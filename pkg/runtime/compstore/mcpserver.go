@@ -13,7 +13,12 @@ limitations under the License.
 
 package compstore
 
-import mcpserverv1alpha1 "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+import (
+	"encoding/json"
+	"net/http"
+
+	mcpserverv1alpha1 "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+)
 
 // GetMCPServer returns the MCPServer with the given name, if it exists.
 func (c *ComponentStore) GetMCPServer(name string) (mcpserverv1alpha1.MCPServer, bool) {
@@ -64,25 +69,26 @@ func (c *ComponentStore) DeleteMCPServer(name string) {
 		}
 	}
 	delete(c.mcpToolSchemas, name)
+	delete(c.mcpHTTPClients, name)
 }
 
-// SetMCPToolSchema caches the input schema for a tool on a given MCPServer.
+// SetMCPToolSchema caches the raw JSON input schema for a tool on a given MCPServer.
 // Called after a successful ListTools to enable client-side argument validation.
-func (c *ComponentStore) SetMCPToolSchema(serverName, toolName string, schema map[string]any) {
+func (c *ComponentStore) SetMCPToolSchema(serverName, toolName string, schema json.RawMessage) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	if c.mcpToolSchemas == nil {
-		c.mcpToolSchemas = make(map[string]map[string]map[string]any)
+		c.mcpToolSchemas = make(map[string]map[string]json.RawMessage)
 	}
 	if c.mcpToolSchemas[serverName] == nil {
-		c.mcpToolSchemas[serverName] = make(map[string]map[string]any)
+		c.mcpToolSchemas[serverName] = make(map[string]json.RawMessage)
 	}
 	c.mcpToolSchemas[serverName][toolName] = schema
 }
 
-// GetMCPToolSchema returns the cached input schema for a tool, if available.
-func (c *ComponentStore) GetMCPToolSchema(serverName, toolName string) (map[string]any, bool) {
+// GetMCPToolSchema returns the cached raw JSON input schema for a tool, if available.
+func (c *ComponentStore) GetMCPToolSchema(serverName, toolName string) (json.RawMessage, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
@@ -95,4 +101,28 @@ func (c *ComponentStore) GetMCPToolSchema(serverName, toolName string) (map[stri
 	}
 	schema, ok := tools[toolName]
 	return schema, ok
+}
+
+// SetMCPHTTPClient caches an HTTP client for the given MCPServer.
+// The cached client is removed when the MCPServer is deleted.
+func (c *ComponentStore) SetMCPHTTPClient(serverName string, client *http.Client) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.mcpHTTPClients == nil {
+		c.mcpHTTPClients = make(map[string]*http.Client)
+	}
+	c.mcpHTTPClients[serverName] = client
+}
+
+// GetMCPHTTPClient returns the cached HTTP client for the given MCPServer,
+// or nil if none is cached.
+func (c *ComponentStore) GetMCPHTTPClient(serverName string) *http.Client {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	if c.mcpHTTPClients == nil {
+		return nil
+	}
+	return c.mcpHTTPClients[serverName]
 }

@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package mcp
+package auth
 
 import (
 	"context"
@@ -26,9 +26,37 @@ import (
 	"golang.org/x/oauth2/clientcredentials"
 )
 
-// httpTransportConfig extracts headers and auth from whichever HTTP transport
+// SecretGetter fetches a single secret value from a named Dapr secret store.
+// storeName is the name of the registered secret store component.
+// secretName and secretKey identify the secret and field within it.
+type SecretGetter interface {
+	GetSecret(ctx context.Context, storeName, secretName, secretKey string) (string, error)
+}
+
+// JWTFetcher fetches a SPIFFE JWT SVID for the given audience.
+// The returned string is the raw JWT compact serialisation (header.payload.signature).
+type JWTFetcher interface {
+	FetchJWT(ctx context.Context, audience string) (string, error)
+}
+
+const (
+	k8sStoreName = "kubernetes"
+	audienceKey  = "audience"
+)
+
+// ErrSecretFetch is a sentinel error wrapped by BuildOAuth2Client when the
+// secret store fetch fails. This allows callers to distinguish transient
+// secret-store failures (retryable) from permanent config errors.
+var ErrSecretFetch = errors.New("secret fetch failed")
+
+// IsSecretFetchError returns true when err wraps ErrSecretFetch.
+func IsSecretFetchError(err error) bool {
+	return errors.Is(err, ErrSecretFetch)
+}
+
+// HTTPTransportConfig extracts headers and auth from whichever HTTP transport
 // is configured on the MCPServer. Returns nil slices/pointers for stdio.
-func httpTransportConfig(server *mcpserverapi.MCPServer) ([]commonapi.NameValuePair, *mcpserverapi.MCPAuth) {
+func HTTPTransportConfig(server *mcpserverapi.MCPServer) ([]commonapi.NameValuePair, *mcpserverapi.MCPAuth) {
 	switch {
 	case server.Spec.Endpoint.StreamableHTTP != nil:
 		return server.Spec.Endpoint.StreamableHTTP.Headers, server.Spec.Endpoint.StreamableHTTP.Auth
@@ -39,21 +67,21 @@ func httpTransportConfig(server *mcpserverapi.MCPServer) ([]commonapi.NameValueP
 	}
 }
 
-// buildHTTPClient returns an http.Client configured with:
+// BuildHTTPClient returns an http.Client configured with:
 //  1. Static header injection from transport headers.
 //  2. OAuth2 client credentials token injection (if auth.oauth2 is set and secrets != nil).
 //  3. SPIFFE JWT injection via the configured header (if auth.spiffe.jwt is set and jwt != nil).
 //
 // OAuth2 and SPIFFE are mutually exclusive in practice; if both are configured,
 // OAuth2 takes precedence and SPIFFE is ignored.
-func buildHTTPClient(
+func BuildHTTPClient(
 	ctx context.Context,
 	server *mcpserverapi.MCPServer,
 	secrets SecretGetter,
 	jwt JWTFetcher,
 	timeout time.Duration,
 ) (*http.Client, error) {
-	transportHeaders, auth := httpTransportConfig(server)
+	transportHeaders, authCfg := HTTPTransportConfig(server)
 
 	// Build the resolved-header map (processor has already resolved secretKeyRef/envRef).
 	headers := make(map[string]string, len(transportHeaders))
@@ -72,8 +100,8 @@ func buildHTTPClient(
 	var authTransport http.RoundTripper = transport
 
 	// OAuth2 client credentials — wraps raw transport with token injection.
-	if auth != nil && auth.OAuth2 != nil && secrets != nil {
-		client, err := buildOAuth2Client(ctx, auth, secrets, authTransport)
+	if authCfg != nil && authCfg.OAuth2 != nil && secrets != nil {
+		client, err := buildOAuth2Client(ctx, authCfg, secrets, authTransport)
 		if err != nil {
 			return nil, err
 		}
@@ -84,11 +112,11 @@ func buildHTTPClient(
 	}
 
 	// SPIFFE JWT — wraps raw transport, injects the SVID per-request.
-	if auth != nil &&
-		auth.SPIFFE != nil &&
-		auth.SPIFFE.JWT != nil &&
+	if authCfg != nil &&
+		authCfg.SPIFFE != nil &&
+		authCfg.SPIFFE.JWT != nil &&
 		jwt != nil {
-		jwtSpec := auth.SPIFFE.JWT
+		jwtSpec := authCfg.SPIFFE.JWT
 		return &http.Client{
 			Timeout: timeout,
 			Transport: &headerRoundTripper{
@@ -112,35 +140,29 @@ func buildHTTPClient(
 
 // buildOAuth2Client fetches the client_secret from the secret store and builds
 // an http.Client that injects an OAuth2 Bearer token on every request.
-// The token is fetched on first use and cached until expiry by the oauth2 package.
 func buildOAuth2Client(
 	ctx context.Context,
-	auth *mcpserverapi.MCPAuth,
+	authCfg *mcpserverapi.MCPAuth,
 	secrets SecretGetter,
 	base http.RoundTripper,
 ) (*http.Client, error) {
-	o := auth.OAuth2
+	o := authCfg.OAuth2
 	if o.SecretKeyRef == nil {
 		return nil, fmt.Errorf("auth.oauth2.secretKeyRef is required for OAuth2 client credentials")
 	}
 
 	storeName := k8sStoreName
-	if auth.SecretStore != nil {
-		storeName = *auth.SecretStore
+	if authCfg.SecretStore != nil {
+		storeName = *authCfg.SecretStore
 	}
 
 	clientSecret, err := secrets.GetSecret(ctx, storeName, o.SecretKeyRef.Name, o.SecretKeyRef.Key)
 	if err != nil {
-		// Wrap with errSecretFetch so callers can detect transient secret-store
-		// failures and retry the activity instead of returning a permanent error.
-		return nil, fmt.Errorf("OAuth2 credential retrieval failed: %w", errors.Join(errSecretFetch, err))
+		return nil, fmt.Errorf("OAuth2 credential retrieval failed: %w", errors.Join(ErrSecretFetch, err))
 	}
 
 	cfg := clientcredentials.Config{
-		// ClientID may be empty for non-standard flows (e.g. JWT-bearer assertions or
-		// endpoints that key solely on client_secret); RFC 6749 client_credentials
-		// requires it, so populate it from the spec when set.
-		ClientID:     o.ClientID,
+		ClientID:     stringDeref(o.ClientID),
 		ClientSecret: clientSecret,
 		TokenURL:     o.Issuer,
 		Scopes:       o.Scopes,
@@ -149,7 +171,6 @@ func buildOAuth2Client(
 		cfg.EndpointParams = map[string][]string{audienceKey: {*o.Audience}}
 	}
 
-	// oauth2.Transport wraps the base transport and injects tokens automatically.
 	tokenSource := cfg.TokenSource(ctx)
 	return &http.Client{
 		Transport: &oauth2.Transport{
@@ -159,8 +180,6 @@ func buildOAuth2Client(
 	}, nil
 }
 
-// headerRoundTripper is an http.RoundTripper that injects a fixed set of headers
-// into every request before delegating to the underlying transport.
 type headerRoundTripper struct {
 	headers map[string]string
 	base    http.RoundTripper
@@ -170,7 +189,6 @@ func (rt *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	if len(rt.headers) == 0 {
 		return rt.base.RoundTrip(req)
 	}
-	// Clone the request so we do not mutate the original.
 	r := req.Clone(req.Context())
 	if r.Header == nil {
 		r.Header = make(http.Header)
@@ -181,8 +199,6 @@ func (rt *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	return rt.base.RoundTrip(r)
 }
 
-// jwtRoundTripper is an http.RoundTripper that fetches a SPIFFE JWT SVID for
-// each request and injects it into the configured header with an optional prefix.
 type jwtRoundTripper struct {
 	header   string
 	prefix   string
@@ -192,8 +208,6 @@ type jwtRoundTripper struct {
 }
 
 func (rt *jwtRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	// TODO: this fetches a new JWT per request. In future,
-	// cache with a short TTL to avoid overloading the SPIFFE workload API under load.
 	token, err := rt.fetcher.FetchJWT(req.Context(), rt.audience)
 	if err != nil {
 		return nil, fmt.Errorf("SPIFFE JWT fetch failed: %w", err)
@@ -204,4 +218,12 @@ func (rt *jwtRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	}
 	r.Header.Set(rt.header, rt.prefix+token)
 	return rt.base.RoundTrip(r)
+}
+
+// stringDeref returns the dereferenced string or "" if nil.
+func stringDeref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

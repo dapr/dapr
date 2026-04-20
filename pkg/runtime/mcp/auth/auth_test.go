@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package mcp
+package auth
 
 import (
 	"context"
@@ -25,9 +25,55 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 )
+
+// FakeSecretGetter is a test double for SecretGetter.
+type FakeSecretGetter struct {
+	secrets map[string]string // key: "storeName/secretName/secretKey"
+	err     error
+}
+
+func (f *FakeSecretGetter) GetSecret(_ context.Context, storeName, secretName, secretKey string) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	key := storeName + "/" + secretName + "/" + secretKey
+	val, ok := f.secrets[key]
+	if !ok {
+		return "", fmt.Errorf("secret %q not found", key)
+	}
+	return val, nil
+}
+
+type fakeJWTFetcher struct {
+	token        string
+	err          error
+	lastAudience string
+}
+
+func (f *fakeJWTFetcher) FetchJWT(_ context.Context, audience string) (string, error) {
+	f.lastAudience = audience
+	return f.token, f.err
+}
+
+func namedServer(name string, spec mcpserverapi.MCPServerSpec) mcpserverapi.MCPServer {
+	s := mcpserverapi.MCPServer{Spec: spec}
+	s.Name = name
+	return s
+}
+
+func plainHeader(name, value string) commonapi.NameValuePair {
+	return commonapi.NameValuePair{
+		Name: name,
+		Value: commonapi.DynamicValue{
+			JSON: apiextensionsv1.JSON{Raw: []byte(`"` + value + `"`)},
+		},
+	}
+}
 
 // roundTripFunc adapts a function to http.RoundTripper.
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -153,7 +199,7 @@ func TestBuildHTTPClient_SPIFFEInjectsJWT(t *testing.T) {
 	}
 
 	fetcher := &fakeJWTFetcher{token: "spiffe-svid-token"}
-	client, err := buildHTTPClient(context.Background(), srv, nil, fetcher, 30*time.Second)
+	client, err := BuildHTTPClient(context.Background(), srv, nil, fetcher, 30*time.Second)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
@@ -192,7 +238,7 @@ func TestBuildHTTPClient_SPIFFEWithoutPrefix(t *testing.T) {
 	}
 
 	fetcher := &fakeJWTFetcher{token: "raw-token"}
-	client, err := buildHTTPClient(context.Background(), srv, nil, fetcher, 30*time.Second)
+	client, err := BuildHTTPClient(context.Background(), srv, nil, fetcher, 30*time.Second)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
@@ -235,13 +281,13 @@ func TestBuildHTTPClient_OAuth2InjectsBearer(t *testing.T) {
 		},
 	}
 
-	secrets := &fakeSecretGetter{
+	secrets := &FakeSecretGetter{
 		secrets: map[string]string{
 			"my-store/my-secret/client_secret": "super-secret",
 		},
 	}
 
-	client, err := buildHTTPClient(context.Background(), srv, secrets, nil, 30*time.Second)
+	client, err := BuildHTTPClient(context.Background(), srv, secrets, nil, 30*time.Second)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, targetServer.URL, nil)
@@ -272,8 +318,8 @@ func TestBuildHTTPClient_OAuth2SecretFetchError(t *testing.T) {
 		},
 	}
 
-	secrets := &fakeSecretGetter{err: errors.New("secret store unavailable")}
-	_, err := buildHTTPClient(context.Background(), srv, secrets, nil, 30*time.Second)
+	secrets := &FakeSecretGetter{err: errors.New("secret store unavailable")}
+	_, err := BuildHTTPClient(context.Background(), srv, secrets, nil, 30*time.Second)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "secret store unavailable")
 }
@@ -294,7 +340,7 @@ func TestBuildHTTPClient_StaticHeadersNoAuth(t *testing.T) {
 			},
 		},
 	})
-	client, err := buildHTTPClient(context.Background(), &srv, nil, nil, 30*time.Second)
+	client, err := BuildHTTPClient(context.Background(), &srv, nil, nil, 30*time.Second)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)

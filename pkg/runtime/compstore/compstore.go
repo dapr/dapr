@@ -14,6 +14,8 @@ limitations under the License.
 package compstore
 
 import (
+	"encoding/json"
+	"net/http"
 	"sync"
 	"sync/atomic"
 
@@ -58,7 +60,8 @@ type ComponentStore struct {
 	subscriptions           *subscriptions
 	httpEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
 	mcpServers              []mcpserverV1alpha1.MCPServer
-	mcpToolSchemas          map[string]map[string]map[string]any // serverName -> toolName -> inputSchema
+	mcpToolSchemas          map[string]map[string]json.RawMessage // serverName -> toolName -> inputSchema (raw JSON)
+	mcpHTTPClients          map[string]*http.Client               // serverName -> cached HTTP client
 	configurationResources  []configapi.Configuration
 	resiliencyResources     []resiliencyapi.Resiliency
 	actorStateStore         struct {

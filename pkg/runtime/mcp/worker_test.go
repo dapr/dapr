@@ -33,6 +33,14 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 )
 
+// setTestSchema marshals a map to json.RawMessage and stores it as a tool schema.
+func setTestSchema(t *testing.T, store *compstore.ComponentStore, server, tool string, schema map[string]any) {
+	t.Helper()
+	raw, err := json.Marshal(schema)
+	require.NoError(t, err)
+	store.SetMCPToolSchema(server, tool, raw)
+}
+
 // fakeActivityContext lets us test activities without the full task runtime.
 type fakeActivityContext struct {
 	ctx   context.Context
@@ -315,7 +323,7 @@ func TestValidateToolArguments(t *testing.T) {
 	})
 
 	t.Run("schema with no required field passes", func(t *testing.T) {
-		store.SetMCPToolSchema("myserver", "greet", map[string]any{
+		setTestSchema(t, store,"myserver", "greet", map[string]any{
 			"type":       "object",
 			"properties": map[string]any{"name": map[string]any{"type": "string"}},
 		})
@@ -324,7 +332,7 @@ func TestValidateToolArguments(t *testing.T) {
 	})
 
 	t.Run("missing required argument fails", func(t *testing.T) {
-		store.SetMCPToolSchema("myserver", "weather", map[string]any{
+		setTestSchema(t, store,"myserver", "weather", map[string]any{
 			"type":       "object",
 			"properties": map[string]any{"city": map[string]any{"type": "string"}},
 			"required":   []any{"city"},
@@ -340,7 +348,7 @@ func TestValidateToolArguments(t *testing.T) {
 	})
 
 	t.Run("multiple missing required arguments listed", func(t *testing.T) {
-		store.SetMCPToolSchema("myserver", "multi", map[string]any{
+		setTestSchema(t, store,"myserver", "multi", map[string]any{
 			"type":     "object",
 			"required": []any{"a", "b", "c"},
 		})
@@ -495,7 +503,7 @@ func TestMakeCallToolActivity_MissingRequiredArg(t *testing.T) {
 			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: ts.URL},
 		},
 	}))
-	store.SetMCPToolSchema("myserver", "greet", map[string]any{
+	setTestSchema(t, store,"myserver", "greet", map[string]any{
 		"type":       "object",
 		"properties": map[string]any{"name": map[string]any{"type": "string"}},
 		"required":   []any{"name"},

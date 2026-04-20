@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
+	mcpauth "github.com/dapr/dapr/pkg/runtime/mcp/auth"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 )
@@ -58,17 +59,17 @@ func (f *fakeSecretGetter) GetSecret(_ context.Context, storeName, secretName, s
 }
 
 func TestIsSecretFetchError(t *testing.T) {
-	t.Run("wrapped errSecretFetch is detected", func(t *testing.T) {
-		err := fmt.Errorf("OAuth2 credential retrieval failed: %w", errors.Join(errSecretFetch, errors.New("store unavailable")))
-		assert.True(t, isSecretFetchError(err))
+	t.Run("wrapped mcpauth.ErrSecretFetch is detected", func(t *testing.T) {
+		err := fmt.Errorf("OAuth2 credential retrieval failed: %w", errors.Join(mcpauth.ErrSecretFetch, errors.New("store unavailable")))
+		assert.True(t, mcpauth.IsSecretFetchError(err))
 	})
 
 	t.Run("unrelated error is not detected", func(t *testing.T) {
-		assert.False(t, isSecretFetchError(errors.New("something else")))
+		assert.False(t, mcpauth.IsSecretFetchError(errors.New("something else")))
 	})
 
 	t.Run("nil error is not detected", func(t *testing.T) {
-		assert.False(t, isSecretFetchError(nil))
+		assert.False(t, mcpauth.IsSecretFetchError(nil))
 	})
 }
 

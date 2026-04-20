@@ -122,7 +122,7 @@ func New(opts Options) Interface {
 
 	// Build the MCP task registry + in-process executor.
 	// The registry stays empty until ActivateMCPServers populates it,
-	// so then work items routed by the worker on wi.Internal start flowing through.
+	// so then work items routed by the worker on wi.InProcess start flowing through.
 	mcpOpts := mcp.ExecutorOptions{
 		Store:   opts.ComponentStore,
 		Secrets: mcp.NewCompstoreSecretGetter(opts.ComponentStore),

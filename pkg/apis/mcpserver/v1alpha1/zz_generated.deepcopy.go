@@ -187,6 +187,11 @@ func (in *MCPOAuth2) DeepCopyInto(out *MCPOAuth2) {
 		*out = new(string)
 		**out = **in
 	}
+	if in.ClientID != nil {
+		in, out := &in.ClientID, &out.ClientID
+		*out = new(string)
+		**out = **in
+	}
 	if in.Scopes != nil {
 		in, out := &in.Scopes, &out.Scopes
 		*out = make([]string, len(*in))

@@ -267,7 +267,7 @@ type MCPOAuth2 struct {
 	// are typically public identifiers; use spec.headers with a secretKeyRef if your
 	// environment requires sourcing the value from a secret store.
 	//+optional
-	ClientID string `json:"clientID,omitempty"`
+	ClientID *string `json:"clientID,omitempty"`
 	// SecretKeyRef references the client secret in the configured secret store.
 	//+optional
 	SecretKeyRef *common.SecretKeyRef `json:"secretKeyRef,omitempty"`

@@ -30,6 +30,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	mcpauth "github.com/dapr/dapr/pkg/runtime/mcp/auth"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 )
 
@@ -54,8 +55,6 @@ const (
 	mcpClientName    = "dapr"
 	mcpClientVersion = "v1alpha1"
 
-	k8sStoreName      = "kubernetes"
-	audienceKey       = "audience"
 	jsonFieldRequired = "required"
 )
 
@@ -216,9 +215,14 @@ func makeListToolsActivity(opts ExecutorOptions) task.Activity {
 		callCtx, cancel := withDeadline(callCtx, timeout)
 		defer cancel()
 
-		httpClient, err := buildHTTPClient(callCtx, &server, opts.Secrets, opts.JWT, timeout)
-		if err != nil {
-			return &ListToolsResult{}, fmt.Errorf("list-tools: failed to build HTTP client for %q: %w", input.MCPServerName, err)
+		httpClient := opts.Store.GetMCPHTTPClient(input.MCPServerName)
+		if httpClient == nil {
+			var err error
+			httpClient, err = mcpauth.BuildHTTPClient(callCtx, &server, opts.Secrets, opts.JWT, timeout)
+			if err != nil {
+				return &ListToolsResult{}, fmt.Errorf("list-tools: failed to build HTTP client for %q: %w", input.MCPServerName, err)
+			}
+			opts.Store.SetMCPHTTPClient(input.MCPServerName, httpClient)
 		}
 
 		transport, err := buildTransport(&server, httpClient)
@@ -260,8 +264,10 @@ func makeListToolsActivity(opts ExecutorOptions) task.Activity {
 			if t.InputSchema != nil {
 				if schema, ok := t.InputSchema.(map[string]any); ok {
 					td.InputSchema = schema
-					// Cache the schema for client-side argument validation in CallTool.
-					opts.Store.SetMCPToolSchema(input.MCPServerName, t.Name, schema)
+					// Cache the schema as raw JSON for client-side argument validation in CallTool.
+					if raw, err := json.Marshal(schema); err == nil {
+						opts.Store.SetMCPToolSchema(input.MCPServerName, t.Name, raw)
+					}
 				}
 			}
 			tools = append(tools, td)
@@ -303,18 +309,23 @@ func makeCallToolActivity(opts ExecutorOptions) task.Activity {
 		callCtx, cancel := withDeadline(callCtx, timeout)
 		defer cancel()
 
-		httpClient, err := buildHTTPClient(callCtx, &server, opts.Secrets, opts.JWT, timeout)
-		if err != nil {
-			// Secret fetch failures are transient — return an activity error so
-			// the workflow engine retries. Log details server-side only.
-			if isSecretFetchError(err) {
-				workerLog.Warnf("call-tool: transient auth error for MCPServer %q: %s", input.MCPServerName, err)
-				return nil, fmt.Errorf("call-tool: temporary authentication failure for MCPServer %q; retrying", input.MCPServerName)
+		httpClient := opts.Store.GetMCPHTTPClient(input.MCPServerName)
+		if httpClient == nil {
+			var err error
+			httpClient, err = mcpauth.BuildHTTPClient(callCtx, &server, opts.Secrets, opts.JWT, timeout)
+			if err != nil {
+				// Secret fetch failures are transient — return an activity error so
+				// the workflow engine retries. Log details server-side only.
+				if mcpauth.IsSecretFetchError(err) {
+					workerLog.Warnf("call-tool: transient auth error for MCPServer %q: %s", input.MCPServerName, err)
+					return nil, fmt.Errorf("call-tool: temporary authentication failure for MCPServer %q; retrying", input.MCPServerName)
+				}
+				return &CallToolResult{IsError: true, Content: []ContentItem{{
+					Type: textContentType,
+					Text: fmt.Sprintf("call-tool: authentication configuration error for MCPServer %q", input.MCPServerName),
+				}}}, nil
 			}
-			return &CallToolResult{IsError: true, Content: []ContentItem{{
-				Type: textContentType,
-				Text: fmt.Sprintf("call-tool: authentication configuration error for MCPServer %q", input.MCPServerName),
-			}}}, nil
+			opts.Store.SetMCPHTTPClient(input.MCPServerName, httpClient)
 		}
 
 		transport, err := buildTransport(&server, httpClient)
@@ -481,8 +492,13 @@ func convertCallToolResult(r *mcp.CallToolResult) *CallToolResult {
 // Returns an empty string when validation passes or no schema is available,
 // or an error message describing the missing/invalid fields.
 func validateToolArguments(store *compstore.ComponentStore, serverName, toolName string, args map[string]any) string {
-	schema, ok := store.GetMCPToolSchema(serverName, toolName)
-	if !ok || schema == nil {
+	raw, ok := store.GetMCPToolSchema(serverName, toolName)
+	if !ok || raw == nil {
+		return ""
+	}
+
+	var schema map[string]any
+	if err := json.Unmarshal(raw, &schema); err != nil {
 		return ""
 	}
 

@@ -15,37 +15,24 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	mcpauth "github.com/dapr/dapr/pkg/runtime/mcp/auth"
 )
-
-// SecretGetter fetches a single secret value from a named Dapr secret store.
-// storeName is the name of the registered secret store component.
-// secretName and secretKey identify the secret and field within it.
-type SecretGetter interface {
-	GetSecret(ctx context.Context, storeName, secretName, secretKey string) (string, error)
-}
-
-// JWTFetcher fetches a SPIFFE JWT SVID for the given audience.
-// The returned string is the raw JWT compact serialisation (header.payload.signature).
-type JWTFetcher interface {
-	FetchJWT(ctx context.Context, audience string) (string, error)
-}
 
 // ExecutorOptions configures the built-in MCP executor.
 type ExecutorOptions struct {
 	// Store is required; it is used to look up MCPServer manifests at call time.
 	Store *compstore.ComponentStore
 	// Secrets enables OAuth2 client credentials auth. If nil, OAuth2 is skipped.
-	Secrets SecretGetter
+	Secrets mcpauth.SecretGetter
 	// JWT enables SPIFFE workload identity JWT injection. If nil, SPIFFE is skipped.
-	JWT JWTFetcher
+	JWT mcpauth.JWTFetcher
 }
 
-// CompstoreSecretGetter implements SecretGetter using the component store's
+// CompstoreSecretGetter implements auth.SecretGetter using the component store's
 // registered secret store components.
 type CompstoreSecretGetter struct {
 	store *compstore.ComponentStore
@@ -70,14 +57,4 @@ func (g *CompstoreSecretGetter) GetSecret(ctx context.Context, storeName, secret
 		return "", fmt.Errorf("key %q not found in secret %q (store: %q)", secretKey, secretName, storeName)
 	}
 	return val, nil
-}
-
-// errSecretFetch is a sentinel error wrapped by buildOAuth2Client when the
-// secret store fetch fails. This allows callers to distinguish transient
-// secret-store failures (retryable) from permanent config errors.
-var errSecretFetch = errors.New("secret fetch failed")
-
-// isSecretFetchError returns true when err wraps errSecretFetch.
-func isSecretFetchError(err error) bool {
-	return errors.Is(err, errSecretFetch)
 }
