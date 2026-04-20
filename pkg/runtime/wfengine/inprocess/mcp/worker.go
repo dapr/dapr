@@ -30,11 +30,21 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
-	mcpauth "github.com/dapr/dapr/pkg/runtime/mcp/auth"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	mcpauth "github.com/dapr/dapr/pkg/runtime/mcp/auth"
+	. "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/types"
+	"github.com/dapr/dapr/pkg/security"
 )
 
 var workerLog = logger.NewLogger("dapr.runtime.mcp.worker")
+
+// Options configures the MCP in-process workflow subsystem.
+type Options struct {
+	// Store is required; it is used to look up MCPServer manifests and fetch secrets at call time.
+	Store *compstore.ComponentStore
+	// JWT enables SPIFFE workload identity JWT injection. If nil, SPIFFE is skipped.
+	JWT security.JWTFetcher
+}
 
 const (
 	// activityListTools is the fixed activity name for the ListTools transport call.
@@ -58,17 +68,17 @@ const (
 	jsonFieldRequired = "required"
 )
 
-// NewBuiltinRegistry returns a task.TaskRegistry that handles all built-in
+// NewRegistry returns a task.TaskRegistry that handles all built-in
 // dapr.internal.mcp.* orchestrations and activities in-process.
-func NewBuiltinRegistry(opts ExecutorOptions) *task.TaskRegistry {
+func NewRegistry(opts Options) *task.TaskRegistry {
 	registry := task.NewTaskRegistry()
-	PopulateBuiltinRegistry(registry, opts)
+	Populate(registry, opts)
 	return registry
 }
 
-// PopulateBuiltinRegistry adds the MCP wildcard orchestrator and the two
+// Populate adds the MCP wildcard orchestrator and the two
 // transport activities to an existing task.TaskRegistry.
-func PopulateBuiltinRegistry(registry *task.TaskRegistry, opts ExecutorOptions) {
+func Populate(registry *task.TaskRegistry, opts Options) {
 	// Wildcard workflow: dispatches based on name suffix, runs middleware.
 	if err := registry.AddWorkflowN("*", makeOrchestrator(opts.Store)); err != nil {
 		workerLog.Warnf("failed to register MCP wildcard workflow: %s", err)
@@ -104,8 +114,8 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContex
 		name := ctx.Name
 
 		switch {
-		case strings.HasSuffix(name, suffixListTools):
-			serverName := mcpServerName(name, suffixListTools)
+		case strings.HasSuffix(name, SuffixListTools):
+			serverName := mcpServerName(name, SuffixListTools)
 			server, ok := store.GetMCPServer(serverName)
 			if !ok {
 				return &ListToolsResult{}, fmt.Errorf("MCPServer %q not found", serverName)
@@ -136,8 +146,8 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContex
 			runAfterListTools(ctx, &server, serverName, result)
 			return result, nil
 
-		case strings.HasSuffix(name, suffixCallTool):
-			serverName := mcpServerName(name, suffixCallTool)
+		case strings.HasSuffix(name, SuffixCallTool):
+			serverName := mcpServerName(name, SuffixCallTool)
 			server, ok := store.GetMCPServer(serverName)
 			if !ok {
 				return &CallToolResult{}, fmt.Errorf("MCPServer %q not found", serverName)
@@ -183,7 +193,7 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContex
 
 		default:
 			return nil, fmt.Errorf("unknown MCP orchestration name %q: expected suffix %q or %q",
-				name, suffixListTools, suffixCallTool)
+				name, SuffixListTools, SuffixCallTool)
 		}
 	}
 }
@@ -191,13 +201,13 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContex
 // mcpServerName extracts the MCPServer resource name from an orchestration name
 // of the form "dapr.internal.mcp.<name><suffix>".
 func mcpServerName(orchestrationName, suffix string) string {
-	trimmed := strings.TrimPrefix(orchestrationName, orchestrationNamePrefix)
+	trimmed := strings.TrimPrefix(orchestrationName, OrchestrationNamePrefix)
 	return strings.TrimSuffix(trimmed, suffix)
 }
 
 // makeListToolsActivity returns a task.Activity that calls ListTools on the
 // named MCP server and returns a ListToolsResult.
-func makeListToolsActivity(opts ExecutorOptions) task.Activity {
+func makeListToolsActivity(opts Options) task.Activity {
 	return func(ctx task.ActivityContext) (any, error) {
 		var input ListToolsInput
 		if err := ctx.GetInput(&input); err != nil {
@@ -218,7 +228,7 @@ func makeListToolsActivity(opts ExecutorOptions) task.Activity {
 		httpClient := opts.Store.GetMCPHTTPClient(input.MCPServerName)
 		if httpClient == nil {
 			var err error
-			httpClient, err = mcpauth.BuildHTTPClient(callCtx, &server, opts.Secrets, opts.JWT, timeout)
+			httpClient, err = mcpauth.BuildHTTPClient(callCtx, &server, opts.Store, opts.JWT, timeout)
 			if err != nil {
 				return &ListToolsResult{}, fmt.Errorf("list-tools: failed to build HTTP client for %q: %w", input.MCPServerName, err)
 			}
@@ -248,30 +258,44 @@ func makeListToolsActivity(opts ExecutorOptions) task.Activity {
 		defer timer.Stop()
 
 		workerLog.Debugf("list-tools: connected, listing tools on %q", input.MCPServerName)
-		// TODO: in future, we can do pagination on the tools available.
-		result, err := session.ListTools(callCtx, &mcp.ListToolsParams{})
-		if err != nil {
-			return &ListToolsResult{}, fmt.Errorf("list-tools: MCP call failed for %q: %w", input.MCPServerName, err)
+
+		// Paginate through all available tools. The MCP spec allows servers
+		// to return tools in pages with a cursor; we collect all pages.
+		var tools []ToolDefinition
+		var cursor string
+		for {
+			params := &mcp.ListToolsParams{}
+			if cursor != "" {
+				params.Cursor = cursor
+			}
+			result, err := session.ListTools(callCtx, params)
+			if err != nil {
+				return &ListToolsResult{}, fmt.Errorf("list-tools: MCP call failed for %q: %w", input.MCPServerName, err)
+			}
+
+			for _, t := range result.Tools {
+				td := ToolDefinition{
+					Name:        t.Name,
+					Description: t.Description,
+				}
+				if t.InputSchema != nil {
+					if schema, ok := t.InputSchema.(map[string]any); ok {
+						td.InputSchema = schema
+						if raw, err := json.Marshal(schema); err == nil {
+							opts.Store.SetMCPToolSchema(input.MCPServerName, t.Name, raw)
+						}
+					}
+				}
+				tools = append(tools, td)
+			}
+
+			if result.NextCursor == "" {
+				break
+			}
+			cursor = result.NextCursor
 		}
 		timer.Stop()
 
-		tools := make([]ToolDefinition, 0, len(result.Tools))
-		for _, t := range result.Tools {
-			td := ToolDefinition{
-				Name:        t.Name,
-				Description: t.Description,
-			}
-			if t.InputSchema != nil {
-				if schema, ok := t.InputSchema.(map[string]any); ok {
-					td.InputSchema = schema
-					// Cache the schema as raw JSON for client-side argument validation in CallTool.
-					if raw, err := json.Marshal(schema); err == nil {
-						opts.Store.SetMCPToolSchema(input.MCPServerName, t.Name, raw)
-					}
-				}
-			}
-			tools = append(tools, td)
-		}
 		return &ListToolsResult{Tools: tools}, nil
 	}
 }
@@ -286,7 +310,7 @@ func makeListToolsActivity(opts ExecutorOptions) task.Activity {
 //     errors so the workflow engine retries the activity automatically.
 //   - Error messages exposed to callers never include infrastructure details (secret store
 //     names, key names, internal URLs). Details are logged server-side only.
-func makeCallToolActivity(opts ExecutorOptions) task.Activity {
+func makeCallToolActivity(opts Options) task.Activity {
 	return func(ctx task.ActivityContext) (any, error) {
 		var input CallToolInput
 		if err := ctx.GetInput(&input); err != nil {
@@ -312,7 +336,7 @@ func makeCallToolActivity(opts ExecutorOptions) task.Activity {
 		httpClient := opts.Store.GetMCPHTTPClient(input.MCPServerName)
 		if httpClient == nil {
 			var err error
-			httpClient, err = mcpauth.BuildHTTPClient(callCtx, &server, opts.Secrets, opts.JWT, timeout)
+			httpClient, err = mcpauth.BuildHTTPClient(callCtx, &server, opts.Store, opts.JWT, timeout)
 			if err != nil {
 				// Secret fetch failures are transient — return an activity error so
 				// the workflow engine retries. Log details server-side only.

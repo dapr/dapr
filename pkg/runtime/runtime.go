@@ -129,7 +129,6 @@ type DaprRuntime struct {
 	runnerCloser          *concurrency.RunnerCloserManager
 	clock                 clock.Clock
 	reloader              *hotreload.Reloader
-	mcpServersReady       chan error // receives MCP activation result then closes
 
 	grpcAPIServer      grpc.Server
 	grpcInternalServer grpc.Server
@@ -400,19 +399,6 @@ func newDaprRuntime(ctx context.Context,
 					return ctx.Err()
 				}
 				return rerr
-			}
-
-			// Wait for MCP workflow actors to be registered before reporting ready.
-			// If activation failed, fail init rather than reporting ready with a broken MCP workflow surface.
-			if rt.mcpServersReady != nil {
-				select {
-				case err := <-rt.mcpServersReady:
-					if err != nil {
-						return fmt.Errorf("MCP server activation failed: %w", err)
-					}
-				case <-ctx.Done():
-					return ctx.Err()
-				}
 			}
 
 			d := time.Since(start).Milliseconds()
@@ -703,25 +689,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 			return fmt.Errorf("failed to load mcpservers: %s", err)
 		}
 		a.flushOutstandingMCPServers(ctx)
-		if list := len(a.compStore.ListMCPServers()); list > 0 {
-			// ActivateMCPServers calls RegisterActors which blocks on actors.waitForReady.
-			// The actor runtime is started in a goroutine after the linear initialization
-			// sequence completes, so we must not call this synchronously here.
-			// We use mcpServersReady to signal completion so that the sidecar
-			// does not report ready until MCP workflow actors are registered.
-			// Buffered so the send never blocks even if init tears down before
-			// the readiness-wait site receives. Closed after the single send so
-			// any later receiver also sees the result (or nil, on success).
-			a.mcpServersReady = make(chan error, 1)
-			go func() {
-				err := a.wfengine.ActivateMCPServers(ctx)
-				if err != nil {
-					log.Errorf("failed to activate workflow actors for MCP servers: %s", err)
-				}
-				a.mcpServersReady <- err
-				close(a.mcpServersReady)
-			}()
-		}
 	}
 
 	err = a.loadDeclarativeSubscriptions(ctx)

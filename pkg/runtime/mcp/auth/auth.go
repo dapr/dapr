@@ -22,22 +22,11 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/security"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 )
-
-// SecretGetter fetches a single secret value from a named Dapr secret store.
-// storeName is the name of the registered secret store component.
-// secretName and secretKey identify the secret and field within it.
-type SecretGetter interface {
-	GetSecret(ctx context.Context, storeName, secretName, secretKey string) (string, error)
-}
-
-// JWTFetcher fetches a SPIFFE JWT SVID for the given audience.
-// The returned string is the raw JWT compact serialisation (header.payload.signature).
-type JWTFetcher interface {
-	FetchJWT(ctx context.Context, audience string) (string, error)
-}
 
 const (
 	k8sStoreName = "kubernetes"
@@ -77,8 +66,8 @@ func HTTPTransportConfig(server *mcpserverapi.MCPServer) ([]commonapi.NameValueP
 func BuildHTTPClient(
 	ctx context.Context,
 	server *mcpserverapi.MCPServer,
-	secrets SecretGetter,
-	jwt JWTFetcher,
+	secrets *compstore.ComponentStore,
+	jwt security.JWTFetcher,
 	timeout time.Duration,
 ) (*http.Client, error) {
 	transportHeaders, authCfg := HTTPTransportConfig(server)
@@ -143,7 +132,7 @@ func BuildHTTPClient(
 func buildOAuth2Client(
 	ctx context.Context,
 	authCfg *mcpserverapi.MCPAuth,
-	secrets SecretGetter,
+	secrets *compstore.ComponentStore,
 	base http.RoundTripper,
 ) (*http.Client, error) {
 	o := authCfg.OAuth2
@@ -203,7 +192,7 @@ type jwtRoundTripper struct {
 	header   string
 	prefix   string
 	audience string
-	fetcher  JWTFetcher
+	fetcher  security.JWTFetcher
 	base     http.RoundTripper
 }
 

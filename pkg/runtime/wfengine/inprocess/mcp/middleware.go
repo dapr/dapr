@@ -15,6 +15,7 @@ package mcp
 
 import (
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	. "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/types"
 	"github.com/dapr/durabletask-go/task"
 )
 

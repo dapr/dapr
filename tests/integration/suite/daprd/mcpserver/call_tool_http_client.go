@@ -26,7 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	daprmcp "github.com/dapr/dapr/pkg/runtime/mcp"
+	daprmcp "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/types"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"

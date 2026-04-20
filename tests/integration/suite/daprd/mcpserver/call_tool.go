@@ -29,7 +29,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 
-	daprmcp "github.com/dapr/dapr/pkg/runtime/mcp"
+	daprmcp "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/types"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"

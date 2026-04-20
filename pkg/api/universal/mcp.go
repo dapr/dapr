@@ -21,7 +21,7 @@ import (
 
 	"github.com/dapr/components-contrib/workflows"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	mcptypes "github.com/dapr/dapr/pkg/runtime/mcp"
+	mcptypes "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/types"
 	"github.com/dapr/durabletask-go/api/helpers"
 	"github.com/dapr/durabletask-go/api/protos"
 	"google.golang.org/protobuf/types/known/wrapperspb"

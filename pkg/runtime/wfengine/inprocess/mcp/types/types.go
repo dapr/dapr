@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package mcp
+package types
 
 import "encoding/json"
 
@@ -91,24 +91,24 @@ type AfterCallInput struct {
 	Result        any            `json:"result"`
 }
 
-// orchestrationNamePrefix is the prefix shared by all built-in MCP orchestrations.
+// OrchestrationNamePrefix is the prefix shared by all built-in MCP orchestrations.
 // All dapr-internal workflows live under dapr.internal.*; MCP claims the mcp sub-namespace.
-const orchestrationNamePrefix = "dapr.internal.mcp."
+const OrchestrationNamePrefix = "dapr.internal.mcp."
 
-// suffixListTools is the suffix identifying a ListTools orchestration.
-const suffixListTools = ".ListTools"
+// SuffixListTools is the suffix identifying a ListTools orchestration.
+const SuffixListTools = ".ListTools"
 
-// suffixCallTool is the suffix identifying a CallTool orchestration.
-const suffixCallTool = ".CallTool"
+// SuffixCallTool is the suffix identifying a CallTool orchestration.
+const SuffixCallTool = ".CallTool"
 
 // ListToolsWorkflowName returns the full workflow name for a ListTools
 // operation on the given MCPServer.
 func ListToolsWorkflowName(serverName string) string {
-	return orchestrationNamePrefix + serverName + suffixListTools
+	return OrchestrationNamePrefix + serverName + SuffixListTools
 }
 
 // CallToolWorkflowName returns the full workflow name for a CallTool
 // operation on the given MCPServer.
 func CallToolWorkflowName(serverName string) string {
-	return orchestrationNamePrefix + serverName + suffixCallTool
+	return OrchestrationNamePrefix + serverName + SuffixCallTool
 }

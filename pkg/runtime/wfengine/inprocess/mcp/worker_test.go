@@ -31,6 +31,7 @@ import (
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	. "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/types"
 )
 
 // setTestSchema marshals a map to json.RawMessage and stores it as a tool schema.
@@ -39,6 +40,18 @@ func setTestSchema(t *testing.T, store *compstore.ComponentStore, server, tool s
 	raw, err := json.Marshal(schema)
 	require.NoError(t, err)
 	store.SetMCPToolSchema(server, tool, raw)
+}
+
+// fakeJWTFetcher is a test double for auth.JWTFetcher.
+type fakeJWTFetcher struct {
+	token        string
+	err          error
+	lastAudience string
+}
+
+func (f *fakeJWTFetcher) FetchJWT(_ context.Context, audience string) (string, error) {
+	f.lastAudience = audience
+	return f.token, f.err
 }
 
 // fakeActivityContext lets us test activities without the full task runtime.
@@ -114,10 +127,10 @@ func plainHeader(name, value string) commonapi.NameValuePair {
 	}
 }
 
-func TestNewBuiltinRegistry(t *testing.T) {
+func TestNewRegistry(t *testing.T) {
 	store := compstore.New()
-	registry := NewBuiltinRegistry(ExecutorOptions{Store: store})
-	require.NotNil(t, registry, "NewBuiltinRegistry should return a non-nil registry")
+	registry := NewRegistry(Options{Store: store})
+	require.NotNil(t, registry, "NewRegistry should return a non-nil registry")
 }
 
 func TestMCPServerName(t *testing.T) {
@@ -126,10 +139,10 @@ func TestMCPServerName(t *testing.T) {
 		suffix            string
 		want              string
 	}{
-		{"dapr.internal.mcp.myserver.ListTools", suffixListTools, "myserver"},
-		{"dapr.internal.mcp.my-server.CallTool", suffixCallTool, "my-server"},
-		{"dapr.internal.mcp.dotted.name.ListTools", suffixListTools, "dotted.name"},
-		{"dapr.internal.mcp..ListTools", suffixListTools, ""},
+		{"dapr.internal.mcp.myserver.ListTools", SuffixListTools, "myserver"},
+		{"dapr.internal.mcp.my-server.CallTool", SuffixCallTool, "my-server"},
+		{"dapr.internal.mcp.dotted.name.ListTools", SuffixListTools, "dotted.name"},
+		{"dapr.internal.mcp..ListTools", SuffixListTools, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.orchestrationName, func(t *testing.T) {
@@ -361,7 +374,7 @@ func TestValidateToolArguments(t *testing.T) {
 
 func TestMakeListToolsActivity_ServerNotFound(t *testing.T) {
 	store := compstore.New()
-	activity := makeListToolsActivity(ExecutorOptions{Store: store})
+	activity := makeListToolsActivity(Options{Store: store})
 
 	actCtx := &fakeActivityContext{
 		ctx:   context.Background(),
@@ -382,7 +395,7 @@ func TestMakeListToolsActivity_RealServer(t *testing.T) {
 		},
 	}))
 
-	activity := makeListToolsActivity(ExecutorOptions{Store: store})
+	activity := makeListToolsActivity(Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx:   context.Background(),
 		input: ListToolsInput{MCPServerName: "myserver"},
@@ -407,7 +420,7 @@ func TestMakeListToolsActivity_CachesToolSchema(t *testing.T) {
 		},
 	}))
 
-	activity := makeListToolsActivity(ExecutorOptions{Store: store})
+	activity := makeListToolsActivity(Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx:   context.Background(),
 		input: ListToolsInput{MCPServerName: "myserver"},
@@ -424,7 +437,7 @@ func TestMakeListToolsActivity_CachesToolSchema(t *testing.T) {
 
 func TestMakeCallToolActivity_ServerNotFound(t *testing.T) {
 	store := compstore.New()
-	activity := makeCallToolActivity(ExecutorOptions{Store: store})
+	activity := makeCallToolActivity(Options{Store: store})
 
 	actCtx := &fakeActivityContext{
 		ctx:   context.Background(),
@@ -449,7 +462,7 @@ func TestMakeCallToolActivity_RealServer(t *testing.T) {
 		},
 	}))
 
-	activity := makeCallToolActivity(ExecutorOptions{Store: store})
+	activity := makeCallToolActivity(Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx: context.Background(),
 		input: CallToolInput{
@@ -483,7 +496,7 @@ func TestMakeCallToolActivity_HeaderInjection(t *testing.T) {
 		},
 	}))
 
-	activity := makeCallToolActivity(ExecutorOptions{Store: store})
+	activity := makeCallToolActivity(Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx:   context.Background(),
 		input: CallToolInput{MCPServerName: "myserver", ToolName: "greet"},
@@ -509,7 +522,7 @@ func TestMakeCallToolActivity_MissingRequiredArg(t *testing.T) {
 		"required":   []any{"name"},
 	})
 
-	activity := makeCallToolActivity(ExecutorOptions{Store: store})
+	activity := makeCallToolActivity(Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx:   context.Background(),
 		input: CallToolInput{MCPServerName: "myserver", ToolName: "greet", Arguments: map[string]any{}},
@@ -549,7 +562,7 @@ func TestMakeCallToolActivity_SPIFFEAuth(t *testing.T) {
 	}))
 
 	fetcher := &fakeJWTFetcher{token: "svid-12345"}
-	activity := makeCallToolActivity(ExecutorOptions{Store: store, JWT: fetcher})
+	activity := makeCallToolActivity(Options{Store: store, JWT: fetcher})
 	actCtx := &fakeActivityContext{
 		ctx: context.Background(),
 		input: CallToolInput{

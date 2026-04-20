@@ -27,26 +27,42 @@ import (
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
+	"github.com/dapr/components-contrib/secretstores"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 )
 
-// FakeSecretGetter is a test double for SecretGetter.
-type FakeSecretGetter struct {
-	secrets map[string]string // key: "storeName/secretName/secretKey"
-	err     error
+// fakeSecretStore implements secretstores.SecretStore for tests.
+type fakeSecretStore struct {
+	data map[string]string // secretName -> value (single key)
+	err  error
 }
 
-func (f *FakeSecretGetter) GetSecret(_ context.Context, storeName, secretName, secretKey string) (string, error) {
+func (f *fakeSecretStore) GetSecret(_ context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	if f.err != nil {
-		return "", f.err
+		return secretstores.GetSecretResponse{}, f.err
 	}
-	key := storeName + "/" + secretName + "/" + secretKey
-	val, ok := f.secrets[key]
-	if !ok {
-		return "", fmt.Errorf("secret %q not found", key)
-	}
-	return val, nil
+	// Return all configured data keyed by their original keys.
+	// compstore.GetSecret looks up resp.Data[secretKey] where secretKey is
+	// what the MCPServer spec references in secretKeyRef.key.
+	return secretstores.GetSecretResponse{Data: f.data}, nil
+}
+
+func (f *fakeSecretStore) Init(_ context.Context, _ secretstores.Metadata) error { return nil }
+func (f *fakeSecretStore) BulkGetSecret(_ context.Context, _ secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
+	return secretstores.BulkGetSecretResponse{}, nil
+}
+func (f *fakeSecretStore) Close() error                                          { return nil }
+func (f *fakeSecretStore) Features() []secretstores.Feature                      { return nil }
+func (f *fakeSecretStore) GetComponentMetadata() (map[string]string, error)      { return nil, nil }
+
+// newTestCompstore creates a *compstore.ComponentStore with a fake secret store.
+func newTestCompstore(t *testing.T, storeName string, secrets map[string]string, err error) *compstore.ComponentStore {
+	t.Helper()
+	cs := compstore.New()
+	cs.AddSecretStore(storeName, &fakeSecretStore{data: secrets, err: err})
+	return cs
 }
 
 type fakeJWTFetcher struct {
@@ -281,13 +297,9 @@ func TestBuildHTTPClient_OAuth2InjectsBearer(t *testing.T) {
 		},
 	}
 
-	secrets := &FakeSecretGetter{
-		secrets: map[string]string{
-			"my-store/my-secret/client_secret": "super-secret",
-		},
-	}
+	cs := newTestCompstore(t, "my-store", map[string]string{"client_secret": "super-secret"}, nil)
 
-	client, err := BuildHTTPClient(context.Background(), srv, secrets, nil, 30*time.Second)
+	client, err := BuildHTTPClient(context.Background(), srv, cs, nil, 30*time.Second)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, targetServer.URL, nil)
@@ -318,8 +330,8 @@ func TestBuildHTTPClient_OAuth2SecretFetchError(t *testing.T) {
 		},
 	}
 
-	secrets := &FakeSecretGetter{err: errors.New("secret store unavailable")}
-	_, err := BuildHTTPClient(context.Background(), srv, secrets, nil, 30*time.Second)
+	cs := newTestCompstore(t, "kubernetes", nil, errors.New("secret store unavailable"))
+	_, err := BuildHTTPClient(context.Background(), srv, cs, nil, 30*time.Second)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "secret store unavailable")
 }
