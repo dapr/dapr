@@ -86,6 +86,13 @@ func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *rtv1.TopicEvent
 	return s.onBulkTopicEventFn(ctx, in)
 }
 
+func (s *server) OnJobEvent(ctx context.Context, in *rtv1.JobEventRequest) (*rtv1.JobEventResponse, error) {
+	if s.onJobEventFn == nil {
+		return new(rtv1.JobEventResponse), nil
+	}
+	return s.onJobEventFn(ctx, in)
+}
+
 func (s *server) OnJobEventAlpha1(ctx context.Context, in *rtv1.JobEventRequest) (*rtv1.JobEventResponse, error) {
 	if s.onJobEventFn == nil {
 		return new(rtv1.JobEventResponse), nil
