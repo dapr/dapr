@@ -19,6 +19,7 @@ import (
 	"slices"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/client"
@@ -40,6 +41,7 @@ type Options struct {
 	Actors           actors.Interface
 	Channels         *channels.Channels
 	WFEngine         wfengine.Interface
+	WorkflowSpec     *config.WorkflowSpec
 	Addresses        []string
 	Security         security.Handler
 	Healthz          healthz.Healthz
@@ -58,11 +60,12 @@ type Scheduler struct {
 
 func New(opts Options) (*Scheduler, error) {
 	connector := connector.New(connector.Options{
-		Namespace: opts.Namespace,
-		AppID:     opts.AppID,
-		Actors:    opts.Actors,
-		Channels:  opts.Channels,
-		WFEngine:  opts.WFEngine,
+		Namespace:    opts.Namespace,
+		AppID:        opts.AppID,
+		WorkflowSpec: opts.WorkflowSpec,
+		Actors:       opts.Actors,
+		Channels:     opts.Channels,
+		WFEngine:     opts.WFEngine,
 	})
 
 	if opts.SchedulerStreams < 1 {
