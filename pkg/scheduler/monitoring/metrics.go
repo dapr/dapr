@@ -53,8 +53,21 @@ var (
 		"scheduler/trigger_latency",
 		"The total time it takes to trigger a job from the scheduler service.",
 		stats.UnitMilliseconds)
+	concurrencyInflightGauge = stats.Int64(
+		"scheduler/concurrency_inflight",
+		"Current number of in-flight triggers subject to global concurrency limits on this scheduler instance.",
+		stats.UnitDimensionless)
+	concurrencyPendingGauge = stats.Int64(
+		"scheduler/concurrency_pending",
+		"Current number of triggers waiting for a concurrency slot on this scheduler instance.",
+		stats.UnitDimensionless)
+	concurrencyThrottledTotal = stats.Int64(
+		"scheduler/concurrency_throttled_total",
+		"Total number of triggers that were throttled by global concurrency limits.",
+		stats.UnitDimensionless)
 
-	tagType = tag.MustNewKey("type")
+	tagType           = tag.MustNewKey("type")
+	tagConcurrencyKey = tag.MustNewKey("concurrency_key")
 )
 
 var tagSidecarsConnected = utils.WithTags(sidecarsConnectedGauge.Name())
@@ -169,6 +182,33 @@ func RecordJobsUndeliveredCount(jobMetadata *schedulerv1pb.JobMetadata) {
 	stats.RecordWithTags(context.Background(), tag, jobsUndeliveredTotal.M(1))
 }
 
+// RecordConcurrencyInflight records the current in-flight count for a
+// concurrency gate on this scheduler instance.
+func RecordConcurrencyInflight(key string, count int64) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(concurrencyInflightGauge.Name(), tagConcurrencyKey, key),
+		concurrencyInflightGauge.M(count),
+	)
+}
+
+// RecordConcurrencyPending records the current pending count for a
+// concurrency gate on this scheduler instance.
+func RecordConcurrencyPending(key string, count int64) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(concurrencyPendingGauge.Name(), tagConcurrencyKey, key),
+		concurrencyPendingGauge.M(count),
+	)
+}
+
+// RecordConcurrencyThrottled records that a trigger was throttled by a
+// concurrency gate.
+func RecordConcurrencyThrottled(key string) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(concurrencyThrottledTotal.Name(), tagConcurrencyKey, key),
+		concurrencyThrottledTotal.M(1),
+	)
+}
+
 // InitMetrics initialize the scheduler service metrics.
 func InitMetrics() error {
 	err := view.Register(
@@ -178,6 +218,9 @@ func InitMetrics() error {
 		utils.NewMeasureView(triggerLatency, []tag.Key{tagType}, view.Distribution(0, 100, 500, 1000, 5000, 10000)),
 		utils.NewMeasureView(jobsFailedTotal, []tag.Key{tagType}, view.Count()),
 		utils.NewMeasureView(jobsUndeliveredTotal, []tag.Key{tagType}, view.Count()),
+		utils.NewMeasureView(concurrencyInflightGauge, []tag.Key{tagConcurrencyKey}, view.LastValue()),
+		utils.NewMeasureView(concurrencyPendingGauge, []tag.Key{tagConcurrencyKey}, view.LastValue()),
+		utils.NewMeasureView(concurrencyThrottledTotal, []tag.Key{tagConcurrencyKey}, view.Count()),
 	)
 
 	return err
