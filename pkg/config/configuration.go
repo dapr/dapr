@@ -90,7 +90,7 @@ const (
 )
 
 var defaultFeatures = map[Feature]bool{
-	HotReload: true,
+	HotReload:                       true,
 	WorkflowsRemoteActivityReminder: true,
 }
 
