@@ -59,7 +59,6 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppPort(g.sub.Port(t)),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(g.operator.Address(t)),

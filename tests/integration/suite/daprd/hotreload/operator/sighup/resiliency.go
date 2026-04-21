@@ -103,7 +103,6 @@ func (r *resiliency) Setup(t *testing.T) []framework.Option {
 
 	r.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
 			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", r.trustAnchor),
 			exec.WithStdout(r.logOut),

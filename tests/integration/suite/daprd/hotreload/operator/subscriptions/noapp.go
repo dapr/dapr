@@ -47,7 +47,6 @@ func (n *noapp) Setup(t *testing.T) []framework.Option {
 
 	n.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(operator.Address(t)),

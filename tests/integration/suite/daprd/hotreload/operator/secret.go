@@ -68,7 +68,6 @@ func (s *secret) Setup(t *testing.T) []framework.Option {
 
 	s.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(s.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
