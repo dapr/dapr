@@ -100,25 +100,29 @@ func (m *multiappchild) Run(t *testing.T, ctx context.Context) {
 	m.daprd1.WaitUntilRunning(t, ctx)
 	m.daprd2.WaitUntilRunning(t, ctx)
 
-	reg := dworkflow.NewRegistry()
-	reg.AddWorkflowN("sign-xapp-parent", func(ctx *dworkflow.WorkflowContext) (any, error) {
+	regParent := dworkflow.NewRegistry()
+	regParent.AddWorkflowN("sign-xapp-parent", func(ctx *dworkflow.WorkflowContext) (any, error) {
 		var result string
-		if err := ctx.CallActivity("remote-act").Await(&result); err != nil {
+		if err := ctx.CallActivity("remote-act",
+			dworkflow.WithActivityAppID(m.daprd2.AppID()),
+		).Await(&result); err != nil {
 			return nil, err
 		}
 		return "parent-done:" + result, nil
 	})
-	reg.AddActivityN("remote-act", func(ctx dworkflow.ActivityContext) (any, error) {
+
+	regChild := dworkflow.NewRegistry()
+	regChild.AddActivityN("remote-act", func(ctx dworkflow.ActivityContext) (any, error) {
 		return "from-child-app", nil
 	})
 
-	// Both instances register the same workflow and activity so that
-	// placement can route the activity to either instance.
+	// daprd1 runs the orchestrator; daprd2 hosts the activity. The parent
+	// explicitly routes the activity call to daprd2 via WithActivityAppID.
 	client1 := dworkflow.NewClient(m.daprd1.GRPCConn(t, ctx))
-	require.NoError(t, client1.StartWorker(ctx, reg))
+	require.NoError(t, client1.StartWorker(ctx, regParent))
 
 	client2 := dworkflow.NewClient(m.daprd2.GRPCConn(t, ctx))
-	require.NoError(t, client2.StartWorker(ctx, reg))
+	require.NoError(t, client2.StartWorker(ctx, regChild))
 
 	// Schedule on the parent (orchestrator) instance.
 	id, err := client1.ScheduleWorkflow(ctx, "sign-xapp-parent")

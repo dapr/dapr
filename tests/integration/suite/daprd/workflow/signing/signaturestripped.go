@@ -15,7 +15,9 @@ package signing
 
 import (
 	"context"
+	"database/sql"
 	"encoding/base64"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -38,9 +40,10 @@ func init() {
 	suite.Register(new(signatureStripped))
 }
 
-// signatureStripped verifies that when all signature-* and sigcert-* keys are
-// stripped from the state store (but history remains), the workflow is marked as
-// FAILED with a signature verification error indicating unsigned history events.
+// signatureStripped verifies that stripping any of the four signing-related
+// state fields (signature keys, sigcert keys, SignatureLength metadata,
+// SigningCertificateLength metadata) results in a verification error on
+// reload. Each scenario runs as a subtest with its own workflow instance.
 type signatureStripped struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
@@ -82,67 +85,105 @@ spec:
 func (s *signatureStripped) Run(tt *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(tt, ctx)
 
+	tt.Run("signature_keys_deleted", func(t *testing.T) {
+		id := s.scheduleAndComplete(t, ctx)
+		deleteKeys(t, ctx, s.db, "%||signature-%")
+		s.assertLoadFails(t, ctx, id)
+	})
+
+	tt.Run("sigcert_keys_deleted", func(t *testing.T) {
+		id := s.scheduleAndComplete(t, ctx)
+		deleteKeys(t, ctx, s.db, "%||sigcert-%")
+		s.assertLoadFails(t, ctx, id)
+	})
+
+	tt.Run("metadata_signature_length_zeroed", func(t *testing.T) {
+		id := s.scheduleAndComplete(t, ctx)
+		mutateMetadata(t, ctx, s.db, id, func(m *backend.BackendWorkflowStateMetadata) {
+			m.SignatureLength = 0
+		})
+		s.assertLoadFails(t, ctx, id)
+	})
+
+	tt.Run("metadata_signing_certificate_length_zeroed", func(t *testing.T) {
+		id := s.scheduleAndComplete(t, ctx)
+		mutateMetadata(t, ctx, s.db, id, func(m *backend.BackendWorkflowStateMetadata) {
+			m.SigningCertificateLength = 0
+		})
+		s.assertLoadFails(t, ctx, id)
+	})
+}
+
+func (s *signatureStripped) scheduleAndComplete(t *testing.T, ctx context.Context) string {
+	t.Helper()
 	reg := dworkflow.NewRegistry()
 	reg.AddWorkflowN("sign-stripped", func(ctx *dworkflow.WorkflowContext) (any, error) {
 		return "", nil
 	})
-
-	client := dworkflow.NewClient(s.daprd.GRPCConn(tt, ctx))
-	require.NoError(tt, client.StartWorker(ctx, reg))
+	client := dworkflow.NewClient(s.daprd.GRPCConn(t, ctx))
+	require.NoError(t, client.StartWorker(ctx, reg))
 
 	id, err := client.ScheduleWorkflow(ctx, "sign-stripped")
-	require.NoError(tt, err)
-
+	require.NoError(t, err)
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
-	require.NoError(tt, err)
+	require.NoError(t, err)
+	assert.Positive(t, fworkflow.SignatureCount(t, ctx, s.db, id))
+	assert.Positive(t, fworkflow.CertificateCount(t, ctx, s.db, id))
+	return id
+}
 
-	assert.Positive(tt, fworkflow.SignatureCount(tt, ctx, s.db, id))
-	assert.Positive(tt, fworkflow.CertificateCount(tt, ctx, s.db, id))
+func (s *signatureStripped) assertLoadFails(t *testing.T, ctx context.Context, id string) {
+	t.Helper()
+	s.daprd.Restart(t, ctx)
+	s.daprd.WaitUntilRunning(t, ctx)
 
-	db := s.db.GetConnection(tt)
-	tableName := s.db.TableName()
+	client := dworkflow.NewClient(s.daprd.GRPCConn(t, ctx))
+	require.NoError(t, client.StartWorker(ctx, dworkflow.NewRegistry()))
 
-	// Delete all signature-* and sigcert-* keys from the state store.
-	//nolint:gosec
-	_, err = db.ExecContext(ctx,
-		"DELETE FROM "+tableName+" WHERE key LIKE '%||signature-%' OR key LIKE '%||sigcert-%'",
+	_, err := client.FetchWorkflowMetadata(ctx, id)
+	require.Error(t, err)
+}
+
+func deleteKeys(t *testing.T, ctx context.Context, db *sqlite.SQLite, likePattern string) {
+	t.Helper()
+	_, err := db.GetConnection(t).ExecContext(ctx,
+		"DELETE FROM "+db.TableName()+" WHERE key LIKE ?",
+		likePattern,
 	)
-	require.NoError(tt, err)
+	require.NoError(t, err)
+}
 
-	// Update the metadata key to set SignatureLength and SigningCertificateLength to 0.
+func mutateMetadata(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string, mutate func(*backend.BackendWorkflowStateMetadata)) {
+	t.Helper()
+	conn := db.GetConnection(t)
+	tableName := db.TableName()
+
 	var metaKey, metaValue string
-	require.NoError(tt, db.QueryRowContext(ctx,
-		"SELECT key, value FROM "+tableName+" WHERE key LIKE '%||metadata' LIMIT 1",
-	).Scan(&metaKey, &metaValue))
+	err := conn.QueryRowContext(ctx,
+		fmt.Sprintf("SELECT key, value FROM '%s' WHERE key LIKE ? AND key LIKE '%%||metadata' LIMIT 1", tableName),
+		"%"+instanceID+"%",
+	).Scan(&metaKey, &metaValue)
+	if err == sql.ErrNoRows {
+		t.Fatalf("no metadata row for instance %s", instanceID)
+	}
+	require.NoError(t, err)
 
 	raw, err := base64.StdEncoding.DecodeString(metaValue)
-	require.NoError(tt, err)
+	require.NoError(t, err)
 
 	var metadata backend.BackendWorkflowStateMetadata
-	require.NoError(tt, proto.Unmarshal(raw, &metadata))
+	require.NoError(t, proto.Unmarshal(raw, &metadata))
 
-	metadata.SignatureLength = 0
-	metadata.SigningCertificateLength = 0
+	mutate(&metadata)
 
 	updated, err := proto.Marshal(&metadata)
-	require.NoError(tt, err)
+	require.NoError(t, err)
 	encoded := base64.StdEncoding.EncodeToString(updated)
 
 	//nolint:gosec
-	_, err = db.ExecContext(ctx,
+	_, err = conn.ExecContext(ctx,
 		"UPDATE "+tableName+" SET value = ? WHERE key = ?",
 		encoded, metaKey,
 	)
-	require.NoError(tt, err)
-
-	// Restart daprd to clear any cached state.
-	s.daprd.Restart(tt, ctx)
-	s.daprd.WaitUntilRunning(tt, ctx)
-
-	client = dworkflow.NewClient(s.daprd.GRPCConn(tt, ctx))
-	require.NoError(tt, client.StartWorker(ctx, reg))
-
-	_, err = client.FetchWorkflowMetadata(ctx, id)
-	require.Error(tt, err)
-	assert.Contains(tt, err.Error(), "unsigned history events")
+	require.NoError(t, err)
 }

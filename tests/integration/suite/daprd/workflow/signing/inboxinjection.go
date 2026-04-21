@@ -180,28 +180,18 @@ func (i *inboxInjection) Run(tt *testing.T, ctx context.Context) {
 	require.NoError(tt, err)
 
 	// Restart daprd to clear the in-memory cache and force re-loading state
-	// from the store. This triggers the orchestrator to process the inbox.
+	// from the store.
 	i.daprd.Restart(tt, ctx)
 	i.daprd.WaitUntilRunning(tt, ctx)
 
 	client = dworkflow.NewClient(i.daprd.GRPCConn(tt, ctx))
 	require.NoError(tt, client.StartWorker(ctx, reg))
 
-	// The workflow should remain RUNNING because the injected TaskCompleted
-	// was rejected by inbox validation (no matching TaskScheduled in history).
-	require.EventuallyWithT(tt, func(c *assert.CollectT) {
-		meta, err = client.FetchWorkflowMetadata(ctx, id)
-		if !assert.NoError(c, err) {
-			return
-		}
-		assert.Equal(c, dworkflow.StatusRunning, meta.RuntimeStatus)
-	}, time.Second*10, time.Millisecond*100)
-
-	// Send a real external event to confirm the workflow is still healthy
-	// and can complete normally after the injected event was rejected.
-	require.NoError(tt, client.RaiseEvent(ctx, id, "continue", dworkflow.WithEventPayload("real-event")))
-
-	meta, err = client.WaitForWorkflowCompletion(ctx, id)
-	require.NoError(tt, err)
-	assert.Equal(tt, dworkflow.StatusCompleted, meta.RuntimeStatus)
+	// Inbox injection is treated as state store tampering: any operation that
+	// loads the actor state detects the forged inbox entry and rejects the
+	// call. RaiseEvent goes through the orchestrator actor, so it surfaces
+	// the tampering error directly.
+	err = client.RaiseEvent(ctx, id, "continue", dworkflow.WithEventPayload("real-event"))
+	require.Error(tt, err)
+	assert.Contains(tt, err.Error(), "state store tampering")
 }

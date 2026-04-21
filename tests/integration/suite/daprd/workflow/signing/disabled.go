@@ -96,7 +96,7 @@ func (d *disabled) Run(tt *testing.T, ctx context.Context) {
 	assert.Equal(tt, 0, fworkflow.CertificateCount(tt, ctx, d.db, id))
 
 	// Verify that history events were still produced.
-	assert.Positive(tt, d.db.CountStateKeys(tt, ctx, "history"))
+	assert.Positive(tt, fworkflow.HistoryCount(tt, ctx, d.db, id))
 
 	// Verify workflow completed successfully.
 	meta, err := client.FetchWorkflowMetadata(ctx, id)

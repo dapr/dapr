@@ -78,5 +78,9 @@ func (n *nomtlserror) Run(t *testing.T, ctx context.Context) {
 	n.sched.WaitUntilRunning(t, ctx)
 	n.place.WaitUntilRunning(t, ctx)
 
+	// The log line confirms daprd detected the misconfiguration. The
+	// daprd.WithExit1() option asserts at process cleanup that daprd
+	// actually exited with code 1, so both the error message and the
+	// fatal-exit are verified by the end of the test.
 	n.logline.EventuallyFoundAll(t)
 }

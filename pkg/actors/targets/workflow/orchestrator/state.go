@@ -60,6 +60,20 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 		return nil, nil, nil
 	}
 
+	// When signing is enabled, any inbox event that does not match signed
+	// history can only have been written via state store tampering. Treat
+	// the state as unrecoverable: fail the workflow terminally so no
+	// further progress is made on forged input.
+	if o.signer != nil {
+		if filtered := filterValidInboxEvents(state); len(filtered) != len(state.Inbox) {
+			o.failSignatureVerification(ctx)
+			return nil, nil, wferrors.NewVerificationError(
+				fmt.Errorf("workflow actor '%s': inbox contained %d events that did not match signed history (state store tampering)",
+					o.actorID, len(state.Inbox)-len(filtered)),
+			)
+		}
+	}
+
 	// Update cached state
 	o.state = state
 	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)

@@ -108,4 +108,11 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 	// exactly 3 events: WorkflowStarted, ExecutionStarted, and ExecutionCompleted.
 	data := fworkflow.UnmarshalSigningData(t, ctx, c.db, id)
 	assert.Len(t, data.RawEvents, 3, "ContinueAsNew final iteration should have exactly 3 events")
+
+	// The signature chain is also reset on ContinueAsNew, so the first
+	// signature of the final iteration must not chain back to any prior
+	// signature (PreviousSignatureDigest must be empty).
+	require.NotEmpty(t, data.Signatures)
+	assert.Empty(t, data.Signatures[0].GetPreviousSignatureDigest(),
+		"first signature after ContinueAsNew should have no previous digest (chain reset)")
 }

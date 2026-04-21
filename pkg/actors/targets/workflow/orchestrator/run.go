@@ -78,29 +78,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		return todo.RunCompletedTrue, nil
 	}
 
-	// Validate inbox events: result events (TaskCompleted/TaskFailed,
-	// ChildWorkflowInstanceCompleted/Failed) must match operations that
-	// were scheduled in signed history. Invalid events are purged from
-	// the inbox and the state is saved to prevent the same invalid events
-	// from blocking execution on retry.
-	if o.signer != nil {
-		filtered := filterValidInboxEvents(state)
-		if len(filtered) != len(state.Inbox) {
-			log.Warnf("Workflow actor '%s': purged %d injected inbox events that did not match signed history",
-				o.actorID, len(state.Inbox)-len(filtered))
-			// Clear and re-add valid events so state change tracking
-			// generates the correct delete operations for the state store.
-			state.ClearInbox()
-			for _, e := range filtered {
-				state.AddToInbox(e)
-			}
-			if err = o.signAndSaveState(ctx, state); err != nil {
-				return todo.RunCompletedFalse, fmt.Errorf("failed to save state after purging injected events: %w", err)
-			}
-			return todo.RunCompletedFalse, fmt.Errorf("workflow actor '%s': inbox contained injected events that were purged; retrying", o.actorID)
-		}
-	}
-
 	var esHistoryEvent *backend.HistoryEvent
 	for _, e := range state.Inbox {
 		if es := e.GetExecutionStarted(); es != nil {
@@ -489,6 +466,17 @@ func filterValidInboxEvents(state *wfenginestate.State) []*backend.HistoryEvent 
 				log.Warnf("Dropping injected inbox event: child workflow failure for task %d not created in signed history", taskID)
 				continue
 			}
+		case e.GetEventRaised() != nil,
+			e.GetTimerFired() != nil,
+			e.GetExecutionStarted() != nil,
+			e.GetExecutionTerminated() != nil,
+			e.GetExecutionResumed() != nil,
+			e.GetExecutionSuspended() != nil:
+			// Legitimate inbox event types that do not correspond to a previously
+			// scheduled operation.
+		default:
+			log.Warnf("Dropping injected inbox event: unknown event type")
+			continue
 		}
 		valid = append(valid, e)
 	}

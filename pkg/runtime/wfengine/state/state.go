@@ -686,13 +686,14 @@ func verifySignatureChain(s *State, sgn *signer.Signer) error {
 	if len(s.Signatures) > 0 {
 		last := s.Signatures[len(s.Signatures)-1]
 		coveredEvents := last.GetStartEventIndex() + last.GetEventCount()
-		if coveredEvents < uint64(len(rawEvents)) {
-			// Signatures don't cover all history events. This means the workflow ran
-			// on a non-signing host mid-flight, creating an unsigned gap. These
-			// events have no integrity proof and could have been tampered with. The
-			// workflow must be purged.
-			return fmt.Errorf("signatures cover events [0, %d) but %d history events exist; %d events have no integrity proof — this workflow ran on a non-signing host and cannot be recovered",
-				coveredEvents, len(rawEvents), uint64(len(rawEvents))-coveredEvents)
+		if coveredEvents != uint64(len(rawEvents)) {
+			// Signature coverage does not match history length. Either an unsigned
+			// gap exists (coveredEvents < len) because the workflow ran on a
+			// non-signing host, or events were removed from history while
+			// signatures remain (coveredEvents > len). In both cases, the state
+			// has no valid integrity proof and the workflow cannot be recovered.
+			return fmt.Errorf("signatures cover events [0, %d) but %d history events exist — signature coverage mismatch, state cannot be verified",
+				coveredEvents, len(rawEvents))
 		}
 	}
 	if err := historysigning.VerifyChain(historysigning.VerifyChainOptions{

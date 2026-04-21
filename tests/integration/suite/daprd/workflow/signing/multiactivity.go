@@ -105,7 +105,11 @@ func (m *multiactivity) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	assert.GreaterOrEqual(t, fworkflow.SignatureCount(t, ctx, m.db, id), 5)
+	// Each of the 5 activities produces a separate orchestrator run (because
+	// the workflow awaits between calls), and the initial + final runs each
+	// produce one signature as well. 5 activity-result runs + 1 initial run =
+	// 6 signatures.
+	assert.Equal(t, 6, fworkflow.SignatureCount(t, ctx, m.db, id))
 
 	fworkflow.VerifySignatureChain(t, ctx, m.db, id, m.sentry.CABundle().X509.TrustAnchors)
 	fworkflow.VerifyCertAppID(t, ctx, m.db, id, m.daprd.AppID())

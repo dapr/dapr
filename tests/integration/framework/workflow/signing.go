@@ -93,6 +93,13 @@ func CertificateCount(t *testing.T, ctx context.Context, db *sqlite.SQLite, inst
 	return len(db.ReadStateValues(t, ctx, instanceID, "sigcert"))
 }
 
+// HistoryCount returns the number of history entries stored for the given
+// workflow instance.
+func HistoryCount(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string) int {
+	t.Helper()
+	return len(db.ReadStateValues(t, ctx, instanceID, "history"))
+}
+
 // VerifySignatureChain verifies the full history signature chain for a
 // workflow instance, including cryptographic signatures and certificate
 // chain-of-trust against the given trust anchors.

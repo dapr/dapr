@@ -79,5 +79,5 @@ func (n *nosigning) Run(t *testing.T, ctx context.Context) {
 
 	assert.Equal(t, 0, fworkflow.SignatureCount(t, ctx, n.db, id))
 	assert.Equal(t, 0, fworkflow.CertificateCount(t, ctx, n.db, id))
-	assert.Positive(t, n.db.CountStateKeys(t, ctx, "history"))
+	assert.Positive(t, fworkflow.HistoryCount(t, ctx, n.db, id))
 }

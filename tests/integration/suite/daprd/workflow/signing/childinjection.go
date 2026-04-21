@@ -178,33 +178,18 @@ func (i *childInjection) Run(tt *testing.T, ctx context.Context) {
 	require.NoError(tt, err)
 
 	// Restart daprd to clear the in-memory cache and force re-loading state
-	// from the store. This triggers the orchestrator to process the inbox.
+	// from the store.
 	i.daprd.Restart(tt, ctx)
 	i.daprd.WaitUntilRunning(tt, ctx)
 
 	client = dworkflow.NewClient(i.daprd.GRPCConn(tt, ctx))
 	require.NoError(tt, client.StartWorker(ctx, reg))
 
-	// The workflow should remain RUNNING because the injected
-	// ChildWorkflowInstanceCompleted was rejected by inbox validation
-	// (no matching ChildWorkflowInstanceCreated for TaskScheduledId 9999).
-	require.EventuallyWithT(tt, func(c *assert.CollectT) {
-		meta, err = client.FetchWorkflowMetadata(ctx, id)
-		if !assert.NoError(c, err) {
-			return
-		}
-		assert.Equal(c, dworkflow.StatusRunning, meta.RuntimeStatus)
-	}, time.Second*10, time.Millisecond*100)
-
-	assert.Positive(tt, i.db.CountStateKeys(tt, ctx, "signature"))
-
-	// Send the "continue" event so the parent can complete. The inbox
-	// filtering validates that only legitimate child workflow results
-	// (matching ChildWorkflowInstanceCreated in signed history) are
-	// accepted- fake results would be purged by filterValidInboxEvents.
-	require.NoError(tt, client.RaiseEvent(ctx, id, "continue", dworkflow.WithEventPayload("real-event")))
-
-	meta, err = client.WaitForWorkflowCompletion(ctx, id)
-	require.NoError(tt, err)
-	assert.Equal(tt, dworkflow.StatusCompleted, meta.RuntimeStatus)
+	// Inbox injection is treated as state store tampering: any operation that
+	// loads the actor state detects the forged inbox entry and rejects the
+	// call. RaiseEvent goes through the orchestrator actor, so it surfaces
+	// the tampering error directly.
+	err = client.RaiseEvent(ctx, id, "continue", dworkflow.WithEventPayload("real-event"))
+	require.Error(tt, err)
+	assert.Contains(tt, err.Error(), "state store tampering")
 }

@@ -15,9 +15,13 @@ package signing
 
 import (
 	"context"
+	"crypto/x509"
 	"testing"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -27,6 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api/protos"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
 )
 
@@ -125,4 +130,23 @@ func (m *multiapp) Run(t *testing.T, ctx context.Context) {
 
 	fworkflow.VerifySignatureChain(t, ctx, m.db, id, m.sentry.CABundle().X509.TrustAnchors)
 	fworkflow.VerifyCertAppID(t, ctx, m.db, id, m.daprd1.AppID())
+
+	// Negative check: no certificate should be attributed to daprd2's app ID
+	// (activity-only app). Signing is always tied to the orchestrator identity.
+	certValues := m.db.ReadStateValues(t, ctx, id, "sigcert")
+	require.NotEmpty(t, certValues)
+	unexpected := spiffeid.RequireFromSegments(
+		spiffeid.RequireTrustDomainFromString("public"),
+		"ns", "default", m.daprd2.AppID(),
+	)
+	for i, raw := range certValues {
+		var sc protos.SigningCertificate
+		require.NoError(t, proto.Unmarshal(raw, &sc))
+		certs, err := x509.ParseCertificates(sc.GetCertificate())
+		require.NoError(t, err)
+		require.NotEmpty(t, certs[0].URIs)
+		id, err := spiffeid.FromURI(certs[0].URIs[0])
+		require.NoError(t, err)
+		assert.NotEqual(t, unexpected, id, "certificate %d unexpectedly attributed to daprd2", i)
+	}
 }
