@@ -26,6 +26,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/durabletask-go/api/protos"
+	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/historysigning"
 	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/crypto/spiffe/trustanchors/fake"
@@ -98,6 +99,24 @@ func CertificateCount(t *testing.T, ctx context.Context, db *sqlite.SQLite, inst
 func HistoryCount(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string) int {
 	t.Helper()
 	return len(db.ReadStateValues(t, ctx, instanceID, "history"))
+}
+
+// MutateMetadata loads the persisted BackendWorkflowStateMetadata for the
+// given workflow instance, applies the mutation, and writes it back. Used
+// by negative tests that simulate state store tampering.
+func MutateMetadata(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string, mutate func(*backend.BackendWorkflowStateMetadata)) {
+	t.Helper()
+
+	key, raw := db.ReadStateValue(t, ctx, instanceID, "metadata")
+
+	var metadata backend.BackendWorkflowStateMetadata
+	require.NoError(t, proto.Unmarshal(raw, &metadata))
+
+	mutate(&metadata)
+
+	updated, err := proto.Marshal(&metadata)
+	require.NoError(t, err)
+	db.WriteStateValue(t, ctx, key, updated)
 }
 
 // VerifySignatureChain verifies the full history signature chain for a

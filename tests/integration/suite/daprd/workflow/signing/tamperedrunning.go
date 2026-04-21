@@ -15,7 +15,6 @@ package signing
 
 import (
 	"context"
-	"encoding/base64"
 	"testing"
 	"time"
 
@@ -102,16 +101,7 @@ func (tr *tamperedrunning) Run(tt *testing.T, ctx context.Context) {
 	assert.Equal(tt, dworkflow.StatusRunning, meta.RuntimeStatus)
 
 	// Tamper with a history event by modifying its EventId.
-	db := tr.db.GetConnection(tt)
-	tableName := tr.db.TableName()
-
-	var histKey, histValue string
-	require.NoError(tt, db.QueryRowContext(ctx,
-		"SELECT key, value FROM "+tableName+" WHERE key LIKE '%||history-%' LIMIT 1",
-	).Scan(&histKey, &histValue))
-
-	raw, err := base64.StdEncoding.DecodeString(histValue)
-	require.NoError(tt, err)
+	histKey, raw := tr.db.FirstStateValue(tt, ctx, id, "history")
 
 	var evt protos.HistoryEvent
 	require.NoError(tt, proto.Unmarshal(raw, &evt))
@@ -120,14 +110,8 @@ func (tr *tamperedrunning) Run(tt *testing.T, ctx context.Context) {
 
 	updated, err := proto.Marshal(&evt)
 	require.NoError(tt, err)
-	encoded := base64.StdEncoding.EncodeToString(updated)
 
-	//nolint:gosec
-	_, err = db.ExecContext(ctx,
-		"UPDATE "+tableName+" SET value = ? WHERE key = ?",
-		encoded, histKey,
-	)
-	require.NoError(tt, err)
+	tr.db.WriteStateValue(tt, ctx, histKey, updated)
 
 	// Restart daprd to clear any cached state.
 	tr.daprd.Restart(tt, ctx)

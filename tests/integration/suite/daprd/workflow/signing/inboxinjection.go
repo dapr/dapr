@@ -15,9 +15,7 @@ package signing
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
-	"strconv"
 	"testing"
 	"time"
 
@@ -126,10 +124,7 @@ func (i *inboxInjection) Run(tt *testing.T, ctx context.Context) {
 	// Inject a fake TaskCompleted event into the inbox referencing a
 	// TaskScheduledId (9999) that was never scheduled in the workflow history.
 	appID := i.daprd.AppID()
-	actorType := "dapr.internal.default." + appID + ".workflow"
-	db := i.db.GetConnection(tt)
-	tableName := i.db.TableName()
-	keyPrefix := appID + "||" + actorType + "||" + id + "||"
+	keyPrefix := appID + "||dapr.internal.default." + appID + ".workflow||" + id + "||"
 
 	fakeEvt := &protos.HistoryEvent{
 		EventId:   int32(-1),
@@ -144,40 +139,12 @@ func (i *inboxInjection) Run(tt *testing.T, ctx context.Context) {
 	raw, err := proto.Marshal(fakeEvt)
 	require.NoError(tt, err)
 
-	encoded := base64.StdEncoding.EncodeToString(raw)
-	inboxKey := fmt.Sprintf("%sinbox-%06d", keyPrefix, 0)
-
-	_, err = db.ExecContext(ctx,
-		fmt.Sprintf("INSERT OR REPLACE INTO '%s' (key, value, is_binary, etag) VALUES (?, ?, 1, ?)", tableName),
-		inboxKey, encoded, strconv.FormatInt(time.Now().UnixNano(), 10),
-	)
-	require.NoError(tt, err)
+	i.db.WriteStateValue(tt, ctx, fmt.Sprintf("%sinbox-%06d", keyPrefix, 0), raw)
 
 	// Update the workflow metadata to reflect the injected inbox event.
-	metaKey := keyPrefix + "metadata"
-	var existingVal string
-	var isBin bool
-	require.NoError(tt, db.QueryRowContext(ctx,
-		fmt.Sprintf("SELECT value, is_binary FROM '%s' WHERE key = ?", tableName),
-		metaKey,
-	).Scan(&existingVal, &isBin))
-	require.True(tt, isBin)
-
-	var wfMeta backend.BackendWorkflowStateMetadata
-	metaRaw, err := base64.StdEncoding.DecodeString(existingVal)
-	require.NoError(tt, err)
-	require.NoError(tt, proto.Unmarshal(metaRaw, &wfMeta))
-
-	wfMeta.InboxLength = uint64(1)
-	metaRaw, err = proto.Marshal(&wfMeta)
-	require.NoError(tt, err)
-
-	metaEncoded := base64.StdEncoding.EncodeToString(metaRaw)
-	_, err = db.ExecContext(ctx,
-		fmt.Sprintf("INSERT OR REPLACE INTO '%s' (key, value, is_binary, etag) VALUES (?, ?, 1, ?)", tableName),
-		metaKey, metaEncoded, strconv.FormatInt(time.Now().UnixNano(), 10),
-	)
-	require.NoError(tt, err)
+	fworkflow.MutateMetadata(tt, ctx, i.db, id, func(m *backend.BackendWorkflowStateMetadata) {
+		m.InboxLength = 1
+	})
 
 	// Restart daprd to clear the in-memory cache and force re-loading state
 	// from the store.

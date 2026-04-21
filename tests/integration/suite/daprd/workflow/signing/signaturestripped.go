@@ -15,14 +15,10 @@ package signing
 
 import (
 	"context"
-	"database/sql"
-	"encoding/base64"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -87,19 +83,19 @@ func (s *signatureStripped) Run(tt *testing.T, ctx context.Context) {
 
 	tt.Run("signature_keys_deleted", func(t *testing.T) {
 		id := s.scheduleAndComplete(t, ctx)
-		deleteKeys(t, ctx, s.db, "%||signature-%")
+		s.db.DeleteStateKeys(t, ctx, "%||signature-%")
 		s.assertLoadFails(t, ctx, id)
 	})
 
 	tt.Run("sigcert_keys_deleted", func(t *testing.T) {
 		id := s.scheduleAndComplete(t, ctx)
-		deleteKeys(t, ctx, s.db, "%||sigcert-%")
+		s.db.DeleteStateKeys(t, ctx, "%||sigcert-%")
 		s.assertLoadFails(t, ctx, id)
 	})
 
 	tt.Run("metadata_signature_length_zeroed", func(t *testing.T) {
 		id := s.scheduleAndComplete(t, ctx)
-		mutateMetadata(t, ctx, s.db, id, func(m *backend.BackendWorkflowStateMetadata) {
+		fworkflow.MutateMetadata(t, ctx, s.db, id, func(m *backend.BackendWorkflowStateMetadata) {
 			m.SignatureLength = 0
 		})
 		s.assertLoadFails(t, ctx, id)
@@ -107,7 +103,7 @@ func (s *signatureStripped) Run(tt *testing.T, ctx context.Context) {
 
 	tt.Run("metadata_signing_certificate_length_zeroed", func(t *testing.T) {
 		id := s.scheduleAndComplete(t, ctx)
-		mutateMetadata(t, ctx, s.db, id, func(m *backend.BackendWorkflowStateMetadata) {
+		fworkflow.MutateMetadata(t, ctx, s.db, id, func(m *backend.BackendWorkflowStateMetadata) {
 			m.SigningCertificateLength = 0
 		})
 		s.assertLoadFails(t, ctx, id)
@@ -144,46 +140,3 @@ func (s *signatureStripped) assertLoadFails(t *testing.T, ctx context.Context, i
 	require.Error(t, err)
 }
 
-func deleteKeys(t *testing.T, ctx context.Context, db *sqlite.SQLite, likePattern string) {
-	t.Helper()
-	_, err := db.GetConnection(t).ExecContext(ctx,
-		"DELETE FROM "+db.TableName()+" WHERE key LIKE ?",
-		likePattern,
-	)
-	require.NoError(t, err)
-}
-
-func mutateMetadata(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string, mutate func(*backend.BackendWorkflowStateMetadata)) {
-	t.Helper()
-	conn := db.GetConnection(t)
-	tableName := db.TableName()
-
-	var metaKey, metaValue string
-	err := conn.QueryRowContext(ctx,
-		fmt.Sprintf("SELECT key, value FROM '%s' WHERE key LIKE ? AND key LIKE '%%||metadata' LIMIT 1", tableName),
-		"%"+instanceID+"%",
-	).Scan(&metaKey, &metaValue)
-	if err == sql.ErrNoRows {
-		t.Fatalf("no metadata row for instance %s", instanceID)
-	}
-	require.NoError(t, err)
-
-	raw, err := base64.StdEncoding.DecodeString(metaValue)
-	require.NoError(t, err)
-
-	var metadata backend.BackendWorkflowStateMetadata
-	require.NoError(t, proto.Unmarshal(raw, &metadata))
-
-	mutate(&metadata)
-
-	updated, err := proto.Marshal(&metadata)
-	require.NoError(t, err)
-	encoded := base64.StdEncoding.EncodeToString(updated)
-
-	//nolint:gosec
-	_, err = conn.ExecContext(ctx,
-		"UPDATE "+tableName+" SET value = ? WHERE key = ?",
-		encoded, metaKey,
-	)
-	require.NoError(t, err)
-}

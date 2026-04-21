@@ -18,11 +18,13 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	// Blank import for the sqlite driver
 	_ "modernc.org/sqlite"
@@ -195,6 +197,72 @@ func (s *SQLite) CountStateKeys(t *testing.T, ctx context.Context, keyPrefix str
 		"%||"+keyPrefix+"-%",
 	).Scan(&count))
 	return count
+}
+
+// DeleteStateKeys deletes all rows whose key matches the given SQL LIKE
+// pattern. Use `%` as the wildcard (e.g. `%||signature-%`).
+func (s *SQLite) DeleteStateKeys(t *testing.T, ctx context.Context, likePattern string) {
+	t.Helper()
+
+	_, err := s.GetConnection(t).ExecContext(ctx,
+		"DELETE FROM "+s.tableName+" WHERE key LIKE ?", likePattern)
+	require.NoError(t, err)
+}
+
+// ReadStateValue loads and base64-decodes the single value for the given
+// workflow instance and exact key suffix (e.g. "metadata"). Fails the test
+// if no such row exists.
+func (s *SQLite) ReadStateValue(t *testing.T, ctx context.Context, instanceID, keySuffix string) (string, []byte) {
+	t.Helper()
+
+	var key, encoded string
+	err := s.GetConnection(t).QueryRowContext(ctx,
+		"SELECT key, value FROM "+s.tableName+" WHERE key LIKE ? AND key LIKE ? LIMIT 1",
+		"%||"+instanceID+"||%", "%||"+keySuffix,
+	).Scan(&key, &encoded)
+	if errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("no %s row for instance %s", keySuffix, instanceID)
+	}
+	require.NoError(t, err)
+
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	require.NoError(t, err)
+	return key, raw
+}
+
+// FirstStateValue returns the (key, base64-decoded value) of the first row
+// matching the given instance ID and key prefix (e.g. "history"). Fails the
+// test if no such row exists.
+func (s *SQLite) FirstStateValue(t *testing.T, ctx context.Context, instanceID, keyPrefix string) (string, []byte) {
+	t.Helper()
+
+	var key, encoded string
+	err := s.GetConnection(t).QueryRowContext(ctx,
+		"SELECT key, value FROM "+s.tableName+" WHERE key LIKE ? ORDER BY key LIMIT 1",
+		"%||"+instanceID+"||"+keyPrefix+"-%",
+	).Scan(&key, &encoded)
+	if errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("no %s-* row for instance %s", keyPrefix, instanceID)
+	}
+	require.NoError(t, err)
+
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	require.NoError(t, err)
+	return key, raw
+}
+
+// WriteStateValue base64-encodes and writes the given raw bytes to the state
+// store under the exact key provided. Uses INSERT OR REPLACE so it works for
+// both new rows and overwrites.
+func (s *SQLite) WriteStateValue(t *testing.T, ctx context.Context, key string, raw []byte) {
+	t.Helper()
+
+	encoded := base64.StdEncoding.EncodeToString(raw)
+	_, err := s.GetConnection(t).ExecContext(ctx,
+		"INSERT OR REPLACE INTO "+s.tableName+" (key, value, is_binary, etag) VALUES (?, ?, 1, ?)",
+		key, encoded, strconv.FormatInt(time.Now().UnixNano(), 10),
+	)
+	require.NoError(t, err)
 }
 
 func toDynamicValue(t *testing.T, val string) commonapi.DynamicValue {

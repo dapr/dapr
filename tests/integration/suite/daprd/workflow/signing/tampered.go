@@ -15,7 +15,6 @@ package signing
 
 import (
 	"context"
-	"encoding/base64"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -99,16 +98,7 @@ func (tp *tampered) Run(tt *testing.T, ctx context.Context) {
 	assert.Positive(tt, fworkflow.SignatureCount(tt, ctx, tp.db, id))
 
 	// Tamper with a history event by modifying its EventId.
-	db := tp.db.GetConnection(tt)
-	tableName := tp.db.TableName()
-
-	var histKey, histValue string
-	require.NoError(tt, db.QueryRowContext(ctx,
-		"SELECT key, value FROM "+tableName+" WHERE key LIKE '%||history-%' LIMIT 1",
-	).Scan(&histKey, &histValue))
-
-	raw, err := base64.StdEncoding.DecodeString(histValue)
-	require.NoError(tt, err)
+	histKey, raw := tp.db.FirstStateValue(tt, ctx, id, "history")
 
 	var evt protos.HistoryEvent
 	require.NoError(tt, proto.Unmarshal(raw, &evt))
@@ -117,14 +107,8 @@ func (tp *tampered) Run(tt *testing.T, ctx context.Context) {
 
 	updated, err := proto.Marshal(&evt)
 	require.NoError(tt, err)
-	encoded := base64.StdEncoding.EncodeToString(updated)
 
-	//nolint:gosec
-	_, err = db.ExecContext(ctx,
-		"UPDATE "+tableName+" SET value = ? WHERE key = ?",
-		encoded, histKey,
-	)
-	require.NoError(tt, err)
+	tp.db.WriteStateValue(tt, ctx, histKey, updated)
 
 	// Restart daprd to clear any cached state.
 	tp.daprd.Restart(tt, ctx)
