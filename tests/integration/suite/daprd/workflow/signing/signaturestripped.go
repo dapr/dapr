@@ -139,4 +139,3 @@ func (s *signatureStripped) assertLoadFails(t *testing.T, ctx context.Context, i
 	_, err := client.FetchWorkflowMetadata(ctx, id)
 	require.Error(t, err)
 }
-
