@@ -256,29 +256,12 @@ func makeListToolsActivity(opts Options) task.Activity {
 			opts.Store.SetMCPHTTPClient(input.MCPServerName, httpClient)
 		}
 
-		transport, err := buildTransport(&server, httpClient)
+		session, err := getOrCreateSession(opts.Store, input.MCPServerName, &server, httpClient)
 		if err != nil {
-			return &rtv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: failed to build transport for %q: %w", input.MCPServerName, err)
+			return &rtv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: %w", err)
 		}
 
-		workerLog.Debugf("list-tools: connecting to MCP server %q", input.MCPServerName)
-		c := mcp.NewClient(&mcp.Implementation{Name: mcpClientName, Version: mcpClientVersion}, nil)
-		session, err := c.Connect(callCtx, transport, nil)
-		if err != nil {
-			return &rtv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: failed to connect to MCP server %q: %w", input.MCPServerName, err)
-		}
-		defer session.Close()
-
-		// The MCP SDK v1.2.0 detaches the connection context from callCtx,
-		// so context deadlines do not propagate to the underlying SSE stream.
-		// Enforce our own timeout by closing the session if the deadline fires.
-		timer := time.AfterFunc(timeout, func() {
-			workerLog.Warnf("list-tools: timeout (%s) reached for MCPServer %q, closing session", timeout, input.MCPServerName)
-			session.Close()
-		})
-		defer timer.Stop()
-
-		workerLog.Debugf("list-tools: connected, listing tools on %q", input.MCPServerName)
+		workerLog.Debugf("list-tools: listing tools on %q", input.MCPServerName)
 
 		// Paginate through all available tools. The MCP spec allows servers
 		// to return tools in pages with a cursor; we collect all pages.
@@ -315,7 +298,6 @@ func makeListToolsActivity(opts Options) task.Activity {
 			}
 			cursor = result.NextCursor
 		}
-		timer.Stop()
 
 		return &rtv1.ListMCPToolsResponse{Tools: tools}, nil
 	}
@@ -364,30 +346,15 @@ func makeCallToolActivity(opts Options) task.Activity {
 			opts.Store.SetMCPHTTPClient(input.MCPServerName, httpClient)
 		}
 
-		transport, err := buildTransport(&server, httpClient)
-		if err != nil {
-			return errorResult("call-tool: failed to build transport for %q: %s", input.MCPServerName, err), nil
-		}
-
 		// Validate tool arguments against the cached input schema if available.
 		if validationErr := validateToolArguments(opts.Store, input.MCPServerName, input.ToolName, input.Arguments); validationErr != "" {
 			return errorResult("%s", validationErr), nil
 		}
 
-		c := mcp.NewClient(&mcp.Implementation{Name: mcpClientName, Version: mcpClientVersion}, nil)
-		session, err := c.Connect(callCtx, transport, nil)
+		session, err := getOrCreateSession(opts.Store, input.MCPServerName, &server, httpClient)
 		if err != nil {
-			return errorResult("call-tool: failed to connect to MCP server %q: %s", input.MCPServerName, err), nil
+			return errorResult("call-tool: %s", err), nil
 		}
-		defer session.Close()
-
-		// The MCP SDK detaches the connection context, so enforce
-		// our own timeout by closing the session if the deadline fires.
-		timer := time.AfterFunc(timeout, func() {
-			workerLog.Warnf("call-tool: timeout (%s) reached for MCPServer %q, closing session", timeout, input.MCPServerName)
-			session.Close()
-		})
-		defer timer.Stop()
 
 		argBytes, err := json.Marshal(input.Arguments)
 		if err != nil {
@@ -439,6 +406,35 @@ func buildTransport(server *mcpserverapi.MCPServer, httpClient *http.Client) (mc
 	default:
 		return nil, fmt.Errorf("no transport configured for MCPServer %q: set one of streamableHTTP, sse, or stdio", server.Name)
 	}
+}
+
+// getOrCreateSession returns a cached MCP session for the server, or creates
+// and caches a new one. The session is connected with context.Background() so
+// it outlives individual call contexts. Per-call deadlines are enforced by the
+// individual ListTools/CallTool RPC calls, not the connection itself.
+// If the cached session is stale (detected by a failed RPC), callers should
+// call store.DeleteMCPSession and retry.
+func getOrCreateSession(store *compstore.ComponentStore, serverName string, server *mcpserverapi.MCPServer, httpClient *http.Client) (*mcp.ClientSession, error) {
+	if cached := store.GetMCPSession(serverName); cached != nil {
+		if session, ok := cached.(*mcp.ClientSession); ok {
+			return session, nil
+		}
+	}
+
+	transport, err := buildTransport(server, httpClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build transport for %q: %w", serverName, err)
+	}
+
+	workerLog.Debugf("connecting to MCP server %q", serverName)
+	c := mcp.NewClient(&mcp.Implementation{Name: mcpClientName, Version: mcpClientVersion}, nil)
+	session, err := c.Connect(context.Background(), transport, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to MCP server %q: %w", serverName, err)
+	}
+
+	store.SetMCPSession(serverName, session)
+	return session, nil
 }
 
 // callTimeout returns the per-call deadline for the given MCPServer.

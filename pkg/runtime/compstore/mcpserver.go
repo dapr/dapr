@@ -15,6 +15,7 @@ package compstore
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	mcpserverv1alpha1 "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
@@ -58,6 +59,7 @@ func (c *ComponentStore) ListMCPServers() []mcpserverv1alpha1.MCPServer {
 }
 
 // DeleteMCPServer removes the MCPServer with the given name from the store.
+// Closes any cached MCP session for the server.
 func (c *ComponentStore) DeleteMCPServer(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -70,6 +72,10 @@ func (c *ComponentStore) DeleteMCPServer(name string) {
 	}
 	delete(c.mcpToolSchemas, name)
 	delete(c.mcpHTTPClients, name)
+	if sess, ok := c.mcpSessions[name]; ok {
+		sess.Close()
+		delete(c.mcpSessions, name)
+	}
 }
 
 // SetMCPToolSchema caches the raw JSON input schema for a tool on a given MCPServer.
@@ -125,4 +131,43 @@ func (c *ComponentStore) GetMCPHTTPClient(serverName string) *http.Client {
 		return nil
 	}
 	return c.mcpHTTPClients[serverName]
+}
+
+// SetMCPSession caches an MCP session for the given MCPServer.
+// The session is closed and removed when the MCPServer is deleted (hot-reload).
+func (c *ComponentStore) SetMCPSession(serverName string, session io.Closer) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.mcpSessions == nil {
+		c.mcpSessions = make(map[string]io.Closer)
+	}
+	// Close any existing session before replacing.
+	if old, ok := c.mcpSessions[serverName]; ok {
+		old.Close()
+	}
+	c.mcpSessions[serverName] = session
+}
+
+// GetMCPSession returns the cached MCP session for the given MCPServer,
+// or nil if none is cached.
+func (c *ComponentStore) GetMCPSession(serverName string) io.Closer {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	if c.mcpSessions == nil {
+		return nil
+	}
+	return c.mcpSessions[serverName]
+}
+
+// DeleteMCPSession closes and removes the cached MCP session for the given MCPServer.
+func (c *ComponentStore) DeleteMCPSession(serverName string) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if sess, ok := c.mcpSessions[serverName]; ok {
+		sess.Close()
+		delete(c.mcpSessions, serverName)
+	}
 }
