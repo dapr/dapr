@@ -53,17 +53,17 @@ func extractTestBaseName(filename string) string {
 		"_header_size", "_payload_size", "_qps", "_connection_stats",
 	}
 	for _, suffix := range chartSuffixes {
-		if strings.HasSuffix(s, suffix) {
-			s = strings.TrimSuffix(s, suffix)
+		if before, ok := strings.CutSuffix(s, suffix); ok {
+			s = before
 			break
 		}
 	}
 	// strip `_avg` or `_T_xxx` (ex: iterations, #01) to get base test name (needed for wf charts)
-	if i := strings.Index(s, "_avg"); i != -1 {
-		return s[:i]
+	if before, _, ok := strings.Cut(s, "_avg"); ok {
+		return before
 	}
-	if i := strings.Index(s, "_T_"); i != -1 {
-		return s[:i]
+	if before, _, ok := strings.Cut(s, "_T_"); ok {
+		return before
 	}
 	return s
 }

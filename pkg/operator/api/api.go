@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"sync"
 	"sync/atomic"
 
 	"google.golang.org/grpc"
@@ -27,7 +26,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/operator/api/informer"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -56,9 +58,6 @@ type Options struct {
 type Server interface {
 	Run(context.Context) error
 	Ready(context.Context) error
-
-	OnSubscriptionUpdated(context.Context, operatorv1pb.ResourceEventType, *subapi.Subscription)
-	OnHTTPEndpointUpdated(context.Context, *httpendpointsapi.HTTPEndpoint)
 }
 
 type apiServer struct {
@@ -68,15 +67,16 @@ type apiServer struct {
 	port          string
 	listenAddress string
 
-	compInformer informer.Interface[componentsapi.Component]
+	compInformer       informer.Interface[componentsapi.Component]
+	subInformer        informer.Interface[subapi.Subscription]
+	endpointInformer   informer.Interface[httpendpointsapi.HTTPEndpoint]
+	configInformer     informer.Interface[configurationapi.Configuration]
+	resiliencyInformer informer.Interface[resiliencyapi.Resiliency]
+	mcpServerInformer  informer.Interface[mcpserverapi.MCPServer]
 
-	endpointLock              sync.Mutex
-	allEndpointsUpdateChan    map[string]chan *httpendpointsapi.HTTPEndpoint
-	allSubscriptionUpdateChan map[string]chan *SubscriptionUpdateEvent
-	subLock                   sync.Mutex
-	readyCh                   chan struct{}
-	running                   atomic.Bool
-	closed                    atomic.Bool
+	readyCh chan struct{}
+	running atomic.Bool
+	closed  atomic.Bool
 }
 
 // NewAPIServer returns a new API server.
@@ -86,12 +86,25 @@ func NewAPIServer(opts Options) Server {
 		compInformer: informer.New[componentsapi.Component](informer.Options{
 			Cache: opts.Cache,
 		}),
-		sec:                       opts.Security,
-		port:                      strconv.Itoa(opts.Port),
-		listenAddress:             opts.ListenAddress,
-		allEndpointsUpdateChan:    make(map[string]chan *httpendpointsapi.HTTPEndpoint),
-		allSubscriptionUpdateChan: make(map[string]chan *SubscriptionUpdateEvent),
-		readyCh:                   make(chan struct{}),
+		subInformer: informer.New[subapi.Subscription](informer.Options{
+			Cache: opts.Cache,
+		}),
+		endpointInformer: informer.New[httpendpointsapi.HTTPEndpoint](informer.Options{
+			Cache: opts.Cache,
+		}),
+		mcpServerInformer: informer.New[mcpserverapi.MCPServer](informer.Options{
+			Cache: opts.Cache,
+		}),
+		configInformer: informer.New[configurationapi.Configuration](informer.Options{
+			Cache: opts.Cache,
+		}),
+		resiliencyInformer: informer.New[resiliencyapi.Resiliency](informer.Options{
+			Cache: opts.Cache,
+		}),
+		sec:           opts.Security,
+		port:          strconv.Itoa(opts.Port),
+		listenAddress: opts.ListenAddress,
+		readyCh:       make(chan struct{}),
 	}
 }
 
@@ -119,6 +132,11 @@ func (a *apiServer) Run(ctx context.Context) error {
 
 	return concurrency.NewRunnerManager(
 		a.compInformer.Run,
+		a.subInformer.Run,
+		a.endpointInformer.Run,
+		a.mcpServerInformer.Run,
+		a.configInformer.Run,
+		a.resiliencyInformer.Run,
 		func(ctx context.Context) error {
 			if err := s.Serve(lis); err != nil {
 				return fmt.Errorf("gRPC server error: %w", err)
@@ -129,18 +147,6 @@ func (a *apiServer) Run(ctx context.Context) error {
 			// Block until context is done
 			<-ctx.Done()
 			a.closed.Store(true)
-			a.subLock.Lock()
-			for key, ch := range a.allSubscriptionUpdateChan {
-				close(ch)
-				delete(a.allSubscriptionUpdateChan, key)
-			}
-			a.subLock.Unlock()
-			a.endpointLock.Lock()
-			for key, ch := range a.allEndpointsUpdateChan {
-				close(ch)
-				delete(a.allEndpointsUpdateChan, key)
-			}
-			a.endpointLock.Unlock()
 			s.GracefulStop()
 			return nil
 		},

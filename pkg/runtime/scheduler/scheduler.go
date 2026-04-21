@@ -19,6 +19,7 @@ import (
 	"slices"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/client"
@@ -32,7 +33,6 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/loop"
-	"github.com/dapr/kit/ptr"
 )
 
 type Options struct {
@@ -41,6 +41,7 @@ type Options struct {
 	Actors           actors.Interface
 	Channels         *channels.Channels
 	WFEngine         wfengine.Interface
+	WorkflowSpec     *config.WorkflowSpec
 	Addresses        []string
 	Security         security.Handler
 	Healthz          healthz.Healthz
@@ -49,8 +50,8 @@ type Options struct {
 
 // Scheduler manages the connection to the cluster of schedulers.
 type Scheduler struct {
-	connector  loop.Interface[loops.Event]
-	hosts      loop.Interface[loops.Event]
+	connector  loop.Interface[loops.EventConn]
+	hosts      loop.Interface[loops.EventHost]
 	watchhosts *watchhosts.WatchHosts
 	client     client.Interface
 
@@ -59,11 +60,12 @@ type Scheduler struct {
 
 func New(opts Options) (*Scheduler, error) {
 	connector := connector.New(connector.Options{
-		Namespace: opts.Namespace,
-		AppID:     opts.AppID,
-		Actors:    opts.Actors,
-		Channels:  opts.Channels,
-		WFEngine:  opts.WFEngine,
+		Namespace:    opts.Namespace,
+		AppID:        opts.AppID,
+		WorkflowSpec: opts.WorkflowSpec,
+		Actors:       opts.Actors,
+		Channels:     opts.Channels,
+		WFEngine:     opts.WFEngine,
 	})
 
 	if opts.SchedulerStreams < 1 {
@@ -107,6 +109,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 			<-ctx.Done()
 			s.hosts.Close(new(loops.Close))
 			s.connector.Close(new(loops.Close))
+
 			return ctx.Err()
 		},
 	).Run(ctx)
@@ -115,14 +118,14 @@ func (s *Scheduler) Run(ctx context.Context) error {
 func (s *Scheduler) StartApp() {
 	s.currentActorTypes = nil
 	s.connector.Enqueue(&loops.Reconnect{
-		AppTarget: ptr.Of(true),
+		AppTarget: new(true),
 	})
 }
 
 func (s *Scheduler) StopApp() {
 	s.currentActorTypes = nil
 	s.connector.Enqueue(&loops.Reconnect{
-		AppTarget: ptr.Of(false),
+		AppTarget: new(false),
 	})
 }
 
@@ -131,9 +134,9 @@ func (s *Scheduler) ReloadActorTypes(actorTypes []string) {
 		return
 	}
 
-	s.currentActorTypes = ptr.Of(actorTypes)
+	s.currentActorTypes = new(actorTypes)
 	s.connector.Enqueue(&loops.Reconnect{
-		ActorTypes: ptr.Of(actorTypes),
+		ActorTypes: new(actorTypes),
 	})
 }
 

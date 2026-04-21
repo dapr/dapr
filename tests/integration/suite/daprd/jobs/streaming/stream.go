@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler/cluster"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -84,16 +83,16 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 	req := &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     "test",
-			Schedule: ptr.Of("@every 1s"),
-			Repeats:  ptr.Of(uint32(1)),
-			DueTime:  ptr.Of("0m"),
+			Schedule: new("@every 1s"),
+			Repeats:  new(uint32(1)),
+			DueTime:  new("0m"),
 			Data: &anypb.Any{
 				TypeUrl: "type.googleapis.com/google.type.Expr",
 			},
 		},
 	}
 
-	_, err := daprAclient.ScheduleJobAlpha1(ctx, req)
+	_, err := daprAclient.ScheduleJob(ctx, req)
 	require.NoError(t, err)
 
 	select {
@@ -109,15 +108,15 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 	req = &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     "test",
-			Schedule: ptr.Of("@every 1s"),
-			Repeats:  ptr.Of(uint32(1)),
+			Schedule: new("@every 1s"),
+			Repeats:  new(uint32(1)),
 			Data: &anypb.Any{
 				TypeUrl: "type.googleapis.com/google.type.Expr",
 			},
 		},
 	}
 
-	_, err = daprBclient.ScheduleJobAlpha1(ctx, req)
+	_, err = daprBclient.ScheduleJob(ctx, req)
 	require.NoError(t, err)
 
 	select {

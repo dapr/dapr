@@ -49,7 +49,7 @@ func (e *parallel) Setup(t *testing.T) []framework.Option {
 func (e *parallel) Run(t *testing.T, ctx context.Context) {
 	e.workflow.WaitUntilRunning(t, ctx)
 
-	require.NoError(t, e.workflow.Registry().AddOrchestratorN("parallel", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, e.workflow.Registry().AddWorkflowN("parallel", func(ctx *task.WorkflowContext) (any, error) {
 		t1 := ctx.CallActivity("FailActivity", task.WithActivityRetryPolicy(&task.RetryPolicy{
 			MaxAttempts:          3,
 			InitialRetryInterval: 10 * time.Millisecond,
@@ -97,13 +97,13 @@ func (e *parallel) Run(t *testing.T, ctx context.Context) {
 
 	cl := e.workflow.BackendClient(t, ctx)
 
-	id, err := cl.ScheduleNewOrchestration(ctx, "parallel")
+	id, err := cl.ScheduleNewWorkflow(ctx, "parallel")
 	require.NoError(t, err)
 
-	_, err = cl.WaitForOrchestrationCompletion(ctx, id)
+	_, err = cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	executionMap.Range(func(k, v interface{}) bool {
+	executionMap.Range(func(k, v any) bool {
 		_, err = uuid.Parse(k.(string))
 		require.NoError(t, err)
 		require.EqualValues(t, 2, v.(*atomic.Int32).Load())

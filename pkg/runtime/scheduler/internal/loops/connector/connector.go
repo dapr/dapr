@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/config"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/cluster"
@@ -31,8 +32,9 @@ import (
 var log = logger.NewLogger("dapr.runtime.scheduler.loops.connector")
 
 type Options struct {
-	Namespace string
-	AppID     string
+	Namespace    string
+	AppID        string
+	WorkflowSpec *config.WorkflowSpec
 
 	Actors   actors.Interface
 	Channels *channels.Channels
@@ -40,30 +42,33 @@ type Options struct {
 }
 
 type connector struct {
-	namespace string
-	appID     string
-	actors    actors.Interface
-	channels  *channels.Channels
-	wfEngine  wfengine.Interface
+	namespace    string
+	appID        string
+	workflowSpec *config.WorkflowSpec
+	actors       actors.Interface
+	channels     *channels.Channels
+	wfEngine     wfengine.Interface
 
 	currentAppRunning bool
 	currentActorTypes []string
 	clients           []schedulerv1pb.SchedulerClient
+	closeConns        []context.CancelFunc
 
 	closeCluster context.CancelFunc
 }
 
-func New(opts Options) loop.Interface[loops.Event] {
-	return loop.New[loops.Event](1024).NewLoop(&connector{
-		namespace: opts.Namespace,
-		appID:     opts.AppID,
-		actors:    opts.Actors,
-		channels:  opts.Channels,
-		wfEngine:  opts.WFEngine,
+func New(opts Options) loop.Interface[loops.EventConn] {
+	return loop.New[loops.EventConn](1024).NewLoop(&connector{
+		namespace:    opts.Namespace,
+		appID:        opts.AppID,
+		workflowSpec: opts.WorkflowSpec,
+		actors:       opts.Actors,
+		channels:     opts.Channels,
+		wfEngine:     opts.WFEngine,
 	})
 }
 
-func (c *connector) Handle(ctx context.Context, event loops.Event) error {
+func (c *connector) Handle(ctx context.Context, event loops.EventConn) error {
 	switch e := event.(type) {
 	case *loops.Reconnect:
 		c.handleReconnect(ctx, e)
@@ -84,11 +89,13 @@ func (c *connector) handleConnect(ctx context.Context, e *loops.Connect) {
 	c.handleDisconnect()
 
 	c.clients = e.Clients
+	c.closeConns = e.CloseConns
 	c.maybeClientConnect(ctx)
 }
 
 func (c *connector) handleDisconnect() {
 	c.closeClusterConnections()
+	c.closeClientConnections()
 	c.clients = nil
 }
 
@@ -114,17 +121,25 @@ func (c *connector) closeClusterConnections() {
 	c.closeCluster()
 }
 
+func (c *connector) closeClientConnections() {
+	for _, closeCon := range c.closeConns {
+		closeCon()
+	}
+	c.closeConns = nil
+}
+
 func (c *connector) maybeClientConnect(ctx context.Context) {
 	if len(c.clients) == 0 || (!c.currentAppRunning && len(c.currentActorTypes) == 0) {
 		return
 	}
 
 	cluster := cluster.New(cluster.Options{
-		Namespace: c.namespace,
-		AppID:     c.appID,
-		Actors:    c.actors,
-		Channels:  c.channels,
-		WFEngine:  c.wfEngine,
+		Namespace:    c.namespace,
+		AppID:        c.appID,
+		WorkflowSpec: c.workflowSpec,
+		Actors:       c.actors,
+		Channels:     c.channels,
+		WFEngine:     c.wfEngine,
 
 		AppTarget:  c.currentAppRunning,
 		ActorTypes: c.currentActorTypes,
@@ -133,17 +148,20 @@ func (c *connector) maybeClientConnect(ctx context.Context) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	doneCh := make(chan struct{})
+
 	go func() {
 		err := cluster.Run(ctx)
 		if err != nil && !errors.Is(err, context.Canceled) {
 			log.Error(err, "failed to run scheduler cluster clients")
 		}
+
 		close(doneCh)
 	}()
 
 	c.closeCluster = func() {
 		cancel()
 		<-doneCh
+
 		c.closeCluster = nil
 	}
 }

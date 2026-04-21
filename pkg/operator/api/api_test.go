@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
@@ -38,6 +37,7 @@ import (
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
@@ -74,6 +74,21 @@ func (m *mockHTTPEndpointUpdateServer) Send(*operatorv1pb.HTTPEndpointUpdateEven
 }
 
 func (m *mockHTTPEndpointUpdateServer) Context() context.Context {
+	return m.ctx
+}
+
+type mockMCPServerUpdateServer struct {
+	grpc.ServerStream
+	Calls atomic.Int64
+	ctx   context.Context
+}
+
+func (m *mockMCPServerUpdateServer) Send(*operatorv1pb.MCPServerUpdateEvent) error {
+	m.Calls.Add(1)
+	return nil
+}
+
+func (m *mockMCPServerUpdateServer) Context() context.Context {
 	return m.ctx
 }
 
@@ -596,10 +611,10 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 	client := fake.NewClientBuilder().
 		WithScheme(s).Build()
 
-	mockSidecar := &mockHTTPEndpointUpdateServer{ctx: pki.ClientGRPCCtx(t)}
-	api := NewAPIServer(Options{Client: client}).(*apiServer)
-
 	t.Run("expect error if requesting for different namespace", func(t *testing.T) {
+		mockSidecar := &mockHTTPEndpointUpdateServer{ctx: pki.ClientGRPCCtx(t)}
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
+
 		// Start sidecar update loop
 		err := api.HTTPEndpointUpdate(&operatorv1pb.HTTPEndpointUpdateRequest{
 			Namespace: "ns2",
@@ -614,25 +629,29 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 	})
 
 	t.Run("skip sidecar update if namespace doesn't match", func(t *testing.T) {
-		go func() {
-			assert.Eventually(t, func() bool {
-				api.endpointLock.Lock()
-				defer api.endpointLock.Unlock()
-				return len(api.allEndpointsUpdateChan) == 1
-			}, time.Second, 10*time.Millisecond)
+		e := httpendpointapi.HTTPEndpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns2",
+			},
+			Spec: httpendpointapi.HTTPEndpointSpec{},
+		}
 
-			api.endpointLock.Lock()
-			defer api.endpointLock.Unlock()
-			for key := range api.allEndpointsUpdateChan {
-				api.allEndpointsUpdateChan[key] <- &httpendpointapi.HTTPEndpoint{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "ns2",
-					},
-					Spec: httpendpointapi.HTTPEndpointSpec{},
-				}
-				close(api.allEndpointsUpdateChan[key])
-			}
-		}()
+		fakeInformer := informerfake.New[httpendpointapi.HTTPEndpoint]().
+			WithWatchUpdates(func(context.Context, string) (<-chan *informer.Event[httpendpointapi.HTTPEndpoint], context.CancelFunc, error) {
+				ch := make(chan *informer.Event[httpendpointapi.HTTPEndpoint])
+				go func() {
+					ch <- &informer.Event[httpendpointapi.HTTPEndpoint]{
+						Manifest: e,
+						Type:     operatorv1pb.ResourceEventType_CREATED,
+					}
+					close(ch)
+				}()
+				return ch, func() {}, nil
+			})
+
+		mockSidecar := &mockHTTPEndpointUpdateServer{ctx: pki.ClientGRPCCtx(t)}
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
+		api.endpointInformer = fakeInformer
 
 		// Start sidecar update loop
 		require.NoError(t, api.HTTPEndpointUpdate(&operatorv1pb.HTTPEndpointUpdateRequest{
@@ -643,25 +662,29 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 	})
 
 	t.Run("sidecar is updated when endpoint namespace is a match", func(t *testing.T) {
-		go func() {
-			assert.Eventually(t, func() bool {
-				api.endpointLock.Lock()
-				defer api.endpointLock.Unlock()
-				return len(api.allEndpointsUpdateChan) == 1
-			}, time.Second, 10*time.Millisecond)
+		e := httpendpointapi.HTTPEndpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns1",
+			},
+			Spec: httpendpointapi.HTTPEndpointSpec{},
+		}
 
-			api.endpointLock.Lock()
-			defer api.endpointLock.Unlock()
-			for key := range api.allEndpointsUpdateChan {
-				api.allEndpointsUpdateChan[key] <- &httpendpointapi.HTTPEndpoint{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "ns1",
-					},
-					Spec: httpendpointapi.HTTPEndpointSpec{},
-				}
-				close(api.allEndpointsUpdateChan[key])
-			}
-		}()
+		fakeInformer := informerfake.New[httpendpointapi.HTTPEndpoint]().
+			WithWatchUpdates(func(context.Context, string) (<-chan *informer.Event[httpendpointapi.HTTPEndpoint], context.CancelFunc, error) {
+				ch := make(chan *informer.Event[httpendpointapi.HTTPEndpoint])
+				go func() {
+					ch <- &informer.Event[httpendpointapi.HTTPEndpoint]{
+						Manifest: e,
+						Type:     operatorv1pb.ResourceEventType_CREATED,
+					}
+					close(ch)
+				}()
+				return ch, func() {}, nil
+			})
+
+		mockSidecar := &mockHTTPEndpointUpdateServer{ctx: pki.ClientGRPCCtx(t)}
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
+		api.endpointInformer = fakeInformer
 
 		// Start sidecar update loop
 		require.NoError(t, api.HTTPEndpointUpdate(&operatorv1pb.HTTPEndpointUpdateRequest{
@@ -725,12 +748,11 @@ func TestListScopes(t *testing.T) {
 		api := NewAPIServer(Options{Client: cl}).(*apiServer)
 
 		res, err := api.ListComponents(pki.ClientGRPCCtx(t), &operatorv1pb.ListComponentsRequest{
-			PodName:   "foo",
 			Namespace: "namespace-a",
 		})
 		require.NoError(t, err)
 		require.Len(t, res.GetComponents(), 2)
-		var exp [][]byte
+		exp := make([][]byte, 0, 2)
 		var b []byte
 		b, err = json.Marshal(comp1)
 		require.NoError(t, err)
@@ -784,7 +806,6 @@ func TestListsNamespaced(t *testing.T) {
 		api := NewAPIServer(Options{Client: cl}).(*apiServer)
 
 		res, err := api.ListComponents(pki.ClientGRPCCtx(t), &operatorv1pb.ListComponentsRequest{
-			PodName:   "foo",
 			Namespace: "namespace-a",
 		})
 		require.NoError(t, err)
@@ -797,7 +818,6 @@ func TestListsNamespaced(t *testing.T) {
 		assert.Equal(t, "namespace-a", sub.Namespace)
 
 		res, err = api.ListComponents(pki.ClientGRPCCtx(t), &operatorv1pb.ListComponentsRequest{
-			PodName:   "foo",
 			Namespace: "namespace-c",
 		})
 		require.Error(t, err)
@@ -837,7 +857,6 @@ func TestListsNamespaced(t *testing.T) {
 		api := NewAPIServer(Options{Client: client}).(*apiServer)
 
 		res, err := api.ListSubscriptionsV2(pki.ClientGRPCCtx(t), &operatorv1pb.ListSubscriptionsRequest{
-			PodName:   "foo",
 			Namespace: "namespace-a",
 		})
 
@@ -852,7 +871,6 @@ func TestListsNamespaced(t *testing.T) {
 		assert.Equal(t, "namespace-a", sub.Namespace)
 
 		res, err = api.ListSubscriptionsV2(t.Context(), &operatorv1pb.ListSubscriptionsRequest{
-			PodName:   "baz",
 			Namespace: "namespace-c",
 		})
 		require.Error(t, err)
@@ -962,6 +980,64 @@ func TestListsNamespaced(t *testing.T) {
 		require.Error(t, err)
 		assert.Empty(t, res.GetHttpEndpoints())
 	})
+	t.Run("list mcp servers namespace scoping", func(t *testing.T) {
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		require.NoError(t, err)
+
+		require.NoError(t, mcpserverapi.AddToScheme(s))
+
+		av, kind := mcpserverapi.SchemeGroupVersion.WithKind("MCPServer").ToAPIVersionAndKind()
+		typeMeta := metav1.TypeMeta{
+			Kind:       kind,
+			APIVersion: av,
+		}
+		client := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(&mcpserverapi.MCPServer{
+				TypeMeta: typeMeta,
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "github",
+					Namespace: "namespace-a",
+				},
+				Spec: mcpserverapi.MCPServerSpec{
+					Endpoint: mcpserverapi.MCPEndpoint{
+						StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: "https://api.githubcopilot.com/mcp/"},
+					},
+				},
+			}, &mcpserverapi.MCPServer{
+				TypeMeta: typeMeta,
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "other",
+					Namespace: "namespace-b",
+				},
+				Spec: mcpserverapi.MCPServerSpec{
+					Endpoint: mcpserverapi.MCPEndpoint{
+						StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: "https://other.example.com/mcp/"},
+					},
+				},
+			}).
+			Build()
+
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
+
+		res, err := api.ListMCPServers(pki.ClientGRPCCtx(t), &operatorv1pb.ListMCPServersRequest{
+			Namespace: "namespace-a",
+		})
+		require.NoError(t, err)
+		assert.Len(t, res.GetMcpServers(), 1)
+
+		var srv mcpserverapi.MCPServer
+		require.NoError(t, yaml.Unmarshal(res.GetMcpServers()[0], &srv))
+		assert.Equal(t, "github", srv.Name)
+		assert.Equal(t, "namespace-a", srv.Namespace)
+
+		res, err = api.ListMCPServers(pki.ClientGRPCCtx(t), &operatorv1pb.ListMCPServersRequest{
+			Namespace: "namespace-c",
+		})
+		require.Error(t, err)
+		assert.Empty(t, res.GetMcpServers())
+	})
 }
 
 func TestProcessHTTPEndpointSecrets(t *testing.T) {
@@ -988,7 +1064,7 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 	})
 
 	t.Run("secret ref exists, kubernetes secret store, secret extracted", func(t *testing.T) {
-		e.Auth.SecretStore = kubernetesSecretStore
+		e.SecretStore = kubernetesSecretStore
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)
 		require.NoError(t, err)
@@ -1016,7 +1092,7 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 	})
 
 	t.Run("secret ref exists, default kubernetes secret store, secret extracted", func(t *testing.T) {
-		e.Auth.SecretStore = ""
+		e.SecretStore = ""
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)
 		require.NoError(t, err)
@@ -1043,6 +1119,172 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 		jsonEnc, err := json.Marshal(enc)
 		require.NoError(t, err)
 		assert.JSONEq(t, string(jsonEnc), string(e.Spec.Headers[0].Value.Raw))
+	})
+}
+
+func TestProcessMCPServerSecrets(t *testing.T) {
+	makeServer := func(secretStore *string) mcpserverapi.MCPServer {
+		s := mcpserverapi.MCPServer{}
+		s.Spec.Endpoint.StreamableHTTP = &mcpserverapi.MCPStreamableHTTP{
+			URL: "http://example.com",
+			Headers: []commonapi.NameValuePair{
+				{
+					Name: "Authorization",
+					SecretKeyRef: commonapi.SecretKeyRef{
+						Name: "mcp-secret",
+						Key:  "token",
+					},
+				},
+			},
+		}
+		if secretStore != nil {
+			s.Spec.Endpoint.StreamableHTTP.Auth = &mcpserverapi.MCPAuth{SecretStore: secretStore}
+		}
+		return s
+	}
+
+	t.Run("secret ref exists, not kubernetes secret store, no error", func(t *testing.T) {
+		store := "secretstore"
+		srv := makeServer(&store)
+		err := processMCPServerSecrets(t.Context(), &srv, "default", nil)
+		require.NoError(t, err)
+		// value should not have been resolved
+		assert.Empty(t, srv.Spec.Endpoint.StreamableHTTP.Headers[0].Value.Raw)
+	})
+
+	t.Run("secret ref exists, kubernetes secret store, secret extracted", func(t *testing.T) {
+		store := kubernetesSecretStore
+		srv := makeServer(&store)
+
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		require.NoError(t, err)
+		require.NoError(t, corev1.AddToScheme(s))
+
+		client := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "mcp-secret", Namespace: "default"},
+				Data:       map[string][]byte{"token": []byte("my-token")},
+			}).
+			Build()
+
+		require.NoError(t, processMCPServerSecrets(t.Context(), &srv, "default", client))
+		enc := base64.StdEncoding.EncodeToString([]byte("my-token"))
+		jsonEnc, _ := json.Marshal(enc)
+		assert.JSONEq(t, string(jsonEnc), string(srv.Spec.Endpoint.StreamableHTTP.Headers[0].Value.Raw))
+	})
+
+	t.Run("secret ref exists, nil auth (default kubernetes), secret extracted", func(t *testing.T) {
+		srv := makeServer(nil)
+		srv.Spec.Endpoint.StreamableHTTP.Auth = nil // ensure nil auth defaults to kubernetes
+
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		require.NoError(t, err)
+		require.NoError(t, corev1.AddToScheme(s))
+
+		client := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "mcp-secret", Namespace: "default"},
+				Data:       map[string][]byte{"token": []byte("my-token")},
+			}).
+			Build()
+
+		require.NoError(t, processMCPServerSecrets(t.Context(), &srv, "default", client))
+		enc := base64.StdEncoding.EncodeToString([]byte("my-token"))
+		jsonEnc, _ := json.Marshal(enc)
+		assert.JSONEq(t, string(jsonEnc), string(srv.Spec.Endpoint.StreamableHTTP.Headers[0].Value.Raw))
+	})
+}
+
+func TestMCPServerUpdate(t *testing.T) {
+	appID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/app1")
+	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
+	pki := test.GenPKI(t, test.PKIOptions{
+		LeafID:   serverID,
+		ClientID: appID,
+	})
+
+	s := runtime.NewScheme()
+	err := scheme.AddToScheme(s)
+	require.NoError(t, err)
+	require.NoError(t, corev1.AddToScheme(s))
+
+	client := fake.NewClientBuilder().WithScheme(s).Build()
+
+	t.Run("expect error if requesting for different namespace", func(t *testing.T) {
+		mockSidecar := &mockMCPServerUpdateServer{ctx: pki.ClientGRPCCtx(t)}
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
+
+		err := api.MCPServerUpdate(&operatorv1pb.MCPServerUpdateRequest{
+			Namespace: "ns2",
+		}, mockSidecar)
+
+		require.Error(t, err)
+		st, ok := status.FromError(err)
+		require.True(t, ok)
+		assert.Equal(t, codes.PermissionDenied, st.Code())
+		assert.Equal(t, int64(0), mockSidecar.Calls.Load())
+	})
+
+	t.Run("skip sidecar update if namespace doesn't match", func(t *testing.T) {
+		srv := mcpserverapi.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "ns2"},
+		}
+
+		fakeInformer := informerfake.New[mcpserverapi.MCPServer]().
+			WithWatchUpdates(func(context.Context, string) (<-chan *informer.Event[mcpserverapi.MCPServer], context.CancelFunc, error) {
+				ch := make(chan *informer.Event[mcpserverapi.MCPServer])
+				go func() {
+					ch <- &informer.Event[mcpserverapi.MCPServer]{
+						Manifest: srv,
+						Type:     operatorv1pb.ResourceEventType_CREATED,
+					}
+					close(ch)
+				}()
+				return ch, func() {}, nil
+			})
+
+		mockSidecar := &mockMCPServerUpdateServer{ctx: pki.ClientGRPCCtx(t)}
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
+		api.mcpServerInformer = fakeInformer
+
+		require.NoError(t, api.MCPServerUpdate(&operatorv1pb.MCPServerUpdateRequest{
+			Namespace: "ns1",
+		}, mockSidecar))
+
+		assert.Equal(t, int64(0), mockSidecar.Calls.Load())
+	})
+
+	t.Run("sidecar is updated when MCP server namespace is a match", func(t *testing.T) {
+		srv := mcpserverapi.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1"},
+		}
+
+		fakeInformer := informerfake.New[mcpserverapi.MCPServer]().
+			WithWatchUpdates(func(context.Context, string) (<-chan *informer.Event[mcpserverapi.MCPServer], context.CancelFunc, error) {
+				ch := make(chan *informer.Event[mcpserverapi.MCPServer])
+				go func() {
+					ch <- &informer.Event[mcpserverapi.MCPServer]{
+						Manifest: srv,
+						Type:     operatorv1pb.ResourceEventType_CREATED,
+					}
+					close(ch)
+				}()
+				return ch, func() {}, nil
+			})
+
+		mockSidecar := &mockMCPServerUpdateServer{ctx: pki.ClientGRPCCtx(t)}
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
+		api.mcpServerInformer = fakeInformer
+
+		require.NoError(t, api.MCPServerUpdate(&operatorv1pb.MCPServerUpdateRequest{
+			Namespace: "ns1",
+		}, mockSidecar))
+
+		assert.Equal(t, int64(1), mockSidecar.Calls.Load())
 	})
 }
 

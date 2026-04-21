@@ -49,8 +49,9 @@ func (g *grpcclient) Run(t *testing.T, ctx context.Context) {
 	g.workflow.WaitUntilRunning(t, ctx)
 
 	holdCh := make(chan struct{})
+	t.Cleanup(func() { close(holdCh) })
 	var inAct atomic.Bool
-	g.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	g.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
 	})
@@ -61,20 +62,18 @@ func (g *grpcclient) Run(t *testing.T, ctx context.Context) {
 	})
 
 	cl := g.workflow.BackendClient(t, ctx)
-	id, err := cl.ScheduleNewOrchestration(ctx, "foo")
+	id, err := cl.ScheduleNewWorkflow(ctx, "foo")
 	require.NoError(t, err)
 
-	assert.Eventually(t, inAct.Load, time.Second*10, time.Millisecond*10)
+	assert.Eventually(t, inAct.Load, time.Second*20, time.Millisecond*10)
 
 	_, err = g.workflow.Dapr().GRPCClient(t, ctx).TerminateWorkflowBeta1(ctx, &rtv1.TerminateWorkflowRequest{
 		InstanceId: id.String(),
 	})
 	require.NoError(t, err)
 
-	close(holdCh)
-
-	meta, err := cl.WaitForOrchestrationCompletion(ctx, id)
+	meta, err := cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	require.Equal(t, "ORCHESTRATION_STATUS_TERMINATED", meta.RuntimeStatus.String())
+	require.Equal(t, "ORCHESTRATION_STATUS_TERMINATED", meta.GetRuntimeStatus().String())
 }

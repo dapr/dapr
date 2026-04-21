@@ -33,7 +33,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -56,7 +55,7 @@ func (c *config) Setup(t *testing.T) []framework.Option {
 		app.WithHandlerFunc("/actors/reentrantActor/myactorid", func(_ http.ResponseWriter, r *http.Request) {}),
 		app.WithHandlerFunc("/actors/reentrantActor/myactorid/method/foo", func(_ http.ResponseWriter, r *http.Request) {
 			if c.rid.Load() == nil {
-				c.rid.Store(ptr.Of(r.Header.Get("Dapr-Reentrancy-Id")))
+				c.rid.Store(new(r.Header.Get("Dapr-Reentrancy-Id")))
 			}
 			c.called.Append(r.URL.Path)
 			<-c.holdCall

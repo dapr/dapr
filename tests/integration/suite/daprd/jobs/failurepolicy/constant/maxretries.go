@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -69,15 +68,15 @@ func (m *maxretries) Run(t *testing.T, ctx context.Context) {
 	m.scheduler.WaitUntilRunning(t, ctx)
 	m.daprd.WaitUntilRunning(t, ctx)
 
-	_, err := m.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err := m.daprd.GRPCClient(t, ctx).ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:    "test",
-			DueTime: ptr.Of("0s"),
+			DueTime: new("0s"),
 			FailurePolicy: &corev1.JobFailurePolicy{
 				Policy: &corev1.JobFailurePolicy_Constant{
 					Constant: &corev1.JobFailurePolicyConstant{
 						Interval:   nil,
-						MaxRetries: ptr.Of(uint32(4)),
+						MaxRetries: new(uint32(4)),
 					},
 				},
 			},

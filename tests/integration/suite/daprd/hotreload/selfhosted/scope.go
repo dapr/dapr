@@ -97,8 +97,8 @@ scopes:
 		assert.Empty(c, s.daprd.GetMetaRegisteredComponents(c, ctx))
 	}, time.Second*5, time.Millisecond*10)
 
-	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(
-		fmt.Sprintf(`
+	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"),
+		fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -109,7 +109,7 @@ spec:
 scopes:
 - not-my-app-id
 - '%s'
-`, s.daprd.AppID())), 0o600))
+`, s.daprd.AppID()), 0o600))
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 1)
 	}, time.Second*5, time.Millisecond*10)

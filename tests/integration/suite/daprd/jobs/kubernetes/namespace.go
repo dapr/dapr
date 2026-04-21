@@ -41,7 +41,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -125,8 +124,8 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 	n.placement.WaitUntilRunning(t, ctx)
 
 	client := n.daprd.GRPCClient(t, ctx)
-	_, err := client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
-		Job: &rtv1.Job{Name: "test", Schedule: ptr.Of("@daily")},
+	_, err := client.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
+		Job: &rtv1.Job{Name: "test", Schedule: new("@daily")},
 	})
 	require.NoError(t, err)
 

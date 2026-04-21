@@ -16,7 +16,6 @@ package universal
 import (
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var testLogger = logger.NewLogger("testlogger")
@@ -26,13 +25,13 @@ var testResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  ptr.Of(1),
+					MaxRetries:  new(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
 				},
 				"tenRetries": {
-					MaxRetries:  ptr.Of(10),
+					MaxRetries:  new(10),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",

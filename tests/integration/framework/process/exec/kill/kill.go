@@ -16,6 +16,8 @@ package kill
 import (
 	"os/exec"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func Interrupt(t *testing.T, cmd *exec.Cmd) {
@@ -40,4 +42,15 @@ func Kill(t *testing.T, cmd *exec.Cmd) {
 	t.Logf("killing %s process", cmd.Path)
 
 	kill(t, cmd)
+}
+
+func SignalHUP(t *testing.T, cmd *exec.Cmd) {
+	t.Helper()
+
+	require.NotNil(t, cmd, "cmd must not be nil when sending SIGHUP")
+	require.Nil(t, cmd.ProcessState, "process must still be running when sending SIGHUP")
+
+	t.Logf("signaling HUP to %s process", cmd.Path)
+
+	signalHUP(t, cmd)
 }

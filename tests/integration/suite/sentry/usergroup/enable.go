@@ -15,8 +15,7 @@ package usergroup
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"testing"
@@ -45,7 +44,7 @@ type enable struct {
 func (e *enable) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
-	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, rootKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)

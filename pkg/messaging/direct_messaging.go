@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -151,6 +152,17 @@ func (d *directMessaging) Close() error {
 
 // Invoke takes a message requests and invokes an app, either local or remote.
 func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	// Normalize the method at the service invocation edge: reject forbidden
+	// characters and resolve path traversal. The normalized form is used for
+	// both ACL evaluation and dispatch to the target app.
+	if msg := req.Message(); msg != nil {
+		normalized, normErr := method.NormalizeMethod(msg.GetMethod())
+		if normErr != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid method: %v", normErr)
+		}
+		msg.Method = normalized
+	}
+
 	app, err := d.getRemoteApp(ctx, targetAppID)
 	if err != nil {
 		return nil, err
@@ -211,8 +223,8 @@ func (d *directMessaging) invokeWithRetry(
 	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error),
 	req *invokev1.InvokeMethodRequest,
 ) (*invokev1.InvokeMethodResponse, error) {
-	if !d.resiliency.PolicyDefined(app.id, resiliency.EndpointPolicy{}) {
-		// This policy has built-in retries so enable replay in the request
+	if !d.resiliency.PolicyDefined(app.id, resiliency.EndpointPolicy{}) && !req.IsStreamingRequest() {
+		// Enable body buffering so the request can be replayed on retry.
 		req.WithReplay(true)
 
 		policyRunner := resiliency.NewRunnerWithOptions(ctx,

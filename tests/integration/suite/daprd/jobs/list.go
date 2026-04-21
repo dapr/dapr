@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -67,61 +66,61 @@ func (l *list) Run(t *testing.T, ctx context.Context) {
 
 	client := l.daprd1.GRPCClient(t, ctx)
 
-	resp, err := client.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err := client.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Empty(t, resp.GetJobs())
 
-	_, err = client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err = client.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:     "test",
-			Schedule: ptr.Of("@daily"),
+			Schedule: new("@daily"),
 		},
 	})
 	require.NoError(t, err)
 
-	resp, err = client.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Len(t, resp.GetJobs(), 1)
 
-	_, err = client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err = client.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:     "test2",
-			Schedule: ptr.Of("@daily"),
+			Schedule: new("@daily"),
 		},
 	})
 	require.NoError(t, err)
-	resp, err = client.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Len(t, resp.GetJobs(), 2)
 
-	_, err = client.DeleteJobAlpha1(ctx, &rtv1.DeleteJobRequest{
+	_, err = client.DeleteJob(ctx, &rtv1.DeleteJobRequest{
 		Name: "test",
 	})
 	require.NoError(t, err)
-	resp, err = client.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Len(t, resp.GetJobs(), 1)
 
 	client2 := l.daprd2.GRPCClient(t, ctx)
-	_, err = client2.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err = client2.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:     "test2",
-			Schedule: ptr.Of("@daily"),
+			Schedule: new("@daily"),
 		},
 	})
 	require.NoError(t, err)
-	_, err = client2.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err = client2.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:     "test3",
-			Schedule: ptr.Of("@daily"),
+			Schedule: new("@daily"),
 		},
 	})
 	require.NoError(t, err)
-	resp, err = client2.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client2.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Len(t, resp.GetJobs(), 2)
 
-	resp, err = client.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Len(t, resp.GetJobs(), 1)
 }

@@ -15,8 +15,7 @@ package kubernetes
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -111,7 +110,7 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 
 	// We need to run the Kubernetes API server with TLS so that HTTP/2.0 is
 	// enabled, which is required for informers.
-	x509RootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, x509RootKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	// Generate a test root key for JWT signing
 	jwtRootKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -130,16 +129,16 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 	})
 	require.NoError(t, err)
 
-	leafpk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, leafpk, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	leafCert := &x509.Certificate{
 		SerialNumber:       big.NewInt(1),
 		NotBefore:          time.Now(),
 		NotAfter:           time.Now().Add(time.Minute * 5),
-		KeyUsage:           x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		KeyUsage:           x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		DNSNames:           []string{"cluster.local"},
-		SignatureAlgorithm: x509.ECDSAWithSHA256,
+		SignatureAlgorithm: x509.PureEd25519,
 	}
 	leafCertDER, err := x509.CreateCertificate(rand.Reader, leafCert, x509bundle.IssChain[0], leafpk.Public(), x509bundle.IssKey)
 	require.NoError(t, err)

@@ -37,13 +37,16 @@ func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.Sc
 	return a.scheduleJob(ctx, inReq)
 }
 
+func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobResponse, error) {
+	return a.scheduleJob(ctx, inReq)
+}
+
 func (a *Universal) ScheduleJobAlpha1HTTP(ctx context.Context, job *internalsv1pb.JobHTTPRequest) (*runtimev1pb.ScheduleJobResponse, error) {
 	data, err := anypb.New(job.GetData())
 	if err != nil {
 		return &runtimev1pb.ScheduleJobResponse{}, fmt.Errorf("error creating storable job data from job: %w", err)
 	}
 
-	//nolint:protogetter
 	return a.scheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:          job.GetName(),
@@ -88,7 +91,7 @@ func (a *Universal) scheduleJob(ctx context.Context, jobRequest *runtimev1pb.Sch
 			},
 		},
 		Overwrite: jobRequest.GetOverwrite(),
-		//nolint:protogetter
+
 		Job: &schedulerv1pb.Job{
 			Schedule:      job.Schedule,
 			Data:          job.GetData(),
@@ -111,7 +114,15 @@ func (a *Universal) scheduleJob(ctx context.Context, jobRequest *runtimev1pb.Sch
 	return &runtimev1pb.ScheduleJobResponse{}, nil
 }
 
+func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobRequest) (*runtimev1pb.DeleteJobResponse, error) {
+	return a.deleteJob(ctx, inReq)
+}
+
 func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.DeleteJobRequest) (*runtimev1pb.DeleteJobResponse, error) {
+	return a.deleteJob(ctx, inReq)
+}
+
+func (a *Universal) deleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobRequest) (*runtimev1pb.DeleteJobResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
@@ -147,7 +158,15 @@ func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.Dele
 	return &runtimev1pb.DeleteJobResponse{}, nil
 }
 
+func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
+	return a.getJob(ctx, inReq)
+}
+
 func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
+	return a.getJob(ctx, inReq)
+}
+
+func (a *Universal) getJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
@@ -183,17 +202,31 @@ func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobR
 	return &runtimev1pb.GetJobResponse{
 		Job: &runtimev1pb.Job{
 			Name:          inReq.GetName(),
-			Schedule:      resp.GetJob().Schedule, //nolint:protogetter
+			Schedule:      resp.GetJob().Schedule,
 			Data:          resp.GetJob().GetData(),
-			Repeats:       resp.GetJob().Repeats, //nolint:protogetter
-			DueTime:       resp.GetJob().DueTime, //nolint:protogetter
-			Ttl:           resp.GetJob().Ttl,     //nolint:protogetter
+			Repeats:       resp.GetJob().Repeats,
+			DueTime:       resp.GetJob().DueTime,
+			Ttl:           resp.GetJob().Ttl,
 			FailurePolicy: resp.GetJob().GetFailurePolicy(),
 		},
 	}, nil
 }
 
+func (a *Universal) DeleteJobsByPrefix(ctx context.Context, req *runtimev1pb.DeleteJobsByPrefixRequest) (*runtimev1pb.DeleteJobsByPrefixResponse, error) {
+	return a.deleteJobsByPrefix(ctx, req)
+}
+
 func (a *Universal) DeleteJobsByPrefixAlpha1(ctx context.Context, req *runtimev1pb.DeleteJobsByPrefixRequestAlpha1) (*runtimev1pb.DeleteJobsByPrefixResponseAlpha1, error) {
+	_, err := a.deleteJobsByPrefix(ctx, &runtimev1pb.DeleteJobsByPrefixRequest{
+		NamePrefix: req.NamePrefix,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &runtimev1pb.DeleteJobsByPrefixResponseAlpha1{}, nil
+}
+
+func (a *Universal) deleteJobsByPrefix(ctx context.Context, req *runtimev1pb.DeleteJobsByPrefixRequest) (*runtimev1pb.DeleteJobsByPrefixResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
@@ -210,17 +243,31 @@ func (a *Universal) DeleteJobsByPrefixAlpha1(ctx context.Context, req *runtimev1
 		},
 	})
 	if err != nil {
-		a.logger.Errorf("Error listing jobs due to: %s", err)
+		a.logger.Errorf("Error deleting jobs by prefix due to: %s", err)
 		return nil, apierrors.SchedulerDeleteJob(map[string]string{
 			"appID":     a.AppID(),
 			"namespace": a.Namespace(),
 		}, err)
 	}
 
-	return nil, nil
+	return &runtimev1pb.DeleteJobsByPrefixResponse{}, nil
 }
 
-func (a *Universal) ListJobsAlpha1(ctx context.Context, req *runtimev1pb.ListJobsRequestAlpha1) (*runtimev1pb.ListJobsResponseAlpha1, error) {
+func (a *Universal) ListJobs(ctx context.Context, req *runtimev1pb.ListJobsRequest) (*runtimev1pb.ListJobsResponse, error) {
+	return a.listJobs(ctx, req)
+}
+
+func (a *Universal) ListJobsAlpha1(ctx context.Context, _ *runtimev1pb.ListJobsRequestAlpha1) (*runtimev1pb.ListJobsResponseAlpha1, error) {
+	resp, err := a.listJobs(ctx, new(runtimev1pb.ListJobsRequest))
+	if err != nil {
+		return nil, err
+	}
+	return &runtimev1pb.ListJobsResponseAlpha1{
+		Jobs: resp.GetJobs(),
+	}, nil
+}
+
+func (a *Universal) listJobs(ctx context.Context, req *runtimev1pb.ListJobsRequest) (*runtimev1pb.ListJobsResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
@@ -260,7 +307,7 @@ func (a *Universal) ListJobsAlpha1(ctx context.Context, req *runtimev1pb.ListJob
 		})
 	}
 
-	return &runtimev1pb.ListJobsResponseAlpha1{
+	return &runtimev1pb.ListJobsResponse{
 		Jobs: jobs,
 	}, nil
 }

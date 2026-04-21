@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -70,9 +69,9 @@ func (d *durable) Run(t *testing.T, ctx context.Context) {
 
 	client := d.daprd.GRPCClient(t, ctx)
 
-	now := ptr.Of(time.Now().UTC().Format(time.RFC3339))
+	now := new(time.Now().UTC().Format(time.RFC3339))
 	for i := range 40 {
-		_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+		_, err := client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{Name: strconv.Itoa(i), DueTime: now},
 		})
 		require.NoError(t, err)

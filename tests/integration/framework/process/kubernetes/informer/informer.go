@@ -36,6 +36,7 @@ import (
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 )
@@ -201,6 +202,8 @@ func (i *Informer) objToGVK(t *testing.T, obj runtime.Object) schema.GroupVersio
 		return schema.GroupVersionKind{Group: "dapr.io", Version: "v1alpha1", Kind: "configurations"}
 	case *httpendapi.HTTPEndpoint:
 		return schema.GroupVersionKind{Group: "dapr.io", Version: "v1alpha1", Kind: "httpendpoints"}
+	case *mcpserverapi.MCPServer:
+		return schema.GroupVersionKind{Group: "dapr.io", Version: "v1alpha1", Kind: "mcpservers"}
 	case *resiliencyapi.Resiliency:
 		return schema.GroupVersionKind{Group: "dapr.io", Version: "v1alpha1", Kind: "resiliencies"}
 	case *subapi.Subscription:
@@ -216,7 +219,7 @@ func (i *Informer) objToGVK(t *testing.T, obj runtime.Object) schema.GroupVersio
 	case *corev1.Namespace:
 		return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "namespaces"}
 	default:
-		require.Fail(t, "unknown type: %T", obj)
+		require.Failf(t, "unknown type", "%T", obj)
 		return schema.GroupVersionKind{}
 	}
 }

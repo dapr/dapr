@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -55,15 +54,15 @@ func (n *noapp) Run(t *testing.T, ctx context.Context) {
 
 	client := n.daprd.GRPCClient(t, ctx)
 
-	_, err := client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err := client.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:    "helloworld",
-			DueTime: ptr.Of("2s"),
+			DueTime: new("2s"),
 		},
 	})
 	require.NoError(t, err)
 
-	resp, err := client.GetJobAlpha1(ctx, &rtv1.GetJobRequest{
+	resp, err := client.GetJob(ctx, &rtv1.GetJobRequest{
 		Name: "helloworld",
 	})
 	require.NoError(t, err)
@@ -72,7 +71,7 @@ func (n *noapp) Run(t *testing.T, ctx context.Context) {
 
 	time.Sleep(3 * time.Second)
 
-	resp, err = client.GetJobAlpha1(ctx, &rtv1.GetJobRequest{
+	resp, err = client.GetJob(ctx, &rtv1.GetJobRequest{
 		Name: "helloworld",
 	})
 	require.NoError(t, err)

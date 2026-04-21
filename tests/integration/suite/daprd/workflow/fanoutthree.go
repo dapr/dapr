@@ -55,13 +55,13 @@ func (f *fanoutthree) Run(t *testing.T, ctx context.Context) {
 	for r := range 3 {
 		registry := f.workflow.RegistryN(r)
 
-		registry.AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+		registry.AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 			tasks := make([]task.Task, 5)
 			for i := range 5 {
 				tasks[i] = ctx.CallActivity("bar", task.WithActivityInput(i))
 			}
 
-			var errs []error
+			errs := make([]error, 0, len(tasks))
 			for _, task := range tasks {
 				errs = append(errs, task.Await(nil))
 			}
@@ -81,9 +81,9 @@ func (f *fanoutthree) Run(t *testing.T, ctx context.Context) {
 	f.workflow.BackendClientN(t, ctx, 1)
 	f.workflow.BackendClientN(t, ctx, 2)
 
-	id, err := client1.ScheduleNewOrchestration(ctx, "foo")
+	id, err := client1.ScheduleNewWorkflow(ctx, "foo")
 	require.NoError(t, err)
-	_, err = client1.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client1.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	exp := make([]int, 5)
 	for i := range 5 {

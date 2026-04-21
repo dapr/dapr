@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/healthz"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/retry"
 	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
@@ -52,7 +53,6 @@ type Options struct {
 	Scheduler  schedclient.Reloader
 
 	DisseminationTimeout time.Duration
-	Cancel               context.CancelCauseFunc
 }
 
 type placement struct {
@@ -66,23 +66,22 @@ type placement struct {
 
 	inflight  *inflight.Inflight
 	connector connector.Interface
-	loop      loop.Interface[loops.Event]
+	loop      loop.Interface[loops.EventPlace]
 	htarget   healthz.Target
 
-	lookups []loops.Event
+	lookups []loops.EventLookup
 
 	idx uint64
 
-	dissLoop loop.Interface[loops.Event]
+	dissLoop loop.Interface[loops.EventDiss]
 	host     *v1pb.Host
 
 	dissTimeout time.Duration
-	cancel      context.CancelCauseFunc
 
 	wg sync.WaitGroup
 }
 
-func New(opts Options) loop.Interface[loops.Event] {
+func New(opts Options) loop.Interface[loops.EventPlace] {
 	place := &placement{
 		id:        opts.ID,
 		ready:     opts.Ready,
@@ -97,13 +96,12 @@ func New(opts Options) loop.Interface[loops.Event] {
 		actorTable:  opts.ActorTable,
 		scheduler:   opts.Scheduler,
 		dissTimeout: opts.DisseminationTimeout,
-		cancel:      opts.Cancel,
 	}
-	place.loop = loop.New[loops.Event](8).NewLoop(place)
+	place.loop = loop.New[loops.EventPlace](8).NewLoop(place)
 	return place.loop
 }
 
-func (p *placement) Handle(ctx context.Context, event loops.Event) error {
+func (p *placement) Handle(ctx context.Context, event loops.EventPlace) error {
 	switch e := event.(type) {
 	case *loops.StreamOrder:
 		p.handleOrder(e)
@@ -177,7 +175,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Second / 2):
+		case <-time.After(retry.Jitter(time.Second/2, time.Second/4)):
 		}
 	}
 
@@ -196,17 +194,15 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		Scheduler:            p.scheduler,
 		HTarget:              p.htarget,
 		DisseminationTimeout: p.dissTimeout,
-		Cancel:               p.cancel,
+		Ready:                p.ready,
 	})
 
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
+	p.wg.Go(func() {
 		derr := p.dissLoop.Run(ctx)
 		if derr != nil {
 			log.Errorf("Placement dissemination loop exited with error: %s", derr)
 		}
-	}()
+	})
 
 	if recon.ActorTypes != nil {
 		p.host.Entities = *recon.ActorTypes
@@ -218,11 +214,9 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 	})
 
 	for _, l := range p.lookups {
-		p.dissLoop.Enqueue(l)
+		p.dissLoop.Enqueue(l.(loops.EventDiss))
 	}
 	p.lookups = nil
-
-	p.ready.Store(true)
 
 	return nil
 }

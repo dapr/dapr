@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/tools/cache"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 
@@ -80,6 +81,22 @@ func (i *informer[T]) Run(ctx context.Context) error {
 	var zero T
 	informer, err := i.cache.GetInformer(ctx, zero.ClientObject())
 	if err != nil {
+		// Ignore errors to prevent fatal shutdown in the case of the operator
+		// shutting down early.
+		if ctx.Err() != nil {
+			return nil
+		}
+
+		// If the CRD for this resource type is not installed, log a warning and
+		// run as a no-op rather than crashing the operator. This supports
+		// version-skew scenarios where newer control plane binaries run against a
+		// cluster that doesn't yet have all CRDs.
+		if apimeta.IsNoMatchError(err) {
+			i.log.Warnf("CRD for %s/%s not found, skipping informer: %v", zero.APIVersion(), zero.Kind(), err)
+			<-ctx.Done()
+			return nil
+		}
+
 		return fmt.Errorf("unable to get setup %s informer: %w", zero.Kind(), err)
 	}
 

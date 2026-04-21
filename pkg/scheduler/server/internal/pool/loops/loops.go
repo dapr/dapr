@@ -22,20 +22,42 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
-// Event is a generic interface for all events in the scheduler.
-type Event any
+type nsbase struct{}
+
+func (*nsbase) isEventNS() {}
+
+type EventNS interface{ isEventNS() }
+
+type connbase struct{}
+
+func (*connbase) isEventConn() {}
+
+type EventConn interface{ isEventConn() }
+
+type streambase struct{}
+
+func (*streambase) isEventStream() {}
+
+type EventStream interface{ isEventStream() }
 
 // TriggerRequest is the event for triggering a job in the scheduler.
 type TriggerRequest struct {
+	*nsbase
+	*connbase
+	*streambase
 	Job      *internalsv1pb.JobEvent
 	ResultFn func(api.TriggerResponseResult)
 }
 
 // StreamShutdown is the event for shutting down the scheduler stream.
-type StreamShutdown struct{}
+type StreamShutdown struct {
+	*streambase
+}
 
 // ConnAdd is the event for adding a new connection to the scheduler.
 type ConnAdd struct {
+	*nsbase
+	*connbase
 	Channel schedulerv1pb.Scheduler_WatchJobsServer
 	Request *schedulerv1pb.WatchJobsRequestInitial
 	Cancel  context.CancelCauseFunc
@@ -44,9 +66,29 @@ type ConnAdd struct {
 // ConnCloseStream is the event for closing a connection to the scheduler from
 // the stream.
 type ConnCloseStream struct {
+	*nsbase
+	*connbase
 	StreamIDx uint64
 	Namespace string
 }
 
+type ConcurrencyRelease struct {
+	*connbase
+	GateKeys []string
+}
+
+// SchedulerInfoUpdate propagates the current scheduler cluster size and this
+// scheduler's index within it, pushed by the leadership loop whenever the host
+// list changes. Flows pool -> namespaces -> every connection loop.
+type SchedulerInfoUpdate struct {
+	*nsbase
+	*connbase
+	Count int32
+	Idx   int32
+}
+
 // Shutdown is the event for shutting down the scheduler loops.
-type Shutdown struct{}
+type Shutdown struct {
+	*nsbase
+	*connbase
+}

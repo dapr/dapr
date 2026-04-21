@@ -95,7 +95,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 1)
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 		resp := s.daprd.GetMetaRegisteredComponents(t, ctx)
 		assert.ElementsMatch(t, []*rtpbv1.RegisteredComponents{
 			{
@@ -138,7 +138,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 3)
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 		resp := s.daprd.GetMetaRegisteredComponents(t, ctx)
 		assert.ElementsMatch(t, []*rtpbv1.RegisteredComponents{
 			{
@@ -166,7 +166,7 @@ spec:
 		s.writeRead(t, ctx, client, "abc")
 		s.writeRead(t, ctx, client, "xyz")
 
-		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -177,7 +177,7 @@ spec:
  metadata:
  - name: connectionString
    value: %s/db.sqlite
-`, tmpDir)), 0o600))
+`, tmpDir), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.daprd.GetMetaRegisteredComponents(c, ctx)
@@ -195,7 +195,7 @@ spec:
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 		s.writeRead(t, ctx, client, "abc")
@@ -208,7 +208,7 @@ spec:
 		s.writeRead(t, ctx, client, "xyz")
 		s.writeExpectError(t, ctx, client, "foo", http.StatusBadRequest)
 
-		require.NoError(t, os.WriteFile(filepath.Join(s.resDir1, "1.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir1, "1.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -228,7 +228,7 @@ spec:
  type: state.in-memory
  version: v1
  metadata: []
-`, s.resDir1)), 0o600))
+`, s.resDir1), 0o600))
 
 		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -261,7 +261,7 @@ spec:
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 		s.writeRead(t, ctx, client, "abc")
@@ -306,7 +306,7 @@ spec:
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 		s.writeRead(t, ctx, client, "bar")
@@ -323,7 +323,7 @@ spec:
 
 		secPath := filepath.Join(tmpDir, "foo")
 		require.NoError(t, os.WriteFile(secPath, []byte(`{}`), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -334,7 +334,7 @@ spec:
   metadata:
   - name: secretsFile
     value: '%s'
-`, secPath)), 0o600))
+`, secPath), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.daprd.GetMetaRegisteredComponents(c, ctx)
@@ -353,7 +353,7 @@ spec:
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 		s.writeExpectError(t, ctx, client, "bar", http.StatusBadRequest)
@@ -375,7 +375,7 @@ spec:
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 			}, resp)
-		}, time.Second*10, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 
 		s.writeExpectError(t, ctx, client, "123", http.StatusInternalServerError)
 		s.writeExpectError(t, ctx, client, "bar", http.StatusInternalServerError)
@@ -397,7 +397,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 2)
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 	})

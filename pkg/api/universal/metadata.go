@@ -15,6 +15,7 @@ package universal
 
 import (
 	"context"
+	"maps"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -30,9 +31,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 	// Extended metadata
 	extendedMetadata := make(map[string]string, len(a.extendedMetadata)+1)
 	a.extendedMetadataLock.RLock()
-	for k, v := range a.extendedMetadata {
-		extendedMetadata[k] = v
-	}
+	maps.Copy(extendedMetadata, a.extendedMetadata)
 	a.extendedMetadataLock.RUnlock()
 
 	// This is deprecated, but we still need to support it for backward compatibility.
@@ -101,6 +100,15 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 		}
 	}
 
+	// MCP servers
+	mcpServers := a.compStore.ListMCPServers()
+	registeredMCPServers := make([]*runtimev1pb.MetadataMCPServer, len(mcpServers))
+	for i, m := range mcpServers {
+		registeredMCPServers[i] = &runtimev1pb.MetadataMCPServer{
+			Name: m.Name,
+		}
+	}
+
 	var sched *runtimev1pb.MetadataScheduler
 	if a.scheduler != nil {
 		if addr := a.scheduler.Addresses(); len(addr) > 0 {
@@ -117,6 +125,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 		ActiveActorsCount:       actorRuntime.GetActiveActors(), // Alias for backwards-compatibility
 		Subscriptions:           ps,
 		HttpEndpoints:           registeredHTTPEndpoints,
+		McpServers:              registeredMCPServers,
 		AppConnectionProperties: appConnectionProperties,
 		RuntimeVersion:          buildinfo.Version(),
 		EnabledFeatures:         a.globalConfig.EnabledFeatures(),

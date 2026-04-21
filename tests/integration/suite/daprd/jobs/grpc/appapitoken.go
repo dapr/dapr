@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -77,10 +76,10 @@ func (a *appapitoken) Run(t *testing.T, ctx context.Context) {
 	client := a.daprd.GRPCClient(t, ctx)
 	data, err := anypb.New(structpb.NewStringValue("test message"))
 	require.NoError(t, err)
-	_, err = client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err = client.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:     "test-job",
-			Schedule: ptr.Of("@every 1s"),
+			Schedule: new("@every 1s"),
 			Data:     data,
 		},
 	})

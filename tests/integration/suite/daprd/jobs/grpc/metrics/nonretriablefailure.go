@@ -31,7 +31,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -73,16 +72,16 @@ func (n *nonretriablefailure) Run(t *testing.T, ctx context.Context) {
 	data, _ := anypb.New(wrapperspb.Bytes([]byte("hello world")))
 
 	t.Run("non-retriable failed job trigger", func(t *testing.T) {
-		_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+		_, err := client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
 				Name:    "nonretriablefailure",
-				DueTime: ptr.Of("0s"),
+				DueTime: new("0s"),
 				Data:    data,
 				FailurePolicy: &corev1pb.JobFailurePolicy{
 					Policy: &corev1pb.JobFailurePolicy_Constant{
 						Constant: &corev1pb.JobFailurePolicyConstant{
 							Interval:   nil,
-							MaxRetries: ptr.Of(uint32(3)),
+							MaxRetries: new(uint32(3)),
 						},
 					},
 				},

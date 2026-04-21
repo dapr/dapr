@@ -31,7 +31,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -59,7 +58,7 @@ func (f *fields) Run(t *testing.T, ctx context.Context) {
 	f.scheduler.WaitUntilRunning(t, ctx)
 	f.daprd.WaitUntilRunning(t, ctx)
 
-	f.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/test", strings.NewReader(`{
+	f.daprd.HTTPPost2xx(t, ctx, "/v1.0/jobs/test", strings.NewReader(`{
 "schedule": "@every 1m",
 "repeats": 123,
 "dueTime": "1000s",
@@ -73,7 +72,7 @@ func (f *fields) Run(t *testing.T, ctx context.Context) {
 }
 }`))
 
-	job, err := f.daprd.GRPCClient(t, ctx).GetJobAlpha1(ctx,
+	job, err := f.daprd.GRPCClient(t, ctx).GetJob(ctx,
 		&runtimev1pb.GetJobRequest{Name: "test"},
 	)
 	require.NoError(t, err)
@@ -87,16 +86,16 @@ func (f *fields) Run(t *testing.T, ctx context.Context) {
 		&runtimev1pb.GetJobResponse{
 			Job: &runtimev1pb.Job{
 				Name:     "test",
-				Schedule: ptr.Of("@every 1m"),
-				Repeats:  ptr.Of(uint32(123)),
-				DueTime:  ptr.Of("1000s"),
-				Ttl:      ptr.Of("123s"),
+				Schedule: new("@every 1m"),
+				Repeats:  new(uint32(123)),
+				DueTime:  new("1000s"),
+				Ttl:      new("123s"),
 				Data:     expData,
 				FailurePolicy: &corev1.JobFailurePolicy{
 					Policy: &corev1.JobFailurePolicy_Constant{
 						Constant: &corev1.JobFailurePolicyConstant{
 							Interval:   durationpb.New(time.Second * 3),
-							MaxRetries: ptr.Of(uint32(5)),
+							MaxRetries: new(uint32(5)),
 						},
 					},
 				},

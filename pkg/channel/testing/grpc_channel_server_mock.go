@@ -43,7 +43,7 @@ type MockServer struct {
 	BulkResponsePerPath            map[string]*runtimev1pb.TopicEventBulkResponse
 	initialized                    bool
 	mutex                          sync.Mutex
-	ValidateCloudEventExtension    *map[string]interface{}
+	ValidateCloudEventExtension    *map[string]any
 }
 
 func (m *MockServer) Init() {
@@ -92,7 +92,7 @@ func (m *MockServer) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEven
 	if marshalErr != nil {
 		return nil, marshalErr
 	}
-	extensionsMap := map[string]interface{}{}
+	extensionsMap := map[string]any{}
 	unmarshalErr := json.Unmarshal(jsonBytes, &extensionsMap)
 	if unmarshalErr != nil {
 		return nil, unmarshalErr
@@ -130,6 +130,10 @@ func (m *MockServer) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb
 
 func (m *MockServer) OnBulkTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
 	return m.bulkTopicEvent(ctx, in)
+}
+
+func (m *MockServer) OnJobEvent(ctx context.Context, request *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+	return &runtimev1pb.JobEventResponse{}, nil
 }
 
 func (m *MockServer) OnJobEventAlpha1(ctx context.Context, request *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {

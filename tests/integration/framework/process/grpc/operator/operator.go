@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/operator/api"
@@ -44,11 +45,24 @@ type Operator struct {
 	closech              chan struct{}
 	lock                 sync.RWMutex
 	updateCompCh         chan *api.ComponentUpdateEvent
-	updateSubCh          chan *api.SubscriptionUpdateEvent
+	updateSubCh          chan *SubscriptionUpdateEvent
+	updateMCPCh          chan *MCPServerUpdateEvent
 	srvCompUpdateCh      []chan *api.ComponentUpdateEvent
-	srvSubUpdateCh       []chan *api.SubscriptionUpdateEvent
+	srvSubUpdateCh       []chan *SubscriptionUpdateEvent
+	srvMCPUpdateCh       []chan *MCPServerUpdateEvent
 	currentComponents    []compapi.Component
 	currentSubscriptions []subapi.Subscription
+	currentMCPServers    []mcpserverapi.MCPServer
+}
+
+type SubscriptionUpdateEvent struct {
+	Subscription *subapi.Subscription
+	EventType    operatorv1.ResourceEventType
+}
+
+type MCPServerUpdateEvent struct {
+	MCPServer *mcpserverapi.MCPServer
+	EventType operatorv1.ResourceEventType
 }
 
 func New(t *testing.T, fopts ...Option) *Operator {
@@ -57,7 +71,8 @@ func New(t *testing.T, fopts ...Option) *Operator {
 	o := &Operator{
 		closech:      make(chan struct{}),
 		updateCompCh: make(chan *api.ComponentUpdateEvent),
-		updateSubCh:  make(chan *api.SubscriptionUpdateEvent),
+		updateSubCh:  make(chan *SubscriptionUpdateEvent),
+		updateMCPCh:  make(chan *MCPServerUpdateEvent),
 	}
 
 	opts := options{
@@ -113,7 +128,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 		},
 		subscriptionUpdateFn: func(req *operatorv1.SubscriptionUpdateRequest, srv operatorv1.Operator_SubscriptionUpdateServer) error {
 			o.lock.Lock()
-			updateCh := make(chan *api.SubscriptionUpdateEvent)
+			updateCh := make(chan *SubscriptionUpdateEvent)
 			o.srvSubUpdateCh = append(o.srvSubUpdateCh, updateCh)
 			o.lock.Unlock()
 
@@ -143,6 +158,80 @@ func New(t *testing.T, fopts ...Option) *Operator {
 						return err
 					}
 				}
+			}
+		},
+		listMCPServersFn: func(ctx context.Context, req *operatorv1.ListMCPServersRequest) (*operatorv1.ListMCPServersResponse, error) {
+			o.lock.Lock()
+			defer o.lock.Unlock()
+			var servers [][]byte
+			for _, s := range o.currentMCPServers {
+				if s.Namespace != req.GetNamespace() {
+					continue
+				}
+				b, err := json.Marshal(s)
+				if err != nil {
+					return nil, err
+				}
+				servers = append(servers, b)
+			}
+			return &operatorv1.ListMCPServersResponse{McpServers: servers}, nil
+		},
+		mcpServerUpdateFn: func(req *operatorv1.MCPServerUpdateRequest, srv operatorv1.Operator_MCPServerUpdateServer) error {
+			o.lock.Lock()
+			updateCh := make(chan *MCPServerUpdateEvent)
+			o.srvMCPUpdateCh = append(o.srvMCPUpdateCh, updateCh)
+			o.lock.Unlock()
+
+			for {
+				select {
+				case <-srv.Context().Done():
+					return nil
+				case <-o.closech:
+					return errors.New("operator closed")
+				case mcp := <-updateCh:
+					if len(mcp.MCPServer.Namespace) == 0 {
+						mcp.MCPServer.Namespace = "default"
+					}
+					if mcp.MCPServer.Namespace != req.GetNamespace() {
+						continue
+					}
+
+					b, err := json.Marshal(mcp.MCPServer)
+					if err != nil {
+						return err
+					}
+
+					if err := srv.Send(&operatorv1.MCPServerUpdateEvent{
+						McpServer: b,
+						Type:      mcp.EventType,
+					}); err != nil {
+						return err
+					}
+				}
+			}
+		},
+		configurationUpdateFn: func(_ *operatorv1.ConfigurationUpdateRequest, srv operatorv1.Operator_ConfigurationUpdateServer) error {
+			select {
+			case <-srv.Context().Done():
+				return nil
+			case <-o.closech:
+				return errors.New("operator closed")
+			}
+		},
+		httpEndpointUpdateFn: func(_ *operatorv1.HTTPEndpointUpdateRequest, srv operatorv1.Operator_HTTPEndpointUpdateServer) error {
+			select {
+			case <-srv.Context().Done():
+				return nil
+			case <-o.closech:
+				return errors.New("operator closed")
+			}
+		},
+		resiliencyUpdateFn: func(_ *operatorv1.ResiliencyUpdateRequest, srv operatorv1.Operator_ResiliencyUpdateServer) error {
+			select {
+			case <-srv.Context().Done():
+				return nil
+			case <-o.closech:
+				return errors.New("operator closed")
 			}
 		},
 	}
@@ -187,14 +276,18 @@ func New(t *testing.T, fopts ...Option) *Operator {
 		procgrpc.WithRegister(func(s *grpc.Server) {
 			srv := &server{
 				componentUpdateFn:     opts.componentUpdateFn,
+				configurationUpdateFn: opts.configurationUpdateFn,
 				getConfigurationFn:    opts.getConfigurationFn,
 				getResiliencyFn:       opts.getResiliencyFn,
 				httpEndpointUpdateFn:  opts.httpEndpointUpdateFn,
 				listComponentsFn:      opts.listComponentsFn,
 				listHTTPEndpointsFn:   opts.listHTTPEndpointsFn,
+				listMCPServersFn:      opts.listMCPServersFn,
 				listResiliencyFn:      opts.listResiliencyFn,
 				listSubscriptionsFn:   opts.listSubscriptionsFn,
 				listSubscriptionsV2Fn: opts.listSubscriptionsV2Fn,
+				mcpServerUpdateFn:     opts.mcpServerUpdateFn,
+				resiliencyUpdateFn:    opts.resiliencyUpdateFn,
 				subscriptionUpdateFn:  opts.subscriptionUpdateFn,
 			}
 
@@ -257,7 +350,7 @@ func (o *Operator) AddSubscriptions(subs ...subapi.Subscription) {
 	o.currentSubscriptions = append(o.currentSubscriptions, subs...)
 }
 
-func (o *Operator) SubscriptionUpdateEvent(t *testing.T, ctx context.Context, event *api.SubscriptionUpdateEvent) {
+func (o *Operator) SubscriptionUpdateEvent(t *testing.T, ctx context.Context, event *SubscriptionUpdateEvent) {
 	t.Helper()
 	o.lock.Lock()
 	defer o.lock.Unlock()
@@ -283,4 +376,26 @@ func (o *Operator) SetSubscriptions(subs ...subapi.Subscription) {
 	o.lock.Lock()
 	defer o.lock.Unlock()
 	o.currentSubscriptions = subs
+}
+
+func (o *Operator) AddMCPServers(servers ...mcpserverapi.MCPServer) {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+	o.currentMCPServers = append(o.currentMCPServers, servers...)
+}
+
+func (o *Operator) MCPServerUpdateEvent(t *testing.T, ctx context.Context, event *MCPServerUpdateEvent) {
+	t.Helper()
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
+	for _, ch := range o.srvMCPUpdateCh {
+		select {
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for MCPServer update event")
+		case <-o.closech:
+			t.Fatal("operator closed")
+		case ch <- event:
+		}
+	}
 }

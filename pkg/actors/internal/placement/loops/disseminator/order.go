@@ -21,7 +21,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -70,7 +69,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		d.streamLoop.Enqueue(&loops.StreamSend{
 			Host: &v1pb.Host{
 				Operation: v1pb.HostOperation_LOCK,
-				Version:   ptr.Of(d.currentVersion),
+				Version:   new(d.currentVersion),
 				Namespace: d.namespace,
 				Id:        d.id,
 			},
@@ -78,10 +77,13 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 
 	case operationUpdate:
 		if d.currentVersion > version {
-			return fmt.Errorf("version mismatch: expected %d, got %d",
-				d.currentVersion,
-				version,
-			)
+			d.streamLoop.Close(&loops.Shutdown{
+				Error: fmt.Errorf("version mismatch: expected %d, got %d",
+					d.currentVersion,
+					version,
+				),
+			})
+			return nil
 		}
 
 		d.timeoutQ.Dequeue(d.timeoutVersion)
@@ -96,7 +98,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		d.streamLoop.Enqueue(&loops.StreamSend{
 			Host: &v1pb.Host{
 				Operation: v1pb.HostOperation_UPDATE,
-				Version:   ptr.Of(d.currentVersion),
+				Version:   new(d.currentVersion),
 				Namespace: d.namespace,
 				Id:        d.id,
 			},
@@ -108,7 +110,6 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 			return nil
 		}
 
-		d.currentVersion = version
 		if d.currentVersion > version {
 			log.Errorf("Version mismatch: expected %d, got %d, ignoring unlock",
 				d.currentVersion,
@@ -116,6 +117,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 			)
 			return nil
 		}
+		d.currentVersion = version
 
 		log.Infof("Dissemination complete for version %d, unlocking disseminator %s/%s",
 			version, d.namespace, d.id,
@@ -129,16 +131,20 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		d.streamLoop.Enqueue(&loops.StreamSend{
 			Host: &v1pb.Host{
 				Operation: v1pb.HostOperation_UNLOCK,
-				Version:   ptr.Of(d.currentVersion),
+				Version:   new(d.currentVersion),
 				Namespace: d.namespace,
 				Id:        d.id,
 			},
 		})
 
 		d.healthTarget.Ready()
+		d.ready.Store(true)
 
 	default:
-		return fmt.Errorf("unknown operation: %s", order.Order.GetOperation())
+		d.streamLoop.Close(&loops.Shutdown{
+			Error: fmt.Errorf("unknown operation: %s", order.Order.GetOperation()),
+		})
+		return nil
 	}
 
 	return nil

@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/state"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/kit/logger"
 )
@@ -96,7 +97,7 @@ func (s *State) ResetChangeTracking() {
 	s.historyRemovedCount = 0
 }
 
-func (s *State) ApplyRuntimeStateChanges(rs *backend.OrchestrationRuntimeState) {
+func (s *State) ApplyRuntimeStateChanges(rs *backend.WorkflowRuntimeState) {
 	if rs.GetContinuedAsNew() {
 		s.historyRemovedCount += len(s.History)
 		s.historyAddedCount = 0
@@ -126,8 +127,10 @@ func (s *State) ClearInbox() {
 			// ignore timer events since those aren't saved into the state store
 			continue
 		}
+
 		s.inboxRemovedCount++
 	}
+
 	s.Inbox = nil
 	s.inboxAddedCount = 0
 }
@@ -155,17 +158,19 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		if cs == nil {
 			cs = &wrapperspb.StringValue{}
 		}
+
 		csProto, err := proto.Marshal(cs)
 		if err != nil {
 			return nil, err
 		}
+
 		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Upsert,
 			Request:   api.TransactionalUpsert{Key: customStatusKey, Value: csProto},
 		})
 	}
 
-	metaProto, err := proto.Marshal(&backend.WorkflowStateMetadata{
+	metaProto, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
 		InboxLength:   uint64(len(s.Inbox)),
 		HistoryLength: uint64(len(s.History)),
 		Generation:    s.Generation,
@@ -198,6 +203,7 @@ func (s *State) String() string {
 			inbox[i] = "[" + v.String() + "]"
 		}
 	}
+
 	history := make([]string, len(s.History))
 	for i, v := range s.History {
 		if v == nil {
@@ -206,6 +212,7 @@ func (s *State) String() string {
 			history[i] = "[" + v.String() + "]"
 		}
 	}
+
 	return fmt.Sprintf("Inbox:%s\nHistory:%s\nCustomStatus:%v\nGeneration:%d\ninboxAddedCount:%d\ninboxRemovedCount:%d\nhistoryAddedCount:%d\nhistoryRemovedCount:%d\nconfig:%s",
 		strings.Join(inbox, ", "), strings.Join(history, ", "),
 		s.CustomStatus, s.Generation,
@@ -224,19 +231,22 @@ func addStateOperations(req *api.TransactionalRequest, keyPrefix string, events 
 		if err != nil {
 			return err
 		}
+
 		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Upsert,
 			//nolint:gosec
 			Request: api.TransactionalUpsert{Key: getMultiEntryKeyName(keyPrefix, uint64(i)), Value: data},
 		})
 	}
+
 	for i := len(events); i < removedCount; i++ {
 		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Delete,
-			//nolint:gosec
+
 			Request: api.TransactionalDelete{Key: getMultiEntryKeyName(keyPrefix, uint64(i))},
 		})
 	}
+
 	return nil
 }
 
@@ -247,10 +257,11 @@ func addPurgeStateOperations(req *api.TransactionalRequest, keyPrefix string, ev
 	for i := range events {
 		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Delete,
-			//nolint:gosec
+
 			Request: api.TransactionalDelete{Key: getMultiEntryKeyName(keyPrefix, uint64(i))},
 		})
 	}
+
 	return nil
 }
 
@@ -263,23 +274,28 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		ActorID:   actorID,
 		Key:       metadataKey,
 	}
+
 	res, err := state.Get(ctx, &req, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load workflow metadata: %w", err)
 	}
+
 	if len(res.Data) == 0 {
 		// no state found
 		return nil, nil
 	}
-	var metadata backend.WorkflowStateMetadata
+
+	var metadata backend.BackendWorkflowStateMetadata
 	if err = proto.Unmarshal(res.Data, &metadata); err != nil {
 		// TODO: @joshvanl: remove in v1.16
 		var metadataJSON legacyWorkflowStateMetadata
-		if jerr := json.Unmarshal(res.Data, &metadataJSON); jerr != nil {
+		jerr := json.Unmarshal(res.Data, &metadataJSON)
+		if jerr != nil {
 			return nil, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
 		}
 
 		wfLogger.Debugf("Loaded legacy workflow state metadata: %s", res.Data)
+
 		metadata.Generation = metadataJSON.Generation
 		metadata.InboxLength = metadataJSON.InboxLength
 		metadata.HistoryLength = metadataJSON.HistoryLength
@@ -299,12 +315,15 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	}
 
 	var n int
+
 	bulkReq.Keys[n] = customStatusKey
+
 	n++
 	for i := range metadata.GetInboxLength() {
 		bulkReq.Keys[n] = getMultiEntryKeyName(inboxKeyPrefix, i)
 		n++
 	}
+
 	for i := range metadata.GetHistoryLength() {
 		bulkReq.Keys[n] = getMultiEntryKeyName(historyKeyPrefix, i)
 		n++
@@ -332,40 +351,51 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 			wfLogger.Warnf("Failed to load inbox state key '%s': not found", key)
 			continue
 		}
+
 		var hist backend.HistoryEvent
-		if err = proto.Unmarshal(bulkRes[key], &hist); err != nil {
+		err = proto.Unmarshal(bulkRes[key], &hist)
+		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key '%s': %w", key, err)
 		}
+
 		wState.Inbox = append(wState.Inbox, &hist)
 	}
+
 	for i := range metadata.GetHistoryLength() {
 		key = getMultiEntryKeyName(historyKeyPrefix, i)
 		if bulkRes[key] == nil {
 			wfLogger.Warnf("Failed to load history state key '%s': not found", key)
 			continue
 		}
+
 		var hist backend.HistoryEvent
-		if err = proto.Unmarshal(bulkRes[key], &hist); err != nil {
+		err = proto.Unmarshal(bulkRes[key], &hist)
+		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from history state key '%s': %w", key, err)
 		}
+
 		wState.History = append(wState.History, &hist)
 	}
 
 	if len(bulkRes[customStatusKey]) > 0 {
 		wState.CustomStatus = &wrapperspb.StringValue{}
+
 		err = proto.Unmarshal(bulkRes[customStatusKey], wState.CustomStatus)
 		if err != nil {
 			// Fallback to JSON unmarshaling
 			var customStatusValue string
 			// TODO: @famarting: remove in v1.16
-			if jerr := json.Unmarshal(bulkRes[customStatusKey], &customStatusValue); jerr != nil {
+			jerr := json.Unmarshal(bulkRes[customStatusKey], &customStatusValue)
+			if jerr != nil {
 				return nil, fmt.Errorf("failed to unmarshal custom status key entry: %w", err)
 			}
+
 			wState.CustomStatus.Value = customStatusValue
 		}
 	}
 
 	wfLogger.Debugf("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))
+
 	return wState, nil
 }
 
@@ -378,12 +408,14 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 	}
 
 	// Inbox Purging
-	if err := addPurgeStateOperations(req, inboxKeyPrefix, s.Inbox); err != nil {
+	err := addPurgeStateOperations(req, inboxKeyPrefix, s.Inbox)
+	if err != nil {
 		return nil, err
 	}
 
 	// History Purging
-	if err := addPurgeStateOperations(req, historyKeyPrefix, s.History); err != nil {
+	err = addPurgeStateOperations(req, historyKeyPrefix, s.History)
+	if err != nil {
 		return nil, err
 	}
 
@@ -401,8 +433,8 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 	return req, nil
 }
 
-func (s *State) ToWorkflowState() *backend.WorkflowState {
-	return &backend.WorkflowState{
+func (s *State) ToWorkflowState() *protos.BackendWorkflowState {
+	return &protos.BackendWorkflowState{
 		Inbox:        s.Inbox,
 		History:      s.History,
 		CustomStatus: s.CustomStatus,
@@ -410,16 +442,19 @@ func (s *State) ToWorkflowState() *backend.WorkflowState {
 	}
 }
 
-func (s *State) FromWorkflowState(state *backend.WorkflowState) {
+func (s *State) FromWorkflowState(state *protos.BackendWorkflowState) {
 	s.Reset()
+
 	for _, e := range state.GetInbox() {
 		s.AddToInbox(e)
 	}
+
 	for _, e := range state.GetHistory() {
 		s.AddToHistory(e)
 	}
-	s.CustomStatus = state.CustomStatus
-	s.Generation = state.Generation
+
+	s.CustomStatus = state.GetCustomStatus()
+	s.Generation = state.GetGeneration()
 }
 
 func getMultiEntryKeyName(prefix string, i uint64) string {

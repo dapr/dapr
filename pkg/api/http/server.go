@@ -182,13 +182,11 @@ func (s *server) StartNonBlocking() error {
 		}
 		s.servers = append(s.servers, healthServer)
 
-		s.wg.Add(1)
-		go func() {
-			defer s.wg.Done()
+		s.wg.Go(func() {
 			if err := healthServer.ListenAndServe(); err != http.ErrServerClosed {
 				log.Fatal(err)
 			}
-		}()
+		})
 	}
 
 	if s.config.EnableProfiling {

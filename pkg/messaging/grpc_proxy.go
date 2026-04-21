@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/config"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
+	"github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -121,6 +122,13 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	}
 
 	if isLocal {
+		// Normalize the method before ACL evaluation and dispatch.
+		normalizedName, normErr := method.NormalizeMethod(fullName)
+		if normErr != nil {
+			return ctx, nil, nil, nopTeardown, status.Errorf(codes.InvalidArgument, "invalid method: %v", normErr)
+		}
+		fullName = normalizedName
+
 		// proxy locally to the app
 		if p.acl != nil {
 			ok, authError := acl.ApplyAccessControlPolicies(ctx, fullName, common.HTTPExtension_NONE, false, p.acl) //nolint:nosnakecase

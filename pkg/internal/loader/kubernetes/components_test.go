@@ -42,10 +42,7 @@ func (o *mockOperator) GetConfiguration(ctx context.Context, in *operatorv1pb.Ge
 
 func (o *mockOperator) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest) (*operatorv1pb.ListComponentResponse, error) {
 	component := v1alpha1.Component{}
-	component.ObjectMeta.Name = "test"
-	component.ObjectMeta.Labels = map[string]string{
-		"podName": in.GetPodName(),
-	}
+	component.Name = "test"
 	component.Spec = v1alpha1.ComponentSpec{
 		Type: "testtype",
 	}
@@ -58,7 +55,7 @@ func (o *mockOperator) ListComponents(ctx context.Context, in *operatorv1pb.List
 
 func (o *mockOperator) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest) (*operatorv1pb.ListSubscriptionsResponse, error) {
 	subscription := subapi.Subscription{}
-	subscription.ObjectMeta.Name = "test"
+	subscription.Name = "test"
 	subscription.Spec = subapi.SubscriptionSpec{
 		Topic:      "topic",
 		Routes:     subapi.Routes{Default: "route"},
@@ -103,7 +100,6 @@ func TestLoadComponents(t *testing.T) {
 		config: config.KubernetesConfig{
 			ControlPlaneAddress: fmt.Sprintf("localhost:%v", port),
 		},
-		podName: "testPodName",
 	}
 
 	response, err := request.Load(t.Context())
@@ -111,5 +107,4 @@ func TestLoadComponents(t *testing.T) {
 	assert.NotNil(t, response)
 	assert.Equal(t, "test", response[0].Name)
 	assert.Equal(t, "testtype", response[0].Spec.Type)
-	assert.Equal(t, "testPodName", response[0].ObjectMeta.Labels["podName"])
 }

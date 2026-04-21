@@ -131,7 +131,18 @@ func (g *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 		grpc.Trailer(&trailer),
 		grpc.MaxCallSendMsgSize(g.maxRequestBodySize),
 		grpc.MaxCallRecvMsgSize(g.maxRequestBodySize),
-	)
+	}
+
+	// Try stable OnJobEvent first, fall back to alpha OnJobEventAlpha1 if unimplemented
+	_, err := g.appCallbackClient.OnJobEvent(ctx, req, callOpts...)
+	if err != nil {
+		if errStatus, ok := status.FromError(err); ok && errStatus.Code() == codes.Unimplemented {
+			// Fallback to alpha if stable is unimplemented
+			header = nil
+			trailer = nil
+			_, err = g.appCallbackAlphaClient.OnJobEventAlpha1(ctx, req, callOpts...) //nolint:staticcheck
+		}
+	}
 
 	var rsp *invokev1.InvokeMethodResponse
 	if err != nil {

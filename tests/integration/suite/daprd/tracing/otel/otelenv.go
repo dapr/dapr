@@ -107,10 +107,7 @@ func (o *otelenv) Run(t *testing.T, ctx context.Context) {
 		// Wait for spans to be exported
 		assert.Eventually(t, func() bool {
 			spans := o.collector.GetSpans()
-			if len(spans) == 0 {
-				return false
-			}
-			return true
+			return len(spans) != 0
 		}, time.Second*20, time.Millisecond*100, "should receive spans")
 
 		// Get spans and verify service name

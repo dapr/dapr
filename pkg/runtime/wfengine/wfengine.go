@@ -49,6 +49,7 @@ type Interface interface {
 	RuntimeMetadata() *runtimev1pb.MetadataWorkflows
 
 	ActivityActorType() string
+	WorkflowActorType() string
 }
 
 type Options struct {
@@ -98,8 +99,11 @@ func New(opts Options) Interface {
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 	})
 
-	var getWorkItemsCount atomic.Int32
-	var lock sync.Mutex
+	var (
+		getWorkItemsCount atomic.Int32
+		lock              sync.Mutex
+	)
+
 	executor, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
 		backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
 			lock.Lock()
@@ -138,7 +142,7 @@ func New(opts Options) Interface {
 	}
 
 	// There are separate "workers" for executing orchestrations (workflows) and activities
-	oworker := backend.NewOrchestrationWorker(backend.OrchestratorOptions{
+	oworker := backend.NewWorkflowWorker(backend.WorkflowWorkerOptions{
 		Backend:  abackend,
 		Executor: executor,
 		Logger:   wfBackendLogger,
@@ -151,6 +155,7 @@ func New(opts Options) Interface {
 			backend.WithMaxParallelism(*opts.Spec.GetMaxConcurrentActivityInvocations()),
 		}
 	}
+
 	aworker := backend.NewActivityTaskWorker(
 		abackend,
 		executor,
@@ -198,6 +203,7 @@ func (wfe *engine) Run(ctx context.Context) error {
 	}
 
 	log.Info("Workflow engine stopped")
+
 	return nil
 }
 
@@ -207,6 +213,10 @@ func (wfe *engine) Client() workflows.Workflow {
 
 func (wfe *engine) ActivityActorType() string {
 	return wfe.backend.ActivityActorType()
+}
+
+func (wfe *engine) WorkflowActorType() string {
+	return wfe.backend.WorkflowActorType()
 }
 
 func (wfe *engine) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {

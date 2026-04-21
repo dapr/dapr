@@ -17,19 +17,21 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	loaderdisk "github.com/dapr/dapr/pkg/internal/loader/disk"
+	"github.com/dapr/dapr/pkg/internal/loader/disk/dirdata"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
 	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/events/batcher"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.runtime.hotreload.loader.disk")
@@ -41,50 +43,73 @@ type Options struct {
 }
 
 type disk struct {
-	components    *resource[compapi.Component]
-	subscriptions *resource[subapi.Subscription]
-	fs            *fswatcher.FSWatcher
-	batcher       *batcher.Batcher[int, struct{}]
+	dirs           []string
+	components     *resource[compapi.Component]
+	subscriptions  *resource[subapi.Subscription]
+	mcpServers     *resource[mcpserverapi.MCPServer]
+	configurations *resource[configapi.Configuration]
+	httpEndpoints  *resource[httpendpointapi.HTTPEndpoint]
+	resiliencies   *resource[resiliencyapi.Resiliency]
+	fs             *fswatcher.FSWatcher
 }
 
 func New(opts Options) (loader.Interface, error) {
 	log.Infof("Watching directories: [%s]", strings.Join(opts.Dirs, ", "))
 
 	fs, err := fswatcher.New(fswatcher.Options{
-		Targets:  opts.Dirs,
-		Interval: ptr.Of(time.Millisecond * 200),
+		Targets: opts.Dirs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)
 	}
 
-	batcher := batcher.New[int, struct{}](batcher.Options{
-		Interval: 0,
-	})
+	diskOpts := loaderdisk.Options{
+		AppID: opts.AppID,
+		Paths: opts.Dirs,
+	}
 
 	return &disk{
-		fs: fs,
+		dirs: opts.Dirs,
+		fs:   fs,
 		components: newResource[compapi.Component](
 			resourceOptions[compapi.Component]{
-				loader: loaderdisk.NewComponents(loaderdisk.Options{
-					AppID: opts.AppID,
-					Paths: opts.Dirs,
-				}),
-				store:   store.NewComponents(opts.ComponentStore),
-				batcher: batcher,
+				loader: loaderdisk.NewComponents(diskOpts),
+				store:  store.NewComponents(opts.ComponentStore),
 			},
 		),
 		subscriptions: newResource[subapi.Subscription](
 			resourceOptions[subapi.Subscription]{
-				loader: loaderdisk.NewSubscriptions(loaderdisk.Options{
+				loader: loaderdisk.NewSubscriptions(diskOpts),
+				store:  store.NewSubscriptions(opts.ComponentStore),
+			},
+		),
+		configurations: newResource[configapi.Configuration](
+			resourceOptions[configapi.Configuration]{
+				loader: loaderdisk.NewConfigurations(diskOpts),
+				store:  store.NewConfigurations(opts.ComponentStore),
+			},
+		),
+		httpEndpoints: newResource[httpendpointapi.HTTPEndpoint](
+			resourceOptions[httpendpointapi.HTTPEndpoint]{
+				loader: loaderdisk.NewHTTPEndpoints(diskOpts),
+				store:  store.NewHTTPEndpoints(opts.ComponentStore),
+			},
+		),
+		resiliencies: newResource[resiliencyapi.Resiliency](
+			resourceOptions[resiliencyapi.Resiliency]{
+				loader: loaderdisk.NewResiliencies(diskOpts),
+				store:  store.NewResiliencies(opts.ComponentStore),
+			},
+		),
+		mcpServers: newResource[mcpserverapi.MCPServer](
+			resourceOptions[mcpserverapi.MCPServer]{
+				loader: loaderdisk.NewMCPServers(loaderdisk.Options{
 					AppID: opts.AppID,
 					Paths: opts.Dirs,
 				}),
-				store:   store.NewSubscriptions(opts.ComponentStore),
-				batcher: batcher,
+				store: store.NewMCPServers(opts.ComponentStore),
 			},
 		),
-		batcher: batcher,
 	}, nil
 }
 
@@ -94,22 +119,46 @@ func (d *disk) Run(ctx context.Context) error {
 	return concurrency.NewRunnerManager(
 		d.components.run,
 		d.subscriptions.run,
+		d.mcpServers.run,
+		d.configurations.run,
+		d.httpEndpoints.run,
+		d.resiliencies.run,
 		func(ctx context.Context) error {
 			return d.fs.Run(ctx, eventCh)
 		},
 		func(ctx context.Context) error {
-			defer d.batcher.Close()
-
-			var i int
 			for {
 				select {
 				case <-ctx.Done():
 					return nil
 				case <-eventCh:
-					// Use a separate: index every batch to prevent deduplicates of separate
-					// file updates happening at the same time.
-					i++
-					d.batcher.Batch(i, struct{}{})
+					// Read all YAML files from all directories once, then pass
+					// the pre-read data to each resource loader. This avoids
+					// each resource type independently opening and reading the
+					// same files, which causes file handle contention on
+					// Windows.
+					dirData, err := dirdata.ReadDirs(d.dirs)
+					if err != nil {
+						return fmt.Errorf("failed to read resource directories: %w", err)
+					}
+					if err := d.components.trigger(ctx, dirData); err != nil {
+						return err
+					}
+					if err := d.subscriptions.trigger(ctx, dirData); err != nil {
+						return err
+					}
+					if err := d.mcpServers.trigger(ctx, dirData); err != nil {
+						return err
+					}
+					if err := d.configurations.trigger(ctx, dirData); err != nil {
+						return err
+					}
+					if err := d.httpEndpoints.trigger(ctx, dirData); err != nil {
+						return err
+					}
+					if err := d.resiliencies.trigger(ctx, dirData); err != nil {
+						return err
+					}
 				}
 			}
 		},
@@ -122,4 +171,20 @@ func (d *disk) Components() loader.Loader[compapi.Component] {
 
 func (d *disk) Subscriptions() loader.Loader[subapi.Subscription] {
 	return d.subscriptions
+}
+
+func (d *disk) MCPServers() loader.Loader[mcpserverapi.MCPServer] {
+	return d.mcpServers
+}
+
+func (d *disk) Configurations() loader.Loader[configapi.Configuration] {
+	return d.configurations
+}
+
+func (d *disk) HTTPEndpoints() loader.Loader[httpendpointapi.HTTPEndpoint] {
+	return d.httpEndpoints
+}
+
+func (d *disk) Resiliencies() loader.Loader[resiliencyapi.Resiliency] {
+	return d.resiliencies
 }

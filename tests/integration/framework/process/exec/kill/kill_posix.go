@@ -1,5 +1,4 @@
 //go:build !windows
-// +build !windows
 
 /*
 Copyright 2023 The Dapr Authors
@@ -19,6 +18,7 @@ package kill
 import (
 	"os"
 	"os/exec"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,4 +30,8 @@ func interrupt(t *testing.T, cmd *exec.Cmd) {
 
 func kill(t *testing.T, cmd *exec.Cmd) {
 	require.NoError(t, cmd.Process.Signal(os.Kill))
+}
+
+func signalHUP(t *testing.T, cmd *exec.Cmd) {
+	require.NoError(t, cmd.Process.Signal(syscall.SIGHUP))
 }

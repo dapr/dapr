@@ -25,15 +25,15 @@ import (
 )
 
 type Fake struct {
-	events chan loops.Event
-	loop   loop.Interface[loops.Event]
+	events chan loops.EventNS
+	loop   loop.Interface[loops.EventNS]
 }
 
 func New(t *testing.T) *Fake {
 	t.Helper()
 
-	f := &Fake{events: make(chan loops.Event, 10)}
-	f.loop = loop.New[loops.Event](5).NewLoop(f)
+	f := &Fake{events: make(chan loops.EventNS, 10)}
+	f.loop = loop.New[loops.EventNS](5).NewLoop(f)
 
 	errCh := make(chan error)
 	go func() { errCh <- f.loop.Run(t.Context()) }()
@@ -51,15 +51,15 @@ func New(t *testing.T) *Fake {
 	return f
 }
 
-func (f *Fake) Handle(_ context.Context, event loops.Event) error {
+func (f *Fake) Handle(_ context.Context, event loops.EventNS) error {
 	f.events <- event
 	return nil
 }
 
-func (f *Fake) Events() <-chan loops.Event {
+func (f *Fake) Events() <-chan loops.EventNS {
 	return f.events
 }
 
-func (f *Fake) Loop() loop.Interface[loops.Event] {
+func (f *Fake) Loop() loop.Interface[loops.EventNS] {
 	return f.loop
 }

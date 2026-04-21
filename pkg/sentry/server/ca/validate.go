@@ -282,7 +282,7 @@ func keyMatches(key1, key2 jwk.Key) bool {
 		return false
 	}
 
-	var signerPubRaw interface{}
+	var signerPubRaw any
 	if err = key2.Raw(&signerPubRaw); err != nil {
 		return false
 	}

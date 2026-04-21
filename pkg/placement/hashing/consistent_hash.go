@@ -25,7 +25,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"sync"
@@ -100,9 +102,7 @@ func NewFromExisting(loadMap map[string]*Host, replicationFactor int64, virtualN
 	}
 
 	// sort hashes in ascending order
-	sort.Slice(newHash.sortedSet, func(i int, j int) bool {
-		return newHash.sortedSet[i] < newHash.sortedSet[j]
-	})
+	slices.Sort(newHash.sortedSet)
 
 	return newHash
 }
@@ -165,16 +165,19 @@ func (hc *VirtualNodesCache) setHashes(replicationFactor int64, host string) []u
 		}
 	}
 
-	hashMap := newHashMap()
-	hashMap.hashes[host] = make([]uint64, replicationFactor)
-
-	for i := range int(replicationFactor) {
-		hashMap.hashes[host][i] = hash(host + strconv.Itoa(i))
+	hm, exists := hc.data[replicationFactor]
+	if !exists {
+		hm = newHashMap()
+		hc.data[replicationFactor] = hm
 	}
 
-	hc.data[replicationFactor] = hashMap
+	hm.hashes[host] = make([]uint64, replicationFactor)
 
-	return hashMap.hashes[host]
+	for i := range int(replicationFactor) {
+		hm.hashes[host][i] = hash(host + strconv.Itoa(i))
+	}
+
+	return hm.hashes[host]
 }
 
 // ReadInternals returns the internal data structure of the consistent hash.
@@ -416,9 +419,7 @@ func (c *Consistent) VirtualNodes() map[uint64]string {
 	defer c.RUnlock()
 
 	virtualNodes := make(map[uint64]string, len(c.hosts))
-	for vn, h := range c.hosts {
-		virtualNodes[vn] = h
-	}
+	maps.Copy(virtualNodes, c.hosts)
 	return virtualNodes
 }
 

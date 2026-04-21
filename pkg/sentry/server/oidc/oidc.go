@@ -33,7 +33,6 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -136,8 +135,8 @@ func New(opts Options) (*Server, error) {
 	oidcEndpoint := OIDCDiscoveryEndpoint
 	authorizeEndpoint := AuthorizationEndpoint
 	if opts.PathPrefix != nil && *opts.PathPrefix != "/" {
-		if strings.HasSuffix(*opts.PathPrefix, "/") {
-			opts.PathPrefix = ptr.Of(strings.TrimSuffix(*opts.PathPrefix, "/"))
+		if before, ok := strings.CutSuffix(*opts.PathPrefix, "/"); ok {
+			opts.PathPrefix = new(before)
 		}
 
 		var err error
@@ -155,7 +154,7 @@ func New(opts Options) (*Server, error) {
 			return nil, fmt.Errorf("failed to join path for authorization endpoint: %w", err)
 		}
 
-		log.Infof("Using path prefix %q for OIDC HTTP endpoints", opts.PathPrefix)
+		log.Infof("Using path prefix %q for OIDC HTTP endpoints", *opts.PathPrefix)
 	}
 
 	return &Server{
@@ -202,7 +201,7 @@ func (s *Server) Run(ctx context.Context) error {
 				break
 			}
 
-			log.Warnf("Waiting for TLS certificate and key files to be available: %s, %s", s.tlsCertPath, s.tlsKeyPath)
+			log.Warnf("Waiting for TLS certificate and key files to be available: %v, %v", s.tlsCertPath, s.tlsKeyPath)
 
 			select {
 			case <-time.After(5 * time.Second):

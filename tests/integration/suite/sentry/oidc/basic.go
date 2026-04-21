@@ -15,8 +15,7 @@ package oidc
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
@@ -132,7 +131,7 @@ func (o *basicOIDCServer) testOIDCDiscovery(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 
-	var discovery map[string]interface{}
+	var discovery map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&discovery)
 	require.NoError(t, err)
 
@@ -155,7 +154,7 @@ func (o *basicOIDCServer) testJWKSEndpoint(t *testing.T) {
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 
 	var jwks struct {
-		Keys []map[string]interface{} `json:"keys"`
+		Keys []map[string]any `json:"keys"`
 	}
 	err = json.NewDecoder(resp.Body).Decode(&jwks)
 	require.NoError(t, err)
@@ -176,7 +175,7 @@ func (o *basicOIDCServer) testJWTTokenValidation(t *testing.T) {
 	client := sentryv1pb.NewCAClient(conn)
 
 	// Generate certificate request
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	csrTemplate := x509.CertificateRequest{Subject: pkix.Name{CommonName: "test-app"}}
 	csrDER, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privateKey)
@@ -211,7 +210,7 @@ func (o *basicOIDCServer) testJWTTokenValidation(t *testing.T) {
 	assert.True(t, idToken.Expiry.After(time.Now()), "Token should not be expired")
 
 	// Verify custom claims
-	var claims map[string]interface{}
+	var claims map[string]any
 	err = idToken.Claims(&claims)
 	require.NoError(t, err)
 	assert.NotEmpty(t, claims["iat"], "Issued at time should be present")
@@ -243,7 +242,7 @@ func (o *basicOIDCServer) testMultipleAudienceValidation(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 		require.NoError(t, err)
 		csrTemplate := x509.CertificateRequest{Subject: pkix.Name{CommonName: tc.appID}}
 		csrDER, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privateKey)
@@ -294,7 +293,7 @@ func (o *basicOIDCServer) testTokenExpiration(t *testing.T) {
 	defer conn.Close()
 	client := sentryv1pb.NewCAClient(conn)
 
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	csrTemplate := x509.CertificateRequest{Subject: pkix.Name{CommonName: "test-app"}}
 	csrDER, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privateKey)
@@ -361,7 +360,7 @@ func (o *basicOIDCServer) testServiceToServiceAuthentication(t *testing.T) {
 	defer conn.Close()
 	client := sentryv1pb.NewCAClient(conn)
 
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	csrTemplate := x509.CertificateRequest{Subject: pkix.Name{CommonName: "payment-service"}}
 	csrDER, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privateKey)
@@ -399,6 +398,22 @@ func (o *basicOIDCServer) testServiceToServiceAuthentication(t *testing.T) {
 		assert.True(t, token.Expiry.After(time.Now()))
 	}
 
+	perJWTToken := resp.GetPerAudienceJwts()
+	require.Len(t, perJWTToken, len(services)+1, "Should have per-audience JWTs for each service and trust domain")
+	for _, serviceAudience := range append(services, "localhost") {
+		tokenString, exists := perJWTToken[serviceAudience]
+		require.True(t, exists, "Per-audience JWT should exist for %s", serviceAudience)
+
+		verifier := o.oidcProvider.Verifier(&oidc.Config{ClientID: serviceAudience})
+		token, verifyErr := verifier.Verify(t.Context(), tokenString.GetValue())
+		require.NoError(t, verifyErr, "Per-audience JWT for %s should be valid", serviceAudience)
+
+		assert.Equal(t, expectedSubject, token.Subject)
+		assert.Equal(t, o.oidcBaseURL, token.Issuer)
+		assert.Equal(t, []string{serviceAudience}, token.Audience)
+		assert.True(t, token.Expiry.After(time.Now()))
+	}
+
 	// Test that unauthorized services cannot validate the token
 	unauthorizedVerifier := o.oidcProvider.Verifier(&oidc.Config{ClientID: "unauthorized-service"})
 	_, err = unauthorizedVerifier.Verify(t.Context(), jwtToken.GetValue())
@@ -408,7 +423,7 @@ func (o *basicOIDCServer) testServiceToServiceAuthentication(t *testing.T) {
 func (o *basicOIDCServer) generateTLSCertificate(t *testing.T) ([]byte, []byte) {
 	t.Helper()
 
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
 	template := x509.Certificate{
@@ -418,20 +433,20 @@ func (o *basicOIDCServer) generateTLSCertificate(t *testing.T) ([]byte, []byte) 
 		},
 		NotBefore:   time.Now(),
 		NotAfter:    time.Now().Add(365 * 24 * time.Hour),
-		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		KeyUsage:    x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		IPAddresses: []net.IP{net.IPv4(127, 0, 0, 1)},
 		DNSNames:    []string{"localhost"},
 	}
 
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, pub, priv)
 	require.NoError(t, err)
 
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 
-	keyBytes, err := x509.MarshalECPrivateKey(key)
+	keyBytes, err := x509.MarshalPKCS8PrivateKey(priv)
 	require.NoError(t, err)
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyBytes})
 
 	return certPEM, keyPEM
 }

@@ -40,7 +40,6 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/apps/utils"
-	"github.com/dapr/kit/ptr"
 )
 
 var (
@@ -171,7 +170,7 @@ func (c *countAndLast) MarshalJSON() ([]byte, error) {
 		Count: c.count,
 	}
 	if c.lastTime.Unix() > 0 {
-		obj.Last = ptr.Of(time.Now().Sub(c.lastTime).Milliseconds())
+		obj.Last = new(time.Since(c.lastTime).Milliseconds())
 	}
 	return json.Marshal(obj)
 }
@@ -447,6 +446,10 @@ func (s *grpcServer) OnTopicEvent(_ context.Context, in *runtimev1pb.TopicEventR
 
 func (s *grpcServer) OnBulkTopicEvent(_ context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
 	return &runtimev1pb.TopicEventBulkResponse{}, nil
+}
+
+func (s *grpcServer) OnJobEvent(_ context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+	return &runtimev1pb.JobEventResponse{}, nil
 }
 
 func (s *grpcServer) ListInputBindings(_ context.Context, in *emptypb.Empty) (*runtimev1pb.ListInputBindingsResponse, error) {

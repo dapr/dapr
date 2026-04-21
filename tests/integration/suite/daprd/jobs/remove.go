@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -89,11 +88,11 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	req := &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     "test",
-			Schedule: ptr.Of("@every 20s"),
-			DueTime:  ptr.Of("0s"),
+			Schedule: new("@every 20s"),
+			DueTime:  new("0s"),
 		},
 	}
-	_, err := client.ScheduleJobAlpha1(ctx, req)
+	_, err := client.ScheduleJob(ctx, req)
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -104,7 +103,7 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 		assert.GreaterOrEqual(c, r.triggered.Load(), int64(1))
 	}, 30*time.Second, 10*time.Millisecond)
 
-	_, err = client.DeleteJobAlpha1(ctx, &runtimev1pb.DeleteJobRequest{
+	_, err = client.DeleteJob(ctx, &runtimev1pb.DeleteJobRequest{
 		Name: "test",
 	})
 	require.NoError(t, err)

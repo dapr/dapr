@@ -14,9 +14,12 @@ limitations under the License.
 package injector
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"testing"
@@ -25,6 +28,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	admissionv1 "k8s.io/api/admission/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,7 +39,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
-	"github.com/dapr/kit/ptr"
 )
 
 type Injector struct {
@@ -85,7 +88,7 @@ func New(t *testing.T, fopts ...Option) *Injector {
 				Name: "dapr-scheduler-server", Namespace: *opts.namespace,
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: ptr.Of(int32(1)),
+				Replicas: new(int32(1)),
 			},
 		}),
 	)
@@ -101,20 +104,25 @@ func New(t *testing.T, fopts ...Option) *Injector {
 		"-kubeconfig=" + kubeapi.KubeconfigPath(t),
 	}
 
+	envVars := []string{
+		"KUBERNETES_SERVICE_HOST", "anything",
+		"NAMESPACE", *opts.namespace,
+		"SIDECAR_IMAGE", opts.sidecarImage,
+		"DAPR_TRUST_ANCHORS_FILE", opts.sentry.TrustAnchorsFile(t),
+		"DAPR_CONTROL_PLANE_TRUST_DOMAIN", opts.sentry.TrustDomain(t),
+		"DAPR_SENTRY_ADDRESS", opts.sentry.Address(),
+	}
+	if opts.allowedServiceAccounts != nil {
+		envVars = append(envVars, "ALLOWED_SERVICE_ACCOUNTS", *opts.allowedServiceAccounts)
+	}
+
 	return &Injector{
 		kubeapi: kubeapi,
 		exec: exec.New(t,
 			binary.EnvValue("injector"), args,
 			append(
 				opts.execOpts,
-				exec.WithEnvVars(t,
-					"KUBERNETES_SERVICE_HOST", "anything",
-					"NAMESPACE", *opts.namespace,
-					"SIDECAR_IMAGE", opts.sidecarImage,
-					"DAPR_TRUST_ANCHORS_FILE", opts.sentry.TrustAnchorsFile(t),
-					"DAPR_CONTROL_PLANE_TRUST_DOMAIN", opts.sentry.TrustDomain(t),
-					"DAPR_SENTRY_ADDRESS", opts.sentry.Address(),
-				),
+				exec.WithEnvVars(t, envVars...),
 			)...,
 		),
 		freeport:    fp,
@@ -167,4 +175,40 @@ func (i *Injector) MetricsPort() int {
 
 func (i *Injector) HealthzPort() int {
 	return i.healthzPort
+}
+
+// SendAdmission posts an AdmissionReview to the injector's /mutate endpoint
+// and returns the parsed response.
+func (i *Injector) SendAdmission(t *testing.T, ctx context.Context, review admissionv1.AdmissionReview) admissionv1.AdmissionReview {
+	t.Helper()
+	body, err := json.Marshal(review)
+	require.NoError(t, err)
+
+	httpClient := &http.Client{
+		Timeout: time.Second * 10,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				//nolint:gosec
+				InsecureSkipVerify: true,
+			},
+		},
+	}
+	defer httpClient.CloseIdleConnections()
+
+	mutateURL := fmt.Sprintf("https://localhost:%d/mutate", i.port)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, mutateURL, bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	respBody, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	var ar admissionv1.AdmissionReview
+	require.NoError(t, json.Unmarshal(respBody, &ar))
+	return ar
 }

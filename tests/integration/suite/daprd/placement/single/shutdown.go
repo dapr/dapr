@@ -21,9 +21,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	dactors "github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -32,37 +31,32 @@ func init() {
 }
 
 type shutdown struct {
-	daprd *daprd.Daprd
-	place *placement.Placement
+	actors *dactors.Actors
 }
 
 func (s *shutdown) Setup(t *testing.T) []framework.Option {
-	s.place = placement.New(t)
-	scheduler := scheduler.New(t)
-
-	s.daprd = daprd.New(t,
-		daprd.WithPlacementAddresses(s.place.Address()),
-		daprd.WithInMemoryActorStateStore("foo"),
-		daprd.WithScheduler(scheduler),
+	s.actors = dactors.New(t,
+		dactors.WithActorTypes("mytype"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.place, scheduler, s.daprd),
+		framework.WithProcesses(s.actors),
 	}
 }
 
 func (s *shutdown) Run(t *testing.T, ctx context.Context) {
-	s.daprd.WaitUntilRunning(t, ctx)
+	s.actors.WaitUntilRunning(t, ctx)
 
-	table := s.place.PlacementTables(t, ctx)
+	table := s.actors.Placement().PlacementTables(t, ctx)
 	assert.Equal(t, &placement.TableState{
 		Tables: map[string]*placement.Table{
 			"default": {
 				Version: 1,
 				Hosts: []placement.Host{
 					{
-						Name:      s.daprd.InternalGRPCAddress(),
-						ID:        s.daprd.AppID(),
+						Entities:  []string{"mytype"},
+						Name:      s.actors.Daprd().InternalGRPCAddress(),
+						ID:        s.actors.Daprd().AppID(),
 						APIVLevel: 20,
 						Namespace: "default",
 					},
@@ -71,11 +65,11 @@ func (s *shutdown) Run(t *testing.T, ctx context.Context) {
 		},
 	}, table)
 
-	s.daprd.Cleanup(t)
+	s.actors.Daprd().Cleanup(t)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := s.place.PlacementTables(t, ctx)
-		assert.Equal(t, &placement.TableState{
-			Tables: map[string]*placement.Table{},
+		table := s.actors.Placement().PlacementTables(t, ctx)
+		assert.Equal(c, &placement.TableState{
+			Tables: make(map[string]*placement.Table),
 		}, table)
 	}, time.Second*10, time.Millisecond*10)
 }

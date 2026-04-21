@@ -122,12 +122,10 @@ func (e *Exec) Run(t *testing.T, ctx context.Context) {
 
 		pipe := tee.WriteCloser(iow, pipe.procPipe)
 
-		e.wg.Add(1)
-		go func() {
-			defer e.wg.Done()
+		e.wg.Go(func() {
 			io.Copy(pipe, cmdPipe)
 			pipe.Close()
-		}()
+		})
 	}
 
 	for k, v := range e.envs {
@@ -158,6 +156,15 @@ func (e *Exec) Kill(t *testing.T) {
 	}
 
 	kill.Kill(t, e.cmd)
+}
+
+func (e *Exec) SignalHUP(t *testing.T) {
+	t.Helper()
+
+	require.NotNil(t, e.cmd, "process should have been started before sending SIGHUP signal")
+	require.NotNil(t, e.cmd.Process, "process should have been started before sending SIGHUP signal")
+
+	kill.SignalHUP(t, e.cmd)
 }
 
 func (e *Exec) checkExit(t *testing.T) {

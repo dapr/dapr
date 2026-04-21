@@ -18,8 +18,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/dapr/kit/ptr"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -50,7 +48,6 @@ func TestGetInjectorConfig(t *testing.T) {
 		t.Setenv("KUBE_CLUSTER_DOMAIN", "cluster.local")
 		t.Setenv("ALLOWED_SERVICE_ACCOUNTS", "test1:test-service-account1,test2:test-service-account2")
 		t.Setenv("ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES", "namespace:test-service-account1,namespace2*:test-service-account2")
-
 		cfg, err := GetConfig()
 		require.NoError(t, err)
 		assert.Equal(t, "daprd-test-image", cfg.SidecarImage)
@@ -72,7 +69,7 @@ func TestGetInjectorConfig(t *testing.T) {
 		assert.Equal(t, "daprd-test-image", cfg.SidecarImage)
 		assert.Equal(t, "IfNotPresent", cfg.SidecarImagePullPolicy)
 		assert.Equal(t, "test-namespace", cfg.Namespace)
-		assert.NotEqual(t, "", cfg.KubeClusterDomain)
+		assert.NotEmpty(t, cfg.KubeClusterDomain)
 	})
 
 	t.Run("sidecar run options not set", func(t *testing.T) {
@@ -121,8 +118,8 @@ func TestGetInjectorConfig(t *testing.T) {
 
 		cfg, err = GetConfig()
 		require.NoError(t, err)
-		assert.Equal(t, ptr.Of(int64(1000)), cfg.GetRunAsUser())
-		assert.Equal(t, ptr.Of(int64(3000)), cfg.GetRunAsGroup())
+		assert.Equal(t, new(int64(1000)), cfg.GetRunAsUser())
+		assert.Equal(t, new(int64(3000)), cfg.GetRunAsGroup())
 
 		// Set to invalid value
 		t.Setenv("SIDECAR_RUN_AS_USER", "invalid")
@@ -237,7 +234,7 @@ func TestTolerationsParsing(t *testing.T) {
 				IgnoreEntrypointTolerations: tc.input,
 			}
 			c.parseTolerationsJSON()
-			assert.EqualValues(t, tc.expect, c.GetIgnoreEntrypointTolerations())
+			assert.Equal(t, tc.expect, c.GetIgnoreEntrypointTolerations())
 		})
 	}
 }

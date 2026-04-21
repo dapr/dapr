@@ -15,4 +15,6 @@ package http
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/http/appapitoken"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/http/reservedchars"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/http/streaming"
 )

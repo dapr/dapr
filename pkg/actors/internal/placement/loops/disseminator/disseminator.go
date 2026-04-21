@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
@@ -34,7 +35,7 @@ import (
 var log = logger.NewLogger("dapr.runtime.actors.placement.loops.disseminator")
 
 var (
-	LoopFactoryCache = loop.New[loops.Event](1024)
+	LoopFactoryCache = loop.New[loops.EventDiss](1024)
 	loopCache        = sync.Pool{New: func() any {
 		return new(disseminator)
 	}}
@@ -42,14 +43,14 @@ var (
 
 type Options struct {
 	Channel       v1pb.Placement_ReportDaprStatusClient
-	PlacementLoop loop.Interface[loops.Event]
+	PlacementLoop loop.Interface[loops.EventPlace]
 	ActorTable    table.Interface
 	Scheduler     schedclient.Reloader
 	IDx           uint64
 	HTarget       healthz.Target
 
 	DisseminationTimeout time.Duration
-	Cancel               context.CancelCauseFunc
+	Ready                *atomic.Bool
 
 	Inflight  *inflight.Inflight
 	Namespace string
@@ -60,18 +61,18 @@ type disseminator struct {
 	namespace string
 	id        string
 
-	loop         loop.Interface[loops.Event]
+	loop         loop.Interface[loops.EventDiss]
 	inflight     *inflight.Inflight
 	actorTable   table.Interface
 	scheduler    schedclient.Reloader
 	healthTarget healthz.Target
+	ready        *atomic.Bool
 
 	timeout        time.Duration
 	timeoutQ       *timeout.Timeout
-	cancel         context.CancelCauseFunc
 	timeoutVersion uint64
 
-	streamLoop loop.Interface[loops.Event]
+	streamLoop loop.Interface[loops.EventStream]
 
 	wg sync.WaitGroup
 
@@ -79,7 +80,7 @@ type disseminator struct {
 	currentVersion   uint64
 }
 
-func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
+func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 	diss := loopCache.Get().(*disseminator)
 
 	diss.namespace = opts.Namespace
@@ -89,7 +90,9 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
 
 	diss.currentOperation = v1pb.HostOperation_LOCK
 	diss.currentVersion = 0
+	diss.timeoutVersion = 0
 	diss.healthTarget = opts.HTarget
+	diss.ready = opts.Ready
 
 	diss.loop = LoopFactoryCache.NewLoop(diss)
 	diss.inflight = opts.Inflight
@@ -99,27 +102,23 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
 		Loop:    diss.loop,
 		Timeout: opts.DisseminationTimeout,
 	})
-	diss.cancel = opts.Cancel
-
 	diss.streamLoop = stream.New(ctx, stream.Options{
 		Channel:       opts.Channel,
 		PlacementLoop: opts.PlacementLoop,
 		IDx:           opts.IDx,
 	})
 
-	diss.wg.Add(1)
-	go func() {
-		defer diss.wg.Done()
+	diss.wg.Go(func() {
 		derr := diss.streamLoop.Run(ctx)
 		if derr != nil {
 			log.Errorf("Stream loop ended with error: %s", derr)
 		}
-	}()
+	})
 
 	return diss.loop
 }
 
-func (d *disseminator) Handle(ctx context.Context, event loops.Event) error {
+func (d *disseminator) Handle(ctx context.Context, event loops.EventDiss) error {
 	switch e := event.(type) {
 	case *loops.LookupRequest:
 		d.handleLookupRequest(e)
@@ -157,10 +156,17 @@ func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.Dissemi
 		return
 	}
 
-	log.Warnf("Dissemination timeout for version %d, shutting down", timeout.Version)
+	log.Warnf("Dissemination timeout for version %d, closing stream to reconnect", timeout.Version)
 
-	d.cancel(fmt.Errorf("dissemination timeout after %s for version %d",
-		d.timeout,
-		timeout.Version,
-	))
+	// Close the stream rather than killing the placement subsystem. The recv
+	// goroutine will exit and enqueue ConnCloseStream to the placement loop,
+	// which will shut down this disseminator, halt actors, and reconnect to
+	// placement. This ensures actor operations are unblocked promptly instead
+	// of hanging until the server-side timeout resolves the slow peer.
+	d.streamLoop.Close(&loops.Shutdown{
+		Error: fmt.Errorf("dissemination timeout after %s for version %d",
+			d.timeout,
+			timeout.Version,
+		),
+	})
 }

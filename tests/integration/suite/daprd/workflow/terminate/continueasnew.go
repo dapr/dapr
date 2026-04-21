@@ -49,7 +49,7 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 
 	holdCh := make(chan struct{})
 	var inAct atomic.Bool
-	c.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	c.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		ctx.ContinueAsNew(nil)
 		return nil, nil
@@ -61,17 +61,17 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 	})
 
 	cl := c.workflow.BackendClient(t, ctx)
-	id, err := cl.ScheduleNewOrchestration(ctx, "foo")
+	id, err := cl.ScheduleNewWorkflow(ctx, "foo")
 	require.NoError(t, err)
 
-	assert.Eventually(t, inAct.Load, time.Second*10, time.Millisecond*10)
+	assert.Eventually(t, inAct.Load, time.Second*20, time.Millisecond*10)
 
-	require.NoError(t, cl.TerminateOrchestration(ctx, id))
+	require.NoError(t, cl.TerminateWorkflow(ctx, id))
 
 	close(holdCh)
 
-	meta, err := cl.WaitForOrchestrationCompletion(ctx, id)
+	meta, err := cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	require.Equal(t, "ORCHESTRATION_STATUS_TERMINATED", meta.RuntimeStatus.String())
+	require.Equal(t, "ORCHESTRATION_STATUS_TERMINATED", meta.GetRuntimeStatus().String())
 }

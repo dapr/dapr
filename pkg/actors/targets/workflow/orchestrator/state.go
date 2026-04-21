@@ -32,7 +32,7 @@ import (
 	"github.com/dapr/kit/concurrency"
 )
 
-func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.State, *backend.OrchestrationMetadata, error) {
+func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.State, *backend.WorkflowMetadata, error) {
 	// See if the state for this actor is already cached in memory
 	if o.state != nil {
 		return o.state, o.ometa, nil
@@ -53,7 +53,7 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	}
 	// Update cached state
 	o.state = state
-	o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
+	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
 	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
 
 	return state, o.ometa, nil
@@ -77,10 +77,10 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 
 	// Update cached state
 	o.state = state
-	o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
+	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
 	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
-	if o.factory.eventSink != nil {
-		o.factory.eventSink(o.ometa)
+	if o.eventSink != nil {
+		o.eventSink(o.ometa)
 	}
 
 	if len(o.streamFns) > 0 {
@@ -155,12 +155,12 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 		return err
 	}
 
-	o.factory.deactivate(o)
+	o.deactivate(o)
 
 	return nil
 }
 
-func (o *orchestrator) ometaFromState(rstate *backend.OrchestrationRuntimeState, startEvent *protos.ExecutionStartedEvent) *backend.OrchestrationMetadata {
+func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, startEvent *protos.ExecutionStartedEvent) *backend.WorkflowMetadata {
 	var se *protos.ExecutionStartedEvent = nil
 	if rstate.GetStartEvent() != nil {
 		se = rstate.GetStartEvent()
@@ -179,10 +179,10 @@ func (o *orchestrator) ometaFromState(rstate *backend.OrchestrationRuntimeState,
 	output, _ := runtimestate.Output(rstate)
 	failureDetails, _ := runtimestate.FailureDetails(rstate)
 	var parentInstanceID string
-	if se != nil && se.GetParentInstance() != nil && se.GetParentInstance().GetOrchestrationInstance() != nil {
-		parentInstanceID = se.GetParentInstance().GetOrchestrationInstance().GetInstanceId()
+	if se != nil && se.GetParentInstance() != nil && se.GetParentInstance().GetWorkflowInstance() != nil {
+		parentInstanceID = se.GetParentInstance().GetWorkflowInstance().GetInstanceId()
 	}
-	return &backend.OrchestrationMetadata{
+	return &backend.WorkflowMetadata{
 		InstanceId:       rstate.GetInstanceId(),
 		Name:             name,
 		RuntimeStatus:    runtimestate.RuntimeStatus(rstate),
@@ -199,7 +199,7 @@ func (o *orchestrator) ometaFromState(rstate *backend.OrchestrationRuntimeState,
 
 // This method purges all the completed activity data from a workflow associated with the given actorID
 func (o *orchestrator) purgeWorkflowState(ctx context.Context, meta map[string]*internalsv1pb.ListStringValue) error {
-	defer o.factory.deactivate(o)
+	defer o.deactivate(o)
 
 	log.Debugf("Workflow actor '%s': purging workflow state", o.actorID)
 

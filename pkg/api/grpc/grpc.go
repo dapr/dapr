@@ -55,6 +55,7 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
+	"github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/outbox"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -189,7 +190,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	md := maps.Clone(in.GetMetadata())
 	if !rawPayload {
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-			Source:          a.Universal.AppID(),
+			Source:          a.AppID(),
 			Topic:           in.GetTopic(),
 			DataContentType: in.GetDataContentType(),
 			Data:            body,
@@ -419,7 +420,7 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 			spanMap[i] = childSpan
 
 			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-				Source:          a.Universal.AppID(),
+				Source:          a.AppID(),
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
 				Data:            entries[i].Event,
@@ -511,9 +512,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 		Operation: bindings.OperationKind(in.GetOperation()),
 		Data:      in.GetData(),
 	}
-	for key, val := range in.GetMetadata() {
-		req.Metadata[key] = val
-	}
+	maps.Copy(req.Metadata, in.GetMetadata())
 
 	// this is for the http binding, so dont need grpc-trace-bin
 	span := diagUtils.SpanFromContext(ctx)
@@ -582,7 +581,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 
 func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error) {
 	bulkResp := &runtimev1pb.GetBulkStateResponse{}
-	store, err := a.Universal.GetStateStore(in.GetStoreName())
+	store, err := a.GetStateStore(in.GetStoreName())
 	if err != nil {
 		// Error has already been logged
 		return bulkResp, err
@@ -595,7 +594,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	var key string
 	reqs := make([]state.GetRequest, len(in.GetKeys()))
 	for i, k := range in.GetKeys() {
-		key, err = stateLoader.GetModifiedStateKey(k, in.GetStoreName(), a.Universal.AppID())
+		key, err = stateLoader.GetModifiedStateKey(k, in.GetStoreName(), a.AppID())
 		if err != nil {
 			return &runtimev1pb.GetBulkStateResponse{}, err
 		}
@@ -657,12 +656,12 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 }
 
 func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
-	store, err := a.Universal.GetStateStore(in.GetStoreName())
+	store, err := a.GetStateStore(in.GetStoreName())
 	if err != nil {
 		// Error has already been logged
 		return &runtimev1pb.GetStateResponse{}, err
 	}
-	key, err := stateLoader.GetModifiedStateKey(in.GetKey(), in.GetStoreName(), a.Universal.AppID())
+	key, err := stateLoader.GetModifiedStateKey(in.GetKey(), in.GetStoreName(), a.AppID())
 	if err != nil {
 		return &runtimev1pb.GetStateResponse{}, err
 	}
@@ -723,7 +722,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error) {
 	empty := &emptypb.Empty{}
 
-	store, err := a.Universal.GetStateStore(in.GetStoreName())
+	store, err := a.GetStateStore(in.GetStoreName())
 	if err != nil {
 		// Error has already been logged
 		return empty, err
@@ -741,7 +740,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		}
 
 		var key string
-		key, err = stateLoader.GetModifiedStateKey(s.GetKey(), in.GetStoreName(), a.Universal.AppID())
+		key, err = stateLoader.GetModifiedStateKey(s.GetKey(), in.GetStoreName(), a.AppID())
 		if err != nil {
 			return empty, err
 		}
@@ -822,13 +821,13 @@ func (a *api) getStateErrorCode(err error) codes.Code {
 func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error) {
 	empty := &emptypb.Empty{}
 
-	store, err := a.Universal.GetStateStore(in.GetStoreName())
+	store, err := a.GetStateStore(in.GetStoreName())
 	if err != nil {
 		// Error has already been logged
 		return empty, err
 	}
 
-	key, err := stateLoader.GetModifiedStateKey(in.GetKey(), in.GetStoreName(), a.Universal.AppID())
+	key, err := stateLoader.GetModifiedStateKey(in.GetKey(), in.GetStoreName(), a.AppID())
 	if err != nil {
 		return empty, err
 	}
@@ -872,7 +871,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*emptypb.Empty, error) {
 	empty := &emptypb.Empty{}
 
-	store, err := a.Universal.GetStateStore(in.GetStoreName())
+	store, err := a.GetStateStore(in.GetStoreName())
 	if err != nil {
 		// Error has already been logged
 		return empty, err
@@ -880,7 +879,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 
 	reqs := make([]state.DeleteRequest, len(in.GetStates()))
 	for i, item := range in.GetStates() {
-		key, err1 := stateLoader.GetModifiedStateKey(item.GetKey(), in.GetStoreName(), a.Universal.AppID())
+		key, err1 := stateLoader.GetModifiedStateKey(item.GetKey(), in.GetStoreName(), a.AppID())
 		if err1 != nil {
 			return empty, err1
 		}
@@ -932,7 +931,7 @@ func extractEtag(req *commonv1pb.StateItem) (bool, string) {
 }
 
 func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*emptypb.Empty, error) {
-	store, storeErr := a.Universal.GetStateStore(in.GetStoreName())
+	store, storeErr := a.GetStateStore(in.GetStoreName())
 	if storeErr != nil {
 		// Error has already been logged
 		return &emptypb.Empty{}, storeErr
@@ -950,7 +949,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		req := inputReq.GetRequest()
 
 		hasEtag, etag := extractEtag(req)
-		key, err := stateLoader.GetModifiedStateKey(req.GetKey(), in.GetStoreName(), a.Universal.AppID())
+		key, err := stateLoader.GetModifiedStateKey(req.GetKey(), in.GetStoreName(), a.AppID())
 		if err != nil {
 			return &emptypb.Empty{}, err
 		}
@@ -1015,7 +1014,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		for i, op := range operations {
 			switch req := op.(type) {
 			case state.SetRequest:
-				data := []byte(fmt.Sprintf("%v", req.Value))
+				data := fmt.Appendf(nil, "%v", req.Value)
 				val, err := encryption.TryEncryptValue(in.GetStoreName(), data)
 				if err != nil {
 					err = apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.StateTransaction, fmt.Sprintf(messages.ErrStateTransaction, err.Error()))
@@ -1033,7 +1032,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	if outboxEnabled {
 		span := diagUtils.SpanFromContext(ctx)
 		traceID, traceState := diag.TraceIDAndStateFromSpan(span)
-		ops, err := a.outbox.PublishInternal(ctx, in.GetStoreName(), operations, a.Universal.AppID(), traceID, traceState)
+		ops, err := a.outbox.PublishInternal(ctx, in.GetStoreName(), operations, a.AppID(), traceID, traceState)
 		if err != nil {
 			nerr := apierrors.PubSubOutbox(a.AppID(), err)
 			apiServerLogger.Debug(nerr)
@@ -1130,7 +1129,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 				Request:   setReq,
 			}
 		case string(state.OperationDelete):
-			delReq := map[string]interface{}{
+			delReq := map[string]any{
 				"key": op.GetKey(),
 				// Actor state do not user other attributes from state request.
 			}
@@ -1182,6 +1181,22 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		in.Metadata = make(map[string]string)
 	}
 	in.Metadata["Dapr-API-Call"] = "true"
+
+	for _, param := range []struct{ name, val string }{
+		{"actorType", in.GetActorType()}, {"actorId", in.GetActorId()},
+	} {
+		if vErr := method.ValidateName(param.val); vErr != nil {
+			apiServerLogger.Debug(vErr)
+			return nil, status.Errorf(codes.InvalidArgument, "invalid %s: %v", param.name, vErr)
+		}
+	}
+
+	normalized, err := method.NormalizeMethod(in.GetMethod())
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return nil, status.Errorf(codes.InvalidArgument, "invalid actor method: %v", err)
+	}
+	in.Method = normalized
 
 	req := in.ToInternalInvokeRequest()
 

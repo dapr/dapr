@@ -31,12 +31,12 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/key"
 	"github.com/dapr/dapr/pkg/actors/targets/app/lock"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 	"github.com/dapr/kit/strings"
 )
 
@@ -69,7 +69,7 @@ func (a *app) doInvokeMethod(ctx context.Context, req *internalv1pb.InternalInvo
 	}
 	defer cancel()
 
-	a.idleAt.Store(ptr.Of(a.clock.Now().Add(a.idleTimeout)))
+	a.idleAt.Store(new(a.clock.Now().Add(a.idleTimeout)))
 	a.idlerQueue.Enqueue(a)
 
 	imReq, err := invokev1.FromInternalInvokeRequest(req)
@@ -152,7 +152,10 @@ func (a *app) doInvokeMethod(ctx context.Context, req *internalv1pb.InternalInvo
 }
 
 func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error {
-	invokeMethod := "remind/" + reminder.Name
+	invokeMethod, err := method.NormalizeMethod("remind/" + reminder.Name)
+	if err != nil {
+		return fmt.Errorf("invalid reminder name: %w", err)
+	}
 	data, err := json.Marshal(&api.ReminderResponse{
 		DueTime: reminder.DueTime,
 		Period:  reminder.Period.String(),
@@ -181,7 +184,10 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error 
 }
 
 func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
-	invokeMethod := "timer/" + reminder.Name
+	invokeMethod, err := method.NormalizeMethod("timer/" + reminder.Name)
+	if err != nil {
+		return fmt.Errorf("invalid timer name: %w", err)
+	}
 	data, err := json.Marshal(&api.TimerResponse{
 		Callback: reminder.Callback,
 		Data:     reminder.Data,

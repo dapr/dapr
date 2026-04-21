@@ -742,7 +742,7 @@ func TestComponentCalls(t *testing.T) {
 	})
 
 	t.Run("query should send a QueryRequest containing all filters", func(t *testing.T) {
-		filters := map[string]interface{}{
+		filters := map[string]any{
 			"a": []string{"a"},
 		}
 		request := &state.QueryRequest{

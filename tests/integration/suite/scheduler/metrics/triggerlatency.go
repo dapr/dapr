@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -61,10 +60,10 @@ func (r *triggerlatency) Run(t *testing.T, ctx context.Context) {
 	client := r.actors.GRPCClient(t, ctx)
 
 	for i := range 3 {
-		_, err := client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+		_, err := client.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 			Job: &rtv1.Job{
 				Name:    strconv.Itoa(i),
-				DueTime: ptr.Of("0s"),
+				DueTime: new("0s"),
 			},
 		})
 		require.NoError(t, err)

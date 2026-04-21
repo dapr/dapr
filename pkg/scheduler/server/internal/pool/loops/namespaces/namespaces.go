@@ -36,7 +36,7 @@ type Options struct {
 
 type connectionLoop struct {
 	connections uint64
-	loop        loop.Interface[loops.Event]
+	loop        loop.Interface[loops.EventConn]
 }
 
 // namespaces is the main control loop for managing stream
@@ -47,23 +47,33 @@ type namespaces struct {
 
 	// connections holds the active namespace connections.
 	connections map[string]*connectionLoop
-	loop        loop.Interface[loops.Event]
+	loop        loop.Interface[loops.EventNS]
+
+	// schedulerCount and schedulerIdx are the latest view of cluster
+	// membership pushed by the leadership loop via SchedulerInfoUpdate.
+	// Accessed only from the namespaces loop goroutine. Defaults to
+	// {count: 1, idx: 0} so the first connection has sane gate shares
+	// before the first leadership event arrives.
+	schedulerCount int32
+	schedulerIdx   int32
 
 	wg sync.WaitGroup
 }
 
-func New(opts Options) loop.Interface[loops.Event] {
+func New(opts Options) loop.Interface[loops.EventNS] {
 	ns := &namespaces{
-		cron:        opts.Cron,
-		cancelPool:  opts.CancelPool,
-		connections: make(map[string]*connectionLoop),
+		cron:           opts.Cron,
+		cancelPool:     opts.CancelPool,
+		connections:    make(map[string]*connectionLoop),
+		schedulerCount: 1,
+		schedulerIdx:   0,
 	}
 
-	ns.loop = loop.New[loops.Event](1024).NewLoop(ns)
+	ns.loop = loop.New[loops.EventNS](1024).NewLoop(ns)
 	return ns.loop
 }
 
-func (n *namespaces) Handle(ctx context.Context, event loops.Event) error {
+func (n *namespaces) Handle(ctx context.Context, event loops.EventNS) error {
 	switch e := event.(type) {
 	case *loops.ConnAdd:
 		return n.handleAdd(ctx, e)
@@ -71,6 +81,8 @@ func (n *namespaces) Handle(ctx context.Context, event loops.Event) error {
 		return n.handleCloseStream(e)
 	case *loops.TriggerRequest:
 		return n.handleTriggerRequest(e)
+	case *loops.SchedulerInfoUpdate:
+		return n.handleSchedulerInfoUpdate(e)
 	case *loops.Shutdown:
 		return n.handleShutdown(e)
 	default:
@@ -87,15 +99,13 @@ func (n *namespaces) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 			NamespaceLoop: n.loop,
 		})
 
-		n.wg.Add(1)
-		go func() {
-			defer n.wg.Done()
+		n.wg.Go(func() {
 			err := loop.Run(ctx)
 			if err != nil && !errors.Is(err, context.Canceled) {
 				log.Errorf("Error running namespaces loop: %v", err)
 				n.cancelPool(err)
 			}
-		}()
+		})
 
 		connLoop = &connectionLoop{
 			loop:        loop,
@@ -103,11 +113,30 @@ func (n *namespaces) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 		}
 
 		n.connections[add.Request.GetNamespace()] = connLoop
+
+		// Seed the new connections loop with the current scheduler view so
+		// its concurrency gates start with correct local shares without
+		// waiting for the next leadership event.
+		loop.Enqueue(&loops.SchedulerInfoUpdate{
+			Count: n.schedulerCount,
+			Idx:   n.schedulerIdx,
+		})
 	}
 
 	connLoop.connections++
 	connLoop.loop.Enqueue(add)
 
+	return nil
+}
+
+// handleSchedulerInfoUpdate caches the latest cluster view and fans it out to
+// every existing connection loop.
+func (n *namespaces) handleSchedulerInfoUpdate(e *loops.SchedulerInfoUpdate) error {
+	n.schedulerCount = e.Count
+	n.schedulerIdx = e.Idx
+	for _, connLoop := range n.connections {
+		connLoop.loop.Enqueue(e)
+	}
 	return nil
 }
 

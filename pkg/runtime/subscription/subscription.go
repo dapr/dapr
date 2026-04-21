@@ -121,6 +121,7 @@ func New(opts Options) (*Subscription, error) {
 			cancel(nil)
 			return nil, fmt.Errorf("failed to bulk subscribe to topic %s: %w", s.topic, err)
 		}
+
 		return s, nil
 	}
 
@@ -135,14 +136,33 @@ func New(opts Options) (*Subscription, error) {
 	}, func(ctx context.Context, msg *contribpubsub.NewMessage) error {
 		s.wg.Add(1)
 		s.inflight.Add(1)
-		defer func() {
-			s.wg.Done()
-			s.inflight.Add(-1)
-		}()
 
 		if s.closed.Load() {
-			return errors.New("subscription is closed")
+			// Release the WaitGroup before blocking to avoid deadlocking
+			// with Subscription.Stop() which calls wg.Wait().
+			s.wg.Done()
+			s.inflight.Add(-1)
+			// Block until the handler context is cancelled rather than
+			// returning an error. Returning an error causes the broker to
+			// NACK the message (e.g. routing it to a dead-letter queue),
+			// which is incorrect during graceful shutdown. By blocking, the
+			// message is held until the broker connection is closed, allowing
+			// the broker to redeliver the message to another consumer. We
+			// block on the handler context (tied to the broker's pull stream)
+			// rather than the subscription context because the subscription
+			// context may already be cancelled by the time this message
+			// arrives.
+			<-ctx.Done()
+			return ctx.Err()
 		}
+
+		wgReleased := false
+		defer func() {
+			if !wgReleased {
+				s.wg.Done()
+				s.inflight.Add(-1)
+			}
+		}()
 
 		if msg.Metadata == nil {
 			msg.Metadata = make(map[string]string, 1)
@@ -168,55 +188,69 @@ func New(opts Options) (*Subscription, error) {
 		rawPayload, err := metadata.IsRawPayload(route.Metadata)
 		if err != nil {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
+
 			if route.DeadLetterTopic != "" {
-				if dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
+				dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+				if dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
 					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 					return nil
 				}
 			}
+
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
+
 			return err
 		}
 
-		var cloudEvent map[string]interface{}
+		var cloudEvent map[string]any
+
 		data := msg.Data
+
 		switch {
 		case rawPayload:
 			cloudEvent = contribpubsub.FromRawPayload(msg.Data, msgTopic, name)
 			if traceid, ok := msg.Metadata[contribpubsub.TraceIDField]; ok {
 				cloudEvent[contribpubsub.TraceIDField] = traceid
 			}
+
 			if traceparent, ok := msg.Metadata[contribpubsub.TraceParentField]; ok {
 				cloudEvent[contribpubsub.TraceParentField] = traceparent
 				// traceparent supersedes traceid
 				cloudEvent[contribpubsub.TraceIDField] = traceparent
 			}
+
 			if tracestate, ok := msg.Metadata[contribpubsub.TraceStateField]; ok {
 				cloudEvent[contribpubsub.TraceStateField] = tracestate
 			}
+
 			data, err = json.Marshal(cloudEvent)
 			if err != nil {
 				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
+
 				if route.DeadLetterTopic != "" {
-					if dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
+					dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+					if dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
 						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 						return nil
 					}
 				}
+
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
+
 				return err
 			}
 		case contribContenttype.IsBinaryContentType(contentType):
-			cloudEvent = make(map[string]interface{})
+			cloudEvent = make(map[string]any)
 			// Reconstruct CloudEvent from metadata
 			for k, v := range msg.Metadata {
-				if strings.HasPrefix(strings.ToLower(k), BinaryCloudEventHeaderPrefix) {
-					ceKey := strings.TrimPrefix(strings.ToLower(k), BinaryCloudEventHeaderPrefix)
+				if after, ok0 := strings.CutPrefix(strings.ToLower(k), BinaryCloudEventHeaderPrefix); ok0 {
+					ceKey := after
 					cloudEvent[ceKey] = v
 				}
 			}
+
 			cloudEvent[contribpubsub.DataField] = msg.Data
 			cloudEvent[contribpubsub.DataContentTypeField] = contentType
 		default:
@@ -224,14 +258,18 @@ func New(opts Options) (*Subscription, error) {
 			err = json.Unmarshal(msg.Data, &cloudEvent)
 			if err != nil {
 				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
+
 				if route.DeadLetterTopic != "" {
-					if dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
+					dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+					if dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
 						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 						return nil
 					}
 				}
+
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
+
 				return err
 			}
 
@@ -241,6 +279,7 @@ func New(opts Options) (*Subscription, error) {
 					cloudEvent[contribpubsub.TraceIDField] = traceid
 				}
 			}
+
 			if _, ok := cloudEvent[contribpubsub.TraceParentField]; !ok {
 				if traceparent, ok := msg.Metadata[contribpubsub.TraceParentField]; ok {
 					cloudEvent[contribpubsub.TraceParentField] = traceparent
@@ -248,6 +287,7 @@ func New(opts Options) (*Subscription, error) {
 					cloudEvent[contribpubsub.TraceIDField] = traceparent
 				}
 			}
+
 			if _, ok := cloudEvent[contribpubsub.TraceStateField]; !ok {
 				if tracestate, ok := msg.Metadata[contribpubsub.TraceStateField]; ok {
 					cloudEvent[contribpubsub.TraceStateField] = tracestate
@@ -262,20 +302,25 @@ func New(opts Options) (*Subscription, error) {
 			if route.DeadLetterTopic != "" {
 				_ = s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
 			}
+
 			return nil
 		}
 
 		routePath, shouldProcess, err := findMatchingRoute(route.Rules, cloudEvent)
 		if err != nil {
 			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[contribpubsub.IDField], name, msgTopic, err)
+
 			if route.DeadLetterTopic != "" {
-				if dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
+				dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+				if dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
 					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 					return nil
 				}
 			}
+
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
+
 			return err
 		}
 
@@ -283,9 +328,11 @@ func New(opts Options) (*Subscription, error) {
 			// The event does not match any route specified so ignore it.
 			log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[contribpubsub.IDField], name, msgTopic)
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), strings.ToLower(string(contribpubsub.Success)), msgTopic, 0)
+
 			if route.DeadLetterTopic != "" {
 				_ = s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
 			}
+
 			return nil
 		}
 
@@ -314,26 +361,46 @@ func New(opts Options) (*Subscription, error) {
 						return nil, pErr
 					}
 				}
+
 				return nil, nil
 			} else if pErr != nil {
 				log.Errorf("encountered a non-retriable error while publishing a subscribed message to topic %s, err: %v", msgTopic, pErr)
 			}
+
 			return nil, pErr
 		})
+		// When the subscription is closing (e.g. during shutdown or
+		// hot-reload), block on the handler context rather than returning an
+		// error. Returning an error causes the broker to NACK the message
+		// (e.g. routing it to a dead-letter queue), which is incorrect
+		// during graceful shutdown. Release the WaitGroup before blocking to
+		// avoid deadlocking with Subscription.Stop() which calls wg.Wait().
+		if err != nil && (s.closed.Load() || errors.Is(err, rtpubsub.ErrSubscriptionClosed)) {
+			wgReleased = true
+			s.wg.Done()
+			s.inflight.Add(-1)
+			<-ctx.Done()
+			return ctx.Err()
+		}
+
 		// when runtime shutting down, don't send to DLQ
 		if err != nil && err != context.Canceled {
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
 			if route.DeadLetterTopic != "" {
-				if dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
+				dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+				if dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
 					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 					return nil
 				}
 			}
+
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
+
 			return err
 		}
+
 		return err
 	})
 	if err != nil {
@@ -349,6 +416,7 @@ func (s *Subscription) Stop(err ...error) {
 	inflight := s.inflight.Load() > 0
 
 	s.wg.Wait()
+
 	if s.adapterStreamer != nil {
 		s.adapterStreamer.Close(s.adapterStreamer.StreamerKey(s.pubsubName, s.topic), s.connectionID)
 	}
@@ -358,7 +426,8 @@ func (s *Subscription) Stop(err ...error) {
 	if inflight {
 		time.Sleep(time.Millisecond * 400)
 	}
-	if err != nil && len(err) > 0 {
+
+	if len(err) > 0 {
 		s.cancel(errors.Join(err...))
 		return
 	}
@@ -375,8 +444,9 @@ func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *c
 		ContentType: msg.ContentType,
 	}
 
-	if err := s.adapter.Publish(ctx, req); err != nil {
-		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
+	err := s.adapter.Publish(ctx, req)
+	if err != nil {
+		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 		return err
 	}
 
@@ -385,16 +455,18 @@ func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *c
 
 // findMatchingRoute selects the path based on routing rules. If there are
 // no matching rules, the route-level path is used.
-func findMatchingRoute(rules []*rtpubsub.Rule, cloudEvent interface{}) (path string, shouldProcess bool, err error) {
+func findMatchingRoute(rules []*rtpubsub.Rule, cloudEvent any) (path string, shouldProcess bool, err error) {
 	hasRules := len(rules) > 0
 	if hasRules {
-		data := map[string]interface{}{
+		data := map[string]any{
 			"event": cloudEvent,
 		}
+
 		rule, err := matchRoutingRule(rules, data)
 		if err != nil {
 			return "", false, err
 		}
+
 		if rule != nil {
 			return rule.Path, true, nil
 		}
@@ -403,15 +475,17 @@ func findMatchingRoute(rules []*rtpubsub.Rule, cloudEvent interface{}) (path str
 	return "", false, nil
 }
 
-func matchRoutingRule(rules []*rtpubsub.Rule, data map[string]interface{}) (*rtpubsub.Rule, error) {
+func matchRoutingRule(rules []*rtpubsub.Rule, data map[string]any) (*rtpubsub.Rule, error) {
 	for _, rule := range rules {
 		if rule.Match == nil || len(rule.Match.String()) == 0 {
 			return rule, nil
 		}
+
 		iResult, err := rule.Match.Eval(data)
 		if err != nil {
 			return nil, err
 		}
+
 		result, ok := iResult.(bool)
 		if !ok {
 			return nil, fmt.Errorf("the result of match expression %s was not a boolean", rule.Match)

@@ -1275,7 +1275,7 @@ func TestValidate(t *testing.T) {
 			}
 
 			kubeCl := kubefake.NewSimpleClientset(kobjs...)
-			kubeCl.Fake.PrependReactor("create", "tokenreviews", test.reactor(t))
+			kubeCl.PrependReactor("create", "tokenreviews", test.reactor(t))
 			scheme := runtime.NewScheme()
 			require.NoError(t, configapi.AddToScheme(scheme))
 			require.NoError(t, corev1.AddToScheme(scheme))

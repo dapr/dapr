@@ -23,6 +23,7 @@ import (
 	"io"
 	"net"
 	nethttp "net/http"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -84,7 +85,6 @@ import (
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 const bufconnBufSize = 2 << 20 // 2MB
@@ -96,13 +96,13 @@ var testResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  ptr.Of(1),
+					MaxRetries:  new(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
 				},
 				"tenRetries": {
-					MaxRetries:  ptr.Of(10),
+					MaxRetries:  new(10),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
@@ -444,7 +444,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 		apiPath := apiVersionV1alpha1 + "/publish/bulk/errorpubsub/topic"
 		testMethods := []string{"POST", "PUT"}
 
-		errBulkRequest := []bulkPublishMessageEntry{}
+		errBulkRequest := make([]bulkPublishMessageEntry, 0, len(bulkRequest))
 		for _, entry := range bulkRequest {
 			if entry.Metadata == nil {
 				entry.Metadata = map[string]string{}
@@ -481,7 +481,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 
 			bulkResp := BulkPublishResponse{}
 			require.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
-			assert.Equal(t, len(errBulkResponse.FailedEntries), len(bulkResp.FailedEntries))
+			assert.Len(t, bulkResp.FailedEntries, len(errBulkResponse.FailedEntries))
 			for i, entry := range bulkResp.FailedEntries {
 				assert.Equal(t, errBulkResponse.FailedEntries[i].EntryId, entry.EntryId)
 				assert.Equal(t, errBulkResponse.FailedEntries[i].Error.Error(), entry.Error)
@@ -493,7 +493,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 		apiPath := apiVersionV1alpha1 + "/publish/bulk/errorpubsub/topic"
 		testMethods := []string{"POST", "PUT"}
 
-		errBulkRequest := []bulkPublishMessageEntry{}
+		errBulkRequest := make([]bulkPublishMessageEntry, 0, len(bulkRequest))
 		for _, entry := range bulkRequest {
 			// Fail entries 2 and 3
 			if entry.EntryID == "2" || entry.EntryID == "3" {
@@ -529,7 +529,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 
 			bulkResp := BulkPublishResponse{}
 			require.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
-			assert.Equal(t, len(errBulkResponse.FailedEntries), len(bulkResp.FailedEntries))
+			assert.Len(t, bulkResp.FailedEntries, len(errBulkResponse.FailedEntries))
 			for i, entry := range bulkResp.FailedEntries {
 				assert.Equal(t, errBulkResponse.FailedEntries[i].EntryId, entry.EntryId)
 				assert.Equal(t, errBulkResponse.FailedEntries[i].Error.Error(), entry.Error)
@@ -1034,7 +1034,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		return f
 	}
 
-	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
+	fakeBodyObject := map[string]any{"data": "fakeData"}
 	fakeData, _ := json.Marshal(fakeBodyObject)
 
 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
@@ -1174,14 +1174,14 @@ func TestV1ActorEndpoints(t *testing.T) {
 		testTransactionalOperations := []actorsapi.TransactionalOperation{
 			{
 				Operation: actorsapi.Upsert,
-				Request: map[string]interface{}{
+				Request: map[string]any{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
 				Operation: actorsapi.Delete,
-				Request: map[string]interface{}{
+				Request: map[string]any{
 					"key": "fakeKey1",
 				},
 			},
@@ -1208,14 +1208,14 @@ func TestV1ActorEndpoints(t *testing.T) {
 		testTransactionalOperations := []actorsapi.TransactionalOperation{
 			{
 				Operation: actorsapi.Upsert,
-				Request: map[string]interface{}{
+				Request: map[string]any{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
 				Operation: actorsapi.Delete,
-				Request: map[string]interface{}{
+				Request: map[string]any{
 					"key": "fakeKey1",
 				},
 			},
@@ -1243,14 +1243,14 @@ func TestV1ActorEndpoints(t *testing.T) {
 		testTransactionalOperations := []actorsapi.TransactionalOperation{
 			{
 				Operation: actorsapi.Upsert,
-				Request: map[string]interface{}{
+				Request: map[string]any{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
 				Operation: actorsapi.Delete,
-				Request: map[string]interface{}{
+				Request: map[string]any{
 					"key": "fakeKey1",
 				},
 			},
@@ -1728,7 +1728,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		return f
 	}
 
-	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
+	fakeBodyObject := map[string]any{"data": "fakeData"}
 	fakeData, _ := json.Marshal(fakeBodyObject)
 
 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
@@ -1780,14 +1780,14 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		testTransactionalOperations := []actorsapi.TransactionalOperation{
 			{
 				Operation: actorsapi.Upsert,
-				Request: map[string]interface{}{
+				Request: map[string]any{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
 				Operation: actorsapi.Delete,
-				Request: map[string]interface{}{
+				Request: map[string]any{
 					"key": "fakeKey1",
 				},
 			},
@@ -2020,14 +2020,14 @@ func TestConfigurationGet(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		assert.Len(t, resp.JSONBody.(map[string]interface{}), 1)
-		rspMap := resp.JSONBody.(map[string]interface{})
+		assert.Len(t, resp.JSONBody.(map[string]any), 1)
+		rspMap := resp.JSONBody.(map[string]any)
 		assert.NotNil(t, rspMap)
 		assert.Contains(t, rspMap, "good-key1")
-		goodkeyVal := rspMap["good-key1"].(map[string]interface{})
+		goodkeyVal := rspMap["good-key1"].(map[string]any)
 		assert.Equal(t, "good-value1", goodkeyVal["value"].(string))
 		assert.Equal(t, "version1", goodkeyVal["version"].(string))
-		metadata := goodkeyVal["metadata"].(map[string]interface{})
+		metadata := goodkeyVal["metadata"].(map[string]any)
 		assert.Equal(t, "metadata-value1", metadata["metadata-key1"])
 	})
 
@@ -2038,14 +2038,14 @@ func TestConfigurationGet(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		assert.Len(t, resp.JSONBody.(map[string]interface{}), 1)
-		rspMap := resp.JSONBody.(map[string]interface{})
+		assert.Len(t, resp.JSONBody.(map[string]any), 1)
+		rspMap := resp.JSONBody.(map[string]any)
 		assert.NotNil(t, rspMap)
 		assert.Contains(t, rspMap, "good-key1")
-		goodkeyVal := rspMap["good-key1"].(map[string]interface{})
+		goodkeyVal := rspMap["good-key1"].(map[string]any)
 		assert.Equal(t, "good-value1", goodkeyVal["value"].(string))
 		assert.Equal(t, "version1", goodkeyVal["version"].(string))
-		metadata := goodkeyVal["metadata"].(map[string]interface{})
+		metadata := goodkeyVal["metadata"].(map[string]any)
 		assert.Equal(t, "metadata-value1", metadata["metadata-key1"])
 	})
 
@@ -2055,23 +2055,23 @@ func TestConfigurationGet(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "Accessing configuration store with good keys should return 200")
 		assert.NotNil(t, resp.JSONBody)
-		assert.Len(t, resp.JSONBody.(map[string]interface{}), 2)
-		rspMap1 := resp.JSONBody.(map[string]interface{})
+		assert.Len(t, resp.JSONBody.(map[string]any), 2)
+		rspMap1 := resp.JSONBody.(map[string]any)
 		assert.NotNil(t, rspMap1)
 		assert.Contains(t, rspMap1, "good-key1")
-		goodkeyVal1 := rspMap1["good-key1"].(map[string]interface{})
+		goodkeyVal1 := rspMap1["good-key1"].(map[string]any)
 		assert.Equal(t, "good-value1", goodkeyVal1["value"].(string))
 		assert.Equal(t, "version1", goodkeyVal1["version"].(string))
-		metadata1 := goodkeyVal1["metadata"].(map[string]interface{})
+		metadata1 := goodkeyVal1["metadata"].(map[string]any)
 		assert.Equal(t, "metadata-value1", metadata1["metadata-key1"])
 
-		rspMap2 := resp.JSONBody.(map[string]interface{})
+		rspMap2 := resp.JSONBody.(map[string]any)
 		assert.NotNil(t, rspMap2)
 		assert.Contains(t, rspMap2, "good-key2")
-		goodkeyVal2 := rspMap2["good-key2"].(map[string]interface{})
+		goodkeyVal2 := rspMap2["good-key2"].(map[string]any)
 		assert.Equal(t, "good-value2", goodkeyVal2["value"].(string))
 		assert.Equal(t, "version2", goodkeyVal2["version"].(string))
-		metadata2 := goodkeyVal2["metadata"].(map[string]interface{})
+		metadata2 := goodkeyVal2["metadata"].(map[string]any)
 		assert.Equal(t, "metadata-value2", metadata2["metadata-key2"])
 	})
 
@@ -2081,23 +2081,23 @@ func TestConfigurationGet(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "Accessing configuration store with good keys should return 200")
 		assert.NotNil(t, resp.JSONBody)
-		assert.Len(t, resp.JSONBody.(map[string]interface{}), 2)
-		rspMap1 := resp.JSONBody.(map[string]interface{})
+		assert.Len(t, resp.JSONBody.(map[string]any), 2)
+		rspMap1 := resp.JSONBody.(map[string]any)
 		assert.NotNil(t, rspMap1)
 		assert.Contains(t, rspMap1, "good-key1")
-		goodkeyVal1 := rspMap1["good-key1"].(map[string]interface{})
+		goodkeyVal1 := rspMap1["good-key1"].(map[string]any)
 		assert.Equal(t, "good-value1", goodkeyVal1["value"].(string))
 		assert.Equal(t, "version1", goodkeyVal1["version"].(string))
-		metadata1 := goodkeyVal1["metadata"].(map[string]interface{})
+		metadata1 := goodkeyVal1["metadata"].(map[string]any)
 		assert.Equal(t, "metadata-value1", metadata1["metadata-key1"])
 
-		rspMap2 := resp.JSONBody.(map[string]interface{})
+		rspMap2 := resp.JSONBody.(map[string]any)
 		assert.NotNil(t, rspMap2)
 		assert.Contains(t, rspMap2, "good-key2")
-		goodkeyVal2 := rspMap2["good-key2"].(map[string]interface{})
+		goodkeyVal2 := rspMap2["good-key2"].(map[string]any)
 		assert.Equal(t, "good-value2", goodkeyVal2["value"].(string))
 		assert.Equal(t, "version2", goodkeyVal2["version"].(string))
-		metadata2 := goodkeyVal2["metadata"].(map[string]interface{})
+		metadata2 := goodkeyVal2["metadata"].(map[string]any)
 		assert.Equal(t, "metadata-value2", metadata2["metadata-key2"])
 	})
 
@@ -2109,23 +2109,23 @@ func TestConfigurationGet(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		assert.Len(t, resp.JSONBody.(map[string]interface{}), 2)
-		rspMap1 := resp.JSONBody.(map[string]interface{})
+		assert.Len(t, resp.JSONBody.(map[string]any), 2)
+		rspMap1 := resp.JSONBody.(map[string]any)
 		assert.NotNil(t, rspMap1)
 		assert.Contains(t, rspMap1, "good-key1")
-		goodkeyVal1 := rspMap1["good-key1"].(map[string]interface{})
+		goodkeyVal1 := rspMap1["good-key1"].(map[string]any)
 		assert.Equal(t, "good-value1", goodkeyVal1["value"].(string))
 		assert.Equal(t, "version1", goodkeyVal1["version"].(string))
-		metadata1 := goodkeyVal1["metadata"].(map[string]interface{})
+		metadata1 := goodkeyVal1["metadata"].(map[string]any)
 		assert.Equal(t, "metadata-value1", metadata1["metadata-key1"])
 
-		rspMap2 := resp.JSONBody.(map[string]interface{})
+		rspMap2 := resp.JSONBody.(map[string]any)
 		assert.NotNil(t, rspMap2)
 		assert.Contains(t, rspMap2, "good-key2")
-		goodkeyVal2 := rspMap2["good-key2"].(map[string]interface{})
+		goodkeyVal2 := rspMap2["good-key2"].(map[string]any)
 		assert.Equal(t, "good-value2", goodkeyVal2["value"].(string))
 		assert.Equal(t, "version2", goodkeyVal2["version"].(string))
-		metadata2 := goodkeyVal2["metadata"].(map[string]interface{})
+		metadata2 := goodkeyVal2["metadata"].(map[string]any)
 		assert.Equal(t, "metadata-value2", metadata2["metadata-key2"])
 	})
 
@@ -2137,23 +2137,23 @@ func TestConfigurationGet(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		assert.Len(t, resp.JSONBody.(map[string]interface{}), 2)
-		rspMap1 := resp.JSONBody.(map[string]interface{})
+		assert.Len(t, resp.JSONBody.(map[string]any), 2)
+		rspMap1 := resp.JSONBody.(map[string]any)
 		assert.NotNil(t, rspMap1)
 		assert.Contains(t, rspMap1, "good-key1")
-		goodkeyVal1 := rspMap1["good-key1"].(map[string]interface{})
+		goodkeyVal1 := rspMap1["good-key1"].(map[string]any)
 		assert.Equal(t, "good-value1", goodkeyVal1["value"].(string))
 		assert.Equal(t, "version1", goodkeyVal1["version"].(string))
-		metadata1 := goodkeyVal1["metadata"].(map[string]interface{})
+		metadata1 := goodkeyVal1["metadata"].(map[string]any)
 		assert.Equal(t, "metadata-value1", metadata1["metadata-key1"])
 
-		rspMap2 := resp.JSONBody.(map[string]interface{})
+		rspMap2 := resp.JSONBody.(map[string]any)
 		assert.NotNil(t, rspMap2)
 		assert.Contains(t, rspMap2, "good-key2")
-		goodkeyVal2 := rspMap2["good-key2"].(map[string]interface{})
+		goodkeyVal2 := rspMap2["good-key2"].(map[string]any)
 		assert.Equal(t, "good-value2", goodkeyVal2["value"].(string))
 		assert.Equal(t, "version2", goodkeyVal2["version"].(string))
-		metadata2 := goodkeyVal2["metadata"].(map[string]interface{})
+		metadata2 := goodkeyVal2["metadata"].(map[string]any)
 		assert.Equal(t, "metadata-value2", metadata2["metadata-key2"])
 	})
 
@@ -2344,7 +2344,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		rspMap := resp.JSONBody.(map[string]interface{})
+		rspMap := resp.JSONBody.(map[string]any)
 		assert.NotNil(t, rspMap)
 		assert.True(t, rspMap["success"].(bool))
 	})
@@ -2472,7 +2472,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		rspMap := resp.JSONBody.(map[string]interface{})
+		rspMap := resp.JSONBody.(map[string]any)
 		assert.NotNil(t, rspMap)
 		assert.InDelta(t, float64(3), rspMap["status"], 0)
 	})
@@ -2545,7 +2545,7 @@ func TestV1Workflow(t *testing.T) {
 		// {"workflow": {"instanceID": "instanceID", "runtimeStatus": "RUNNING", "createdAt": "2023-04-08T15:30:00.123Z", "lastUpdatedAt": "2023-04-08T15:30:00.123Z"}}
 		assert.Nil(t, resp.ErrorBody)
 		assert.NotNil(t, resp.JSONBody)
-		rspMap := resp.JSONBody.(map[string]interface{})
+		rspMap := resp.JSONBody.(map[string]any)
 		assert.NotNil(t, rspMap)
 	})
 
@@ -2806,7 +2806,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, "", buffer, "failed to generate proper traces with invoke")
+		assert.Empty(t, buffer, "failed to generate proper traces with invoke")
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 }
@@ -2826,7 +2826,7 @@ type fakeHTTPResponse struct {
 	ContentType string
 	RawHeader   nethttp.Header
 	RawBody     []byte
-	JSONBody    interface{}
+	JSONBody    any
 	ErrorBody   map[string]string
 }
 
@@ -2916,14 +2916,14 @@ func (f *fakeHTTPServer) doRequest(basicAuth, method, path string, body []byte, 
 
 	if params != nil {
 		url += "?"
+		var urlSb2919 strings.Builder
 		for k, v := range params {
-			url += k + "=" + v + "&"
+			urlSb2919.WriteString(k + "=" + v + "&")
 		}
+		url += urlSb2919.String()
 		url = url[:len(url)-1]
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	r, _ := nethttp.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
+	r, _ := nethttp.NewRequestWithContext(context.Background(), method, url, bytes.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 
 	for i := 0; i < len(headers); i += 2 {
@@ -3121,7 +3121,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		apiPath := "v1.0/state/" + storeName
 		request := []state.SetRequest{{
 			Key:  "error-key",
-			ETag: ptr.Of(""),
+			ETag: new(""),
 		}}
 		b, _ := json.Marshal(request)
 		// act
@@ -3170,7 +3170,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer(t).DoRequest("POST", apiPath, b, nil)
 		// assert
 		assert.Equal(t, 204, resp.StatusCode)
-		assert.Equal(t, "", string(resp.RawBody))
+		assert.Empty(t, string(resp.RawBody))
 	})
 
 	t.Run("Update bulk state - State Error", func(t *testing.T) {
@@ -3198,14 +3198,14 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer(t).DoRequest("POST", apiPath, b, nil)
 		// assert
 		assert.Equal(t, 204, resp.StatusCode)
-		assert.Equal(t, "", string(resp.RawBody))
+		assert.Empty(t, string(resp.RawBody))
 	})
 
 	t.Run("Update bulk state - One has invalid ETag", func(t *testing.T) {
 		apiPath := "v1.0/state/" + storeName
 		request := []state.SetRequest{
 			{Key: "good-key", ETag: &etag},
-			{Key: "good-key2", ETag: ptr.Of("BAD ETAG")},
+			{Key: "good-key2", ETag: new("BAD ETAG")},
 		}
 		b, _ := json.Marshal(request)
 		// act
@@ -3282,7 +3282,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			{
 				Key:   "good-key",
 				Data:  json.RawMessage("\"bGlmZSBpcyBnb29k\""),
-				ETag:  ptr.Of("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
+				ETag:  new("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
 			{
@@ -3315,7 +3315,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			{
 				Key:   "good-key",
 				Data:  json.RawMessage("\"bGlmZSBpcyBnb29k\""),
-				ETag:  ptr.Of("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
+				ETag:  new("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
 			{
@@ -3425,9 +3425,9 @@ func TestV1StateEndpoints(t *testing.T) {
 
 	t.Run("bulk state get fails with bulk support", func(t *testing.T) {
 		// Adding this will make the bulk operation fail
-		failingStore.BulkFailKey.Store(ptr.Of("timeoutBulkGetKeyBulk"))
+		failingStore.BulkFailKey.Store(new("timeoutBulkGetKeyBulk"))
 		t.Cleanup(func() {
-			failingStore.BulkFailKey.Store(ptr.Of(""))
+			failingStore.BulkFailKey.Store(new(""))
 		})
 
 		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", "failStore")
@@ -3676,7 +3676,7 @@ func (c fakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.
 	if req.Key == "good-key" {
 		return &state.GetResponse{
 			Data: []byte("\"bGlmZSBpcyBnb29k\""),
-			ETag: ptr.Of("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
+			ETag: new("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 		}, nil
 	}
 	if req.Key == "error-key" {
@@ -3914,8 +3914,8 @@ func TestV1SecretEndpoints(t *testing.T) {
 
 	t.Run("Get Bulk secret - Good Key default allow", func(t *testing.T) {
 		// The interface{} use here is due to JSONBody usage
-		expectedOutput := map[string]interface{}{
-			"good-key": map[string]interface{}{"good-key": "life is good"},
+		expectedOutput := map[string]any{
+			"good-key": map[string]any{"good-key": "life is good"},
 		}
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/bulk", storeName)
 		// act
@@ -4198,7 +4198,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		return f
 	}
 
-	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
+	fakeBodyObject := map[string]any{"data": "fakeData"}
 	storeName := "store1"
 	nonTransactionalStoreName := "storeNonTransactional"
 
@@ -4207,14 +4207,14 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		testTransactionalOperations := []stateTransactionRequestBodyOperation{
 			{
 				Operation: string(state.OperationUpsert),
-				Request: map[string]interface{}{
+				Request: map[string]any{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
 				Operation: string(state.OperationDelete),
-				Request: map[string]interface{}{
+				Request: map[string]any{
 					"key": "fakeKey1",
 				},
 			},
@@ -4238,14 +4238,14 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		testTransactionalOperations := []stateTransactionRequestBodyOperation{
 			{
 				Operation: string(state.OperationUpsert),
-				Request: map[string]interface{}{
+				Request: map[string]any{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
 				Operation: string(state.OperationDelete),
-				Request: map[string]interface{}{
+				Request: map[string]any{
 					"key": "fakeKey1",
 				},
 			},
@@ -4266,7 +4266,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		testTransactionalOperations := []stateTransactionRequestBodyOperation{
 			{
 				Operation: "foo",
-				Request: map[string]interface{}{
+				Request: map[string]any{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
@@ -4292,7 +4292,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 			testTransactionalOperations := []stateTransactionRequestBodyOperation{
 				{
 					Operation: string(operation),
-					Request: map[string]interface{}{
+					Request: map[string]any{
 						// Should cause the decorder to fail
 						"key":   []string{"fakeKey1"},
 						"value": fakeBodyObject,
@@ -4345,7 +4345,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		testTransactionalOperations := []stateTransactionRequestBodyOperation{
 			{
 				Operation: string(state.OperationUpsert),
-				Request: map[string]interface{}{
+				Request: map[string]any{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
@@ -4370,14 +4370,14 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		testTransactionalOperations := []stateTransactionRequestBodyOperation{
 			{
 				Operation: string(state.OperationUpsert),
-				Request: map[string]interface{}{
+				Request: map[string]any{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
 				Operation: string(state.OperationDelete),
-				Request: map[string]interface{}{
+				Request: map[string]any{
 					"key": "fakeKey1",
 				},
 			},
