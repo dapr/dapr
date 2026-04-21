@@ -29,7 +29,7 @@ import (
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spf13/cast"
 	"go.opencensus.io/stats/view"
-	yaml "gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
@@ -90,6 +90,7 @@ const (
 )
 
 var defaultFeatures = map[Feature]bool{
+	HotReload: true,
 	WorkflowsRemoteActivityReminder: true,
 }
 

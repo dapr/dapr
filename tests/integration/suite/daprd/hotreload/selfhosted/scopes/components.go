@@ -41,15 +41,6 @@ func (c *components) Setup(t *testing.T) []framework.Option {
 	c.resDir = t.TempDir()
 
 	c.daprd = daprd.New(t,
-		daprd.WithConfigManifests(t, `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
- name: hotreloading
-spec:
- features:
- - name: HotReload
-   enabled: true`),
 		daprd.WithResourcesDir(c.resDir),
 		daprd.WithNamespace("default"),
 		daprd.WithAppID("myappid"),

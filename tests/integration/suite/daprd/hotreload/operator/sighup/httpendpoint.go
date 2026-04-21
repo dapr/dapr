@@ -67,13 +67,6 @@ func (h *httpendpoint) Setup(t *testing.T) []framework.Option {
 
 	h.operator = operator.New(t,
 		operator.WithSentry(snt),
-		operator.WithGetConfigurationFn(func(_ context.Context, _ *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
-			return &operatorv1.GetConfigurationResponse{
-				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"features":[{"name":"HotReload","enabled":true}]}}`,
-				),
-			}, nil
-		}),
 		operator.WithListHTTPEndpointsFn(func(_ context.Context, _ *operatorv1.ListHTTPEndpointsRequest) (*operatorv1.ListHTTPEndpointsResponse, error) {
 			if h.hasEndpoint.Load() {
 				return &operatorv1.ListHTTPEndpointsResponse{
