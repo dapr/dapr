@@ -142,7 +142,7 @@ func (s *headerInjection) Run(t *testing.T, ctx context.Context) {
 
 		var result rtv1.CallMCPToolResponse
 		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.False(t, result.IsError)
+		assert.False(t, result.IsError, "expected success result")
 		require.NotEmpty(t, result.Content)
 		assert.True(t, strings.Contains(result.Content[0].Text, "ok"))
 

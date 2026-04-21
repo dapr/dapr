@@ -143,7 +143,10 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContex
 				return nil, errors.New("list-tools activity failed: " + err.Error())
 			}
 
-			final := runAfterListTools(ctx, &server, serverName, &result)
+			final, err := runAfterListTools(ctx, &server, serverName, &result)
+			if err != nil {
+				return nil, fmt.Errorf("afterListTools failed: %w", err)
+			}
 			return final, nil
 
 		case strings.HasSuffix(name, mcptypes.MethodCallTool):
@@ -185,11 +188,17 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContex
 				// Activity-level failure: return as CallMCPToolResponse{IsError: true},
 				// not as a workflow exception.
 				errResult := errorResult("%s", err)
-				final := runAfterCallTool(ctx, &server, serverName, input.ToolName, arguments, errResult)
+				final, hookErr := runAfterCallTool(ctx, &server, serverName, input.ToolName, arguments, errResult)
+				if hookErr != nil {
+					return nil, fmt.Errorf("afterCallTool failed: %w", hookErr)
+				}
 				return final, nil
 			}
 
-			final := runAfterCallTool(ctx, &server, serverName, input.ToolName, arguments, &result)
+			final, hookErr := runAfterCallTool(ctx, &server, serverName, input.ToolName, arguments, &result)
+			if hookErr != nil {
+				return nil, fmt.Errorf("afterCallTool failed: %w", hookErr)
+			}
 			return final, nil
 
 		default:
@@ -455,6 +464,9 @@ func withDeadline(ctx context.Context, d time.Duration) (context.Context, contex
 }
 
 // convertCallToolResult converts an mcp.CallToolResult from the go-sdk into a proto CallMCPToolResponse.
+// The response shape matches the MCP protocol's CallToolResult for wire compatibility
+// with MCP-native clients (Claude, Cursor, etc.).
+//
 // Handles all MCP content types defined in the spec:
 //   - text          → Text field
 //   - image         → Data (base64) + MimeType
@@ -470,8 +482,6 @@ func convertCallToolResult(r *mcp.CallToolResult) *rtv1.CallMCPToolResponse {
 		case *mcp.TextContent:
 			out.Content = append(out.Content, &rtv1.MCPContentItem{Type: textContentType, Text: v.Text})
 		case *mcp.ImageContent:
-			// v.Data is raw bytes (Go's JSON unmarshaler decoded the base64 wire format).
-			// Re-encode to base64 for our JSON output.
 			out.Content = append(out.Content, &rtv1.MCPContentItem{
 				Type: imageContentType, Data: base64.StdEncoding.EncodeToString(v.Data), MimeType: v.MIMEType,
 			})
@@ -492,7 +502,6 @@ func convertCallToolResult(r *mcp.CallToolResult) *rtv1.CallMCPToolResponse {
 				out.Content = append(out.Content, &rtv1.MCPContentItem{Type: textContentType, Text: fmt.Sprintf("failed to marshal embedded resource: %s", err)})
 			}
 		default:
-			// Unknown/future content type: marshal as JSON text as forward-compatible fallback.
 			if b, err := json.Marshal(c); err == nil {
 				out.Content = append(out.Content, &rtv1.MCPContentItem{Type: textContentType, Text: string(b)})
 			}

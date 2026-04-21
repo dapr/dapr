@@ -24,6 +24,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
@@ -160,7 +161,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
 		var result rtv1.CallMCPToolResponse
-		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 		assert.False(t, result.IsError)
 		require.NotEmpty(t, result.Content)
 		assert.True(t, strings.Contains(result.Content[0].Text, "Austin"))
@@ -181,7 +182,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
 		var result rtv1.CallMCPToolResponse
-		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 		assert.False(t, result.IsError)
 		require.NotEmpty(t, result.Content)
 		assert.True(t, strings.Contains(result.Content[0].Text, "dapr"))

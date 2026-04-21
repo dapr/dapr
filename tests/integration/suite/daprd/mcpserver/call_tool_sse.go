@@ -137,7 +137,7 @@ func (s *callToolSSE) Run(t *testing.T, ctx context.Context) {
 		var result rtv1.CallMCPToolResponse
 		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 
-		assert.False(t, result.IsError, "expected isError=false")
+		assert.False(t, result.IsError, "expected success result")
 		require.NotEmpty(t, result.Content)
 		assert.Equal(t, "text", result.Content[0].Type)
 		assert.True(t, strings.Contains(result.Content[0].Text, "Denver"),

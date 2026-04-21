@@ -266,6 +266,8 @@ func (x *CallMCPToolRequest) GetArguments() []byte {
 }
 
 // CallMCPToolResponse is the response for the CallMCPToolAlpha1 API.
+// Matches the MCP protocol's CallToolResult shape so the response is
+// wire-compatible with MCP-native clients (Claude, Cursor, etc.).
 type CallMCPToolResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -539,6 +541,7 @@ func (x *MCPBeforeCallToolHookInput) GetArguments() *structpb.Struct {
 // MCPAfterCallToolHookInput is received by afterCallTool middleware hooks.
 // When the hook has mutate=true, its return value (CallMCPToolResponse shape)
 // replaces the result returned to the caller.
+// Errors returned by after-hooks fail the workflow.
 type MCPAfterCallToolHookInput struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -550,7 +553,7 @@ type MCPAfterCallToolHookInput struct {
 	ToolName string `protobuf:"bytes,2,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
 	// arguments is the tool arguments that were sent.
 	Arguments *structpb.Struct `protobuf:"bytes,3,opt,name=arguments,proto3" json:"arguments,omitempty"`
-	// result is the tool call result.
+	// result is the tool call result (success or error).
 	Result *CallMCPToolResponse `protobuf:"bytes,4,opt,name=result,proto3" json:"result,omitempty"`
 }
 

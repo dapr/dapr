@@ -30,8 +30,9 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	. "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/types"
+	mcptypes "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/types"
 )
 
 // setTestSchema marshals a map to json.RawMessage and stores it as a tool schema.
@@ -135,10 +136,10 @@ func TestMCPServerName(t *testing.T) {
 		suffix            string
 		want              string
 	}{
-		{"dapr.internal.mcp.myserver.ListTools", MethodListTools, "myserver"},
-		{"dapr.internal.mcp.my-server.CallTool", MethodCallTool, "my-server"},
-		{"dapr.internal.mcp.dotted.name.ListTools", MethodListTools, "dotted.name"},
-		{"dapr.internal.mcp..ListTools", MethodListTools, ""},
+		{"dapr.internal.mcp.myserver.ListTools", mcptypes.MethodListTools, "myserver"},
+		{"dapr.internal.mcp.my-server.CallTool", mcptypes.MethodCallTool, "my-server"},
+		{"dapr.internal.mcp.dotted.name.ListTools", mcptypes.MethodListTools, "dotted.name"},
+		{"dapr.internal.mcp..ListTools", mcptypes.MethodListTools, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.orchestrationName, func(t *testing.T) {
@@ -236,10 +237,12 @@ func TestConvertCallToolResult(t *testing.T) {
 			},
 		}
 		got := convertCallToolResult(r)
-		require.Len(t, got.Content, 1)
-		assert.Equal(t, imageContentType, got.Content[0].Type)
-		assert.Equal(t, "image/png", got.Content[0].MimeType)
-		assert.Equal(t, "aW1nZGF0YQ==", got.Content[0].Data) // base64("imgdata")
+		assert.False(t, got.IsError)
+		content := got.Content
+		require.Len(t, content, 1)
+		assert.Equal(t, imageContentType, content[0].Type)
+		assert.Equal(t, "image/png", content[0].MimeType)
+		assert.Equal(t, "aW1nZGF0YQ==", content[0].Data) // base64("imgdata")
 	})
 
 	t.Run("audio content", func(t *testing.T) {
@@ -249,10 +252,12 @@ func TestConvertCallToolResult(t *testing.T) {
 			},
 		}
 		got := convertCallToolResult(r)
-		require.Len(t, got.Content, 1)
-		assert.Equal(t, audioContentType, got.Content[0].Type)
-		assert.Equal(t, "audio/wav", got.Content[0].MimeType)
-		assert.Equal(t, "YXVkaW9kYXRh", got.Content[0].Data) // base64("audiodata")
+		assert.False(t, got.IsError)
+		content := got.Content
+		require.Len(t, content, 1)
+		assert.Equal(t, audioContentType, content[0].Type)
+		assert.Equal(t, "audio/wav", content[0].MimeType)
+		assert.Equal(t, "YXVkaW9kYXRh", content[0].Data) // base64("audiodata")
 	})
 
 	t.Run("resource link content", func(t *testing.T) {
@@ -266,12 +271,13 @@ func TestConvertCallToolResult(t *testing.T) {
 			},
 		}
 		got := convertCallToolResult(r)
-		require.Len(t, got.Content, 1)
-		assert.Equal(t, resourceLinkContentType, got.Content[0].Type)
-		assert.NotNil(t, got.Content[0].Resource)
-		// The raw JSON should contain the URI and name.
-		assert.Contains(t, string(got.Content[0].Resource), "file:///tmp/report.pdf")
-		assert.Contains(t, string(got.Content[0].Resource), "report")
+		assert.False(t, got.IsError)
+		content := got.Content
+		require.Len(t, content, 1)
+		assert.Equal(t, resourceLinkContentType, content[0].Type)
+		assert.NotNil(t, content[0].Resource)
+		assert.Contains(t, string(content[0].Resource), "file:///tmp/report.pdf")
+		assert.Contains(t, string(content[0].Resource), "report")
 	})
 
 	t.Run("embedded resource content", func(t *testing.T) {
@@ -286,11 +292,13 @@ func TestConvertCallToolResult(t *testing.T) {
 			},
 		}
 		got := convertCallToolResult(r)
-		require.Len(t, got.Content, 1)
-		assert.Equal(t, resourceContentType, got.Content[0].Type)
-		assert.NotNil(t, got.Content[0].Resource)
-		assert.Contains(t, string(got.Content[0].Resource), "file:///tmp/data.txt")
-		assert.Contains(t, string(got.Content[0].Resource), "some file contents")
+		assert.False(t, got.IsError)
+		content := got.Content
+		require.Len(t, content, 1)
+		assert.Equal(t, resourceContentType, content[0].Type)
+		assert.NotNil(t, content[0].Resource)
+		assert.Contains(t, string(content[0].Resource), "file:///tmp/data.txt")
+		assert.Contains(t, string(content[0].Resource), "some file contents")
 	})
 
 	t.Run("mixed content types", func(t *testing.T) {
@@ -303,22 +311,27 @@ func TestConvertCallToolResult(t *testing.T) {
 			},
 		}
 		got := convertCallToolResult(r)
-		require.Len(t, got.Content, 4)
-		assert.Equal(t, textContentType, got.Content[0].Type)
-		assert.Equal(t, imageContentType, got.Content[1].Type)
-		assert.Equal(t, audioContentType, got.Content[2].Type)
-		assert.Equal(t, resourceLinkContentType, got.Content[3].Type)
+		assert.False(t, got.IsError)
+		content := got.Content
+		require.Len(t, content, 4)
+		assert.Equal(t, textContentType, content[0].Type)
+		assert.Equal(t, imageContentType, content[1].Type)
+		assert.Equal(t, audioContentType, content[2].Type)
+		assert.Equal(t, resourceLinkContentType, content[3].Type)
 	})
 
 	t.Run("error result", func(t *testing.T) {
 		r := &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "err"}}}
 		got := convertCallToolResult(r)
 		assert.True(t, got.IsError)
+		assert.Equal(t, "err", got.Content[0].Text)
+		require.NotEmpty(t, got.Content)
 	})
 
 	t.Run("empty content", func(t *testing.T) {
 		r := &mcp.CallToolResult{Content: nil}
 		got := convertCallToolResult(r)
+		assert.False(t, got.IsError)
 		assert.Empty(t, got.Content)
 	})
 }
@@ -400,7 +413,7 @@ func TestMakeListToolsActivity_RealServer(t *testing.T) {
 	result, err := activity(actCtx)
 	require.NoError(t, err)
 
-	listResult, ok := result.(*ListToolsResult)
+	listResult, ok := result.(*rtv1.ListMCPToolsResponse)
 	require.True(t, ok)
 	require.Len(t, listResult.Tools, 1)
 	assert.Equal(t, "greet", listResult.Tools[0].Name)
@@ -441,10 +454,9 @@ func TestMakeCallToolActivity_ServerNotFound(t *testing.T) {
 	}
 	result, err := activity(actCtx)
 	require.NoError(t, err, "call-tool activity must not return activity-level error")
-	callResult, ok := result.(*CallToolResult)
+	callResult, ok := result.(*rtv1.CallMCPToolResponse)
 	require.True(t, ok)
 	assert.True(t, callResult.IsError)
-	require.NotEmpty(t, callResult.Content)
 	assert.Contains(t, callResult.Content[0].Text, "not found")
 }
 
@@ -471,9 +483,9 @@ func TestMakeCallToolActivity_RealServer(t *testing.T) {
 	result, err := activity(actCtx)
 	require.NoError(t, err)
 
-	callResult, ok := result.(*CallToolResult)
+	callResult, ok := result.(*rtv1.CallMCPToolResponse)
 	require.True(t, ok)
-	assert.False(t, callResult.IsError, "unexpected error in result")
+	assert.False(t, callResult.IsError, "expected success result")
 	require.NotEmpty(t, callResult.Content)
 	assert.Contains(t, callResult.Content[0].Text, "dapr")
 }
@@ -534,10 +546,9 @@ func TestMakeCallToolActivity_MissingRequiredArg(t *testing.T) {
 
 	result, err := activity(actCtx)
 	require.NoError(t, err, "validation failure should not be an activity error")
-	callResult, ok := result.(*CallToolResult)
+	callResult, ok := result.(*rtv1.CallMCPToolResponse)
 	require.True(t, ok)
 	assert.True(t, callResult.IsError)
-	require.NotEmpty(t, callResult.Content)
 	assert.Contains(t, callResult.Content[0].Text, "missing required")
 	assert.Contains(t, callResult.Content[0].Text, "name")
 }
@@ -578,8 +589,8 @@ func TestMakeCallToolActivity_SPIFFEAuth(t *testing.T) {
 
 	result, err := activity(actCtx)
 	require.NoError(t, err)
-	callResult, ok := result.(*CallToolResult)
+	callResult, ok := result.(*rtv1.CallMCPToolResponse)
 	require.True(t, ok)
-	assert.False(t, callResult.IsError)
+	assert.False(t, callResult.IsError, "expected success result")
 	assert.Equal(t, "SVID svid-12345", capturedHeader)
 }

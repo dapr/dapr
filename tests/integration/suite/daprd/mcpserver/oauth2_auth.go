@@ -15,7 +15,6 @@ package mcpserver
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -25,6 +24,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
@@ -173,8 +173,8 @@ func (s *oauth2Auth) Run(t *testing.T, ctx context.Context) {
 		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 		var result rtv1.CallMCPToolResponse
-		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.False(t, result.IsError, "expected tool call to succeed; got error: %v", result.Content)
+		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+		assert.False(t, result.IsError, "expected tool call to succeed; isError=true, content: %v", result.Content)
 
 		// Verify the MCP server received a Bearer token from the OAuth2 flow.
 		capturedAuth, ok := s.capturedAuthHeader.Load().(string)

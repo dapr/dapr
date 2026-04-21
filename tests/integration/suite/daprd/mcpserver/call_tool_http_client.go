@@ -25,6 +25,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -155,9 +156,9 @@ func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 		require.NotEmpty(t, outputJSON, "expected dapr.workflow.output to be populated")
 
 		var result rtv1.CallMCPToolResponse
-		require.NoError(t, json.Unmarshal([]byte(outputJSON), &result))
+		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 
-		assert.False(t, result.IsError, "expected isError=false")
+		assert.False(t, result.IsError, "expected success result")
 		require.NotEmpty(t, result.Content)
 		assert.Equal(t, "text", result.Content[0].Type)
 		assert.True(t, strings.Contains(result.Content[0].Text, "Portland"),

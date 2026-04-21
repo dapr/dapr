@@ -15,7 +15,6 @@ package mcpserver
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -24,6 +23,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
@@ -138,9 +138,9 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
 		var result rtv1.CallMCPToolResponse
-		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 
-		assert.False(t, result.IsError, "expected isError=false")
+		assert.False(t, result.IsError, "expected success result")
 		require.NotEmpty(t, result.Content)
 		assert.Equal(t, "text", result.Content[0].Type)
 		assert.True(t, strings.Contains(result.Content[0].Text, "Seattle"),
@@ -164,7 +164,7 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 		// The MCP server returns isError=true for unknown tools, which surfaces
 		// as a completed workflow with isError=true in the output, NOT a workflow failure.
 		var result rtv1.CallMCPToolResponse
-		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 		assert.True(t, result.IsError, "expected isError=true for unknown tool")
 	})
 }

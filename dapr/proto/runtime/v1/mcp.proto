@@ -57,6 +57,8 @@ message CallMCPToolRequest {
 }
 
 // CallMCPToolResponse is the response for the CallMCPToolAlpha1 API.
+// Matches the MCP protocol's CallToolResult shape so the response is
+// wire-compatible with MCP-native clients (Claude, Cursor, etc.).
 message CallMCPToolResponse {
   // is_error is true when the tool call failed at the MCP level.
   bool is_error = 1;
@@ -111,6 +113,7 @@ message MCPBeforeCallToolHookInput {
 // MCPAfterCallToolHookInput is received by afterCallTool middleware hooks.
 // When the hook has mutate=true, its return value (CallMCPToolResponse shape)
 // replaces the result returned to the caller.
+// Errors returned by after-hooks fail the workflow.
 message MCPAfterCallToolHookInput {
   // mcp_server_name is the name of the MCPServer resource.
   string mcp_server_name = 1;
@@ -118,7 +121,7 @@ message MCPAfterCallToolHookInput {
   string tool_name = 2;
   // arguments is the tool arguments that were sent.
   google.protobuf.Struct arguments = 3;
-  // result is the tool call result.
+  // result is the tool call result (success or error).
   CallMCPToolResponse result = 4;
 }
 
