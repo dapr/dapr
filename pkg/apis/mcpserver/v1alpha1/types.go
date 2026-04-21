@@ -303,13 +303,13 @@ type MCPMiddleware struct {
 	// If any hook returns an error, the chain stops and the error is returned
 	// as CallToolResult{isError: true}.
 	//+optional
-	BeforeCallTool []MCPMiddlewareHook `json:"beforeCallTool,omitempty"`
+	BeforeCallTool []MutatingMCPMiddlewareHook `json:"beforeCallTool,omitempty"`
 
 	// AfterCallTool hooks are invoked in order after each CallTool.
 	// Receives {mcpServer, toolName, arguments, result} as input.
 	// Errors are logged but do not affect the result.
 	//+optional
-	AfterCallTool []MCPMiddlewareHook `json:"afterCallTool,omitempty"`
+	AfterCallTool []MutatingMCPMiddlewareHook `json:"afterCallTool,omitempty"`
 
 	// BeforeListTools hooks are invoked in order before each ListTools.
 	// Receives {mcpServer} as input.
@@ -321,7 +321,7 @@ type MCPMiddleware struct {
 	// Receives {mcpServer, result} as input.
 	// Errors are logged but do not affect the result.
 	//+optional
-	AfterListTools []MCPMiddlewareHook `json:"afterListTools,omitempty"`
+	AfterListTools []MutatingMCPMiddlewareHook `json:"afterListTools,omitempty"`
 }
 
 // MCPMiddlewareHook is a single middleware hook. Exactly one field must be set.
@@ -331,6 +331,21 @@ type MCPMiddlewareHook struct {
 	// Workflow invokes a Dapr workflow as the hook.
 	//+optional
 	Workflow *MCPMiddlewareWorkflow `json:"workflow,omitempty"`
+}
+
+// MutatingMCPMiddlewareHook extends MCPMiddlewareHook with the ability to
+// replace the data flowing through the pipeline when Mutate is true.
+type MutatingMCPMiddlewareHook struct {
+	MCPMiddlewareHook `json:",inline"`
+
+	// Mutate, when true, causes the hook's return value to replace the data
+	// flowing through the pipeline:
+	//   - beforeCallTool: replaces the arguments sent to the tool call
+	//     (e.g. redact PII, inject defaults).
+	//   - afterCallTool / afterListTools: replaces the result returned to the caller.
+	// When false (default), the hook validates/observes only — its output is discarded.
+	//+optional
+	Mutate bool `json:"mutate,omitempty"`
 }
 
 // MCPMiddlewareWorkflow identifies a workflow to invoke as a middleware hook.
