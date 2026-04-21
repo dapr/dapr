@@ -60,7 +60,7 @@ const (
 	// cross app workflows. Ensures that activities are not retried forever if
 	// the workflow app is not available, and instead queues the result for when
 	// the workflow app is back online. Strongly recommended to always be enabled
-	// if using the same Dapr version on all daprds.
+	// if using the same Dapr version on all daprds. Enabled by default.
 	WorkflowsRemoteActivityReminder Feature = "WorkflowsRemoteActivityReminder"
 
 	// Enables support for the MCPServer first-class resource,
@@ -83,7 +83,9 @@ const (
 	ActionPolicyGlobal  = "global"
 )
 
-var defaultFeatures = make(map[Feature]bool)
+var defaultFeatures = map[Feature]bool{
+	WorkflowsRemoteActivityReminder: true,
+}
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
 //
