@@ -19,13 +19,20 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
+
 	"github.com/dapr/components-contrib/workflows"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	mcptypes "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/types"
 	"github.com/dapr/durabletask-go/api/helpers"
 	"github.com/dapr/durabletask-go/api/protos"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
+
+// protoMarshaler uses UseProtoNames so JSON output uses snake_case field names,
+// matching the convention used by the workflow engine.
+var protoMarshaler = protojson.MarshalOptions{UseProtoNames: true}
 
 const (
 	mcpWorkflowPollInterval = 100 * time.Millisecond
@@ -39,7 +46,7 @@ func (a *Universal) ListMCPToolsAlpha1(ctx context.Context, in *runtimev1pb.List
 		return nil, fmt.Errorf("mcp_server_name is required")
 	}
 
-	// ListToolsInput is empty — the server name is encoded in the workflow name.
+	// ListTools has no input — the server name is encoded in the workflow name.
 	output, err := a.startAndWaitMCPWorkflow(ctx,
 		mcptypes.ListToolsWorkflowName(in.GetMcpServerName()),
 		"{}",
@@ -48,25 +55,12 @@ func (a *Universal) ListMCPToolsAlpha1(ctx context.Context, in *runtimev1pb.List
 		return nil, fmt.Errorf("ListMCPTools failed: %w", err)
 	}
 
-	var result mcptypes.ListToolsResult
-	if err := json.Unmarshal([]byte(output), &result); err != nil {
+	// The workflow output is a proto ListMCPToolsResponse serialized via protojson.
+	var resp runtimev1pb.ListMCPToolsResponse
+	if err := protojson.Unmarshal([]byte(output), &resp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal ListTools result: %w", err)
 	}
-
-	resp := &runtimev1pb.ListMCPToolsResponse{
-		Tools: make([]*runtimev1pb.MCPToolDefinition, 0, len(result.Tools)),
-	}
-	for _, t := range result.Tools {
-		td := &runtimev1pb.MCPToolDefinition{
-			Name:        t.Name,
-			Description: t.Description,
-		}
-		if len(t.InputSchema) > 0 {
-			td.InputSchema = t.InputSchema
-		}
-		resp.Tools = append(resp.Tools, td)
-	}
-	return resp, nil
+	return &resp, nil
 }
 
 // CallMCPToolAlpha1 invokes a tool on a declared MCPServer resource.
@@ -79,18 +73,25 @@ func (a *Universal) CallMCPToolAlpha1(ctx context.Context, in *runtimev1pb.CallM
 		return nil, fmt.Errorf("tool_name is required")
 	}
 
-	var args map[string]any
+	// Parse the bytes arguments into a structpb.Struct for the proto workflow input.
+	var args *structpb.Struct
 	if len(in.GetArguments()) > 0 {
-		if err := json.Unmarshal(in.GetArguments(), &args); err != nil {
+		var argMap map[string]any
+		if err := json.Unmarshal(in.GetArguments(), &argMap); err != nil {
 			return nil, fmt.Errorf("invalid arguments JSON: %w", err)
+		}
+		var err error
+		args, err = structpb.NewStruct(argMap)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert arguments: %w", err)
 		}
 	}
 
-	callInput := mcptypes.CallToolInput{
+	callInput := &runtimev1pb.MCPCallToolWorkflowInput{
 		ToolName:  in.GetToolName(),
 		Arguments: args,
 	}
-	input, err := json.Marshal(callInput)
+	input, err := protoMarshaler.Marshal(callInput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal CallTool input: %w", err)
 	}
@@ -103,25 +104,12 @@ func (a *Universal) CallMCPToolAlpha1(ctx context.Context, in *runtimev1pb.CallM
 		return nil, fmt.Errorf("CallMCPTool failed: %w", err)
 	}
 
-	var result mcptypes.CallToolResult
-	if err := json.Unmarshal([]byte(output), &result); err != nil {
+	// The workflow output is a proto CallMCPToolResponse serialized via protojson.
+	var resp runtimev1pb.CallMCPToolResponse
+	if err := protojson.Unmarshal([]byte(output), &resp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal CallTool result: %w", err)
 	}
-
-	resp := &runtimev1pb.CallMCPToolResponse{
-		IsError: result.IsError,
-		Content: make([]*runtimev1pb.MCPContentItem, 0, len(result.Content)),
-	}
-	for _, c := range result.Content {
-		resp.Content = append(resp.Content, &runtimev1pb.MCPContentItem{
-			Type:     c.Type,
-			Text:     c.Text,
-			Data:     c.Data,
-			MimeType: c.MimeType,
-			Resource: c.Resource,
-		})
-	}
-	return resp, nil
+	return &resp, nil
 }
 
 // startAndWaitMCPWorkflow starts an MCP workflow and polls for completion.

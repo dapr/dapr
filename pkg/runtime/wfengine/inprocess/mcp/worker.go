@@ -25,14 +25,17 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/types/known/structpb"
+
 	"github.com/dapr/durabletask-go/task"
 	"github.com/dapr/kit/logger"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	mcpauth "github.com/dapr/dapr/pkg/runtime/mcp/auth"
-	. "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/types"
+	mcptypes "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/types"
 	"github.com/dapr/dapr/pkg/security"
 )
 
@@ -112,19 +115,19 @@ func RegisterMCP(registry *task.TaskRegistry, opts Options) error {
 //   - afterListTools hooks are awaited; errors are logged but do not affect the result.
 //
 // CallTool path:
-//   - beforeCallTool is awaited; any error aborts with CallToolResult{IsError:true}.
-//   - dapr.internal.mcp.call-tool activity errors are returned as CallToolResult{IsError:true}.
+//   - beforeCallTool is awaited; any error aborts with CallMCPToolResponse{IsError:true}.
+//   - dapr.internal.mcp.call-tool activity errors are returned as CallMCPToolResponse{IsError:true}.
 //   - afterCallTool hooks are awaited; errors are logged but do not affect the result.
 func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContext) (any, error) {
 	return func(ctx *task.WorkflowContext) (any, error) {
 		name := ctx.Name
 
 		switch {
-		case strings.HasSuffix(name, MethodListTools):
-			serverName := mcpServerName(name, MethodListTools)
+		case strings.HasSuffix(name, mcptypes.MethodListTools):
+			serverName := mcpServerName(name, mcptypes.MethodListTools)
 			server, ok := store.GetMCPServer(serverName)
 			if !ok {
-				return &ListToolsResult{}, fmt.Errorf("MCPServer %q not found", serverName)
+				return &rtv1.ListMCPToolsResponse{}, fmt.Errorf("MCPServer %q not found", serverName)
 			}
 
 			// beforeListTools middleware pipeline
@@ -134,82 +137,88 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContex
 
 			// The server name is derived from the workflow name — not from caller input.
 			actInput := activityListToolsInput{MCPServerName: serverName}
-			var result ListToolsResult
+			var result rtv1.ListMCPToolsResponse
 			t := ctx.CallActivity(activityListTools, task.WithActivityInput(actInput))
 			if err := t.Await(&result); err != nil {
-				runAfterListTools(ctx, &server, serverName, &CallToolResult{
-					IsError: true, Content: []ContentItem{{Type: textContentType, Text: err.Error()}},
-				})
 				return nil, errors.New("list-tools activity failed: " + err.Error())
 			}
 
-			runAfterListTools(ctx, &server, serverName, result)
-			return result, nil
+			final := runAfterListTools(ctx, &server, serverName, &result)
+			return final, nil
 
-		case strings.HasSuffix(name, MethodCallTool):
-			serverName := mcpServerName(name, MethodCallTool)
+		case strings.HasSuffix(name, mcptypes.MethodCallTool):
+			serverName := mcpServerName(name, mcptypes.MethodCallTool)
 			server, ok := store.GetMCPServer(serverName)
 			if !ok {
-				return &CallToolResult{}, fmt.Errorf("MCPServer %q not found", serverName)
+				return errorResult("MCPServer %q not found", serverName), nil
 			}
 
-			var input CallToolInput
+			var input rtv1.MCPCallToolWorkflowInput
 			if err := ctx.GetInput(&input); err != nil {
-				return &CallToolResult{IsError: true, Content: []ContentItem{{
-					Type: textContentType,
-					Text: fmt.Sprintf("failed to parse CallToolInput: %s", err),
-				}}}, nil
+				return errorResult("failed to parse CallToolInput: %s", err), nil
 			}
 			if input.ToolName == "" {
 				return nil, fmt.Errorf("CallTool requires a non-empty tool_name")
 			}
 
-			// beforeCallTool middleware pipeline
-			if err := runBeforeCallTool(ctx, &server, serverName, input.ToolName, input.Arguments); err != nil {
-				return &CallToolResult{IsError: true, Content: []ContentItem{{
-					Type: textContentType,
-					Text: fmt.Sprintf("beforeCallTool: %s", err),
-				}}}, nil
+			// beforeCallTool middleware pipeline — may mutate arguments.
+			arguments, err := runBeforeCallTool(ctx, &server, serverName, input.ToolName, input.Arguments)
+			if err != nil {
+				return errorResult("beforeCallTool: %s", err), nil
+			}
+
+			// Convert structpb.Struct → map[string]any for the activity (MCP SDK needs a map).
+			var argMap map[string]any
+			if arguments != nil {
+				argMap = arguments.AsMap()
 			}
 
 			// The server name is derived from the workflow name — not from caller input.
 			actInput := activityCallToolInput{
 				MCPServerName: serverName,
 				ToolName:      input.ToolName,
-				Arguments:     input.Arguments,
+				Arguments:     argMap,
 			}
-			var result CallToolResult
+			var result rtv1.CallMCPToolResponse
 			t := ctx.CallActivity(activityCallTool, task.WithActivityInput(actInput))
 			if err := t.Await(&result); err != nil {
-				// Activity-level failure: return as CallToolResult{isError: true},
+				// Activity-level failure: return as CallMCPToolResponse{IsError: true},
 				// not as a workflow exception.
-				errResult := &CallToolResult{IsError: true, Content: []ContentItem{{
-					Type: textContentType,
-					Text: err.Error(),
-				}}}
-				runAfterCallTool(ctx, &server, serverName, input.ToolName, input.Arguments, errResult)
-				return errResult, nil
+				errResult := errorResult("%s", err)
+				final := runAfterCallTool(ctx, &server, serverName, input.ToolName, arguments, errResult)
+				return final, nil
 			}
 
-			runAfterCallTool(ctx, &server, serverName, input.ToolName, input.Arguments, result)
-			return result, nil
+			final := runAfterCallTool(ctx, &server, serverName, input.ToolName, arguments, &result)
+			return final, nil
 
 		default:
 			return nil, fmt.Errorf("unknown MCP workflow name %q: expected suffix %q or %q",
-				name, MethodListTools, MethodCallTool)
+				name, mcptypes.MethodListTools, mcptypes.MethodCallTool)
 		}
+	}
+}
+
+// errorResult returns a CallMCPToolResponse with is_error=true and a single text content item.
+func errorResult(format string, args ...any) *rtv1.CallMCPToolResponse {
+	return &rtv1.CallMCPToolResponse{
+		IsError: true,
+		Content: []*rtv1.MCPContentItem{{
+			Type: textContentType,
+			Text: fmt.Sprintf(format, args...),
+		}},
 	}
 }
 
 // mcpServerName extracts the MCPServer resource name from a workflow name
 // of the form "dapr.internal.mcp.<name>.<method>".
 func mcpServerName(workflowName, method string) string {
-	trimmed := strings.TrimPrefix(workflowName, WorkflowNamePrefix)
+	trimmed := strings.TrimPrefix(workflowName, mcptypes.WorkflowNamePrefix)
 	return strings.TrimSuffix(trimmed, method)
 }
 
 // makeListToolsActivity returns a task.Activity that calls ListTools on the
-// named MCP server and returns a ListToolsResult.
+// named MCP server and returns a *rtv1.ListMCPToolsResponse.
 func makeListToolsActivity(opts Options) task.Activity {
 	return func(ctx task.ActivityContext) (any, error) {
 		var input activityListToolsInput
@@ -219,7 +228,7 @@ func makeListToolsActivity(opts Options) task.Activity {
 
 		server, ok := opts.Store.GetMCPServer(input.MCPServerName)
 		if !ok {
-			return &ListToolsResult{}, fmt.Errorf("MCPServer %q not found", input.MCPServerName)
+			return &rtv1.ListMCPToolsResponse{}, fmt.Errorf("MCPServer %q not found", input.MCPServerName)
 		}
 
 		callCtx := ctx.Context()
@@ -233,21 +242,21 @@ func makeListToolsActivity(opts Options) task.Activity {
 			var err error
 			httpClient, err = mcpauth.BuildHTTPClient(callCtx, &server, opts.Store, opts.JWT, timeout)
 			if err != nil {
-				return &ListToolsResult{}, fmt.Errorf("list-tools: failed to build HTTP client for %q: %w", input.MCPServerName, err)
+				return &rtv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: failed to build HTTP client for %q: %w", input.MCPServerName, err)
 			}
 			opts.Store.SetMCPHTTPClient(input.MCPServerName, httpClient)
 		}
 
 		transport, err := buildTransport(&server, httpClient)
 		if err != nil {
-			return &ListToolsResult{}, fmt.Errorf("list-tools: failed to build transport for %q: %w", input.MCPServerName, err)
+			return &rtv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: failed to build transport for %q: %w", input.MCPServerName, err)
 		}
 
 		workerLog.Debugf("list-tools: connecting to MCP server %q", input.MCPServerName)
 		c := mcp.NewClient(&mcp.Implementation{Name: mcpClientName, Version: mcpClientVersion}, nil)
 		session, err := c.Connect(callCtx, transport, nil)
 		if err != nil {
-			return &ListToolsResult{}, fmt.Errorf("list-tools: failed to connect to MCP server %q: %w", input.MCPServerName, err)
+			return &rtv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: failed to connect to MCP server %q: %w", input.MCPServerName, err)
 		}
 		defer session.Close()
 
@@ -264,7 +273,7 @@ func makeListToolsActivity(opts Options) task.Activity {
 
 		// Paginate through all available tools. The MCP spec allows servers
 		// to return tools in pages with a cursor; we collect all pages.
-		var tools []ToolDefinition
+		var tools []*rtv1.MCPToolDefinition
 		var cursor string
 		for {
 			params := &mcp.ListToolsParams{}
@@ -273,11 +282,11 @@ func makeListToolsActivity(opts Options) task.Activity {
 			}
 			result, err := session.ListTools(callCtx, params)
 			if err != nil {
-				return &ListToolsResult{}, fmt.Errorf("list-tools: MCP call failed for %q: %w", input.MCPServerName, err)
+				return &rtv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: MCP call failed for %q: %w", input.MCPServerName, err)
 			}
 
 			for _, t := range result.Tools {
-				td := ToolDefinition{
+				td := &rtv1.MCPToolDefinition{
 					Name:        t.Name,
 					Description: t.Description,
 				}
@@ -299,16 +308,16 @@ func makeListToolsActivity(opts Options) task.Activity {
 		}
 		timer.Stop()
 
-		return &ListToolsResult{Tools: tools}, nil
+		return &rtv1.ListMCPToolsResponse{Tools: tools}, nil
 	}
 }
 
 // makeCallToolActivity returns a task.Activity that calls a tool on the named
-// MCP server and returns a CallToolResult.
+// MCP server and returns a *rtv1.CallMCPToolResponse.
 //
 // Error strategy:
 //   - Permanent errors (bad input, unknown server, transport misconfiguration) are
-//     returned as CallToolResult{IsError: true} so callers see a result, not a retry loop.
+//     returned as CallMCPToolResponse{IsError: true} so callers see a result, not a retry loop.
 //   - Transient errors (secret store unavailable for OAuth2) are returned as activity-level
 //     errors so the workflow engine retries the activity automatically.
 //   - Error messages exposed to callers never include infrastructure details (secret store
@@ -317,18 +326,12 @@ func makeCallToolActivity(opts Options) task.Activity {
 	return func(ctx task.ActivityContext) (any, error) {
 		var input activityCallToolInput
 		if err := ctx.GetInput(&input); err != nil {
-			return &CallToolResult{IsError: true, Content: []ContentItem{{
-				Type: textContentType,
-				Text: fmt.Sprintf("call-tool: failed to parse input: %s", err),
-			}}}, nil
+			return errorResult("call-tool: failed to parse input: %s", err), nil
 		}
 
 		server, ok := opts.Store.GetMCPServer(input.MCPServerName)
 		if !ok {
-			return &CallToolResult{IsError: true, Content: []ContentItem{{
-				Type: textContentType,
-				Text: fmt.Sprintf("MCPServer %q not found", input.MCPServerName),
-			}}}, nil
+			return errorResult("MCPServer %q not found", input.MCPServerName), nil
 		}
 
 		callCtx := ctx.Context()
@@ -347,37 +350,25 @@ func makeCallToolActivity(opts Options) task.Activity {
 					workerLog.Warnf("call-tool: transient auth error for MCPServer %q: %s", input.MCPServerName, err)
 					return nil, fmt.Errorf("call-tool: temporary authentication failure for MCPServer %q; retrying", input.MCPServerName)
 				}
-				return &CallToolResult{IsError: true, Content: []ContentItem{{
-					Type: textContentType,
-					Text: fmt.Sprintf("call-tool: authentication configuration error for MCPServer %q", input.MCPServerName),
-				}}}, nil
+				return errorResult("call-tool: authentication configuration error for MCPServer %q", input.MCPServerName), nil
 			}
 			opts.Store.SetMCPHTTPClient(input.MCPServerName, httpClient)
 		}
 
 		transport, err := buildTransport(&server, httpClient)
 		if err != nil {
-			return &CallToolResult{IsError: true, Content: []ContentItem{{
-				Type: textContentType,
-				Text: fmt.Sprintf("call-tool: failed to build transport for %q: %s", input.MCPServerName, err),
-			}}}, nil
+			return errorResult("call-tool: failed to build transport for %q: %s", input.MCPServerName, err), nil
 		}
 
 		// Validate tool arguments against the cached input schema if available.
 		if validationErr := validateToolArguments(opts.Store, input.MCPServerName, input.ToolName, input.Arguments); validationErr != "" {
-			return &CallToolResult{IsError: true, Content: []ContentItem{{
-				Type: textContentType,
-				Text: validationErr,
-			}}}, nil
+			return errorResult("%s", validationErr), nil
 		}
 
 		c := mcp.NewClient(&mcp.Implementation{Name: mcpClientName, Version: mcpClientVersion}, nil)
 		session, err := c.Connect(callCtx, transport, nil)
 		if err != nil {
-			return &CallToolResult{IsError: true, Content: []ContentItem{{
-				Type: textContentType,
-				Text: fmt.Sprintf("call-tool: failed to connect to MCP server %q: %s", input.MCPServerName, err),
-			}}}, nil
+			return errorResult("call-tool: failed to connect to MCP server %q: %s", input.MCPServerName, err), nil
 		}
 		defer session.Close()
 
@@ -400,10 +391,7 @@ func makeCallToolActivity(opts Options) task.Activity {
 			Arguments: input.Arguments,
 		})
 		if err != nil {
-			return &CallToolResult{IsError: true, Content: []ContentItem{{
-				Type: textContentType,
-				Text: fmt.Sprintf("call-tool: MCP call failed for tool %q on %q: %s", input.ToolName, input.MCPServerName, err),
-			}}}, nil
+			return errorResult("call-tool: MCP call failed for tool %q on %q: %s", input.ToolName, input.MCPServerName, err), nil
 		}
 
 		return convertCallToolResult(result), nil
@@ -466,7 +454,7 @@ func withDeadline(ctx context.Context, d time.Duration) (context.Context, contex
 	return context.WithTimeout(ctx, d)
 }
 
-// convertCallToolResult converts an mcp.CallToolResult from the go-sdk into our internal CallToolResult type.
+// convertCallToolResult converts an mcp.CallToolResult from the go-sdk into a proto CallMCPToolResponse.
 // Handles all MCP content types defined in the spec:
 //   - text          → Text field
 //   - image         → Data (base64) + MimeType
@@ -475,42 +463,56 @@ func withDeadline(ctx context.Context, d time.Duration) (context.Context, contex
 //   - resource      → Resource (raw JSON preserving embedded resource)
 //
 // Unknown/future content types are JSON-marshaled into a text item as a forward-compatible fallback.
-func convertCallToolResult(r *mcp.CallToolResult) *CallToolResult {
-	out := &CallToolResult{IsError: r.IsError}
+func convertCallToolResult(r *mcp.CallToolResult) *rtv1.CallMCPToolResponse {
+	out := &rtv1.CallMCPToolResponse{IsError: r.IsError}
 	for _, c := range r.Content {
 		switch v := c.(type) {
 		case *mcp.TextContent:
-			out.Content = append(out.Content, ContentItem{Type: textContentType, Text: v.Text})
+			out.Content = append(out.Content, &rtv1.MCPContentItem{Type: textContentType, Text: v.Text})
 		case *mcp.ImageContent:
 			// v.Data is raw bytes (Go's JSON unmarshaler decoded the base64 wire format).
 			// Re-encode to base64 for our JSON output.
-			out.Content = append(out.Content, ContentItem{
+			out.Content = append(out.Content, &rtv1.MCPContentItem{
 				Type: imageContentType, Data: base64.StdEncoding.EncodeToString(v.Data), MimeType: v.MIMEType,
 			})
 		case *mcp.AudioContent:
-			out.Content = append(out.Content, ContentItem{
+			out.Content = append(out.Content, &rtv1.MCPContentItem{
 				Type: audioContentType, Data: base64.StdEncoding.EncodeToString(v.Data), MimeType: v.MIMEType,
 			})
 		case *mcp.ResourceLink:
 			if raw, err := json.Marshal(v); err == nil {
-				out.Content = append(out.Content, ContentItem{Type: resourceLinkContentType, Resource: raw})
+				out.Content = append(out.Content, &rtv1.MCPContentItem{Type: resourceLinkContentType, Resource: raw})
 			} else {
-				out.Content = append(out.Content, ContentItem{Type: textContentType, Text: fmt.Sprintf("failed to marshal resource_link: %s", err)})
+				out.Content = append(out.Content, &rtv1.MCPContentItem{Type: textContentType, Text: fmt.Sprintf("failed to marshal resource_link: %s", err)})
 			}
 		case *mcp.EmbeddedResource:
 			if raw, err := json.Marshal(v); err == nil {
-				out.Content = append(out.Content, ContentItem{Type: resourceContentType, Resource: raw})
+				out.Content = append(out.Content, &rtv1.MCPContentItem{Type: resourceContentType, Resource: raw})
 			} else {
-				out.Content = append(out.Content, ContentItem{Type: textContentType, Text: fmt.Sprintf("failed to marshal embedded resource: %s", err)})
+				out.Content = append(out.Content, &rtv1.MCPContentItem{Type: textContentType, Text: fmt.Sprintf("failed to marshal embedded resource: %s", err)})
 			}
 		default:
 			// Unknown/future content type: marshal as JSON text as forward-compatible fallback.
 			if b, err := json.Marshal(c); err == nil {
-				out.Content = append(out.Content, ContentItem{Type: textContentType, Text: string(b)})
+				out.Content = append(out.Content, &rtv1.MCPContentItem{Type: textContentType, Text: string(b)})
 			}
 		}
 	}
 	return out
+}
+
+// structFromMap converts a map[string]any to a *structpb.Struct.
+// Returns nil if the input map is nil.
+func structFromMap(m map[string]any) *structpb.Struct {
+	if m == nil {
+		return nil
+	}
+	s, err := structpb.NewStruct(m)
+	if err != nil {
+		workerLog.Warnf("failed to convert map to structpb.Struct: %s", err)
+		return nil
+	}
+	return s
 }
 
 // validateToolArguments performs client-side validation of tool arguments

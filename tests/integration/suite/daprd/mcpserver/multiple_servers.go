@@ -29,7 +29,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 
-	daprmcp "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/types"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -159,7 +159,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
-		var result daprmcp.CallToolResult
+		var result rtv1.CallMCPToolResponse
 		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 		assert.False(t, result.IsError)
 		require.NotEmpty(t, result.Content)
@@ -180,7 +180,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
-		var result daprmcp.CallToolResult
+		var result rtv1.CallMCPToolResponse
 		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 		assert.False(t, result.IsError)
 		require.NotEmpty(t, result.Content)
@@ -195,7 +195,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 			ctx, api.InstanceID(weatherID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
 
-		var weatherResult daprmcp.ListToolsResult
+		var weatherResult rtv1.ListMCPToolsResponse
 		require.NoError(t, json.Unmarshal([]byte(weatherMeta.GetOutput().GetValue()), &weatherResult))
 		weatherNames := make([]string, len(weatherResult.Tools))
 		for i, tool := range weatherResult.Tools {
@@ -211,7 +211,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 			ctx, api.InstanceID(greeterID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
 
-		var greeterResult daprmcp.ListToolsResult
+		var greeterResult rtv1.ListMCPToolsResponse
 		require.NoError(t, json.Unmarshal([]byte(greeterMeta.GetOutput().GetValue()), &greeterResult))
 		greeterNames := make([]string, len(greeterResult.Tools))
 		for i, tool := range greeterResult.Tools {

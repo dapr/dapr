@@ -29,7 +29,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 
-	daprmcp "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/types"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -137,7 +137,7 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
-		var result daprmcp.CallToolResult
+		var result rtv1.CallMCPToolResponse
 		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 
 		assert.False(t, result.IsError, "expected isError=false")
@@ -163,7 +163,7 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 
 		// The MCP server returns isError=true for unknown tools, which surfaces
 		// as a completed workflow with isError=true in the output, NOT a workflow failure.
-		var result daprmcp.CallToolResult
+		var result rtv1.CallMCPToolResponse
 		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 		assert.True(t, result.IsError, "expected isError=true for unknown tool")
 	})

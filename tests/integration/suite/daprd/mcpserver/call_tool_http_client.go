@@ -26,7 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	daprmcp "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/types"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -154,7 +154,7 @@ func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON, "expected dapr.workflow.output to be populated")
 
-		var result daprmcp.CallToolResult
+		var result rtv1.CallMCPToolResponse
 		require.NoError(t, json.Unmarshal([]byte(outputJSON), &result))
 
 		assert.False(t, result.IsError, "expected isError=false")
