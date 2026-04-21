@@ -14,8 +14,9 @@ limitations under the License.
 // Package types provides workflow name constants and helpers for the MCP in-process workflow subsystem.
 package types
 
-// WorkflowNamePrefix is the prefix shared by all built-in MCP orchestrations.
-const WorkflowNamePrefix = "dapr.internal.mcp."
+// WorkflowNamePrefix is the prefix shared by all v1 MCP orchestrations.
+// Format: dapr.internal.mcp.v1.<server>.<method>
+const WorkflowNamePrefix = "dapr.internal.mcp.v1."
 
 // MethodListTools is the method suffix for a ListTools operation.
 const MethodListTools = ".ListTools"
@@ -24,13 +25,13 @@ const MethodListTools = ".ListTools"
 const MethodCallTool = ".CallTool"
 
 // ListToolsWorkflowName returns the full workflow name for a ListTools
-// operation on the given MCPServer: dapr.internal.mcp.<server>.ListTools
+// operation on the given MCPServer: dapr.internal.mcp.v1.<server>.ListTools
 func ListToolsWorkflowName(serverName string) string {
 	return WorkflowNamePrefix + serverName + MethodListTools
 }
 
 // CallToolWorkflowName returns the full workflow name for a CallTool
-// operation on the given MCPServer: dapr.internal.mcp.<server>.CallTool
+// operation on the given MCPServer: dapr.internal.mcp.v1.<server>.CallTool
 func CallToolWorkflowName(serverName string) string {
 	return WorkflowNamePrefix + serverName + MethodCallTool
 }

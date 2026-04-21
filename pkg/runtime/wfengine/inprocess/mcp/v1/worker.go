@@ -35,7 +35,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	mcpauth "github.com/dapr/dapr/pkg/runtime/mcp/auth"
-	mcptypes "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/types"
+	mcptypes "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/types"
 	"github.com/dapr/dapr/pkg/security"
 )
 
@@ -50,11 +50,11 @@ type Options struct {
 }
 
 const (
-	// activityListTools is the fixed activity name for the ListTools transport call.
-	activityListTools = "dapr.internal.mcp.list-tools"
+	// activityListTools is the fixed activity name for the v1 ListTools transport call.
+	activityListTools = "dapr.internal.mcp.v1.list-tools"
 
-	// activityCallTool is the fixed activity name for the CallTool transport call.
-	activityCallTool = "dapr.internal.mcp.call-tool"
+	// activityCallTool is the fixed activity name for the v1 CallTool transport call.
+	activityCallTool = "dapr.internal.mcp.v1.call-tool"
 
 	// defaultMCPTimeout is the per-call deadline when no endpoint.timeout is set.
 	defaultMCPTimeout = 30 * time.Second
@@ -111,12 +111,12 @@ func RegisterMCP(registry *task.TaskRegistry, opts Options) error {
 //
 // ListTools path:
 //   - beforeListTools is awaited; any error fails the workflow.
-//   - dapr.internal.mcp.list-tools activity errors fail the workflow.
+//   - dapr.internal.mcp.v1.list-tools activity errors fail the workflow.
 //   - afterListTools hooks are awaited; errors are logged but do not affect the result.
 //
 // CallTool path:
 //   - beforeCallTool is awaited; any error aborts with CallMCPToolResponse{IsError:true}.
-//   - dapr.internal.mcp.call-tool activity errors are returned as CallMCPToolResponse{IsError:true}.
+//   - dapr.internal.mcp.v1.call-tool activity errors are returned as CallMCPToolResponse{IsError:true}.
 //   - afterCallTool hooks are awaited; errors are logged but do not affect the result.
 func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContext) (any, error) {
 	return func(ctx *task.WorkflowContext) (any, error) {
@@ -220,7 +220,7 @@ func errorResult(format string, args ...any) *rtv1.CallMCPToolResponse {
 }
 
 // mcpServerName extracts the MCPServer resource name from a workflow name
-// of the form "dapr.internal.mcp.<name>.<method>".
+// of the form "dapr.internal.mcp.v1.<name>.<method>".
 func mcpServerName(workflowName, method string) string {
 	trimmed := strings.TrimPrefix(workflowName, mcptypes.WorkflowNamePrefix)
 	return strings.TrimSuffix(trimmed, method)
