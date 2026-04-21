@@ -68,6 +68,22 @@ const (
 	jsonFieldRequired = "required"
 )
 
+// activityListToolsInput is the internal input passed from the orchestrator
+// to the ListTools activity. The MCPServerName is derived from the workflow
+// name by the orchestrator — callers never set it.
+type activityListToolsInput struct {
+	MCPServerName string `json:"mcp_server_name"`
+}
+
+// activityCallToolInput is the internal input passed from the orchestrator
+// to the CallTool activity. The MCPServerName is derived from the workflow
+// name by the orchestrator — callers never set it.
+type activityCallToolInput struct {
+	MCPServerName string         `json:"mcp_server_name"`
+	ToolName      string         `json:"tool_name"`
+	Arguments     map[string]any `json:"arguments,omitempty"`
+}
+
 // RegisterMCP adds the MCP wildcard orchestrator and the two transport
 // activities to an existing task.TaskRegistry. Returns an error if any
 // registration fails — this indicates a programming error that should
@@ -111,21 +127,15 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContex
 				return &ListToolsResult{}, fmt.Errorf("MCPServer %q not found", serverName)
 			}
 
-			var input ListToolsInput
-			if err := ctx.GetInput(&input); err != nil {
-				return nil, errors.New("failed to parse ListToolsInput: " + err.Error())
-			}
-			if input.MCPServerName == "" {
-				input.MCPServerName = serverName
-			}
-
 			// beforeListTools middleware pipeline
 			if err := runBeforeListTools(ctx, &server, serverName); err != nil {
 				return nil, errors.New("beforeListTools failed: " + err.Error())
 			}
 
+			// The server name is derived from the workflow name — not from caller input.
+			actInput := activityListToolsInput{MCPServerName: serverName}
 			var result ListToolsResult
-			t := ctx.CallActivity(activityListTools, task.WithActivityInput(input))
+			t := ctx.CallActivity(activityListTools, task.WithActivityInput(actInput))
 			if err := t.Await(&result); err != nil {
 				runAfterListTools(ctx, &server, serverName, &CallToolResult{
 					IsError: true, Content: []ContentItem{{Type: textContentType, Text: err.Error()}},
@@ -150,11 +160,8 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContex
 					Text: fmt.Sprintf("failed to parse CallToolInput: %s", err),
 				}}}, nil
 			}
-			if input.MCPServerName == "" {
-				input.MCPServerName = serverName
-			}
 			if input.ToolName == "" {
-				return nil, fmt.Errorf("CallTool requires a non-empty toolName")
+				return nil, fmt.Errorf("CallTool requires a non-empty tool_name")
 			}
 
 			// beforeCallTool middleware pipeline
@@ -165,8 +172,14 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContex
 				}}}, nil
 			}
 
+			// The server name is derived from the workflow name — not from caller input.
+			actInput := activityCallToolInput{
+				MCPServerName: serverName,
+				ToolName:      input.ToolName,
+				Arguments:     input.Arguments,
+			}
 			var result CallToolResult
-			t := ctx.CallActivity(activityCallTool, task.WithActivityInput(input))
+			t := ctx.CallActivity(activityCallTool, task.WithActivityInput(actInput))
 			if err := t.Await(&result); err != nil {
 				// Activity-level failure: return as CallToolResult{isError: true},
 				// not as a workflow exception.
@@ -199,7 +212,7 @@ func mcpServerName(workflowName, method string) string {
 // named MCP server and returns a ListToolsResult.
 func makeListToolsActivity(opts Options) task.Activity {
 	return func(ctx task.ActivityContext) (any, error) {
-		var input ListToolsInput
+		var input activityListToolsInput
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("list-tools: failed to parse input: %w", err)
 		}
@@ -302,7 +315,7 @@ func makeListToolsActivity(opts Options) task.Activity {
 //     names, key names, internal URLs). Details are logged server-side only.
 func makeCallToolActivity(opts Options) task.Activity {
 	return func(ctx task.ActivityContext) (any, error) {
-		var input CallToolInput
+		var input activityCallToolInput
 		if err := ctx.GetInput(&input); err != nil {
 			return &CallToolResult{IsError: true, Content: []ContentItem{{
 				Type: textContentType,

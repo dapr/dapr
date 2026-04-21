@@ -374,7 +374,7 @@ func TestMakeListToolsActivity_ServerNotFound(t *testing.T) {
 
 	actCtx := &fakeActivityContext{
 		ctx:   context.Background(),
-		input: ListToolsInput{MCPServerName: "nonexistent"},
+		input: activityListToolsInput{MCPServerName: "nonexistent"},
 	}
 	_, err := activity(actCtx)
 	require.Error(t, err)
@@ -394,7 +394,7 @@ func TestMakeListToolsActivity_RealServer(t *testing.T) {
 	activity := makeListToolsActivity(Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx:   context.Background(),
-		input: ListToolsInput{MCPServerName: "myserver"},
+		input: activityListToolsInput{MCPServerName: "myserver"},
 	}
 
 	result, err := activity(actCtx)
@@ -419,7 +419,7 @@ func TestMakeListToolsActivity_CachesToolSchema(t *testing.T) {
 	activity := makeListToolsActivity(Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx:   context.Background(),
-		input: ListToolsInput{MCPServerName: "myserver"},
+		input: activityListToolsInput{MCPServerName: "myserver"},
 	}
 
 	_, err := activity(actCtx)
@@ -437,7 +437,7 @@ func TestMakeCallToolActivity_ServerNotFound(t *testing.T) {
 
 	actCtx := &fakeActivityContext{
 		ctx:   context.Background(),
-		input: CallToolInput{MCPServerName: "nonexistent", ToolName: "greet"},
+		input: activityCallToolInput{MCPServerName: "nonexistent", ToolName: "foo"},
 	}
 	result, err := activity(actCtx)
 	require.NoError(t, err, "call-tool activity must not return activity-level error")
@@ -461,7 +461,7 @@ func TestMakeCallToolActivity_RealServer(t *testing.T) {
 	activity := makeCallToolActivity(Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx: context.Background(),
-		input: CallToolInput{
+		input: activityCallToolInput{
 			MCPServerName: "myserver",
 			ToolName:      "greet",
 			Arguments:     map[string]interface{}{"name": "dapr"},
@@ -494,8 +494,12 @@ func TestMakeCallToolActivity_HeaderInjection(t *testing.T) {
 
 	activity := makeCallToolActivity(Options{Store: store})
 	actCtx := &fakeActivityContext{
-		ctx:   context.Background(),
-		input: CallToolInput{MCPServerName: "myserver", ToolName: "greet"},
+		ctx: context.Background(),
+		input: activityCallToolInput{
+			MCPServerName: "myserver",
+			ToolName:      "greet",
+			Arguments:     map[string]any{"name": "dapr"},
+		},
 	}
 
 	_, err := activity(actCtx)
@@ -520,8 +524,12 @@ func TestMakeCallToolActivity_MissingRequiredArg(t *testing.T) {
 
 	activity := makeCallToolActivity(Options{Store: store})
 	actCtx := &fakeActivityContext{
-		ctx:   context.Background(),
-		input: CallToolInput{MCPServerName: "myserver", ToolName: "greet", Arguments: map[string]any{}},
+		ctx: context.Background(),
+		input: activityCallToolInput{
+			MCPServerName: "myserver",
+			ToolName:      "greet",
+			Arguments:     map[string]any{}, // missing "name" which is required
+		},
 	}
 
 	result, err := activity(actCtx)
@@ -561,7 +569,7 @@ func TestMakeCallToolActivity_SPIFFEAuth(t *testing.T) {
 	activity := makeCallToolActivity(Options{Store: store, JWT: fetcher})
 	actCtx := &fakeActivityContext{
 		ctx: context.Background(),
-		input: CallToolInput{
+		input: activityCallToolInput{
 			MCPServerName: "myserver",
 			ToolName:      "greet",
 			Arguments:     map[string]any{"name": "dapr"},

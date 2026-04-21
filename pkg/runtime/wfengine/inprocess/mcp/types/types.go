@@ -15,100 +15,86 @@ package types
 
 import "encoding/json"
 
-// ListToolsInput is the input payload for a dapr.mcp.<name>.ListTools orchestration.
-type ListToolsInput struct {
-	// MCPServerName is the name of the MCPServer resource.
-	MCPServerName string `json:"mcpServerName"`
-}
+// ListToolsInput is the input payload for a ListTools orchestration.
+// The MCPServer name is derived from the workflow name, not from this input.
+type ListToolsInput struct{}
 
-// ListToolsResult is the output of a dapr.mcp.<name>.ListTools orchestration.
+// ListToolsResult is the output of a ListTools orchestration.
+// Field names and types align with ListMCPToolsResponse in mcp.proto.
 type ListToolsResult struct {
 	Tools []ToolDefinition `json:"tools"`
 }
 
 // ToolDefinition describes a single tool advertised by the MCP server.
+// Field names and types align with MCPToolDefinition in mcp.proto.
 type ToolDefinition struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	// InputSchema is the raw JSON Schema for the tool's input arguments.
-	InputSchema map[string]any `json:"inputSchema,omitempty"`
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	InputSchema json.RawMessage `json:"input_schema,omitempty"`
 }
 
-// CallToolInput is the input payload for a dapr.mcp.<name>.CallTool orchestration.
+// CallToolInput is the input payload for a CallTool orchestration.
+// The MCPServer name is derived from the workflow name, not from this input.
+// Arguments is map[string]any (not bytes) because the MCP SDK and
+// the validation code need parsed access to individual argument keys.
 type CallToolInput struct {
-	// MCPServerName is the name of the MCPServer resource.
-	MCPServerName string `json:"mcpServerName"`
-	// ToolName is the name of the MCP tool to invoke.
-	ToolName string `json:"toolName"`
-	// Arguments are the tool arguments, encoded as a JSON object.
+	ToolName  string         `json:"tool_name"`
 	Arguments map[string]any `json:"arguments,omitempty"`
 }
 
-// CallToolResult is the output of a dapr.mcp.<name>.CallTool orchestration.
-// It mirrors the MCP protocol's CallToolResult schema.
-// ref: https://modelcontextprotocol.io/specification/2025-11-25/server/tools
+// CallToolResult is the output of a CallTool orchestration.
+// Field names and types align with CallMCPToolResponse in mcp.proto.
 type CallToolResult struct {
-	// IsError is true when the tool call failed at the MCP level (e.g. auth error,
-	// tool not found, transport failure). This is NOT a workflow execution failure.
-	IsError bool `json:"isError"`
-	// Content holds the content items returned by the tool.
+	IsError bool          `json:"is_error"`
 	Content []ContentItem `json:"content,omitempty"`
 }
 
 // ContentItem is a single piece of content returned by a tool call.
-// Mirrors the MCP spec's unstructured content types:
-// text, image, audio, resource_link, and resource (embedded).
-// ref: https://modelcontextprotocol.io/specification/2025-11-25/server/tools#tool-result
+// Field names and types align with MCPContentItem in mcp.proto.
 type ContentItem struct {
-	// Type is the content type: "text", "image", "audio", "resource_link", or "resource".
-	Type string `json:"type"`
-	// Text is set when Type is "text".
-	Text string `json:"text,omitempty"`
-	// Data is set when Type is "image" or "audio" (base64-encoded).
-	Data string `json:"data,omitempty"`
-	// MimeType is the MIME type for image, audio, and resource content.
-	MimeType string `json:"mimeType,omitempty"`
-	// Resource is set when Type is "resource_link" or "resource".
-	// It contains the full structured content as raw JSON to preserve all
-	// fields without coupling to a specific schema version.
+	Type     string          `json:"type"`
+	Text     string          `json:"text,omitempty"`
+	Data     string          `json:"data,omitempty"`
+	MimeType string          `json:"mime_type,omitempty"`
 	Resource json.RawMessage `json:"resource,omitempty"`
 }
 
-// BeforeCallInput is passed to the beforeCall workflow.
+// BeforeCallInput is passed to beforeCallTool / beforeListTools middleware hooks.
 // ToolName is empty for ListTools orchestrations.
+// TODO: add to mcp.proto so other SDKs can deserialize middleware payloads.
 type BeforeCallInput struct {
-	MCPServerName string         `json:"mcpServerName"`
-	ToolName      string         `json:"toolName,omitempty"`
+	MCPServerName string         `json:"mcp_server_name"`
+	ToolName      string         `json:"tool_name,omitempty"`
 	Arguments     map[string]any `json:"arguments,omitempty"`
 }
 
-// AfterCallInput is passed to the afterCall workflow.
+// AfterCallInput is passed to afterCallTool / afterListTools middleware hooks.
 // ToolName is empty for ListTools orchestrations.
+// TODO: add to mcp.proto so other SDKs can deserialize middleware payloads.
 type AfterCallInput struct {
-	MCPServerName string         `json:"mcpServerName"`
-	ToolName      string         `json:"toolName,omitempty"`
+	MCPServerName string         `json:"mcp_server_name"`
+	ToolName      string         `json:"tool_name,omitempty"`
 	Arguments     map[string]any `json:"arguments,omitempty"`
 	Result        any            `json:"result"`
 }
 
-// OrchestrationNamePrefix is the prefix shared by all built-in MCP orchestrations.
-// All dapr-internal workflows live under dapr.internal.*; MCP claims the mcp sub-namespace.
-const OrchestrationNamePrefix = "dapr.internal.mcp."
+// WorkflowNamePrefix is the prefix shared by all built-in MCP orchestrations.
+const WorkflowNamePrefix = "dapr.internal.mcp."
 
-// SuffixListTools is the suffix identifying a ListTools orchestration.
-const SuffixListTools = ".ListTools"
+// MethodListTools is the method name for a ListTools operation.
+const MethodListTools = ".ListTools"
 
-// SuffixCallTool is the suffix identifying a CallTool orchestration.
-const SuffixCallTool = ".CallTool"
+// MethodCallTool is the method name for a CallTool operation.
+const MethodCallTool = ".CallTool"
 
 // ListToolsWorkflowName returns the full workflow name for a ListTools
-// operation on the given MCPServer.
+// operation on the given MCPServer: dapr.internal.mcp.<server>.ListTools
 func ListToolsWorkflowName(serverName string) string {
-	return OrchestrationNamePrefix + serverName + SuffixListTools
+	return WorkflowNamePrefix + serverName + MethodListTools
 }
 
 // CallToolWorkflowName returns the full workflow name for a CallTool
-// operation on the given MCPServer.
+// operation on the given MCPServer: dapr.internal.mcp.<server>.CallTool
 func CallToolWorkflowName(serverName string) string {
-	return OrchestrationNamePrefix + serverName + SuffixCallTool
+	return WorkflowNamePrefix + serverName + MethodCallTool
 }

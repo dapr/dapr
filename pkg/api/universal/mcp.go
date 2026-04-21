@@ -39,16 +39,10 @@ func (a *Universal) ListMCPToolsAlpha1(ctx context.Context, in *runtimev1pb.List
 		return nil, fmt.Errorf("mcp_server_name is required")
 	}
 
-	input, err := json.Marshal(mcptypes.ListToolsInput{
-		MCPServerName: in.GetMcpServerName(),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal ListTools input: %w", err)
-	}
-
+	// ListToolsInput is empty — the server name is encoded in the workflow name.
 	output, err := a.startAndWaitMCPWorkflow(ctx,
 		mcptypes.ListToolsWorkflowName(in.GetMcpServerName()),
-		string(input),
+		"{}",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("ListMCPTools failed: %w", err)
@@ -93,9 +87,8 @@ func (a *Universal) CallMCPToolAlpha1(ctx context.Context, in *runtimev1pb.CallM
 	}
 
 	callInput := mcptypes.CallToolInput{
-		MCPServerName: in.GetMcpServerName(),
-		ToolName:      in.GetToolName(),
-		Arguments:     args,
+		ToolName:  in.GetToolName(),
+		Arguments: args,
 	}
 	input, err := json.Marshal(callInput)
 	if err != nil {
