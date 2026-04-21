@@ -119,14 +119,15 @@ func (g *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 	ctx = g.AddAppTokenToContext(ctx)
 	var header, trailer grpcMetadata.MD
 
-	_, err = runtimev1pb.NewAppCallbackAlphaClient(conn).OnJobEventAlpha1(ctx,
-		&runtimev1pb.JobEventRequest{
-			Name:          name,
-			Data:          data,
-			Method:        "job/" + name,
-			ContentType:   data.GetTypeUrl(),
-			HttpExtension: &commonv1pb.HTTPExtension{Verb: commonv1pb.HTTPExtension_POST},
-		},
+	req := &runtimev1pb.JobEventRequest{
+		Name:          name,
+		Data:          data,
+		Method:        "job/" + name,
+		ContentType:   data.GetTypeUrl(),
+		HttpExtension: &commonv1pb.HTTPExtension{Verb: commonv1pb.HTTPExtension_POST},
+	}
+
+	callOpts := []grpc.CallOption{
 		grpc.Header(&header),
 		grpc.Trailer(&trailer),
 		grpc.MaxCallSendMsgSize(g.maxRequestBodySize),
@@ -134,13 +135,13 @@ func (g *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 	}
 
 	// Try stable OnJobEvent first, fall back to alpha OnJobEventAlpha1 if unimplemented
-	_, err := g.appCallbackClient.OnJobEvent(ctx, req, callOpts...)
+	_, err = runtimev1pb.NewAppCallbackClient(conn).OnJobEvent(ctx, req, callOpts...)
 	if err != nil {
 		if errStatus, ok := status.FromError(err); ok && errStatus.Code() == codes.Unimplemented {
 			// Fallback to alpha if stable is unimplemented
 			header = nil
 			trailer = nil
-			_, err = g.appCallbackAlphaClient.OnJobEventAlpha1(ctx, req, callOpts...) //nolint:staticcheck
+			_, err = runtimev1pb.NewAppCallbackAlphaClient(conn).OnJobEventAlpha1(ctx, req, callOpts...) //nolint:staticcheck
 		}
 	}
 

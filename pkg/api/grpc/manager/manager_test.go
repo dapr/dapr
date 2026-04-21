@@ -121,10 +121,12 @@ func TestGetAppClient_BaselineComparison(t *testing.T) {
 
 	// Simulate 250 requests staying open (like long-running streams)
 	conns := make([]grpc.ClientConnInterface, 250)
+	teardowns := make([]func(bool), 250)
 	for i := range 250 {
-		c, _, err := mgr.GetAppClient()
+		c, td, err := mgr.GetAppClient()
 		require.NoError(t, err)
 		conns[i] = c
+		teardowns[i] = td
 	}
 
 	uniqueConns := make(map[grpc.ClientConnInterface]struct{})
@@ -133,4 +135,9 @@ func TestGetAppClient_BaselineComparison(t *testing.T) {
 	}
 
 	assert.Len(t, uniqueConns, 3, "Expected 3 unique connections for 250 streams")
+
+	// Release all connections back to the pool.
+	for _, td := range teardowns {
+		td(false)
+	}
 }
