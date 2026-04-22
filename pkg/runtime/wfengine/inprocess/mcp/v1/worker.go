@@ -50,11 +50,14 @@ type Options struct {
 }
 
 const (
-	// activityListTools is the fixed activity name for the v1 ListTools transport call.
-	activityListTools = "dapr.internal.mcp.v1.list-tools"
+	// activityListTools is the fixed activity name for the ListTools transport call.
+	activityListTools = "dapr.internal.mcp.list-tools"
 
-	// activityCallTool is the fixed activity name for the v1 CallTool transport call.
-	activityCallTool = "dapr.internal.mcp.v1.call-tool"
+	// activityCallTool is the fixed activity name for the CallTool transport call.
+	activityCallTool = "dapr.internal.mcp.call-tool"
+
+	// workflowVersion is the version name used when registering versioned workflows.
+	workflowVersion = "v1"
 
 	// defaultMCPTimeout is the per-call deadline when no endpoint.timeout is set.
 	defaultMCPTimeout = 30 * time.Second
@@ -92,7 +95,7 @@ type activityCallToolInput struct {
 // registration fails — this indicates a programming error that should
 // cause the runtime to shut down.
 func RegisterMCP(registry *task.TaskRegistry, opts Options) error {
-	if err := registry.AddWorkflowN("*", makeOrchestrator(opts.Store)); err != nil {
+	if err := registry.AddVersionedWorkflowN("*", workflowVersion, true, makeOrchestrator(opts.Store)); err != nil {
 		return fmt.Errorf("failed to register MCP wildcard workflow: %w", err)
 	}
 	if err := registry.AddActivityN(activityListTools, makeListToolsActivity(opts)); err != nil {
@@ -111,12 +114,12 @@ func RegisterMCP(registry *task.TaskRegistry, opts Options) error {
 //
 // ListTools path:
 //   - beforeListTools is awaited; any error fails the workflow.
-//   - dapr.internal.mcp.v1.list-tools activity errors fail the workflow.
+//   - dapr.internal.mcp.list-tools activity errors fail the workflow.
 //   - afterListTools hooks are awaited; errors are logged but do not affect the result.
 //
 // CallTool path:
 //   - beforeCallTool is awaited; any error aborts with CallMCPToolResponse{IsError:true}.
-//   - dapr.internal.mcp.v1.call-tool activity errors are returned as CallMCPToolResponse{IsError:true}.
+//   - dapr.internal.mcp.call-tool activity errors are returned as CallMCPToolResponse{IsError:true}.
 //   - afterCallTool hooks are awaited; errors are logged but do not affect the result.
 func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContext) (any, error) {
 	return func(ctx *task.WorkflowContext) (any, error) {

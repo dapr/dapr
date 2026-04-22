@@ -136,10 +136,10 @@ func TestMCPServerName(t *testing.T) {
 		suffix            string
 		want              string
 	}{
-		{"dapr.internal.mcp.v1.myserver.ListTools", mcptypes.MethodListTools, "myserver"},
-		{"dapr.internal.mcp.v1.my-server.CallTool", mcptypes.MethodCallTool, "my-server"},
-		{"dapr.internal.mcp.v1.dotted.name.ListTools", mcptypes.MethodListTools, "dotted.name"},
-		{"dapr.internal.mcp.v1..ListTools", mcptypes.MethodListTools, ""},
+		{"dapr.internal.mcp.myserver.ListTools", mcptypes.MethodListTools, "myserver"},
+		{"dapr.internal.mcp.my-server.CallTool", mcptypes.MethodCallTool, "my-server"},
+		{"dapr.internal.mcp.dotted.name.ListTools", mcptypes.MethodListTools, "dotted.name"},
+		{"dapr.internal.mcp..ListTools", mcptypes.MethodListTools, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.orchestrationName, func(t *testing.T) {
