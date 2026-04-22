@@ -296,8 +296,12 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 			if _, ok := (*bscData.EntryIdIndexMap)[response.EntryId]; ok {
 				switch response.Status {
 				case "":
-					// When statusCode 2xx, Consider empty status field OR not receiving status for an item as retry
+					// When statusCode is 2xx, consider empty status field as success.
 					fallthrough
+				case contribpubsub.Success:
+					bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Success)]++
+					entryRespReceived[response.EntryId] = true
+					todo.AddBulkResponseEntry(&bsrr.Entries, response.EntryId, nil)
 				case contribpubsub.Retry:
 					bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)]++
 					entryRespReceived[response.EntryId] = true
@@ -305,10 +309,6 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 						fmt.Errorf("RETRY required while processing bulk subscribe event for entry id: %v", response.EntryId))
 
 					hasAnyError = true
-				case contribpubsub.Success:
-					bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Success)]++
-					entryRespReceived[response.EntryId] = true
-					todo.AddBulkResponseEntry(&bsrr.Entries, response.EntryId, nil)
 				case contribpubsub.Drop:
 					bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)]++
 					entryRespReceived[response.EntryId] = true
