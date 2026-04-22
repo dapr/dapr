@@ -24,6 +24,7 @@ import (
 	"github.com/diagridio/go-etcd-cron/api"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 )
 
 // recvLoop is the main loop for receiving messages from the stream. It
@@ -42,6 +43,7 @@ func (s *stream) recvLoop() {
 		}
 
 		log.Warnf("Error receiving from stream %s/%s: %s", s.ns, s.appID, err)
+		monitoring.RecordSidecarRecvError()
 		return
 	}
 }
