@@ -99,8 +99,6 @@ const (
 	Dapr_ListJobsAlpha1_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ListJobsAlpha1"
 	Dapr_ConverseAlpha1_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha1"
 	Dapr_ConverseAlpha2_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha2"
-	Dapr_ListMCPToolsAlpha1_FullMethodName             = "/dapr.proto.runtime.v1.Dapr/ListMCPToolsAlpha1"
-	Dapr_CallMCPToolAlpha1_FullMethodName              = "/dapr.proto.runtime.v1.Dapr/CallMCPToolAlpha1"
 )
 
 // DaprClient is the client API for Dapr service.
@@ -245,12 +243,6 @@ type DaprClient interface {
 	ConverseAlpha1(ctx context.Context, in *ConversationRequest, opts ...grpc.CallOption) (*ConversationResponse, error)
 	// Converse with a LLM service via alpha2 api
 	ConverseAlpha2(ctx context.Context, in *ConversationRequestAlpha2, opts ...grpc.CallOption) (*ConversationResponseAlpha2, error)
-	// ListMCPToolsAlpha1 returns tools available from a declared MCPServer resource.
-	// Under the hood the call is routed through the workflow engine for durability.
-	ListMCPToolsAlpha1(ctx context.Context, in *ListMCPToolsRequest, opts ...grpc.CallOption) (*ListMCPToolsResponse, error)
-	// CallMCPToolAlpha1 invokes a tool on a declared MCPServer resource.
-	// Under the hood the call is routed through the workflow engine for durability and audit.
-	CallMCPToolAlpha1(ctx context.Context, in *CallMCPToolRequest, opts ...grpc.CallOption) (*CallMCPToolResponse, error)
 }
 
 type daprClient struct {
@@ -975,24 +967,6 @@ func (c *daprClient) ConverseAlpha2(ctx context.Context, in *ConversationRequest
 	return out, nil
 }
 
-func (c *daprClient) ListMCPToolsAlpha1(ctx context.Context, in *ListMCPToolsRequest, opts ...grpc.CallOption) (*ListMCPToolsResponse, error) {
-	out := new(ListMCPToolsResponse)
-	err := c.cc.Invoke(ctx, Dapr_ListMCPToolsAlpha1_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *daprClient) CallMCPToolAlpha1(ctx context.Context, in *CallMCPToolRequest, opts ...grpc.CallOption) (*CallMCPToolResponse, error) {
-	out := new(CallMCPToolResponse)
-	err := c.cc.Invoke(ctx, Dapr_CallMCPToolAlpha1_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // DaprServer is the server API for Dapr service.
 // All implementations should embed UnimplementedDaprServer
 // for forward compatibility
@@ -1135,12 +1109,6 @@ type DaprServer interface {
 	ConverseAlpha1(context.Context, *ConversationRequest) (*ConversationResponse, error)
 	// Converse with a LLM service via alpha2 api
 	ConverseAlpha2(context.Context, *ConversationRequestAlpha2) (*ConversationResponseAlpha2, error)
-	// ListMCPToolsAlpha1 returns tools available from a declared MCPServer resource.
-	// Under the hood the call is routed through the workflow engine for durability.
-	ListMCPToolsAlpha1(context.Context, *ListMCPToolsRequest) (*ListMCPToolsResponse, error)
-	// CallMCPToolAlpha1 invokes a tool on a declared MCPServer resource.
-	// Under the hood the call is routed through the workflow engine for durability and audit.
-	CallMCPToolAlpha1(context.Context, *CallMCPToolRequest) (*CallMCPToolResponse, error)
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -1344,12 +1312,6 @@ func (UnimplementedDaprServer) ConverseAlpha1(context.Context, *ConversationRequ
 }
 func (UnimplementedDaprServer) ConverseAlpha2(context.Context, *ConversationRequestAlpha2) (*ConversationResponseAlpha2, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConverseAlpha2 not implemented")
-}
-func (UnimplementedDaprServer) ListMCPToolsAlpha1(context.Context, *ListMCPToolsRequest) (*ListMCPToolsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListMCPToolsAlpha1 not implemented")
-}
-func (UnimplementedDaprServer) CallMCPToolAlpha1(context.Context, *CallMCPToolRequest) (*CallMCPToolResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CallMCPToolAlpha1 not implemented")
 }
 
 // UnsafeDaprServer may be embedded to opt out of forward compatibility for this service.
@@ -2581,42 +2543,6 @@ func _Dapr_ConverseAlpha2_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Dapr_ListMCPToolsAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListMCPToolsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DaprServer).ListMCPToolsAlpha1(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Dapr_ListMCPToolsAlpha1_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).ListMCPToolsAlpha1(ctx, req.(*ListMCPToolsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Dapr_CallMCPToolAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CallMCPToolRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DaprServer).CallMCPToolAlpha1(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Dapr_CallMCPToolAlpha1_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).CallMCPToolAlpha1(ctx, req.(*CallMCPToolRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // Dapr_ServiceDesc is the grpc.ServiceDesc for Dapr service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2867,14 +2793,6 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ConverseAlpha2",
 			Handler:    _Dapr_ConverseAlpha2_Handler,
-		},
-		{
-			MethodName: "ListMCPToolsAlpha1",
-			Handler:    _Dapr_ListMCPToolsAlpha1_Handler,
-		},
-		{
-			MethodName: "CallMCPToolAlpha1",
-			Handler:    _Dapr_CallMCPToolAlpha1_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

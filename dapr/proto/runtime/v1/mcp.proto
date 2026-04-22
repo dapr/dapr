@@ -22,15 +22,9 @@ option java_outer_classname = "DaprProtos";
 option java_package = "io.dapr.v1";
 option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
 
-// ---- Typed MCP API messages ----
+// ---- MCP workflow output messages ----
 
-// ListMCPToolsRequest is the request for the ListMCPToolsAlpha1 API.
-message ListMCPToolsRequest {
-  // mcp_server_name is the name of the MCPServer resource.
-  string mcp_server_name = 1;
-}
-
-// ListMCPToolsResponse is the response for the ListMCPToolsAlpha1 API.
+// ListMCPToolsResponse is the output of a ListTools workflow.
 message ListMCPToolsResponse {
   // tools is the list of tools available on the MCPServer.
   repeated MCPToolDefinition tools = 1;
@@ -46,19 +40,9 @@ message MCPToolDefinition {
   bytes input_schema = 3;
 }
 
-// CallMCPToolRequest is the request for the CallMCPToolAlpha1 API.
-message CallMCPToolRequest {
-  // mcp_server_name is the name of the MCPServer resource.
-  string mcp_server_name = 1;
-  // tool_name is the name of the MCP tool to invoke.
-  string tool_name = 2;
-  // arguments is the tool arguments, encoded as a JSON object.
-  bytes arguments = 3;
-}
-
-// CallMCPToolResponse is the response for the CallMCPToolAlpha1 API.
-// Matches the MCP protocol's CallToolResult shape so the response is
-// wire-compatible with MCP-native clients (Claude, Cursor, etc.).
+// CallMCPToolResponse is the output of a CallTool workflow.
+// Matches the MCP protocol's CallToolResult shape for wire compatibility
+// with MCP-native clients (Claude, Cursor, etc.).
 message CallMCPToolResponse {
   // is_error is true when the tool call failed at the MCP level.
   bool is_error = 1;

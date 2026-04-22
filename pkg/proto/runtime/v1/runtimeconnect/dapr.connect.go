@@ -206,10 +206,6 @@ const (
 	DaprConverseAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha1"
 	// DaprConverseAlpha2Procedure is the fully-qualified name of the Dapr's ConverseAlpha2 RPC.
 	DaprConverseAlpha2Procedure = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha2"
-	// DaprListMCPToolsAlpha1Procedure is the fully-qualified name of the Dapr's ListMCPToolsAlpha1 RPC.
-	DaprListMCPToolsAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/ListMCPToolsAlpha1"
-	// DaprCallMCPToolAlpha1Procedure is the fully-qualified name of the Dapr's CallMCPToolAlpha1 RPC.
-	DaprCallMCPToolAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/CallMCPToolAlpha1"
 )
 
 // DaprClient is a client for the dapr.proto.runtime.v1.Dapr service.
@@ -360,12 +356,6 @@ type DaprClient interface {
 	ConverseAlpha1(context.Context, *connect.Request[v1.ConversationRequest]) (*connect.Response[v1.ConversationResponse], error)
 	// Converse with a LLM service via alpha2 api
 	ConverseAlpha2(context.Context, *connect.Request[v1.ConversationRequestAlpha2]) (*connect.Response[v1.ConversationResponseAlpha2], error)
-	// ListMCPToolsAlpha1 returns tools available from a declared MCPServer resource.
-	// Under the hood the call is routed through the workflow engine for durability.
-	ListMCPToolsAlpha1(context.Context, *connect.Request[v1.ListMCPToolsRequest]) (*connect.Response[v1.ListMCPToolsResponse], error)
-	// CallMCPToolAlpha1 invokes a tool on a declared MCPServer resource.
-	// Under the hood the call is routed through the workflow engine for durability and audit.
-	CallMCPToolAlpha1(context.Context, *connect.Request[v1.CallMCPToolRequest]) (*connect.Response[v1.CallMCPToolResponse], error)
 }
 
 // NewDaprClient constructs a client for the dapr.proto.runtime.v1.Dapr service. By default, it uses
@@ -775,18 +765,6 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			connect.WithSchema(daprMethods.ByName("ConverseAlpha2")),
 			connect.WithClientOptions(opts...),
 		),
-		listMCPToolsAlpha1: connect.NewClient[v1.ListMCPToolsRequest, v1.ListMCPToolsResponse](
-			httpClient,
-			baseURL+DaprListMCPToolsAlpha1Procedure,
-			connect.WithSchema(daprMethods.ByName("ListMCPToolsAlpha1")),
-			connect.WithClientOptions(opts...),
-		),
-		callMCPToolAlpha1: connect.NewClient[v1.CallMCPToolRequest, v1.CallMCPToolResponse](
-			httpClient,
-			baseURL+DaprCallMCPToolAlpha1Procedure,
-			connect.WithSchema(daprMethods.ByName("CallMCPToolAlpha1")),
-			connect.WithClientOptions(opts...),
-		),
 	}
 }
 
@@ -858,8 +836,6 @@ type daprClient struct {
 	listJobsAlpha1                 *connect.Client[v1.ListJobsRequestAlpha1, v1.ListJobsResponseAlpha1]
 	converseAlpha1                 *connect.Client[v1.ConversationRequest, v1.ConversationResponse]
 	converseAlpha2                 *connect.Client[v1.ConversationRequestAlpha2, v1.ConversationResponseAlpha2]
-	listMCPToolsAlpha1             *connect.Client[v1.ListMCPToolsRequest, v1.ListMCPToolsResponse]
-	callMCPToolAlpha1              *connect.Client[v1.CallMCPToolRequest, v1.CallMCPToolResponse]
 }
 
 // InvokeService calls dapr.proto.runtime.v1.Dapr.InvokeService.
@@ -1208,16 +1184,6 @@ func (c *daprClient) ConverseAlpha2(ctx context.Context, req *connect.Request[v1
 	return c.converseAlpha2.CallUnary(ctx, req)
 }
 
-// ListMCPToolsAlpha1 calls dapr.proto.runtime.v1.Dapr.ListMCPToolsAlpha1.
-func (c *daprClient) ListMCPToolsAlpha1(ctx context.Context, req *connect.Request[v1.ListMCPToolsRequest]) (*connect.Response[v1.ListMCPToolsResponse], error) {
-	return c.listMCPToolsAlpha1.CallUnary(ctx, req)
-}
-
-// CallMCPToolAlpha1 calls dapr.proto.runtime.v1.Dapr.CallMCPToolAlpha1.
-func (c *daprClient) CallMCPToolAlpha1(ctx context.Context, req *connect.Request[v1.CallMCPToolRequest]) (*connect.Response[v1.CallMCPToolResponse], error) {
-	return c.callMCPToolAlpha1.CallUnary(ctx, req)
-}
-
 // DaprHandler is an implementation of the dapr.proto.runtime.v1.Dapr service.
 type DaprHandler interface {
 	// Invokes a method on a remote Dapr app.
@@ -1366,12 +1332,6 @@ type DaprHandler interface {
 	ConverseAlpha1(context.Context, *connect.Request[v1.ConversationRequest]) (*connect.Response[v1.ConversationResponse], error)
 	// Converse with a LLM service via alpha2 api
 	ConverseAlpha2(context.Context, *connect.Request[v1.ConversationRequestAlpha2]) (*connect.Response[v1.ConversationResponseAlpha2], error)
-	// ListMCPToolsAlpha1 returns tools available from a declared MCPServer resource.
-	// Under the hood the call is routed through the workflow engine for durability.
-	ListMCPToolsAlpha1(context.Context, *connect.Request[v1.ListMCPToolsRequest]) (*connect.Response[v1.ListMCPToolsResponse], error)
-	// CallMCPToolAlpha1 invokes a tool on a declared MCPServer resource.
-	// Under the hood the call is routed through the workflow engine for durability and audit.
-	CallMCPToolAlpha1(context.Context, *connect.Request[v1.CallMCPToolRequest]) (*connect.Response[v1.CallMCPToolResponse], error)
 }
 
 // NewDaprHandler builds an HTTP handler from the service implementation. It returns the path on
@@ -1777,18 +1737,6 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 		connect.WithSchema(daprMethods.ByName("ConverseAlpha2")),
 		connect.WithHandlerOptions(opts...),
 	)
-	daprListMCPToolsAlpha1Handler := connect.NewUnaryHandler(
-		DaprListMCPToolsAlpha1Procedure,
-		svc.ListMCPToolsAlpha1,
-		connect.WithSchema(daprMethods.ByName("ListMCPToolsAlpha1")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daprCallMCPToolAlpha1Handler := connect.NewUnaryHandler(
-		DaprCallMCPToolAlpha1Procedure,
-		svc.CallMCPToolAlpha1,
-		connect.WithSchema(daprMethods.ByName("CallMCPToolAlpha1")),
-		connect.WithHandlerOptions(opts...),
-	)
 	return "/dapr.proto.runtime.v1.Dapr/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DaprInvokeServiceProcedure:
@@ -1923,10 +1871,6 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 			daprConverseAlpha1Handler.ServeHTTP(w, r)
 		case DaprConverseAlpha2Procedure:
 			daprConverseAlpha2Handler.ServeHTTP(w, r)
-		case DaprListMCPToolsAlpha1Procedure:
-			daprListMCPToolsAlpha1Handler.ServeHTTP(w, r)
-		case DaprCallMCPToolAlpha1Procedure:
-			daprCallMCPToolAlpha1Handler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -2198,12 +2142,4 @@ func (UnimplementedDaprHandler) ConverseAlpha1(context.Context, *connect.Request
 
 func (UnimplementedDaprHandler) ConverseAlpha2(context.Context, *connect.Request[v1.ConversationRequestAlpha2]) (*connect.Response[v1.ConversationResponseAlpha2], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ConverseAlpha2 is not implemented"))
-}
-
-func (UnimplementedDaprHandler) ListMCPToolsAlpha1(context.Context, *connect.Request[v1.ListMCPToolsRequest]) (*connect.Response[v1.ListMCPToolsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ListMCPToolsAlpha1 is not implemented"))
-}
-
-func (UnimplementedDaprHandler) CallMCPToolAlpha1(context.Context, *connect.Request[v1.CallMCPToolRequest]) (*connect.Response[v1.CallMCPToolResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.CallMCPToolAlpha1 is not implemented"))
 }

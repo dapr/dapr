@@ -160,7 +160,6 @@ func NewAPI(opts APIOpts) API {
 	api.endpoints = append(api.endpoints, api.constructWorkflowEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructJobsEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructConversationEndpoints()...)
-	api.endpoints = append(api.endpoints, api.constructMCPEndpoints()...)
 
 	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
 	api.publicEndpoints = append(api.publicEndpoints, healthEndpoints...)

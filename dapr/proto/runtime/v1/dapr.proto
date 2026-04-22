@@ -31,7 +31,6 @@ import "dapr/proto/runtime/v1/crypto.proto";
 import "dapr/proto/runtime/v1/workflow.proto";
 import "dapr/proto/runtime/v1/jobs.proto";
 import "dapr/proto/runtime/v1/ai.proto";
-import "dapr/proto/runtime/v1/mcp.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprProtos";
@@ -252,13 +251,6 @@ service Dapr {
   // Converse with a LLM service via alpha2 api
   rpc ConverseAlpha2(ConversationRequestAlpha2) returns (ConversationResponseAlpha2) {}
 
-  // ListMCPToolsAlpha1 returns tools available from a declared MCPServer resource.
-  // Under the hood the call is routed through the workflow engine for durability.
-  rpc ListMCPToolsAlpha1(ListMCPToolsRequest) returns (ListMCPToolsResponse) {}
-
-  // CallMCPToolAlpha1 invokes a tool on a declared MCPServer resource.
-  // Under the hood the call is routed through the workflow engine for durability and audit.
-  rpc CallMCPToolAlpha1(CallMCPToolRequest) returns (CallMCPToolResponse) {}
 }
 
 // ShutdownRequest is the request for Shutdown.
