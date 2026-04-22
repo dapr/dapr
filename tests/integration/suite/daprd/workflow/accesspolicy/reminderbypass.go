@@ -16,28 +16,21 @@ package accesspolicy
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/dapr/dapr/pkg/apis/common"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
-	"github.com/dapr/dapr/tests/integration/framework/manifest"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
-	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/store"
-	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
+	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/client"
@@ -49,117 +42,96 @@ func init() {
 }
 
 // reminderbypass tests that an unauthorized sidecar cannot bypass workflow
-// access policies. An attacker app (not in any policy rule) attempts to
-// schedule cross-app workflows and activities on a target app, and all
-// attempts are denied.
+// access policies by crafting reminders. An attacker app not in any policy
+// rule attempts to schedule cross-app workflows and activities on a target
+// app; all attempts are denied.
 type reminderbypass struct {
-	target   *daprd.Daprd
-	attacker *daprd.Daprd
+	sentry   *sentry.Sentry
 	place    *placement.Placement
 	sched    *scheduler.Scheduler
-	kubeapi  *kubernetes.Kubernetes
-	oper     *operator.Operator
+	db       *sqlite.SQLite
+	target   *daprd.Daprd
+	attacker *daprd.Daprd
 }
 
 func (r *reminderbypass) Setup(t *testing.T) []framework.Option {
-	sen := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
+	r.sentry = sentry.New(t)
 
-	policyStore := store.New(metav1.GroupVersionKind{
-		Group: "dapr.io", Version: "v1alpha1", Kind: "WorkflowAccessPolicy",
-	})
-	policyStore.Add(&wfaclapi.WorkflowAccessPolicy{
-		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "WorkflowAccessPolicy"},
-		ObjectMeta: metav1.ObjectMeta{Name: "bypass-test", Namespace: "default"},
-		Scoped:     common.Scoped{},
-		Spec: wfaclapi.WorkflowAccessPolicySpec{
-			DefaultAction: wfaclapi.PolicyActionDeny,
-			Rules: []wfaclapi.WorkflowAccessPolicyRule{
-				{
-					Callers: []wfaclapi.WorkflowCaller{{AppID: "legit-caller"}},
-					Operations: []wfaclapi.WorkflowOperationRule{
-						{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionAllow},
-						{Type: wfaclapi.WorkflowOperationTypeActivity, Name: "*", Action: wfaclapi.PolicyActionAllow},
-					},
-				},
-				{
-					Callers: []wfaclapi.WorkflowCaller{{AppID: "bypass-target"}},
-					Operations: []wfaclapi.WorkflowOperationRule{
-						{Type: wfaclapi.WorkflowOperationTypeActivity, Name: "*", Action: wfaclapi.PolicyActionAllow},
-					},
-				},
-			},
-		},
-	})
+	r.place = placement.New(t, placement.WithSentry(t, r.sentry))
+	r.sched = scheduler.New(t, scheduler.WithSentry(r.sentry), scheduler.WithID("dapr-scheduler-server-0"))
+	r.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	boolTrue := true
-	r.kubeapi = kubernetes.New(t,
-		kubernetes.WithBaseOperatorAPI(t,
-			spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
-			"default",
-			sen.Port(),
-		),
-		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
-			Items: []configapi.Configuration{{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "daprsystem"},
-				Spec: configapi.ConfigurationSpec{
-					Features: []configapi.FeatureSpec{
-						{Name: "WorkflowAccessPolicy", Enabled: &boolTrue},
-					},
-					MTLSSpec: &configapi.MTLSSpec{
-						ControlPlaneTrustDomain: "integration.test.dapr.io",
-						SentryAddress:           sen.Address(),
-					},
-				},
-			}},
-		}),
-		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
-			Items: []compapi.Component{manifest.ActorInMemoryStateComponent("default", "mystore")},
-		}),
-		kubernetes.WithClusterDaprWorkflowAccessPolicyListFromStore(t, policyStore),
-	)
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(configFile, []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: wfaclconfig
+spec:
+  features:
+  - name: WorkflowAccessPolicy
+    enabled: true`), 0o600))
 
-	r.oper = operator.New(t,
-		operator.WithNamespace("default"),
-		operator.WithKubeconfigPath(r.kubeapi.KubeconfigPath(t)),
-		operator.WithTrustAnchorsFile(sen.TrustAnchorsFile(t)),
-	)
+	// Policy only allows "legit-caller". "attacker-app" is not in any rule.
+	policy := []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: WorkflowAccessPolicy
+metadata:
+  name: bypass-test
+spec:
+  defaultAction: deny
+  rules:
+  - callers:
+    - appID: legit-caller
+    operations:
+    - type: workflow
+      name: "*"
+      action: allow
+    - type: activity
+      name: "*"
+      action: allow
+  - callers:
+    - appID: bypass-target
+    operations:
+    - type: activity
+      name: "*"
+      action: allow
+`)
 
-	r.place = placement.New(t, placement.WithSentry(t, sen))
-	r.sched = scheduler.New(t,
-		scheduler.WithSentry(sen),
-		scheduler.WithKubeconfig(r.kubeapi.KubeconfigPath(t)),
-		scheduler.WithMode("kubernetes"),
-		scheduler.WithID("dapr-scheduler-server-0"),
-	)
+	// Both sidecars load the policy: the attacker's local router check also
+	// denies, and the target's remote CallActor check denies.
+	targetResDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))
+	attackerResDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(attackerResDir, "policy.yaml"), policy, 0o600))
 
-	commonOpts := []daprd.Option{
-		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("daprsystem"),
+	r.target = daprd.New(t,
+		daprd.WithAppID("bypass-target"),
 		daprd.WithNamespace("default"),
-		daprd.WithSentry(t, sen),
-		daprd.WithControlPlaneAddress(r.oper.Address()),
+		daprd.WithConfigs(configFile),
+		daprd.WithResourcesDir(targetResDir),
+		daprd.WithResourceFiles(r.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithSchedulerAddresses(r.sched.Address()),
-		daprd.WithDisableK8sSecretStore(true),
-		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
-	}
-
-	r.target = daprd.New(t, append(commonOpts,
-		daprd.WithAppID("bypass-target"),
-	)...)
-
-	r.attacker = daprd.New(t, append(commonOpts,
+		daprd.WithSentry(t, r.sentry),
+	)
+	r.attacker = daprd.New(t,
 		daprd.WithAppID("attacker-app"),
-	)...)
+		daprd.WithNamespace("default"),
+		daprd.WithConfigs(configFile),
+		daprd.WithResourcesDir(attackerResDir),
+		daprd.WithResourceFiles(r.db.GetComponent(t)),
+		daprd.WithPlacementAddresses(r.place.Address()),
+		daprd.WithSchedulerAddresses(r.sched.Address()),
+		daprd.WithSentry(t, r.sentry),
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(sen, r.kubeapi, r.oper, r.sched, r.place, r.target, r.attacker),
+		framework.WithProcesses(r.sentry, r.place, r.sched, r.db, r.target, r.attacker),
 	}
 }
 
 func (r *reminderbypass) Run(t *testing.T, ctx context.Context) {
-	r.oper.WaitUntilRunning(t, ctx)
 	r.place.WaitUntilRunning(t, ctx)
 	r.sched.WaitUntilRunning(t, ctx)
 	r.target.WaitUntilRunning(t, ctx)
@@ -168,20 +140,15 @@ func (r *reminderbypass) Run(t *testing.T, ctx context.Context) {
 	registry := task.NewTaskRegistry()
 	require.NoError(t, registry.AddWorkflowN("AttackWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var output string
-		err := ctx.CallChildWorkflow("VictimWorkflow",
-			task.WithChildWorkflowAppID(r.target.AppID())).
-			Await(&output)
+		err := ctx.CallChildWorkflow("VictimWorkflow", task.WithChildWorkflowAppID(r.target.AppID())).Await(&output)
 		if err != nil {
 			return nil, fmt.Errorf("attack failed: %w", err)
 		}
 		return output, nil
 	}))
-
 	require.NoError(t, registry.AddWorkflowN("AttackActivity", func(ctx *task.WorkflowContext) (any, error) {
 		var output string
-		err := ctx.CallActivity("VictimActivity",
-			task.WithActivityAppID(r.target.AppID())).
-			Await(&output)
+		err := ctx.CallActivity("VictimActivity", task.WithActivityAppID(r.target.AppID())).Await(&output)
 		if err != nil {
 			return nil, fmt.Errorf("attack failed: %w", err)
 		}
@@ -209,7 +176,6 @@ func (r *reminderbypass) Run(t *testing.T, ctx context.Context) {
 	t.Run("attacker cannot schedule cross-app workflow on target", func(t *testing.T) {
 		id, err := attackerClient.ScheduleNewWorkflow(ctx, "AttackWorkflow")
 		if err != nil {
-			// Denied at scheduling — the local policy check blocks the attacker.
 			assert.Contains(t, err.Error(), "PermissionDenied")
 			return
 		}

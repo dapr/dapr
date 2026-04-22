@@ -15,30 +15,23 @@ package accesspolicy
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/dapr/dapr/pkg/apis/common"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
-	"github.com/dapr/dapr/tests/integration/framework/manifest"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
-	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/store"
-	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
+	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api/protos"
 	dtclient "github.com/dapr/durabletask-go/client"
@@ -50,116 +43,89 @@ func init() {
 }
 
 // invokeactor tests that a crafted InvokeActor call on the public gRPC API
-// targeting a remote sidecar's workflow actors is denied by the workflow
-// access policy on the target. This proves that bypassing the workflow SDK
-// and using direct actor invocation does not circumvent ACL enforcement.
+// targeting a remote sidecar's workflow actors is denied by the target's
+// workflow access policy. Bypassing the workflow SDK and using direct actor
+// invocation must not circumvent ACL enforcement.
 type invokeactor struct {
-	attacker *daprd.Daprd
-	target   *daprd.Daprd
+	sentry   *sentry.Sentry
 	place    *placement.Placement
 	sched    *scheduler.Scheduler
-	kubeapi  *kubernetes.Kubernetes
-	oper     *operator.Operator
+	db       *sqlite.SQLite
+	target   *daprd.Daprd
+	attacker *daprd.Daprd
 }
 
 func (ia *invokeactor) Setup(t *testing.T) []framework.Option {
-	sen := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
+	ia.sentry = sentry.New(t)
 
-	policyStore := store.New(metav1.GroupVersionKind{
-		Group: "dapr.io", Version: "v1alpha1", Kind: "WorkflowAccessPolicy",
-	})
-	policyStore.Add(&wfaclapi.WorkflowAccessPolicy{
-		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "WorkflowAccessPolicy"},
-		ObjectMeta: metav1.ObjectMeta{Name: "invokeactor-test", Namespace: "default"},
-		Scoped:     common.Scoped{Scopes: []string{"invokeactor-target"}},
-		Spec: wfaclapi.WorkflowAccessPolicySpec{
-			DefaultAction: wfaclapi.PolicyActionDeny,
-			Rules: []wfaclapi.WorkflowAccessPolicyRule{
-				{
-					Callers: []wfaclapi.WorkflowCaller{{AppID: "legit-caller"}},
-					Operations: []wfaclapi.WorkflowOperationRule{
-						{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionAllow},
-					},
-				},
-				{
-					Callers: []wfaclapi.WorkflowCaller{{AppID: "invokeactor-target"}},
-					Operations: []wfaclapi.WorkflowOperationRule{
-						{Type: wfaclapi.WorkflowOperationTypeActivity, Name: "*", Action: wfaclapi.PolicyActionAllow},
-					},
-				},
-			},
-		},
-	})
+	ia.place = placement.New(t, placement.WithSentry(t, ia.sentry))
+	ia.sched = scheduler.New(t, scheduler.WithSentry(ia.sentry), scheduler.WithID("dapr-scheduler-server-0"))
+	ia.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	boolTrue := true
-	ia.kubeapi = kubernetes.New(t,
-		kubernetes.WithBaseOperatorAPI(t,
-			spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
-			"default",
-			sen.Port(),
-		),
-		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
-			Items: []configapi.Configuration{{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "daprsystem"},
-				Spec: configapi.ConfigurationSpec{
-					Features: []configapi.FeatureSpec{
-						{Name: "WorkflowAccessPolicy", Enabled: &boolTrue},
-					},
-					MTLSSpec: &configapi.MTLSSpec{
-						ControlPlaneTrustDomain: "integration.test.dapr.io",
-						SentryAddress:           sen.Address(),
-					},
-				},
-			}},
-		}),
-		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
-			Items: []compapi.Component{manifest.ActorInMemoryStateComponent("default", "mystore")},
-		}),
-		kubernetes.WithClusterDaprWorkflowAccessPolicyListFromStore(t, policyStore),
-	)
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(configFile, []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: wfaclconfig
+spec:
+  features:
+  - name: WorkflowAccessPolicy
+    enabled: true`), 0o600))
 
-	ia.oper = operator.New(t,
-		operator.WithNamespace("default"),
-		operator.WithKubeconfigPath(ia.kubeapi.KubeconfigPath(t)),
-		operator.WithTrustAnchorsFile(sen.TrustAnchorsFile(t)),
-	)
+	policy := []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: WorkflowAccessPolicy
+metadata:
+  name: invokeactor-test
+scopes:
+- invokeactor-target
+spec:
+  defaultAction: deny
+  rules:
+  - callers:
+    - appID: legit-caller
+    operations:
+    - type: workflow
+      name: "*"
+      action: allow
+  - callers:
+    - appID: invokeactor-target
+    operations:
+    - type: activity
+      name: "*"
+      action: allow
+`)
 
-	ia.place = placement.New(t, placement.WithSentry(t, sen))
-	ia.sched = scheduler.New(t,
-		scheduler.WithSentry(sen),
-		scheduler.WithKubeconfig(ia.kubeapi.KubeconfigPath(t)),
-		scheduler.WithMode("kubernetes"),
-		scheduler.WithID("dapr-scheduler-server-0"),
-	)
+	targetResDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))
 
-	commonOpts := []daprd.Option{
-		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("daprsystem"),
+	ia.target = daprd.New(t,
+		daprd.WithAppID("invokeactor-target"),
 		daprd.WithNamespace("default"),
-		daprd.WithSentry(t, sen),
-		daprd.WithControlPlaneAddress(ia.oper.Address()),
+		daprd.WithConfigs(configFile),
+		daprd.WithResourcesDir(targetResDir),
+		daprd.WithResourceFiles(ia.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(ia.place.Address()),
 		daprd.WithSchedulerAddresses(ia.sched.Address()),
-		daprd.WithDisableK8sSecretStore(true),
-		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
-	}
-
-	ia.target = daprd.New(t, append(commonOpts,
-		daprd.WithAppID("invokeactor-target"),
-	)...)
-
-	ia.attacker = daprd.New(t, append(commonOpts,
+		daprd.WithSentry(t, ia.sentry),
+	)
+	ia.attacker = daprd.New(t,
 		daprd.WithAppID("invokeactor-attacker"),
-	)...)
+		daprd.WithNamespace("default"),
+		daprd.WithConfigs(configFile),
+		daprd.WithResourceFiles(ia.db.GetComponent(t)),
+		daprd.WithPlacementAddresses(ia.place.Address()),
+		daprd.WithSchedulerAddresses(ia.sched.Address()),
+		daprd.WithSentry(t, ia.sentry),
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(sen, ia.kubeapi, ia.oper, ia.sched, ia.place, ia.target, ia.attacker),
+		framework.WithProcesses(ia.sentry, ia.place, ia.sched, ia.db, ia.target, ia.attacker),
 	}
 }
 
 func (ia *invokeactor) Run(t *testing.T, ctx context.Context) {
-	ia.oper.WaitUntilRunning(t, ctx)
 	ia.place.WaitUntilRunning(t, ctx)
 	ia.sched.WaitUntilRunning(t, ctx)
 	ia.target.WaitUntilRunning(t, ctx)

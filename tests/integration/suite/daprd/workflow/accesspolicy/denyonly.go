@@ -16,28 +16,21 @@ package accesspolicy
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/dapr/dapr/pkg/apis/common"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
-	"github.com/dapr/dapr/tests/integration/framework/manifest"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
-	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/store"
-	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
+	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/client"
@@ -48,167 +41,129 @@ func init() {
 	suite.Register(new(denyonly))
 }
 
-// denyonly tests that a caller appearing ONLY in deny rules cannot invoke
-// any workflow operations on the target. This validates VULN-1 fix:
-// IsCallerKnown now requires at least one allow action, so deny-only
-// callers are fully rejected for both subject and non-subject methods.
+// denyonly validates that a caller appearing only in deny rules cannot invoke
+// any workflow methods on the target. IsCallerKnown requires at least one
+// allow rule, so deny-only callers are fully rejected.
 type denyonly struct {
-	target      *daprd.Daprd
-	denyOnlyApp *daprd.Daprd
-	place       *placement.Placement
-	sched       *scheduler.Scheduler
-	kubeapi     *kubernetes.Kubernetes
-	oper        *operator.Operator
+	sentry *sentry.Sentry
+	place  *placement.Placement
+	sched  *scheduler.Scheduler
+	db     *sqlite.SQLite
+	caller *daprd.Daprd
+	target *daprd.Daprd
 }
 
 func (d *denyonly) Setup(t *testing.T) []framework.Option {
-	sen := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
+	d.sentry = sentry.New(t)
 
-	policyStore := store.New(metav1.GroupVersionKind{
-		Group: "dapr.io", Version: "v1alpha1", Kind: "WorkflowAccessPolicy",
-	})
-	policyStore.Add(&wfaclapi.WorkflowAccessPolicy{
-		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "WorkflowAccessPolicy"},
-		ObjectMeta: metav1.ObjectMeta{Name: "denyonly-test", Namespace: "default"},
-		Scoped:     common.Scoped{Scopes: []string{"denyonly-target"}},
-		Spec: wfaclapi.WorkflowAccessPolicySpec{
-			DefaultAction: wfaclapi.PolicyActionDeny,
-			Rules: []wfaclapi.WorkflowAccessPolicyRule{
-				{
-					Callers: []wfaclapi.WorkflowCaller{{AppID: "allowed-caller"}},
-					Operations: []wfaclapi.WorkflowOperationRule{
-						{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "AllowedWF", Action: wfaclapi.PolicyActionAllow},
-						{Type: wfaclapi.WorkflowOperationTypeActivity, Name: "*", Action: wfaclapi.PolicyActionAllow},
-					},
-				},
-				{
-					Callers: []wfaclapi.WorkflowCaller{{AppID: "denyonly-target"}},
-					Operations: []wfaclapi.WorkflowOperationRule{
-						{Type: wfaclapi.WorkflowOperationTypeActivity, Name: "*", Action: wfaclapi.PolicyActionAllow},
-					},
-				},
-				{
-					Callers: []wfaclapi.WorkflowCaller{{AppID: "denyonly-caller"}},
-					Operations: []wfaclapi.WorkflowOperationRule{
-						{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionDeny},
-					},
-				},
-			},
-		},
-	})
+	d.place = placement.New(t, placement.WithSentry(t, d.sentry))
+	d.sched = scheduler.New(t, scheduler.WithSentry(d.sentry), scheduler.WithID("dapr-scheduler-server-0"))
+	d.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	boolTrue := true
-	d.kubeapi = kubernetes.New(t,
-		kubernetes.WithBaseOperatorAPI(t,
-			spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
-			"default",
-			sen.Port(),
-		),
-		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
-			Items: []configapi.Configuration{{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "daprsystem"},
-				Spec: configapi.ConfigurationSpec{
-					Features: []configapi.FeatureSpec{
-						{Name: "WorkflowAccessPolicy", Enabled: &boolTrue},
-					},
-					MTLSSpec: &configapi.MTLSSpec{
-						ControlPlaneTrustDomain: "integration.test.dapr.io",
-						SentryAddress:           sen.Address(),
-					},
-				},
-			}},
-		}),
-		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
-			Items: []compapi.Component{manifest.ActorInMemoryStateComponent("default", "mystore")},
-		}),
-		kubernetes.WithClusterDaprWorkflowAccessPolicyListFromStore(t, policyStore),
-	)
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(configFile, []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: wfaclconfig
+spec:
+  features:
+  - name: WorkflowAccessPolicy
+    enabled: true`), 0o600))
 
-	d.oper = operator.New(t,
-		operator.WithNamespace("default"),
-		operator.WithKubeconfigPath(d.kubeapi.KubeconfigPath(t)),
-		operator.WithTrustAnchorsFile(sen.TrustAnchorsFile(t)),
-	)
+	// denyonly-caller appears ONLY in a deny rule.
+	policy := []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: WorkflowAccessPolicy
+metadata:
+  name: denyonly-test
+scopes:
+- denyonly-target
+spec:
+  defaultAction: deny
+  rules:
+  - callers:
+    - appID: denyonly-target
+    operations:
+    - type: activity
+      name: "*"
+      action: allow
+  - callers:
+    - appID: denyonly-caller
+    operations:
+    - type: workflow
+      name: "*"
+      action: deny
+`)
 
-	d.place = placement.New(t, placement.WithSentry(t, sen))
-	d.sched = scheduler.New(t,
-		scheduler.WithSentry(sen),
-		scheduler.WithKubeconfig(d.kubeapi.KubeconfigPath(t)),
-		scheduler.WithMode("kubernetes"),
-		scheduler.WithID("dapr-scheduler-server-0"),
-	)
+	targetResDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))
 
-	commonOpts := []daprd.Option{
-		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("daprsystem"),
+	d.target = daprd.New(t,
+		daprd.WithAppID("denyonly-target"),
 		daprd.WithNamespace("default"),
-		daprd.WithSentry(t, sen),
-		daprd.WithControlPlaneAddress(d.oper.Address()),
+		daprd.WithConfigs(configFile),
+		daprd.WithResourcesDir(targetResDir),
+		daprd.WithResourceFiles(d.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(d.place.Address()),
 		daprd.WithSchedulerAddresses(d.sched.Address()),
-		daprd.WithDisableK8sSecretStore(true),
-		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
-	}
-
-	d.target = daprd.New(t, append(commonOpts,
-		daprd.WithAppID("denyonly-target"),
-	)...)
-
-	d.denyOnlyApp = daprd.New(t, append(commonOpts,
+		daprd.WithSentry(t, d.sentry),
+	)
+	d.caller = daprd.New(t,
 		daprd.WithAppID("denyonly-caller"),
-	)...)
+		daprd.WithNamespace("default"),
+		daprd.WithConfigs(configFile),
+		daprd.WithResourceFiles(d.db.GetComponent(t)),
+		daprd.WithPlacementAddresses(d.place.Address()),
+		daprd.WithSchedulerAddresses(d.sched.Address()),
+		daprd.WithSentry(t, d.sentry),
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(sen, d.kubeapi, d.oper, d.sched, d.place, d.target, d.denyOnlyApp),
+		framework.WithProcesses(d.sentry, d.place, d.sched, d.db, d.target, d.caller),
 	}
 }
 
 func (d *denyonly) Run(t *testing.T, ctx context.Context) {
-	d.oper.WaitUntilRunning(t, ctx)
 	d.place.WaitUntilRunning(t, ctx)
 	d.sched.WaitUntilRunning(t, ctx)
 	d.target.WaitUntilRunning(t, ctx)
-	d.denyOnlyApp.WaitUntilRunning(t, ctx)
+	d.caller.WaitUntilRunning(t, ctx)
 
-	denyOnlyRegistry := task.NewTaskRegistry()
-	require.NoError(t, denyOnlyRegistry.AddWorkflowN("TryScheduleFromDenyOnly", func(ctx *task.WorkflowContext) (any, error) {
+	callerReg := task.NewTaskRegistry()
+	require.NoError(t, callerReg.AddWorkflowN("TryScheduleFromDenyOnly", func(ctx *task.WorkflowContext) (any, error) {
 		var output string
-		err := ctx.CallChildWorkflow("AllowedWF",
-			task.WithChildWorkflowAppID(d.target.AppID())).
-			Await(&output)
+		err := ctx.CallChildWorkflow("AllowedWF", task.WithChildWorkflowAppID(d.target.AppID())).Await(&output)
 		if err != nil {
 			return nil, fmt.Errorf("sub-orchestrator failed: %w", err)
 		}
 		return output, nil
 	}))
 
-	targetRegistry := task.NewTaskRegistry()
-	require.NoError(t, targetRegistry.AddWorkflowN("AllowedWF", func(ctx *task.WorkflowContext) (any, error) {
+	targetReg := task.NewTaskRegistry()
+	require.NoError(t, targetReg.AddWorkflowN("AllowedWF", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, nil
 	}))
 
-	denyOnlyClient := client.NewTaskHubGrpcClient(d.denyOnlyApp.GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, denyOnlyClient.StartWorkItemListener(ctx, denyOnlyRegistry))
+	callerClient := client.NewTaskHubGrpcClient(d.caller.GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, callerClient.StartWorkItemListener(ctx, callerReg))
 	targetClient := client.NewTaskHubGrpcClient(d.target.GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, targetClient.StartWorkItemListener(ctx, targetRegistry))
+	require.NoError(t, targetClient.StartWorkItemListener(ctx, targetReg))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, len(d.denyOnlyApp.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
+		assert.GreaterOrEqual(c, len(d.caller.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 		assert.GreaterOrEqual(c, len(d.target.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 	}, time.Second*20, time.Millisecond*10)
 
-	t.Run("deny-only caller cannot schedule workflows on target", func(t *testing.T) {
-		id, err := denyOnlyClient.ScheduleNewWorkflow(ctx, "TryScheduleFromDenyOnly")
-		if err != nil {
-			assert.Contains(t, err.Error(), "PermissionDenied")
-			return
-		}
+	id, err := callerClient.ScheduleNewWorkflow(ctx, "TryScheduleFromDenyOnly")
+	if err != nil {
+		assert.Contains(t, err.Error(), "PermissionDenied")
+		return
+	}
 
-		metadata, err := denyOnlyClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
-		require.NoError(t, err)
-		require.NotNil(t, metadata.GetFailureDetails(),
-			"deny-only caller should not be able to schedule workflows on target")
-		assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(), "denied by workflow access policy")
-	})
+	metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
+	require.NoError(t, err)
+	require.NotNil(t, metadata.GetFailureDetails(),
+		"deny-only caller should not be able to schedule workflows on target")
+	assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(), "denied by workflow access policy")
 }

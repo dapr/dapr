@@ -18,30 +18,23 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/dapr/dapr/pkg/apis/common"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
-	"github.com/dapr/dapr/tests/integration/framework/manifest"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
-	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/store"
-	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
+	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	dtclient "github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
@@ -53,108 +46,78 @@ func init() {
 
 // httpapi tests workflow access policy enforcement through the HTTP API.
 type httpapi struct {
-	daprd    *daprd.Daprd
-	place    *placement.Placement
-	sched    *scheduler.Scheduler
-	kubeapi  *kubernetes.Kubernetes
-	operator *operator.Operator
+	sentry *sentry.Sentry
+	place  *placement.Placement
+	sched  *scheduler.Scheduler
+	db     *sqlite.SQLite
+	daprd  *daprd.Daprd
 }
 
 func (h *httpapi) Setup(t *testing.T) []framework.Option {
-	sen := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
+	h.sentry = sentry.New(t)
 
-	policyStore := store.New(metav1.GroupVersionKind{
-		Group: "dapr.io", Version: "v1alpha1", Kind: "WorkflowAccessPolicy",
-	})
-	policyStore.Add(&wfaclapi.WorkflowAccessPolicy{
-		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "WorkflowAccessPolicy"},
-		ObjectMeta: metav1.ObjectMeta{Name: "httpapi-test", Namespace: "default"},
-		Scoped:     common.Scoped{Scopes: []string{}},
-		Spec: wfaclapi.WorkflowAccessPolicySpec{
-			DefaultAction: wfaclapi.PolicyActionDeny,
-			Rules: []wfaclapi.WorkflowAccessPolicyRule{{
-				Callers: []wfaclapi.WorkflowCaller{{AppID: "httpapi-app"}},
-				Operations: []wfaclapi.WorkflowOperationRule{
-					{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "AllowedWF", Action: wfaclapi.PolicyActionAllow},
-					{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "DeniedWF", Action: wfaclapi.PolicyActionDeny},
-				},
-			}},
-		},
-	})
+	h.place = placement.New(t, placement.WithSentry(t, h.sentry))
+	h.sched = scheduler.New(t, scheduler.WithSentry(h.sentry), scheduler.WithID("dapr-scheduler-server-0"))
+	h.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	boolTrue := true
-	h.kubeapi = kubernetes.New(t,
-		kubernetes.WithBaseOperatorAPI(t,
-			spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
-			"default",
-			sen.Port(),
-		),
-		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
-			Items: []configapi.Configuration{{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "daprsystem"},
-				Spec: configapi.ConfigurationSpec{
-					Features: []configapi.FeatureSpec{
-						{Name: "WorkflowAccessPolicy", Enabled: &boolTrue},
-					},
-					MTLSSpec: &configapi.MTLSSpec{
-						ControlPlaneTrustDomain: "integration.test.dapr.io",
-						SentryAddress:           sen.Address(),
-					},
-				},
-			}},
-		}),
-		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
-			Items: []compapi.Component{manifest.ActorInMemoryStateComponent("default", "mystore")},
-		}),
-		kubernetes.WithClusterDaprWorkflowAccessPolicyListFromStore(t, policyStore),
-	)
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(configFile, []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: wfaclconfig
+spec:
+  features:
+  - name: WorkflowAccessPolicy
+    enabled: true`), 0o600))
 
-	h.operator = operator.New(t,
-		operator.WithNamespace("default"),
-		operator.WithKubeconfigPath(h.kubeapi.KubeconfigPath(t)),
-		operator.WithTrustAnchorsFile(sen.TrustAnchorsFile(t)),
-	)
+	policy := []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: WorkflowAccessPolicy
+metadata:
+  name: httpapi-test
+spec:
+  defaultAction: deny
+  rules:
+  - callers:
+    - appID: httpapi-app
+    operations:
+    - type: workflow
+      name: AllowedWF
+      action: allow
+    - type: workflow
+      name: DeniedWF
+      action: deny
+`)
 
-	h.place = placement.New(t, placement.WithSentry(t, sen))
-
-	h.sched = scheduler.New(t,
-		scheduler.WithSentry(sen),
-		scheduler.WithKubeconfig(h.kubeapi.KubeconfigPath(t)),
-		scheduler.WithMode("kubernetes"),
-		scheduler.WithID("dapr-scheduler-server-0"),
-	)
+	resDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(resDir, "policy.yaml"), policy, 0o600))
 
 	h.daprd = daprd.New(t,
-		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("daprsystem"),
+		daprd.WithAppID("httpapi-app"),
 		daprd.WithNamespace("default"),
-		daprd.WithSentry(t, sen),
-		daprd.WithControlPlaneAddress(h.operator.Address()),
+		daprd.WithConfigs(configFile),
+		daprd.WithResourcesDir(resDir),
+		daprd.WithResourceFiles(h.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(h.place.Address()),
 		daprd.WithSchedulerAddresses(h.sched.Address()),
-		daprd.WithDisableK8sSecretStore(true),
-		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
-		daprd.WithAppID("httpapi-app"),
+		daprd.WithSentry(t, h.sentry),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(sen, h.kubeapi, h.operator, h.sched, h.place, h.daprd),
+		framework.WithProcesses(h.sentry, h.place, h.sched, h.db, h.daprd),
 	}
 }
 
 func (h *httpapi) Run(t *testing.T, ctx context.Context) {
-	h.operator.WaitUntilRunning(t, ctx)
 	h.place.WaitUntilRunning(t, ctx)
 	h.sched.WaitUntilRunning(t, ctx)
 	h.daprd.WaitUntilRunning(t, ctx)
 
 	registry := task.NewTaskRegistry()
-
 	require.NoError(t, registry.AddWorkflowN("AllowedWF", func(ctx *task.WorkflowContext) (any, error) {
 		return "allowed-ok", nil
 	}))
-
 	require.NoError(t, registry.AddWorkflowN("DeniedWF", func(ctx *task.WorkflowContext) (any, error) {
 		return "denied-should-not-reach", nil
 	}))
