@@ -33,7 +33,11 @@ func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, event
 	actionIDs := make([]int32, len(events))
 
 	for i, msg := range events {
-		msgs[i] = &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
+		req := &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
+		if ph := msg.GetPropagatedHistory(); ph != nil {
+			req.PropagatedHistory = ph
+		}
+		msgs[i] = req
 		historyEvents[i] = msg.GetHistoryEvent()
 		targets[i] = msg.GetTargetInstanceId()
 		if es := msg.GetHistoryEvent().GetExecutionStarted(); es != nil && es.GetParentInstance() != nil {
@@ -84,7 +88,7 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 
 	if historyEvent != nil && historyEvent.GetRouter() != nil {
 		router := historyEvent.GetRouter()
-		log.Debugf("Cross-app suborchestrator call: target appID=%s, source appID=%s", router.GetTargetAppID(), router.GetSourceAppID())
+		log.Debugf("Cross-app child workflow call: target appID=%s, source appID=%s", router.GetTargetAppID(), router.GetSourceAppID())
 
 		switch m := m.(type) {
 		case *backend.CreateWorkflowInstanceRequest:
@@ -95,7 +99,7 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 			var routeAppID string
 			if m.GetChildWorkflowInstanceCompleted() != nil || m.GetChildWorkflowInstanceFailed() != nil {
 				if router.TargetAppID == nil {
-					return errors.New("sub-orchestrator completion events should have a target appID")
+					return errors.New("child workflow completion events should have a target appID")
 				}
 				routeAppID = router.GetTargetAppID()
 			} else {

@@ -27,6 +27,7 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
 
@@ -56,31 +57,63 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 
 	msg := imReq.Message()
 
-	var his backend.HistoryEvent
-	if err = proto.Unmarshal(msg.GetData().GetValue(), &his); err != nil {
-		return nil, fmt.Errorf("failed to decode activity request: %w", err)
+	invocation, activityName, err := decodeActivityInvocation(msg.GetData().GetValue())
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode activity invocation: %w", err)
+	}
+
+	// The actual execution is triggered by a reminder
+	return nil, a.createReminder(ctx, invocation, dueTime, activityName)
+}
+
+
+// decodeActivityInvocation parses an activity invocation payload. New
+// orchestrators wrap the HistoryEvent in an ActivityInvocation envelope
+// (which may carry PropagatedHistory). Old orchestrators marshal a
+// raw HistoryEvent directly. We try the envelope first, and fall back to
+// raw HistoryEvent if the envelope is absent or its HistoryEvent field is
+// empty. This fallback is necessary to preserve compatibility with reminders created by pre-propagation code
+func decodeActivityInvocation(data []byte) (*protos.ActivityInvocation, *string, error) {
+	var invocation protos.ActivityInvocation
+	if err := proto.Unmarshal(data, &invocation); err == nil && invocation.GetHistoryEvent() != nil {
+		return &invocation, nil, nil
+	}
+
+	var legacy backend.HistoryEvent
+	if err := proto.Unmarshal(data, &legacy); err != nil {
+		return nil, nil, err
 	}
 
 	var activityName *string
-	if ts := his.GetTaskScheduled(); ts != nil {
+	if ts := legacy.GetTaskScheduled(); ts != nil {
 		if n := ts.GetName(); n != "" {
 			activityName = &n
 		}
 	}
-
-	// The actual execution is triggered by a reminder
-	return nil, a.createReminder(ctx, &his, dueTime, activityName)
+	return &protos.ActivityInvocation{HistoryEvent: &legacy}, activityName, nil
 }
 
 func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Reminder) error {
 	log.Debugf("Activity actor '%s': invoking reminder '%s'", a.actorID, reminder.Name)
 
-	var state backend.HistoryEvent
-	if err := reminder.Data.UnmarshalTo(&state); err != nil {
-		return fmt.Errorf("failed to decode activity reminder: %w", err)
+	// Try the new ActivityInvocation envelope format first. Fall back to
+	// the legacy raw HistoryEvent payload for reminders created by
+	// pre-propagation code
+	var invocation protos.ActivityInvocation
+	if err := reminder.Data.UnmarshalTo(&invocation); err != nil {
+		var legacy backend.HistoryEvent
+		if legacyErr := reminder.Data.UnmarshalTo(&legacy); legacyErr != nil {
+			return fmt.Errorf("failed to decode activity reminder (new format: %v; legacy: %w)", err, legacyErr)
+		}
+		invocation.HistoryEvent = &legacy
 	}
 
-	err := a.executeActivity(ctx, reminder.Name, &state)
+	his := invocation.GetHistoryEvent()
+	if his == nil {
+		return errors.New("activity reminder missing history event")
+	}
+
+	err := a.executeActivity(ctx, reminder.Name, his, invocation.GetPropagatedHistory())
 
 	// Returning nil signals that we want the execution to be retried in the next
 	// period interval

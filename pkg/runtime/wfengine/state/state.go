@@ -31,10 +31,11 @@ import (
 )
 
 const (
-	inboxKeyPrefix   = "inbox"
-	historyKeyPrefix = "history"
-	customStatusKey  = "customStatus"
-	metadataKey      = "metadata"
+	inboxKeyPrefix       = "inbox"
+	historyKeyPrefix     = "history"
+	customStatusKey      = "customStatus"
+	metadataKey          = "metadata"
+	propagatedHistoryKey = "propagated-history"
 )
 
 var wfLogger = logger.NewLogger("dapr.runtime.actor.target.workflow.state")
@@ -55,11 +56,17 @@ type State struct {
 	CustomStatus *wrapperspb.StringValue
 	Generation   uint64
 
+	// IncomingHistory is the propagated history this workflow received from
+	// its caller. Stored as a separate state key, NOT as part of history
+	// events. Set once at workflow creation, never modified.
+	IncomingHistory *protos.PropagatedHistory
+
 	// change tracking
-	inboxAddedCount     int
-	inboxRemovedCount   int
-	historyAddedCount   int
-	historyRemovedCount int
+	inboxAddedCount        int
+	inboxRemovedCount      int
+	historyAddedCount      int
+	historyRemovedCount    int
+	incomingHistoryChanged bool
 }
 
 // TODO: @joshvanl: remove in v1.16
@@ -95,6 +102,13 @@ func (s *State) ResetChangeTracking() {
 	s.inboxRemovedCount = 0
 	s.historyAddedCount = 0
 	s.historyRemovedCount = 0
+	s.incomingHistoryChanged = false
+}
+
+// SetIncomingHistory sets the received propagated history on the state.
+func (s *State) SetIncomingHistory(ph *protos.PropagatedHistory) {
+	s.IncomingHistory = ph
+	s.incomingHistoryChanged = true
 }
 
 func (s *State) ApplyRuntimeStateChanges(rs *backend.WorkflowRuntimeState) {
@@ -167,6 +181,17 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Upsert,
 			Request:   api.TransactionalUpsert{Key: customStatusKey, Value: csProto},
+		})
+	}
+
+	if s.incomingHistoryChanged && s.IncomingHistory != nil {
+		phBytes, err := proto.Marshal(s.IncomingHistory)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal incoming propagated history: %w", err)
+		}
+		req.Operations = append(req.Operations, api.TransactionalOperation{
+			Operation: api.Upsert,
+			Request:   api.TransactionalUpsert{Key: propagatedHistoryKey, Value: phBytes},
 		})
 	}
 
@@ -310,15 +335,17 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	bulkReq := &api.GetBulkStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,
-		// Initializing with size for all the inbox, history, and custom status
-		Keys: make([]string, metadata.GetInboxLength()+metadata.GetHistoryLength()+1),
+		// Initializing with size for all the inbox, history, custom status, and propagated history
+		Keys: make([]string, metadata.GetInboxLength()+metadata.GetHistoryLength()+2),
 	}
 
 	var n int
 
 	bulkReq.Keys[n] = customStatusKey
-
 	n++
+	bulkReq.Keys[n] = propagatedHistoryKey
+	n++
+
 	for i := range metadata.GetInboxLength() {
 		bulkReq.Keys[n] = getMultiEntryKeyName(inboxKeyPrefix, i)
 		n++
@@ -394,6 +421,15 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 	}
 
+	if len(bulkRes[propagatedHistoryKey]) > 0 {
+		var ph protos.PropagatedHistory
+		if err = proto.Unmarshal(bulkRes[propagatedHistoryKey], &ph); err != nil {
+			wfLogger.Warnf("Failed to unmarshal propagated history for '%s': %v", actorID, err)
+		} else {
+			wState.IncomingHistory = &ph
+		}
+	}
+
 	wfLogger.Debugf("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))
 
 	return wState, nil
@@ -427,6 +463,10 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 		api.TransactionalOperation{
 			Operation: api.Delete,
 			Request:   api.TransactionalDelete{Key: metadataKey},
+		},
+		api.TransactionalOperation{
+			Operation: api.Delete,
+			Request:   api.TransactionalDelete{Key: propagatedHistoryKey},
 		},
 	)
 

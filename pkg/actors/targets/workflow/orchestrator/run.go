@@ -93,9 +93,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		NewEvents:  state.Inbox,
 		RetryCount: -1, // TODO
 		State:      rs,
-		Properties: make(map[string]any, 1),
+		Properties: make(map[string]any, 2),
 	}
 
+	wi.IncomingHistory = state.IncomingHistory
 	// Executing workflow code is a one-way operation. We must wait for the app code to report its completion, which
 	// will trigger this callback channel.
 	callback := make(chan bool, 1)
@@ -264,7 +265,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 
 	// Dispatch activities and messages, collecting failures.
-	activityResult := o.callActivities(ctx, pendingTasks, state)
+	activityResult := o.callActivities(ctx, pendingTasks, state, wi.OutgoingHistory)
 	addResult := o.callAddEventStateMessage(ctx, addWorkflows)
 	createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows)
 

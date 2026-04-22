@@ -42,6 +42,7 @@ type daprdOptionConfig struct {
 type options struct {
 	daprds int
 	skipDB bool
+	mtls   bool
 
 	orchestrators []orchestratorConfig
 	activities    []activityConfig
@@ -100,5 +101,15 @@ func WithDaprdOptions(index int, opts ...daprd.Option) Option {
 func WithNoDB() Option {
 	return func(o *options) {
 		o.skipDB = true
+	}
+}
+
+// WithMTLS enables mTLS on all daprd instances by spinning up a Sentry
+// process. Required for workflow history propagation tests since propagation
+// requires mTLS to be enabled.
+func WithMTLS(t *testing.T) Option {
+	t.Helper()
+	return func(o *options) {
+		o.mtls = true
 	}
 }

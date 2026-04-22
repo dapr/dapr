@@ -64,6 +64,12 @@ type Options struct {
 
 	EnableClusteredDeployment       bool
 	WorkflowsRemoteActivityReminder bool
+
+	// MTLSEnabled indicates whether mTLS is enabled. When true, workflow
+	// history propagation is allowed. When false, propagation requests are
+	// silently ignored because without mTLS, history cannot be signed and
+	// verified.
+	MTLSEnabled bool
 }
 
 type engine struct {
@@ -147,6 +153,12 @@ func New(opts Options) Interface {
 		Executor: executor,
 		Logger:   wfBackendLogger,
 		AppID:    opts.AppID,
+		// History propagation requires mTLS so that the history chain can be
+		// signed and verified. Without mTLS, propagation is disabled because
+		// unsigned history provides no integrity guarantees.
+		// TODO - cassie: once history signing is implemented, remove this gate and
+		// instead reject unsigned propagated history at delivery time.
+		PropagationEnabled: opts.MTLSEnabled,
 	}, topts...)
 
 	topts = nil
