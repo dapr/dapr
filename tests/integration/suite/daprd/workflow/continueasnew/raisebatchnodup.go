@@ -113,6 +113,11 @@ func (r *raisebatchnodup) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.GreaterOrEqual(c, eventCount.Load(), int64(totalEvents),
+			"waiting for all events to be processed")
+	}, 30*time.Second, 10*time.Millisecond)
+
 	time.Sleep(2 * time.Second)
 	drainMode.Store(true)
 

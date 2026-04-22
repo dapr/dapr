@@ -367,8 +367,14 @@ spec:
 		s.writeRead(t, ctx, client, "xyz")
 		s.writeRead(t, ctx, client, "foo")
 
-		require.NoError(t, os.Remove(filepath.Join(s.resDir1, "1.yaml")))
-		require.NoError(t, os.Remove(filepath.Join(s.resDir3, "3.yaml")))
+		// Retry removal on Windows where the daprd fsnotify watcher may
+		// briefly hold the file handle open, blocking deletion.
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.NoError(c, os.Remove(filepath.Join(s.resDir1, "1.yaml")))
+		}, time.Second*15, time.Millisecond*10)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.NoError(c, os.Remove(filepath.Join(s.resDir3, "3.yaml")))
+		}, time.Second*15, time.Millisecond*10)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.daprd.GetMetaRegisteredComponents(c, ctx)
