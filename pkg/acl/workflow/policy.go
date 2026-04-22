@@ -88,7 +88,7 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 			for _, op := range rule.Operations {
 				// Validate glob pattern
 				if _, err := path.Match(op.Name, ""); err != nil {
-					log.Warnf("Invalid glob pattern '%s' in WorkflowAccessPolicy '%s', skipping rule", op.Name, policy.Name)
+					log.Warnf("Invalid glob pattern '%s' in WorkflowAccessPolicy '%s', skipping operation", op.Name, policy.Name)
 					continue
 				}
 

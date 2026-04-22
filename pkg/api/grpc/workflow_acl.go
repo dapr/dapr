@@ -51,7 +51,8 @@ func (a *api) callActorValidateWorkflowACL(ctx context.Context, in *internalv1pb
 		in.GetMessage().GetData().GetValue(),
 	)
 	if err != nil {
-		return status.Errorf(codes.Internal, "workflow access policy: %v", err)
+		a.logger.Errorf("Failed to enforce workflow access policy for app '%s': %v", callerAppID, err)
+		return status.Error(codes.Internal, "failed to enforce workflow access policy")
 	}
 	if result == nil {
 		return nil
@@ -111,7 +112,8 @@ func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *inte
 func (a *api) extractCallerIdentity(ctx context.Context) (appID, namespace string, err error) {
 	spiffeID, ok, err := spiffe.FromGRPCContext(ctx)
 	if err != nil {
-		return "", "", status.Errorf(codes.Internal, "workflow access policy: failed to extract caller identity: %v", err)
+		a.logger.Errorf("Workflow access policy failed to extract caller identity: %v", err)
+		return "", "", status.Error(codes.Internal, "workflow access policy: failed to extract caller identity")
 	}
 	if !ok {
 		return "", "", status.Error(codes.PermissionDenied, workflowACLDeniedMsg)
