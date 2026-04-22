@@ -28,17 +28,28 @@ import (
 // The marshaled bytes are stored on the state so that GetSaveRequest can
 // persist the exact bytes that were signed.
 // If signer is nil (mTLS disabled or feature flag off), this is a no-op.
-func (o *orchestrator) signNewEvents(state *wfenginestate.State, newEventCount int) error {
+func (o *orchestrator) signNewEvents(state *wfenginestate.State) error {
 	if o.signer == nil {
 		return nil
 	}
 
+	newEventCount := state.HistoryAddedCount()
 	if newEventCount == 0 {
 		return nil
 	}
 
 	//nolint:gosec
 	startIndex := uint64(len(state.History) - newEventCount)
+
+	// Defensive: when there is no previous signature, this must be the very
+	// first signature for the workflow, which requires the batch to cover the
+	// entire history. Otherwise we'd produce a chain-less signature over a
+	// suffix of the history which the verifier would reject, but the defect
+	// would only surface on reload. Fail fast instead.
+	if len(state.RawSignatures) == 0 && startIndex != 0 {
+		return fmt.Errorf("cannot sign partial history (%d events, starting at index %d) without a previous signature",
+			newEventCount, startIndex)
+	}
 
 	// Marshal new events deterministically. These exact bytes will be both
 	// signed and persisted to the state store.

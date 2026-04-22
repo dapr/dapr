@@ -115,7 +115,7 @@ func TestSignNewEvents_NilCrypto(t *testing.T) {
 	o := &orchestrator{factory: &factory{signer: nil}}
 	s := testState(testHistoryEvent(0))
 
-	err := o.signNewEvents(s, 1)
+	err := o.signNewEvents(s)
 	require.NoError(t, err)
 
 	assert.Empty(t, s.Signatures)
@@ -127,9 +127,12 @@ func TestSignNewEvents_ZeroEvents(t *testing.T) {
 
 	certDER, priv := generateTestCert(t)
 	o := &orchestrator{factory: &factory{signer: testSigner(t, certDER, priv)}}
+	// Start with history already persisted (no pending additions) by
+	// clearing change tracking, mirroring a freshly-loaded state.
 	s := testState(testHistoryEvent(0))
+	s.ResetChangeTracking()
 
-	err := o.signNewEvents(s, 0)
+	err := o.signNewEvents(s)
 	require.NoError(t, err)
 
 	assert.Empty(t, s.Signatures)
@@ -149,7 +152,7 @@ func TestSignNewEvents_SignsAndAppends(t *testing.T) {
 	}
 	s := testState(events...)
 
-	err := o.signNewEvents(s, 3)
+	err := o.signNewEvents(s)
 	require.NoError(t, err)
 
 	assert.Len(t, s.Signatures, 1)
@@ -174,15 +177,17 @@ func TestSignNewEvents_ChainsToExistingSignature(t *testing.T) {
 	}
 	s := testState(events...)
 
-	err := o.signNewEvents(s, 2)
+	err := o.signNewEvents(s)
 	require.NoError(t, err)
 	require.Len(t, s.Signatures, 1)
 	require.Len(t, s.SigningCertificates, 1)
 
-	// Second batch: add and sign 1 more event.
+	// Simulate the post-save reset that the orchestrator performs in the
+	// real flow, then append a new event so only it counts as pending.
+	s.ResetChangeTracking()
 	s.AddToHistory(testHistoryEvent(2))
 
-	err = o.signNewEvents(s, 1)
+	err = o.signNewEvents(s)
 	require.NoError(t, err)
 
 	require.Len(t, s.Signatures, 2)
@@ -207,7 +212,7 @@ func TestSignNewEvents_SetsMarshaledNewHistory(t *testing.T) {
 	}
 	s := testState(events...)
 
-	err := o.signNewEvents(s, 2)
+	err := o.signNewEvents(s)
 	require.NoError(t, err)
 
 	// Verify the marshaled bytes were set by checking GetSaveRequest produces
@@ -250,7 +255,7 @@ func TestSignNewEvents_VerifiesWithHistorySigning(t *testing.T) {
 	}
 	st := testState(events...)
 
-	err := o.signNewEvents(st, 3)
+	err := o.signNewEvents(st)
 	require.NoError(t, err)
 
 	// Independently verify the signature using historysigning.VerifySignature.
@@ -281,7 +286,7 @@ func TestSignNewEvents_RoundTripDeterminism(t *testing.T) {
 	}
 	st := testState(events...)
 
-	err := o.signNewEvents(st, 2)
+	err := o.signNewEvents(st)
 	require.NoError(t, err)
 	require.Len(t, st.Signatures, 1)
 	require.Len(t, st.RawSignatures, 1)
@@ -343,7 +348,7 @@ func TestSignNewEvents_RoundTripDeterminism(t *testing.T) {
 	st.RawSignatures = savedRawSigs
 	st.AddToHistory(testHistoryEvent(2))
 
-	err = o.signNewEvents(st, 1)
+	err = o.signNewEvents(st)
 	require.NoError(t, err)
 	require.Len(t, st.Signatures, 2)
 	require.Len(t, st.RawSignatures, 2)

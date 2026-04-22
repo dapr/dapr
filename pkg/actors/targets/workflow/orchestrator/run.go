@@ -441,41 +441,43 @@ func filterValidInboxEvents(state *wfenginestate.State) []*backend.HistoryEvent 
 
 	valid := make([]*backend.HistoryEvent, 0, len(state.Inbox))
 	for _, e := range state.Inbox {
-		switch {
-		case e.GetTaskCompleted() != nil:
-			taskID := e.GetTaskCompleted().GetTaskScheduledId()
+		// exhaustive linter will error here on missing types not implemented on
+		// the switch.
+		switch et := e.GetEventType().(type) {
+		case *protos.HistoryEvent_TaskCompleted:
+			taskID := et.TaskCompleted.GetTaskScheduledId()
 			if _, ok := scheduledTaskIDs[taskID]; !ok {
 				log.Warnf("Dropping injected inbox event: task result for task %d not scheduled in signed history", taskID)
 				continue
 			}
-		case e.GetTaskFailed() != nil:
-			taskID := e.GetTaskFailed().GetTaskScheduledId()
+		case *protos.HistoryEvent_TaskFailed:
+			taskID := et.TaskFailed.GetTaskScheduledId()
 			if _, ok := scheduledTaskIDs[taskID]; !ok {
 				log.Warnf("Dropping injected inbox event: task failure for task %d not scheduled in signed history", taskID)
 				continue
 			}
-		case e.GetChildWorkflowInstanceCompleted() != nil:
-			taskID := e.GetChildWorkflowInstanceCompleted().GetTaskScheduledId()
+		case *protos.HistoryEvent_ChildWorkflowInstanceCompleted:
+			taskID := et.ChildWorkflowInstanceCompleted.GetTaskScheduledId()
 			if _, ok := createdChildIDs[taskID]; !ok {
 				log.Warnf("Dropping injected inbox event: child workflow result for task %d not created in signed history", taskID)
 				continue
 			}
-		case e.GetChildWorkflowInstanceFailed() != nil:
-			taskID := e.GetChildWorkflowInstanceFailed().GetTaskScheduledId()
+		case *protos.HistoryEvent_ChildWorkflowInstanceFailed:
+			taskID := et.ChildWorkflowInstanceFailed.GetTaskScheduledId()
 			if _, ok := createdChildIDs[taskID]; !ok {
 				log.Warnf("Dropping injected inbox event: child workflow failure for task %d not created in signed history", taskID)
 				continue
 			}
-		case e.GetEventRaised() != nil,
-			e.GetTimerFired() != nil,
-			e.GetExecutionStarted() != nil,
-			e.GetExecutionTerminated() != nil,
-			e.GetExecutionResumed() != nil,
-			e.GetExecutionSuspended() != nil:
+		case *protos.HistoryEvent_EventRaised,
+			*protos.HistoryEvent_TimerFired,
+			*protos.HistoryEvent_ExecutionStarted,
+			*protos.HistoryEvent_ExecutionTerminated,
+			*protos.HistoryEvent_ExecutionResumed,
+			*protos.HistoryEvent_ExecutionSuspended:
 			// Legitimate inbox event types that do not correspond to a previously
 			// scheduled operation.
 		default:
-			log.Warnf("Dropping injected inbox event: unknown event type")
+			log.Warnf("Dropping injected inbox event: unknown event type %T", et)
 			continue
 		}
 		valid = append(valid, e)
