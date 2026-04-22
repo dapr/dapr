@@ -15,6 +15,7 @@ package concurrency
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -88,18 +89,17 @@ func (m *multiScheduler) Run(t *testing.T, ctx context.Context) {
 		}(stream)
 	}
 
-	// Schedule 12 jobs across all 3 schedulers.
-	for i := range 12 {
+	for i := range 60 {
 		client := m.cluster.ClientN(t, ctx, i%3)
 		_, err := client.ScheduleJob(ctx, &schedulerv1.ScheduleJobRequest{
-			Name: "job-" + string(rune('a'+i)),
+			Name: fmt.Sprintf("job-%d", i),
 			Job:  &schedulerv1.Job{DueTime: new(time.Now().Format(time.RFC3339))},
 			Metadata: &schedulerv1.JobMetadata{
 				AppId: "myapp", Namespace: "default",
 				Target: &schedulerv1.JobTargetMetadata{
 					Type: &schedulerv1.JobTargetMetadata_Actor{
 						Actor: &schedulerv1.TargetActorReminder{
-							Type: "mytype", Id: "id-" + string(rune('a'+i)),
+							Type: "mytype", Id: fmt.Sprintf("id-%d", i),
 						},
 					},
 				},
