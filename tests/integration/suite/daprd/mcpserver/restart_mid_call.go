@@ -32,7 +32,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -189,12 +189,13 @@ func (s *restartMidCall) Run(t *testing.T, ctx context.Context) {
 		assert.Nil(t, metadata.GetFailureDetails(),
 			"expected orchestration to succeed after daprd restart")
 
-		var result rtv1.CallMCPToolResponse
+		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 		assert.False(t, result.IsError)
 		require.NotEmpty(t, result.Content)
-		assert.True(t, strings.Contains(result.Content[0].Text, "Seattle"),
-			"expected tool result to mention Seattle, got: %s", result.Content[0].Text)
+		assert.NotNil(t, result.Content[0].GetText())
+		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "Seattle"),
+			"expected tool result to mention Seattle, got: %s", result.Content[0].GetText().GetText())
 
 		// The tool was called at least twice: once before the restart (which
 		// was abandoned when daprd died) and at least once after (the retry).

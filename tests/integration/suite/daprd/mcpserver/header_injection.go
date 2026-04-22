@@ -30,7 +30,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -140,11 +140,12 @@ func (s *headerInjection) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
-		var result rtv1.CallMCPToolResponse
+		var result wfv1.CallMCPToolResponse
 		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 		assert.False(t, result.IsError, "expected success result")
 		require.NotEmpty(t, result.Content)
-		assert.True(t, strings.Contains(result.Content[0].Text, "ok"))
+		assert.NotNil(t, result.Content[0].GetText())
+		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "ok"))
 
 		// Verify the MCP server actually received the injected header.
 		capturedKey, ok := s.capturedAPIKey.Load().(string)

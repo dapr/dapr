@@ -21,6 +21,13 @@ import (
 	mcpserverv1alpha1 "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 )
 
+// MCPServerSnapshot holds all cached state for an MCPServer.
+type MCPServerSnapshot struct {
+	Server     mcpserverv1alpha1.MCPServer
+	HTTPClient *http.Client
+	Session    io.Closer
+}
+
 // GetMCPServer returns the MCPServer with the given name, if it exists.
 func (c *ComponentStore) GetMCPServer(name string) (mcpserverv1alpha1.MCPServer, bool) {
 	c.lock.RLock()
@@ -34,7 +41,29 @@ func (c *ComponentStore) GetMCPServer(name string) (mcpserverv1alpha1.MCPServer,
 	return mcpserverv1alpha1.MCPServer{}, false
 }
 
+// GetMCPServerSnapshot returns the MCPServer config, cached HTTP client, and cached session.
+func (c *ComponentStore) GetMCPServerSnapshot(name string) (MCPServerSnapshot, bool) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	for i, s := range c.mcpServers {
+		if s.Name == name {
+			snap := MCPServerSnapshot{Server: c.mcpServers[i]}
+			if c.mcpHTTPClients != nil {
+				snap.HTTPClient = c.mcpHTTPClients[name]
+			}
+			if c.mcpSessions != nil {
+				snap.Session = c.mcpSessions[name]
+			}
+			return snap, true
+		}
+	}
+	return MCPServerSnapshot{}, false
+}
+
 // AddMCPServer adds or replaces an MCPServer in the store.
+// On replace, cached HTTP clients and sessions are invalidated since the
+// server config (URL, auth, etc.) may have changed.
 func (c *ComponentStore) AddMCPServer(s mcpserverv1alpha1.MCPServer) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -42,6 +71,12 @@ func (c *ComponentStore) AddMCPServer(s mcpserverv1alpha1.MCPServer) {
 	for i, existing := range c.mcpServers {
 		if existing.Name == s.Name {
 			c.mcpServers[i] = s
+			// Invalidate cached clients/sessions — config may have changed.
+			delete(c.mcpHTTPClients, s.Name)
+			if sess, ok := c.mcpSessions[s.Name]; ok {
+				sess.Close()
+				delete(c.mcpSessions, s.Name)
+			}
 			return
 		}
 	}
@@ -159,6 +194,24 @@ func (c *ComponentStore) GetMCPSession(serverName string) io.Closer {
 		return nil
 	}
 	return c.mcpSessions[serverName]
+}
+
+// GetOrSetMCPSession atomically returns an existing cached session or stores
+// the provided one. Returns the session that ended up in the cache (which may
+// be a previously cached session if another goroutine won the race) and true
+// if the provided session was stored (false if an existing one was returned).
+func (c *ComponentStore) GetOrSetMCPSession(serverName string, session io.Closer) (io.Closer, bool) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.mcpSessions == nil {
+		c.mcpSessions = make(map[string]io.Closer)
+	}
+	if existing, ok := c.mcpSessions[serverName]; ok {
+		return existing, false
+	}
+	c.mcpSessions[serverName] = session
+	return session, true
 }
 
 // DeleteMCPSession closes and removes the cached MCP session for the given MCPServer.

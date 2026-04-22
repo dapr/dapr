@@ -22,6 +22,7 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	autherrors "github.com/dapr/dapr/pkg/runtime/mcp/auth/errors"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/security"
 	"golang.org/x/oauth2"
@@ -32,16 +33,6 @@ const (
 	k8sStoreName = "kubernetes"
 	audienceKey  = "audience"
 )
-
-// ErrSecretFetch is a sentinel error wrapped by BuildOAuth2Client when the
-// secret store fetch fails. This allows callers to distinguish transient
-// secret-store failures (retryable) from permanent config errors.
-var ErrSecretFetch = errors.New("secret fetch failed")
-
-// IsSecretFetchError returns true when err wraps ErrSecretFetch.
-func IsSecretFetchError(err error) bool {
-	return errors.Is(err, ErrSecretFetch)
-}
 
 // HTTPTransportConfig extracts headers and auth from whichever HTTP transport
 // is configured on the MCPServer. Returns nil slices/pointers for stdio.
@@ -67,7 +58,7 @@ func BuildHTTPClient(
 	ctx context.Context,
 	server *mcpserverapi.MCPServer,
 	secrets *compstore.ComponentStore,
-	jwt security.JWTFetcher,
+	jwt security.Handler,
 	timeout time.Duration,
 ) (*http.Client, error) {
 	transportHeaders, authCfg := HTTPTransportConfig(server)
@@ -147,7 +138,7 @@ func buildOAuth2Client(
 
 	clientSecret, err := secrets.GetSecret(ctx, storeName, o.SecretKeyRef.Name, o.SecretKeyRef.Key)
 	if err != nil {
-		return nil, fmt.Errorf("OAuth2 credential retrieval failed: %w", errors.Join(ErrSecretFetch, err))
+		return nil, fmt.Errorf("OAuth2 credential retrieval failed: %w", errors.Join(autherrors.ErrSecretFetch, err))
 	}
 
 	cfg := clientcredentials.Config{
@@ -192,7 +183,7 @@ type jwtRoundTripper struct {
 	header   string
 	prefix   string
 	audience string
-	fetcher  security.JWTFetcher
+	fetcher  security.Handler
 	base     http.RoundTripper
 }
 

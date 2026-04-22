@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -34,41 +36,34 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(oauth2Auth))
+	suite.Register(new(spiffeAuth))
 }
 
-// oauth2Auth verifies that the OAuth2 client credentials flow is used when auth.oauth2 is configured.
-// A fake token server issues an access token,
-// and the MCP server handler captures the Authorization header to confirm the bearer token was injected.
-type oauth2Auth struct {
+// spiffeAuth verifies that SPIFFE JWT SVIDs are injected into MCP requests
+// when auth.spiffe.jwt is configured on an MCPServer resource.
+type spiffeAuth struct {
 	daprd      *daprd.Daprd
 	place      *placement.Placement
 	sched      *scheduler.Scheduler
+	sent       *sentry.Sentry
 	httpClient *http.Client
 
-	capturedAuthHeader atomic.Value // stores string
+	capturedHeader atomic.Value // stores string
 }
 
-func (s *oauth2Auth) Setup(t *testing.T) []framework.Option {
-	const fakeAccessToken = "test-oauth2-bearer-token-xyz"
-
-	// Fake OAuth2 token endpoint.
-	tokenHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"access_token":%q,"token_type":"Bearer","expires_in":3600}`, fakeAccessToken)
-	})
-	tokenServer := prochttp.New(t, prochttp.WithHandler(tokenHandler))
-
-	// MCP server that captures the Authorization header.
-	mcpSrv := mcp.NewServer(&mcp.Implementation{Name: "test-oauth2-server", Version: "v1"}, nil)
+func (s *spiffeAuth) Setup(t *testing.T) []framework.Option {
+	// MCP server that captures the X-SPIFFE-JWT header.
+	mcpSrv := mcp.NewServer(&mcp.Implementation{Name: "test-spiffe-server", Version: "v1"}, nil)
 	mcp.AddTool(mcpSrv, &mcp.Tool{
 		Name:        "echo",
 		Description: "Echoes input",
@@ -79,24 +74,45 @@ func (s *oauth2Auth) Setup(t *testing.T) []framework.Option {
 	})
 
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
-		if auth := r.Header.Get("Authorization"); auth != "" {
-			s.capturedAuthHeader.Store(auth)
+		if h := r.Header.Get("X-SPIFFE-JWT"); h != "" {
+			s.capturedHeader.Store(h)
 		}
 		return mcpSrv
 	}, nil)
 	mcpSrvProc := prochttp.New(t, prochttp.WithHandler(mcpHandler))
 
 	appProc := app.New(t)
-	s.sched = scheduler.New(t)
-	s.place = placement.New(t)
 
-	// In-memory secret store with the client_secret value.
-	// The MCPServer's oauth2.secretKeyRef points to this.
+	s.sent = sentry.New(t,
+		sentry.WithMode("standalone"),
+		sentry.WithEnableJWT(true),
+	)
+
+	bundle := s.sent.CABundle()
+	taFile := filepath.Join(t.TempDir(), "ca.pem")
+	require.NoError(t, os.WriteFile(taFile, bundle.X509.TrustAnchors, 0o600))
+
+	s.sched = scheduler.New(t,
+		scheduler.WithSentry(s.sent),
+		scheduler.WithID("dapr-scheduler-server-0"),
+	)
+	s.place = placement.New(t,
+		placement.WithEnableTLS(true),
+		placement.WithTrustAnchorsFile(taFile),
+		placement.WithSentryAddress(s.sent.Address()),
+	)
+
 	s.daprd = daprd.New(t,
+		daprd.WithAppID("spiffe-mcp-app"),
 		daprd.WithAppPort(appProc.Port()),
 		daprd.WithAppProtocol("http"),
+		daprd.WithMode("standalone"),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(bundle.X509.TrustAnchors))),
+		daprd.WithSentryAddress(s.sent.Address()),
 		daprd.WithPlacementAddresses(s.place.Address()),
 		daprd.WithSchedulerAddresses(s.sched.Address()),
+		daprd.WithEnableMTLS(true),
+		daprd.WithNamespace("default"),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
@@ -108,49 +124,31 @@ spec:
   - name: MCPServerResource
     enabled: true
 `),
-		daprd.WithResourceFiles(
-			fmt.Sprintf(`
+		daprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
-  name: oauth2-server
+  name: spiffe-server
 spec:
   endpoint:
     streamableHTTP:
       url: http://localhost:%d
-  auth:
-    secretStore: inmemory
-    oauth2:
-      issuer: http://localhost:%d/token
-      clientID: test-client-id
-      secretKeyRef:
-        name: mcp-oauth-secret
-        key: client_secret
-`, mcpSrvProc.Port(), tokenServer.Port()),
-			// In-memory secret store component.
-			`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: inmemory
-spec:
-  type: secretstores.local.file
-  version: v1
-  metadata:
-  - name: secretsFile
-    value: ""
-  - name: multiValued
-    value: "false"
-`,
-		),
+      auth:
+        spiffe:
+          jwt:
+            header: X-SPIFFE-JWT
+            headerValuePrefix: "Bearer "
+            audience: mcp://test-server
+`, mcpSrvProc.Port())),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.place, s.sched, appProc, tokenServer, mcpSrvProc, s.daprd),
+		framework.WithProcesses(s.sent, s.place, s.sched, appProc, mcpSrvProc, s.daprd),
 	}
 }
 
-func (s *oauth2Auth) Run(t *testing.T, ctx context.Context) {
+func (s *spiffeAuth) Run(t *testing.T, ctx context.Context) {
+	s.sent.WaitUntilRunning(t, ctx)
 	s.sched.WaitUntilRunning(t, ctx)
 	s.place.WaitUntilRunning(t, ctx)
 	s.daprd.WaitUntilRunning(t, ctx)
@@ -158,14 +156,13 @@ func (s *oauth2Auth) Run(t *testing.T, ctx context.Context) {
 	s.httpClient = fclient.HTTP(t)
 	taskhubClient := dtclient.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 
-	t.Run("OAuth2 bearer token is injected into MCP requests", func(t *testing.T) {
+	t.Run("SPIFFE JWT is injected into MCP requests", func(t *testing.T) {
 		input := map[string]any{
-			"mcpServerName": "oauth2-server",
-			"toolName":      "echo",
-			"arguments":     map[string]any{},
+			"tool_name": "echo",
+			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.oauth2-server.CallTool", input)
+			"dapr.internal.mcp.spiffe-server.CallTool", input)
 
 		metadata, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
@@ -174,12 +171,16 @@ func (s *oauth2Auth) Run(t *testing.T, ctx context.Context) {
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.False(t, result.IsError, "expected tool call to succeed; isError=true, content: %v", result.Content)
+		assert.False(t, result.IsError, "expected tool call to succeed")
 
-		// Verify the MCP server received a Bearer token from the OAuth2 flow.
-		capturedAuth, ok := s.capturedAuthHeader.Load().(string)
-		require.True(t, ok, "expected Authorization header to have been captured")
-		assert.True(t, strings.HasPrefix(capturedAuth, "Bearer "),
-			"expected Bearer token; got: %s", capturedAuth)
+		// Verify the MCP server received a SPIFFE JWT token.
+		capturedJWT, ok := s.capturedHeader.Load().(string)
+		require.True(t, ok, "expected X-SPIFFE-JWT header to have been captured")
+		assert.True(t, strings.HasPrefix(capturedJWT, "Bearer "),
+			"expected Bearer prefix; got: %s", capturedJWT)
+		// The value after "Bearer " should be a JWT (three dot-separated segments).
+		token := strings.TrimPrefix(capturedJWT, "Bearer ")
+		parts := strings.Split(token, ".")
+		assert.Equal(t, 3, len(parts), "expected JWT with 3 segments; got: %s", token)
 	})
 }

@@ -35,3 +35,15 @@ func ListToolsWorkflowName(serverName string) string {
 func CallToolWorkflowName(serverName string) string {
 	return WorkflowNamePrefix + serverName + MethodCallTool
 }
+
+// ListToolsActivityName returns the activity name for a ListTools transport
+// call on the given MCPServer: dapr.internal.mcp.<server>.list-tools
+func ListToolsActivityName(serverName string) string {
+	return WorkflowNamePrefix + serverName + ".list-tools"
+}
+
+// CallToolActivityName returns the activity name for a CallTool transport
+// call on the given MCPServer: dapr.internal.mcp.<server>.call-tool
+func CallToolActivityName(serverName string) string {
+	return WorkflowNamePrefix + serverName + ".call-tool"
+}

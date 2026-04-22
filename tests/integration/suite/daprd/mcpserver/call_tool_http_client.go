@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -155,13 +155,13 @@ func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON, "expected dapr.workflow.output to be populated")
 
-		var result rtv1.CallMCPToolResponse
+		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 
 		assert.False(t, result.IsError, "expected success result")
 		require.NotEmpty(t, result.Content)
-		assert.Equal(t, "text", result.Content[0].Type)
-		assert.True(t, strings.Contains(result.Content[0].Text, "Portland"),
-			"expected tool result to mention Portland, got: %s", result.Content[0].Text)
+		assert.NotNil(t, result.Content[0].GetText())
+		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "Portland"),
+			"expected tool result to mention Portland, got: %s", result.Content[0].GetText().GetText())
 	})
 }

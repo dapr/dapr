@@ -30,9 +30,9 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	mcptypes "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/types"
+	fakesecurity "github.com/dapr/dapr/pkg/security/fake"
 )
 
 // setTestSchema marshals a map to json.RawMessage and stores it as a tool schema.
@@ -41,18 +41,6 @@ func setTestSchema(t *testing.T, store *compstore.ComponentStore, server, tool s
 	raw, err := json.Marshal(schema)
 	require.NoError(t, err)
 	store.SetMCPToolSchema(server, tool, raw)
-}
-
-// fakeJWTFetcher is a test double for auth.JWTFetcher.
-type fakeJWTFetcher struct {
-	token        string
-	err          error
-	lastAudience string
-}
-
-func (f *fakeJWTFetcher) FetchJWT(_ context.Context, audience string) (string, error) {
-	f.lastAudience = audience
-	return f.token, f.err
 }
 
 // fakeActivityContext lets us test activities without the full task runtime.
@@ -128,26 +116,6 @@ func plainHeader(name, value string) commonapi.NameValuePair {
 	}
 }
 
-
-
-func TestMCPServerName(t *testing.T) {
-	tests := []struct {
-		orchestrationName string
-		suffix            string
-		want              string
-	}{
-		{"dapr.internal.mcp.myserver.ListTools", mcptypes.MethodListTools, "myserver"},
-		{"dapr.internal.mcp.my-server.CallTool", mcptypes.MethodCallTool, "my-server"},
-		{"dapr.internal.mcp.dotted.name.ListTools", mcptypes.MethodListTools, "dotted.name"},
-		{"dapr.internal.mcp..ListTools", mcptypes.MethodListTools, ""},
-	}
-	for _, tc := range tests {
-		t.Run(tc.orchestrationName, func(t *testing.T) {
-			got := mcpServerName(tc.orchestrationName, tc.suffix)
-			assert.Equal(t, tc.want, got)
-		})
-	}
-}
 
 func TestCallTimeout(t *testing.T) {
 	t.Run("no timeout set returns default", func(t *testing.T) {
@@ -226,8 +194,8 @@ func TestConvertCallToolResult(t *testing.T) {
 		got := convertCallToolResult(r)
 		assert.False(t, got.IsError)
 		require.Len(t, got.Content, 1)
-		assert.Equal(t, textContentType, got.Content[0].Type)
-		assert.Equal(t, "hello", got.Content[0].Text)
+		assert.NotNil(t, got.Content[0].GetText())
+		assert.Equal(t, "hello", got.Content[0].GetText().GetText())
 	})
 
 	t.Run("image content", func(t *testing.T) {
@@ -240,9 +208,9 @@ func TestConvertCallToolResult(t *testing.T) {
 		assert.False(t, got.IsError)
 		content := got.Content
 		require.Len(t, content, 1)
-		assert.Equal(t, imageContentType, content[0].Type)
-		assert.Equal(t, "image/png", content[0].MimeType)
-		assert.Equal(t, "aW1nZGF0YQ==", content[0].Data) // base64("imgdata")
+		assert.NotNil(t, content[0].GetImage())
+		assert.Equal(t, "image/png", content[0].GetImage().GetMimeType())
+		assert.Equal(t, []byte("imgdata"), content[0].GetImage().GetData())
 	})
 
 	t.Run("audio content", func(t *testing.T) {
@@ -255,9 +223,9 @@ func TestConvertCallToolResult(t *testing.T) {
 		assert.False(t, got.IsError)
 		content := got.Content
 		require.Len(t, content, 1)
-		assert.Equal(t, audioContentType, content[0].Type)
-		assert.Equal(t, "audio/wav", content[0].MimeType)
-		assert.Equal(t, "YXVkaW9kYXRh", content[0].Data) // base64("audiodata")
+		assert.NotNil(t, content[0].GetAudio())
+		assert.Equal(t, "audio/wav", content[0].GetAudio().GetMimeType())
+		assert.Equal(t, []byte("audiodata"), content[0].GetAudio().GetData())
 	})
 
 	t.Run("resource link content", func(t *testing.T) {
@@ -274,10 +242,9 @@ func TestConvertCallToolResult(t *testing.T) {
 		assert.False(t, got.IsError)
 		content := got.Content
 		require.Len(t, content, 1)
-		assert.Equal(t, resourceLinkContentType, content[0].Type)
-		assert.NotNil(t, content[0].Resource)
-		assert.Contains(t, string(content[0].Resource), "file:///tmp/report.pdf")
-		assert.Contains(t, string(content[0].Resource), "report")
+		assert.NotNil(t, content[0].GetResourceLink())
+		assert.Contains(t, string(content[0].GetResourceLink().GetResource()), "file:///tmp/report.pdf")
+		assert.Contains(t, string(content[0].GetResourceLink().GetResource()), "report")
 	})
 
 	t.Run("embedded resource content", func(t *testing.T) {
@@ -295,10 +262,9 @@ func TestConvertCallToolResult(t *testing.T) {
 		assert.False(t, got.IsError)
 		content := got.Content
 		require.Len(t, content, 1)
-		assert.Equal(t, resourceContentType, content[0].Type)
-		assert.NotNil(t, content[0].Resource)
-		assert.Contains(t, string(content[0].Resource), "file:///tmp/data.txt")
-		assert.Contains(t, string(content[0].Resource), "some file contents")
+		assert.NotNil(t, content[0].GetEmbeddedResource())
+		assert.Contains(t, string(content[0].GetEmbeddedResource().GetResource()), "file:///tmp/data.txt")
+		assert.Contains(t, string(content[0].GetEmbeddedResource().GetResource()), "some file contents")
 	})
 
 	t.Run("mixed content types", func(t *testing.T) {
@@ -314,18 +280,18 @@ func TestConvertCallToolResult(t *testing.T) {
 		assert.False(t, got.IsError)
 		content := got.Content
 		require.Len(t, content, 4)
-		assert.Equal(t, textContentType, content[0].Type)
-		assert.Equal(t, imageContentType, content[1].Type)
-		assert.Equal(t, audioContentType, content[2].Type)
-		assert.Equal(t, resourceLinkContentType, content[3].Type)
+		assert.NotNil(t, content[0].GetText())
+		assert.NotNil(t, content[1].GetImage())
+		assert.NotNil(t, content[2].GetAudio())
+		assert.NotNil(t, content[3].GetResourceLink())
 	})
 
 	t.Run("error result", func(t *testing.T) {
 		r := &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "err"}}}
 		got := convertCallToolResult(r)
 		assert.True(t, got.IsError)
-		assert.Equal(t, "err", got.Content[0].Text)
 		require.NotEmpty(t, got.Content)
+		assert.Equal(t, "err", got.Content[0].GetText().GetText())
 	})
 
 	t.Run("empty content", func(t *testing.T) {
@@ -381,39 +347,27 @@ func TestValidateToolArguments(t *testing.T) {
 	})
 }
 
-func TestMakeListToolsActivity_ServerNotFound(t *testing.T) {
-	store := compstore.New()
-	activity := makeListToolsActivity(Options{Store: store})
-
-	actCtx := &fakeActivityContext{
-		ctx:   context.Background(),
-		input: activityListToolsInput{MCPServerName: "nonexistent"},
-	}
-	_, err := activity(actCtx)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not found")
-}
-
 func TestMakeListToolsActivity_RealServer(t *testing.T) {
 	ts := newMCPTestServer(t, nil)
 
 	store := compstore.New()
-	store.AddMCPServer(namedServer("myserver", mcpserverapi.MCPServerSpec{
+	server := namedServer("myserver", mcpserverapi.MCPServerSpec{
 		Endpoint: mcpserverapi.MCPEndpoint{
 			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: ts.URL},
 		},
-	}))
+	})
+	store.AddMCPServer(server)
 
-	activity := makeListToolsActivity(Options{Store: store})
+	activity := makeListToolsActivity(server, Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx:   context.Background(),
-		input: activityListToolsInput{MCPServerName: "myserver"},
+		input: nil,
 	}
 
 	result, err := activity(actCtx)
 	require.NoError(t, err)
 
-	listResult, ok := result.(*rtv1.ListMCPToolsResponse)
+	listResult, ok := result.(*wfv1.ListMCPToolsResponse)
 	require.True(t, ok)
 	require.Len(t, listResult.Tools, 1)
 	assert.Equal(t, "greet", listResult.Tools[0].Name)
@@ -423,16 +377,17 @@ func TestMakeListToolsActivity_CachesToolSchema(t *testing.T) {
 	ts := newMCPTestServer(t, nil)
 
 	store := compstore.New()
-	store.AddMCPServer(namedServer("myserver", mcpserverapi.MCPServerSpec{
+	server := namedServer("myserver", mcpserverapi.MCPServerSpec{
 		Endpoint: mcpserverapi.MCPEndpoint{
 			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: ts.URL},
 		},
-	}))
+	})
+	store.AddMCPServer(server)
 
-	activity := makeListToolsActivity(Options{Store: store})
+	activity := makeListToolsActivity(server, Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx:   context.Background(),
-		input: activityListToolsInput{MCPServerName: "myserver"},
+		input: nil,
 	}
 
 	_, err := activity(actCtx)
@@ -444,50 +399,34 @@ func TestMakeListToolsActivity_CachesToolSchema(t *testing.T) {
 	assert.NotNil(t, schema)
 }
 
-func TestMakeCallToolActivity_ServerNotFound(t *testing.T) {
-	store := compstore.New()
-	activity := makeCallToolActivity(Options{Store: store})
-
-	actCtx := &fakeActivityContext{
-		ctx:   context.Background(),
-		input: activityCallToolInput{MCPServerName: "nonexistent", ToolName: "foo"},
-	}
-	result, err := activity(actCtx)
-	require.NoError(t, err, "call-tool activity must not return activity-level error")
-	callResult, ok := result.(*rtv1.CallMCPToolResponse)
-	require.True(t, ok)
-	assert.True(t, callResult.IsError)
-	assert.Contains(t, callResult.Content[0].Text, "not found")
-}
-
 func TestMakeCallToolActivity_RealServer(t *testing.T) {
 	ts := newMCPTestServer(t, nil)
 
 	store := compstore.New()
-	store.AddMCPServer(namedServer("myserver", mcpserverapi.MCPServerSpec{
+	server := namedServer("myserver", mcpserverapi.MCPServerSpec{
 		Endpoint: mcpserverapi.MCPEndpoint{
 			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: ts.URL},
 		},
-	}))
+	})
+	store.AddMCPServer(server)
 
-	activity := makeCallToolActivity(Options{Store: store})
+	activity := makeCallToolActivity(server, Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx: context.Background(),
 		input: activityCallToolInput{
-			MCPServerName: "myserver",
-			ToolName:      "greet",
-			Arguments:     map[string]interface{}{"name": "dapr"},
+			ToolName:  "greet",
+			Arguments: map[string]interface{}{"name": "dapr"},
 		},
 	}
 
 	result, err := activity(actCtx)
 	require.NoError(t, err)
 
-	callResult, ok := result.(*rtv1.CallMCPToolResponse)
+	callResult, ok := result.(*wfv1.CallMCPToolResponse)
 	require.True(t, ok)
 	assert.False(t, callResult.IsError, "expected success result")
 	require.NotEmpty(t, callResult.Content)
-	assert.Contains(t, callResult.Content[0].Text, "dapr")
+	assert.Contains(t, callResult.Content[0].GetText().GetText(), "dapr")
 }
 
 func TestMakeCallToolActivity_HeaderInjection(t *testing.T) {
@@ -495,22 +434,22 @@ func TestMakeCallToolActivity_HeaderInjection(t *testing.T) {
 	ts := newMCPTestServer(t, &capturedHeader)
 
 	store := compstore.New()
-	store.AddMCPServer(namedServer("myserver", mcpserverapi.MCPServerSpec{
+	server := namedServer("myserver", mcpserverapi.MCPServerSpec{
 		Endpoint: mcpserverapi.MCPEndpoint{
 			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
 				URL:     ts.URL,
 				Headers: []commonapi.NameValuePair{plainHeader("X-Test", "injected-value")},
 			},
 		},
-	}))
+	})
+	store.AddMCPServer(server)
 
-	activity := makeCallToolActivity(Options{Store: store})
+	activity := makeCallToolActivity(server, Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx: context.Background(),
 		input: activityCallToolInput{
-			MCPServerName: "myserver",
-			ToolName:      "greet",
-			Arguments:     map[string]any{"name": "dapr"},
+			ToolName:  "greet",
+			Arguments: map[string]any{"name": "dapr"},
 		},
 	}
 
@@ -523,34 +462,34 @@ func TestMakeCallToolActivity_MissingRequiredArg(t *testing.T) {
 	ts := newMCPTestServer(t, nil)
 
 	store := compstore.New()
-	store.AddMCPServer(namedServer("myserver", mcpserverapi.MCPServerSpec{
+	server := namedServer("myserver", mcpserverapi.MCPServerSpec{
 		Endpoint: mcpserverapi.MCPEndpoint{
 			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: ts.URL},
 		},
-	}))
+	})
+	store.AddMCPServer(server)
 	setTestSchema(t, store, "myserver", "greet", map[string]any{
 		"type":       "object",
 		"properties": map[string]any{"name": map[string]any{"type": "string"}},
 		"required":   []any{"name"},
 	})
 
-	activity := makeCallToolActivity(Options{Store: store})
+	activity := makeCallToolActivity(server, Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx: context.Background(),
 		input: activityCallToolInput{
-			MCPServerName: "myserver",
-			ToolName:      "greet",
-			Arguments:     map[string]any{}, // missing "name" which is required
+			ToolName:  "greet",
+			Arguments: map[string]any{}, // missing "name" which is required
 		},
 	}
 
 	result, err := activity(actCtx)
 	require.NoError(t, err, "validation failure should not be an activity error")
-	callResult, ok := result.(*rtv1.CallMCPToolResponse)
+	callResult, ok := result.(*wfv1.CallMCPToolResponse)
 	require.True(t, ok)
 	assert.True(t, callResult.IsError)
-	assert.Contains(t, callResult.Content[0].Text, "missing required")
-	assert.Contains(t, callResult.Content[0].Text, "name")
+	assert.Contains(t, callResult.Content[0].GetText().GetText(), "missing required")
+	assert.Contains(t, callResult.Content[0].GetText().GetText(), "name")
 }
 
 func TestMakeCallToolActivity_SPIFFEAuth(t *testing.T) {
@@ -559,7 +498,7 @@ func TestMakeCallToolActivity_SPIFFEAuth(t *testing.T) {
 
 	store := compstore.New()
 	prefix := "SVID "
-	store.AddMCPServer(namedServer("myserver", mcpserverapi.MCPServerSpec{
+	server := namedServer("myserver", mcpserverapi.MCPServerSpec{
 		Endpoint: mcpserverapi.MCPEndpoint{
 			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
 				URL: ts.URL,
@@ -574,22 +513,24 @@ func TestMakeCallToolActivity_SPIFFEAuth(t *testing.T) {
 				},
 			},
 		},
-	}))
+	})
+	store.AddMCPServer(server)
 
-	fetcher := &fakeJWTFetcher{token: "svid-12345"}
-	activity := makeCallToolActivity(Options{Store: store, JWT: fetcher})
+	fetcher := fakesecurity.New().WithFetchJWT(func(_ context.Context, _ string) (string, error) {
+		return "svid-12345", nil
+	})
+	activity := makeCallToolActivity(server, Options{Store: store, Security: fetcher})
 	actCtx := &fakeActivityContext{
 		ctx: context.Background(),
 		input: activityCallToolInput{
-			MCPServerName: "myserver",
-			ToolName:      "greet",
-			Arguments:     map[string]any{"name": "dapr"},
+			ToolName:  "greet",
+			Arguments: map[string]any{"name": "dapr"},
 		},
 	}
 
 	result, err := activity(actCtx)
 	require.NoError(t, err)
-	callResult, ok := result.(*rtv1.CallMCPToolResponse)
+	callResult, ok := result.(*wfv1.CallMCPToolResponse)
 	require.True(t, ok)
 	assert.False(t, callResult.IsError, "expected success result")
 	assert.Equal(t, "SVID svid-12345", capturedHeader)

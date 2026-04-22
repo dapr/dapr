@@ -21,7 +21,7 @@ import (
 	"github.com/dapr/durabletask-go/task"
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 )
 
 // runBeforeCallTool executes the beforeCallTool middleware pipeline in order.
@@ -39,8 +39,8 @@ func runBeforeCallTool(
 	if server.Spec.Middleware == nil {
 		return arguments, nil
 	}
-	input := &rtv1.MCPBeforeCallToolHookInput{
-		McpServerName: serverName, ToolName: tool, Arguments: arguments,
+	input := &wfv1.MCPBeforeCallToolHookInput{
+		Name: serverName, ToolName: tool, Arguments: arguments,
 	}
 	for _, hook := range server.Spec.Middleware.BeforeCallTool {
 		if hook.Workflow == nil {
@@ -49,7 +49,7 @@ func runBeforeCallTool(
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
 			task.WithChildWorkflowInput(input))
 		if hook.Mutate {
-			var mutated rtv1.MCPBeforeCallToolHookInput
+			var mutated wfv1.MCPBeforeCallToolHookInput
 			if err := t.Await(&mutated); err != nil {
 				return nil, err
 			}
@@ -74,13 +74,13 @@ func runAfterCallTool(
 	server *mcpserverapi.MCPServer,
 	serverName, tool string,
 	arguments *structpb.Struct,
-	result *rtv1.CallMCPToolResponse,
-) (*rtv1.CallMCPToolResponse, error) {
+	result *wfv1.CallMCPToolResponse,
+) (*wfv1.CallMCPToolResponse, error) {
 	if server.Spec.Middleware == nil {
 		return result, nil
 	}
-	input := &rtv1.MCPAfterCallToolHookInput{
-		McpServerName: serverName, ToolName: tool, Arguments: arguments, Result: result,
+	input := &wfv1.MCPAfterCallToolHookInput{
+		Name: serverName, ToolName: tool, Arguments: arguments, Result: result,
 	}
 	for _, hook := range server.Spec.Middleware.AfterCallTool {
 		if hook.Workflow == nil {
@@ -89,7 +89,7 @@ func runAfterCallTool(
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
 			task.WithChildWorkflowInput(input))
 		if hook.Mutate {
-			var mutated rtv1.CallMCPToolResponse
+			var mutated wfv1.CallMCPToolResponse
 			if err := t.Await(&mutated); err != nil {
 				return nil, fmt.Errorf("afterCallTool mutating hook %q failed for tool %q on MCPServer %q: %w",
 					hook.Workflow.WorkflowName, tool, serverName, err)
@@ -116,7 +116,7 @@ func runBeforeListTools(
 	if server.Spec.Middleware == nil {
 		return nil
 	}
-	input := &rtv1.MCPBeforeListToolsHookInput{McpServerName: serverName}
+	input := &wfv1.MCPBeforeListToolsHookInput{Name: serverName}
 	for _, hook := range server.Spec.Middleware.BeforeListTools {
 		if hook.Workflow == nil {
 			continue
@@ -137,12 +137,12 @@ func runAfterListTools(
 	ctx *task.WorkflowContext,
 	server *mcpserverapi.MCPServer,
 	serverName string,
-	result *rtv1.ListMCPToolsResponse,
-) (*rtv1.ListMCPToolsResponse, error) {
+	result *wfv1.ListMCPToolsResponse,
+) (*wfv1.ListMCPToolsResponse, error) {
 	if server.Spec.Middleware == nil {
 		return result, nil
 	}
-	input := &rtv1.MCPAfterListToolsHookInput{McpServerName: serverName, Result: result}
+	input := &wfv1.MCPAfterListToolsHookInput{Name: serverName, Result: result}
 	for _, hook := range server.Spec.Middleware.AfterListTools {
 		if hook.Workflow == nil {
 			continue
@@ -150,7 +150,7 @@ func runAfterListTools(
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
 			task.WithChildWorkflowInput(input))
 		if hook.Mutate {
-			var mutated rtv1.ListMCPToolsResponse
+			var mutated wfv1.ListMCPToolsResponse
 			if err := t.Await(&mutated); err != nil {
 				return nil, fmt.Errorf("afterListTools mutating hook %q failed for MCPServer %q: %w",
 					hook.Workflow.WorkflowName, serverName, err)

@@ -29,7 +29,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -137,14 +137,14 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
-		var result rtv1.CallMCPToolResponse
+		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 
 		assert.False(t, result.IsError, "expected success result")
 		require.NotEmpty(t, result.Content)
-		assert.Equal(t, "text", result.Content[0].Type)
-		assert.True(t, strings.Contains(result.Content[0].Text, "Seattle"),
-			"expected tool result to mention Seattle, got: %s", result.Content[0].Text)
+		assert.NotNil(t, result.Content[0].GetText())
+		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "Seattle"),
+			"expected tool result to mention Seattle, got: %s", result.Content[0].GetText().GetText())
 	})
 
 	t.Run("CallTool unknown tool name sets isError=true", func(t *testing.T) {
@@ -163,7 +163,7 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 
 		// The MCP server returns isError=true for unknown tools, which surfaces
 		// as a completed workflow with isError=true in the output, NOT a workflow failure.
-		var result rtv1.CallMCPToolResponse
+		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 		assert.True(t, result.IsError, "expected isError=true for unknown tool")
 	})

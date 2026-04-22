@@ -40,10 +40,10 @@ type Options struct {
 func NewExecutor(opts Options) (backend.Executor, error) {
 	registry := task.NewTaskRegistry()
 
-	// MCP subsystem: wildcard orchestrator + transport activities.
+	// MCP subsystem: per-server versioned workflows + transport activities.
 	if err := mcp.RegisterMCP(registry, mcp.Options{
-		Store: opts.ComponentStore,
-		JWT:   security.NewSPIFFEJWTFetcher(opts.Security),
+		Store:    opts.ComponentStore,
+		Security: opts.Security,
 	}); err != nil {
 		return nil, fmt.Errorf("failed to register MCP in-process workflows: %w", err)
 	}

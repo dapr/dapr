@@ -30,7 +30,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -160,11 +160,12 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
-		var result rtv1.CallMCPToolResponse
+		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 		assert.False(t, result.IsError)
 		require.NotEmpty(t, result.Content)
-		assert.True(t, strings.Contains(result.Content[0].Text, "Austin"))
+		assert.NotNil(t, result.Content[0].GetText())
+		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "Austin"))
 	})
 
 	t.Run("CallTool on greeter server returns greeting", func(t *testing.T) {
@@ -181,11 +182,12 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
-		var result rtv1.CallMCPToolResponse
+		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 		assert.False(t, result.IsError)
 		require.NotEmpty(t, result.Content)
-		assert.True(t, strings.Contains(result.Content[0].Text, "dapr"))
+		assert.NotNil(t, result.Content[0].GetText())
+		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "dapr"))
 	})
 
 	t.Run("ListTools returns different tools per server", func(t *testing.T) {
@@ -196,7 +198,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 			ctx, api.InstanceID(weatherID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
 
-		var weatherResult rtv1.ListMCPToolsResponse
+		var weatherResult wfv1.ListMCPToolsResponse
 		require.NoError(t, json.Unmarshal([]byte(weatherMeta.GetOutput().GetValue()), &weatherResult))
 		weatherNames := make([]string, len(weatherResult.Tools))
 		for i, tool := range weatherResult.Tools {
@@ -212,7 +214,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 			ctx, api.InstanceID(greeterID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
 
-		var greeterResult rtv1.ListMCPToolsResponse
+		var greeterResult wfv1.ListMCPToolsResponse
 		require.NoError(t, json.Unmarshal([]byte(greeterMeta.GetOutput().GetValue()), &greeterResult))
 		greeterNames := make([]string, len(greeterResult.Tools))
 		for i, tool := range greeterResult.Tools {

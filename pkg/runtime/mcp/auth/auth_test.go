@@ -31,6 +31,7 @@ import (
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	fakesecurity "github.com/dapr/dapr/pkg/security/fake"
 )
 
 // fakeSecretStore implements secretstores.SecretStore for tests.
@@ -65,16 +66,6 @@ func newTestCompstore(t *testing.T, storeName string, secrets map[string]string,
 	return cs
 }
 
-type fakeJWTFetcher struct {
-	token        string
-	err          error
-	lastAudience string
-}
-
-func (f *fakeJWTFetcher) FetchJWT(_ context.Context, audience string) (string, error) {
-	f.lastAudience = audience
-	return f.token, f.err
-}
 
 func namedServer(name string, spec mcpserverapi.MCPServerSpec) mcpserverapi.MCPServer {
 	s := mcpserverapi.MCPServer{Spec: spec}
@@ -152,7 +143,11 @@ func TestJWTRoundTripper_InjectsHeader(t *testing.T) {
 	})
 
 	prefix := "Bearer "
-	fetcher := &fakeJWTFetcher{token: "my-jwt-token"}
+	var lastAudience string
+	fetcher := fakesecurity.New().WithFetchJWT(func(_ context.Context, audience string) (string, error) {
+		lastAudience = audience
+		return "my-jwt-token", nil
+	})
 	rt := &jwtRoundTripper{
 		header:   "Authorization",
 		prefix:   prefix,
@@ -167,14 +162,16 @@ func TestJWTRoundTripper_InjectsHeader(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Bearer my-jwt-token", captured.Get("Authorization"))
-	assert.Equal(t, "https://api.example.com", fetcher.lastAudience)
+	assert.Equal(t, "https://api.example.com", lastAudience)
 }
 
 func TestJWTRoundTripper_FetchError(t *testing.T) {
 	inner := roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
 	})
-	fetcher := &fakeJWTFetcher{err: errors.New("svid unavailable")}
+	fetcher := fakesecurity.New().WithFetchJWT(func(_ context.Context, _ string) (string, error) {
+		return "", errors.New("svid unavailable")
+	})
 	rt := &jwtRoundTripper{
 		header: "Authorization", prefix: "Bearer ", audience: "aud",
 		fetcher: fetcher, base: inner,
@@ -214,7 +211,11 @@ func TestBuildHTTPClient_SPIFFEInjectsJWT(t *testing.T) {
 		},
 	}
 
-	fetcher := &fakeJWTFetcher{token: "spiffe-svid-token"}
+	var lastAudience string
+	fetcher := fakesecurity.New().WithFetchJWT(func(_ context.Context, audience string) (string, error) {
+		lastAudience = audience
+		return "spiffe-svid-token", nil
+	})
 	client, err := BuildHTTPClient(context.Background(), srv, nil, fetcher, 30*time.Second)
 	require.NoError(t, err)
 
@@ -224,7 +225,7 @@ func TestBuildHTTPClient_SPIFFEInjectsJWT(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "Bearer spiffe-svid-token", captured.Get("X-SVID"))
-	assert.Equal(t, "mcp://payments", fetcher.lastAudience)
+	assert.Equal(t, "mcp://payments", lastAudience)
 }
 
 func TestBuildHTTPClient_SPIFFEWithoutPrefix(t *testing.T) {
@@ -253,7 +254,9 @@ func TestBuildHTTPClient_SPIFFEWithoutPrefix(t *testing.T) {
 		},
 	}
 
-	fetcher := &fakeJWTFetcher{token: "raw-token"}
+	fetcher := fakesecurity.New().WithFetchJWT(func(_ context.Context, _ string) (string, error) {
+		return "raw-token", nil
+	})
 	client, err := BuildHTTPClient(context.Background(), srv, nil, fetcher, 30*time.Second)
 	require.NoError(t, err)
 

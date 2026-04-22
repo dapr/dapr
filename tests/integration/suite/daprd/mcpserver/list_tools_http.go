@@ -30,7 +30,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -138,7 +138,7 @@ func (s *listToolsHTTP) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
-		var result rtv1.ListMCPToolsResponse
+		var result wfv1.ListMCPToolsResponse
 		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 
 		names := make([]string, len(result.Tools))
