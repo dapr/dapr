@@ -58,6 +58,7 @@ const (
 	Dapr_GetActorReminder_FullMethodName               = "/dapr.proto.runtime.v1.Dapr/GetActorReminder"
 	Dapr_ExecuteActorStateTransaction_FullMethodName   = "/dapr.proto.runtime.v1.Dapr/ExecuteActorStateTransaction"
 	Dapr_InvokeActor_FullMethodName                    = "/dapr.proto.runtime.v1.Dapr/InvokeActor"
+	Dapr_SubscribeActorEventsAlpha1_FullMethodName     = "/dapr.proto.runtime.v1.Dapr/SubscribeActorEventsAlpha1"
 	Dapr_GetConfigurationAlpha1_FullMethodName         = "/dapr.proto.runtime.v1.Dapr/GetConfigurationAlpha1"
 	Dapr_GetConfiguration_FullMethodName               = "/dapr.proto.runtime.v1.Dapr/GetConfiguration"
 	Dapr_SubscribeConfigurationAlpha1_FullMethodName   = "/dapr.proto.runtime.v1.Dapr/SubscribeConfigurationAlpha1"
@@ -161,6 +162,13 @@ type DaprClient interface {
 	ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(ctx context.Context, in *InvokeActorRequest, opts ...grpc.CallOption) (*InvokeActorResponse, error)
+	// SubscribeActorEventsAlpha1 is the app-initiated stream over which an
+	// actor host receives invocation, reminder, timer, and deactivation
+	// callbacks from Dapr. The first message the app sends must be a
+	// SubscribeActorEventsRequestInitialAlpha1 registering the actor types
+	// it hosts. Apps using this RPC do not need to expose a server port for
+	// actor callbacks.
+	SubscribeActorEventsAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_SubscribeActorEventsAlpha1Client, error)
 	// GetConfiguration gets configuration from configuration store.
 	GetConfigurationAlpha1(ctx context.Context, in *GetConfigurationRequest, opts ...grpc.CallOption) (*GetConfigurationResponse, error)
 	// GetConfiguration gets configuration from configuration store.
@@ -523,6 +531,37 @@ func (c *daprClient) InvokeActor(ctx context.Context, in *InvokeActorRequest, op
 	return out, nil
 }
 
+func (c *daprClient) SubscribeActorEventsAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_SubscribeActorEventsAlpha1Client, error) {
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[1], Dapr_SubscribeActorEventsAlpha1_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &daprSubscribeActorEventsAlpha1Client{stream}
+	return x, nil
+}
+
+type Dapr_SubscribeActorEventsAlpha1Client interface {
+	Send(*SubscribeActorEventsRequestAlpha1) error
+	Recv() (*SubscribeActorEventsResponseAlpha1, error)
+	grpc.ClientStream
+}
+
+type daprSubscribeActorEventsAlpha1Client struct {
+	grpc.ClientStream
+}
+
+func (x *daprSubscribeActorEventsAlpha1Client) Send(m *SubscribeActorEventsRequestAlpha1) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *daprSubscribeActorEventsAlpha1Client) Recv() (*SubscribeActorEventsResponseAlpha1, error) {
+	m := new(SubscribeActorEventsResponseAlpha1)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *daprClient) GetConfigurationAlpha1(ctx context.Context, in *GetConfigurationRequest, opts ...grpc.CallOption) (*GetConfigurationResponse, error) {
 	out := new(GetConfigurationResponse)
 	err := c.cc.Invoke(ctx, Dapr_GetConfigurationAlpha1_FullMethodName, in, out, opts...)
@@ -542,7 +581,7 @@ func (c *daprClient) GetConfiguration(ctx context.Context, in *GetConfigurationR
 }
 
 func (c *daprClient) SubscribeConfigurationAlpha1(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (Dapr_SubscribeConfigurationAlpha1Client, error) {
-	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[1], Dapr_SubscribeConfigurationAlpha1_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[2], Dapr_SubscribeConfigurationAlpha1_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -574,7 +613,7 @@ func (x *daprSubscribeConfigurationAlpha1Client) Recv() (*SubscribeConfiguration
 }
 
 func (c *daprClient) SubscribeConfiguration(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (Dapr_SubscribeConfigurationClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[2], Dapr_SubscribeConfiguration_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[3], Dapr_SubscribeConfiguration_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -642,7 +681,7 @@ func (c *daprClient) UnlockAlpha1(ctx context.Context, in *UnlockRequest, opts .
 }
 
 func (c *daprClient) EncryptAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_EncryptAlpha1Client, error) {
-	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[3], Dapr_EncryptAlpha1_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[4], Dapr_EncryptAlpha1_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -673,7 +712,7 @@ func (x *daprEncryptAlpha1Client) Recv() (*EncryptResponse, error) {
 }
 
 func (c *daprClient) DecryptAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_DecryptAlpha1Client, error) {
-	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[4], Dapr_DecryptAlpha1_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[5], Dapr_DecryptAlpha1_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1094,6 +1133,13 @@ type DaprServer interface {
 	ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(context.Context, *InvokeActorRequest) (*InvokeActorResponse, error)
+	// SubscribeActorEventsAlpha1 is the app-initiated stream over which an
+	// actor host receives invocation, reminder, timer, and deactivation
+	// callbacks from Dapr. The first message the app sends must be a
+	// SubscribeActorEventsRequestInitialAlpha1 registering the actor types
+	// it hosts. Apps using this RPC do not need to expose a server port for
+	// actor callbacks.
+	SubscribeActorEventsAlpha1(Dapr_SubscribeActorEventsAlpha1Server) error
 	// GetConfiguration gets configuration from configuration store.
 	GetConfigurationAlpha1(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error)
 	// GetConfiguration gets configuration from configuration store.
@@ -1278,6 +1324,9 @@ func (UnimplementedDaprServer) ExecuteActorStateTransaction(context.Context, *Ex
 }
 func (UnimplementedDaprServer) InvokeActor(context.Context, *InvokeActorRequest) (*InvokeActorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeActor not implemented")
+}
+func (UnimplementedDaprServer) SubscribeActorEventsAlpha1(Dapr_SubscribeActorEventsAlpha1Server) error {
+	return status.Errorf(codes.Unimplemented, "method SubscribeActorEventsAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) GetConfigurationAlpha1(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetConfigurationAlpha1 not implemented")
@@ -1885,6 +1934,32 @@ func _Dapr_InvokeActor_Handler(srv interface{}, ctx context.Context, dec func(in
 		return srv.(DaprServer).InvokeActor(ctx, req.(*InvokeActorRequest))
 	}
 	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_SubscribeActorEventsAlpha1_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaprServer).SubscribeActorEventsAlpha1(&daprSubscribeActorEventsAlpha1Server{stream})
+}
+
+type Dapr_SubscribeActorEventsAlpha1Server interface {
+	Send(*SubscribeActorEventsResponseAlpha1) error
+	Recv() (*SubscribeActorEventsRequestAlpha1, error)
+	grpc.ServerStream
+}
+
+type daprSubscribeActorEventsAlpha1Server struct {
+	grpc.ServerStream
+}
+
+func (x *daprSubscribeActorEventsAlpha1Server) Send(m *SubscribeActorEventsResponseAlpha1) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *daprSubscribeActorEventsAlpha1Server) Recv() (*SubscribeActorEventsRequestAlpha1, error) {
+	m := new(SubscribeActorEventsRequestAlpha1)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func _Dapr_GetConfigurationAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -3013,6 +3088,12 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "SubscribeTopicEventsAlpha1",
 			Handler:       _Dapr_SubscribeTopicEventsAlpha1_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "SubscribeActorEventsAlpha1",
+			Handler:       _Dapr_SubscribeActorEventsAlpha1_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},

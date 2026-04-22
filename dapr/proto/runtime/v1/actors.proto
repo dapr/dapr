@@ -166,3 +166,185 @@ message UnregisterActorRemindersByTypeRequest {
 }
 
 message UnregisterActorRemindersByTypeResponse {}
+
+// ----------------------------------------------------------------------------
+// Actor host streaming protocol (SubscribeActorEventsAlpha1 on the Dapr
+// service). The app is the gRPC client: it dials daprd, opens the stream,
+// sends an initial registration message, and then exchanges callback
+// request/response pairs correlated by id. Apps using this protocol do not
+// need to expose an HTTP or gRPC server port.
+//
+// Naming convention: every oneof variant type is prefixed with its parent
+// message name (SubscribeActorEventsRequestAlpha1 /
+// SubscribeActorEventsResponseAlpha1) so the wire types are self-describing
+// and can't collide with unrelated messages.
+// ----------------------------------------------------------------------------
+
+// SubscribeActorEventsRequestAlpha1 is a message flowing from the app to
+// daprd on the actor event stream. The first message must be the initial
+// request (registering the actor host); every subsequent message must be a
+// response correlated by id to a request previously emitted by daprd.
+message SubscribeActorEventsRequestAlpha1 {
+  oneof request_type {
+    SubscribeActorEventsRequestInitialAlpha1             initial_request     = 1;
+    SubscribeActorEventsRequestInvokeResponseAlpha1      invoke_response     = 2;
+    SubscribeActorEventsRequestReminderResponseAlpha1    reminder_response   = 3;
+    SubscribeActorEventsRequestReminderResponseAlpha1    timer_response      = 4;
+    SubscribeActorEventsRequestDeactivateResponseAlpha1  deactivate_response = 5;
+
+    // request_failed is sent in place of a typed response when the app
+    // cannot process the request (e.g. the actor method does not exist).
+    // The id correlates back to the originating request; the code is a gRPC
+    // status code (see google.golang.org/grpc/codes) and lets daprd map
+    // codes.NotFound to a permanent, non-retryable failure.
+    SubscribeActorEventsRequestFailedAlpha1              request_failed      = 6;
+  }
+}
+
+// SubscribeActorEventsRequestInitialAlpha1 is the first message the app
+// sends when opening the stream. It advertises the actor types the app
+// hosts and the runtime configuration that applies to them.
+message SubscribeActorEventsRequestInitialAlpha1 {
+  // entities is the list of actor types this app hosts.
+  repeated string entities = 1;
+
+  // actor_idle_timeout is the default idle timeout for all actor types as
+  // a duration string (e.g. "1h"). Empty means use Dapr's default.
+  string actor_idle_timeout = 2;
+
+  // drain_ongoing_call_timeout is the duration Dapr waits for ongoing
+  // invocations to finish when an actor is rebalanced (e.g. "30s"). Empty
+  // means use Dapr's default.
+  string drain_ongoing_call_timeout = 3;
+
+  // drain_rebalanced_actors, when true, instructs Dapr to drain invocations
+  // from a rebalanced actor rather than aborting them.
+  optional bool drain_rebalanced_actors = 4;
+
+  // reentrancy is the default reentrancy configuration applied to all
+  // actor types.
+  ActorReentrancyConfig reentrancy = 5;
+
+  // entities_config applies per-actor-type overrides on top of the
+  // defaults above.
+  repeated ActorEntityConfig entities_config = 6;
+}
+
+// SubscribeActorEventsRequestInvokeResponseAlpha1 is the app's response to
+// a SubscribeActorEventsResponseInvokeRequestAlpha1 (actor method call).
+message SubscribeActorEventsRequestInvokeResponseAlpha1 {
+  string id = 1;
+  bytes data = 2;
+  // metadata carries response-level headers, including "content-type".
+  map<string, string> metadata = 3;
+  // error, when true, signals that data is an application-defined error
+  // payload returned from the actor method. Dapr passes the payload
+  // through to the original caller verbatim.
+  bool error = 4;
+}
+
+// SubscribeActorEventsRequestReminderResponseAlpha1 is the app's response
+// to both reminder and timer callbacks. The cancel flag signals that the
+// reminder or timer should not fire again.
+message SubscribeActorEventsRequestReminderResponseAlpha1 {
+  string id = 1;
+  bool cancel = 2;
+}
+
+// SubscribeActorEventsRequestDeactivateResponseAlpha1 is the app's ack
+// for a SubscribeActorEventsResponseDeactivateRequestAlpha1.
+message SubscribeActorEventsRequestDeactivateResponseAlpha1 {
+  string id = 1;
+}
+
+// SubscribeActorEventsRequestFailedAlpha1 signals an app-side failure for
+// a previously received request. The id correlates with the originating
+// request, the code is a gRPC status code.
+message SubscribeActorEventsRequestFailedAlpha1 {
+  string id = 1;
+  uint32 code = 2;
+  string message = 3;
+}
+
+// SubscribeActorEventsResponseAlpha1 is a message flowing from daprd to
+// the app on the actor event stream. The first message is the initial
+// response acknowledging registration; every subsequent message is a
+// callback request with a unique id the app must echo on its response.
+message SubscribeActorEventsResponseAlpha1 {
+  oneof response_type {
+    SubscribeActorEventsResponseInitialAlpha1            initial_response    = 1;
+    SubscribeActorEventsResponseInvokeRequestAlpha1      invoke_request      = 2;
+    SubscribeActorEventsResponseReminderRequestAlpha1    reminder_request    = 3;
+    SubscribeActorEventsResponseTimerRequestAlpha1       timer_request       = 4;
+    SubscribeActorEventsResponseDeactivateRequestAlpha1  deactivate_request  = 5;
+  }
+}
+
+// SubscribeActorEventsResponseInitialAlpha1 acks the app's registration
+// message. An empty body indicates success; failures are surfaced as a
+// gRPC error on the stream itself.
+message SubscribeActorEventsResponseInitialAlpha1 {}
+
+// SubscribeActorEventsResponseInvokeRequestAlpha1 is the callback payload
+// daprd sends when an actor method is invoked. The app echoes id on its
+// SubscribeActorEventsRequestInvokeResponseAlpha1.
+message SubscribeActorEventsResponseInvokeRequestAlpha1 {
+  string id = 1;
+  string actor_type = 2;
+  string actor_id = 3;
+  string method = 4;
+  bytes data = 5;
+  // metadata carries request-level headers from the original caller,
+  // including "content-type" and "Dapr-Reentrancy-Id" when reentrancy is
+  // enabled for the actor type.
+  map<string, string> metadata = 6;
+}
+
+// SubscribeActorEventsResponseReminderRequestAlpha1 is the callback
+// payload daprd sends when an actor reminder fires.
+message SubscribeActorEventsResponseReminderRequestAlpha1 {
+  string id = 1;
+  string actor_type = 2;
+  string actor_id = 3;
+  string name = 4;
+  string due_time = 5;
+  string period = 6;
+  google.protobuf.Any data = 7;
+}
+
+// SubscribeActorEventsResponseTimerRequestAlpha1 is the callback payload
+// daprd sends when an actor timer fires.
+message SubscribeActorEventsResponseTimerRequestAlpha1 {
+  string id = 1;
+  string actor_type = 2;
+  string actor_id = 3;
+  string name = 4;
+  string due_time = 5;
+  string period = 6;
+  string callback = 7;
+  google.protobuf.Any data = 8;
+}
+
+// SubscribeActorEventsResponseDeactivateRequestAlpha1 is the callback
+// payload daprd sends when an actor instance is being deactivated.
+message SubscribeActorEventsResponseDeactivateRequestAlpha1 {
+  string id = 1;
+  string actor_type = 2;
+  string actor_id = 3;
+}
+
+// ActorEntityConfig overrides the default actor runtime configuration for
+// a specific set of entities.
+message ActorEntityConfig {
+  repeated string entities = 1;
+  string actor_idle_timeout = 2;
+  string drain_ongoing_call_timeout = 3;
+  optional bool drain_rebalanced_actors = 4;
+  ActorReentrancyConfig reentrancy = 5;
+}
+
+// ActorReentrancyConfig configures actor reentrancy behavior.
+message ActorReentrancyConfig {
+  bool enabled = 1;
+  optional int32 max_stack_depth = 2;
+}
