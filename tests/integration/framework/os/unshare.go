@@ -61,7 +61,6 @@ func SkipUnlessUnshareAvailable(t *testing.T) {
 			t.Skip("kernel.unprivileged_userns_clone is disabled")
 		}
 	}
-	//nolint:gosec
 	if out, err := exec.Command("unshare",
 		"--user", "--mount", "--map-root-user", "--propagation=private",
 		"true").CombinedOutput(); err != nil {
