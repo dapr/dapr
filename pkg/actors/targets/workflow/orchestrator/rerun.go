@@ -167,7 +167,6 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 	startedEvent := o.getExecutionStartedEvent(newState)
 	if err = errors.Join(
 		o.callChildWorkflows(ctx, startedEvent.GetName(), childWFs),
-		// TODO - cassie: propagation
 		o.callActivities(ctx, activities, newState, nil).err,
 		o.createTimers(ctx, timers, newState.Generation),
 	); err != nil {
