@@ -69,7 +69,7 @@ metadata:
   name: sign-on
 spec:
   features:
-  - name: WorkflowSignState
+  - name: WorkflowHistorySigning
     enabled: true
 `),
 	)
@@ -86,7 +86,7 @@ metadata:
   name: sign-on
 spec:
   features:
-  - name: WorkflowSignState
+  - name: WorkflowHistorySigning
     enabled: true
 `),
 	)
@@ -103,7 +103,7 @@ metadata:
   name: sign-on
 spec:
   features:
-  - name: WorkflowSignState
+  - name: WorkflowHistorySigning
     enabled: true
 `),
 	)

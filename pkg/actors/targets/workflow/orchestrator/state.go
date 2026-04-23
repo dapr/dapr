@@ -61,10 +61,11 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	}
 
 	// When signing is enabled, any inbox event that does not match signed
-	// history can only have been written via state store tampering. Treat
-	// the state as unrecoverable: fail the workflow terminally so no
-	// further progress is made on forged input.
-	if o.signer != nil {
+	// history can only have been written via state store tampering. Treat the
+	// state as unrecoverable: fail the workflow terminally so no further
+	// progress is made on forged input. Skip the scan on an empty inbox as
+	// nothing to validate and the history-index build is pure waste.
+	if o.signer != nil && len(state.Inbox) > 0 {
 		if filtered := filterValidInboxEvents(state); len(filtered) != len(state.Inbox) {
 			o.failSignatureVerification(ctx)
 			return nil, nil, wferrors.NewVerificationError(

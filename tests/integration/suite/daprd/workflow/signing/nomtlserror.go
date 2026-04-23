@@ -30,7 +30,7 @@ func init() {
 	suite.Register(new(nomtlserror))
 }
 
-// nomtlserror verifies that when the WorkflowSignState feature flag is
+// nomtlserror verifies that when the WorkflowHistorySigning feature flag is
 // explicitly enabled but mTLS is not configured (no sentry), daprd fails
 // to start with a clear error message.
 type nomtlserror struct {
@@ -48,7 +48,7 @@ func (n *nomtlserror) Setup(t *testing.T) []framework.Option {
 	n.sched = scheduler.New(t)
 
 	n.logline = logline.New(t,
-		logline.WithStdoutLineContains("WorkflowSignState feature flag is enabled but mTLS is not configured"),
+		logline.WithStdoutLineContains("WorkflowHistorySigning feature flag is enabled but mTLS is not configured"),
 	)
 
 	daprd := daprd.New(t,
@@ -62,7 +62,7 @@ metadata:
   name: sign-on
 spec:
   features:
-  - name: WorkflowSignState
+  - name: WorkflowHistorySigning
     enabled: true
 `),
 		daprd.WithExit1(),

@@ -38,6 +38,15 @@ func (o *orchestrator) signNewEvents(state *wfenginestate.State) error {
 		return nil
 	}
 
+	// Defensive: the added count cannot exceed the history length. Without
+	// this guard, the int subtraction below would underflow and the uint64
+	// cast would produce a massive startIndex, panicking in the marshal loop
+	// with a misleading out-of-bounds error instead of a clear message here.
+	if newEventCount > len(state.History) {
+		return fmt.Errorf("signNewEvents called with newEventCount=%d but history has only %d events",
+			newEventCount, len(state.History))
+	}
+
 	//nolint:gosec
 	startIndex := uint64(len(state.History) - newEventCount)
 

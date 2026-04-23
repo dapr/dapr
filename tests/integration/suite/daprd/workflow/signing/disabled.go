@@ -35,7 +35,7 @@ func init() {
 	suite.Register(new(disabled))
 }
 
-// disabled verifies that when the WorkflowSignState feature flag is disabled,
+// disabled verifies that when the WorkflowHistorySigning feature flag is disabled,
 // no signatures or signing certificates are produced for a completed workflow.
 type disabled struct {
 	sentry *sentry.Sentry
@@ -65,7 +65,7 @@ metadata:
   name: signoff
 spec:
   features:
-  - name: WorkflowSignState
+  - name: WorkflowHistorySigning
     enabled: false
 `),
 	)

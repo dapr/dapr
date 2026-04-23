@@ -68,7 +68,7 @@ metadata:
   name: sign-on
 spec:
   features:
-  - name: WorkflowSignState
+  - name: WorkflowHistorySigning
     enabled: true
 `),
 	)

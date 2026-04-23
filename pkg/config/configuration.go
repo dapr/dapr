@@ -69,11 +69,11 @@ const (
 	// and makes them available for tool execution via workflow orchestrations.
 	MCPServerResource Feature = "MCPServerResource"
 
-	// WorkflowSignState enables cryptographic signing of workflow history
-	// state. When enabled and mTLS is active, each workflow execution's
+	// WorkflowHistorySigning enables cryptographic signing of workflow
+	// history. When enabled and mTLS is active, each workflow execution's
 	// history events are signed using the app's X.509 SVID identity,
 	// creating a verifiable chain of signatures. Disabled by default.
-	WorkflowSignState Feature = "WorkflowSignState"
+	WorkflowHistorySigning Feature = "WorkflowHistorySigning"
 )
 
 // end feature flags section

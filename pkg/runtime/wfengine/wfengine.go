@@ -66,7 +66,7 @@ type Options struct {
 
 	EnableClusteredDeployment       bool
 	WorkflowsRemoteActivityReminder bool
-	WorkflowSignState               bool
+	WorkflowHistorySigning          bool
 
 	// Signer provides cryptographic signing and verification. If nil, history
 	// signing is disabled.
@@ -92,16 +92,16 @@ func New(opts Options) (Interface, error) {
 		retPolicy = opts.Spec.StateRetentionPolicy
 	}
 
-	// Disable history signing if the WorkflowSignState feature flag is not
+	// Disable history signing if the WorkflowHistorySigning feature flag is not
 	// enabled.
 	s := opts.Signer
-	if !opts.WorkflowSignState {
+	if !opts.WorkflowHistorySigning {
 		s = nil
 	} else if s == nil {
 		// The feature flag is explicitly enabled but mTLS is not available. This
 		// is a misconfiguration. Signing requires mTLS for the SPIFFE identity
 		// used as the signing key.
-		return nil, errors.New("WorkflowSignState feature flag is enabled but mTLS is not configured; workflow history signing requires mTLS to be active")
+		return nil, errors.New("WorkflowHistorySigning feature flag is enabled but mTLS is not configured; workflow history signing requires mTLS to be active")
 	}
 
 	// If no backend was initialized by the manager, create a backend backed by actors
