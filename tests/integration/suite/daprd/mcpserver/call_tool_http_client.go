@@ -119,7 +119,7 @@ func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 		// Start the CallTool workflow via a plain HTTP POST — no durabletask SDK needed.
 		input := map[string]any{
 			"mcpServerName": "weather",
-			"toolName":          "get_weather",
+			"toolName":      "get_weather",
 			"arguments":     map[string]any{"city": "Portland"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
@@ -149,7 +149,7 @@ func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 				return
 			}
 			assert.Equal(c, api.RUNTIME_STATUS_COMPLETED, status.RuntimeStatus)
-		}, 30*time.Second, 100*time.Millisecond)
+		}, 30*time.Second, 10*time.Millisecond)
 
 		// The tool output is stored in the dapr.workflow.output property.
 		outputJSON := status.Properties["dapr.workflow.output"]
