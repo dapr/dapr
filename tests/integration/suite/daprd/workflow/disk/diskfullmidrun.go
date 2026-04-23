@@ -112,17 +112,21 @@ func (d *diskfullmidrun) Run(t *testing.T, ctx context.Context) {
 
 	sched := d.wf.Scheduler()
 
-	sched.WaitUntilRunning(t, ctx)
 	httpClient := client.HTTP(t)
 	healthzURL := fmt.Sprintf("http://127.0.0.1:%d/healthz", sched.HealthzPort())
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, healthzURL, nil)
-		var resp *http.Response
-		resp, err = httpClient.Do(req)
-		if assert.Error(c, err) {
+		req, rerr := http.NewRequestWithContext(ctx, http.MethodGet, healthzURL, nil)
+		if !assert.NoError(c, rerr) {
 			return
 		}
-		resp.Body.Close()
+		resp, derr := httpClient.Do(req)
+		if resp != nil {
+			resp.Body.Close()
+		}
+		if derr != nil {
+			return
+		}
+		assert.NotEqual(c, http.StatusOK, resp.StatusCode)
 	}, 10*time.Second, 50*time.Millisecond)
 
 	require.NoError(t, os.Remove(padPath))

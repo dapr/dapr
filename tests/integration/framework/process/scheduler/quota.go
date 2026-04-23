@@ -45,27 +45,52 @@ func (s *Scheduler) FillQuota(t *testing.T, ctx context.Context, prefix string) 
 }
 
 // RecoverQuota deletes keys under prefix, compacts revisions, defragments
-// the backend, and disarms any etcd alarms so writes can resume.
+// the backend, and disarms any etcd alarms so writes can resume. Each etcd
+// operation is bounded by its own 5s timeout so a hung backend cannot stall
+// the test until the suite-level deadline.
 func (s *Scheduler) RecoverQuota(t *testing.T, ctx context.Context, prefix string) {
 	t.Helper()
 	cli := s.ETCDClient(t, ctx)
 	endpoint := "127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())
 
-	_, err := cli.Delete(ctx, prefix, clientv3.WithPrefix())
-	require.NoError(t, err)
+	withTimeout := func(fn func(context.Context)) {
+		octx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		fn(octx)
+	}
 
-	status, err := cli.Status(ctx, endpoint)
-	require.NoError(t, err)
-	_, err = cli.Compact(ctx, status.Header.Revision, clientv3.WithCompactPhysical())
-	require.NoError(t, err)
-
-	_, err = cli.Defragment(ctx, endpoint)
-	require.NoError(t, err)
-
-	alarms, err := cli.AlarmList(ctx)
-	require.NoError(t, err)
-	for _, a := range alarms.Alarms {
-		_, err := cli.AlarmDisarm(ctx, (*clientv3.AlarmMember)(a))
+	withTimeout(func(octx context.Context) {
+		_, err := cli.Delete(octx, prefix, clientv3.WithPrefix())
 		require.NoError(t, err)
+	})
+
+	var rev int64
+	withTimeout(func(octx context.Context) {
+		status, err := cli.Status(octx, endpoint)
+		require.NoError(t, err)
+		rev = status.Header.Revision
+	})
+
+	withTimeout(func(octx context.Context) {
+		_, err := cli.Compact(octx, rev, clientv3.WithCompactPhysical())
+		require.NoError(t, err)
+	})
+
+	withTimeout(func(octx context.Context) {
+		_, err := cli.Defragment(octx, endpoint)
+		require.NoError(t, err)
+	})
+
+	var alarms *clientv3.AlarmResponse
+	withTimeout(func(octx context.Context) {
+		var err error
+		alarms, err = cli.AlarmList(octx)
+		require.NoError(t, err)
+	})
+	for _, a := range alarms.Alarms {
+		withTimeout(func(octx context.Context) {
+			_, err := cli.AlarmDisarm(octx, (*clientv3.AlarmMember)(a))
+			require.NoError(t, err)
+		})
 	}
 }

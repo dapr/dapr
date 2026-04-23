@@ -35,7 +35,7 @@ var (
 )
 
 // portsBase returns the starting port for reservation probing. A test binary
-// re-execed inside an unshare user namespace (where our mapped euid is 0)
+// re-executed inside an unshare user namespace (where our mapped euid is 0)
 // probes from a high base to avoid colliding with the parent process's
 // reservations on the lower port range.
 func portsBase() int {
@@ -76,7 +76,7 @@ func Reserve(t *testing.T, count int) *Ports {
 		for i := 0; i < blockSize; i++ {
 			last++
 			if last+i > 65535 {
-				last = 1024
+				last = portsBase()
 			}
 			ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(last))
 			if err != nil {

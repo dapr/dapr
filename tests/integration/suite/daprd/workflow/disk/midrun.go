@@ -91,12 +91,18 @@ func (m *midrun) Run(t *testing.T, ctx context.Context) {
 	httpClient := client.HTTP(t)
 	healthzURL := fmt.Sprintf("http://127.0.0.1:%d/healthz", sched.HealthzPort())
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, healthzURL, nil)
-		resp, err := httpClient.Do(req)
-		if assert.Error(c, err) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthzURL, nil)
+		if !assert.NoError(c, err) {
 			return
 		}
-		resp.Body.Close()
+		resp, err := httpClient.Do(req)
+		if resp != nil {
+			resp.Body.Close()
+		}
+		if err != nil {
+			return
+		}
+		assert.NotEqual(c, http.StatusOK, resp.StatusCode)
 	}, 15*time.Second, 50*time.Millisecond)
 
 	sched.Kill(t)
