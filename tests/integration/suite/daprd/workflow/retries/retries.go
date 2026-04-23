@@ -70,6 +70,27 @@ func (e *retries) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	_, err = cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
+
+	hist, err := cl.GetInstanceHistory(ctx, id)
+	require.NoError(t, err)
+
+	var activityRetryTimers int
+	for _, ev := range hist.GetEvents() {
+		tc := ev.GetTimerCreated()
+		if tc == nil {
+			continue
+		}
+		ar := tc.GetActivityRetry()
+		if ar == nil {
+			continue
+		}
+		activityRetryTimers++
+		assert.NotEmpty(t, ar.GetTaskExecutionId())
+	}
+	// With 3 max attempts and all failures, there should be 2 retry timers
+	// (between attempt 1->2 and attempt 2->3).
+	assert.Equal(t, 2, activityRetryTimers)
+
 	require.NoError(t, cl.TerminateWorkflow(ctx, id))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {

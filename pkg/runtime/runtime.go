@@ -333,6 +333,7 @@ func newDaprRuntime(ctx context.Context,
 		Addresses:        runtimeConfig.schedulerAddress,
 		Security:         sec,
 		WFEngine:         wfe,
+		WorkflowSpec:     globalConfig.Spec.WorkflowSpec,
 		Healthz:          runtimeConfig.healthz,
 		SchedulerStreams: runtimeConfig.schedulerStreams,
 	})

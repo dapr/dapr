@@ -64,6 +64,7 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	logWithField := log.WithFields(map[string]any{"overwrite": req.GetOverwrite()})
 	if err != nil {
 		logWithField.Errorf("error scheduling job %s: %s", req.GetName(), err)
+		monitoring.RecordJobsCreatedFailedCount(req.GetMetadata())
 		if apierrors.IsJobAlreadyExists(err) {
 			return nil, status.Errorf(codes.AlreadyExists, "%s", err.Error())
 		}
@@ -92,6 +93,7 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.DeleteJobRequ
 		return nil, err
 	}
 
+	monitoring.RecordJobsDeletedCount(req.GetMetadata())
 	return &schedulerv1pb.DeleteJobResponse{}, nil
 }
 
@@ -221,6 +223,7 @@ func (s *Server) DeleteByMetadata(ctx context.Context, req *schedulerv1pb.Delete
 		return nil, err
 	}
 
+	monitoring.RecordJobsBulkDeletedCount()
 	return new(schedulerv1pb.DeleteByMetadataResponse), nil
 }
 
@@ -245,6 +248,7 @@ func (s *Server) DeleteByNamePrefix(ctx context.Context, req *schedulerv1pb.Dele
 		return nil, err
 	}
 
+	monitoring.RecordJobsBulkDeletedCount()
 	return new(schedulerv1pb.DeleteByNamePrefixResponse), nil
 }
 

@@ -232,18 +232,45 @@ service Dapr {
   // Shutdown the sidecar
   rpc Shutdown (ShutdownRequest) returns (google.protobuf.Empty) {}
 
+  // Deprecated: Create and schedule a job
+  rpc ScheduleJobAlpha1(ScheduleJobRequest) returns (ScheduleJobResponse) {
+    option deprecated = true;
+  }
+
   // Create and schedule a job
-  rpc ScheduleJobAlpha1(ScheduleJobRequest) returns (ScheduleJobResponse) {}
+  rpc ScheduleJob(ScheduleJobRequest) returns (ScheduleJobResponse) {}
+
+  // Deprecated: Gets a scheduled job
+  rpc GetJobAlpha1(GetJobRequest) returns (GetJobResponse) {
+    option deprecated = true;
+  }
 
   // Gets a scheduled job
-  rpc GetJobAlpha1(GetJobRequest) returns (GetJobResponse) {}
+  rpc GetJob(GetJobRequest) returns (GetJobResponse) {}
+
+  // Deprecated: Delete a job
+  rpc DeleteJobAlpha1(DeleteJobRequest) returns (DeleteJobResponse) {
+    option deprecated = true;
+  }
 
   // Delete a job
-  rpc DeleteJobAlpha1(DeleteJobRequest) returns (DeleteJobResponse) {}
+  rpc DeleteJob(DeleteJobRequest) returns (DeleteJobResponse) {}
 
-  rpc DeleteJobsByPrefixAlpha1(DeleteJobsByPrefixRequestAlpha1) returns (DeleteJobsByPrefixResponseAlpha1) {}
+  // Deprecated: Delete jobs by name prefix
+  rpc DeleteJobsByPrefixAlpha1(DeleteJobsByPrefixRequestAlpha1) returns (DeleteJobsByPrefixResponseAlpha1) {
+    option deprecated = true;
+  }
 
-  rpc ListJobsAlpha1(ListJobsRequestAlpha1) returns (ListJobsResponseAlpha1) {}
+  // Delete jobs by name prefix
+  rpc DeleteJobsByPrefix(DeleteJobsByPrefixRequest) returns (DeleteJobsByPrefixResponse) {}
+
+  // Deprecated: List all jobs
+  rpc ListJobsAlpha1(ListJobsRequestAlpha1) returns (ListJobsResponseAlpha1) {
+    option deprecated = true;
+  }
+
+  // List all jobs
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse) {}
 
   // Converse with a LLM service
   rpc ConverseAlpha1(ConversationRequest) returns (ConversationResponse) {}
