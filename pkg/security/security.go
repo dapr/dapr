@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/crypto/spiffe"
 	spiffecontext "github.com/dapr/kit/crypto/spiffe/context"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/crypto/spiffe/trustanchors"
 	"github.com/dapr/kit/crypto/spiffe/trustanchors/file"
 	"github.com/dapr/kit/crypto/spiffe/trustanchors/static"
@@ -67,6 +68,10 @@ type Handler interface {
 	ID() spiffeid.ID
 	WatchTrustAnchors(context.Context, chan<- []byte)
 	IdentityDir() *string
+
+	// Signer returns a Signer for signing and verifying using the workload's
+	// identity and trust anchors. Returns nil if mTLS is not enabled.
+	Signer() *signer.Signer
 }
 
 // Provider is the security provider.
@@ -488,6 +493,13 @@ func (s *security) WithSVIDContext(ctx context.Context) context.Context {
 
 func (s *security) IdentityDir() *string {
 	return s.identityDir
+}
+
+func (s *security) Signer() *signer.Signer {
+	if s.spiffe == nil {
+		return nil
+	}
+	return signer.New(s.spiffe.X509SVIDSource(), s.trustAnchors)
 }
 
 func (s *security) ID() spiffeid.ID {
