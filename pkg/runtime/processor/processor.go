@@ -137,6 +137,10 @@ type Processor struct {
 	running  atomic.Bool
 	shutdown atomic.Bool
 	closedCh chan struct{}
+
+	// internalWorkflows is set after the workflow engine is created.
+	// Used to register internal workflows when resources are loaded or hot-reloaded.
+	internalWorkflows internalWorkflowRegistrar
 }
 
 func New(opts Options) *Processor {

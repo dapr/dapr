@@ -21,6 +21,7 @@ package inprocess
 import (
 	"fmt"
 
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	mcp "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
 	"github.com/dapr/dapr/pkg/security"
@@ -60,4 +61,13 @@ func (e *Executor) RegisterMCP(store *compstore.ComponentStore, sec security.Han
 		return fmt.Errorf("failed to register MCP in-process workflows: %w", err)
 	}
 	return nil
+}
+
+// RegisterMCPServer registers workflows for a single MCPServer.
+// Called on hot-reload when a new server is added.
+func (e *Executor) RegisterMCPServer(server mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) error {
+	return mcp.RegisterMCPServer(e.registry, server, mcp.Options{
+		Store:    store,
+		Security: sec,
+	})
 }

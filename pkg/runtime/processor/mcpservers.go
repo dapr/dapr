@@ -36,6 +36,12 @@ func (r mcpStdioEnvResource) NameValuePairs() []commonapi.NameValuePair {
 	return r.Spec.Endpoint.Stdio.Env
 }
 
+// SetInternalWorkflows sets the in-process executor used to register internal
+// workflows when resources are loaded or hot-reloaded.
+func (p *Processor) SetInternalWorkflows(exec internalWorkflowRegistrar) {
+	p.internalWorkflows = exec
+}
+
 // AddPendingMCPServer enqueues an MCPServer for processing.
 // Returns false if the processor has shut down or the context is done.
 func (p *Processor) AddPendingMCPServer(ctx context.Context, s mcpserverapi.MCPServer) bool {
@@ -72,6 +78,12 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 		p.processMCPServerSecrets(ctx, &s)
 		p.compStore.AddMCPServer(s)
 		log.Infof("MCPServer loaded: %s", s.LogName())
+
+		if p.internalWorkflows != nil {
+			if err := p.internalWorkflows.RegisterMCPServer(s, p.compStore, p.security); err != nil {
+				log.Warnf("MCPServer %q: failed to register workflows: %s", s.Name, err)
+			}
+		}
 	}
 
 	return nil

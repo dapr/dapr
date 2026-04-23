@@ -69,43 +69,52 @@ type activityCallToolInput struct {
 	Arguments map[string]any `json:"arguments,omitempty"`
 }
 
-// RegisterMCP registers versioned MCP workflows for each known MCPServer and
-// the shared transport activities. Returns an error if any registration fails —
-// this indicates a programming error that should cause the runtime to shut down.
+// RegisterMCP registers versioned MCP workflows for each known MCPServer.
+// Safe to call multiple times — new servers are registered, existing ones skipped.
 func RegisterMCP(registry *task.TaskRegistry, opts Options) error {
 	for _, server := range opts.Store.ListMCPServers() {
-		server := server // capture loop variable
+		if err := RegisterMCPServer(registry, server, opts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-		httpClient, err := mcpauth.BuildHTTPClient(context.Background(), &server, opts.Store, opts.Security, callTimeout(&server))
-		if err != nil {
-			return fmt.Errorf("MCPServer %q: failed to build HTTP client: %w", server.Name, err)
-		}
-		opts.Store.SetMCPHTTPClient(server.Name, httpClient)
+// RegisterMCPServer registers workflows and activities for a single MCPServer.
+// Builds the HTTP client and MCP session eagerly - similar to component init().
+// Returns an error if the server is unreachable or registration fails.
+// Safe to call on hot-reload — registry upserts replace existing entries,
+// and AddMCPServer invalidates stale cached clients/sessions.
+func RegisterMCPServer(registry *task.TaskRegistry, server mcpserverapi.MCPServer, opts Options) error {
+	httpClient, err := mcpauth.BuildHTTPClient(context.Background(), &server, opts.Store, opts.Security, callTimeout(&server))
+	if err != nil {
+		return fmt.Errorf("MCPServer %q: failed to build HTTP client: %w", server.Name, err)
+	}
+	opts.Store.SetMCPHTTPClient(server.Name, httpClient)
 
-		if _, err := getOrCreateSession(opts.Store, server.Name, &server, httpClient); err != nil {
-			return fmt.Errorf("MCPServer %q: failed to connect: %w", server.Name, err)
-		}
+	if _, err := getOrCreateSession(opts.Store, server.Name, &server, httpClient); err != nil {
+		return fmt.Errorf("MCPServer %q: failed to connect: %w", server.Name, err)
+	}
 
-		orchestrator := makeOrchestrator(server, opts.Store)
-		listActivity := makeListToolsActivity(server, opts)
-		callActivity := makeCallToolActivity(server, opts)
+	orchestrator := makeOrchestrator(server, opts.Store)
+	listActivity := makeListToolsActivity(server, opts)
+	callActivity := makeCallToolActivity(server, opts)
 
-		listWF := mcptypes.ListToolsWorkflowName(server.Name)
-		if err := registry.AddVersionedWorkflowN(listWF, workflowVersion, true, orchestrator); err != nil {
-			return fmt.Errorf("failed to register workflow %q: %w", listWF, err)
-		}
-		callWF := mcptypes.CallToolWorkflowName(server.Name)
-		if err := registry.AddVersionedWorkflowN(callWF, workflowVersion, true, orchestrator); err != nil {
-			return fmt.Errorf("failed to register workflow %q: %w", callWF, err)
-		}
-		listAct := mcptypes.ListToolsActivityName(server.Name)
-		if err := registry.AddActivityN(listAct, listActivity); err != nil {
-			return fmt.Errorf("failed to register activity %q: %w", listAct, err)
-		}
-		callAct := mcptypes.CallToolActivityName(server.Name)
-		if err := registry.AddActivityN(callAct, callActivity); err != nil {
-			return fmt.Errorf("failed to register activity %q: %w", callAct, err)
-		}
+	listWF := mcptypes.ListToolsWorkflowName(server.Name)
+	if err := registry.AddVersionedWorkflowN(listWF, workflowVersion, true, orchestrator); err != nil {
+		return fmt.Errorf("failed to register workflow %q: %w", listWF, err)
+	}
+	callWF := mcptypes.CallToolWorkflowName(server.Name)
+	if err := registry.AddVersionedWorkflowN(callWF, workflowVersion, true, orchestrator); err != nil {
+		return fmt.Errorf("failed to register workflow %q: %w", callWF, err)
+	}
+	listAct := mcptypes.ListToolsActivityName(server.Name)
+	if err := registry.AddActivityN(listAct, listActivity); err != nil {
+		return fmt.Errorf("failed to register activity %q: %w", listAct, err)
+	}
+	callAct := mcptypes.CallToolActivityName(server.Name)
+	if err := registry.AddActivityN(callAct, callActivity); err != nil {
+		return fmt.Errorf("failed to register activity %q: %w", callAct, err)
 	}
 	return nil
 }
