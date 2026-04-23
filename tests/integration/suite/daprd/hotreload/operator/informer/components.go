@@ -178,7 +178,7 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 			exp := []*rtv1.RegisteredComponents{
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "KEYS_LIKE", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "KEYS_LIKE", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}
 			assert.ElementsMatch(ct, exp, c.daprd1.GetMetaRegisteredComponents(ct, ctx))

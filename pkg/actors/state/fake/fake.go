@@ -23,6 +23,8 @@ type Fake struct {
 	getFn                         func(ctx context.Context, req *api.GetStateRequest, lock bool) (*api.StateResponse, error)
 	getBulkFn                     func(ctx context.Context, req *api.GetBulkStateRequest, lock bool) (api.BulkStateResponse, error)
 	transactionalStateOperationFn func(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error
+	multiMaxSizeFn                func() int
+	deleteActorStateFn            func(ctx context.Context, actorType, actorID string) (bool, error)
 }
 
 func New() *Fake {
@@ -35,6 +37,12 @@ func New() *Fake {
 		},
 		transactionalStateOperationFn: func(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error {
 			return nil
+		},
+		multiMaxSizeFn: func() int {
+			return 0
+		},
+		deleteActorStateFn: func(ctx context.Context, actorType, actorID string) (bool, error) {
+			return false, nil
 		},
 	}
 }
@@ -54,6 +62,16 @@ func (f *Fake) WithTransactionalStateOperationFn(fn func(ctx context.Context, ig
 	return f
 }
 
+func (f *Fake) WithMultiMaxSizeFn(fn func() int) *Fake {
+	f.multiMaxSizeFn = fn
+	return f
+}
+
+func (f *Fake) WithDeleteActorStateFn(fn func(ctx context.Context, actorType, actorID string) (bool, error)) *Fake {
+	f.deleteActorStateFn = fn
+	return f
+}
+
 func (f *Fake) Get(ctx context.Context, req *api.GetStateRequest, lock bool) (*api.StateResponse, error) {
 	return f.getFn(ctx, req, lock)
 }
@@ -64,4 +82,12 @@ func (f *Fake) GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock b
 
 func (f *Fake) TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error {
 	return f.transactionalStateOperationFn(ctx, ignoreHosted, req, lock)
+}
+
+func (f *Fake) MultiMaxSize() int {
+	return f.multiMaxSizeFn()
+}
+
+func (f *Fake) DeleteActorState(ctx context.Context, actorType, actorID string) (bool, error) {
+	return f.deleteActorStateFn(ctx, actorType, actorID)
 }

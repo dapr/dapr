@@ -49,6 +49,14 @@ const (
 	// (inbox, history, signatures, certificates). This prevents OOM from
 	// an attacker inflating metadata values in the state store.
 	maxStateEntries = 1_000_000
+
+	// speculativeReadHint is the number of per-slice (inbox/history/sigcert/
+	// signature) keys the cold-load path speculatively fetches in the same
+	// bulk request as the metadata key. For workflows whose actual lengths
+	// all fit within this bound the load completes in a single round trip;
+	// longer workflows pay a second round trip to fetch the tail (matching
+	// the pre-speculation cost). See LoadWorkflowState.
+	speculativeReadHint = 32
 )
 
 var wfLogger = logger.NewLogger("dapr.runtime.actor.target.workflow.state")
@@ -218,8 +226,70 @@ func (s *State) ClearInbox() {
 	s.inboxAddedCount = 0
 }
 
+// GetChunkedSaveRequest returns one or more transactional requests whose
+// operations respect maxChunkSize. maxChunkSize <= 0 disables chunking (the
+// result is a single-element slice equivalent to GetSaveRequest).
+//
+// Crash-recovery invariant: the metadata key is the length-of-truth counter.
+// If we commit chunks progressively and crash between them, a subsequent load
+// sees the OLD metadata and ignores any keys we already wrote at indices
+// beyond the old length. To preserve this, metadata is always the last
+// operation in the last chunk, and all deletions are kept in the same chunk as
+// metadata (a pre-committed delete at an index < oldLength would leave a
+// "hole" that a subsequent load would treat as a warning). This is safe for
+// appending saves; the purge / ContinueAsNew path with many deletions should
+// use DeleteWithPrefix (see state.FeatureDeleteWithPrefix).
+func (s *State) GetChunkedSaveRequest(actorID string, maxChunkSize int) ([]*api.TransactionalRequest, error) {
+	full, err := s.GetSaveRequest(actorID)
+	if err != nil {
+		return nil, err
+	}
+
+	if maxChunkSize <= 0 || len(full.Operations) <= maxChunkSize {
+		return []*api.TransactionalRequest{full}, nil
+	}
+
+	var upserts, finals []api.TransactionalOperation
+	for _, op := range full.Operations {
+		switch r := op.Request.(type) {
+		case api.TransactionalUpsert:
+			if r.Key == metadataKey || r.Key == customStatusKey {
+				finals = append(finals, op)
+			} else {
+				upserts = append(upserts, op)
+			}
+		case api.TransactionalDelete:
+			finals = append(finals, op)
+		default:
+			return nil, fmt.Errorf("workflow save: unexpected operation type %T", op.Request)
+		}
+	}
+
+	if len(finals) > maxChunkSize {
+		return nil, fmt.Errorf("workflow save: final commit chunk has %d ops (deletes + customStatus + metadata) which exceeds state store MultiMaxSize %d; use DeleteWithPrefix for purge", len(finals), maxChunkSize)
+	}
+
+	chunks := make([]*api.TransactionalRequest, 0, (len(upserts)+maxChunkSize-1)/maxChunkSize+1)
+	for i := 0; i < len(upserts); i += maxChunkSize {
+		end := i + maxChunkSize
+		if end > len(upserts) {
+			end = len(upserts)
+		}
+		chunks = append(chunks, &api.TransactionalRequest{
+			ActorType:  s.workflowActorType,
+			ActorID:    actorID,
+			Operations: upserts[i:end],
+		})
+	}
+	chunks = append(chunks, &api.TransactionalRequest{
+		ActorType:  s.workflowActorType,
+		ActorID:    actorID,
+		Operations: finals,
+	})
+	return chunks, nil
+}
+
 func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error) {
-	// TODO: Batching up the save requests into smaller chunks to avoid batch size limits in Dapr state stores.
 	opsCapacity := s.inboxAddedCount + s.inboxRemovedCount +
 		s.historyAddedCount + s.historyRemovedCount +
 		s.signingCertificatesAddedCount + s.signingCertificatesRemovedCount +
@@ -444,33 +514,46 @@ func addPurgeStateOperations(req *api.TransactionalRequest, keyPrefix string, co
 func LoadWorkflowState(ctx context.Context, state state.Interface, actorID string, opts Options) (*State, error) {
 	loadStartTime := time.Now()
 
-	// Load metadata
-	req := api.GetStateRequest{
+	// Speculative bulk: request metadata + customStatus + the first
+	// speculativeReadHint keys of each slice in one round trip. Metadata is
+	// the length-of-truth; keys beyond the actual lengths come back missing
+	// and are simply ignored.
+	bulkReq := &api.GetBulkStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,
-		Key:       metadataKey,
+		Keys:      make([]string, 0, 2+4*speculativeReadHint),
+	}
+	bulkReq.Keys = append(bulkReq.Keys, metadataKey, customStatusKey)
+	for i := uint64(0); i < speculativeReadHint; i++ {
+		bulkReq.Keys = append(bulkReq.Keys,
+			getMultiEntryKeyName(inboxKeyPrefix, i),
+			getMultiEntryKeyName(historyKeyPrefix, i),
+			getMultiEntryKeyName(sigcertKeyPrefix, i),
+			getMultiEntryKeyName(signatureKeyPrefix, i),
+		)
 	}
 
-	res, err := state.Get(ctx, &req, false)
+	bulkRes, err := state.GetBulk(ctx, bulkReq, false)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load workflow metadata: %w", err)
+		return nil, fmt.Errorf("failed to load workflow state: %w", err)
 	}
 
-	if len(res.Data) == 0 {
+	metaBytes := bulkRes[metadataKey]
+	if len(metaBytes) == 0 {
 		// no state found
 		return nil, nil
 	}
 
 	var metadata backend.BackendWorkflowStateMetadata
-	if err = proto.Unmarshal(res.Data, &metadata); err != nil {
+	if err = proto.Unmarshal(metaBytes, &metadata); err != nil {
 		// TODO: @joshvanl: remove in v1.16
 		var metadataJSON legacyWorkflowStateMetadata
-		jerr := json.Unmarshal(res.Data, &metadataJSON)
+		jerr := json.Unmarshal(metaBytes, &metadataJSON)
 		if jerr != nil {
 			return nil, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
 		}
 
-		wfLogger.Debugf("Loaded legacy workflow state metadata: %s", res.Data)
+		wfLogger.Debugf("Loaded legacy workflow state metadata: %s", metaBytes)
 
 		metadata.Generation = metadataJSON.Generation
 		metadata.InboxLength = metadataJSON.InboxLength
@@ -504,7 +587,33 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	//nolint:gosec
 	signatureLen := int(metadata.GetSignatureLength())
 
-	// Load inbox, history, signing certs, signatures, and custom status using a bulk request
+	// If any slice exceeds the speculative hint, fetch the tail keys in a second
+	// bulk request and merge.
+	var tailKeys []string
+	appendTail := func(prefix string, length uint64) {
+		for i := uint64(speculativeReadHint); i < length; i++ {
+			tailKeys = append(tailKeys, getMultiEntryKeyName(prefix, i))
+		}
+	}
+	appendTail(inboxKeyPrefix, metadata.GetInboxLength())
+	appendTail(historyKeyPrefix, metadata.GetHistoryLength())
+	appendTail(sigcertKeyPrefix, metadata.GetSigningCertificateLength())
+	appendTail(signatureKeyPrefix, metadata.GetSignatureLength())
+
+	if len(tailKeys) > 0 {
+		tailRes, terr := state.GetBulk(ctx, &api.GetBulkStateRequest{
+			ActorType: opts.WorkflowActorType,
+			ActorID:   actorID,
+			Keys:      tailKeys,
+		}, false)
+		if terr != nil {
+			return nil, fmt.Errorf("failed to load workflow state tail: %w", terr)
+		}
+		for k, v := range tailRes {
+			bulkRes[k] = v
+		}
+	}
+
 	wState := NewState(opts)
 	wState.Generation = metadata.GetGeneration()
 	wState.Inbox = make([]*backend.HistoryEvent, 0, inboxLen)
@@ -512,44 +621,6 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	wState.RawHistory = make([][]byte, 0, historyLen)
 	wState.SigningCertificates = make([]*backend.SigningCertificate, 0, signingCertLen)
 	wState.Signatures = make([]*backend.HistorySignature, 0, signatureLen)
-
-	totalKeys := inboxLen + historyLen + signingCertLen + signatureLen + 1
-	bulkReq := &api.GetBulkStateRequest{
-		ActorType: opts.WorkflowActorType,
-		ActorID:   actorID,
-		Keys:      make([]string, totalKeys),
-	}
-
-	var n int
-
-	bulkReq.Keys[n] = customStatusKey
-
-	n++
-	for i := range metadata.GetInboxLength() {
-		bulkReq.Keys[n] = getMultiEntryKeyName(inboxKeyPrefix, i)
-		n++
-	}
-
-	for i := range metadata.GetHistoryLength() {
-		bulkReq.Keys[n] = getMultiEntryKeyName(historyKeyPrefix, i)
-		n++
-	}
-
-	for i := range metadata.GetSigningCertificateLength() {
-		bulkReq.Keys[n] = getMultiEntryKeyName(sigcertKeyPrefix, i)
-		n++
-	}
-
-	for i := range metadata.GetSignatureLength() {
-		bulkReq.Keys[n] = getMultiEntryKeyName(signatureKeyPrefix, i)
-		n++
-	}
-
-	// Perform the request
-	bulkRes, err := state.GetBulk(ctx, bulkReq, false)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load workflow state: %w", err)
-	}
 
 	defer func() {
 		// TODO: @joshvanl: remove in v1.16 where we will no longer have legacy

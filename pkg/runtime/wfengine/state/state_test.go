@@ -14,6 +14,9 @@ limitations under the License.
 package state
 
 import (
+	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,6 +26,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
+	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -478,4 +482,185 @@ func TestGetSaveRequest_MetadataIncludesSigningLengths(t *testing.T) {
 	assert.Equal(t, uint64(1), meta.GetHistoryLength())
 	assert.Equal(t, uint64(1), meta.GetSigningCertificateLength())
 	assert.Equal(t, uint64(1), meta.GetSignatureLength())
+}
+
+func TestGetChunkedSaveRequest_NoChunkingWhenUnderLimit(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+	s.AddToHistory(testEvent(1))
+	s.AddToHistory(testEvent(2))
+
+	chunks, err := s.GetChunkedSaveRequest("actor1", 0)
+	require.NoError(t, err)
+	assert.Len(t, chunks, 1, "maxChunkSize <= 0 should never chunk")
+
+	chunks, err = s.GetChunkedSaveRequest("actor1", 1_000)
+	require.NoError(t, err)
+	assert.Len(t, chunks, 1, "ops under limit should fit in one chunk")
+}
+
+func TestGetChunkedSaveRequest_MetadataAlwaysLast(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+	for i := int32(0); i < 25; i++ {
+		s.AddToHistory(testEvent(i))
+	}
+
+	chunks, err := s.GetChunkedSaveRequest("actor1", 10)
+	require.NoError(t, err)
+	require.Greater(t, len(chunks), 1, "25 history adds + metadata should require chunking with limit=10")
+
+	// metadata must live in the final chunk, as its last operation.
+	last := chunks[len(chunks)-1]
+	require.NotEmpty(t, last.Operations)
+	tail := last.Operations[len(last.Operations)-1]
+	up, ok := tail.Request.(api.TransactionalUpsert)
+	require.True(t, ok, "final op should be an Upsert")
+	assert.Equal(t, metadataKey, up.Key, "final op must be the metadata write")
+
+	// No earlier chunk may contain metadata or customStatus.
+	for i, c := range chunks[:len(chunks)-1] {
+		for _, op := range c.Operations {
+			if u, ok := op.Request.(api.TransactionalUpsert); ok {
+				assert.NotEqual(t, metadataKey, u.Key, "chunk %d must not contain metadata", i)
+				assert.NotEqual(t, customStatusKey, u.Key, "chunk %d must not contain customStatus", i)
+			}
+		}
+	}
+
+	// Every chunk must respect the size limit.
+	for i, c := range chunks {
+		assert.LessOrEqual(t, len(c.Operations), 10, "chunk %d exceeds limit", i)
+	}
+}
+
+func TestGetChunkedSaveRequest_FinalChunkTooLarge(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+	// Simulate a ContinueAsNew / purge: many history entries, no adds. This
+	// produces a pile of deletes that must all fit with metadata in the
+	// final chunk.
+	for i := int32(0); i < 20; i++ {
+		s.AddToHistory(testEvent(i))
+	}
+	req1, err := s.GetSaveRequest("a")
+	require.NoError(t, err)
+	_ = req1
+	s.Reset() // pushes 20 deletes into the next save
+
+	_, err = s.GetChunkedSaveRequest("a", 5)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "DeleteWithPrefix", "error should point user to DeleteWithPrefix for purge")
+}
+
+// storeFromBytes builds a GetBulk response from a keyed byte map. Missing keys
+// are returned absent from the map, matching real state-store semantics.
+func storeFromBytes(entries map[string][]byte) func(ctx context.Context, req *api.GetBulkStateRequest, lock bool) (api.BulkStateResponse, error) {
+	return func(ctx context.Context, req *api.GetBulkStateRequest, lock bool) (api.BulkStateResponse, error) {
+		resp := api.BulkStateResponse{}
+		for _, k := range req.Keys {
+			if v, ok := entries[k]; ok {
+				resp[k] = v
+			}
+		}
+		return resp, nil
+	}
+}
+
+func TestLoadWorkflowState_EmptyStateIsOneRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	fake := statefake.New().WithGetBulkFn(func(ctx context.Context, req *api.GetBulkStateRequest, lock bool) (api.BulkStateResponse, error) {
+		calls.Add(1)
+		// Metadata key absent ⇒ no workflow state.
+		return api.BulkStateResponse{}, nil
+	})
+
+	ws, err := LoadWorkflowState(t.Context(), fake, "no-such-id", testOpts())
+	require.NoError(t, err)
+	assert.Nil(t, ws)
+	assert.Equal(t, int32(1), calls.Load(), "empty state should cost one GetBulk round trip")
+}
+
+func TestLoadWorkflowState_SmallHistoryIsOneRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	// 5 history events, 3 inbox, no signing — all comfortably under
+	// speculativeReadHint.
+	metaBytes, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
+		Generation:    1,
+		InboxLength:   3,
+		HistoryLength: 5,
+	})
+	require.NoError(t, err)
+
+	entries := map[string][]byte{metadataKey: metaBytes}
+	for i := uint64(0); i < 5; i++ {
+		b, err := proto.Marshal(testEvent(int32(i)))
+		require.NoError(t, err)
+		entries[getMultiEntryKeyName(historyKeyPrefix, i)] = b
+	}
+	for i := uint64(0); i < 3; i++ {
+		b, err := proto.Marshal(testEvent(int32(100 + i)))
+		require.NoError(t, err)
+		entries[getMultiEntryKeyName(inboxKeyPrefix, i)] = b
+	}
+
+	var calls atomic.Int32
+	fake := statefake.New().WithGetBulkFn(func(ctx context.Context, req *api.GetBulkStateRequest, lock bool) (api.BulkStateResponse, error) {
+		calls.Add(1)
+		return storeFromBytes(entries)(ctx, req, lock)
+	})
+
+	ws, err := LoadWorkflowState(t.Context(), fake, "wf-1", testOpts())
+	require.NoError(t, err)
+	require.NotNil(t, ws)
+	assert.Len(t, ws.History, 5)
+	assert.Len(t, ws.Inbox, 3)
+	assert.Equal(t, int32(1), calls.Load(), "history fitting under speculativeReadHint should cost one GetBulk")
+}
+
+func TestLoadWorkflowState_LongHistoryTriggersTailFetch(t *testing.T) {
+	t.Parallel()
+
+	const longHistory = speculativeReadHint + 10 // 42 events
+	metaBytes, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
+		Generation:    1,
+		HistoryLength: longHistory,
+	})
+	require.NoError(t, err)
+
+	entries := map[string][]byte{metadataKey: metaBytes}
+	for i := uint64(0); i < longHistory; i++ {
+		b, err := proto.Marshal(testEvent(int32(i)))
+		require.NoError(t, err)
+		entries[getMultiEntryKeyName(historyKeyPrefix, i)] = b
+	}
+
+	var calls atomic.Int32
+	var secondCallKeys []string
+	fake := statefake.New().WithGetBulkFn(func(ctx context.Context, req *api.GetBulkStateRequest, lock bool) (api.BulkStateResponse, error) {
+		n := calls.Add(1)
+		if n == 2 {
+			secondCallKeys = append([]string(nil), req.Keys...)
+		}
+		return storeFromBytes(entries)(ctx, req, lock)
+	})
+
+	ws, err := LoadWorkflowState(t.Context(), fake, "wf-long", testOpts())
+	require.NoError(t, err)
+	require.NotNil(t, ws)
+	assert.Len(t, ws.History, int(longHistory))
+	assert.Equal(t, int32(2), calls.Load(), "history exceeding speculativeReadHint should cost a tail GetBulk")
+	// Tail request must only fetch the 10 missing indices, not refetch the
+	// speculated ones — otherwise we haven't saved any work.
+	assert.Len(t, secondCallKeys, 10)
+	for i, k := range secondCallKeys {
+		want := getMultiEntryKeyName(historyKeyPrefix, uint64(speculativeReadHint+i))
+		assert.Equal(t, want, k, fmt.Sprintf("tail key %d", i))
+	}
 }

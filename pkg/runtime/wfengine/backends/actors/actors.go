@@ -765,20 +765,6 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 		return err
 	}
 
-	s, err := state.LoadWorkflowState(ctx, astate, id.String(), state.Options{
-		AppID:             abe.appID,
-		WorkflowActorType: abe.workflowActorType,
-		ActivityActorType: abe.activityActorType,
-	})
-	if err != nil {
-		return err
-	}
-
-	req, err := s.GetPurgeRequest(id.String())
-	if err != nil {
-		return err
-	}
-
 	reminders, err := abe.actors.Reminders(ctx)
 	if err != nil {
 		return err
@@ -789,10 +775,37 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 		return err
 	}
 
+	// Prefer native DeleteWithPrefix when the state store supports it: one
+	// round trip vs. loading state + building a transactional delete with
+	// N operations. Falls back to the load+transaction path otherwise.
+	stateDeleteFn := func(ctx context.Context) error {
+		ok, derr := astate.DeleteActorState(ctx, abe.workflowActorType, id.String())
+		if derr != nil {
+			return derr
+		}
+		if ok {
+			return nil
+		}
+		s, lerr := state.LoadWorkflowState(ctx, astate, id.String(), state.Options{
+			AppID:             abe.appID,
+			WorkflowActorType: abe.workflowActorType,
+			ActivityActorType: abe.activityActorType,
+		})
+		if lerr != nil {
+			return lerr
+		}
+		if s == nil {
+			return nil
+		}
+		req, perr := s.GetPurgeRequest(id.String())
+		if perr != nil {
+			return perr
+		}
+		return astate.TransactionalStateOperation(ctx, true, req, false)
+	}
+
 	return concurrency.Join(ctx,
-		func(ctx context.Context) error {
-			return astate.TransactionalStateOperation(ctx, true, req, false)
-		},
+		stateDeleteFn,
 		func(ctx context.Context) error {
 			return sched.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       abe.workflowActorType,
