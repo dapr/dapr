@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -35,6 +34,7 @@ import (
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
@@ -60,14 +60,12 @@ type restartMidCall struct {
 	db         *sqlite.SQLite
 	httpClient *http.Client
 
-	callCount  atomic.Int32
-	firstCall  chan struct{} // closed when first call begins
+	callCount atomic.Int32
+	firstCall chan struct{} // closed when first call begins
 }
 
 func (s *restartMidCall) Setup(t *testing.T) []framework.Option {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping on Windows: SQLite used for persistent workflow state is not reliable on Windows CI")
-	}
+	os.SkipWindows(t)
 
 	s.firstCall = make(chan struct{})
 
@@ -154,7 +152,7 @@ func (s *restartMidCall) Run(t *testing.T, ctx context.Context) {
 	t.Run("activity retries after daprd restart mid tool call", func(t *testing.T) {
 		input := map[string]any{
 			"mcpServerName": "weather",
-			"toolName":          "get_weather",
+			"toolName":      "get_weather",
 			"arguments":     map[string]any{"city": "Seattle"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
