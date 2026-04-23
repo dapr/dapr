@@ -15,7 +15,6 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -61,13 +60,6 @@ const (
 	jsonFieldRequired = "required"
 )
 
-// activityCallToolInput is the internal input passed from the orchestrator
-// to the CallTool activity.
-type activityCallToolInput struct {
-	ToolName  string         `json:"tool_name"`
-	Arguments map[string]any `json:"arguments,omitempty"`
-}
-
 // RegisterMCP registers versioned MCP workflows for each known MCPServer.
 // Safe to call multiple times — new servers are registered, existing ones skipped.
 func RegisterMCP(registry *task.TaskRegistry, opts Options) error {
@@ -85,14 +77,15 @@ func RegisterMCP(registry *task.TaskRegistry, opts Options) error {
 // Safe to call on hot-reload — registry upserts replace existing entries,
 // and AddMCPServer invalidates stale cached clients/sessions.
 func RegisterMCPServer(registry *task.TaskRegistry, server mcpserverapi.MCPServer, opts Options) error {
-	session, err := getOrCreateSession(opts.Store, server.Name, &server, opts.Security)
+	session, err := connectSession(&server, opts.Store, opts.Security)
 	if err != nil {
 		return fmt.Errorf("MCPServer %q: failed to connect: %w", server.Name, err)
 	}
 
+	schemas := &toolSchemaCache{}
 	orchestrator := makeOrchestrator(server, opts.Store)
-	listActivity := makeListToolsActivity(server, session, opts)
-	callActivity := makeCallToolActivity(server, session, opts)
+	listActivity := makeListToolsActivity(server, session, schemas)
+	callActivity := makeCallToolActivity(server, session, schemas, opts)
 
 	listWF := mcptypes.ListToolsWorkflowName(server.Name)
 	if err := registry.AddVersionedWorkflowN(listWF, workflowVersion, true, orchestrator); err != nil {
@@ -211,108 +204,6 @@ func errorResult(format string, args ...any) *wfv1.CallMCPToolResponse {
 	}
 }
 
-// makeListToolsActivity returns a task.Activity that calls ListTools on the given MCP server.
-func makeListToolsActivity(server mcpserverapi.MCPServer, session *mcp.ClientSession, opts Options) task.Activity {
-	serverName := server.Name
-	return func(ctx task.ActivityContext) (any, error) {
-		callCtx := ctx.Context()
-		timeout := callTimeout(&server)
-		workerLog.Debugf("list-tools: MCPServer %q timeout=%s", serverName, timeout)
-		callCtx, cancel := withDeadline(callCtx, timeout)
-		defer cancel()
-
-		workerLog.Debugf("list-tools: listing tools on %q", serverName)
-
-		var tools []*wfv1.MCPToolDefinition
-		var cursor string
-		for {
-			params := &mcp.ListToolsParams{}
-			if cursor != "" {
-				params.Cursor = cursor
-			}
-			result, err := session.ListTools(callCtx, params)
-			if err != nil {
-				return &wfv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: MCP call failed for %q: %w", serverName, err)
-			}
-
-			for _, t := range result.Tools {
-				td := &wfv1.MCPToolDefinition{
-					Name:        t.Name,
-					Description: &t.Description,
-				}
-				if t.InputSchema != nil {
-					schema, ok := t.InputSchema.(map[string]any)
-					if !ok {
-						workerLog.Warnf("list-tools: tool %q on MCPServer %q has non-object inputSchema (type %T), skipping schema", t.Name, serverName, t.InputSchema)
-					} else {
-						s, err := structpb.NewStruct(schema)
-						if err != nil {
-							workerLog.Warnf("list-tools: tool %q on MCPServer %q: failed to convert inputSchema: %s", t.Name, serverName, err)
-						} else {
-							td.InputSchema = s
-							if raw, err := json.Marshal(schema); err == nil {
-								opts.Store.SetMCPToolSchema(serverName, t.Name, raw)
-							}
-						}
-					}
-				}
-				tools = append(tools, td)
-			}
-
-			if result.NextCursor == "" {
-				break
-			}
-			cursor = result.NextCursor
-		}
-
-		return &wfv1.ListMCPToolsResponse{Tools: tools}, nil
-	}
-}
-
-// makeCallToolActivity returns a task.Activity that calls a tool on the given MCP server.
-// Error strategy:
-//   - Permanent errors (bad input, transport misconfiguration) are returned as
-//     CallMCPToolResponse{IsError: true} so callers see a result, not a retry loop.
-//   - Transient errors (secret store unavailable for OAuth2) are returned as activity-level
-//     errors so the workflow engine retries the activity automatically.
-//   - Error messages exposed to callers never include infrastructure details.
-//
-// makeCallToolActivity returns a task.Activity that calls a tool on the given MCP server.
-func makeCallToolActivity(server mcpserverapi.MCPServer, session *mcp.ClientSession, opts Options) task.Activity {
-	serverName := server.Name
-	return func(ctx task.ActivityContext) (any, error) {
-		var input activityCallToolInput
-		if err := ctx.GetInput(&input); err != nil {
-			return errorResult("call-tool: failed to parse input: %s", err), nil
-		}
-
-		callCtx := ctx.Context()
-		timeout := callTimeout(&server)
-		callCtx, cancel := withDeadline(callCtx, timeout)
-		defer cancel()
-
-		if validationErr := validateToolArguments(opts.Store, serverName, input.ToolName, input.Arguments); validationErr != "" {
-			return errorResult("%s", validationErr), nil
-		}
-
-		argBytes, err := json.Marshal(input.Arguments)
-		if err != nil {
-			argBytes = []byte(fmt.Sprintf("failed to marshal arguments: %s for %v", err, input.Arguments))
-		}
-		workerLog.Debugf("call-tool: calling tool %q on MCPServer %q args %s", input.ToolName, serverName, argBytes)
-
-		result, err := session.CallTool(callCtx, &mcp.CallToolParams{
-			Name:      input.ToolName,
-			Arguments: input.Arguments,
-		})
-		if err != nil {
-			return errorResult("call-tool: MCP call failed for tool %q on %q: %s", input.ToolName, serverName, err), nil
-		}
-
-		return convertCallToolResult(result), nil
-	}
-}
-
 // buildTransport constructs the appropriate mcp.Transport for the given MCPServer.
 // The httpClient is used for HTTP-based transports (streamableHTTP, sse).
 func buildTransport(server *mcpserverapi.MCPServer, httpClient *http.Client) (mcp.Transport, error) {
@@ -347,47 +238,25 @@ func buildTransport(server *mcpserverapi.MCPServer, httpClient *http.Client) (mc
 	}
 }
 
-// getOrCreateSession returns a cached MCP session for the server, or creates
-// and caches a new one. The session is connected with context.Background() so
-// it outlives individual call contexts. Per-call deadlines are enforced by the
-// individual ListTools/CallTool RPC calls, not the connection itself.
-// If the cached session is stale (detected by a failed RPC), callers should
-// call store.DeleteMCPSession and retry.
-func getOrCreateSession(store *compstore.ComponentStore, serverName string, server *mcpserverapi.MCPServer, sec security.Handler) (*mcp.ClientSession, error) {
-	// Fast path: return cached session if present.
-	if cached := store.GetMCPSession(serverName); cached != nil {
-		if session, ok := cached.(*mcp.ClientSession); ok {
-			return session, nil
-		}
+// connectSession builds an HTTP client and MCP session for the given server.
+// Called once at registration time; the session is captured in activity closures.
+// Connected with context.Background() so the session outlives individual calls.
+func connectSession(server *mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) (*mcp.ClientSession, error) {
+	httpClient, err := mcpauth.BuildHTTPClient(context.Background(), server, store, sec, callTimeout(server))
+	if err != nil {
+		return nil, fmt.Errorf("failed to build HTTP client for %q: %w", server.Name, err)
 	}
 
-	// Build or retrieve the HTTP client
-	httpClient := store.GetMCPHTTPClient(serverName)
-	if httpClient == nil {
-		built, err := mcpauth.BuildHTTPClient(context.Background(), server, store, sec, callTimeout(server))
-		if err != nil {
-			return nil, fmt.Errorf("failed to build HTTP client for %q: %w", serverName, err)
-		}
-		httpClient, _ = store.GetOrSetMCPHTTPClient(serverName, built)
-	}
-
-	// Build transport and connect.
 	transport, err := buildTransport(server, httpClient)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build transport for %q: %w", serverName, err)
+		return nil, fmt.Errorf("failed to build transport for %q: %w", server.Name, err)
 	}
 
-	workerLog.Debugf("connecting to MCP server %q", serverName)
+	workerLog.Debugf("connecting to MCP server %q", server.Name)
 	c := mcp.NewClient(&mcp.Implementation{Name: mcpClientName, Version: mcpClientVersion}, nil)
 	session, err := c.Connect(context.Background(), transport, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to MCP server %q: %w", serverName, err)
-	}
-
-	cached, stored := store.GetOrSetMCPSession(serverName, session)
-	if !stored {
-		session.Close()
-		return cached.(*mcp.ClientSession), nil
+		return nil, fmt.Errorf("failed to connect to MCP server %q: %w", server.Name, err)
 	}
 	return session, nil
 }
@@ -414,60 +283,6 @@ func withDeadline(ctx context.Context, d time.Duration) (context.Context, contex
 	return context.WithTimeout(ctx, d)
 }
 
-// convertCallToolResult converts an mcp.CallToolResult from the go-sdk into a proto CallMCPToolResponse.
-// Each MCP content type maps to the corresponding oneof variant in MCPContentBlock.
-// Unknown/future content types are JSON-marshaled into a text block as a forward-compatible fallback.
-func convertCallToolResult(r *mcp.CallToolResult) *wfv1.CallMCPToolResponse {
-	out := &wfv1.CallMCPToolResponse{IsError: r.IsError}
-	for _, c := range r.Content {
-		switch v := c.(type) {
-		case *mcp.TextContent:
-			out.Content = append(out.Content, &wfv1.MCPContentBlock{
-				Content: &wfv1.MCPContentBlock_Text{
-					Text: &wfv1.MCPTextContent{Text: v.Text},
-				},
-			})
-		case *mcp.ImageContent:
-			out.Content = append(out.Content, &wfv1.MCPContentBlock{
-				Content: &wfv1.MCPContentBlock_Image{
-					Image: &wfv1.MCPBinaryContent{MimeType: v.MIMEType, Data: v.Data},
-				},
-			})
-		case *mcp.AudioContent:
-			out.Content = append(out.Content, &wfv1.MCPContentBlock{
-				Content: &wfv1.MCPContentBlock_Audio{
-					Audio: &wfv1.MCPBinaryContent{MimeType: v.MIMEType, Data: v.Data},
-				},
-			})
-		case *mcp.ResourceLink:
-			if raw, err := json.Marshal(v); err == nil {
-				out.Content = append(out.Content, &wfv1.MCPContentBlock{
-					Content: &wfv1.MCPContentBlock_ResourceLink{
-						ResourceLink: &wfv1.MCPResourceContent{Resource: raw},
-					},
-				})
-			}
-		case *mcp.EmbeddedResource:
-			if raw, err := json.Marshal(v); err == nil {
-				out.Content = append(out.Content, &wfv1.MCPContentBlock{
-					Content: &wfv1.MCPContentBlock_EmbeddedResource{
-						EmbeddedResource: &wfv1.MCPResourceContent{Resource: raw},
-					},
-				})
-			}
-		default:
-			if b, err := json.Marshal(c); err == nil {
-				out.Content = append(out.Content, &wfv1.MCPContentBlock{
-					Content: &wfv1.MCPContentBlock_Text{
-						Text: &wfv1.MCPTextContent{Text: string(b)},
-					},
-				})
-			}
-		}
-	}
-	return out
-}
-
 // structFromMap converts a map[string]any to a *structpb.Struct.
 // Returns nil if the input map is nil.
 func structFromMap(m map[string]any) *structpb.Struct {
@@ -480,50 +295,6 @@ func structFromMap(m map[string]any) *structpb.Struct {
 		return nil
 	}
 	return s
-}
-
-// validateToolArguments performs client-side validation of tool arguments
-// against the tool's declared input schema (if known).
-// It checks that all required properties are present.
-// Returns an empty string when validation passes or no schema is available,
-// or an error message describing the missing/invalid fields.
-func validateToolArguments(store *compstore.ComponentStore, serverName, toolName string, args map[string]any) string {
-	raw, ok := store.GetMCPToolSchema(serverName, toolName)
-	if !ok || raw == nil {
-		return ""
-	}
-
-	var schema map[string]any
-	if err := json.Unmarshal(raw, &schema); err != nil {
-		return ""
-	}
-
-	requiredRaw, ok := schema[jsonFieldRequired]
-	if !ok {
-		return ""
-	}
-
-	requiredList, ok := requiredRaw.([]any)
-	if !ok {
-		return ""
-	}
-
-	var missing []string
-	for _, r := range requiredList {
-		name, ok := r.(string)
-		if !ok {
-			continue
-		}
-		if _, present := args[name]; !present {
-			missing = append(missing, name)
-		}
-	}
-
-	if len(missing) > 0 {
-		return fmt.Sprintf("call-tool: missing required argument(s) for tool %q: %s",
-			toolName, strings.Join(missing, ", "))
-	}
-	return ""
 }
 
 // stringDeref returns the dereferenced string or "" if nil.
