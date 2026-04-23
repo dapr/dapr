@@ -15,7 +15,6 @@ package signing
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -50,9 +49,9 @@ type certexpiry struct {
 }
 
 func (c *certexpiry) Setup(t *testing.T) []framework.Option {
-	// Configure sentry with a very short workload cert TTL (10s).
-	// The SPIFFE library renews at 50% of the validity period, so
-	// renewal happens every ~5 seconds.
+	// Configure sentry with a very short workload cert TTL (10s). The SPIFFE
+	// library renews at 50% of the validity period, so renewal happens every ~5
+	// seconds.
 	c.sentry = sentry.New(t,
 		sentry.WithConfiguration(`
 apiVersion: dapr.io/v1alpha1
@@ -97,16 +96,16 @@ spec:
 func (c *certexpiry) Run(t *testing.T, ctx context.Context) {
 	c.daprd.WaitUntilRunning(t, ctx)
 
-	// The workflow waits for multiple external events spaced apart in
-	// time, giving the SVID time to rotate between events.
-	const numEvents = 5
-
+	// The workflow waits for two external events with a gap in between so the
+	// SVID rotates at least once. Any more events just add wall-clock time
+	// without exercising new code paths.
 	reg := dworkflow.NewRegistry()
 	reg.AddWorkflowN("sign-certexpiry", func(ctx *dworkflow.WorkflowContext) (any, error) {
-		for i := range numEvents {
-			if err := ctx.WaitForExternalEvent(fmt.Sprintf("event-%d", i), time.Second*60).Await(nil); err != nil {
-				return nil, err
-			}
+		if err := ctx.WaitForExternalEvent("event-0", time.Second*60).Await(nil); err != nil {
+			return nil, err
+		}
+		if err := ctx.WaitForExternalEvent("event-1", time.Second*60).Await(nil); err != nil {
+			return nil, err
 		}
 		return nil, nil
 	})
@@ -121,34 +120,23 @@ func (c *certexpiry) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, dworkflow.StatusRunning, meta.RuntimeStatus)
 
-	// Send events spaced 6 seconds apart. With a 10s TTL and renewal at 50%
-	// (5s), the SVID should rotate at least once between events.
-	for i := range numEvents {
-		if i > 0 {
-			time.Sleep(6 * time.Second)
-		}
-		require.NoError(t, client.RaiseEvent(ctx, id, fmt.Sprintf("event-%d", i)))
+	require.NoError(t, client.RaiseEvent(ctx, id, "event-0"))
+	require.EventuallyWithT(t, func(col *assert.CollectT) {
+		assert.GreaterOrEqual(col, fworkflow.CertificateCount(t, ctx, c.db, id), 1)
+	}, 10*time.Second, 10*time.Millisecond)
 
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			m, ferr := client.FetchWorkflowMetadata(ctx, id)
-			if !assert.NoError(c, ferr) {
-				return
-			}
-			assert.NotEqual(c, dworkflow.StatusFailed, m.RuntimeStatus)
-		}, 10*time.Second, 100*time.Millisecond)
-	}
+	time.Sleep(7 * time.Second)
+
+	require.NoError(t, client.RaiseEvent(ctx, id, "event-1"))
 
 	meta, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, dworkflow.StatusCompleted, meta.RuntimeStatus)
 
-	// The SVID rotated multiple times during the workflow. Each rotation
-	// produces a new signing certificate entry.
 	certCount := fworkflow.CertificateCount(t, ctx, c.db, id)
 	assert.GreaterOrEqual(t, certCount, 2,
 		"expected at least 2 certificates from natural SVID rotation, got %d", certCount)
 
-	// The full signature chain must be valid across all certificate rotations.
 	fworkflow.VerifySignatureChain(t, ctx, c.db, id, c.sentry.CABundle().X509.TrustAnchors)
 	fworkflow.VerifyCertAppID(t, ctx, c.db, id, c.daprd.AppID())
 }
