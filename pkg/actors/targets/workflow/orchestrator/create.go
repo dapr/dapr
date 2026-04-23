@@ -110,7 +110,7 @@ func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *ba
 		return err
 	}
 	state.AddToInbox(startEvent)
-	if err := o.saveInternalState(ctx, state); err != nil {
+	if err := o.signAndSaveState(ctx, state); err != nil {
 		return err
 	}
 
