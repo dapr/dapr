@@ -156,6 +156,23 @@ func (c *ComponentStore) SetMCPHTTPClient(serverName string, client *http.Client
 	c.mcpHTTPClients[serverName] = client
 }
 
+// GetOrSetMCPHTTPClient atomically returns an existing cached HTTP client or
+// stores the provided one. Returns the client in the cache and true if the
+// provided client was stored (false if an existing one was returned).
+func (c *ComponentStore) GetOrSetMCPHTTPClient(serverName string, client *http.Client) (*http.Client, bool) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.mcpHTTPClients == nil {
+		c.mcpHTTPClients = make(map[string]*http.Client)
+	}
+	if existing, ok := c.mcpHTTPClients[serverName]; ok {
+		return existing, false
+	}
+	c.mcpHTTPClients[serverName] = client
+	return client, true
+}
+
 // GetMCPHTTPClient returns the cached HTTP client for the given MCPServer,
 // or nil if none is cached.
 func (c *ComponentStore) GetMCPHTTPClient(serverName string) *http.Client {
@@ -197,9 +214,7 @@ func (c *ComponentStore) GetMCPSession(serverName string) io.Closer {
 }
 
 // GetOrSetMCPSession atomically returns an existing cached session or stores
-// the provided one. Returns the session that ended up in the cache (which may
-// be a previously cached session if another goroutine won the race) and true
-// if the provided session was stored (false if an existing one was returned).
+// the provided one.
 func (c *ComponentStore) GetOrSetMCPSession(serverName string, session io.Closer) (io.Closer, bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()

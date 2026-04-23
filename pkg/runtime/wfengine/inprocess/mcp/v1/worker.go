@@ -34,7 +34,6 @@ import (
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	mcpauth "github.com/dapr/dapr/pkg/runtime/mcp/auth"
-	autherrors "github.com/dapr/dapr/pkg/runtime/mcp/auth/errors"
 	mcptypes "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/types"
 	"github.com/dapr/dapr/pkg/security"
 )
@@ -86,13 +85,7 @@ func RegisterMCP(registry *task.TaskRegistry, opts Options) error {
 // Safe to call on hot-reload — registry upserts replace existing entries,
 // and AddMCPServer invalidates stale cached clients/sessions.
 func RegisterMCPServer(registry *task.TaskRegistry, server mcpserverapi.MCPServer, opts Options) error {
-	httpClient, err := mcpauth.BuildHTTPClient(context.Background(), &server, opts.Store, opts.Security, callTimeout(&server))
-	if err != nil {
-		return fmt.Errorf("MCPServer %q: failed to build HTTP client: %w", server.Name, err)
-	}
-	opts.Store.SetMCPHTTPClient(server.Name, httpClient)
-
-	if _, err := getOrCreateSession(opts.Store, server.Name, &server, httpClient); err != nil {
+	if _, err := getOrCreateSession(opts.Store, server.Name, &server, opts.Security); err != nil {
 		return fmt.Errorf("MCPServer %q: failed to connect: %w", server.Name, err)
 	}
 
@@ -227,17 +220,7 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, opts Options) task.Act
 		callCtx, cancel := withDeadline(callCtx, timeout)
 		defer cancel()
 
-		httpClient := opts.Store.GetMCPHTTPClient(serverName)
-		if httpClient == nil {
-			var err error
-			httpClient, err = mcpauth.BuildHTTPClient(callCtx, &server, opts.Store, opts.Security, timeout)
-			if err != nil {
-				return &wfv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: failed to build HTTP client for %q: %w", serverName, err)
-			}
-			opts.Store.SetMCPHTTPClient(serverName, httpClient)
-		}
-
-		session, err := getOrCreateSession(opts.Store, serverName, &server, httpClient)
+		session, err := getOrCreateSession(opts.Store, serverName, &server, opts.Security)
 		if err != nil {
 			return &wfv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: %w", err)
 		}
@@ -310,25 +293,11 @@ func makeCallToolActivity(server mcpserverapi.MCPServer, opts Options) task.Acti
 		callCtx, cancel := withDeadline(callCtx, timeout)
 		defer cancel()
 
-		httpClient := opts.Store.GetMCPHTTPClient(serverName)
-		if httpClient == nil {
-			var err error
-			httpClient, err = mcpauth.BuildHTTPClient(callCtx, &server, opts.Store, opts.Security, timeout)
-			if err != nil {
-				if autherrors.IsSecretFetchError(err) {
-					workerLog.Warnf("call-tool: transient auth error for MCPServer %q: %s", serverName, err)
-					return nil, fmt.Errorf("call-tool: temporary authentication failure for MCPServer %q; retrying", serverName)
-				}
-				return errorResult("call-tool: authentication configuration error for MCPServer %q", serverName), nil
-			}
-			opts.Store.SetMCPHTTPClient(serverName, httpClient)
-		}
-
 		if validationErr := validateToolArguments(opts.Store, serverName, input.ToolName, input.Arguments); validationErr != "" {
 			return errorResult("%s", validationErr), nil
 		}
 
-		session, err := getOrCreateSession(opts.Store, serverName, &server, httpClient)
+		session, err := getOrCreateSession(opts.Store, serverName, &server, opts.Security)
 		if err != nil {
 			return errorResult("call-tool: %s", err), nil
 		}
@@ -391,7 +360,7 @@ func buildTransport(server *mcpserverapi.MCPServer, httpClient *http.Client) (mc
 // individual ListTools/CallTool RPC calls, not the connection itself.
 // If the cached session is stale (detected by a failed RPC), callers should
 // call store.DeleteMCPSession and retry.
-func getOrCreateSession(store *compstore.ComponentStore, serverName string, server *mcpserverapi.MCPServer, httpClient *http.Client) (*mcp.ClientSession, error) {
+func getOrCreateSession(store *compstore.ComponentStore, serverName string, server *mcpserverapi.MCPServer, sec security.Handler) (*mcp.ClientSession, error) {
 	// Fast path: return cached session if present.
 	if cached := store.GetMCPSession(serverName); cached != nil {
 		if session, ok := cached.(*mcp.ClientSession); ok {
@@ -399,7 +368,17 @@ func getOrCreateSession(store *compstore.ComponentStore, serverName string, serv
 		}
 	}
 
-	// Slow path: create a new session.
+	// Build or retrieve the HTTP client
+	httpClient := store.GetMCPHTTPClient(serverName)
+	if httpClient == nil {
+		built, err := mcpauth.BuildHTTPClient(context.Background(), server, store, sec, callTimeout(server))
+		if err != nil {
+			return nil, fmt.Errorf("failed to build HTTP client for %q: %w", serverName, err)
+		}
+		httpClient, _ = store.GetOrSetMCPHTTPClient(serverName, built)
+	}
+
+	// Build transport and connect.
 	transport, err := buildTransport(server, httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build transport for %q: %w", serverName, err)
@@ -412,10 +391,8 @@ func getOrCreateSession(store *compstore.ComponentStore, serverName string, serv
 		return nil, fmt.Errorf("failed to connect to MCP server %q: %w", serverName, err)
 	}
 
-	// Atomically store our session or get the one that won the race.
 	cached, stored := store.GetOrSetMCPSession(serverName, session)
 	if !stored {
-		// Another goroutine won — close ours and use theirs.
 		session.Close()
 		return cached.(*mcp.ClientSession), nil
 	}
