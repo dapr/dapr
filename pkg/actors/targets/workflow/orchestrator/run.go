@@ -60,6 +60,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 
 		timerEvent := durableTimer.GetTimerEvent()
+		// Validate the timer event is actually a TimerFired event. A crafted
+		// reminder could contain arbitrary event types to inject into the inbox.
+		if timerEvent.GetTimerFired() == nil {
+			return todo.RunCompletedTrue, fmt.Errorf("workflow actor '%s': timer reminder contains non-TimerFired event type %T", o.actorID, timerEvent.GetEventType())
+		}
 		// timer fired event is precreated at the moment of creating the timer
 		// set the timestamp to now so it is accurately recorded in the history
 		timerEvent.Timestamp = timestamppb.Now()
@@ -198,7 +203,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 				state.Generation++
 
-				if err = o.saveInternalState(ctx, state); err != nil {
+				if err = o.signAndSaveState(ctx, state); err != nil {
 					o.rstate = rstateSnapshot
 					return todo.RunCompletedFalse, err
 				}
@@ -300,7 +305,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			rs.NewEvents = filtered
 			state.ApplyRuntimeStateChanges(rs)
 			rs.NewEvents = origNewEvents
-			if saveErr := o.saveInternalState(ctx, state); saveErr != nil {
+			if saveErr := o.signAndSaveState(ctx, state); saveErr != nil {
 				return todo.RunCompletedFalse, saveErr
 			}
 			executionStatus = diag.StatusRecoverable
@@ -314,7 +319,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	state.ApplyRuntimeStateChanges(rs)
 	state.ClearInbox()
 
-	err = o.saveInternalState(ctx, state)
+	err = o.signAndSaveState(ctx, state)
 	if err != nil {
 		return todo.RunCompletedFalse, err
 	}
@@ -416,4 +421,68 @@ func (o *orchestrator) handleRetention(ctx context.Context, status protos.Orches
 	}
 
 	return nil
+}
+
+// filterValidInboxEvents returns inbox events that pass validation. Result
+// events (TaskCompleted/TaskFailed, ChildWorkflowInstanceCompleted/Failed)
+// must match operations that were scheduled in signed history. Invalid events
+// are dropped and logged.
+func filterValidInboxEvents(state *wfenginestate.State) []*backend.HistoryEvent {
+	// Build sets of scheduled operation event IDs from history.
+	scheduledTaskIDs := make(map[int32]struct{})
+	createdChildIDs := make(map[int32]struct{})
+	for _, e := range state.History {
+		switch {
+		case e.GetTaskScheduled() != nil:
+			scheduledTaskIDs[e.GetEventId()] = struct{}{}
+		case e.GetChildWorkflowInstanceCreated() != nil:
+			createdChildIDs[e.GetEventId()] = struct{}{}
+		}
+	}
+
+	valid := make([]*backend.HistoryEvent, 0, len(state.Inbox))
+	for _, e := range state.Inbox {
+		// exhaustive linter will error here on missing types not implemented on
+		// the switch.
+		switch et := e.GetEventType().(type) {
+		case *protos.HistoryEvent_TaskCompleted:
+			taskID := et.TaskCompleted.GetTaskScheduledId()
+			if _, ok := scheduledTaskIDs[taskID]; !ok {
+				log.Warnf("Dropping injected inbox event: task result for task %d not scheduled in signed history", taskID)
+				continue
+			}
+		case *protos.HistoryEvent_TaskFailed:
+			taskID := et.TaskFailed.GetTaskScheduledId()
+			if _, ok := scheduledTaskIDs[taskID]; !ok {
+				log.Warnf("Dropping injected inbox event: task failure for task %d not scheduled in signed history", taskID)
+				continue
+			}
+		case *protos.HistoryEvent_ChildWorkflowInstanceCompleted:
+			taskID := et.ChildWorkflowInstanceCompleted.GetTaskScheduledId()
+			if _, ok := createdChildIDs[taskID]; !ok {
+				log.Warnf("Dropping injected inbox event: child workflow result for task %d not created in signed history", taskID)
+				continue
+			}
+		case *protos.HistoryEvent_ChildWorkflowInstanceFailed:
+			taskID := et.ChildWorkflowInstanceFailed.GetTaskScheduledId()
+			if _, ok := createdChildIDs[taskID]; !ok {
+				log.Warnf("Dropping injected inbox event: child workflow failure for task %d not created in signed history", taskID)
+				continue
+			}
+		case *protos.HistoryEvent_EventRaised,
+			*protos.HistoryEvent_TimerFired,
+			*protos.HistoryEvent_ExecutionStarted,
+			*protos.HistoryEvent_ExecutionTerminated,
+			*protos.HistoryEvent_ExecutionResumed,
+			*protos.HistoryEvent_ExecutionSuspended:
+			// Legitimate inbox event types that do not correspond to a previously
+			// scheduled operation.
+		default:
+			log.Warnf("Dropping injected inbox event: unknown event type %T", et)
+			continue
+		}
+		valid = append(valid, e)
+	}
+
+	return valid
 }

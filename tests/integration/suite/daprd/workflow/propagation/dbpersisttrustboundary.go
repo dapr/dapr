@@ -121,12 +121,19 @@ func (d *dbpersisttrustboundary) Run(t *testing.T, ctx context.Context) {
 	require.Contains(t, metadata.GetOutput().GetValue(), "has-history")
 
 	// The leaf's propagated-history row should contain only App1's chunk + App1's events
-	// App0 is behind the trust boundary
+	// App0 is behind the trust boundary.
+	//
+	// NOTE: all three daprds write to the same shared DB in this framework,
+	// so there will be two propagated-history rows (App1's received
+	// from App0, and App2's received from App1). We filter by App2's AppID
+	// prefix so assertions run against the leaf's row only
 	db := d.workflow.DB().GetConnection(t)
 	tableName := d.workflow.DB().TableName()
 
+	app2AppID := d.workflow.DaprN(2).AppID()
 	rows, err := db.QueryContext(ctx,
-		"SELECT key, value, is_binary FROM "+tableName+" WHERE key LIKE '%propagated-history'")
+		"SELECT key, value, is_binary FROM "+tableName+
+			" WHERE key LIKE '"+app2AppID+"%propagated-history'")
 	require.NoError(t, err)
 	defer rows.Close()
 

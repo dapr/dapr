@@ -105,8 +105,10 @@ func WithNoDB() Option {
 }
 
 // WithMTLS enables mTLS on all daprd instances by spinning up a Sentry
-// process. Required for workflow history propagation tests since propagation
-// requires mTLS to be enabled.
+// process AND turns on the WorkflowHistorySigning feature flag on each
+// daprd. Propagation is gated on signing being active, and signing requires
+// mTLS for the SPIFFE identity, so these two are coupled for propagation
+// tests.
 func WithMTLS(t *testing.T) Option {
 	t.Helper()
 	return func(o *options) {
