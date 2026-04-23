@@ -49,6 +49,7 @@ type Interface interface {
 	RegisterGrpcServer(*grpc.Server)
 	Client() workflows.Workflow
 	RuntimeMetadata() *runtimev1pb.MetadataWorkflows
+	InternalExecutor() *inprocess.Executor
 
 	ActivityActorType() string
 }
@@ -76,9 +77,10 @@ type engine struct {
 	actors            actors.Interface
 	getWorkItemsCount *atomic.Int32
 
-	worker  backend.TaskHubWorker
-	backend *backendactors.Actors
-	client  workflows.Workflow
+	worker       backend.TaskHubWorker
+	backend      *backendactors.Actors
+	client       workflows.Workflow
+	internalExec *inprocess.Executor
 
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 }
@@ -108,13 +110,7 @@ func New(opts Options) (Interface, error) {
 		lock              sync.Mutex
 	)
 
-	internalExecutor, err := inprocess.NewExecutor(inprocess.Options{
-		ComponentStore: opts.ComponentStore,
-		Security:       opts.Security,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create in-process workflow executor: %w", err)
-	}
+	internalExec := inprocess.NewExecutor()
 
 	grpcExec, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
 		backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
@@ -159,7 +155,7 @@ func New(opts Options) (Interface, error) {
 	oworker := backend.NewWorkflowWorker(backend.WorkflowWorkerOptions{
 		Backend:          abackend,
 		Executor:         grpcExec,
-		InternalExecutor: internalExecutor,
+		InternalExecutor: internalExec.Backend(),
 		Logger:           wfBackendLogger,
 		AppID:            opts.AppID,
 	}, topts...)
@@ -174,7 +170,7 @@ func New(opts Options) (Interface, error) {
 	aworker := backend.NewActivityTaskWorkerWithInternal(
 		abackend,
 		grpcExec,
-		internalExecutor,
+		internalExec.Backend(),
 		wfBackendLogger,
 		topts...,
 	)
@@ -186,6 +182,7 @@ func New(opts Options) (Interface, error) {
 		actors:               opts.Actors,
 		worker:               worker,
 		backend:              abackend,
+		internalExec:         internalExec,
 		registerGrpcServerFn: registerGrpcServerFn,
 		getWorkItemsCount:    &getWorkItemsCount,
 		client: &client{
@@ -193,6 +190,10 @@ func New(opts Options) (Interface, error) {
 			client: backend.NewTaskHubClient(abackend),
 		},
 	}, nil
+}
+
+func (wfe *engine) InternalExecutor() *inprocess.Executor {
+	return wfe.internalExec
 }
 
 func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {

@@ -14,41 +14,50 @@ limitations under the License.
 // Package inprocess creates and configures the in-process workflow executor
 // used for dapr-internal workflows (e.g. MCP tool calls). The executor runs
 // alongside the sidecar rather than dispatching work to an external SDK via
-// gRPC. Subsystems register their orchestrators and activities via Populate
-// functions (e.g. mcp.Populate) at startup.
+// gRPC. Subsystems register their orchestrators and activities after resources
+// are loaded (e.g. MCPServers) to ensure the store is populated.
 package inprocess
 
 import (
 	"fmt"
 
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
+	mcp "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/task"
 )
 
-// Options configures all in-process workflow subsystems.
-type Options struct {
-	ComponentStore *compstore.ComponentStore
-	Security       security.Handler
+// Executor wraps a task.TaskExecutor and exposes methods to register
+// in-process workflow subsystems after resources are loaded.
+type Executor struct {
+	registry *task.TaskRegistry
+	executor backend.Executor
 }
 
-// NewExecutor creates a task.TaskExecutor backed by a registry that is
-// eagerly populated with all known in-process workflow subsystems.
-// Therefore, workflows handle missing resources gracefully at call time (e.g. "MCPServer not found").
-func NewExecutor(opts Options) (backend.Executor, error) {
+// NewExecutor creates an in-process executor with an empty registry.
+// Call RegisterMCP after MCPServers are loaded.
+func NewExecutor() *Executor {
 	registry := task.NewTaskRegistry()
-
-	// MCP subsystem: per-server versioned workflows + transport activities.
-	if err := mcp.RegisterMCP(registry, mcp.Options{
-		Store:    opts.ComponentStore,
-		Security: opts.Security,
-	}); err != nil {
-		return nil, fmt.Errorf("failed to register MCP in-process workflows: %w", err)
+	return &Executor{
+		registry: registry,
+		executor: task.NewTaskExecutor(registry),
 	}
+}
 
-	// Future in-process subsystems would register here.
+// Backend returns the underlying backend.Executor for use by the workflow engine.
+func (e *Executor) Backend() backend.Executor {
+	return e.executor
+}
 
-	return task.NewTaskExecutor(registry), nil
+// RegisterMCP registers versioned MCP workflows for all known MCPServers.
+// Must be called after MCPServers are loaded into the component store.
+func (e *Executor) RegisterMCP(store *compstore.ComponentStore, sec security.Handler) error {
+	if err := mcp.RegisterMCP(e.registry, mcp.Options{
+		Store:    store,
+		Security: sec,
+	}); err != nil {
+		return fmt.Errorf("failed to register MCP in-process workflows: %w", err)
+	}
+	return nil
 }
