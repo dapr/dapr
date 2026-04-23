@@ -15,6 +15,8 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 
 	"google.golang.org/protobuf/types/known/anypb"
@@ -24,6 +26,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -43,20 +46,51 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 		AppID:             o.appID,
 		WorkflowActorType: o.actorType,
 		ActivityActorType: o.activityActorType,
+		Signer:            o.signer,
 	})
 	if err != nil {
+		var verifyErr *wferrors.VerificationError
+		if errors.As(err, &verifyErr) {
+			o.failSignatureVerification(ctx)
+		}
 		return nil, nil, err
 	}
 	if state == nil {
 		// No such state exists in the state store
 		return nil, nil, nil
 	}
+
+	// When signing is enabled, any inbox event that does not match signed
+	// history can only have been written via state store tampering. Treat the
+	// state as unrecoverable: fail the workflow terminally so no further
+	// progress is made on forged input. Skip the scan on an empty inbox as
+	// nothing to validate and the history-index build is pure waste.
+	if o.signer != nil && len(state.Inbox) > 0 {
+		if filtered := filterValidInboxEvents(state); len(filtered) != len(state.Inbox) {
+			o.failSignatureVerification(ctx)
+			return nil, nil, wferrors.NewVerificationError(
+				fmt.Errorf("workflow actor '%s': inbox contained %d events that did not match signed history (state store tampering)",
+					o.actorID, len(state.Inbox)-len(filtered)),
+			)
+		}
+	}
+
 	// Update cached state
 	o.state = state
 	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
 	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
 
 	return state, o.ometa, nil
+}
+
+// signAndSaveState signs any newly added history events and then persists
+// the state. This is the single entry point for all state persistence —
+// callers must never call saveInternalState directly.
+func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestate.State) error {
+	if err := o.signNewEvents(state); err != nil {
+		return fmt.Errorf("failed to sign new history events: %w", err)
+	}
+	return o.saveInternalState(ctx, state)
 }
 
 func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State) error {
