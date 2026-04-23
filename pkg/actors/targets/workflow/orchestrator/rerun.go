@@ -160,7 +160,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 
 	newState.FromWorkflowState(&workflowState)
 
-	if err = o.saveInternalState(ctx, newState); err != nil {
+	if err = o.signAndSaveState(ctx, newState); err != nil {
 		return fmt.Errorf("failed to save workflow state: %w", err)
 	}
 
