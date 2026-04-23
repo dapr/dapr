@@ -1547,14 +1547,22 @@ func (a *DaprRuntime) warnIfPoliciesExistWithoutFeatureFlag(ctx context.Context)
 		resp, err := a.operatorClient.ListWorkflowAccessPolicy(ctx, &operatorv1pb.ListWorkflowAccessPolicyRequest{
 			Namespace: a.namespace,
 		})
-		if err == nil && len(resp.GetPolicies()) > 0 {
+		if err != nil {
+			log.Warnf("Failed to check for WorkflowAccessPolicy resources: %s", err)
+			return
+		}
+		if len(resp.GetPolicies()) > 0 {
 			log.Warnf("Found %d WorkflowAccessPolicy resource(s) but the WorkflowAccessPolicy feature flag is NOT enabled. "+
 				"Policies will NOT be enforced. Enable the feature flag in your Dapr configuration to activate enforcement.",
 				len(resp.GetPolicies()))
 		}
 	case modes.StandaloneMode:
 		for _, dir := range a.runtimeConfig.standalone.ResourcesPath {
-			policies, _ := loadWorkflowAccessPoliciesFromDir(dir, a.runtimeConfig.id)
+			policies, err := loadWorkflowAccessPoliciesFromDir(dir, a.runtimeConfig.id)
+			if err != nil {
+				log.Warnf("Failed to check for WorkflowAccessPolicy resources in %s: %s", dir, err)
+				continue
+			}
 			if len(policies) > 0 {
 				log.Warnf("Found WorkflowAccessPolicy resource(s) in %s but the WorkflowAccessPolicy feature flag is NOT enabled. "+
 					"Policies will NOT be enforced. Enable the feature flag in your Dapr configuration to activate enforcement.", dir)
