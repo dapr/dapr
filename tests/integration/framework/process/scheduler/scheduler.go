@@ -219,7 +219,7 @@ func (s *Scheduler) Kill(t *testing.T) {
 func (s *Scheduler) Restart(t *testing.T, ctx context.Context) {
 	t.Helper()
 	clone := s.exec.Clone(t)
-	s.exec.Kill(t)
+	s.Kill(t)
 	s.exec = clone
 	s.exec.Run(t, ctx)
 }

@@ -15,11 +15,13 @@ package os
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -93,7 +95,9 @@ func ReexecInUserNamespace(t *testing.T, ctx context.Context) bool {
 	return true
 }
 
-// FillDisk writes 1MiB chunks to path until ENOSPC.
+// FillDisk writes 1MiB chunks to path until ENOSPC. Linux can defer ENOSPC
+// reporting until Close (or fsync), so failure from either Write or Close
+// satisfies the helper.
 func FillDisk(t *testing.T, path string) {
 	t.Helper()
 	f, err := os.Create(path)
@@ -105,7 +109,8 @@ func FillDisk(t *testing.T, path string) {
 			break
 		}
 	}
-	require.NoError(t, f.Close())
-	require.Error(t, writeErr)
-	require.Contains(t, writeErr.Error(), "no space left on device")
+	closeErr := f.Close()
+	require.True(t,
+		errors.Is(writeErr, syscall.ENOSPC) || errors.Is(closeErr, syscall.ENOSPC),
+		"expected ENOSPC from Write or Close; write=%v close=%v", writeErr, closeErr)
 }
