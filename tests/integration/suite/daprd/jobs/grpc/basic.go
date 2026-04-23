@@ -76,7 +76,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		} {
-			_, err := client.ScheduleJobAlpha1(ctx, req)
+			_, err := client.ScheduleJob(ctx, req)
 			require.Error(t, err)
 		}
 	})
@@ -113,7 +113,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		} {
-			_, err := client.ScheduleJobAlpha1(ctx, req)
+			_, err := client.ScheduleJob(ctx, req)
 			require.NoError(t, err)
 		}
 	})

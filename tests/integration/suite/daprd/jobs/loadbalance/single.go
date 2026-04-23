@@ -104,7 +104,7 @@ func (s *single) Run(t *testing.T, ctx context.Context) {
 	s.daprdB.WaitUntilRunning(t, ctx)
 	s.daprdC.WaitUntilRunning(t, ctx)
 
-	_, err := s.daprdA.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1pb.ScheduleJobRequest{
+	_, err := s.daprdA.GRPCClient(t, ctx).ScheduleJob(ctx, &rtv1pb.ScheduleJobRequest{
 		Job: &rtv1pb.Job{
 			Name:     "job1",
 			Schedule: new("@every 1s"),
