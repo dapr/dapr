@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 )
 
 type Fake struct {
@@ -246,6 +247,10 @@ func (f *Fake) Run(ctx context.Context) error {
 
 func (f *Fake) Handler(context.Context) (security.Handler, error) {
 	return f, nil
+}
+
+func (f *Fake) Signer() *signer.Signer {
+	return nil
 }
 
 func (f *Fake) ID() spiffeid.ID {

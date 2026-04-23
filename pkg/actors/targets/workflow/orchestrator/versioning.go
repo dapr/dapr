@@ -84,7 +84,7 @@ func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.S
 	}
 	if hasFilteredNewEvents || hasStalledEvent {
 		state.ApplyRuntimeStateChanges(rs)
-		err := o.saveInternalState(ctx, state)
+		err := o.signAndSaveState(ctx, state)
 		if err != nil {
 			return err
 		}
