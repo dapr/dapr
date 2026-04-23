@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -29,9 +30,20 @@ var (
 	lock     sync.Mutex
 	resvPLen int
 	resvPIx  int
-	last     = 1024
+	last     = portsBase()
 	resvP    []*reservedPort
 )
+
+// portsBase returns the starting port for reservation probing. A test binary
+// re-execed inside an unshare user namespace (where our mapped euid is 0)
+// probes from a high base to avoid colliding with the parent process's
+// reservations on the lower port range.
+func portsBase() int {
+	if os.Geteuid() == 0 {
+		return 40000
+	}
+	return 1024
+}
 
 const blockSize = 500
 
