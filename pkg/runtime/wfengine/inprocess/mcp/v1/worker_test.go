@@ -32,6 +32,7 @@ import (
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	mcpauth "github.com/dapr/dapr/pkg/runtime/mcp/auth"
 	fakesecurity "github.com/dapr/dapr/pkg/security/fake"
 )
 
@@ -41,6 +42,22 @@ func setTestSchema(t *testing.T, store *compstore.ComponentStore, server, tool s
 	raw, err := json.Marshal(schema)
 	require.NoError(t, err)
 	store.SetMCPToolSchema(server, tool, raw)
+}
+
+// connectTestSession creates an MCP client session connected to the given URL.
+// An optional *http.Client can be provided to inject custom headers or auth;
+// if nil, the default HTTP client is used.
+func connectTestSession(t *testing.T, url string, httpClient ...*http.Client) *mcp.ClientSession {
+	t.Helper()
+	transport := &mcp.StreamableClientTransport{Endpoint: url}
+	if len(httpClient) > 0 && httpClient[0] != nil {
+		transport.HTTPClient = httpClient[0]
+	}
+	c := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "v1"}, nil)
+	session, err := c.Connect(context.Background(), transport, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { session.Close() })
+	return session
 }
 
 // fakeActivityContext lets us test activities without the full task runtime.
@@ -358,7 +375,7 @@ func TestMakeListToolsActivity_RealServer(t *testing.T) {
 	})
 	store.AddMCPServer(server)
 
-	activity := makeListToolsActivity(server, Options{Store: store})
+	activity := makeListToolsActivity(server, connectTestSession(t, ts.URL), Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx:   context.Background(),
 		input: nil,
@@ -384,7 +401,7 @@ func TestMakeListToolsActivity_CachesToolSchema(t *testing.T) {
 	})
 	store.AddMCPServer(server)
 
-	activity := makeListToolsActivity(server, Options{Store: store})
+	activity := makeListToolsActivity(server, connectTestSession(t, ts.URL), Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx:   context.Background(),
 		input: nil,
@@ -410,7 +427,7 @@ func TestMakeCallToolActivity_RealServer(t *testing.T) {
 	})
 	store.AddMCPServer(server)
 
-	activity := makeCallToolActivity(server, Options{Store: store})
+	activity := makeCallToolActivity(server, connectTestSession(t, ts.URL), Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx: context.Background(),
 		input: activityCallToolInput{
@@ -444,7 +461,10 @@ func TestMakeCallToolActivity_HeaderInjection(t *testing.T) {
 	})
 	store.AddMCPServer(server)
 
-	activity := makeCallToolActivity(server, Options{Store: store})
+	httpClient, err := mcpauth.BuildHTTPClient(context.Background(), &server, store, nil, defaultMCPTimeout)
+	require.NoError(t, err)
+
+	activity := makeCallToolActivity(server, connectTestSession(t, ts.URL, httpClient), Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx: context.Background(),
 		input: activityCallToolInput{
@@ -453,7 +473,7 @@ func TestMakeCallToolActivity_HeaderInjection(t *testing.T) {
 		},
 	}
 
-	_, err := activity(actCtx)
+	_, err = activity(actCtx)
 	require.NoError(t, err)
 	assert.Equal(t, "injected-value", capturedHeader)
 }
@@ -474,7 +494,7 @@ func TestMakeCallToolActivity_MissingRequiredArg(t *testing.T) {
 		"required":   []any{"name"},
 	})
 
-	activity := makeCallToolActivity(server, Options{Store: store})
+	activity := makeCallToolActivity(server, connectTestSession(t, ts.URL), Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx: context.Background(),
 		input: activityCallToolInput{
@@ -519,7 +539,11 @@ func TestMakeCallToolActivity_SPIFFEAuth(t *testing.T) {
 	fetcher := fakesecurity.New().WithFetchJWT(func(_ context.Context, _ string) (string, error) {
 		return "svid-12345", nil
 	})
-	activity := makeCallToolActivity(server, Options{Store: store, Security: fetcher})
+
+	httpClient, err := mcpauth.BuildHTTPClient(context.Background(), &server, store, fetcher, defaultMCPTimeout)
+	require.NoError(t, err)
+
+	activity := makeCallToolActivity(server, connectTestSession(t, ts.URL, httpClient), Options{Store: store, Security: fetcher})
 	actCtx := &fakeActivityContext{
 		ctx: context.Background(),
 		input: activityCallToolInput{

@@ -85,13 +85,14 @@ func RegisterMCP(registry *task.TaskRegistry, opts Options) error {
 // Safe to call on hot-reload — registry upserts replace existing entries,
 // and AddMCPServer invalidates stale cached clients/sessions.
 func RegisterMCPServer(registry *task.TaskRegistry, server mcpserverapi.MCPServer, opts Options) error {
-	if _, err := getOrCreateSession(opts.Store, server.Name, &server, opts.Security); err != nil {
+	session, err := getOrCreateSession(opts.Store, server.Name, &server, opts.Security)
+	if err != nil {
 		return fmt.Errorf("MCPServer %q: failed to connect: %w", server.Name, err)
 	}
 
 	orchestrator := makeOrchestrator(server, opts.Store)
-	listActivity := makeListToolsActivity(server, opts)
-	callActivity := makeCallToolActivity(server, opts)
+	listActivity := makeListToolsActivity(server, session, opts)
+	callActivity := makeCallToolActivity(server, session, opts)
 
 	listWF := mcptypes.ListToolsWorkflowName(server.Name)
 	if err := registry.AddVersionedWorkflowN(listWF, workflowVersion, true, orchestrator); err != nil {
@@ -211,7 +212,7 @@ func errorResult(format string, args ...any) *wfv1.CallMCPToolResponse {
 }
 
 // makeListToolsActivity returns a task.Activity that calls ListTools on the given MCP server.
-func makeListToolsActivity(server mcpserverapi.MCPServer, opts Options) task.Activity {
+func makeListToolsActivity(server mcpserverapi.MCPServer, session *mcp.ClientSession, opts Options) task.Activity {
 	serverName := server.Name
 	return func(ctx task.ActivityContext) (any, error) {
 		callCtx := ctx.Context()
@@ -219,11 +220,6 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, opts Options) task.Act
 		workerLog.Debugf("list-tools: MCPServer %q timeout=%s", serverName, timeout)
 		callCtx, cancel := withDeadline(callCtx, timeout)
 		defer cancel()
-
-		session, err := getOrCreateSession(opts.Store, serverName, &server, opts.Security)
-		if err != nil {
-			return &wfv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: %w", err)
-		}
 
 		workerLog.Debugf("list-tools: listing tools on %q", serverName)
 
@@ -280,7 +276,9 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, opts Options) task.Act
 //   - Transient errors (secret store unavailable for OAuth2) are returned as activity-level
 //     errors so the workflow engine retries the activity automatically.
 //   - Error messages exposed to callers never include infrastructure details.
-func makeCallToolActivity(server mcpserverapi.MCPServer, opts Options) task.Activity {
+//
+// makeCallToolActivity returns a task.Activity that calls a tool on the given MCP server.
+func makeCallToolActivity(server mcpserverapi.MCPServer, session *mcp.ClientSession, opts Options) task.Activity {
 	serverName := server.Name
 	return func(ctx task.ActivityContext) (any, error) {
 		var input activityCallToolInput
@@ -295,11 +293,6 @@ func makeCallToolActivity(server mcpserverapi.MCPServer, opts Options) task.Acti
 
 		if validationErr := validateToolArguments(opts.Store, serverName, input.ToolName, input.Arguments); validationErr != "" {
 			return errorResult("%s", validationErr), nil
-		}
-
-		session, err := getOrCreateSession(opts.Store, serverName, &server, opts.Security)
-		if err != nil {
-			return errorResult("call-tool: %s", err), nil
 		}
 
 		argBytes, err := json.Marshal(input.Arguments)
