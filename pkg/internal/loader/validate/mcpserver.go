@@ -14,12 +14,14 @@ limitations under the License.
 package validate
 
 import (
+	"context"
+
 	daprcrds "github.com/dapr/dapr/charts/dapr"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 )
 
 var mcpServerValidator = NewValidator("MCPServer", daprcrds.MCPServerCRD)
 
-func MCPServer(server *mcpserverapi.MCPServer) error {
-	return mcpServerValidator.Validate(server)
+func MCPServer(ctx context.Context, server *mcpserverapi.MCPServer) error {
+	return mcpServerValidator.Validate(ctx, server)
 }

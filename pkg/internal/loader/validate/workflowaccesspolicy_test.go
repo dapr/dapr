@@ -48,39 +48,39 @@ func validPolicy() *wfaclapi.WorkflowAccessPolicy {
 }
 
 func TestWorkflowAccessPolicy_ValidPolicy(t *testing.T) {
-	err := WorkflowAccessPolicy(validPolicy())
+	err := WorkflowAccessPolicy(t.Context(), validPolicy())
 	require.NoError(t, err)
 }
 
 func TestWorkflowAccessPolicy_ValidWithGlob(t *testing.T) {
 	p := validPolicy()
 	p.Spec.Rules[0].Operations[0].Name = "Process*"
-	require.NoError(t, WorkflowAccessPolicy(p))
+	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
 }
 
 func TestWorkflowAccessPolicy_ValidAllowDefaultAction(t *testing.T) {
 	p := validPolicy()
 	p.Spec.DefaultAction = wfaclapi.PolicyActionAllow
-	require.NoError(t, WorkflowAccessPolicy(p))
+	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
 }
 
 func TestWorkflowAccessPolicy_ValidActivityType(t *testing.T) {
 	p := validPolicy()
 	p.Spec.Rules[0].Operations[0].Type = wfaclapi.WorkflowOperationTypeActivity
-	require.NoError(t, WorkflowAccessPolicy(p))
+	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
 }
 
 func TestWorkflowAccessPolicy_ValidWithOperation(t *testing.T) {
 	p := validPolicy()
 	op := wfaclapi.WorkflowOperationSchedule
 	p.Spec.Rules[0].Operations[0].Operation = &op
-	require.NoError(t, WorkflowAccessPolicy(p))
+	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
 }
 
 func TestWorkflowAccessPolicy_InvalidAction(t *testing.T) {
 	p := validPolicy()
 	p.Spec.Rules[0].Operations[0].Action = wfaclapi.PolicyAction("bogus")
-	err := WorkflowAccessPolicy(p)
+	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "bogus")
 }
@@ -88,14 +88,14 @@ func TestWorkflowAccessPolicy_InvalidAction(t *testing.T) {
 func TestWorkflowAccessPolicy_InvalidType(t *testing.T) {
 	p := validPolicy()
 	p.Spec.Rules[0].Operations[0].Type = wfaclapi.WorkflowOperationType("bogus")
-	err := WorkflowAccessPolicy(p)
+	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }
 
 func TestWorkflowAccessPolicy_InvalidDefaultAction(t *testing.T) {
 	p := validPolicy()
 	p.Spec.DefaultAction = wfaclapi.PolicyAction("bogus")
-	err := WorkflowAccessPolicy(p)
+	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }
 
@@ -103,35 +103,35 @@ func TestWorkflowAccessPolicy_InvalidOperation(t *testing.T) {
 	p := validPolicy()
 	op := wfaclapi.WorkflowOperation("bogus")
 	p.Spec.Rules[0].Operations[0].Operation = &op
-	err := WorkflowAccessPolicy(p)
+	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }
 
 func TestWorkflowAccessPolicy_EmptyAppID(t *testing.T) {
 	p := validPolicy()
 	p.Spec.Rules[0].Callers[0].AppID = ""
-	err := WorkflowAccessPolicy(p)
+	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }
 
 func TestWorkflowAccessPolicy_EmptyName(t *testing.T) {
 	p := validPolicy()
 	p.Spec.Rules[0].Operations[0].Name = ""
-	err := WorkflowAccessPolicy(p)
+	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }
 
 func TestWorkflowAccessPolicy_EmptyCallers(t *testing.T) {
 	p := validPolicy()
 	p.Spec.Rules[0].Callers = []wfaclapi.WorkflowCaller{}
-	err := WorkflowAccessPolicy(p)
+	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }
 
 func TestWorkflowAccessPolicy_EmptyOperations(t *testing.T) {
 	p := validPolicy()
 	p.Spec.Rules[0].Operations = []wfaclapi.WorkflowOperationRule{}
-	err := WorkflowAccessPolicy(p)
+	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }
 
@@ -142,7 +142,7 @@ func TestWorkflowAccessPolicy_EmptySpec(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "empty"},
 		Spec:       wfaclapi.WorkflowAccessPolicySpec{},
 	}
-	require.NoError(t, WorkflowAccessPolicy(p))
+	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
 }
 
 func TestWorkflowAccessPolicy_MultipleRulesOneInvalid(t *testing.T) {
@@ -154,6 +154,6 @@ func TestWorkflowAccessPolicy_MultipleRulesOneInvalid(t *testing.T) {
 			{Type: wfaclapi.WorkflowOperationType("bad"), Name: "wf", Action: wfaclapi.PolicyActionAllow},
 		},
 	})
-	err := WorkflowAccessPolicy(p)
+	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }

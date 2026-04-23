@@ -112,7 +112,9 @@ func (v *Validator) init() error {
 // Validate checks the given resource against both the CRD's OpenAPI schema
 // constraints (enum, minLength, minItems, required, etc.) and any CEL
 // XValidation rules. The resource must be JSON-serializable. Returns nil if valid.
-func (v *Validator) Validate(resource any) error {
+// The context is passed to CEL validation so callers can cancel long-running
+// validation work (e.g. during shutdown or hot-reload storms).
+func (v *Validator) Validate(ctx context.Context, resource any) error {
 	v.initOnce.Do(func() {
 		v.initErr = v.init()
 	})
@@ -135,7 +137,7 @@ func (v *Validator) Validate(resource any) error {
 
 	// Validate against CEL XValidation rules (if any are defined in the CRD).
 	celErrs, _ := v.celValidator.Validate(
-		context.Background(),
+		ctx,
 		field.NewPath(""),
 		nil,
 		obj,

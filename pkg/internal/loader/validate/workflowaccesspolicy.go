@@ -14,6 +14,8 @@ limitations under the License.
 package validate
 
 import (
+	"context"
+
 	daprcrds "github.com/dapr/dapr/charts/dapr"
 	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 )
@@ -23,6 +25,6 @@ var workflowAccessPolicyValidator = NewValidator("WorkflowAccessPolicy", daprcrd
 // WorkflowAccessPolicy validates a WorkflowAccessPolicy against the OpenAPI
 // schema and CEL rules embedded in the CRD. This provides the same validation
 // in standalone mode that the Kubernetes API server provides via CRD admission.
-func WorkflowAccessPolicy(policy *wfaclapi.WorkflowAccessPolicy) error {
-	return workflowAccessPolicyValidator.Validate(policy)
+func WorkflowAccessPolicy(ctx context.Context, policy *wfaclapi.WorkflowAccessPolicy) error {
+	return workflowAccessPolicyValidator.Validate(ctx, policy)
 }

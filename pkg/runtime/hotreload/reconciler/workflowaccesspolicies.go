@@ -82,8 +82,8 @@ func (w *workflowAccessPolicies) recompileAll() {
 // the generic reconciler.
 //
 //nolint:unused
-func (w *workflowAccessPolicies) update(_ context.Context, policy wfaclapi.WorkflowAccessPolicy) {
-	if err := validate.WorkflowAccessPolicy(&policy); err != nil {
+func (w *workflowAccessPolicies) update(ctx context.Context, policy wfaclapi.WorkflowAccessPolicy) {
+	if err := validate.WorkflowAccessPolicy(ctx, &policy); err != nil {
 		log.Warnf("WorkflowAccessPolicy %q failed validation, skipping: %s", policy.Name, err)
 		return
 	}

@@ -1483,7 +1483,7 @@ func (a *DaprRuntime) loadWorkflowAccessPoliciesStandalone(ctx context.Context) 
 	var policies []wfaclapi.WorkflowAccessPolicy
 
 	for _, dir := range a.runtimeConfig.standalone.ResourcesPath {
-		loaded, err := loadWorkflowAccessPoliciesFromDir(dir, a.runtimeConfig.id)
+		loaded, err := loadWorkflowAccessPoliciesFromDir(ctx, dir, a.runtimeConfig.id)
 		if err != nil {
 			log.Warnf("Error loading workflow access policies from %s: %s", dir, err)
 			continue
@@ -1558,7 +1558,7 @@ func (a *DaprRuntime) warnIfPoliciesExistWithoutFeatureFlag(ctx context.Context)
 		}
 	case modes.StandaloneMode:
 		for _, dir := range a.runtimeConfig.standalone.ResourcesPath {
-			policies, err := loadWorkflowAccessPoliciesFromDir(dir, a.runtimeConfig.id)
+			policies, err := loadWorkflowAccessPoliciesFromDir(ctx, dir, a.runtimeConfig.id)
 			if err != nil {
 				log.Warnf("Failed to check for WorkflowAccessPolicy resources in %s: %s", dir, err)
 				continue
@@ -1572,7 +1572,7 @@ func (a *DaprRuntime) warnIfPoliciesExistWithoutFeatureFlag(ctx context.Context)
 	}
 }
 
-func loadWorkflowAccessPoliciesFromDir(dir string, appID string) ([]wfaclapi.WorkflowAccessPolicy, error) {
+func loadWorkflowAccessPoliciesFromDir(ctx context.Context, dir string, appID string) ([]wfaclapi.WorkflowAccessPolicy, error) {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -1604,7 +1604,7 @@ func loadWorkflowAccessPoliciesFromDir(dir string, appID string) ([]wfaclapi.Wor
 			continue
 		}
 
-		if err := validate.WorkflowAccessPolicy(&policy); err != nil {
+		if err := validate.WorkflowAccessPolicy(ctx, &policy); err != nil {
 			log.Warnf("WorkflowAccessPolicy %q in %s failed validation: %s", policy.Name, name, err)
 			continue
 		}
