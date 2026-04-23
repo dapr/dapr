@@ -46,8 +46,10 @@ func MountTmpfs(t *testing.T, sizeMiB int) string {
 	return mount
 }
 
-// SkipUnlessUnshareAvailable skips the test unless `unshare` is on PATH and
-// unprivileged user namespaces are enabled by the kernel.
+// SkipUnlessUnshareAvailable skips the test unless `unshare -Umr` is actually
+// usable: `unshare` must be on PATH, unprivileged user namespaces must be
+// enabled by the kernel, and the current process must be able to set up the
+// uid_map mapping.
 func SkipUnlessUnshareAvailable(t *testing.T) {
 	t.Helper()
 	MustLinux(t)
@@ -58,6 +60,12 @@ func SkipUnlessUnshareAvailable(t *testing.T) {
 		if strings.TrimSpace(string(b)) != "1" {
 			t.Skip("kernel.unprivileged_userns_clone is disabled")
 		}
+	}
+	//nolint:gosec
+	if out, err := exec.Command("unshare",
+		"--user", "--mount", "--map-root-user", "--propagation=private",
+		"true").CombinedOutput(); err != nil {
+		t.Skipf("unshare -Umr is not usable on this host: %v: %s", err, out)
 	}
 }
 
