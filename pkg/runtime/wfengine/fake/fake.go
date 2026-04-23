@@ -98,6 +98,10 @@ func (f *Fake) ActivityActorType() string {
 	return ""
 }
 
+func (f *Fake) WorkflowActorType() string {
+	return ""
+}
+
 func (f *Fake) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {
 	return f.runtimeMetadataFn()
 }

@@ -60,7 +60,7 @@ func (r *triggerlatency) Run(t *testing.T, ctx context.Context) {
 	client := r.actors.GRPCClient(t, ctx)
 
 	for i := range 3 {
-		_, err := client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+		_, err := client.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 			Job: &rtv1.Job{
 				Name:    strconv.Itoa(i),
 				DueTime: new("0s"),
@@ -85,8 +85,8 @@ func (r *triggerlatency) Run(t *testing.T, ctx context.Context) {
 		if !assert.True(c, ok) {
 			return
 		}
-		assert.Equal(c, 3.0, total["type=job"])
-		assert.Equal(c, 5.0, total["type=actor"])
+		assert.InDelta(c, 3.0, total["type=job"], 0.01)
+		assert.InDelta(c, 5.0, total["type=actor"], 0.01)
 	}, time.Second*15, time.Millisecond*10)
 
 	metrics := r.actors.Scheduler().MetricsWithLabels(t, ctx)

@@ -52,6 +52,7 @@ type Interface interface {
 	InternalExecutor() *inprocess.Executor
 
 	ActivityActorType() string
+	WorkflowActorType() string
 }
 
 type Options struct {
@@ -230,6 +231,10 @@ func (wfe *engine) Client() workflows.Workflow {
 
 func (wfe *engine) ActivityActorType() string {
 	return wfe.backend.ActivityActorType()
+}
+
+func (wfe *engine) WorkflowActorType() string {
+	return wfe.backend.WorkflowActorType()
 }
 
 func (wfe *engine) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {
