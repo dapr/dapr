@@ -38,12 +38,12 @@ import (
 )
 
 const (
-	inboxKeyPrefix     = "inbox"
-	historyKeyPrefix   = "history"
-	sigcertKeyPrefix   = "sigcert"
-	signatureKeyPrefix = "signature"
-	customStatusKey    = "customStatus"
-	metadataKey        = "metadata"
+	inboxKeyPrefix       = "inbox"
+	historyKeyPrefix     = "history"
+	sigcertKeyPrefix     = "sigcert"
+	signatureKeyPrefix   = "signature"
+	customStatusKey      = "customStatus"
+	metadataKey          = "metadata"
 	propagatedHistoryKey = "propagated-history"
 
 	// maxStateEntries is the upper bound for any metadata count field
@@ -103,7 +103,7 @@ type State struct {
 	signingCertificatesRemovedCount int
 	signaturesAddedCount            int
 	signaturesRemovedCount          int
-	incomingHistoryChanged bool
+	incomingHistoryChanged          bool
 }
 
 // TODO: @joshvanl: remove in v1.16
@@ -138,6 +138,10 @@ func (s *State) Reset() {
 	s.Signatures = nil
 	s.RawSignatures = nil
 	s.CustomStatus = nil
+	if s.IncomingHistory != nil {
+		s.IncomingHistory = nil
+		s.incomingHistoryChanged = true
+	}
 	s.Generation++
 }
 
@@ -281,15 +285,24 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		})
 	}
 
-	if s.incomingHistoryChanged && s.IncomingHistory != nil {
-		phBytes, err := proto.Marshal(s.IncomingHistory)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal incoming propagated history: %w", err)
+	if s.incomingHistoryChanged {
+		if s.IncomingHistory != nil {
+			phBytes, err := proto.Marshal(s.IncomingHistory)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal incoming propagated history: %w", err)
+			}
+			req.Operations = append(req.Operations, api.TransactionalOperation{
+				Operation: api.Upsert,
+				Request:   api.TransactionalUpsert{Key: propagatedHistoryKey, Value: phBytes},
+			})
+		} else {
+			// Explicit delete so a recreate/reset without propagation does not
+			// leave stale propagated history visible to the new instance.
+			req.Operations = append(req.Operations, api.TransactionalOperation{
+				Operation: api.Delete,
+				Request:   api.TransactionalDelete{Key: propagatedHistoryKey},
+			})
 		}
-		req.Operations = append(req.Operations, api.TransactionalOperation{
-			Operation: api.Upsert,
-			Request:   api.TransactionalUpsert{Key: propagatedHistoryKey, Value: phBytes},
-		})
 	}
 
 	metaProto, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{

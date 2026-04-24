@@ -66,17 +66,17 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 	return nil, a.createReminder(ctx, invocation, dueTime, activityName)
 }
 
-
 // decodeActivityInvocation parses an activity invocation payload. New
 // orchestrators wrap the HistoryEvent in an ActivityInvocation envelope
-// (which may carry PropagatedHistory). Old orchestrators marshal a
-// raw HistoryEvent directly. We try the envelope first, and fall back to
-// raw HistoryEvent if the envelope is absent or its HistoryEvent field is
-// empty. This fallback is necessary to preserve compatibility with reminders created by pre-propagation code
+// (which may carry PropagatedHistory) only when propagation is present.
+// Otherwise, send a raw HistoryEvent for rolling-upgrade compatibility
+// with older daprds. We try the envelope first, and fall back to a raw
+// HistoryEvent if the envelope is absent or its HistoryEvent field is
+// empty.
 func decodeActivityInvocation(data []byte) (*protos.ActivityInvocation, *string, error) {
 	var invocation protos.ActivityInvocation
 	if err := proto.Unmarshal(data, &invocation); err == nil && invocation.GetHistoryEvent() != nil {
-		return &invocation, nil, nil
+		return &invocation, taskScheduledName(invocation.GetHistoryEvent()), nil
 	}
 
 	var legacy backend.HistoryEvent
@@ -84,13 +84,18 @@ func decodeActivityInvocation(data []byte) (*protos.ActivityInvocation, *string,
 		return nil, nil, err
 	}
 
-	var activityName *string
-	if ts := legacy.GetTaskScheduled(); ts != nil {
+	return &protos.ActivityInvocation{HistoryEvent: &legacy}, taskScheduledName(&legacy), nil
+}
+
+// taskScheduledName returns a pointer to the TaskScheduled event's name on
+// the given history event
+func taskScheduledName(e *backend.HistoryEvent) *string {
+	if ts := e.GetTaskScheduled(); ts != nil {
 		if n := ts.GetName(); n != "" {
-			activityName = &n
+			return &n
 		}
 	}
-	return &protos.ActivityInvocation{HistoryEvent: &legacy}, activityName, nil
+	return nil
 }
 
 func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Reminder) error {

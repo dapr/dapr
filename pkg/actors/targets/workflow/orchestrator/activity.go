@@ -62,15 +62,16 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		return nil
 	}
 
-	// Use ActivityInvocation wrapper to carry both the history event & optional
-	// PropagatedHistory
-	invocation := &protos.ActivityInvocation{
-		HistoryEvent:      e,
-		PropagatedHistory: ph,
+	// Only wrap in the ActivityInvocation envelope when there is propagated history to carry.
+	var payload proto.Message = e
+	if ph != nil {
+		payload = &protos.ActivityInvocation{
+			HistoryEvent:      e,
+			PropagatedHistory: ph,
+		}
 	}
 
-	var invocationData []byte
-	invocationData, err := proto.Marshal(invocation)
+	invocationData, err := proto.Marshal(payload)
 	if err != nil {
 		return err
 	}
