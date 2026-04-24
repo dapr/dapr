@@ -41,17 +41,21 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 		return o.state, o.ometa, nil
 	}
 
-	// state is not cached, so try to load it from the state store
-	state, err := wfenginestate.LoadWorkflowState(ctx, o.actorState, o.actorID, wfenginestate.Options{
+	opts := wfenginestate.Options{
 		AppID:             o.appID,
 		WorkflowActorType: o.actorType,
 		ActivityActorType: o.activityActorType,
 		Signer:            o.signer,
-	})
+	}
+
+	// state is not cached, so try to load it from the state store
+	state, err := wfenginestate.LoadWorkflowState(ctx, o.actorState, o.actorID, opts)
 	if err != nil {
 		var verifyErr *wferrors.VerificationError
 		if errors.As(err, &verifyErr) {
-			o.failSignatureVerification(ctx)
+			if !isCompleted(state) {
+				return o.tombstoneTamperedState(ctx, opts, state, err)
+			}
 		}
 		return nil, nil, err
 	}
@@ -64,14 +68,14 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	// history can only have been written via state store tampering. Treat the
 	// state as unrecoverable: fail the workflow terminally so no further
 	// progress is made on forged input. Skip the scan on an empty inbox as
-	// nothing to validate and the history-index build is pure waste.
-	if o.signer != nil && len(state.Inbox) > 0 {
+	// nothing to validate and the history-index build is pure waste. Skip
+	// when the workflow is already terminal, so we don't re-detect the same
+	// condition on every load.
+	if o.signer != nil && len(state.Inbox) > 0 && !isCompleted(state) {
 		if filtered := filterValidInboxEvents(state); len(filtered) != len(state.Inbox) {
-			o.failSignatureVerification(ctx)
-			return nil, nil, wferrors.NewVerificationError(
-				fmt.Errorf("workflow actor '%s': inbox contained %d events that did not match signed history (state store tampering)",
-					o.actorID, len(state.Inbox)-len(filtered)),
-			)
+			cause := fmt.Errorf("workflow actor '%s': inbox contained %d events that did not match signed history (state store tampering)",
+				o.actorID, len(state.Inbox)-len(filtered))
+			return o.tombstoneTamperedState(ctx, opts, state, cause)
 		}
 	}
 
@@ -81,6 +85,38 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
 
 	return state, o.ometa, nil
+}
+
+// tombstoneTamperedState appends an unsigned ExecutionCompleted(FAILED)
+// tamper marker to the workflow's history (see [wfenginestate.MarkAsTamperFailed])
+// so it surfaces as terminally FAILED on every subsequent load. The original
+// (untrusted) history, inbox, signatures, and certs are left intact for
+// forensics. The actor's reminders are deleted to stop further activations
+// from firing against the dead workflow.
+func (o *orchestrator) tombstoneTamperedState(ctx context.Context, opts wfenginestate.Options, prior *wfenginestate.State, cause error) (*wfenginestate.State, *backend.WorkflowMetadata, error) {
+	log.Warnf("Workflow actor '%s': tampering detected, marking workflow as FAILED: %s", o.actorID, cause)
+
+	failed, err := wfenginestate.MarkAsTamperFailed(ctx, o.actorState, o.actorID, opts, prior, cause)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to append tamper marker: %w", err)
+	}
+
+	o.failSignatureVerification(ctx)
+
+	o.state = failed
+	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, failed.CustomStatus, failed.History)
+	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(failed))
+
+	return failed, o.ometa, nil
+}
+
+// isCompleted reports whether the loaded workflow's history ends in an
+// ExecutionCompleted event of any kind (the runtime's terminal marker).
+// There is nothing for the orchestrator actor to do on a terminal workflow,
+// so the tamper-marker append is skipped — the reader path is responsible
+// for surfacing the verification error to clients.
+func isCompleted(s *wfenginestate.State) bool {
+	return s != nil && len(s.History) > 0 && s.History[len(s.History)-1].GetExecutionCompleted() != nil
 }
 
 // signAndSaveState signs any newly added history events and then persists

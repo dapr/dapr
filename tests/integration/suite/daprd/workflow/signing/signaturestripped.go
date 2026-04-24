@@ -39,7 +39,9 @@ func init() {
 // signatureStripped verifies that stripping any of the four signing-related
 // state fields (signature keys, sigcert keys, SignatureLength metadata,
 // SigningCertificateLength metadata) results in a verification error on
-// reload. Each scenario runs as a subtest with its own workflow instance.
+// reload. The workflows under test have already completed (terminal), so
+// the orchestrator does not append a tamper marker — the reader path
+// surfaces the verification error to the caller.
 type signatureStripped struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement

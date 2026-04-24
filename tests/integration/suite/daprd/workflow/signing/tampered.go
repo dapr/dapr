@@ -38,8 +38,10 @@ func init() {
 }
 
 // tampered verifies that a completed workflow with a tampered history event
-// is detected as invalid after a daprd restart, resulting in a FAILED status
-// with a signature verification error.
+// is detected as invalid after a daprd restart. Because the workflow had
+// already finished executing, the orchestrator does not append a tamper
+// marker — there is nothing left for the actor to do — so reads of the
+// tampered state surface the verification error to the caller.
 type tampered struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
