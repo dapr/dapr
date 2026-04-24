@@ -577,8 +577,11 @@ func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*s
 		return nil, err
 	}
 
-	// actor id is workflow instance id
-	state, err := state.LoadWorkflowState(ctx, astate, string(id), state.Options{
+	// actor id is workflow instance id. Tamper recovery (appending the
+	// terminal failed event) is the orchestrator actor's responsibility, not
+	// the read path's — readers surface the verification error to clients
+	// and let them detect it.
+	wstate, err := state.LoadWorkflowState(ctx, astate, string(id), state.Options{
 		AppID:             abe.appID,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
@@ -588,12 +591,12 @@ func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*s
 		return nil, err
 	}
 
-	if state == nil {
+	if wstate == nil {
 		// No such state exists in the state store
 		return nil, nil
 	}
 
-	return state, nil
+	return wstate, nil
 }
 
 // NextWorkflowWorkItem implements backend.Backend
