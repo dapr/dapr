@@ -15,6 +15,8 @@ package mcpserver
 
 import (
 	"context"
+	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -23,6 +25,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	jwx_jwt "github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,8 +53,6 @@ func init() {
 	suite.Register(new(spiffeAuth))
 }
 
-// spiffeAuth verifies that SPIFFE JWT SVIDs are injected into MCP requests
-// when auth.spiffe.jwt is configured on an MCPServer resource.
 type spiffeAuth struct {
 	daprd      *daprd.Daprd
 	place      *placement.Placement
@@ -62,7 +64,6 @@ type spiffeAuth struct {
 }
 
 func (s *spiffeAuth) Setup(t *testing.T) []framework.Option {
-	// MCP server that captures the X-SPIFFE-JWT header.
 	mcpSrv := mcp.NewServer(&mcp.Implementation{Name: "test-spiffe-server", Version: "v1"}, nil)
 	mcp.AddTool(mcpSrv, &mcp.Tool{
 		Name:        "echo",
@@ -86,6 +87,8 @@ func (s *spiffeAuth) Setup(t *testing.T) []framework.Option {
 	s.sent = sentry.New(t,
 		sentry.WithMode("standalone"),
 		sentry.WithEnableJWT(true),
+		sentry.WithOIDCEnabled(true),
+		sentry.WithJWTIssuerFromOIDC(),
 	)
 
 	bundle := s.sent.CABundle()
@@ -156,7 +159,7 @@ func (s *spiffeAuth) Run(t *testing.T, ctx context.Context) {
 	s.httpClient = fclient.HTTP(t)
 	taskhubClient := dtclient.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 
-	t.Run("SPIFFE JWT is injected into MCP requests", func(t *testing.T) {
+	t.Run("SPIFFE JWT is injected with correct SPIFFE ID and signed by Sentry", func(t *testing.T) {
 		input := map[string]any{
 			"tool_name": "echo",
 			"arguments": map[string]any{},
@@ -173,14 +176,60 @@ func (s *spiffeAuth) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 		assert.False(t, result.IsError, "expected tool call to succeed")
 
-		// Verify the MCP server received a SPIFFE JWT token.
+		// Extract the captured JWT from the MCP server.
 		capturedJWT, ok := s.capturedHeader.Load().(string)
 		require.True(t, ok, "expected X-SPIFFE-JWT header to have been captured")
-		assert.True(t, strings.HasPrefix(capturedJWT, "Bearer "),
-			"expected Bearer prefix; got: %s", capturedJWT)
-		// The value after "Bearer " should be a JWT (three dot-separated segments).
-		token := strings.TrimPrefix(capturedJWT, "Bearer ")
-		parts := strings.Split(token, ".")
-		assert.Equal(t, 3, len(parts), "expected JWT with 3 segments; got: %s", token)
+		require.True(t, strings.HasPrefix(capturedJWT, "Bearer "), "expected Bearer prefix; got: %s", capturedJWT)
+		tokenRaw := strings.TrimPrefix(capturedJWT, "Bearer ")
+
+		// Fetch JWKS from Sentry's OIDC endpoint to verify the signature.
+		insecureClient := &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+			},
+		}
+		oidcURL := fmt.Sprintf("https://localhost:%d/.well-known/openid-configuration", s.sent.OIDCPort(t))
+		resp, err := insecureClient.Get(oidcURL)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var discovery struct {
+			Issuer  string `json:"issuer"`
+			JWKSURI string `json:"jwks_uri"`
+		}
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&discovery))
+		require.NotEmpty(t, discovery.JWKSURI)
+
+		jwksResp, err := insecureClient.Get(discovery.JWKSURI)
+		require.NoError(t, err)
+		defer jwksResp.Body.Close()
+		require.Equal(t, http.StatusOK, jwksResp.StatusCode)
+
+		keySet, err := jwk.ParseReader(jwksResp.Body)
+		require.NoError(t, err)
+		require.Positive(t, keySet.Len(), "JWKS should contain at least one key")
+
+		// Parse and validate the JWT signature using Sentry's JWKS.
+		tkn, err := jwx_jwt.Parse([]byte(tokenRaw), jwx_jwt.WithKeySet(keySet))
+		require.NoError(t, err, "JWT should be valid and signed by Sentry")
+
+		// Verify the SPIFFE ID is the correct app identity.
+		sub, ok := tkn.Get("sub")
+		require.True(t, ok, "JWT should have a sub claim")
+		subStr, ok := sub.(string)
+		require.True(t, ok)
+		assert.Contains(t, subStr, "spiffe-mcp-app", "sub claim should contain the app ID")
+
+		// Verify the audience matches what was configured.
+		aud, ok := tkn.Get("aud")
+		require.True(t, ok, "JWT should have an aud claim")
+		audList, ok := aud.([]string)
+		require.True(t, ok)
+		assert.Contains(t, audList, "mcp://test-server", "aud should contain the configured audience")
+
+		// Verify issuer matches Sentry's OIDC issuer.
+		issuer, _ := tkn.Get("iss")
+		assert.Equal(t, discovery.Issuer, issuer, "issuer should match Sentry OIDC")
 	})
 }

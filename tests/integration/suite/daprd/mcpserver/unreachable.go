@@ -16,7 +16,6 @@ package mcpserver
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"testing"
 
@@ -32,6 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -50,15 +50,11 @@ type listToolsUnreachable struct {
 }
 
 func (s *listToolsUnreachable) Setup(t *testing.T) []framework.Option {
-	// Listen on an ephemeral port but never Accept. The kernel completes the
-	// TCP handshake (so the port stays occupied and no other process can
-	// claim it), but the MCP HTTP request receives no response and
-	// eventually hits the 5s endpoint timeout. This is deterministic —
-	// unlike the close-and-hope-nobody-rebinds pattern.
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	t.Cleanup(func() { l.Close() })
-	deadPort := l.Addr().(*net.TCPAddr).Port
+	// Reserve a port that never accepts connections.
+	// The port stays occupied so no other process can claim it,
+	// but the MCP HTTP request receives no response and hits the timeout.
+	reserved := ports.Reserve(t, 1)
+	deadPort := reserved.Port(t)
 
 	appProc := app.New(t)
 
