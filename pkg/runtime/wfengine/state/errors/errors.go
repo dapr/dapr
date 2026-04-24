@@ -13,9 +13,20 @@ limitations under the License.
 
 package errors
 
-// VerificationError is returned by LoadWorkflowState when signature
-// verification fails. The State is still returned alongside this error so
-// callers can build failure metadata from it.
+// ErrorTypeHistoryTampered is the well-known FailureDetails.ErrorType set on
+// workflows that are marked failed because their persisted history or signing
+// state was detected as tampered. Clients can match on this constant to
+// programmatically detect the failure mode.
+const ErrorTypeHistoryTampered = "DAPR_WORKFLOW_HISTORY_TAMPERED"
+
+// VerificationError is returned by LoadWorkflowState when the persisted
+// workflow state has been tampered with: signature chain verification has
+// failed, signing material is missing, metadata bounds are exceeded, or
+// inbox events do not match signed history. The recovery action is to mark
+// the workflow as FAILED via [state.MarkAsTamperFailed].
+//
+// The State (when available) is returned alongside this error so callers
+// can scope the tombstone-write transaction to the existing keys.
 type VerificationError struct {
 	err error
 }
@@ -29,5 +40,27 @@ func (e *VerificationError) Error() string {
 }
 
 func (e *VerificationError) Unwrap() error {
+	return e.err
+}
+
+// ConfigurationError is returned by LoadWorkflowState when the workflow
+// state is intact but cannot be loaded under the host's current
+// configuration. This covers the one-way signing commitment (a signed
+// workflow on a non-signing host, or vice versa) and missing app ID
+// configuration. The workflow data is not tampered, so the tombstone
+// recovery path must not run; the operator is expected to fix the config.
+type ConfigurationError struct {
+	err error
+}
+
+func NewConfigurationError(err error) *ConfigurationError {
+	return &ConfigurationError{err}
+}
+
+func (e *ConfigurationError) Error() string {
+	return e.err.Error()
+}
+
+func (e *ConfigurationError) Unwrap() error {
 	return e.err
 }
