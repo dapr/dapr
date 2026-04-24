@@ -19,8 +19,6 @@ limitations under the License.
 package inprocess
 
 import (
-	"fmt"
-
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	mcp "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
@@ -37,7 +35,7 @@ type Executor struct {
 }
 
 // NewExecutor creates an in-process executor with an empty registry.
-// Call RegisterMCP after MCPServers are loaded.
+// Workflows are registered per-resource via RegisterMCPServer.
 func NewExecutor() *Executor {
 	registry := task.NewTaskRegistry()
 	return &Executor{
@@ -51,20 +49,8 @@ func (e *Executor) Backend() backend.Executor {
 	return e.executor
 }
 
-// RegisterMCP registers versioned MCP workflows for all known MCPServers.
-// Must be called after MCPServers are loaded into the component store.
-func (e *Executor) RegisterMCP(store *compstore.ComponentStore, sec security.Handler) error {
-	if err := mcp.RegisterMCP(e.registry, mcp.Options{
-		Store:    store,
-		Security: sec,
-	}); err != nil {
-		return fmt.Errorf("failed to register MCP in-process workflows: %w", err)
-	}
-	return nil
-}
-
 // RegisterMCPServer registers workflows for a single MCPServer.
-// Called on hot-reload when a new server is added.
+// Called by the processor when a server is loaded or hot-reloaded.
 func (e *Executor) RegisterMCPServer(server mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) error {
 	return mcp.RegisterMCPServer(e.registry, server, mcp.Options{
 		Store:    store,

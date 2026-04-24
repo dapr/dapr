@@ -60,17 +60,6 @@ const (
 	jsonFieldRequired = "required"
 )
 
-// RegisterMCP registers versioned MCP workflows for each known MCPServer.
-// Safe to call multiple times — new servers are registered, existing ones skipped.
-func RegisterMCP(registry *task.TaskRegistry, opts Options) error {
-	for _, server := range opts.Store.ListMCPServers() {
-		if err := RegisterMCPServer(registry, server, opts); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // RegisterMCPServer registers workflows and activities for a single MCPServer.
 // Builds the HTTP client and MCP session eagerly - similar to component init().
 // Returns an error if the server is unreachable or registration fails.

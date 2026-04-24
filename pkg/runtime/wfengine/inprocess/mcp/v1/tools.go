@@ -25,7 +25,7 @@ import (
 
 // toolSchemaCache is a per-server cache of tool input schemas.
 // Shared between ListTools (writes) and CallTool (reads) activities
-// for the same server. Owned by the worker, not the compstore.
+// for the same server.
 type toolSchemaCache struct {
 	mu      sync.RWMutex
 	schemas map[string]json.RawMessage // toolName -> inputSchema
@@ -46,8 +46,6 @@ func (c *toolSchemaCache) get(toolName string) (json.RawMessage, bool) {
 	s, ok := c.schemas[toolName]
 	return s, ok
 }
-
-
 
 // convertCallToolResult converts an mcp.CallToolResult from the go-sdk into a proto CallMCPToolResponse.
 // Each MCP content type maps to the corresponding oneof variant in MCPContentBlock.
@@ -102,7 +100,6 @@ func convertCallToolResult(r *mcp.CallToolResult) *wfv1.CallMCPToolResponse {
 	}
 	return out
 }
-
 
 // validateToolArguments performs client-side validation of tool arguments
 // against the tool's declared input schema (if known).
