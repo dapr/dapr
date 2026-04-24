@@ -95,15 +95,21 @@ func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestat
 
 func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State) error {
 	// generate and run a state store operation that saves all changes
-	req, err := state.GetSaveRequest(o.actorID)
+	chunks, err := state.GetChunkedSaveRequest(o.actorID, o.actorState.MultiMaxSize())
 	if err != nil {
 		return err
 	}
 
-	log.Debugf("Workflow actor '%s': saving %d keys to actor state store", o.actorID, len(req.Operations))
+	if len(chunks) == 1 {
+		log.Debugf("Workflow actor '%s': saving %d keys to actor state store", o.actorID, len(chunks[0].Operations))
+	} else {
+		log.Debugf("Workflow actor '%s': saving across %d chunks (state store MultiMaxSize=%d)", o.actorID, len(chunks), o.actorState.MultiMaxSize())
+	}
 
-	if err = o.actorState.TransactionalStateOperation(ctx, true, req, false); err != nil {
-		return err
+	for i, req := range chunks {
+		if err = o.actorState.TransactionalStateOperation(ctx, true, req, false); err != nil {
+			return fmt.Errorf("workflow actor '%s': save chunk %d/%d failed: %w", o.actorID, i+1, len(chunks), err)
+		}
 	}
 
 	// ResetChangeTracking should always be called after a save operation succeeds

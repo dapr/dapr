@@ -47,6 +47,18 @@ type Interface interface {
 
 	// TransactionalStateOperation performs a transactional state operation with the actor state store.
 	TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error
+
+	// MultiMaxSize reports the maximum number of operations the configured
+	// state store will accept in a single transactional request. Returns 0
+	// when the store does not expose a limit.
+	MultiMaxSize() int
+
+	// DeleteActorState removes all state keys belonging to the given actor
+	// instance. When the configured store supports contribstate.DeleteWithPrefix
+	// this is a single server-side operation; otherwise the caller is
+	// responsible for falling back to a transactional delete. Returns
+	// (ok=false, nil) when the store does not implement DeleteWithPrefix.
+	DeleteActorState(ctx context.Context, actorType, actorID string) (ok bool, err error)
 }
 
 type Backend interface {
@@ -248,6 +260,42 @@ func (s *state) executeStateStoreTransaction(ctx context.Context, operations []c
 		return struct{}{}, store.Multi(ctx, stateReq)
 	})
 	return err
+}
+
+func (s *state) DeleteActorState(ctx context.Context, actorType, actorID string) (bool, error) {
+	storeName, store, err := s.stateStore()
+	if err != nil {
+		return false, err
+	}
+	pfx, ok := store.(contribstate.DeleteWithPrefix)
+	if !ok || !contribstate.FeatureDeleteWithPrefix.IsPresent(store.Features()) {
+		return false, nil
+	}
+	// Keys for an actor are stored as appID||actorType||actorID||<inner-key>
+	// — matching construction in TransactionalStateOperation above.
+	prefix := key.ConstructComposite(s.appID, actorType, actorID) + api.DaprSeparator
+	policyRunner := resiliency.NewRunner[struct{}](ctx,
+		s.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+	)
+	_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
+		_, perr := pfx.DeleteWithPrefix(ctx, contribstate.DeleteWithPrefixRequest{Prefix: prefix})
+		return struct{}{}, perr
+	})
+	if err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
+func (s *state) MultiMaxSize() int {
+	_, store, err := s.stateStore()
+	if err != nil {
+		return 0
+	}
+	if maxMulti, ok := store.(contribstate.TransactionalStoreMultiMaxSize); ok {
+		return maxMulti.MultiMaxSize()
+	}
+	return 0
 }
 
 func (s *state) stateStore() (string, Backend, error) {
