@@ -657,6 +657,16 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 
 	wfLogger.Debugf("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))
 
+	// A workflow that was previously detected as tampered carries an unsigned
+	// ExecutionCompleted(FAILED) marker as its last history event (see
+	// [MarkAsFailed]). It must always remain loadable so callers can observe the
+	// FAILED status. Short-circuit every signing-enforcement check
+	// (configuration mismatch, signature chain failure) when the marker is
+	// present.
+	if hasTamperMarker(wState) {
+		return wState, nil
+	}
+
 	// Signing enforcement. Once signing is enabled for a cluster, it is a
 	// one-way commitment: workflows created with signing must always run on
 	// signing-enabled hosts, and workflows created without signing cannot be
@@ -675,15 +685,6 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 			)
 		}
 		if err := verifySignatureChain(wState, opts.Signer); err != nil {
-			// A workflow that was previously detected as tampered carries an
-			// unsigned ExecutionCompleted(FAILED) marker as its last history
-			// event (see [MarkAsFailed]). The marker is intentionally not
-			// covered by a signature, so the chain check will always fail —
-			// short-circuit here so the workflow continues to surface as
-			// terminally FAILED on every load instead of being unloadable.
-			if hasTamperMarker(wState) {
-				return wState, nil
-			}
 			return wState, wferrors.NewVerificationError(
 				fmt.Errorf("workflow history signature verification failed for '%s': %w", actorID, err),
 			)

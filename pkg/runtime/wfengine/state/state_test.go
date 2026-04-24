@@ -624,3 +624,84 @@ func TestMarkAsFailed_NilPriorCreatesFreshState(t *testing.T) {
 	require.Len(t, got.History, 1)
 	assert.True(t, IsTamperMarker(got.History[0]))
 }
+
+// TestLoadWorkflowState_TamperMarkerBypassesConfigurationError exercises
+// the bypass added so previously tamper-marked workflows remain loadable
+// after a host config change (e.g. signing was disabled). The signing
+// enforcement checks must short-circuit when the loaded history ends in
+// a tamper marker so the FAILED status still surfaces.
+func TestLoadWorkflowState_TamperMarkerBypassesConfigurationError(t *testing.T) {
+	t.Parallel()
+
+	const actorID = "wf-tampered"
+
+	// Build a state with a signature plus a tamper marker as the last
+	// history event, then persist it through a fake store.
+	store := statefake.New()
+	bulk := map[string][]byte{}
+	store = store.
+		WithGetFn(func(_ context.Context, req *api.GetStateRequest, _ bool) (*api.StateResponse, error) {
+			if v, ok := bulk[req.Key]; ok {
+				return &api.StateResponse{Data: v}, nil
+			}
+			return &api.StateResponse{}, nil
+		}).
+		WithGetBulkFn(func(_ context.Context, req *api.GetBulkStateRequest, _ bool) (api.BulkStateResponse, error) {
+			out := api.BulkStateResponse{}
+			for _, k := range req.Keys {
+				if v, ok := bulk[k]; ok {
+					out[k] = v
+				}
+			}
+			return out, nil
+		}).
+		WithTransactionalStateOperationFn(func(_ context.Context, _ bool, req *api.TransactionalRequest, _ bool) error {
+			for _, op := range req.Operations {
+				if op.Operation == api.Upsert {
+					u := op.Request.(api.TransactionalUpsert)
+					bulk[u.Key] = u.Value.([]byte)
+				}
+			}
+			return nil
+		})
+
+	histEvt := testEvent(0)
+	histBytes, err := proto.Marshal(histEvt)
+	require.NoError(t, err)
+	bulk["history-000000"] = histBytes
+
+	markerBytes, err := proto.Marshal(tamperMarkerEvent())
+	require.NoError(t, err)
+	bulk["history-000001"] = markerBytes
+
+	sig := &backend.HistorySignature{StartEventIndex: 0, EventCount: 1, Signature: []byte("sig")}
+	sigBytes, err := proto.Marshal(sig)
+	require.NoError(t, err)
+	bulk["signature-000000"] = sigBytes
+
+	cert := &backend.SigningCertificate{Certificate: []byte("cert")}
+	certBytes, err := proto.Marshal(cert)
+	require.NoError(t, err)
+	bulk["sigcert-000000"] = certBytes
+
+	metaBytes, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
+		HistoryLength:            2,
+		SignatureLength:          1,
+		SigningCertificateLength: 1,
+		Generation:               1,
+	})
+	require.NoError(t, err)
+	bulk["metadata"] = metaBytes
+
+	// Load with no signer / no app ID — the configuration that would
+	// normally yield a ConfigurationError. The tamper marker must
+	// short-circuit the check so the load succeeds.
+	got, err := LoadWorkflowState(t.Context(), store, actorID, Options{
+		WorkflowActorType: "workflow",
+		ActivityActorType: "activity",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Len(t, got.History, 2)
+	assert.True(t, IsTamperMarker(got.History[1]))
+}
