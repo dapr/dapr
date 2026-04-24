@@ -23,7 +23,7 @@ const ErrorTypeHistoryTampered = "DAPR_WORKFLOW_HISTORY_TAMPERED"
 // workflow state has been tampered with: signature chain verification has
 // failed, signing material is missing, metadata bounds are exceeded, or
 // inbox events do not match signed history. The recovery action is to mark
-// the workflow as FAILED via [state.MarkAsFailed].
+// the workflow as FAILED via [state.MarkAsTamperFailed].
 //
 // The State (when available) is returned alongside this error so callers
 // can scope the tombstone-write transaction to the existing keys.

@@ -659,7 +659,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 
 	// A workflow that was previously detected as tampered carries an unsigned
 	// ExecutionCompleted(FAILED) marker as its last history event (see
-	// [MarkAsFailed]). It must always remain loadable so callers can observe the
+	// [MarkAsTamperFailed]). It must always remain loadable so callers can observe the
 	// FAILED status. Short-circuit every signing-enforcement check
 	// (configuration mismatch, signature chain failure) when the marker is
 	// present.
@@ -699,7 +699,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 }
 
 // IsTamperMarker reports whether e is the well-known terminal event written
-// by [MarkAsFailed] to record that the workflow's persisted state was
+// by [MarkAsTamperFailed] to record that the workflow's persisted state was
 // detected as tampered. It is identified by an ExecutionCompleted with
 // status FAILED and FailureDetails.ErrorType set to
 // [wferrors.ErrorTypeHistoryTampered]. Loaders use this check to bypass
@@ -719,14 +719,14 @@ func IsTamperMarker(e *backend.HistoryEvent) bool {
 }
 
 // hasTamperMarker reports whether the loaded state's history ends in the
-// terminal tamper marker event written by [MarkAsFailed]. Used by
+// terminal tamper marker event written by [MarkAsTamperFailed]. Used by
 // LoadWorkflowState to short-circuit verification failures on workflows
 // that are already terminally failed.
 func hasTamperMarker(s *State) bool {
 	return s != nil && len(s.History) > 0 && IsTamperMarker(s.History[len(s.History)-1])
 }
 
-// MarkAsFailed appends a single terminal ExecutionCompleted(FAILED) event to
+// MarkAsTamperFailed appends a single terminal ExecutionCompleted(FAILED) event to
 // the workflow's history to record that its persisted state was detected as
 // tampered. The original (untrusted) history, inbox, signatures, and certs
 // are left intact for forensics — only the marker event is added, and it is
@@ -734,9 +734,9 @@ func hasTamperMarker(s *State) bool {
 // bypass signature verification, so the workflow surfaces as terminally
 // FAILED with [wferrors.ErrorTypeHistoryTampered] in its FailureDetails.
 //
-// MarkAsFailed is idempotent: if prior already ends in a tamper marker the
+// MarkAsTamperFailed is idempotent: if prior already ends in a tamper marker the
 // state is returned unchanged with no store write.
-func MarkAsFailed(ctx context.Context, astate state.Interface, actorID string, opts Options, prior *State, cause error) (*State, error) {
+func MarkAsTamperFailed(ctx context.Context, astate state.Interface, actorID string, opts Options, prior *State, cause error) (*State, error) {
 	s := prior
 	if s == nil {
 		s = NewState(opts)

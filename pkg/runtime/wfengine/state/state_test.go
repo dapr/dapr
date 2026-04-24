@@ -539,7 +539,7 @@ func TestIsTamperMarker(t *testing.T) {
 	})
 }
 
-func TestMarkAsFailed_AppendsMarkerAndPersists(t *testing.T) {
+func TestMarkAsTamperFailed_AppendsMarkerAndPersists(t *testing.T) {
 	t.Parallel()
 
 	prior := NewState(testOpts())
@@ -555,7 +555,7 @@ func TestMarkAsFailed_AppendsMarkerAndPersists(t *testing.T) {
 		},
 	)
 
-	got, err := MarkAsFailed(t.Context(), store, "wf-1", testOpts(), prior, errors.New("chain broken"))
+	got, err := MarkAsTamperFailed(t.Context(), store, "wf-1", testOpts(), prior, errors.New("chain broken"))
 	require.NoError(t, err)
 	require.NotNil(t, got)
 
@@ -590,7 +590,7 @@ func TestMarkAsFailed_AppendsMarkerAndPersists(t *testing.T) {
 	assert.True(t, foundMarkerUpsert, "expected upsert for the appended marker history key")
 }
 
-func TestMarkAsFailed_Idempotent(t *testing.T) {
+func TestMarkAsTamperFailed_Idempotent(t *testing.T) {
 	t.Parallel()
 
 	prior := NewState(testOpts())
@@ -606,19 +606,19 @@ func TestMarkAsFailed_Idempotent(t *testing.T) {
 		},
 	)
 
-	got, err := MarkAsFailed(t.Context(), store, "wf-1", testOpts(), prior, errors.New("ignored"))
+	got, err := MarkAsTamperFailed(t.Context(), store, "wf-1", testOpts(), prior, errors.New("ignored"))
 	require.NoError(t, err)
 	assert.Same(t, prior, got)
 	assert.Len(t, got.History, 2, "history must not grow when marker already present")
 	assert.Equal(t, 0, writes, "no store write should happen when already marked")
 }
 
-func TestMarkAsFailed_NilPriorCreatesFreshState(t *testing.T) {
+func TestMarkAsTamperFailed_NilPriorCreatesFreshState(t *testing.T) {
 	t.Parallel()
 
 	store := statefake.New()
 
-	got, err := MarkAsFailed(t.Context(), store, "wf-1", testOpts(), nil, errors.New("no prior"))
+	got, err := MarkAsTamperFailed(t.Context(), store, "wf-1", testOpts(), nil, errors.New("no prior"))
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	require.Len(t, got.History, 1)

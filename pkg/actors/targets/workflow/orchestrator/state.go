@@ -53,7 +53,7 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	if err != nil {
 		var verifyErr *wferrors.VerificationError
 		if errors.As(err, &verifyErr) {
-			if !isTerminal(state) {
+			if !isCompleted(state) {
 				return o.tombstoneTamperedState(ctx, opts, state, err)
 			}
 		}
@@ -71,7 +71,7 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	// nothing to validate and the history-index build is pure waste. Skip
 	// when the workflow is already terminal, so we don't re-detect the same
 	// condition on every load.
-	if o.signer != nil && len(state.Inbox) > 0 && !isTerminal(state) {
+	if o.signer != nil && len(state.Inbox) > 0 && !isCompleted(state) {
 		if filtered := filterValidInboxEvents(state); len(filtered) != len(state.Inbox) {
 			cause := fmt.Errorf("workflow actor '%s': inbox contained %d events that did not match signed history (state store tampering)",
 				o.actorID, len(state.Inbox)-len(filtered))
@@ -88,7 +88,7 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 }
 
 // tombstoneTamperedState appends an unsigned ExecutionCompleted(FAILED)
-// tamper marker to the workflow's history (see [wfenginestate.MarkAsFailed])
+// tamper marker to the workflow's history (see [wfenginestate.MarkAsTamperFailed])
 // so it surfaces as terminally FAILED on every subsequent load. The original
 // (untrusted) history, inbox, signatures, and certs are left intact for
 // forensics. The actor's reminders are deleted to stop further activations
@@ -96,7 +96,7 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 func (o *orchestrator) tombstoneTamperedState(ctx context.Context, opts wfenginestate.Options, prior *wfenginestate.State, cause error) (*wfenginestate.State, *backend.WorkflowMetadata, error) {
 	log.Warnf("Workflow actor '%s': tampering detected, marking workflow as FAILED: %s", o.actorID, cause)
 
-	failed, err := wfenginestate.MarkAsFailed(ctx, o.actorState, o.actorID, opts, prior, cause)
+	failed, err := wfenginestate.MarkAsTamperFailed(ctx, o.actorState, o.actorID, opts, prior, cause)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to append tamper marker: %w", err)
 	}
@@ -110,12 +110,12 @@ func (o *orchestrator) tombstoneTamperedState(ctx context.Context, opts wfengine
 	return failed, o.ometa, nil
 }
 
-// isTerminal reports whether the loaded workflow's history ends in an
+// isCompleted reports whether the loaded workflow's history ends in an
 // ExecutionCompleted event of any kind (the runtime's terminal marker).
 // There is nothing for the orchestrator actor to do on a terminal workflow,
 // so the tamper-marker append is skipped — the reader path is responsible
 // for surfacing the verification error to clients.
-func isTerminal(s *wfenginestate.State) bool {
+func isCompleted(s *wfenginestate.State) bool {
 	return s != nil && len(s.History) > 0 && s.History[len(s.History)-1].GetExecutionCompleted() != nil
 }
 
