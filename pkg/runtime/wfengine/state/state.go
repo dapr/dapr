@@ -707,6 +707,9 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 // failed by tamper detection — without the bypass, the broken signature
 // chain would block every subsequent load.
 func IsTamperMarker(e *backend.HistoryEvent) bool {
+	if e == nil {
+		return false
+	}
 	ec := e.GetExecutionCompleted()
 	if ec == nil {
 		return false
