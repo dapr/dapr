@@ -147,12 +147,12 @@ func (c *chunksparallel) Run(t *testing.T, ctx context.Context) {
 
 	metadata, err := client0.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
-	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
+	require.True(t, api.WorkflowMetadataIsComplete(metadata))
 
-	assert.True(t, c.childHistoryReceived.Load(), "child should have received propagated history")
+	require.True(t, c.childHistoryReceived.Load(), "child should have received propagated history")
 
 	// All events should be in a single chunk, parallel activities don't split chunks
-	assert.Equal(t, int32(1), c.childChunkCount.Load(), "parallel activities should produce 1 chunk (same app)")
+	require.Equal(t, int32(1), c.childChunkCount.Load(), "parallel activities should produce 1 chunk (same app)")
 	childChunks, _ := c.childChunks.Load().([]api.WorkflowResult)
 	childAppIDs, _ := c.childAppIDs.Load().([]string)
 	actNames, _ := c.childActNames.Load().(map[string]bool)

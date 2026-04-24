@@ -126,13 +126,13 @@ func (w *workflowchain) Run(t *testing.T, ctx context.Context) {
 
 	metadata, err := client.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
-	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
+	require.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 	// depth=3 sees 2 worker chunks in its lineage.
 	// Its own chunk is not in its received history. This count
 	// proves the 3-level chain executed. depth-3 couldn't observe 2 worker
 	// ancestor chunks unless depths 1 & 2 both ran.
-	assert.Equal(t, int32(2), w.workerPluralCount.Load(),
+	require.Equal(t, int32(2), w.workerPluralCount.Load(),
 		"GetWorkflowsByName('worker') should return 2 matches (depth-1 and depth-2)")
 
 	first := w.pluralFirstInstanceID.Load()
