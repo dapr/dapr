@@ -696,7 +696,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	a.flushOutstandingHTTPEndpoints(ctx)
 
 	if a.globalConfig.IsFeatureEnabled(config.MCPServerResource) {
-		a.processor.SetInternalWorkflows(a.wfengine.InternalExecutor())
+		a.processor.SetInternalWorkflows(a.wfengine.InProcessExecutor())
 
 		err = a.loadMCPServers(ctx)
 		if err != nil {

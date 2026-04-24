@@ -51,7 +51,7 @@ type Interface interface {
 	RegisterGrpcServer(*grpc.Server)
 	Client() workflows.Workflow
 	RuntimeMetadata() *runtimev1pb.MetadataWorkflows
-	InternalExecutor() *inprocess.Executor
+	InProcessExecutor() *inprocess.Executor
 
 	ActivityActorType() string
 	WorkflowActorType() string
@@ -85,10 +85,10 @@ type engine struct {
 	actors            actors.Interface
 	getWorkItemsCount *atomic.Int32
 
-	worker       backend.TaskHubWorker
-	backend      *backendactors.Actors
-	client       workflows.Workflow
-	internalExec *inprocess.Executor
+	worker        backend.TaskHubWorker
+	backend       *backendactors.Actors
+	client        workflows.Workflow
+	inProcessExec *inprocess.Executor
 
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 }
@@ -131,7 +131,7 @@ func New(opts Options) (Interface, error) {
 		lock              sync.Mutex
 	)
 
-	internalExec := inprocess.NewExecutor()
+	inProcessExec := inprocess.NewExecutor()
 
 	grpcExec, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
 		backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
@@ -161,7 +161,7 @@ func New(opts Options) (Interface, error) {
 			return nil
 		}),
 		backend.WithStreamSendTimeout(time.Second*10),
-		backend.WithInternalNamePrefix("dapr.internal."),
+		backend.WithInProcessNamePrefix("dapr.internal."),
 	)
 
 	// TODO: handle somewhere that users cannot use a managed workflow name themselves.
@@ -174,11 +174,11 @@ func New(opts Options) (Interface, error) {
 	}
 
 	oworker := backend.NewWorkflowWorker(backend.WorkflowWorkerOptions{
-		Backend:          abackend,
-		Executor:         grpcExec,
-		InternalExecutor: internalExec.Backend(),
-		Logger:           wfBackendLogger,
-		AppID:            opts.AppID,
+		Backend:           abackend,
+		Executor:          grpcExec,
+		InProcessExecutor: inProcessExec.Backend(),
+		Logger:            wfBackendLogger,
+		AppID:             opts.AppID,
 	}, topts...)
 
 	topts = nil
@@ -188,10 +188,10 @@ func New(opts Options) (Interface, error) {
 		}
 	}
 
-	aworker := backend.NewActivityTaskWorkerWithInternal(
+	aworker := backend.NewActivityTaskWorkerWithInProcess(
 		abackend,
 		grpcExec,
-		internalExec.Backend(),
+		inProcessExec.Backend(),
 		wfBackendLogger,
 		topts...,
 	)
@@ -203,7 +203,7 @@ func New(opts Options) (Interface, error) {
 		actors:               opts.Actors,
 		worker:               worker,
 		backend:              abackend,
-		internalExec:         internalExec,
+		inProcessExec:        inProcessExec,
 		registerGrpcServerFn: registerGrpcServerFn,
 		getWorkItemsCount:    &getWorkItemsCount,
 		client: &client{
@@ -213,8 +213,8 @@ func New(opts Options) (Interface, error) {
 	}, nil
 }
 
-func (wfe *engine) InternalExecutor() *inprocess.Executor {
-	return wfe.internalExec
+func (wfe *engine) InProcessExecutor() *inprocess.Executor {
+	return wfe.inProcessExec
 }
 
 func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {
