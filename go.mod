@@ -11,7 +11,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
-	github.com/dapr/components-contrib v1.17.3
+	github.com/dapr/components-contrib v1.16.2-0.20260429133534-d5b3968d04e5
 	github.com/dapr/durabletask-go v0.11.4-0.20260413145313-c4b7279b6a8e
 	github.com/dapr/kit v0.17.1-0.20260409110905-18c6fce40d5d
 	github.com/diagridio/go-etcd-cron v0.12.4

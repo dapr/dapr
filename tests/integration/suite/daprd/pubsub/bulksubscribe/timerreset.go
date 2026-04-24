@@ -16,7 +16,6 @@ package bulksubscribe
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -38,10 +37,15 @@ func init() {
 	suite.Register(new(timerReset))
 }
 
-// timerReset verifies that bulk subscribe flushes messages promptly via
-// drain-and-flush. After a count-based batch flush, the next message should
-// be flushed immediately rather than waiting for the await-duration timer.
-// This is the regression test for dapr/dapr#9727.
+// timerReset is an end-to-end smoke test for dapr/dapr#9211: it verifies
+// that a single published message reaches the subscriber app via the bulk
+// subscribe pipeline and is delivered within a predictable window driven
+// by the awaitDuration timer. The real regression cover for the count-
+// based flush + ticker reset semantics lives in the unit tests under
+// pkg/runtime/pubsub/default_bulksub_test.go; the in-memory pubsub
+// component serialises delivery through a transactional event bus, so
+// the bursty scenarios that would trigger a count-based flush cannot be
+// reproduced through a daprd integration test without a custom broker.
 type timerReset struct {
 	daprd  *daprd.Daprd
 	app    *app.App
@@ -49,7 +53,6 @@ type timerReset struct {
 
 	mu         sync.Mutex
 	deliveries []delivery
-	deliveryCh chan struct{}
 }
 
 type delivery struct {
@@ -58,7 +61,6 @@ type delivery struct {
 }
 
 func (tr *timerReset) Setup(t *testing.T) []framework.Option {
-	tr.deliveryCh = make(chan struct{}, 10)
 	tr.client = client.HTTP(t)
 
 	tr.app = app.New(t,
@@ -73,11 +75,6 @@ func (tr *timerReset) Setup(t *testing.T) []framework.Option {
 			})
 			tr.mu.Unlock()
 
-			select {
-			case tr.deliveryCh <- struct{}{}:
-			default:
-			}
-
 			type statusT struct {
 				EntryID string `json:"entryId"`
 				Status  string `json:"status"`
@@ -88,7 +85,6 @@ func (tr *timerReset) Setup(t *testing.T) []framework.Option {
 			}
 
 			var resp respT
-
 			for _, entry := range env.Entries {
 				resp.Statuses = append(resp.Statuses, statusT{
 					EntryID: entry.EntryId,
@@ -122,8 +118,8 @@ spec:
   default: /bulk
  bulkSubscribe:
   enabled: true
-  maxMessagesCount: 3
-  maxAwaitDurationMs: 1500
+  maxMessagesCount: 100
+  maxAwaitDurationMs: 500
 `))
 
 	return []framework.Option{
@@ -134,40 +130,33 @@ spec:
 func (tr *timerReset) Run(t *testing.T, ctx context.Context) {
 	tr.daprd.WaitUntilRunning(t, ctx)
 
-	// Publish maxMessagesCount (3) individual messages to trigger a
-	// count-based flush.
-	for i := range 3 {
-		tr.publish(t, ctx, fmt.Sprintf(`{"id": %d}`, i))
-	}
+	const awaitDurationMs = 500
 
-	// Wait for the count-based flush.
-	tr.waitForDelivery(t, ctx, "first batch (count-based flush)")
+	start := time.Now()
+	tr.publish(t, ctx, `{"id": 1}`)
 
-	tr.mu.Lock()
-	require.Len(t, tr.deliveries, 1, "expected exactly 1 delivery after 3 messages")
-	assert.Equal(t, 3, tr.deliveries[0].entries, "first batch should contain 3 entries")
-	firstFlushTime := tr.deliveries[0].time
-	tr.mu.Unlock()
-
-	// Immediately publish 1 more message. With drain-and-flush, this
-	// message should be flushed promptly (not waiting for the timer).
-	tr.publish(t, ctx, `{"id": 99}`)
-
-	// Wait for the drain-and-flush to deliver the extra message.
-	tr.waitForDelivery(t, ctx, "second batch (drain-and-flush)")
+	// With in-memory (transactional) pubsub + defaultBulkSubscriber, a
+	// single message is held until the awaitDuration timer fires. It
+	// must be delivered in its own batch of 1, at roughly
+	// awaitDurationMs after publish.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		tr.mu.Lock()
+		defer tr.mu.Unlock()
+		require.Len(c, tr.deliveries, 1, "expected exactly one timer-based delivery")
+	}, time.Duration(awaitDurationMs*4)*time.Millisecond, 20*time.Millisecond)
 
 	tr.mu.Lock()
-	require.Len(t, tr.deliveries, 2, "expected exactly 2 deliveries total")
-	assert.Equal(t, 1, tr.deliveries[1].entries, "second batch should contain 1 entry")
+	defer tr.mu.Unlock()
 
-	// The second delivery should happen promptly after the first, not
-	// waiting for the full 1500ms timer. Use 1000ms (2/3 of the timer)
-	// as the upper bound — generous enough for CI scheduling jitter
-	// while still distinguishing drain-and-flush from timer-based flush.
-	elapsed := tr.deliveries[1].time.Sub(firstFlushTime)
-	assert.Less(t, elapsed, 1000*time.Millisecond,
-		"second flush should happen promptly via drain-and-flush, not waiting for timer")
-	tr.mu.Unlock()
+	require.Equal(t, 1, tr.deliveries[0].entries, "delivery should contain the single message")
+
+	elapsed := tr.deliveries[0].time.Sub(start)
+	lowerBound := time.Duration(awaitDurationMs) * time.Millisecond * 7 / 10
+	upperBound := time.Duration(awaitDurationMs*4) * time.Millisecond
+	require.GreaterOrEqual(t, elapsed, lowerBound,
+		"message should be held until ~awaitDuration (not flushed immediately as with drain-and-flush); got %v", elapsed)
+	require.Less(t, elapsed, upperBound,
+		"message should be delivered within 4x awaitDuration; got %v", elapsed)
 }
 
 func (tr *timerReset) publish(t *testing.T, ctx context.Context, data string) {
@@ -185,17 +174,4 @@ func (tr *timerReset) publish(t *testing.T, ctx context.Context, data string) {
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
-}
-
-func (tr *timerReset) waitForDelivery(t *testing.T, ctx context.Context, desc string) {
-	t.Helper()
-
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	select {
-	case <-ctx.Done():
-		t.Fatalf("timed out waiting for bulk delivery: %s", desc)
-	case <-tr.deliveryCh:
-	}
 }
