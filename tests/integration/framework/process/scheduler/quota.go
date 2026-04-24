@@ -26,9 +26,13 @@ import (
 
 // FillQuota writes 1MiB values under the given etcd key prefix until etcd
 // returns "database space exceeded". Requires the scheduler to have been
-// started with a low --etcd-space-quota (see WithEtcdSpaceQuota).
+// started with a low --etcd-space-quota (see WithEtcdSpaceQuota); without one,
+// we would otherwise just keep writing against etcd's default 2GiB quota and
+// eventually fill the backing disk.
 func (s *Scheduler) FillQuota(t *testing.T, ctx context.Context, prefix string) {
 	t.Helper()
+	require.NotNil(t, s.etcdSpaceQuota,
+		"FillQuota requires the scheduler to be started with WithEtcdSpaceQuota")
 	cli := s.ETCDClient(t, ctx)
 	payload := strings.Repeat("x", 1024*1024)
 	require.Eventually(t, func() bool {

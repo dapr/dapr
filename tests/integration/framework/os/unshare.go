@@ -38,6 +38,7 @@ func InUnshareNamespace() bool {
 // umount via t.Cleanup. Requires InUnshareNamespace() to be true.
 func MountTmpfs(t *testing.T, sizeMiB int) string {
 	t.Helper()
+	MustLinux(t)
 	mount := t.TempDir()
 	//nolint:gosec
 	require.NoError(t, exec.Command("mount", "-t", "tmpfs",
@@ -107,6 +108,7 @@ func ReexecInUserNamespace(t *testing.T, ctx context.Context) bool {
 // satisfies the helper.
 func FillDisk(t *testing.T, path string) {
 	t.Helper()
+	MustLinux(t)
 	f, err := os.Create(path)
 	require.NoError(t, err)
 	chunk := make([]byte, 1024*1024)

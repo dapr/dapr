@@ -66,6 +66,7 @@ type Scheduler struct {
 	id                 string
 	etcdInitialCluster string
 	etcdClientPort     int
+	etcdSpaceQuota     *string
 	sentry             *sentry.Sentry
 
 	embed    bool
@@ -187,6 +188,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		metricsPort:        opts.metricsPort,
 		etcdInitialCluster: *opts.etcdInitialCluster,
 		etcdClientPort:     opts.etcdClientPort,
+		etcdSpaceQuota:     opts.etcdSpaceQuota,
 		dataDir:            dataDir,
 		sentry:             opts.sentry,
 		namespace:          opts.namespace,

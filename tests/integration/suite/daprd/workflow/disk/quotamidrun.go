@@ -34,15 +34,15 @@ import (
 )
 
 func init() {
-	suite.Register(new(midrun))
+	suite.Register(new(quotamidrun))
 }
 
-type midrun struct {
+type quotamidrun struct {
 	wf     *workflow.Workflow
 	stepCh chan struct{}
 }
 
-func (m *midrun) Setup(t *testing.T) []framework.Option {
+func (m *quotamidrun) Setup(t *testing.T) []framework.Option {
 	m.stepCh = make(chan struct{}, 10)
 	m.wf = workflow.New(t,
 		workflow.WithSchedulerOptions(scheduler.WithEtcdSpaceQuota("16Mi")),
@@ -68,14 +68,14 @@ func (m *midrun) Setup(t *testing.T) []framework.Option {
 	return []framework.Option{framework.WithProcesses(m.wf)}
 }
 
-func (m *midrun) Run(t *testing.T, ctx context.Context) {
+func (m *quotamidrun) Run(t *testing.T, ctx context.Context) {
 	m.wf.WaitUntilRunning(t, ctx)
 
 	sched := m.wf.Scheduler()
 	cl := m.wf.BackendClient(t, ctx)
 
 	id, err := cl.ScheduleNewWorkflow(ctx, "multiTimerFlow",
-		api.WithInstanceID("wf-midrun"))
+		api.WithInstanceID("wf-quotamidrun"))
 	require.NoError(t, err)
 
 	stepCtx, cancelStep := context.WithTimeout(ctx, 10*time.Second)
