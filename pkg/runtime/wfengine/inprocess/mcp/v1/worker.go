@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"google.golang.org/protobuf/types/known/structpb"
@@ -32,7 +33,6 @@ import (
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	mcpauth "github.com/dapr/dapr/pkg/runtime/mcp/auth"
 	mcptypes "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/types"
 	"github.com/dapr/dapr/pkg/security"
 )
@@ -65,16 +65,25 @@ const (
 // Returns an error if the server is unreachable or registration fails.
 // Safe to call on hot-reload — registry upserts replace existing entries,
 // and AddMCPServer invalidates stale cached clients/sessions.
+// holders tracks active session holders per server for hot-reload cleanup.
+var holders sync.Map // map[string]*sessionHolder
+
 func RegisterMCPServer(registry *task.TaskRegistry, server mcpserverapi.MCPServer, opts Options) error {
-	session, err := connectSession(&server, opts.Store, opts.Security)
+	// Close the previous holder if this is a hot-reload replacement.
+	if prev, ok := holders.LoadAndDelete(server.Name); ok {
+		prev.(*sessionHolder).Close()
+	}
+
+	holder, err := newSessionHolder(&server, opts.Store, opts.Security)
 	if err != nil {
 		return fmt.Errorf("MCPServer %q: failed to connect: %w", server.Name, err)
 	}
+	holders.Store(server.Name, holder)
 
 	schemas := &toolSchemaCache{}
 	orchestrator := makeOrchestrator(server, opts.Store)
-	listActivity := makeListToolsActivity(server, session, schemas)
-	callActivity := makeCallToolActivity(server, session, schemas, opts)
+	listActivity := makeListToolsActivity(server, holder, schemas)
+	callActivity := makeCallToolActivity(server, holder, schemas, opts)
 
 	listWF := mcptypes.ListToolsWorkflowName(server.Name)
 	if err := registry.AddVersionedWorkflowN(listWF, workflowVersion, true, orchestrator); err != nil {
@@ -227,28 +236,6 @@ func buildTransport(server *mcpserverapi.MCPServer, httpClient *http.Client) (mc
 	}
 }
 
-// connectSession builds an HTTP client and MCP session for the given server.
-// Called once at registration time; the session is captured in activity closures.
-// Connected with context.Background() so the session outlives individual calls.
-func connectSession(server *mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) (*mcp.ClientSession, error) {
-	httpClient, err := mcpauth.BuildHTTPClient(context.Background(), server, store, sec, callTimeout(server))
-	if err != nil {
-		return nil, fmt.Errorf("failed to build HTTP client for %q: %w", server.Name, err)
-	}
-
-	transport, err := buildTransport(server, httpClient)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build transport for %q: %w", server.Name, err)
-	}
-
-	workerLog.Debugf("connecting to MCP server %q", server.Name)
-	c := mcp.NewClient(&mcp.Implementation{Name: mcpClientName, Version: mcpClientVersion}, nil)
-	session, err := c.Connect(context.Background(), transport, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to MCP server %q: %w", server.Name, err)
-	}
-	return session, nil
-}
 
 // callTimeout returns the per-call deadline for the given MCPServer.
 // Falls back to defaultMCPTimeout when no timeout is configured.

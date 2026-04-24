@@ -32,7 +32,8 @@ type activityCallToolInput struct {
 }
 
 // makeListToolsActivity returns a task.Activity that calls ListTools on the given MCP server.
-func makeListToolsActivity(server mcpserverapi.MCPServer, session *mcp.ClientSession, schemas *toolSchemaCache) task.Activity {
+// The sessionHolder handles reconnection if the connection drops.
+func makeListToolsActivity(server mcpserverapi.MCPServer, holder *sessionHolder, schemas *toolSchemaCache) task.Activity {
 	serverName := server.Name
 	return func(ctx task.ActivityContext) (any, error) {
 		callCtx := ctx.Context()
@@ -41,7 +42,10 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, session *mcp.ClientSes
 		callCtx, cancel := withDeadline(callCtx, timeout)
 		defer cancel()
 
-		workerLog.Debugf("list-tools: listing tools on %q", serverName)
+		session, err := holder.Session()
+		if err != nil {
+			return &wfv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: %w", err)
+		}
 
 		var tools []*wfv1.MCPToolDefinition
 		var cursor string
@@ -52,7 +56,17 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, session *mcp.ClientSes
 			}
 			result, err := session.ListTools(callCtx, params)
 			if err != nil {
-				return &wfv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: MCP call failed for %q: %w", serverName, err)
+				if isConnectionClosed(err) {
+					workerLog.Warnf("list-tools: connection lost for %q, reconnecting", serverName)
+					session, err = holder.Reconnect()
+					if err != nil {
+						return &wfv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: reconnect failed for %q: %w", serverName, err)
+					}
+					result, err = session.ListTools(callCtx, params)
+				}
+				if err != nil {
+					return &wfv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: MCP call failed for %q: %w", serverName, err)
+				}
 			}
 
 			for _, t := range result.Tools {
@@ -90,8 +104,7 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, session *mcp.ClientSes
 }
 
 // makeCallToolActivity returns a task.Activity that calls a tool on the given MCP server.
-// The session and schema cache are captured at registration time; hot-reload replaces the closure.
-func makeCallToolActivity(server mcpserverapi.MCPServer, session *mcp.ClientSession, schemas *toolSchemaCache, opts Options) task.Activity {
+func makeCallToolActivity(server mcpserverapi.MCPServer, holder *sessionHolder, schemas *toolSchemaCache, opts Options) task.Activity {
 	serverName := server.Name
 	return func(ctx task.ActivityContext) (any, error) {
 		var input activityCallToolInput
@@ -108,6 +121,11 @@ func makeCallToolActivity(server mcpserverapi.MCPServer, session *mcp.ClientSess
 			return errorResult("%s", validationErr), nil
 		}
 
+		session, err := holder.Session()
+		if err != nil {
+			return errorResult("call-tool: %s", err), nil
+		}
+
 		argBytes, err := json.Marshal(input.Arguments)
 		if err != nil {
 			argBytes = []byte(fmt.Sprintf("failed to marshal arguments: %s for %v", err, input.Arguments))
@@ -119,7 +137,20 @@ func makeCallToolActivity(server mcpserverapi.MCPServer, session *mcp.ClientSess
 			Arguments: input.Arguments,
 		})
 		if err != nil {
-			return errorResult("call-tool: MCP call failed for tool %q on %q: %s", input.ToolName, serverName, err), nil
+			if isConnectionClosed(err) {
+				workerLog.Warnf("call-tool: connection lost for %q, reconnecting", serverName)
+				session, err = holder.Reconnect()
+				if err != nil {
+					return errorResult("call-tool: reconnect failed for %q: %s", serverName, err), nil
+				}
+				result, err = session.CallTool(callCtx, &mcp.CallToolParams{
+					Name:      input.ToolName,
+					Arguments: input.Arguments,
+				})
+			}
+			if err != nil {
+				return errorResult("call-tool: MCP call failed for tool %q on %q: %s", input.ToolName, serverName, err), nil
+			}
 		}
 
 		return convertCallToolResult(result), nil
