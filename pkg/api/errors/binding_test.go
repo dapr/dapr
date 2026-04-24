@@ -19,9 +19,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 )
