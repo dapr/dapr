@@ -14,6 +14,8 @@ limitations under the License.
 package state
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,6 +25,8 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
+	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -478,4 +482,145 @@ func TestGetSaveRequest_MetadataIncludesSigningLengths(t *testing.T) {
 	assert.Equal(t, uint64(1), meta.GetHistoryLength())
 	assert.Equal(t, uint64(1), meta.GetSigningCertificateLength())
 	assert.Equal(t, uint64(1), meta.GetSignatureLength())
+}
+
+func tamperMarkerEvent() *backend.HistoryEvent {
+	return &backend.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ExecutionCompleted{
+			ExecutionCompleted: &protos.ExecutionCompletedEvent{
+				WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED,
+				FailureDetails: &protos.TaskFailureDetails{
+					ErrorType:    wferrors.ErrorTypeHistoryTampered,
+					ErrorMessage: "boom",
+				},
+			},
+		},
+	}
+}
+
+func TestIsTamperMarker(t *testing.T) {
+	t.Parallel()
+
+	t.Run("tamper marker", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, IsTamperMarker(tamperMarkerEvent()))
+	})
+
+	t.Run("non-tamper failed completion", func(t *testing.T) {
+		t.Parallel()
+		e := &backend.HistoryEvent{
+			EventType: &protos.HistoryEvent_ExecutionCompleted{
+				ExecutionCompleted: &protos.ExecutionCompletedEvent{
+					WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED,
+					FailureDetails: &protos.TaskFailureDetails{ErrorType: "user-failure"},
+				},
+			},
+		}
+		assert.False(t, IsTamperMarker(e))
+	})
+
+	t.Run("completed without failure details", func(t *testing.T) {
+		t.Parallel()
+		e := &backend.HistoryEvent{
+			EventType: &protos.HistoryEvent_ExecutionCompleted{
+				ExecutionCompleted: &protos.ExecutionCompletedEvent{
+					WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED,
+				},
+			},
+		}
+		assert.False(t, IsTamperMarker(e))
+	})
+
+	t.Run("non-completion event", func(t *testing.T) {
+		t.Parallel()
+		assert.False(t, IsTamperMarker(testEvent(0)))
+	})
+}
+
+func TestMarkAsFailed_AppendsMarkerAndPersists(t *testing.T) {
+	t.Parallel()
+
+	prior := NewState(testOpts())
+	prior.AddToHistory(testEvent(0))
+	prior.AddToHistory(testEvent(1))
+	prior.ResetChangeTracking()
+
+	var saved *api.TransactionalRequest
+	store := statefake.New().WithTransactionalStateOperationFn(
+		func(_ context.Context, _ bool, req *api.TransactionalRequest, _ bool) error {
+			saved = req
+			return nil
+		},
+	)
+
+	got, err := MarkAsFailed(t.Context(), store, "wf-1", testOpts(), prior, errors.New("chain broken"))
+	require.NoError(t, err)
+	require.NotNil(t, got)
+
+	require.Len(t, got.History, 3, "marker should be appended to existing history")
+	last := got.History[len(got.History)-1]
+	assert.True(t, IsTamperMarker(last))
+	assert.Equal(t, "chain broken", last.GetExecutionCompleted().GetFailureDetails().GetErrorMessage())
+
+	// First two events must be unchanged.
+	assert.Equal(t, int32(0), got.History[0].GetEventId())
+	assert.Equal(t, int32(1), got.History[1].GetEventId())
+
+	// No new signatures or certs are written — the marker is intentionally unsigned.
+	assert.Empty(t, got.Signatures)
+	assert.Empty(t, got.SigningCertificates)
+
+	// Persistence happened: an upsert at history-000002 must be present.
+	require.NotNil(t, saved)
+	var foundMarkerUpsert bool
+	for _, op := range saved.Operations {
+		if op.Operation != api.Upsert {
+			continue
+		}
+		u, ok := op.Request.(api.TransactionalUpsert)
+		if !ok {
+			continue
+		}
+		if u.Key == "history-000002" {
+			foundMarkerUpsert = true
+		}
+	}
+	assert.True(t, foundMarkerUpsert, "expected upsert for the appended marker history key")
+}
+
+func TestMarkAsFailed_Idempotent(t *testing.T) {
+	t.Parallel()
+
+	prior := NewState(testOpts())
+	prior.AddToHistory(testEvent(0))
+	prior.AddToHistory(tamperMarkerEvent())
+	prior.ResetChangeTracking()
+
+	var writes int
+	store := statefake.New().WithTransactionalStateOperationFn(
+		func(_ context.Context, _ bool, _ *api.TransactionalRequest, _ bool) error {
+			writes++
+			return nil
+		},
+	)
+
+	got, err := MarkAsFailed(t.Context(), store, "wf-1", testOpts(), prior, errors.New("ignored"))
+	require.NoError(t, err)
+	assert.Same(t, prior, got)
+	assert.Len(t, got.History, 2, "history must not grow when marker already present")
+	assert.Equal(t, 0, writes, "no store write should happen when already marked")
+}
+
+func TestMarkAsFailed_NilPriorCreatesFreshState(t *testing.T) {
+	t.Parallel()
+
+	store := statefake.New()
+
+	got, err := MarkAsFailed(t.Context(), store, "wf-1", testOpts(), nil, errors.New("no prior"))
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Len(t, got.History, 1)
+	assert.True(t, IsTamperMarker(got.History[0]))
 }

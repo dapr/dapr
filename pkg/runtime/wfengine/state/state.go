@@ -25,6 +25,7 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -597,7 +598,10 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	for i := range metadata.GetSigningCertificateLength() {
 		key = getMultiEntryKeyName(sigcertKeyPrefix, i)
 		if bulkRes[key] == nil {
-			return nil, wferrors.NewVerificationError(
+			if hasTamperMarker(wState) {
+				return wState, nil
+			}
+			return wState, wferrors.NewVerificationError(
 				fmt.Errorf("signing certificate state key '%s' declared in metadata but not found in state store — possible tampering", key),
 			)
 		}
@@ -614,7 +618,10 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	for i := range metadata.GetSignatureLength() {
 		key = getMultiEntryKeyName(signatureKeyPrefix, i)
 		if bulkRes[key] == nil {
-			return nil, wferrors.NewVerificationError(
+			if hasTamperMarker(wState) {
+				return wState, nil
+			}
+			return wState, wferrors.NewVerificationError(
 				fmt.Errorf("signature state key '%s' declared in metadata but not found in state store — possible tampering", key),
 			)
 		}
@@ -658,27 +665,111 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	// purged before enabling signing cluster-wide.
 	if len(wState.Signatures) > 0 {
 		if opts.Signer == nil {
-			return wState, wferrors.NewVerificationError(
+			return wState, wferrors.NewConfigurationError(
 				fmt.Errorf("workflow '%s' has signed history but no signer is configured; cannot verify signatures — signing cannot be disabled for workflows that were created with signing enabled", actorID),
 			)
 		}
 		if opts.AppID == "" {
-			return wState, wferrors.NewVerificationError(
+			return wState, wferrors.NewConfigurationError(
 				fmt.Errorf("workflow '%s' has signed history but app ID is not configured; cannot verify signer identity", actorID),
 			)
 		}
 		if err := verifySignatureChain(wState, opts.Signer); err != nil {
+			// A workflow that was previously detected as tampered carries an
+			// unsigned ExecutionCompleted(FAILED) marker as its last history
+			// event (see [MarkAsFailed]). The marker is intentionally not
+			// covered by a signature, so the chain check will always fail —
+			// short-circuit here so the workflow continues to surface as
+			// terminally FAILED on every load instead of being unloadable.
+			if hasTamperMarker(wState) {
+				return wState, nil
+			}
 			return wState, wferrors.NewVerificationError(
 				fmt.Errorf("workflow history signature verification failed for '%s': %w", actorID, err),
 			)
 		}
 	} else if opts.Signer != nil && len(wState.History) > 0 {
-		return wState, wferrors.NewVerificationError(
+		return wState, wferrors.NewConfigurationError(
 			fmt.Errorf("workflow '%s' has %d unsigned history events but signing is enabled — signing cannot be enabled for workflows that were created without signing; ensure all unsigned workflows complete or are purged before enabling signing", actorID, len(wState.History)),
 		)
 	}
 
 	return wState, nil
+}
+
+// IsTamperMarker reports whether e is the well-known terminal event written
+// by [MarkAsFailed] to record that the workflow's persisted state was
+// detected as tampered. It is identified by an ExecutionCompleted with
+// status FAILED and FailureDetails.ErrorType set to
+// [wferrors.ErrorTypeHistoryTampered]. Loaders use this check to bypass
+// signature verification on workflows that have already been terminally
+// failed by tamper detection — without the bypass, the broken signature
+// chain would block every subsequent load.
+func IsTamperMarker(e *backend.HistoryEvent) bool {
+	ec := e.GetExecutionCompleted()
+	if ec == nil {
+		return false
+	}
+	if ec.GetWorkflowStatus() != protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED {
+		return false
+	}
+	fd := ec.GetFailureDetails()
+	return fd != nil && fd.GetErrorType() == wferrors.ErrorTypeHistoryTampered
+}
+
+// hasTamperMarker reports whether the loaded state's history ends in the
+// terminal tamper marker event written by [MarkAsFailed]. Used by
+// LoadWorkflowState to short-circuit verification failures on workflows
+// that are already terminally failed.
+func hasTamperMarker(s *State) bool {
+	return s != nil && len(s.History) > 0 && IsTamperMarker(s.History[len(s.History)-1])
+}
+
+// MarkAsFailed appends a single terminal ExecutionCompleted(FAILED) event to
+// the workflow's history to record that its persisted state was detected as
+// tampered. The original (untrusted) history, inbox, signatures, and certs
+// are left intact for forensics — only the marker event is added, and it is
+// not signed. Subsequent loads detect the marker via [IsTamperMarker] and
+// bypass signature verification, so the workflow surfaces as terminally
+// FAILED with [wferrors.ErrorTypeHistoryTampered] in its FailureDetails.
+//
+// MarkAsFailed is idempotent: if prior already ends in a tamper marker the
+// state is returned unchanged with no store write.
+func MarkAsFailed(ctx context.Context, astate state.Interface, actorID string, opts Options, prior *State, cause error) (*State, error) {
+	s := prior
+	if s == nil {
+		s = NewState(opts)
+	}
+
+	if len(s.History) > 0 && IsTamperMarker(s.History[len(s.History)-1]) {
+		return s, nil
+	}
+
+	s.AddToHistory(&backend.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ExecutionCompleted{
+			ExecutionCompleted: &protos.ExecutionCompletedEvent{
+				WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED,
+				FailureDetails: &protos.TaskFailureDetails{
+					ErrorType:    wferrors.ErrorTypeHistoryTampered,
+					ErrorMessage: cause.Error(),
+				},
+			},
+		},
+	})
+
+	req, err := s.GetSaveRequest(actorID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := astate.TransactionalStateOperation(ctx, true, req, false); err != nil {
+		return nil, err
+	}
+
+	s.ResetChangeTracking()
+	return s, nil
 }
 
 func verifySignatureChain(s *State, sgn *signer.Signer) error {
