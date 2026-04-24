@@ -16,7 +16,6 @@ package runtime
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -43,15 +42,9 @@ import (
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 
-	"sigs.k8s.io/yaml"
-
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
-	actorrouter "github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/api/grpc"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	"github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
@@ -63,7 +56,6 @@ import (
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
-	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
@@ -75,14 +67,12 @@ import (
 	"github.com/dapr/dapr/pkg/internal/loader"
 	"github.com/dapr/dapr/pkg/internal/loader/disk"
 	"github.com/dapr/dapr/pkg/internal/loader/kubernetes"
-	"github.com/dapr/dapr/pkg/internal/loader/validate"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	middlewarehttp "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	"github.com/dapr/dapr/pkg/outbox"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
@@ -1433,194 +1423,6 @@ func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func (a *DaprRuntime) loadWorkflowAccessPolicies(ctx context.Context) error {
-	switch a.runtimeConfig.mode {
-	case modes.KubernetesMode:
-		return a.loadWorkflowAccessPoliciesKubernetes(ctx)
-	case modes.StandaloneMode:
-		return a.loadWorkflowAccessPoliciesStandalone(ctx)
-	default:
-		return nil
-	}
-}
-
-func (a *DaprRuntime) loadWorkflowAccessPoliciesKubernetes(ctx context.Context) error {
-	resp, err := a.operatorClient.ListWorkflowAccessPolicy(ctx, &operatorv1pb.ListWorkflowAccessPolicyRequest{
-		Namespace: a.namespace,
-	})
-	if err != nil {
-		return fmt.Errorf("error listing workflow access policies: %w", err)
-	}
-
-	var policies []wfaclapi.WorkflowAccessPolicy
-	for _, raw := range resp.GetPolicies() {
-		var policy wfaclapi.WorkflowAccessPolicy
-		if err := json.Unmarshal(raw, &policy); err != nil {
-			log.Warnf("Error unmarshalling workflow access policy: %s", err)
-			continue
-		}
-
-		if !policy.IsAppScoped(a.runtimeConfig.id) {
-			continue
-		}
-		policies = append(policies, policy)
-		a.compStore.AddWorkflowAccessPolicy(policy)
-	}
-
-	compiled := workflowacl.Compile(policies)
-	a.daprGRPCAPI.SetWorkflowAccessPolicies(compiled)
-
-	if compiled != nil {
-		log.Infof("Loaded %d workflow access policy resource(s)", len(policies))
-	}
-
-	return nil
-}
-
-func (a *DaprRuntime) loadWorkflowAccessPoliciesStandalone(ctx context.Context) error {
-	var policies []wfaclapi.WorkflowAccessPolicy
-
-	for _, dir := range a.runtimeConfig.standalone.ResourcesPath {
-		loaded, err := loadWorkflowAccessPoliciesFromDir(ctx, dir, a.runtimeConfig.id)
-		if err != nil {
-			log.Warnf("Error loading workflow access policies from %s: %s", dir, err)
-			continue
-		}
-		for _, p := range loaded {
-			a.compStore.AddWorkflowAccessPolicy(p)
-		}
-		policies = append(policies, loaded...)
-	}
-
-	compiled := workflowacl.Compile(policies)
-	a.daprGRPCAPI.SetWorkflowAccessPolicies(compiled)
-
-	if compiled != nil {
-		log.Infof("Loaded %d workflow access policy resource(s)", len(policies))
-	}
-
-	return nil
-}
-
-// buildWorkflowACLChecker creates a WorkflowACLChecker for the actor router.
-// This enforces workflow access policies on local actor calls (same sidecar).
-// Remote calls are enforced at the callee's CallActor gRPC handler.
-func (a *DaprRuntime) buildWorkflowACLChecker() actorrouter.WorkflowACLChecker {
-	if !a.globalConfig.IsFeatureEnabled(config.WorkflowAccessPolicy) {
-		return nil
-	}
-
-	return func(callerAppID string, req *internalv1pb.InternalInvokeRequest) error {
-		result, err := workflowacl.EnforceRequest(
-			a.daprGRPCAPI.GetWorkflowAccessPolicies(), callerAppID,
-			req.GetActor().GetActorType(),
-			req.GetMessage().GetMethod(),
-			req.GetMessage().GetData().GetValue(),
-		)
-		if err != nil {
-			return status.Errorf(codes.Internal, "workflow access policy: %v", err)
-		}
-		if result == nil {
-			return nil
-		}
-
-		if !result.Allowed {
-			log.Warnf("Workflow access policy denied app '%s' for %s operation '%s'", callerAppID, result.OpType, result.Operation)
-			diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(result.OpType), result.Operation)
-			return status.Errorf(codes.PermissionDenied, "access denied by workflow access policy")
-		}
-
-		diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, string(result.OpType), result.Operation)
-		return nil
-	}
-}
-
-// warnIfPoliciesExistWithoutFeatureFlag checks whether WorkflowAccessPolicy
-// resources exist even though the feature flag is disabled. This helps catch
-// misconfigurations where an operator creates policies but forgets to enable
-// the WorkflowAccessPolicy feature flag.
-func (a *DaprRuntime) warnIfPoliciesExistWithoutFeatureFlag(ctx context.Context) {
-	switch a.runtimeConfig.mode {
-	case modes.KubernetesMode:
-		resp, err := a.operatorClient.ListWorkflowAccessPolicy(ctx, &operatorv1pb.ListWorkflowAccessPolicyRequest{
-			Namespace: a.namespace,
-		})
-		if err != nil {
-			log.Warnf("Failed to check for WorkflowAccessPolicy resources: %s", err)
-			return
-		}
-		if len(resp.GetPolicies()) > 0 {
-			log.Warnf("Found %d WorkflowAccessPolicy resource(s) but the WorkflowAccessPolicy feature flag is NOT enabled. "+
-				"Policies will NOT be enforced. Enable the feature flag in your Dapr configuration to activate enforcement.",
-				len(resp.GetPolicies()))
-		}
-	case modes.StandaloneMode:
-		for _, dir := range a.runtimeConfig.standalone.ResourcesPath {
-			policies, err := loadWorkflowAccessPoliciesFromDir(ctx, dir, a.runtimeConfig.id)
-			if err != nil {
-				log.Warnf("Failed to check for WorkflowAccessPolicy resources in %s: %s", dir, err)
-				continue
-			}
-			if len(policies) > 0 {
-				log.Warnf("Found WorkflowAccessPolicy resource(s) in %s but the WorkflowAccessPolicy feature flag is NOT enabled. "+
-					"Policies will NOT be enforced. Enable the feature flag in your Dapr configuration to activate enforcement.", dir)
-				return
-			}
-		}
-	}
-}
-
-func loadWorkflowAccessPoliciesFromDir(ctx context.Context, dir string, appID string) ([]wfaclapi.WorkflowAccessPolicy, error) {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-
-	var policies []wfaclapi.WorkflowAccessPolicy
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
-
-		name := file.Name()
-		if !isYAMLFile(name) {
-			continue
-		}
-
-		b, err := os.ReadFile(dir + "/" + name)
-		if err != nil {
-			log.Warnf("Error reading file %s: %s", name, err)
-			continue
-		}
-
-		var policy wfaclapi.WorkflowAccessPolicy
-		if err := yaml.Unmarshal(b, &policy); err != nil {
-			continue // Not a WorkflowAccessPolicy, skip
-		}
-
-		if policy.TypeMeta.Kind != "WorkflowAccessPolicy" {
-			continue
-		}
-
-		if err := validate.WorkflowAccessPolicy(ctx, &policy); err != nil {
-			log.Warnf("WorkflowAccessPolicy %q in %s failed validation: %s", policy.Name, name, err)
-			continue
-		}
-
-		if !policy.IsAppScoped(appID) {
-			continue
-		}
-
-		policies = append(policies, policy)
-	}
-
-	return policies, nil
-}
-
-func isYAMLFile(name string) bool {
-	return strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml")
 }
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations.

@@ -98,7 +98,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		// activity task immediately rather than retrying.
 		if isPermissionDenied(err) {
 			log.Errorf("Workflow actor '%s': activity '%s' denied by workflow access policy: %v", o.actorID, ts.GetName(), err)
-			return o.failActivity(ctx, e, err)
+			return o.failActivityACL(ctx, e)
 		}
 
 		if router := e.GetRouter(); router != nil && router.TargetAppID != nil {
@@ -111,10 +111,10 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	return nil
 }
 
-// failActivity creates a TaskFailed event on the parent orchestrator when
-// the activity call is permanently rejected (e.g. by a WorkflowAccessPolicy).
-// Uses a reminder to deliver the event in a fresh execution cycle.
-func (o *orchestrator) failActivity(ctx context.Context, e *backend.HistoryEvent, callErr error) error {
+// failActivityACL creates a TaskFailed event on the parent orchestrator when
+// the activity call is rejected by a WorkflowAccessPolicy. Uses a reminder to
+// deliver the event in a fresh execution cycle.
+func (o *orchestrator) failActivityACL(ctx context.Context, e *backend.HistoryEvent) error {
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
@@ -123,7 +123,7 @@ func (o *orchestrator) failActivity(ctx context.Context, e *backend.HistoryEvent
 				TaskScheduledId: e.GetEventId(),
 				FailureDetails: &protos.TaskFailureDetails{
 					ErrorType:    "WorkflowAccessPolicyDenied",
-					ErrorMessage: "operation denied by workflow access policy",
+					ErrorMessage: "access denied by workflow access policy",
 				},
 			},
 		},

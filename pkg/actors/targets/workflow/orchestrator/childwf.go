@@ -82,7 +82,7 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 			// If the call was denied by a workflow access policy, fail the
 			// child orchestration immediately rather than retrying.
 			if isPermissionDenied(err) {
-				return o.failChildWorkflow(ctx, e.GetEventId(), err)
+				return o.failChildWorkflowACL(ctx, e.GetEventId(), err)
 			}
 			return fmt.Errorf("failed to call child workflow '%s': %w", id, err)
 		}
@@ -116,14 +116,14 @@ func isPermissionDenied(err error) bool {
 	return false
 }
 
-// failChildWorkflow creates a ChildWorkflowInstanceFailed event on the parent
-// orchestrator when the child workflow call is permanently rejected (e.g. by a
-// WorkflowAccessPolicy). It uses a reminder-based approach to deliver the
+// failChildWorkflowACL creates a ChildWorkflowInstanceFailed event on the
+// parent orchestrator when the child workflow call is rejected by a
+// WorkflowAccessPolicy. It uses a reminder-based approach to deliver the
 // failure event in a fresh execution cycle, avoiding conflicts with the current
 // run loop's ClearInbox/saveInternalState calls.
 // taskScheduledID is the correlation ID that the parent orchestrator engine
 // uses to match this failure with the original sub-orchestration request.
-func (o *orchestrator) failChildWorkflow(ctx context.Context, taskScheduledID int32, callErr error) error {
+func (o *orchestrator) failChildWorkflowACL(ctx context.Context, taskScheduledID int32, callErr error) error {
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
@@ -132,7 +132,7 @@ func (o *orchestrator) failChildWorkflow(ctx context.Context, taskScheduledID in
 				TaskScheduledId: taskScheduledID,
 				FailureDetails: &protos.TaskFailureDetails{
 					ErrorType:    "WorkflowAccessPolicyDenied",
-					ErrorMessage: "operation denied by workflow access policy",
+					ErrorMessage: "access denied by workflow access policy",
 				},
 			},
 		},

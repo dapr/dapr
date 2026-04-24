@@ -75,7 +75,8 @@ func ExtractOperationName(opType OperationType, method string, data []byte) (str
 
 func extractWorkflowName(method string, data []byte) (string, bool, error) {
 	if method != methodCreateWorkflowInstance {
-		// Only CreateWorkflowInstance is subject to access control (schedule operation).
+		// Only CreateWorkflowInstance is subject to access control (schedule
+		// operation).
 		return "", false, nil
 	}
 

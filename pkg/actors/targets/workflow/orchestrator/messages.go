@@ -124,7 +124,7 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 		// we can correlate the failure to a parent task via ParentInstance.
 		if isPermissionDenied(err) && historyEvent != nil {
 			if es := historyEvent.GetExecutionStarted(); es != nil && es.GetParentInstance() != nil {
-				if fErr := o.failChildWorkflow(ctx, es.GetParentInstance().GetTaskScheduledId(), err); fErr != nil {
+				if fErr := o.failChildWorkflowACL(ctx, es.GetParentInstance().GetTaskScheduledId(), err); fErr != nil {
 					return fmt.Errorf("failed to record child workflow failure: %w (original: %v)", fErr, err)
 				}
 				return nil

@@ -74,9 +74,16 @@ spec:
 
 	v.resDir = t.TempDir()
 
+	// Register each invalid policy name so we can assert per-subtest that
+	// it was reported as failing validation. The log escapes inner quotes
+	// in the msg= field, so the expected substrings match that format.
 	v.validationLog = logline.New(t,
 		logline.WithStdoutLineContains(
-			"failed validation",
+			`\"bad-action\" failed validation`,
+			`\"bad-type\" failed validation`,
+			`\"empty-appid\" failed validation`,
+			`\"empty-ops\" failed validation`,
+			`\"bad-default\" failed validation`,
 		),
 	)
 
@@ -143,8 +150,7 @@ spec:
       action: bogus
 `), 0o600))
 
-		v.validationLog.EventuallyFoundAll(t)
-
+		v.validationLog.EventuallyContains(t, `\"bad-action\" failed validation`, time.Second*20, time.Millisecond*100)
 		assert.True(t, v.scheduleAndComplete(ctx, backendClient))
 	})
 
@@ -165,6 +171,7 @@ spec:
       action: allow
 `), 0o600))
 
+		v.validationLog.EventuallyContains(t, `\"bad-type\" failed validation`, time.Second*20, time.Millisecond*100)
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.True(c, v.scheduleAndComplete(ctx, backendClient))
 		}, time.Second*10, time.Millisecond*200)
@@ -187,6 +194,7 @@ spec:
       action: allow
 `), 0o600))
 
+		v.validationLog.EventuallyContains(t, `\"empty-appid\" failed validation`, time.Second*20, time.Millisecond*100)
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.True(c, v.scheduleAndComplete(ctx, backendClient))
 		}, time.Second*10, time.Millisecond*200)
@@ -206,6 +214,7 @@ spec:
     operations: []
 `), 0o600))
 
+		v.validationLog.EventuallyContains(t, `\"empty-ops\" failed validation`, time.Second*20, time.Millisecond*100)
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.True(c, v.scheduleAndComplete(ctx, backendClient))
 		}, time.Second*10, time.Millisecond*200)
@@ -228,6 +237,7 @@ spec:
       action: allow
 `), 0o600))
 
+		v.validationLog.EventuallyContains(t, `\"bad-default\" failed validation`, time.Second*20, time.Millisecond*100)
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.True(c, v.scheduleAndComplete(ctx, backendClient))
 		}, time.Second*10, time.Millisecond*200)
