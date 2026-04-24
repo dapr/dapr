@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -43,11 +44,12 @@ func init() {
 }
 
 // inboxInjection verifies that injecting a fake TaskCompleted event into the
-// inbox is rejected when signing is enabled. The workflow schedules a real
-// activity and then waits for an external event. A TaskCompleted referencing
-// a TaskScheduledId that was never scheduled in the signed history is purged
-// by filterValidInboxEvents, leaving the workflow in RUNNING state without
-// processing the injected event.
+// inbox marks the workflow as terminally FAILED with the well-known
+// [wferrors.ErrorTypeHistoryTampered] error type. The workflow schedules a
+// real activity and then waits for an external event. A TaskCompleted
+// referencing a TaskScheduledId that was never scheduled in the signed
+// history is detected by filterValidInboxEvents on the next orchestrator
+// load, which appends a tamper-marker ExecutionCompleted event.
 type inboxInjection struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
@@ -154,11 +156,22 @@ func (i *inboxInjection) Run(tt *testing.T, ctx context.Context) {
 	client = dworkflow.NewClient(i.daprd.GRPCConn(tt, ctx))
 	require.NoError(tt, client.StartWorker(ctx, reg))
 
-	// Inbox injection is treated as state store tampering: any operation that
-	// loads the actor state detects the forged inbox entry and rejects the
-	// call. RaiseEvent goes through the orchestrator actor, so it surfaces
-	// the tampering error directly.
-	err = client.RaiseEvent(ctx, id, "continue", dworkflow.WithEventPayload("real-event"))
-	require.Error(tt, err)
-	assert.Contains(tt, err.Error(), "state store tampering")
+	// Inbox injection is treated as state store tampering: the next operation
+	// that activates the orchestrator actor detects the forged inbox entry
+	// and appends a terminal tamper-marker event to the history, leaving the
+	// workflow in a FAILED state. RaiseEvent triggers the activation.
+	require.NoError(tt, client.RaiseEvent(ctx, id, "continue", dworkflow.WithEventPayload("real-event")))
+
+	require.EventuallyWithT(tt, func(c *assert.CollectT) {
+		meta, err := client.FetchWorkflowMetadata(ctx, id)
+		assert.NoError(c, err)
+		if !assert.Equal(c, dworkflow.StatusFailed, meta.RuntimeStatus) {
+			return
+		}
+		if !assert.NotNil(c, meta.FailureDetails) {
+			return
+		}
+		assert.Equal(c, wferrors.ErrorTypeHistoryTampered, meta.FailureDetails.GetErrorType())
+		assert.Contains(c, meta.FailureDetails.GetErrorMessage(), "state store tampering")
+	}, time.Second*10, time.Millisecond*100)
 }
