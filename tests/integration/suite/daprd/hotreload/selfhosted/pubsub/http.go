@@ -48,17 +48,6 @@ type http struct {
 func (h *http) Setup(t *testing.T) []framework.Option {
 	h.topicChan = make(chan string, 1)
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-    - name: HotReload
-      enabled: true`), 0o600))
-
 	handler := nethttp.NewServeMux()
 	handler.HandleFunc("/dapr/subscribe", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 		w.WriteHeader(nethttp.StatusOK)
@@ -102,7 +91,6 @@ spec:
 `), 0o600))
 
 	h.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(h.resDir),
 		daprd.WithAppPort(srv.Port()),
 	)
