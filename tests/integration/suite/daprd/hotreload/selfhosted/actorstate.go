@@ -49,17 +49,6 @@ type actorstate struct {
 }
 
 func (a *actorstate) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true`), 0o600))
-
 	a.loglineCreate = logline.New(t, logline.WithStdoutLineContains(
 		"Aborting to hot-reload a state store component that is used as an actor state store: mystore (state.in-memory/v1)",
 	))
@@ -77,7 +66,6 @@ spec:
 	place := placement.New(t)
 
 	a.daprdCreate = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(a.resDirCreate),
 		daprd.WithPlacementAddresses(place.Address()),
 		daprd.WithExecOptions(
@@ -86,7 +74,6 @@ spec:
 	)
 
 	a.daprdUpdate = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(a.resDirUpdate),
 		daprd.WithPlacementAddresses(place.Address()),
 		daprd.WithExecOptions(
@@ -108,7 +95,6 @@ spec:
 `), 0o600))
 
 	a.daprdDelete = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(a.resDirDelete),
 		daprd.WithPlacementAddresses(place.Address()),
 		daprd.WithExecOptions(
