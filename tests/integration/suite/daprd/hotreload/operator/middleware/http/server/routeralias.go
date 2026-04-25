@@ -59,7 +59,7 @@ func (r *routeralias) Setup(t *testing.T) []framework.Option {
 		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
 			return &operatorv1.GetConfigurationResponse{
 				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"nameResolution": {"component": "mdns"}, "features":[{"name":"HotReload","enabled":true}],
+					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"middleware"},"spec":{"nameResolution": {"component": "mdns"},
 					"httpPipeline":{"handlers":[{"name":"routeralias1","type":"middleware.http.routeralias"},{"name":"routeralias2","type":"middleware.http.routeralias"},{"name":"routeralias3","type":"middleware.http.routeralias"}]}}}`,
 				),
 			}, nil
@@ -78,7 +78,7 @@ func (r *routeralias) Setup(t *testing.T) []framework.Option {
 
 	r.daprd1 = daprd.New(t,
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
+		daprd.WithConfigs("middleware"),
 		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(r.operator.Address(t)),
@@ -88,7 +88,7 @@ func (r *routeralias) Setup(t *testing.T) []framework.Option {
 	)
 	r.daprd2 = daprd.New(t,
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
+		daprd.WithConfigs("middleware"),
 		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(r.operator.Address(t)),
