@@ -71,10 +71,7 @@ func (c *components) Setup(t *testing.T) []framework.Option {
 						ControlPlaneTrustDomain: "integration.test.dapr.io",
 						SentryAddress:           c.sentry.Address(),
 					},
-					Features: []configapi.FeatureSpec{{
-						Name:    "HotReload",
-						Enabled: new(true),
-					}},
+					Features: []configapi.FeatureSpec{},
 				},
 			}},
 		}),
