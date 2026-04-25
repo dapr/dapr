@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -37,9 +38,11 @@ func init() {
 	suite.Register(new(tamperedrunning))
 }
 
-// tamperedrunning verifies that a running workflow with a tampered history
-// event is detected as invalid after a daprd restart, resulting in a FAILED
-// status with a signature verification error.
+// tamperedrunning verifies that a running (non-terminal) workflow with a
+// tampered history event is, on the next orchestrator-actor activation,
+// terminally marked FAILED with the well-known
+// [wferrors.ErrorTypeHistoryTampered] error type — so the executor stops
+// working on the workflow.
 type tamperedrunning struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
@@ -120,7 +123,21 @@ func (tr *tamperedrunning) Run(tt *testing.T, ctx context.Context) {
 	client = dworkflow.NewClient(tr.daprd.GRPCConn(tt, ctx))
 	require.NoError(tt, client.StartWorker(ctx, reg))
 
-	_, err = client.FetchWorkflowMetadata(ctx, id)
-	require.Error(tt, err)
-	assert.Contains(tt, err.Error(), "signature verification failed")
+	// Trigger the orchestrator actor by raising the event the workflow is
+	// waiting on. The actor's load detects the tampered history and appends
+	// the terminal tamper marker so the workflow stops being worked on.
+	require.NoError(tt, client.RaiseEvent(ctx, id, "continue", dworkflow.WithEventPayload("real-event")))
+
+	require.EventuallyWithT(tt, func(c *assert.CollectT) {
+		meta, err := client.FetchWorkflowMetadata(ctx, id)
+		assert.NoError(c, err)
+		if !assert.Equal(c, dworkflow.StatusFailed, meta.RuntimeStatus) {
+			return
+		}
+		if !assert.NotNil(c, meta.FailureDetails) {
+			return
+		}
+		assert.Equal(c, wferrors.ErrorTypeHistoryTampered, meta.FailureDetails.GetErrorType())
+		assert.Contains(c, meta.FailureDetails.GetErrorMessage(), "signature verification failed")
+	}, time.Second*10, time.Millisecond*100)
 }
