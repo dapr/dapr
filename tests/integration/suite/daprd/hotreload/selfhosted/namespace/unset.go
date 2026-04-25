@@ -43,17 +43,6 @@ type unset struct {
 }
 
 func (u *unset) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true`), 0o600))
-
 	u.resDir = t.TempDir()
 
 	u.logline = logline.New(t, logline.WithStdoutLineContains(
@@ -61,7 +50,6 @@ spec:
 	))
 
 	u.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(u.resDir),
 		daprd.WithExit1(),
 		daprd.WithLogLineStdout(u.logline),

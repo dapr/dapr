@@ -51,17 +51,6 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		make(chan string, 1), make(chan string, 1), make(chan string, 1),
 	}
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true`), 0o600))
-
 	g.resDir = t.TempDir()
 
 	g.registered[0].Store(true)
@@ -115,7 +104,6 @@ spec:
 `), 0o600))
 
 	g.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(g.resDir),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithAppPort(srv.Port(t)),
