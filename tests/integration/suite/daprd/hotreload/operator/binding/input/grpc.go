@@ -97,13 +97,6 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 
 	g.operator = operator.New(t,
 		operator.WithSentry(sentry),
-		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
-			return &operatorv1.GetConfigurationResponse{
-				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"features":[{"name":"HotReload","enabled":true}]}}`,
-				),
-			}, nil
-		}),
 	)
 
 	g.operator.AddComponents(compapi.Component{
@@ -127,7 +120,6 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 
 	g.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(g.operator.Address(t)),
