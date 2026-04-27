@@ -31,11 +31,13 @@ func init() {
 }
 
 type env struct {
-	base                  *helm.Helm
-	withOtelEnvVars       *helm.Helm
-	withEscapedCommas     *helm.Helm
-	withSchedulerEnabled  *helm.Helm
-	withSchedulerDisabled *helm.Helm
+	base                       *helm.Helm
+	withOtelEnvVars            *helm.Helm
+	withEscapedCommas          *helm.Helm
+	withSchedulerEnabled       *helm.Helm
+	withSchedulerDisabled      *helm.Helm
+	withNativeSidecarEnabled   *helm.Helm
+	withNativeSidecarDisabled  *helm.Helm
 }
 
 func (e *env) Setup(t *testing.T) []framework.Option {
@@ -67,6 +69,19 @@ func (e *env) Setup(t *testing.T) []framework.Option {
 		),
 	)
 
+	e.withNativeSidecarEnabled = helm.New(t,
+		helm.WithShowOnly("charts/dapr_sidecar_injector", "dapr_sidecar_injector_deployment.yaml"),
+		helm.WithValues(
+			"dapr_sidecar_injector.nativeSidecar=true",
+		),
+	)
+	e.withNativeSidecarDisabled = helm.New(t,
+		helm.WithShowOnly("charts/dapr_sidecar_injector", "dapr_sidecar_injector_deployment.yaml"),
+		helm.WithValues(
+			"dapr_sidecar_injector.nativeSidecar=false",
+		),
+	)
+
 	// config with escaped commas to test complex OTEL_RESOURCE_ATTRIBUTES
 	e.withEscapedCommas = helm.New(t,
 		helm.WithShowOnly("charts/dapr_sidecar_injector", "dapr_sidecar_injector_deployment.yaml"),
@@ -84,6 +99,8 @@ func (e *env) Setup(t *testing.T) []framework.Option {
 			e.withEscapedCommas,
 			e.withSchedulerEnabled,
 			e.withSchedulerDisabled,
+			e.withNativeSidecarEnabled,
+			e.withNativeSidecarDisabled,
 		),
 	}
 }
@@ -148,6 +165,47 @@ func (e *env) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "escaped-test", envMap["OTEL_SERVICE_NAME"])
 		assert.Equal(t, "k8s.pod.name=my-pod,k8s.namespace.name=default,k8s.deployment.name=my-app", envMap["OTEL_RESOURCE_ATTRIBUTES"])
 		assert.Equal(t, "http://otel-collector:4317", envMap["OTEL_EXPORTER_OTLP_ENDPOINT"])
+	})
+
+	t.Run("native sidecar", func(t *testing.T) {
+		// Given:
+		//  - base config (nativeSidecar defaults to false)
+		//  - explicit nativeSidecar=true
+		//  - explicit nativeSidecar=false
+		// When:
+		//  - helm renders the injector deployment
+		// Expect:
+		//  - NATIVE_SIDECAR_ENABLED env var reflects the configured value
+
+		deployments := helm.UnmarshalStdout[appsv1.Deployment](t, e.base)
+		injectorDeployment := findInjectorDeployment(deployments)
+		require.NotNil(t, injectorDeployment)
+		injectorContainer := injectorDeployment.Spec.Template.Spec.Containers[0]
+		envMap := make(map[string]string)
+		for _, envvar := range injectorContainer.Env {
+			envMap[envvar.Name] = envvar.Value
+		}
+		assert.Equal(t, "false", envMap["NATIVE_SIDECAR_ENABLED"])
+
+		deployments = helm.UnmarshalStdout[appsv1.Deployment](t, e.withNativeSidecarEnabled)
+		injectorDeployment = findInjectorDeployment(deployments)
+		require.NotNil(t, injectorDeployment)
+		injectorContainer = injectorDeployment.Spec.Template.Spec.Containers[0]
+		envMap = make(map[string]string)
+		for _, envvar := range injectorContainer.Env {
+			envMap[envvar.Name] = envvar.Value
+		}
+		assert.Equal(t, "true", envMap["NATIVE_SIDECAR_ENABLED"])
+
+		deployments = helm.UnmarshalStdout[appsv1.Deployment](t, e.withNativeSidecarDisabled)
+		injectorDeployment = findInjectorDeployment(deployments)
+		require.NotNil(t, injectorDeployment)
+		injectorContainer = injectorDeployment.Spec.Template.Spec.Containers[0]
+		envMap = make(map[string]string)
+		for _, envvar := range injectorContainer.Env {
+			envMap[envvar.Name] = envvar.Value
+		}
+		assert.Equal(t, "false", envMap["NATIVE_SIDECAR_ENABLED"])
 	})
 
 	t.Run("scheduler enabled", func(t *testing.T) {
