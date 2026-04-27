@@ -55,9 +55,11 @@ func (o *orchestrator) certChainTrustVerified(digest []byte, eventTS time.Time) 
 
 // cacheCertChainTrust records that the cert identified by digest has been
 // chain-verified; subsequent lookups within the leaf validity window can
-// skip chain-of-trust.
-func (o *orchestrator) cacheCertChainTrust(digest []byte, certDER []byte) {
-	leaf, err := parseLeafCertFromChainDER(certDER)
+// skip chain-of-trust. chainDER is the DER-concatenated certificate chain
+// (leaf first, intermediates concatenated), matching the format consumed
+// by parseLeafCertFromChainDER.
+func (o *orchestrator) cacheCertChainTrust(digest []byte, chainDER []byte) {
+	leaf, err := parseLeafCertFromChainDER(chainDER)
 	if err != nil {
 		// Parsing failure here is benign — we just don't cache. The
 		// next attestation using the same cert will pay full chain-of-

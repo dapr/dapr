@@ -100,11 +100,12 @@ type State struct {
 	// events. Set once at workflow creation, never modified.
 	IncomingHistory *protos.PropagatedHistory
 
-	// externalCertDigestIndex maps SHA-256 cert digests (as hex strings) to
-	// their index in ExternalSigningCertificates. Built on load and
-	// maintained incrementally by AddExternalCert so repeated ingestion of
-	// the same foreign cert within one run is O(1) and idempotent. Not
-	// persisted — rebuilt from ExternalSigningCertificates at load time.
+	// externalCertDigestIndex maps SHA-256 cert digests (raw 32-byte digest
+	// converted to a string for use as a map key, not hex-encoded) to their
+	// index in ExternalSigningCertificates. Built on load and maintained
+	// incrementally by AddExternalCert so repeated ingestion of the same foreign
+	// cert within one run is O(1) and idempotent. Not persisted. Rebuilt from
+	// ExternalSigningCertificates at load time.
 	externalCertDigestIndex map[string]uint64
 
 	// change tracking
