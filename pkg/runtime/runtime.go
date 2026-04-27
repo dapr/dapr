@@ -42,6 +42,7 @@ import (
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/api/grpc"
@@ -79,6 +80,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/hotreload"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/reconciler"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -752,6 +754,32 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		Processor:             a.processor,
 	})
 
+	// Load and apply workflow access policies before starting servers.
+	if a.globalConfig.IsFeatureEnabled(config.WorkflowAccessPolicy) {
+		if err = a.loadWorkflowAccessPolicies(ctx); err != nil {
+			return fmt.Errorf("failed to load workflow access policies: %w", err)
+		}
+
+		a.reloader.SetPolicyRecompiler(reconciler.WorkflowAccessPolicyOptions{
+			AppID:     a.runtimeConfig.id,
+			Loader:    a.reloader.Loader(),
+			CompStore: a.compStore,
+			Recompiler: func(compiled *workflowacl.CompiledPolicies) {
+				a.daprGRPCAPI.SetWorkflowAccessPolicies(compiled)
+			},
+			Healthz: a.runtimeConfig.healthz,
+		})
+	} else {
+		// Signal the reloader that no policy reconciler is needed so Run()
+		// doesn't block waiting.
+		a.reloader.SignalNoPolicyRecompiler()
+
+		// Warn if policies may exist but the feature flag is disabled.
+		// This helps operators catch misconfigurations where they created
+		// WorkflowAccessPolicy resources but forgot to enable the feature.
+		a.warnIfPoliciesExistWithoutFeatureFlag(ctx)
+	}
+
 	if err = a.runnerCloser.AddCloser(a.daprGRPCAPI); err != nil {
 		return err
 	}
@@ -1200,6 +1228,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		GRPC:              a.grpc,
 		SchedulerClient:   a.jobsManager.Client(),
 		SchedulerReloader: a.jobsManager,
+		WorkflowACL:       a.buildWorkflowACLChecker(),
 	}); err != nil {
 		return err
 	}
