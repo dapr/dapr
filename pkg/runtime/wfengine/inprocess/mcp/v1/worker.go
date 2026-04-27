@@ -60,19 +60,18 @@ const (
 	jsonFieldRequired = "required"
 )
 
-// RegisterMCPServer registers workflows and activities for a single MCPServer.
-// Builds the HTTP client and MCP session eagerly - similar to component init().
-// Returns an error if the server is unreachable or registration fails.
-// Safe to call on hot-reload — registry upserts replace existing entries,
-// and AddMCPServer invalidates stale cached clients/sessions.
 // holders tracks active session holders per server for hot-reload cleanup.
 var holders sync.Map // map[string]*sessionHolder
 
+// RegisterMCPServer registers workflows and activities for a single MCPServer.
+// Builds the HTTP client and MCP session eagerly — similar to component Init().
+// Safe to call on hot-reload — registry upserts replace existing entries.
+
 func RegisterMCPServer(registry *task.TaskRegistry, server mcpserverapi.MCPServer, opts Options) error {
-	// Close the previous holder if this is a hot-reload replacement.
-	if prev, ok := holders.LoadAndDelete(server.Name); ok {
-		prev.(*sessionHolder).Close()
-	}
+	// Remove the previous holder but don't close it — in-flight activities
+	// may still reference it. The old holder becomes unreachable once no
+	// closures reference it and GC cleans up the session.
+	holders.Delete(server.Name)
 
 	holder, err := newSessionHolder(&server, opts.Store, opts.Security)
 	if err != nil {
@@ -102,6 +101,18 @@ func RegisterMCPServer(registry *task.TaskRegistry, server mcpserverapi.MCPServe
 		return fmt.Errorf("failed to register activity %q: %w", callAct, err)
 	}
 	return nil
+}
+
+// UnregisterMCPServer removes workflows and activities for a deleted MCPServer.
+// In-flight workflows that already captured closures continue to completion;
+// only new workflow starts will fail with "not found".
+func UnregisterMCPServer(registry *task.TaskRegistry, serverName string) {
+	holders.Delete(serverName)
+
+	registry.RemoveVersionedWorkflow(mcptypes.ListToolsWorkflowName(serverName))
+	registry.RemoveVersionedWorkflow(mcptypes.CallToolWorkflowName(serverName))
+	registry.RemoveActivity(mcptypes.ListToolsActivityName(serverName))
+	registry.RemoveActivity(mcptypes.CallToolActivityName(serverName))
 }
 
 // makeOrchestrator returns the wildcard orchestrator function, closing over the

@@ -24,4 +24,5 @@ import (
 // methods here (e.g. RegisterAgentServer).
 type internalWorkflowRegistrar interface {
 	RegisterMCPServer(server mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) error
+	UnregisterMCPServer(serverName string)
 }

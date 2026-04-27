@@ -57,3 +57,8 @@ func (e *Executor) RegisterMCPServer(server mcpserverapi.MCPServer, store *comps
 		Security: sec,
 	})
 }
+
+// UnregisterMCPServer removes workflows for a deleted MCPServer.
+func (e *Executor) UnregisterMCPServer(serverName string) {
+	mcp.UnregisterMCPServer(e.registry, serverName)
+}

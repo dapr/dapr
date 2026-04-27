@@ -89,6 +89,14 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 	return nil
 }
 
+// DeleteMCPServer removes an MCPServer from the store and unregisters its workflows.
+func (p *Processor) DeleteMCPServer(serverName string) {
+	p.compStore.DeleteMCPServer(serverName)
+	if p.internalWorkflows != nil {
+		p.internalWorkflows.UnregisterMCPServer(serverName)
+	}
+}
+
 // processMCPServerSecrets resolves secretKeyRef and envRef entries in the
 // transport headers (spec.endpoint.streamableHTTP.headers or spec.endpoint.sse.headers)
 // and spec.endpoint.stdio.env using the configured secret store.
