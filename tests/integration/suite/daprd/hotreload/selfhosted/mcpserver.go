@@ -47,11 +47,9 @@ func (m *mcpserver) Setup(t *testing.T) []framework.Option {
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: hotreloading
+  name: mcpserver
 spec:
   features:
-  - name: HotReload
-    enabled: true
   - name: MCPServerResource
     enabled: true
 `), 0o600))

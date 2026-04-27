@@ -51,7 +51,7 @@ func (m *mcpserver) Setup(t *testing.T) []framework.Option {
 		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
 			return &operatorv1.GetConfigurationResponse{
 				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"features":[{"name":"HotReload","enabled":true},{"name":"MCPServerResource","enabled":true}]}}`,
+					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"mcpserver"},"spec":{"features":[{"name":"MCPServerResource","enabled":true}]}}`,
 				),
 			}, nil
 		}),
@@ -59,7 +59,7 @@ func (m *mcpserver) Setup(t *testing.T) []framework.Option {
 
 	m.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
+		daprd.WithConfigs("mcpserver"),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(m.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
