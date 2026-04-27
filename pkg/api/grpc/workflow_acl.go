@@ -78,8 +78,8 @@ func (a *api) callActorValidateWorkflowACL(ctx context.Context, in *internalv1pb
 // CallActorReminder gRPC endpoint.
 func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *internalv1pb.Reminder) error {
 	actorType := in.GetActorType()
-	_, isWorkflowActor := workflowacl.ParseActorType(actorType)
-	if !isWorkflowActor {
+	opType, isWorkflowOrActivityActor := workflowacl.ParseActorType(actorType)
+	if !isWorkflowOrActivityActor {
 		return nil
 	}
 
@@ -97,7 +97,7 @@ func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *inte
 		return nsErr
 	}
 
-	if !policies.IsCallerKnown(callerAppID) {
+	if !policies.IsCallerKnown(callerAppID, opType) {
 		a.logger.Warnf("Workflow access policy denied app '%s' from invoking workflow reminders", callerAppID)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, "reminder", "invoke")
 		return status.Errorf(codes.PermissionDenied, workflowACLDeniedMsg)

@@ -28,9 +28,23 @@ var log = logger.NewLogger("dapr.acl.workflow")
 // target app. It is built from one or more WorkflowAccessPolicy resources that
 // apply to the app (via scopes).
 type CompiledPolicies struct {
-	rules          []compiledRule
-	defaultAction  wfaclapi.PolicyAction // "allow" or "deny" - deny if any policy says deny
-	allowedCallers map[string]struct{}   // callers that have at least one allow rule
+	rules         []compiledRule
+	defaultAction wfaclapi.PolicyAction // "allow" or "deny" - deny if any policy says deny
+
+	// wildcardAllowed[caller][opType] is set when the caller has at least one
+	// allow rule with name="*" for opType. Required for IsCallerKnown because
+	// non-subject methods (AddWorkflowEvent, PurgeWorkflowState, ...) operate on
+	// existing instances and we cannot extract the workflow/activity name from
+	// the request. Only callers with an unconditional wildcard allow for the
+	// relevant op type can be trusted to invoke them.
+	wildcardAllowed map[string]map[OperationType]struct{}
+
+	// hasDeny[caller][opType] is set when the caller has any deny rule for
+	// opType. A caller with a deny rule has conditional trust and must not be
+	// granted access to non-subject methods even if they also have a wildcard
+	// allow, since those methods could target an instance the caller is
+	// specifically denied from.
+	hasDeny map[string]map[OperationType]struct{}
 }
 
 type compiledRule struct {
@@ -108,35 +122,55 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 		}
 	}
 
-	// Build the set of callers that have at least one allow action.
-	// IsCallerKnown uses this to avoid granting access to callers that
-	// only appear in deny rules.
-	allowed := make(map[string]struct{})
+	// Track per-(caller, opType) whether the caller has a wildcard allow rule
+	// (name="*", action=allow) and whether they have any deny rule. IsCallerKnown
+	// requires the former and forbids the latter.
+	wildcardAllowed := make(map[string]map[OperationType]struct{})
+	hasDeny := make(map[string]map[OperationType]struct{})
 	for i := range rules {
 		for _, op := range rules[i].operations {
-			if op.action == wfaclapi.PolicyActionAllow {
-				for id := range rules[i].callerAppIDs {
-					allowed[id] = struct{}{}
+			for id := range rules[i].callerAppIDs {
+				if op.action == wfaclapi.PolicyActionAllow && op.pattern == "*" {
+					if wildcardAllowed[id] == nil {
+						wildcardAllowed[id] = make(map[OperationType]struct{})
+					}
+					wildcardAllowed[id][op.opType] = struct{}{}
 				}
-				break
+				if op.action == wfaclapi.PolicyActionDeny {
+					if hasDeny[id] == nil {
+						hasDeny[id] = make(map[OperationType]struct{})
+					}
+					hasDeny[id][op.opType] = struct{}{}
+				}
 			}
 		}
 	}
 
-	return &CompiledPolicies{rules: rules, defaultAction: defaultAction, allowedCallers: allowed}
+	return &CompiledPolicies{
+		rules:           rules,
+		defaultAction:   defaultAction,
+		wildcardAllowed: wildcardAllowed,
+		hasDeny:         hasDeny,
+	}
 }
 
-// IsCallerKnown checks whether the given caller appears in at least one rule
-// that contains an allow action. Used for methods where we can't extract a
-// specific operation name (e.g., AddWorkflowEvent, PurgeWorkflowState).
-// Callers that only appear in deny rules are not considered "known" to prevent
-// a deny-only entry from granting broader access than being absent entirely.
-func (cp *CompiledPolicies) IsCallerKnown(callerAppID string) bool {
+// IsCallerKnown reports whether the caller is unconditionally trusted to
+// invoke non-subject methods (e.g., AddWorkflowEvent, PurgeWorkflowState) on
+// actors of opType. Non-subject methods operate on existing workflow/activity
+// instances whose name cannot be extracted from the request payload, so we
+// cannot check the policy against the specific instance. The caller must
+// therefore have an allow rule with name="*" for opType AND no deny rules for
+// the same opType — anything narrower means the caller has conditional trust
+// and could otherwise tamper with instances they are explicitly denied.
+func (cp *CompiledPolicies) IsCallerKnown(callerAppID string, opType OperationType) bool {
 	if cp == nil {
 		return true
 	}
 
-	_, ok := cp.allowedCallers[callerAppID]
+	if _, ok := cp.hasDeny[callerAppID][opType]; ok {
+		return false
+	}
+	_, ok := cp.wildcardAllowed[callerAppID][opType]
 	return ok
 }
 
@@ -237,8 +271,8 @@ type EnforceRequestResult struct {
 // Returns nil result if the request is not for a workflow/activity actor or
 // policies are nil (allow-all).
 func EnforceRequest(policies *CompiledPolicies, callerAppID string, actorType string, method string, data []byte) (*EnforceRequestResult, error) {
-	opType, isWorkflowActor := ParseActorType(actorType)
-	if !isWorkflowActor {
+	opType, isWorkflowOrActivityActor := ParseActorType(actorType)
+	if !isWorkflowOrActivityActor {
 		return nil, nil
 	}
 
@@ -252,7 +286,7 @@ func EnforceRequest(policies *CompiledPolicies, callerAppID string, actorType st
 	}
 
 	if !subject {
-		allowed := policies.IsCallerKnown(callerAppID)
+		allowed := policies.IsCallerKnown(callerAppID, opType)
 		return &EnforceRequestResult{
 			Allowed:   allowed,
 			OpType:    opType,

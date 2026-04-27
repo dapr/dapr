@@ -713,10 +713,13 @@ func TestCompile_Standalone_EmptyNamePattern(t *testing.T) {
 
 func TestIsCallerKnown_NilPoliciesAllowAll(t *testing.T) {
 	var cp *CompiledPolicies
-	assert.True(t, cp.IsCallerKnown("any-app"))
+	assert.True(t, cp.IsCallerKnown("any-app", OperationTypeWorkflow))
 }
 
-func TestIsCallerKnown_CallerWithAllowRule(t *testing.T) {
+func TestIsCallerKnown_CallerWithSpecificAllowOnly(t *testing.T) {
+	// A caller with only a specific-name allow rule (no wildcard) is NOT
+	// known: non-subject methods could target an instance whose name is
+	// outside the caller's allow list, so unconditional trust isn't warranted.
 	cp := Compile([]wfaclapi.WorkflowAccessPolicy{
 		makePolicy("test", []wfaclapi.WorkflowAccessPolicyRule{{
 			Callers: []wfaclapi.WorkflowCaller{{AppID: "app-a"}},
@@ -726,14 +729,28 @@ func TestIsCallerKnown_CallerWithAllowRule(t *testing.T) {
 		}}),
 	})
 
-	assert.True(t, cp.IsCallerKnown("app-a"))
-	assert.False(t, cp.IsCallerKnown("app-b"))
+	assert.False(t, cp.IsCallerKnown("app-a", OperationTypeWorkflow))
+	assert.False(t, cp.IsCallerKnown("app-b", OperationTypeWorkflow))
+}
+
+func TestIsCallerKnown_CallerWithWildcardAllow(t *testing.T) {
+	// A caller with a wildcard allow and no deny rules is known.
+	cp := Compile([]wfaclapi.WorkflowAccessPolicy{
+		makePolicy("test", []wfaclapi.WorkflowAccessPolicyRule{{
+			Callers: []wfaclapi.WorkflowCaller{{AppID: "trusted"}},
+			Operations: []wfaclapi.WorkflowOperationRule{
+				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionAllow},
+			},
+		}}),
+	})
+
+	assert.True(t, cp.IsCallerKnown("trusted", OperationTypeWorkflow))
+	// Wildcard allow for workflow does not imply known for activity.
+	assert.False(t, cp.IsCallerKnown("trusted", OperationTypeActivity))
 }
 
 func TestIsCallerKnown_CallerOnlyInDenyRule(t *testing.T) {
-	// A caller that only appears in deny rules should NOT be considered known.
-	// This prevents deny-only callers from gaining access to non-subject methods
-	// like AddWorkflowEvent and PurgeWorkflowState.
+	// A caller that only appears in deny rules is NOT known.
 	cp := Compile([]wfaclapi.WorkflowAccessPolicy{
 		makePolicy("test", []wfaclapi.WorkflowAccessPolicyRule{{
 			Callers: []wfaclapi.WorkflowCaller{{AppID: "deny-only-app"}},
@@ -743,49 +760,46 @@ func TestIsCallerKnown_CallerOnlyInDenyRule(t *testing.T) {
 		}}),
 	})
 
-	assert.False(t, cp.IsCallerKnown("deny-only-app"))
+	assert.False(t, cp.IsCallerKnown("deny-only-app", OperationTypeWorkflow))
 }
 
-func TestIsCallerKnown_CallerInMixedRules(t *testing.T) {
-	// A caller that appears in both allow and deny rules IS known
-	// (they have at least one allow rule).
+func TestIsCallerKnown_CallerWithMixedAllowAndDeny(t *testing.T) {
+	// A caller with both allow and deny rules is NOT known: the deny rule
+	// signals conditional trust, and non-subject methods could target an
+	// instance the caller is specifically denied from. Regression test for
+	// the partial-auth bypass cicoyle flagged in #9790.
 	cp := Compile([]wfaclapi.WorkflowAccessPolicy{
-		makePolicy("test", []wfaclapi.WorkflowAccessPolicyRule{
-			{
-				Callers: []wfaclapi.WorkflowCaller{{AppID: "mixed-app"}},
-				Operations: []wfaclapi.WorkflowOperationRule{
-					{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "AllowedWF", Action: wfaclapi.PolicyActionAllow},
-				},
+		makePolicy("test", []wfaclapi.WorkflowAccessPolicyRule{{
+			Callers: []wfaclapi.WorkflowCaller{{AppID: "mixed-app"}},
+			Operations: []wfaclapi.WorkflowOperationRule{
+				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "AllowedWF", Action: wfaclapi.PolicyActionAllow},
+				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "DeniedWF", Action: wfaclapi.PolicyActionDeny},
 			},
-			{
-				Callers: []wfaclapi.WorkflowCaller{{AppID: "mixed-app"}},
-				Operations: []wfaclapi.WorkflowOperationRule{
-					{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "DeniedWF", Action: wfaclapi.PolicyActionDeny},
-				},
-			},
-		}),
+		}}),
 	})
 
-	assert.True(t, cp.IsCallerKnown("mixed-app"))
+	assert.False(t, cp.IsCallerKnown("mixed-app", OperationTypeWorkflow))
 }
 
-func TestIsCallerKnown_CallerInRuleWithMixedActions(t *testing.T) {
-	// A rule with both allow and deny ops: the caller has an allow action.
+func TestIsCallerKnown_WildcardAllowWithSpecificDeny(t *testing.T) {
+	// A caller with a wildcard allow PLUS a specific deny is also NOT known:
+	// the deny rule means the caller cannot be trusted to invoke non-subject
+	// methods that may target the denied instance.
 	cp := Compile([]wfaclapi.WorkflowAccessPolicy{
 		makePolicy("test", []wfaclapi.WorkflowAccessPolicyRule{{
 			Callers: []wfaclapi.WorkflowCaller{{AppID: "app-a"}},
 			Operations: []wfaclapi.WorkflowOperationRule{
-				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "WF1", Action: wfaclapi.PolicyActionAllow},
+				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionAllow},
 				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "SecretWF", Action: wfaclapi.PolicyActionDeny},
 			},
 		}}),
 	})
 
-	assert.True(t, cp.IsCallerKnown("app-a"))
+	assert.False(t, cp.IsCallerKnown("app-a", OperationTypeWorkflow))
 }
 
 func TestIsCallerKnown_MultiplePolicies(t *testing.T) {
-	// Caller allowed in one policy, not mentioned in another.
+	// Wildcard allow in one policy, denied in another, and unmentioned cases.
 	cp := Compile([]wfaclapi.WorkflowAccessPolicy{
 		makePolicy("deny-policy", []wfaclapi.WorkflowAccessPolicyRule{{
 			Callers: []wfaclapi.WorkflowCaller{{AppID: "deny-app"}},
@@ -801,9 +815,9 @@ func TestIsCallerKnown_MultiplePolicies(t *testing.T) {
 		}}),
 	})
 
-	assert.True(t, cp.IsCallerKnown("allow-app"))
-	assert.False(t, cp.IsCallerKnown("deny-app"))
-	assert.False(t, cp.IsCallerKnown("unknown-app"))
+	assert.True(t, cp.IsCallerKnown("allow-app", OperationTypeWorkflow))
+	assert.False(t, cp.IsCallerKnown("deny-app", OperationTypeWorkflow))
+	assert.False(t, cp.IsCallerKnown("unknown-app", OperationTypeWorkflow))
 }
 
 func TestIsCallerKnown_EmptyPolicyNoRules(t *testing.T) {
@@ -812,7 +826,7 @@ func TestIsCallerKnown_EmptyPolicyNoRules(t *testing.T) {
 		makePolicy("empty", nil),
 	})
 
-	assert.False(t, cp.IsCallerKnown("any-app"))
+	assert.False(t, cp.IsCallerKnown("any-app", OperationTypeWorkflow))
 }
 
 func TestCompile_Standalone_EmptyAppIDInCaller(t *testing.T) {
