@@ -233,7 +233,7 @@ jobs:
       DAPR_REGISTRY: localhost:5000/dapr
       DAPR_TAG: dev
       DAPR_NAMESPACE: dapr-tests
-      DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+      DAPR_CACHE_REGISTRY: "daprtestcacheacr.azurecr.io"
       PULL_POLICY: Always
     strategy:
       fail-fast: false # Keep running if one leg fails.

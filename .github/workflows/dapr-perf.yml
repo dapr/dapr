@@ -53,7 +53,7 @@ env:
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
   AZURE_REGIONS: "eastus"
   # Container registry where to cache perf test images
-  DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+  DAPR_CACHE_REGISTRY: "daprtestcacheacr.azurecr.io"
 
 jobs:
   deploy-infrastructure:
