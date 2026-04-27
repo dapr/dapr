@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/historysigning"
 )
 
 func (a *activity) executeActivity(ctx context.Context, name string, invocation *protos.ActivityInvocation) error {
@@ -106,6 +107,14 @@ func (a *activity) executeActivity(ctx context.Context, name string, invocation 
 	}
 	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, name)
 
+	// Attach an attestation so the parent workflow can cryptographically
+	// verify this activity's identity, input, and output. No-op when
+	// signing is disabled.
+	if attachErr := a.attachActivityAttestation(ctx, wi.Result, taskEvent, workflowID, activityName); attachErr != nil {
+		executionStatus = diag.StatusRecoverable
+		return wferrors.NewRecoverable(attachErr)
+	}
+
 	// send completed event to orchestrator wf actor
 	wfActorType := a.workflowActorType
 	if router := taskEvent.GetRouter(); router != nil {
@@ -159,6 +168,62 @@ func (a *activity) executeActivity(ctx context.Context, name string, invocation 
 		executionStatus = diag.StatusFailed
 	}
 
+	return nil
+}
+
+// attachActivityAttestation builds an ActivityCompletionAttestation signed
+// by this executor's identity and attaches it (plus the signer's
+// certificate chain as a companion) to the outbound TaskCompleted or
+// TaskFailed event. No-op if signing is disabled or the result is not a
+// terminal activity event.
+func (a *activity) attachActivityAttestation(ctx context.Context, result *backend.HistoryEvent, taskEvent *backend.HistoryEvent, workflowID string, activityName string) error {
+	if a.signer == nil {
+		return nil
+	}
+	if result == nil {
+		return nil
+	}
+
+	scheduled := taskEvent.GetTaskScheduled()
+	if scheduled == nil {
+		return fmt.Errorf("activity actor '%s': cannot build activity attestation without TaskScheduledEvent", a.actorID)
+	}
+
+	in := historysigning.ActivityAttestationInput{
+		ParentInstanceId: workflowID,
+		ActivityName:     activityName,
+		Input:            scheduled.GetInput(),
+	}
+
+	switch body := result.GetEventType().(type) {
+	case *protos.HistoryEvent_TaskCompleted:
+		in.ParentTaskScheduledId = body.TaskCompleted.GetTaskScheduledId()
+		in.Output = body.TaskCompleted.GetResult()
+		in.TerminalStatus = protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_COMPLETED
+	case *protos.HistoryEvent_TaskFailed:
+		in.ParentTaskScheduledId = body.TaskFailed.GetTaskScheduledId()
+		in.FailureDetails = body.TaskFailed.GetFailureDetails()
+		in.TerminalStatus = protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_FAILED
+	default:
+		return nil
+	}
+
+	att, certChainDER, err := historysigning.BuildActivityAttestation(a.signer, in)
+	if err != nil {
+		diag.DefaultWorkflowMonitoring.AttestationGenerated(ctx, diag.AttestationKindActivity, diag.StatusFailed)
+		return fmt.Errorf("activity actor '%s': failed to build activity attestation: %w", a.actorID, err)
+	}
+
+	switch body := result.GetEventType().(type) {
+	case *protos.HistoryEvent_TaskCompleted:
+		body.TaskCompleted.Attestation = att
+		body.TaskCompleted.SignerCertificate = certChainDER
+	case *protos.HistoryEvent_TaskFailed:
+		body.TaskFailed.Attestation = att
+		body.TaskFailed.SignerCertificate = certChainDER
+	}
+
+	diag.DefaultWorkflowMonitoring.AttestationGenerated(ctx, diag.AttestationKindActivity, diag.StatusSuccess)
 	return nil
 }
 

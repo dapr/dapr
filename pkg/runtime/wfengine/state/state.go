@@ -14,7 +14,9 @@ limitations under the License.
 package state
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/json"
 	"errors"
@@ -42,14 +44,16 @@ const (
 	inboxKeyPrefix       = "inbox"
 	historyKeyPrefix     = "history"
 	sigcertKeyPrefix     = "sigcert"
+	extSigCertKeyPrefix  = "ext-sigcert"
 	signatureKeyPrefix   = "signature"
 	customStatusKey      = "customStatus"
 	metadataKey          = "metadata"
 	propagatedHistoryKey = "propagated-history"
 
 	// maxStateEntries is the upper bound for any metadata count field
-	// (inbox, history, signatures, certificates). This prevents OOM from
-	// an attacker inflating metadata values in the state store.
+	// (inbox, history, signatures, own signing certificates, external
+	// signing certificates). This prevents OOM from an attacker inflating
+	// metadata values in the state store.
 	maxStateEntries = 1_000_000
 )
 
@@ -67,12 +71,13 @@ type State struct {
 	workflowActorType string
 	activityActorType string
 
-	Inbox               []*backend.HistoryEvent
-	History             []*backend.HistoryEvent
-	SigningCertificates []*backend.SigningCertificate
-	Signatures          []*backend.HistorySignature
-	CustomStatus        *wrapperspb.StringValue
-	Generation          uint64
+	Inbox                       []*backend.HistoryEvent
+	History                     []*backend.HistoryEvent
+	SigningCertificates         []*backend.SigningCertificate
+	ExternalSigningCertificates []*backend.ExternalSigningCertificate
+	Signatures                  []*backend.HistorySignature
+	CustomStatus                *wrapperspb.StringValue
+	Generation                  uint64
 
 	// RawHistory holds the raw bytes of history events as loaded from the
 	// state store. These are used for signature verification to verify
@@ -95,16 +100,25 @@ type State struct {
 	// events. Set once at workflow creation, never modified.
 	IncomingHistory *protos.PropagatedHistory
 
+	// externalCertDigestIndex maps SHA-256 cert digests (as hex strings) to
+	// their index in ExternalSigningCertificates. Built on load and
+	// maintained incrementally by AddExternalCert so repeated ingestion of
+	// the same foreign cert within one run is O(1) and idempotent. Not
+	// persisted — rebuilt from ExternalSigningCertificates at load time.
+	externalCertDigestIndex map[string]uint64
+
 	// change tracking
-	inboxAddedCount                 int
-	inboxRemovedCount               int
-	historyAddedCount               int
-	historyRemovedCount             int
-	signingCertificatesAddedCount   int
-	signingCertificatesRemovedCount int
-	signaturesAddedCount            int
-	signaturesRemovedCount          int
-	incomingHistoryChanged          bool
+	inboxAddedCount                         int
+	inboxRemovedCount                       int
+	historyAddedCount                       int
+	historyRemovedCount                     int
+	signingCertificatesAddedCount           int
+	signingCertificatesRemovedCount         int
+	externalSigningCertificatesAddedCount   int
+	externalSigningCertificatesRemovedCount int
+	signaturesAddedCount                    int
+	signaturesRemovedCount                  int
+	incomingHistoryChanged                  bool
 }
 
 // TODO: @joshvanl: remove in v1.16
@@ -134,6 +148,10 @@ func (s *State) Reset() {
 	s.signingCertificatesAddedCount = 0
 	s.signingCertificatesRemovedCount += len(s.SigningCertificates)
 	s.SigningCertificates = nil
+	s.externalSigningCertificatesAddedCount = 0
+	s.externalSigningCertificatesRemovedCount += len(s.ExternalSigningCertificates)
+	s.ExternalSigningCertificates = nil
+	s.externalCertDigestIndex = nil
 	s.signaturesAddedCount = 0
 	s.signaturesRemovedCount += len(s.Signatures)
 	s.Signatures = nil
@@ -154,6 +172,8 @@ func (s *State) ResetChangeTracking() {
 	s.historyRemovedCount = 0
 	s.signingCertificatesAddedCount = 0
 	s.signingCertificatesRemovedCount = 0
+	s.externalSigningCertificatesAddedCount = 0
+	s.externalSigningCertificatesRemovedCount = 0
 	s.signaturesAddedCount = 0
 	s.signaturesRemovedCount = 0
 	s.marshaledNewHistory = nil
@@ -175,6 +195,10 @@ func (s *State) ApplyRuntimeStateChanges(rs *backend.WorkflowRuntimeState) {
 		s.signingCertificatesRemovedCount += len(s.SigningCertificates)
 		s.signingCertificatesAddedCount = 0
 		s.SigningCertificates = nil
+		s.externalSigningCertificatesRemovedCount += len(s.ExternalSigningCertificates)
+		s.externalSigningCertificatesAddedCount = 0
+		s.ExternalSigningCertificates = nil
+		s.externalCertDigestIndex = nil
 		s.signaturesRemovedCount += len(s.Signatures)
 		s.signaturesAddedCount = 0
 		s.Signatures = nil
@@ -201,6 +225,90 @@ func (s *State) AddToHistory(e *backend.HistoryEvent) {
 func (s *State) AddSigningCertificate(cert *backend.SigningCertificate) {
 	s.SigningCertificates = append(s.SigningCertificates, cert)
 	s.signingCertificatesAddedCount++
+}
+
+// AddExternalCert appends a foreign signing certificate to the ext-sigcert
+// table if its digest is not already present, and returns the table index.
+// Idempotent: the same (digest, certDER) pair called twice in one run
+// produces exactly one stored entry and returns the same index both times.
+// digest must be the SHA-256 of certDER (the caller typically already has
+// this value from historysigning.CertDigest). The caller is responsible
+// for verifying that the digest matches certDER before calling — this
+// method does not re-hash on the hot path. Panics if digest is not 32
+// bytes, which indicates a programming error.
+func (s *State) AddExternalCert(digest []byte, certDER []byte) uint64 {
+	if len(digest) != sha256.Size {
+		panic(fmt.Sprintf("AddExternalCert: digest must be %d bytes, got %d", sha256.Size, len(digest)))
+	}
+	if s.externalCertDigestIndex == nil {
+		s.externalCertDigestIndex = make(map[string]uint64, len(s.ExternalSigningCertificates)+1)
+	}
+	key := string(digest)
+	if idx, ok := s.externalCertDigestIndex[key]; ok {
+		return idx
+	}
+	idx := uint64(len(s.ExternalSigningCertificates))
+	// Defensive-copy both byte slices so the stored entry does not alias
+	// caller buffers. Proto getters often return references into the
+	// enclosing message's backing array, which the caller may overwrite
+	// later (e.g., when the source event is reused or its
+	// SignerCertificate companion is cleared).
+	storedDigest := make([]byte, len(digest))
+	copy(storedDigest, digest)
+	storedCert := make([]byte, len(certDER))
+	copy(storedCert, certDER)
+	s.ExternalSigningCertificates = append(s.ExternalSigningCertificates, &backend.ExternalSigningCertificate{
+		Digest:      storedDigest,
+		Certificate: storedCert,
+	})
+	s.externalSigningCertificatesAddedCount++
+	s.externalCertDigestIndex[key] = idx
+	return idx
+}
+
+// LookupExternalCert returns the ExternalSigningCertificate whose digest
+// matches the given bytes, plus its table index. Returns (nil, 0, false)
+// if not found. Used by attestation verification to resolve a payload's
+// signerCertDigest to the corresponding cert.
+func (s *State) LookupExternalCert(digest []byte) (*backend.ExternalSigningCertificate, uint64, bool) {
+	if s.externalCertDigestIndex == nil {
+		return nil, 0, false
+	}
+	idx, ok := s.externalCertDigestIndex[string(digest)]
+	if !ok {
+		return nil, 0, false
+	}
+	return s.ExternalSigningCertificates[idx], idx, true
+}
+
+// setLoadedExternalCerts populates the external signing certificate table
+// and rebuilds the digest→index map from entries freshly loaded from the
+// state store. Each entry's stored digest must match sha256 of its
+// certificate bytes — otherwise the state store has been tampered with
+// (or bit-rotted) since the entry was written.
+//
+// This is the load-time counterpart to AddExternalCert: AddExternalCert
+// incrementally grows the table during a run; setLoadedExternalCerts
+// restores the full table from persisted state at the start of a run.
+// Both leave the state with a consistent ExternalSigningCertificates
+// slice + externalCertDigestIndex map; the difference is only *when* the
+// table is populated (ingestion vs. load).
+func (s *State) setLoadedExternalCerts(certs []*backend.ExternalSigningCertificate) error {
+	for i, ext := range certs {
+		if got := historysigning.CertDigest(ext.GetCertificate()); !bytes.Equal(got, ext.GetDigest()) {
+			return fmt.Errorf("external signing certificate index %d: stored digest does not match sha256 of certificate bytes", i)
+		}
+	}
+	s.ExternalSigningCertificates = certs
+	if len(certs) == 0 {
+		s.externalCertDigestIndex = nil
+		return nil
+	}
+	s.externalCertDigestIndex = make(map[string]uint64, len(certs))
+	for i, ext := range certs {
+		s.externalCertDigestIndex[string(ext.GetDigest())] = uint64(i)
+	}
+	return nil
 }
 
 func (s *State) AddSignature(sig *backend.HistorySignature, raw []byte) {
@@ -242,6 +350,7 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 	opsCapacity := s.inboxAddedCount + s.inboxRemovedCount +
 		s.historyAddedCount + s.historyRemovedCount +
 		s.signingCertificatesAddedCount + s.signingCertificatesRemovedCount +
+		s.externalSigningCertificatesAddedCount + s.externalSigningCertificatesRemovedCount +
 		s.signaturesAddedCount + s.signaturesRemovedCount +
 		2 // customStatus + metadata
 	req := &api.TransactionalRequest{
@@ -259,6 +368,10 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 	}
 
 	if err := addProtoStateOperations(req, sigcertKeyPrefix, s.SigningCertificates, s.signingCertificatesAddedCount, s.signingCertificatesRemovedCount); err != nil {
+		return nil, err
+	}
+
+	if err := addProtoStateOperations(req, extSigCertKeyPrefix, s.ExternalSigningCertificates, s.externalSigningCertificatesAddedCount, s.externalSigningCertificatesRemovedCount); err != nil {
 		return nil, err
 	}
 
@@ -307,11 +420,12 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 	}
 
 	metaProto, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
-		InboxLength:              uint64(len(s.Inbox)),
-		HistoryLength:            uint64(len(s.History)),
-		Generation:               s.Generation,
-		SignatureLength:          uint64(len(s.Signatures)),
-		SigningCertificateLength: uint64(len(s.SigningCertificates)),
+		InboxLength:                      uint64(len(s.Inbox)),
+		HistoryLength:                    uint64(len(s.History)),
+		Generation:                       s.Generation,
+		SignatureLength:                  uint64(len(s.Signatures)),
+		SigningCertificateLength:         uint64(len(s.SigningCertificates)),
+		ExternalSigningCertificateLength: uint64(len(s.ExternalSigningCertificates)),
 	})
 	if err != nil {
 		return nil, err
@@ -525,6 +639,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		{"history", metadata.GetHistoryLength()},
 		{"signatures", metadata.GetSignatureLength()},
 		{"signing certificates", metadata.GetSigningCertificateLength()},
+		{"external signing certificates", metadata.GetExternalSigningCertificateLength()},
 	} {
 		if entry.value > maxStateEntries {
 			return nil, wferrors.NewVerificationError(
@@ -541,18 +656,22 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	//nolint:gosec
 	signingCertLen := int(metadata.GetSigningCertificateLength())
 	//nolint:gosec
+	extSigningCertLen := int(metadata.GetExternalSigningCertificateLength())
+	//nolint:gosec
 	signatureLen := int(metadata.GetSignatureLength())
 
-	// Load inbox, history, signing certs, signatures, and custom status using a bulk request
+	// Load inbox, history, signing certs, external signing certs,
+	// signatures, and custom status using a bulk request.
 	wState := NewState(opts)
 	wState.Generation = metadata.GetGeneration()
 	wState.Inbox = make([]*backend.HistoryEvent, 0, inboxLen)
 	wState.History = make([]*backend.HistoryEvent, 0, historyLen)
 	wState.RawHistory = make([][]byte, 0, historyLen)
 	wState.SigningCertificates = make([]*backend.SigningCertificate, 0, signingCertLen)
+	wState.ExternalSigningCertificates = make([]*backend.ExternalSigningCertificate, 0, extSigningCertLen)
 	wState.Signatures = make([]*backend.HistorySignature, 0, signatureLen)
 
-	totalKeys := inboxLen + historyLen + signingCertLen + signatureLen + 2
+	totalKeys := inboxLen + historyLen + signingCertLen + extSigningCertLen + signatureLen + 2
 	bulkReq := &api.GetBulkStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,
@@ -578,6 +697,11 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 
 	for i := range metadata.GetSigningCertificateLength() {
 		bulkReq.Keys[n] = getMultiEntryKeyName(sigcertKeyPrefix, i)
+		n++
+	}
+
+	for i := range metadata.GetExternalSigningCertificateLength() {
+		bulkReq.Keys[n] = getMultiEntryKeyName(extSigCertKeyPrefix, i)
 		n++
 	}
 
@@ -653,6 +777,26 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 
 		wState.SigningCertificates = append(wState.SigningCertificates, &cert)
+	}
+
+	loadedExtCerts := make([]*backend.ExternalSigningCertificate, 0, extSigningCertLen)
+	for i := range metadata.GetExternalSigningCertificateLength() {
+		key = getMultiEntryKeyName(extSigCertKeyPrefix, i)
+		if bulkRes[key] == nil {
+			return nil, wferrors.NewVerificationError(
+				fmt.Errorf("external signing certificate state key '%s' declared in metadata but not found in state store — possible tampering", key),
+			)
+		}
+
+		var ext backend.ExternalSigningCertificate
+		err = proto.Unmarshal(bulkRes[key], &ext)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal external signing certificate from state key '%s': %w", key, err)
+		}
+		loadedExtCerts = append(loadedExtCerts, &ext)
+	}
+	if err = wState.setLoadedExternalCerts(loadedExtCerts); err != nil {
+		return nil, wferrors.NewVerificationError(err)
 	}
 
 	for i := range metadata.GetSignatureLength() {
@@ -905,12 +1049,13 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 		ActorType: s.workflowActorType,
 		ActorID:   actorID,
 		// Initial capacity should be enough to contain the entire inbox, history, signing data, and custom status + metadata
-		Operations: make([]api.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+len(s.SigningCertificates)+len(s.Signatures)+2),
+		Operations: make([]api.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+len(s.SigningCertificates)+len(s.ExternalSigningCertificates)+len(s.Signatures)+2),
 	}
 
 	addPurgeStateOperations(req, inboxKeyPrefix, len(s.Inbox))
 	addPurgeStateOperations(req, historyKeyPrefix, len(s.History))
 	addPurgeStateOperations(req, sigcertKeyPrefix, len(s.SigningCertificates))
+	addPurgeStateOperations(req, extSigCertKeyPrefix, len(s.ExternalSigningCertificates))
 	addPurgeStateOperations(req, signatureKeyPrefix, len(s.Signatures))
 
 	req.Operations = append(req.Operations,

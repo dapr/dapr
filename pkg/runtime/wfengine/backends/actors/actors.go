@@ -221,6 +221,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		Actors:                          abe.actors,
 		ActorTypeBuilder:                actorTypeBuilder,
 		WorkflowAccessPolicies:          abe.workflowAccessPolicies,
+		Signer:                          abe.signer,
 		WorkflowsRemoteActivityReminder: abe.workflowsRemoteActivityReminder,
 	}
 

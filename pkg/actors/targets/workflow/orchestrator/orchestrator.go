@@ -49,6 +49,17 @@ type orchestrator struct {
 
 	streamFns map[int64]*streamFn
 	streamIDx int64
+
+	// certVerifyCache caches chain-of-trust validity windows for foreign
+	// signer certs seen on inbound attestations. Keyed by cert digest
+	// (SHA-256(certDER) as string bytes); value is a certValidityWindow
+	// carrying the leaf's NotBefore/NotAfter. Hot-loop benefit: a
+	// workflow calling the same foreign activity/child N times pays
+	// chain-of-trust parsing + verification once instead of N times.
+	// Scoped to this orchestrator instance only — on actor deactivation
+	// the cache is dropped, so no stale trust anchor decisions are held
+	// across Sentry CA rotation.
+	certVerifyCache sync.Map
 }
 
 type streamFn struct {

@@ -286,6 +286,16 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 
+	// Attach an attestation to each outbound child-completion message so
+	// the receiving parent can cryptographically verify this child
+	// executed the invocation it's reporting on. No-op when signing is
+	// disabled.
+	for _, msg := range addWorkflows {
+		if err = o.attachChildCompletionAttestation(ctx, state, msg.GetHistoryEvent()); err != nil {
+			return todo.RunCompletedFalse, err
+		}
+	}
+
 	// Dispatch activities and messages, collecting failures.
 	activityResult := o.callActivities(ctx, pendingTasks, state, wi.OutgoingHistory)
 	addResult := o.callAddEventStateMessage(ctx, addWorkflows)

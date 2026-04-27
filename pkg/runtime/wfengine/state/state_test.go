@@ -15,6 +15,7 @@ package state
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"testing"
 
@@ -30,6 +31,11 @@ import (
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
+
+func sha256Sum(b []byte) []byte {
+	d := sha256.Sum256(b)
+	return d[:]
+}
 
 func addSig(t *testing.T, s *State, sig *backend.HistorySignature) {
 	t.Helper()
@@ -705,4 +711,309 @@ func TestLoadWorkflowState_TamperMarkerBypassesConfigurationError(t *testing.T) 
 	require.NotNil(t, got)
 	require.Len(t, got.History, 2)
 	assert.True(t, IsTamperMarker(got.History[1]))
+}
+
+// --- External signing certificate table ---
+func extCertDigest(b byte) []byte {
+	d := make([]byte, 32)
+	for i := range d {
+		d[i] = b
+	}
+	return d
+}
+
+func TestAddExternalCert_AppendsAndTracks(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	idx := s.AddExternalCert(extCertDigest(0xAA), []byte("cert-bytes-A"))
+	assert.Equal(t, uint64(0), idx)
+	require.Len(t, s.ExternalSigningCertificates, 1)
+	assert.Equal(t, []byte("cert-bytes-A"), s.ExternalSigningCertificates[0].GetCertificate())
+	assert.Equal(t, extCertDigest(0xAA), s.ExternalSigningCertificates[0].GetDigest())
+	assert.Equal(t, 1, s.externalSigningCertificatesAddedCount)
+}
+
+func TestAddExternalCert_DedupsByDigest(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	i1 := s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
+	i2 := s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
+	i3 := s.AddExternalCert(extCertDigest(0xBB), []byte("cert-B"))
+	i4 := s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
+
+	assert.Equal(t, uint64(0), i1)
+	assert.Equal(t, uint64(0), i2, "same digest must return existing index")
+	assert.Equal(t, uint64(1), i3, "new digest must get next index")
+	assert.Equal(t, uint64(0), i4, "repeated digest must still return existing index")
+
+	assert.Len(t, s.ExternalSigningCertificates, 2, "duplicates must not grow the table")
+	assert.Equal(t, 2, s.externalSigningCertificatesAddedCount, "counter must reflect unique additions only")
+}
+
+func TestAddExternalCert_PanicsOnWrongDigestLength(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	assert.Panics(t, func() {
+		s.AddExternalCert([]byte{1, 2, 3}, []byte("cert"))
+	})
+}
+
+func TestAddExternalCert_CopiesDigestBytes(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	digest := extCertDigest(0xCC)
+	s.AddExternalCert(digest, []byte("cert"))
+
+	// Mutating the caller's buffer must not change stored state.
+	digest[0] = 0xFF
+
+	assert.Equal(t, extCertDigest(0xCC), s.ExternalSigningCertificates[0].GetDigest())
+}
+
+func TestAddExternalCert_CopiesCertificateBytes(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	cert := []byte("cert-original")
+	s.AddExternalCert(extCertDigest(0xDD), cert)
+
+	// Mutating the caller's cert buffer must not affect stored state.
+	cert[0] = 'X'
+
+	assert.Equal(t, []byte("cert-original"), s.ExternalSigningCertificates[0].GetCertificate())
+}
+
+func TestLookupExternalCert_Found(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
+	s.AddExternalCert(extCertDigest(0xBB), []byte("cert-B"))
+
+	cert, idx, ok := s.LookupExternalCert(extCertDigest(0xBB))
+	require.True(t, ok)
+	assert.Equal(t, uint64(1), idx)
+	assert.Equal(t, []byte("cert-B"), cert.GetCertificate())
+}
+
+func TestLookupExternalCert_NotFound(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
+
+	cert, idx, ok := s.LookupExternalCert(extCertDigest(0xCC))
+	assert.False(t, ok)
+	assert.Nil(t, cert)
+	assert.Equal(t, uint64(0), idx)
+}
+
+func TestReset_ClearsExternalCerts(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
+	s.AddExternalCert(extCertDigest(0xBB), []byte("cert-B"))
+
+	s.Reset()
+
+	assert.Empty(t, s.ExternalSigningCertificates)
+	assert.Nil(t, s.externalCertDigestIndex)
+	assert.Equal(t, 2, s.externalSigningCertificatesRemovedCount)
+	assert.Equal(t, 0, s.externalSigningCertificatesAddedCount)
+}
+
+func TestApplyRuntimeStateChanges_CANClearsExternalCerts(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
+	s.AddExternalCert(extCertDigest(0xBB), []byte("cert-B"))
+
+	s.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{
+		ContinuedAsNew: true,
+	})
+
+	assert.Empty(t, s.ExternalSigningCertificates)
+	assert.Nil(t, s.externalCertDigestIndex)
+	assert.Equal(t, 2, s.externalSigningCertificatesRemovedCount)
+}
+
+func TestGetSaveRequest_ExternalCertOperations(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	s.AddToHistory(testEvent(0))
+	s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
+	s.AddExternalCert(extCertDigest(0xBB), []byte("cert-B"))
+
+	req, err := s.GetSaveRequest("actor1")
+	require.NoError(t, err)
+
+	upsertKeys := make(map[string]bool)
+	for _, op := range req.Operations {
+		if op.Operation == api.Upsert {
+			if u, ok := op.Request.(api.TransactionalUpsert); ok {
+				upsertKeys[u.Key] = true
+			}
+		}
+	}
+
+	assert.True(t, upsertKeys["ext-sigcert-000000"], "expected ext-sigcert-000000 upsert")
+	assert.True(t, upsertKeys["ext-sigcert-000001"], "expected ext-sigcert-000001 upsert")
+}
+
+func TestGetSaveRequest_DeletesExternalCertsOnReset(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	s.AddToHistory(testEvent(0))
+	s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
+	s.AddExternalCert(extCertDigest(0xBB), []byte("cert-B"))
+
+	s.Reset()
+	s.AddToHistory(testEvent(0))
+
+	req, err := s.GetSaveRequest("actor1")
+	require.NoError(t, err)
+
+	deleteKeys := make(map[string]bool)
+	for _, op := range req.Operations {
+		if op.Operation == api.Delete {
+			if d, ok := op.Request.(api.TransactionalDelete); ok {
+				deleteKeys[d.Key] = true
+			}
+		}
+	}
+
+	assert.True(t, deleteKeys["ext-sigcert-000000"], "expected ext-sigcert-000000 delete")
+	assert.True(t, deleteKeys["ext-sigcert-000001"], "expected ext-sigcert-000001 delete")
+}
+
+func TestGetPurgeRequest_IncludesExternalCerts(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	s.AddToHistory(testEvent(0))
+	s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
+	s.AddExternalCert(extCertDigest(0xBB), []byte("cert-B"))
+
+	req, err := s.GetPurgeRequest("actor1")
+	require.NoError(t, err)
+
+	deleteKeys := make(map[string]bool)
+	for _, op := range req.Operations {
+		if op.Operation == api.Delete {
+			if d, ok := op.Request.(api.TransactionalDelete); ok {
+				deleteKeys[d.Key] = true
+			}
+		}
+	}
+
+	assert.True(t, deleteKeys["ext-sigcert-000000"])
+	assert.True(t, deleteKeys["ext-sigcert-000001"])
+}
+
+func TestSetLoadedExternalCerts_PopulatesSliceAndDigestIndex(t *testing.T) {
+	t.Parallel()
+
+	// Use real SHA-256 digests so the integrity check passes.
+	certA := []byte("cert-A")
+	certB := []byte("cert-B")
+	digestA := sha256Sum(certA)
+	digestB := sha256Sum(certB)
+
+	s := NewState(testOpts())
+	require.NoError(t, s.setLoadedExternalCerts([]*backend.ExternalSigningCertificate{
+		{Digest: digestA, Certificate: certA},
+		{Digest: digestB, Certificate: certB},
+	}))
+
+	require.Len(t, s.ExternalSigningCertificates, 2)
+
+	gotA, idxA, okA := s.LookupExternalCert(digestA)
+	require.True(t, okA)
+	assert.Equal(t, uint64(0), idxA)
+	assert.Equal(t, certA, gotA.GetCertificate())
+
+	gotB, idxB, okB := s.LookupExternalCert(digestB)
+	require.True(t, okB)
+	assert.Equal(t, uint64(1), idxB)
+	assert.Equal(t, certB, gotB.GetCertificate())
+}
+
+func TestSetLoadedExternalCerts_RejectsDigestMismatch(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	// Stored digest does not match sha256(cert) — simulates state store
+	// tampering or corruption.
+	err := s.setLoadedExternalCerts([]*backend.ExternalSigningCertificate{
+		{Digest: extCertDigest(0xAA), Certificate: []byte("cert-A")},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "stored digest does not match")
+
+	// State is left in a clean state — no partial population.
+	assert.Empty(t, s.ExternalSigningCertificates)
+	assert.Nil(t, s.externalCertDigestIndex)
+}
+
+func TestSetLoadedExternalCerts_EmptyInputClearsState(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+	s.AddExternalCert(extCertDigest(0xAA), []byte("cert"))
+
+	require.NoError(t, s.setLoadedExternalCerts(nil))
+	assert.Empty(t, s.ExternalSigningCertificates)
+	assert.Nil(t, s.externalCertDigestIndex)
+}
+
+func TestGetSaveRequest_MetadataIncludesExternalCertLength(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	s.AddToHistory(testEvent(0))
+	s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
+	s.AddExternalCert(extCertDigest(0xBB), []byte("cert-B"))
+
+	req, err := s.GetSaveRequest("actor1")
+	require.NoError(t, err)
+
+	var metadataBytes []byte
+	for _, op := range req.Operations {
+		if op.Operation == api.Upsert {
+			if u, ok := op.Request.(api.TransactionalUpsert); ok {
+				if u.Key == "metadata" {
+					metadataBytes, _ = u.Value.([]byte)
+					break
+				}
+			}
+		}
+	}
+	require.NotEmpty(t, metadataBytes)
+
+	var meta backend.BackendWorkflowStateMetadata
+	require.NoError(t, proto.Unmarshal(metadataBytes, &meta))
+
+	assert.Equal(t, uint64(2), meta.GetExternalSigningCertificateLength())
 }

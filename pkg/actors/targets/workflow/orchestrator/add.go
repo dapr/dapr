@@ -45,6 +45,17 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
 		o.activityResultAwaited.CompareAndSwap(true, false)
 	}
+
+	// Verify any attestation on the incoming event against the signed
+	// history and Sentry trust anchors, then absorb the signer certificate
+	// into the ext-sigcert table and strip the companion cert from the
+	// event so the stored form is cert-free. No-op when signing is
+	// disabled.
+	if err := o.verifyInboxAttestation(ctx, state, &e); err != nil {
+		log.Warnf("Workflow actor '%s': rejecting inbox event with invalid attestation: %s", o.actorID, err)
+		return err
+	}
+
 	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)
 	state.AddToInbox(e)
 
