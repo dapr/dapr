@@ -528,7 +528,8 @@ replace (
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
 // replace github.com/dapr/kit => ../kit
-// replace github.com/dapr/durabletask-go => ../durabletask-go
+replace github.com/dapr/durabletask-go => github.com/joshvanl/durabletask-go v0.0.0-20260427202626-8aa45f15fc81
+
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
