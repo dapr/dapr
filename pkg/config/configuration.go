@@ -63,12 +63,6 @@ const (
 	// if using the same Dapr version on all daprds. Enabled by default.
 	WorkflowsRemoteActivityReminder Feature = "WorkflowsRemoteActivityReminder"
 
-	// Enables support for the MCPServer first-class resource,
-	// which declares connections to MCP (Model Context Protocol) servers.
-	// When enabled, daprd loads MCPServer manifests at startup,
-	// and makes them available for tool execution via workflow orchestrations.
-	MCPServerResource Feature = "MCPServerResource"
-
 	// WorkflowHistorySigning enables cryptographic signing of workflow
 	// history. When enabled and mTLS is active, each workflow execution's
 	// history events are signed using the app's X.509 SVID identity,

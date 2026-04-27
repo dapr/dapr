@@ -695,15 +695,13 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.flushOutstandingHTTPEndpoints(ctx)
 
-	if a.globalConfig.IsFeatureEnabled(config.MCPServerResource) {
-		a.processor.SetInternalWorkflows(a.wfengine.InProcessExecutor())
+	a.processor.SetInternalWorkflows(a.wfengine.InProcessExecutor())
 
-		err = a.loadMCPServers(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to load mcpservers: %s", err)
-		}
-		a.flushOutstandingMCPServers(ctx)
+	err = a.loadMCPServers(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load mcpservers: %s", err)
 	}
+	a.flushOutstandingMCPServers(ctx)
 
 	err = a.loadDeclarativeSubscriptions(ctx)
 	if err != nil {

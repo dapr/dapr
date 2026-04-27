@@ -66,7 +66,6 @@ var holders sync.Map // map[string]*sessionHolder
 // RegisterMCPServer registers workflows and activities for a single MCPServer.
 // Builds the HTTP client and MCP session eagerly — similar to component Init().
 // Safe to call on hot-reload — registry upserts replace existing entries.
-
 func RegisterMCPServer(registry *task.TaskRegistry, server mcpserverapi.MCPServer, opts Options) error {
 	// Remove the previous holder but don't close it — in-flight activities
 	// may still reference it. The old holder becomes unreachable once no
