@@ -557,14 +557,30 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	return rsp, nil
 }
 
+// cleanPath cleans a URL path like path.Clean but preserves a single trailing
+// slash so that method names such as "foo/bar/" are forwarded to the target
+// app unchanged.
+func cleanPath(p string) string {
+	if p == "" {
+		return p
+	}
+	hasTrailing := p[len(p)-1] == '/'
+	cleaned := path.Clean(p)
+	if hasTrailing && cleaned != "/" {
+		cleaned += "/"
+	}
+	return cleaned
+}
+
 func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*http.Request, error) {
 	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
 	msg := req.Message()
 	verb := msg.GetHttpExtension().GetVerb().String()
 	// Defense-in-depth: resolve path traversal before building the outbound
 	// URL. The caller should have already normalized via NormalizeMethod, but
-	// we apply path.Clean here to guarantee no ../ reaches the target app.
-	method := path.Clean(msg.GetMethod())
+	// we apply cleanPath here to guarantee no ../ reaches the target app while
+	// preserving any intentional trailing slash in the method path.
+	method := cleanPath(msg.GetMethod())
 	if method == "." {
 		method = ""
 	}
