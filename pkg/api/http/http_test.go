@@ -2658,6 +2658,95 @@ func TestV1Workflow(t *testing.T) {
 		// assert
 		assert.Nil(t, resp.ErrorBody)
 	})
+
+	////////////////////////////
+	// GET NOT-FOUND TESTS   //
+	////////////////////////////
+
+	t.Run("Get workflow instance not found", func(t *testing.T) {
+		// When the workflow engine returns a response with nil Properties,
+		// the HTTP handler should return 404 with ERR_INSTANCE_ID_NOT_FOUND.
+		wf.WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
+				return &workflows.StateResponse{
+					Workflow: &workflows.WorkflowState{
+						InstanceID: req.InstanceID,
+						Properties: nil,
+					},
+				}, nil
+			})
+		})
+
+		apiPath := "v1.0/workflows/dapr/notExistingInstanceID"
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 404, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_INSTANCE_ID_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrWorkflowInstanceNotFound.WithFormat("notExistingInstanceID").Message(), resp.ErrorBody["message"])
+	})
+
+	///////////////////////////////
+	// TERMINATE ERROR TESTS    //
+	///////////////////////////////
+
+	t.Run("Terminate with engine error returns standardized error code", func(t *testing.T) {
+		wf.WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithTerminate(func(ctx context.Context, req *workflows.TerminateRequest) error {
+				return errors.New("engine failure")
+			})
+		})
+
+		apiPath := "v1.0/workflows/dapr/instanceID/terminate"
+		resp := fakeServer(t).DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_TERMINATE_WORKFLOW", resp.ErrorBody["errorCode"])
+	})
+
+	///////////////////////////
+	// PAUSE ERROR TESTS    //
+	///////////////////////////
+
+	t.Run("Pause with engine error returns standardized error code", func(t *testing.T) {
+		wf.WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithPause(func(ctx context.Context, req *workflows.PauseRequest) error {
+				return errors.New("engine failure")
+			})
+		})
+
+		apiPath := "v1.0/workflows/dapr/instanceID/pause"
+		resp := fakeServer(t).DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_PAUSE_WORKFLOW", resp.ErrorBody["errorCode"])
+	})
+
+	////////////////////////////
+	// RESUME ERROR TESTS    //
+	////////////////////////////
+
+	t.Run("Resume with engine error returns standardized error code", func(t *testing.T) {
+		wf.WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithResume(func(ctx context.Context, req *workflows.ResumeRequest) error {
+				return errors.New("engine failure")
+			})
+		})
+
+		apiPath := "v1.0/workflows/dapr/instanceID/resume"
+		resp := fakeServer(t).DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_RESUME_WORKFLOW", resp.ErrorBody["errorCode"])
+	})
+
 }
 
 func buildHTTPPipeline(spec config.PipelineSpec) middleware.HTTP {
