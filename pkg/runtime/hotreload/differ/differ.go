@@ -24,13 +24,14 @@ import (
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 )
 
 // Resource is a generic type constraint.
 type Resource interface {
-	componentsapi.Component | subapi.Subscription | mcpserverapi.MCPServer | configapi.Configuration | httpendpointapi.HTTPEndpoint | resiliencyapi.Resiliency
+	componentsapi.Component | subapi.Subscription | mcpserverapi.MCPServer | configapi.Configuration | httpendpointapi.HTTPEndpoint | resiliencyapi.Resiliency | wfaclapi.WorkflowAccessPolicy
 	meta.Resource
 }
 

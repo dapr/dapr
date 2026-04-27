@@ -14,7 +14,9 @@ limitations under the License.
 package dirdata
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -79,6 +81,12 @@ func readDir(dir string) (*DirEntry, error) {
 		}
 		content, err := os.ReadFile(filepath.Join(dir, f.Name()))
 		if err != nil {
+			// File may have been deleted between the directory listing and
+			// the read (e.g. during a rapid write/delete cycle or shutdown).
+			// Skip it; the next FSWatcher event will re-trigger a scan.
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
 			return nil, fmt.Errorf("failed to read file %s: %w", filepath.Join(dir, f.Name()), err)
 		}
 		entry.Files = append(entry.Files, FileEntry{Name: f.Name(), Content: content})
