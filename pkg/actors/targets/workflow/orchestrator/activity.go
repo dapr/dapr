@@ -21,11 +21,14 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
 
@@ -91,10 +94,43 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		WithContentType(invokev1.ProtobufContentType),
 	)
 	if err != nil {
+		// If the call was denied by a workflow access policy, fail the
+		// activity task immediately rather than retrying.
+		if isPermissionDenied(err) {
+			log.Errorf("Workflow actor '%s': activity '%s' denied by workflow access policy: %v", o.actorID, ts.GetName(), err)
+			return o.failActivityACL(ctx, e)
+		}
+
 		if router := e.GetRouter(); router != nil && router.TargetAppID != nil {
 			return fmt.Errorf("failed to dispatch activity '%s' to remote app '%s' (the app may not be available): %w", ts.GetName(), router.GetTargetAppID(), err)
 		}
+
 		return fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.GetName(), err)
+	}
+
+	return nil
+}
+
+// failActivityACL creates a TaskFailed event on the parent orchestrator when
+// the activity call is rejected by a WorkflowAccessPolicy. Uses a reminder to
+// deliver the event in a fresh execution cycle.
+func (o *orchestrator) failActivityACL(ctx context.Context, e *backend.HistoryEvent) error {
+	failedEvent := &protos.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.New(time.Now()),
+		EventType: &protos.HistoryEvent_TaskFailed{
+			TaskFailed: &protos.TaskFailedEvent{
+				TaskScheduledId: e.GetEventId(),
+				FailureDetails: &protos.TaskFailureDetails{
+					ErrorType:    "WorkflowAccessPolicyDenied",
+					ErrorMessage: "access denied by workflow access policy",
+				},
+			},
+		},
+	}
+
+	if _, err := o.createWorkflowReminder(ctx, common.ReminderPrefixActivityResult, failedEvent, time.Now(), o.appID, nil); err != nil {
+		return fmt.Errorf("failed to create activity failure reminder: %w", err)
 	}
 
 	return nil

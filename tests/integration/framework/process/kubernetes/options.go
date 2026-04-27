@@ -35,6 +35,7 @@ import (
 	resapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subv1api "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subv2api "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/store"
 )
 
@@ -89,6 +90,10 @@ func WithClusterDaprSubscriptionV2ListFromStore(t *testing.T, store *store.Store
 
 func WithClusterNamespaceListFromStore(t *testing.T, store *store.Store) Option {
 	return handleClusterListResourceFromStore(t, "/api/v1/namespaces", store)
+}
+
+func WithClusterDaprWorkflowAccessPolicyListFromStore(t *testing.T, store *store.Store) Option {
+	return handleClusterListResourceFromStore(t, "/apis/dapr.io/v1alpha1/workflowaccesspolicies", store)
 }
 
 func WithClusterDaprHTTPEndpointList(t *testing.T, endpoints *httpendapi.HTTPEndpointList) Option {
@@ -182,6 +187,7 @@ func WithBaseOperatorAPI(t *testing.T, td spiffeid.TrustDomain, ns string, sentr
 			WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ConfigurationList"}}),
 			WithClusterDaprResiliencyList(t, &resapi.ResiliencyList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ResiliencyList"}}),
 			WithClusterDaprMCPServerList(t, &mcpapi.MCPServerList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "MCPServerList"}}),
+			handleClusterListResource(t, "/apis/dapr.io/v1alpha1/workflowaccesspolicies", &wfaclapi.WorkflowAccessPolicyList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "WorkflowAccessPolicyList"}}),
 			WithClusterNamespaceList(t, &corev1.NamespaceList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "NamespaceList"}}),
 		} {
 			op(o)
