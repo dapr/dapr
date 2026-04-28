@@ -65,13 +65,6 @@ func (o *output) Setup(t *testing.T) []framework.Option {
 
 	o.operator = operator.New(t,
 		operator.WithSentry(sentry),
-		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
-			return &operatorv1.GetConfigurationResponse{
-				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"features":[{"name":"HotReload","enabled":true}]}}`,
-				),
-			}, nil
-		}),
 	)
 
 	o.bindingDir1, o.bindingDir2, o.bindingDir3 = t.TempDir(), t.TempDir(), t.TempDir()
@@ -88,7 +81,6 @@ func (o *output) Setup(t *testing.T) []framework.Option {
 
 	o.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(o.operator.Address(t)),

@@ -1,0 +1,8 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: wfaclconfig
+spec:
+  features:
+  - name: WorkflowAccessPolicy
+    enabled: true

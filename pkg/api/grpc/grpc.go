@@ -42,6 +42,7 @@ import (
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
@@ -85,21 +86,27 @@ type API interface {
 
 	// Dapr Service methods
 	runtimev1pb.DaprServer
+
+	// SetWorkflowAccessPolicies atomically updates the workflow access policies.
+	SetWorkflowAccessPolicies(policies *workflowacl.CompiledPolicies)
+	// GetWorkflowAccessPolicies returns the current compiled workflow access policies.
+	GetWorkflowAccessPolicies() *workflowacl.CompiledPolicies
 }
 
 type api struct {
 	*universal.Universal
-	logger                logger.Logger
-	directMessaging       invokev1.DirectMessaging
-	channels              *channels.Channels
-	pubsubAdapter         runtimePubsub.Adapter
-	pubsubAdapterStreamer runtimePubsub.AdapterStreamer
-	outbox                outbox.Outbox
-	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	tracingSpec           config.TracingSpec
-	accessControlList     *config.AccessControlList
-	processor             *processor.Processor
-	wg                    sync.WaitGroup
+	logger                 logger.Logger
+	directMessaging        invokev1.DirectMessaging
+	channels               *channels.Channels
+	pubsubAdapter          runtimePubsub.Adapter
+	pubsubAdapterStreamer  runtimePubsub.AdapterStreamer
+	outbox                 outbox.Outbox
+	sendToOutputBindingFn  func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	tracingSpec            config.TracingSpec
+	accessControlList      *config.AccessControlList
+	workflowAccessPolicies atomic.Pointer[workflowacl.CompiledPolicies]
+	processor              *processor.Processor
+	wg                     sync.WaitGroup
 
 	closeCh chan struct{}
 	closed  atomic.Bool
@@ -136,6 +143,17 @@ func NewAPI(opts APIOpts) API {
 		processor:             opts.Processor,
 		closeCh:               make(chan struct{}),
 	}
+}
+
+// SetWorkflowAccessPolicies atomically sets the compiled workflow access
+// policies used for enforcement in CallActor/CallActorStream.
+func (a *api) SetWorkflowAccessPolicies(policies *workflowacl.CompiledPolicies) {
+	a.workflowAccessPolicies.Store(policies)
+}
+
+// GetWorkflowAccessPolicies returns the current compiled workflow access policies.
+func (a *api) GetWorkflowAccessPolicies() *workflowacl.CompiledPolicies {
+	return a.workflowAccessPolicies.Load()
 }
 
 // validateAndGetPubsubAndTopic validates the request parameters and returns the pubsub interface, pubsub name, topic name, rawPayload metadata if set

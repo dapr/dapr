@@ -49,22 +49,10 @@ type secret struct {
 }
 
 func (s *secret) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-    - name: HotReload
-      enabled: true`), 0o600))
-
 	s.resDir1, s.resDir2, s.resDir3 = t.TempDir(), t.TempDir(), t.TempDir()
 	s.client = client.HTTP(t)
 
 	s.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(s.resDir1, s.resDir2, s.resDir3),
 		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"FOO_SEC_1", "bar1",
