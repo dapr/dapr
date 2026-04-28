@@ -47,22 +47,10 @@ type crypto struct {
 }
 
 func (c *crypto) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true`), 0o600))
-
 	c.resDir = t.TempDir()
 	c.cryptoDir1, c.cryptoDir2 = t.TempDir(), t.TempDir()
 
 	c.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(c.resDir),
 	)
 

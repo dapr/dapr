@@ -41,9 +41,9 @@ namespace DaprDemoActor
       var inputItem = "paperclips";
       var workflowOptions = new Dictionary<string, string>();
       var startResponse = await daprClient.StartWorkflowAsync(
-              instanceId: instanceID, 
+              instanceId: instanceID,
               workflowComponent: workflowComponent,
-              workflowName: "PlaceOrder",
+              workflowName: workflowName,
               input: inputItem,
               workflowOptions: workflowOptions);
 
