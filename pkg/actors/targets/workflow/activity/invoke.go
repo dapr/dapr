@@ -75,13 +75,18 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 // empty.
 func decodeActivityInvocation(data []byte) (*protos.ActivityInvocation, *string, error) {
 	var invocation protos.ActivityInvocation
-	if err := proto.Unmarshal(data, &invocation); err == nil && invocation.GetHistoryEvent() != nil {
+	envelopeErr := proto.Unmarshal(data, &invocation)
+	if envelopeErr == nil && invocation.GetHistoryEvent() != nil {
 		return &invocation, taskScheduledName(invocation.GetHistoryEvent()), nil
 	}
 
+	// TODO: remove this legacy fallback in v1.19. Older daprds dispatch
+	// activities as a raw HistoryEvent (no envelope); accept that shape so
+	// rolling upgrades work, and drop it once the floor version is past
+	// the rollout.
 	var legacy backend.HistoryEvent
-	if err := proto.Unmarshal(data, &legacy); err != nil {
-		return nil, nil, err
+	if legacyErr := proto.Unmarshal(data, &legacy); legacyErr != nil {
+		return nil, nil, fmt.Errorf("failed to decode activity invocation (envelope: %v; legacy: %w)", envelopeErr, legacyErr)
 	}
 
 	return &protos.ActivityInvocation{HistoryEvent: &legacy}, taskScheduledName(&legacy), nil
@@ -103,7 +108,9 @@ func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Remind
 
 	// Try the new ActivityInvocation envelope format first. Fall back to
 	// the legacy raw HistoryEvent payload for reminders created by
-	// pre-propagation code
+	// pre-propagation code.
+	// TODO: remove this legacy fallback in v1.19 once reminders written by
+	// pre-propagation daprds have been drained from the rollout.
 	var invocation protos.ActivityInvocation
 	if err := reminder.Data.UnmarshalTo(&invocation); err != nil {
 		var legacy backend.HistoryEvent
@@ -113,12 +120,11 @@ func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Remind
 		invocation.HistoryEvent = &legacy
 	}
 
-	his := invocation.GetHistoryEvent()
-	if his == nil {
+	if invocation.GetHistoryEvent() == nil {
 		return errors.New("activity reminder missing history event")
 	}
 
-	err := a.executeActivity(ctx, reminder.Name, his, invocation.GetPropagatedHistory())
+	err := a.executeActivity(ctx, reminder.Name, &invocation)
 
 	// Returning nil signals that we want the execution to be retried in the next
 	// period interval

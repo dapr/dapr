@@ -34,7 +34,8 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *backend.HistoryEvent, propagatedHistory *protos.PropagatedHistory) error {
+func (a *activity) executeActivity(ctx context.Context, name string, invocation *protos.ActivityInvocation) error {
+	taskEvent := invocation.GetHistoryEvent()
 	activityName := ""
 	if ts := taskEvent.GetTaskScheduled(); ts != nil {
 		activityName = ts.GetName()
@@ -53,7 +54,7 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 		InstanceID:      api.InstanceID(workflowID),
 		NewEvent:        taskEvent,
 		Properties:      make(map[string]any),
-		IncomingHistory: propagatedHistory,
+		IncomingHistory: invocation.GetPropagatedHistory(),
 	}
 
 	// Executing activity code is a one-way operation. We must wait for the app code to report its completion, which

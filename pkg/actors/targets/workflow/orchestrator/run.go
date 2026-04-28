@@ -98,7 +98,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		NewEvents:  state.Inbox,
 		RetryCount: -1, // TODO
 		State:      rs,
-		Properties: make(map[string]any, 2),
+		Properties: make(map[string]any, 1),
 	}
 
 	wi.IncomingHistory = state.IncomingHistory
