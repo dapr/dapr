@@ -181,60 +181,23 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 			return ok
 		}, &d.waitingToDelete)
 
+		// If a coalesce window is configured and there is something queued,
+		// defer the next round so additional churn arriving in the window
+		// folds into a single follow-up round. The first event that arrived
+		// in REPORT state already triggered THIS round immediately, so cold
+		// starts stay responsive.
+		if d.coalesceWindow > 0 && (len(d.waitingToDelete) > 0 || len(d.waitingToDisseminate) > 0) {
+			d.startCoalesceTimer()
+			return
+		}
+
 		if len(d.waitingToDelete) > 0 {
 			d.processWaitingDeletes()
 			return
 		}
 
-		// Batch all waiting connections: create their streams and update the store
-		// for all of them, then start a single dissemination round if any store
-		// change occurred. This avoids O(n) sequential dissemination rounds when
-		// many replicas connect at once.
-		if len(d.waitingToDisseminate) > 0 {
-			waiting := d.waitingToDisseminate
-			d.waitingToDisseminate = nil
-
-			storeChanged := false
-			newStreamIDxs := make([]uint64, 0, len(waiting))
-			for _, add := range waiting {
-				streamIDx := d.addStream(ctx, add)
-				newStreamIDxs = append(newStreamIDxs, streamIDx)
-				if d.store.Set(streamIDx, add.InitialHost) {
-					storeChanged = true
-				}
-			}
-
-			if !storeChanged {
-				// All waiting connections had no actors. Send one-shot table pushes
-				// only to the newly added streams so they can route actor invocations.
-				for _, idx := range newStreamIDxs {
-					s, ok := d.streams[idx]
-					if !ok || d.store.Has(idx) {
-						continue
-					}
-					version := d.currentVersion
-					s.receivingTable = &version
-					s.loop.Enqueue(&loops.DisseminateTable{
-						Version: d.currentVersion,
-						Tables:  d.store.PlacementTables(d.currentVersion),
-					})
-				}
-
-				return
-			}
-
-			d.currentVersion++
-			d.timeoutQ.Enqueue(d.currentVersion)
-			d.currentOperation = v1pb.HostOperation_LOCK
-			d.streamsInTargetState = 0
-
-			for _, s := range d.streams {
-				s.currentState = v1pb.HostOperation_REPORT
-				s.receivingTable = nil
-				s.loop.Enqueue(&loops.DisseminateLock{
-					Version: d.currentVersion,
-				})
-			}
-		}
+		// Batch all waiting connections into a single follow-up round (or
+		// one-shot table pushes when none of them register actors).
+		d.processWaitingDisseminate(ctx)
 	}
 }

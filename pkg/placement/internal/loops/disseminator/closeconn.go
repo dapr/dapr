@@ -14,6 +14,8 @@ limitations under the License.
 package disseminator
 
 import (
+	"context"
+
 	"github.com/dapr/dapr/pkg/placement/internal/loops"
 	"github.com/dapr/dapr/pkg/placement/internal/loops/stream"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
@@ -74,6 +76,14 @@ func (d *disseminator) handleCloseStream(closeStream *loops.ConnCloseStream) {
 		return
 	}
 
+	// If a post-round coalesce window is open, leave the deletion queued
+	// for the timer (or for handleAdd, which preempts the timer when a new
+	// stream arrives in REPORT). Multiple closes arriving in rapid
+	// succession during a rolling update batch naturally either way.
+	if d.coalesceTimer != nil {
+		return
+	}
+
 	// In REPORT state, process accumulated deletions now. Multiple closes
 	// arriving in rapid succession (during a rolling update) will be batched
 	// naturally because handleAdd processes waitingToDelete before starting a
@@ -120,6 +130,85 @@ func (d *disseminator) advancePhase() {
 			d.processWaitingDeletes()
 		}
 	}
+}
+
+// processWaitingDisseminate creates streams for every queued ConnAdd, sets
+// them in the store, and either sends one-shot table pushes (no store change)
+// or starts a single follow-up dissemination round covering them all. Must
+// only be called when currentOperation is REPORT and waitingToDelete has
+// already been drained (delete-rounds take priority over add-rounds).
+func (d *disseminator) processWaitingDisseminate(ctx context.Context) {
+	if len(d.waitingToDisseminate) == 0 {
+		return
+	}
+
+	waiting := d.waitingToDisseminate
+	d.waitingToDisseminate = nil
+
+	storeChanged := false
+	newStreamIDxs := make([]uint64, 0, len(waiting))
+	for _, add := range waiting {
+		streamIDx := d.addStream(ctx, add)
+		newStreamIDxs = append(newStreamIDxs, streamIDx)
+		if d.store.Set(streamIDx, add.InitialHost) {
+			storeChanged = true
+		}
+	}
+
+	if !storeChanged {
+		// All waiting connections had no actors. Send one-shot table pushes
+		// only to the newly added streams so they can route actor invocations.
+		for _, idx := range newStreamIDxs {
+			s, ok := d.streams[idx]
+			if !ok || d.store.Has(idx) {
+				continue
+			}
+			version := d.currentVersion
+			s.receivingTable = &version
+			s.loop.Enqueue(&loops.DisseminateTable{
+				Version: d.currentVersion,
+				Tables:  d.store.PlacementTables(d.currentVersion),
+			})
+		}
+		return
+	}
+
+	d.currentVersion++
+	d.timeoutQ.Enqueue(d.currentVersion)
+	d.currentOperation = v1pb.HostOperation_LOCK
+	d.streamsInTargetState = 0
+
+	for _, s := range d.streams {
+		s.currentState = v1pb.HostOperation_REPORT
+		s.receivingTable = nil
+		s.loop.Enqueue(&loops.DisseminateLock{
+			Version: d.currentVersion,
+		})
+	}
+}
+
+// handleCoalesceFire is the timer callback that drains the post-round
+// coalesce window. Called when the disseminator has been idle long enough
+// since the last round ended; triggers a single follow-up round covering
+// every disconnect / new connection accumulated during the window.
+func (d *disseminator) handleCoalesceFire(ctx context.Context) {
+	d.coalesceTimer = nil
+
+	// Mirror handleAdd's flow: apply queued deletions to the store BEFORE
+	// processing waiting-to-disseminate, so a single round emitted by
+	// processWaitingDisseminate captures both. If only deletes are queued
+	// (no adds), we still need to start a round for the deletes.
+	if len(d.waitingToDelete) > 0 && len(d.waitingToDisseminate) == 0 {
+		d.processWaitingDeletes()
+		return
+	}
+
+	for _, toDelete := range d.waitingToDelete {
+		d.store.Delete(toDelete)
+	}
+	d.waitingToDelete = nil
+
+	d.processWaitingDisseminate(ctx)
 }
 
 // processWaitingDeletes processes all queued stream deletions in a single

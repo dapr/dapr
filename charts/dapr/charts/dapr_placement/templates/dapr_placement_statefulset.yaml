@@ -153,6 +153,7 @@ spec:
         - "--keepalive-time={{ .Values.keepAliveTime }}"
         - "--keepalive-timeout={{ .Values.keepAliveTimeout }}"
         - "--disseminate-timeout={{ .Values.disseminateTimeout }}"
+        - "--disseminate-coalesce-window={{ .Values.disseminateCoalesceWindow }}"
 {{- if eq .Values.global.prometheus.enabled true }}
         - "--enable-metrics"
         - "--metrics-port"
