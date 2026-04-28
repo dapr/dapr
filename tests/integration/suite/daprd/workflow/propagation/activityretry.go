@@ -126,16 +126,15 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 		}
 		a.childHistoryReceived.Store(true)
 
-		parent := ph.GetWorkflowByName("parentWf")
-		if parent.Found {
+		parent, parentErr := ph.GetWorkflowByName("parentWf")
+		if parentErr == nil {
 			a.parentFound.Store(true)
 			a.parentWFName.Store(parent.Name)
 			if parent.InstanceID != "" {
 				a.parentWFInstanceSeen.Store(true)
 			}
 		}
-		nonexistentWF := ph.GetWorkflowByName("DoesNotExist")
-		if nonexistentWF.Found {
+		if _, err := ph.GetWorkflowByName("DoesNotExist"); err == nil {
 			a.nonexistentWFFound.Store(true) // should stay false
 		}
 
@@ -146,11 +145,11 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 			a.nonexistentWFsIsNil.Store(true)
 		}
 
-		if !parent.Found {
+		if parentErr != nil {
 			return "no-parent", nil
 		}
 
-		singular := parent.GetActivityByName("CallLLM")
+		singular, _ := parent.GetActivityByName("CallLLM")
 		if singular.Started {
 			a.singularStarted.Store(true)
 		}
@@ -160,8 +159,7 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 		if singular.Failed {
 			a.singularFailed.Store(true)
 		}
-		nonexistentAct := parent.GetActivityByName("NotAnActivity")
-		if nonexistentAct.Started {
+		if nonexistentAct, err := parent.GetActivityByName("NotAnActivity"); err == nil && nonexistentAct.Started {
 			a.nonexistentActSeenAsStarted.Store(true) // should stay false
 		}
 

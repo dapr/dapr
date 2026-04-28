@@ -96,7 +96,10 @@ func (w *workflowchain) Run(t *testing.T, ctx context.Context) {
 			w.pluralLastInstanceID.Store(plural[len(plural)-1].InstanceID)
 		}
 
-		singular := ph.GetWorkflowByName("worker")
+		singular, err := ph.GetWorkflowByName("worker")
+		if err != nil {
+			return nil, err
+		}
 		w.singularInstanceID.Store(singular.InstanceID)
 
 		// Cross-check

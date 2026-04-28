@@ -529,7 +529,7 @@ replace (
 // replace github.com/dapr/components-contrib => ../components-contrib
 // replace github.com/dapr/kit => ../kit
 // replace github.com/dapr/durabletask-go => ../durabletask-go
-replace github.com/dapr/durabletask-go => github.com/cicoyle/durabletask-go v0.0.0-20260422184926-a6cd3faa3884
+replace github.com/dapr/durabletask-go => github.com/cicoyle/durabletask-go v0.0.0-20260428163230-2dbd830d92cf
 
 //
 // Then, run `make modtidy-all` in this repository.

@@ -144,8 +144,8 @@ func (a *allfields) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// GetWorkflowByName
-		parentResult := ph.GetWorkflowByName("parent")
-		if parentResult.Found {
+		parentResult, parentErr := ph.GetWorkflowByName("parent")
+		if parentErr == nil {
 			a.parentResultFound.Store(true)
 			a.parentResultName.Store(parentResult.Name)
 			a.parentResultAppID.Store(parentResult.AppID)
@@ -159,7 +159,7 @@ func (a *allfields) Run(t *testing.T, ctx context.Context) {
 		a.eventsByWorkflowNameCount.Store(int32(len(ph.GetEventsByWorkflowName("parent"))))
 
 		// Success activity
-		successAct := parentResult.GetActivityByName("SuccessAct")
+		successAct, _ := parentResult.GetActivityByName("SuccessAct")
 		if successAct.Name == "SuccessAct" && successAct.Started {
 			a.successActFound.Store(true)
 		}
@@ -180,7 +180,7 @@ func (a *allfields) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Failure activity
-		failAct := parentResult.GetActivityByName("FailAct")
+		failAct, _ := parentResult.GetActivityByName("FailAct")
 		if failAct.Name == "FailAct" && failAct.Started {
 			a.failActFound.Store(true)
 		}
