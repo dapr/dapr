@@ -158,7 +158,7 @@ func (c *chunkstrustboundary) Run(t *testing.T, ctx context.Context) {
 
 	// Only 1 chunk, App1's events (App0's chunk excluded by trust boundary)
 	assert.Equal(t, int32(1), c.leafChunkCount.Load(), "should have 1 chunk (App1 only, trust boundary excludes App0)")
-	leafChunks, _ := c.leafChunks.Load().([]api.WorkflowResult)
+	leafChunks, _ := c.leafChunks.Load().([]*api.WorkflowResult)
 	leafAppIDs, _ := c.leafAppIDs.Load().([]string)
 
 	// single chunk is App1's

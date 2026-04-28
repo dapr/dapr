@@ -162,7 +162,7 @@ func (c *chunksmultiapp) Run(t *testing.T, ctx context.Context) {
 	// 12 total events: 6 from App0 + 6 from App1 = 2 chunks
 	assert.Equal(t, int32(12), c.leafTotalEvents.Load(), "App2 should receive 12 events: 6 from App0 + 6 from App1")
 	assert.Equal(t, int32(2), c.leafChunkCount.Load(), "should have 2 chunks (App0 + App1)")
-	leafChunks, _ := c.leafChunks.Load().([]api.WorkflowResult)
+	leafChunks, _ := c.leafChunks.Load().([]*api.WorkflowResult)
 	leafAppIDs, _ := c.leafAppIDs.Load().([]string)
 
 	// Verify chunks and app events

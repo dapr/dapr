@@ -32,16 +32,14 @@ func init() {
 	suite.Register(new(continueasnew))
 }
 
-// continueasnew verifies that a workflow which participated in propagation
-// will pass its history forward across a CAN boundary, so the new generation
-// sees the prior generation's events via ctx.GetPropagatedHistory().
+// CAN only forwards an incoming chunk. A root workflow that
+// schedules activities with PropagateLineage but itself has no parent
+// chunk does NOT seed a chunk for its next generation.
 type continueasnew struct {
 	workflow *procworkflow.Workflow
 
-	gen2SawHistory     atomic.Bool
-	gen2EventCount     atomic.Int32
-	gen2HasGen1Task    atomic.Bool
-	gen2HasGen1Started atomic.Bool
+	gen2Ran        atomic.Bool
+	gen2SawHistory atomic.Bool
 }
 
 func (c *continueasnew) Setup(t *testing.T) []framework.Option {
@@ -69,6 +67,7 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 		}
 
 		if input == "first" {
+			// Root workflow that opts into propagation for its activity.
 			if err := ctx.CallActivity("act",
 				task.WithHistoryPropagation(api.PropagateLineage()),
 			).Await(nil); err != nil {
@@ -78,21 +77,12 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 			return nil, nil
 		}
 
-		// Second gen: should see gen-1's events via IncomingHistory
-		ph := ctx.GetPropagatedHistory()
-		if ph == nil {
-			return "no-history", nil
-		}
-
-		c.gen2SawHistory.Store(true)
-		c.gen2EventCount.Store(int32(len(ph.Events())))
-		for _, e := range ph.Events() {
-			if ts := e.GetTaskScheduled(); ts != nil && ts.GetName() == "act" {
-				c.gen2HasGen1Task.Store(true)
-			}
-			if e.GetExecutionStarted() != nil {
-				c.gen2HasGen1Started.Store(true)
-			}
+		// Second generation. Because gen-1 was a root (no IncomingHistory),
+		// gen-2 must NOT receive a chunk — propagation across CAN only
+		// inherits what was already there, not anything synthesized.
+		c.gen2Ran.Store(true)
+		if ctx.GetPropagatedHistory() != nil {
+			c.gen2SawHistory.Store(true)
 		}
 		return "done", nil
 	})
@@ -109,8 +99,8 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.True(t, api.WorkflowMetadataIsComplete(metadata))
 
-	require.True(t, c.gen2SawHistory.Load(), "second generation should receive propagated history from prior generation")
-	assert.True(t, c.gen2HasGen1Task.Load(), "second generation should see the 'act' TaskScheduled event from generation 1")
-	assert.True(t, c.gen2HasGen1Started.Load(), "second generation should see generation 1's ExecutionStarted")
-	assert.Greater(t, c.gen2EventCount.Load(), int32(2), "propagated history should contain multiple events from generation 1")
+	require.True(t, c.gen2Ran.Load(), "second generation should have executed")
+	assert.False(t, c.gen2SawHistory.Load(),
+		"root workflow's CAN must not synthesize a chunk for the next generation; "+
+			"propagation across CAN only inherits an incoming chunk from a parent")
 }

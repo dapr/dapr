@@ -153,7 +153,7 @@ func (c *chunksparallel) Run(t *testing.T, ctx context.Context) {
 
 	// All events should be in a single chunk, parallel activities don't split chunks
 	require.Equal(t, int32(1), c.childChunkCount.Load(), "parallel activities should produce 1 chunk (same app)")
-	childChunks, _ := c.childChunks.Load().([]api.WorkflowResult)
+	childChunks, _ := c.childChunks.Load().([]*api.WorkflowResult)
 	childAppIDs, _ := c.childAppIDs.Load().([]string)
 	actNames, _ := c.childActNames.Load().(map[string]bool)
 	completedNames, _ := c.childCompletedNames.Load().(map[string]bool)

@@ -117,7 +117,7 @@ func (c *chunks) Run(t *testing.T, ctx context.Context) {
 	require.Equal(t, int32(6), c.childTotalEvents.Load(), "child should receive 6 events from App0")
 	// Should have exactly 1 chunk — App0's events
 	require.Equal(t, int32(1), c.childChunkCount.Load(), "should have 1 chunk (App0 only)")
-	app0Chunks, _ := c.app0Chunks.Load().([]api.WorkflowResult)
+	app0Chunks, _ := c.app0Chunks.Load().([]*api.WorkflowResult)
 	app0AppIDs, _ := c.app0AppIDs.Load().([]string)
 	require.Len(t, app0Chunks, 1)
 	assert.True(t, app0Chunks[0].Found, "workflow result should be found")
