@@ -247,6 +247,29 @@ func (s *Scheduler) WaitUntilLeadership(t *testing.T, ctx context.Context, leade
 	}, 10*time.Second, 10*time.Millisecond)
 }
 
+// WaitUntilSidecarsConnected blocks until the scheduler has exactly `want`
+// sidecar stream connections and that count has remained stable across 20
+// consecutive polls (~1s). This catches the startup window where daprd's
+// WatchHosts stream can trigger a short disconnect/reconnect cycle of all
+// scheduler job streams, during which a newly-scheduled job can be delivered
+// to streams that are about to disconnect as well as their replacements.
+func (s *Scheduler) WaitUntilSidecarsConnected(t *testing.T, ctx context.Context, want int) {
+	t.Helper()
+
+	const stableObservations = 20
+	var consecutive int
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		got := int(s.Metrics(c, ctx).All()["dapr_scheduler_sidecars_connected"])
+		if got != want {
+			consecutive = 0
+			assert.Equal(c, want, got)
+			return
+		}
+		consecutive++
+		assert.GreaterOrEqual(c, consecutive, stableObservations)
+	}, 20*time.Second, 50*time.Millisecond)
+}
+
 func (s *Scheduler) ID() string {
 	return s.id
 }

@@ -39,6 +39,7 @@ import (
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 )
 
 // Informer is a fake informer that adds events to the Kubernetes API server to
@@ -208,6 +209,8 @@ func (i *Informer) objToGVK(t *testing.T, obj runtime.Object) schema.GroupVersio
 		return schema.GroupVersionKind{Group: "dapr.io", Version: "v1alpha1", Kind: "resiliencies"}
 	case *subapi.Subscription:
 		return schema.GroupVersionKind{Group: "dapr.io", Version: "v2alpha1", Kind: "subscriptions"}
+	case *wfaclapi.WorkflowAccessPolicy:
+		return schema.GroupVersionKind{Group: "dapr.io", Version: "v1alpha1", Kind: "workflowaccesspolicies"}
 	case *corev1.Pod:
 		return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "pods"}
 	case *corev1.Service:

@@ -253,8 +253,6 @@ func (s *server) StartNonBlocking() error {
 }
 
 func (s *server) Close() error {
-	defer s.wg.Wait()
-
 	s.htarget.NotReady()
 
 	if s.api != nil {
@@ -263,14 +261,18 @@ func (s *server) Close() error {
 		}
 	}
 
-	s.wg.Add(len(s.servers))
+	var stopWg sync.WaitGroup
+	stopWg.Add(len(s.servers))
 	for _, server := range s.servers {
 		// This calls `Close()` on the underlying listener.
 		go func(server *grpcGo.Server) {
-			defer s.wg.Done()
+			defer stopWg.Done()
 			server.GracefulStop()
 		}(server)
 	}
+	stopWg.Wait()
+
+	s.wg.Wait()
 
 	return nil
 }

@@ -29,7 +29,7 @@ import (
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spf13/cast"
 	"go.opencensus.io/stats/view"
-	yaml "gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
@@ -68,6 +68,16 @@ const (
 	// When enabled, daprd loads MCPServer manifests at startup,
 	// and makes them available for tool execution via workflow orchestrations.
 	MCPServerResource Feature = "MCPServerResource"
+
+	// WorkflowHistorySigning enables cryptographic signing of workflow
+	// history. When enabled and mTLS is active, each workflow execution's
+	// history events are signed using the app's X.509 SVID identity,
+	// creating a verifiable chain of signatures. Disabled by default.
+	WorkflowHistorySigning Feature = "WorkflowHistorySigning"
+
+	// Enables workflow access control policies. When enabled, WorkflowAccessPolicy
+	// resources are loaded and enforced at the target sidecar's CallActor handler.
+	WorkflowAccessPolicy Feature = "WorkflowAccessPolicy"
 )
 
 // end feature flags section
@@ -84,6 +94,7 @@ const (
 )
 
 var defaultFeatures = map[Feature]bool{
+	HotReload:                       true,
 	WorkflowsRemoteActivityReminder: true,
 }
 

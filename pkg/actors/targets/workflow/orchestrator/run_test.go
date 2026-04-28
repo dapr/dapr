@@ -311,3 +311,129 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 
 	assert.Equal(t, `3`, o.rstate.GetStartEvent().GetInput().GetValue())
 }
+
+func TestFilterValidInboxEvents_EmptyInbox(t *testing.T) {
+	t.Parallel()
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	result := filterValidInboxEvents(state)
+	assert.Empty(t, result)
+}
+
+func TestFilterValidInboxEvents_TaskCompletedValid(t *testing.T) {
+	t.Parallel()
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.History = []*backend.HistoryEvent{
+		{EventId: 1, EventType: &protos.HistoryEvent_TaskScheduled{TaskScheduled: &protos.TaskScheduledEvent{Name: "activity1"}}},
+	}
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 1, Result: wrapperspb.String("ok")}}},
+	}
+	result := filterValidInboxEvents(state)
+	assert.Len(t, result, 1)
+}
+
+func TestFilterValidInboxEvents_TaskCompletedNoMatch(t *testing.T) {
+	t.Parallel()
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.History = []*backend.HistoryEvent{
+		{EventId: 1, EventType: &protos.HistoryEvent_TaskScheduled{TaskScheduled: &protos.TaskScheduledEvent{Name: "activity1"}}},
+	}
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 999, Result: wrapperspb.String("ok")}}},
+	}
+	result := filterValidInboxEvents(state)
+	assert.Empty(t, result)
+}
+
+func TestFilterValidInboxEvents_TaskFailedValid(t *testing.T) {
+	t.Parallel()
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.History = []*backend.HistoryEvent{
+		{EventId: 2, EventType: &protos.HistoryEvent_TaskScheduled{TaskScheduled: &protos.TaskScheduledEvent{Name: "activity2"}}},
+	}
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_TaskFailed{TaskFailed: &protos.TaskFailedEvent{TaskScheduledId: 2}}},
+	}
+	result := filterValidInboxEvents(state)
+	assert.Len(t, result, 1)
+}
+
+func TestFilterValidInboxEvents_TaskFailedNoMatch(t *testing.T) {
+	t.Parallel()
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.History = []*backend.HistoryEvent{
+		{EventId: 2, EventType: &protos.HistoryEvent_TaskScheduled{TaskScheduled: &protos.TaskScheduledEvent{Name: "activity2"}}},
+	}
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_TaskFailed{TaskFailed: &protos.TaskFailedEvent{TaskScheduledId: 777}}},
+	}
+	result := filterValidInboxEvents(state)
+	assert.Empty(t, result)
+}
+
+func TestFilterValidInboxEvents_ChildWorkflowCompletedValid(t *testing.T) {
+	t.Parallel()
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.History = []*backend.HistoryEvent{
+		{EventId: 5, EventType: &protos.HistoryEvent_ChildWorkflowInstanceCreated{ChildWorkflowInstanceCreated: &protos.ChildWorkflowInstanceCreatedEvent{}}},
+	}
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{TaskScheduledId: 5}}},
+	}
+	result := filterValidInboxEvents(state)
+	assert.Len(t, result, 1)
+}
+
+func TestFilterValidInboxEvents_ChildWorkflowCompletedNoMatch(t *testing.T) {
+	t.Parallel()
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.History = []*backend.HistoryEvent{
+		{EventId: 5, EventType: &protos.HistoryEvent_ChildWorkflowInstanceCreated{ChildWorkflowInstanceCreated: &protos.ChildWorkflowInstanceCreatedEvent{}}},
+	}
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{TaskScheduledId: 99}}},
+	}
+	result := filterValidInboxEvents(state)
+	assert.Empty(t, result)
+}
+
+func TestFilterValidInboxEvents_ChildWorkflowFailedNoMatch(t *testing.T) {
+	t.Parallel()
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.History = []*backend.HistoryEvent{
+		{EventId: 5, EventType: &protos.HistoryEvent_ChildWorkflowInstanceCreated{ChildWorkflowInstanceCreated: &protos.ChildWorkflowInstanceCreatedEvent{}}},
+	}
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_ChildWorkflowInstanceFailed{ChildWorkflowInstanceFailed: &protos.ChildWorkflowInstanceFailedEvent{TaskScheduledId: 42}}},
+	}
+	result := filterValidInboxEvents(state)
+	assert.Empty(t, result)
+}
+
+func TestFilterValidInboxEvents_EventRaisedPassesThrough(t *testing.T) {
+	t.Parallel()
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{Name: "myevent"}}},
+	}
+	result := filterValidInboxEvents(state)
+	assert.Len(t, result, 1)
+}
+
+func TestFilterValidInboxEvents_MixedValidAndInvalid(t *testing.T) {
+	t.Parallel()
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.History = []*backend.HistoryEvent{
+		{EventId: 1, EventType: &protos.HistoryEvent_TaskScheduled{TaskScheduled: &protos.TaskScheduledEvent{Name: "activity1"}}},
+		{EventId: 5, EventType: &protos.HistoryEvent_ChildWorkflowInstanceCreated{ChildWorkflowInstanceCreated: &protos.ChildWorkflowInstanceCreatedEvent{}}},
+	}
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 1, Result: wrapperspb.String("ok")}}},
+		{EventId: -1, EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 999, Result: wrapperspb.String("injected")}}},
+		{EventId: -1, EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{TaskScheduledId: 5}}},
+		{EventId: -1, EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{Name: "myevent"}}},
+	}
+	result := filterValidInboxEvents(state)
+	// task 1 valid, task 999 dropped, child 5 valid, event raised kept
+	assert.Len(t, result, 3)
+}

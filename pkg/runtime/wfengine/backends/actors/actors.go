@@ -56,6 +56,7 @@ import (
 	"github.com/dapr/durabletask-go/backend/local"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/logger"
 )
 
@@ -92,6 +93,7 @@ type Options struct {
 	WorkflowsRemoteActivityReminder bool
 
 	RetentionPolicy *config.WorkflowStateRetentionPolicy
+	Signer          *signer.Signer
 }
 
 type Actors struct {
@@ -108,6 +110,7 @@ type Actors struct {
 	eventSink           orchestrator.EventSink
 	compStore           *compstore.ComponentStore
 	retentionPolicy     *config.WorkflowStateRetentionPolicy
+	signer              *signer.Signer
 
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
@@ -144,6 +147,7 @@ func New(opts Options) *Actors {
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
 		eventSink:                 opts.EventSink,
 		retentionPolicy:           opts.RetentionPolicy,
+		signer:                    opts.Signer,
 
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
@@ -165,6 +169,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		Actors:             abe.actors,
 		RetentionActorType: abe.retentionerActorType,
 		RetentionPolicy:    abe.retentionPolicy,
+		Signer:             abe.signer,
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
@@ -572,22 +577,26 @@ func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*s
 		return nil, err
 	}
 
-	// actor id is workflow instance id
-	state, err := state.LoadWorkflowState(ctx, astate, string(id), state.Options{
+	// actor id is workflow instance id. Tamper recovery (appending the
+	// terminal failed event) is the orchestrator actor's responsibility, not
+	// the read path's — readers surface the verification error to clients
+	// and let them detect it.
+	wstate, err := state.LoadWorkflowState(ctx, astate, string(id), state.Options{
 		AppID:             abe.appID,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
+		Signer:            abe.signer,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	if state == nil {
+	if wstate == nil {
 		// No such state exists in the state store
 		return nil, nil
 	}
 
-	return state, nil
+	return wstate, nil
 }
 
 // NextWorkflowWorkItem implements backend.Backend
@@ -720,6 +729,7 @@ func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstan
 		AppID:             abe.appID,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
+		Signer:            abe.signer,
 	})
 	if err != nil {
 		return nil, err
