@@ -71,7 +71,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		baseDopts = append(baseDopts, daprd.WithResourceFiles(db.GetComponent(t)))
 	}
 
-	sched := scheduler.New(t)
+	sched := scheduler.New(t, opts.schedulerOptions...)
 	baseDopts = append(baseDopts, daprd.WithScheduler(sched))
 
 	daprds := make([]*daprd.Daprd, opts.daprds)
