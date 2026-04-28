@@ -30,7 +30,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName string, es []*protos.HistoryEvent) error {
+func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName string, es []*protos.HistoryEvent, outgoingHistory map[int32]*protos.PropagatedHistory) error {
 	log.Debugf("Workflow actor '%s': calling %d child workflows", o.actorID, len(es))
 
 	for _, e := range es {
@@ -60,9 +60,14 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 			},
 		}
 
-		reqP, err := proto.Marshal(&backend.CreateWorkflowInstanceRequest{
+		createReq := &backend.CreateWorkflowInstanceRequest{
 			StartEvent: startEvent,
-		})
+		}
+		if ph := outgoingHistory[e.GetEventId()]; ph != nil {
+			createReq.PropagatedHistory = ph
+		}
+
+		reqP, err := proto.Marshal(createReq)
 		if err != nil {
 			return fmt.Errorf("failed to marshal child workflow request: %w", err)
 		}

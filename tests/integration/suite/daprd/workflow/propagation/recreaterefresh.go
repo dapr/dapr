@@ -114,7 +114,7 @@ func countPropagatedHistoryRows(t *testing.T, ctx context.Context, wf *procworkf
 	db := wf.DB().GetConnection(t)
 	tableName := wf.DB().TableName()
 
-	likePattern := escapeLike(instanceID) + `%propagated-history`
+	likePattern := `%` + escapeLike(instanceID) + `%propagated-history`
 	rows, err := db.QueryContext(ctx,
 		"SELECT key FROM "+tableName+
 			` WHERE key LIKE ? ESCAPE '\'`, likePattern)

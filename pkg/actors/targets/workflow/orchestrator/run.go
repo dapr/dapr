@@ -203,6 +203,13 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 				state.Generation++
 
+				// The engine carries the propagation chain across CAN by
+				// updating wi.IncomingHistory. Persist any change so the new
+				// generation observes the chain on its next run.
+				if wi.IncomingHistory != state.IncomingHistory {
+					state.SetIncomingHistory(wi.IncomingHistory)
+				}
+
 				if err = o.signAndSaveState(ctx, state); err != nil {
 					o.rstate = rstateSnapshot
 					return todo.RunCompletedFalse, err
@@ -235,6 +242,12 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	if rs.GetContinuedAsNew() {
 		log.Debugf("Workflow actor '%s': workflow with instanceId '%s' continued as new", o.actorID, wi.InstanceID)
 		state.Generation += 1
+		// The engine carries the propagation chain across CAN by updating
+		// wi.IncomingHistory. Persist any change so the new generation sees
+		// the chain on its next run.
+		if wi.IncomingHistory != state.IncomingHistory {
+			state.SetIncomingHistory(wi.IncomingHistory)
+		}
 	}
 
 	if !runtimestate.IsCompleted(rs) {
