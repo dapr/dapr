@@ -104,26 +104,55 @@ func (c *coalesce) Run(t *testing.T, ctx context.Context) {
 	// arms the coalesce timer (does NOT immediately start the next round).
 	require.NoError(t, a.Send(&v1pb.Host{Name: "a", Port: 1001, Entities: []string{"actorA"}, Id: "a", Namespace: "default"}))
 
-	// Sleep for half the coalesce window so we know the timer is armed,
-	// then connect a third stream C. Because the timer is armed,
-	// handleAdd routes C into waitingToDisseminate instead of starting
-	// its own round. When the timer fires (about 250ms later from now),
-	// the disseminator processes B and C together in ONE round.
-	time.Sleep(time.Millisecond * 250)
+	// Read from B in a goroutine so we can assert it stays blocked while
+	// the coalesce timer is armed. This is the key proof point: without
+	// the deferral, B would receive LOCK promptly after A's UNLOCK ack
+	// because the server would immediately start round 2 for the queued
+	// stream. With coalescing, B must wait for the timer (or for C to
+	// also queue and the timer to fire).
+	type recvResult struct {
+		order *v1pb.PlacementOrder
+		err   error
+	}
+	bRecv := make(chan recvResult, 1)
+	go func() {
+		r, rerr := b.Recv()
+		bRecv <- recvResult{order: r, err: rerr}
+	}()
 
+	// Wait a fraction of the coalesce window and verify B has NOT
+	// received LOCK yet. If the timer is broken or not actually
+	// deferring, B would have received LOCK almost immediately and this
+	// select would pick the bRecv branch.
+	select {
+	case got := <-bRecv:
+		require.Failf(t, "stream B received message before coalesce window expired",
+			"got op=%s version=%d, expected timer to defer round",
+			got.order.GetOperation(), got.order.GetVersion())
+	case <-time.After(time.Millisecond * 200):
+		// Good: timer is deferring as expected.
+	}
+
+	// Connect stream C. Because the timer is armed, handleAdd routes C
+	// into waitingToDisseminate without preempting the timer.
 	cs, err := client.ReportDaprStatus(ctx)
 	require.NoError(t, err)
 	require.NoError(t, cs.Send(&v1pb.Host{
 		Name: "c", Port: 1003, Entities: []string{"actorC"}, Id: "c", Namespace: "default",
 	}))
 
-	// B and C should both receive LOCK at the SAME version (one batched
-	// round). Without coalescing, B's connection would have triggered
-	// round 2 immediately at unlock-ack of A, and C's connection 250ms
-	// later would have triggered round 3, landing on different
-	// versions.
-	rb, err := b.Recv()
-	require.NoError(t, err)
+	// When the timer fires, B and C should both receive LOCK at the
+	// SAME version (one batched round absorbing both queued streams).
+	// Without coalescing, each would have triggered its own round at
+	// distinct versions.
+	var rb *v1pb.PlacementOrder
+	select {
+	case got := <-bRecv:
+		require.NoError(t, got.err)
+		rb = got.order
+	case <-time.After(time.Second * 5):
+		require.Fail(t, "stream B did not receive LOCK after coalesce window")
+	}
 	require.Equal(t, "lock", rb.GetOperation())
 
 	rc, err := cs.Recv()

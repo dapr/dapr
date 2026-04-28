@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	nethttp "net/http"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -51,8 +50,6 @@ type concurrent struct {
 
 	inCall      atomic.Int32
 	releaseCall chan struct{}
-
-	startedAt sync.Map // map[string]time.Time
 }
 
 func (c *concurrent) Setup(t *testing.T) []framework.Option {
@@ -63,7 +60,6 @@ func (c *concurrent) Setup(t *testing.T) []framework.Option {
 	)
 
 	handler := func(w nethttp.ResponseWriter, r *nethttp.Request) {
-		c.startedAt.Store(r.URL.Path, time.Now())
 		c.inCall.Add(1)
 		defer c.inCall.Add(-1)
 		select {

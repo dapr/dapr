@@ -77,9 +77,11 @@ func (d *disseminator) handleCloseStream(closeStream *loops.ConnCloseStream) {
 	}
 
 	// If a post-round coalesce window is open, leave the deletion queued
-	// for the timer (or for handleAdd, which preempts the timer when a new
-	// stream arrives in REPORT). Multiple closes arriving in rapid
-	// succession during a rolling update batch naturally either way.
+	// for the timer to process when the window expires. New streams that
+	// arrive while the timer is armed are queued as well (handleAdd
+	// routes them to waitingToDisseminate without preempting the timer),
+	// so rapid closes and adds during a rolling update are still batched
+	// into a single follow-up round.
 	if d.coalesceTimer != nil {
 		return
 	}
