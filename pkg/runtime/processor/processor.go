@@ -125,6 +125,10 @@ type Processor struct {
 	subscriber      *subscriber.Subscriber
 	reporter        registry.Reporter
 
+	// kubernetesMode is true when running in Kubernetes mode.
+	// Used to reject configurations that are unsafe in a cluster (e.g. stdio transport).
+	kubernetesMode bool
+
 	pendingHTTPEndpoints       chan httpendpointsapi.HTTPEndpoint
 	pendingMCPServers          chan mcpserverapi.MCPServer
 	pendingComponents          chan componentsapi.Component
@@ -192,6 +196,7 @@ func New(opts Options) *Processor {
 
 	return &Processor{
 		appID:                      opts.ID,
+		kubernetesMode:             opts.Mode == modes.KubernetesMode,
 		pendingHTTPEndpoints:       make(chan httpendpointsapi.HTTPEndpoint),
 		pendingMCPServers:          make(chan mcpserverapi.MCPServer),
 		pendingComponents:          make(chan componentsapi.Component),

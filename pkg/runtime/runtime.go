@@ -703,6 +703,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 	a.flushOutstandingMCPServers(ctx)
 
+
 	err = a.loadDeclarativeSubscriptions(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load declarative subscriptions: %s", err)

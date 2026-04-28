@@ -75,6 +75,11 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 			continue
 		}
 
+		if err := validate.MCPServerSecurity(&s, p.kubernetesMode); err != nil {
+			log.Warnf("MCPServer %q failed security validation: %s", s.Name, err)
+			continue
+		}
+
 		p.processMCPServerSecrets(ctx, &s)
 		p.compStore.AddMCPServer(s)
 		log.Infof("MCPServer loaded: %s", s.LogName())
