@@ -84,7 +84,7 @@ func (c *childworkflow) Run(t *testing.T, ctx context.Context) {
 		}
 
 		c.historyReceived.Store(true)
-		c.totalEvents.Store(int32(len(ph.Events())))
+		c.totalEvents.Store(int32(len(ph.Events()))) //nolint:gosec
 		for _, e := range ph.Events() {
 			switch {
 			case e.GetTaskScheduled() != nil:

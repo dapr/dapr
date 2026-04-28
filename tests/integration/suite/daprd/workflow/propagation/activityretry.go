@@ -139,13 +139,14 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 		}
 
 		parentWFs := ph.GetWorkflowsByName("parentWf")
-		a.parentWFsCount.Store(int32(len(parentWFs)))
+		a.parentWFsCount.Store(int32(len(parentWFs))) //nolint:gosec
 		nonexistentWFs := ph.GetWorkflowsByName("DoesNotExist")
 		if nonexistentWFs == nil {
 			a.nonexistentWFsIsNil.Store(true)
 		}
 
 		if parentErr != nil {
+			//nolint:nilerr
 			return "no-parent", nil
 		}
 
@@ -164,7 +165,7 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 		}
 
 		all := parent.GetActivitiesByName("CallLLM")
-		a.pluralCount.Store(int32(len(all)))
+		a.pluralCount.Store(int32(len(all))) //nolint:gosec
 		if len(all) >= 1 && all[0].Failed {
 			a.firstAttemptFailed.Store(true)
 		}

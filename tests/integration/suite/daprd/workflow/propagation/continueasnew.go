@@ -84,7 +84,7 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 		if ctx.GetPropagatedHistory() != nil {
 			c.gen2SawHistory.Store(true)
 		}
-		return "done", nil
+		return "done", nil //nolint:goconst
 	})
 
 	client := c.workflow.BackendClient(t, ctx)

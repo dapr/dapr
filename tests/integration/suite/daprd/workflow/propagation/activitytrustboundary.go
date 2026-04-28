@@ -108,9 +108,9 @@ func (atb *activitytrustboundary) Run(t *testing.T, ctx context.Context) {
 		}
 
 		atb.historyReceived.Store(true)
-		atb.totalEvents.Store(int32(len(ph.Events())))
-		atb.appIDCount.Store(int32(len(ph.GetAppIDs())))
-		atb.chunkCount.Store(int32(len(ph.GetWorkflows())))
+		atb.totalEvents.Store(int32(len(ph.Events())))      //nolint:gosec
+		atb.appIDCount.Store(int32(len(ph.GetAppIDs())))    //nolint:gosec
+		atb.chunkCount.Store(int32(len(ph.GetWorkflows()))) //nolint:gosec
 
 		for _, e := range ph.Events() {
 			if ts := e.GetTaskScheduled(); ts != nil {

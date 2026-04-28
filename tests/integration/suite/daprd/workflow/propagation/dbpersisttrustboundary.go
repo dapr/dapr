@@ -139,6 +139,7 @@ func (d *dbpersisttrustboundary) Run(t *testing.T, ctx context.Context) {
 	app2AppID := d.workflow.DaprN(2).AppID()
 	likePattern := escapeLike(app2AppID) + `%propagated-history`
 	rows, err := db.QueryContext(ctx,
+		//nolint:gosec
 		"SELECT key, value, is_binary FROM "+tableName+
 			` WHERE key LIKE ? ESCAPE '\'`, likePattern)
 	require.NoError(t, err)

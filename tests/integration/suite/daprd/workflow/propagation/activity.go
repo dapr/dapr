@@ -91,7 +91,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 		}
 
 		a.historyReceived.Store(true)
-		a.totalEvents.Store(int32(len(ph.Events())))
+		a.totalEvents.Store(int32(len(ph.Events()))) //nolint:gosec
 		for _, e := range ph.Events() {
 			switch {
 			case e.GetTaskScheduled() != nil:

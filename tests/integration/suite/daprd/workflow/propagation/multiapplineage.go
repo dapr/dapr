@@ -114,7 +114,7 @@ func (m *multiapplineage) Run(t *testing.T, ctx context.Context) {
 		for _, e := range ph.Events() {
 			if ts := e.GetTaskScheduled(); ts != nil {
 				switch ts.GetName() {
-				case "app0Act":
+				case "app0Act": //nolint:goconst
 					m.app2App0ActCount.Add(1)
 				case "app1Act":
 					m.app2App1ActCount.Add(1)

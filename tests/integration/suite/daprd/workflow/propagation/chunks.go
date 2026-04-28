@@ -92,9 +92,9 @@ func (c *chunks) Run(t *testing.T, ctx context.Context) {
 		}
 
 		c.childHistoryReceived.Store(true)
-		c.childTotalEvents.Store(int32(len(ph.Events())))
+		c.childTotalEvents.Store(int32(len(ph.Events()))) //nolint:gosec
 		workflows := ph.GetWorkflows()
-		c.childChunkCount.Store(int32(len(workflows)))
+		c.childChunkCount.Store(int32(len(workflows))) //nolint:gosec
 
 		c.app0Chunks.Store(workflows)
 		c.app0AppIDs.Store(ph.GetAppIDs())

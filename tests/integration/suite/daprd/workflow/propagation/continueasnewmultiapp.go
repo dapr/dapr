@@ -108,7 +108,7 @@ func (c *continueasnewmultiapp) Run(t *testing.T, ctx context.Context) {
 		// prior generation's own events.
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no-history", nil
+			return "no-history", nil //nolint:goconst
 		}
 
 		c.gen2SawHistory.Store(true)

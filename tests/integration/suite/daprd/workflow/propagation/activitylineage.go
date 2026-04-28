@@ -108,7 +108,7 @@ func (al *activitylineage) Run(t *testing.T, ctx context.Context) {
 		}
 
 		al.historyReceived.Store(true)
-		al.totalEvents.Store(int32(len(ph.Events())))
+		al.totalEvents.Store(int32(len(ph.Events()))) //nolint:gosec
 		for _, e := range ph.Events() {
 			if ts := e.GetTaskScheduled(); ts != nil {
 				switch ts.GetName() {

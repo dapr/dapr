@@ -93,6 +93,7 @@ func (d *dbpersist) Run(t *testing.T, ctx context.Context) {
 	tableName := d.workflow.DB().TableName()
 
 	rows, err := db.QueryContext(ctx,
+		//nolint:gosec
 		"SELECT key, value, is_binary FROM "+tableName+" WHERE key LIKE '%propagated-history'")
 	require.NoError(t, err)
 	defer rows.Close()
@@ -123,7 +124,7 @@ func (d *dbpersist) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, int32(len(ph.GetEvents())), chunk.GetEventCount(),
 			"chunk.EventCount should match the number of persisted events")
 
-		require.Equal(t, 6, len(ph.GetEvents()),
+		require.Len(t, ph.GetEvents(), 6,
 			"parent should have produced 6 events: WorkflowStarted x2, ExecutionStarted, TaskScheduled, TaskCompleted, ChildWorkflowInstanceCreated")
 
 		var (

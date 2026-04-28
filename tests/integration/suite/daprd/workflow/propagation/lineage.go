@@ -95,7 +95,7 @@ func (l *lineage) Run(t *testing.T, ctx context.Context) {
 	reg.AddWorkflowN("wfC", func(ctx *task.WorkflowContext) (any, error) {
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no history", nil
+			return "no history", nil //nolint:goconst
 		}
 
 		l.totalEvents.Store(int32(len(ph.Events())))

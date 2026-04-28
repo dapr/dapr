@@ -117,7 +117,7 @@ func (a *allfields) Run(t *testing.T, ctx context.Context) {
 			return "no history", nil
 		}
 		a.historyReceived.Store(true)
-		a.eventCount.Store(int32(len(ph.Events())))
+		a.eventCount.Store(int32(len(ph.Events()))) //nolint:gosec
 
 		if ph.Scope() == protos.HistoryPropagationScope_HISTORY_PROPAGATION_SCOPE_LINEAGE {
 			a.scopeMatches.Store(true)
@@ -125,13 +125,13 @@ func (a *allfields) Run(t *testing.T, ctx context.Context) {
 
 		// AppIDs + chunk metadata
 		ids := ph.GetAppIDs()
-		a.appIDsCount.Store(int32(len(ids)))
+		a.appIDsCount.Store(int32(len(ids))) //nolint:gosec
 		if len(ids) == 1 && ids[0] == parentAppID {
 			a.appIDMatches.Store(true)
 		}
 
 		wfs := ph.GetWorkflows()
-		a.workflowsCount.Store(int32(len(wfs)))
+		a.workflowsCount.Store(int32(len(wfs))) //nolint:gosec
 		if len(wfs) == 1 {
 			a.parentChunkFound.Store(true)
 			if wfs[0].Name == "parent" {
@@ -154,9 +154,9 @@ func (a *allfields) Run(t *testing.T, ctx context.Context) {
 
 		// Events-by-* accessors
 		expectedIID, _ := a.parentInstanceID.Load().(string)
-		a.eventsByAppIDCount.Store(int32(len(ph.GetEventsByAppID(parentAppID))))
-		a.eventsByInstanceIDCount.Store(int32(len(ph.GetEventsByInstanceID(expectedIID))))
-		a.eventsByWorkflowNameCount.Store(int32(len(ph.GetEventsByWorkflowName("parent"))))
+		a.eventsByAppIDCount.Store(int32(len(ph.GetEventsByAppID(parentAppID))))            //nolint:gosec
+		a.eventsByInstanceIDCount.Store(int32(len(ph.GetEventsByInstanceID(expectedIID))))  //nolint:gosec
+		a.eventsByWorkflowNameCount.Store(int32(len(ph.GetEventsByWorkflowName("parent")))) //nolint:gosec
 
 		// Success activity
 		successAct, _ := parentResult.GetActivityByName("SuccessAct")

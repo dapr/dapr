@@ -71,7 +71,7 @@ func (w *workflowchain) Run(t *testing.T, ctx context.Context) {
 
 		if depth < 3 {
 			var next string
-			if err := ctx.CallChildWorkflow("worker",
+			if err = ctx.CallChildWorkflow("worker",
 				task.WithChildWorkflowInput(strconv.Itoa(depth+1)),
 				task.WithHistoryPropagation(api.PropagateLineage()),
 			).Await(&next); err != nil {
