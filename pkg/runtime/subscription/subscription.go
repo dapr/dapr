@@ -128,14 +128,33 @@ func New(opts Options) (*Subscription, error) {
 	}, func(ctx context.Context, msg *contribpubsub.NewMessage) error {
 		s.wg.Add(1)
 		s.inflight.Add(1)
-		defer func() {
-			s.wg.Done()
-			s.inflight.Add(-1)
-		}()
 
 		if s.closed.Load() {
-			return errors.New("subscription is closed")
+			// Release the WaitGroup before blocking to avoid deadlocking
+			// with Subscription.Stop() which calls wg.Wait().
+			s.wg.Done()
+			s.inflight.Add(-1)
+			// Block until the handler context is cancelled rather than
+			// returning an error. Returning an error causes the broker to
+			// NACK the message (e.g. routing it to a dead-letter queue),
+			// which is incorrect during graceful shutdown. By blocking, the
+			// message is held until the broker connection is closed, allowing
+			// the broker to redeliver the message to another consumer. We
+			// block on the handler context (tied to the broker's pull stream)
+			// rather than the subscription context because the subscription
+			// context may already be cancelled by the time this message
+			// arrives.
+			<-ctx.Done()
+			return ctx.Err()
 		}
+
+		wgReleased := false
+		defer func() {
+			if !wgReleased {
+				s.wg.Done()
+				s.inflight.Add(-1)
+			}
+		}()
 
 		if msg.Metadata == nil {
 			msg.Metadata = make(map[string]string, 1)
@@ -291,6 +310,20 @@ func New(opts Options) (*Subscription, error) {
 			}
 			return nil, pErr
 		})
+		// When the subscription is closing (e.g. during shutdown or
+		// hot-reload), block on the handler context rather than returning an
+		// error. Returning an error causes the broker to NACK the message
+		// (e.g. routing it to a dead-letter queue), which is incorrect
+		// during graceful shutdown. Release the WaitGroup before blocking to
+		// avoid deadlocking with Subscription.Stop() which calls wg.Wait().
+		if err != nil && (s.closed.Load() || errors.Is(err, rtpubsub.ErrSubscriptionClosed)) {
+			wgReleased = true
+			s.wg.Done()
+			s.inflight.Add(-1)
+			<-ctx.Done()
+			return ctx.Err()
+		}
+
 		// when runtime shutting down, don't send to DLQ
 		if err != nil && err != context.Canceled {
 			// Sending msg to dead letter queue.
