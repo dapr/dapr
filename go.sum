@@ -433,8 +433,8 @@ github.com/chebyrash/promise v0.0.0-20230709133807-42ec49ba1459/go.mod h1:CQthfP
 github.com/chzyer/logex v1.2.1/go.mod h1:JLbx6lG2kDbNRFnfkgvh4eRJRPX1QCoOIWomwysCBrQ=
 github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5PlCu98SY8svDHJxuZscDgtXS6KTTbou5AhLI=
 github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
-github.com/cicoyle/durabletask-go v0.0.0-20260428200909-ff8192a83da1 h1:AuXKcZwE6MILz8JHxjlJyXmN7OhV7CnzaMym/I+UAjo=
-github.com/cicoyle/durabletask-go v0.0.0-20260428200909-ff8192a83da1/go.mod h1:E8K+ZNckRktzI8YqB+jIHWOIu1jPiinjctS1e6t4BlE=
+github.com/cicoyle/durabletask-go v0.0.0-20260428211454-7938cf0908ae h1:tEwvvccIKV1VM5yJ6hle711n5C8vNgbo3m7guhUareA=
+github.com/cicoyle/durabletask-go v0.0.0-20260428211454-7938cf0908ae/go.mod h1:E8K+ZNckRktzI8YqB+jIHWOIu1jPiinjctS1e6t4BlE=
 github.com/cinience/go_rocketmq v0.0.2 h1:HZkcQ2wfwZeigkpUs71Gojp/WRiBzkz2uezrOFquh08=
 github.com/cinience/go_rocketmq v0.0.2/go.mod h1:2YNY7emT546dcFpMEWLesmAEi4ndW7+tX5VfNf1Zsgs=
 github.com/circonus-labs/circonus-gometrics v2.3.1+incompatible/go.mod h1:nmEj6Dob7S7YxXgwXpfOuvO54S+tGdZdw9fuRZt25Ag=
