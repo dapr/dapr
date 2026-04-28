@@ -143,6 +143,9 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 			// beforeCallTool middleware pipeline — may mutate arguments.
 			arguments, err := runBeforeCallTool(ctx, &server, serverName, input.ToolName, input.Arguments)
 			if err != nil {
+				// Return isError result (not a workflow failure) so the calling agent/LLM
+				// receives a structured error it can act on — retry, pick another tool, or
+				// inform the user — rather than a raw workflow failure with no content.
 				return errorResult("beforeCallTool: %s", err), nil
 			}
 

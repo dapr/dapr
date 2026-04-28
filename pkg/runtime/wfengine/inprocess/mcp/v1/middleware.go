@@ -24,6 +24,16 @@ import (
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 )
 
+// hookChildWorkflowOpts builds the CallChildWorkflow options for a middleware hook.
+// When the hook's AppID is set, the child workflow targets the remote app via service invocation.
+func hookChildWorkflowOpts(wf *mcpserverapi.MCPMiddlewareWorkflow, input any) []task.ChildWorkflowOption {
+	opts := []task.ChildWorkflowOption{task.WithChildWorkflowInput(input)}
+	if wf.AppID != nil && *wf.AppID != "" {
+		opts = append(opts, task.WithChildWorkflowAppID(*wf.AppID))
+	}
+	return opts
+}
+
 // runBeforeCallTool executes the beforeCallTool middleware pipeline in order.
 // If any hook returns an error, the chain stops and the error is returned.
 // When a hook has Mutate=true, its return value replaces the arguments flowing to subsequent hooks,
@@ -47,7 +57,7 @@ func runBeforeCallTool(
 			continue
 		}
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
-			task.WithChildWorkflowInput(input))
+			hookChildWorkflowOpts(hook.Workflow, input)...)
 		if hook.Mutate {
 			var mutated wfv1.MCPBeforeCallToolHookInput
 			if err := t.Await(&mutated); err != nil {
@@ -87,7 +97,7 @@ func runAfterCallTool(
 			continue
 		}
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
-			task.WithChildWorkflowInput(input))
+			hookChildWorkflowOpts(hook.Workflow, input)...)
 		if hook.Mutate {
 			var mutated wfv1.CallMCPToolResponse
 			if err := t.Await(&mutated); err != nil {
@@ -122,7 +132,7 @@ func runBeforeListTools(
 			continue
 		}
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
-			task.WithChildWorkflowInput(input))
+			hookChildWorkflowOpts(hook.Workflow, input)...)
 		if err := t.Await(nil); err != nil {
 			return err
 		}
@@ -148,7 +158,7 @@ func runAfterListTools(
 			continue
 		}
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
-			task.WithChildWorkflowInput(input))
+			hookChildWorkflowOpts(hook.Workflow, input)...)
 		if hook.Mutate {
 			var mutated wfv1.ListMCPToolsResponse
 			if err := t.Await(&mutated); err != nil {
