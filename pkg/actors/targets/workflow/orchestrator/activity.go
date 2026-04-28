@@ -65,6 +65,9 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	// Only wrap in the ActivityInvocation envelope when there is propagated history to carry.
 	var payload proto.Message = e
 	if ph != nil {
+		if o.signer == nil {
+			log.Warnf("Workflow actor '%s': propagating unsigned workflow history to activity '%s::%d' (signing is not configured; chunks cannot be cryptographically verified by the receiver)", o.actorID, ts.GetName(), e.GetEventId())
+		}
 		payload = &protos.ActivityInvocation{
 			HistoryEvent:      e,
 			PropagatedHistory: ph,

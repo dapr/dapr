@@ -161,16 +161,11 @@ func New(opts Options) (Interface, error) {
 		}
 	}
 
-	// There are separate "workers" for executing orchestrations (workflows) and activities
 	oworker := backend.NewWorkflowWorker(backend.WorkflowWorkerOptions{
 		Backend:  abackend,
 		Executor: executor,
 		Logger:   wfBackendLogger,
-		AppID: opts.AppID,
-		// Propagation is gated on signing being active. Propagated history
-		// must be verifiable at the receiver — without a signer, unsigned
-		// history provides no integrity guarantees, so we refuse to emit it.
-		PropagationEnabled: s != nil,
+		AppID:    opts.AppID,
 	}, topts...)
 
 	topts = nil

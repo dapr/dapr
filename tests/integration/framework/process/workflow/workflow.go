@@ -90,11 +90,9 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 
 	if sen != nil {
 		baseDopts = append(baseDopts, daprd.WithSentry(t, sen))
-		// Propagation is gated on history signing being active. Signing
-		// requires mTLS for the SPIFFE identity, so when this framework is
-		// configured with mTLS we also enable the WorkflowHistorySigning
-		// feature flag on every daprd — otherwise propagation silently
-		// stays off and every propagation test would fail the same way.
+		// Signing requires mTLS for the SPIFFE identity, so when this
+		// framework is configured with mTLS we also enable the
+		// WorkflowHistorySigning feature flag on every daprd.
 		baseDopts = append(baseDopts, daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:

@@ -35,6 +35,9 @@ func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, event
 	for i, msg := range events {
 		req := &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
 		if ph := msg.GetPropagatedHistory(); ph != nil {
+			if o.signer == nil {
+				log.Warnf("Workflow actor '%s': propagating unsigned workflow history to child workflow '%s' (signing is not configured; chunks cannot be cryptographically verified by the receiver)", o.actorID, msg.GetTargetInstanceId())
+			}
 			req.PropagatedHistory = ph
 		}
 		msgs[i] = req

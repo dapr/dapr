@@ -22,6 +22,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	procworkflow "github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -32,22 +34,30 @@ func init() {
 	suite.Register(new(nomtls))
 }
 
-// nomtls tests that history propagation is blocked when mTLS is disabled.
-// Even though the workflow configures WithHistoryPropagation(PropagateLineage()),
-// the child should receive nil propagated history because w/o mTLS the
-// runtime cannot sign/verify the history chain.
+// nomtls verifies that history propagation works in standalone mode without
+// mTLS / signing, and that the orchestrator logs a warning at every dispatch
+// so operators are aware the propagated chunks are unsigned. This unblocks
+// standalone deployments where mTLS is a pain to configure while still
+// surfacing the integrity-cannot-be-verified state in logs.
 type nomtls struct {
 	workflow *procworkflow.Workflow
+	logline  *logline.LogLine
 
 	childHistoryReceived atomic.Bool
 }
 
 func (n *nomtls) Setup(t *testing.T) []framework.Option {
+	n.logline = logline.New(t,
+		logline.WithStdoutLineContains("propagating unsigned workflow history"),
+	)
+
 	n.workflow = procworkflow.New(t,
 		procworkflow.WithDaprds(1),
+		procworkflow.WithDaprdOptions(0, daprd.WithLogLineStdout(n.logline)),
 	)
+
 	return []framework.Option{
-		framework.WithProcesses(n.workflow),
+		framework.WithProcesses(n.logline, n.workflow),
 	}
 }
 
@@ -56,14 +66,7 @@ func (n *nomtls) Run(t *testing.T, ctx context.Context) {
 
 	reg := n.workflow.Registry()
 
-	reg.AddActivityN("parentAct", func(ctx task.ActivityContext) (any, error) {
-		return "done", nil
-	})
-
 	reg.AddWorkflowN("parentWf", func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.CallActivity("parentAct").Await(nil); err != nil {
-			return nil, err
-		}
 		var result string
 		if err := ctx.CallChildWorkflow("childWf",
 			task.WithChildWorkflowInput("test"),
@@ -90,11 +93,12 @@ func (n *nomtls) Run(t *testing.T, ctx context.Context) {
 
 	metadata, err := client.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
-	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
+	require.True(t, api.WorkflowMetadataIsComplete(metadata))
 
-	// Child should NOT have received propagated history because mTLS is disabled
-	assert.False(t, n.childHistoryReceived.Load(),
-		"child should NOT receive propagated history when mTLS is disabled")
-	assert.Contains(t, metadata.GetOutput().GetValue(), "no-history",
-		"child should return 'no-history' since propagation is blocked without mTLS")
+	// Propagation works even without mTLS / signing.
+	assert.True(t, n.childHistoryReceived.Load(),
+		"child should receive propagated history even without mTLS / signing")
+	assert.Contains(t, metadata.GetOutput().GetValue(), "has-history",
+		"child should observe propagated history (chunks are still emitted, just unsigned)")
+	n.logline.EventuallyFoundAll(t)
 }

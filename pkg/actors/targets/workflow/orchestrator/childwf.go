@@ -64,6 +64,9 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 			StartEvent: startEvent,
 		}
 		if ph := outgoingHistory[e.GetEventId()]; ph != nil {
+			if o.signer == nil {
+				log.Warnf("Workflow actor '%s': propagating unsigned workflow history to child workflow '%s' (signing is not configured; chunks cannot be cryptographically verified by the receiver)", o.actorID, createSO.GetInstanceId())
+			}
 			createReq.PropagatedHistory = ph
 		}
 
