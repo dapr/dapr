@@ -79,11 +79,12 @@ type Options struct {
 	ComponentStore *compstore.ComponentStore
 
 	// XNSDispatcher performs the sidecar-to-sidecar service-invocation hop
-	// for cross-namespace workflow and activity calls. When nil, cross-ns
-	// dispatch reminders that fire will error out. Runtime sets this to a
-	// xns.Dispatcher when WorkflowCrossNamespace is enabled, and xns.Deny
-	// when disabled so misconfigured cross-ns HistoryEvents fail fast
-	// instead of retrying forever.
+	// for cross-namespace workflow and activity calls. The runtime wires
+	// an xns.Dispatcher when the WorkflowAccessPolicy feature is enabled
+	// (which is the same gate that authorizes cross-namespace ingress on
+	// the target side). When nil, an xns-dispatch reminder that fires
+	// returns an error and the failure policy retries — callers should
+	// only emit cross-ns HistoryEvents when a dispatcher is wired.
 	XNSDispatcher orchestrator.XNSDispatcher
 
 	// experimental feature

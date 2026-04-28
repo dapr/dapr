@@ -133,7 +133,7 @@ type WorkflowCaller struct {
 
 	// Namespace is the Dapr namespace of the caller. When nil, the rule
 	// matches callers running in the same namespace as this policy.
-	// Cross-namespace rules are only evaluated when the WorkflowCrossNamespace
+	// Cross-namespace rules are only evaluated when the WorkflowAccessPolicy
 	// feature is enabled; otherwise they are ignored at compile time.
 	// +optional
 	Namespace *string `json:"namespace,omitempty"`

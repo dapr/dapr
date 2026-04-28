@@ -94,7 +94,7 @@ func (a *Universal) Namespace() string {
 }
 
 // GlobalConfig returns the runtime configuration. Used by enforcement paths
-// that need to check feature flags (e.g. WorkflowCrossNamespace).
+// that need to check feature flags (e.g. WorkflowAccessPolicy).
 func (a *Universal) GlobalConfig() *config.Configuration {
 	return a.globalConfig
 }
