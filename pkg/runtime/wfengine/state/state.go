@@ -698,10 +698,9 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	if len(bulkRes[propagatedHistoryKey]) > 0 {
 		var ph protos.PropagatedHistory
 		if err = proto.Unmarshal(bulkRes[propagatedHistoryKey], &ph); err != nil {
-			wfLogger.Warnf("Failed to unmarshal propagated history for '%s': %v", actorID, err)
-		} else {
-			wState.IncomingHistory = &ph
+			return nil, fmt.Errorf("failed to unmarshal propagated history for '%s': %w", actorID, err)
 		}
+		wState.IncomingHistory = &ph
 	}
 
 	wfLogger.Debugf("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))
