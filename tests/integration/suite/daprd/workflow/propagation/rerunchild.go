@@ -42,8 +42,8 @@ type rerunchild struct {
 	workflow *procworkflow.Workflow
 
 	childSawHist       atomic.Bool
-	childEventLen      atomic.Int32
-	chunkCount         atomic.Int32
+	childEventLen      atomic.Int64
+	chunkCount         atomic.Int64
 	parentName         atomic.Value
 	parentAppID        atomic.Value
 	parentInstanceID   atomic.Value
@@ -84,10 +84,9 @@ func (r *rerunchild) Run(t *testing.T, ctx context.Context) {
 			return "child-done", nil
 		}
 		r.childSawHist.Store(true)
-		r.childEventLen.Store(int32(len(ph.Events())))
-
+		r.childEventLen.Store(int64(len(ph.Events())))
 		workflows := ph.GetWorkflows()
-		r.chunkCount.Store(int32(len(workflows)))
+		r.chunkCount.Store(int64(len(workflows)))
 		if len(workflows) > 0 {
 			r.parentName.Store(workflows[0].Name)
 			r.parentAppID.Store(workflows[0].AppID)
@@ -121,7 +120,7 @@ func (r *rerunchild) Run(t *testing.T, ctx context.Context) {
 
 	require.True(t, r.childSawHist.Load(), "child should receive propagated history on original execution")
 	require.Positive(t, r.childEventLen.Load())
-	require.Equal(t, int32(1), r.chunkCount.Load(), "original run should have exactly one chunk (the parent's own events)")
+	require.Equal(t, int64(1), r.chunkCount.Load(), "original run should have exactly one chunk (the parent's own events)")
 	assert.Equal(t, "parent", r.parentName.Load(), "original chunk should be tagged with parent workflow name")
 	assert.Equal(t, workflowAppID, r.parentAppID.Load(), "original chunk should be tagged with the test app's appID")
 	assert.Equal(t, string(id), r.parentInstanceID.Load(), "original chunk's instanceID should match the original parent id")
@@ -141,7 +140,7 @@ func (r *rerunchild) Run(t *testing.T, ctx context.Context) {
 
 	require.True(t, r.childSawHist.Load(), "child should receive propagated history on rerun (re-driven dispatch)")
 	require.Positive(t, r.childEventLen.Load(), "rerun propagated history should be non-empty")
-	require.Equal(t, int32(1), r.chunkCount.Load(), "rerun should have exactly one chunk (the rerunning parent's events)")
+	require.Equal(t, int64(1), r.chunkCount.Load(), "rerun should have exactly one chunk (the rerunning parent's events)")
 	assert.Equal(t, "parent", r.parentName.Load(), "rerun chunk should still be tagged with parent workflow name")
 	assert.Equal(t, workflowAppID, r.parentAppID.Load(), "rerun chunk should be tagged with the test app's appID")
 	assert.Equal(t, string(newID), r.parentInstanceID.Load(), "rerun chunk's instanceID should match the rerun parent id (distinct from original)")

@@ -42,8 +42,8 @@ type chunks struct {
 	workflow *procworkflow.Workflow
 
 	childHistoryReceived atomic.Bool
-	childTotalEvents     atomic.Int32
-	childChunkCount      atomic.Int32
+	childTotalEvents     atomic.Int64
+	childChunkCount      atomic.Int64
 
 	app0Chunks atomic.Value
 	app0AppIDs atomic.Value
@@ -92,10 +92,9 @@ func (c *chunks) Run(t *testing.T, ctx context.Context) {
 		}
 
 		c.childHistoryReceived.Store(true)
-		c.childTotalEvents.Store(int32(len(ph.Events()))) //nolint:gosec
+		c.childTotalEvents.Store(int64(len(ph.Events())))
 		workflows := ph.GetWorkflows()
-		c.childChunkCount.Store(int32(len(workflows))) //nolint:gosec
-
+		c.childChunkCount.Store(int64(len(workflows)))
 		c.app0Chunks.Store(workflows)
 		c.app0AppIDs.Store(ph.GetAppIDs())
 
@@ -114,9 +113,9 @@ func (c *chunks) Run(t *testing.T, ctx context.Context) {
 	require.True(t, c.childHistoryReceived.Load(), "child should have received propagated history")
 
 	// App0's history: 6 events
-	require.Equal(t, int32(6), c.childTotalEvents.Load(), "child should receive 6 events from App0")
+	require.Equal(t, int64(6), c.childTotalEvents.Load(), "child should receive 6 events from App0")
 	// Should have exactly 1 chunk — App0's events
-	require.Equal(t, int32(1), c.childChunkCount.Load(), "should have 1 chunk (App0 only)")
+	require.Equal(t, int64(1), c.childChunkCount.Load(), "should have 1 chunk (App0 only)")
 	app0Chunks, _ := c.app0Chunks.Load().([]*api.WorkflowResult)
 	app0AppIDs, _ := c.app0AppIDs.Load().([]string)
 	require.Len(t, app0Chunks, 1)

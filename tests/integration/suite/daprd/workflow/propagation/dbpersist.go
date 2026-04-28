@@ -121,7 +121,7 @@ func (d *dbpersist) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, string(parentID), chunk.GetInstanceId(), "chunk.InstanceId should equal parent's workflow ID")
 		assert.Equal(t, parentAppID, chunk.GetAppId(), "chunk.AppId should equal parent's Dapr app ID")
 		assert.Equal(t, int32(0), chunk.GetStartEventIndex(), "chunk.StartEventIndex should be 0")
-		assert.Equal(t, int32(len(ph.GetEvents())), chunk.GetEventCount(),
+		assert.Equal(t, int32(len(ph.GetEvents())), chunk.GetEventCount(), //nolint:gosec
 			"chunk.EventCount should match the number of persisted events")
 
 		require.Len(t, ph.GetEvents(), 6,

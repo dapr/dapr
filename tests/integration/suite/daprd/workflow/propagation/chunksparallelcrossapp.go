@@ -41,16 +41,16 @@ type chunksparallelcrossapp struct {
 
 	// App1's child
 	app1HistoryReceived atomic.Bool
-	app1TotalEvents     atomic.Int32
-	app1ChunkCount      atomic.Int32
+	app1TotalEvents     atomic.Int64
+	app1ChunkCount      atomic.Int64
 	app1Chunks          atomic.Value
 	app1AppIDs          atomic.Value
 	app1HasAct          atomic.Bool
 
 	// App2's child
 	app2HistoryReceived atomic.Bool
-	app2TotalEvents     atomic.Int32
-	app2ChunkCount      atomic.Int32
+	app2TotalEvents     atomic.Int64
+	app2ChunkCount      atomic.Int64
 	app2Chunks          atomic.Value
 	app2AppIDs          atomic.Value
 	app2HasAct          atomic.Bool
@@ -111,10 +111,9 @@ func (c *chunksparallelcrossapp) Run(t *testing.T, ctx context.Context) {
 		}
 
 		c.app1HistoryReceived.Store(true)
-		c.app1TotalEvents.Store(int32(len(ph.Events())))
+		c.app1TotalEvents.Store(int64(len(ph.Events())))
 		workflows := ph.GetWorkflows()
-		c.app1ChunkCount.Store(int32(len(workflows)))
-
+		c.app1ChunkCount.Store(int64(len(workflows)))
 		for _, e := range ph.Events() {
 			if ts := e.GetTaskScheduled(); ts != nil && ts.GetName() == "app0Act" {
 				c.app1HasAct.Store(true)
@@ -135,10 +134,9 @@ func (c *chunksparallelcrossapp) Run(t *testing.T, ctx context.Context) {
 		}
 
 		c.app2HistoryReceived.Store(true)
-		c.app2TotalEvents.Store(int32(len(ph.Events())))
+		c.app2TotalEvents.Store(int64(len(ph.Events())))
 		workflows2 := ph.GetWorkflows()
-		c.app2ChunkCount.Store(int32(len(workflows2)))
-
+		c.app2ChunkCount.Store(int64(len(workflows2)))
 		for _, e := range ph.Events() {
 			if ts := e.GetTaskScheduled(); ts != nil && ts.GetName() == "app0Act" {
 				c.app2HasAct.Store(true)
@@ -164,7 +162,7 @@ func (c *chunksparallelcrossapp) Run(t *testing.T, ctx context.Context) {
 
 	// App1
 	assert.True(t, c.app1HistoryReceived.Load(), "App1 should have received propagated history")
-	assert.Equal(t, int32(1), c.app1ChunkCount.Load(), "App1 should have 1 chunk (App0)")
+	assert.Equal(t, int64(1), c.app1ChunkCount.Load(), "App1 should have 1 chunk (App0)")
 	assert.True(t, c.app1HasAct.Load(), "App1 should see app0Act")
 	app1Chunks, _ := c.app1Chunks.Load().([]*api.WorkflowResult)
 	app1AppIDs, _ := c.app1AppIDs.Load().([]string)
@@ -176,7 +174,7 @@ func (c *chunksparallelcrossapp) Run(t *testing.T, ctx context.Context) {
 
 	// App2 assertions
 	assert.True(t, c.app2HistoryReceived.Load(), "App2 should have received propagated history")
-	assert.Equal(t, int32(1), c.app2ChunkCount.Load(), "App2 should have 1 chunk (App0)")
+	assert.Equal(t, int64(1), c.app2ChunkCount.Load(), "App2 should have 1 chunk (App0)")
 	assert.True(t, c.app2HasAct.Load(), "App2 should see app0Act")
 	app2Chunks, _ := c.app2Chunks.Load().([]*api.WorkflowResult)
 	app2AppIDs, _ := c.app2AppIDs.Load().([]string)
@@ -186,8 +184,8 @@ func (c *chunksparallelcrossapp) Run(t *testing.T, ctx context.Context) {
 	require.Len(t, app2AppIDs, 1)
 	assert.Equal(t, app0AppID, app2AppIDs[0])
 
-	assert.GreaterOrEqual(t, c.app1TotalEvents.Load(), int32(6),
+	assert.GreaterOrEqual(t, c.app1TotalEvents.Load(), int64(6),
 		"App1 should receive at least 6 events from App0")
-	assert.GreaterOrEqual(t, c.app2TotalEvents.Load(), int32(6),
+	assert.GreaterOrEqual(t, c.app2TotalEvents.Load(), int64(6),
 		"App2 should receive at least 6 events from App0")
 }

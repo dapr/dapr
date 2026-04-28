@@ -40,9 +40,9 @@ type multiapplineage struct {
 	workflow *procworkflow.Workflow
 
 	app2HistoryReceived atomic.Bool
-	app2TotalEvents     atomic.Int32
-	app2App0ActCount    atomic.Int32
-	app2App1ActCount    atomic.Int32
+	app2TotalEvents     atomic.Int64
+	app2App0ActCount    atomic.Int64
+	app2App1ActCount    atomic.Int64
 }
 
 func (m *multiapplineage) Setup(t *testing.T) []framework.Option {
@@ -109,8 +109,7 @@ func (m *multiapplineage) Run(t *testing.T, ctx context.Context) {
 		}
 
 		m.app2HistoryReceived.Store(true)
-		m.app2TotalEvents.Store(int32(len(ph.Events())))
-
+		m.app2TotalEvents.Store(int64(len(ph.Events())))
 		for _, e := range ph.Events() {
 			if ts := e.GetTaskScheduled(); ts != nil {
 				switch ts.GetName() {
@@ -155,7 +154,7 @@ func (m *multiapplineage) Run(t *testing.T, ctx context.Context) {
 	//     [9] WorkflowStarted                — App1 replays after app1Act completes
 	//     [10] TaskCompleted                  — app1Act result
 	//     [11] ChildWorkflowInstanceCreated   — App1 creates leafWf on App2
-	assert.Equal(t, int32(12), m.app2TotalEvents.Load(), "App2 should receive 12 events: 6 from App0 (ancestor) + 6 from App1 (own)")
-	assert.Equal(t, int32(1), m.app2App0ActCount.Load(), "App2 should see app0Act from App0 (via lineage through App1)")
-	assert.Equal(t, int32(1), m.app2App1ActCount.Load(), "App2 should see app1Act from App1's own history")
+	assert.Equal(t, int64(12), m.app2TotalEvents.Load(), "App2 should receive 12 events: 6 from App0 (ancestor) + 6 from App1 (own)")
+	assert.Equal(t, int64(1), m.app2App0ActCount.Load(), "App2 should see app0Act from App0 (via lineage through App1)")
+	assert.Equal(t, int64(1), m.app2App1ActCount.Load(), "App2 should see app1Act from App1's own history")
 }

@@ -39,9 +39,9 @@ type activitylineage struct {
 	workflow *procworkflow.Workflow
 
 	historyReceived atomic.Bool
-	totalEvents     atomic.Int32
-	actACount       atomic.Int32
-	actBCount       atomic.Int32
+	totalEvents     atomic.Int64
+	actACount       atomic.Int64
+	actBCount       atomic.Int64
 }
 
 func (al *activitylineage) Setup(t *testing.T) []framework.Option {
@@ -108,7 +108,7 @@ func (al *activitylineage) Run(t *testing.T, ctx context.Context) {
 		}
 
 		al.historyReceived.Store(true)
-		al.totalEvents.Store(int32(len(ph.Events()))) //nolint:gosec
+		al.totalEvents.Store(int64(len(ph.Events())))
 		for _, e := range ph.Events() {
 			if ts := e.GetTaskScheduled(); ts != nil {
 				switch ts.GetName() {
@@ -149,7 +149,7 @@ func (al *activitylineage) Run(t *testing.T, ctx context.Context) {
 	//     [9] WorkflowStarted                — B replays after actB completes
 	//     [10] TaskCompleted                  — actB result
 	//     [11] TaskScheduled("receiver")      — the receiver activity being scheduled
-	assert.Equal(t, int32(12), al.totalEvents.Load(), "activity should receive 12 events: 6 from A (ancestor) + 6 from B (own)")
-	assert.Equal(t, int32(1), al.actACount.Load(), "receiver should see actA from A's history (forwarded via lineage through B)")
-	assert.Equal(t, int32(1), al.actBCount.Load(), "receiver should see actB from B's own history")
+	assert.Equal(t, int64(12), al.totalEvents.Load(), "activity should receive 12 events: 6 from A (ancestor) + 6 from B (own)")
+	assert.Equal(t, int64(1), al.actACount.Load(), "receiver should see actA from A's history (forwarded via lineage through B)")
+	assert.Equal(t, int64(1), al.actBCount.Load(), "receiver should see actB from B's own history")
 }

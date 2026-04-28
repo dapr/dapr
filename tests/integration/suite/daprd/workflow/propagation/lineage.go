@@ -38,9 +38,9 @@ func init() {
 type lineage struct {
 	workflow *procworkflow.Workflow
 
-	totalEvents atomic.Int32
-	actACount   atomic.Int32
-	actBCount   atomic.Int32
+	totalEvents atomic.Int64
+	actACount   atomic.Int64
+	actBCount   atomic.Int64
 }
 
 func (l *lineage) Setup(t *testing.T) []framework.Option {
@@ -98,7 +98,7 @@ func (l *lineage) Run(t *testing.T, ctx context.Context) {
 			return "no history", nil //nolint:goconst
 		}
 
-		l.totalEvents.Store(int32(len(ph.Events())))
+		l.totalEvents.Store(int64(len(ph.Events())))
 		for _, e := range ph.Events() {
 			if ts := e.GetTaskScheduled(); ts != nil {
 				switch ts.GetName() {
@@ -146,7 +146,7 @@ func (l *lineage) Run(t *testing.T, ctx context.Context) {
 	//     [9] WorkflowStarted                — B replays after actB completes
 	//     [10] TaskCompleted                  — actB result
 	//     [11] ChildWorkflowInstanceCreated   — B creates C
-	assert.Equal(t, int32(12), l.totalEvents.Load(), "C should receive 12 events: 6 from A (ancestor) + 6 from B (own)")
-	assert.Equal(t, int32(1), l.actACount.Load(), "C should see actA from A's history (forwarded via lineage through B)")
-	assert.Equal(t, int32(1), l.actBCount.Load(), "C should see actB from B's own history")
+	assert.Equal(t, int64(12), l.totalEvents.Load(), "C should receive 12 events: 6 from A (ancestor) + 6 from B (own)")
+	assert.Equal(t, int64(1), l.actACount.Load(), "C should see actA from A's history (forwarded via lineage through B)")
+	assert.Equal(t, int64(1), l.actBCount.Load(), "C should see actB from B's own history")
 }

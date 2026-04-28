@@ -39,13 +39,13 @@ type chunkstrustboundary struct {
 	workflow *procworkflow.Workflow
 
 	leafHistoryReceived atomic.Bool
-	leafTotalEvents     atomic.Int32
-	leafChunkCount      atomic.Int32
+	leafTotalEvents     atomic.Int64
+	leafChunkCount      atomic.Int64
 
 	leafChunks     atomic.Value
 	leafAppIDs     atomic.Value
-	eventCountApp0 atomic.Int32
-	eventCountApp1 atomic.Int32
+	eventCountApp0 atomic.Int64
+	eventCountApp1 atomic.Int64
 	leafHasApp0Act atomic.Bool
 	leafHasApp1Act atomic.Bool
 }
@@ -115,18 +115,16 @@ func (c *chunkstrustboundary) Run(t *testing.T, ctx context.Context) {
 		}
 
 		c.leafHistoryReceived.Store(true)
-		c.leafTotalEvents.Store(int32(len(ph.Events())))
+		c.leafTotalEvents.Store(int64(len(ph.Events())))
 		workflows := ph.GetWorkflows()
-		c.leafChunkCount.Store(int32(len(workflows)))
-
+		c.leafChunkCount.Store(int64(len(workflows)))
 		c.leafChunks.Store(workflows)
 		c.leafAppIDs.Store(ph.GetAppIDs())
 
 		app0Events := ph.GetEventsByAppID(app0AppID)
 		app1Events := ph.GetEventsByAppID(app1AppID)
-		c.eventCountApp0.Store(int32(len(app0Events)))
-		c.eventCountApp1.Store(int32(len(app1Events)))
-
+		c.eventCountApp0.Store(int64(len(app0Events)))
+		c.eventCountApp1.Store(int64(len(app1Events)))
 		for _, e := range app0Events {
 			if ts := e.GetTaskScheduled(); ts != nil && ts.GetName() == "app0Act" {
 				c.leafHasApp0Act.Store(true)
@@ -154,10 +152,10 @@ func (c *chunkstrustboundary) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, c.leafHistoryReceived.Load(), "App2 should have received propagated history")
 
 	// Only App1's events (6 events), NOT App0's
-	assert.Equal(t, int32(6), c.leafTotalEvents.Load(), "App2 should receive 6 events from App1 only")
+	assert.Equal(t, int64(6), c.leafTotalEvents.Load(), "App2 should receive 6 events from App1 only")
 
 	// Only 1 chunk, App1's events (App0's chunk excluded by trust boundary)
-	assert.Equal(t, int32(1), c.leafChunkCount.Load(), "should have 1 chunk (App1 only, trust boundary excludes App0)")
+	assert.Equal(t, int64(1), c.leafChunkCount.Load(), "should have 1 chunk (App1 only, trust boundary excludes App0)")
 	leafChunks, _ := c.leafChunks.Load().([]*api.WorkflowResult)
 	leafAppIDs, _ := c.leafAppIDs.Load().([]string)
 
@@ -168,8 +166,8 @@ func (c *chunkstrustboundary) Run(t *testing.T, ctx context.Context) {
 	require.Len(t, leafAppIDs, 1, "expected 1 app ID")
 	assert.Equal(t, app1AppID, leafAppIDs[0], "only App1 should be in the chain")
 
-	assert.Equal(t, int32(0), c.eventCountApp0.Load(), "EventsByAppID(App0) should return 0 events (trust boundary)")
-	assert.Equal(t, int32(6), c.eventCountApp1.Load(), "EventsByAppID(App1) should return 6 events")
+	assert.Equal(t, int64(0), c.eventCountApp0.Load(), "EventsByAppID(App0) should return 0 events (trust boundary)")
+	assert.Equal(t, int64(6), c.eventCountApp1.Load(), "EventsByAppID(App1) should return 6 events")
 
 	// App0's activity should NOT be visible
 	assert.False(t, c.leafHasApp0Act.Load(), "App0's app0Act should NOT be visible (trust boundary)")

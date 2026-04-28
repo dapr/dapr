@@ -38,12 +38,12 @@ func init() {
 type childworkflow struct {
 	workflow *procworkflow.Workflow
 
-	totalEvents        atomic.Int32
-	taskScheduledCount atomic.Int32
-	taskCompletedCount atomic.Int32
-	cwfCreatedCount    atomic.Int32
-	wfStartedCount     atomic.Int32
-	execStartedCount   atomic.Int32
+	totalEvents        atomic.Int64
+	taskScheduledCount atomic.Int64
+	taskCompletedCount atomic.Int64
+	cwfCreatedCount    atomic.Int64
+	wfStartedCount     atomic.Int64
+	execStartedCount   atomic.Int64
 	historyReceived    atomic.Bool
 }
 
@@ -84,7 +84,7 @@ func (c *childworkflow) Run(t *testing.T, ctx context.Context) {
 		}
 
 		c.historyReceived.Store(true)
-		c.totalEvents.Store(int32(len(ph.Events()))) //nolint:gosec
+		c.totalEvents.Store(int64(len(ph.Events())))
 		for _, e := range ph.Events() {
 			switch {
 			case e.GetTaskScheduled() != nil:
@@ -128,10 +128,10 @@ func (c *childworkflow) Run(t *testing.T, ctx context.Context) {
 	//     [3] WorkflowStarted                — orchestrator replays for second execution
 	//     [4] TaskCompleted                   — greet activity result
 	//     [5] ChildWorkflowInstanceCreated    — parent creates this child wf
-	assert.Equal(t, int32(6), c.totalEvents.Load(), "child should receive exactly 6 events from parent")
-	assert.Equal(t, int32(2), c.wfStartedCount.Load(), "2 WorkflowStarted: initial + replay after greet completes")
-	assert.Equal(t, int32(1), c.execStartedCount.Load(), "1 ExecutionStarted: parent's workflow metadata")
-	assert.Equal(t, int32(1), c.taskScheduledCount.Load(), "1 TaskScheduled: the greet activity")
-	assert.Equal(t, int32(1), c.taskCompletedCount.Load(), "1 TaskCompleted: greet activity result")
-	assert.Equal(t, int32(1), c.cwfCreatedCount.Load(), "1 ChildWorkflowInstanceCreated: this child workflow")
+	assert.Equal(t, int64(6), c.totalEvents.Load(), "child should receive exactly 6 events from parent")
+	assert.Equal(t, int64(2), c.wfStartedCount.Load(), "2 WorkflowStarted: initial + replay after greet completes")
+	assert.Equal(t, int64(1), c.execStartedCount.Load(), "1 ExecutionStarted: parent's workflow metadata")
+	assert.Equal(t, int64(1), c.taskScheduledCount.Load(), "1 TaskScheduled: the greet activity")
+	assert.Equal(t, int64(1), c.taskCompletedCount.Load(), "1 TaskCompleted: greet activity result")
+	assert.Equal(t, int64(1), c.cwfCreatedCount.Load(), "1 ChildWorkflowInstanceCreated: this child workflow")
 }

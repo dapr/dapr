@@ -41,10 +41,10 @@ func init() {
 type rerun struct {
 	workflow *procworkflow.Workflow
 
-	activityRuns      atomic.Int32
+	activityRuns      atomic.Int64
 	activitySawHist   atomic.Bool
-	activityEventsLen atomic.Int32
-	chunkCount        atomic.Int32
+	activityEventsLen atomic.Int64
+	chunkCount        atomic.Int64
 	chunkName         atomic.Value
 	chunkAppID        atomic.Value
 	chunkInstanceID   atomic.Value
@@ -86,10 +86,9 @@ func (r *rerun) Run(t *testing.T, ctx context.Context) {
 			return "ok", nil
 		}
 		r.activitySawHist.Store(true)
-		r.activityEventsLen.Store(int32(len(ph.Events())))
-
+		r.activityEventsLen.Store(int64(len(ph.Events())))
 		workflows := ph.GetWorkflows()
-		r.chunkCount.Store(int32(len(workflows)))
+		r.chunkCount.Store(int64(len(workflows)))
 		if len(workflows) > 0 {
 			r.chunkName.Store(workflows[0].Name)
 			r.chunkAppID.Store(workflows[0].AppID)
@@ -120,10 +119,10 @@ func (r *rerun) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	require.Equal(t, int32(1), r.activityRuns.Load(), "activity should run once on original execution")
+	require.Equal(t, int64(1), r.activityRuns.Load(), "activity should run once on original execution")
 	require.True(t, r.activitySawHist.Load(), "activity should receive propagated history on original execution")
 	require.Positive(t, r.activityEventsLen.Load(), "original propagated history should be non-empty")
-	require.Equal(t, int32(1), r.chunkCount.Load(), "original run should have exactly one chunk (the parent's own events)")
+	require.Equal(t, int64(1), r.chunkCount.Load(), "original run should have exactly one chunk (the parent's own events)")
 	assert.Equal(t, "parent", r.chunkName.Load(), "original chunk should be tagged with workflow name 'parent'")
 	assert.Equal(t, workflowAppID, r.chunkAppID.Load(), "original chunk should be tagged with the test app's appID")
 	assert.Equal(t, string(id), r.chunkInstanceID.Load(), "original chunk's instanceID should match the original workflow id")
@@ -143,10 +142,10 @@ func (r *rerun) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 
-	require.Equal(t, int32(1), r.activityRuns.Load(), "activity should run once on rerun")
+	require.Equal(t, int64(1), r.activityRuns.Load(), "activity should run once on rerun")
 	require.True(t, r.activitySawHist.Load(), "activity should receive propagated history on rerun (re-driven dispatch)")
 	require.Positive(t, r.activityEventsLen.Load(), "rerun propagated history should be non-empty")
-	require.Equal(t, int32(1), r.chunkCount.Load(), "rerun should have exactly one chunk (the rerunning workflow's own events)")
+	require.Equal(t, int64(1), r.chunkCount.Load(), "rerun should have exactly one chunk (the rerunning workflow's own events)")
 	assert.Equal(t, "parent", r.chunkName.Load(), "rerun chunk should still be tagged with workflow name 'parent'")
 	assert.Equal(t, workflowAppID, r.chunkAppID.Load(), "rerun chunk should be tagged with the test app's appID")
 	assert.Equal(t, string(newID), r.chunkInstanceID.Load(), "rerun chunk's instanceID should match the rerun workflow id (distinct from original)")

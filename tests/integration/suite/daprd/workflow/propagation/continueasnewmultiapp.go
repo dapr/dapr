@@ -44,7 +44,7 @@ type continueasnewmultiapp struct {
 	app0AppID      string
 	gen1SawApp0    atomic.Bool
 	gen2SawHistory atomic.Bool
-	gen2EventCount atomic.Int32
+	gen2EventCount atomic.Int64
 	gen2SawApp0    atomic.Bool
 	gen2SawGen1    atomic.Bool
 }
@@ -112,7 +112,7 @@ func (c *continueasnewmultiapp) Run(t *testing.T, ctx context.Context) {
 		}
 
 		c.gen2SawHistory.Store(true)
-		c.gen2EventCount.Store(int32(len(ph.Events())))
+		c.gen2EventCount.Store(int64(len(ph.Events())))
 		for _, chunk := range ph.GetWorkflows() {
 			if chunk.AppID == c.app0AppID {
 				c.gen2SawApp0.Store(true)

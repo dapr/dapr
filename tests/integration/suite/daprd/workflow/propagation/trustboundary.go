@@ -39,9 +39,9 @@ func init() {
 type trustboundary struct {
 	workflow *workflow.Workflow
 
-	totalEvents atomic.Int32
-	actACount   atomic.Int32
-	actBCount   atomic.Int32
+	totalEvents atomic.Int64
+	actACount   atomic.Int64
+	actBCount   atomic.Int64
 }
 
 func (tb *trustboundary) Setup(t *testing.T) []framework.Option {
@@ -94,7 +94,7 @@ func (tb *trustboundary) Run(t *testing.T, ctx context.Context) {
 			return "no history", nil
 		}
 
-		tb.totalEvents.Store(int32(len(ph.Events())))
+		tb.totalEvents.Store(int64(len(ph.Events())))
 		for _, e := range ph.Events() {
 			if ts := e.GetTaskScheduled(); ts != nil {
 				switch ts.GetName() {
@@ -135,7 +135,7 @@ func (tb *trustboundary) Run(t *testing.T, ctx context.Context) {
 	//     [3] WorkflowStarted                — B replays after actB completes
 	//     [4] TaskCompleted                   — actB result
 	//     [5] ChildWorkflowInstanceCreated    — B creates C
-	assert.Equal(t, int32(6), tb.totalEvents.Load(), "C should receive 6 events: only B's own history (trust boundary)")
-	assert.Equal(t, int32(0), tb.actACount.Load(), "C should NOT see actA — OwnHistory blocks ancestor events (trust boundary)")
-	assert.Equal(t, int32(1), tb.actBCount.Load(), "C should see actB from B's own history")
+	assert.Equal(t, int64(6), tb.totalEvents.Load(), "C should receive 6 events: only B's own history (trust boundary)")
+	assert.Equal(t, int64(0), tb.actACount.Load(), "C should NOT see actA — OwnHistory blocks ancestor events (trust boundary)")
+	assert.Equal(t, int64(1), tb.actBCount.Load(), "C should see actB from B's own history")
 }

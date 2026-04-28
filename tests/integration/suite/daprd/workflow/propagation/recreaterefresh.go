@@ -116,6 +116,7 @@ func countPropagatedHistoryRows(t *testing.T, ctx context.Context, wf *procworkf
 
 	likePattern := `%` + escapeLike(instanceID) + `%propagated-history`
 	rows, err := db.QueryContext(ctx,
+		//nolint:gosec
 		"SELECT key FROM "+tableName+
 			` WHERE key LIKE ? ESCAPE '\'`, likePattern)
 	require.NoError(t, err)

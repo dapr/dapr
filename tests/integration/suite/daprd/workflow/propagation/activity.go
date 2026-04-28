@@ -40,11 +40,11 @@ type activity struct {
 	workflow *procworkflow.Workflow
 
 	historyReceived    atomic.Bool
-	totalEvents        atomic.Int32
-	taskScheduledCount atomic.Int32
-	taskCompletedCount atomic.Int32
-	wfStartedCount     atomic.Int32
-	execStartedCount   atomic.Int32
+	totalEvents        atomic.Int64
+	taskScheduledCount atomic.Int64
+	taskCompletedCount atomic.Int64
+	wfStartedCount     atomic.Int64
+	execStartedCount   atomic.Int64
 }
 
 func (a *activity) Setup(t *testing.T) []framework.Option {
@@ -91,7 +91,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 		}
 
 		a.historyReceived.Store(true)
-		a.totalEvents.Store(int32(len(ph.Events()))) //nolint:gosec
+		a.totalEvents.Store(int64(len(ph.Events())))
 		for _, e := range ph.Events() {
 			switch {
 			case e.GetTaskScheduled() != nil:
@@ -127,9 +127,9 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 	//     [3] WorkflowStarted                 — orchestrator replays for second execution
 	//     [4] TaskCompleted                   — step1 result
 	//     [5] TaskScheduled("receiver")       — the receiver activity itself being scheduled
-	assert.Equal(t, int32(6), a.totalEvents.Load(), "activity should receive exactly 6 events from parent workflow")
-	assert.Equal(t, int32(2), a.wfStartedCount.Load(), "2 WorkflowStarted: initial + replay after step1 completes")
-	assert.Equal(t, int32(1), a.execStartedCount.Load(), "1 ExecutionStarted: workflow metadata")
-	assert.Equal(t, int32(2), a.taskScheduledCount.Load(), "2 TaskScheduled: step1 + receiver (itself)")
-	assert.Equal(t, int32(1), a.taskCompletedCount.Load(), "1 TaskCompleted: step1 result")
+	assert.Equal(t, int64(6), a.totalEvents.Load(), "activity should receive exactly 6 events from parent workflow")
+	assert.Equal(t, int64(2), a.wfStartedCount.Load(), "2 WorkflowStarted: initial + replay after step1 completes")
+	assert.Equal(t, int64(1), a.execStartedCount.Load(), "1 ExecutionStarted: workflow metadata")
+	assert.Equal(t, int64(2), a.taskScheduledCount.Load(), "2 TaskScheduled: step1 + receiver (itself)")
+	assert.Equal(t, int64(1), a.taskCompletedCount.Load(), "1 TaskCompleted: step1 result")
 }

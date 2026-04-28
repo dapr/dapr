@@ -169,7 +169,7 @@ func (d *dbpersisttrustboundary) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, app1AppID, chunk.GetAppId(), "chunk.AppId should be App1, not App0")
 		assert.Equal(t, "middleWf", chunk.GetWorkflowName(), "chunk.WorkflowName should be middleWf, not rootWf")
 		assert.Equal(t, int32(0), chunk.GetStartEventIndex(), "chunk.StartEventIndex")
-		assert.Equal(t, int32(len(ph.GetEvents())), chunk.GetEventCount(),
+		assert.Equal(t, int32(len(ph.GetEvents())), chunk.GetEventCount(), //nolint:gosec
 			"chunk.EventCount should match events length")
 
 		// No App0 chunk leaked

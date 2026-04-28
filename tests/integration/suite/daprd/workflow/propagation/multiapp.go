@@ -40,8 +40,8 @@ type multiapp struct {
 	workflow *procworkflow.Workflow
 
 	childHistoryReceived atomic.Bool
-	childTotalEvents     atomic.Int32
-	childTaskCount       atomic.Int32
+	childTotalEvents     atomic.Int64
+	childTaskCount       atomic.Int64
 	childHasLocalAct     atomic.Bool
 	childHasRemoteAct    atomic.Bool
 }
@@ -91,8 +91,7 @@ func (m *multiapp) Run(t *testing.T, ctx context.Context) {
 		}
 
 		m.childHistoryReceived.Store(true)
-		m.childTotalEvents.Store(int32(len(ph.Events())))
-
+		m.childTotalEvents.Store(int64(len(ph.Events())))
 		for _, e := range ph.Events() {
 			if ts := e.GetTaskScheduled(); ts != nil {
 				m.childTaskCount.Add(1)
@@ -131,8 +130,8 @@ func (m *multiapp) Run(t *testing.T, ctx context.Context) {
 	//     [3] WorkflowStarted                — App0
 	//     [4] TaskCompleted                   — localValidation result
 	//     [5] ChildWorkflowInstanceCreated    — App0 creates child on App1
-	assert.Equal(t, int32(6), m.childTotalEvents.Load(), "child should receive exactly 6 events from App0")
-	assert.Equal(t, int32(1), m.childTaskCount.Load(), "1 TaskScheduled: localValidation")
+	assert.Equal(t, int64(6), m.childTotalEvents.Load(), "child should receive exactly 6 events from App0")
+	assert.Equal(t, int64(1), m.childTaskCount.Load(), "1 TaskScheduled: localValidation")
 	assert.True(t, m.childHasLocalAct.Load(), "child should see App0's 'localValidation' in propagated history")
 	assert.True(t, m.childHasRemoteAct.Load(), "child should see the ChildWorkflowInstanceCreated for itself")
 }

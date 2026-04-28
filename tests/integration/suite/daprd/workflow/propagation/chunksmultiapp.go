@@ -42,13 +42,13 @@ type chunksmultiapp struct {
 	workflow *procworkflow.Workflow
 
 	leafHistoryReceived atomic.Bool
-	leafTotalEvents     atomic.Int32
-	leafChunkCount      atomic.Int32
+	leafTotalEvents     atomic.Int64
+	leafChunkCount      atomic.Int64
 
 	leafChunks     atomic.Value
 	leafAppIDs     atomic.Value
-	eventCountApp0 atomic.Int32
-	eventCountApp1 atomic.Int32
+	eventCountApp0 atomic.Int64
+	eventCountApp1 atomic.Int64
 	leafApp0HasAct atomic.Bool
 	leafApp1HasAct atomic.Bool
 }
@@ -118,18 +118,16 @@ func (c *chunksmultiapp) Run(t *testing.T, ctx context.Context) {
 		}
 
 		c.leafHistoryReceived.Store(true)
-		c.leafTotalEvents.Store(int32(len(ph.Events())))
+		c.leafTotalEvents.Store(int64(len(ph.Events())))
 		workflows := ph.GetWorkflows()
-		c.leafChunkCount.Store(int32(len(workflows)))
-
+		c.leafChunkCount.Store(int64(len(workflows)))
 		c.leafChunks.Store(workflows)
 		c.leafAppIDs.Store(ph.GetAppIDs())
 
 		app0Events := ph.GetEventsByAppID(app0AppID)
 		app1Events := ph.GetEventsByAppID(app1AppID)
-		c.eventCountApp0.Store(int32(len(app0Events)))
-		c.eventCountApp1.Store(int32(len(app1Events)))
-
+		c.eventCountApp0.Store(int64(len(app0Events)))
+		c.eventCountApp1.Store(int64(len(app1Events)))
 		// Verify app0's events contain app0Act
 		for _, e := range app0Events {
 			if ts := e.GetTaskScheduled(); ts != nil && ts.GetName() == "app0Act" {
@@ -160,8 +158,8 @@ func (c *chunksmultiapp) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, c.leafHistoryReceived.Load(), "App2 should have received propagated history")
 
 	// 12 total events: 6 from App0 + 6 from App1 = 2 chunks
-	assert.Equal(t, int32(12), c.leafTotalEvents.Load(), "App2 should receive 12 events: 6 from App0 + 6 from App1")
-	assert.Equal(t, int32(2), c.leafChunkCount.Load(), "should have 2 chunks (App0 + App1)")
+	assert.Equal(t, int64(12), c.leafTotalEvents.Load(), "App2 should receive 12 events: 6 from App0 + 6 from App1")
+	assert.Equal(t, int64(2), c.leafChunkCount.Load(), "should have 2 chunks (App0 + App1)")
 	leafChunks, _ := c.leafChunks.Load().([]*api.WorkflowResult)
 	leafAppIDs, _ := c.leafAppIDs.Load().([]string)
 
@@ -174,8 +172,8 @@ func (c *chunksmultiapp) Run(t *testing.T, ctx context.Context) {
 	require.Len(t, leafAppIDs, 2, "expected 2 unique app IDs")
 	assert.Equal(t, app0AppID, leafAppIDs[0], "first app should be App0 (root)")
 	assert.Equal(t, app1AppID, leafAppIDs[1], "second app should be App1 (middle)")
-	assert.Equal(t, int32(6), c.eventCountApp0.Load(), "EventsByAppID(App0) should return 6 events")
-	assert.Equal(t, int32(6), c.eventCountApp1.Load(), "EventsByAppID(App1) should return 6 events")
+	assert.Equal(t, int64(6), c.eventCountApp0.Load(), "EventsByAppID(App0) should return 6 events")
+	assert.Equal(t, int64(6), c.eventCountApp1.Load(), "EventsByAppID(App1) should return 6 events")
 	assert.True(t, c.leafApp0HasAct.Load(), "App0's events should contain app0Act")
 	assert.True(t, c.leafApp1HasAct.Load(), "App1's events should contain app1Act")
 }

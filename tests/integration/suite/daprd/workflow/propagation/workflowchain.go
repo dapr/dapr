@@ -37,7 +37,7 @@ func init() {
 // GetWorkflowByName returns the last one
 type workflowchain struct {
 	workflow          *procworkflow.Workflow
-	workerPluralCount atomic.Int32
+	workerPluralCount atomic.Int64
 
 	pluralFirstInstanceID atomic.Value
 	pluralLastInstanceID  atomic.Value
@@ -87,8 +87,7 @@ func (w *workflowchain) Run(t *testing.T, ctx context.Context) {
 		}
 
 		plural := ph.GetWorkflowsByName("worker")
-		w.workerPluralCount.Store(int32(len(plural)))
-
+		w.workerPluralCount.Store(int64(len(plural)))
 		if len(plural) >= 1 {
 			w.pluralFirstInstanceID.Store(plural[0].InstanceID)
 		}
@@ -135,7 +134,7 @@ func (w *workflowchain) Run(t *testing.T, ctx context.Context) {
 	// Its own chunk is not in its received history. This count
 	// proves the 3-level chain executed. depth-3 couldn't observe 2 worker
 	// ancestor chunks unless depths 1 & 2 both ran.
-	require.Equal(t, int32(2), w.workerPluralCount.Load(),
+	require.Equal(t, int64(2), w.workerPluralCount.Load(),
 		"GetWorkflowsByName('worker') should return 2 matches (depth-1 and depth-2)")
 
 	first := w.pluralFirstInstanceID.Load()

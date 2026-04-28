@@ -40,12 +40,12 @@ type allfields struct {
 	parentInstanceID atomic.Value
 
 	historyReceived atomic.Bool
-	eventCount      atomic.Int32
+	eventCount      atomic.Int64
 	scopeMatches    atomic.Bool
 
-	appIDsCount       atomic.Int32
+	appIDsCount       atomic.Int64
 	appIDMatches      atomic.Bool
-	workflowsCount    atomic.Int32
+	workflowsCount    atomic.Int64
 	parentChunkFound  atomic.Bool
 	parentNameMatches atomic.Bool
 	parentIIDMatches  atomic.Bool
@@ -71,9 +71,9 @@ type allfields struct {
 	failActCompleted  atomic.Bool
 	failActErrMessage atomic.Value
 
-	eventsByAppIDCount        atomic.Int32
-	eventsByInstanceIDCount   atomic.Int32
-	eventsByWorkflowNameCount atomic.Int32
+	eventsByAppIDCount        atomic.Int64
+	eventsByInstanceIDCount   atomic.Int64
+	eventsByWorkflowNameCount atomic.Int64
 }
 
 func (a *allfields) Setup(t *testing.T) []framework.Option {
@@ -117,21 +117,20 @@ func (a *allfields) Run(t *testing.T, ctx context.Context) {
 			return "no history", nil
 		}
 		a.historyReceived.Store(true)
-		a.eventCount.Store(int32(len(ph.Events()))) //nolint:gosec
-
+		a.eventCount.Store(int64(len(ph.Events())))
 		if ph.Scope() == protos.HistoryPropagationScope_HISTORY_PROPAGATION_SCOPE_LINEAGE {
 			a.scopeMatches.Store(true)
 		}
 
 		// AppIDs + chunk metadata
 		ids := ph.GetAppIDs()
-		a.appIDsCount.Store(int32(len(ids))) //nolint:gosec
+		a.appIDsCount.Store(int64(len(ids)))
 		if len(ids) == 1 && ids[0] == parentAppID {
 			a.appIDMatches.Store(true)
 		}
 
 		wfs := ph.GetWorkflows()
-		a.workflowsCount.Store(int32(len(wfs))) //nolint:gosec
+		a.workflowsCount.Store(int64(len(wfs)))
 		if len(wfs) == 1 {
 			a.parentChunkFound.Store(true)
 			if wfs[0].Name == "parent" {
@@ -154,10 +153,9 @@ func (a *allfields) Run(t *testing.T, ctx context.Context) {
 
 		// Events-by-* accessors
 		expectedIID, _ := a.parentInstanceID.Load().(string)
-		a.eventsByAppIDCount.Store(int32(len(ph.GetEventsByAppID(parentAppID))))            //nolint:gosec
-		a.eventsByInstanceIDCount.Store(int32(len(ph.GetEventsByInstanceID(expectedIID))))  //nolint:gosec
-		a.eventsByWorkflowNameCount.Store(int32(len(ph.GetEventsByWorkflowName("parent")))) //nolint:gosec
-
+		a.eventsByAppIDCount.Store(int64(len(ph.GetEventsByAppID(parentAppID))))
+		a.eventsByInstanceIDCount.Store(int64(len(ph.GetEventsByInstanceID(expectedIID))))
+		a.eventsByWorkflowNameCount.Store(int64(len(ph.GetEventsByWorkflowName("parent"))))
 		// Success activity
 		successAct, _ := parentResult.GetActivityByName("SuccessAct")
 		if successAct.Name == "SuccessAct" && successAct.Started {
@@ -213,9 +211,9 @@ func (a *allfields) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, a.scopeMatches.Load(), "scope should be LINEAGE")
 
 	// Chunks / AppIDs
-	assert.Equal(t, int32(1), a.appIDsCount.Load(), "AppIDs should have 1 entry (parent)")
+	assert.Equal(t, int64(1), a.appIDsCount.Load(), "AppIDs should have 1 entry (parent)")
 	assert.True(t, a.appIDMatches.Load(), "AppIDs[0] should be parent's app ID")
-	assert.Equal(t, int32(1), a.workflowsCount.Load(), "1 workflow chunk expected")
+	assert.Equal(t, int64(1), a.workflowsCount.Load(), "1 workflow chunk expected")
 	assert.True(t, a.parentChunkFound.Load(), "parent's chunk should be present")
 	assert.True(t, a.parentNameMatches.Load(), "chunk.Name should be 'parent'")
 	assert.True(t, a.parentIIDMatches.Load(), "chunk.InstanceID should match parent's actual instance ID")

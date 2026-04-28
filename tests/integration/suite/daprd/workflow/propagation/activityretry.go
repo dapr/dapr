@@ -44,7 +44,7 @@ func init() {
 type activityretry struct {
 	workflow *procworkflow.Workflow
 
-	activityAttempts atomic.Int32
+	activityAttempts atomic.Int64
 
 	childHistoryReceived atomic.Bool
 
@@ -55,7 +55,7 @@ type activityretry struct {
 	parentWFInstanceSeen atomic.Bool
 
 	// GetWorkflowsByName
-	parentWFsCount      atomic.Int32
+	parentWFsCount      atomic.Int64
 	nonexistentWFsIsNil atomic.Bool
 
 	// GetActivityByName
@@ -65,7 +65,7 @@ type activityretry struct {
 	nonexistentActSeenAsStarted atomic.Bool
 
 	// GetActivitiesByName
-	pluralCount          atomic.Int32
+	pluralCount          atomic.Int64
 	firstAttemptFailed   atomic.Bool
 	secondAttemptPassed  atomic.Bool
 	nonexistentActsIsNil atomic.Bool
@@ -139,7 +139,7 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 		}
 
 		parentWFs := ph.GetWorkflowsByName("parentWf")
-		a.parentWFsCount.Store(int32(len(parentWFs))) //nolint:gosec
+		a.parentWFsCount.Store(int64(len(parentWFs)))
 		nonexistentWFs := ph.GetWorkflowsByName("DoesNotExist")
 		if nonexistentWFs == nil {
 			a.nonexistentWFsIsNil.Store(true)
@@ -165,7 +165,7 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 		}
 
 		all := parent.GetActivitiesByName("CallLLM")
-		a.pluralCount.Store(int32(len(all))) //nolint:gosec
+		a.pluralCount.Store(int64(len(all)))
 		if len(all) >= 1 && all[0].Failed {
 			a.firstAttemptFailed.Store(true)
 		}
@@ -201,7 +201,7 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 	// Activity was invoked twice: one failure, one success.
-	assert.Equal(t, int32(2), a.activityAttempts.Load(), "CallLLM should have been invoked twice (1 fail + 1 succeed)")
+	assert.Equal(t, int64(2), a.activityAttempts.Load(), "CallLLM should have been invoked twice (1 fail + 1 succeed)")
 	require.True(t, a.childHistoryReceived.Load(), "child should have received propagated history with lineage")
 
 	// GetWorkflowByName
@@ -211,7 +211,7 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 	assert.False(t, a.nonexistentWFFound.Load(), "GetWorkflowByName('DoesNotExist') should NOT be Found")
 
 	// GetWorkflowsByName
-	assert.Equal(t, int32(1), a.parentWFsCount.Load(), "GetWorkflowsByName('parentWf') should return one match")
+	assert.Equal(t, int64(1), a.parentWFsCount.Load(), "GetWorkflowsByName('parentWf') should return one match")
 	assert.True(t, a.nonexistentWFsIsNil.Load(), "GetWorkflowsByName('DoesNotExist') should return nil")
 
 	// GetActivityByName: returns last attempt successful
@@ -221,7 +221,7 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 	assert.False(t, a.nonexistentActSeenAsStarted.Load(), "GetActivityByName('NotAnActivity') should have Started=false")
 
 	// GetActivitiesByName: returns BOTH attempts in order
-	assert.Equal(t, int32(2), a.pluralCount.Load(), "GetActivitiesByName should return both retry attempts")
+	assert.Equal(t, int64(2), a.pluralCount.Load(), "GetActivitiesByName should return both retry attempts")
 	assert.True(t, a.firstAttemptFailed.Load(), "first entry should be the failed attempt")
 	assert.True(t, a.secondAttemptPassed.Load(), "second entry should be the successful attempt")
 	assert.True(t, a.nonexistentActsIsNil.Load(), "GetActivitiesByName('NotAnActivity') should return nil")

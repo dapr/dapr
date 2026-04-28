@@ -40,8 +40,8 @@ type chunksparallel struct {
 	workflow *procworkflow.Workflow
 
 	childHistoryReceived atomic.Bool
-	childTotalEvents     atomic.Int32
-	childChunkCount      atomic.Int32
+	childTotalEvents     atomic.Int64
+	childChunkCount      atomic.Int64
 
 	childChunks         atomic.Value
 	childAppIDs         atomic.Value
@@ -111,10 +111,9 @@ func (c *chunksparallel) Run(t *testing.T, ctx context.Context) {
 		}
 
 		c.childHistoryReceived.Store(true)
-		c.childTotalEvents.Store(int32(len(ph.Events())))
+		c.childTotalEvents.Store(int64(len(ph.Events())))
 		workflows := ph.GetWorkflows()
-		c.childChunkCount.Store(int32(len(workflows)))
-
+		c.childChunkCount.Store(int64(len(workflows)))
 		actNames := make(map[string]bool)
 		completedNames := make(map[string]bool)
 		scheduledByExecID := make(map[string]string)
@@ -152,7 +151,7 @@ func (c *chunksparallel) Run(t *testing.T, ctx context.Context) {
 	require.True(t, c.childHistoryReceived.Load(), "child should have received propagated history")
 
 	// All events should be in a single chunk, parallel activities don't split chunks
-	require.Equal(t, int32(1), c.childChunkCount.Load(), "parallel activities should produce 1 chunk (same app)")
+	require.Equal(t, int64(1), c.childChunkCount.Load(), "parallel activities should produce 1 chunk (same app)")
 	childChunks, _ := c.childChunks.Load().([]*api.WorkflowResult)
 	childAppIDs, _ := c.childAppIDs.Load().([]string)
 	actNames, _ := c.childActNames.Load().(map[string]bool)

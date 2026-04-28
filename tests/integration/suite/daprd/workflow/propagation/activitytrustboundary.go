@@ -42,11 +42,11 @@ type activitytrustboundary struct {
 	workflow *procworkflow.Workflow
 
 	historyReceived atomic.Bool
-	totalEvents     atomic.Int32
-	actACount       atomic.Int32
-	actBCount       atomic.Int32
-	appIDCount      atomic.Int32
-	chunkCount      atomic.Int32
+	totalEvents     atomic.Int64
+	actACount       atomic.Int64
+	actBCount       atomic.Int64
+	appIDCount      atomic.Int64
+	chunkCount      atomic.Int64
 }
 
 func (atb *activitytrustboundary) Setup(t *testing.T) []framework.Option {
@@ -108,10 +108,9 @@ func (atb *activitytrustboundary) Run(t *testing.T, ctx context.Context) {
 		}
 
 		atb.historyReceived.Store(true)
-		atb.totalEvents.Store(int32(len(ph.Events())))      //nolint:gosec
-		atb.appIDCount.Store(int32(len(ph.GetAppIDs())))    //nolint:gosec
-		atb.chunkCount.Store(int32(len(ph.GetWorkflows()))) //nolint:gosec
-
+		atb.totalEvents.Store(int64(len(ph.Events())))
+		atb.appIDCount.Store(int64(len(ph.GetAppIDs())))
+		atb.chunkCount.Store(int64(len(ph.GetWorkflows())))
 		for _, e := range ph.Events() {
 			if ts := e.GetTaskScheduled(); ts != nil {
 				switch ts.GetName() {
@@ -145,11 +144,11 @@ func (atb *activitytrustboundary) Run(t *testing.T, ctx context.Context) {
 	//   [3] WorkflowStarted                  — B replays after actB completes
 	//   [4] TaskCompleted                    — actB result
 	//   [5] TaskScheduled("receiver")        — the receiver activity being scheduled
-	assert.Equal(t, int32(6), atb.totalEvents.Load(), "activity should receive 6 events: B's own history only (trust boundary)")
-	assert.Equal(t, int32(0), atb.actACount.Load(), "activity should NOT see actA — OwnHistory blocks ancestor events")
-	assert.Equal(t, int32(1), atb.actBCount.Load(), "activity should see actB from B's own history")
+	assert.Equal(t, int64(6), atb.totalEvents.Load(), "activity should receive 6 events: B's own history only (trust boundary)")
+	assert.Equal(t, int64(0), atb.actACount.Load(), "activity should NOT see actA — OwnHistory blocks ancestor events")
+	assert.Equal(t, int64(1), atb.actBCount.Load(), "activity should see actB from B's own history")
 
 	// only B's chunk, only B's appID
-	assert.Equal(t, int32(1), atb.chunkCount.Load(), "should have 1 chunk (B's only, A's chunk excluded by trust boundary)")
-	assert.Equal(t, int32(1), atb.appIDCount.Load(), "should have 1 appID (B's only)")
+	assert.Equal(t, int64(1), atb.chunkCount.Load(), "should have 1 chunk (B's only, A's chunk excluded by trust boundary)")
+	assert.Equal(t, int64(1), atb.appIDCount.Load(), "should have 1 appID (B's only)")
 }
