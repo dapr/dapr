@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -43,9 +44,10 @@ type options struct {
 	daprds int
 	skipDB bool
 
-	orchestrators []orchestratorConfig
-	activities    []activityConfig
-	daprdOptions  []daprdOptionConfig
+	orchestrators    []orchestratorConfig
+	activities       []activityConfig
+	daprdOptions     []daprdOptionConfig
+	schedulerOptions []scheduler.Option
 }
 
 func WithAddOrchestrator(t *testing.T, name string, or func(*task.WorkflowContext) (any, error)) Option {
@@ -100,5 +102,11 @@ func WithDaprdOptions(index int, opts ...daprd.Option) Option {
 func WithNoDB() Option {
 	return func(o *options) {
 		o.skipDB = true
+	}
+}
+
+func WithSchedulerOptions(opts ...scheduler.Option) Option {
+	return func(o *options) {
+		o.schedulerOptions = append(o.schedulerOptions, opts...)
 	}
 }
