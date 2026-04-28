@@ -130,6 +130,16 @@ namespace DaprDemoActor
                     return Task.FromResult($"Alert: {input}");
                 });
 
+                // Simple workflow for access policy e2e tests.
+                options.RegisterWorkflow<string, string>("AllowedWorkflow", implementation: (context, input) =>
+                {
+                    return Task.FromResult("allowed-ok");
+                });
+                options.RegisterWorkflow<string, string>("DeniedWorkflow", implementation: (context, input) =>
+                {
+                    return Task.FromResult("denied-ok");
+                });
+
             });
 
 

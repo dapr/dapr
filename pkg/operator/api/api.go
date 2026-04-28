@@ -31,6 +31,7 @@ import (
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/pkg/operator/api/informer"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/security"
@@ -73,6 +74,7 @@ type apiServer struct {
 	configInformer     informer.Interface[configurationapi.Configuration]
 	resiliencyInformer informer.Interface[resiliencyapi.Resiliency]
 	mcpServerInformer  informer.Interface[mcpserverapi.MCPServer]
+	policyInformer     informer.Interface[wfaclapi.WorkflowAccessPolicy]
 
 	readyCh chan struct{}
 	running atomic.Bool
@@ -99,6 +101,9 @@ func NewAPIServer(opts Options) Server {
 			Cache: opts.Cache,
 		}),
 		resiliencyInformer: informer.New[resiliencyapi.Resiliency](informer.Options{
+			Cache: opts.Cache,
+		}),
+		policyInformer: informer.New[wfaclapi.WorkflowAccessPolicy](informer.Options{
 			Cache: opts.Cache,
 		}),
 		sec:           opts.Security,
@@ -137,6 +142,7 @@ func (a *apiServer) Run(ctx context.Context) error {
 		a.mcpServerInformer.Run,
 		a.configInformer.Run,
 		a.resiliencyInformer.Run,
+		a.policyInformer.Run,
 		func(ctx context.Context) error {
 			if err := s.Serve(lis); err != nil {
 				return fmt.Errorf("gRPC server error: %w", err)

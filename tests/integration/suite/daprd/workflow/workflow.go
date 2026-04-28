@@ -14,10 +14,12 @@ limitations under the License.
 package workflow
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/accesspolicy"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/apphealth"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/basic"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/continueasnew"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/disk"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/externalevent"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/get"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/globalmaxconcurrent"

@@ -30,6 +30,7 @@ import (
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	mcpserverV1alpha1 "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/durabletask-go/backend"
@@ -60,6 +61,7 @@ type ComponentStore struct {
 	mcpServers []mcpserverV1alpha1.MCPServer
 	configurationResources  []configapi.Configuration
 	resiliencyResources     []resiliencyapi.Resiliency
+	workflowAccessPolicies  []wfaclapi.WorkflowAccessPolicy
 	actorStateStore         struct {
 		name  string
 		store state.Store
