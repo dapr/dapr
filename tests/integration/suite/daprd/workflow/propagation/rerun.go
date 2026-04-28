@@ -122,7 +122,7 @@ func (r *rerun) Run(t *testing.T, ctx context.Context) {
 
 	require.Equal(t, int32(1), r.activityRuns.Load(), "activity should run once on original execution")
 	require.True(t, r.activitySawHist.Load(), "activity should receive propagated history on original execution")
-	require.Greater(t, r.activityEventsLen.Load(), int32(0), "original propagated history should be non-empty")
+	require.Positive(t, r.activityEventsLen.Load(), "original propagated history should be non-empty")
 	require.Equal(t, int32(1), r.chunkCount.Load(), "original run should have exactly one chunk (the parent's own events)")
 	assert.Equal(t, "parent", r.chunkName.Load(), "original chunk should be tagged with workflow name 'parent'")
 	assert.Equal(t, workflowAppID, r.chunkAppID.Load(), "original chunk should be tagged with the test app's appID")
@@ -145,7 +145,7 @@ func (r *rerun) Run(t *testing.T, ctx context.Context) {
 
 	require.Equal(t, int32(1), r.activityRuns.Load(), "activity should run once on rerun")
 	require.True(t, r.activitySawHist.Load(), "activity should receive propagated history on rerun (re-driven dispatch)")
-	require.Greater(t, r.activityEventsLen.Load(), int32(0), "rerun propagated history should be non-empty")
+	require.Positive(t, r.activityEventsLen.Load(), "rerun propagated history should be non-empty")
 	require.Equal(t, int32(1), r.chunkCount.Load(), "rerun should have exactly one chunk (the rerunning workflow's own events)")
 	assert.Equal(t, "parent", r.chunkName.Load(), "rerun chunk should still be tagged with workflow name 'parent'")
 	assert.Equal(t, workflowAppID, r.chunkAppID.Load(), "rerun chunk should be tagged with the test app's appID")

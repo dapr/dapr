@@ -89,11 +89,12 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	}
 
 	if sen != nil {
-		baseDopts = append(baseDopts, daprd.WithSentry(t, sen))
 		// Signing requires mTLS for the SPIFFE identity, so when this
 		// framework is configured with mTLS we also enable the
 		// WorkflowHistorySigning feature flag on every daprd.
-		baseDopts = append(baseDopts, daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
+		baseDopts = append(baseDopts,
+			daprd.WithSentry(t, sen),
+			daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
   name: propagation-signing
@@ -101,7 +102,8 @@ spec:
   features:
   - name: WorkflowHistorySigning
     enabled: true
-`))
+`),
+		)
 	}
 
 	baseDopts = append(baseDopts, daprd.WithScheduler(sched))

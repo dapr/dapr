@@ -140,5 +140,5 @@ func (c *continueasnewmultiapp) Run(t *testing.T, ctx context.Context) {
 	require.True(t, c.gen2SawHistory.Load(), "second generation should see propagated history (chain preserved across CAN)")
 	assert.True(t, c.gen2SawApp0.Load(), "second generation should still see App0's original chunk")
 	assert.True(t, c.gen2SawGen1.Load(), "second generation should see prior App1 generation's events")
-	assert.Greater(t, c.gen2EventCount.Load(), int32(0))
+	assert.Positive(t, c.gen2EventCount.Load())
 }
