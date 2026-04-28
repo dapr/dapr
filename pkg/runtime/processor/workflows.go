@@ -14,6 +14,8 @@ limitations under the License.
 package processor
 
 import (
+	"context"
+
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/security"
@@ -23,6 +25,6 @@ import (
 // Satisfied by *inprocess.Executor. Future managed workflow subsystems add
 // methods here (e.g. RegisterAgentServer).
 type internalWorkflowRegistrar interface {
-	RegisterMCPServer(server mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) error
+	RegisterMCPServer(ctx context.Context, server mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) error
 	UnregisterMCPServer(serverName string)
 }

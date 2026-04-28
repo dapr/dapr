@@ -130,7 +130,7 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 			"arguments":     map[string]any{"city": "Seattle"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.weather.CallTool", input)
+			api.MCPCallToolWorkflowName("weather"), input)
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
@@ -154,7 +154,7 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 			"arguments":     map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.weather.CallTool", input)
+			api.MCPCallToolWorkflowName("weather"), input)
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))

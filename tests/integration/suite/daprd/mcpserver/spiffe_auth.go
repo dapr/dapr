@@ -165,7 +165,7 @@ func (s *spiffeAuth) Run(t *testing.T, ctx context.Context) {
 			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.spiffe-server.CallTool", input)
+			api.MCPCallToolWorkflowName("spiffe-server"), input)
 
 		metadata, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))

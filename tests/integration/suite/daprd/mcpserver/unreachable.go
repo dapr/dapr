@@ -104,7 +104,7 @@ func (s *listToolsUnreachable) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("ListTools fails when MCP server is unreachable", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.dead-server.ListTools", map[string]any{"mcpServerName": "dead-server"})
+			api.MCPListToolsWorkflowName("dead-server"), map[string]any{"mcpServerName": "dead-server"})
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))

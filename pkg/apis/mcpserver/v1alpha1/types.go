@@ -294,20 +294,20 @@ type SPIFFEJWT struct {
 }
 
 // MCPMiddleware defines optional hook pipelines invoked around tool and list operations.
-// Hooks are executed in array order. For "before" hooks, any error aborts the
-// chain and the operation. For "after" hooks, errors are logged but do not
-// affect the result returned to the caller.
+// Hooks are executed in array order.
+// For "before" hooks, any error aborts the chain and the operation.
+// For "after" hooks, errors fail the workflow — they act as authorization gates.
 type MCPMiddleware struct {
 	// BeforeCallTool hooks are invoked in order before each CallTool.
 	// Receives {mcpServer, toolName, arguments} as input.
-	// If any hook returns an error, the chain stops and the error is returned
-	// as CallToolResult{isError: true}.
+	// If any hook returns an error, the chain stops and the workflow completes
+	// with CallToolResult{isError: true} so the agent/LLM can self-correct.
 	//+optional
 	BeforeCallTool []MutatingMCPMiddlewareHook `json:"beforeCallTool,omitempty"`
 
 	// AfterCallTool hooks are invoked in order after each CallTool.
 	// Receives {mcpServer, toolName, arguments, result} as input.
-	// Errors are logged but do not affect the result.
+	// Errors fail the workflow — after-hooks act as authorization gates.
 	//+optional
 	AfterCallTool []MutatingMCPMiddlewareHook `json:"afterCallTool,omitempty"`
 
@@ -345,7 +345,7 @@ type MutatingMCPMiddlewareHook struct {
 	//   - afterCallTool / afterListTools: replaces the result returned to the caller.
 	// When false (default), the hook validates/observes only — its output is discarded.
 	//+optional
-	Mutate bool `json:"mutate,omitempty"`
+	Mutate *bool `json:"mutate,omitempty"`
 }
 
 // MCPMiddlewareWorkflow identifies a workflow to invoke as a middleware hook.

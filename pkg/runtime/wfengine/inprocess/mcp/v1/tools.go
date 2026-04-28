@@ -40,19 +40,21 @@ type toolSchemaCache struct {
 	schemas map[string]json.RawMessage // toolName -> inputSchema
 }
 
-func (c *toolSchemaCache) set(toolName string, schema json.RawMessage) {
+func (c *toolSchemaCache) set(toolName string, schema json.RawMessage) error {
 	if len(schema) > maxSchemaSize {
-		return
+		return fmt.Errorf("schema for tool %q exceeds max size (%d > %d)", toolName, len(schema), maxSchemaSize)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.schemas == nil {
 		c.schemas = make(map[string]json.RawMessage)
 	}
-	if len(c.schemas) >= maxSchemaCacheEntries {
-		return
+	// Allow upsert (overwrite existing), but reject new entries past the limit.
+	if _, exists := c.schemas[toolName]; !exists && len(c.schemas) >= maxSchemaCacheEntries {
+		return fmt.Errorf("schema cache full (%d entries), cannot add tool %q", maxSchemaCacheEntries, toolName)
 	}
 	c.schemas[toolName] = schema
+	return nil
 }
 
 func (c *toolSchemaCache) get(toolName string) (json.RawMessage, bool) {

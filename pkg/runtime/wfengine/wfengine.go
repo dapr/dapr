@@ -90,6 +90,7 @@ type engine struct {
 	backend       *backendactors.Actors
 	client        workflows.Workflow
 	inProcessExec *inprocess.Executor
+	compStore     *compstore.ComponentStore
 
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 }
@@ -205,6 +206,7 @@ func New(opts Options) (Interface, error) {
 		worker:               worker,
 		backend:              abackend,
 		inProcessExec:        inProcessExec,
+		compStore:            opts.ComponentStore,
 		registerGrpcServerFn: registerGrpcServerFn,
 		getWorkItemsCount:    &getWorkItemsCount,
 		actorRegLock:         &lock,
@@ -252,8 +254,10 @@ func (wfe *engine) Run(ctx context.Context) error {
 	// If internal workflows are registered (e.g. MCP), ensure actor types are
 	// registered with placement immediately so they can execute before any
 	// external SDK worker connects via GetWorkItems.
-	if err := wfe.EnsureActorsRegistered(ctx); err != nil {
-		log.Warnf("Failed to pre-register workflow actors: %s", err)
+	if len(wfe.compStore.ListMCPServers()) > 0 {
+		if err := wfe.EnsureActorsRegistered(ctx); err != nil {
+			return fmt.Errorf("failed to pre-register workflow actors: %w", err)
+		}
 	}
 
 	log.Info("Workflow engine started")

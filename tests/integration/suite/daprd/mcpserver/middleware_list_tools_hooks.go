@@ -29,6 +29,7 @@ import (
 
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 
@@ -148,7 +149,7 @@ func (s *middlewareListToolsHooks) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("beforeListTools hook error blocks discovery", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.before-list-deny.ListTools", nil)
+			api.MCPListToolsWorkflowName("before-list-deny"), nil)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, status.RuntimeStatus,
@@ -157,7 +158,7 @@ func (s *middlewareListToolsHooks) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("afterListTools hook error fails workflow", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.after-list-fail.ListTools", nil)
+			api.MCPListToolsWorkflowName("after-list-fail"), nil)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, status.RuntimeStatus,

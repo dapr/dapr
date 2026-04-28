@@ -27,6 +27,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/dapr/durabletask-go/api"
+
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -115,7 +117,7 @@ spec:
 		// Poll until ListTools succeeds — hot-reload needs time to detect the file.
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-				"dapr.internal.mcp.dynamic.ListTools", nil)
+				api.MCPListToolsWorkflowName("dynamic"), nil)
 
 			status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 10*time.Second)
 			if !assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus) {
@@ -143,7 +145,7 @@ spec:
 		// Poll until the ListTools workflow fails with "not registered".
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-				"dapr.internal.mcp.dynamic.ListTools", nil)
+				api.MCPListToolsWorkflowName("dynamic"), nil)
 
 			status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 10*time.Second)
 			assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, status.RuntimeStatus,

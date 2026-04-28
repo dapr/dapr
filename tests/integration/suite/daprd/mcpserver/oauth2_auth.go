@@ -165,7 +165,7 @@ func (s *oauth2Auth) Run(t *testing.T, ctx context.Context) {
 			"arguments":     map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.oauth2-server.CallTool", input)
+			api.MCPCallToolWorkflowName("oauth2-server"), input)
 
 		metadata, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))

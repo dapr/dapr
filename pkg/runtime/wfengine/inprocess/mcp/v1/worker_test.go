@@ -40,9 +40,9 @@ func setTestSchema(t *testing.T, cache *toolSchemaCache, tool string, schema map
 	cache.set(tool, raw)
 }
 
-// connectTestSession creates a sessionHolder connected to the given URL.
+// connectTestSession creates a SessionHolder connected to the given URL.
 // An optional *http.Client can be provided to inject custom headers or auth.
-func connectTestSession(t *testing.T, url string, httpClient ...*http.Client) *sessionHolder {
+func connectTestSession(t *testing.T, url string, httpClient ...*http.Client) *SessionHolder {
 	t.Helper()
 	transport := &mcp.StreamableClientTransport{Endpoint: url}
 	if len(httpClient) > 0 && httpClient[0] != nil {
@@ -51,7 +51,8 @@ func connectTestSession(t *testing.T, url string, httpClient ...*http.Client) *s
 	c := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "v1"}, nil)
 	session, err := c.Connect(context.Background(), transport, nil)
 	require.NoError(t, err)
-	h := &sessionHolder{session: session}
+	h := &SessionHolder{}
+	h.session.Store(session)
 	t.Cleanup(func() { h.Close() })
 	return h
 }

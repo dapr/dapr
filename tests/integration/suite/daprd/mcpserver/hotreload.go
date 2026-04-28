@@ -135,7 +135,7 @@ func (s *hotReload) Run(t *testing.T, ctx context.Context) {
 		t.Helper()
 		input := map[string]any{"tool_name": "echo", "arguments": map[string]any{}}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.hotreload-server.CallTool", input)
+			api.MCPCallToolWorkflowName("hotreload-server"), input)
 
 		metadata, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))

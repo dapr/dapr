@@ -133,7 +133,7 @@ func (s *headerInjection) Run(t *testing.T, ctx context.Context) {
 			"arguments":     map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.authed-server.CallTool", input)
+			api.MCPCallToolWorkflowName("authed-server"), input)
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))

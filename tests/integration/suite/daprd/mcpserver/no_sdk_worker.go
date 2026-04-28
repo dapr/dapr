@@ -27,6 +27,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/dapr/durabletask-go/api"
+
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -105,7 +107,7 @@ func (s *noSDKWorker) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("ListTools works without gRPC SDK worker", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.echo-server.ListTools", nil)
+			api.MCPListToolsWorkflowName("echo-server"), nil)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus)
@@ -125,7 +127,7 @@ func (s *noSDKWorker) Run(t *testing.T, ctx context.Context) {
 			"arguments": map[string]any{"message": "hello-no-sdk"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.echo-server.CallTool", input)
+			api.MCPCallToolWorkflowName("echo-server"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus)

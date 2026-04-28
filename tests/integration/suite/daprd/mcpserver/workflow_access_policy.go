@@ -236,7 +236,7 @@ func (w *workflowAccessPolicy) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, callerReg.AddWorkflowN("InvokeDeniedMCP", func(ctx *task.WorkflowContext) (any, error) {
 		var output string
 		err := ctx.CallChildWorkflow(
-			"dapr.internal.mcp.denied-server.CallTool",
+			api.MCPCallToolWorkflowName("denied-server"),
 			task.WithChildWorkflowAppID("mcp-target"),
 			task.WithChildWorkflowInput(map[string]any{
 				"toolName":  "ping",
@@ -253,7 +253,7 @@ func (w *workflowAccessPolicy) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, callerReg.AddWorkflowN("InvokeAllowedMCP", func(ctx *task.WorkflowContext) (any, error) {
 		var output string
 		err := ctx.CallChildWorkflow(
-			"dapr.internal.mcp.allowed-server.CallTool",
+			api.MCPCallToolWorkflowName("allowed-server"),
 			task.WithChildWorkflowAppID("mcp-target"),
 			task.WithChildWorkflowInput(map[string]any{
 				"toolName":  "ping",
@@ -270,7 +270,7 @@ func (w *workflowAccessPolicy) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, callerReg.AddWorkflowN("InvokeCrossAppHookMCP", func(ctx *task.WorkflowContext) (any, error) {
 		var output string
 		err := ctx.CallChildWorkflow(
-			"dapr.internal.mcp.crossapp-hook-server.CallTool",
+			api.MCPCallToolWorkflowName("crossapp-hook-server"),
 			task.WithChildWorkflowAppID("mcp-target"),
 			task.WithChildWorkflowInput(map[string]any{
 				"toolName":  "ping",

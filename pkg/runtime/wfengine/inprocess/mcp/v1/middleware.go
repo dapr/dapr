@@ -58,7 +58,7 @@ func runBeforeCallTool(
 		}
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
 			hookChildWorkflowOpts(hook.Workflow, input)...)
-		if hook.Mutate {
+		if hook.Mutate != nil && *hook.Mutate {
 			var mutated wfv1.MCPBeforeCallToolHookInput
 			if err := t.Await(&mutated); err != nil {
 				return nil, err
@@ -98,7 +98,7 @@ func runAfterCallTool(
 		}
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
 			hookChildWorkflowOpts(hook.Workflow, input)...)
-		if hook.Mutate {
+		if hook.Mutate != nil && *hook.Mutate {
 			var mutated wfv1.CallMCPToolResponse
 			if err := t.Await(&mutated); err != nil {
 				return nil, fmt.Errorf("afterCallTool mutating hook %q failed for tool %q on MCPServer %q: %w",
@@ -159,7 +159,7 @@ func runAfterListTools(
 		}
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
 			hookChildWorkflowOpts(hook.Workflow, input)...)
-		if hook.Mutate {
+		if hook.Mutate != nil && *hook.Mutate {
 			var mutated wfv1.ListMCPToolsResponse
 			if err := t.Await(&mutated); err != nil {
 				return nil, fmt.Errorf("afterListTools mutating hook %q failed for MCPServer %q: %w",

@@ -99,7 +99,7 @@ func BuildHTTPClient(
 				headers: headers,
 				base: &jwtRoundTripper{
 					header:   jwtSpec.Header,
-					prefix:   stringDeref(jwtSpec.HeaderValuePrefix),
+					prefix:   jwtSpec.HeaderValuePrefix,
 					audience: jwtSpec.Audience,
 					fetcher:  jwt,
 					base:     authTransport,
@@ -180,7 +180,7 @@ func (rt *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 
 type jwtRoundTripper struct {
 	header   string
-	prefix   string
+	prefix   *string
 	audience string
 	fetcher  security.Handler
 	base     http.RoundTripper
@@ -195,7 +195,11 @@ func (rt *jwtRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	if r.Header == nil {
 		r.Header = make(http.Header)
 	}
-	r.Header.Set(rt.header, rt.prefix+token)
+	val := token
+	if rt.prefix != nil {
+		val = *rt.prefix + token
+	}
+	r.Header.Set(rt.header, val)
 	return rt.base.RoundTrip(r)
 }
 

@@ -117,7 +117,7 @@ func (s *listToolsSSE) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("ListTools via SSE transport returns expected tools", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.weather-sse.ListTools", map[string]any{"mcpServerName": "weather-sse"})
+			api.MCPListToolsWorkflowName("weather-sse"), map[string]any{"mcpServerName": "weather-sse"})
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))

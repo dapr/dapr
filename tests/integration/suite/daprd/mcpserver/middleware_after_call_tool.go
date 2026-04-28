@@ -30,6 +30,7 @@ import (
 
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 
@@ -157,7 +158,7 @@ func (s *middlewareAfterCallTool) Run(t *testing.T, ctx context.Context) {
 			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.after-error.CallTool", input)
+			api.MCPCallToolWorkflowName("after-error"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		// afterCallTool errors fail the workflow itself — not just isError in output.
@@ -171,7 +172,7 @@ func (s *middlewareAfterCallTool) Run(t *testing.T, ctx context.Context) {
 			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.after-ok.CallTool", input)
+			api.MCPCallToolWorkflowName("after-ok"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus)

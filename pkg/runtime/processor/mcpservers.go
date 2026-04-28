@@ -85,7 +85,7 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 		log.Infof("MCPServer loaded: %s", s.LogName())
 
 		if p.internalWorkflows != nil {
-			if err := p.internalWorkflows.RegisterMCPServer(s, p.compStore, p.security); err != nil {
+			if err := p.internalWorkflows.RegisterMCPServer(ctx, s, p.compStore, p.security); err != nil {
 				log.Warnf("MCPServer %q: failed to register workflows: %s", s.Name, err)
 			}
 		}

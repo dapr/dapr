@@ -32,8 +32,8 @@ type activityCallToolInput struct {
 }
 
 // makeListToolsActivity returns a task.Activity that calls ListTools on the given MCP server.
-// The sessionHolder handles reconnection if the connection drops.
-func makeListToolsActivity(server mcpserverapi.MCPServer, holder *sessionHolder, schemas *toolSchemaCache) task.Activity {
+// The SessionHolder handles reconnection if the connection drops.
+func makeListToolsActivity(server mcpserverapi.MCPServer, holder *SessionHolder, schemas *toolSchemaCache) task.Activity {
 	serverName := server.Name
 	return func(ctx task.ActivityContext) (any, error) {
 		callCtx := ctx.Context()
@@ -42,7 +42,7 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *sessionHolder,
 		callCtx, cancel := withDeadline(callCtx, timeout)
 		defer cancel()
 
-		session, err := holder.Session()
+		session, err := holder.Session(callCtx)
 		if err != nil {
 			return &wfv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: %w", err)
 		}
@@ -60,7 +60,7 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *sessionHolder,
 			if err != nil {
 				if isConnectionClosed(err) {
 					workerLog.Warnf("list-tools: connection lost for %q, reconnecting", serverName)
-					session, err = holder.Reconnect()
+					session, err = holder.Reconnect(callCtx)
 					if err != nil {
 						return &wfv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: reconnect failed for %q: %w", serverName, err)
 					}
@@ -73,8 +73,10 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *sessionHolder,
 
 			for _, t := range result.Tools {
 				td := &wfv1.MCPToolDefinition{
-					Name:        t.Name,
-					Description: &t.Description,
+					Name: t.Name,
+				}
+				if t.Description != "" {
+					td.Description = &t.Description
 				}
 				if t.InputSchema != nil {
 					schema, ok := t.InputSchema.(map[string]any)
@@ -87,7 +89,9 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *sessionHolder,
 						} else {
 							td.InputSchema = s
 							if raw, err := json.Marshal(schema); err == nil {
-								schemas.set(t.Name, raw)
+								if err := schemas.set(t.Name, raw); err != nil {
+									workerLog.Warnf("list-tools: tool %q on MCPServer %q: %s", t.Name, serverName, err)
+								}
 							}
 						}
 					}
@@ -109,7 +113,7 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *sessionHolder,
 }
 
 // makeCallToolActivity returns a task.Activity that calls a tool on the given MCP server.
-func makeCallToolActivity(server mcpserverapi.MCPServer, holder *sessionHolder, schemas *toolSchemaCache, opts Options) task.Activity {
+func makeCallToolActivity(server mcpserverapi.MCPServer, holder *SessionHolder, schemas *toolSchemaCache, opts Options) task.Activity {
 	serverName := server.Name
 	return func(ctx task.ActivityContext) (any, error) {
 		var input activityCallToolInput
@@ -126,7 +130,7 @@ func makeCallToolActivity(server mcpserverapi.MCPServer, holder *sessionHolder, 
 			return errorResult("%s", validationErr), nil
 		}
 
-		session, err := holder.Session()
+		session, err := holder.Session(callCtx)
 		if err != nil {
 			return errorResult("call-tool: %s", err), nil
 		}
@@ -140,7 +144,7 @@ func makeCallToolActivity(server mcpserverapi.MCPServer, holder *sessionHolder, 
 		if err != nil {
 			if isConnectionClosed(err) {
 				workerLog.Warnf("call-tool: connection lost for %q, reconnecting", serverName)
-				session, err = holder.Reconnect()
+				session, err = holder.Reconnect(callCtx)
 				if err != nil {
 					return errorResult("call-tool: reconnect failed for %q: %s", serverName, err), nil
 				}

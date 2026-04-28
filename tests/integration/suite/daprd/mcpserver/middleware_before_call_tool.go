@@ -31,6 +31,7 @@ import (
 
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 
@@ -166,7 +167,7 @@ func (s *middlewareBeforeCallTool) Run(t *testing.T, ctx context.Context) {
 			"arguments": map[string]any{"msg": "hello"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.gated.CallTool", input)
+			api.MCPCallToolWorkflowName("gated"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus,
@@ -189,7 +190,7 @@ func (s *middlewareBeforeCallTool) Run(t *testing.T, ctx context.Context) {
 			"arguments": map[string]any{"msg": "hello"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.internal.mcp.passthrough.CallTool", input)
+			api.MCPCallToolWorkflowName("passthrough"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus)

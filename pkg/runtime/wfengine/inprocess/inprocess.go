@@ -19,6 +19,8 @@ limitations under the License.
 package inprocess
 
 import (
+	"context"
+
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	mcp "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
@@ -30,8 +32,9 @@ import (
 // Executor wraps a task.TaskExecutor and exposes methods to register
 // in-process workflow subsystems after resources are loaded.
 type Executor struct {
-	registry *task.TaskRegistry
-	executor backend.Executor
+	registry  *task.TaskRegistry
+	executor  backend.Executor
+	mcpHolder map[string]*mcp.SessionHolder
 }
 
 // NewExecutor creates an in-process executor with an empty registry.
@@ -39,8 +42,9 @@ type Executor struct {
 func NewExecutor() *Executor {
 	registry := task.NewTaskRegistry()
 	return &Executor{
-		registry: registry,
-		executor: task.NewTaskExecutor(registry),
+		registry:  registry,
+		executor:  task.NewTaskExecutor(registry),
+		mcpHolder: make(map[string]*mcp.SessionHolder),
 	}
 }
 
@@ -51,8 +55,8 @@ func (e *Executor) Backend() backend.Executor {
 
 // RegisterMCPServer registers workflows for a single MCPServer.
 // Called by the processor when a server is loaded or hot-reloaded.
-func (e *Executor) RegisterMCPServer(server mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) error {
-	return mcp.RegisterMCPServer(e.registry, server, mcp.Options{
+func (e *Executor) RegisterMCPServer(ctx context.Context, server mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) error {
+	return mcp.RegisterMCPServer(ctx, e.registry, e.mcpHolder, server, mcp.Options{
 		Store:    store,
 		Security: sec,
 	})
@@ -60,5 +64,5 @@ func (e *Executor) RegisterMCPServer(server mcpserverapi.MCPServer, store *comps
 
 // UnregisterMCPServer removes workflows for a deleted MCPServer.
 func (e *Executor) UnregisterMCPServer(serverName string) {
-	mcp.UnregisterMCPServer(e.registry, serverName)
+	mcp.UnregisterMCPServer(e.registry, e.mcpHolder, serverName)
 }
