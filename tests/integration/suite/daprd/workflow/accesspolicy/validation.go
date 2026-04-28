@@ -59,19 +59,6 @@ func (v *validation) Setup(t *testing.T) []framework.Option {
 	v.sched = scheduler.New(t)
 	db := sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true
-  - name: WorkflowAccessPolicy
-    enabled: true`), 0o600))
-
 	v.resDir = t.TempDir()
 
 	// Register each invalid policy name so we can assert per-subtest that
@@ -89,7 +76,6 @@ spec:
 
 	v.daprd = daprd.New(t,
 		daprd.WithAppID("wfacl-validation"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(v.resDir),
 		daprd.WithResourceFiles(db.GetComponent(t)),
 		daprd.WithPlacementAddresses(v.place.Address()),
