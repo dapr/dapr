@@ -41,6 +41,15 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 		createSO := e.GetChildWorkflowInstanceCreated()
 
 		//nolint:protogetter
+		parentNs := o.actorTypeBuilder.Namespace()
+		// Carry the parent's executionId in the WorkflowInstance so the
+		// target can echo it back on result delivery; the parent-side
+		// xns-result-in handler uses it for executionId-isolation
+		// (drop results that target a since-purged-and-recreated parent).
+		parentExecID := ""
+		if rs := o.rstate; rs != nil {
+			parentExecID = rs.GetStartEvent().GetWorkflowInstance().GetExecutionId().GetValue()
+		}
 		startEvent := &protos.HistoryEvent{
 			EventId:   -1,
 			Timestamp: timestamppb.New(time.Now()),
@@ -49,10 +58,14 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 				ExecutionStarted: &protos.ExecutionStartedEvent{
 					Name: createSO.Name,
 					ParentInstance: &protos.ParentInstanceInfo{
-						TaskScheduledId:  e.EventId,
-						Name:             wrapperspb.String(startEventName),
-						WorkflowInstance: &protos.WorkflowInstance{InstanceId: o.actorID},
-						AppID:            new(o.appID),
+						TaskScheduledId: e.EventId,
+						Name:            wrapperspb.String(startEventName),
+						WorkflowInstance: &protos.WorkflowInstance{
+							InstanceId:  o.actorID,
+							ExecutionId: wrapperspb.String(parentExecID),
+						},
+						AppID:        new(o.appID),
+						AppNamespace: &parentNs,
 					},
 					Input: createSO.Input,
 					WorkflowInstance: &protos.WorkflowInstance{
@@ -72,19 +85,43 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 		}
 
 		id := e.GetChildWorkflowInstanceCreated().GetInstanceId()
-		req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
-			WithActor(o.actorType, id).
-			WithData(reqP).
-			WithContentType(invokev1.ProtobufContentType)
 
-		_, err = o.router.Call(ctx, req)
-		if err != nil {
-			// If the call was denied by a workflow access policy, fail the
-			// child orchestration immediately rather than retrying.
-			if isPermissionDenied(err) {
-				return o.failChildWorkflowACL(ctx, e.GetEventId(), err)
+		switch o.classifyRouting(e.GetRouter()) {
+		case RoutingCrossNS:
+			targetNs := e.GetRouter().GetTargetAppNamespace()
+			targetAppID := e.GetRouter().GetTargetAppID()
+			targetActorType := o.actorTypeBuilder.WorkflowNS(targetNs, targetAppID)
+			parentExecID := ""
+			if rs := o.rstate; rs != nil {
+				parentExecID = rs.GetStartEvent().GetWorkflowInstance().GetExecutionId().GetValue()
 			}
-			return fmt.Errorf("failed to call child workflow '%s': %w", id, err)
+			childExecID := startEvent.GetExecutionStarted().GetWorkflowInstance().GetExecutionId().GetValue()
+			if xerr := o.dispatchCrossNS(ctx,
+				targetNs, targetAppID,
+				targetActorType, id,
+				todo.CreateWorkflowInstanceMethod,
+				reqP,
+				parentExecID, id, childExecID,
+				e.GetEventId(),
+			); xerr != nil {
+				return fmt.Errorf("failed to dispatch cross-namespace child workflow '%s' to '%s/%s': %w", id, targetNs, targetAppID, xerr)
+			}
+			continue
+
+		case RoutingLocal, RoutingCrossApp:
+			req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
+				WithActor(o.actorType, id).
+				WithData(reqP).
+				WithContentType(invokev1.ProtobufContentType)
+
+			if _, err = o.router.Call(ctx, req); err != nil {
+				// If the call was denied by a workflow access policy, fail the
+				// child orchestration immediately rather than retrying.
+				if isPermissionDenied(err) {
+					return o.failChildWorkflowACL(ctx, e.GetEventId(), err)
+				}
+				return fmt.Errorf("failed to call child workflow '%s': %w", id, err)
+			}
 		}
 	}
 

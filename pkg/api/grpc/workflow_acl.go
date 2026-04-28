@@ -45,7 +45,7 @@ func (a *api) callActorValidateWorkflowACL(ctx context.Context, in *internalv1pb
 	}
 
 	result, err := workflowacl.EnforceRequest(
-		policies, callerAppID,
+		policies, callerNamespace, callerAppID,
 		in.GetActor().GetActorType(),
 		in.GetMessage().GetMethod(),
 		in.GetMessage().GetData().GetValue(),
@@ -56,10 +56,6 @@ func (a *api) callActorValidateWorkflowACL(ctx context.Context, in *internalv1pb
 	}
 	if result == nil {
 		return nil
-	}
-
-	if nsErr := a.checkNamespace(callerNamespace); nsErr != nil {
-		return nsErr
 	}
 
 	if !result.Allowed {
@@ -93,11 +89,7 @@ func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *inte
 		return err
 	}
 
-	if nsErr := a.checkNamespace(callerNamespace); nsErr != nil {
-		return nsErr
-	}
-
-	if !policies.IsCallerKnown(callerAppID, opType) {
+	if !policies.IsCallerKnown(callerNamespace, callerAppID, opType) {
 		a.logger.Warnf("Workflow access policy denied app '%s' from invoking workflow reminders", callerAppID)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, "reminder", "invoke")
 		return status.Errorf(codes.PermissionDenied, workflowACLDeniedMsg)
@@ -120,13 +112,4 @@ func (a *api) extractCallerIdentity(ctx context.Context) (appID, namespace strin
 	}
 
 	return spiffeID.AppID(), spiffeID.Namespace(), nil
-}
-
-// checkNamespace denies cross-namespace calls when policies are active.
-func (a *api) checkNamespace(callerNamespace string) error {
-	if callerNamespace != "" && callerNamespace != a.Namespace() {
-		a.logger.Warnf("Workflow access policy denied cross-namespace call (caller namespace '%s' != target namespace '%s')", callerNamespace, a.Namespace())
-		return status.Errorf(codes.PermissionDenied, workflowACLDeniedMsg)
-	}
-	return nil
 }

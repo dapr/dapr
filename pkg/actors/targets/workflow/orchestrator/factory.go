@@ -58,6 +58,13 @@ type Options struct {
 	// Signer provides cryptographic signing and verification. If nil, history
 	// signing is disabled.
 	Signer *signer.Signer
+
+	// XNSDispatcher performs the sidecar-to-sidecar service-invocation hop
+	// for cross-namespace workflow and activity calls. When nil, cross-ns
+	// dispatch reminders that fire will error out — callers should only
+	// produce them when the WorkflowCrossNamespace feature is enabled and a
+	// dispatcher is wired.
+	XNSDispatcher XNSDispatcher
 }
 
 type factory struct {
@@ -75,6 +82,7 @@ type factory struct {
 	actorTypeBuilder *common.ActorTypeBuilder
 	retentionPolicy  *config.WorkflowStateRetentionPolicy
 	signer           *signer.Signer
+	xnsDispatcher    XNSDispatcher
 
 	scheduler todo.WorkflowScheduler
 
@@ -127,6 +135,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		retentionPolicy:    opts.RetentionPolicy,
 		signer:             opts.Signer,
 		scheduler:          opts.Scheduler,
+		xnsDispatcher:      opts.XNSDispatcher,
 		deactivateCh:       deactivateCh,
 	}, nil
 }

@@ -79,6 +79,33 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 
 	o.activityResultAwaited.Store(true)
 
+	switch o.classifyRouting(e.GetRouter()) {
+	case RoutingCrossNS:
+		targetNs := e.GetRouter().GetTargetAppNamespace()
+		targetAppID := e.GetRouter().GetTargetAppID()
+		activityActorType = o.actorTypeBuilder.ActivityNS(targetNs, targetAppID)
+		parentExecID := ""
+		if rs := o.rstate; rs != nil {
+			parentExecID = rs.GetStartEvent().GetWorkflowInstance().GetExecutionId().GetValue()
+		}
+		// Activities have no executionId of their own, so the deterministic
+		// key reuses the parent's executionId for both parent and child
+		// slots; the task ID already disambiguates individual activity
+		// schedulings within a run.
+		if xerr := o.dispatchCrossNS(ctx,
+			targetNs, targetAppID,
+			activityActorType, targetActorID,
+			"Execute",
+			eventData,
+			parentExecID, o.actorID, parentExecID,
+			e.GetEventId(),
+		); xerr != nil {
+			return fmt.Errorf("failed to dispatch cross-namespace activity '%s' to '%s/%s': %w", ts.GetName(), targetNs, targetAppID, xerr)
+		}
+		return nil
+	case RoutingLocal, RoutingCrossApp:
+	}
+
 	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", o.actorID, activityActorType, targetActorID)
 
 	ctx, cancel := context.WithTimeout(ctx, dispatchTimeout)

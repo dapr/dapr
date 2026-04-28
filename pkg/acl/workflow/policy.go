@@ -37,19 +37,29 @@ type CompiledPolicies struct {
 	// existing instances and we cannot extract the workflow/activity name from
 	// the request. Only callers with an unconditional wildcard allow for the
 	// relevant op type can be trusted to invoke them.
-	wildcardAllowed map[string]map[OperationType]struct{}
+	wildcardAllowed map[callerKey]map[OperationType]struct{}
 
 	// hasDeny[caller][opType] is set when the caller has any deny rule for
 	// opType. A caller with a deny rule has conditional trust and must not be
 	// granted access to non-subject methods even if they also have a wildcard
 	// allow, since those methods could target an instance the caller is
 	// specifically denied from.
-	hasDeny map[string]map[OperationType]struct{}
+	hasDeny map[callerKey]map[OperationType]struct{}
+
+	// targetNs is the namespace of the target app these policies apply to.
+	// Used by enforcement paths to reason about same- vs cross-ns callers.
+	targetNs string
+}
+
+// callerKey identifies a caller by (namespace, appID).
+type callerKey struct {
+	Namespace string
+	AppID     string
 }
 
 type compiledRule struct {
-	callerAppIDs map[string]struct{}
-	operations   []compiledOp
+	callerKeys map[callerKey]struct{}
+	operations []compiledOp
 }
 
 type compiledOp struct {
@@ -63,7 +73,10 @@ type compiledOp struct {
 // Compile builds a CompiledPolicies from a set of WorkflowAccessPolicy
 // resources that all apply to the same target app. Returns nil if no policies
 // are provided (indicating no access control).
-func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
+//
+// targetNs is the namespace of the target app, used to resolve a nil
+// Caller.Namespace to same-ns.
+func Compile(policies []wfaclapi.WorkflowAccessPolicy, targetNs string) *CompiledPolicies {
 	if len(policies) == 0 {
 		return nil
 	}
@@ -93,10 +106,14 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 			}
 
 			cr := compiledRule{
-				callerAppIDs: make(map[string]struct{}, len(rule.Callers)),
+				callerKeys: make(map[callerKey]struct{}, len(rule.Callers)),
 			}
 			for _, caller := range rule.Callers {
-				cr.callerAppIDs[caller.AppID] = struct{}{}
+				ns := targetNs
+				if caller.Namespace != nil {
+					ns = *caller.Namespace
+				}
+				cr.callerKeys[callerKey{Namespace: ns, AppID: caller.AppID}] = struct{}{}
 			}
 
 			for _, op := range rule.Operations {
@@ -125,22 +142,22 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 	// Track per-(caller, opType) whether the caller has a wildcard allow rule
 	// (name="*", action=allow) and whether they have any deny rule. IsCallerKnown
 	// requires the former and forbids the latter.
-	wildcardAllowed := make(map[string]map[OperationType]struct{})
-	hasDeny := make(map[string]map[OperationType]struct{})
+	wildcardAllowed := make(map[callerKey]map[OperationType]struct{})
+	hasDeny := make(map[callerKey]map[OperationType]struct{})
 	for i := range rules {
 		for _, op := range rules[i].operations {
-			for id := range rules[i].callerAppIDs {
+			for k := range rules[i].callerKeys {
 				if op.action == wfaclapi.PolicyActionAllow && op.pattern == "*" {
-					if wildcardAllowed[id] == nil {
-						wildcardAllowed[id] = make(map[OperationType]struct{})
+					if wildcardAllowed[k] == nil {
+						wildcardAllowed[k] = make(map[OperationType]struct{})
 					}
-					wildcardAllowed[id][op.opType] = struct{}{}
+					wildcardAllowed[k][op.opType] = struct{}{}
 				}
 				if op.action == wfaclapi.PolicyActionDeny {
-					if hasDeny[id] == nil {
-						hasDeny[id] = make(map[OperationType]struct{})
+					if hasDeny[k] == nil {
+						hasDeny[k] = make(map[OperationType]struct{})
 					}
-					hasDeny[id][op.opType] = struct{}{}
+					hasDeny[k][op.opType] = struct{}{}
 				}
 			}
 		}
@@ -151,6 +168,7 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 		defaultAction:   defaultAction,
 		wildcardAllowed: wildcardAllowed,
 		hasDeny:         hasDeny,
+		targetNs:        targetNs,
 	}
 }
 
@@ -162,33 +180,46 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 // therefore have an allow rule with name="*" for opType AND no deny rules for
 // the same opType — anything narrower means the caller has conditional trust
 // and could otherwise tamper with instances they are explicitly denied.
-func (cp *CompiledPolicies) IsCallerKnown(callerAppID string, opType OperationType) bool {
+func (cp *CompiledPolicies) IsCallerKnown(callerNamespace, callerAppID string, opType OperationType) bool {
 	if cp == nil {
 		return true
 	}
 
-	if _, ok := cp.hasDeny[callerAppID][opType]; ok {
+	k := callerKey{Namespace: callerNamespace, AppID: callerAppID}
+	if _, ok := cp.hasDeny[k][opType]; ok {
 		return false
 	}
-	_, ok := cp.wildcardAllowed[callerAppID][opType]
+	_, ok := cp.wildcardAllowed[k][opType]
 	return ok
+}
+
+// TargetNamespace reports the namespace of the target app these policies
+// apply to. Used by enforcement paths to reason about same- vs cross-ns
+// callers when the feature gate is enabled.
+func (cp *CompiledPolicies) TargetNamespace() string {
+	if cp == nil {
+		return ""
+	}
+	return cp.targetNs
 }
 
 // Evaluate checks whether the given caller is allowed to perform the specified
 // operation. Returns true if allowed, false if denied.
-func (cp *CompiledPolicies) Evaluate(callerAppID string, opType OperationType, opName string) bool {
+func (cp *CompiledPolicies) Evaluate(callerNamespace, callerAppID string, opType OperationType, opName string) bool {
 	if cp == nil {
 		// No policies means allow all (backward compatible).
 		return true
 	}
+
+	key := callerKey{Namespace: callerNamespace, AppID: callerAppID}
 
 	var bestMatch *compiledOp
 	for i := range cp.rules {
 		rule := &cp.rules[i]
 
 		// Check if this rule applies to the caller.
-		if len(rule.callerAppIDs) > 0 {
-			if _, ok := rule.callerAppIDs[callerAppID]; !ok {
+		if len(rule.callerKeys) > 0 {
+			if _, ok := rule.callerKeys[key]; !ok {
 				continue
 			}
 		}
@@ -270,7 +301,7 @@ type EnforceRequestResult struct {
 // (remote calls) and the local router (same-sidecar calls).
 // Returns nil result if the request is not for a workflow/activity actor or
 // policies are nil (allow-all).
-func EnforceRequest(policies *CompiledPolicies, callerAppID string, actorType string, method string, data []byte) (*EnforceRequestResult, error) {
+func EnforceRequest(policies *CompiledPolicies, callerNamespace, callerAppID string, actorType string, method string, data []byte) (*EnforceRequestResult, error) {
 	opType, isWorkflowOrActivityActor := ParseActorType(actorType)
 	if !isWorkflowOrActivityActor {
 		return nil, nil
@@ -286,7 +317,7 @@ func EnforceRequest(policies *CompiledPolicies, callerAppID string, actorType st
 	}
 
 	if !subject {
-		allowed := policies.IsCallerKnown(callerAppID, opType)
+		allowed := policies.IsCallerKnown(callerNamespace, callerAppID, opType)
 		return &EnforceRequestResult{
 			Allowed:   allowed,
 			OpType:    opType,
@@ -294,7 +325,7 @@ func EnforceRequest(policies *CompiledPolicies, callerAppID string, actorType st
 		}, nil
 	}
 
-	allowed := policies.Evaluate(callerAppID, opType, opName)
+	allowed := policies.Evaluate(callerNamespace, callerAppID, opType, opName)
 	return &EnforceRequestResult{
 		Allowed:   allowed,
 		OpType:    opType,

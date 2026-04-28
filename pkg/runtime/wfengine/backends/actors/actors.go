@@ -78,6 +78,15 @@ type Options struct {
 	EventSink      orchestrator.EventSink
 	ComponentStore *compstore.ComponentStore
 
+	// XNSDispatcher performs the sidecar-to-sidecar service-invocation hop
+	// for cross-namespace workflow and activity calls. The runtime wires
+	// an xns.Dispatcher when the WorkflowAccessPolicy feature is enabled
+	// (which is the same gate that authorizes cross-namespace ingress on
+	// the target side). When nil, an xns-dispatch reminder that fires
+	// returns an error and the failure policy retries — callers should
+	// only emit cross-ns HistoryEvents when a dispatcher is wired.
+	XNSDispatcher orchestrator.XNSDispatcher
+
 	// experimental feature
 	// enabling this will use the cluster tasks backend for pending tasks, instead of the default local implementation
 	// the cluster tasks backend uses actors to share the state of pending tasks
@@ -111,6 +120,7 @@ type Actors struct {
 	compStore           *compstore.ComponentStore
 	retentionPolicy     *config.WorkflowStateRetentionPolicy
 	signer              *signer.Signer
+	xnsDispatcher       orchestrator.XNSDispatcher
 
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
@@ -148,10 +158,20 @@ func New(opts Options) *Actors {
 		eventSink:                 opts.EventSink,
 		retentionPolicy:           opts.RetentionPolicy,
 		signer:                    opts.Signer,
+		xnsDispatcher:             opts.XNSDispatcher,
 
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 	}
+}
+
+// SetXNSDispatcher installs the cross-namespace dispatcher. It must be called
+// before the first RegisterActors invocation (i.e. before any workflow work
+// item connection triggers actor registration). Callers that don't know the
+// dispatcher at construction time use this to late-bind once the name
+// resolver and gRPC manager are initialized.
+func (abe *Actors) SetXNSDispatcher(d orchestrator.XNSDispatcher) {
+	abe.xnsDispatcher = d
 }
 
 func (abe *Actors) RegisterActors(ctx context.Context) error {
@@ -182,6 +202,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		},
 		EventSink:        abe.eventSink,
 		ActorTypeBuilder: actorTypeBuilder,
+		XNSDispatcher:    abe.xnsDispatcher,
 	}
 
 	aopts := activity.Options{

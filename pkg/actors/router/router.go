@@ -52,7 +52,8 @@ type Interface interface {
 // WorkflowACLChecker validates workflow access policies for local actor calls.
 // For remote calls, enforcement happens at the callee's CallActor gRPC handler.
 // For local calls (same sidecar), this checker provides the same enforcement.
-type WorkflowACLChecker func(callerAppID string, req *internalv1pb.InternalInvokeRequest) error
+// callerNamespace is always the local sidecar's namespace for local calls.
+type WorkflowACLChecker func(callerNamespace, callerAppID string, req *internalv1pb.InternalInvokeRequest) error
 
 type Options struct {
 	Namespace          string
@@ -251,7 +252,7 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		// enforcement normally happens. This ensures same-app workflow calls
 		// are also subject to policy enforcement.
 		if r.workflowACL != nil {
-			if err = r.workflowACL(r.appID, req); err != nil {
+			if err = r.workflowACL(r.namespace, r.appID, req); err != nil {
 				return nil, backoff.Permanent(err)
 			}
 		}
@@ -385,7 +386,7 @@ func (r *router) callStream(ctx context.Context,
 
 	// Enforce workflow access policies for local streaming calls.
 	if r.workflowACL != nil {
-		if err := r.workflowACL(r.appID, req); err != nil {
+		if err := r.workflowACL(r.namespace, r.appID, req); err != nil {
 			return backoff.Permanent(err)
 		}
 	}

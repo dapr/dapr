@@ -61,6 +61,12 @@ const (
 	// ServiceInvocationCallActorStreamProcedure is the fully-qualified name of the ServiceInvocation's
 	// CallActorStream RPC.
 	ServiceInvocationCallActorStreamProcedure = "/dapr.proto.internals.v1.ServiceInvocation/CallActorStream"
+	// ServiceInvocationCallWorkflowCrossNamespaceProcedure is the fully-qualified name of the
+	// ServiceInvocation's CallWorkflowCrossNamespace RPC.
+	ServiceInvocationCallWorkflowCrossNamespaceProcedure = "/dapr.proto.internals.v1.ServiceInvocation/CallWorkflowCrossNamespace"
+	// ServiceInvocationDeliverWorkflowResultCrossNamespaceProcedure is the fully-qualified name of the
+	// ServiceInvocation's DeliverWorkflowResultCrossNamespace RPC.
+	ServiceInvocationDeliverWorkflowResultCrossNamespaceProcedure = "/dapr.proto.internals.v1.ServiceInvocation/DeliverWorkflowResultCrossNamespace"
 )
 
 // ServiceInvocationClient is a client for the dapr.proto.internals.v1.ServiceInvocation service.
@@ -84,6 +90,20 @@ type ServiceInvocationClient interface {
 	// CallActorStream is used to invoke actor method with request and streaming
 	// response.
 	CallActorStream(context.Context, *connect.Request[v1.InternalInvokeRequest]) (*connect.ServerStreamForClient[v1.InternalInvokeResponse], error)
+	// CallWorkflowCrossNamespace dispatches a cross-namespace workflow/activity
+	// invocation from a caller sidecar to the target sidecar. The target sidecar
+	// authorizes via WorkflowAccessPolicy and creates an idempotency-keyed local
+	// reminder that carries the work to the local workflow/activity actor.
+	// Returns an ACK once the reminder is persisted; does not wait for the
+	// work to complete.
+	CallWorkflowCrossNamespace(context.Context, *connect.Request[v1.CrossNSDispatchRequest]) (*connect.Response[v1.CrossNSAck], error)
+	// DeliverWorkflowResultCrossNamespace ships a completion event from a
+	// cross-namespace child workflow or activity back to the parent orchestrator's
+	// sidecar. The receiver validates the parent orchestrator's current
+	// executionId against the request to drop stale results (parent was purged
+	// or re-created) and creates an idempotency-keyed local reminder that
+	// delivers the event to the parent's inbox.
+	DeliverWorkflowResultCrossNamespace(context.Context, *connect.Request[v1.CrossNSResultRequest]) (*connect.Response[v1.CrossNSAck], error)
 }
 
 // NewServiceInvocationClient constructs a client for the dapr.proto.internals.v1.ServiceInvocation
@@ -127,16 +147,30 @@ func NewServiceInvocationClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(serviceInvocationMethods.ByName("CallActorStream")),
 			connect.WithClientOptions(opts...),
 		),
+		callWorkflowCrossNamespace: connect.NewClient[v1.CrossNSDispatchRequest, v1.CrossNSAck](
+			httpClient,
+			baseURL+ServiceInvocationCallWorkflowCrossNamespaceProcedure,
+			connect.WithSchema(serviceInvocationMethods.ByName("CallWorkflowCrossNamespace")),
+			connect.WithClientOptions(opts...),
+		),
+		deliverWorkflowResultCrossNamespace: connect.NewClient[v1.CrossNSResultRequest, v1.CrossNSAck](
+			httpClient,
+			baseURL+ServiceInvocationDeliverWorkflowResultCrossNamespaceProcedure,
+			connect.WithSchema(serviceInvocationMethods.ByName("DeliverWorkflowResultCrossNamespace")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // serviceInvocationClient implements ServiceInvocationClient.
 type serviceInvocationClient struct {
-	callActor         *connect.Client[v1.InternalInvokeRequest, v1.InternalInvokeResponse]
-	callLocal         *connect.Client[v1.InternalInvokeRequest, v1.InternalInvokeResponse]
-	callActorReminder *connect.Client[v1.Reminder, emptypb.Empty]
-	callLocalStream   *connect.Client[v1.InternalInvokeRequestStream, v1.InternalInvokeResponseStream]
-	callActorStream   *connect.Client[v1.InternalInvokeRequest, v1.InternalInvokeResponse]
+	callActor                           *connect.Client[v1.InternalInvokeRequest, v1.InternalInvokeResponse]
+	callLocal                           *connect.Client[v1.InternalInvokeRequest, v1.InternalInvokeResponse]
+	callActorReminder                   *connect.Client[v1.Reminder, emptypb.Empty]
+	callLocalStream                     *connect.Client[v1.InternalInvokeRequestStream, v1.InternalInvokeResponseStream]
+	callActorStream                     *connect.Client[v1.InternalInvokeRequest, v1.InternalInvokeResponse]
+	callWorkflowCrossNamespace          *connect.Client[v1.CrossNSDispatchRequest, v1.CrossNSAck]
+	deliverWorkflowResultCrossNamespace *connect.Client[v1.CrossNSResultRequest, v1.CrossNSAck]
 }
 
 // CallActor calls dapr.proto.internals.v1.ServiceInvocation.CallActor.
@@ -164,6 +198,18 @@ func (c *serviceInvocationClient) CallActorStream(ctx context.Context, req *conn
 	return c.callActorStream.CallServerStream(ctx, req)
 }
 
+// CallWorkflowCrossNamespace calls
+// dapr.proto.internals.v1.ServiceInvocation.CallWorkflowCrossNamespace.
+func (c *serviceInvocationClient) CallWorkflowCrossNamespace(ctx context.Context, req *connect.Request[v1.CrossNSDispatchRequest]) (*connect.Response[v1.CrossNSAck], error) {
+	return c.callWorkflowCrossNamespace.CallUnary(ctx, req)
+}
+
+// DeliverWorkflowResultCrossNamespace calls
+// dapr.proto.internals.v1.ServiceInvocation.DeliverWorkflowResultCrossNamespace.
+func (c *serviceInvocationClient) DeliverWorkflowResultCrossNamespace(ctx context.Context, req *connect.Request[v1.CrossNSResultRequest]) (*connect.Response[v1.CrossNSAck], error) {
+	return c.deliverWorkflowResultCrossNamespace.CallUnary(ctx, req)
+}
+
 // ServiceInvocationHandler is an implementation of the dapr.proto.internals.v1.ServiceInvocation
 // service.
 type ServiceInvocationHandler interface {
@@ -186,6 +232,20 @@ type ServiceInvocationHandler interface {
 	// CallActorStream is used to invoke actor method with request and streaming
 	// response.
 	CallActorStream(context.Context, *connect.Request[v1.InternalInvokeRequest], *connect.ServerStream[v1.InternalInvokeResponse]) error
+	// CallWorkflowCrossNamespace dispatches a cross-namespace workflow/activity
+	// invocation from a caller sidecar to the target sidecar. The target sidecar
+	// authorizes via WorkflowAccessPolicy and creates an idempotency-keyed local
+	// reminder that carries the work to the local workflow/activity actor.
+	// Returns an ACK once the reminder is persisted; does not wait for the
+	// work to complete.
+	CallWorkflowCrossNamespace(context.Context, *connect.Request[v1.CrossNSDispatchRequest]) (*connect.Response[v1.CrossNSAck], error)
+	// DeliverWorkflowResultCrossNamespace ships a completion event from a
+	// cross-namespace child workflow or activity back to the parent orchestrator's
+	// sidecar. The receiver validates the parent orchestrator's current
+	// executionId against the request to drop stale results (parent was purged
+	// or re-created) and creates an idempotency-keyed local reminder that
+	// delivers the event to the parent's inbox.
+	DeliverWorkflowResultCrossNamespace(context.Context, *connect.Request[v1.CrossNSResultRequest]) (*connect.Response[v1.CrossNSAck], error)
 }
 
 // NewServiceInvocationHandler builds an HTTP handler from the service implementation. It returns
@@ -225,6 +285,18 @@ func NewServiceInvocationHandler(svc ServiceInvocationHandler, opts ...connect.H
 		connect.WithSchema(serviceInvocationMethods.ByName("CallActorStream")),
 		connect.WithHandlerOptions(opts...),
 	)
+	serviceInvocationCallWorkflowCrossNamespaceHandler := connect.NewUnaryHandler(
+		ServiceInvocationCallWorkflowCrossNamespaceProcedure,
+		svc.CallWorkflowCrossNamespace,
+		connect.WithSchema(serviceInvocationMethods.ByName("CallWorkflowCrossNamespace")),
+		connect.WithHandlerOptions(opts...),
+	)
+	serviceInvocationDeliverWorkflowResultCrossNamespaceHandler := connect.NewUnaryHandler(
+		ServiceInvocationDeliverWorkflowResultCrossNamespaceProcedure,
+		svc.DeliverWorkflowResultCrossNamespace,
+		connect.WithSchema(serviceInvocationMethods.ByName("DeliverWorkflowResultCrossNamespace")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/dapr.proto.internals.v1.ServiceInvocation/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ServiceInvocationCallActorProcedure:
@@ -237,6 +309,10 @@ func NewServiceInvocationHandler(svc ServiceInvocationHandler, opts ...connect.H
 			serviceInvocationCallLocalStreamHandler.ServeHTTP(w, r)
 		case ServiceInvocationCallActorStreamProcedure:
 			serviceInvocationCallActorStreamHandler.ServeHTTP(w, r)
+		case ServiceInvocationCallWorkflowCrossNamespaceProcedure:
+			serviceInvocationCallWorkflowCrossNamespaceHandler.ServeHTTP(w, r)
+		case ServiceInvocationDeliverWorkflowResultCrossNamespaceProcedure:
+			serviceInvocationDeliverWorkflowResultCrossNamespaceHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -264,4 +340,12 @@ func (UnimplementedServiceInvocationHandler) CallLocalStream(context.Context, *c
 
 func (UnimplementedServiceInvocationHandler) CallActorStream(context.Context, *connect.Request[v1.InternalInvokeRequest], *connect.ServerStream[v1.InternalInvokeResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.internals.v1.ServiceInvocation.CallActorStream is not implemented"))
+}
+
+func (UnimplementedServiceInvocationHandler) CallWorkflowCrossNamespace(context.Context, *connect.Request[v1.CrossNSDispatchRequest]) (*connect.Response[v1.CrossNSAck], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.internals.v1.ServiceInvocation.CallWorkflowCrossNamespace is not implemented"))
+}
+
+func (UnimplementedServiceInvocationHandler) DeliverWorkflowResultCrossNamespace(context.Context, *connect.Request[v1.CrossNSResultRequest]) (*connect.Response[v1.CrossNSAck], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.internals.v1.ServiceInvocation.DeliverWorkflowResultCrossNamespace is not implemented"))
 }
