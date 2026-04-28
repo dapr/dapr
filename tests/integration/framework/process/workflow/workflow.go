@@ -67,6 +67,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	var sen *sentry.Sentry
 	var placementOpts []placement.Option
 	var schedulerOpts []scheduler.Option
+	schedulerOpts = append(schedulerOpts, opts.schedulerOptions...)
 	if opts.mtls {
 		sen = sentry.New(t)
 		placementOpts = append(placementOpts, placement.WithSentry(t, sen))

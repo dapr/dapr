@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -44,9 +45,10 @@ type options struct {
 	skipDB bool
 	mtls   bool
 
-	orchestrators []orchestratorConfig
-	activities    []activityConfig
-	daprdOptions  []daprdOptionConfig
+	orchestrators    []orchestratorConfig
+	activities       []activityConfig
+	daprdOptions     []daprdOptionConfig
+	schedulerOptions []scheduler.Option
 }
 
 func WithAddOrchestrator(t *testing.T, name string, or func(*task.WorkflowContext) (any, error)) Option {
@@ -104,14 +106,17 @@ func WithNoDB() Option {
 	}
 }
 
-// WithMTLS enables mTLS on all daprd instances by spinning up a Sentry
-// process AND turns on the WorkflowHistorySigning feature flag on each
-// daprd. Propagation is gated on signing being active, and signing requires
-// mTLS for the SPIFFE identity, so these two are coupled for propagation
-// tests.
+// WithMTLS spins up a Sentry process for mTLS and enables the
+// WorkflowHistorySigning feature flag on every daprd in the workflow.
 func WithMTLS(t *testing.T) Option {
 	t.Helper()
 	return func(o *options) {
 		o.mtls = true
+	}
+}
+
+func WithSchedulerOptions(opts ...scheduler.Option) Option {
+	return func(o *options) {
+		o.schedulerOptions = append(o.schedulerOptions, opts...)
 	}
 }
