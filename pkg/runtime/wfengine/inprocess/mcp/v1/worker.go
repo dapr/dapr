@@ -74,21 +74,13 @@ func RegisterMCPServer(registry *task.TaskRegistry, server mcpserverapi.MCPServe
 	callActivity := makeCallToolActivity(server, holder, schemas, opts)
 
 	listWF := mcptypes.ListToolsWorkflowName(server.Name)
-	if err := registry.AddVersionedWorkflowN(listWF, workflowVersion, true, orchestrator); err != nil {
-		return fmt.Errorf("failed to register workflow %q: %w", listWF, err)
-	}
+	registry.UpsertVersionedWorkflowN(listWF, workflowVersion, true, orchestrator)
 	callWF := mcptypes.CallToolWorkflowName(server.Name)
-	if err := registry.AddVersionedWorkflowN(callWF, workflowVersion, true, orchestrator); err != nil {
-		return fmt.Errorf("failed to register workflow %q: %w", callWF, err)
-	}
+	registry.UpsertVersionedWorkflowN(callWF, workflowVersion, true, orchestrator)
 	listAct := mcptypes.ListToolsActivityName(server.Name)
-	if err := registry.AddActivityN(listAct, listActivity); err != nil {
-		return fmt.Errorf("failed to register activity %q: %w", listAct, err)
-	}
+	registry.UpsertActivityN(listAct, listActivity)
 	callAct := mcptypes.CallToolActivityName(server.Name)
-	if err := registry.AddActivityN(callAct, callActivity); err != nil {
-		return fmt.Errorf("failed to register activity %q: %w", callAct, err)
-	}
+	registry.UpsertActivityN(callAct, callActivity)
 	return nil
 }
 
