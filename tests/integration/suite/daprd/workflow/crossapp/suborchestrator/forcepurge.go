@@ -16,6 +16,7 @@ package suborchestrator
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,36 +25,26 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
 )
 
 func init() {
-	suite.Register(new(purge))
+	suite.Register(new(forcepurge))
 }
 
-// purge covers recursive PurgeWorkflowState across a cross-app
-// sub-orchestrator boundary. The sibling of dapr/dapr #9827 in the purge
-// path: durabletask-go's recursive purge calls
-// be.GetWorkflowRuntimeState/PurgeWorkflowState directly with the child's
-// instance ID and no router, so dapr's actor backend looks the child up on
-// the local app, fails with "instance not found", and the entire recursive
-// purge errors out before the parent is touched.
-//
-// Expected behaviour: a recursive purge of the parent must drive both the
-// parent (in app0) and the cross-app child (in app1) to a not-found state
-// and return success.
-type purge struct {
+type forcepurge struct {
 	workflow *workflow.Workflow
 }
 
-func (p *purge) Setup(t *testing.T) []framework.Option {
+func (p *forcepurge) Setup(t *testing.T) []framework.Option {
 	p.workflow = workflow.New(t, workflow.WithDaprds(2))
 	return []framework.Option{
 		framework.WithProcesses(p.workflow),
 	}
 }
 
-func (p *purge) Run(t *testing.T, ctx context.Context) {
+func (p *forcepurge) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
 	const childInstanceID = "test-1-child"
@@ -71,6 +62,9 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 	})
 
 	p.workflow.RegistryN(1).AddWorkflowN("ChildHelloWorkflow", func(wctx *task.WorkflowContext) (any, error) {
+		if err := wctx.CreateTimer(time.Hour).Await(nil); err != nil {
+			return nil, err
+		}
 		return "child done", nil
 	})
 
@@ -80,15 +74,22 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 	parentID, err := parent.ScheduleNewWorkflow(ctx, "MainHelloWorkflow", api.WithInstanceID("test-1"))
 	require.NoError(t, err)
 
-	parentMeta, err := parent.WaitForWorkflowCompletion(ctx, parentID)
+	_, err = parent.WaitForWorkflowStart(ctx, parentID)
 	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, parentMeta.GetRuntimeStatus())
 
-	childMeta, err := child.WaitForWorkflowCompletion(ctx, api.InstanceID(childInstanceID))
-	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, childMeta.GetRuntimeStatus())
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		var meta *protos.WorkflowMetadata
+		meta, err = child.FetchWorkflowMetadata(ctx, api.InstanceID(childInstanceID))
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Equal(c, api.RUNTIME_STATUS_RUNNING, meta.GetRuntimeStatus())
+	}, time.Second*30, time.Millisecond*10)
 
-	require.NoError(t, parent.PurgeWorkflowState(ctx, parentID, api.WithRecursivePurge(true)))
+	require.NoError(t, parent.PurgeWorkflowState(ctx, parentID,
+		api.WithRecursivePurge(true),
+		api.WithForcePurge(true),
+	))
 
 	_, err = parent.FetchWorkflowMetadata(ctx, parentID)
 	require.ErrorIs(t, err, api.ErrInstanceNotFound)

@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -75,18 +76,17 @@ func (te *terminate) Run(t *testing.T, ctx context.Context) {
 	parentID, err := parent.ScheduleNewWorkflow(ctx, "MainHelloWorkflow", api.WithInstanceID("test-1"))
 	require.NoError(t, err)
 
-	// Wait for the parent and the cross-app child to both be running before we
-	// attempt the terminate.
 	_, err = parent.WaitForWorkflowStart(ctx, parentID)
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		meta, err := child.FetchWorkflowMetadata(ctx, api.InstanceID(childInstanceID))
+		var meta *protos.WorkflowMetadata
+		meta, err = child.FetchWorkflowMetadata(ctx, api.InstanceID(childInstanceID))
 		if !assert.NoError(c, err) {
 			return
 		}
 		assert.Equal(c, api.RUNTIME_STATUS_RUNNING, meta.GetRuntimeStatus())
-	}, time.Second*30, time.Millisecond*100)
+	}, time.Second*30, time.Millisecond*10)
 
 	require.NoError(t, parent.TerminateWorkflow(ctx, parentID))
 
@@ -94,9 +94,11 @@ func (te *terminate) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_TERMINATED, parentMeta.GetRuntimeStatus())
 
-	// Terminate is recursive by default, so the cross-app child must also be
-	// driven to TERMINATED rather than left running.
-	childMeta, err := child.WaitForWorkflowCompletion(ctx, api.InstanceID(childInstanceID))
-	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_TERMINATED, childMeta.GetRuntimeStatus())
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		meta, err := child.FetchWorkflowMetadata(ctx, api.InstanceID(childInstanceID))
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Equal(c, api.RUNTIME_STATUS_TERMINATED, meta.GetRuntimeStatus())
+	}, time.Second*30, time.Millisecond*10)
 }

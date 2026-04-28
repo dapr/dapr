@@ -72,14 +72,15 @@ func (o *orchestrator) recursivePurgeWorkflowState(ctx context.Context, meta map
 			actorType = o.actorTypeBuilder.Workflow(child.targetAppID)
 		}
 
-		count, err := o.invokeRecursivePurge(ctx, actorType, child.instanceID, force)
+		var count int32
+		count, err = o.invokeRecursivePurge(ctx, actorType, child.instanceID, force)
 		deleted += count
 		if err != nil {
 			return nil, fmt.Errorf("failed to purge child workflow %q: %w", child.instanceID, err)
 		}
 	}
 
-	if err := o.cleanupWorkflowStateInternal(ctx, state, true); err != nil {
+	if err = o.cleanupWorkflowStateInternal(ctx, state, true); err != nil {
 		return nil, err
 	}
 	deleted++
