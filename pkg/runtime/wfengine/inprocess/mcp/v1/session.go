@@ -125,8 +125,13 @@ func (h *sessionHolder) Close() {
 
 // connect builds an HTTP client, transport, and MCP session.
 // Must be called with h.mu held.
+// Uses a hard goroutine-based timeout so that an unreachable server
+// (especially stdio, where context cancellation doesn't kill the
+// subprocess) does not block the processor pipeline and sidecar init.
 func (h *sessionHolder) connect() (*mcp.ClientSession, error) {
-	httpClient, err := mcpauth.BuildHTTPClient(context.Background(), h.server, h.store, h.sec, callTimeout(h.server))
+	timeout := callTimeout(h.server)
+
+	httpClient, err := mcpauth.BuildHTTPClient(context.Background(), h.server, h.store, h.sec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build HTTP client for %q: %w", h.server.Name, err)
 	}
@@ -136,15 +141,37 @@ func (h *sessionHolder) connect() (*mcp.ClientSession, error) {
 		return nil, fmt.Errorf("failed to build transport for %q: %w", h.server.Name, err)
 	}
 
-	workerLog.Debugf("connecting to MCP server %q", h.server.Name)
+	workerLog.Debugf("connecting to MCP server %q (timeout=%s)", h.server.Name, timeout)
 	c := mcp.NewClient(&mcp.Implementation{Name: mcpClientName, Version: mcpClientVersion}, &mcp.ClientOptions{
 		KeepAlive: keepAliveInterval,
 	})
-	session, err := c.Connect(context.Background(), transport, nil)
-	if err != nil {
+
+	// Run the connect in a goroutine with a hard timer.
+	// For stdio transport, the MCP SDK starts the subprocess via exec.Command
+	// (no context), so context.WithTimeout alone cannot break a hung handshake.
+	sessionCh := make(chan *mcp.ClientSession, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		s, e := c.Connect(context.Background(), transport, nil)
+		if e != nil {
+			errCh <- e
+		} else {
+			sessionCh <- s
+		}
+	}()
+
+	select {
+	case session := <-sessionCh:
+		return session, nil
+	case err := <-errCh:
 		return nil, fmt.Errorf("failed to connect to MCP server %q: %w", h.server.Name, err)
+	case <-time.After(timeout):
+		// Kill a stdio subprocess if possible.
+		if ct, ok := transport.(*mcp.CommandTransport); ok && ct.Command != nil && ct.Command.Process != nil {
+			_ = ct.Command.Process.Kill()
+		}
+		return nil, fmt.Errorf("timed out connecting to MCP server %q after %s", h.server.Name, timeout)
 	}
-	return session, nil
 }
 
 // isConnectionClosed returns true if the error wraps mcp.ErrConnectionClosed.

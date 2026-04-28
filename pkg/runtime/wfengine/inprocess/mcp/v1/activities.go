@@ -47,9 +47,11 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *sessionHolder,
 			return &wfv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: %w", err)
 		}
 
+		const maxListToolsPages = 100
+
 		var tools []*wfv1.MCPToolDefinition
 		var cursor string
-		for {
+		for page := 0; page < maxListToolsPages; page++ {
 			params := &mcp.ListToolsParams{}
 			if cursor != "" {
 				params.Cursor = cursor
@@ -98,6 +100,9 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *sessionHolder,
 			}
 			cursor = result.NextCursor
 		}
+		if cursor != "" {
+			workerLog.Warnf("list-tools: MCPServer %q returned more than %d pages of tools; results truncated", serverName, maxListToolsPages)
+		}
 
 		return &wfv1.ListMCPToolsResponse{Tools: tools}, nil
 	}
@@ -126,11 +131,7 @@ func makeCallToolActivity(server mcpserverapi.MCPServer, holder *sessionHolder, 
 			return errorResult("call-tool: %s", err), nil
 		}
 
-		argBytes, err := json.Marshal(input.Arguments)
-		if err != nil {
-			argBytes = []byte(fmt.Sprintf("failed to marshal arguments: %s for %v", err, input.Arguments))
-		}
-		workerLog.Debugf("call-tool: calling tool %q on MCPServer %q args %s", input.ToolName, serverName, argBytes)
+		workerLog.Debugf("call-tool: calling tool %q on MCPServer %q (%d argument keys)", input.ToolName, serverName, len(input.Arguments))
 
 		result, err := session.CallTool(callCtx, &mcp.CallToolParams{
 			Name:      input.ToolName,

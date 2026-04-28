@@ -21,7 +21,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
 
 	"google.golang.org/protobuf/types/known/structpb"
@@ -60,23 +59,14 @@ const (
 	jsonFieldRequired = "required"
 )
 
-// holders tracks active session holders per server for hot-reload cleanup.
-var holders sync.Map // map[string]*sessionHolder
-
 // RegisterMCPServer registers workflows and activities for a single MCPServer.
 // Builds the HTTP client and MCP session eagerly — similar to component Init().
 // Safe to call on hot-reload — registry upserts replace existing entries.
 func RegisterMCPServer(registry *task.TaskRegistry, server mcpserverapi.MCPServer, opts Options) error {
-	// Remove the previous holder but don't close it — in-flight activities
-	// may still reference it. The old holder becomes unreachable once no
-	// closures reference it and GC cleans up the session.
-	holders.Delete(server.Name)
-
 	holder, err := newSessionHolder(&server, opts.Store, opts.Security)
 	if err != nil {
 		return fmt.Errorf("MCPServer %q: failed to connect: %w", server.Name, err)
 	}
-	holders.Store(server.Name, holder)
 
 	schemas := &toolSchemaCache{}
 	orchestrator := makeOrchestrator(server, opts.Store)
@@ -106,8 +96,6 @@ func RegisterMCPServer(registry *task.TaskRegistry, server mcpserverapi.MCPServe
 // In-flight workflows that already captured closures continue to completion;
 // only new workflow starts will fail with "not found".
 func UnregisterMCPServer(registry *task.TaskRegistry, serverName string) {
-	holders.Delete(serverName)
-
 	registry.RemoveVersionedWorkflow(mcptypes.ListToolsWorkflowName(serverName))
 	registry.RemoveVersionedWorkflow(mcptypes.CallToolWorkflowName(serverName))
 	registry.RemoveActivity(mcptypes.ListToolsActivityName(serverName))
@@ -140,7 +128,7 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 			}
 
 			var result wfv1.ListMCPToolsResponse
-			t := ctx.CallActivity(mcptypes.ListToolsActivityName(serverName), task.WithActivityInput(nil))
+			t := ctx.CallActivity(mcptypes.ListToolsActivityName(serverName), task.WithActivityInput(nil), task.WithActivityInProcess())
 			if err := t.Await(&result); err != nil {
 				return nil, errors.New("list-tools activity failed: " + err.Error())
 			}
@@ -177,7 +165,7 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 				Arguments: argMap,
 			}
 			var result wfv1.CallMCPToolResponse
-			t := ctx.CallActivity(mcptypes.CallToolActivityName(serverName), task.WithActivityInput(actInput))
+			t := ctx.CallActivity(mcptypes.CallToolActivityName(serverName), task.WithActivityInput(actInput), task.WithActivityInProcess())
 			if err := t.Await(&result); err != nil {
 				errResult := errorResult("%s", err)
 				final, hookErr := runAfterCallTool(ctx, &server, serverName, input.ToolName, arguments, errResult)
@@ -220,6 +208,13 @@ func buildTransport(server *mcpserverapi.MCPServer, httpClient *http.Client) (mc
 		return &mcp.StreamableClientTransport{
 			Endpoint:   server.Spec.Endpoint.StreamableHTTP.URL,
 			HTTPClient: httpClient,
+			// Disable the standalone SSE GET stream. The SDK sends GET / for
+			// server-initiated notifications, but this blocks Client.Connect
+			// synchronously (via sessionUpdated → connectStandaloneSSE) until
+			// the HTTP client timeout fires if the server doesn't support it.
+			// Dapr's MCP integration is request/response only (ListTools,
+			// CallTool) and doesn't need server push.
+			DisableStandaloneSSE: true,
 		}, nil
 
 	case server.Spec.Endpoint.SSE != nil:
@@ -245,7 +240,6 @@ func buildTransport(server *mcpserverapi.MCPServer, httpClient *http.Client) (mc
 		return nil, fmt.Errorf("no transport configured for MCPServer %q: set one of streamableHTTP, sse, or stdio", server.Name)
 	}
 }
-
 
 // callTimeout returns the per-call deadline for the given MCPServer.
 // Falls back to defaultMCPTimeout when no timeout is configured.

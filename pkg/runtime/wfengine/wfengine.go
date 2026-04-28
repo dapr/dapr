@@ -84,6 +84,7 @@ type engine struct {
 	namespace         string
 	actors            actors.Interface
 	getWorkItemsCount *atomic.Int32
+	actorRegLock      *sync.Mutex
 
 	worker        backend.TaskHubWorker
 	backend       *backendactors.Actors
@@ -206,11 +207,26 @@ func New(opts Options) (Interface, error) {
 		inProcessExec:        inProcessExec,
 		registerGrpcServerFn: registerGrpcServerFn,
 		getWorkItemsCount:    &getWorkItemsCount,
+		actorRegLock:         &lock,
 		client: &client{
 			logger: wfBackendLogger,
 			client: backend.NewTaskHubClient(abackend),
 		},
 	}, nil
+}
+
+// EnsureActorsRegistered registers workflow actor types with placement if they
+// haven't been registered yet. This is needed when internal workflows (e.g. MCP)
+// are used before any external SDK worker connects via GetWorkItems.
+func (wfe *engine) EnsureActorsRegistered(ctx context.Context) error {
+	wfe.actorRegLock.Lock()
+	defer wfe.actorRegLock.Unlock()
+
+	if wfe.getWorkItemsCount.Load() == 0 {
+		log.Debug("Registering workflow actors for internal workflows")
+		return wfe.backend.RegisterActors(ctx)
+	}
+	return nil
 }
 
 func (wfe *engine) InProcessExecutor() *inprocess.Executor {
@@ -231,6 +247,13 @@ func (wfe *engine) Run(ctx context.Context) error {
 	// Start the Durable Task worker, which will allow workflows to be scheduled and execute.
 	if err := wfe.worker.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start workflow engine: %w", err)
+	}
+
+	// If internal workflows are registered (e.g. MCP), ensure actor types are
+	// registered with placement immediately so they can execute before any
+	// external SDK worker connects via GetWorkItems.
+	if err := wfe.EnsureActorsRegistered(ctx); err != nil {
+		log.Warnf("Failed to pre-register workflow actors: %s", err)
 	}
 
 	log.Info("Workflow engine started")

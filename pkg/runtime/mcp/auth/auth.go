@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
@@ -59,7 +58,6 @@ func BuildHTTPClient(
 	server *mcpserverapi.MCPServer,
 	secrets *compstore.ComponentStore,
 	jwt security.Handler,
-	timeout time.Duration,
 ) (*http.Client, error) {
 	transportHeaders, authCfg := HTTPTransportConfig(server)
 
@@ -87,7 +85,6 @@ func BuildHTTPClient(
 		}
 		// Wrap the oauth2 client's transport with static header injection.
 		client.Transport = &headerRoundTripper{headers: headers, base: client.Transport}
-		client.Timeout = timeout
 		return client, nil
 	}
 
@@ -98,7 +95,6 @@ func BuildHTTPClient(
 		jwt != nil {
 		jwtSpec := authCfg.SPIFFE.JWT
 		return &http.Client{
-			Timeout: timeout,
 			Transport: &headerRoundTripper{
 				headers: headers,
 				base: &jwtRoundTripper{
@@ -112,9 +108,12 @@ func BuildHTTPClient(
 		}, nil
 	}
 
+	// Do NOT set http.Client.Timeout here. The MCP Go SDK manages
+	// long-lived SSE streams on the same HTTP client, and a global
+	// timeout would kill those connections. Per-call deadlines are
+	// enforced at the activity level via context.WithTimeout instead.
 	return &http.Client{
 		Transport: &headerRoundTripper{headers: headers, base: transport},
-		Timeout:   timeout,
 	}, nil
 }
 

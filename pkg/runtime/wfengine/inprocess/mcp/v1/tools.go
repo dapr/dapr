@@ -23,6 +23,15 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+const (
+	// maxSchemaCacheEntries limits the number of tool schemas cached per server
+	// to prevent memory exhaustion from a malicious MCP server.
+	maxSchemaCacheEntries = 10_000
+
+	// maxSchemaSize limits the size of a single tool's input schema (1 MB).
+	maxSchemaSize = 1 << 20
+)
+
 // toolSchemaCache is a per-server cache of tool input schemas.
 // Shared between ListTools (writes) and CallTool (reads) activities
 // for the same server.
@@ -32,10 +41,16 @@ type toolSchemaCache struct {
 }
 
 func (c *toolSchemaCache) set(toolName string, schema json.RawMessage) {
+	if len(schema) > maxSchemaSize {
+		return
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.schemas == nil {
 		c.schemas = make(map[string]json.RawMessage)
+	}
+	if len(c.schemas) >= maxSchemaCacheEntries {
+		return
 	}
 	c.schemas[toolName] = schema
 }
