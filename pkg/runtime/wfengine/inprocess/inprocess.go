@@ -26,6 +26,7 @@ import (
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	mcp "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/task"
@@ -38,6 +39,7 @@ type Executor struct {
 	registry  *task.TaskRegistry
 	executor  backend.Executor
 	mcpHolder map[string]*mcp.SessionHolder
+	mcpTools  map[string][]string // serverName → []toolName for per-tool unregistration
 }
 
 // NewExecutor creates an in-process executor with an empty registry.
@@ -48,6 +50,7 @@ func NewExecutor() *Executor {
 		registry:  registry,
 		executor:  task.NewTaskExecutor(registry),
 		mcpHolder: make(map[string]*mcp.SessionHolder),
+		mcpTools:  make(map[string][]string),
 	}
 }
 
@@ -57,16 +60,24 @@ func (e *Executor) Backend() backend.Executor {
 }
 
 // RegisterMCPServer registers workflows for a single MCPServer.
-// Called by the processor when a server is loaded or hot-reloaded.
+// Eagerly connects and calls ListTools to discover tool names, then registers
+// per-tool CallTool workflows for fine-grained observability.
+// Called by the processor on initial load and hot-reload (same path).
 // Thread-safe — acquires the executor lock for the entire operation.
 func (e *Executor) RegisterMCPServer(ctx context.Context, server mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	// Close old holder if hot-reloading.
+	// Close old holder and unregister old per-tool workflows if hot-reloading.
 	if old, ok := e.mcpHolder[server.Name]; ok {
 		old.Close()
 		delete(e.mcpHolder, server.Name)
+	}
+	if oldTools, ok := e.mcpTools[server.Name]; ok {
+		for _, tool := range oldTools {
+			e.registry.RemoveVersionedWorkflow(mcpnames.MCPCallToolWorkflowName(server.Name, tool))
+		}
+		delete(e.mcpTools, server.Name)
 	}
 
 	// Create new session with timeout.
@@ -77,10 +88,27 @@ func (e *Executor) RegisterMCPServer(ctx context.Context, server mcpserverapi.MC
 	if err != nil {
 		return fmt.Errorf("MCPServer %q: failed to connect: %w", server.Name, err)
 	}
+
+	// Eager ListTools to discover tool names for per-tool workflow registration.
+	// If ListTools fails, fail the entire registration — we cannot register a
+	// useful MCPServer without knowing its tools.
+	tools, err := mcp.DiscoverTools(connectCtx, holder)
+	if err != nil {
+		holder.Close()
+		return fmt.Errorf("MCPServer %q: failed to discover tools: %w", server.Name, err)
+	}
+
 	e.mcpHolder[server.Name] = holder
 
+	// Track tool names for unregistration.
+	toolNames := make([]string, len(tools))
+	for i, t := range tools {
+		toolNames[i] = t.Name
+	}
+	e.mcpTools[server.Name] = toolNames
+
 	// Register workflows — pure, no shared state mutation.
-	mcp.RegisterMCPServer(e.registry, holder, server, mcp.Options{
+	mcp.RegisterMCPServer(e.registry, holder, server, tools, mcp.Options{
 		Store:    store,
 		Security: sec,
 	})
@@ -97,5 +125,15 @@ func (e *Executor) UnregisterMCPServer(serverName string) {
 		old.Close()
 		delete(e.mcpHolder, serverName)
 	}
+
+	// Remove per-tool CallTool workflows.
+	if tools, ok := e.mcpTools[serverName]; ok {
+		for _, tool := range tools {
+			e.registry.RemoveVersionedWorkflow(mcpnames.MCPCallToolWorkflowName(serverName, tool))
+		}
+		delete(e.mcpTools, serverName)
+	}
+
+	// Remove ListTools + activities.
 	mcp.UnregisterMCPServer(e.registry, serverName)
 }

@@ -38,7 +38,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 )
 
 func init() {
@@ -128,7 +128,7 @@ func (s *callToolSSE) Run(t *testing.T, ctx context.Context) {
 			"arguments":     map[string]any{"city": "Denver"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			mcpnames.MCPCallToolWorkflowName("weather-sse"), input)
+			mcpnames.MCPCallToolWorkflowName("weather-sse", "get_weather"), input)
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))

@@ -15,6 +15,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -23,14 +24,16 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/types/known/structpb"
+
 	"github.com/dapr/durabletask-go/task"
 	"github.com/dapr/kit/logger"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
-	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/pkg/security"
 )
 
@@ -58,32 +61,94 @@ const (
 )
 
 // RegisterMCPServer registers workflows and activities for a single MCPServer
-// using the given session holder. The caller is responsible for holder lifecycle
-// (creation, caching, cleanup). This function is pure — it only registers closures.
-func RegisterMCPServer(registry *task.TaskRegistry, holder *SessionHolder, server mcpserverapi.MCPServer, opts Options) {
+// using the given session holder and pre-discovered tool definitions.
+// Registers one CallTool.<toolName> workflow per tool for fine-grained observability.
+// The caller is responsible for holder lifecycle (creation, caching, cleanup).
+func RegisterMCPServer(registry *task.TaskRegistry, holder *SessionHolder, server mcpserverapi.MCPServer, tools []*wfv1.MCPToolDefinition, opts Options) {
 	schemas := &toolSchemaCache{}
 	orchestrator := makeOrchestrator(server, opts.Store)
 	listActivity := makeListToolsActivity(server, holder, schemas)
 	callActivity := makeCallToolActivity(server, holder, schemas, opts)
 
+	// Register per-tool CallTool workflows. Each tool gets its own workflow name
+	// (dapr.internal.mcp.<server>.CallTool.<tool>) but they all share the same
+	// orchestrator closure.
+	for _, tool := range tools {
+		wfName := mcpnames.MCPCallToolWorkflowName(server.Name, tool.Name)
+		registry.UpsertVersionedWorkflowN(wfName, workflowVersion, true, orchestrator)
+		// Pre-populate the schema cache from the eager ListTools results.
+		if tool.InputSchema != nil {
+			if raw, err := json.Marshal(tool.InputSchema.AsMap()); err == nil {
+				schemas.set(tool.Name, raw) //nolint:errcheck
+			}
+		}
+	}
+
 	listWF := mcpnames.MCPListToolsWorkflowName(server.Name)
 	registry.UpsertVersionedWorkflowN(listWF, workflowVersion, true, orchestrator)
-	callWF := mcpnames.MCPCallToolWorkflowName(server.Name)
-	registry.UpsertVersionedWorkflowN(callWF, workflowVersion, true, orchestrator)
 	listAct := mcpnames.MCPListToolsActivityName(server.Name)
 	registry.UpsertActivityN(listAct, listActivity)
 	callAct := mcpnames.MCPCallToolActivityName(server.Name)
 	registry.UpsertActivityN(callAct, callActivity)
 }
 
-// UnregisterMCPServer removes workflows and activities for a deleted MCPServer.
-// In-flight workflows that already captured closures continue to completion;
-// only new workflow starts will fail with "not found".
+// UnregisterMCPServer removes the ListTools workflow and activities for a deleted MCPServer.
+// Per-tool CallTool workflows are removed by the caller (Executor) which tracks tool names.
 func UnregisterMCPServer(registry *task.TaskRegistry, serverName string) {
 	registry.RemoveVersionedWorkflow(mcpnames.MCPListToolsWorkflowName(serverName))
-	registry.RemoveVersionedWorkflow(mcpnames.MCPCallToolWorkflowName(serverName))
 	registry.RemoveActivity(mcpnames.MCPListToolsActivityName(serverName))
 	registry.RemoveActivity(mcpnames.MCPCallToolActivityName(serverName))
+}
+
+// maxListToolsPages bounds the number of pages we'll fetch from an MCP server's
+// ListTools response. This guards against a misbehaving or malicious server that
+// returns infinite cursors. The context timeout is the primary bound; this is a
+// belt-and-suspenders defense. 500 pages × typical 50-100 tools/page ≈ 25k-50k
+// tools, well beyond any realistic catalog.
+const maxListToolsPages = 500
+
+// DiscoverTools calls ListTools on the MCP server eagerly and returns the tool definitions.
+// Called during RegisterMCPServer to discover tool names for per-tool workflow registration.
+// Returns an error if the server returns more than maxListToolsPages — refusing to
+// silently truncate the tool list (callers would later get confusing "workflow not
+// registered" errors for the truncated tools).
+func DiscoverTools(ctx context.Context, holder *SessionHolder) ([]*wfv1.MCPToolDefinition, error) {
+	session, err := holder.Session(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var tools []*wfv1.MCPToolDefinition
+	var cursor string
+	for page := 0; page < maxListToolsPages; page++ {
+		params := &mcp.ListToolsParams{}
+		if cursor != "" {
+			params.Cursor = cursor
+		}
+		result, err := session.ListTools(ctx, params)
+		if err != nil {
+			return nil, fmt.Errorf("ListTools failed: %w", err)
+		}
+		for _, t := range result.Tools {
+			td := &wfv1.MCPToolDefinition{Name: t.Name}
+			if t.Description != "" {
+				td.Description = &t.Description
+			}
+			if t.InputSchema != nil {
+				if schema, ok := t.InputSchema.(map[string]any); ok {
+					if s, err := structpb.NewStruct(schema); err == nil {
+						td.InputSchema = s
+					}
+				}
+			}
+			tools = append(tools, td)
+		}
+		if result.NextCursor == "" {
+			return tools, nil
+		}
+		cursor = result.NextCursor
+	}
+	return nil, fmt.Errorf("MCP server returned more than %d pages of tools — refusing to truncate", maxListToolsPages)
 }
 
 // makeOrchestrator returns the wildcard orchestrator function, closing over the
@@ -123,14 +188,17 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 			}
 			return final, nil
 
-		case strings.HasSuffix(name, mcpnames.MCPMethodCallTool):
+		case strings.Contains(name, mcpnames.MCPMethodCallTool+"."):
+			// Extract tool name from workflow name:
+			// "dapr.internal.mcp.<server>.CallTool.<tool>" -> "<tool>"
+			toolName := name[strings.LastIndex(name, ".")+1:]
+
 			var input wfv1.MCPCallToolWorkflowInput
 			if err := ctx.GetInput(&input); err != nil {
 				return errorResult("failed to parse CallToolInput: %s", err), nil
 			}
-			if input.ToolName == "" {
-				return nil, fmt.Errorf("CallTool requires a non-empty tool_name")
-			}
+			// Use tool name from workflow name.
+			input.ToolName = toolName
 
 			// beforeCallTool middleware pipeline — may mutate arguments.
 			arguments, err := runBeforeCallTool(ctx, &server, serverName, input.ToolName, input.Arguments)
@@ -249,7 +317,6 @@ func withDeadline(ctx context.Context, d time.Duration) (context.Context, contex
 	}
 	return context.WithTimeout(ctx, d)
 }
-
 
 // stringDeref returns the dereferenced string or "" if nil.
 func stringDeref(s *string) string {

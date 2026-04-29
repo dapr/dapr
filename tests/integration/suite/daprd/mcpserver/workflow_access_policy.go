@@ -35,7 +35,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
-	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
@@ -237,7 +237,7 @@ func (w *workflowAccessPolicy) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, callerReg.AddWorkflowN("InvokeDeniedMCP", func(ctx *task.WorkflowContext) (any, error) {
 		var output string
 		err := ctx.CallChildWorkflow(
-			mcpnames.MCPCallToolWorkflowName("denied-server"),
+			mcpnames.MCPCallToolWorkflowName("denied-server", "ping"),
 			task.WithChildWorkflowAppID("mcp-target"),
 			task.WithChildWorkflowInput(map[string]any{
 				"toolName":  "ping",
@@ -254,7 +254,7 @@ func (w *workflowAccessPolicy) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, callerReg.AddWorkflowN("InvokeAllowedMCP", func(ctx *task.WorkflowContext) (any, error) {
 		var output string
 		err := ctx.CallChildWorkflow(
-			mcpnames.MCPCallToolWorkflowName("allowed-server"),
+			mcpnames.MCPCallToolWorkflowName("allowed-server", "ping"),
 			task.WithChildWorkflowAppID("mcp-target"),
 			task.WithChildWorkflowInput(map[string]any{
 				"toolName":  "ping",
@@ -271,7 +271,7 @@ func (w *workflowAccessPolicy) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, callerReg.AddWorkflowN("InvokeCrossAppHookMCP", func(ctx *task.WorkflowContext) (any, error) {
 		var output string
 		err := ctx.CallChildWorkflow(
-			mcpnames.MCPCallToolWorkflowName("crossapp-hook-server"),
+			mcpnames.MCPCallToolWorkflowName("crossapp-hook-server", "ping"),
 			task.WithChildWorkflowAppID("mcp-target"),
 			task.WithChildWorkflowInput(map[string]any{
 				"toolName":  "ping",

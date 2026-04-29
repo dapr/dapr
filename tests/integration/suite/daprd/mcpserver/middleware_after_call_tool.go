@@ -30,7 +30,6 @@ import (
 
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
-	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 
@@ -43,7 +42,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 )
 
 func init() {
@@ -159,7 +158,7 @@ func (s *middlewareAfterCallTool) Run(t *testing.T, ctx context.Context) {
 			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			mcpnames.MCPCallToolWorkflowName("after-error"), input)
+			mcpnames.MCPCallToolWorkflowName("after-error", "ping"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		// afterCallTool errors fail the workflow itself — not just isError in output.
@@ -173,7 +172,7 @@ func (s *middlewareAfterCallTool) Run(t *testing.T, ctx context.Context) {
 			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			mcpnames.MCPCallToolWorkflowName("after-ok"), input)
+			mcpnames.MCPCallToolWorkflowName("after-ok", "ping"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus)

@@ -42,7 +42,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
-	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 )
 
 func init() {
@@ -157,7 +157,7 @@ func (s *restartMidCall) Run(t *testing.T, ctx context.Context) {
 			"arguments":     map[string]any{"city": "Seattle"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			mcpnames.MCPCallToolWorkflowName("weather"), input)
+			mcpnames.MCPCallToolWorkflowName("weather", "get_weather"), input)
 
 		// Wait until the first MCP tool call is in-flight inside the activity.
 		select {
