@@ -110,12 +110,12 @@ message MCPResourceContent {
 // schema; SDKs use them via their language's protobuf/protojson support.
 
 // MCPCallToolWorkflowInput is the input for a
-// dapr.internal.mcp.<server>.CallTool workflow.
+// dapr.internal.mcp.<server>.CallTool.<tool> workflow.
+// The tool name is encoded in the workflow name suffix; this payload only
+// carries the arguments.
 message MCPCallToolWorkflowInput {
-  // tool_name is the name of the MCP tool to invoke.
-  string tool_name = 1;
   // arguments is the tool arguments as a JSON object.
-  google.protobuf.Struct arguments = 2;
+  google.protobuf.Struct arguments = 1;
 }
 
 // ---- Middleware hook payload messages ----

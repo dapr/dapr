@@ -214,11 +214,9 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 			if err := ctx.GetInput(&input); err != nil {
 				return errorResult("failed to parse CallToolInput: %s", err), nil
 			}
-			// Use tool name from workflow name.
-			input.ToolName = toolName
 
 			// beforeCallTool middleware pipeline — may mutate arguments.
-			arguments, err := runBeforeCallTool(ctx, &server, serverName, input.ToolName, input.Arguments)
+			arguments, err := runBeforeCallTool(ctx, &server, serverName, toolName, input.Arguments)
 			if err != nil {
 				// Return isError result (not a workflow failure) so the calling agent/LLM
 				// receives a structured error it can act on — retry, pick another tool, or
@@ -233,21 +231,21 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 			}
 
 			actInput := activityCallToolInput{
-				ToolName:  input.ToolName,
+				ToolName:  toolName,
 				Arguments: argMap,
 			}
 			var result wfv1.CallMCPToolResponse
 			t := ctx.CallActivity(mcpnames.MCPCallToolActivityName(serverName), task.WithActivityInput(actInput))
 			if err := t.Await(&result); err != nil {
 				errResult := errorResult("%s", err)
-				final, hookErr := runAfterCallTool(ctx, &server, serverName, input.ToolName, arguments, errResult)
+				final, hookErr := runAfterCallTool(ctx, &server, serverName, toolName, arguments, errResult)
 				if hookErr != nil {
 					return nil, fmt.Errorf("afterCallTool failed: %w", hookErr)
 				}
 				return final, nil
 			}
 
-			final, hookErr := runAfterCallTool(ctx, &server, serverName, input.ToolName, arguments, &result)
+			final, hookErr := runAfterCallTool(ctx, &server, serverName, toolName, arguments, &result)
 			if hookErr != nil {
 				return nil, fmt.Errorf("afterCallTool failed: %w", hookErr)
 			}
