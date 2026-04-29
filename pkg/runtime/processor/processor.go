@@ -110,6 +110,10 @@ type Options struct {
 
 	// ProgrammaticSubscriptionEnabled indicates whether programmatic subscriptions are active.
 	ProgrammaticSubscriptionEnabled bool
+
+	// InProcessWorkflows registers workflows for in-process workflow executor.
+	// When nil, internal workflow registration is skipped.
+	InProcessWorkflows internalWorkflowRegistrar
 }
 
 // Processor manages the lifecycle of all components categories.
@@ -210,6 +214,7 @@ func New(opts Options) *Processor {
 		security:                   opts.Security,
 		subscriber:                 subscriber,
 		reporter:                   reporter,
+		internalWorkflows:          opts.InProcessWorkflows,
 		managers: map[components.Category]manager{
 			components.CategoryBindings: binding,
 			components.CategoryConfiguration: configuration.New(configuration.Options{

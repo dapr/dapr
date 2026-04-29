@@ -89,6 +89,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/scheduler"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/crypto/spiffe/signer"
@@ -260,6 +261,7 @@ func newDaprRuntime(ctx context.Context,
 		MaxRequestBodySize: runtimeConfig.maxRequestBodySize,
 		Mode:               runtimeConfig.mode,
 	})
+	inProcessExec := inprocess.NewExecutor()
 
 	processor := processor.New(processor.Options{
 		ID:                              runtimeConfig.id,
@@ -283,6 +285,7 @@ func newDaprRuntime(ctx context.Context,
 		Adapter:                         pubsubAdapter,
 		AdapterStreamer:                 pubsubAdapterStreamer,
 		Reporter:                        runtimeConfig.registry.Reporter(),
+		InProcessWorkflows:              inProcessExec,
 	})
 
 	var reloader *hotreload.Reloader
@@ -334,6 +337,7 @@ func newDaprRuntime(ctx context.Context,
 		ComponentStore:                  compStore,
 		Security:                        sec,
 		Signer:                          wfSigner,
+		InProcessExecutor:               inProcessExec,
 	})
 	if err != nil {
 		return nil, err
@@ -697,14 +701,11 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.flushOutstandingHTTPEndpoints(ctx)
 
-	a.processor.SetInternalWorkflows(a.wfengine.InProcessExecutor())
-
 	err = a.loadMCPServers(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load mcpservers: %s", err)
 	}
 	a.flushOutstandingMCPServers(ctx)
-
 
 	err = a.loadDeclarativeSubscriptions(ctx)
 	if err != nil {

@@ -70,7 +70,8 @@ type Options struct {
 	ComponentStore *compstore.ComponentStore
 	// Security is optional. When set,
 	// SPIFFE JWT SVID injection is enabled for MCPServer resources that configure auth.spiffe.
-	Security security.Handler
+	Security          security.Handler
+	InProcessExecutor *inprocess.Executor
 
 	EnableClusteredDeployment       bool
 	WorkflowsRemoteActivityReminder bool
@@ -135,7 +136,10 @@ func New(opts Options) (Interface, error) {
 		lock              sync.Mutex
 	)
 
-	inProcessExec := inprocess.NewExecutor()
+	inProcessExec := opts.InProcessExecutor
+	if inProcessExec == nil {
+		return nil, errors.New("InProcessExecutor is required")
+	}
 
 	grpcExec, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
 		backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
