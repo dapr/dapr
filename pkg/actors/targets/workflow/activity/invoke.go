@@ -27,6 +27,7 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
 
@@ -56,31 +57,74 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 
 	msg := imReq.Message()
 
-	var his backend.HistoryEvent
-	if err = proto.Unmarshal(msg.GetData().GetValue(), &his); err != nil {
-		return nil, fmt.Errorf("failed to decode activity request: %w", err)
-	}
-
-	var activityName *string
-	if ts := his.GetTaskScheduled(); ts != nil {
-		if n := ts.GetName(); n != "" {
-			activityName = &n
-		}
+	invocation, activityName, err := decodeActivityInvocation(msg.GetData().GetValue())
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode activity invocation: %w", err)
 	}
 
 	// The actual execution is triggered by a reminder
-	return nil, a.createReminder(ctx, &his, dueTime, activityName)
+	return nil, a.createReminder(ctx, invocation, dueTime, activityName)
+}
+
+// decodeActivityInvocation parses an activity invocation payload. New
+// orchestrators wrap the HistoryEvent in an ActivityInvocation envelope
+// (which may carry PropagatedHistory) only when propagation is present.
+// Otherwise, send a raw HistoryEvent for rolling-upgrade compatibility
+// with older daprds. We try the envelope first, and fall back to a raw
+// HistoryEvent if the envelope is absent or its HistoryEvent field is
+// empty.
+func decodeActivityInvocation(data []byte) (*protos.ActivityInvocation, *string, error) {
+	var invocation protos.ActivityInvocation
+	envelopeErr := proto.Unmarshal(data, &invocation)
+	if envelopeErr == nil && invocation.GetHistoryEvent() != nil {
+		return &invocation, taskScheduledName(invocation.GetHistoryEvent()), nil
+	}
+
+	// TODO: remove this legacy fallback in v1.19. Older daprds dispatch
+	// activities as a raw HistoryEvent (no envelope); accept that shape so
+	// rolling upgrades work, and drop it once the floor version is past
+	// the rollout.
+	var legacy backend.HistoryEvent
+	if legacyErr := proto.Unmarshal(data, &legacy); legacyErr != nil {
+		return nil, nil, fmt.Errorf("failed to decode activity invocation (envelope: %v; legacy: %w)", envelopeErr, legacyErr)
+	}
+
+	return &protos.ActivityInvocation{HistoryEvent: &legacy}, taskScheduledName(&legacy), nil
+}
+
+// taskScheduledName returns a pointer to the TaskScheduled event's name on
+// the given history event
+func taskScheduledName(e *backend.HistoryEvent) *string {
+	if ts := e.GetTaskScheduled(); ts != nil {
+		if n := ts.GetName(); n != "" {
+			return &n
+		}
+	}
+	return nil
 }
 
 func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Reminder) error {
 	log.Debugf("Activity actor '%s': invoking reminder '%s'", a.actorID, reminder.Name)
 
-	var state backend.HistoryEvent
-	if err := reminder.Data.UnmarshalTo(&state); err != nil {
-		return fmt.Errorf("failed to decode activity reminder: %w", err)
+	// Try the new ActivityInvocation envelope format first. Fall back to
+	// the legacy raw HistoryEvent payload for reminders created by
+	// pre-propagation code.
+	// TODO: remove this legacy fallback in v1.19 once reminders written by
+	// pre-propagation daprds have been drained from the rollout.
+	var invocation protos.ActivityInvocation
+	if err := reminder.Data.UnmarshalTo(&invocation); err != nil {
+		var legacy backend.HistoryEvent
+		if legacyErr := reminder.Data.UnmarshalTo(&legacy); legacyErr != nil {
+			return fmt.Errorf("failed to decode activity reminder (new format: %v; legacy: %w)", err, legacyErr)
+		}
+		invocation.HistoryEvent = &legacy
 	}
 
-	err := a.executeActivity(ctx, reminder.Name, &state)
+	if invocation.GetHistoryEvent() == nil {
+		return errors.New("activity reminder missing history event")
+	}
+
+	err := a.executeActivity(ctx, reminder.Name, &invocation)
 
 	// Returning nil signals that we want the execution to be retried in the next
 	// period interval
