@@ -39,12 +39,13 @@ import (
 )
 
 const (
-	inboxKeyPrefix     = "inbox"
-	historyKeyPrefix   = "history"
-	sigcertKeyPrefix   = "sigcert"
-	signatureKeyPrefix = "signature"
-	customStatusKey    = "customStatus"
-	metadataKey        = "metadata"
+	inboxKeyPrefix       = "inbox"
+	historyKeyPrefix     = "history"
+	sigcertKeyPrefix     = "sigcert"
+	signatureKeyPrefix   = "signature"
+	customStatusKey      = "customStatus"
+	metadataKey          = "metadata"
+	propagatedHistoryKey = "propagated-history"
 
 	// maxStateEntries is the upper bound for any metadata count field
 	// (inbox, history, signatures, certificates). This prevents OOM from
@@ -89,6 +90,11 @@ type State struct {
 	// exact bytes are persisted to the state store (matching what was signed).
 	marshaledNewHistory [][]byte
 
+	// IncomingHistory is the propagated history this workflow received from
+	// its caller. Stored as a separate state key, NOT as part of history
+	// events. Set once at workflow creation, never modified.
+	IncomingHistory *protos.PropagatedHistory
+
 	// change tracking
 	inboxAddedCount                 int
 	inboxRemovedCount               int
@@ -98,6 +104,7 @@ type State struct {
 	signingCertificatesRemovedCount int
 	signaturesAddedCount            int
 	signaturesRemovedCount          int
+	incomingHistoryChanged          bool
 }
 
 // TODO: @joshvanl: remove in v1.16
@@ -132,6 +139,10 @@ func (s *State) Reset() {
 	s.Signatures = nil
 	s.RawSignatures = nil
 	s.CustomStatus = nil
+	if s.IncomingHistory != nil {
+		s.IncomingHistory = nil
+		s.incomingHistoryChanged = true
+	}
 	s.Generation++
 }
 
@@ -147,6 +158,13 @@ func (s *State) ResetChangeTracking() {
 	s.signaturesRemovedCount = 0
 	s.marshaledNewHistory = nil
 	s.RawHistory = nil
+	s.incomingHistoryChanged = false
+}
+
+// SetIncomingHistory sets the received propagated history on the state.
+func (s *State) SetIncomingHistory(ph *protos.PropagatedHistory) {
+	s.IncomingHistory = ph
+	s.incomingHistoryChanged = true
 }
 
 func (s *State) ApplyRuntimeStateChanges(rs *backend.WorkflowRuntimeState) {
@@ -266,6 +284,26 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 			Operation: api.Upsert,
 			Request:   api.TransactionalUpsert{Key: customStatusKey, Value: csProto},
 		})
+	}
+
+	if s.incomingHistoryChanged {
+		if s.IncomingHistory != nil {
+			phBytes, err := proto.Marshal(s.IncomingHistory)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal incoming propagated history: %w", err)
+			}
+			req.Operations = append(req.Operations, api.TransactionalOperation{
+				Operation: api.Upsert,
+				Request:   api.TransactionalUpsert{Key: propagatedHistoryKey, Value: phBytes},
+			})
+		} else {
+			// Explicit delete so a recreate/reset without propagation does not
+			// leave stale propagated history visible to the new instance.
+			req.Operations = append(req.Operations, api.TransactionalOperation{
+				Operation: api.Delete,
+				Request:   api.TransactionalDelete{Key: propagatedHistoryKey},
+			})
+		}
 	}
 
 	metaProto, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
@@ -514,7 +552,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	wState.SigningCertificates = make([]*backend.SigningCertificate, 0, signingCertLen)
 	wState.Signatures = make([]*backend.HistorySignature, 0, signatureLen)
 
-	totalKeys := inboxLen + historyLen + signingCertLen + signatureLen + 1
+	totalKeys := inboxLen + historyLen + signingCertLen + signatureLen + 2
 	bulkReq := &api.GetBulkStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,
@@ -524,8 +562,10 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	var n int
 
 	bulkReq.Keys[n] = customStatusKey
-
 	n++
+	bulkReq.Keys[n] = propagatedHistoryKey
+	n++
+
 	for i := range metadata.GetInboxLength() {
 		bulkReq.Keys[n] = getMultiEntryKeyName(inboxKeyPrefix, i)
 		n++
@@ -653,6 +693,14 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 
 			wState.CustomStatus.Value = customStatusValue
 		}
+	}
+
+	if len(bulkRes[propagatedHistoryKey]) > 0 {
+		var ph protos.PropagatedHistory
+		if err = proto.Unmarshal(bulkRes[propagatedHistoryKey], &ph); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal propagated history for '%s': %w", actorID, err)
+		}
+		wState.IncomingHistory = &ph
 	}
 
 	wfLogger.Debugf("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))
@@ -873,6 +921,10 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 		api.TransactionalOperation{
 			Operation: api.Delete,
 			Request:   api.TransactionalDelete{Key: metadataKey},
+		},
+		api.TransactionalOperation{
+			Operation: api.Delete,
+			Request:   api.TransactionalDelete{Key: propagatedHistoryKey},
 		},
 	)
 
