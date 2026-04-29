@@ -75,11 +75,11 @@ func (c *chunksparallelcrossapp) Run(t *testing.T, ctx context.Context) {
 	app0AppID := c.workflow.DaprN(0).AppID()
 
 	// App0: root, calls app0Act, then fan-out to App1 and App2 in parallel
-	app0Reg.AddActivityN("app0Act", func(ctx task.ActivityContext) (any, error) {
-		return "done", nil
+	app0Reg.AddActivityN(activityApp0Act, func(ctx task.ActivityContext) (any, error) {
+		return statusDone, nil
 	})
 	app0Reg.AddWorkflowN("parentWf", func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.CallActivity("app0Act").Await(nil); err != nil {
+		if err := ctx.CallActivity(activityApp0Act).Await(nil); err != nil {
 			return nil, err
 		}
 
@@ -100,14 +100,14 @@ func (c *chunksparallelcrossapp) Run(t *testing.T, ctx context.Context) {
 		if err := t2.Await(nil); err != nil {
 			return nil, err
 		}
-		return "done", nil
+		return statusDone, nil
 	})
 
 	// App1: child1 verifies it receives App0's chunk
 	app1Reg.AddWorkflowN("child1", func(ctx *task.WorkflowContext) (any, error) {
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no history", nil
+			return statusNoHistory, nil
 		}
 
 		c.app1HistoryReceived.Store(true)
@@ -115,7 +115,7 @@ func (c *chunksparallelcrossapp) Run(t *testing.T, ctx context.Context) {
 		workflows := ph.GetWorkflows()
 		c.app1ChunkCount.Store(int64(len(workflows)))
 		for _, e := range ph.Events() {
-			if ts := e.GetTaskScheduled(); ts != nil && ts.GetName() == "app0Act" {
+			if ts := e.GetTaskScheduled(); ts != nil && ts.GetName() == activityApp0Act {
 				c.app1HasAct.Store(true)
 			}
 		}
@@ -123,14 +123,14 @@ func (c *chunksparallelcrossapp) Run(t *testing.T, ctx context.Context) {
 		c.app1Chunks.Store(workflows)
 		c.app1AppIDs.Store(ph.GetAppIDs())
 
-		return "done", nil
+		return statusDone, nil
 	})
 
 	// App2: child2 verifies it also receives App0's chunk independently
 	app2Reg.AddWorkflowN("child2", func(ctx *task.WorkflowContext) (any, error) {
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no history", nil
+			return statusNoHistory, nil
 		}
 
 		c.app2HistoryReceived.Store(true)
@@ -138,7 +138,7 @@ func (c *chunksparallelcrossapp) Run(t *testing.T, ctx context.Context) {
 		workflows2 := ph.GetWorkflows()
 		c.app2ChunkCount.Store(int64(len(workflows2)))
 		for _, e := range ph.Events() {
-			if ts := e.GetTaskScheduled(); ts != nil && ts.GetName() == "app0Act" {
+			if ts := e.GetTaskScheduled(); ts != nil && ts.GetName() == activityApp0Act {
 				c.app2HasAct.Store(true)
 			}
 		}
@@ -146,7 +146,7 @@ func (c *chunksparallelcrossapp) Run(t *testing.T, ctx context.Context) {
 		c.app2Chunks.Store(workflows2)
 		c.app2AppIDs.Store(ph.GetAppIDs())
 
-		return "done", nil
+		return statusDone, nil
 	})
 
 	client0 := c.workflow.BackendClient(t, ctx)

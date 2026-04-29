@@ -57,7 +57,7 @@ func (d *dbpersist) Run(t *testing.T, ctx context.Context) {
 	// Parent calls an activity, then creates a child with lineage propagation. Child reads
 	// its propagated history and returns.
 	reg.AddActivityN("parentAct", func(ctx task.ActivityContext) (any, error) {
-		return "done", nil
+		return statusDone, nil
 	})
 	reg.AddWorkflowN("parentWf", func(ctx *task.WorkflowContext) (any, error) {
 		if err := ctx.CallActivity("parentAct").Await(nil); err != nil {
@@ -73,7 +73,7 @@ func (d *dbpersist) Run(t *testing.T, ctx context.Context) {
 	})
 	reg.AddWorkflowN("childWf", func(ctx *task.WorkflowContext) (any, error) {
 		if ctx.GetPropagatedHistory() == nil {
-			return "no-history", nil
+			return statusNoHistoryHyphen, nil
 		}
 		return "has-history", nil
 	})

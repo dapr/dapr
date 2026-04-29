@@ -63,11 +63,11 @@ func (m *multiapplineage) Run(t *testing.T, ctx context.Context) {
 	app2Reg := m.workflow.RegistryN(2)
 
 	// App0: root workflow, calls app0Act, then creates middleWf on App1
-	app0Reg.AddActivityN("app0Act", func(ctx task.ActivityContext) (any, error) {
+	app0Reg.AddActivityN(activityApp0Act, func(ctx task.ActivityContext) (any, error) {
 		return "app0-done", nil
 	})
 	app0Reg.AddWorkflowN("rootWf", func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.CallActivity("app0Act").Await(nil); err != nil {
+		if err := ctx.CallActivity(activityApp0Act).Await(nil); err != nil {
 			return nil, err
 		}
 
@@ -105,7 +105,7 @@ func (m *multiapplineage) Run(t *testing.T, ctx context.Context) {
 	app2Reg.AddWorkflowN("leafWf", func(ctx *task.WorkflowContext) (any, error) {
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no history", nil
+			return statusNoHistory, nil
 		}
 
 		m.app2HistoryReceived.Store(true)
@@ -113,7 +113,7 @@ func (m *multiapplineage) Run(t *testing.T, ctx context.Context) {
 		for _, e := range ph.Events() {
 			if ts := e.GetTaskScheduled(); ts != nil {
 				switch ts.GetName() {
-				case "app0Act": //nolint:goconst
+				case activityApp0Act:
 					m.app2App0ActCount.Add(1)
 				case "app1Act":
 					m.app2App1ActCount.Add(1)
@@ -121,7 +121,7 @@ func (m *multiapplineage) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 
-		return "done", nil
+		return statusDone, nil
 	})
 
 	client0 := m.workflow.BackendClient(t, ctx)
@@ -142,7 +142,7 @@ func (m *multiapplineage) Run(t *testing.T, ctx context.Context) {
 	//   Events [0-5]: App0's history (ancestor, forwarded through App1 via lineage)
 	//     [0] WorkflowStarted                — App0 begins
 	//     [1] ExecutionStarted                — App0's metadata
-	//     [2] TaskScheduled("app0Act")        — App0 schedules app0Act
+	//     [2] TaskScheduled(activityApp0Act)        — App0 schedules app0Act
 	//     [3] WorkflowStarted                — App0 replays after app0Act completes
 	//     [4] TaskCompleted                   — app0Act result
 	//     [5] ChildWorkflowInstanceCreated    — App0 creates middleWf on App1

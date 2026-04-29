@@ -91,7 +91,7 @@ func (tb *trustboundary) Run(t *testing.T, ctx context.Context) {
 	reg.AddWorkflowN("wfC", func(ctx *task.WorkflowContext) (any, error) {
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no history", nil
+			return statusNoHistory, nil
 		}
 
 		tb.totalEvents.Store(int64(len(ph.Events())))
@@ -106,7 +106,7 @@ func (tb *trustboundary) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 
-		return "done", nil
+		return statusDone, nil
 	})
 
 	reg.AddActivityN("actA", func(ctx task.ActivityContext) (any, error) {

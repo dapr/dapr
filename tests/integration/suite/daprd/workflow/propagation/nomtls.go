@@ -83,7 +83,7 @@ func (n *nomtls) Run(t *testing.T, ctx context.Context) {
 			n.childHistoryReceived.Store(true)
 			return "has-history", nil
 		}
-		return "no-history", nil
+		return statusNoHistoryHyphen, nil
 	})
 
 	client := n.workflow.BackendClient(t, ctx)

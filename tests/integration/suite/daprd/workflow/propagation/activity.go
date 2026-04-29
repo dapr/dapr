@@ -81,13 +81,13 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 	})
 
 	reg.AddActivityN("step1", func(ctx task.ActivityContext) (any, error) {
-		return "done", nil
+		return statusDone, nil
 	})
 
 	reg.AddActivityN("receiver", func(ctx task.ActivityContext) (any, error) {
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no history", nil
+			return statusNoHistory, nil
 		}
 
 		a.historyReceived.Store(true)

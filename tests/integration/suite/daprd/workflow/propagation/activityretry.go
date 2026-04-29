@@ -122,7 +122,7 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 	reg.AddWorkflowN("childWf", func(ctx *task.WorkflowContext) (any, error) {
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no-history", nil
+			return statusNoHistoryHyphen, nil
 		}
 		a.childHistoryReceived.Store(true)
 
@@ -188,7 +188,7 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 
-		return "done", nil
+		return statusDone, nil
 	})
 
 	client := a.workflow.BackendClient(t, ctx)

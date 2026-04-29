@@ -83,7 +83,7 @@ func (w *workflowchain) Run(t *testing.T, ctx context.Context) {
 		// depth == 3: look at propagated history
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no-history", nil
+			return statusNoHistoryHyphen, nil
 		}
 
 		plural := ph.GetWorkflowsByName("worker")
@@ -106,7 +106,7 @@ func (w *workflowchain) Run(t *testing.T, ctx context.Context) {
 			w.singularEqualsPluralLast.Store(true)
 		}
 
-		return "done", nil
+		return statusDone, nil
 	})
 
 	// parent kicks off the chain at depth=1 with lineage

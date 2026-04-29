@@ -83,7 +83,7 @@ func (s *ownhistoryevents) Run(t *testing.T, ctx context.Context) {
 	reg.AddWorkflowN("child", func(ctx *task.WorkflowContext) (any, error) {
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no history", nil
+			return statusNoHistory, nil
 		}
 
 		s.totalEvents.Store(int64(len(ph.Events())))
@@ -106,10 +106,10 @@ func (s *ownhistoryevents) Run(t *testing.T, ctx context.Context) {
 	})
 
 	reg.AddActivityN("step1", func(ctx task.ActivityContext) (any, error) {
-		return "done", nil
+		return statusDone, nil
 	})
 	reg.AddActivityN("step2", func(ctx task.ActivityContext) (any, error) {
-		return "done", nil
+		return statusDone, nil
 	})
 
 	client := s.workflow.BackendClient(t, ctx)

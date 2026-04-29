@@ -87,7 +87,7 @@ func (m *multiapp) Run(t *testing.T, ctx context.Context) {
 	app1Reg.AddWorkflowN("remoteChildWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no history", nil
+			return statusNoHistory, nil
 		}
 
 		m.childHistoryReceived.Store(true)
@@ -104,7 +104,7 @@ func (m *multiapp) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 
-		return "done", nil
+		return statusDone, nil
 	})
 
 	client0 := m.workflow.BackendClient(t, ctx)

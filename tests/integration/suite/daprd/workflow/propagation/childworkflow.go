@@ -80,7 +80,7 @@ func (c *childworkflow) Run(t *testing.T, ctx context.Context) {
 	reg.AddWorkflowN("child", func(ctx *task.WorkflowContext) (any, error) {
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no history", nil
+			return statusNoHistory, nil
 		}
 
 		c.historyReceived.Store(true)
@@ -100,7 +100,7 @@ func (c *childworkflow) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 
-		return "done", nil
+		return statusDone, nil
 	})
 
 	reg.AddActivityN("greet", func(ctx task.ActivityContext) (any, error) {

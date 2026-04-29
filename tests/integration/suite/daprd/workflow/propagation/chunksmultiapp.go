@@ -74,11 +74,11 @@ func (c *chunksmultiapp) Run(t *testing.T, ctx context.Context) {
 	app1AppID := c.workflow.DaprN(1).AppID()
 
 	// App0: root workflow calls app0Act, then creates middleWf on App1
-	app0Reg.AddActivityN("app0Act", func(ctx task.ActivityContext) (any, error) {
+	app0Reg.AddActivityN(activityApp0Act, func(ctx task.ActivityContext) (any, error) {
 		return "app0-done", nil
 	})
 	app0Reg.AddWorkflowN("rootWf", func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.CallActivity("app0Act").Await(nil); err != nil {
+		if err := ctx.CallActivity(activityApp0Act).Await(nil); err != nil {
 			return nil, err
 		}
 		var result string
@@ -114,7 +114,7 @@ func (c *chunksmultiapp) Run(t *testing.T, ctx context.Context) {
 	app2Reg.AddWorkflowN("leafWf", func(ctx *task.WorkflowContext) (any, error) {
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no history", nil
+			return statusNoHistory, nil
 		}
 
 		c.leafHistoryReceived.Store(true)
@@ -130,7 +130,7 @@ func (c *chunksmultiapp) Run(t *testing.T, ctx context.Context) {
 		c.eventCountApp1.Store(int64(len(app1Events)))
 		// Verify app0's events contain app0Act
 		for _, e := range app0Events {
-			if ts := e.GetTaskScheduled(); ts != nil && ts.GetName() == "app0Act" {
+			if ts := e.GetTaskScheduled(); ts != nil && ts.GetName() == activityApp0Act {
 				c.leafApp0HasAct.Store(true)
 			}
 		}
@@ -141,7 +141,7 @@ func (c *chunksmultiapp) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 
-		return "done", nil
+		return statusDone, nil
 	})
 
 	client0 := c.workflow.BackendClient(t, ctx)

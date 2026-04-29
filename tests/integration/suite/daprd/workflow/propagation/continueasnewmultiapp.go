@@ -108,7 +108,7 @@ func (c *continueasnewmultiapp) Run(t *testing.T, ctx context.Context) {
 		// prior generation's own events.
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no-history", nil //nolint:goconst
+			return statusNoHistoryHyphen, nil
 		}
 
 		c.gen2SawHistory.Store(true)
@@ -121,7 +121,7 @@ func (c *continueasnewmultiapp) Run(t *testing.T, ctx context.Context) {
 				c.gen2SawGen1.Store(true)
 			}
 		}
-		return "done", nil
+		return statusDone, nil
 	})
 
 	client0 := c.workflow.BackendClient(t, ctx)

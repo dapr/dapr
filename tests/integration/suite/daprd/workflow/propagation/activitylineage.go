@@ -104,7 +104,7 @@ func (al *activitylineage) Run(t *testing.T, ctx context.Context) {
 	reg.AddActivityN("receiver", func(ctx task.ActivityContext) (any, error) {
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no history", nil
+			return statusNoHistory, nil
 		}
 
 		al.historyReceived.Store(true)

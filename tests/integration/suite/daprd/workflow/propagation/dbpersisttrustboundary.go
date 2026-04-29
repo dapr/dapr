@@ -72,11 +72,11 @@ func (d *dbpersisttrustboundary) Run(t *testing.T, ctx context.Context) {
 	app1AppID := d.workflow.DaprN(1).AppID()
 
 	// App0: rootWf -> app0Act -> middleWf (App1, lineage).
-	app0Reg.AddActivityN("app0Act", func(ctx task.ActivityContext) (any, error) {
+	app0Reg.AddActivityN(activityApp0Act, func(ctx task.ActivityContext) (any, error) {
 		return "app0-done", nil
 	})
 	app0Reg.AddWorkflowN("rootWf", func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.CallActivity("app0Act").Await(nil); err != nil {
+		if err := ctx.CallActivity(activityApp0Act).Await(nil); err != nil {
 			return nil, err
 		}
 		var result string
@@ -110,7 +110,7 @@ func (d *dbpersisttrustboundary) Run(t *testing.T, ctx context.Context) {
 	// App2: leafWf proves it received some history, check db below
 	app2Reg.AddWorkflowN("leafWf", func(ctx *task.WorkflowContext) (any, error) {
 		if ctx.GetPropagatedHistory() == nil {
-			return "no-history", nil
+			return statusNoHistoryHyphen, nil
 		}
 		return "has-history", nil
 	})
@@ -182,7 +182,7 @@ func (d *dbpersisttrustboundary) Run(t *testing.T, ctx context.Context) {
 		// rootWf/app0Act events (trust boundary)
 		for _, e := range ph.GetEvents() {
 			if ts := e.GetTaskScheduled(); ts != nil {
-				assert.NotEqual(t, "app0Act", ts.GetName(),
+				assert.NotEqual(t, activityApp0Act, ts.GetName(),
 					"app0Act should NOT appear in the leaf's persisted events (trust boundary)")
 			}
 			if es := e.GetExecutionStarted(); es != nil {

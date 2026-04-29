@@ -67,12 +67,12 @@ func (c *chunks) Run(t *testing.T, ctx context.Context) {
 
 	app0AppID := c.workflow.DaprN(0).AppID()
 
-	app0Reg.AddActivityN("app0Act", func(ctx task.ActivityContext) (any, error) {
-		return "done", nil
+	app0Reg.AddActivityN(activityApp0Act, func(ctx task.ActivityContext) (any, error) {
+		return statusDone, nil
 	})
 
 	app0Reg.AddWorkflowN("parentWf", func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.CallActivity("app0Act").Await(nil); err != nil {
+		if err := ctx.CallActivity(activityApp0Act).Await(nil); err != nil {
 			return nil, err
 		}
 		var result string
@@ -88,7 +88,7 @@ func (c *chunks) Run(t *testing.T, ctx context.Context) {
 	app1Reg.AddWorkflowN("childWf", func(ctx *task.WorkflowContext) (any, error) {
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no history", nil
+			return statusNoHistory, nil
 		}
 
 		c.childHistoryReceived.Store(true)
@@ -98,7 +98,7 @@ func (c *chunks) Run(t *testing.T, ctx context.Context) {
 		c.app0Chunks.Store(workflows)
 		c.app0AppIDs.Store(ph.GetAppIDs())
 
-		return "done", nil
+		return statusDone, nil
 	})
 
 	client0 := c.workflow.BackendClient(t, ctx)

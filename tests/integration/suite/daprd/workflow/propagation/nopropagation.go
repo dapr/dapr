@@ -76,7 +76,7 @@ func (n *nopropagation) Run(t *testing.T, ctx context.Context) {
 		if ph := ctx.GetPropagatedHistory(); ph != nil {
 			n.childHistoryReceived.Store(true)
 		}
-		return "done", nil
+		return statusDone, nil
 	})
 
 	reg.AddActivityN("activity", func(ctx task.ActivityContext) (any, error) {

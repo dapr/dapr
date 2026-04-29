@@ -114,7 +114,7 @@ func (a *allfields) Run(t *testing.T, ctx context.Context) {
 	reg.AddWorkflowN("childWf", func(ctx *task.WorkflowContext) (any, error) {
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no history", nil
+			return statusNoHistory, nil
 		}
 		a.historyReceived.Store(true)
 		a.eventCount.Store(int64(len(ph.Events())))
@@ -195,7 +195,7 @@ func (a *allfields) Run(t *testing.T, ctx context.Context) {
 			a.failActErrMessage.Store(failAct.Error.GetErrorMessage())
 		}
 
-		return "done", nil
+		return statusDone, nil
 	})
 
 	client := a.workflow.BackendClient(t, ctx)

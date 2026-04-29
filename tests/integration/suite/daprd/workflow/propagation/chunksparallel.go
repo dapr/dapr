@@ -107,7 +107,7 @@ func (c *chunksparallel) Run(t *testing.T, ctx context.Context) {
 	app1Reg.AddWorkflowN("childWf", func(ctx *task.WorkflowContext) (any, error) {
 		ph := ctx.GetPropagatedHistory()
 		if ph == nil {
-			return "no history", nil
+			return statusNoHistory, nil
 		}
 
 		c.childHistoryReceived.Store(true)
@@ -135,7 +135,7 @@ func (c *chunksparallel) Run(t *testing.T, ctx context.Context) {
 		c.childActNames.Store(actNames)
 		c.childCompletedNames.Store(completedNames)
 
-		return "done", nil
+		return statusDone, nil
 	})
 
 	client0 := c.workflow.BackendClient(t, ctx)
