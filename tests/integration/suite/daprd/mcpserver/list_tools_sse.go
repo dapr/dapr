@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
 )
 
 func init() {
@@ -117,7 +118,7 @@ func (s *listToolsSSE) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("ListTools via SSE transport returns expected tools", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPListToolsWorkflowName("weather-sse"), map[string]any{"mcpServerName": "weather-sse"})
+			mcpnames.MCPListToolsWorkflowName("weather-sse"), map[string]any{"mcpServerName": "weather-sse"})
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))

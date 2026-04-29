@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 )
@@ -126,7 +127,7 @@ func (s *accessPolicyScoped) Run(t *testing.T, ctx context.Context) {
 		// MCPServer was filtered out and its workflows were never registered.
 		input := map[string]any{}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPListToolsWorkflowName("restricted-mcp"), input)
+			mcpnames.MCPListToolsWorkflowName("restricted-mcp"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, status.RuntimeStatus,

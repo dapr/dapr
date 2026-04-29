@@ -36,6 +36,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
 	"github.com/dapr/durabletask-go/api/protos"
 )
 
@@ -143,7 +144,7 @@ func (s *callToolStdio) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("ListTools over stdio transport", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPListToolsWorkflowName("stdio-server"), nil)
+			mcpnames.MCPListToolsWorkflowName("stdio-server"), nil)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus)
@@ -163,7 +164,7 @@ func (s *callToolStdio) Run(t *testing.T, ctx context.Context) {
 			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPCallToolWorkflowName("stdio-server"), input)
+			mcpnames.MCPCallToolWorkflowName("stdio-server"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus)

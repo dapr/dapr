@@ -23,12 +23,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
 	"github.com/dapr/kit/logger"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/security"
@@ -66,13 +66,13 @@ func RegisterMCPServer(registry *task.TaskRegistry, holder *SessionHolder, serve
 	listActivity := makeListToolsActivity(server, holder, schemas)
 	callActivity := makeCallToolActivity(server, holder, schemas, opts)
 
-	listWF := api.MCPListToolsWorkflowName(server.Name)
+	listWF := mcpnames.MCPListToolsWorkflowName(server.Name)
 	registry.UpsertVersionedWorkflowN(listWF, workflowVersion, true, orchestrator)
-	callWF := api.MCPCallToolWorkflowName(server.Name)
+	callWF := mcpnames.MCPCallToolWorkflowName(server.Name)
 	registry.UpsertVersionedWorkflowN(callWF, workflowVersion, true, orchestrator)
-	listAct := api.MCPListToolsActivityName(server.Name)
+	listAct := mcpnames.MCPListToolsActivityName(server.Name)
 	registry.UpsertActivityN(listAct, listActivity)
-	callAct := api.MCPCallToolActivityName(server.Name)
+	callAct := mcpnames.MCPCallToolActivityName(server.Name)
 	registry.UpsertActivityN(callAct, callActivity)
 }
 
@@ -80,10 +80,10 @@ func RegisterMCPServer(registry *task.TaskRegistry, holder *SessionHolder, serve
 // In-flight workflows that already captured closures continue to completion;
 // only new workflow starts will fail with "not found".
 func UnregisterMCPServer(registry *task.TaskRegistry, serverName string) {
-	registry.RemoveVersionedWorkflow(api.MCPListToolsWorkflowName(serverName))
-	registry.RemoveVersionedWorkflow(api.MCPCallToolWorkflowName(serverName))
-	registry.RemoveActivity(api.MCPListToolsActivityName(serverName))
-	registry.RemoveActivity(api.MCPCallToolActivityName(serverName))
+	registry.RemoveVersionedWorkflow(mcpnames.MCPListToolsWorkflowName(serverName))
+	registry.RemoveVersionedWorkflow(mcpnames.MCPCallToolWorkflowName(serverName))
+	registry.RemoveActivity(mcpnames.MCPListToolsActivityName(serverName))
+	registry.RemoveActivity(mcpnames.MCPCallToolActivityName(serverName))
 }
 
 // makeOrchestrator returns the wildcard orchestrator function, closing over the
@@ -106,13 +106,13 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 		name := ctx.Name
 
 		switch {
-		case strings.HasSuffix(name, api.MCPMethodSuffix[api.MCP_METHOD_LIST_TOOLS]):
+		case strings.HasSuffix(name, mcpnames.MCPMethodListTools):
 			if err := runBeforeListTools(ctx, &server, serverName); err != nil {
 				return nil, errors.New("beforeListTools failed: " + err.Error())
 			}
 
 			var result wfv1.ListMCPToolsResponse
-			t := ctx.CallActivity(api.MCPListToolsActivityName(serverName), task.WithActivityInput(nil), task.WithActivityInProcess())
+			t := ctx.CallActivity(mcpnames.MCPListToolsActivityName(serverName), task.WithActivityInput(nil), task.WithActivityInProcess())
 			if err := t.Await(&result); err != nil {
 				return nil, errors.New("list-tools activity failed: " + err.Error())
 			}
@@ -123,7 +123,7 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 			}
 			return final, nil
 
-		case strings.HasSuffix(name, api.MCPMethodSuffix[api.MCP_METHOD_CALL_TOOL]):
+		case strings.HasSuffix(name, mcpnames.MCPMethodCallTool):
 			var input wfv1.MCPCallToolWorkflowInput
 			if err := ctx.GetInput(&input); err != nil {
 				return errorResult("failed to parse CallToolInput: %s", err), nil
@@ -152,7 +152,7 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 				Arguments: argMap,
 			}
 			var result wfv1.CallMCPToolResponse
-			t := ctx.CallActivity(api.MCPCallToolActivityName(serverName), task.WithActivityInput(actInput), task.WithActivityInProcess())
+			t := ctx.CallActivity(mcpnames.MCPCallToolActivityName(serverName), task.WithActivityInput(actInput), task.WithActivityInProcess())
 			if err := t.Await(&result); err != nil {
 				errResult := errorResult("%s", err)
 				final, hookErr := runAfterCallTool(ctx, &server, serverName, input.ToolName, arguments, errResult)
@@ -170,7 +170,7 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 
 		default:
 			return nil, fmt.Errorf("unknown MCP workflow name %q: expected suffix %q or %q",
-				name, api.MCPMethodSuffix[api.MCP_METHOD_LIST_TOOLS], api.MCPMethodSuffix[api.MCP_METHOD_CALL_TOOL])
+				name, mcpnames.MCPMethodListTools, mcpnames.MCPMethodCallTool)
 		}
 	}
 }

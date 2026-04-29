@@ -44,6 +44,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
 )
 
 func init() {
@@ -167,7 +168,7 @@ func (s *middlewareBeforeCallTool) Run(t *testing.T, ctx context.Context) {
 			"arguments": map[string]any{"msg": "hello"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPCallToolWorkflowName("gated"), input)
+			mcpnames.MCPCallToolWorkflowName("gated"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus,
@@ -190,7 +191,7 @@ func (s *middlewareBeforeCallTool) Run(t *testing.T, ctx context.Context) {
 			"arguments": map[string]any{"msg": "hello"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPCallToolWorkflowName("passthrough"), input)
+			mcpnames.MCPCallToolWorkflowName("passthrough"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus)

@@ -39,6 +39,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
 )
 
 func init() {
@@ -153,7 +154,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 			"arguments":     map[string]any{"city": "Austin"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPCallToolWorkflowName("weather"), input)
+			mcpnames.MCPCallToolWorkflowName("weather"), input)
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
@@ -175,7 +176,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 			"arguments":     map[string]any{"name": "dapr"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPCallToolWorkflowName("greeter"), input)
+			mcpnames.MCPCallToolWorkflowName("greeter"), input)
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
@@ -193,7 +194,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 	t.Run("ListTools returns different tools per server", func(t *testing.T) {
 		// Weather server
 		weatherID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPListToolsWorkflowName("weather"), map[string]any{"mcpServerName": "weather"})
+			mcpnames.MCPListToolsWorkflowName("weather"), map[string]any{"mcpServerName": "weather"})
 		weatherMeta, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(weatherID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
@@ -209,7 +210,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 
 		// Greeter server
 		greeterID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPListToolsWorkflowName("greeter"), map[string]any{"mcpServerName": "greeter"})
+			mcpnames.MCPListToolsWorkflowName("greeter"), map[string]any{"mcpServerName": "greeter"})
 		greeterMeta, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(greeterID), api.WithFetchPayloads(true))
 		require.NoError(t, err)

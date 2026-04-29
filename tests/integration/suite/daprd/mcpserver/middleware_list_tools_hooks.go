@@ -41,6 +41,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
 )
 
 func init() {
@@ -149,7 +150,7 @@ func (s *middlewareListToolsHooks) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("beforeListTools hook error blocks discovery", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPListToolsWorkflowName("before-list-deny"), nil)
+			mcpnames.MCPListToolsWorkflowName("before-list-deny"), nil)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, status.RuntimeStatus,
@@ -158,7 +159,7 @@ func (s *middlewareListToolsHooks) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("afterListTools hook error fails workflow", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPListToolsWorkflowName("after-list-fail"), nil)
+			mcpnames.MCPListToolsWorkflowName("after-list-fail"), nil)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, status.RuntimeStatus,

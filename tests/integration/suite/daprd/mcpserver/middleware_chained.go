@@ -44,6 +44,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
 )
 
 func init() {
@@ -178,7 +179,7 @@ func (s *middlewareChained) Run(t *testing.T, ctx context.Context) {
 			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPCallToolWorkflowName("chained-before"), input)
+			mcpnames.MCPCallToolWorkflowName("chained-before"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus,
@@ -201,7 +202,7 @@ func (s *middlewareChained) Run(t *testing.T, ctx context.Context) {
 			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPCallToolWorkflowName("chained-after"), input)
+			mcpnames.MCPCallToolWorkflowName("chained-after"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, status.RuntimeStatus,

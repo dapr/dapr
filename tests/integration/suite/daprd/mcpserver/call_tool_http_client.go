@@ -36,6 +36,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
 	"github.com/dapr/durabletask-go/api"
 )
 
@@ -123,7 +124,7 @@ func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 			"arguments":     map[string]any{"city": "Portland"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPCallToolWorkflowName("weather"), input)
+			mcpnames.MCPCallToolWorkflowName("weather"), input)
 
 		// Poll for completion using plain HTTP GET
 		statusURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s",

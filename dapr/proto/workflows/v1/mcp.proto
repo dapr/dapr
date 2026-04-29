@@ -22,6 +22,30 @@ option java_outer_classname = "DaprWorkflowProtos";
 option java_package = "io.dapr.workflows.v1";
 option go_package = "github.com/dapr/dapr/pkg/proto/workflows/v1;workflows";
 
+// ---- MCP workflow name enums ----
+
+// InProcessWorkflow identifies a category of Dapr internal workflow.
+// Workflow name format: dapr.internal.<workflow>.<resource>.<method>
+//
+// SDKs map enum values to string prefixes:
+//   IN_PROCESS_WORKFLOW_MCP → "dapr.internal.mcp."
+enum InProcessWorkflow {
+    // MCP: Model Context Protocol server orchestrations.
+    // Prefix: "dapr.internal.mcp."
+    IN_PROCESS_WORKFLOW_MCP = 0;
+}
+
+// MCPMethod identifies an operation within the MCP internal workflow.
+// SDKs map enum values to PascalCase method suffixes:
+//   MCP_METHOD_LIST_TOOLS → ".ListTools"
+//   MCP_METHOD_CALL_TOOL  → ".CallTool"
+enum MCPMethod {
+    // Discovers available tools on an MCPServer.
+    MCP_METHOD_LIST_TOOLS = 0;
+    // Invokes a specific tool on an MCPServer.
+    MCP_METHOD_CALL_TOOL = 1;
+}
+
 // ---- MCP workflow output messages ----
 
 // ListMCPToolsResponse is the output of a ListTools workflow.

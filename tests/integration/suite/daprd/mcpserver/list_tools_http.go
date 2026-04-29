@@ -39,6 +39,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
 )
 
 func init() {
@@ -131,7 +132,7 @@ func (s *listToolsHTTP) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("ListTools via streamable_http returns expected tools", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPListToolsWorkflowName("weather"), map[string]any{"mcpServerName": "weather"})
+			mcpnames.MCPListToolsWorkflowName("weather"), map[string]any{"mcpServerName": "weather"})
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))

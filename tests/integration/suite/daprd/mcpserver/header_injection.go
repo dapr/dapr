@@ -39,6 +39,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
 )
 
 func init() {
@@ -133,7 +134,7 @@ func (s *headerInjection) Run(t *testing.T, ctx context.Context) {
 			"arguments":     map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPCallToolWorkflowName("authed-server"), input)
+			mcpnames.MCPCallToolWorkflowName("authed-server"), input)
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))

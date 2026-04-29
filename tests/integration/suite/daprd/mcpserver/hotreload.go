@@ -40,6 +40,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1"
 )
 
 func init() {
@@ -135,7 +136,7 @@ func (s *hotReload) Run(t *testing.T, ctx context.Context) {
 		t.Helper()
 		input := map[string]any{"tool_name": "echo", "arguments": map[string]any{}}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			api.MCPCallToolWorkflowName("hotreload-server"), input)
+			mcpnames.MCPCallToolWorkflowName("hotreload-server"), input)
 
 		metadata, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
