@@ -194,7 +194,7 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 			}
 
 			var result wfv1.ListMCPToolsResponse
-			t := ctx.CallActivity(mcpnames.MCPListToolsActivityName(serverName), task.WithActivityInput(nil), task.WithActivityInProcess())
+			t := ctx.CallActivity(mcpnames.MCPListToolsActivityName(serverName), task.WithActivityInput(nil))
 			if err := t.Await(&result); err != nil {
 				return nil, errors.New("list-tools activity failed: " + err.Error())
 			}
@@ -237,7 +237,7 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 				Arguments: argMap,
 			}
 			var result wfv1.CallMCPToolResponse
-			t := ctx.CallActivity(mcpnames.MCPCallToolActivityName(serverName), task.WithActivityInput(actInput), task.WithActivityInProcess())
+			t := ctx.CallActivity(mcpnames.MCPCallToolActivityName(serverName), task.WithActivityInput(actInput))
 			if err := t.Await(&result); err != nil {
 				errResult := errorResult("%s", err)
 				final, hookErr := runAfterCallTool(ctx, &server, serverName, input.ToolName, arguments, errResult)

@@ -36,7 +36,7 @@ func TestMakeListToolsActivity_RealServer(t *testing.T) {
 		},
 	})
 
-	activity := makeListToolsActivity(server, connectTestSession(t, ts.URL), &toolSchemaCache{})
+	activity := makeListToolsActivity(server, connectTestSession(t, ts.URL), &toolSchemaCache{}, &toolListCache{})
 	actCtx := &fakeActivityContext{
 		ctx:   context.Background(),
 		input: nil,
@@ -61,7 +61,7 @@ func TestMakeListToolsActivity_CachesToolSchema(t *testing.T) {
 		},
 	})
 
-	activity := makeListToolsActivity(server, connectTestSession(t, ts.URL), schemas)
+	activity := makeListToolsActivity(server, connectTestSession(t, ts.URL), schemas, &toolListCache{})
 	actCtx := &fakeActivityContext{
 		ctx:   context.Background(),
 		input: nil,

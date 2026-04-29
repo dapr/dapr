@@ -22,6 +22,7 @@ import (
 
 	"github.com/dapr/components-contrib/workflows"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess"
 )
 
 type Fake struct {
@@ -107,5 +108,9 @@ func (f *Fake) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {
 }
 
 func (f *Fake) ActivateMCPServers(ctx context.Context) error {
+	return nil
+}
+
+func (f *Fake) InProcessExecutor() *inprocess.Executor {
 	return nil
 }

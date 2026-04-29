@@ -46,6 +46,8 @@ var (
 	wfBackendLogger = logger.NewLogger("dapr.wfengine.durabletask.backend")
 )
 
+const inprocessWorkflowNamePrefix = "dapr.internal."
+
 type Interface interface {
 	Run(context.Context) error
 	RegisterGrpcServer(*grpc.Server)
@@ -163,7 +165,6 @@ func New(opts Options) (Interface, error) {
 			return nil
 		}),
 		backend.WithStreamSendTimeout(time.Second*10),
-		backend.WithInProcessNamePrefix("dapr.internal."),
 	)
 
 	// TODO: handle somewhere that users cannot use a managed workflow name themselves.
@@ -176,11 +177,12 @@ func New(opts Options) (Interface, error) {
 	}
 
 	oworker := backend.NewWorkflowWorker(backend.WorkflowWorkerOptions{
-		Backend:           abackend,
-		Executor:          grpcExec,
-		InProcessExecutor: inProcessExec.Backend(),
-		Logger:            wfBackendLogger,
-		AppID:             opts.AppID,
+		Backend:             abackend,
+		Executor:            grpcExec,
+		InProcessExecutor:   inProcessExec.Backend(),
+		InProcessNamePrefix: inprocessWorkflowNamePrefix,
+		Logger:              wfBackendLogger,
+		AppID:               opts.AppID,
 	}, topts...)
 
 	topts = nil
@@ -194,6 +196,7 @@ func New(opts Options) (Interface, error) {
 		abackend,
 		grpcExec,
 		inProcessExec.Backend(),
+		inprocessWorkflowNamePrefix,
 		wfBackendLogger,
 		topts...,
 	)
