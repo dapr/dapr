@@ -58,6 +58,12 @@ type SignRequest struct {
 
 	// Optional DNS names to add to the certificate.
 	DNS []string
+
+	// IsKubeWebhook indicates that this cert will be presented to the Kube
+	// API server (e.g. conversion/admission webhooks). When true, the cert
+	// is signed with an ECDSA issuer for compatibility with API servers that
+	// do not support Ed25519.
+	IsKubeWebhook bool
 }
 
 // Signer is the interface for the CA.
@@ -271,7 +277,16 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 	}
 	tmpl.DNSNames = append(tmpl.DNSNames, req.DNS...)
 
-	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, c.bundle.X509.IssChain[0], req.PublicKey, c.bundle.X509.IssKey)
+	// Use the ECDSA issuer for Kube webhook-facing services so the cert
+	// chain is verifiable by API servers that don't support Ed25519.
+	issChain := c.bundle.X509.IssChain
+	issKey := c.bundle.X509.IssKey
+	if req.IsKubeWebhook && c.bundle.X509.ECIssChain != nil {
+		issChain = c.bundle.X509.ECIssChain
+		issKey = c.bundle.X509.ECIssKey
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, issChain[0], req.PublicKey, issKey)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +296,7 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 		return nil, err
 	}
 
-	return append([]*x509.Certificate{cert}, c.bundle.X509.IssChain...), nil
+	return append([]*x509.Certificate{cert}, issChain...), nil
 }
 
 // TODO: Remove this method in v1.12 since it is not used any more.
