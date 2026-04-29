@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 )
@@ -34,7 +36,12 @@ type reminderCreator interface {
 const reminderCreateMaxElapsedTime = time.Minute
 
 // CreateReminderWithRetry calls reminders.Create with bounded exponential
-// backoff.
+// backoff. Only transient gRPC errors are retried (e.g. scheduler pod
+// failover surfacing as Unavailable); permanent errors such as etcd
+// "database space exceeded" (ResourceExhausted) or invalid arguments are
+// returned to the caller immediately. Without that distinction a permanent
+// failure would burn the entire retry budget before surfacing the original
+// error, masking the real cause and tripping caller deadlines.
 func CreateReminderWithRetry(ctx context.Context, r reminderCreator, req *actorapi.CreateReminderRequest) error {
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = 100 * time.Millisecond
@@ -45,6 +52,30 @@ func CreateReminderWithRetry(ctx context.Context, r reminderCreator, req *actora
 		if err := ctx.Err(); err != nil {
 			return backoff.Permanent(err)
 		}
-		return r.Create(ctx, req)
+		err := r.Create(ctx, req)
+		if err != nil && !isTransientCreateError(err) {
+			return backoff.Permanent(err)
+		}
+		return err
 	}, backoff.WithContext(bo, ctx))
+}
+
+// isTransientCreateError reports whether a reminder Create error should be
+// retried. The retry exists to mask short scheduler-pod failovers, where
+// the gRPC client surfaces Unavailable (connection lost) or DeadlineExceeded
+// (per-call timeout) for the brief window before a new pod accepts the
+// connection. Anything outside that allowlist (ResourceExhausted, invalid
+// argument, permission denied, etc.) is a server-side decision that
+// retrying will not change, so we surface it immediately.
+func isTransientCreateError(err error) bool {
+	s, ok := status.FromError(err)
+	if !ok {
+		return false
+	}
+	switch s.Code() {
+	case codes.Unavailable, codes.DeadlineExceeded:
+		return true
+	default:
+		return false
+	}
 }
