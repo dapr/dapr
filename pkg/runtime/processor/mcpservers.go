@@ -15,6 +15,7 @@ package processor
 
 import (
 	"context"
+	"sync"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
@@ -64,9 +65,14 @@ func (p *Processor) AddPendingMCPServer(ctx context.Context, s mcpserverapi.MCPS
 
 // processMCPServers reads from the pendingMCPServers channel, resolves secrets,
 // and adds each MCPServer to the component store.
+// Workflow registration runs concurrently as each performs a network round-trip to discover tools.
 func (p *Processor) processMCPServers(ctx context.Context) error {
+	var wg sync.WaitGroup
+
 	for s := range p.pendingMCPServers {
 		if s.Name == "" {
+			// Flush sentinel: wait for in-flight registrations before continuing.
+			wg.Wait()
 			continue
 		}
 
@@ -84,13 +90,33 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 		p.compStore.AddMCPServer(s)
 		log.Infof("MCPServer loaded: %s", s.LogName())
 
-		if p.internalWorkflows != nil {
+		if p.internalWorkflows == nil {
+			continue
+		}
+
+		// Skip registration if the runtime is already shutting down — the
+		// derived contexts inside RegisterMCPServer would just error out.
+		if ctx.Err() != nil {
+			continue
+		}
+
+		wg.Add(1)
+		go func(s mcpserverapi.MCPServer) {
+			defer wg.Done()
+			// Recover so a panic in one server's registration does not bring down the whole sidecar.
+			// The failure is isolated to that server.
+			defer func() {
+				if r := recover(); r != nil {
+					log.Errorf("MCPServer %q: panic during workflow registration: %v", s.Name, r)
+				}
+			}()
 			if err := p.internalWorkflows.RegisterMCPServer(ctx, s, p.compStore, p.security); err != nil {
 				log.Warnf("MCPServer %q: failed to register workflows: %s", s.Name, err)
 			}
-		}
+		}(s)
 	}
 
+	wg.Wait()
 	return nil
 }
 
