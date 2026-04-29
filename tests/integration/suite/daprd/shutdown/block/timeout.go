@@ -184,14 +184,16 @@ func (i *timeout) Run(t *testing.T, ctx context.Context) {
 		close(daprdStopped)
 	}()
 
-	t.Run("daprd APIs should still be available during blocked shutdown, except input bindings and subscriptions", func(t *testing.T) {
+	t.Run("daprd APIs, input bindings, and subscriptions should all be available during blocked shutdown", func(t *testing.T) {
+		// During block-shutdown, subscriptions and input bindings remain active
+		// so the app can drain in-flight events. See dapr/dapr#9604.
 		time.Sleep(time.Second / 2)
 
 		i.listening.Store(true)
 		select {
 		case <-i.bindingChan:
-			assert.Fail(t, "binding event should not have been sent to subscriber")
-		case <-time.After(time.Second / 2):
+		case <-time.After(time.Second):
+			assert.Fail(t, "binding event should have been delivered during block-shutdown window")
 		}
 
 		_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
@@ -203,8 +205,8 @@ func (i *timeout) Run(t *testing.T, ctx context.Context) {
 
 		select {
 		case <-i.routeCh:
-			assert.Fail(t, "pubsub message should not have been sent to subscriber")
-		case <-time.After(time.Second / 2):
+		case <-time.After(time.Second):
+			assert.Fail(t, "pubsub message should have been delivered during block-shutdown window")
 		}
 
 		_, err = client.SaveState(ctx, &rtv1.SaveStateRequest{

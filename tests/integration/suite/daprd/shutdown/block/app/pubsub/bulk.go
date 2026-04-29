@@ -149,21 +149,21 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 		close(daprdStopped)
 	}()
 
-LOOP:
-	for {
-		_, err := client.BulkPublishEvent(ctx, &rtv1.BulkPublishRequest{
-			PubsubName: "foo",
-			Topic:      "def",
-			Entries: []*rtv1.BulkPublishRequestEntry{
-				{EntryId: "1", Event: []byte(`{"status":"completed"}`), ContentType: "application/json"},
-			},
-		})
-		require.NoError(t, err)
-		select {
-		case <-b.recvRoute2:
-		case <-time.After(time.Second / 2):
-			break LOOP
-		}
+	// During block-shutdown the subscription remains active so the app can drain
+	// in-flight pub/sub messages. A bulk publish made now should still reach
+	// route2 — see dapr/dapr#9604.
+	_, err = client.BulkPublishEvent(ctx, &rtv1.BulkPublishRequest{
+		PubsubName: "foo",
+		Topic:      "def",
+		Entries: []*rtv1.BulkPublishRequestEntry{
+			{EntryId: "1", Event: []byte(`{"status":"completed"}`), ContentType: "application/json"},
+		},
+	})
+	require.NoError(t, err)
+	select {
+	case <-b.recvRoute2:
+	case <-time.After(time.Second * 5):
+		assert.Fail(t, "expected route2 to be delivered during block-shutdown window")
 	}
 
 	close(b.returnPublish)

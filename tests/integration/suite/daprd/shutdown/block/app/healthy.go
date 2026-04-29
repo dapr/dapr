@@ -150,6 +150,9 @@ func (h *healthy) Run(t *testing.T, ctx context.Context) {
 		return h.healthzCalled.Load() > healthzCalled
 	}, time.Second*5, time.Millisecond*10)
 
+	// During block-shutdown the subscription remains active so the app can drain
+	// in-flight pub/sub messages. A publish made now should still reach the
+	// subscriber. See dapr/dapr#9604.
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "foo",
 		Topic:      "topic",
@@ -158,8 +161,8 @@ func (h *healthy) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	select {
 	case <-h.routeCh:
-		assert.Fail(t, "pubsub should not have sent message to subscriber")
-	case <-time.After(time.Second):
+	case <-time.After(time.Second * 5):
+		assert.Fail(t, "pubsub message should have been delivered during block-shutdown window")
 	}
 	_, err = client.SaveState(ctx, &rtv1.SaveStateRequest{
 		StoreName: "mystore",
