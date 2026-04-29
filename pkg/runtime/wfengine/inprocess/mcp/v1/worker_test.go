@@ -133,7 +133,7 @@ func plainHeader(name, value string) commonapi.NameValuePair {
 func TestCallTimeout(t *testing.T) {
 	t.Run("no timeout set returns default", func(t *testing.T) {
 		s := &mcpserverapi.MCPServer{}
-		assert.Equal(t, defaultMCPTimeout, callTimeout(s))
+		assert.Equal(t, defaultMCPTimeout, CallTimeout(s))
 	})
 
 	t.Run("endpoint timeout is honoured", func(t *testing.T) {
@@ -148,7 +148,7 @@ func TestCallTimeout(t *testing.T) {
 				},
 			},
 		}
-		assert.Equal(t, 5*time.Second, callTimeout(s))
+		assert.Equal(t, 5*time.Second, CallTimeout(s))
 	})
 }
 

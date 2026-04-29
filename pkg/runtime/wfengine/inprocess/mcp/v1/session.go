@@ -47,7 +47,7 @@ type SessionHolder struct {
 
 // newSessionHolder creates a holder and eagerly connects using the given context.
 // Returns an error if the initial connection fails (like component Init).
-func newSessionHolder(ctx context.Context, server *mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) (*SessionHolder, error) {
+func NewSessionHolder(ctx context.Context, server *mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) (*SessionHolder, error) {
 	h := &SessionHolder{
 		server: server,
 		store:  store,

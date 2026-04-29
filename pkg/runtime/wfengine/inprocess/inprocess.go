@@ -20,6 +20,8 @@ package inprocess
 
 import (
 	"context"
+	"fmt"
+	"sync"
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -32,6 +34,7 @@ import (
 // Executor wraps a task.TaskExecutor and exposes methods to register
 // in-process workflow subsystems after resources are loaded.
 type Executor struct {
+	mu        sync.Mutex
 	registry  *task.TaskRegistry
 	executor  backend.Executor
 	mcpHolder map[string]*mcp.SessionHolder
@@ -55,14 +58,44 @@ func (e *Executor) Backend() backend.Executor {
 
 // RegisterMCPServer registers workflows for a single MCPServer.
 // Called by the processor when a server is loaded or hot-reloaded.
+// Thread-safe — acquires the executor lock for the entire operation.
 func (e *Executor) RegisterMCPServer(ctx context.Context, server mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) error {
-	return mcp.RegisterMCPServer(ctx, e.registry, e.mcpHolder, server, mcp.Options{
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// Close old holder if hot-reloading.
+	if old, ok := e.mcpHolder[server.Name]; ok {
+		old.Close()
+		delete(e.mcpHolder, server.Name)
+	}
+
+	// Create new session with timeout.
+	connectCtx, cancel := context.WithTimeout(ctx, mcp.CallTimeout(&server))
+	defer cancel()
+
+	holder, err := mcp.NewSessionHolder(connectCtx, &server, store, sec)
+	if err != nil {
+		return fmt.Errorf("MCPServer %q: failed to connect: %w", server.Name, err)
+	}
+	e.mcpHolder[server.Name] = holder
+
+	// Register workflows — pure, no shared state mutation.
+	mcp.RegisterMCPServer(e.registry, holder, server, mcp.Options{
 		Store:    store,
 		Security: sec,
 	})
+	return nil
 }
 
 // UnregisterMCPServer removes workflows for a deleted MCPServer.
+// Thread-safe — acquires the executor lock.
 func (e *Executor) UnregisterMCPServer(serverName string) {
-	mcp.UnregisterMCPServer(e.registry, e.mcpHolder, serverName)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if old, ok := e.mcpHolder[serverName]; ok {
+		old.Close()
+		delete(e.mcpHolder, serverName)
+	}
+	mcp.UnregisterMCPServer(e.registry, serverName)
 }

@@ -37,7 +37,7 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *SessionHolder,
 	serverName := server.Name
 	return func(ctx task.ActivityContext) (any, error) {
 		callCtx := ctx.Context()
-		timeout := callTimeout(&server)
+		timeout := CallTimeout(&server)
 		workerLog.Debugf("list-tools: MCPServer %q timeout=%s", serverName, timeout)
 		callCtx, cancel := withDeadline(callCtx, timeout)
 		defer cancel()
@@ -122,7 +122,7 @@ func makeCallToolActivity(server mcpserverapi.MCPServer, holder *SessionHolder, 
 		}
 
 		callCtx := ctx.Context()
-		timeout := callTimeout(&server)
+		timeout := CallTimeout(&server)
 		callCtx, cancel := withDeadline(callCtx, timeout)
 		defer cancel()
 

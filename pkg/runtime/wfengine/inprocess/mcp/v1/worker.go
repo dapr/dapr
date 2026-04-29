@@ -23,8 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/protobuf/types/known/structpb"
-
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
 	"github.com/dapr/kit/logger"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -32,7 +31,6 @@ import (
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	mcptypes "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/types"
 	"github.com/dapr/dapr/pkg/security"
 )
 
@@ -59,39 +57,33 @@ const (
 	jsonFieldRequired = "required"
 )
 
-// RegisterMCPServer registers workflows and activities for a single MCPServer.
-// Builds the HTTP client and MCP session eagerly — similar to component Init().
-// Safe to call on hot-reload — registry upserts replace existing entries.
-func RegisterMCPServer(registry *task.TaskRegistry, server mcpserverapi.MCPServer, opts Options) error {
-	holder, err := newSessionHolder(&server, opts.Store, opts.Security)
-	if err != nil {
-		return fmt.Errorf("MCPServer %q: failed to connect: %w", server.Name, err)
-	}
-
+// RegisterMCPServer registers workflows and activities for a single MCPServer
+// using the given session holder. The caller is responsible for holder lifecycle
+// (creation, caching, cleanup). This function is pure — it only registers closures.
+func RegisterMCPServer(registry *task.TaskRegistry, holder *SessionHolder, server mcpserverapi.MCPServer, opts Options) {
 	schemas := &toolSchemaCache{}
 	orchestrator := makeOrchestrator(server, opts.Store)
 	listActivity := makeListToolsActivity(server, holder, schemas)
 	callActivity := makeCallToolActivity(server, holder, schemas, opts)
 
-	listWF := mcptypes.ListToolsWorkflowName(server.Name)
+	listWF := api.MCPListToolsWorkflowName(server.Name)
 	registry.UpsertVersionedWorkflowN(listWF, workflowVersion, true, orchestrator)
-	callWF := mcptypes.CallToolWorkflowName(server.Name)
+	callWF := api.MCPCallToolWorkflowName(server.Name)
 	registry.UpsertVersionedWorkflowN(callWF, workflowVersion, true, orchestrator)
-	listAct := mcptypes.ListToolsActivityName(server.Name)
+	listAct := api.MCPListToolsActivityName(server.Name)
 	registry.UpsertActivityN(listAct, listActivity)
-	callAct := mcptypes.CallToolActivityName(server.Name)
+	callAct := api.MCPCallToolActivityName(server.Name)
 	registry.UpsertActivityN(callAct, callActivity)
-	return nil
 }
 
 // UnregisterMCPServer removes workflows and activities for a deleted MCPServer.
 // In-flight workflows that already captured closures continue to completion;
 // only new workflow starts will fail with "not found".
 func UnregisterMCPServer(registry *task.TaskRegistry, serverName string) {
-	registry.RemoveVersionedWorkflow(mcptypes.ListToolsWorkflowName(serverName))
-	registry.RemoveVersionedWorkflow(mcptypes.CallToolWorkflowName(serverName))
-	registry.RemoveActivity(mcptypes.ListToolsActivityName(serverName))
-	registry.RemoveActivity(mcptypes.CallToolActivityName(serverName))
+	registry.RemoveVersionedWorkflow(api.MCPListToolsWorkflowName(serverName))
+	registry.RemoveVersionedWorkflow(api.MCPCallToolWorkflowName(serverName))
+	registry.RemoveActivity(api.MCPListToolsActivityName(serverName))
+	registry.RemoveActivity(api.MCPCallToolActivityName(serverName))
 }
 
 // makeOrchestrator returns the wildcard orchestrator function, closing over the
@@ -114,13 +106,13 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 		name := ctx.Name
 
 		switch {
-		case strings.HasSuffix(name, mcptypes.MethodListTools):
+		case strings.HasSuffix(name, api.MCPMethodSuffix[api.MCP_METHOD_LIST_TOOLS]):
 			if err := runBeforeListTools(ctx, &server, serverName); err != nil {
 				return nil, errors.New("beforeListTools failed: " + err.Error())
 			}
 
 			var result wfv1.ListMCPToolsResponse
-			t := ctx.CallActivity(mcptypes.ListToolsActivityName(serverName), task.WithActivityInput(nil), task.WithActivityInProcess())
+			t := ctx.CallActivity(api.MCPListToolsActivityName(serverName), task.WithActivityInput(nil), task.WithActivityInProcess())
 			if err := t.Await(&result); err != nil {
 				return nil, errors.New("list-tools activity failed: " + err.Error())
 			}
@@ -131,7 +123,7 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 			}
 			return final, nil
 
-		case strings.HasSuffix(name, mcptypes.MethodCallTool):
+		case strings.HasSuffix(name, api.MCPMethodSuffix[api.MCP_METHOD_CALL_TOOL]):
 			var input wfv1.MCPCallToolWorkflowInput
 			if err := ctx.GetInput(&input); err != nil {
 				return errorResult("failed to parse CallToolInput: %s", err), nil
@@ -160,7 +152,7 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 				Arguments: argMap,
 			}
 			var result wfv1.CallMCPToolResponse
-			t := ctx.CallActivity(mcptypes.CallToolActivityName(serverName), task.WithActivityInput(actInput), task.WithActivityInProcess())
+			t := ctx.CallActivity(api.MCPCallToolActivityName(serverName), task.WithActivityInput(actInput), task.WithActivityInProcess())
 			if err := t.Await(&result); err != nil {
 				errResult := errorResult("%s", err)
 				final, hookErr := runAfterCallTool(ctx, &server, serverName, input.ToolName, arguments, errResult)
@@ -178,7 +170,7 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 
 		default:
 			return nil, fmt.Errorf("unknown MCP workflow name %q: expected suffix %q or %q",
-				name, mcptypes.MethodListTools, mcptypes.MethodCallTool)
+				name, api.MCPMethodSuffix[api.MCP_METHOD_LIST_TOOLS], api.MCPMethodSuffix[api.MCP_METHOD_CALL_TOOL])
 		}
 	}
 }
@@ -236,9 +228,9 @@ func buildTransport(server *mcpserverapi.MCPServer, httpClient *http.Client) (mc
 	}
 }
 
-// callTimeout returns the per-call deadline for the given MCPServer.
+// CallTimeout returns the per-call deadline for the given MCPServer.
 // Falls back to defaultMCPTimeout when no timeout is configured.
-func callTimeout(server *mcpserverapi.MCPServer) time.Duration {
+func CallTimeout(server *mcpserverapi.MCPServer) time.Duration {
 	switch {
 	case server.Spec.Endpoint.StreamableHTTP != nil && server.Spec.Endpoint.StreamableHTTP.Timeout != nil:
 		return server.Spec.Endpoint.StreamableHTTP.Timeout.Duration
@@ -258,19 +250,6 @@ func withDeadline(ctx context.Context, d time.Duration) (context.Context, contex
 	return context.WithTimeout(ctx, d)
 }
 
-// structFromMap converts a map[string]any to a *structpb.Struct.
-// Returns nil if the input map is nil.
-func structFromMap(m map[string]any) *structpb.Struct {
-	if m == nil {
-		return nil
-	}
-	s, err := structpb.NewStruct(m)
-	if err != nil {
-		workerLog.Warnf("failed to convert map to structpb.Struct: %s", err)
-		return nil
-	}
-	return s
-}
 
 // stringDeref returns the dereferenced string or "" if nil.
 func stringDeref(s *string) string {
