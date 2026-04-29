@@ -152,7 +152,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	// pre-ECDSA-webhook version). This is a self-signed ECDSA CA used only
 	// for operator/injector webhook certs so the Kube API server can verify
 	// the chain without Ed25519 support.
-	if bndle.X509 != nil && bndle.X509.ECIssChain == nil {
+	if bndle.X509 != nil && bndle.X509.ECIssChain == nil && conf.TrustDomain != "" {
 		needsWrite = true
 		log.Info("ECDSA webhook CA not found: generating")
 		ecBundle, ecErr := bundle.GenerateECX509(bundle.OptionsX509{

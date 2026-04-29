@@ -369,3 +369,83 @@ func TestSignIdentity(t *testing.T) {
 		require.NoError(t, clientCert[0].CheckSignatureFrom(int2Crt))
 	})
 }
+
+func TestSignIdentity_IsKubeWebhook(t *testing.T) {
+	dir := t.TempDir()
+	rootCertPath := filepath.Join(dir, "ca.crt")
+	issuerCertPath := filepath.Join(dir, "issuer.crt")
+	issuerKeyPath := filepath.Join(dir, "issuer.key")
+	jwtSigningKeyPath := filepath.Join(dir, "jwt.key")
+	jwksPath := filepath.Join(dir, "jwks.json")
+
+	config := config.Config{
+		TrustDomain:      "example.test.dapr.io",
+		WorkloadCertTTL:  time.Hour,
+		AllowedClockSkew: time.Minute,
+		RootCertPath:     rootCertPath,
+		IssuerCertPath:   issuerCertPath,
+		IssuerKeyPath:    issuerKeyPath,
+		JWT: config.ConfigJWT{
+			Enabled:        false,
+			SigningKeyPath: jwtSigningKeyPath,
+			JWKSPath:       jwksPath,
+		},
+	}
+
+	// Let sentry auto-generate everything (including ECDSA CA)
+	ca, err := New(t.Context(), config)
+	require.NoError(t, err)
+
+	clientPK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	t.Run("regular workload uses Ed25519 issuer", func(t *testing.T) {
+		chain, err := ca.SignIdentity(t.Context(), &SignRequest{
+			PublicKey:     clientPK.Public(),
+			TrustDomain:  "example.test.dapr.io",
+			Namespace:    "default",
+			AppID:        "my-app",
+			IsKubeWebhook: false,
+		})
+		require.NoError(t, err)
+		require.True(t, len(chain) >= 2)
+
+		// Issuer cert (chain[1]) should use Ed25519
+		assert.Equal(t, x509.PureEd25519, chain[1].SignatureAlgorithm,
+			"Regular workload issuer should use Ed25519")
+	})
+
+	t.Run("webhook workload uses ECDSA issuer", func(t *testing.T) {
+		chain, err := ca.SignIdentity(t.Context(), &SignRequest{
+			PublicKey:     clientPK.Public(),
+			TrustDomain:  "example.test.dapr.io",
+			Namespace:    "default",
+			AppID:        "dapr-operator",
+			IsKubeWebhook: true,
+		})
+		require.NoError(t, err)
+		require.True(t, len(chain) >= 2)
+
+		// Issuer cert (chain[1]) should use ECDSA
+		assert.Equal(t, x509.ECDSAWithSHA256, chain[1].SignatureAlgorithm,
+			"Webhook issuer should use ECDSA")
+		assert.IsType(t, &ecdsa.PublicKey{}, chain[1].PublicKey,
+			"Webhook issuer key should be ECDSA")
+	})
+
+	t.Run("webhook cert verifiable with ECDSA-only chain", func(t *testing.T) {
+		chain, err := ca.SignIdentity(t.Context(), &SignRequest{
+			PublicKey:     clientPK.Public(),
+			TrustDomain:  "example.test.dapr.io",
+			Namespace:    "default",
+			AppID:        "dapr-operator",
+			IsKubeWebhook: true,
+		})
+		require.NoError(t, err)
+		require.True(t, len(chain) >= 2)
+
+		// Leaf should be verifiable from ECDSA issuer
+		require.NoError(t, chain[0].CheckSignatureFrom(chain[1]),
+			"Leaf cert should be verifiable from ECDSA issuer")
+	})
+}
