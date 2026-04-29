@@ -30,6 +30,7 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -277,6 +278,13 @@ func (o *operator) Start(ctx context.Context) error {
 				return rErr
 			}
 
+			// Prefer ECDSA trust anchors for webhook caBundle if available.
+			// Managed Kube API servers (e.g. AKS) may not support Ed25519
+			// for TLS verification of conversion webhooks.
+			if ecCA := o.ecTrustAnchorsFromConfigMap(ctx); ecCA != nil {
+				caBundle = ecCA
+			}
+
 			for {
 				rErr = o.patchConversionWebhooksInCRDs(ctx, caBundle, o.mgr.GetConfig(), "subscriptions.dapr.io")
 				if rErr != nil {
@@ -402,4 +410,22 @@ func buildScheme(opts Options) (*runtime.Scheme, error) {
 	}
 
 	return scheme, errors.Join(errs...)
+}
+
+// ecTrustAnchorsFromConfigMap reads the ECDSA webhook trust anchors from the
+// dapr-trust-bundle configmap. Returns nil if not present.
+func (o *operator) ecTrustAnchorsFromConfigMap(ctx context.Context) []byte {
+	cfg := o.mgr.GetConfig()
+	client, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil
+	}
+	cm, err := client.CoreV1().ConfigMaps(security.CurrentNamespace()).Get(ctx, "dapr-trust-bundle", v1.GetOptions{})
+	if err != nil {
+		return nil
+	}
+	if ecCA, ok := cm.Data["ec-ca.crt"]; ok && ecCA != "" {
+		return []byte(ecCA)
+	}
+	return nil
 }

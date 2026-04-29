@@ -36,6 +36,13 @@ func (s *selfhosted) store(_ context.Context, bundle bundle.Bundle) error {
 	files[s.config.IssuerCertPath] = bundle.X509.IssChainPEM
 	files[s.config.IssuerKeyPath] = bundle.X509.IssKeyPEM
 
+	// Persist ECDSA webhook CA alongside the main CA
+	if bundle.X509.ECTrustAnchors != nil {
+		files[s.config.RootCertPath+".ec-ca"] = bundle.X509.ECTrustAnchors
+		files[s.config.IssuerCertPath+".ec"] = bundle.X509.ECIssChainPEM
+		files[s.config.IssuerKeyPath+".ec"] = bundle.X509.ECIssKeyPEM
+	}
+
 	if s.config.JWT.Enabled {
 		files[s.config.JWT.SigningKeyPath] = bundle.JWT.SigningKeyPEM
 		files[s.config.JWT.JWKSPath] = bundle.JWT.JWKSJson

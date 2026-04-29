@@ -15,6 +15,7 @@ package ca
 
 import (
 	"context"
+	"crypto"
 	"fmt"
 	"path/filepath"
 
@@ -72,6 +73,24 @@ func (k *kube) get(ctx context.Context) (bundle.Bundle, error) {
 		if err != nil {
 			return bundle.Bundle{}, fmt.Errorf("failed to verify CA bundle: %w", err)
 		}
+
+		// Load persisted ECDSA webhook CA if present
+		if ecTrustAnchors, ok := secret.Data["ec-ca.crt"]; ok {
+			if ecIssChainPEM, ok := secret.Data["ec-tls.crt"]; ok {
+				if ecIssKeyPEM, ok := secret.Data["ec-tls.key"]; ok {
+					ecBundle, ecErr := verifyX509Bundle(ecTrustAnchors, ecIssChainPEM, ecIssKeyPEM)
+					if ecErr != nil {
+						log.Warnf("Failed to verify persisted ECDSA webhook CA, will regenerate: %v", ecErr)
+					} else {
+						bndle.X509.ECTrustAnchors = ecBundle.TrustAnchors
+						bndle.X509.ECIssChainPEM = ecBundle.IssChainPEM
+						bndle.X509.ECIssKeyPEM = ecBundle.IssKeyPEM
+						bndle.X509.ECIssChain = ecBundle.IssChain
+						bndle.X509.ECIssKey = ecBundle.IssKey.(crypto.Signer)
+					}
+				}
+			}
+		}
 	}
 
 	// Check for JWT signing key and JWKS
@@ -119,6 +138,13 @@ func (k *kube) store(ctx context.Context, bundle bundle.Bundle) error {
 	secret.Data[filepath.Base(k.config.IssuerCertPath)] = bundle.X509.IssChainPEM
 	secret.Data[filepath.Base(k.config.IssuerKeyPath)] = bundle.X509.IssKeyPEM
 
+	// Persist ECDSA webhook CA if present
+	if bundle.X509.ECTrustAnchors != nil {
+		secret.Data["ec-ca.crt"] = bundle.X509.ECTrustAnchors
+		secret.Data["ec-tls.crt"] = bundle.X509.ECIssChainPEM
+		secret.Data["ec-tls.key"] = bundle.X509.ECIssKeyPEM
+	}
+
 	// Add JWT related data if available
 	if bundle.JWT != nil {
 		if bundle.JWT.SigningKeyPEM != nil {
@@ -145,6 +171,11 @@ func (k *kube) store(ctx context.Context, bundle bundle.Bundle) error {
 	}
 
 	configMap.Data[filepath.Base(k.config.RootCertPath)] = string(bundle.X509.TrustAnchors)
+
+	// Add ECDSA trust anchors for webhook caBundle injection
+	if bundle.X509.ECTrustAnchors != nil {
+		configMap.Data["ec-ca.crt"] = string(bundle.X509.ECTrustAnchors)
+	}
 
 	// If the OIDC server is enabled, clients could use that to access the JWKS
 	// to verify JWTs. However, the OIDC server is not required and so it is

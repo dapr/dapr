@@ -148,6 +148,27 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		log.Info("Generating self-signed CA certs and persisting to store")
 	}
 
+	// Generate ECDSA webhook CA if not present (new install or upgrade from
+	// pre-ECDSA-webhook version). This is a self-signed ECDSA CA used only
+	// for operator/injector webhook certs so the Kube API server can verify
+	// the chain without Ed25519 support.
+	if bndle.X509 != nil && bndle.X509.ECIssChain == nil {
+		needsWrite = true
+		log.Info("ECDSA webhook CA not found: generating")
+		ecBundle, ecErr := bundle.GenerateECX509(bundle.OptionsX509{
+			TrustDomain:      conf.TrustDomain,
+			AllowedClockSkew: conf.AllowedClockSkew,
+		})
+		if ecErr != nil {
+			return nil, fmt.Errorf("failed to generate ECDSA webhook CA: %w", ecErr)
+		}
+		bndle.X509.ECTrustAnchors = ecBundle.TrustAnchors
+		bndle.X509.ECIssChainPEM = ecBundle.IssChainPEM
+		bndle.X509.ECIssKeyPEM = ecBundle.IssKeyPEM
+		bndle.X509.ECIssChain = ecBundle.IssChain
+		bndle.X509.ECIssKey = ecBundle.IssKey.(crypto.Signer)
+	}
+
 	if bndle.JWT == nil && conf.JWT.Enabled {
 		needsWrite = true
 

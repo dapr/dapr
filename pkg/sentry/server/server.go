@@ -213,7 +213,8 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	// calls for CRD conversion and sidecar injection. Their certs must use
 	// ECDSA because some managed Kube API servers (e.g. AKS) do not
 	// support Ed25519 for TLS verification.
-	isKubeWebhook := req.GetId() == "dapr-operator" || req.GetId() == "dapr-injector"
+	isKubeWebhook := req.GetNamespace() == security.CurrentNamespace() &&
+		(req.GetId() == "dapr-operator" || req.GetId() == "dapr-injector")
 
 	chain, err := s.ca.SignIdentity(ctx, &ca.SignRequest{
 		PublicKey:     csr.PublicKey,

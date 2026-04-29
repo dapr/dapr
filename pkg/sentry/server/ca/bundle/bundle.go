@@ -66,11 +66,19 @@ type X509 struct {
 	IssChain []*x509.Certificate
 	// IssKey is the issuer private key.
 	IssKey any
-	// ECIssChain is a secondary ECDSA issuer certificate chain used for
-	// Kubernetes webhook-facing services (operator, injector) whose certs
-	// must be verifiable by the Kube API server which may not support Ed25519.
+
+	// ECTrustAnchors is PEM encoded ECDSA trust anchors for Kube webhook
+	// caBundle injection. This is a self-signed ECDSA root CA, separate from
+	// the Ed25519 trust anchors, so the full chain is verifiable by API
+	// servers that do not support Ed25519.
+	ECTrustAnchors []byte
+	// ECIssChainPEM is the PEM encoded ECDSA issuer certificate chain.
+	ECIssChainPEM []byte
+	// ECIssKeyPEM is the PEM encoded ECDSA issuer private key.
+	ECIssKeyPEM []byte
+	// ECIssChain is the ECDSA issuer certificate chain.
 	ECIssChain []*x509.Certificate
-	// ECIssKey is the ECDSA private key for the secondary issuer.
+	// ECIssKey is the ECDSA private key for the webhook issuer.
 	ECIssKey crypto.Signer
 }
 
@@ -124,37 +132,82 @@ func GenerateX509(opts OptionsX509) (*X509, error) {
 		return nil, err
 	}
 
-	// Generate a secondary ECDSA issuer for Kubernetes webhook-facing
-	// services. The Kube API server may not support Ed25519 for TLS
-	// verification of conversion/admission webhooks.
+	ecBundle, err := GenerateECX509(opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate ECDSA webhook CA: %w", err)
+	}
+
+	return &X509{
+		TrustAnchors:   trustAnchors,
+		IssChainPEM:    issCertPEM,
+		IssKeyPEM:      issKeyPEM,
+		IssChain:       []*x509.Certificate{issCert},
+		IssKey:         issKey,
+		ECTrustAnchors: ecBundle.TrustAnchors,
+		ECIssChainPEM:  ecBundle.IssChainPEM,
+		ECIssKeyPEM:    ecBundle.IssKeyPEM,
+		ECIssChain:     ecBundle.IssChain,
+		ECIssKey:       ecBundle.IssKey.(crypto.Signer),
+	}, nil
+}
+
+// GenerateECX509 generates a self-signed ECDSA P-256 CA bundle for Kubernetes
+// webhook-facing services. The Kube API server on managed platforms (e.g. AKS)
+// may not support Ed25519 for TLS verification of conversion/admission
+// webhooks. This CA is completely independent so the entire cert chain is
+// verifiable using only ECDSA.
+func GenerateECX509(opts OptionsX509) (*X509, error) {
+	log.Debug("Generating ECDSA webhook CA bundle")
+
+	ecRootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate ECDSA root key: %w", err)
+	}
+
+	ecRootCert, err := generateRootCert(opts.TrustDomain, opts.AllowedClockSkew, opts.OverrideCATTL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate ECDSA root cert: %w", err)
+	}
+	ecRootCertDER, err := x509.CreateCertificate(rand.Reader, ecRootCert, ecRootCert, &ecRootKey.PublicKey, ecRootKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign ECDSA root cert: %w", err)
+	}
+	trustAnchors := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ecRootCertDER})
+	ecRootCert, err = x509.ParseCertificate(ecRootCertDER)
+	if err != nil {
+		return nil, err
+	}
+
 	ecIssKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate ECDSA key for webhook issuer: %w", err)
+		return nil, fmt.Errorf("failed to generate ECDSA issuer key: %w", err)
 	}
+	ecIssKeyDer, err := x509.MarshalPKCS8PrivateKey(ecIssKey)
+	if err != nil {
+		return nil, err
+	}
+	issKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: ecIssKeyDer})
 
 	ecIssCert, err := generateIssuerCert(opts.TrustDomain, opts.AllowedClockSkew, opts.OverrideCATTL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate ECDSA issuer cert: %w", err)
 	}
-	ecIssCert.SignatureAlgorithm = x509.ECDSAWithSHA256
-
-	ecIssCertDER, err := x509.CreateCertificate(rand.Reader, ecIssCert, rootCert, &ecIssKey.PublicKey, opts.X509RootKey)
+	ecIssCertDER, err := x509.CreateCertificate(rand.Reader, ecIssCert, ecRootCert, &ecIssKey.PublicKey, ecRootKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign ECDSA issuer cert: %w", err)
 	}
-	ecIssCertParsed, err := x509.ParseCertificate(ecIssCertDER)
+	issChainPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ecIssCertDER})
+	ecIssCert, err = x509.ParseCertificate(ecIssCertDER)
 	if err != nil {
 		return nil, err
 	}
 
 	return &X509{
 		TrustAnchors: trustAnchors,
-		IssChainPEM:  issCertPEM,
+		IssChainPEM:  issChainPEM,
 		IssKeyPEM:    issKeyPEM,
-		IssChain:     []*x509.Certificate{issCert},
-		IssKey:       issKey,
-		ECIssChain:   []*x509.Certificate{ecIssCertParsed},
-		ECIssKey:     ecIssKey,
+		IssChain:     []*x509.Certificate{ecIssCert},
+		IssKey:       ecIssKey,
 	}, nil
 }
 
