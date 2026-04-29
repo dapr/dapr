@@ -60,20 +60,35 @@ const (
 	jsonFieldRequired = "required"
 )
 
-// RegisterMCPServer registers workflows and activities for a single MCPServer
-// using the given session holder and pre-discovered tool definitions.
+// RegisterMCPServer eagerly discovers tools on the MCP server, then registers
+// per-tool CallTool workflows, the ListTools workflow, and supporting activities.
 // Registers one CallTool.<toolName> workflow per tool for fine-grained observability.
 // The caller is responsible for holder lifecycle (creation, caching, cleanup).
-func RegisterMCPServer(registry *task.TaskRegistry, holder *SessionHolder, server mcpserverapi.MCPServer, tools []*wfv1.MCPToolDefinition, opts Options) {
+// Returns the discovered tool names (for unregistration tracking) or an error
+// if tool discovery fails.
+func RegisterMCPServer(ctx context.Context, registry *task.TaskRegistry, holder *SessionHolder, server mcpserverapi.MCPServer, opts Options) ([]string, error) {
+	tools, err := DiscoverTools(ctx, holder)
+	if err != nil {
+		return nil, fmt.Errorf("MCPServer %q: failed to discover tools: %w", server.Name, err)
+	}
+
 	schemas := &toolSchemaCache{}
+	listCache := &toolListCache{}
+	// Pre-populate the list cache with the eagerly-discovered tools so ListTools
+	// workflow invocations return immediately without a redundant upstream call.
+	// The cache is invalidated on hot-reload (this function runs again with fresh tools).
+	listCache.store(tools)
+
 	orchestrator := makeOrchestrator(server, opts.Store)
-	listActivity := makeListToolsActivity(server, holder, schemas)
+	listActivity := makeListToolsActivity(server, holder, schemas, listCache)
 	callActivity := makeCallToolActivity(server, holder, schemas, opts)
 
 	// Register per-tool CallTool workflows. Each tool gets its own workflow name
 	// (dapr.internal.mcp.<server>.CallTool.<tool>) but they all share the same
 	// orchestrator closure.
-	for _, tool := range tools {
+	toolNames := make([]string, len(tools))
+	for i, tool := range tools {
+		toolNames[i] = tool.Name
 		wfName := mcpnames.MCPCallToolWorkflowName(server.Name, tool.Name)
 		registry.UpsertVersionedWorkflowN(wfName, workflowVersion, true, orchestrator)
 		// Pre-populate the schema cache from the eager ListTools results.
@@ -90,6 +105,8 @@ func RegisterMCPServer(registry *task.TaskRegistry, holder *SessionHolder, serve
 	registry.UpsertActivityN(listAct, listActivity)
 	callAct := mcpnames.MCPCallToolActivityName(server.Name)
 	registry.UpsertActivityN(callAct, callActivity)
+
+	return toolNames, nil
 }
 
 // UnregisterMCPServer removes the ListTools workflow and activities for a deleted MCPServer.

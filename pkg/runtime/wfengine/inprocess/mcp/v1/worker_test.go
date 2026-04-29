@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
@@ -71,10 +72,11 @@ func (f *fakeActivityContext) GetInput(resultPtr any) error {
 	return json.Unmarshal(b, resultPtr)
 }
 
-func (f *fakeActivityContext) GetTaskID() int32                      { return 1 }
-func (f *fakeActivityContext) GetTaskExecutionID() string            { return "test-exec-id" }
-func (f *fakeActivityContext) Context() context.Context              { return f.ctx }
-func (f *fakeActivityContext) GetTraceContext() *protos.TraceContext { return nil }
+func (f *fakeActivityContext) GetTaskID() int32                                { return 1 }
+func (f *fakeActivityContext) GetTaskExecutionID() string                      { return "test-exec-id" }
+func (f *fakeActivityContext) Context() context.Context                        { return f.ctx }
+func (f *fakeActivityContext) GetTraceContext() *protos.TraceContext           { return nil }
+func (f *fakeActivityContext) GetPropagatedHistory() *api.PropagatedHistory    { return nil }
 
 // newMCPTestServer creates an httptest server backed by an MCP streamable
 // HTTP handler with a single "greet" tool registered.

@@ -33,9 +33,17 @@ type activityCallToolInput struct {
 
 // makeListToolsActivity returns a task.Activity that calls ListTools on the given MCP server.
 // The SessionHolder handles reconnection if the connection drops.
-func makeListToolsActivity(server mcpserverapi.MCPServer, holder *SessionHolder, schemas *toolSchemaCache) task.Activity {
+// listCache is checked first — if pre-populated by eager discovery during RegisterMCPServer,
+// the activity returns the cached result immediately without an upstream MCP call.
+func makeListToolsActivity(server mcpserverapi.MCPServer, holder *SessionHolder, schemas *toolSchemaCache, listCache *toolListCache) task.Activity {
 	serverName := server.Name
 	return func(ctx task.ActivityContext) (any, error) {
+		// Cache hit: return pre-discovered tools without upstream call.
+		if cached, ok := listCache.load(); ok {
+			workerLog.Debugf("list-tools: MCPServer %q served from cache (%d tools)", serverName, len(cached))
+			return &wfv1.ListMCPToolsResponse{Tools: cached}, nil
+		}
+
 		callCtx := ctx.Context()
 		timeout := CallTimeout(&server)
 		workerLog.Debugf("list-tools: MCPServer %q timeout=%s", serverName, timeout)

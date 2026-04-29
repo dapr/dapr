@@ -89,29 +89,19 @@ func (e *Executor) RegisterMCPServer(ctx context.Context, server mcpserverapi.MC
 		return fmt.Errorf("MCPServer %q: failed to connect: %w", server.Name, err)
 	}
 
-	// Eager ListTools to discover tool names for per-tool workflow registration.
-	// If ListTools fails, fail the entire registration — we cannot register a
-	// useful MCPServer without knowing its tools.
-	tools, err := mcp.DiscoverTools(connectCtx, holder)
-	if err != nil {
-		holder.Close()
-		return fmt.Errorf("MCPServer %q: failed to discover tools: %w", server.Name, err)
-	}
-
-	e.mcpHolder[server.Name] = holder
-
-	// Track tool names for unregistration.
-	toolNames := make([]string, len(tools))
-	for i, t := range tools {
-		toolNames[i] = t.Name
-	}
-	e.mcpTools[server.Name] = toolNames
-
-	// Register workflows — pure, no shared state mutation.
-	mcp.RegisterMCPServer(e.registry, holder, server, tools, mcp.Options{
+	// Discover tools and register workflows. If discovery fails, we cannot
+	// register a useful MCPServer — fail the entire registration.
+	toolNames, err := mcp.RegisterMCPServer(connectCtx, e.registry, holder, server, mcp.Options{
 		Store:    store,
 		Security: sec,
 	})
+	if err != nil {
+		holder.Close()
+		return err
+	}
+
+	e.mcpHolder[server.Name] = holder
+	e.mcpTools[server.Name] = toolNames
 	return nil
 }
 

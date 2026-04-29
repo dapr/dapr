@@ -64,6 +64,27 @@ func (c *toolSchemaCache) get(toolName string) (json.RawMessage, bool) {
 	return s, ok
 }
 
+// toolListCache is a per-server cache of the full tool list returned by ListTools.
+// Populated eagerly by RegisterMCPServer from the DiscoverTools result, then
+// served to ListTools workflow invocations to avoid redundant upstream calls.
+// Refreshed on hot-reload (RegisterMCPServer is called again).
+type toolListCache struct {
+	mu    sync.RWMutex
+	tools []*wfv1.MCPToolDefinition
+}
+
+func (c *toolListCache) store(tools []*wfv1.MCPToolDefinition) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.tools = tools
+}
+
+func (c *toolListCache) load() ([]*wfv1.MCPToolDefinition, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.tools, len(c.tools) > 0
+}
+
 // convertCallToolResult converts an mcp.CallToolResult from the go-sdk into a proto CallMCPToolResponse.
 // Each MCP content type maps to the corresponding oneof variant in MCPContentBlock.
 // Unknown/future content types are JSON-marshaled into a text block as a forward-compatible fallback.
