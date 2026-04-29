@@ -91,7 +91,11 @@ func (e *Executor) RegisterMCPServer(ctx context.Context, server mcpserverapi.MC
 
 	// Discover tools and register workflows. If discovery fails, we cannot
 	// register a useful MCPServer — fail the entire registration.
-	toolNames, err := mcp.RegisterMCPServer(connectCtx, e.registry, holder, server, mcp.Options{
+	toolNames, err := mcp.RegisterMCPServer(mcp.RegisterOptions{
+		Ctx:      connectCtx,
+		Registry: e.registry,
+		Holder:   holder,
+		Server:   server,
 		Store:    store,
 		Security: sec,
 	})

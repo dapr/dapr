@@ -47,6 +47,23 @@ type Options struct {
 	Security security.Handler
 }
 
+// RegisterOptions bundles the inputs to RegisterMCPServer.
+type RegisterOptions struct {
+	// Ctx is used for the eager ListTools discovery call. Required.
+	Ctx context.Context
+	// Registry is the task registry to install workflows and activities into. Required.
+	Registry *task.TaskRegistry
+	// Holder is the connected MCP session for this server. Required; the caller
+	// owns its lifecycle (creation, caching, cleanup).
+	Holder *SessionHolder
+	// Server is the MCPServer manifest being registered. Required.
+	Server mcpserverapi.MCPServer
+	// Store is required; it is used to look up MCPServer manifests and fetch secrets at call time.
+	Store *compstore.ComponentStore
+	// Security enables SPIFFE workload identity JWT injection. If nil, SPIFFE is skipped.
+	Security security.Handler
+}
+
 const (
 	// workflowVersion is the version name used when registering versioned workflows.
 	workflowVersion = "v1"
@@ -66,10 +83,10 @@ const (
 // The caller is responsible for holder lifecycle (creation, caching, cleanup).
 // Returns the discovered tool names (for unregistration tracking) or an error
 // if tool discovery fails.
-func RegisterMCPServer(ctx context.Context, registry *task.TaskRegistry, holder *SessionHolder, server mcpserverapi.MCPServer, opts Options) ([]string, error) {
-	tools, err := DiscoverTools(ctx, holder)
+func RegisterMCPServer(opts RegisterOptions) ([]string, error) {
+	tools, err := DiscoverTools(opts.Ctx, opts.Holder)
 	if err != nil {
-		return nil, fmt.Errorf("MCPServer %q: failed to discover tools: %w", server.Name, err)
+		return nil, fmt.Errorf("MCPServer %q: failed to discover tools: %w", opts.Server.Name, err)
 	}
 
 	schemas := &toolSchemaCache{}
@@ -79,9 +96,10 @@ func RegisterMCPServer(ctx context.Context, registry *task.TaskRegistry, holder 
 	// The cache is invalidated on hot-reload (this function runs again with fresh tools).
 	listCache.store(tools)
 
-	orchestrator := makeOrchestrator(server, opts.Store)
-	listActivity := makeListToolsActivity(server, holder, schemas, listCache)
-	callActivity := makeCallToolActivity(server, holder, schemas, opts)
+	activityOpts := Options{Store: opts.Store, Security: opts.Security}
+	orchestrator := makeOrchestrator(opts.Server, opts.Store)
+	listActivity := makeListToolsActivity(opts.Server, opts.Holder, schemas, listCache)
+	callActivity := makeCallToolActivity(opts.Server, opts.Holder, schemas, activityOpts)
 
 	// Register per-tool CallTool workflows. Each tool gets its own workflow name
 	// (dapr.internal.mcp.<server>.CallTool.<tool>) but they all share the same
@@ -89,8 +107,8 @@ func RegisterMCPServer(ctx context.Context, registry *task.TaskRegistry, holder 
 	toolNames := make([]string, len(tools))
 	for i, tool := range tools {
 		toolNames[i] = tool.Name
-		wfName := mcpnames.MCPCallToolWorkflowName(server.Name, tool.Name)
-		registry.UpsertVersionedWorkflowN(wfName, workflowVersion, true, orchestrator)
+		wfName := mcpnames.MCPCallToolWorkflowName(opts.Server.Name, tool.Name)
+		opts.Registry.UpsertVersionedWorkflowN(wfName, workflowVersion, true, orchestrator)
 		// Pre-populate the schema cache from the eager ListTools results.
 		if tool.InputSchema != nil {
 			if raw, err := json.Marshal(tool.InputSchema.AsMap()); err == nil {
@@ -99,12 +117,12 @@ func RegisterMCPServer(ctx context.Context, registry *task.TaskRegistry, holder 
 		}
 	}
 
-	listWF := mcpnames.MCPListToolsWorkflowName(server.Name)
-	registry.UpsertVersionedWorkflowN(listWF, workflowVersion, true, orchestrator)
-	listAct := mcpnames.MCPListToolsActivityName(server.Name)
-	registry.UpsertActivityN(listAct, listActivity)
-	callAct := mcpnames.MCPCallToolActivityName(server.Name)
-	registry.UpsertActivityN(callAct, callActivity)
+	listWF := mcpnames.MCPListToolsWorkflowName(opts.Server.Name)
+	opts.Registry.UpsertVersionedWorkflowN(listWF, workflowVersion, true, orchestrator)
+	listAct := mcpnames.MCPListToolsActivityName(opts.Server.Name)
+	opts.Registry.UpsertActivityN(listAct, listActivity)
+	callAct := mcpnames.MCPCallToolActivityName(opts.Server.Name)
+	opts.Registry.UpsertActivityN(callAct, callActivity)
 
 	return toolNames, nil
 }
