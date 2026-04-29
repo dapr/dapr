@@ -31,13 +31,13 @@ func init() {
 }
 
 type env struct {
-	base                       *helm.Helm
-	withOtelEnvVars            *helm.Helm
-	withEscapedCommas          *helm.Helm
-	withSchedulerEnabled       *helm.Helm
-	withSchedulerDisabled      *helm.Helm
-	withNativeSidecarEnabled   *helm.Helm
-	withNativeSidecarDisabled  *helm.Helm
+	base                      *helm.Helm
+	withOtelEnvVars           *helm.Helm
+	withEscapedCommas         *helm.Helm
+	withSchedulerEnabled      *helm.Helm
+	withSchedulerDisabled     *helm.Helm
+	withNativeSidecarEnabled  *helm.Helm
+	withNativeSidecarDisabled *helm.Helm
 }
 
 func (e *env) Setup(t *testing.T) []framework.Option {
