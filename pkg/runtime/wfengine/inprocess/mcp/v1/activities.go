@@ -55,7 +55,7 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *SessionHolder,
 			return &wfv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: %w", err)
 		}
 
-		const maxListToolsPages = 100
+		const maxListToolsPages = 500
 
 		var tools []*wfv1.MCPToolDefinition
 		var cursor string

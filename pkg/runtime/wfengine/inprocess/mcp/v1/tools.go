@@ -26,7 +26,7 @@ import (
 const (
 	// maxSchemaCacheEntries limits the number of tool schemas cached per server
 	// to prevent memory exhaustion from a malicious MCP server.
-	maxSchemaCacheEntries = 10_000
+	maxSchemaCacheEntries = 500
 
 	// maxSchemaSize limits the size of a single tool's input schema (1 MB).
 	maxSchemaSize = 1 << 20

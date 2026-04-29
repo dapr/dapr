@@ -16,7 +16,6 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -136,10 +135,8 @@ func UnregisterMCPServer(registry *task.TaskRegistry, serverName string) {
 }
 
 // maxListToolsPages bounds the number of pages we'll fetch from an MCP server's
-// ListTools response. This guards against a misbehaving or malicious server that
-// returns infinite cursors. The context timeout is the primary bound; this is a
-// belt-and-suspenders defense. 500 pages × typical 50-100 tools/page ≈ 25k-50k
-// tools, well beyond any realistic catalog.
+// ListTools response. Guards against a misbehaving or malicious server returning
+// infinite cursors.
 const maxListToolsPages = 500
 
 // DiscoverTools calls ListTools on the MCP server eagerly and returns the tool definitions.
@@ -208,13 +205,13 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 		switch {
 		case strings.HasSuffix(name, mcpnames.MCPMethodListTools):
 			if err := runBeforeListTools(ctx, &server, serverName); err != nil {
-				return nil, errors.New("beforeListTools failed: " + err.Error())
+				return nil, fmt.Errorf("beforeListTools failed: %w", err)
 			}
 
 			var result wfv1.ListMCPToolsResponse
 			t := ctx.CallActivity(mcpnames.MCPListToolsActivityName(serverName), task.WithActivityInput(nil))
 			if err := t.Await(&result); err != nil {
-				return nil, errors.New("list-tools activity failed: " + err.Error())
+				return nil, fmt.Errorf("list-tools activity failed: %w", err)
 			}
 
 			final, err := runAfterListTools(ctx, &server, serverName, &result)
