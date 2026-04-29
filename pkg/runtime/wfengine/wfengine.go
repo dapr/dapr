@@ -161,7 +161,6 @@ func New(opts Options) (Interface, error) {
 		}
 	}
 
-	// There are separate "workers" for executing orchestrations (workflows) and activities
 	oworker := backend.NewWorkflowWorker(backend.WorkflowWorkerOptions{
 		Backend:  abackend,
 		Executor: executor,
