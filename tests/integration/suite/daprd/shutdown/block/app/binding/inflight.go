@@ -125,13 +125,17 @@ func (i *inflight) Run(t *testing.T, ctx context.Context) {
 		assert.Fail(t, "timeout")
 	}
 
+	// During block-shutdown the input binding remains active so the app can drain
+	// in-flight events. A binding event sent now should be delivered to the app
+	// successfully. closeInvoke is already closed, so the handler returns
+	// immediately. See dapr/dapr#9604.
 	ch = i.binding.SendMessage(new(compv1.ReadResponse))
 	select {
 	case req := <-ch:
-		assert.Empty(t, req.GetResponseData())
-		assert.Equal(t, &compv1.AckResponseError{Message: "input binding is closed"}, req.GetResponseError())
+		assert.Equal(t, "hello world", string(req.GetResponseData()))
+		assert.Nil(t, req.GetResponseError(), "binding events delivered during block-shutdown should succeed")
 	case <-time.After(time.Second * 10):
-		assert.Fail(t, "timeout")
+		assert.Fail(t, "timeout waiting for in-window binding event")
 	}
 
 	client := i.daprd.GRPCClient(t, ctx)

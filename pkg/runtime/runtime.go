@@ -497,15 +497,18 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 
 			log.Infof("Blocking graceful shutdown for %s or until app reports unhealthy...", *a.runtimeConfig.blockShutdownDuration)
 
-			a.processor.Subscriber().StopAllSubscriptionsForever()
-			a.processor.Binding().StopReadingFromBindings(true)
-
 			select {
 			case <-a.clock.After(*a.runtimeConfig.blockShutdownDuration):
 				log.Info("Block shutdown period expired, entering shutdown...")
 			case <-a.isAppHealthy:
 				log.Info("App reported unhealthy, entering shutdown...")
 			}
+
+			// Stop subscriptions and input bindings AFTER the block-shutdown
+			// window expires. During the window they remain active so the app
+			// can drain in-flight pub/sub messages and binding events. See #9604.
+			a.processor.Subscriber().StopAllSubscriptionsForever()
+			a.processor.Binding().StopReadingFromBindings(true)
 
 			return nil
 		})

@@ -125,16 +125,17 @@ func (i *inflight) Run(t *testing.T, ctx context.Context) {
 		assert.Fail(t, "timeout")
 	}
 
-	// Publish another message after in-flight has completed. Since the
-	// subscription is now closed (but the subscription context is not yet
-	// cancelled), the handler should block rather than returning an error that
-	// would cause the broker to NACK the message. The message should never be
-	// ack'd or nack'd— the broker connection will be torn down instead.
+	// During block-shutdown the subscription remains active so the app can drain
+	// in-flight messages. A message published now should be delivered to the
+	// handler and ack'd successfully. closeInvoke is already closed, so the
+	// handler returns immediately. See dapr/dapr#9604.
 	ch = i.broker.PublishHelloWorld("a")
 	select {
-	case <-ch:
-		assert.Fail(t, "expected no ack/nack for message published after subscription closed")
-	case <-time.After(time.Second * 3):
+	case req := <-ch:
+		assert.Nil(t, req.GetAckError(), "messages published during block-shutdown should be delivered successfully")
+		assert.Equal(t, "foo", req.GetAckMessageId())
+	case <-time.After(time.Second * 10):
+		assert.Fail(t, "timeout waiting for in-window message ack")
 	}
 
 	client := i.daprd.GRPCClient(t, ctx)

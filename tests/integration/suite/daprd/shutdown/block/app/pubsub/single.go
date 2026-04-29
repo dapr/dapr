@@ -143,19 +143,19 @@ func (s *single) Run(t *testing.T, ctx context.Context) {
 		}
 	})
 
-LOOP:
-	for {
-		_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
-			PubsubName: "foo",
-			Topic:      "def",
-			Data:       []byte(`{"status":"completed"}`),
-		})
-		require.NoError(t, err)
-		select {
-		case <-s.recvRoute2:
-		case <-time.After(time.Second / 2):
-			break LOOP
-		}
+	// During block-shutdown the subscription remains active so the app can drain
+	// in-flight pub/sub messages and binding events. A publish made now should
+	// still reach route2 — see dapr/dapr#9604.
+	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+		PubsubName: "foo",
+		Topic:      "def",
+		Data:       []byte(`{"status":"completed"}`),
+	})
+	require.NoError(t, err)
+	select {
+	case <-s.recvRoute2:
+	case <-time.After(time.Second * 5):
+		assert.Fail(t, "expected route2 to be delivered during block-shutdown window")
 	}
 
 	close(s.returnPublish)
