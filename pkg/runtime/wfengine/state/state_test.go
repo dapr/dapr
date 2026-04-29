@@ -444,9 +444,10 @@ func TestGetPurgeRequest(t *testing.T) {
 	assert.True(t, deleteKeys["signature-000001"])
 	assert.True(t, deleteKeys["customStatus"])
 	assert.True(t, deleteKeys["metadata"])
+	assert.True(t, deleteKeys["propagated-history"])
 
-	// Total: 1 inbox + 2 history + 1 sigcert + 2 sig + customStatus + metadata = 8
-	assert.Len(t, req.Operations, 8)
+	// Total: 1 inbox + 2 history + 1 sigcert + 2 sig + customStatus + metadata + propagated-history = 9
+	assert.Len(t, req.Operations, 9)
 }
 
 func TestGetSaveRequest_MetadataIncludesSigningLengths(t *testing.T) {
