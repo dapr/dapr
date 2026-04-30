@@ -46,7 +46,7 @@ type workflowoversize struct {
 func (w *workflowoversize) Setup(t *testing.T) []framework.Option {
 	w.workflow = workflow.New(t,
 		workflow.WithDaprdOptions(0,
-			daprd.WithMaxBodySize("1M"),
+			daprd.WithMaxBodySize("1Mi"),
 		),
 	)
 	return []framework.Option{

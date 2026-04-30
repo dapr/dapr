@@ -58,7 +58,9 @@ func (a *activityoversize) Run(t *testing.T, ctx context.Context) {
 	largeInput := strings.Repeat("x", inputSize)
 
 	a.workflow.Registry().AddWorkflowN("calls-large-activity", func(wctx *task.WorkflowContext) (any, error) {
-		wctx.CallActivity("echo", task.WithActivityInput("")).Await(nil)
+		if err := wctx.CallActivity("echo", task.WithActivityInput("")).Await(nil); err != nil {
+			return nil, err
+		}
 		return nil, wctx.CallActivity("echo", task.WithActivityInput(largeInput)).Await(nil)
 	})
 

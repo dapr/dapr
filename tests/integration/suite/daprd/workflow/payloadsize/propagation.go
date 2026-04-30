@@ -88,6 +88,7 @@ func (p *propagationoversize) Run(t *testing.T, ctx context.Context) {
 
 	var childRan atomic.Bool
 	childReg.AddWorkflowN("child", func(wctx *task.WorkflowContext) (any, error) {
+		childRan.Store(true)
 		return nil, nil
 	})
 

@@ -40,7 +40,12 @@ const (
 
 // workflowPayloadOversize reports whether the WorkflowRequest the executor
 // will build for this run would exceed the gRPC stream's send threshold.
+// A non-positive maxRequestBodySize signals "no limit" (matching the dapr
+// HTTP server's convention) and disables the precheck.
 func (o *orchestrator) workflowPayloadOversize(state *wfenginestate.State) (protos.StalledReason, string, bool) {
+	if o.maxRequestBodySize <= 0 {
+		return 0, "", false
+	}
 	threshold := (o.maxRequestBodySize * payloadStallNumerator) / payloadStallDenominator
 	size := proto.Size(state.IncomingHistory)
 	for _, e := range state.History {
@@ -62,8 +67,12 @@ func (o *orchestrator) workflowPayloadOversize(state *wfenginestate.State) (prot
 // activityPayloadOversize reports whether the ActivityRequest the executor
 // will build for this dispatch would exceed the gRPC stream's send threshold.
 // Returns nil when the payload fits, or a wrapped errPayloadSizeExceeded that
-// runWorkflow uses to stall the parent workflow.
+// runWorkflow uses to stall the parent workflow. A non-positive
+// maxRequestBodySize signals "no limit" and disables the precheck.
 func (o *orchestrator) activityPayloadOversize(e *backend.HistoryEvent, ph *protos.PropagatedHistory) error {
+	if o.maxRequestBodySize <= 0 {
+		return nil
+	}
 	ts := e.GetTaskScheduled()
 	threshold := (o.maxRequestBodySize * payloadStallNumerator) / payloadStallDenominator
 	size := proto.Size(ts) + proto.Size(ph)
