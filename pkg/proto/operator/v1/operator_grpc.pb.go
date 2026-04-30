@@ -32,16 +32,22 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	Operator_ComponentUpdate_FullMethodName     = "/dapr.proto.operator.v1.Operator/ComponentUpdate"
-	Operator_ListComponents_FullMethodName      = "/dapr.proto.operator.v1.Operator/ListComponents"
-	Operator_GetConfiguration_FullMethodName    = "/dapr.proto.operator.v1.Operator/GetConfiguration"
-	Operator_ListSubscriptions_FullMethodName   = "/dapr.proto.operator.v1.Operator/ListSubscriptions"
-	Operator_GetResiliency_FullMethodName       = "/dapr.proto.operator.v1.Operator/GetResiliency"
-	Operator_ListResiliency_FullMethodName      = "/dapr.proto.operator.v1.Operator/ListResiliency"
-	Operator_ListSubscriptionsV2_FullMethodName = "/dapr.proto.operator.v1.Operator/ListSubscriptionsV2"
-	Operator_SubscriptionUpdate_FullMethodName  = "/dapr.proto.operator.v1.Operator/SubscriptionUpdate"
-	Operator_ListHTTPEndpoints_FullMethodName   = "/dapr.proto.operator.v1.Operator/ListHTTPEndpoints"
-	Operator_HTTPEndpointUpdate_FullMethodName  = "/dapr.proto.operator.v1.Operator/HTTPEndpointUpdate"
+	Operator_ComponentUpdate_FullMethodName            = "/dapr.proto.operator.v1.Operator/ComponentUpdate"
+	Operator_ListComponents_FullMethodName             = "/dapr.proto.operator.v1.Operator/ListComponents"
+	Operator_GetConfiguration_FullMethodName           = "/dapr.proto.operator.v1.Operator/GetConfiguration"
+	Operator_ListSubscriptions_FullMethodName          = "/dapr.proto.operator.v1.Operator/ListSubscriptions"
+	Operator_GetResiliency_FullMethodName              = "/dapr.proto.operator.v1.Operator/GetResiliency"
+	Operator_ListResiliency_FullMethodName             = "/dapr.proto.operator.v1.Operator/ListResiliency"
+	Operator_ListSubscriptionsV2_FullMethodName        = "/dapr.proto.operator.v1.Operator/ListSubscriptionsV2"
+	Operator_SubscriptionUpdate_FullMethodName         = "/dapr.proto.operator.v1.Operator/SubscriptionUpdate"
+	Operator_ListHTTPEndpoints_FullMethodName          = "/dapr.proto.operator.v1.Operator/ListHTTPEndpoints"
+	Operator_HTTPEndpointUpdate_FullMethodName         = "/dapr.proto.operator.v1.Operator/HTTPEndpointUpdate"
+	Operator_ListMCPServers_FullMethodName             = "/dapr.proto.operator.v1.Operator/ListMCPServers"
+	Operator_MCPServerUpdate_FullMethodName            = "/dapr.proto.operator.v1.Operator/MCPServerUpdate"
+	Operator_ConfigurationUpdate_FullMethodName        = "/dapr.proto.operator.v1.Operator/ConfigurationUpdate"
+	Operator_ResiliencyUpdate_FullMethodName           = "/dapr.proto.operator.v1.Operator/ResiliencyUpdate"
+	Operator_ListWorkflowAccessPolicy_FullMethodName   = "/dapr.proto.operator.v1.Operator/ListWorkflowAccessPolicy"
+	Operator_WorkflowAccessPolicyUpdate_FullMethodName = "/dapr.proto.operator.v1.Operator/WorkflowAccessPolicyUpdate"
 )
 
 // OperatorClient is the client API for Operator service.
@@ -60,7 +66,7 @@ type OperatorClient interface {
 	GetResiliency(ctx context.Context, in *GetResiliencyRequest, opts ...grpc.CallOption) (*GetResiliencyResponse, error)
 	// Returns a list of resiliency configurations
 	ListResiliency(ctx context.Context, in *ListResiliencyRequest, opts ...grpc.CallOption) (*ListResiliencyResponse, error)
-	// Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
+	// Returns a list of pub/sub subscriptions
 	ListSubscriptionsV2(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
 	// Sends events to Dapr sidecars upon subscription changes.
 	SubscriptionUpdate(ctx context.Context, in *SubscriptionUpdateRequest, opts ...grpc.CallOption) (Operator_SubscriptionUpdateClient, error)
@@ -68,6 +74,18 @@ type OperatorClient interface {
 	ListHTTPEndpoints(ctx context.Context, in *ListHTTPEndpointsRequest, opts ...grpc.CallOption) (*ListHTTPEndpointsResponse, error)
 	// Sends events to Dapr sidecars upon http endpoint changes.
 	HTTPEndpointUpdate(ctx context.Context, in *HTTPEndpointUpdateRequest, opts ...grpc.CallOption) (Operator_HTTPEndpointUpdateClient, error)
+	// Returns a list of MCP server configurations.
+	ListMCPServers(ctx context.Context, in *ListMCPServersRequest, opts ...grpc.CallOption) (*ListMCPServersResponse, error)
+	// Sends events to Dapr sidecars upon MCP server changes.
+	MCPServerUpdate(ctx context.Context, in *MCPServerUpdateRequest, opts ...grpc.CallOption) (Operator_MCPServerUpdateClient, error)
+	// Sends events to Dapr sidecars upon configuration changes.
+	ConfigurationUpdate(ctx context.Context, in *ConfigurationUpdateRequest, opts ...grpc.CallOption) (Operator_ConfigurationUpdateClient, error)
+	// Sends events to Dapr sidecars upon resiliency changes.
+	ResiliencyUpdate(ctx context.Context, in *ResiliencyUpdateRequest, opts ...grpc.CallOption) (Operator_ResiliencyUpdateClient, error)
+	// Returns a list of workflow access policies
+	ListWorkflowAccessPolicy(ctx context.Context, in *ListWorkflowAccessPolicyRequest, opts ...grpc.CallOption) (*ListWorkflowAccessPolicyResponse, error)
+	// Sends events to Dapr sidecars upon workflow access policy changes.
+	WorkflowAccessPolicyUpdate(ctx context.Context, in *WorkflowAccessPolicyUpdateRequest, opts ...grpc.CallOption) (Operator_WorkflowAccessPolicyUpdateClient, error)
 }
 
 type operatorClient struct {
@@ -237,6 +255,152 @@ func (x *operatorHTTPEndpointUpdateClient) Recv() (*HTTPEndpointUpdateEvent, err
 	return m, nil
 }
 
+func (c *operatorClient) ListMCPServers(ctx context.Context, in *ListMCPServersRequest, opts ...grpc.CallOption) (*ListMCPServersResponse, error) {
+	out := new(ListMCPServersResponse)
+	err := c.cc.Invoke(ctx, Operator_ListMCPServers_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *operatorClient) MCPServerUpdate(ctx context.Context, in *MCPServerUpdateRequest, opts ...grpc.CallOption) (Operator_MCPServerUpdateClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Operator_ServiceDesc.Streams[3], Operator_MCPServerUpdate_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &operatorMCPServerUpdateClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Operator_MCPServerUpdateClient interface {
+	Recv() (*MCPServerUpdateEvent, error)
+	grpc.ClientStream
+}
+
+type operatorMCPServerUpdateClient struct {
+	grpc.ClientStream
+}
+
+func (x *operatorMCPServerUpdateClient) Recv() (*MCPServerUpdateEvent, error) {
+	m := new(MCPServerUpdateEvent)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *operatorClient) ConfigurationUpdate(ctx context.Context, in *ConfigurationUpdateRequest, opts ...grpc.CallOption) (Operator_ConfigurationUpdateClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Operator_ServiceDesc.Streams[4], Operator_ConfigurationUpdate_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &operatorConfigurationUpdateClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Operator_ConfigurationUpdateClient interface {
+	Recv() (*ConfigurationUpdateEvent, error)
+	grpc.ClientStream
+}
+
+type operatorConfigurationUpdateClient struct {
+	grpc.ClientStream
+}
+
+func (x *operatorConfigurationUpdateClient) Recv() (*ConfigurationUpdateEvent, error) {
+	m := new(ConfigurationUpdateEvent)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *operatorClient) ResiliencyUpdate(ctx context.Context, in *ResiliencyUpdateRequest, opts ...grpc.CallOption) (Operator_ResiliencyUpdateClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Operator_ServiceDesc.Streams[5], Operator_ResiliencyUpdate_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &operatorResiliencyUpdateClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Operator_ResiliencyUpdateClient interface {
+	Recv() (*ResiliencyUpdateEvent, error)
+	grpc.ClientStream
+}
+
+type operatorResiliencyUpdateClient struct {
+	grpc.ClientStream
+}
+
+func (x *operatorResiliencyUpdateClient) Recv() (*ResiliencyUpdateEvent, error) {
+	m := new(ResiliencyUpdateEvent)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *operatorClient) ListWorkflowAccessPolicy(ctx context.Context, in *ListWorkflowAccessPolicyRequest, opts ...grpc.CallOption) (*ListWorkflowAccessPolicyResponse, error) {
+	out := new(ListWorkflowAccessPolicyResponse)
+	err := c.cc.Invoke(ctx, Operator_ListWorkflowAccessPolicy_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *operatorClient) WorkflowAccessPolicyUpdate(ctx context.Context, in *WorkflowAccessPolicyUpdateRequest, opts ...grpc.CallOption) (Operator_WorkflowAccessPolicyUpdateClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Operator_ServiceDesc.Streams[6], Operator_WorkflowAccessPolicyUpdate_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &operatorWorkflowAccessPolicyUpdateClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Operator_WorkflowAccessPolicyUpdateClient interface {
+	Recv() (*WorkflowAccessPolicyUpdateEvent, error)
+	grpc.ClientStream
+}
+
+type operatorWorkflowAccessPolicyUpdateClient struct {
+	grpc.ClientStream
+}
+
+func (x *operatorWorkflowAccessPolicyUpdateClient) Recv() (*WorkflowAccessPolicyUpdateEvent, error) {
+	m := new(WorkflowAccessPolicyUpdateEvent)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // OperatorServer is the server API for Operator service.
 // All implementations should embed UnimplementedOperatorServer
 // for forward compatibility
@@ -253,7 +417,7 @@ type OperatorServer interface {
 	GetResiliency(context.Context, *GetResiliencyRequest) (*GetResiliencyResponse, error)
 	// Returns a list of resiliency configurations
 	ListResiliency(context.Context, *ListResiliencyRequest) (*ListResiliencyResponse, error)
-	// Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
+	// Returns a list of pub/sub subscriptions
 	ListSubscriptionsV2(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error)
 	// Sends events to Dapr sidecars upon subscription changes.
 	SubscriptionUpdate(*SubscriptionUpdateRequest, Operator_SubscriptionUpdateServer) error
@@ -261,6 +425,18 @@ type OperatorServer interface {
 	ListHTTPEndpoints(context.Context, *ListHTTPEndpointsRequest) (*ListHTTPEndpointsResponse, error)
 	// Sends events to Dapr sidecars upon http endpoint changes.
 	HTTPEndpointUpdate(*HTTPEndpointUpdateRequest, Operator_HTTPEndpointUpdateServer) error
+	// Returns a list of MCP server configurations.
+	ListMCPServers(context.Context, *ListMCPServersRequest) (*ListMCPServersResponse, error)
+	// Sends events to Dapr sidecars upon MCP server changes.
+	MCPServerUpdate(*MCPServerUpdateRequest, Operator_MCPServerUpdateServer) error
+	// Sends events to Dapr sidecars upon configuration changes.
+	ConfigurationUpdate(*ConfigurationUpdateRequest, Operator_ConfigurationUpdateServer) error
+	// Sends events to Dapr sidecars upon resiliency changes.
+	ResiliencyUpdate(*ResiliencyUpdateRequest, Operator_ResiliencyUpdateServer) error
+	// Returns a list of workflow access policies
+	ListWorkflowAccessPolicy(context.Context, *ListWorkflowAccessPolicyRequest) (*ListWorkflowAccessPolicyResponse, error)
+	// Sends events to Dapr sidecars upon workflow access policy changes.
+	WorkflowAccessPolicyUpdate(*WorkflowAccessPolicyUpdateRequest, Operator_WorkflowAccessPolicyUpdateServer) error
 }
 
 // UnimplementedOperatorServer should be embedded to have forward compatible implementations.
@@ -296,6 +472,24 @@ func (UnimplementedOperatorServer) ListHTTPEndpoints(context.Context, *ListHTTPE
 }
 func (UnimplementedOperatorServer) HTTPEndpointUpdate(*HTTPEndpointUpdateRequest, Operator_HTTPEndpointUpdateServer) error {
 	return status.Errorf(codes.Unimplemented, "method HTTPEndpointUpdate not implemented")
+}
+func (UnimplementedOperatorServer) ListMCPServers(context.Context, *ListMCPServersRequest) (*ListMCPServersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListMCPServers not implemented")
+}
+func (UnimplementedOperatorServer) MCPServerUpdate(*MCPServerUpdateRequest, Operator_MCPServerUpdateServer) error {
+	return status.Errorf(codes.Unimplemented, "method MCPServerUpdate not implemented")
+}
+func (UnimplementedOperatorServer) ConfigurationUpdate(*ConfigurationUpdateRequest, Operator_ConfigurationUpdateServer) error {
+	return status.Errorf(codes.Unimplemented, "method ConfigurationUpdate not implemented")
+}
+func (UnimplementedOperatorServer) ResiliencyUpdate(*ResiliencyUpdateRequest, Operator_ResiliencyUpdateServer) error {
+	return status.Errorf(codes.Unimplemented, "method ResiliencyUpdate not implemented")
+}
+func (UnimplementedOperatorServer) ListWorkflowAccessPolicy(context.Context, *ListWorkflowAccessPolicyRequest) (*ListWorkflowAccessPolicyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListWorkflowAccessPolicy not implemented")
+}
+func (UnimplementedOperatorServer) WorkflowAccessPolicyUpdate(*WorkflowAccessPolicyUpdateRequest, Operator_WorkflowAccessPolicyUpdateServer) error {
+	return status.Errorf(codes.Unimplemented, "method WorkflowAccessPolicyUpdate not implemented")
 }
 
 // UnsafeOperatorServer may be embedded to opt out of forward compatibility for this service.
@@ -498,6 +692,126 @@ func (x *operatorHTTPEndpointUpdateServer) Send(m *HTTPEndpointUpdateEvent) erro
 	return x.ServerStream.SendMsg(m)
 }
 
+func _Operator_ListMCPServers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMCPServersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OperatorServer).ListMCPServers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Operator_ListMCPServers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OperatorServer).ListMCPServers(ctx, req.(*ListMCPServersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Operator_MCPServerUpdate_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(MCPServerUpdateRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(OperatorServer).MCPServerUpdate(m, &operatorMCPServerUpdateServer{stream})
+}
+
+type Operator_MCPServerUpdateServer interface {
+	Send(*MCPServerUpdateEvent) error
+	grpc.ServerStream
+}
+
+type operatorMCPServerUpdateServer struct {
+	grpc.ServerStream
+}
+
+func (x *operatorMCPServerUpdateServer) Send(m *MCPServerUpdateEvent) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _Operator_ConfigurationUpdate_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ConfigurationUpdateRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(OperatorServer).ConfigurationUpdate(m, &operatorConfigurationUpdateServer{stream})
+}
+
+type Operator_ConfigurationUpdateServer interface {
+	Send(*ConfigurationUpdateEvent) error
+	grpc.ServerStream
+}
+
+type operatorConfigurationUpdateServer struct {
+	grpc.ServerStream
+}
+
+func (x *operatorConfigurationUpdateServer) Send(m *ConfigurationUpdateEvent) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _Operator_ResiliencyUpdate_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ResiliencyUpdateRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(OperatorServer).ResiliencyUpdate(m, &operatorResiliencyUpdateServer{stream})
+}
+
+type Operator_ResiliencyUpdateServer interface {
+	Send(*ResiliencyUpdateEvent) error
+	grpc.ServerStream
+}
+
+type operatorResiliencyUpdateServer struct {
+	grpc.ServerStream
+}
+
+func (x *operatorResiliencyUpdateServer) Send(m *ResiliencyUpdateEvent) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _Operator_ListWorkflowAccessPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListWorkflowAccessPolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OperatorServer).ListWorkflowAccessPolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Operator_ListWorkflowAccessPolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OperatorServer).ListWorkflowAccessPolicy(ctx, req.(*ListWorkflowAccessPolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Operator_WorkflowAccessPolicyUpdate_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WorkflowAccessPolicyUpdateRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(OperatorServer).WorkflowAccessPolicyUpdate(m, &operatorWorkflowAccessPolicyUpdateServer{stream})
+}
+
+type Operator_WorkflowAccessPolicyUpdateServer interface {
+	Send(*WorkflowAccessPolicyUpdateEvent) error
+	grpc.ServerStream
+}
+
+type operatorWorkflowAccessPolicyUpdateServer struct {
+	grpc.ServerStream
+}
+
+func (x *operatorWorkflowAccessPolicyUpdateServer) Send(m *WorkflowAccessPolicyUpdateEvent) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // Operator_ServiceDesc is the grpc.ServiceDesc for Operator service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -533,6 +847,14 @@ var Operator_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "ListHTTPEndpoints",
 			Handler:    _Operator_ListHTTPEndpoints_Handler,
 		},
+		{
+			MethodName: "ListMCPServers",
+			Handler:    _Operator_ListMCPServers_Handler,
+		},
+		{
+			MethodName: "ListWorkflowAccessPolicy",
+			Handler:    _Operator_ListWorkflowAccessPolicy_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -548,6 +870,26 @@ var Operator_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "HTTPEndpointUpdate",
 			Handler:       _Operator_HTTPEndpointUpdate_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "MCPServerUpdate",
+			Handler:       _Operator_MCPServerUpdate_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "ConfigurationUpdate",
+			Handler:       _Operator_ConfigurationUpdate_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "ResiliencyUpdate",
+			Handler:       _Operator_ResiliencyUpdate_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WorkflowAccessPolicyUpdate",
+			Handler:       _Operator_WorkflowAccessPolicyUpdate_Handler,
 			ServerStreams: true,
 		},
 	},

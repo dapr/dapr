@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -32,6 +33,7 @@ import (
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
 func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) error {
@@ -50,7 +52,7 @@ func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) 
 		return status.Errorf(codes.NotFound, "workflow instance does not exist with ID '%s'", o.actorID)
 	}
 
-	if !api.OrchestrationMetadataIsComplete(ometa) {
+	if !api.WorkflowMetadataIsComplete(ometa) {
 		return status.Errorf(codes.InvalidArgument, "'%s' is not in a terminal state", o.actorID)
 	}
 
@@ -106,12 +108,12 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 		return status.Errorf(codes.AlreadyExists, "workflow '%s' has already been created", o.actorID)
 	}
 
-	var workflowState backend.WorkflowState
+	var workflowState protos.BackendWorkflowState
 	if err = proto.Unmarshal(request, &workflowState); err != nil {
 		return fmt.Errorf("failed to unmarshal workflow history: %w", err)
 	}
 
-	if len(workflowState.Inbox) == 0 {
+	if len(workflowState.GetInbox()) == 0 {
 		return errors.New("expect rerun workflow inbox to not be empty")
 	}
 
@@ -119,8 +121,8 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 	var timers []*protos.HistoryEvent
 	var childWFs []*protos.HistoryEvent
 
-	for i := 0; i < len(workflowState.Inbox); i++ {
-		his := workflowState.Inbox[i]
+	for i := 0; i < len(workflowState.GetInbox()); i++ {
+		his := workflowState.GetInbox()[i]
 		his.Timestamp = timestamppb.Now()
 
 		switch his.GetEventType().(type) {
@@ -139,7 +141,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 				},
 			})
 
-		case *protos.HistoryEvent_SubOrchestrationInstanceCreated:
+		case *protos.HistoryEvent_ChildWorkflowInstanceCreated:
 			childWFs = append(childWFs, his)
 
 		default:
@@ -147,7 +149,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 		}
 
 		workflowState.History = append(workflowState.History, his)
-		workflowState.Inbox = append(workflowState.Inbox[:i], workflowState.Inbox[i+1:]...)
+		workflowState.Inbox = slices.Delete(workflowState.GetInbox(), i, i+1)
 		i--
 	}
 
@@ -159,18 +161,65 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 
 	newState.FromWorkflowState(&workflowState)
 
-	if err = o.saveInternalState(ctx, newState); err != nil {
+	if err = o.signAndSaveState(ctx, newState); err != nil {
 		return fmt.Errorf("failed to save workflow state: %w", err)
 	}
 
 	startedEvent := o.getExecutionStartedEvent(newState)
+
+	// Re-driven activities and child workflows preserve the propagation scope
+	// they originally had: scope is persisted on TaskScheduledEvent and
+	// ChildWorkflowInstanceCreatedEvent so it survives the action being
+	// discarded. Non-propagating tasks stay non-propagating & propagating
+	// tasks are re-issued with a chunk reflecting the rerunning workflow's
+	// current state plus whatever lineage it received from its parent.
+	outgoingActPropHist := buildRerunOutgoingHistory(activities, newState, o.actorID, o.appID, taskScheduledScope)
+	outgoingChildPropHist := buildRerunOutgoingHistory(childWFs, newState, o.actorID, o.appID, childWorkflowCreatedScope)
+
 	if err = errors.Join(
-		o.callChildWorkflows(ctx, startedEvent.GetName(), childWFs),
-		o.callActivities(ctx, activities, newState),
+		o.callChildWorkflows(ctx, startedEvent.GetName(), childWFs, outgoingChildPropHist),
+		o.callActivities(ctx, activities, newState, outgoingActPropHist).err,
 		o.createTimers(ctx, timers, newState.Generation),
 	); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func taskScheduledScope(e *protos.HistoryEvent) protos.HistoryPropagationScope {
+	return e.GetTaskScheduled().GetHistoryPropagationScope()
+}
+
+func childWorkflowCreatedScope(e *protos.HistoryEvent) protos.HistoryPropagationScope {
+	return e.GetChildWorkflowInstanceCreated().GetHistoryPropagationScope()
+}
+
+func buildRerunOutgoingHistory(
+	events []*protos.HistoryEvent,
+	state *wfenginestate.State,
+	instanceID string,
+	appID string,
+	scopeOf func(*protos.HistoryEvent) protos.HistoryPropagationScope,
+) map[int32]*protos.PropagatedHistory {
+	var out map[int32]*protos.PropagatedHistory
+	var rt *protos.WorkflowRuntimeState
+	for _, e := range events {
+		scope := scopeOf(e)
+		if scope == protos.HistoryPropagationScope_HISTORY_PROPAGATION_SCOPE_NONE {
+			continue
+		}
+		if rt == nil {
+			rt = runtimestate.NewWorkflowRuntimeState(instanceID, nil, state.History)
+		}
+		chunk := runtimestate.AssembleProtoPropagatedHistory(rt, scope, state.IncomingHistory, appID)
+		if chunk == nil {
+			continue
+		}
+		if out == nil {
+			out = make(map[int32]*protos.PropagatedHistory, len(events))
+		}
+		out[e.GetEventId()] = chunk
+	}
+	return out
 }

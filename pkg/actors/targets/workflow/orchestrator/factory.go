@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/kit/concurrency/slice"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 )
 
 var orchestratorCache = sync.Pool{
@@ -53,6 +54,10 @@ type Options struct {
 	EventSink        EventSink
 	ActorTypeBuilder *common.ActorTypeBuilder
 	RetentionPolicy  *config.WorkflowStateRetentionPolicy
+
+	// Signer provides cryptographic signing and verification. If nil, history
+	// signing is disabled.
+	Signer *signer.Signer
 }
 
 type factory struct {
@@ -69,6 +74,7 @@ type factory struct {
 	eventSink        EventSink
 	actorTypeBuilder *common.ActorTypeBuilder
 	retentionPolicy  *config.WorkflowStateRetentionPolicy
+	signer           *signer.Signer
 
 	scheduler todo.WorkflowScheduler
 
@@ -119,6 +125,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		actorTypeBuilder:   opts.ActorTypeBuilder,
 		placement:          placement,
 		retentionPolicy:    opts.RetentionPolicy,
+		signer:             opts.Signer,
 		scheduler:          opts.Scheduler,
 		deactivateCh:       deactivateCh,
 	}, nil

@@ -93,10 +93,15 @@ const (
 	Dapr_RaiseEventWorkflowBeta1_FullMethodName        = "/dapr.proto.runtime.v1.Dapr/RaiseEventWorkflowBeta1"
 	Dapr_Shutdown_FullMethodName                       = "/dapr.proto.runtime.v1.Dapr/Shutdown"
 	Dapr_ScheduleJobAlpha1_FullMethodName              = "/dapr.proto.runtime.v1.Dapr/ScheduleJobAlpha1"
+	Dapr_ScheduleJob_FullMethodName                    = "/dapr.proto.runtime.v1.Dapr/ScheduleJob"
 	Dapr_GetJobAlpha1_FullMethodName                   = "/dapr.proto.runtime.v1.Dapr/GetJobAlpha1"
+	Dapr_GetJob_FullMethodName                         = "/dapr.proto.runtime.v1.Dapr/GetJob"
 	Dapr_DeleteJobAlpha1_FullMethodName                = "/dapr.proto.runtime.v1.Dapr/DeleteJobAlpha1"
+	Dapr_DeleteJob_FullMethodName                      = "/dapr.proto.runtime.v1.Dapr/DeleteJob"
 	Dapr_DeleteJobsByPrefixAlpha1_FullMethodName       = "/dapr.proto.runtime.v1.Dapr/DeleteJobsByPrefixAlpha1"
+	Dapr_DeleteJobsByPrefix_FullMethodName             = "/dapr.proto.runtime.v1.Dapr/DeleteJobsByPrefix"
 	Dapr_ListJobsAlpha1_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ListJobsAlpha1"
+	Dapr_ListJobs_FullMethodName                       = "/dapr.proto.runtime.v1.Dapr/ListJobs"
 	Dapr_ConverseAlpha1_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha1"
 	Dapr_ConverseAlpha2_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha2"
 )
@@ -231,14 +236,31 @@ type DaprClient interface {
 	RaiseEventWorkflowBeta1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Shutdown the sidecar
 	Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// Create and schedule a job
+	// Deprecated: Do not use.
+	// Deprecated: Create and schedule a job
 	ScheduleJobAlpha1(ctx context.Context, in *ScheduleJobRequest, opts ...grpc.CallOption) (*ScheduleJobResponse, error)
-	// Gets a scheduled job
+	// Create and schedule a job
+	ScheduleJob(ctx context.Context, in *ScheduleJobRequest, opts ...grpc.CallOption) (*ScheduleJobResponse, error)
+	// Deprecated: Do not use.
+	// Deprecated: Gets a scheduled job
 	GetJobAlpha1(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*GetJobResponse, error)
-	// Delete a job
+	// Gets a scheduled job
+	GetJob(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*GetJobResponse, error)
+	// Deprecated: Do not use.
+	// Deprecated: Delete a job
 	DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error)
+	// Delete a job
+	DeleteJob(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error)
+	// Deprecated: Do not use.
+	// Deprecated: Delete jobs by name prefix
 	DeleteJobsByPrefixAlpha1(ctx context.Context, in *DeleteJobsByPrefixRequestAlpha1, opts ...grpc.CallOption) (*DeleteJobsByPrefixResponseAlpha1, error)
+	// Delete jobs by name prefix
+	DeleteJobsByPrefix(ctx context.Context, in *DeleteJobsByPrefixRequest, opts ...grpc.CallOption) (*DeleteJobsByPrefixResponse, error)
+	// Deprecated: Do not use.
+	// Deprecated: List all jobs
 	ListJobsAlpha1(ctx context.Context, in *ListJobsRequestAlpha1, opts ...grpc.CallOption) (*ListJobsResponseAlpha1, error)
+	// List all jobs
+	ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error)
 	// Converse with a LLM service
 	ConverseAlpha1(ctx context.Context, in *ConversationRequest, opts ...grpc.CallOption) (*ConversationResponse, error)
 	// Converse with a LLM service via alpha2 api
@@ -904,6 +926,7 @@ func (c *daprClient) Shutdown(ctx context.Context, in *ShutdownRequest, opts ...
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *daprClient) ScheduleJobAlpha1(ctx context.Context, in *ScheduleJobRequest, opts ...grpc.CallOption) (*ScheduleJobResponse, error) {
 	out := new(ScheduleJobResponse)
 	err := c.cc.Invoke(ctx, Dapr_ScheduleJobAlpha1_FullMethodName, in, out, opts...)
@@ -913,6 +936,16 @@ func (c *daprClient) ScheduleJobAlpha1(ctx context.Context, in *ScheduleJobReque
 	return out, nil
 }
 
+func (c *daprClient) ScheduleJob(ctx context.Context, in *ScheduleJobRequest, opts ...grpc.CallOption) (*ScheduleJobResponse, error) {
+	out := new(ScheduleJobResponse)
+	err := c.cc.Invoke(ctx, Dapr_ScheduleJob_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Deprecated: Do not use.
 func (c *daprClient) GetJobAlpha1(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*GetJobResponse, error) {
 	out := new(GetJobResponse)
 	err := c.cc.Invoke(ctx, Dapr_GetJobAlpha1_FullMethodName, in, out, opts...)
@@ -922,6 +955,16 @@ func (c *daprClient) GetJobAlpha1(ctx context.Context, in *GetJobRequest, opts .
 	return out, nil
 }
 
+func (c *daprClient) GetJob(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*GetJobResponse, error) {
+	out := new(GetJobResponse)
+	err := c.cc.Invoke(ctx, Dapr_GetJob_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Deprecated: Do not use.
 func (c *daprClient) DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error) {
 	out := new(DeleteJobResponse)
 	err := c.cc.Invoke(ctx, Dapr_DeleteJobAlpha1_FullMethodName, in, out, opts...)
@@ -931,6 +974,16 @@ func (c *daprClient) DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, 
 	return out, nil
 }
 
+func (c *daprClient) DeleteJob(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error) {
+	out := new(DeleteJobResponse)
+	err := c.cc.Invoke(ctx, Dapr_DeleteJob_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Deprecated: Do not use.
 func (c *daprClient) DeleteJobsByPrefixAlpha1(ctx context.Context, in *DeleteJobsByPrefixRequestAlpha1, opts ...grpc.CallOption) (*DeleteJobsByPrefixResponseAlpha1, error) {
 	out := new(DeleteJobsByPrefixResponseAlpha1)
 	err := c.cc.Invoke(ctx, Dapr_DeleteJobsByPrefixAlpha1_FullMethodName, in, out, opts...)
@@ -940,9 +993,28 @@ func (c *daprClient) DeleteJobsByPrefixAlpha1(ctx context.Context, in *DeleteJob
 	return out, nil
 }
 
+func (c *daprClient) DeleteJobsByPrefix(ctx context.Context, in *DeleteJobsByPrefixRequest, opts ...grpc.CallOption) (*DeleteJobsByPrefixResponse, error) {
+	out := new(DeleteJobsByPrefixResponse)
+	err := c.cc.Invoke(ctx, Dapr_DeleteJobsByPrefix_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Deprecated: Do not use.
 func (c *daprClient) ListJobsAlpha1(ctx context.Context, in *ListJobsRequestAlpha1, opts ...grpc.CallOption) (*ListJobsResponseAlpha1, error) {
 	out := new(ListJobsResponseAlpha1)
 	err := c.cc.Invoke(ctx, Dapr_ListJobsAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error) {
+	out := new(ListJobsResponse)
+	err := c.cc.Invoke(ctx, Dapr_ListJobs_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1097,14 +1169,31 @@ type DaprServer interface {
 	RaiseEventWorkflowBeta1(context.Context, *RaiseEventWorkflowRequest) (*emptypb.Empty, error)
 	// Shutdown the sidecar
 	Shutdown(context.Context, *ShutdownRequest) (*emptypb.Empty, error)
-	// Create and schedule a job
+	// Deprecated: Do not use.
+	// Deprecated: Create and schedule a job
 	ScheduleJobAlpha1(context.Context, *ScheduleJobRequest) (*ScheduleJobResponse, error)
-	// Gets a scheduled job
+	// Create and schedule a job
+	ScheduleJob(context.Context, *ScheduleJobRequest) (*ScheduleJobResponse, error)
+	// Deprecated: Do not use.
+	// Deprecated: Gets a scheduled job
 	GetJobAlpha1(context.Context, *GetJobRequest) (*GetJobResponse, error)
-	// Delete a job
+	// Gets a scheduled job
+	GetJob(context.Context, *GetJobRequest) (*GetJobResponse, error)
+	// Deprecated: Do not use.
+	// Deprecated: Delete a job
 	DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error)
+	// Delete a job
+	DeleteJob(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error)
+	// Deprecated: Do not use.
+	// Deprecated: Delete jobs by name prefix
 	DeleteJobsByPrefixAlpha1(context.Context, *DeleteJobsByPrefixRequestAlpha1) (*DeleteJobsByPrefixResponseAlpha1, error)
+	// Delete jobs by name prefix
+	DeleteJobsByPrefix(context.Context, *DeleteJobsByPrefixRequest) (*DeleteJobsByPrefixResponse, error)
+	// Deprecated: Do not use.
+	// Deprecated: List all jobs
 	ListJobsAlpha1(context.Context, *ListJobsRequestAlpha1) (*ListJobsResponseAlpha1, error)
+	// List all jobs
+	ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error)
 	// Converse with a LLM service
 	ConverseAlpha1(context.Context, *ConversationRequest) (*ConversationResponse, error)
 	// Converse with a LLM service via alpha2 api
@@ -1295,17 +1384,32 @@ func (UnimplementedDaprServer) Shutdown(context.Context, *ShutdownRequest) (*emp
 func (UnimplementedDaprServer) ScheduleJobAlpha1(context.Context, *ScheduleJobRequest) (*ScheduleJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ScheduleJobAlpha1 not implemented")
 }
+func (UnimplementedDaprServer) ScheduleJob(context.Context, *ScheduleJobRequest) (*ScheduleJobResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ScheduleJob not implemented")
+}
 func (UnimplementedDaprServer) GetJobAlpha1(context.Context, *GetJobRequest) (*GetJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetJobAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) GetJob(context.Context, *GetJobRequest) (*GetJobResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetJob not implemented")
 }
 func (UnimplementedDaprServer) DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteJobAlpha1 not implemented")
 }
+func (UnimplementedDaprServer) DeleteJob(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteJob not implemented")
+}
 func (UnimplementedDaprServer) DeleteJobsByPrefixAlpha1(context.Context, *DeleteJobsByPrefixRequestAlpha1) (*DeleteJobsByPrefixResponseAlpha1, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteJobsByPrefixAlpha1 not implemented")
 }
+func (UnimplementedDaprServer) DeleteJobsByPrefix(context.Context, *DeleteJobsByPrefixRequest) (*DeleteJobsByPrefixResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteJobsByPrefix not implemented")
+}
 func (UnimplementedDaprServer) ListJobsAlpha1(context.Context, *ListJobsRequestAlpha1) (*ListJobsResponseAlpha1, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListJobsAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListJobs not implemented")
 }
 func (UnimplementedDaprServer) ConverseAlpha1(context.Context, *ConversationRequest) (*ConversationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConverseAlpha1 not implemented")
@@ -2435,6 +2539,24 @@ func _Dapr_ScheduleJobAlpha1_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_ScheduleJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ScheduleJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).ScheduleJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_ScheduleJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).ScheduleJob(ctx, req.(*ScheduleJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Dapr_GetJobAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetJobRequest)
 	if err := dec(in); err != nil {
@@ -2449,6 +2571,24 @@ func _Dapr_GetJobAlpha1_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaprServer).GetJobAlpha1(ctx, req.(*GetJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_GetJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).GetJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_GetJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).GetJob(ctx, req.(*GetJobRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2471,6 +2611,24 @@ func _Dapr_DeleteJobAlpha1_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_DeleteJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DeleteJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_DeleteJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DeleteJob(ctx, req.(*DeleteJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Dapr_DeleteJobsByPrefixAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DeleteJobsByPrefixRequestAlpha1)
 	if err := dec(in); err != nil {
@@ -2489,6 +2647,24 @@ func _Dapr_DeleteJobsByPrefixAlpha1_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_DeleteJobsByPrefix_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteJobsByPrefixRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DeleteJobsByPrefix(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_DeleteJobsByPrefix_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DeleteJobsByPrefix(ctx, req.(*DeleteJobsByPrefixRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Dapr_ListJobsAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListJobsRequestAlpha1)
 	if err := dec(in); err != nil {
@@ -2503,6 +2679,24 @@ func _Dapr_ListJobsAlpha1_Handler(srv interface{}, ctx context.Context, dec func
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaprServer).ListJobsAlpha1(ctx, req.(*ListJobsRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_ListJobs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListJobsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).ListJobs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_ListJobs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).ListJobs(ctx, req.(*ListJobsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2771,20 +2965,40 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Dapr_ScheduleJobAlpha1_Handler,
 		},
 		{
+			MethodName: "ScheduleJob",
+			Handler:    _Dapr_ScheduleJob_Handler,
+		},
+		{
 			MethodName: "GetJobAlpha1",
 			Handler:    _Dapr_GetJobAlpha1_Handler,
+		},
+		{
+			MethodName: "GetJob",
+			Handler:    _Dapr_GetJob_Handler,
 		},
 		{
 			MethodName: "DeleteJobAlpha1",
 			Handler:    _Dapr_DeleteJobAlpha1_Handler,
 		},
 		{
+			MethodName: "DeleteJob",
+			Handler:    _Dapr_DeleteJob_Handler,
+		},
+		{
 			MethodName: "DeleteJobsByPrefixAlpha1",
 			Handler:    _Dapr_DeleteJobsByPrefixAlpha1_Handler,
 		},
 		{
+			MethodName: "DeleteJobsByPrefix",
+			Handler:    _Dapr_DeleteJobsByPrefix_Handler,
+		},
+		{
 			MethodName: "ListJobsAlpha1",
 			Handler:    _Dapr_ListJobsAlpha1_Handler,
+		},
+		{
+			MethodName: "ListJobs",
+			Handler:    _Dapr_ListJobs_Handler,
 		},
 		{
 			MethodName: "ConverseAlpha1",

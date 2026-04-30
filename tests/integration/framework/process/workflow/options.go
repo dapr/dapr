@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -25,7 +26,7 @@ type Option func(*options)
 type orchestratorConfig struct {
 	index int
 	name  string
-	fn    func(*task.OrchestrationContext) (any, error)
+	fn    func(*task.WorkflowContext) (any, error)
 }
 
 type activityConfig struct {
@@ -42,18 +43,20 @@ type daprdOptionConfig struct {
 type options struct {
 	daprds int
 	skipDB bool
+	mtls   bool
 
-	orchestrators []orchestratorConfig
-	activities    []activityConfig
-	daprdOptions  []daprdOptionConfig
+	orchestrators    []orchestratorConfig
+	activities       []activityConfig
+	daprdOptions     []daprdOptionConfig
+	schedulerOptions []scheduler.Option
 }
 
-func WithAddOrchestrator(t *testing.T, name string, or func(*task.OrchestrationContext) (any, error)) Option {
+func WithAddOrchestrator(t *testing.T, name string, or func(*task.WorkflowContext) (any, error)) Option {
 	t.Helper()
-	return WithAddOrchestratorN(t, 0, name, or)
+	return WithAddWorkflowN(t, 0, name, or)
 }
 
-func WithAddOrchestratorN(t *testing.T, index int, name string, or func(*task.OrchestrationContext) (any, error)) Option {
+func WithAddWorkflowN(t *testing.T, index int, name string, or func(*task.WorkflowContext) (any, error)) Option {
 	t.Helper()
 
 	return func(o *options) {
@@ -100,5 +103,20 @@ func WithDaprdOptions(index int, opts ...daprd.Option) Option {
 func WithNoDB() Option {
 	return func(o *options) {
 		o.skipDB = true
+	}
+}
+
+// WithMTLS spins up a Sentry process for mTLS and enables the
+// WorkflowHistorySigning feature flag on every daprd in the workflow.
+func WithMTLS(t *testing.T) Option {
+	t.Helper()
+	return func(o *options) {
+		o.mtls = true
+	}
+}
+
+func WithSchedulerOptions(opts ...scheduler.Option) Option {
+	return func(o *options) {
+		o.schedulerOptions = append(o.schedulerOptions, opts...)
 	}
 }

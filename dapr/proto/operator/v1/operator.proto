@@ -32,7 +32,7 @@ service Operator {
   rpc GetResiliency (GetResiliencyRequest) returns (GetResiliencyResponse) {}
   // Returns a list of resiliency configurations
   rpc ListResiliency (ListResiliencyRequest) returns (ListResiliencyResponse) {}
-  // Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
+  // Returns a list of pub/sub subscriptions
   rpc ListSubscriptionsV2 (ListSubscriptionsRequest) returns (ListSubscriptionsResponse) {}
   // Sends events to Dapr sidecars upon subscription changes.
   rpc SubscriptionUpdate (SubscriptionUpdateRequest) returns (stream SubscriptionUpdateEvent) {}
@@ -40,6 +40,18 @@ service Operator {
   rpc ListHTTPEndpoints (ListHTTPEndpointsRequest) returns (ListHTTPEndpointsResponse) {}
   // Sends events to Dapr sidecars upon http endpoint changes.
   rpc HTTPEndpointUpdate (HTTPEndpointUpdateRequest) returns (stream HTTPEndpointUpdateEvent) {}
+  // Returns a list of MCP server configurations.
+  rpc ListMCPServers (ListMCPServersRequest) returns (ListMCPServersResponse) {}
+  // Sends events to Dapr sidecars upon MCP server changes.
+  rpc MCPServerUpdate (MCPServerUpdateRequest) returns (stream MCPServerUpdateEvent) {}
+  // Sends events to Dapr sidecars upon configuration changes.
+  rpc ConfigurationUpdate (ConfigurationUpdateRequest) returns (stream ConfigurationUpdateEvent) {}
+  // Sends events to Dapr sidecars upon resiliency changes.
+  rpc ResiliencyUpdate (ResiliencyUpdateRequest) returns (stream ResiliencyUpdateEvent) {}
+  // Returns a list of workflow access policies
+  rpc ListWorkflowAccessPolicy (ListWorkflowAccessPolicyRequest) returns (ListWorkflowAccessPolicyResponse) {}
+  // Sends events to Dapr sidecars upon workflow access policy changes.
+  rpc WorkflowAccessPolicyUpdate (WorkflowAccessPolicyUpdateRequest) returns (stream WorkflowAccessPolicyUpdateEvent) {}
 }
 
 // ResourceEventType is the type of event to a resource.
@@ -60,13 +72,15 @@ enum ResourceEventType {
 // ListComponentsRequest is the request to get components for a sidecar in namespace.
 message ListComponentsRequest {
   string namespace = 1;
-  string podName = 2;
+  reserved "podName";
+  reserved 2;
 }
 
 // ComponentUpdateRequest is the request to get updates about new components for a given namespace.
 message ComponentUpdateRequest {
   string namespace = 1;
-  string podName = 2;
+  reserved "podName";
+  reserved 2;
 }
 
 // ComponentUpdateEvent includes the updated component event.
@@ -86,7 +100,8 @@ message ListComponentResponse {
 message GetConfigurationRequest {
   string name = 1;
   string namespace = 2;
-  string podName = 3;
+  reserved "podName";
+  reserved 3;
 }
 
 // GetConfigurationResponse includes the requested configuration.
@@ -103,7 +118,8 @@ message ListSubscriptionsResponse {
 // subscriptions for a given namespace.
 message SubscriptionUpdateRequest {
   string namespace = 1;
-  string podName = 2;
+  reserved "podName";
+  reserved 2;
 }
 
 // SubscriptionUpdateEvent includes the updated subscription event.
@@ -136,7 +152,8 @@ message ListResiliencyResponse {
 }
 
 message ListSubscriptionsRequest {
-  string podName = 1;
+  reserved "podName";
+  reserved 1;
   string namespace = 2;
 }
 
@@ -163,12 +180,85 @@ message ListHTTPEndpointsRequest {
 // HTTPEndpointsUpdateRequest is the request to get updates about new http endpoints for a given namespace.
 message HTTPEndpointUpdateRequest {
   string namespace = 1;
-  string pod_name = 2;
+  reserved "pod_name";
+  reserved 2;
 }
 
 // HTTPEndpointsUpdateEvent includes the updated http endpoint event.
 message HTTPEndpointUpdateEvent {
   bytes http_endpoints = 1;
+
+  // type is the type of event.
+  ResourceEventType type = 2;
+}
+
+// ListMCPServersRequest is the request to get MCP server configurations for a sidecar namespace.
+message ListMCPServersRequest {
+  string namespace = 1;
+}
+
+// ListMCPServersResponse includes the list of available MCP server configurations.
+message ListMCPServersResponse {
+  repeated bytes mcp_servers = 1;
+}
+
+// MCPServerUpdateRequest is the request to receive updates about MCP server changes for a given namespace.
+message MCPServerUpdateRequest {
+  string namespace = 1;
+}
+
+// MCPServerUpdateEvent includes an updated MCP server event.
+message MCPServerUpdateEvent {
+  bytes mcp_server = 1;
+
+  // type is the type of event.
+  ResourceEventType type = 2;
+}
+
+// ConfigurationUpdateRequest is the request to get updates about configuration changes for a given namespace.
+message ConfigurationUpdateRequest {
+  string namespace = 1;
+}
+
+// ConfigurationUpdateEvent includes the updated configuration event.
+message ConfigurationUpdateEvent {
+  bytes configuration = 1;
+
+  // type is the type of event.
+  ResourceEventType type = 2;
+}
+
+// ResiliencyUpdateRequest is the request to get updates about resiliency changes for a given namespace.
+message ResiliencyUpdateRequest {
+  string namespace = 1;
+}
+
+// ResiliencyUpdateEvent includes the updated resiliency event.
+message ResiliencyUpdateEvent {
+  bytes resiliency = 1;
+
+  // type is the type of event.
+  ResourceEventType type = 2;
+}
+
+// ListWorkflowAccessPolicyRequest is the request to get workflow access policies for a namespace.
+message ListWorkflowAccessPolicyRequest {
+  string namespace = 1;
+}
+
+// ListWorkflowAccessPolicyResponse includes the list of workflow access policies.
+message ListWorkflowAccessPolicyResponse {
+  repeated bytes policies = 1;
+}
+
+// WorkflowAccessPolicyUpdateRequest is the request to get updates about workflow access policy changes.
+message WorkflowAccessPolicyUpdateRequest {
+  string namespace = 1;
+}
+
+// WorkflowAccessPolicyUpdateEvent includes the updated workflow access policy event.
+message WorkflowAccessPolicyUpdateEvent {
+  bytes policy = 1;
 
   // type is the type of event.
   ResourceEventType type = 2;

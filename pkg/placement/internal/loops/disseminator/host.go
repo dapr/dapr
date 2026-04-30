@@ -171,17 +171,62 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 		d.timeoutQ.Dequeue(d.currentVersion)
 		log.Debugf("Dissemination of version %d in %s complete", d.currentVersion, d.namespace)
 
-		// If there were connections deleted while we were disseminating, delete
-		// them now in a new dissemination cycle.
+		// Clean up orphaned store entries- store entries whose streams are no
+		// longer in d.streams. This handles the case where a stream's
+		// ConnCloseStream event hasn't propagated to the disseminator yet but the
+		// stream was already removed from d.streams by a prior handleCloseStream
+		// or handleTimeout call.
+		d.store.CollectOrphans(func(idx uint64) bool {
+			_, ok := d.streams[idx]
+			return ok
+		}, &d.waitingToDelete)
+
 		if len(d.waitingToDelete) > 0 {
-			for _, toDelete := range d.waitingToDelete {
-				d.store.Delete(toDelete)
+			d.processWaitingDeletes()
+			return
+		}
+
+		// Batch all waiting connections: create their streams and update the store
+		// for all of them, then start a single dissemination round if any store
+		// change occurred. This avoids O(n) sequential dissemination rounds when
+		// many replicas connect at once.
+		if len(d.waitingToDisseminate) > 0 {
+			waiting := d.waitingToDisseminate
+			d.waitingToDisseminate = nil
+
+			storeChanged := false
+			newStreamIDxs := make([]uint64, 0, len(waiting))
+			for _, add := range waiting {
+				streamIDx := d.addStream(ctx, add)
+				newStreamIDxs = append(newStreamIDxs, streamIDx)
+				if d.store.Set(streamIDx, add.InitialHost) {
+					storeChanged = true
+				}
 			}
 
-			d.waitingToDelete = nil
+			if !storeChanged {
+				// All waiting connections had no actors. Send one-shot table pushes
+				// only to the newly added streams so they can route actor invocations.
+				for _, idx := range newStreamIDxs {
+					s, ok := d.streams[idx]
+					if !ok || d.store.Has(idx) {
+						continue
+					}
+					version := d.currentVersion
+					s.receivingTable = &version
+					s.loop.Enqueue(&loops.DisseminateTable{
+						Version: d.currentVersion,
+						Tables:  d.store.PlacementTables(d.currentVersion),
+					})
+				}
+
+				return
+			}
+
 			d.currentVersion++
 			d.timeoutQ.Enqueue(d.currentVersion)
 			d.currentOperation = v1pb.HostOperation_LOCK
+			d.streamsInTargetState = 0
 
 			for _, s := range d.streams {
 				s.currentState = v1pb.HostOperation_REPORT
@@ -190,16 +235,6 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 					Version: d.currentVersion,
 				})
 			}
-
-			return
-		}
-
-		// If there are new connections to add while we were disseminating, add
-		// them now in a new dissemination cycle.
-		if len(d.waitingToDisseminate) > 0 {
-			needs := d.waitingToDisseminate[0]
-			d.waitingToDisseminate = d.waitingToDisseminate[1:]
-			d.handleAdd(ctx, needs)
 		}
 	}
 }

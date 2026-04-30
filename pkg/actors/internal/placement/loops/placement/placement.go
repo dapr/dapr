@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/healthz"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/retry"
 	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
@@ -52,7 +53,6 @@ type Options struct {
 	Scheduler  schedclient.Reloader
 
 	DisseminationTimeout time.Duration
-	Cancel               context.CancelCauseFunc
 }
 
 type placement struct {
@@ -77,7 +77,6 @@ type placement struct {
 	host     *v1pb.Host
 
 	dissTimeout time.Duration
-	cancel      context.CancelCauseFunc
 
 	wg sync.WaitGroup
 }
@@ -97,7 +96,6 @@ func New(opts Options) loop.Interface[loops.EventPlace] {
 		actorTable:  opts.ActorTable,
 		scheduler:   opts.Scheduler,
 		dissTimeout: opts.DisseminationTimeout,
-		cancel:      opts.Cancel,
 	}
 	place.loop = loop.New[loops.EventPlace](8).NewLoop(place)
 	return place.loop
@@ -177,7 +175,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Second / 2):
+		case <-time.After(retry.Jitter(time.Second/2, time.Second/4)):
 		}
 	}
 
@@ -196,7 +194,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		Scheduler:            p.scheduler,
 		HTarget:              p.htarget,
 		DisseminationTimeout: p.dissTimeout,
-		Cancel:               p.cancel,
+		Ready:                p.ready,
 	})
 
 	p.wg.Go(func() {
@@ -219,8 +217,6 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		p.dissLoop.Enqueue(l.(loops.EventDiss))
 	}
 	p.lookups = nil
-
-	p.ready.Store(true)
 
 	return nil
 }

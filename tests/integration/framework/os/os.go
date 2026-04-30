@@ -38,6 +38,13 @@ func SkipMacOS(t *testing.T) {
 	}
 }
 
+func MustLinux(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skipf("test requires linux, got %s", runtime.GOOS)
+	}
+}
+
 func WriteFileYaml(t *testing.T, data string) string {
 	t.Helper()
 	f := filepath.Join(t.TempDir(), "test.yaml")

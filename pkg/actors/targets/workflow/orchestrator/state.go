@@ -15,6 +15,8 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 
 	"google.golang.org/protobuf/types/known/anypb"
@@ -24,6 +26,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -32,31 +35,98 @@ import (
 	"github.com/dapr/kit/concurrency"
 )
 
-func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.State, *backend.OrchestrationMetadata, error) {
+func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.State, *backend.WorkflowMetadata, error) {
 	// See if the state for this actor is already cached in memory
 	if o.state != nil {
 		return o.state, o.ometa, nil
 	}
 
-	// state is not cached, so try to load it from the state store
-	state, err := wfenginestate.LoadWorkflowState(ctx, o.actorState, o.actorID, wfenginestate.Options{
+	opts := wfenginestate.Options{
 		AppID:             o.appID,
 		WorkflowActorType: o.actorType,
 		ActivityActorType: o.activityActorType,
-	})
+		Signer:            o.signer,
+	}
+
+	// state is not cached, so try to load it from the state store
+	state, err := wfenginestate.LoadWorkflowState(ctx, o.actorState, o.actorID, opts)
 	if err != nil {
+		var verifyErr *wferrors.VerificationError
+		if errors.As(err, &verifyErr) {
+			if !isCompleted(state) {
+				return o.tombstoneTamperedState(ctx, opts, state, err)
+			}
+		}
 		return nil, nil, err
 	}
 	if state == nil {
 		// No such state exists in the state store
 		return nil, nil, nil
 	}
+
+	// When signing is enabled, any inbox event that does not match signed
+	// history can only have been written via state store tampering. Treat the
+	// state as unrecoverable: fail the workflow terminally so no further
+	// progress is made on forged input. Skip the scan on an empty inbox as
+	// nothing to validate and the history-index build is pure waste. Skip
+	// when the workflow is already terminal, so we don't re-detect the same
+	// condition on every load.
+	if o.signer != nil && len(state.Inbox) > 0 && !isCompleted(state) {
+		if filtered := filterValidInboxEvents(state); len(filtered) != len(state.Inbox) {
+			cause := fmt.Errorf("workflow actor '%s': inbox contained %d events that did not match signed history (state store tampering)",
+				o.actorID, len(state.Inbox)-len(filtered))
+			return o.tombstoneTamperedState(ctx, opts, state, cause)
+		}
+	}
+
 	// Update cached state
 	o.state = state
-	o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
+	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
 	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
 
 	return state, o.ometa, nil
+}
+
+// tombstoneTamperedState appends an unsigned ExecutionCompleted(FAILED)
+// tamper marker to the workflow's history (see [wfenginestate.MarkAsTamperFailed])
+// so it surfaces as terminally FAILED on every subsequent load. The original
+// (untrusted) history, inbox, signatures, and certs are left intact for
+// forensics. The actor's reminders are deleted to stop further activations
+// from firing against the dead workflow.
+func (o *orchestrator) tombstoneTamperedState(ctx context.Context, opts wfenginestate.Options, prior *wfenginestate.State, cause error) (*wfenginestate.State, *backend.WorkflowMetadata, error) {
+	log.Warnf("Workflow actor '%s': tampering detected, marking workflow as FAILED: %s", o.actorID, cause)
+
+	failed, err := wfenginestate.MarkAsTamperFailed(ctx, o.actorState, o.actorID, opts, prior, cause)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to append tamper marker: %w", err)
+	}
+
+	o.failSignatureVerification(ctx)
+
+	o.state = failed
+	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, failed.CustomStatus, failed.History)
+	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(failed))
+
+	return failed, o.ometa, nil
+}
+
+// isCompleted reports whether the loaded workflow's history ends in an
+// ExecutionCompleted event of any kind (the runtime's terminal marker).
+// There is nothing for the orchestrator actor to do on a terminal workflow,
+// so the tamper-marker append is skipped — the reader path is responsible
+// for surfacing the verification error to clients.
+func isCompleted(s *wfenginestate.State) bool {
+	return s != nil && len(s.History) > 0 && s.History[len(s.History)-1].GetExecutionCompleted() != nil
+}
+
+// signAndSaveState signs any newly added history events and then persists
+// the state. This is the single entry point for all state persistence —
+// callers must never call saveInternalState directly.
+func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestate.State) error {
+	if err := o.signNewEvents(state); err != nil {
+		return fmt.Errorf("failed to sign new history events: %w", err)
+	}
+	return o.saveInternalState(ctx, state)
 }
 
 func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State) error {
@@ -77,7 +147,7 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 
 	// Update cached state
 	o.state = state
-	o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
+	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
 	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
 	if o.eventSink != nil {
 		o.eventSink(o.ometa)
@@ -160,7 +230,7 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 	return nil
 }
 
-func (o *orchestrator) ometaFromState(rstate *backend.OrchestrationRuntimeState, startEvent *protos.ExecutionStartedEvent) *backend.OrchestrationMetadata {
+func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, startEvent *protos.ExecutionStartedEvent) *backend.WorkflowMetadata {
 	var se *protos.ExecutionStartedEvent = nil
 	if rstate.GetStartEvent() != nil {
 		se = rstate.GetStartEvent()
@@ -179,10 +249,10 @@ func (o *orchestrator) ometaFromState(rstate *backend.OrchestrationRuntimeState,
 	output, _ := runtimestate.Output(rstate)
 	failureDetails, _ := runtimestate.FailureDetails(rstate)
 	var parentInstanceID string
-	if se != nil && se.GetParentInstance() != nil && se.GetParentInstance().GetOrchestrationInstance() != nil {
-		parentInstanceID = se.GetParentInstance().GetOrchestrationInstance().GetInstanceId()
+	if se != nil && se.GetParentInstance() != nil && se.GetParentInstance().GetWorkflowInstance() != nil {
+		parentInstanceID = se.GetParentInstance().GetWorkflowInstance().GetInstanceId()
 	}
-	return &backend.OrchestrationMetadata{
+	return &backend.WorkflowMetadata{
 		InstanceId:       rstate.GetInstanceId(),
 		Name:             name,
 		RuntimeStatus:    runtimestate.RuntimeStatus(rstate),

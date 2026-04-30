@@ -67,8 +67,9 @@ func (a *allfail) Setup(t *testing.T) []framework.Option {
 func (a *allfail) Run(t *testing.T, ctx context.Context) {
 	a.scheduler.WaitUntilRunning(t, ctx)
 	a.daprd.WaitUntilRunning(t, ctx)
+	a.scheduler.WaitUntilSidecarsConnected(t, ctx, 3)
 
-	_, err := a.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err := a.daprd.GRPCClient(t, ctx).ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:    "test",
 			DueTime: new("0s"),
@@ -80,6 +81,8 @@ func (a *allfail) Run(t *testing.T, ctx context.Context) {
 		assert.ElementsMatch(c, []string{"test", "test", "test", "test"}, a.triggered.Slice())
 	}, time.Second*10, time.Millisecond*10)
 
-	time.Sleep(time.Second * 2)
-	assert.ElementsMatch(t, []string{"test", "test", "test", "test"}, a.triggered.Slice())
+	// Ensure no additional triggers arrive beyond the expected 4.
+	require.Never(t, func() bool {
+		return len(a.triggered.Slice()) != 4
+	}, time.Second*3, time.Millisecond*100)
 }

@@ -43,7 +43,7 @@ var (
 )
 
 // WorkflowScheduler is a func interface for pushing workflow (orchestration) work items into the durabletask backend
-type WorkflowScheduler func(ctx context.Context, wi *backend.OrchestrationWorkItem) error
+type WorkflowScheduler func(ctx context.Context, wi *backend.WorkflowWorkItem) error
 
 // ActivityScheduler is a func interface for pushing activity work items into the durabletask backend
 type ActivityScheduler func(ctx context.Context, wi *backend.ActivityWorkItem) error

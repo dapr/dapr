@@ -27,14 +27,15 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent, dueTime time.Time) error {
+func (a *activity) createReminder(ctx context.Context, invocation *protos.ActivityInvocation, dueTime time.Time, activityName *string) error {
 	const reminderName = "run-activity"
 	log.Debugf("Activity actor '%s||%s': creating reminder '%s' with dueTime=%s", a.actorType, a.actorID, reminderName, dueTime)
 
-	anydata, err := anypb.New(his)
+	anydata, err := anypb.New(invocation)
 	if err != nil {
 		return err
 	}
@@ -55,7 +56,8 @@ func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent
 				},
 			},
 		},
-		Data: anydata,
+		Data:           anydata,
+		ConcurrencyKey: activityName,
 	})
 }
 

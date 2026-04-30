@@ -89,6 +89,10 @@ func (*DeleteJobRequest) AppendSpanAttributes(rpcMethod string, m map[string]str
 	// TODO
 }
 
+func (*DeleteJobsByPrefixRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
 func (*DecryptRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
@@ -138,6 +142,10 @@ func (*GetWorkflowRequest) AppendSpanAttributes(rpcMethod string, m map[string]s
 }
 
 func (*ListActorRemindersRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
+func (*ListJobsRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
 

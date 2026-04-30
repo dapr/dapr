@@ -28,7 +28,7 @@ import (
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
-func (o *orchestrator) handleStalled(ctx context.Context, state *wfenginestate.State, rs *backend.OrchestrationRuntimeState) error {
+func (o *orchestrator) handleStalled(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState) error {
 	for _, msg := range rs.GetPendingMessages() {
 		if executionStalledEvent := msg.GetHistoryEvent().GetExecutionStalled(); executionStalledEvent != nil {
 			return o.stallWorkflow(ctx, state, rs, executionStalledEvent.GetReason(), executionStalledEvent.GetDescription())
@@ -42,7 +42,7 @@ func (o *orchestrator) handleStalled(ctx context.Context, state *wfenginestate.S
 	return nil
 }
 
-func (o *orchestrator) hasPatchMismatch(rs *backend.OrchestrationRuntimeState) (bool, string) {
+func (o *orchestrator) hasPatchMismatch(rs *backend.WorkflowRuntimeState) (bool, string) {
 	historyPatches := collectAllPatches(rs.OldEvents)
 	currentPatches := getLastPatches(rs.NewEvents)
 	if len(historyPatches) == 0 {
@@ -60,7 +60,7 @@ func (o *orchestrator) hasPatchMismatch(rs *backend.OrchestrationRuntimeState) (
 		strings.Join(currentPatches, ", "))
 }
 
-func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.State, rs *backend.OrchestrationRuntimeState, reason protos.StalledReason, description string) error {
+func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, reason protos.StalledReason, description string) error {
 	rs.CompletedEvent = nil
 	rs.CompletedTime = nil
 
@@ -84,7 +84,7 @@ func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.S
 	}
 	if hasFilteredNewEvents || hasStalledEvent {
 		state.ApplyRuntimeStateChanges(rs)
-		err := o.saveInternalState(ctx, state)
+		err := o.signAndSaveState(ctx, state)
 		if err != nil {
 			return err
 		}
@@ -107,7 +107,7 @@ func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.S
 func collectAllPatches(events []*protos.HistoryEvent) []string {
 	var allPatches []string
 	for _, e := range events {
-		if os := e.GetOrchestratorStarted(); os != nil {
+		if os := e.GetWorkflowStarted(); os != nil {
 			if v := os.GetVersion(); v != nil {
 				allPatches = append(allPatches, v.GetPatches()...)
 			}
@@ -119,7 +119,7 @@ func collectAllPatches(events []*protos.HistoryEvent) []string {
 func getLastPatches(events []*protos.HistoryEvent) []string {
 	for i := len(events) - 1; i >= 0; i-- {
 		e := events[i]
-		if os := e.GetOrchestratorStarted(); os != nil {
+		if os := e.GetWorkflowStarted(); os != nil {
 			if version := os.GetVersion(); version != nil {
 				return version.GetPatches()
 			}
@@ -128,13 +128,13 @@ func getLastPatches(events []*protos.HistoryEvent) []string {
 	return nil
 }
 
-func compactPatches(rs *backend.OrchestrationRuntimeState) {
+func compactPatches(rs *backend.WorkflowRuntimeState) {
 	for _, e := range rs.NewEvents {
-		if os := e.GetOrchestratorStarted(); os != nil {
+		if os := e.GetWorkflowStarted(); os != nil {
 			if v := os.GetVersion(); v != nil && len(v.GetPatches()) > 0 {
 				existingPatchCounts := make(map[string]int)
 				for _, oldEvent := range rs.OldEvents {
-					if oldOS := oldEvent.GetOrchestratorStarted(); oldOS != nil {
+					if oldOS := oldEvent.GetWorkflowStarted(); oldOS != nil {
 						if oldV := oldOS.GetVersion(); oldV != nil {
 							for _, p := range oldV.GetPatches() {
 								existingPatchCounts[p]++
@@ -153,7 +153,7 @@ func compactPatches(rs *backend.OrchestrationRuntimeState) {
 				}
 
 				if len(newPatches) > 0 {
-					os.Version = &protos.OrchestrationVersion{Patches: newPatches}
+					os.Version = &protos.WorkflowVersion{Patches: newPatches}
 				} else {
 					os.Version = nil
 				}

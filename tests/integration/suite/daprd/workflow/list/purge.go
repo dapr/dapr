@@ -46,7 +46,7 @@ func (p *purge) Setup(t *testing.T) []framework.Option {
 func (p *purge) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
-	p.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	p.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, nil
 	})
 
@@ -54,7 +54,7 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 
 	ids := make([]string, 0, 3)
 	for range 3 {
-		id, err := client.ScheduleNewOrchestration(ctx, "foo")
+		id, err := client.ScheduleNewWorkflow(ctx, "foo")
 		require.NoError(t, err)
 		ids = append(ids, id.String())
 	}
@@ -77,7 +77,7 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 	ids = make([]string, 0, 3)
 	for range 3 {
 		var id api.InstanceID
-		id, err = client.ScheduleNewOrchestration(ctx, "foo")
+		id, err = client.ScheduleNewWorkflow(ctx, "foo")
 		require.NoError(t, err)
 		ids = append(ids, id.String())
 	}

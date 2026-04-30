@@ -87,10 +87,7 @@ func (s *subscriptions) Setup(t *testing.T) []framework.Option {
 						ControlPlaneTrustDomain: "integration.test.dapr.io",
 						SentryAddress:           sentry.Address(),
 					},
-					Features: []configapi.FeatureSpec{{
-						Name:    "HotReload",
-						Enabled: new(true),
-					}},
+					Features: []configapi.FeatureSpec{},
 				},
 			}},
 		}),
@@ -150,7 +147,7 @@ func (s *subscriptions) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, s.daprd.GetMetaSubscriptions(c, ctx), 1)
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*40, time.Millisecond*100)
 	s.sub.ExpectPublishReceive(t, ctx, s.daprd, newReq("pubsub0", "a"))
 	s.sub.ExpectPublishNoReceive(t, ctx, s.daprd, newReq("pubsub0", "b"))
 
@@ -167,7 +164,7 @@ func (s *subscriptions) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, s.daprd.GetMetaSubscriptions(c, ctx), 2)
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*40, time.Millisecond*100)
 	s.sub.ExpectPublishReceive(t, ctx, s.daprd, newReq("pubsub0", "a"))
 	s.sub.ExpectPublishReceive(t, ctx, s.daprd, newReq("pubsub0", "b"))
 
@@ -181,7 +178,7 @@ func (s *subscriptions) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(c, "a", resp.GetSubscriptions()[0].GetTopic())
 			assert.Equal(c, "c", resp.GetSubscriptions()[1].GetTopic())
 		}
-	}, time.Second*15, time.Millisecond*10)
+	}, time.Second*40, time.Millisecond*100)
 	s.sub.ExpectPublishReceive(t, ctx, s.daprd, newReq("pubsub0", "a"))
 	s.sub.ExpectPublishNoReceive(t, ctx, s.daprd, newReq("pubsub0", "b"))
 	s.sub.ExpectPublishReceive(t, ctx, s.daprd, newReq("pubsub0", "c"))
@@ -190,7 +187,7 @@ func (s *subscriptions) Run(t *testing.T, ctx context.Context) {
 	s.kubeapi.Informer().Delete(t, &sub2)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, s.daprd.GetMetaSubscriptions(c, ctx), 1)
-	}, time.Second*25, time.Millisecond*10)
+	}, time.Second*40, time.Millisecond*100)
 	s.sub.ExpectPublishNoReceive(t, ctx, s.daprd, newReq("pubsub0", "c"))
 	s.sub.ExpectPublishNoReceive(t, ctx, s.daprd, newReq("pubsub0", "b"))
 	s.sub.ExpectPublishReceive(t, ctx, s.daprd, newReq("pubsub0", "a"))

@@ -67,8 +67,9 @@ func (m *maxretries) Setup(t *testing.T) []framework.Option {
 func (m *maxretries) Run(t *testing.T, ctx context.Context) {
 	m.scheduler.WaitUntilRunning(t, ctx)
 	m.daprd.WaitUntilRunning(t, ctx)
+	m.scheduler.WaitUntilSidecarsConnected(t, ctx, 3)
 
-	_, err := m.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err := m.daprd.GRPCClient(t, ctx).ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:    "test",
 			DueTime: new("0s"),

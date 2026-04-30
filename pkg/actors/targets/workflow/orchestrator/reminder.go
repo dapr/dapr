@@ -29,16 +29,16 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
-func (o *orchestrator) createWorkflowReminder(ctx context.Context, namePrefix string, data proto.Message, start time.Time, targetAppID string) (string, error) {
+func (o *orchestrator) createWorkflowReminder(ctx context.Context, namePrefix string, data proto.Message, start time.Time, targetAppID string, concurrencyKey *string) (string, error) {
 	actorType := o.actorTypeBuilder.Workflow(targetAppID)
-	return o.createReminderWithType(ctx, namePrefix, data, start, actorType)
+	return o.createReminderWithType(ctx, namePrefix, data, start, actorType, concurrencyKey)
 }
 
 func (o *orchestrator) createRetentionReminder(ctx context.Context, namePrefix string, start time.Time) (string, error) {
-	return o.createReminderWithType(ctx, namePrefix, nil, start, o.retentionActorType)
+	return o.createReminderWithType(ctx, namePrefix, nil, start, o.retentionActorType, nil)
 }
 
-func (o *orchestrator) createReminderWithType(ctx context.Context, namePrefix string, data proto.Message, start time.Time, actorType string) (string, error) {
+func (o *orchestrator) createReminderWithType(ctx context.Context, namePrefix string, data proto.Message, start time.Time, actorType string, concurrencyKey *string) (string, error) {
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
 	if err != nil {
@@ -73,5 +73,33 @@ func (o *orchestrator) createReminderWithType(ctx context.Context, namePrefix st
 				},
 			},
 		},
+		ConcurrencyKey: concurrencyKey,
 	})
+}
+
+// deleteAllReminders deletes all reminders for the workflow and its
+// activities. This is called when the workflow completes to ensure no orphan
+// reminders (e.g. unfired timers) remain in the scheduler.
+func (o *orchestrator) deleteAllReminders(ctx context.Context) error {
+	actorType := o.actorTypeBuilder.Workflow(o.appID)
+
+	log.Debugf("Workflow actor '%s': deleting all reminders for completed workflow", o.actorID)
+
+	if err := o.reminders.DeleteByActorID(ctx, &actorapi.DeleteRemindersByActorIDRequest{
+		ActorType:       actorType,
+		ActorID:         o.actorID,
+		MatchIDAsPrefix: false,
+	}); err != nil {
+		return fmt.Errorf("actor '%s' failed to delete reminders on completion: %w", o.actorID, err)
+	}
+
+	if err := o.reminders.DeleteByActorID(ctx, &actorapi.DeleteRemindersByActorIDRequest{
+		ActorType:       o.activityActorType,
+		ActorID:         o.actorID + "::",
+		MatchIDAsPrefix: true,
+	}); err != nil {
+		return fmt.Errorf("actor '%s' failed to delete activity reminders on completion: %w", o.actorID, err)
+	}
+
+	return nil
 }

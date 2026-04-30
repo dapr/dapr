@@ -42,6 +42,7 @@ import (
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/api/grpc"
@@ -50,7 +51,10 @@ import (
 	"github.com/dapr/dapr/pkg/api/http"
 	"github.com/dapr/dapr/pkg/api/universal"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	endpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/components"
@@ -76,6 +80,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/hotreload"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/reconciler"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -86,6 +91,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 )
 
 var log = logger.NewLogger("dapr.runtime")
@@ -105,7 +111,6 @@ type DaprRuntime struct {
 	nameResolver          nr.Resolver
 	hostAddress           string
 	namespace             string
-	podName               string
 	daprUniversal         *universal.Universal
 	daprHTTPAPI           http.API
 	daprGRPCAPI           grpc.API
@@ -150,6 +155,8 @@ func newDaprRuntime(ctx context.Context,
 	globalConfig *config.Configuration,
 	accessControlList *config.AccessControlList,
 	resiliencyProvider resiliency.Provider,
+	configAPIResource *configapi.Configuration,
+	resiliencyConfigs []*resiliencyapi.Resiliency,
 ) (*DaprRuntime, error) {
 	// TODO: @joshvanl: find a solution for this:
 	// We need to register our custom proxy codec in the global registrar, but
@@ -171,12 +178,22 @@ func newDaprRuntime(ctx context.Context,
 
 	compStore := compstore.New()
 
+	// Store raw API resources in compstore so that the SIGHUP reconciler can
+	// detect unchanged resource events and avoid unnecessary restarts.
+	if configAPIResource != nil {
+		compStore.AddConfigurationResource(*configAPIResource)
+	}
+	for _, res := range resiliencyConfigs {
+		if res != nil {
+			compStore.AddResiliencyResource(*res)
+		}
+	}
+
 	namespace := security.CurrentNamespace()
-	podName := getPodName()
 
 	meta := meta.New(meta.Options{
 		ID:            runtimeConfig.id,
-		PodName:       podName,
+		PodName:       os.Getenv("POD_NAME"),
 		Namespace:     namespace,
 		StrictSandbox: globalConfig.Spec.WasmSpec.GetStrictSandbox(),
 		Mode:          runtimeConfig.mode,
@@ -257,7 +274,6 @@ func newDaprRuntime(ctx context.Context,
 		GlobalConfig:                    globalConfig,
 		Resiliency:                      resiliencyProvider,
 		Mode:                            runtimeConfig.mode,
-		PodName:                         podName,
 		OperatorClient:                  operatorClient,
 		GRPC:                            grpc,
 		Channels:                        channels,
@@ -274,7 +290,6 @@ func newDaprRuntime(ctx context.Context,
 	switch runtimeConfig.mode {
 	case modes.KubernetesMode:
 		reloader = hotreload.NewOperator(hotreload.OptionsReloaderOperator{
-			PodName:        podName,
 			Namespace:      namespace,
 			Client:         operatorClient,
 			Config:         globalConfig,
@@ -300,7 +315,12 @@ func newDaprRuntime(ctx context.Context,
 		return nil, fmt.Errorf("invalid mode: %s", runtimeConfig.mode)
 	}
 
-	wfe := wfengine.New(wfengine.Options{
+	var wfSigner *signer.Signer
+	if sec != nil {
+		wfSigner = sec.Signer()
+	}
+
+	wfe, err := wfengine.New(wfengine.Options{
 		AppID:                           runtimeConfig.id,
 		Namespace:                       namespace,
 		Actors:                          actors,
@@ -310,8 +330,13 @@ func newDaprRuntime(ctx context.Context,
 		EventSink:                       runtimeConfig.workflowEventSink,
 		EnableClusteredDeployment:       globalConfig.IsFeatureEnabled(config.WorkflowsClusteredDeployment),
 		WorkflowsRemoteActivityReminder: globalConfig.IsFeatureEnabled(config.WorkflowsRemoteActivityReminder),
+		WorkflowHistorySigning:          globalConfig.IsFeatureEnabled(config.WorkflowHistorySigning),
 		ComponentStore:                  compStore,
+		Signer:                          wfSigner,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	jobsManager, err := scheduler.New(scheduler.Options{
 		Namespace:        namespace,
@@ -321,6 +346,7 @@ func newDaprRuntime(ctx context.Context,
 		Addresses:        runtimeConfig.schedulerAddress,
 		Security:         sec,
 		WFEngine:         wfe,
+		WorkflowSpec:     globalConfig.Spec.WorkflowSpec,
 		Healthz:          runtimeConfig.healthz,
 		SchedulerStreams: runtimeConfig.schedulerStreams,
 	})
@@ -349,7 +375,6 @@ func newDaprRuntime(ctx context.Context,
 		authz:                 authz,
 		reloader:              reloader,
 		namespace:             namespace,
-		podName:               podName,
 		initComplete:          make(chan struct{}),
 		isAppHealthy:          make(chan struct{}),
 		clock:                 new(clock.RealClock),
@@ -380,6 +405,12 @@ func newDaprRuntime(ctx context.Context,
 
 			rerr := rt.initRuntime(ctx)
 			if rerr != nil {
+				// If the context was canceled (e.g. SIGHUP/SIGINT during
+				// init), treat the initialization failure as a clean
+				// shutdown rather than a fatal error.
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
 				return rerr
 			}
 
@@ -481,10 +512,6 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 	}
 
 	return a.runnerCloser.Run(ctx)
-}
-
-func getPodName() string {
-	return os.Getenv("POD_NAME")
 }
 
 func getOperatorClient(ctx context.Context, sec security.Handler, cfg *internalConfig) (operatorv1pb.OperatorClient, error) {
@@ -643,7 +670,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Register and initialize name resolution for service discovery.
 	err = a.initNameResolution(ctx)
 	if err != nil {
-		log.Errorf(err.Error())
+		log.Error(err.Error())
 	}
 
 	// Start proxy
@@ -668,6 +695,17 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 
 	a.flushOutstandingHTTPEndpoints(ctx)
+
+	if a.globalConfig.IsFeatureEnabled(config.MCPServerResource) {
+		err = a.loadMCPServers(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to load mcpservers: %s", err)
+		}
+		a.flushOutstandingMCPServers(ctx)
+		if list := len(a.compStore.ListMCPServers()); list > 0 {
+			log.Debugf("MCP servers loaded: %d; additional handling to be implemented", list)
+		}
+	}
 
 	err = a.loadDeclarativeSubscriptions(ctx)
 	if err != nil {
@@ -713,6 +751,32 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		AccessControlList:     a.accessControlList,
 		Processor:             a.processor,
 	})
+
+	// Load and apply workflow access policies before starting servers.
+	if a.globalConfig.IsFeatureEnabled(config.WorkflowAccessPolicy) {
+		if err = a.loadWorkflowAccessPolicies(ctx); err != nil {
+			return fmt.Errorf("failed to load workflow access policies: %w", err)
+		}
+
+		a.reloader.SetPolicyRecompiler(reconciler.WorkflowAccessPolicyOptions{
+			AppID:     a.runtimeConfig.id,
+			Loader:    a.reloader.Loader(),
+			CompStore: a.compStore,
+			Recompiler: func(compiled *workflowacl.CompiledPolicies) {
+				a.daprGRPCAPI.SetWorkflowAccessPolicies(compiled)
+			},
+			Healthz: a.runtimeConfig.healthz,
+		})
+	} else {
+		// Signal the reloader that no policy reconciler is needed so Run()
+		// doesn't block waiting.
+		a.reloader.SignalNoPolicyRecompiler()
+
+		// Warn if policies may exist but the feature flag is disabled.
+		// This helps operators catch misconfigurations where they created
+		// WorkflowAccessPolicy resources but forgot to enable the feature.
+		a.warnIfPoliciesExistWithoutFeatureFlag(ctx)
+	}
 
 	if err = a.runnerCloser.AddCloser(a.daprGRPCAPI); err != nil {
 		return err
@@ -1162,6 +1226,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		GRPC:              a.grpc,
 		SchedulerClient:   a.jobsManager.Client(),
 		SchedulerReloader: a.jobsManager,
+		WorkflowACL:       a.buildWorkflowACLChecker(),
 	}); err != nil {
 		return err
 	}
@@ -1178,7 +1243,6 @@ func (a *DaprRuntime) loadComponents(ctx context.Context) error {
 			Config:    a.runtimeConfig.kubernetes,
 			Client:    a.operatorClient,
 			Namespace: a.namespace,
-			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
 		loader = disk.NewComponents(disk.Options{
@@ -1232,7 +1296,6 @@ func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
 		loader = kubernetes.NewSubscriptions(kubernetes.Options{
 			Client:    a.operatorClient,
 			Namespace: a.namespace,
-			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
 		loader = disk.NewSubscriptions(disk.Options{
@@ -1267,6 +1330,54 @@ func (a *DaprRuntime) flushOutstandingHTTPEndpoints(ctx context.Context) {
 	log.Info("All outstanding http endpoints processed")
 }
 
+func (a *DaprRuntime) flushOutstandingMCPServers(ctx context.Context) {
+	log.Info("Waiting for all outstanding MCP servers to be processed…")
+	// Send a no-op sentinel so that processMCPServers drains all previously enqueued items first.
+	a.processor.AddPendingMCPServer(ctx, mcpserverapi.MCPServer{})
+	log.Info("All outstanding MCP servers processed")
+}
+
+func (a *DaprRuntime) loadMCPServers(ctx context.Context) error {
+	var l loader.Loader[mcpserverapi.MCPServer]
+
+	switch a.runtimeConfig.mode {
+	case modes.KubernetesMode:
+		l = kubernetes.NewMCPServers(kubernetes.Options{
+			Config:    a.runtimeConfig.kubernetes,
+			Client:    a.operatorClient,
+			Namespace: a.namespace,
+		})
+	case modes.StandaloneMode:
+		l = disk.NewMCPServers(disk.Options{
+			AppID: a.runtimeConfig.id,
+			Paths: a.runtimeConfig.standalone.ResourcesPath,
+		})
+	default:
+		return nil
+	}
+
+	log.Info("Loading MCP servers…")
+
+	servers, err := l.Load(ctx)
+	if err != nil {
+		return err
+	}
+
+	authorizedServers, ok := a.authz.GetAuthorizedObjects(servers, a.authz.IsObjectAuthorized).([]mcpserverapi.MCPServer)
+	if !ok {
+		return errors.New("unexpected type from GetAuthorizedObjects for MCPServers")
+	}
+
+	for _, s := range authorizedServers {
+		log.Infof("Found MCP server: %s", s.Name)
+		if !a.processor.AddPendingMCPServer(ctx, s) {
+			return nil
+		}
+	}
+
+	return nil
+}
+
 func (a *DaprRuntime) flushOutstandingComponents(ctx context.Context) {
 	log.Info("Waiting for all outstanding components to be processed…")
 	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
@@ -1284,7 +1395,6 @@ func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
 			Config:    a.runtimeConfig.kubernetes,
 			Client:    a.operatorClient,
 			Namespace: a.namespace,
-			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
 		loader = disk.NewHTTPEndpoints(disk.Options{

@@ -42,8 +42,6 @@ type reload struct {
 }
 
 func (r *reload) Setup(t *testing.T) []framework.Option {
-	os.SkipWindows(t)
-
 	r.log = log.New()
 
 	r.configFile = os.WriteFileYaml(t, `

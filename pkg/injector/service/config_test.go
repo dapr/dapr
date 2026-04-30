@@ -48,7 +48,6 @@ func TestGetInjectorConfig(t *testing.T) {
 		t.Setenv("KUBE_CLUSTER_DOMAIN", "cluster.local")
 		t.Setenv("ALLOWED_SERVICE_ACCOUNTS", "test1:test-service-account1,test2:test-service-account2")
 		t.Setenv("ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES", "namespace:test-service-account1,namespace2*:test-service-account2")
-
 		cfg, err := GetConfig()
 		require.NoError(t, err)
 		assert.Equal(t, "daprd-test-image", cfg.SidecarImage)

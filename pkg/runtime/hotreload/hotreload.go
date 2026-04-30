@@ -17,7 +17,12 @@ import (
 	"context"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/healthz"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -45,7 +50,6 @@ type OptionsReloaderDisk struct {
 }
 
 type OptionsReloaderOperator struct {
-	PodName        string
 	Namespace      string
 	Client         operatorv1.OperatorClient
 	Config         *config.Configuration
@@ -60,6 +64,17 @@ type Reloader struct {
 	loader                  loader.Interface
 	componentsReconciler    *reconciler.Reconciler[compapi.Component]
 	subscriptionsReconciler *reconciler.Reconciler[subapi.Subscription]
+	mcpServersReconciler    *reconciler.Reconciler[mcpserverapi.MCPServer]
+
+	// SIGHUP reconcilers for resources that require runtime restart
+	configurationsReconciler *reconciler.SIGHUPReconciler[configapi.Configuration]
+	httpEndpointsReconciler  *reconciler.SIGHUPReconciler[httpendpointapi.HTTPEndpoint]
+	resilienciesReconciler   *reconciler.SIGHUPReconciler[resiliencyapi.Resiliency]
+
+	// policyOptsCh receives options for the WorkflowAccessPolicy reconciler.
+	// SetPolicyRecompiler sends on this channel; Run() receives from it. This
+	// synchronizes the race between initRuntime() and Run().
+	policyOptsCh chan reconciler.WorkflowAccessPolicyOptions
 }
 
 func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
@@ -94,6 +109,29 @@ func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
 			Authorizer: opts.Authorizer,
 			Healthz:    opts.Healthz,
 		}),
+		mcpServersReconciler: reconciler.NewMCPServers(reconciler.Options[mcpserverapi.MCPServer]{
+			Loader:     loader,
+			CompStore:  opts.ComponentStore,
+			Processor:  opts.Processor,
+			Authorizer: opts.Authorizer,
+			Healthz:    opts.Healthz,
+		}),
+		configurationsReconciler: reconciler.NewSIGHUPConfigurations(reconciler.Options[configapi.Configuration]{
+			Loader:    loader,
+			CompStore: opts.ComponentStore,
+			Healthz:   opts.Healthz,
+		}),
+		httpEndpointsReconciler: reconciler.NewSIGHUPHTTPEndpoints(reconciler.Options[httpendpointapi.HTTPEndpoint]{
+			Loader:    loader,
+			CompStore: opts.ComponentStore,
+			Healthz:   opts.Healthz,
+		}),
+		resilienciesReconciler: reconciler.NewSIGHUPResiliencies(reconciler.Options[resiliencyapi.Resiliency]{
+			Loader:    loader,
+			CompStore: opts.ComponentStore,
+			Healthz:   opts.Healthz,
+		}),
+		policyOptsCh: make(chan reconciler.WorkflowAccessPolicyOptions, 1),
 	}, nil
 }
 
@@ -104,7 +142,6 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 	}
 
 	loader := operator.New(operator.Options{
-		PodName:        opts.PodName,
 		Namespace:      opts.Namespace,
 		ComponentStore: opts.ComponentStore,
 		OperatorClient: opts.Client,
@@ -127,6 +164,54 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 			Authorizer: opts.Authorizer,
 			Healthz:    opts.Healthz,
 		}),
+		mcpServersReconciler: reconciler.NewMCPServers(reconciler.Options[mcpserverapi.MCPServer]{
+			Loader:     loader,
+			CompStore:  opts.ComponentStore,
+			Processor:  opts.Processor,
+			Authorizer: opts.Authorizer,
+			Healthz:    opts.Healthz,
+		}),
+		configurationsReconciler: reconciler.NewSIGHUPConfigurations(reconciler.Options[configapi.Configuration]{
+			Loader:    loader,
+			CompStore: opts.ComponentStore,
+			Healthz:   opts.Healthz,
+		}),
+		httpEndpointsReconciler: reconciler.NewSIGHUPHTTPEndpoints(reconciler.Options[httpendpointapi.HTTPEndpoint]{
+			Loader:    loader,
+			CompStore: opts.ComponentStore,
+			Healthz:   opts.Healthz,
+		}),
+		resilienciesReconciler: reconciler.NewSIGHUPResiliencies(reconciler.Options[resiliencyapi.Resiliency]{
+			Loader:    loader,
+			CompStore: opts.ComponentStore,
+			Healthz:   opts.Healthz,
+		}),
+		policyOptsCh: make(chan reconciler.WorkflowAccessPolicyOptions, 1),
+	}
+}
+
+// Loader returns the underlying loader.Interface used by this reloader.
+func (r *Reloader) Loader() loader.Interface {
+	return r.loader
+}
+
+// SetPolicyRecompiler sends options for the WorkflowAccessPolicy reconciler.
+// Run() waits for this signal before starting the reconciler. This is safe
+// to call concurrently with Run() from initRuntime().
+func (r *Reloader) SetPolicyRecompiler(opts reconciler.WorkflowAccessPolicyOptions) {
+	if !r.isEnabled || r.policyOptsCh == nil {
+		return
+	}
+
+	r.policyOptsCh <- opts
+}
+
+// SignalNoPolicyRecompiler signals Run() that no policy reconciler will be
+// created. Must be called if SetPolicyRecompiler is not going to be called,
+// so Run() does not block waiting.
+func (r *Reloader) SignalNoPolicyRecompiler() {
+	if r.isEnabled && r.policyOptsCh != nil {
+		close(r.policyOptsCh)
 	}
 }
 
@@ -138,11 +223,35 @@ func (r *Reloader) Run(ctx context.Context) error {
 		return nil
 	}
 
-	log.Info("Hot reloading enabled. Daprd will reload 'Component' and 'Subscription' resources on change.")
-
-	return concurrency.NewRunnerManager(
+	runners := []concurrency.Runner{
 		r.loader.Run,
 		r.componentsReconciler.Run,
 		r.subscriptionsReconciler.Run,
-	).Run(ctx)
+		r.mcpServersReconciler.Run,
+		r.configurationsReconciler.Run,
+		r.httpEndpointsReconciler.Run,
+		r.resilienciesReconciler.Run,
+	}
+
+	// Wait for initRuntime to signal whether a policy reconciler is needed. This
+	// synchronizes with the concurrent call to SetPolicyRecompiler or
+	// SignalNoPolicyRecompiler from initRuntime.
+	var policyReconciler *reconciler.Reconciler[wfaclapi.WorkflowAccessPolicy]
+	select {
+	case opts, ok := <-r.policyOptsCh:
+		if ok {
+			policyReconciler = reconciler.NewWorkflowAccessPolicies(opts)
+		}
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	if policyReconciler != nil {
+		runners = append(runners, policyReconciler.Run)
+		log.Info("Hot reloading enabled. Daprd will reload 'Component', 'Subscription', 'MCPServer', 'Configuration', 'HTTPEndpoint', 'Resiliency' and 'WorkflowAccessPolicy' resources when they are added, updated or deleted.")
+	} else {
+		log.Info("Hot reloading enabled. Daprd will reload 'Component', 'Subscription', 'MCPServer', 'Configuration', 'HTTPEndpoint' and 'Resiliency' resources when they are added, updated or deleted.")
+	}
+
+	return concurrency.NewRunnerManager(runners...).Run(ctx)
 }

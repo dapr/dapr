@@ -16,10 +16,9 @@ package activity
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
-	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -36,7 +35,6 @@ func init() {
 	suite.Register(new(crossnamespace))
 }
 
-// crossnamespace tests that calling activities across different namespaces fails
 type crossnamespace struct {
 	workflow             *workflow.Workflow
 	actorNotFoundLogLine *logline.LogLine
@@ -58,7 +56,6 @@ func (c *crossnamespace) Setup(t *testing.T) []framework.Option {
 		workflow.WithDaprdOptions(1, daprd.WithNamespace("other")),
 	)
 
-	// App1: Activity in different namespace
 	c.workflow.RegistryN(1).AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
@@ -67,21 +64,18 @@ func (c *crossnamespace) Setup(t *testing.T) []framework.Option {
 		return "Processed by app1: " + input, nil
 	})
 
-	// App0: Orchestrator that tries to call app2 in different namespace
-	c.workflow.Registry().AddOrchestratorN("CrossNamespaceWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	c.workflow.Registry().AddWorkflowN("CrossNamespaceWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app0: %w", err)
 		}
 
-		// Try to call activity on app1 in different namespace - this should fail
 		var output string
 		err := ctx.CallActivity("ProcessData",
 			task.WithActivityInput(input),
 			task.WithActivityAppID(c.workflow.DaprN(1).AppID())).
 			Await(&output)
 		if err != nil {
-			// Expected to fail due to namespace isolation
 			return fmt.Sprintf("Cross-namespace call failed as expected: %v", err), nil
 		}
 		return output, nil
@@ -95,18 +89,15 @@ func (c *crossnamespace) Setup(t *testing.T) []framework.Option {
 func (c *crossnamespace) Run(t *testing.T, ctx context.Context) {
 	c.workflow.WaitUntilRunning(t, ctx)
 
-	// Start workflow listener for apps
-	client0 := c.workflow.BackendClient(t, ctx)
+	client := c.workflow.BackendClient(t, ctx)
 	c.workflow.BackendClientN(t, ctx, 1)
 
-	// Expect completion to hang, so timeout
-	// dapr will log about 'did not find address for actor'
-	waitCtx, waitCancel := context.WithTimeout(ctx, 5*time.Second)
-	defer waitCancel()
+	id, err := client.ScheduleNewWorkflow(ctx, "CrossNamespaceWorkflow", api.WithInput("Hello from app0"))
+	require.NoError(t, err)
 
-	// Start workflow from app0 (default namespace)
-	_, err := client0.ScheduleNewOrchestration(waitCtx, "CrossNamespaceWorkflow", api.WithInput("Hello from app0"))
-	require.Error(t, err)
-	require.True(t, strings.Contains(err.Error(), "context deadline exceeded") || strings.Contains(err.Error(), "DeadlineExceeded"))
+	metadata, err := client.WaitForWorkflowStart(ctx, id)
+	require.NoError(t, err)
+	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.GetRuntimeStatus())
+
 	c.actorNotFoundLogLine.EventuallyFoundAll(t)
 }

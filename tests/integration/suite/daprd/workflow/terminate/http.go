@@ -51,8 +51,9 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 	h.workflow.WaitUntilRunning(t, ctx)
 
 	holdCh := make(chan struct{})
+	t.Cleanup(func() { close(holdCh) })
 	var inAct atomic.Bool
-	h.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	h.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
 	})
@@ -63,7 +64,7 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 	})
 
 	cl := h.workflow.BackendClient(t, ctx)
-	id, err := cl.ScheduleNewOrchestration(ctx, "foo")
+	id, err := cl.ScheduleNewWorkflow(ctx, "foo")
 	require.NoError(t, err)
 
 	assert.Eventually(t, inAct.Load, time.Second*20, time.Millisecond*10)
@@ -76,10 +77,8 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
 
-	close(holdCh)
-
-	meta, err := cl.WaitForOrchestrationCompletion(ctx, id)
+	meta, err := cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	require.Equal(t, "ORCHESTRATION_STATUS_TERMINATED", meta.RuntimeStatus.String())
+	require.Equal(t, "ORCHESTRATION_STATUS_TERMINATED", meta.GetRuntimeStatus().String())
 }

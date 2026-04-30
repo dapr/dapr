@@ -17,6 +17,7 @@ package wfengine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -34,6 +35,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/logger"
 )
 
@@ -49,6 +51,7 @@ type Interface interface {
 	RuntimeMetadata() *runtimev1pb.MetadataWorkflows
 
 	ActivityActorType() string
+	WorkflowActorType() string
 }
 
 type Options struct {
@@ -63,6 +66,11 @@ type Options struct {
 
 	EnableClusteredDeployment       bool
 	WorkflowsRemoteActivityReminder bool
+	WorkflowHistorySigning          bool
+
+	// Signer provides cryptographic signing and verification. If nil, history
+	// signing is disabled.
+	Signer *signer.Signer
 }
 
 type engine struct {
@@ -78,10 +86,22 @@ type engine struct {
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 }
 
-func New(opts Options) Interface {
+func New(opts Options) (Interface, error) {
 	var retPolicy *config.WorkflowStateRetentionPolicy
 	if opts.Spec != nil {
 		retPolicy = opts.Spec.StateRetentionPolicy
+	}
+
+	// Disable history signing if the WorkflowHistorySigning feature flag is not
+	// enabled.
+	s := opts.Signer
+	if !opts.WorkflowHistorySigning {
+		s = nil
+	} else if s == nil {
+		// The feature flag is explicitly enabled but mTLS is not available. This
+		// is a misconfiguration. Signing requires mTLS for the SPIFFE identity
+		// used as the signing key.
+		return nil, errors.New("WorkflowHistorySigning feature flag is enabled but mTLS is not configured; workflow history signing requires mTLS to be active")
 	}
 
 	// If no backend was initialized by the manager, create a backend backed by actors
@@ -93,6 +113,7 @@ func New(opts Options) Interface {
 		EventSink:       opts.EventSink,
 		ComponentStore:  opts.ComponentStore,
 		RetentionPolicy: retPolicy,
+		Signer:          s,
 
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
@@ -140,8 +161,7 @@ func New(opts Options) Interface {
 		}
 	}
 
-	// There are separate "workers" for executing orchestrations (workflows) and activities
-	oworker := backend.NewOrchestrationWorker(backend.OrchestratorOptions{
+	oworker := backend.NewWorkflowWorker(backend.WorkflowWorkerOptions{
 		Backend:  abackend,
 		Executor: executor,
 		Logger:   wfBackendLogger,
@@ -175,7 +195,7 @@ func New(opts Options) Interface {
 			logger: wfBackendLogger,
 			client: backend.NewTaskHubClient(abackend),
 		},
-	}
+	}, nil
 }
 
 func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {
@@ -212,6 +232,10 @@ func (wfe *engine) Client() workflows.Workflow {
 
 func (wfe *engine) ActivityActorType() string {
 	return wfe.backend.ActivityActorType()
+}
+
+func (wfe *engine) WorkflowActorType() string {
+	return wfe.backend.WorkflowActorType()
 }
 
 func (wfe *engine) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {

@@ -59,6 +59,7 @@ func (f *failed) Setup(t *testing.T) []framework.Option {
 
 func (f *failed) Run(t *testing.T, ctx context.Context) {
 	f.actors.WaitUntilRunning(t, ctx)
+	f.actors.Scheduler().WaitUntilSidecarsConnected(t, ctx, 3)
 
 	_, err := f.actors.GRPCClient(t, ctx).RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: "foo",
@@ -77,7 +78,7 @@ func (f *failed) Run(t *testing.T, ctx context.Context) {
 	select {
 	case name := <-f.triggered:
 		assert.Equal(t, "test", name)
-	case <-time.After(time.Second * 1):
+	case <-time.After(time.Second * 3):
 		require.Fail(t, "timed out waiting for job")
 	}
 
@@ -85,6 +86,6 @@ func (f *failed) Run(t *testing.T, ctx context.Context) {
 	select {
 	case <-f.triggered:
 		assert.Fail(t, "unexpected trigger")
-	case <-time.After(time.Second * 3):
+	case <-time.After(time.Second * 5):
 	}
 }

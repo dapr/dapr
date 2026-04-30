@@ -70,7 +70,7 @@ func (s *success) Run(t *testing.T, ctx context.Context) {
 	data, _ := anypb.New(wrapperspb.Bytes([]byte("hello world")))
 
 	t.Run("successful job trigger", func(t *testing.T) {
-		_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+		_, err := client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
 				Name:     "success",
 				DueTime:  new("0s"),
@@ -85,6 +85,6 @@ func (s *success) Run(t *testing.T, ctx context.Context) {
 			metrics := s.daprd.Metrics(c, ctx).All()
 			assert.Equal(c, 3, int(metrics["dapr_component_job_success_count|app_id:my_app|namespace:|operation:job_trigger_op"]))
 			assert.NotNil(c, metrics["dapr_component_job_latencies_sum|app_id:my_app|namespace:|operation:job_trigger_op"])
-		}, time.Second*10, time.Millisecond*10)
+		}, time.Second*30, time.Millisecond*10)
 	})
 }

@@ -29,7 +29,7 @@ import (
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spf13/cast"
 	"go.opencensus.io/stats/view"
-	yaml "gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
@@ -60,8 +60,24 @@ const (
 	// cross app workflows. Ensures that activities are not retried forever if
 	// the workflow app is not available, and instead queues the result for when
 	// the workflow app is back online. Strongly recommended to always be enabled
-	// if using the same Dapr version on all daprds.
+	// if using the same Dapr version on all daprds. Enabled by default.
 	WorkflowsRemoteActivityReminder Feature = "WorkflowsRemoteActivityReminder"
+
+	// Enables support for the MCPServer first-class resource,
+	// which declares connections to MCP (Model Context Protocol) servers.
+	// When enabled, daprd loads MCPServer manifests at startup,
+	// and makes them available for tool execution via workflow orchestrations.
+	MCPServerResource Feature = "MCPServerResource"
+
+	// WorkflowHistorySigning enables cryptographic signing of workflow
+	// history. When enabled and mTLS is active, each workflow execution's
+	// history events are signed using the app's X.509 SVID identity,
+	// creating a verifiable chain of signatures. Disabled by default.
+	WorkflowHistorySigning Feature = "WorkflowHistorySigning"
+
+	// Enables workflow access control policies. When enabled, WorkflowAccessPolicy
+	// resources are loaded and enforced at the target sidecar's CallActor handler.
+	WorkflowAccessPolicy Feature = "WorkflowAccessPolicy"
 )
 
 // end feature flags section
@@ -77,7 +93,10 @@ const (
 	ActionPolicyGlobal  = "global"
 )
 
-var defaultFeatures = make(map[Feature]bool)
+var defaultFeatures = map[Feature]bool{
+	HotReload:                       true,
+	WorkflowsRemoteActivityReminder: true,
+}
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
 //
@@ -145,10 +164,30 @@ type WorkflowSpec struct {
 	// If omitted, no maximum will be enforced.
 	MaxConcurrentActivityInvocations int32 `json:"maxConcurrentActivityInvocations,omitempty" yaml:"maxConcurrentActivityInvocations,omitempty"`
 
+	// globalMaxConcurrentWorkflowInvocations is the maximum number of concurrent
+	// workflow invocations across all replicas, enforced by the scheduler.
+	// If omitted, no global maximum will be enforced.
+	GlobalMaxConcurrentWorkflowInvocations *int32 `json:"globalMaxConcurrentWorkflowInvocations,omitempty" yaml:"globalMaxConcurrentWorkflowInvocations,omitempty"`
+	// globalMaxConcurrentActivityInvocations is the maximum number of concurrent
+	// activity invocations across all replicas, enforced by the scheduler.
+	// If omitted, no global maximum will be enforced.
+	GlobalMaxConcurrentActivityInvocations *int32 `json:"globalMaxConcurrentActivityInvocations,omitempty" yaml:"globalMaxConcurrentActivityInvocations,omitempty"`
+
+	// Per-workflow-name concurrency limits enforced globally by the scheduler.
+	WorkflowConcurrencyLimits []NamedConcurrencyLimit `json:"workflowConcurrencyLimits,omitempty" yaml:"workflowConcurrencyLimits,omitempty"`
+	// Per-activity-name concurrency limits enforced globally by the scheduler.
+	ActivityConcurrencyLimits []NamedConcurrencyLimit `json:"activityConcurrencyLimits,omitempty" yaml:"activityConcurrencyLimits,omitempty"`
+
 	// StateRetentionPolicy defines the retention configuration for workflow
 	// state once a workflow reaches a terminal state. If not set, workflow
 	// instances will not be automatically purged.
 	StateRetentionPolicy *WorkflowStateRetentionPolicy `json:"stateRetentionPolicy,omitempty" yaml:"stateRetentionPolicy,omitempty"`
+}
+
+// NamedConcurrencyLimit defines a per-name concurrency limit.
+type NamedConcurrencyLimit struct {
+	Name          *string `json:"name"          yaml:"name"`
+	MaxConcurrent *int32  `json:"maxConcurrent" yaml:"maxConcurrent"`
 }
 
 // WorkflowStateRetentionPolicy defines the retention policy of workflow state
@@ -217,6 +256,20 @@ func (w *WorkflowSpec) GetMaxConcurrentActivityInvocations() *int32 {
 		return nil
 	}
 	return new(w.MaxConcurrentActivityInvocations)
+}
+
+func (w *WorkflowSpec) GetGlobalMaxConcurrentWorkflowInvocations() *int32 {
+	if w == nil || w.GlobalMaxConcurrentWorkflowInvocations == nil || *w.GlobalMaxConcurrentWorkflowInvocations <= 0 {
+		return nil
+	}
+	return w.GlobalMaxConcurrentWorkflowInvocations
+}
+
+func (w *WorkflowSpec) GetGlobalMaxConcurrentActivityInvocations() *int32 {
+	if w == nil || w.GlobalMaxConcurrentActivityInvocations == nil || *w.GlobalMaxConcurrentActivityInvocations <= 0 {
+		return nil
+	}
+	return w.GlobalMaxConcurrentActivityInvocations
 }
 
 type SecretsSpec struct {
@@ -616,32 +669,38 @@ func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 }
 
 // LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name.
-func LoadKubernetesConfiguration(config string, namespace string, podName string, operatorClient operatorv1pb.OperatorClient) (*Configuration, error) {
+// Returns the processed Configuration and the raw configapi.Configuration resource.
+func LoadKubernetesConfiguration(config string, namespace string, operatorClient operatorv1pb.OperatorClient) (*Configuration, *configapi.Configuration, error) {
 	resp, err := operatorClient.GetConfiguration(context.Background(), &operatorv1pb.GetConfigurationRequest{
 		Name:      config,
 		Namespace: namespace,
-		PodName:   podName,
 	}, grpcRetry.WithMax(operatorMaxRetries), grpcRetry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	b := resp.GetConfiguration()
 	if len(b) == 0 {
-		return nil, fmt.Errorf("configuration %s not found", config)
+		return nil, nil, fmt.Errorf("configuration %s not found", config)
 	}
 	conf := LoadDefaultConfiguration()
 	if err = json.Unmarshal(b, conf); err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+
+	// Also parse the raw API resource for use by the SIGHUP reconciler.
+	var configResource configapi.Configuration
+	if err = json.Unmarshal(b, &configResource); err != nil {
+		return nil, nil, err
 	}
 
 	err = conf.sortAndValidateSecretsConfiguration()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	conf.sortMetricsSpec()
 	conf.SetDefaultFeatures()
-	return conf, nil
+	return conf, &configResource, nil
 }
 
 // Update configuration from Otlp Environment Variables, if they exist.

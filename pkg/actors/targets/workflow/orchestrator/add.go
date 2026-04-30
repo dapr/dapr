@@ -56,7 +56,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)
 	state.AddToInbox(&e)
 
-	if err := o.saveInternalState(ctx, state); err != nil {
+	if err := o.signAndSaveState(ctx, state); err != nil {
 		return err
 	}
 
@@ -64,7 +64,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	// hosted, so use the source app from the router.
 	// For sub-orchestrator completion events we want to create the reminder on the current app.
 	sourceAppID := o.appID
-	returningToParent := e.GetSubOrchestrationInstanceCompleted() != nil || e.GetSubOrchestrationInstanceFailed() != nil
+	returningToParent := e.GetChildWorkflowInstanceCompleted() != nil || e.GetChildWorkflowInstanceFailed() != nil
 	if !returningToParent && e.GetRouter() != nil {
 		sourceAppID = e.GetRouter().GetSourceAppID()
 	}
@@ -73,7 +73,8 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	if len(state.History) > 0 {
 		dueTime = state.History[0].Timestamp.AsTime()
 	}
-	if _, err := o.createWorkflowReminder(ctx, reminderPrefixNewEvent, nil, dueTime, sourceAppID); err != nil {
+	wfName := o.getExecutionStartedEvent(state).GetName()
+	if _, err := o.createWorkflowReminder(ctx, reminderPrefixNewEvent, nil, dueTime, sourceAppID, &wfName); err != nil {
 		return err
 	}
 

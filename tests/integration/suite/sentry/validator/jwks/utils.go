@@ -15,8 +15,7 @@ package jwks
 
 import (
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -53,7 +52,7 @@ var (
 
 func init() {
 	// Generate a signing key
-	privK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, privK, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		log.Fatalf("failed to generate private key: %v", err)
 	}
@@ -62,7 +61,7 @@ func init() {
 		log.Fatalf("failed to import private key as JWK: %v", err)
 	}
 	jwtSigningKeyPriv.Set("kid", "mykey")
-	jwtSigningKeyPriv.Set("alg", "ES256")
+	jwtSigningKeyPriv.Set("alg", "EdDSA")
 	jwtSigningKeyPub, err := jwtSigningKeyPriv.PublicKey()
 	if err != nil {
 		log.Fatalf("failed to get public key from JWK: %v", err)
@@ -103,7 +102,7 @@ func signJWT(builder *jwt.Builder) ([]byte, error) {
 		return nil, err
 	}
 
-	return jwt.Sign(token, jwt.WithKey(jwa.ES256, jwtSigningKeyPriv))
+	return jwt.Sign(token, jwt.WithKey(jwa.EdDSA, jwtSigningKeyPriv))
 }
 
 func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle bundle.Bundle, expectSPIFFEID string) {
@@ -150,7 +149,7 @@ func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateRe
 
 func generateCACertificate(t *testing.T) (caCert []byte, caKey []byte) {
 	// Generate a private key for the CA
-	caPrivateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	caPublicKey, caPrivateKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
 	// Create a self-signed CA certificate
@@ -165,7 +164,7 @@ func generateCACertificate(t *testing.T) (caCert []byte, caKey []byte) {
 		IsCA:                  true,
 	}
 
-	caCertificateDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, caPrivateKey.Public(), caPrivateKey)
+	caCertificateDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, caPublicKey, caPrivateKey)
 	require.NoError(t, err)
 	caCert = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCertificateDER})
 
@@ -187,7 +186,7 @@ func generateTLSCertificates(t *testing.T, caCert []byte, caKey []byte, dnsName 
 	require.NoError(t, err)
 
 	// Generate a private key for the new cert
-	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	pubKey, privKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
 	// Create a certificate
@@ -200,7 +199,7 @@ func generateTLSCertificates(t *testing.T, caCert []byte, caKey []byte, dnsName 
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
-	certDER, err := x509.CreateCertificate(rand.Reader, certData, caCertificate, privKey.Public(), caPrivateKey)
+	certDER, err := x509.CreateCertificate(rand.Reader, certData, caCertificate, pubKey, caPrivateKey)
 	require.NoError(t, err)
 
 	cert = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
