@@ -25,9 +25,10 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/dapr/durabletask-go/task"
 	"github.com/dapr/kit/logger"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"

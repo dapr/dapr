@@ -152,7 +152,7 @@ func (s *middlewareListToolsHooks) Run(t *testing.T, ctx context.Context) {
 			mcpnames.MCPListToolsWorkflowName("before-list-deny"), nil)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, status.RuntimeStatus,
+		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(), status.RuntimeStatus,
 			"beforeListTools error should fail the workflow")
 	})
 
@@ -161,7 +161,7 @@ func (s *middlewareListToolsHooks) Run(t *testing.T, ctx context.Context) {
 			mcpnames.MCPListToolsWorkflowName("after-list-fail"), nil)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, status.RuntimeStatus,
+		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(), status.RuntimeStatus,
 			"afterListTools error should fail the workflow")
 	})
 }

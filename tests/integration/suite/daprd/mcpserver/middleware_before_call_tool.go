@@ -168,7 +168,7 @@ func (s *middlewareBeforeCallTool) Run(t *testing.T, ctx context.Context) {
 			mcpnames.MCPCallToolWorkflowName("gated", "echo"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus,
+		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus,
 			"CallTool with gate hook should complete (not fail) — the error is in the output")
 
 		outputJSON := status.Properties["dapr.workflow.output"]
@@ -190,7 +190,7 @@ func (s *middlewareBeforeCallTool) Run(t *testing.T, ctx context.Context) {
 			mcpnames.MCPCallToolWorkflowName("passthrough", "echo"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus)
+		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus)
 
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)

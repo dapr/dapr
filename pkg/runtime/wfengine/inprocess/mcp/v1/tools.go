@@ -19,8 +19,9 @@ import (
 	"strings"
 	"sync"
 
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 )
 
 const (

@@ -119,7 +119,7 @@ spec:
 				mcpnames.MCPListToolsWorkflowName("dynamic"), nil)
 
 			status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 10*time.Second)
-			if !assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus) {
+			if !assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus) {
 				return
 			}
 
@@ -147,7 +147,7 @@ spec:
 				mcpnames.MCPListToolsWorkflowName("dynamic"), nil)
 
 			status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 10*time.Second)
-			assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, status.RuntimeStatus,
+			assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(), status.RuntimeStatus,
 				"ListTools should fail after MCPServer is deleted")
 		}, 30*time.Second, time.Second)
 	})

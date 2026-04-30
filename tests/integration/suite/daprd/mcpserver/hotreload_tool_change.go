@@ -124,7 +124,7 @@ func (s *hotReloadToolChange) Run(t *testing.T, ctx context.Context) {
 			mcpnames.MCPCallToolWorkflowName("dynamic", "alpha"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus)
+		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus)
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(status.Properties["dapr.workflow.output"]), &result))
@@ -142,7 +142,7 @@ func (s *hotReloadToolChange) Run(t *testing.T, ctx context.Context) {
 				mcpnames.MCPCallToolWorkflowName("dynamic", "beta"), input)
 
 			status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 10*time.Second)
-			assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus)
+			assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus)
 		}, 30*time.Second, time.Second)
 	})
 
@@ -154,7 +154,7 @@ func (s *hotReloadToolChange) Run(t *testing.T, ctx context.Context) {
 				mcpnames.MCPCallToolWorkflowName("dynamic", "alpha"), input)
 
 			status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 10*time.Second)
-			assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, status.RuntimeStatus,
+			assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(), status.RuntimeStatus,
 				"alpha tool should be unregistered after hot-reload to server B")
 		}, 30*time.Second, time.Second)
 	})

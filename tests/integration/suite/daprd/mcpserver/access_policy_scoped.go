@@ -14,6 +14,7 @@ limitations under the License.
 package mcpserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -33,7 +34,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/durabletask-go/api/protos"
 )
 
 func init() {
@@ -121,15 +121,34 @@ func (s *accessPolicyScoped) Run(t *testing.T, ctx context.Context) {
 		}
 	})
 
-	t.Run("scoped MCPServer workflow not registered", func(t *testing.T) {
-		// Attempting to start the ListTools workflow should fail because the
-		// MCPServer was filtered out and its workflows were never registered.
-		input := map[string]any{}
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			mcpnames.MCPListToolsWorkflowName("restricted-mcp"), input)
+	t.Run("scoped out MCPServer workflow not registered", func(t *testing.T) {
+		// Because the MCPServer was filtered out by appID scoping, its workflow
+		// (dapr.internal.mcp.restricted-mcp.ListTools) was never registered in the
+		// in-process task registry. We can't read the registry directly via the
+		// metadata API, so we infer non-registration from the start API's
+		// behavior: the dapr workflow start endpoint synchronously waits for
+		// the orchestrator to begin executing (WaitForInstanceStart). When the
+		// orchestrator is not registered, that call hangs until the request
+		// context expires — so a POST with a short client timeout MUST error
+		// out. If the start succeeded fast, the workflow is registered and
+		// this assertion fails.
+		shortClient := fclient.HTTPWithTimeout(t, 3*time.Second)
 
-		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, status.RuntimeStatus,
-			"workflow for out-of-scope MCPServer should fail as not registered")
+		body, err := json.Marshal(map[string]any{})
+		require.NoError(t, err)
+		reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start",
+			s.daprd.HTTPPort(), mcpnames.MCPListToolsWorkflowName("restricted-mcp"))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := shortClient.Do(req)
+		if resp != nil {
+			resp.Body.Close()
+		}
+		// Any non-nil error here proves the start hung past the short timeout,
+		// which means no orchestrator was registered to make the workflow start
+		// progress. A successful 202 would mean the workflow IS registered.
+		require.Error(t, err, "start of unregistered workflow should not succeed quickly")
 	})
 }

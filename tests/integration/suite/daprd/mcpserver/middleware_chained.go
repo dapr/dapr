@@ -179,7 +179,7 @@ func (s *middlewareChained) Run(t *testing.T, ctx context.Context) {
 			mcpnames.MCPCallToolWorkflowName("chained-before", "echo"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus,
+		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus,
 			"beforeCallTool error should produce isError result, not workflow failure")
 
 		outputJSON := status.Properties["dapr.workflow.output"]
@@ -201,7 +201,7 @@ func (s *middlewareChained) Run(t *testing.T, ctx context.Context) {
 			mcpnames.MCPCallToolWorkflowName("chained-after", "echo"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, status.RuntimeStatus,
+		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(), status.RuntimeStatus,
 			"afterCallTool chain error should fail the entire workflow")
 	})
 }

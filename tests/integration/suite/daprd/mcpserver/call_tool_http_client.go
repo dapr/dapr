@@ -146,7 +146,7 @@ func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 			if !assert.NoError(c, json.NewDecoder(resp.Body).Decode(&status)) {
 				return
 			}
-			assert.Equal(c, api.RUNTIME_STATUS_COMPLETED, status.RuntimeStatus)
+			assert.Equal(c, api.RUNTIME_STATUS_COMPLETED.String(), status.RuntimeStatus)
 		}, 30*time.Second, 10*time.Millisecond)
 
 		// The tool output is stored in the dapr.workflow.output property.

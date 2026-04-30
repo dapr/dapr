@@ -161,7 +161,7 @@ func (s *middlewareAfterCallTool) Run(t *testing.T, ctx context.Context) {
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		// afterCallTool errors fail the workflow itself — not just isError in output.
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, status.RuntimeStatus,
+		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(), status.RuntimeStatus,
 			"afterCallTool hook error should cause workflow FAILURE")
 	})
 
@@ -173,7 +173,7 @@ func (s *middlewareAfterCallTool) Run(t *testing.T, ctx context.Context) {
 			mcpnames.MCPCallToolWorkflowName("after-ok", "ping"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus)
+		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus)
 
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)

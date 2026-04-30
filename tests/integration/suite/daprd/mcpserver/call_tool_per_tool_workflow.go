@@ -127,7 +127,7 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 			mcpnames.MCPCallToolWorkflowName("multi-tool", "get_weather"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus)
+		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus)
 
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
@@ -148,7 +148,7 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 			mcpnames.MCPCallToolWorkflowName("multi-tool", "greet"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus)
+		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus)
 
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
@@ -169,7 +169,7 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 			mcpnames.MCPCallToolWorkflowName("multi-tool", "nonexistent_tool"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, status.RuntimeStatus,
+		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(), status.RuntimeStatus,
 			"workflow for non-existent tool should fail as not registered")
 	})
 
@@ -183,7 +183,7 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 			mcpnames.MCPCallToolWorkflowName("multi-tool", "get_weather"), input)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus,
+		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus,
 			"should succeed using tool name from workflow name suffix")
 
 		outputJSON := status.Properties["dapr.workflow.output"]
@@ -201,7 +201,7 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 			mcpnames.MCPListToolsWorkflowName("multi-tool"), nil)
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus)
+		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus)
 
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
