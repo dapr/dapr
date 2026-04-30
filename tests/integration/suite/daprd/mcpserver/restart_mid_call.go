@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -193,7 +192,7 @@ func (s *restartMidCall) Run(t *testing.T, ctx context.Context) {
 		assert.False(t, result.GetIsError())
 		require.NotEmpty(t, result.GetContent())
 		assert.NotNil(t, result.GetContent()[0].GetText())
-		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "Seattle"),
+		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "Seattle",
 			"expected tool result to mention Seattle, got: %s", result.GetContent()[0].GetText().GetText())
 
 		// The tool was called at least twice: once before the restart (which

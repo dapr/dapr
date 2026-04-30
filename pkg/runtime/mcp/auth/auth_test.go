@@ -53,9 +53,9 @@ func (f *fakeSecretStore) Init(_ context.Context, _ secretstores.Metadata) error
 func (f *fakeSecretStore) BulkGetSecret(_ context.Context, _ secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
 	return secretstores.BulkGetSecretResponse{}, nil
 }
-func (f *fakeSecretStore) Close() error                                          { return nil }
-func (f *fakeSecretStore) Features() []secretstores.Feature                      { return nil }
-func (f *fakeSecretStore) GetComponentMetadata() (map[string]string, error)      { return nil, nil }
+func (f *fakeSecretStore) Close() error                                     { return nil }
+func (f *fakeSecretStore) Features() []secretstores.Feature                 { return nil }
+func (f *fakeSecretStore) GetComponentMetadata() (map[string]string, error) { return nil, nil }
 
 // newTestCompstore creates a *compstore.ComponentStore with a fake secret store.
 func newTestCompstore(t *testing.T, storeName string, secrets map[string]string, err error) *compstore.ComponentStore {
@@ -64,7 +64,6 @@ func newTestCompstore(t *testing.T, storeName string, secrets map[string]string,
 	cs.AddSecretStore(storeName, &fakeSecretStore{data: secrets, err: err})
 	return cs
 }
-
 
 func namedServer(name string, spec mcpserverapi.MCPServerSpec) mcpserverapi.MCPServer {
 	s := mcpserverapi.MCPServer{Spec: spec}

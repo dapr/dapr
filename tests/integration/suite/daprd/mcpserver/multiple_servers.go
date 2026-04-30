@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -166,7 +165,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 		assert.False(t, result.GetIsError())
 		require.NotEmpty(t, result.GetContent())
 		assert.NotNil(t, result.GetContent()[0].GetText())
-		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "Austin"))
+		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "Austin")
 	})
 
 	t.Run("CallTool on greeter server returns greeting", func(t *testing.T) {
@@ -188,7 +187,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 		assert.False(t, result.GetIsError())
 		require.NotEmpty(t, result.GetContent())
 		assert.NotNil(t, result.GetContent()[0].GetText())
-		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "dapr"))
+		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "dapr")
 	})
 
 	t.Run("ListTools returns different tools per server", func(t *testing.T) {
