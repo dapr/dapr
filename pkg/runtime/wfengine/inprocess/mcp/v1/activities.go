@@ -59,7 +59,7 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *SessionHolder,
 
 		var tools []*wfv1.MCPToolDefinition
 		var cursor string
-		for page := 0; page < maxListToolsPages; page++ {
+		for range maxListToolsPages {
 			params := &mcp.ListToolsParams{}
 			if cursor != "" {
 				params.Cursor = cursor

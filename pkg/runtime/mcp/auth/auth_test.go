@@ -101,7 +101,7 @@ func TestHeaderRoundTripper(t *testing.T) {
 
 	inner := roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		captured = r.Header.Clone()
-		return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
+		return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 	})
 
 	rt := &headerRoundTripper{
@@ -113,7 +113,8 @@ func TestHeaderRoundTripper(t *testing.T) {
 	require.NoError(t, err)
 	resp, err := rt.RoundTrip(req)
 	require.NoError(t, err)
-	assert.Equal(t, 200, resp.StatusCode)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	assert.Equal(t, "value1", captured.Get("X-Custom"))
 	assert.Equal(t, "Bearer tok", captured.Get("Authorization"))
@@ -123,14 +124,15 @@ func TestHeaderRoundTripper_NoHeaders(t *testing.T) {
 	callCount := 0
 	inner := roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		callCount++
-		return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
+		return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 	})
 	rt := &headerRoundTripper{headers: nil, base: inner}
 	req, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
 	require.NoError(t, err)
 	resp, err := rt.RoundTrip(req)
 	require.NoError(t, err)
-	assert.Equal(t, 200, resp.StatusCode)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, 1, callCount)
 }
 
@@ -138,7 +140,7 @@ func TestJWTRoundTripper_InjectsHeader(t *testing.T) {
 	var captured http.Header
 	inner := roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		captured = r.Header.Clone()
-		return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
+		return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 	})
 
 	prefix := "Bearer "
@@ -159,7 +161,8 @@ func TestJWTRoundTripper_InjectsHeader(t *testing.T) {
 	require.NoError(t, err)
 	resp, err := rt.RoundTrip(req)
 	require.NoError(t, err)
-	assert.Equal(t, 200, resp.StatusCode)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "Bearer my-jwt-token", captured.Get("Authorization"))
 	assert.Equal(t, "https://api.example.com", lastAudience)
 }

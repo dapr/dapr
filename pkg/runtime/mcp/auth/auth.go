@@ -127,7 +127,7 @@ func buildOAuth2Client(
 ) (*http.Client, error) {
 	o := authCfg.OAuth2
 	if o.SecretKeyRef == nil {
-		return nil, fmt.Errorf("auth.oauth2.secretKeyRef is required for OAuth2 client credentials")
+		return nil, errors.New("auth.oauth2.secretKeyRef is required for OAuth2 client credentials")
 	}
 
 	storeName := k8sStoreName

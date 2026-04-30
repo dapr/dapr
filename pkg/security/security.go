@@ -495,11 +495,11 @@ func (s *security) WithSVIDContext(ctx context.Context) context.Context {
 
 func (s *security) FetchJWT(ctx context.Context, audience string) (string, error) {
 	if s.spiffe == nil {
-		return "", fmt.Errorf("SPIFFE JWT auth is configured but security is disabled")
+		return "", errors.New("SPIFFE JWT auth is configured but security is disabled")
 	}
 	jwtSource := s.spiffe.JWTSVIDSource()
 	if jwtSource == nil {
-		return "", fmt.Errorf("SPIFFE JWT source not available")
+		return "", errors.New("SPIFFE JWT source not available")
 	}
 	svid, err := jwtSource.FetchJWTSVID(ctx, jwtsvid.Params{Audience: audience})
 	if err != nil {

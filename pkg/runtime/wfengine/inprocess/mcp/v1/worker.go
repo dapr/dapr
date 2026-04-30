@@ -152,7 +152,7 @@ func DiscoverTools(ctx context.Context, holder *SessionHolder) ([]*wfv1.MCPToolD
 
 	var tools []*wfv1.MCPToolDefinition
 	var cursor string
-	for page := 0; page < maxListToolsPages; page++ {
+	for range maxListToolsPages {
 		params := &mcp.ListToolsParams{}
 		if cursor != "" {
 			params.Cursor = cursor
@@ -346,12 +346,4 @@ func withDeadline(ctx context.Context, d time.Duration) (context.Context, contex
 		return ctx, func() {}
 	}
 	return context.WithTimeout(ctx, d)
-}
-
-// stringDeref returns the dereferenced string or "" if nil.
-func stringDeref(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }
