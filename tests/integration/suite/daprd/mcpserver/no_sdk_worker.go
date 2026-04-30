@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -27,8 +26,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 
-
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -36,7 +35,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/durabletask-go/api/protos"
 )
 
@@ -139,7 +137,7 @@ func (s *noSDKWorker) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 		assert.False(t, result.GetIsError())
 		require.NotEmpty(t, result.GetContent())
-		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "hello-no-sdk"))
+		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "hello-no-sdk")
 	})
 }
 

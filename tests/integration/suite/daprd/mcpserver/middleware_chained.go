@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -35,6 +34,7 @@ import (
 	"github.com/dapr/durabletask-go/task"
 
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -43,7 +43,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 )
 
 func init() {
@@ -191,7 +190,7 @@ func (s *middlewareChained) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 		assert.True(t, result.GetIsError(), "expected isError=true from chain short-circuit")
 		require.NotEmpty(t, result.GetContent())
-		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "hook-b"),
+		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "hook-b",
 			"expected hook-b error in content, got: %s", result.GetContent()[0].GetText().GetText())
 	})
 

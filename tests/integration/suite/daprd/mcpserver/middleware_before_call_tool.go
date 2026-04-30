@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -180,7 +179,7 @@ func (s *middlewareBeforeCallTool) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 		assert.True(t, result.GetIsError(), "expected isError=true when gate hook denies")
 		require.NotEmpty(t, result.GetContent())
-		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "access denied by policy"),
+		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "access denied by policy",
 			"expected gate error in content, got: %s", result.GetContent()[0].GetText().GetText())
 	})
 
