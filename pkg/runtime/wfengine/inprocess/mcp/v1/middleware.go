@@ -63,7 +63,7 @@ func runBeforeCallTool(
 			if err := t.Await(&mutated); err != nil {
 				return nil, err
 			}
-			arguments = mutated.Arguments
+			arguments = mutated.GetArguments()
 			// Update input for the next hook in the chain so it sees the mutated arguments.
 			input.Arguments = arguments
 		} else {

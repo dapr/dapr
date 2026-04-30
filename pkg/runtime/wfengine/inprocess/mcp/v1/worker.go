@@ -109,8 +109,8 @@ func RegisterMCPServer(opts RegisterOptions) ([]string, error) {
 		wfName := mcpnames.MCPCallToolWorkflowName(opts.Server.Name, tool.Name)
 		opts.Registry.UpsertVersionedWorkflowN(wfName, workflowVersion, true, orchestrator)
 		// Pre-populate the schema cache from the eager ListTools results.
-		if tool.InputSchema != nil {
-			if raw, err := json.Marshal(tool.InputSchema.AsMap()); err == nil {
+		if tool.GetInputSchema() != nil {
+			if raw, err := json.Marshal(tool.GetInputSchema().AsMap()); err == nil {
 				schemas.set(tool.Name, raw) //nolint:errcheck
 			}
 		}
@@ -231,7 +231,7 @@ func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentS
 			}
 
 			// beforeCallTool middleware pipeline — may mutate arguments.
-			arguments, err := runBeforeCallTool(ctx, &server, serverName, toolName, input.Arguments)
+			arguments, err := runBeforeCallTool(ctx, &server, serverName, toolName, input.GetArguments())
 			if err != nil {
 				// Return isError result (not a workflow failure) so the calling agent/LLM
 				// receives a structured error it can act on — retry, pick another tool, or

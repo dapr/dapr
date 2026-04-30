@@ -207,10 +207,10 @@ func TestConvertCallToolResult(t *testing.T) {
 			Content: []mcp.Content{&mcp.TextContent{Text: "hello"}},
 		}
 		got := convertCallToolResult(r)
-		assert.False(t, got.IsError)
-		require.Len(t, got.Content, 1)
-		assert.NotNil(t, got.Content[0].GetText())
-		assert.Equal(t, "hello", got.Content[0].GetText().GetText())
+		assert.False(t, got.GetIsError())
+		require.Len(t, got.GetContent(), 1)
+		assert.NotNil(t, got.GetContent()[0].GetText())
+		assert.Equal(t, "hello", got.GetContent()[0].GetText().GetText())
 	})
 
 	t.Run("image content", func(t *testing.T) {
@@ -220,8 +220,8 @@ func TestConvertCallToolResult(t *testing.T) {
 			},
 		}
 		got := convertCallToolResult(r)
-		assert.False(t, got.IsError)
-		content := got.Content
+		assert.False(t, got.GetIsError())
+		content := got.GetContent()
 		require.Len(t, content, 1)
 		assert.NotNil(t, content[0].GetImage())
 		assert.Equal(t, "image/png", content[0].GetImage().GetMimeType())
@@ -235,8 +235,8 @@ func TestConvertCallToolResult(t *testing.T) {
 			},
 		}
 		got := convertCallToolResult(r)
-		assert.False(t, got.IsError)
-		content := got.Content
+		assert.False(t, got.GetIsError())
+		content := got.GetContent()
 		require.Len(t, content, 1)
 		assert.NotNil(t, content[0].GetAudio())
 		assert.Equal(t, "audio/wav", content[0].GetAudio().GetMimeType())
@@ -254,8 +254,8 @@ func TestConvertCallToolResult(t *testing.T) {
 			},
 		}
 		got := convertCallToolResult(r)
-		assert.False(t, got.IsError)
-		content := got.Content
+		assert.False(t, got.GetIsError())
+		content := got.GetContent()
 		require.Len(t, content, 1)
 		assert.NotNil(t, content[0].GetResourceLink())
 		assert.Contains(t, string(content[0].GetResourceLink().GetResource()), "file:///tmp/report.pdf")
@@ -274,8 +274,8 @@ func TestConvertCallToolResult(t *testing.T) {
 			},
 		}
 		got := convertCallToolResult(r)
-		assert.False(t, got.IsError)
-		content := got.Content
+		assert.False(t, got.GetIsError())
+		content := got.GetContent()
 		require.Len(t, content, 1)
 		assert.NotNil(t, content[0].GetEmbeddedResource())
 		assert.Contains(t, string(content[0].GetEmbeddedResource().GetResource()), "file:///tmp/data.txt")
@@ -292,8 +292,8 @@ func TestConvertCallToolResult(t *testing.T) {
 			},
 		}
 		got := convertCallToolResult(r)
-		assert.False(t, got.IsError)
-		content := got.Content
+		assert.False(t, got.GetIsError())
+		content := got.GetContent()
 		require.Len(t, content, 4)
 		assert.NotNil(t, content[0].GetText())
 		assert.NotNil(t, content[1].GetImage())
@@ -304,15 +304,15 @@ func TestConvertCallToolResult(t *testing.T) {
 	t.Run("error result", func(t *testing.T) {
 		r := &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "err"}}}
 		got := convertCallToolResult(r)
-		assert.True(t, got.IsError)
-		require.NotEmpty(t, got.Content)
-		assert.Equal(t, "err", got.Content[0].GetText().GetText())
+		assert.True(t, got.GetIsError())
+		require.NotEmpty(t, got.GetContent())
+		assert.Equal(t, "err", got.GetContent()[0].GetText().GetText())
 	})
 
 	t.Run("empty content", func(t *testing.T) {
 		r := &mcp.CallToolResult{Content: nil}
 		got := convertCallToolResult(r)
-		assert.False(t, got.IsError)
-		assert.Empty(t, got.Content)
+		assert.False(t, got.GetIsError())
+		assert.Empty(t, got.GetContent())
 	})
 }

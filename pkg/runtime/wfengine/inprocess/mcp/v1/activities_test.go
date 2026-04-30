@@ -47,8 +47,8 @@ func TestMakeListToolsActivity_RealServer(t *testing.T) {
 
 	listResult, ok := result.(*wfv1.ListMCPToolsResponse)
 	require.True(t, ok)
-	require.Len(t, listResult.Tools, 1)
-	assert.Equal(t, "greet", listResult.Tools[0].Name)
+	require.Len(t, listResult.GetTools(), 1)
+	assert.Equal(t, "greet", listResult.GetTools()[0].GetName())
 }
 
 func TestMakeListToolsActivity_CachesToolSchema(t *testing.T) {
@@ -101,9 +101,9 @@ func TestMakeCallToolActivity_RealServer(t *testing.T) {
 
 	callResult, ok := result.(*wfv1.CallMCPToolResponse)
 	require.True(t, ok)
-	assert.False(t, callResult.IsError, "expected success result")
-	require.NotEmpty(t, callResult.Content)
-	assert.Contains(t, callResult.Content[0].GetText().GetText(), "dapr")
+	assert.False(t, callResult.GetIsError(), "expected success result")
+	require.NotEmpty(t, callResult.GetContent())
+	assert.Contains(t, callResult.GetContent()[0].GetText().GetText(), "dapr")
 }
 
 func TestMakeCallToolActivity_HeaderInjection(t *testing.T) {
@@ -168,9 +168,9 @@ func TestMakeCallToolActivity_MissingRequiredArg(t *testing.T) {
 	require.NoError(t, err, "validation failure should not be an activity error")
 	callResult, ok := result.(*wfv1.CallMCPToolResponse)
 	require.True(t, ok)
-	assert.True(t, callResult.IsError)
-	assert.Contains(t, callResult.Content[0].GetText().GetText(), "missing required")
-	assert.Contains(t, callResult.Content[0].GetText().GetText(), "name")
+	assert.True(t, callResult.GetIsError())
+	assert.Contains(t, callResult.GetContent()[0].GetText().GetText(), "missing required")
+	assert.Contains(t, callResult.GetContent()[0].GetText().GetText(), "name")
 }
 
 func TestMakeCallToolActivity_SPIFFEAuth(t *testing.T) {
@@ -217,6 +217,6 @@ func TestMakeCallToolActivity_SPIFFEAuth(t *testing.T) {
 	require.NoError(t, err)
 	callResult, ok := result.(*wfv1.CallMCPToolResponse)
 	require.True(t, ok)
-	assert.False(t, callResult.IsError, "expected success result")
+	assert.False(t, callResult.GetIsError(), "expected success result")
 	assert.Equal(t, "SVID svid-12345", capturedHeader)
 }
