@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -162,7 +161,7 @@ func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 		assert.False(t, result.GetIsError(), "expected success result")
 		require.NotEmpty(t, result.GetContent())
 		assert.NotNil(t, result.GetContent()[0].GetText())
-		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "Portland"),
+		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "Portland",
 			"expected tool result to mention Portland, got: %s", result.GetContent()[0].GetText().GetText())
 	})
 }

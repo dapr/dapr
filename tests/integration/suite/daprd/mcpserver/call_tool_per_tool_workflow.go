@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -137,7 +136,7 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 		assert.False(t, result.GetIsError())
 		require.NotEmpty(t, result.GetContent())
-		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "Portland"))
+		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "Portland")
 	})
 
 	t.Run("different tool uses different workflow name", func(t *testing.T) {
@@ -158,7 +157,7 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 		assert.False(t, result.GetIsError())
 		require.NotEmpty(t, result.GetContent())
-		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "Hello, Dapr!"))
+		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "Hello, Dapr!")
 	})
 
 	t.Run("non-existent tool workflow name fails as not registered", func(t *testing.T) {
@@ -194,7 +193,7 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 		assert.False(t, result.GetIsError())
-		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "Seattle"),
+		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "Seattle",
 			"expected weather result from get_weather, got: %s", result.GetContent()[0].GetText().GetText())
 	})
 

@@ -315,8 +315,9 @@ func TestBuildHTTPClient_OAuth2InjectsBearer(t *testing.T) {
 
 	req, err := http.NewRequest(http.MethodGet, targetServer.URL, nil)
 	require.NoError(t, err)
-	_, err = client.Do(req)
+	resp, err := client.Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
 	assert.Equal(t, "Bearer oauth-access-token", captured.Get("Authorization"))
 }
@@ -368,8 +369,9 @@ func TestBuildHTTPClient_StaticHeadersNoAuth(t *testing.T) {
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
 	require.NoError(t, err)
-	_, err = client.Do(req)
+	resp, err := client.Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
 	assert.Equal(t, "hello", captured.Get("X-Static"))
 }

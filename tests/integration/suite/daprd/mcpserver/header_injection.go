@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -146,7 +145,7 @@ func (s *headerInjection) Run(t *testing.T, ctx context.Context) {
 		assert.False(t, result.GetIsError(), "expected success result")
 		require.NotEmpty(t, result.GetContent())
 		assert.NotNil(t, result.GetContent()[0].GetText())
-		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "ok"))
+		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "ok")
 
 		// Verify the MCP server actually received the injected header.
 		capturedKey, ok := s.capturedAPIKey.Load().(string)

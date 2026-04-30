@@ -118,7 +118,7 @@ func (s *noSDKWorker) Run(t *testing.T, ctx context.Context) {
 		var result wfv1.ListMCPToolsResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 		require.Len(t, result.GetTools(), 1)
-		assert.Equal(t, "echo", result.GetTools()[0].Name)
+		assert.Equal(t, "echo", result.GetTools()[0].GetName())
 	})
 
 	t.Run("CallTool works without gRPC SDK worker", func(t *testing.T) {

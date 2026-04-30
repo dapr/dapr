@@ -105,13 +105,13 @@ func RegisterMCPServer(opts RegisterOptions) ([]string, error) {
 	// orchestrator closure.
 	toolNames := make([]string, len(tools))
 	for i, tool := range tools {
-		toolNames[i] = tool.Name
-		wfName := mcpnames.MCPCallToolWorkflowName(opts.Server.Name, tool.Name)
+		toolNames[i] = tool.GetName()
+		wfName := mcpnames.MCPCallToolWorkflowName(opts.Server.Name, tool.GetName())
 		opts.Registry.UpsertVersionedWorkflowN(wfName, workflowVersion, true, orchestrator)
 		// Pre-populate the schema cache from the eager ListTools results.
 		if tool.GetInputSchema() != nil {
 			if raw, err := json.Marshal(tool.GetInputSchema().AsMap()); err == nil {
-				schemas.set(tool.Name, raw) //nolint:errcheck
+				schemas.set(tool.GetName(), raw) //nolint:errcheck
 			}
 		}
 	}

@@ -19,7 +19,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -153,7 +152,7 @@ func (s *callToolStdio) Run(t *testing.T, ctx context.Context) {
 		var result wfv1.ListMCPToolsResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 		require.Len(t, result.GetTools(), 1)
-		assert.Equal(t, "stdio_echo", result.GetTools()[0].Name)
+		assert.Equal(t, "stdio_echo", result.GetTools()[0].GetName())
 	})
 
 	t.Run("CallTool over stdio transport", func(t *testing.T) {
@@ -174,6 +173,6 @@ func (s *callToolStdio) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 		assert.False(t, result.GetIsError())
 		require.NotEmpty(t, result.GetContent())
-		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "stdio-pong"))
+		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "stdio-pong")
 	})
 }

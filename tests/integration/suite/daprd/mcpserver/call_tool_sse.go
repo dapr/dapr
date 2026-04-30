@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -141,7 +140,7 @@ func (s *callToolSSE) Run(t *testing.T, ctx context.Context) {
 		assert.False(t, result.GetIsError(), "expected success result")
 		require.NotEmpty(t, result.GetContent())
 		assert.NotNil(t, result.GetContent()[0].GetText())
-		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "Denver"),
+		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "Denver",
 			"expected tool result to mention Denver, got: %s", result.GetContent()[0].GetText().GetText())
 	})
 }
