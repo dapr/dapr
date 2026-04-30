@@ -117,7 +117,7 @@ type WorkflowAccessPolicySpec struct {
 // activity rules they are allowed or denied. At least one of workflows or
 // activities must be set.
 //
-// +kubebuilder:validation:XValidation:rule="size(self.workflows) > 0 || size(self.activities) > 0",message="at least one of workflows or activities must contain a rule"
+// +kubebuilder:validation:XValidation:rule="(has(self.workflows) && size(self.workflows) > 0) || (has(self.activities) && size(self.activities) > 0)",message="at least one of workflows or activities must contain a rule"
 type WorkflowAccessPolicyRule struct {
 	// Callers that this rule applies to.
 	// +kubebuilder:validation:MinItems=1

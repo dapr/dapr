@@ -149,7 +149,8 @@ spec:
                   x-kubernetes-validations:
                   - message: at least one of workflows or activities must contain
                       a rule
-                    rule: size(self.workflows) > 0 || size(self.activities) > 0
+                    rule: (has(self.workflows) && size(self.workflows) > 0) || (has(self.activities)
+                      && size(self.activities) > 0)
                 type: array
             type: object
         type: object
