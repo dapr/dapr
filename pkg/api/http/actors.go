@@ -178,6 +178,12 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
+	if workflowacl.IsInternalActorType(actorType) {
+		respondWithError(w, messages.ErrActorTypeReserved.WithFormat(actorType))
+		return
+	}
+
 	var req actorapi.CreateReminderRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -195,7 +201,7 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Name = name
-	req.ActorType = chi.URLParamFromCtx(ctx, actorTypeParam)
+	req.ActorType = actorType
 	req.ActorID = chi.URLParamFromCtx(ctx, actorIDParam)
 
 	rem, err := a.universal.ActorReminders(ctx)
@@ -233,6 +239,12 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
+	if workflowacl.IsInternalActorType(actorType) {
+		respondWithError(w, messages.ErrActorTypeReserved.WithFormat(actorType))
+		return
+	}
+
 	var req actorapi.CreateTimerRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -250,7 +262,7 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Name = name
-	req.ActorType = chi.URLParamFromCtx(ctx, actorTypeParam)
+	req.ActorType = actorType
 	req.ActorID = chi.URLParamFromCtx(ctx, actorIDParam)
 
 	timers, err := a.universal.ActorTimers(ctx)
@@ -288,6 +300,10 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
+	if workflowacl.IsInternalActorType(actorType) {
+		respondWithError(w, messages.ErrActorTypeReserved.WithFormat(actorType))
+		return
+	}
 	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
 
 	var ops []actorapi.TransactionalOperation
@@ -503,13 +519,18 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
+	if workflowacl.IsInternalActorType(actorType) {
+		respondWithError(w, messages.ErrActorTypeReserved.WithFormat(actorType))
+		return
+	}
+
 	astate, err := a.universal.ActorState(ctx)
 	if err != nil {
 		respondWithError(w, err)
 		return
 	}
 
-	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
 	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
 	key := chi.URLParamFromCtx(ctx, stateKeyParam)
 
