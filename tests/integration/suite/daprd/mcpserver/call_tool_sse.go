@@ -130,10 +130,10 @@ func (s *callToolSSE) Run(t *testing.T, ctx context.Context) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("weather-sse", "get_weather"), input)
 
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))

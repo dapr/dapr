@@ -59,7 +59,7 @@ type oauth2Auth struct {
 }
 
 func (s *oauth2Auth) Setup(t *testing.T) []framework.Option {
-	const fakeAccessToken = "test-oauth2-bearer-token-xyz"
+	const fakeAccessToken = "test-oauth2-bearer-token-xyz" //nolint:gosec // test-only fake token
 
 	// Fake OAuth2 token endpoint.
 	tokenHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -121,7 +121,7 @@ spec:
   endpoint:
     streamableHTTP:
       url: http://localhost:` + strconv.Itoa(port) + "\n")
-	require.NoError(t, os.WriteFile(s.mcpFilePath, yaml, 0o644))
+	require.NoError(t, os.WriteFile(s.mcpFilePath, yaml, 0o600))
 }
 
 func (s *hotReload) Run(t *testing.T, ctx context.Context) {

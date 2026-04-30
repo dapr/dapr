@@ -66,7 +66,7 @@ func (s *multipleServers) Setup(t *testing.T) []framework.Option {
 		Description: "Get weather for a city",
 	}, func(_ context.Context, _ *mcp.CallToolRequest, args cityInput) (*mcp.CallToolResult, struct{}, error) {
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("sunny in %s", args.City)}},
+			Content: []mcp.Content{&mcp.TextContent{Text: "sunny in " + args.City}},
 		}, struct{}{}, nil
 	})
 	mcpProcA := prochttp.New(t, prochttp.WithHandler(

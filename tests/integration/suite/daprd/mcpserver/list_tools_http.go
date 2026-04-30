@@ -67,7 +67,7 @@ func (s *listToolsHTTP) Setup(t *testing.T) []framework.Option {
 		Description: "Get current weather for a city",
 	}, func(_ context.Context, _ *mcp.CallToolRequest, args cityInput) (*mcp.CallToolResult, struct{}, error) {
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("sunny, 72°F in %s", args.City)}},
+			Content: []mcp.Content{&mcp.TextContent{Text: "sunny, 72°F in " + args.City}},
 		}, struct{}{}, nil
 	})
 	mcp.AddTool(mcpSrv, &mcp.Tool{
@@ -75,7 +75,7 @@ func (s *listToolsHTTP) Setup(t *testing.T) []framework.Option {
 		Description: "Get weather forecast for a city",
 	}, func(_ context.Context, _ *mcp.CallToolRequest, args cityInput) (*mcp.CallToolResult, struct{}, error) {
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("partly cloudy tomorrow in %s", args.City)}},
+			Content: []mcp.Content{&mcp.TextContent{Text: "partly cloudy tomorrow in " + args.City}},
 		}, struct{}{}, nil
 	})
 

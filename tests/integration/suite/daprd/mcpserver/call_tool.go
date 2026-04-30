@@ -133,10 +133,10 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("weather", "get_weather"), input)
 
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
@@ -157,10 +157,10 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("weather", "get_weather"), input)
 
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 		// The MCP server returns isError=true for unknown tools, which surfaces
 		// as a completed workflow with isError=true in the output, NOT a workflow failure.

@@ -122,7 +122,7 @@ spec:
 `), 0o600))
 
 	// MCPServer without middleware — deny test.
-	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "denied.yaml"), []byte(fmt.Sprintf(`
+	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "denied.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
@@ -131,10 +131,10 @@ spec:
   endpoint:
     streamableHTTP:
       url: http://localhost:%d
-`, mcpSrvProc.Port())), 0o600))
+`, mcpSrvProc.Port()), 0o600))
 
 	// MCPServer with local middleware hook — allow + local hook test.
-	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "allowed.yaml"), []byte(fmt.Sprintf(`
+	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "allowed.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
@@ -147,10 +147,10 @@ spec:
     beforeCallTool:
       - workflow:
           workflowName: local_hook_workflow
-`, mcpSrvProc.Port())), 0o600))
+`, mcpSrvProc.Port()), 0o600))
 
 	// MCPServer with CROSS-APP middleware hook targeting hook-app.
-	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "crossapp-hook.yaml"), []byte(fmt.Sprintf(`
+	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "crossapp-hook.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
@@ -164,7 +164,7 @@ spec:
       - workflow:
           workflowName: remote_audit_workflow
           appID: hook-app
-`, mcpSrvProc.Port())), 0o600))
+`, mcpSrvProc.Port()), 0o600))
 
 	// --- Hook-app resources ---
 	hookAppResDir := t.TempDir()

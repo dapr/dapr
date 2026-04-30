@@ -18,7 +18,7 @@ package names
 
 const (
 	// MCPWorkflowPrefix is the prefix for all MCP internal workflows.
-	MCPWorkflowPrefix = "dapr.internal.mcp."
+	MCPWorkflowPrefix = "dapr.internal.mcp." //nolint:gosec // workflow name prefix, not a credential
 
 	// MCPMethodListTools is the suffix for ListTools operations.
 	MCPMethodListTools = ".ListTools"
