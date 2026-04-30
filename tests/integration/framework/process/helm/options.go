@@ -58,6 +58,12 @@ func WithShowOnlySchedulerSTS() OptionFunc {
 	}
 }
 
+func WithShowOnlyPlacementSTS() OptionFunc {
+	return func(o *options) {
+		o.showOnly = append(o.showOnly, "charts/dapr_placement/templates/dapr_placement_statefulset.yaml")
+	}
+}
+
 func WithShowOnlySentryDeployment() OptionFunc {
 	return func(o *options) {
 		o.showOnly = append(o.showOnly, "charts/dapr_sentry/templates/dapr_sentry_deployment.yaml")
