@@ -67,10 +67,17 @@ type Subscription struct {
 	adapterStreamer rtpubsub.AdapterStreamer
 	adapter         rtpubsub.Adapter
 
-	cancel   func(cause error)
-	closed   atomic.Bool
-	wg       sync.WaitGroup
-	inflight atomic.Int64
+	cancel func(cause error)
+	// drainSealed is set after the drain phase completes (inflight=0) and
+	// just before the final wg.Wait. It bars any new wg.Add calls so that
+	// the subsequent Wait can never race with an incoming Add — preventing
+	// the "WaitGroup is reused before previous Wait has returned" panic
+	// that contrib retry loops can otherwise trigger. Handlers check this
+	// BEFORE calling wg.Add and take the <-ctx.Done() block path if set.
+	drainSealed atomic.Bool
+	closed      atomic.Bool
+	wg          sync.WaitGroup
+	inflight    atomic.Int64
 
 	postman postman.Interface
 }
@@ -134,6 +141,15 @@ func New(opts Options) (*Subscription, error) {
 		Topic:    subscribeTopic,
 		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *contribpubsub.NewMessage) error {
+		// Check drainSealed BEFORE wg.Add. Stop sets this just before calling
+		// wg.Wait so any handler that gets here after the flag is set skips
+		// the Add entirely — preventing the WaitGroup reuse panic that
+		// contrib retry loops can otherwise trigger.
+		if s.drainSealed.Load() {
+			<-ctx.Done()
+			return ctx.Err()
+		}
+
 		s.wg.Add(1)
 		s.inflight.Add(1)
 
@@ -412,9 +428,64 @@ func New(opts Options) (*Subscription, error) {
 }
 
 func (s *Subscription) Stop(err ...error) {
-	s.closed.Store(true)
+	cause := errors.Join(err...)
+	graceful := errors.Is(cause, contribpubsub.ErrGracefulShutdown)
+
+	// On graceful shutdown, if the underlying pubsub component supports it,
+	// pause fetching new messages from the broker. While paused, the
+	// session and partition assignments stay alive — and importantly, the
+	// heartbeat loop continues — so any messages already buffered locally
+	// can still be delivered to the app via postman.Deliver. The actual
+	// close (e.g. Kafka's consumerGroup.Close → LeaveGroup) happens via
+	// the existing s.cancel path at the end.
+	paused := false
+	if graceful {
+		if pausable, ok := s.pubsub.Component.(contribpubsub.PausableSubscriber); ok {
+			log.Infof("pausing subscription on topic %s during graceful shutdown", s.topic)
+			if perr := pausable.Pause(context.Background()); perr != nil {
+				log.Warnf("failed to pause subscription on topic %s during graceful shutdown: %v", s.topic, perr)
+			} else {
+				paused = true
+			}
+		}
+	}
+
+	// When pausing succeeded, leave s.closed=false during the drain so
+	// handlers continue delivering buffered messages to the app and we get
+	// SUCCESS/DROP/RETRY back from the app. Pending offsets get marked and
+	// will be flushed by Sarama's auto-commit and the final commit during
+	// session.release(). For non-pausable components or non-graceful Stop,
+	// fall back to close-first behavior — without Pause we have no way to
+	// bound the buffer growth, so blocking incoming work is the only safe
+	// option.
+	if !paused {
+		s.closed.Store(true)
+	}
+
 	inflight := s.inflight.Load() > 0
 
+	// Drain via atomic polling rather than wg.Wait. wg.Wait is unsafe
+	// here because contrib retry loops can call the handler repeatedly
+	// with wg.Add(1)/wg.Done() bracketed around backoff sleeps. Between
+	// retries the counter momentarily hits 0; if Wait was in progress it
+	// can start to unwind and race the next retry's Add(1), tripping the
+	// "WaitGroup is reused before previous Wait has returned" panic.
+	// atomic.Int64 polling has no such restriction.
+	//
+	// No inner timeout here — the runner's graceful-shutdown-duration
+	// caps the whole close phase, so a stuck handler can't hang shutdown
+	// indefinitely.
+	const drainPollInterval = 20 * time.Millisecond
+	for s.inflight.Load() > 0 {
+		time.Sleep(drainPollInterval)
+	}
+
+	// Bar any new wg.Add calls and run wg.Wait as a final safety net.
+	// After drainSealed is set, handlers see it and skip Add entirely
+	// (taking the <-ctx.Done() block path instead), so the subsequent
+	// Wait can never race with an incoming Add.
+	s.drainSealed.Store(true)
+	s.closed.Store(true)
 	s.wg.Wait()
 
 	if s.adapterStreamer != nil {
@@ -428,7 +499,7 @@ func (s *Subscription) Stop(err ...error) {
 	}
 
 	if len(err) > 0 {
-		s.cancel(errors.Join(err...))
+		s.cancel(cause)
 		return
 	}
 
