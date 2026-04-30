@@ -168,7 +168,7 @@ func TestHandleCloseStream_RemovesFromStreams(t *testing.T) {
 	d := newTestDisseminator(t)
 	addFakeStream(d, 0, []string{"actorA"})
 
-	d.handleCloseStream(&loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
+	d.handleCloseStream(t.Context(), &loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
 
 	assert.NotContains(t, d.streams, uint64(0))
 	assert.Equal(t, int64(0), d.connCount.Load())
@@ -180,7 +180,7 @@ func TestHandleCloseStream_QueuesDeleteDuringRound(t *testing.T) {
 	addFakeStream(d, 1, []string{"actorA"})
 	d.currentOperation = v1pb.HostOperation_LOCK
 
-	d.handleCloseStream(&loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
+	d.handleCloseStream(t.Context(), &loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
 
 	assert.NotContains(t, d.streams, uint64(0))
 	assert.Contains(t, d.waitingToDelete, uint64(0))
@@ -193,7 +193,7 @@ func TestHandleCloseStream_ProcessesImmediatelyInReportState(t *testing.T) {
 	addFakeStream(d, 1, []string{"actorA"})
 	d.currentOperation = v1pb.HostOperation_REPORT
 
-	d.handleCloseStream(&loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
+	d.handleCloseStream(t.Context(), &loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
 
 	assert.False(t, d.store.Has(0))
 	assert.Equal(t, v1pb.HostOperation_LOCK, d.currentOperation)
@@ -208,7 +208,7 @@ func TestHandleCloseStream_DecrementsTargetState(t *testing.T) {
 	d.streamsInTargetState = 1
 	d.streams[0].currentState = v1pb.HostOperation_LOCK
 
-	d.handleCloseStream(&loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
+	d.handleCloseStream(t.Context(), &loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
 
 	assert.Equal(t, 0, d.streamsInTargetState)
 }
@@ -223,7 +223,7 @@ func TestHandleCloseStream_AdvancesPhaseWhenLastNonResponder(t *testing.T) {
 	d.streams[0].currentState = v1pb.HostOperation_LOCK
 	d.streams[1].currentState = v1pb.HostOperation_REPORT
 
-	d.handleCloseStream(&loops.ConnCloseStream{StreamIDx: 1, Namespace: "default"})
+	d.handleCloseStream(t.Context(), &loops.ConnCloseStream{StreamIDx: 1, Namespace: "default"})
 
 	assert.Equal(t, v1pb.HostOperation_UPDATE, d.currentOperation)
 }
@@ -233,14 +233,14 @@ func TestHandleCloseStream_NoActorsSkipsDissemination(t *testing.T) {
 	addFakeStream(d, 0, nil)
 	addFakeStream(d, 1, []string{"actorA"})
 
-	d.handleCloseStream(&loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
+	d.handleCloseStream(t.Context(), &loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
 
 	assert.Equal(t, v1pb.HostOperation_REPORT, d.currentOperation)
 }
 
 func TestHandleCloseStream_IgnoresUnknownStream(t *testing.T) {
 	d := newTestDisseminator(t)
-	d.handleCloseStream(&loops.ConnCloseStream{StreamIDx: 999, Namespace: "default"})
+	d.handleCloseStream(t.Context(), &loops.ConnCloseStream{StreamIDx: 999, Namespace: "default"})
 }
 
 func TestAdvancePhase_LockToUpdate(t *testing.T) {
@@ -250,7 +250,7 @@ func TestAdvancePhase_LockToUpdate(t *testing.T) {
 	d.currentOperation = v1pb.HostOperation_LOCK
 	d.streamsInTargetState = 1
 
-	d.advancePhase()
+	d.advancePhase(t.Context())
 
 	assert.Equal(t, v1pb.HostOperation_UPDATE, d.currentOperation)
 	assert.Equal(t, 0, d.streamsInTargetState)
@@ -264,7 +264,7 @@ func TestAdvancePhase_UpdateToUnlock(t *testing.T) {
 	d.currentOperation = v1pb.HostOperation_UPDATE
 	d.streamsInTargetState = 1
 
-	d.advancePhase()
+	d.advancePhase(t.Context())
 
 	assert.Equal(t, v1pb.HostOperation_UNLOCK, d.currentOperation)
 	assert.Equal(t, 0, d.streamsInTargetState)
@@ -278,7 +278,7 @@ func TestAdvancePhase_UnlockToReport(t *testing.T) {
 	d.currentOperation = v1pb.HostOperation_UNLOCK
 	d.streamsInTargetState = 1
 
-	d.advancePhase()
+	d.advancePhase(t.Context())
 
 	assert.Equal(t, v1pb.HostOperation_REPORT, d.currentOperation)
 }
@@ -292,7 +292,7 @@ func TestAdvancePhase_UnlockProcessesWaitingDeletes(t *testing.T) {
 	d.waitingToDelete = []uint64{99}
 	d.store.Set(99, host("gone", "actorA"))
 
-	d.advancePhase()
+	d.advancePhase(t.Context())
 
 	assert.False(t, d.store.Has(99))
 	assert.Equal(t, v1pb.HostOperation_LOCK, d.currentOperation)
@@ -306,7 +306,7 @@ func TestAdvancePhase_NoAdvanceIfNotAllResponded(t *testing.T) {
 	d.currentOperation = v1pb.HostOperation_LOCK
 	d.streamsInTargetState = 1
 
-	d.advancePhase()
+	d.advancePhase(t.Context())
 
 	assert.Equal(t, v1pb.HostOperation_LOCK, d.currentOperation)
 }

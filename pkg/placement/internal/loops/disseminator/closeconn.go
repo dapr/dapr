@@ -23,7 +23,7 @@ import (
 )
 
 // handleCloseStream handles a close stream request.
-func (d *disseminator) handleCloseStream(closeStream *loops.ConnCloseStream) {
+func (d *disseminator) handleCloseStream(ctx context.Context, closeStream *loops.ConnCloseStream) {
 	s, ok := d.streams[closeStream.StreamIDx]
 	if !ok {
 		// Ignore old streams.
@@ -71,7 +71,7 @@ func (d *disseminator) handleCloseStream(closeStream *loops.ConnCloseStream) {
 		// if removing this stream completes the current phase, this happens when
 		// this was the last stream that hadn't responded yet.
 		if d.streamsInTargetState >= len(d.streams) {
-			d.advancePhase()
+			d.advancePhase(ctx)
 		}
 		return
 	}
@@ -97,7 +97,7 @@ func (d *disseminator) handleCloseStream(closeStream *loops.ConnCloseStream) {
 // advances to the next dissemination phase. This is called from
 // handleCloseStream when removing a stream during active dissemination may
 // have completed the current phase.
-func (d *disseminator) advancePhase() {
+func (d *disseminator) advancePhase(ctx context.Context) {
 	if d.streamsInTargetState < len(d.streams) {
 		return
 	}
@@ -128,9 +128,22 @@ func (d *disseminator) advancePhase() {
 		d.timeoutQ.Dequeue(d.currentVersion)
 		log.Debugf("Dissemination of version %d in %s complete (via stream close)", d.currentVersion, d.namespace)
 
+		// Mirror handleReportedUnlock's completion path: drain any work
+		// queued during this round (deletions and new connections that
+		// arrived mid-round). Without this, queued ConnAdd events sit in
+		// waitingToDisseminate forever when the round completes via a
+		// stream close instead of via reported UNLOCK acks.
+		if d.coalesceWindow > 0 && (len(d.waitingToDelete) > 0 || len(d.waitingToDisseminate) > 0) {
+			d.startCoalesceTimer()
+			return
+		}
+
 		if len(d.waitingToDelete) > 0 {
 			d.processWaitingDeletes()
+			return
 		}
+
+		d.processWaitingDisseminate(ctx, false)
 	}
 }
 
@@ -139,7 +152,12 @@ func (d *disseminator) advancePhase() {
 // or starts a single follow-up dissemination round covering them all. Must
 // only be called when currentOperation is REPORT and waitingToDelete has
 // already been drained (delete-rounds take priority over add-rounds).
-func (d *disseminator) processWaitingDisseminate(ctx context.Context) {
+//
+// forceRound is set by callers that have already mutated the store (eg, by
+// applying queued deletions) and therefore must emit a full round even when
+// the queued adds themselves do not change the store - otherwise existing
+// streams would never see those prior store mutations.
+func (d *disseminator) processWaitingDisseminate(ctx context.Context, forceRound bool) {
 	if len(d.waitingToDisseminate) == 0 {
 		return
 	}
@@ -147,7 +165,7 @@ func (d *disseminator) processWaitingDisseminate(ctx context.Context) {
 	waiting := d.waitingToDisseminate
 	d.waitingToDisseminate = nil
 
-	storeChanged := false
+	storeChanged := forceRound
 	newStreamIDxs := make([]uint64, 0, len(waiting))
 	for _, add := range waiting {
 		streamIDx := d.addStream(ctx, add)
@@ -205,12 +223,18 @@ func (d *disseminator) handleCoalesceFire(ctx context.Context) {
 		return
 	}
 
+	// If deletes are present, applying them mutates the store. We must force
+	// a full follow-up round even if the queued adds themselves don't change
+	// the store (eg, new connections with no actor entities), otherwise
+	// existing streams would never receive the updated placement table
+	// reflecting the deletions.
+	storeChangedByDeletes := len(d.waitingToDelete) > 0
 	for _, toDelete := range d.waitingToDelete {
 		d.store.Delete(toDelete)
 	}
 	d.waitingToDelete = nil
 
-	d.processWaitingDisseminate(ctx)
+	d.processWaitingDisseminate(ctx, storeChangedByDeletes)
 }
 
 // processWaitingDeletes processes all queued stream deletions in a single

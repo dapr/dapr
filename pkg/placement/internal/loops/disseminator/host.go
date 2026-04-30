@@ -198,6 +198,6 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 
 		// Batch all waiting connections into a single follow-up round (or
 		// one-shot table pushes when none of them register actors).
-		d.processWaitingDisseminate(ctx)
+		d.processWaitingDisseminate(ctx, false)
 	}
 }

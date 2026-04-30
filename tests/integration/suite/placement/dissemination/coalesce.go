@@ -126,9 +126,18 @@ func (c *coalesce) Run(t *testing.T, ctx context.Context) {
 	// select would pick the bRecv branch.
 	select {
 	case got := <-bRecv:
-		require.Failf(t, "stream B received message before coalesce window expired",
-			"got op=%s version=%d, expected timer to defer round",
-			got.order.GetOperation(), got.order.GetVersion())
+		switch {
+		case got.err != nil:
+			require.Failf(t, "stream B Recv failed before coalesce window expired",
+				"got err=%v, expected timer to defer round", got.err)
+		case got.order == nil:
+			require.Fail(t, "stream B received nil order before coalesce window expired",
+				"expected timer to defer round")
+		default:
+			require.Failf(t, "stream B received message before coalesce window expired",
+				"got op=%s version=%d, expected timer to defer round",
+				got.order.GetOperation(), got.order.GetVersion())
+		}
 	case <-time.After(time.Millisecond * 200):
 		// Good: timer is deferring as expected.
 	}

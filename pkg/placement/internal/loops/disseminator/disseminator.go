@@ -148,7 +148,7 @@ func (d *disseminator) Handle(ctx context.Context, event loops.EventDisseminator
 	case *loops.ReportedHost:
 		d.handleReportedHost(ctx, e)
 	case *loops.ConnCloseStream:
-		d.handleCloseStream(e)
+		d.handleCloseStream(ctx, e)
 	case *loops.Shutdown:
 		d.handleShutdown(e)
 	case *loops.DisseminationTimeout:
