@@ -1070,8 +1070,8 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 }
 
 func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error) {
-	if workflowacl.IsInternalActorType(in.GetActorType()) {
-		return nil, messages.ErrActorTypeReserved.WithFormat(in.GetActorType())
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
 	}
 
 	astate, err := a.ActorState(ctx)
@@ -1109,8 +1109,8 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 }
 
 func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
-	if workflowacl.IsInternalActorType(in.GetActorType()) {
-		return nil, messages.ErrActorTypeReserved.WithFormat(in.GetActorType())
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
 	}
 
 	astate, err := a.ActorState(ctx)

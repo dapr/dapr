@@ -179,8 +179,8 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
-	if workflowacl.IsInternalActorType(actorType) {
-		respondWithError(w, messages.ErrActorTypeReserved.WithFormat(actorType))
+	if err := a.universal.RejectInternalActorType(actorType); err != nil {
+		respondWithError(w, err)
 		return
 	}
 
@@ -240,8 +240,8 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
-	if workflowacl.IsInternalActorType(actorType) {
-		respondWithError(w, messages.ErrActorTypeReserved.WithFormat(actorType))
+	if err := a.universal.RejectInternalActorType(actorType); err != nil {
+		respondWithError(w, err)
 		return
 	}
 
@@ -300,8 +300,8 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
-	if workflowacl.IsInternalActorType(actorType) {
-		respondWithError(w, messages.ErrActorTypeReserved.WithFormat(actorType))
+	if err := a.universal.RejectInternalActorType(actorType); err != nil {
+		respondWithError(w, err)
 		return
 	}
 	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
@@ -520,8 +520,8 @@ func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
-	if workflowacl.IsInternalActorType(actorType) {
-		respondWithError(w, messages.ErrActorTypeReserved.WithFormat(actorType))
+	if err := a.universal.RejectInternalActorType(actorType); err != nil {
+		respondWithError(w, err)
 		return
 	}
 
