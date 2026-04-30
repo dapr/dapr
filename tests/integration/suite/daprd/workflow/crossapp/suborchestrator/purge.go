@@ -32,12 +32,12 @@ func init() {
 }
 
 // purge covers recursive PurgeWorkflowState across a cross-app
-// sub-orchestrator boundary. The sibling of dapr/dapr #9827 in the purge
-// path: durabletask-go's recursive purge calls
-// be.GetWorkflowRuntimeState/PurgeWorkflowState directly with the child's
-// instance ID and no router, so dapr's actor backend looks the child up on
-// the local app, fails with "instance not found", and the entire recursive
-// purge errors out before the parent is touched.
+// sub-orchestrator boundary. durabletask-go's recursive purge walks the
+// parent's state and calls be.GetWorkflowRuntimeState/PurgeWorkflowState
+// directly with the child's instance ID and no router, so without
+// cross-app routing dapr's actor backend looks the child up on the local
+// app, fails with "instance not found", and the entire recursive purge
+// errors out before the parent is touched.
 //
 // Expected behaviour: a recursive purge of the parent must drive both the
 // parent (in app0) and the cross-app child (in app1) to a not-found state

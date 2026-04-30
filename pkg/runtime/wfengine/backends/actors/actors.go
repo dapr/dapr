@@ -554,28 +554,34 @@ func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.Instan
 // Mirrors the "each app handles its own subtree" model that recursive
 // terminate already uses.
 func (abe *Actors) PurgeWorkflowState(ctx context.Context, id api.InstanceID, router *protos.TaskRouter, force bool) (int, error) {
-	if target := router.GetTargetAppID(); target != "" && target != abe.appID {
-		return abe.purgeWorkflowRemote(ctx, id, target, force)
-	}
-
 	start := time.Now()
 
-	var err error
-	if force {
-		err = abe.purgeWorkflowForce(ctx, id)
-	} else {
-		err = abe.purgeWorkflow(ctx, id)
-	}
+	count, err := abe.purgeWorkflowState(ctx, id, router, force)
 
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
-		// failed request to PURGE WORKFLOW, record latency and count metrics.
 		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusFailed, elapsed)
 		return 0, err
 	}
 
-	// successful request to PURGE WORKFLOW, record latency and count metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusSuccess, elapsed)
+	return count, nil
+}
+
+func (abe *Actors) purgeWorkflowState(ctx context.Context, id api.InstanceID, router *protos.TaskRouter, force bool) (int, error) {
+	if target := router.GetTargetAppID(); target != "" && target != abe.appID {
+		return abe.purgeWorkflowRemote(ctx, id, target, force)
+	}
+
+	if force {
+		if err := abe.purgeWorkflowForce(ctx, id); err != nil {
+			return 0, err
+		}
+	} else {
+		if err := abe.purgeWorkflow(ctx, id); err != nil {
+			return 0, err
+		}
+	}
 
 	return 1, nil
 }
