@@ -57,7 +57,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 		parsedAddEvent = &ev
 	}
 
-	if err := o.checkAccessPolicy(ctx, method, data, parsedAddEvent, req.GetMetadata()); err != nil {
+	if err := o.checkAccessPolicy(ctx, method, data, parsedAddEvent, nil, req.GetMetadata()); err != nil {
 		return nil, err
 	}
 

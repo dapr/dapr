@@ -28,7 +28,10 @@ import (
 
 const workflowACLDeniedMsg = "access denied by workflow access policy"
 
-func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, data []byte, parsedAddEvent *backend.HistoryEvent, md map[string]*internalsv1pb.ListStringValue) error {
+// preLoadedMeta lets callers that have already loaded the actor's metadata
+// (e.g. handleStream which needs ometa for the response anyway) skip the
+// state load inside the access check. Pass nil to load on demand.
+func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, data []byte, parsedAddEvent *backend.HistoryEvent, preLoadedMeta *backend.WorkflowMetadata, md map[string]*internalsv1pb.ListStringValue) error {
 	if o.workflowAccessPolicies == nil {
 		return nil
 	}
@@ -57,7 +60,7 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 		return status.Errorf(codes.PermissionDenied, "%s: caller identity missing on workflow '%s' operation", workflowACLDeniedMsg, operation)
 	}
 
-	name, err := o.workflowNameForOperation(ctx, method, data)
+	name, err := o.workflowNameForOperation(ctx, method, data, preLoadedMeta)
 	if err != nil {
 		log.Errorf("Workflow actor '%s': failed to resolve workflow name for policy check on '%s': %v", o.actorID, method, err)
 		return status.Error(codes.Internal, "failed to evaluate workflow access policy")
@@ -73,9 +76,13 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 	return nil
 }
 
-func (o *orchestrator) workflowNameForOperation(ctx context.Context, method string, data []byte) (string, error) {
+func (o *orchestrator) workflowNameForOperation(ctx context.Context, method string, data []byte, preLoadedMeta *backend.WorkflowMetadata) (string, error) {
 	if method == todo.CreateWorkflowInstanceMethod {
 		return workflowacl.WorkflowNameFromCreateRequest(data)
+	}
+
+	if preLoadedMeta != nil {
+		return preLoadedMeta.GetName(), nil
 	}
 
 	_, ometa, err := o.loadInternalState(ctx)
