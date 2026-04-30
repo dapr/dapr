@@ -136,8 +136,8 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 		assert.False(t, result.GetIsError())
-		require.NotEmpty(t, result.Content)
-		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "Portland"))
+		require.NotEmpty(t, result.GetContent())
+		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "Portland"))
 	})
 
 	t.Run("different tool uses different workflow name", func(t *testing.T) {
@@ -157,8 +157,8 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 		assert.False(t, result.GetIsError())
-		require.NotEmpty(t, result.Content)
-		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "Hello, Dapr!"))
+		require.NotEmpty(t, result.GetContent())
+		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "Hello, Dapr!"))
 	})
 
 	t.Run("non-existent tool workflow name fails as not registered", func(t *testing.T) {
@@ -194,8 +194,8 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 		assert.False(t, result.GetIsError())
-		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "Seattle"),
-			"expected weather result from get_weather, got: %s", result.Content[0].GetText().GetText())
+		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "Seattle"),
+			"expected weather result from get_weather, got: %s", result.GetContent()[0].GetText().GetText())
 	})
 
 	t.Run("ListTools still returns all tools", func(t *testing.T) {
@@ -210,11 +210,11 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 
 		var result wfv1.ListMCPToolsResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		assert.Len(t, result.Tools, 2, "expected both get_weather and greet tools")
+		assert.Len(t, result.GetTools(), 2, "expected both get_weather and greet tools")
 
-		toolNames := make([]string, len(result.Tools))
-		for i, tool := range result.Tools {
-			toolNames[i] = tool.Name
+		toolNames := make([]string, len(result.GetTools()))
+		for i, tool := range result.GetTools() {
+			toolNames[i] = tool.GetName()
 		}
 		assert.Contains(t, toolNames, "get_weather")
 		assert.Contains(t, toolNames, "greet")

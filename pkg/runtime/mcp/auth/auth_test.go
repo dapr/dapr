@@ -169,7 +169,7 @@ func TestJWTRoundTripper_InjectsHeader(t *testing.T) {
 
 func TestJWTRoundTripper_FetchError(t *testing.T) {
 	inner := roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
+		return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 	})
 	fetcher := fakesecurity.New().WithFetchJWT(func(_ context.Context, _ string) (string, error) {
 		return "", errors.New("svid unavailable")
@@ -181,7 +181,10 @@ func TestJWTRoundTripper_FetchError(t *testing.T) {
 	}
 	req, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
 	require.NoError(t, err)
-	_, err = rt.RoundTrip(req)
+	resp, err := rt.RoundTrip(req)
+	if resp != nil {
+		resp.Body.Close()
+	}
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "svid unavailable")
 }
@@ -224,8 +227,9 @@ func TestBuildHTTPClient_SPIFFEInjectsJWT(t *testing.T) {
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
 	require.NoError(t, err)
-	_, err = client.Do(req)
+	resp, err := client.Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
 	assert.Equal(t, "Bearer spiffe-svid-token", captured.Get("X-SVID"))
 	assert.Equal(t, "mcp://payments", lastAudience)
@@ -265,8 +269,9 @@ func TestBuildHTTPClient_SPIFFEWithoutPrefix(t *testing.T) {
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
 	require.NoError(t, err)
-	_, err = client.Do(req)
+	resp, err := client.Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
 	assert.Equal(t, "raw-token", captured.Get("X-JWT"))
 }

@@ -30,6 +30,7 @@ import (
 	dtclient "github.com/dapr/durabletask-go/client"
 
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -38,7 +39,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 )
 
 func init() {
@@ -124,7 +124,7 @@ func (s *callToolSSE) Run(t *testing.T, ctx context.Context) {
 	t.Run("CallTool via SSE transport returns tool result", func(t *testing.T) {
 		input := map[string]any{
 			"mcpServerName": "weather-sse",
-			"toolName":          "get_weather",
+			"toolName":      "get_weather",
 			"arguments":     map[string]any{"city": "Denver"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
@@ -139,9 +139,9 @@ func (s *callToolSSE) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 
 		assert.False(t, result.GetIsError(), "expected success result")
-		require.NotEmpty(t, result.Content)
-		assert.NotNil(t, result.Content[0].GetText())
-		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "Denver"),
-			"expected tool result to mention Denver, got: %s", result.Content[0].GetText().GetText())
+		require.NotEmpty(t, result.GetContent())
+		assert.NotNil(t, result.GetContent()[0].GetText())
+		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "Denver"),
+			"expected tool result to mention Denver, got: %s", result.GetContent()[0].GetText().GetText())
 	})
 }

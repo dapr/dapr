@@ -27,15 +27,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 
-
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/durabletask-go/api/protos"
 )
 
@@ -153,8 +152,8 @@ func (s *callToolStdio) Run(t *testing.T, ctx context.Context) {
 
 		var result wfv1.ListMCPToolsResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		require.Len(t, result.Tools, 1)
-		assert.Equal(t, "stdio_echo", result.Tools[0].Name)
+		require.Len(t, result.GetTools(), 1)
+		assert.Equal(t, "stdio_echo", result.GetTools()[0].Name)
 	})
 
 	t.Run("CallTool over stdio transport", func(t *testing.T) {
@@ -174,7 +173,7 @@ func (s *callToolStdio) Run(t *testing.T, ctx context.Context) {
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 		assert.False(t, result.GetIsError())
-		require.NotEmpty(t, result.Content)
-		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "stdio-pong"))
+		require.NotEmpty(t, result.GetContent())
+		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "stdio-pong"))
 	})
 }

@@ -175,7 +175,7 @@ func (s *spiffeAuth) Run(t *testing.T, ctx context.Context) {
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.False(t, result.IsError, "expected tool call to succeed")
+		assert.False(t, result.GetIsError(), "expected tool call to succeed")
 
 		// Extract the captured JWT from the MCP server.
 		capturedJWT, ok := s.capturedHeader.Load().(string)

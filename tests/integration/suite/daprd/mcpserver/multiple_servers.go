@@ -31,6 +31,7 @@ import (
 	dtclient "github.com/dapr/durabletask-go/client"
 
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -39,7 +40,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 )
 
 func init() {
@@ -83,7 +83,7 @@ func (s *multipleServers) Setup(t *testing.T) []framework.Option {
 		Description: "Return a greeting",
 	}, func(_ context.Context, _ *mcp.CallToolRequest, args nameInput) (*mcp.CallToolResult, struct{}, error) {
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("hello %s", args.Name)}},
+			Content: []mcp.Content{&mcp.TextContent{Text: "hello " + args.Name}},
 		}, struct{}{}, nil
 	})
 	mcpProcB := prochttp.New(t, prochttp.WithHandler(
@@ -150,52 +150,52 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 	t.Run("CallTool on weather server returns weather", func(t *testing.T) {
 		input := map[string]any{
 			"mcpServerName": "weather",
-			"toolName":          "get_weather",
+			"toolName":      "get_weather",
 			"arguments":     map[string]any{"city": "Austin"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("weather", "get_weather"), input)
 
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.False(t, result.IsError)
-		require.NotEmpty(t, result.Content)
-		assert.NotNil(t, result.Content[0].GetText())
-		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "Austin"))
+		assert.False(t, result.GetIsError())
+		require.NotEmpty(t, result.GetContent())
+		assert.NotNil(t, result.GetContent()[0].GetText())
+		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "Austin"))
 	})
 
 	t.Run("CallTool on greeter server returns greeting", func(t *testing.T) {
 		input := map[string]any{
 			"mcpServerName": "greeter",
-			"toolName":          "greet",
+			"toolName":      "greet",
 			"arguments":     map[string]any{"name": "dapr"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("greeter", "greet"), input)
 
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.False(t, result.IsError)
-		require.NotEmpty(t, result.Content)
-		assert.NotNil(t, result.Content[0].GetText())
-		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "dapr"))
+		assert.False(t, result.GetIsError())
+		require.NotEmpty(t, result.GetContent())
+		assert.NotNil(t, result.GetContent()[0].GetText())
+		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "dapr"))
 	})
 
 	t.Run("ListTools returns different tools per server", func(t *testing.T) {
 		// Weather server
 		weatherID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPListToolsWorkflowName("weather"), map[string]any{"mcpServerName": "weather"})
-		weatherMeta, err := taskhubClient.WaitForOrchestrationCompletion(
+		weatherMeta, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(weatherID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
 
@@ -203,7 +203,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, json.Unmarshal([]byte(weatherMeta.GetOutput().GetValue()), &weatherResult))
 		weatherNames := make([]string, len(weatherResult.GetTools()))
 		for i, tool := range weatherResult.GetTools() {
-			weatherNames[i] = tool.Name
+			weatherNames[i] = tool.GetName()
 		}
 		assert.Contains(t, weatherNames, "get_weather")
 		assert.NotContains(t, weatherNames, "greet")
@@ -211,7 +211,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 		// Greeter server
 		greeterID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPListToolsWorkflowName("greeter"), map[string]any{"mcpServerName": "greeter"})
-		greeterMeta, err := taskhubClient.WaitForOrchestrationCompletion(
+		greeterMeta, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(greeterID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
 
@@ -219,7 +219,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, json.Unmarshal([]byte(greeterMeta.GetOutput().GetValue()), &greeterResult))
 		greeterNames := make([]string, len(greeterResult.GetTools()))
 		for i, tool := range greeterResult.GetTools() {
-			greeterNames[i] = tool.Name
+			greeterNames[i] = tool.GetName()
 		}
 		assert.Contains(t, greeterNames, "greet")
 		assert.NotContains(t, greeterNames, "get_weather")

@@ -182,8 +182,8 @@ func (s *middlewareAfterCallTool) Run(t *testing.T, ctx context.Context) {
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		assert.False(t, result.IsError)
-		require.NotEmpty(t, result.Content)
-		assert.Equal(t, "pong", result.Content[0].GetText().GetText())
+		assert.False(t, result.GetIsError())
+		require.NotEmpty(t, result.GetContent())
+		assert.Equal(t, "pong", result.GetContent()[0].GetText().GetText())
 	})
 }

@@ -189,10 +189,10 @@ func (s *middlewareChained) Run(t *testing.T, ctx context.Context) {
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		assert.True(t, result.IsError, "expected isError=true from chain short-circuit")
-		require.NotEmpty(t, result.Content)
-		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "hook-b"),
-			"expected hook-b error in content, got: %s", result.Content[0].GetText().GetText())
+		assert.True(t, result.GetIsError(), "expected isError=true from chain short-circuit")
+		require.NotEmpty(t, result.GetContent())
+		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "hook-b"),
+			"expected hook-b error in content, got: %s", result.GetContent()[0].GetText().GetText())
 	})
 
 	t.Run("afterCallTool chain: hook A passes, hook B fails → workflow FAILS", func(t *testing.T) {

@@ -133,8 +133,8 @@ spec:
 			if !assert.NoError(c, protojson.Unmarshal([]byte(outputJSON), &result)) {
 				return
 			}
-			assert.Len(c, result.Tools, 1)
-			assert.Equal(c, "dynamic_tool", result.Tools[0].Name)
+			assert.Len(c, result.GetTools(), 1)
+			assert.Equal(c, "dynamic_tool", result.GetTools()[0].Name)
 		}, 30*time.Second, time.Second)
 	})
 

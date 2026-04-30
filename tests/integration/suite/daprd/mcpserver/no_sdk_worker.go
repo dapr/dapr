@@ -117,8 +117,8 @@ func (s *noSDKWorker) Run(t *testing.T, ctx context.Context) {
 
 		var result wfv1.ListMCPToolsResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		require.Len(t, result.Tools, 1)
-		assert.Equal(t, "echo", result.Tools[0].Name)
+		require.Len(t, result.GetTools(), 1)
+		assert.Equal(t, "echo", result.GetTools()[0].Name)
 	})
 
 	t.Run("CallTool works without gRPC SDK worker", func(t *testing.T) {
@@ -138,8 +138,8 @@ func (s *noSDKWorker) Run(t *testing.T, ctx context.Context) {
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 		assert.False(t, result.GetIsError())
-		require.NotEmpty(t, result.Content)
-		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "hello-no-sdk"))
+		require.NotEmpty(t, result.GetContent())
+		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "hello-no-sdk"))
 	})
 }
 

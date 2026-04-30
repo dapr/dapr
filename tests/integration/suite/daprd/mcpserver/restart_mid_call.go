@@ -32,6 +32,7 @@ import (
 	dtclient "github.com/dapr/durabletask-go/client"
 
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/os"
@@ -42,7 +43,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
-	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 )
 
 func init() {
@@ -91,7 +91,7 @@ func (s *restartMidCall) Setup(t *testing.T) []framework.Option {
 		}
 		// Subsequent calls (after restart) complete normally.
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("sunny in %s", args.City)}},
+			Content: []mcp.Content{&mcp.TextContent{Text: "sunny in " + args.City}},
 		}, struct{}{}, nil
 	})
 
@@ -181,20 +181,20 @@ func (s *restartMidCall) Run(t *testing.T, ctx context.Context) {
 		// calls the MCP server a second time and succeeds.
 		completionCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		t.Cleanup(cancel)
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(
 			completionCtx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 		assert.Nil(t, metadata.GetFailureDetails(),
 			"expected orchestration to succeed after daprd restart")
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.False(t, result.IsError)
-		require.NotEmpty(t, result.Content)
-		assert.NotNil(t, result.Content[0].GetText())
-		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "Seattle"),
-			"expected tool result to mention Seattle, got: %s", result.Content[0].GetText().GetText())
+		assert.False(t, result.GetIsError())
+		require.NotEmpty(t, result.GetContent())
+		assert.NotNil(t, result.GetContent()[0].GetText())
+		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "Seattle"),
+			"expected tool result to mention Seattle, got: %s", result.GetContent()[0].GetText().GetText())
 
 		// The tool was called at least twice: once before the restart (which
 		// was abandoned when daprd died) and at least once after (the retry).

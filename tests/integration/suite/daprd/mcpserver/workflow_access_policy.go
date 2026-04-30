@@ -360,7 +360,7 @@ func (w *workflowAccessPolicy) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		// beforeCallTool errors complete the workflow with isError=true so the
 		// agent/LLM can reason about the failure and self-correct.
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata),
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata),
 			"workflow should complete (not fail) — the hook error is in the output")
 	})
 

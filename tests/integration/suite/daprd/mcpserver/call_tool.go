@@ -142,10 +142,10 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 
 		assert.False(t, result.GetIsError(), "expected success result")
-		require.NotEmpty(t, result.Content)
-		assert.NotNil(t, result.Content[0].GetText())
-		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "Seattle"),
-			"expected tool result to mention Seattle, got: %s", result.Content[0].GetText().GetText())
+		require.NotEmpty(t, result.GetContent())
+		assert.NotNil(t, result.GetContent()[0].GetText())
+		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "Seattle"),
+			"expected tool result to mention Seattle, got: %s", result.GetContent()[0].GetText().GetText())
 	})
 
 	t.Run("CallTool unknown tool name sets isError=true", func(t *testing.T) {

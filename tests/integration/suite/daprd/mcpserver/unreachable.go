@@ -107,10 +107,10 @@ func (s *listToolsUnreachable) Run(t *testing.T, ctx context.Context) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPListToolsWorkflowName("dead-server"), map[string]any{"mcpServerName": "dead-server"})
 
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 		// The list-tools activity fails (connection refused / timeout), which causes
 		// the orchestration to fail. The output should be empty or the failure reason

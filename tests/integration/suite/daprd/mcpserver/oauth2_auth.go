@@ -175,7 +175,7 @@ func (s *oauth2Auth) Run(t *testing.T, ctx context.Context) {
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.False(t, result.IsError, "expected tool call to succeed; isError=true, content: %v", result.Content)
+		assert.False(t, result.GetIsError(), "expected tool call to succeed; isError=true, content: %v", result.GetContent())
 
 		// Verify the MCP server received a Bearer token from the OAuth2 flow.
 		capturedAuth, ok := s.capturedAuthHeader.Load().(string)

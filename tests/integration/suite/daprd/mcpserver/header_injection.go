@@ -31,6 +31,7 @@ import (
 	dtclient "github.com/dapr/durabletask-go/client"
 
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -39,7 +40,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 )
 
 func init() {
@@ -130,23 +130,23 @@ func (s *headerInjection) Run(t *testing.T, ctx context.Context) {
 	t.Run("static header X-API-Key is injected into MCP requests", func(t *testing.T) {
 		input := map[string]any{
 			"mcpServerName": "authed-server",
-			"toolName":          "echo",
+			"toolName":      "echo",
 			"arguments":     map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("authed-server", "echo"), input)
 
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.False(t, result.IsError, "expected success result")
-		require.NotEmpty(t, result.Content)
-		assert.NotNil(t, result.Content[0].GetText())
-		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "ok"))
+		assert.False(t, result.GetIsError(), "expected success result")
+		require.NotEmpty(t, result.GetContent())
+		assert.NotNil(t, result.GetContent()[0].GetText())
+		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "ok"))
 
 		// Verify the MCP server actually received the injected header.
 		capturedKey, ok := s.capturedAPIKey.Load().(string)

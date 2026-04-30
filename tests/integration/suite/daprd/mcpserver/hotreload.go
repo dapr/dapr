@@ -145,9 +145,9 @@ func (s *hotReload) Run(t *testing.T, ctx context.Context) {
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		require.False(t, result.IsError, "tool call failed: %v", result.Content)
-		require.NotEmpty(t, result.Content)
-		return result.Content[0].GetText().GetText()
+		require.False(t, result.GetIsError(), "tool call failed: %v", result.GetContent())
+		require.NotEmpty(t, result.GetContent())
+		return result.GetContent()[0].GetText().GetText()
 	}
 
 	t.Run("initial call uses server A", func(t *testing.T) {

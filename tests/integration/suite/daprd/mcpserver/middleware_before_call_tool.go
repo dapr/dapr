@@ -178,10 +178,10 @@ func (s *middlewareBeforeCallTool) Run(t *testing.T, ctx context.Context) {
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		assert.True(t, result.IsError, "expected isError=true when gate hook denies")
-		require.NotEmpty(t, result.Content)
-		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "access denied by policy"),
-			"expected gate error in content, got: %s", result.Content[0].GetText().GetText())
+		assert.True(t, result.GetIsError(), "expected isError=true when gate hook denies")
+		require.NotEmpty(t, result.GetContent())
+		assert.True(t, strings.Contains(result.GetContent()[0].GetText().GetText(), "access denied by policy"),
+			"expected gate error in content, got: %s", result.GetContent()[0].GetText().GetText())
 	})
 
 	t.Run("pass-through hook allows tool call", func(t *testing.T) {
@@ -200,6 +200,6 @@ func (s *middlewareBeforeCallTool) Run(t *testing.T, ctx context.Context) {
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		assert.False(t, result.IsError, "expected success when noop hook passes through")
+		assert.False(t, result.GetIsError(), "expected success when noop hook passes through")
 	})
 }

@@ -120,17 +120,17 @@ func (s *listToolsSSE) Run(t *testing.T, ctx context.Context) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPListToolsWorkflowName("weather-sse"), map[string]any{"mcpServerName": "weather-sse"})
 
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 		var result wfv1.ListMCPToolsResponse
 		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 
-		names := make([]string, len(result.Tools))
-		for i, tool := range result.Tools {
-			names[i] = tool.Name
+		names := make([]string, len(result.GetTools()))
+		for i, tool := range result.GetTools() {
+			names[i] = tool.GetName()
 		}
 		assert.Contains(t, names, "get_weather")
 	})

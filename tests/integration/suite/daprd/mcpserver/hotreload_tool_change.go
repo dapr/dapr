@@ -128,7 +128,7 @@ func (s *hotReloadToolChange) Run(t *testing.T, ctx context.Context) {
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(status.Properties["dapr.workflow.output"]), &result))
-		assert.False(t, result.IsError)
+		assert.False(t, result.GetIsError())
 	})
 
 	// Hot-reload: switch to server B.
