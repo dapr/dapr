@@ -173,11 +173,10 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 			"workflow for non-existent tool should fail as not registered")
 	})
 
-	t.Run("tool name extracted from workflow name not input", func(t *testing.T) {
-		// Pass a WRONG tool_name in the input but use the correct workflow name.
-		// The orchestrator should use the tool name from the workflow name (authoritative).
+	t.Run("tool name is derived from workflow name", func(t *testing.T) {
+		// The CallTool input only carries arguments — the tool name is encoded in the
+		// workflow-name suffix and is authoritative.
 		input := map[string]any{
-			"toolName":  "wrong_tool_name",
 			"arguments": map[string]any{"city": "Seattle"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
@@ -185,7 +184,7 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 
 		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
 		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, status.RuntimeStatus,
-			"should succeed using tool name from workflow name, ignoring input.toolName")
+			"should succeed using tool name from workflow name suffix")
 
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)

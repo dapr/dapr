@@ -132,7 +132,7 @@ func (s *listToolsHTTP) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("ListTools via streamable_http returns expected tools", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			mcpnames.MCPListToolsWorkflowName("weather"), map[string]any{"mcpServerName": "weather"})
+			mcpnames.MCPListToolsWorkflowName("weather"), map[string]any{})
 
 		metadata, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))

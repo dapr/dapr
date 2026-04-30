@@ -154,7 +154,6 @@ func (s *middlewareAfterCallTool) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("afterCallTool error fails workflow", func(t *testing.T) {
 		input := map[string]any{
-			"toolName":  "ping",
 			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
@@ -168,7 +167,6 @@ func (s *middlewareAfterCallTool) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("afterCallTool success preserves tool result", func(t *testing.T) {
 		input := map[string]any{
-			"toolName":  "ping",
 			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),

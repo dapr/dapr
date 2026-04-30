@@ -162,7 +162,6 @@ func (s *middlewareBeforeCallTool) Run(t *testing.T, ctx context.Context) {
 	// about — retry, choose a different tool, or inform the user.
 	t.Run("gate hook blocks tool call with isError", func(t *testing.T) {
 		input := map[string]any{
-			"toolName":  "echo",
 			"arguments": map[string]any{"msg": "hello"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
@@ -185,7 +184,6 @@ func (s *middlewareBeforeCallTool) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("pass-through hook allows tool call", func(t *testing.T) {
 		input := map[string]any{
-			"toolName":  "echo",
 			"arguments": map[string]any{"msg": "hello"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),

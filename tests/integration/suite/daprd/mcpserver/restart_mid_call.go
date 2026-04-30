@@ -151,8 +151,6 @@ func (s *restartMidCall) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("activity retries after daprd restart mid tool call", func(t *testing.T) {
 		input := map[string]any{
-			"mcpServerName": "weather",
-			"toolName":      "get_weather",
 			"arguments":     map[string]any{"city": "Seattle"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),

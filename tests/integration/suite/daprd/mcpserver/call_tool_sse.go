@@ -122,8 +122,6 @@ func (s *callToolSSE) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("CallTool via SSE transport returns tool result", func(t *testing.T) {
 		input := map[string]any{
-			"mcpServerName": "weather-sse",
-			"toolName":      "get_weather",
 			"arguments":     map[string]any{"city": "Denver"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),

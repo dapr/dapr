@@ -157,7 +157,6 @@ func (s *callToolStdio) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("CallTool over stdio transport", func(t *testing.T) {
 		input := map[string]any{
-			"toolName":  "stdio_echo",
 			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),

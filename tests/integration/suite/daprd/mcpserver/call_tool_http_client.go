@@ -118,8 +118,6 @@ func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 	t.Run("plain HTTP client can invoke MCP tool via workflow API without SDK", func(t *testing.T) {
 		// Start the CallTool workflow via a plain HTTP POST — no durabletask SDK needed.
 		input := map[string]any{
-			"mcpServerName": "weather",
-			"toolName":      "get_weather",
 			"arguments":     map[string]any{"city": "Portland"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),

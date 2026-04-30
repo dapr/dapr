@@ -240,7 +240,6 @@ func (w *workflowAccessPolicy) Run(t *testing.T, ctx context.Context) {
 			mcpnames.MCPCallToolWorkflowName("denied-server", "ping"),
 			task.WithChildWorkflowAppID("mcp-target"),
 			task.WithChildWorkflowInput(map[string]any{
-				"toolName":  "ping",
 				"arguments": map[string]any{},
 			}),
 		).Await(&output)
@@ -257,7 +256,6 @@ func (w *workflowAccessPolicy) Run(t *testing.T, ctx context.Context) {
 			mcpnames.MCPCallToolWorkflowName("allowed-server", "ping"),
 			task.WithChildWorkflowAppID("mcp-target"),
 			task.WithChildWorkflowInput(map[string]any{
-				"toolName":  "ping",
 				"arguments": map[string]any{},
 			}),
 		).Await(&output)
@@ -274,7 +272,6 @@ func (w *workflowAccessPolicy) Run(t *testing.T, ctx context.Context) {
 			mcpnames.MCPCallToolWorkflowName("crossapp-hook-server", "ping"),
 			task.WithChildWorkflowAppID("mcp-target"),
 			task.WithChildWorkflowInput(map[string]any{
-				"toolName":  "ping",
 				"arguments": map[string]any{},
 			}),
 		).Await(&output)

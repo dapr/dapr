@@ -173,7 +173,6 @@ func (s *middlewareChained) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("beforeCallTool chain: hook A passes, hook B fails → isError", func(t *testing.T) {
 		input := map[string]any{
-			"toolName":  "echo",
 			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
@@ -196,7 +195,6 @@ func (s *middlewareChained) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("afterCallTool chain: hook A passes, hook B fails → workflow FAILS", func(t *testing.T) {
 		input := map[string]any{
-			"toolName":  "echo",
 			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),

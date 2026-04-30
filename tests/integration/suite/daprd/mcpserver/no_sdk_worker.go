@@ -121,7 +121,6 @@ func (s *noSDKWorker) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("CallTool works without gRPC SDK worker", func(t *testing.T) {
 		input := map[string]any{
-			"toolName":  "echo",
 			"arguments": map[string]any{"message": "hello-no-sdk"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
