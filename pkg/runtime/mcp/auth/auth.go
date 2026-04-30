@@ -19,13 +19,14 @@ import (
 	"fmt"
 	"net/http"
 
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/clientcredentials"
+
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	autherrors "github.com/dapr/dapr/pkg/runtime/mcp/auth/errors"
 	"github.com/dapr/dapr/pkg/security"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/clientcredentials"
 )
 
 const (

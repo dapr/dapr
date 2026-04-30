@@ -17,11 +17,12 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/durabletask-go/task"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // activityCallToolInput is the internal input passed from the orchestrator
