@@ -58,7 +58,7 @@ type ComponentStore struct {
 	components              []compsv1alpha1.Component
 	subscriptions           *subscriptions
 	httpEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
-	mcpServers []mcpserverV1alpha1.MCPServer
+	mcpServers              []mcpserverV1alpha1.MCPServer
 	configurationResources  []configapi.Configuration
 	resiliencyResources     []resiliencyapi.Resiliency
 	workflowAccessPolicies  []wfaclapi.WorkflowAccessPolicy
