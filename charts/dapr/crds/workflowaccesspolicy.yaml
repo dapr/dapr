@@ -60,9 +60,34 @@ spec:
                   which operations.
                 items:
                   description: |-
-                    WorkflowAccessPolicyRule defines a set of callers and the operations they
-                    are allowed or denied.
+                    WorkflowAccessPolicyRule defines a set of callers and the workflow and/or
+                    activity rules they are allowed or denied. At least one of workflows or
+                    activities must be set.
                   properties:
+                    activities:
+                      description: Activities are the activity rules that the matched
+                        callers are allowed/denied.
+                      items:
+                        description: |-
+                          ActivityRule defines access control for an activity. Activities only have a
+                          single operation (schedule), so there is no operation field.
+                        properties:
+                          action:
+                            description: Action is "allow" or "deny".
+                            enum:
+                            - allow
+                            - deny
+                            type: string
+                          name:
+                            description: Name is the exact name or glob pattern for
+                              the activity.
+                            minLength: 1
+                            type: string
+                        required:
+                        - action
+                        - name
+                        type: object
+                      type: array
                     callers:
                       description: Callers that this rule applies to.
                       items:
@@ -77,12 +102,12 @@ spec:
                         type: object
                       minItems: 1
                       type: array
-                    operations:
-                      description: Operations that the matched callers are allowed/denied
-                        to perform.
+                    workflows:
+                      description: Workflows are the workflow rules that the matched
+                        callers are allowed/denied.
                       items:
-                        description: WorkflowOperationRule defines access control
-                          for a specific workflow or activity operation.
+                        description: WorkflowRule defines access control for a workflow
+                          operation.
                         properties:
                           action:
                             description: Action is "allow" or "deny".
@@ -92,31 +117,39 @@ spec:
                             type: string
                           name:
                             description: Name is the exact name or glob pattern for
-                              the workflow/activity.
+                              the workflow.
                             minLength: 1
                             type: string
-                          operation:
-                            description: Operation defaults to "schedule" if omitted.
-                            enum:
-                            - schedule
-                            type: string
-                          type:
-                            description: Type is "workflow" or "activity".
-                            enum:
-                            - workflow
-                            - activity
-                            type: string
+                          operations:
+                            description: Operations is the set of operations this
+                              rule applies to.
+                            items:
+                              enum:
+                              - schedule
+                              - terminate
+                              - raise
+                              - pause
+                              - resume
+                              - purge
+                              - get
+                              - rerun
+                              type: string
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: set
                         required:
                         - action
                         - name
-                        - type
+                        - operations
                         type: object
-                      minItems: 1
                       type: array
                   required:
                   - callers
-                  - operations
                   type: object
+                  x-kubernetes-validations:
+                  - message: at least one of workflows or activities must contain
+                      a rule
+                    rule: size(self.workflows) > 0 || size(self.activities) > 0
                 type: array
             type: object
         type: object

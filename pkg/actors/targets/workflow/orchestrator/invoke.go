@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cenkalti/backoff/v4"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
@@ -32,11 +33,32 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/backend"
 )
 
 func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 	if req.GetMessage() == nil {
 		return nil, errors.New("message is nil in request")
+	}
+
+	method := req.GetMessage().GetMethod()
+	data := req.GetMessage().GetData().GetValue()
+
+	// AddWorkflowEvent encodes the operation in its HistoryEvent payload, and
+	// the orchestrator processes the same parsed event for its own logic.
+	// Unmarshal once here, share with both the access policy check and
+	// addWorkflowEvent.
+	var parsedAddEvent *backend.HistoryEvent
+	if method == todo.AddWorkflowEventMethod {
+		var ev backend.HistoryEvent
+		if err := proto.Unmarshal(data, &ev); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal AddWorkflowEvent HistoryEvent: %w", err)
+		}
+		parsedAddEvent = &ev
+	}
+
+	if err := o.checkAccessPolicy(ctx, method, data, parsedAddEvent, req.GetMetadata()); err != nil {
+		return nil, err
 	}
 
 	// Create the InvokeMethodRequest
@@ -50,7 +72,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 	policyRunner := resiliency.NewRunner[*internalsv1pb.InternalInvokeResponse](ctx, policyDef)
 	msg := imReq.Message()
 	return policyRunner(func(ctx context.Context) (*internalsv1pb.InternalInvokeResponse, error) {
-		resData, err := o.executeMethod(ctx, msg.GetMethod(), req.GetMetadata(), msg.GetData().GetValue())
+		resData, err := o.executeMethod(ctx, msg.GetMethod(), req.GetMetadata(), msg.GetData().GetValue(), parsedAddEvent)
 		if err != nil {
 			return nil, err
 		}
@@ -68,7 +90,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 	})
 }
 
-func (o *orchestrator) executeMethod(ctx context.Context, methodName string, meta map[string]*internalsv1pb.ListStringValue, request []byte) ([]byte, error) {
+func (o *orchestrator) executeMethod(ctx context.Context, methodName string, meta map[string]*internalsv1pb.ListStringValue, request []byte, parsedAddEvent *backend.HistoryEvent) ([]byte, error) {
 	log.Debugf("Workflow actor '%s': invoking method '%s'", o.actorID, methodName)
 
 	if o.actorState == nil {
@@ -80,7 +102,7 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, met
 		return nil, o.createWorkflowInstance(ctx, request)
 
 	case todo.AddWorkflowEventMethod:
-		return nil, o.addWorkflowEvent(ctx, request)
+		return nil, o.addWorkflowEvent(ctx, parsedAddEvent)
 
 	case todo.PurgeWorkflowStateMethod:
 		return nil, o.purgeWorkflowState(ctx, meta)
@@ -109,7 +131,11 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 		return o.runWorkflowFromReminder(ctx, reminder)
 
 	case strings.HasPrefix(reminder.Name, common.ReminderPrefixActivityResult):
-		return o.addWorkflowEvent(ctx, reminder.Data.GetValue())
+		var ev backend.HistoryEvent
+		if err := proto.Unmarshal(reminder.Data.GetValue(), &ev); err != nil {
+			return fmt.Errorf("failed to unmarshal activity-result HistoryEvent: %w", err)
+		}
+		return o.addWorkflowEvent(ctx, &ev)
 
 	default:
 		return fmt.Errorf("unable to handle reminder '%s' for workflow actor '%s': unknown reminder type", reminder.Name, o.actorID)

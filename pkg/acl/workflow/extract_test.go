@@ -21,7 +21,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/durabletask-go/api/protos"
+	"github.com/dapr/durabletask-go/backend"
 )
 
 func TestParseActorType(t *testing.T) {
@@ -31,42 +33,15 @@ func TestParseActorType(t *testing.T) {
 		wantOpType OperationType
 		wantOK     bool
 	}{
-		{
-			name:       "workflow actor",
-			actorType:  "dapr.internal.default.myapp.workflow",
-			wantOpType: OperationTypeWorkflow,
-			wantOK:     true,
-		},
-		{
-			name:       "activity actor",
-			actorType:  "dapr.internal.default.myapp.activity",
-			wantOpType: OperationTypeActivity,
-			wantOK:     true,
-		},
-		{
-			name:       "executor actor (not workflow/activity)",
-			actorType:  "dapr.internal.default.myapp.executor",
-			wantOpType: "",
-			wantOK:     false,
-		},
-		{
-			name:       "regular user actor",
-			actorType:  "MyActor",
-			wantOpType: "",
-			wantOK:     false,
-		},
-		{
-			name:       "empty string",
-			actorType:  "",
-			wantOpType: "",
-			wantOK:     false,
-		},
-		{
-			name:       "prefix but no suffix",
-			actorType:  "dapr.internal.default.myapp",
-			wantOpType: "",
-			wantOK:     false,
-		},
+		{"workflow actor", "dapr.internal.default.myapp.workflow", OperationTypeWorkflow, true},
+		{"activity actor", "dapr.internal.default.myapp.activity", OperationTypeActivity, true},
+		{"executor actor (not workflow/activity)", "dapr.internal.default.myapp.executor", "", false},
+		{"regular user actor", "MyActor", "", false},
+		{"empty string", "", "", false},
+		{"prefix but no suffix", "dapr.internal.default.myapp", "", false},
+		{"namespace with dots, workflow", "dapr.internal.my.namespace.myapp.workflow", OperationTypeWorkflow, true},
+		{"namespace with dots, activity", "dapr.internal.my.namespace.myapp.activity", OperationTypeActivity, true},
+		{"just prefix", "dapr.internal.", "", false},
 	}
 
 	for _, tt := range tests {
@@ -78,8 +53,132 @@ func TestParseActorType(t *testing.T) {
 	}
 }
 
-func TestExtractOperationName_Workflow(t *testing.T) {
-	t.Run("CreateWorkflowInstance extracts workflow name", func(t *testing.T) {
+func TestWorkflowOperationFromMethod(t *testing.T) {
+	tests := []struct {
+		name       string
+		method     string
+		event      *backend.HistoryEvent
+		wantOp     wfaclapi.WorkflowOperation
+		wantSubj   bool
+		wantErr    bool
+		errMessage string
+	}{
+		{
+			name:     "CreateWorkflowInstance is schedule",
+			method:   "CreateWorkflowInstance",
+			wantOp:   wfaclapi.WorkflowOperationSchedule,
+			wantSubj: true,
+		},
+		{
+			name:   "AddWorkflowEvent ExecutionTerminated is terminate",
+			method: "AddWorkflowEvent",
+			event: &backend.HistoryEvent{
+				EventType: &protos.HistoryEvent_ExecutionTerminated{
+					ExecutionTerminated: &protos.ExecutionTerminatedEvent{},
+				},
+			},
+			wantOp:   wfaclapi.WorkflowOperationTerminate,
+			wantSubj: true,
+		},
+		{
+			name:   "AddWorkflowEvent EventRaised is raise",
+			method: "AddWorkflowEvent",
+			event: &backend.HistoryEvent{
+				EventType: &protos.HistoryEvent_EventRaised{
+					EventRaised: &protos.EventRaisedEvent{Name: "ev"},
+				},
+			},
+			wantOp:   wfaclapi.WorkflowOperationRaise,
+			wantSubj: true,
+		},
+		{
+			name:   "AddWorkflowEvent ExecutionSuspended is pause",
+			method: "AddWorkflowEvent",
+			event: &backend.HistoryEvent{
+				EventType: &protos.HistoryEvent_ExecutionSuspended{
+					ExecutionSuspended: &protos.ExecutionSuspendedEvent{},
+				},
+			},
+			wantOp:   wfaclapi.WorkflowOperationPause,
+			wantSubj: true,
+		},
+		{
+			name:   "AddWorkflowEvent ExecutionResumed is resume",
+			method: "AddWorkflowEvent",
+			event: &backend.HistoryEvent{
+				EventType: &protos.HistoryEvent_ExecutionResumed{
+					ExecutionResumed: &protos.ExecutionResumedEvent{},
+				},
+			},
+			wantOp:   wfaclapi.WorkflowOperationResume,
+			wantSubj: true,
+		},
+		{
+			name:     "PurgeWorkflowState is purge",
+			method:   "PurgeWorkflowState",
+			wantOp:   wfaclapi.WorkflowOperationPurge,
+			wantSubj: true,
+		},
+		{
+			name:     "WaitForRuntimeStatus is get",
+			method:   "WaitForRuntimeStatus",
+			wantOp:   wfaclapi.WorkflowOperationGet,
+			wantSubj: true,
+		},
+		{
+			name:     "ForkWorkflowHistory is rerun",
+			method:   "ForkWorkflowHistory",
+			wantOp:   wfaclapi.WorkflowOperationRerun,
+			wantSubj: true,
+		},
+		{
+			name:     "RerunWorkflowInstance is rerun",
+			method:   "RerunWorkflowInstance",
+			wantOp:   wfaclapi.WorkflowOperationRerun,
+			wantSubj: true,
+		},
+		{
+			name:     "unknown method is not subject",
+			method:   "SomeInternalMethod",
+			wantSubj: false,
+		},
+		{
+			name:       "AddWorkflowEvent without parsed event errors",
+			method:     "AddWorkflowEvent",
+			event:      nil,
+			wantSubj:   true,
+			wantErr:    true,
+			errMessage: "parsed event is required",
+		},
+		{
+			name:       "AddWorkflowEvent unknown event type errors",
+			method:     "AddWorkflowEvent",
+			event:      &backend.HistoryEvent{},
+			wantSubj:   true,
+			wantErr:    true,
+			errMessage: "unsupported event type",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			op, subject, err := WorkflowOperationFromMethod(tt.method, tt.event)
+			assert.Equal(t, tt.wantSubj, subject)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errMessage != "" {
+					assert.Contains(t, err.Error(), tt.errMessage)
+				}
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantOp, op)
+		})
+	}
+}
+
+func TestWorkflowNameFromCreateRequest(t *testing.T) {
+	t.Run("extracts name from valid request", func(t *testing.T) {
 		req := &protos.CreateWorkflowInstanceRequest{
 			StartEvent: &protos.HistoryEvent{
 				EventType: &protos.HistoryEvent_ExecutionStarted{
@@ -95,35 +194,37 @@ func TestExtractOperationName_Workflow(t *testing.T) {
 		data, err := proto.Marshal(req)
 		require.NoError(t, err)
 
-		name, subject, err := ExtractOperationName(OperationTypeWorkflow, "CreateWorkflowInstance", data)
+		name, err := WorkflowNameFromCreateRequest(data)
 		require.NoError(t, err)
-		assert.True(t, subject)
 		assert.Equal(t, "ProcessOrder", name)
 	})
 
-	t.Run("AddWorkflowEvent is not subject to enforcement", func(t *testing.T) {
-		name, subject, err := ExtractOperationName(OperationTypeWorkflow, "AddWorkflowEvent", nil)
-		require.NoError(t, err)
-		assert.False(t, subject)
-		assert.Empty(t, name)
+	t.Run("invalid payload errors", func(t *testing.T) {
+		_, err := WorkflowNameFromCreateRequest([]byte("garbage"))
+		require.Error(t, err)
 	})
 
-	t.Run("PurgeWorkflowState is not subject to enforcement", func(t *testing.T) {
-		name, subject, err := ExtractOperationName(OperationTypeWorkflow, "PurgeWorkflowState", nil)
+	t.Run("missing ExecutionStarted errors", func(t *testing.T) {
+		req := &protos.CreateWorkflowInstanceRequest{
+			StartEvent: &protos.HistoryEvent{},
+		}
+		data, err := proto.Marshal(req)
 		require.NoError(t, err)
-		assert.False(t, subject)
-		assert.Empty(t, name)
+
+		_, err = WorkflowNameFromCreateRequest(data)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "ExecutionStarted")
 	})
 
-	t.Run("invalid data returns error", func(t *testing.T) {
-		_, _, err := ExtractOperationName(OperationTypeWorkflow, "CreateWorkflowInstance", []byte("invalid"))
+	t.Run("empty payload errors with missing ExecutionStarted", func(t *testing.T) {
+		_, err := WorkflowNameFromCreateRequest([]byte{})
 		require.Error(t, err)
 	})
 }
 
-func TestExtractOperationName_Activity(t *testing.T) {
-	t.Run("Execute extracts activity name", func(t *testing.T) {
-		his := &protos.HistoryEvent{
+func TestActivityNameFromExecute(t *testing.T) {
+	t.Run("extracts name from Execute", func(t *testing.T) {
+		ev := &protos.HistoryEvent{
 			EventType: &protos.HistoryEvent_TaskScheduled{
 				TaskScheduled: &protos.TaskScheduledEvent{
 					Name:  "ChargePayment",
@@ -131,113 +232,34 @@ func TestExtractOperationName_Activity(t *testing.T) {
 				},
 			},
 		}
-		data, err := proto.Marshal(his)
+		data, err := proto.Marshal(ev)
 		require.NoError(t, err)
 
-		name, subject, err := ExtractOperationName(OperationTypeActivity, "Execute", data)
+		name, subject, err := ActivityNameFromExecute("Execute", data)
 		require.NoError(t, err)
 		assert.True(t, subject)
 		assert.Equal(t, "ChargePayment", name)
 	})
 
 	t.Run("non-Execute method is not subject", func(t *testing.T) {
-		name, subject, err := ExtractOperationName(OperationTypeActivity, "SomeOtherMethod", nil)
+		name, subject, err := ActivityNameFromExecute("Other", nil)
 		require.NoError(t, err)
 		assert.False(t, subject)
 		assert.Empty(t, name)
 	})
 
-	t.Run("invalid data returns error", func(t *testing.T) {
-		_, _, err := ExtractOperationName(OperationTypeActivity, "Execute", []byte("invalid"))
+	t.Run("invalid data errors", func(t *testing.T) {
+		_, _, err := ActivityNameFromExecute("Execute", []byte("not a protobuf"))
 		require.Error(t, err)
 	})
-}
 
-// --- Additional edge case tests ---
+	t.Run("missing TaskScheduled errors", func(t *testing.T) {
+		ev := &protos.HistoryEvent{}
+		data, err := proto.Marshal(ev)
+		require.NoError(t, err)
 
-func TestParseActorType_NameWithDots(t *testing.T) {
-	// Namespace with dots in the actor type string.
-	opType, ok := ParseActorType("dapr.internal.my.namespace.myapp.workflow")
-	assert.Equal(t, OperationTypeWorkflow, opType)
-	assert.True(t, ok)
-
-	opType, ok = ParseActorType("dapr.internal.my.namespace.myapp.activity")
-	assert.Equal(t, OperationTypeActivity, opType)
-	assert.True(t, ok)
-}
-
-func TestParseActorType_JustPrefix(t *testing.T) {
-	opType, ok := ParseActorType("dapr.internal.")
-	assert.Empty(t, opType)
-	assert.False(t, ok)
-}
-
-func TestExtractOperationName_WorkflowNilStartEvent(t *testing.T) {
-	req := &protos.CreateWorkflowInstanceRequest{
-		StartEvent: &protos.HistoryEvent{
-			// No ExecutionStarted event set.
-		},
-	}
-	data, err := proto.Marshal(req)
-	require.NoError(t, err)
-
-	_, _, err = ExtractOperationName(OperationTypeWorkflow, "CreateWorkflowInstance", data)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "ExecutionStarted")
-}
-
-func TestExtractOperationName_WorkflowEmptyData(t *testing.T) {
-	_, _, err := ExtractOperationName(OperationTypeWorkflow, "CreateWorkflowInstance", []byte{})
-	// Empty protobuf unmarshals to zero-value struct, but StartEvent will be nil.
-	// The code checks for nil ExecutionStarted and returns an error.
-	require.Error(t, err)
-}
-
-func TestExtractOperationName_ActivityNilTaskScheduled(t *testing.T) {
-	his := &protos.HistoryEvent{
-		// No TaskScheduled event set.
-	}
-	data, err := proto.Marshal(his)
-	require.NoError(t, err)
-
-	_, _, err = ExtractOperationName(OperationTypeActivity, "Execute", data)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "TaskScheduled")
-}
-
-func TestExtractOperationName_ActivityEmptyData(t *testing.T) {
-	_, _, err := ExtractOperationName(OperationTypeActivity, "Execute", []byte{})
-	// Empty protobuf → nil TaskScheduled → error.
-	require.Error(t, err)
-}
-
-func TestExtractOperationName_UnknownOpType(t *testing.T) {
-	name, subject, err := ExtractOperationName(OperationType("unknown"), "AnyMethod", nil)
-	require.NoError(t, err)
-	assert.False(t, subject)
-	assert.Empty(t, name)
-}
-
-func TestExtractOperationName_WorkflowNonSubjectMethods(t *testing.T) {
-	// All methods other than CreateWorkflowInstance should not be subject to enforcement.
-	for _, method := range []string{"AddWorkflowEvent", "PurgeWorkflowState", "GetWorkflowState", "AnyOtherMethod"} {
-		t.Run(method, func(t *testing.T) {
-			name, subject, err := ExtractOperationName(OperationTypeWorkflow, method, nil)
-			require.NoError(t, err)
-			assert.False(t, subject)
-			assert.Empty(t, name)
-		})
-	}
-}
-
-func TestExtractOperationName_ActivityNonSubjectMethods(t *testing.T) {
-	// All methods other than Execute should not be subject to enforcement.
-	for _, method := range []string{"SomeOtherMethod", "Init", "Reminder", ""} {
-		t.Run(method, func(t *testing.T) {
-			name, subject, err := ExtractOperationName(OperationTypeActivity, method, nil)
-			require.NoError(t, err)
-			assert.False(t, subject)
-			assert.Empty(t, name)
-		})
-	}
+		_, _, err = ActivityNameFromExecute("Execute", data)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "TaskScheduled")
+	})
 }

@@ -29,6 +29,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/utils/clock"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
@@ -49,11 +50,6 @@ type Interface interface {
 	CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, fn func(*internalv1pb.InternalInvokeResponse) (bool, error)) error
 }
 
-// WorkflowACLChecker validates workflow access policies for local actor calls.
-// For remote calls, enforcement happens at the callee's CallActor gRPC handler.
-// For local calls (same sidecar), this checker provides the same enforcement.
-type WorkflowACLChecker func(callerAppID string, req *internalv1pb.InternalInvokeRequest) error
-
 type Options struct {
 	Namespace          string
 	AppID              string
@@ -63,13 +59,11 @@ type Options struct {
 	Reminders          reminders.Interface
 	GRPC               *manager.Manager
 	MaxRequestBodySize int
-	WorkflowACL        WorkflowACLChecker
 }
 
 type router struct {
-	namespace   string
-	appID       string
-	workflowACL WorkflowACLChecker
+	namespace string
+	appID     string
 
 	table      table.Interface
 	placement  placement.Interface
@@ -89,15 +83,14 @@ type router struct {
 
 func New(opts Options) Interface {
 	return &router{
-		namespace:   opts.Namespace,
-		appID:       opts.AppID,
-		workflowACL: opts.WorkflowACL,
-		table:       opts.Table,
-		placement:   opts.Placement,
-		resiliency:  opts.Resiliency,
-		grpc:        opts.GRPC,
-		reminders:   opts.Reminders,
-		clock:       clock.RealClock{},
+		namespace:  opts.Namespace,
+		appID:      opts.AppID,
+		table:      opts.Table,
+		placement:  opts.Placement,
+		resiliency: opts.Resiliency,
+		grpc:       opts.GRPC,
+		reminders:  opts.Reminders,
+		clock:      clock.RealClock{},
 		callOptions: []grpc.CallOption{
 			grpc.MaxCallRecvMsgSize(opts.MaxRequestBodySize),
 			grpc.MaxCallSendMsgSize(opts.MaxRequestBodySize),
@@ -246,15 +239,7 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		defer cancel(nil)
 		ctx = cctx
 
-		// For local actor calls, enforce workflow access policies here since
-		// the call won't go through the remote CallActor gRPC handler where
-		// enforcement normally happens. This ensures same-app workflow calls
-		// are also subject to policy enforcement.
-		if r.workflowACL != nil {
-			if err = r.workflowACL(r.appID, req); err != nil {
-				return nil, backoff.Permanent(err)
-			}
-		}
+		r.stampLocalCallerIdentity(req)
 
 		var resp *internalv1pb.InternalInvokeResponse
 		resp, err = r.callLocalActor(ctx, req)
@@ -383,12 +368,7 @@ func (r *router) callStream(ctx context.Context,
 		return r.callRemoteActorStream(ctx, lar, req, stream)
 	}
 
-	// Enforce workflow access policies for local streaming calls.
-	if r.workflowACL != nil {
-		if err := r.workflowACL(r.appID, req); err != nil {
-			return backoff.Permanent(err)
-		}
-	}
+	r.stampLocalCallerIdentity(req)
 
 	return r.callLocalActorStream(ctx, req, stream)
 }
@@ -458,4 +438,17 @@ func (r *router) withContext(ctx context.Context) (context.Context, context.Canc
 	}
 
 	return ctx, wrappedCancel
+}
+
+func (r *router) stampLocalCallerIdentity(req *internalv1pb.InternalInvokeRequest) {
+	if req == nil {
+		return
+	}
+	// Preserve identity stamped upstream (e.g. by the CallActor gRPC
+	// handler from a remote SPIFFE peer) so a remote-routed-local call
+	// keeps the remote caller's identity.
+	if workflowacl.CallerAppID(req.GetMetadata()) != "" {
+		return
+	}
+	workflowacl.SetCallerIdentity(req, r.appID, r.namespace)
 }

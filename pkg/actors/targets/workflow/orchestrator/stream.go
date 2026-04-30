@@ -35,6 +35,10 @@ func (o *orchestrator) handleStream(ctx context.Context,
 		return false, fmt.Errorf("unsupported stream method: %s", m)
 	}
 
+	if err := o.checkAccessPolicy(ctx, req.GetMessage().GetMethod(), req.GetMessage().GetData().GetValue(), nil, req.GetMetadata()); err != nil {
+		return false, err
+	}
+
 	_, ometa, err := o.loadInternalState(ctx)
 	if err != nil {
 		return false, err
