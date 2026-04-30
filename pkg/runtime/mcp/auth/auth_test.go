@@ -149,7 +149,7 @@ func TestJWTRoundTripper_InjectsHeader(t *testing.T) {
 	})
 	rt := &jwtRoundTripper{
 		header:   "Authorization",
-		prefix:   prefix,
+		prefix:   &prefix,
 		audience: "https://api.example.com",
 		fetcher:  fetcher,
 		base:     inner,
@@ -171,8 +171,9 @@ func TestJWTRoundTripper_FetchError(t *testing.T) {
 	fetcher := fakesecurity.New().WithFetchJWT(func(_ context.Context, _ string) (string, error) {
 		return "", errors.New("svid unavailable")
 	})
+	prefix := "Bearer "
 	rt := &jwtRoundTripper{
-		header: "Authorization", prefix: "Bearer ", audience: "aud",
+		header: "Authorization", prefix: &prefix, audience: "aud",
 		fetcher: fetcher, base: inner,
 	}
 	req, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
