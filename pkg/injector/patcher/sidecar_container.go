@@ -312,6 +312,13 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		},
 	}
 
+	// Native sidecar: set RestartPolicy to Always so Kubernetes treats
+	// this init container as a long-running sidecar (KEP-753).
+	if c.EnableNativeSidecar {
+		policy := corev1.ContainerRestartPolicyAlways
+		container.RestartPolicy = &policy
+	}
+
 	// If the pod contains any of the tolerations specified by the configuration,
 	// the Command and Args are passed as is. Otherwise, the Command is passed as a part of Args.
 	// This is to allow the Docker images to specify an ENTRYPOINT
