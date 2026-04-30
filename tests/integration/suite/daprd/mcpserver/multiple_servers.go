@@ -201,8 +201,8 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 
 		var weatherResult wfv1.ListMCPToolsResponse
 		require.NoError(t, json.Unmarshal([]byte(weatherMeta.GetOutput().GetValue()), &weatherResult))
-		weatherNames := make([]string, len(weatherResult.Tools))
-		for i, tool := range weatherResult.Tools {
+		weatherNames := make([]string, len(weatherResult.GetTools()))
+		for i, tool := range weatherResult.GetTools() {
 			weatherNames[i] = tool.Name
 		}
 		assert.Contains(t, weatherNames, "get_weather")
@@ -217,8 +217,8 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 
 		var greeterResult wfv1.ListMCPToolsResponse
 		require.NoError(t, json.Unmarshal([]byte(greeterMeta.GetOutput().GetValue()), &greeterResult))
-		greeterNames := make([]string, len(greeterResult.Tools))
-		for i, tool := range greeterResult.Tools {
+		greeterNames := make([]string, len(greeterResult.GetTools()))
+		for i, tool := range greeterResult.GetTools() {
 			greeterNames[i] = tool.Name
 		}
 		assert.Contains(t, greeterNames, "greet")

@@ -141,7 +141,7 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 
-		assert.False(t, result.IsError, "expected success result")
+		assert.False(t, result.GetIsError(), "expected success result")
 		require.NotEmpty(t, result.Content)
 		assert.NotNil(t, result.Content[0].GetText())
 		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "Seattle"),
@@ -166,6 +166,6 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 		// as a completed workflow with isError=true in the output, NOT a workflow failure.
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.True(t, result.IsError, "expected isError=true for unknown tool")
+		assert.True(t, result.GetIsError(), "expected isError=true for unknown tool")
 	})
 }

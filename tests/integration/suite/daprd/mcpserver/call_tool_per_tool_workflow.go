@@ -135,7 +135,7 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		assert.False(t, result.IsError)
+		assert.False(t, result.GetIsError())
 		require.NotEmpty(t, result.Content)
 		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "Portland"))
 	})
@@ -156,7 +156,7 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		assert.False(t, result.IsError)
+		assert.False(t, result.GetIsError())
 		require.NotEmpty(t, result.Content)
 		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "Hello, Dapr!"))
 	})
@@ -193,7 +193,7 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		assert.False(t, result.IsError)
+		assert.False(t, result.GetIsError())
 		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "Seattle"),
 			"expected weather result from get_weather, got: %s", result.Content[0].GetText().GetText())
 	})

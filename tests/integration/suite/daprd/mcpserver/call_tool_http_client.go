@@ -159,7 +159,7 @@ func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
 
-		assert.False(t, result.IsError, "expected success result")
+		assert.False(t, result.GetIsError(), "expected success result")
 		require.NotEmpty(t, result.Content)
 		assert.NotNil(t, result.Content[0].GetText())
 		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "Portland"),

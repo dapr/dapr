@@ -137,7 +137,7 @@ func (s *noSDKWorker) Run(t *testing.T, ctx context.Context) {
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		assert.False(t, result.IsError)
+		assert.False(t, result.GetIsError())
 		require.NotEmpty(t, result.Content)
 		assert.True(t, strings.Contains(result.Content[0].GetText().GetText(), "hello-no-sdk"))
 	})

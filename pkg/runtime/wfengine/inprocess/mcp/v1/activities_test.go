@@ -92,7 +92,7 @@ func TestMakeCallToolActivity_RealServer(t *testing.T) {
 		ctx: context.Background(),
 		input: activityCallToolInput{
 			ToolName:  "greet",
-			Arguments: map[string]interface{}{"name": "dapr"},
+			Arguments: map[string]any{"name": "dapr"},
 		},
 	}
 
