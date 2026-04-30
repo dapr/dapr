@@ -18,6 +18,22 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
+// StripUntrustedCallerIdentity removes the caller-identity headers from
+// metadata that arrived from an untrusted source (a user-facing API like
+// InvokeActor or onDirectActorMessage that copies client metadata
+// verbatim). Without this, a local app could spoof another app's identity
+// by setting the caller-app-id / caller-namespace headers in their request.
+// Trusted code paths (the CallActor gRPC handler stamping SPIFFE identity,
+// the router stamping the local sidecar's identity) re-set these headers
+// after stripping.
+func StripUntrustedCallerIdentity(md map[string]*internalv1pb.ListStringValue) {
+	if md == nil {
+		return
+	}
+	delete(md, invokev1.CallerIDHeader)
+	delete(md, invokev1.CallerNamespaceHeader)
+}
+
 // Callers MUST authenticate the identity before stamping (mTLS/SPIFFE for
 // remote calls, local sidecar trust for local calls); this helper does not.
 func SetCallerIdentity(req *internalv1pb.InternalInvokeRequest, appID, namespace string) {

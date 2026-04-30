@@ -86,11 +86,6 @@ type API interface {
 
 	// Dapr Service methods
 	runtimev1pb.DaprServer
-
-	// SetWorkflowAccessPolicies atomically updates the workflow access policies.
-	SetWorkflowAccessPolicies(policies *workflowacl.CompiledPolicies)
-	// GetWorkflowAccessPolicies returns the current compiled workflow access policies.
-	GetWorkflowAccessPolicies() *workflowacl.CompiledPolicies
 }
 
 type api struct {
@@ -145,17 +140,6 @@ func NewAPI(opts APIOpts) API {
 		workflowAccessPolicies: opts.WorkflowAccessPolicies,
 		closeCh:                make(chan struct{}),
 	}
-}
-
-// SetWorkflowAccessPolicies atomically sets the compiled workflow access
-// policies used for enforcement in CallActor/CallActorStream.
-func (a *api) SetWorkflowAccessPolicies(policies *workflowacl.CompiledPolicies) {
-	a.workflowAccessPolicies.Store(policies)
-}
-
-// GetWorkflowAccessPolicies returns the current compiled workflow access policies.
-func (a *api) GetWorkflowAccessPolicies() *workflowacl.CompiledPolicies {
-	return a.workflowAccessPolicies.Load()
 }
 
 // validateAndGetPubsubAndTopic validates the request parameters and returns the pubsub interface, pubsub name, topic name, rawPayload metadata if set
@@ -1219,6 +1203,10 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	in.Method = normalized
 
 	req := in.ToInternalInvokeRequest()
+
+	// Drop caller-identity headers that the client may have set; the
+	// router stamps the trusted local sidecar identity itself.
+	workflowacl.StripUntrustedCallerIdentity(req.GetMetadata())
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
