@@ -23,7 +23,7 @@ import (
 type Fake struct {
 	fnRun           func(context.Context) error
 	fnReady         func() bool
-	fnLock          func(context.Context) (context.Context, context.CancelCauseFunc, error)
+	fnLock          func(ctx context.Context, actorType string) (context.Context, context.CancelCauseFunc, error)
 	fnLookupActor   func(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error)
 	fnIsActorHosted func(context.Context, string, string) bool
 }
@@ -32,7 +32,7 @@ func New() *Fake {
 	return &Fake{
 		fnRun:   func(ctx context.Context) error { <-ctx.Done(); return nil },
 		fnReady: func() bool { return true },
-		fnLock: func(ctx context.Context) (context.Context, context.CancelCauseFunc, error) {
+		fnLock: func(ctx context.Context, _ string) (context.Context, context.CancelCauseFunc, error) {
 			return ctx, func(_ error) {}, nil
 		},
 		fnLookupActor: func(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
@@ -54,7 +54,7 @@ func (f *Fake) WithReady(fn func() bool) *Fake {
 	return f
 }
 
-func (f *Fake) WithLock(fn func(context.Context) (context.Context, context.CancelCauseFunc, error)) *Fake {
+func (f *Fake) WithLock(fn func(ctx context.Context, actorType string) (context.Context, context.CancelCauseFunc, error)) *Fake {
 	f.fnLock = fn
 	return f
 }
@@ -77,8 +77,8 @@ func (f *Fake) Ready() bool {
 	return f.fnReady()
 }
 
-func (f *Fake) Lock(ctx context.Context) (context.Context, context.CancelCauseFunc, error) {
-	return f.fnLock(ctx)
+func (f *Fake) Lock(ctx context.Context, actorType string) (context.Context, context.CancelCauseFunc, error) {
+	return f.fnLock(ctx, actorType)
 }
 
 func (f *Fake) LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
