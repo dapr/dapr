@@ -40,12 +40,6 @@ func init() {
 	suite.Register(new(multiapp))
 }
 
-// multiapp runs an orchestrator on one daprd and an activity on a second
-// daprd with a different app ID. The parent's attestation verifier
-// absorbs the child app's foreign cert into its ext-sigcert table. The
-// resulting stored attestation commits to the child app's SPIFFE identity,
-// not the parent's — the core cross-identity property the attestation
-// mechanism exists to prove.
 type multiapp struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement

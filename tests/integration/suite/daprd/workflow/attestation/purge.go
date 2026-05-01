@@ -35,8 +35,6 @@ func init() {
 	suite.Register(new(purge))
 }
 
-// purge verifies that ext-sigcert entries are swept along with the rest of
-// the workflow instance state when the workflow is purged.
 type purge struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement

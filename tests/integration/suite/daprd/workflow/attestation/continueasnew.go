@@ -35,9 +35,6 @@ func init() {
 	suite.Register(new(continueasnew))
 }
 
-// continueasnew verifies that ext-sigcert entries accumulated across
-// pre-CAN iterations are cleared when the workflow continues as new. Only
-// certs absorbed after the final CAN survive.
 type continueasnew struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement

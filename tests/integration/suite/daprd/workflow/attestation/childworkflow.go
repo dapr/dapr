@@ -37,10 +37,6 @@ func init() {
 	suite.Register(new(childworkflow))
 }
 
-// childworkflow verifies that a parent workflow invoking a child workflow
-// produces a ChildCompletionAttestation on the parent's stored
-// ChildWorkflowInstanceCompleted event and absorbs the child's signer cert
-// into the parent's ext-sigcert table.
 type childworkflow struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement

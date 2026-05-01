@@ -38,10 +38,6 @@ func init() {
 	suite.Register(new(failedactivity))
 }
 
-// failedactivity verifies that when an activity returns an error, the
-// parent stores an ActivityCompletionAttestation with terminalStatus ==
-// FAILED and an ioDigest committing to the canonical failure
-// serialization of the activity's TaskFailureDetails.
 type failedactivity struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement

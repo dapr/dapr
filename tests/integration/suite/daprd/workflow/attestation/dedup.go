@@ -35,10 +35,6 @@ func init() {
 	suite.Register(new(dedup))
 }
 
-// dedup verifies that calling the same activity many times from one
-// workflow results in exactly one ext-sigcert entry: the executor's cert
-// is stored once and reused by digest for every attestation that
-// references it.
 type dedup struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement

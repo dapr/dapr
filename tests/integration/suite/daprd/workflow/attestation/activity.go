@@ -37,10 +37,6 @@ func init() {
 	suite.Register(new(activity))
 }
 
-// activity verifies that a workflow calling a single activity produces an
-// ActivityCompletionAttestation on the TaskCompleted event in the parent's
-// signed history, and absorbs the executor's signer cert into the
-// parent's ext-sigcert table.
 type activity struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement

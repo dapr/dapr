@@ -21,14 +21,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	procworkflow "github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
-	dworkflow "github.com/dapr/durabletask-go/workflow"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/task"
 )
 
 func init() {
@@ -36,82 +33,45 @@ func init() {
 }
 
 type mixedParentOffChildOn struct {
-	sentry *sentry.Sentry
-	place  *placement.Placement
-	sched  *scheduler.Scheduler
-	parent *daprd.Daprd
-	child  *daprd.Daprd
-	db     *sqlite.SQLite
+	workflow *procworkflow.Workflow
 }
 
 func (m *mixedParentOffChildOn) Setup(t *testing.T) []framework.Option {
-	m.sentry = sentry.New(t)
-	m.db = sqlite.New(t,
-		sqlite.WithActorStateStore(true),
-		sqlite.WithCreateStateTables(),
+	m.workflow = procworkflow.New(t,
+		procworkflow.WithDaprds(2),
+		procworkflow.WithMTLS(t),
+		procworkflow.WithSigningDisabledN(0),
 	)
-	m.place = placement.New(t, placement.WithSentry(t, m.sentry))
-	m.sched = scheduler.New(t, scheduler.WithSentry(m.sentry), scheduler.WithID("dapr-scheduler-server-0"))
-
-	m.parent = daprd.New(t,
-		daprd.WithAppID("attest-parent-off"),
-		daprd.WithSentry(t, m.sentry),
-		daprd.WithPlacementAddresses(m.place.Address()),
-		daprd.WithScheduler(m.sched),
-		daprd.WithResourceFiles(m.db.GetComponent(t)),
-	)
-
-	m.child = daprd.New(t,
-		daprd.WithAppID("attest-child-on"),
-		daprd.WithSentry(t, m.sentry),
-		daprd.WithPlacementAddresses(m.place.Address()),
-		daprd.WithScheduler(m.sched),
-		daprd.WithResourceFiles(m.db.GetComponent(t)),
-		daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: attest-on
-spec:
-  features:
-  - name: WorkflowHistorySigning
-    enabled: true
-`),
-	)
-
 	return []framework.Option{
-		framework.WithProcesses(m.sentry, m.db, m.place, m.sched, m.parent, m.child),
+		framework.WithProcesses(m.workflow),
 	}
 }
 
 func (m *mixedParentOffChildOn) Run(t *testing.T, ctx context.Context) {
-	m.parent.WaitUntilRunning(t, ctx)
-	m.child.WaitUntilRunning(t, ctx)
+	m.workflow.WaitUntilRunning(t, ctx)
 
-	regParent := dworkflow.NewRegistry()
-	regParent.AddWorkflowN("attest-mixed-parent-off", func(ctx *dworkflow.WorkflowContext) (any, error) {
+	parentReg := m.workflow.Registry()
+	childReg := m.workflow.RegistryN(1)
+
+	parentReg.AddWorkflowN("attest-mixed-parent-off", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, ctx.CallActivity("remote-noop",
-			dworkflow.WithActivityAppID(m.child.AppID()),
+			task.WithActivityAppID(m.workflow.DaprN(1).AppID()),
 		).Await(nil)
 	})
 
-	regChild := dworkflow.NewRegistry()
-	regChild.AddActivityN("remote-noop", func(ctx dworkflow.ActivityContext) (any, error) {
+	childReg.AddActivityN("remote-noop", func(ctx task.ActivityContext) (any, error) {
 		return nil, nil
 	})
 
-	clientParent := dworkflow.NewClient(m.parent.GRPCConn(t, ctx))
-	require.NoError(t, clientParent.StartWorker(ctx, regParent))
+	parentClient := m.workflow.BackendClient(t, ctx)
+	m.workflow.BackendClientN(t, ctx, 1)
 
-	clientChild := dworkflow.NewClient(m.child.GRPCConn(t, ctx))
-	require.NoError(t, clientChild.StartWorker(ctx, regChild))
-
-	id, err := clientParent.ScheduleWorkflow(ctx, "attest-mixed-parent-off")
+	id, err := parentClient.ScheduleNewWorkflow(ctx, "attest-mixed-parent-off")
 	require.NoError(t, err)
 
-	meta, err := clientParent.WaitForWorkflowCompletion(ctx, id)
+	meta, err := parentClient.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, dworkflow.StatusCompleted, meta.RuntimeStatus,
-		"workflow must complete when the parent has signing off, even if the child sends an attestation")
+	assert.True(t, api.WorkflowMetadataIsComplete(meta))
 
-	assert.Equal(t, 0, fworkflow.ExtSigCertCount(t, ctx, m.db, id))
+	assert.Equal(t, 0, fworkflow.ExtSigCertCount(t, ctx, m.workflow.DB(), string(id)))
 }

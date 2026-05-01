@@ -38,10 +38,6 @@ func init() {
 	suite.Register(new(failedchild))
 }
 
-// failedchild verifies that when a child workflow fails, the parent
-// stores a ChildCompletionAttestation with terminalStatus == FAILED and
-// an ioDigest that commits to the canonical failure serialization (not
-// the success output path).
 type failedchild struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
