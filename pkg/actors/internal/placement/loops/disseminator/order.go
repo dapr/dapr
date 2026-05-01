@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strconv"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
@@ -157,13 +156,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		)
 
 		d.currentOperation = v1pb.HostOperation_UNLOCK
-		// Sort to keep ReloadActorTypes' slices.Equal fast path stable:
-		// actorTable.Types() iterates a sync.Map and returns types in
-		// non-deterministic order, otherwise spurious scheduler
-		// reconnects fire on every routine round.
-		hostedTypes := d.actorTable.Types()
-		slices.Sort(hostedTypes)
-		d.scheduler.ReloadActorTypes(hostedTypes)
+		d.scheduler.ReloadActorTypes(d.actorTable.Types())
 
 		d.inflight.UnlockTypes(toUnlock)
 		clear(d.roundChangedTypes)

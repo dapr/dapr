@@ -15,6 +15,7 @@ package inflight
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"testing"
 	"time"
@@ -208,6 +209,213 @@ func TestAcquireBeforeOpen_QueuesUntilOpen(t *testing.T) {
 	case <-time.After(time.Second):
 		require.Fail(t, "AcquireLookup queued before Open should drain after Open")
 	}
+
+	i.Close(nil)
+}
+
+func TestAcquire_QueuesWhileTypeBlocked(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	i := New(Options{Hostname: "h", Port: "1"})
+	i.Set(newTables(100, map[string]map[string]int64{
+		"locked":   {"h:1": 1},
+		"unlocked": {"h:1": 1},
+	}), 1)
+	i.Open(ctx)
+	i.LockTypes([]string{"locked"})
+
+	immediate := make(chan *loops.LockResponse, 1)
+	i.Acquire(&loops.LockRequest{
+		ActorType: "unlocked",
+		Context:   ctx,
+		Response:  immediate,
+	})
+	select {
+	case <-immediate:
+	case <-time.After(time.Second):
+		require.Fail(t, "Acquire for unlocked type should not have queued")
+	}
+
+	queued := make(chan *loops.LockResponse, 1)
+	i.Acquire(&loops.LockRequest{
+		ActorType: "locked",
+		Context:   ctx,
+		Response:  queued,
+	})
+	select {
+	case <-queued:
+		require.Fail(t, "Acquire for locked type should have queued")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	i.UnlockTypes([]string{"locked"})
+	select {
+	case <-queued:
+	case <-time.After(time.Second):
+		require.Fail(t, "queued Acquire should drain after UnlockTypes")
+	}
+
+	i.Close(nil)
+}
+
+func TestCancelClaimsForTypes_DrainsMatchingClaims(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	i := New(Options{Hostname: "h", Port: "1"})
+	i.Set(newTables(100, map[string]map[string]int64{
+		"a": {"h:1": 1},
+		"b": {"h:1": 1},
+	}), 1)
+	i.Open(ctx)
+
+	// Issue claims for both types and confirm they resolve.
+	for _, atype := range []string{"a", "b"} {
+		respCh := make(chan *loops.LockResponse, 1)
+		i.Acquire(&loops.LockRequest{
+			ActorType: atype,
+			Context:   ctx,
+			Response:  respCh,
+		})
+		select {
+		case resp := <-respCh:
+			require.NotNil(t, resp.Cancel)
+		case <-time.After(time.Second):
+			require.Fail(t, "Acquire should resolve")
+		}
+	}
+
+	cancelErr := errors.New("placement table updated")
+	i.CancelClaimsForTypes([]string{"a"}, cancelErr)
+
+	// CancelClaimsForTypes blocks until drain completes; once it returns
+	// the affected claims have been torn down. Acquiring a fresh claim for
+	// type "a" should still succeed because the loop is not closed.
+	respCh := make(chan *loops.LockResponse, 1)
+	i.Acquire(&loops.LockRequest{
+		ActorType: "a",
+		Context:   ctx,
+		Response:  respCh,
+	})
+	select {
+	case <-respCh:
+	case <-time.After(time.Second):
+		require.Fail(t, "Acquire after CancelClaimsForTypes should still succeed")
+	}
+
+	i.Close(nil)
+}
+
+func TestCancelClaimsForTypes_NoLockNoop(t *testing.T) {
+	i := New(Options{Hostname: "h", Port: "1"})
+	// No Open - lock loop is nil. Should not panic and should return.
+	i.CancelClaimsForTypes([]string{"a"}, errors.New("noop"))
+}
+
+func TestCancelClaimsForTypes_EmptyTypesNoop(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	i := New(Options{Hostname: "h", Port: "1"})
+	i.Open(ctx)
+	// Empty set should return without enqueueing.
+	i.CancelClaimsForTypes(nil, errors.New("noop"))
+	i.Close(nil)
+}
+
+func TestIsActorHostedNoLock(t *testing.T) {
+	i := New(Options{Hostname: "h", Port: "1"})
+	i.Set(newTables(100, map[string]map[string]int64{
+		"local": {"h:1": 1},
+	}), 1)
+
+	// Type that exists and resolves to the local host.
+	assert.True(t, i.IsActorHostedNoLock(&api.LookupActorRequest{
+		ActorType: "local", ActorID: "x",
+	}))
+
+	// Unknown type returns false (resolve errors out).
+	assert.False(t, i.IsActorHostedNoLock(&api.LookupActorRequest{
+		ActorType: "unknown", ActorID: "x",
+	}))
+}
+
+func TestIsActorHostedNoLock_RemoteHost(t *testing.T) {
+	i := New(Options{Hostname: "h", Port: "1"})
+	// Single host that is NOT us.
+	i.Set(newTables(100, map[string]map[string]int64{
+		"remote": {"other:9": 9},
+	}), 1)
+
+	assert.False(t, i.IsActorHostedNoLock(&api.LookupActorRequest{
+		ActorType: "remote", ActorID: "x",
+	}))
+}
+
+func TestSetDrainOngoingCallTimeout_StoresValues(t *testing.T) {
+	i := New(Options{Hostname: "h", Port: "1"})
+	drain := true
+	timeout := 7 * time.Second
+
+	i.SetDrainOngoingCallTimeout(&drain, &timeout)
+
+	assert.Equal(t, &drain, i.drainRebalancedActors.Load())
+	assert.Equal(t, &timeout, i.drainOngoingCallTimeout.Load())
+}
+
+func TestClose_NoLoopNoop(t *testing.T) {
+	i := New(Options{Hostname: "h", Port: "1"})
+	// No Open - lock loop is nil. Close should be a no-op.
+	i.Close(nil)
+}
+
+func TestOpenIsIdempotent(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	i := New(Options{Hostname: "h", Port: "1"})
+	i.Set(newTables(100, map[string]map[string]int64{"a": {"h:1": 1}}), 1)
+
+	i.Open(ctx)
+	first := i.lock
+	i.Open(ctx)
+	assert.Same(t, first, i.lock, "Open must not replace an active lock loop")
+
+	i.Close(nil)
+}
+
+func TestUnlockTypes_DrainsQueuedFns(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	i := New(Options{Hostname: "h", Port: "1"})
+	i.Set(newTables(100, map[string]map[string]int64{
+		"locked": {"h:1": 1},
+	}), 1)
+	i.Open(ctx)
+	i.LockTypes([]string{"locked"})
+
+	respCh := make(chan *loops.LookupResponse, 1)
+	i.AcquireLookup(&loops.LookupRequest{
+		Request:  &api.LookupActorRequest{ActorType: "locked", ActorID: "x"},
+		Context:  ctx,
+		Response: respCh,
+	})
+
+	// Without UnlockTypes the queued fn should remain queued.
+	require.Contains(t, i.queued, "locked")
+	require.Len(t, i.queued["locked"], 1)
+
+	i.UnlockTypes([]string{"locked"})
+
+	select {
+	case <-respCh:
+	case <-time.After(time.Second):
+		require.Fail(t, "queued response should drain after UnlockTypes")
+	}
+	assert.NotContains(t, i.queued, "locked")
+	assert.NotContains(t, i.blockedTypes, "locked")
 
 	i.Close(nil)
 }
