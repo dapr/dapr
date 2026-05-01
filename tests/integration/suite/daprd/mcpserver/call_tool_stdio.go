@@ -34,7 +34,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/durabletask-go/api/protos"
 )
 
 func init() {
@@ -140,11 +139,9 @@ func (s *callToolStdio) Run(t *testing.T, ctx context.Context) {
 	s.httpClient = fclient.HTTP(t)
 
 	t.Run("ListTools over stdio transport", func(t *testing.T) {
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			mcpnames.MCPListToolsWorkflowName("stdio-server"), nil)
-
-		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus)
+		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+			mcpnames.MCPListToolsWorkflowName("stdio-server"), nil, 30*time.Second)
+		require.Equal(t, statusCompleted, status.RuntimeStatus)
 
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
@@ -159,11 +156,9 @@ func (s *callToolStdio) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{},
 		}
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			mcpnames.MCPCallToolWorkflowName("stdio-server", "stdio_echo"), input)
-
-		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus)
+		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+			mcpnames.MCPCallToolWorkflowName("stdio-server", "stdio_echo"), input, 30*time.Second)
+		require.Equal(t, statusCompleted, status.RuntimeStatus)
 
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)

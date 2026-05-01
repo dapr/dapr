@@ -134,7 +134,7 @@ func (s *hotReload) Run(t *testing.T, ctx context.Context) {
 
 	callTool := func(t *testing.T) string {
 		t.Helper()
-		input := map[string]any{"tool_name": "echo", "arguments": map[string]any{}}
+		input := map[string]any{"arguments": map[string]any{}}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("hotreload-server", "echo"), input)
 

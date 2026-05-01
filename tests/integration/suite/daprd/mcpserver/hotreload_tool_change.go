@@ -36,7 +36,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/durabletask-go/api/protos"
 )
 
 func init() {
@@ -120,11 +119,10 @@ func (s *hotReloadToolChange) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("initial: alpha tool workflow works", func(t *testing.T) {
 		input := map[string]any{"arguments": map[string]any{}}
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			mcpnames.MCPCallToolWorkflowName("dynamic", "alpha"), input)
-
-		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus)
+		status, err := tryRunWorkflow(ctx, s.httpClient, s.daprd.HTTPPort(),
+			mcpnames.MCPCallToolWorkflowName("dynamic", "alpha"), input, 30*time.Second)
+		require.NoError(t, err)
+		require.Equal(t, statusCompleted, status.RuntimeStatus)
 
 		var result wfv1.CallMCPToolResponse
 		require.NoError(t, protojson.Unmarshal([]byte(status.Properties["dapr.workflow.output"]), &result))
@@ -135,27 +133,27 @@ func (s *hotReloadToolChange) Run(t *testing.T, ctx context.Context) {
 	s.writeMCPResource(t, s.serverBPort)
 
 	t.Run("after hot-reload: beta tool workflow works", func(t *testing.T) {
-		// Poll until beta is available.
+		input := map[string]any{"arguments": map[string]any{}}
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			input := map[string]any{"arguments": map[string]any{}}
-			instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-				mcpnames.MCPCallToolWorkflowName("dynamic", "beta"), input)
-
-			status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 10*time.Second)
-			assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus)
+			status, err := tryRunWorkflow(ctx, s.httpClient, s.daprd.HTTPPort(),
+				mcpnames.MCPCallToolWorkflowName("dynamic", "beta"), input, 5*time.Second)
+			if !assert.NoError(c, err) {
+				return
+			}
+			assert.Equal(c, statusCompleted, status.RuntimeStatus)
 		}, 30*time.Second, time.Second)
 	})
 
 	t.Run("after hot-reload: alpha tool workflow unregistered", func(t *testing.T) {
-		// Poll until alpha fails (unregistered by hot-reload).
+		// alpha is no longer registered: dapr's start endpoint hangs on unregistered
+		// workflows (WaitForInstanceStart blocks). runWorkflow's short per-tick
+		// timeout makes that hang surface as an error each tick — we assert the
+		// error eventually appears.
+		input := map[string]any{"arguments": map[string]any{}}
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			input := map[string]any{"arguments": map[string]any{}}
-			instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-				mcpnames.MCPCallToolWorkflowName("dynamic", "alpha"), input)
-
-			status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 10*time.Second)
-			assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(), status.RuntimeStatus,
-				"alpha tool should be unregistered after hot-reload to server B")
+			_, err := tryRunWorkflow(ctx, s.httpClient, s.daprd.HTTPPort(),
+				mcpnames.MCPCallToolWorkflowName("dynamic", "alpha"), input, 3*time.Second)
+			assert.Error(c, err, "alpha tool start should hang or fail after hot-reload to server B")
 		}, 30*time.Second, time.Second)
 	})
 }

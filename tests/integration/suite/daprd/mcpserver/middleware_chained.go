@@ -28,7 +28,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
@@ -175,11 +174,9 @@ func (s *middlewareChained) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{},
 		}
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			mcpnames.MCPCallToolWorkflowName("chained-before", "echo"), input)
-
-		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus,
+		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+			mcpnames.MCPCallToolWorkflowName("chained-before", "echo"), input, 30*time.Second)
+		require.Equal(t, statusCompleted, status.RuntimeStatus,
 			"beforeCallTool error should produce isError result, not workflow failure")
 
 		outputJSON := status.Properties["dapr.workflow.output"]
@@ -197,11 +194,9 @@ func (s *middlewareChained) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{},
 		}
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			mcpnames.MCPCallToolWorkflowName("chained-after", "echo"), input)
-
-		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(), status.RuntimeStatus,
+		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+			mcpnames.MCPCallToolWorkflowName("chained-after", "echo"), input, 30*time.Second)
+		assert.Equal(t, statusFailed, status.RuntimeStatus,
 			"afterCallTool chain error should fail the entire workflow")
 	})
 }

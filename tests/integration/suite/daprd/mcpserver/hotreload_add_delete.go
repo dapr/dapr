@@ -36,7 +36,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/durabletask-go/api/protos"
 )
 
 func init() {
@@ -108,28 +107,24 @@ spec:
 `, s.mcpPort)
 
 	mcpFilePath := filepath.Join(s.resourceDir, "mcpserver.yaml")
+	listToolsName := mcpnames.MCPListToolsWorkflowName("dynamic")
 
 	t.Run("add MCPServer via hot-reload and verify ListTools works", func(t *testing.T) {
-		// Drop the MCPServer YAML into the resources dir.
 		require.NoError(t, os.WriteFile(mcpFilePath, []byte(mcpYAML), 0o600))
 
-		// Poll until ListTools succeeds — hot-reload needs time to detect the file.
+		// Outer Eventually retries until hot-reload registers the workflow.
+		// runWorkflow uses a short per-tick timeout so each attempt yields quickly
+		// and never spawns a goroutine that could outlive the test.
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-				mcpnames.MCPListToolsWorkflowName("dynamic"), nil)
-
-			status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 10*time.Second)
-			if !assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus) {
+			status, err := tryRunWorkflow(ctx, s.httpClient, s.daprd.HTTPPort(), listToolsName, map[string]any{}, 5*time.Second)
+			if !assert.NoError(c, err) {
 				return
 			}
-
-			outputJSON := status.Properties["dapr.workflow.output"]
-			if !assert.NotEmpty(c, outputJSON) {
+			if !assert.Equal(c, statusCompleted, status.RuntimeStatus) {
 				return
 			}
-
 			var result wfv1.ListMCPToolsResponse
-			if !assert.NoError(c, protojson.Unmarshal([]byte(outputJSON), &result)) {
+			if !assert.NoError(c, protojson.Unmarshal([]byte(status.Properties["dapr.workflow.output"]), &result)) {
 				return
 			}
 			assert.Len(c, result.GetTools(), 1)
@@ -138,17 +133,14 @@ spec:
 	})
 
 	t.Run("delete MCPServer via hot-reload and verify workflow unregistered", func(t *testing.T) {
-		// Remove the MCPServer YAML.
 		require.NoError(t, os.Remove(mcpFilePath))
 
-		// Poll until the ListTools workflow fails with "not registered".
+		// After delete, the workflow is unregistered: dapr's start endpoint hangs
+		// (WaitForInstanceStart blocks forever), so runWorkflow's per-tick timeout
+		// returns an error each tick. We assert that error eventually appears.
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-				mcpnames.MCPListToolsWorkflowName("dynamic"), nil)
-
-			status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 10*time.Second)
-			assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(), status.RuntimeStatus,
-				"ListTools should fail after MCPServer is deleted")
+			_, err := tryRunWorkflow(ctx, s.httpClient, s.daprd.HTTPPort(), listToolsName, map[string]any{}, 3*time.Second)
+			assert.Error(c, err, "ListTools start should hang or fail after MCPServer is deleted")
 		}, 30*time.Second, time.Second)
 	})
 }

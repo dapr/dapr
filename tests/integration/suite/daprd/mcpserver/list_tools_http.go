@@ -14,11 +14,9 @@ limitations under the License.
 package mcpserver
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"testing"
 
@@ -148,32 +146,4 @@ func (s *listToolsHTTP) Run(t *testing.T, ctx context.Context) {
 		}
 		assert.ElementsMatch(t, []string{"get_weather", "get_forecast"}, names)
 	})
-}
-
-// startMCPWorkflow starts a dapr.internal.mcp.* workflow via the HTTP API and returns the instance ID.
-func startMCPWorkflow(ctx context.Context, t *testing.T, httpClient *http.Client, httpPort int, workflowName string, input any) string {
-	t.Helper()
-
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start", httpPort, workflowName)
-	data, err := json.Marshal(input)
-	require.NoError(t, err)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(data))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := httpClient.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	if !assert.Equal(t, http.StatusAccepted, resp.StatusCode) {
-		body, _ := io.ReadAll(resp.Body)
-		require.Fail(t, string(body))
-	}
-
-	var response struct {
-		InstanceID string `json:"instanceID"`
-	}
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
-	return response.InstanceID
 }

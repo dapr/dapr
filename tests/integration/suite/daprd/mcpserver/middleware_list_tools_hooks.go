@@ -27,7 +27,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
@@ -148,20 +147,16 @@ func (s *middlewareListToolsHooks) Run(t *testing.T, ctx context.Context) {
 	defer cancelWorker()
 
 	t.Run("beforeListTools hook error blocks discovery", func(t *testing.T) {
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			mcpnames.MCPListToolsWorkflowName("before-list-deny"), nil)
-
-		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(), status.RuntimeStatus,
+		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+			mcpnames.MCPListToolsWorkflowName("before-list-deny"), nil, 30*time.Second)
+		assert.Equal(t, statusFailed, status.RuntimeStatus,
 			"beforeListTools error should fail the workflow")
 	})
 
 	t.Run("afterListTools hook error fails workflow", func(t *testing.T) {
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			mcpnames.MCPListToolsWorkflowName("after-list-fail"), nil)
-
-		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(), status.RuntimeStatus,
+		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+			mcpnames.MCPListToolsWorkflowName("after-list-fail"), nil, 30*time.Second)
+		assert.Equal(t, statusFailed, status.RuntimeStatus,
 			"afterListTools error should fail the workflow")
 	})
 }

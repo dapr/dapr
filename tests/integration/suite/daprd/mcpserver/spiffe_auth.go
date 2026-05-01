@@ -162,7 +162,6 @@ func (s *spiffeAuth) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("SPIFFE JWT is injected with correct SPIFFE ID and signed by Sentry", func(t *testing.T) {
 		input := map[string]any{
-			"tool_name": "echo",
 			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),

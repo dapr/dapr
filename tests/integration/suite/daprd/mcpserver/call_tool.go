@@ -125,7 +125,7 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("CallTool returns tool result with correct content", func(t *testing.T) {
 		input := map[string]any{
-			"arguments":     map[string]any{"city": "Seattle"},
+			"arguments": map[string]any{"city": "Seattle"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("weather", "get_weather"), input)
@@ -147,7 +147,7 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("CallTool unknown tool name sets isError=true", func(t *testing.T) {
 		input := map[string]any{
-			"arguments":     map[string]any{},
+			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("weather", "get_weather"), input)

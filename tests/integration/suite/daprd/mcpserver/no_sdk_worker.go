@@ -15,7 +15,6 @@ package mcpserver
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
@@ -35,7 +34,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/durabletask-go/api/protos"
 )
 
 func init() {
@@ -104,11 +102,9 @@ func (s *noSDKWorker) Run(t *testing.T, ctx context.Context) {
 	s.httpClient = fclient.HTTP(t)
 
 	t.Run("ListTools works without gRPC SDK worker", func(t *testing.T) {
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			mcpnames.MCPListToolsWorkflowName("echo-server"), nil)
-
-		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus)
+		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+			mcpnames.MCPListToolsWorkflowName("echo-server"), nil, 30*time.Second)
+		require.Equal(t, statusCompleted, status.RuntimeStatus)
 
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
@@ -123,11 +119,9 @@ func (s *noSDKWorker) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{"message": "hello-no-sdk"},
 		}
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			mcpnames.MCPCallToolWorkflowName("echo-server", "echo"), input)
-
-		status := pollWorkflowCompletion(ctx, t, s.httpClient, s.daprd.HTTPPort(), instanceID, 30*time.Second)
-		require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String(), status.RuntimeStatus)
+		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+			mcpnames.MCPCallToolWorkflowName("echo-server", "echo"), input, 30*time.Second)
+		require.Equal(t, statusCompleted, status.RuntimeStatus)
 
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
@@ -138,40 +132,4 @@ func (s *noSDKWorker) Run(t *testing.T, ctx context.Context) {
 		require.NotEmpty(t, result.GetContent())
 		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "hello-no-sdk")
 	})
-}
-
-// wfStatus is a shared type for polling workflow status via HTTP.
-type wfStatus struct {
-	RuntimeStatus string            `json:"runtimeStatus"`
-	Properties    map[string]string `json:"properties"`
-}
-
-// pollWorkflowCompletion polls the workflow status endpoint until the workflow
-// reaches a terminal state or the timeout expires.
-func pollWorkflowCompletion(ctx context.Context, t *testing.T, httpClient *http.Client, httpPort int, instanceID string, timeout time.Duration) wfStatus {
-	t.Helper()
-
-	statusURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s", httpPort, instanceID)
-
-	var status wfStatus
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, statusURL, nil)
-		if !assert.NoError(c, err) {
-			return
-		}
-		resp, err := httpClient.Do(req)
-		if !assert.NoError(c, err) {
-			return
-		}
-		defer resp.Body.Close()
-		if !assert.NoError(c, json.NewDecoder(resp.Body).Decode(&status)) {
-			return
-		}
-		assert.True(c,
-			status.RuntimeStatus == protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED.String() ||
-				status.RuntimeStatus == protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(),
-			"expected terminal status, got %s", status.RuntimeStatus)
-	}, timeout, 10*time.Millisecond)
-
-	return status
 }

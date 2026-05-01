@@ -36,7 +36,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/durabletask-go/api"
 )
 
 func init() {
@@ -118,7 +117,7 @@ func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 	t.Run("plain HTTP client can invoke MCP tool via workflow API without SDK", func(t *testing.T) {
 		// Start the CallTool workflow via a plain HTTP POST — no durabletask SDK needed.
 		input := map[string]any{
-			"arguments":     map[string]any{"city": "Portland"},
+			"arguments": map[string]any{"city": "Portland"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("weather", "get_weather"), input)
@@ -146,7 +145,7 @@ func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 			if !assert.NoError(c, json.NewDecoder(resp.Body).Decode(&status)) {
 				return
 			}
-			assert.Equal(c, api.RUNTIME_STATUS_COMPLETED.String(), status.RuntimeStatus)
+			assert.Equal(c, statusCompleted, status.RuntimeStatus)
 		}, 30*time.Second, 10*time.Millisecond)
 
 		// The tool output is stored in the dapr.workflow.output property.
