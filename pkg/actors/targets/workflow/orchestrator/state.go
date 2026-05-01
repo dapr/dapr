@@ -297,6 +297,13 @@ func (o *orchestrator) purgeWorkflowState(ctx context.Context, meta map[string]*
 	return o.cleanupWorkflowStateInternal(ctx, state, !retentionCall)
 }
 
+// metaFlagSet reports whether the given key is set to "true" in the actor
+// invocation metadata.
+func metaFlagSet(meta map[string]*internalsv1pb.ListStringValue, key string) bool {
+	v, ok := meta[key]
+	return ok && len(v.GetValues()) > 0 && v.GetValues()[0] == "true"
+}
+
 func (o *orchestrator) getExecutionStartedEvent(state *wfenginestate.State) *protos.ExecutionStartedEvent {
 	for _, e := range state.History {
 		if es := e.GetExecutionStarted(); es != nil {
