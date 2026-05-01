@@ -154,6 +154,11 @@ func NewAppCallbackClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			baseURL+AppCallbackOnJobEventProcedure,
 			opts...,
 		),
+		onJobEvent: connect.NewClient[v11.JobEventRequest, v11.JobEventResponse](
+			httpClient,
+			baseURL+AppCallbackOnJobEventProcedure,
+			opts...,
+		),
 	}
 }
 
@@ -266,6 +271,11 @@ func NewAppCallbackHandler(svc AppCallbackHandler, opts ...connect.HandlerOption
 		svc.OnBulkTopicEvent,
 		connect.WithSchema(appCallbackMethods.ByName("OnBulkTopicEvent")),
 		connect.WithHandlerOptions(opts...),
+	)
+	appCallbackOnJobEventHandler := connect.NewUnaryHandler(
+		AppCallbackOnJobEventProcedure,
+		svc.OnJobEvent,
+		opts...,
 	)
 	appCallbackOnJobEventHandler := connect.NewUnaryHandler(
 		AppCallbackOnJobEventProcedure,

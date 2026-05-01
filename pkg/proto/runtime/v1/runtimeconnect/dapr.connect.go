@@ -766,11 +766,21 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			baseURL+DaprScheduleJobProcedure,
 			opts...,
 		),
+		scheduleJob: connect.NewClient[v1.ScheduleJobRequest, v1.ScheduleJobResponse](
+			httpClient,
+			baseURL+DaprScheduleJobProcedure,
+			opts...,
+		),
 		getJobAlpha1: connect.NewClient[v1.GetJobRequest, v1.GetJobResponse](
 			httpClient,
 			baseURL+DaprGetJobAlpha1Procedure,
 			connect.WithSchema(daprMethods.ByName("GetJobAlpha1")),
 			connect.WithClientOptions(opts...),
+		),
+		getJob: connect.NewClient[v1.GetJobRequest, v1.GetJobResponse](
+			httpClient,
+			baseURL+DaprGetJobProcedure,
+			opts...,
 		),
 		getJob: connect.NewClient[v1.GetJobRequest, v1.GetJobResponse](
 			httpClient,
@@ -788,6 +798,11 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			baseURL+DaprDeleteJobProcedure,
 			opts...,
 		),
+		deleteJob: connect.NewClient[v1.DeleteJobRequest, v1.DeleteJobResponse](
+			httpClient,
+			baseURL+DaprDeleteJobProcedure,
+			opts...,
+		),
 		deleteJobsByPrefixAlpha1: connect.NewClient[v1.DeleteJobsByPrefixRequestAlpha1, v1.DeleteJobsByPrefixResponseAlpha1](
 			httpClient,
 			baseURL+DaprDeleteJobsByPrefixAlpha1Procedure,
@@ -799,11 +814,21 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			baseURL+DaprDeleteJobsByPrefixProcedure,
 			opts...,
 		),
+		deleteJobsByPrefix: connect.NewClient[v1.DeleteJobsByPrefixRequest, v1.DeleteJobsByPrefixResponse](
+			httpClient,
+			baseURL+DaprDeleteJobsByPrefixProcedure,
+			opts...,
+		),
 		listJobsAlpha1: connect.NewClient[v1.ListJobsRequestAlpha1, v1.ListJobsResponseAlpha1](
 			httpClient,
 			baseURL+DaprListJobsAlpha1Procedure,
 			connect.WithSchema(daprMethods.ByName("ListJobsAlpha1")),
 			connect.WithClientOptions(opts...),
+		),
+		listJobs: connect.NewClient[v1.ListJobsRequest, v1.ListJobsResponse](
+			httpClient,
+			baseURL+DaprListJobsProcedure,
+			opts...,
 		),
 		listJobs: connect.NewClient[v1.ListJobsRequest, v1.ListJobsResponse](
 			httpClient,
@@ -1825,11 +1850,21 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 		svc.ScheduleJob,
 		opts...,
 	)
+	daprScheduleJobHandler := connect.NewUnaryHandler(
+		DaprScheduleJobProcedure,
+		svc.ScheduleJob,
+		opts...,
+	)
 	daprGetJobAlpha1Handler := connect.NewUnaryHandler(
 		DaprGetJobAlpha1Procedure,
 		svc.GetJobAlpha1,
 		connect.WithSchema(daprMethods.ByName("GetJobAlpha1")),
 		connect.WithHandlerOptions(opts...),
+	)
+	daprGetJobHandler := connect.NewUnaryHandler(
+		DaprGetJobProcedure,
+		svc.GetJob,
+		opts...,
 	)
 	daprGetJobHandler := connect.NewUnaryHandler(
 		DaprGetJobProcedure,
@@ -1847,6 +1882,11 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 		svc.DeleteJob,
 		opts...,
 	)
+	daprDeleteJobHandler := connect.NewUnaryHandler(
+		DaprDeleteJobProcedure,
+		svc.DeleteJob,
+		opts...,
+	)
 	daprDeleteJobsByPrefixAlpha1Handler := connect.NewUnaryHandler(
 		DaprDeleteJobsByPrefixAlpha1Procedure,
 		svc.DeleteJobsByPrefixAlpha1,
@@ -1858,11 +1898,21 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 		svc.DeleteJobsByPrefix,
 		opts...,
 	)
+	daprDeleteJobsByPrefixHandler := connect.NewUnaryHandler(
+		DaprDeleteJobsByPrefixProcedure,
+		svc.DeleteJobsByPrefix,
+		opts...,
+	)
 	daprListJobsAlpha1Handler := connect.NewUnaryHandler(
 		DaprListJobsAlpha1Procedure,
 		svc.ListJobsAlpha1,
 		connect.WithSchema(daprMethods.ByName("ListJobsAlpha1")),
 		connect.WithHandlerOptions(opts...),
+	)
+	daprListJobsHandler := connect.NewUnaryHandler(
+		DaprListJobsProcedure,
+		svc.ListJobs,
+		opts...,
 	)
 	daprListJobsHandler := connect.NewUnaryHandler(
 		DaprListJobsProcedure,
