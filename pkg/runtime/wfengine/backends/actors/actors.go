@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -606,6 +607,12 @@ func (abe *Actors) purgeWorkflowRemote(ctx context.Context, id api.InstanceID, t
 
 	resp, err := actorRouter.Call(ctx, req)
 	if err != nil {
+		// Actor invocations carry errors as wire strings, so api.ErrInstanceNotFound
+		// from the remote handler arrives unwrapped. Normalise so callers
+		// (durabletask-go's recursive driver) can rely on errors.Is.
+		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
+			return 0, api.ErrInstanceNotFound
+		}
 		return 0, err
 	}
 

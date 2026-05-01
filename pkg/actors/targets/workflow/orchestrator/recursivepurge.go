@@ -16,6 +16,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"google.golang.org/protobuf/proto"
 
@@ -76,6 +77,12 @@ func (o *orchestrator) recursivePurgeWorkflowState(ctx context.Context, meta map
 		count, err = o.invokeRecursivePurge(ctx, actorType, child.instanceID, force)
 		deleted += count
 		if err != nil {
+			// Actor invocation surfaces api.ErrInstanceNotFound as a wire string;
+			// match by suffix to keep recursive purge idempotent against children
+			// that were already purged out-of-band.
+			if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
+				continue
+			}
 			return nil, fmt.Errorf("failed to purge child workflow %q: %w", child.instanceID, err)
 		}
 	}
