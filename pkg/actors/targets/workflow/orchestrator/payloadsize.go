@@ -69,17 +69,17 @@ func (o *orchestrator) workflowPayloadOversize(state *wfenginestate.State) (prot
 // Returns nil when the payload fits, or a wrapped errPayloadSizeExceeded that
 // runWorkflow uses to stall the parent workflow. A non-positive
 // maxRequestBodySize signals "no limit" and disables the precheck.
-func (o *orchestrator) activityPayloadOversize(e *backend.HistoryEvent, ph *protos.PropagatedHistory) error {
+func (o *orchestrator) activityPayloadOversize(payload proto.Message, e *backend.HistoryEvent) error {
 	if o.maxRequestBodySize <= 0 {
 		return nil
 	}
-	ts := e.GetTaskScheduled()
 	threshold := (o.maxRequestBodySize * payloadStallNumerator) / payloadStallDenominator
-	size := proto.Size(ts) + proto.Size(ph)
+	size := proto.Size(payload)
 	if size <= threshold {
 		return nil
 	}
 
+	ts := e.GetTaskScheduled()
 	return fmt.Errorf("activity '%s::%d' payload %d bytes exceeds %d%% of max gRPC body size %d bytes; increase daprd --max-body-size and restart to resume: %w",
 		ts.GetName(), e.GetEventId(), size, payloadStallNumerator, o.maxRequestBodySize, errPayloadSizeExceeded)
 }

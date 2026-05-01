@@ -64,10 +64,6 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		return nil
 	}
 
-	if err := o.activityPayloadOversize(e, ph); err != nil {
-		return err
-	}
-
 	// Only wrap in the ActivityInvocation envelope when there is propagated history to carry.
 	var payload proto.Message = e
 	if ph != nil {
@@ -78,6 +74,10 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 			HistoryEvent:      e,
 			PropagatedHistory: ph,
 		}
+	}
+
+	if err := o.activityPayloadOversize(payload, e); err != nil {
+		return err
 	}
 
 	invocationData, err := proto.Marshal(payload)
