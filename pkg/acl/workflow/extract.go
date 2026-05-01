@@ -29,8 +29,6 @@ const (
 	actorTypePrefix = "dapr.internal."
 	suffixWorkflow  = ".workflow"
 	suffixActivity  = ".activity"
-
-	methodExecute = "Execute"
 )
 
 // OperationType represents the type of workflow operation being performed.
@@ -59,49 +57,53 @@ func ParseActorType(actorType string) (OperationType, bool) {
 	}
 }
 
-// AddWorkflowEvent's operation is encoded in the HistoryEvent payload;
-// parsedAddEvent must be non-nil for that method so we don't unmarshal
-// twice on the hot path. nil for other methods.
-func WorkflowOperationFromMethod(method string, parsedAddEvent *backend.HistoryEvent) (wfaclapi.WorkflowOperation, bool, error) {
+// WorkflowOperationFromMethod returns the WorkflowOperation for a workflow
+// actor method. An empty operation with nil error means the method is not
+// subject to access control (an internal/system method). AddWorkflowEvent's
+// operation is encoded in the HistoryEvent payload; parsedAddEvent must be
+// non-nil for that method so we don't unmarshal twice on the hot path.
+func WorkflowOperationFromMethod(method string, parsedAddEvent *backend.HistoryEvent) (wfaclapi.WorkflowOperation, error) {
 	switch method {
 	case todo.CreateWorkflowInstanceMethod:
-		return wfaclapi.WorkflowOperationSchedule, true, nil
+		return wfaclapi.WorkflowOperationSchedule, nil
 
 	case todo.AddWorkflowEventMethod:
 		if parsedAddEvent == nil {
-			return "", true, errors.New("AddWorkflowEvent: parsed event is required to derive the operation")
+			return "", errors.New("AddWorkflowEvent: parsed event is required to derive the operation")
 		}
-		op, err := operationFromHistoryEvent(parsedAddEvent)
-		return op, true, err
+		return operationFromHistoryEvent(parsedAddEvent)
 
 	case todo.PurgeWorkflowStateMethod:
-		return wfaclapi.WorkflowOperationPurge, true, nil
+		return wfaclapi.WorkflowOperationPurge, nil
 
 	case todo.WaitForRuntimeStatus:
-		return wfaclapi.WorkflowOperationGet, true, nil
+		return wfaclapi.WorkflowOperationGet, nil
 
 	case todo.ForkWorkflowHistory, todo.RerunWorkflowInstance:
-		return wfaclapi.WorkflowOperationRerun, true, nil
+		return wfaclapi.WorkflowOperationRerun, nil
 
 	default:
-		return "", false, nil
+		return "", nil
 	}
 }
 
-func ActivityNameFromExecute(method string, data []byte) (string, bool, error) {
-	if method != methodExecute {
-		return "", false, nil
+// ActivityNameFromExecute returns the activity name from an Execute method
+// payload. An empty name with nil error means the method is not Execute
+// (no other activity methods are subject to access control).
+func ActivityNameFromExecute(method string, data []byte) (string, error) {
+	if method != todo.ExecuteActivityMethod {
+		return "", nil
 	}
 
 	var his backend.HistoryEvent
 	if err := proto.Unmarshal(data, &his); err != nil {
-		return "", false, fmt.Errorf("failed to unmarshal activity HistoryEvent: %w", err)
+		return "", fmt.Errorf("failed to unmarshal activity HistoryEvent: %w", err)
 	}
 	ts := his.GetTaskScheduled()
 	if ts == nil {
-		return "", false, errors.New("activity HistoryEvent missing TaskScheduled")
+		return "", errors.New("activity HistoryEvent missing TaskScheduled")
 	}
-	return ts.GetName(), true, nil
+	return ts.GetName(), nil
 }
 
 func WorkflowNameFromCreateRequest(data []byte) (string, error) {

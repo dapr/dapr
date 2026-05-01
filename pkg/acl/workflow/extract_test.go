@@ -59,15 +59,13 @@ func TestWorkflowOperationFromMethod(t *testing.T) {
 		method     string
 		event      *backend.HistoryEvent
 		wantOp     wfaclapi.WorkflowOperation
-		wantSubj   bool
 		wantErr    bool
 		errMessage string
 	}{
 		{
-			name:     "CreateWorkflowInstance is schedule",
-			method:   "CreateWorkflowInstance",
-			wantOp:   wfaclapi.WorkflowOperationSchedule,
-			wantSubj: true,
+			name:   "CreateWorkflowInstance is schedule",
+			method: "CreateWorkflowInstance",
+			wantOp: wfaclapi.WorkflowOperationSchedule,
 		},
 		{
 			name:   "AddWorkflowEvent ExecutionTerminated is terminate",
@@ -77,8 +75,7 @@ func TestWorkflowOperationFromMethod(t *testing.T) {
 					ExecutionTerminated: &protos.ExecutionTerminatedEvent{},
 				},
 			},
-			wantOp:   wfaclapi.WorkflowOperationTerminate,
-			wantSubj: true,
+			wantOp: wfaclapi.WorkflowOperationTerminate,
 		},
 		{
 			name:   "AddWorkflowEvent EventRaised is raise",
@@ -88,8 +85,7 @@ func TestWorkflowOperationFromMethod(t *testing.T) {
 					EventRaised: &protos.EventRaisedEvent{Name: "ev"},
 				},
 			},
-			wantOp:   wfaclapi.WorkflowOperationRaise,
-			wantSubj: true,
+			wantOp: wfaclapi.WorkflowOperationRaise,
 		},
 		{
 			name:   "AddWorkflowEvent ExecutionSuspended is pause",
@@ -99,8 +95,7 @@ func TestWorkflowOperationFromMethod(t *testing.T) {
 					ExecutionSuspended: &protos.ExecutionSuspendedEvent{},
 				},
 			},
-			wantOp:   wfaclapi.WorkflowOperationPause,
-			wantSubj: true,
+			wantOp: wfaclapi.WorkflowOperationPause,
 		},
 		{
 			name:   "AddWorkflowEvent ExecutionResumed is resume",
@@ -110,43 +105,37 @@ func TestWorkflowOperationFromMethod(t *testing.T) {
 					ExecutionResumed: &protos.ExecutionResumedEvent{},
 				},
 			},
-			wantOp:   wfaclapi.WorkflowOperationResume,
-			wantSubj: true,
+			wantOp: wfaclapi.WorkflowOperationResume,
 		},
 		{
-			name:     "PurgeWorkflowState is purge",
-			method:   "PurgeWorkflowState",
-			wantOp:   wfaclapi.WorkflowOperationPurge,
-			wantSubj: true,
+			name:   "PurgeWorkflowState is purge",
+			method: "PurgeWorkflowState",
+			wantOp: wfaclapi.WorkflowOperationPurge,
 		},
 		{
-			name:     "WaitForRuntimeStatus is get",
-			method:   "WaitForRuntimeStatus",
-			wantOp:   wfaclapi.WorkflowOperationGet,
-			wantSubj: true,
+			name:   "WaitForRuntimeStatus is get",
+			method: "WaitForRuntimeStatus",
+			wantOp: wfaclapi.WorkflowOperationGet,
 		},
 		{
-			name:     "ForkWorkflowHistory is rerun",
-			method:   "ForkWorkflowHistory",
-			wantOp:   wfaclapi.WorkflowOperationRerun,
-			wantSubj: true,
+			name:   "ForkWorkflowHistory is rerun",
+			method: "ForkWorkflowHistory",
+			wantOp: wfaclapi.WorkflowOperationRerun,
 		},
 		{
-			name:     "RerunWorkflowInstance is rerun",
-			method:   "RerunWorkflowInstance",
-			wantOp:   wfaclapi.WorkflowOperationRerun,
-			wantSubj: true,
+			name:   "RerunWorkflowInstance is rerun",
+			method: "RerunWorkflowInstance",
+			wantOp: wfaclapi.WorkflowOperationRerun,
 		},
 		{
-			name:     "unknown method is not subject",
-			method:   "SomeInternalMethod",
-			wantSubj: false,
+			name:   "unknown method is not subject",
+			method: "SomeInternalMethod",
+			wantOp: "",
 		},
 		{
 			name:       "AddWorkflowEvent without parsed event errors",
 			method:     "AddWorkflowEvent",
 			event:      nil,
-			wantSubj:   true,
 			wantErr:    true,
 			errMessage: "parsed event is required",
 		},
@@ -154,7 +143,6 @@ func TestWorkflowOperationFromMethod(t *testing.T) {
 			name:       "AddWorkflowEvent unknown event type errors",
 			method:     "AddWorkflowEvent",
 			event:      &backend.HistoryEvent{},
-			wantSubj:   true,
 			wantErr:    true,
 			errMessage: "unsupported event type",
 		},
@@ -162,8 +150,7 @@ func TestWorkflowOperationFromMethod(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			op, subject, err := WorkflowOperationFromMethod(tt.method, tt.event)
-			assert.Equal(t, tt.wantSubj, subject)
+			op, err := WorkflowOperationFromMethod(tt.method, tt.event)
 			if tt.wantErr {
 				require.Error(t, err)
 				if tt.errMessage != "" {
@@ -235,21 +222,19 @@ func TestActivityNameFromExecute(t *testing.T) {
 		data, err := proto.Marshal(ev)
 		require.NoError(t, err)
 
-		name, subject, err := ActivityNameFromExecute("Execute", data)
+		name, err := ActivityNameFromExecute("Execute", data)
 		require.NoError(t, err)
-		assert.True(t, subject)
 		assert.Equal(t, "ChargePayment", name)
 	})
 
 	t.Run("non-Execute method is not subject", func(t *testing.T) {
-		name, subject, err := ActivityNameFromExecute("Other", nil)
+		name, err := ActivityNameFromExecute("Other", nil)
 		require.NoError(t, err)
-		assert.False(t, subject)
 		assert.Empty(t, name)
 	})
 
 	t.Run("invalid data errors", func(t *testing.T) {
-		_, _, err := ActivityNameFromExecute("Execute", []byte("not a protobuf"))
+		_, err := ActivityNameFromExecute("Execute", []byte("not a protobuf"))
 		require.Error(t, err)
 	})
 
@@ -258,7 +243,7 @@ func TestActivityNameFromExecute(t *testing.T) {
 		data, err := proto.Marshal(ev)
 		require.NoError(t, err)
 
-		_, _, err = ActivityNameFromExecute("Execute", data)
+		_, err = ActivityNameFromExecute("Execute", data)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "TaskScheduled")
 	})

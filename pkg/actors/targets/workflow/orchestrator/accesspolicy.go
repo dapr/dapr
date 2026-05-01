@@ -40,7 +40,7 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 		return nil
 	}
 
-	operation, subject, err := workflowacl.WorkflowOperationFromMethod(method, parsedAddEvent)
+	operation, err := workflowacl.WorkflowOperationFromMethod(method, parsedAddEvent)
 	if err != nil {
 		// Fail closed on malformed requests - same outcome from the caller's
 		// perspective as a denied operation, and avoids leaking parsing
@@ -49,7 +49,7 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 		diag.DefaultMonitoring.WorkflowACLActionDenied(workflowacl.CallerAppID(md), string(workflowacl.OperationTypeWorkflow), method)
 		return status.Errorf(codes.PermissionDenied, "%s: malformed request for method '%s'", workflowACLDeniedMsg, method)
 	}
-	if !subject {
+	if operation == "" {
 		return nil
 	}
 

@@ -34,13 +34,13 @@ func (a *activity) checkAccessPolicy(method string, data []byte, md map[string]*
 		return nil
 	}
 
-	name, subject, err := workflowacl.ActivityNameFromExecute(method, data)
+	name, err := workflowacl.ActivityNameFromExecute(method, data)
 	if err != nil {
 		log.Warnf("Activity actor '%s': workflow access policy denied call '%s': could not extract name from request: %v", a.actorID, method, err)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(workflowacl.CallerAppID(md), string(workflowacl.OperationTypeActivity), method)
 		return status.Errorf(codes.PermissionDenied, "%s: malformed request for method '%s'", workflowACLDeniedMsg, method)
 	}
-	if !subject {
+	if name == "" {
 		return nil
 	}
 
