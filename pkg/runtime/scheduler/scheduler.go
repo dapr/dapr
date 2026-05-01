@@ -130,6 +130,8 @@ func (s *Scheduler) StopApp() {
 }
 
 func (s *Scheduler) ReloadActorTypes(actorTypes []string) {
+	slices.Sort(actorTypes)
+
 	if s.currentActorTypes != nil && slices.Equal(*s.currentActorTypes, actorTypes) {
 		return
 	}
