@@ -15,7 +15,6 @@ package mcpserver
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync/atomic"
@@ -24,6 +23,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
@@ -128,7 +128,7 @@ func (s *headerInjection) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("static header X-API-Key is injected into MCP requests", func(t *testing.T) {
 		input := map[string]any{
-			"arguments":     map[string]any{},
+			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("authed-server", "echo"), input)
@@ -139,7 +139,7 @@ func (s *headerInjection) Run(t *testing.T, ctx context.Context) {
 		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 		var result wfv1.CallMCPToolResponse
-		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 		assert.False(t, result.GetIsError(), "expected success result")
 		require.NotEmpty(t, result.GetContent())
 		assert.NotNil(t, result.GetContent()[0].GetText())

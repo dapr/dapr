@@ -161,7 +161,7 @@ func (s *oauth2Auth) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("OAuth2 bearer token is injected into MCP requests", func(t *testing.T) {
 		input := map[string]any{
-			"arguments":     map[string]any{},
+			"arguments": map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("oauth2-server", "echo"), input)

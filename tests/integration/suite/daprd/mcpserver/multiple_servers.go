@@ -148,7 +148,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("CallTool on weather server returns weather", func(t *testing.T) {
 		input := map[string]any{
-			"arguments":     map[string]any{"city": "Austin"},
+			"arguments": map[string]any{"city": "Austin"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("weather", "get_weather"), input)
@@ -168,7 +168,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("CallTool on greeter server returns greeting", func(t *testing.T) {
 		input := map[string]any{
-			"arguments":     map[string]any{"name": "dapr"},
+			"arguments": map[string]any{"name": "dapr"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("greeter", "greet"), input)
