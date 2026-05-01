@@ -174,7 +174,7 @@ func (f *factory) Len() int {
 }
 
 func (f *factory) handleIdleActor(target *app) {
-	ctx, cancel, err := f.placement.Lock(context.Background())
+	ctx, cancel, err := f.placement.Lock(context.Background(), f.actorType)
 	if err != nil {
 		log.Errorf("Failed to lock placement for idle actor deactivation: %s", err)
 		return

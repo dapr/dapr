@@ -880,6 +880,27 @@ func TestGetSidecarContainer(t *testing.T) {
 		},
 	}))
 
+	t.Run("actors disseminate timeout", testSuiteGenerator([]testCase{
+		{
+			name:        "default to empty",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--actors-disseminate-timeout")
+			},
+		},
+		{
+			name: "add an actors disseminate timeout",
+			annotations: map[string]string{
+				annotations.KeyActorsDisseminateTimeout: "45s",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--actors-disseminate-timeout 45s")
+			},
+		},
+	}))
+
 	t.Run("sidecar image", testSuiteGenerator([]testCase{
 		{
 			name:        "no annotation",
