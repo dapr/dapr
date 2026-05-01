@@ -176,11 +176,11 @@ func (a *activity) executeActivity(ctx context.Context, name string, invocation 
 // certificate chain as a companion) to the outbound TaskCompleted or
 // TaskFailed event. No-op if signing is disabled or the result is not a
 // terminal activity event.
-func (a *activity) attachActivityAttestation(ctx context.Context, result *backend.HistoryEvent, taskEvent *backend.HistoryEvent, workflowID string, activityName string) error {
+func (a *activity) attachActivityAttestation(ctx context.Context, history *backend.HistoryEvent, taskEvent *backend.HistoryEvent, workflowID string, activityName string) error {
 	if a.signer == nil {
 		return nil
 	}
-	if result == nil {
+	if history == nil {
 		return nil
 	}
 
@@ -195,7 +195,7 @@ func (a *activity) attachActivityAttestation(ctx context.Context, result *backen
 		Input:            scheduled.GetInput(),
 	}
 
-	switch body := result.GetEventType().(type) {
+	switch body := history.GetEventType().(type) {
 	case *protos.HistoryEvent_TaskCompleted:
 		in.ParentTaskScheduledId = body.TaskCompleted.GetTaskScheduledId()
 		in.Output = body.TaskCompleted.GetResult()
@@ -214,7 +214,7 @@ func (a *activity) attachActivityAttestation(ctx context.Context, result *backen
 		return fmt.Errorf("activity actor '%s': failed to build activity attestation: %w", a.actorID, err)
 	}
 
-	switch body := result.GetEventType().(type) {
+	switch body := history.GetEventType().(type) {
 	case *protos.HistoryEvent_TaskCompleted:
 		body.TaskCompleted.Attestation = att
 		body.TaskCompleted.SignerCertificate = certChainDER

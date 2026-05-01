@@ -342,8 +342,8 @@ func (o *orchestrator) verifyChildInboxAttestation(
 	}
 
 	certDigest := historysigning.CertDigest(certDER)
-	skipChain := o.certChainTrustVerified(certDigest, eventTS)
-	if skipChain {
+	chainOfTrustVerifiedExternally := o.certChainTrustVerified(certDigest, eventTS)
+	if chainOfTrustVerifiedExternally {
 		diag.DefaultWorkflowMonitoring.AttestationCertCacheLookup(ctx, diag.CertCacheHit)
 	} else {
 		diag.DefaultWorkflowMonitoring.AttestationCertCacheLookup(ctx, diag.CertCacheMiss)
@@ -359,7 +359,7 @@ func (o *orchestrator) verifyChildInboxAttestation(
 		ClaimedOutput:                  output,
 		ClaimedFailure:                 failure,
 		Signer:                         o.signer,
-		ChainOfTrustVerifiedExternally: skipChain,
+		ChainOfTrustVerifiedExternally: chainOfTrustVerifiedExternally,
 	})
 	if err != nil {
 		return fmt.Errorf("child attestation verification failed for task %d: %w", taskID, err)
@@ -369,7 +369,7 @@ func (o *orchestrator) verifyChildInboxAttestation(
 			payload.GetTerminalStatus(), expectedStatus)
 	}
 
-	if !skipChain {
+	if !chainOfTrustVerifiedExternally {
 		o.cacheCertChainTrust(certDigest, certDER)
 	}
 
@@ -394,8 +394,8 @@ func (o *orchestrator) verifyActivityInboxAttestation(
 	}
 
 	certDigest := historysigning.CertDigest(certDER)
-	skipChain := o.certChainTrustVerified(certDigest, eventTS)
-	if skipChain {
+	chainOfTrustVerifiedExternally := o.certChainTrustVerified(certDigest, eventTS)
+	if chainOfTrustVerifiedExternally {
 		diag.DefaultWorkflowMonitoring.AttestationCertCacheLookup(ctx, diag.CertCacheHit)
 	} else {
 		diag.DefaultWorkflowMonitoring.AttestationCertCacheLookup(ctx, diag.CertCacheMiss)
@@ -412,7 +412,7 @@ func (o *orchestrator) verifyActivityInboxAttestation(
 		ClaimedOutput:                  output,
 		ClaimedFailure:                 failure,
 		Signer:                         o.signer,
-		ChainOfTrustVerifiedExternally: skipChain,
+		ChainOfTrustVerifiedExternally: chainOfTrustVerifiedExternally,
 	})
 	if err != nil {
 		return fmt.Errorf("activity attestation verification failed for task %d: %w", taskID, err)
@@ -422,7 +422,7 @@ func (o *orchestrator) verifyActivityInboxAttestation(
 			payload.GetTerminalStatus(), expectedStatus)
 	}
 
-	if !skipChain {
+	if !chainOfTrustVerifiedExternally {
 		o.cacheCertChainTrust(certDigest, certDER)
 	}
 

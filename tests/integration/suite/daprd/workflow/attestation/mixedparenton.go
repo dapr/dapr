@@ -33,17 +33,10 @@ import (
 )
 
 func init() {
-	suite.Register(new(missing))
+	suite.Register(new(mixedParentOnChildOff))
 }
 
-// missing models a heterogeneous deployment: the parent daprd has history
-// signing enabled, but the child/activity daprd does NOT. When the child
-// app delivers a completion event without an attestation, the parent must
-// reject the event (not silently accept) — otherwise signing enablement
-// on the parent would be cosmetic. The workflow should fail to make
-// forward progress: the parent's inbox rejects each retry, and the task
-// stays pending.
-type missing struct {
+type mixedParentOnChildOff struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
 	sched  *scheduler.Scheduler
@@ -52,7 +45,7 @@ type missing struct {
 	db     *sqlite.SQLite
 }
 
-func (m *missing) Setup(t *testing.T) []framework.Option {
+func (m *mixedParentOnChildOff) Setup(t *testing.T) []framework.Option {
 	m.sentry = sentry.New(t)
 	m.db = sqlite.New(t,
 		sqlite.WithActorStateStore(true),
@@ -61,7 +54,6 @@ func (m *missing) Setup(t *testing.T) []framework.Option {
 	m.place = placement.New(t, placement.WithSentry(t, m.sentry))
 	m.sched = scheduler.New(t, scheduler.WithSentry(m.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 
-	// Parent: signing ON — will require attestations on inbound events.
 	m.parent = daprd.New(t,
 		daprd.WithAppID("attest-parent-on"),
 		daprd.WithSentry(t, m.sentry),
@@ -79,8 +71,6 @@ spec:
 `),
 	)
 
-	// Child: signing OFF — will deliver completion events without
-	// attestations.
 	m.child = daprd.New(t,
 		daprd.WithAppID("attest-child-off"),
 		daprd.WithSentry(t, m.sentry),
@@ -94,12 +84,12 @@ spec:
 	}
 }
 
-func (m *missing) Run(t *testing.T, ctx context.Context) {
+func (m *mixedParentOnChildOff) Run(t *testing.T, ctx context.Context) {
 	m.parent.WaitUntilRunning(t, ctx)
 	m.child.WaitUntilRunning(t, ctx)
 
 	regParent := dworkflow.NewRegistry()
-	regParent.AddWorkflowN("attest-missing-parent", func(ctx *dworkflow.WorkflowContext) (any, error) {
+	regParent.AddWorkflowN("attest-mixed-parent-on", func(ctx *dworkflow.WorkflowContext) (any, error) {
 		return nil, ctx.CallActivity("remote-noop",
 			dworkflow.WithActivityAppID(m.child.AppID()),
 		).Await(nil)
@@ -116,19 +106,13 @@ func (m *missing) Run(t *testing.T, ctx context.Context) {
 	clientChild := dworkflow.NewClient(m.child.GRPCConn(t, ctx))
 	require.NoError(t, clientChild.StartWorker(ctx, regChild))
 
-	id, err := clientParent.ScheduleWorkflow(ctx, "attest-missing-parent")
+	id, err := clientParent.ScheduleWorkflow(ctx, "attest-mixed-parent-on")
 	require.NoError(t, err)
 
-	// Wait a generous window for the workflow to fail-to-progress. The
-	// parent's ingestion keeps rejecting the unattested activity result,
-	// so the workflow stays RUNNING and never reaches COMPLETED.
-	time.Sleep(5 * time.Second)
+	assert.Never(t, func() bool {
+		meta, err := clientParent.FetchWorkflowMetadata(ctx, id)
+		return err == nil && meta.RuntimeStatus == dworkflow.StatusCompleted
+	}, 5*time.Second, 10*time.Millisecond)
 
-	meta, err := clientParent.FetchWorkflowMetadata(ctx, id)
-	require.NoError(t, err)
-	assert.NotEqual(t, dworkflow.StatusCompleted, meta.RuntimeStatus,
-		"workflow must not complete when the parent rejects unattested activity results")
-
-	// No attestations were ever absorbed — ext-sigcert must remain empty.
 	assert.Equal(t, 0, fworkflow.ExtSigCertCount(t, ctx, m.db, id))
 }
