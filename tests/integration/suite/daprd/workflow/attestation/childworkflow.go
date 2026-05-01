@@ -124,6 +124,6 @@ func (c *childworkflow) Run(t *testing.T, ctx context.Context) {
 	fworkflow.AssertSignerCertificateStripped(t, ctx, c.db, id)
 
 	certs := fworkflow.ReadExtSigCerts(t, ctx, c.db, id)
-	require.NotEmpty(t, certs)
+	require.Len(t, certs, 1)
 	assert.Equal(t, payload.GetSignerCertDigest(), certs[0].GetDigest())
 }

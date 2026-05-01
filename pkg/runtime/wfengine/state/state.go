@@ -784,7 +784,10 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	for i := range metadata.GetExternalSigningCertificateLength() {
 		key = getMultiEntryKeyName(extSigCertKeyPrefix, i)
 		if bulkRes[key] == nil {
-			return nil, wferrors.NewVerificationError(
+			if hasTamperMarker(wState) {
+				return wState, nil
+			}
+			return wState, wferrors.NewVerificationError(
 				fmt.Errorf("external signing certificate state key '%s' declared in metadata but not found in state store — possible tampering", key),
 			)
 		}
@@ -797,7 +800,10 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		loadedExtCerts = append(loadedExtCerts, &ext)
 	}
 	if err = wState.setLoadedExternalCerts(loadedExtCerts); err != nil {
-		return nil, wferrors.NewVerificationError(err)
+		if hasTamperMarker(wState) {
+			return wState, nil
+		}
+		return wState, wferrors.NewVerificationError(err)
 	}
 
 	for i := range metadata.GetSignatureLength() {

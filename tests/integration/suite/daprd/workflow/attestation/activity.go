@@ -129,12 +129,12 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 	// lives in ext-sigcert.
 	fworkflow.AssertSignerCertificateStripped(t, ctx, a.db, id)
 
-	// At least one ext-sigcert entry should exist (the activity executor's
+	// Exactly one ext-sigcert entry should exist (the activity executor's
 	// cert). In a same-app workflow it is the same SPIFFE identity as the
 	// parent's own sigcert, but content-addressed foreign storage is a
 	// separate table by design.
 	certs := fworkflow.ReadExtSigCerts(t, ctx, a.db, id)
-	require.NotEmpty(t, certs)
+	require.Len(t, certs, 1)
 	assert.Equal(t, payload.GetSignerCertDigest(), certs[0].GetDigest(),
 		"ext-sigcert digest must match the attestation's signerCertDigest")
 }
