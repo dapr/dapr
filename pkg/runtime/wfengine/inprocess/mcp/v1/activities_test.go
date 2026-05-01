@@ -15,10 +15,14 @@ package mcp
 
 import (
 	"context"
+	"sort"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
@@ -220,4 +224,161 @@ func TestMakeCallToolActivity_SPIFFEAuth(t *testing.T) {
 	require.True(t, ok)
 	assert.False(t, callResult.GetIsError(), "expected success result")
 	assert.Equal(t, "SVID svid-12345", capturedHeader)
+}
+
+func realisticToolDef(t *testing.T, name string) *wfv1.MCPToolDefinition {
+	t.Helper()
+	desc := "tool " + name
+	schemaMap := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"city": map[string]any{
+				"type":        "string",
+				"description": "City to query",
+				"minLength":   float64(1),
+				"maxLength":   float64(120),
+			},
+			"limit": map[string]any{
+				"type":    "integer",
+				"minimum": float64(1),
+				"maximum": float64(100),
+				"default": float64(10),
+			},
+			"include": map[string]any{
+				"type":  "array",
+				"items": map[string]any{"type": "string"},
+			},
+			"options": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"unit":   map[string]any{"type": "string", "enum": []any{"metric", "imperial"}},
+					"detail": map[string]any{"type": "boolean", "default": false},
+				},
+			},
+		},
+		"required":             []any{"city"},
+		"additionalProperties": false,
+	}
+	schema, err := structpb.NewStruct(schemaMap)
+	require.NoError(t, err, "structpb.NewStruct must accept a realistic schema")
+	return &wfv1.MCPToolDefinition{
+		Name:        name,
+		Description: &desc,
+		InputSchema: schema,
+	}
+}
+
+// TestMakeListToolsActivity_CacheHitSingleCall is a sanity check that the
+// cache-hit branch returns the cached tools verbatim and the response
+// round-trips through protojson without error.
+func TestMakeListToolsActivity_CacheHitSingleCall(t *testing.T) {
+	listCache := &toolListCache{}
+	listCache.store([]*wfv1.MCPToolDefinition{
+		realisticToolDef(t, "alpha"),
+		realisticToolDef(t, "beta"),
+	})
+
+	server := namedServer("myserver", mcpserverapi.MCPServerSpec{
+		Endpoint: mcpserverapi.MCPEndpoint{
+			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: "http://unused.invalid"},
+		},
+	})
+
+	// Holder is intentionally not connected — cache-hit branch must return
+	// before touching it.
+	activity := makeListToolsActivity(server, &SessionHolder{}, &toolSchemaCache{}, listCache)
+
+	res, err := activity(&fakeActivityContext{ctx: context.Background()})
+	require.NoError(t, err)
+	listResp, ok := res.(*wfv1.ListMCPToolsResponse)
+	require.True(t, ok, "expected *ListMCPToolsResponse, got %T", res)
+	require.Len(t, listResp.GetTools(), 2)
+
+	bytes, err := protojson.Marshal(listResp)
+	require.NoError(t, err, "protojson.Marshal of cache-hit response must succeed")
+
+	var rt wfv1.ListMCPToolsResponse
+	require.NoError(t, protojson.Unmarshal(bytes, &rt), "protojson round-trip must succeed")
+	require.Len(t, rt.GetTools(), 2)
+}
+
+// TestMakeListToolsActivity_CacheHitConcurrentRoundTrip exercises the
+// cache-hit path under concurrent load with a full protojson marshal /
+// unmarshal round-trip per call.
+func TestMakeListToolsActivity_CacheHitConcurrentRoundTrip(t *testing.T) {
+	listCache := &toolListCache{}
+	const toolCount = 8
+	cached := make([]*wfv1.MCPToolDefinition, toolCount)
+	expectedNames := make([]string, toolCount)
+	for i := range cached {
+		name := "tool" + string(rune('a'+i))
+		cached[i] = realisticToolDef(t, name)
+		expectedNames[i] = name
+	}
+	sort.Strings(expectedNames)
+	listCache.store(cached)
+
+	server := namedServer("myserver", mcpserverapi.MCPServerSpec{
+		Endpoint: mcpserverapi.MCPEndpoint{
+			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: "http://unused.invalid"},
+		},
+	})
+
+	activity := makeListToolsActivity(server, &SessionHolder{}, &toolSchemaCache{}, listCache)
+
+	const workers = 32
+	const callsPerWorker = 10
+
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	errs := make(chan error, workers*callsPerWorker)
+
+	for w := 0; w < workers; w++ {
+		go func() {
+			defer wg.Done()
+			for c := 0; c < callsPerWorker; c++ {
+				res, err := activity(&fakeActivityContext{ctx: context.Background()})
+				if err != nil {
+					errs <- err
+					return
+				}
+				resp, ok := res.(*wfv1.ListMCPToolsResponse)
+				if !ok {
+					errs <- assert.AnError
+					return
+				}
+				bytes, err := protojson.Marshal(resp)
+				if err != nil {
+					errs <- err
+					return
+				}
+				var rt wfv1.ListMCPToolsResponse
+				if err := protojson.Unmarshal(bytes, &rt); err != nil {
+					errs <- err
+					return
+				}
+				if got := len(rt.GetTools()); got != toolCount {
+					errs <- assert.AnError
+					return
+				}
+				gotNames := make([]string, len(rt.GetTools()))
+				for i, td := range rt.GetTools() {
+					gotNames[i] = td.GetName()
+				}
+				sort.Strings(gotNames)
+				for i := range gotNames {
+					if gotNames[i] != expectedNames[i] {
+						errs <- assert.AnError
+						return
+					}
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		t.Fatalf("concurrent cache-hit call failed: %v", err)
+	}
 }

@@ -21,8 +21,11 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/components-contrib/workflows"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess"
+	"github.com/dapr/dapr/pkg/security"
 )
 
 type Fake struct {
@@ -114,3 +117,13 @@ func (f *Fake) ActivateMCPServers(ctx context.Context) error {
 func (f *Fake) InProcessExecutor() *inprocess.Executor {
 	return nil
 }
+
+func (f *Fake) EnsureActorsRegistered(_ context.Context) error {
+	return nil
+}
+
+func (f *Fake) RegisterMCPServer(_ context.Context, _ mcpserverapi.MCPServer, _ *compstore.ComponentStore, _ security.Handler) error {
+	return nil
+}
+
+func (f *Fake) UnregisterMCPServer(_ string) {}

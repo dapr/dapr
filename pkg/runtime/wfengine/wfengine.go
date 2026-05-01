@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -35,6 +36,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/wfregistrar"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/kit/crypto/spiffe/signer"
@@ -49,6 +51,10 @@ var (
 const inprocessWorkflowNamePrefix = "dapr.internal."
 
 type Interface interface {
+	// Registrar is the consumer-side surface used by the processor to register
+	// internal workflows for managed resources (MCPServers, etc.).
+	wfregistrar.Registrar
+
 	Run(context.Context) error
 	RegisterGrpcServer(*grpc.Server)
 	Client() workflows.Workflow
@@ -86,8 +92,15 @@ type engine struct {
 	appID             string
 	namespace         string
 	actors            actors.Interface
-	getWorkItemsCount *atomic.Int32
-	actorRegLock      *sync.Mutex
+	getWorkItemsCount atomic.Int32
+	// actorRegLock guards getWorkItemsCount transitions and actorsRegistered.
+	// Held by the GetWorkItems connect/disconnect callbacks and by
+	// EnsureActorsRegistered so all three paths can read and write the
+	// registration state without racing.
+	actorRegLock sync.Mutex
+	// actorsRegistered tracks whether workflow actor types are currently
+	// registered with placement. Guarded by actorRegLock.
+	actorsRegistered bool
 
 	worker        backend.TaskHubWorker
 	backend       *backendactors.Actors
@@ -131,39 +144,49 @@ func New(opts Options) (Interface, error) {
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 	})
 
-	var (
-		getWorkItemsCount atomic.Int32
-		lock              sync.Mutex
-	)
-
 	inProcessExec := opts.InProcessExecutor
 	if inProcessExec == nil {
 		return nil, errors.New("InProcessExecutor is required")
 	}
 
+	wfe := &engine{
+		appID:         opts.AppID,
+		namespace:     opts.Namespace,
+		actors:        opts.Actors,
+		backend:       abackend,
+		inProcessExec: inProcessExec,
+		compStore:     opts.ComponentStore,
+	}
+
 	grpcExec, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
 		backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
-			lock.Lock()
-			defer lock.Unlock()
+			wfe.actorRegLock.Lock()
+			defer wfe.actorRegLock.Unlock()
 
-			if getWorkItemsCount.Add(1) == 1 {
+			if wfe.getWorkItemsCount.Add(1) == 1 && !wfe.actorsRegistered {
 				log.Debug("Registering workflow actors")
-				return abackend.RegisterActors(ctx)
+				if err := abackend.RegisterActors(ctx); err != nil {
+					return err
+				}
+				wfe.actorsRegistered = true
 			}
 
 			return nil
 		}),
 		backend.WithOnGetWorkItemsDisconnectCallback(func(ctx context.Context) error {
-			lock.Lock()
-			defer lock.Unlock()
+			wfe.actorRegLock.Lock()
+			defer wfe.actorRegLock.Unlock()
 
 			if ctx.Err() != nil {
 				ctx = context.Background()
 			}
 
-			if getWorkItemsCount.Add(-1) == 0 {
+			if wfe.getWorkItemsCount.Add(-1) == 0 && wfe.actorsRegistered {
 				log.Debug("Unregistering workflow actors")
-				return abackend.UnRegisterActors(ctx)
+				if err := abackend.UnRegisterActors(ctx); err != nil {
+					return err
+				}
+				wfe.actorsRegistered = false
 			}
 
 			return nil
@@ -206,36 +229,44 @@ func New(opts Options) (Interface, error) {
 	)
 	worker := backend.NewTaskHubWorker(abackend, oworker, aworker, wfBackendLogger)
 
-	return &engine{
-		appID:                opts.AppID,
-		namespace:            opts.Namespace,
-		actors:               opts.Actors,
-		worker:               worker,
-		backend:              abackend,
-		inProcessExec:        inProcessExec,
-		compStore:            opts.ComponentStore,
-		registerGrpcServerFn: registerGrpcServerFn,
-		getWorkItemsCount:    &getWorkItemsCount,
-		actorRegLock:         &lock,
-		client: &client{
-			logger: wfBackendLogger,
-			client: backend.NewTaskHubClient(abackend),
-		},
-	}, nil
+	wfe.worker = worker
+	wfe.registerGrpcServerFn = registerGrpcServerFn
+	wfe.client = &client{
+		logger: wfBackendLogger,
+		client: backend.NewTaskHubClient(abackend),
+	}
+	return wfe, nil
 }
 
 // EnsureActorsRegistered registers workflow actor types with placement if they
-// haven't been registered yet. This is needed when internal workflows (e.g. MCP)
+// haven't been registered yet. This is needed when internal workflows
 // are used before any external SDK worker connects via GetWorkItems.
 func (wfe *engine) EnsureActorsRegistered(ctx context.Context) error {
 	wfe.actorRegLock.Lock()
 	defer wfe.actorRegLock.Unlock()
 
-	if wfe.getWorkItemsCount.Load() == 0 {
-		log.Debug("Registering workflow actors for internal workflows")
-		return wfe.backend.RegisterActors(ctx)
+	if wfe.actorsRegistered {
+		return nil
 	}
+
+	log.Debug("Registering workflow actors for internal workflows")
+	if err := wfe.backend.RegisterActors(ctx); err != nil {
+		return err
+	}
+	wfe.actorsRegistered = true
 	return nil
+}
+
+// RegisterMCPServer forwards to the in-process executor.
+// Implements processor.internalWorkflowRegistrar.
+func (wfe *engine) RegisterMCPServer(ctx context.Context, server mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) error {
+	return wfe.inProcessExec.RegisterMCPServer(ctx, server, store, sec)
+}
+
+// UnregisterMCPServer forwards to the in-process executor.
+// Implements processor.internalWorkflowRegistrar.
+func (wfe *engine) UnregisterMCPServer(serverName string) {
+	wfe.inProcessExec.UnregisterMCPServer(serverName)
 }
 
 func (wfe *engine) InProcessExecutor() *inprocess.Executor {
@@ -256,15 +287,6 @@ func (wfe *engine) Run(ctx context.Context) error {
 	// Start the Durable Task worker, which will allow workflows to be scheduled and execute.
 	if err := wfe.worker.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start workflow engine: %w", err)
-	}
-
-	// If internal workflows are registered (e.g. MCP), ensure actor types are
-	// registered with placement immediately so they can execute before any
-	// external SDK worker connects via GetWorkItems.
-	if len(wfe.compStore.ListMCPServers()) > 0 {
-		if err := wfe.EnsureActorsRegistered(ctx); err != nil {
-			return fmt.Errorf("failed to pre-register workflow actors: %w", err)
-		}
 	}
 
 	log.Info("Workflow engine started")

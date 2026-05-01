@@ -285,7 +285,6 @@ func newDaprRuntime(ctx context.Context,
 		Adapter:                         pubsubAdapter,
 		AdapterStreamer:                 pubsubAdapterStreamer,
 		Reporter:                        runtimeConfig.registry.Reporter(),
-		InProcessWorkflows:              inProcessExec,
 	})
 
 	var reloader *hotreload.Reloader
@@ -342,6 +341,9 @@ func newDaprRuntime(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+
+	// Install the wfengine as the processor's internal workflow registrar.
+	processor.SetInternalWorkflows(wfe)
 
 	jobsManager, err := scheduler.New(scheduler.Options{
 		Namespace:        namespace,

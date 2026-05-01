@@ -84,7 +84,8 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 		p.compStore.AddMCPServer(s)
 		log.Infof("MCPServer loaded: %s", s.LogName())
 
-		if p.internalWorkflows == nil {
+		registrar := p.getInternalWorkflows()
+		if registrar == nil {
 			continue
 		}
 
@@ -104,7 +105,13 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 					log.Errorf("MCPServer %q: panic during workflow registration: %v", s.Name, r)
 				}
 			}()
-			if err := p.internalWorkflows.RegisterMCPServer(ctx, s, p.compStore, p.security); err != nil {
+			// Ensure workflow actor types are registered with placement before
+			// any internal workflow becomes invokable.
+			if err := registrar.EnsureActorsRegistered(ctx); err != nil {
+				log.Warnf("MCPServer %q: failed to register workflow actors: %s", s.Name, err)
+				return
+			}
+			if err := registrar.RegisterMCPServer(ctx, s, p.compStore, p.security); err != nil {
 				log.Warnf("MCPServer %q: failed to register workflows: %s", s.Name, err)
 			}
 		}(s)
@@ -117,8 +124,8 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 // DeleteMCPServer removes an MCPServer from the store and unregisters its workflows.
 func (p *Processor) DeleteMCPServer(serverName string) {
 	p.compStore.DeleteMCPServer(serverName)
-	if p.internalWorkflows != nil {
-		p.internalWorkflows.UnregisterMCPServer(serverName)
+	if registrar := p.getInternalWorkflows(); registrar != nil {
+		registrar.UnregisterMCPServer(serverName)
 	}
 }
 

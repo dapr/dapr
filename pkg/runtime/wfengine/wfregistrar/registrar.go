@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package processor
+package wfregistrar
 
 import (
 	"context"
@@ -21,10 +21,16 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 )
 
-// internalWorkflowRegistrar registers internal workflows for managed resources.
-// Satisfied by *inprocess.Executor. Future managed workflow subsystems add
-// methods here (e.g. RegisterAgentServer).
-type internalWorkflowRegistrar interface {
+// Registrar registers internal workflows for managed resources. Implemented by
+// the workflow engine; consumed by the processor.
+//
+// EnsureActorsRegistered must be called before the first internal workflow can
+// be invoked. It registers workflow actor types with placement so the
+// dapr.internal.<subsystem>.* workflows can resolve their backing actors.
+//
+// Future managed workflow subsystems add methods here (e.g. RegisterAgentServer).
+type Registrar interface {
+	EnsureActorsRegistered(ctx context.Context) error
 	RegisterMCPServer(ctx context.Context, server mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) error
 	UnregisterMCPServer(serverName string)
 }

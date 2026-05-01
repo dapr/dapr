@@ -47,6 +47,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/subscriber"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/wfregistrar"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
@@ -110,10 +111,6 @@ type Options struct {
 
 	// ProgrammaticSubscriptionEnabled indicates whether programmatic subscriptions are active.
 	ProgrammaticSubscriptionEnabled bool
-
-	// InProcessWorkflows registers workflows for in-process workflow executor.
-	// When nil, internal workflow registration is skipped.
-	InProcessWorkflows internalWorkflowRegistrar
 }
 
 // Processor manages the lifecycle of all components categories.
@@ -146,9 +143,25 @@ type Processor struct {
 	shutdown atomic.Bool
 	closedCh chan struct{}
 
-	// internalWorkflows is set after the workflow engine is created.
-	// Used to register internal workflows when resources are loaded or hot-reloaded.
-	internalWorkflows internalWorkflowRegistrar
+	// internalWorkflows is set after the workflow engine is created via
+	// SetInternalWorkflows. Used to register internal workflows when resources
+	// are loaded or hot-reloaded.
+	internalWorkflowsLock sync.RWMutex
+	internalWorkflows     wfregistrar.Registrar
+}
+
+// SetInternalWorkflows installs the internal workflow wfregistrar.
+func (p *Processor) SetInternalWorkflows(r wfregistrar.Registrar) {
+	p.internalWorkflowsLock.Lock()
+	defer p.internalWorkflowsLock.Unlock()
+	p.internalWorkflows = r
+}
+
+// getInternalWorkflows returns the wfregistrar, or nil if it has not been set yet.
+func (p *Processor) getInternalWorkflows() wfregistrar.Registrar {
+	p.internalWorkflowsLock.RLock()
+	defer p.internalWorkflowsLock.RUnlock()
+	return p.internalWorkflows
 }
 
 func New(opts Options) *Processor {
@@ -214,7 +227,6 @@ func New(opts Options) *Processor {
 		security:                   opts.Security,
 		subscriber:                 subscriber,
 		reporter:                   reporter,
-		internalWorkflows:          opts.InProcessWorkflows,
 		managers: map[components.Category]manager{
 			components.CategoryBindings: binding,
 			components.CategoryConfiguration: configuration.New(configuration.Options{
