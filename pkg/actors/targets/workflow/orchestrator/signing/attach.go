@@ -80,3 +80,61 @@ func (s *Signing) AttachChildCompletionAttestation(ctx context.Context, evt *bac
 	diag.DefaultWorkflowMonitoring.AttestationGenerated(ctx, diag.AttestationKindChild, diag.StatusSuccess)
 	return nil
 }
+
+// ActivityAttestationParams are the executor-side inputs needed to build
+// an ActivityCompletionAttestation. Resolved by the activity actor from
+// the inbound TaskScheduledEvent before calling
+// AttachActivityCompletionAttestation.
+type ActivityAttestationParams struct {
+	ParentInstanceID string
+	ActivityName     string
+	Input            *wrapperspb.StringValue
+}
+
+// AttachActivityCompletionAttestation builds an
+// ActivityCompletionAttestation signed by this executor's identity and
+// attaches it (plus the signer's certificate chain as a companion) to the
+// outbound TaskCompleted or TaskFailed event. Other event types are
+// ignored. No-op if Signer is nil.
+func (s *Signing) AttachActivityCompletionAttestation(ctx context.Context, evt *backend.HistoryEvent, params ActivityAttestationParams) error {
+	if s.Signer == nil {
+		return nil
+	}
+
+	in := historysigning.ActivityAttestationInput{
+		ParentInstanceId: params.ParentInstanceID,
+		ActivityName:     params.ActivityName,
+		Input:            params.Input,
+	}
+
+	switch body := evt.GetEventType().(type) {
+	case *protos.HistoryEvent_TaskCompleted:
+		in.ParentTaskScheduledId = body.TaskCompleted.GetTaskScheduledId()
+		in.Output = body.TaskCompleted.GetResult()
+		in.TerminalStatus = protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_COMPLETED
+	case *protos.HistoryEvent_TaskFailed:
+		in.ParentTaskScheduledId = body.TaskFailed.GetTaskScheduledId()
+		in.FailureDetails = body.TaskFailed.GetFailureDetails()
+		in.TerminalStatus = protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_FAILED
+	default:
+		return nil
+	}
+
+	att, certChainDER, err := historysigning.BuildActivityAttestation(s.Signer, in)
+	if err != nil {
+		diag.DefaultWorkflowMonitoring.AttestationGenerated(ctx, diag.AttestationKindActivity, diag.StatusFailed)
+		return fmt.Errorf("failed to build activity attestation: %w", err)
+	}
+
+	switch body := evt.GetEventType().(type) {
+	case *protos.HistoryEvent_TaskCompleted:
+		body.TaskCompleted.Attestation = att
+		body.TaskCompleted.SignerCertificate = certChainDER
+	case *protos.HistoryEvent_TaskFailed:
+		body.TaskFailed.Attestation = att
+		body.TaskFailed.SignerCertificate = certChainDER
+	}
+
+	diag.DefaultWorkflowMonitoring.AttestationGenerated(ctx, diag.AttestationKindActivity, diag.StatusSuccess)
+	return nil
+}

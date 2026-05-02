@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/kit/crypto/spiffe/signer"
 )
@@ -71,7 +72,7 @@ type factory struct {
 	placement              placement.Interface
 	actorTypeBuilder       *common.ActorTypeBuilder
 	workflowAccessPolicies *workflowacl.Holder
-	signer                 *signer.Signer
+	signing                *signing.Signing
 
 	scheduler todo.ActivityScheduler
 
@@ -105,7 +106,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
-	return &factory{
+	f := &factory{
 		appID:                  opts.AppID,
 		actorType:              opts.ActivityActorType,
 		router:                 router,
@@ -114,12 +115,15 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		placement:              placement,
 		workflowActorType:      opts.WorkflowActorType,
 		actorTypeBuilder:       opts.ActorTypeBuilder,
-		state:                  state,
 		workflowAccessPolicies: opts.WorkflowAccessPolicies,
-		signer:                 opts.Signer,
+		state:                  state,
 
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
-	}, nil
+	}
+	if opts.Signer != nil {
+		f.signing = &signing.Signing{Signer: opts.Signer}
+	}
+	return f, nil
 }
 
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
