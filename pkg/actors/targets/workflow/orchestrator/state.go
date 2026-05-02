@@ -100,7 +100,40 @@ func (o *orchestrator) tombstoneTamperedState(ctx context.Context, opts wfengine
 	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, failed.CustomStatus, failed.History)
 	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(failed))
 
+	if o.eventSink != nil {
+		o.eventSink(o.ometa)
+	}
+	o.notifyStreams()
+
 	return failed, o.ometa, nil
+}
+
+// notifyStreams pushes the current cached metadata to all registered
+// runtime-status stream watchers and removes any whose condition fired or
+// whose callback errored. Safe to call with no streams registered.
+func (o *orchestrator) notifyStreams() {
+	if len(o.streamFns) == 0 {
+		return
+	}
+	arstate, err := anypb.New(o.ometa)
+	if err != nil {
+		return
+	}
+	streamReq := &internalsv1pb.InternalInvokeResponse{
+		Status:  &internalsv1pb.Status{Code: http.StatusOK},
+		Message: &commonv1pb.InvokeResponse{Data: arstate},
+	}
+	for idx, stream := range o.streamFns {
+		if stream.done.Load() {
+			delete(o.streamFns, idx)
+			continue
+		}
+		ok, ferr := stream.fn(streamReq)
+		if ferr != nil || ok {
+			stream.errCh <- ferr
+			delete(o.streamFns, idx)
+		}
+	}
 }
 
 // signAndSaveState signs any newly added history events and then persists
@@ -138,32 +171,7 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 	if o.eventSink != nil {
 		o.eventSink(o.ometa)
 	}
-
-	if len(o.streamFns) > 0 {
-		arstate, err := anypb.New(o.ometa)
-		if err != nil {
-			return err
-		}
-
-		streamReq := &internalsv1pb.InternalInvokeResponse{
-			Status:  &internalsv1pb.Status{Code: http.StatusOK},
-			Message: &commonv1pb.InvokeResponse{Data: arstate},
-		}
-
-		var ok bool
-		for idx, stream := range o.streamFns {
-			if stream.done.Load() {
-				delete(o.streamFns, idx)
-				continue
-			}
-
-			ok, err = stream.fn(streamReq)
-			if err != nil || ok {
-				stream.errCh <- err
-				delete(o.streamFns, idx)
-			}
-		}
-	}
+	o.notifyStreams()
 
 	return nil
 }
