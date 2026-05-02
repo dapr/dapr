@@ -71,6 +71,10 @@ type Options struct {
 	StateTTLEnabled    bool
 	MaxRequestBodySize int
 	Mode               modes.DaprMode
+
+	// DisseminationTimeout is the daprd-side timeout for a placement
+	// LOCK -> UPDATE -> UNLOCK round.
+	DisseminationTimeout time.Duration
 }
 
 type InitOptions struct {
@@ -111,8 +115,9 @@ type actors struct {
 	healthz            healthz.Healthz
 	compStore          *compstore.ComponentStore
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
-	stateTTLEnabled    bool
-	maxRequestBodySize int
+	stateTTLEnabled      bool
+	maxRequestBodySize   int
+	disseminationTimeout time.Duration
 
 	reminders       reminders.Interface
 	table           table.Interface
@@ -147,25 +152,26 @@ func New(opts Options) Interface {
 	}
 
 	return &actors{
-		appID:              opts.AppID,
-		namespace:          opts.Namespace,
-		port:               opts.Port,
-		placementAddresses: opts.PlacementAddresses,
-		healthEndpoint:     opts.HealthEndpoint,
-		resiliency:         opts.Resiliency,
-		security:           opts.Security,
-		compStore:          opts.CompStore,
-		stateTTLEnabled:    opts.StateTTLEnabled,
-		clock:              clock.RealClock{},
-		disabled:           &disabled,
-		healthz:            opts.Healthz,
-		readyCh:            make(chan struct{}),
-		closedCh:           make(chan struct{}),
-		initDoneCh:         make(chan struct{}),
-		registerDoneCh:     make(chan struct{}),
-		maxRequestBodySize: opts.MaxRequestBodySize,
-		mode:               opts.Mode,
-		reentrancyStore:    reentrancystore.New(),
+		appID:                opts.AppID,
+		namespace:            opts.Namespace,
+		port:                 opts.Port,
+		placementAddresses:   opts.PlacementAddresses,
+		healthEndpoint:       opts.HealthEndpoint,
+		resiliency:           opts.Resiliency,
+		security:             opts.Security,
+		compStore:            opts.CompStore,
+		stateTTLEnabled:      opts.StateTTLEnabled,
+		clock:                clock.RealClock{},
+		disabled:             &disabled,
+		healthz:              opts.Healthz,
+		readyCh:              make(chan struct{}),
+		closedCh:             make(chan struct{}),
+		initDoneCh:           make(chan struct{}),
+		registerDoneCh:       make(chan struct{}),
+		maxRequestBodySize:   opts.MaxRequestBodySize,
+		mode:                 opts.Mode,
+		disseminationTimeout: opts.DisseminationTimeout,
+		reentrancyStore:      reentrancystore.New(),
 	}
 }
 
@@ -197,16 +203,17 @@ func (a *actors) Init(opts InitOptions) error {
 
 	var err error
 	a.placement, err = placement.New(placement.Options{
-		AppID:     a.appID,
-		Addresses: a.placementAddresses,
-		Security:  a.security,
-		Table:     a.table,
-		Namespace: a.namespace,
-		Hostname:  opts.Hostname,
-		Port:      a.port,
-		Healthz:   a.healthz,
-		Mode:      a.mode,
-		Scheduler: opts.SchedulerReloader,
+		AppID:                a.appID,
+		Addresses:            a.placementAddresses,
+		Security:             a.security,
+		Table:                a.table,
+		Namespace:            a.namespace,
+		Hostname:             opts.Hostname,
+		Port:                 a.port,
+		Healthz:              a.healthz,
+		Mode:                 a.mode,
+		Scheduler:            opts.SchedulerReloader,
+		DisseminationTimeout: a.disseminationTimeout,
 	})
 	if err != nil {
 		return err

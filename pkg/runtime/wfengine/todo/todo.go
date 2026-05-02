@@ -24,15 +24,17 @@ const (
 	// TODO: @joshvanl: remove
 	CallbackChannelProperty = "dapr.callback"
 
-	CreateWorkflowInstanceMethod = "CreateWorkflowInstance"
-	AddWorkflowEventMethod       = "AddWorkflowEvent"
-	PurgeWorkflowStateMethod     = "PurgeWorkflowState"
-	WaitForRuntimeStatus         = "WaitForRuntimeStatus"
-	ForkWorkflowHistory          = "ForkWorkflowHistory"
-	RerunWorkflowInstance        = "RerunWorkflowInstance"
+	CreateWorkflowInstanceMethod      = "CreateWorkflowInstance"
+	AddWorkflowEventMethod            = "AddWorkflowEvent"
+	PurgeWorkflowStateMethod          = "PurgeWorkflowState"
+	RecursivePurgeWorkflowStateMethod = "RecursivePurgeWorkflowState"
+	WaitForRuntimeStatus              = "WaitForRuntimeStatus"
+	ForkWorkflowHistory               = "ForkWorkflowHistory"
+	RerunWorkflowInstance             = "RerunWorkflowInstance"
 
 	MetadataActivityReminderDueTime = "dueTime"
 	MetadataPurgeRetentionCall      = "PurgeRetentionCall"
+	MetadataPurgeForce              = "PurgeForce"
 
 	ActorTypePrefix = "dapr.internal."
 )
