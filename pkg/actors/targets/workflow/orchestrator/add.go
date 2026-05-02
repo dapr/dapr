@@ -38,6 +38,21 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 		return api.ErrInstanceNotFound
 	}
 
+	// On a tombstoned workflow (cold-store load tamper or attestation
+	// verification failure - identified by the unsigned tamper marker at
+	// the end of history) reject inbound activity / child-workflow
+	// completion events with ErrInstanceNotFound. The activity actor
+	// treats ErrInstanceNotFound as terminal and stops re-delivering, so
+	// we don't loop the parent's actor lock against a workflow that will
+	// never accept the result. Other event types (RaiseEvent, terminate,
+	// etc.) still flow through.
+	isCompletion := e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil ||
+		e.GetChildWorkflowInstanceCompleted() != nil || e.GetChildWorkflowInstanceFailed() != nil
+	if isCompletion && state.HasTamperMarker() {
+		log.Debugf("Workflow actor '%s': dropping completion event for tombstoned workflow", o.actorID)
+		return api.ErrInstanceNotFound
+	}
+
 	// Only reject user events when the workflow is stalled.
 	if o.rstate.Stalled != nil && e.GetEventRaised() != nil {
 		return api.ErrStalled
@@ -53,7 +68,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// stored form is cert-free. On any verification failure the workflow is
 	// tombstoned. No-op when signing is disabled.
 	if o.signing != nil {
-		if verr := o.signing.VerifyInboxAttestation(ctx, state, &e); verr != nil {
+		if verr := o.signing.VerifyInboxAttestation(ctx, state, e); verr != nil {
 			log.Warnf("Workflow actor '%s': attestation verification failed, tombstoning workflow: %s", o.actorID, verr)
 			opts := wfenginestate.Options{
 				AppID:             o.appID,
@@ -64,7 +79,13 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 			if _, _, terr := o.tombstoneTamperedState(ctx, opts, state, verr); terr != nil {
 				return terr
 			}
-			return verr
+			// Return ErrInstanceNotFound rather than the verification
+			// error so the activity actor on the sender side recognizes
+			// the workflow as gone and stops re-executing the activity.
+			// The reason for tombstoning is preserved in the workflow's
+			// FailureDetails (errorType=DAPR_WORKFLOW_HISTORY_TAMPERED,
+			// errorMessage=verr.Error()) for callers polling metadata.
+			return api.ErrInstanceNotFound
 		}
 	}
 

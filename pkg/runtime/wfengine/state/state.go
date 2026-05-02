@@ -949,6 +949,14 @@ func (s *State) IsCompleted() bool {
 	return s != nil && len(s.History) > 0 && s.History[len(s.History)-1].GetExecutionCompleted() != nil
 }
 
+// HasTamperMarker reports whether the workflow has been terminally failed by
+// tamper detection (cold-store load tamper or attestation verification
+// failure). True implies IsCompleted; the converse does not hold (a normally
+// completed workflow returns false).
+func (s *State) HasTamperMarker() bool {
+	return hasTamperMarker(s)
+}
+
 // MarkAsTamperFailed appends a single terminal ExecutionCompleted(FAILED) event to
 // the workflow's history to record that its persisted state was detected as
 // tampered. The original (untrusted) history, inbox, signatures, and certs
