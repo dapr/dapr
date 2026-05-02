@@ -104,7 +104,7 @@ func ActivityCompletionAttestations(t *testing.T, ctx context.Context, db *sqlit
 
 // AssertSignerCertificateStripped verifies that no completion events in the
 // given workflow instance's history still carry a signerCertificate
-// companion field. The companion is wire-only — it must always be cleared
+// companion field. The companion is wire-only - it must always be cleared
 // before persisting the event so the cert lives only once in ext-sigcert.
 func AssertSignerCertificateStripped(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string) {
 	t.Helper()

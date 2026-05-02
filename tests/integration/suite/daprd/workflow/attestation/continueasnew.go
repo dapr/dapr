@@ -76,8 +76,6 @@ spec:
 func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 	c.daprd.WaitUntilRunning(t, ctx)
 
-	// Each iteration calls one activity, then continues as new. On the
-	// final iteration (no more CAN) it returns.
 	reg := dworkflow.NewRegistry()
 	reg.AddWorkflowN("attest-can", func(ctx *dworkflow.WorkflowContext) (any, error) {
 		var iteration int
@@ -106,12 +104,8 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	// After ContinueAsNew, only attestations from the final iteration's
-	// single activity call remain in history. Likewise ext-sigcert must be
-	// cleared and repopulated only with the final iteration's foreign cert.
 	atts := fworkflow.ActivityCompletionAttestations(t, ctx, c.db, id)
-	assert.Len(t, atts, 1, "final CAN iteration should hold exactly one activity attestation")
+	assert.Len(t, atts, 1)
 
-	assert.Equal(t, 1, fworkflow.ExtSigCertCount(t, ctx, c.db, id),
-		"ext-sigcert table must be cleared and repopulated on ContinueAsNew")
+	assert.Equal(t, 1, fworkflow.ExtSigCertCount(t, ctx, c.db, id))
 }

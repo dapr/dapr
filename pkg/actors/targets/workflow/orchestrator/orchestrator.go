@@ -23,6 +23,7 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/backend"
@@ -50,16 +51,7 @@ type orchestrator struct {
 	streamFns map[int64]*streamFn
 	streamIDx int64
 
-	// certVerifyCache caches chain-of-trust validity windows for foreign
-	// signer certs seen on inbound attestations. Keyed by cert digest
-	// (SHA-256(certDER) as string bytes); value is a certValidityWindow
-	// carrying the leaf's NotBefore/NotAfter. Hot-loop benefit: a
-	// workflow calling the same foreign activity/child N times pays
-	// chain-of-trust parsing + verification once instead of N times.
-	// Scoped to this orchestrator instance only — on actor deactivation
-	// the cache is dropped, so no stale trust anchor decisions are held
-	// across Sentry CA rotation.
-	certVerifyCache sync.Map
+	signing *signing.Signing
 }
 
 type streamFn struct {
@@ -135,6 +127,9 @@ func (o *orchestrator) Deactivate(ctx context.Context) error {
 		stream.errCh <- targeterrors.NewClosed("deactivated")
 	}
 	clear(o.streamFns)
+	if o.signing != nil {
+		o.signing.Reset()
+	}
 	o.wg.Wait()
 	orchestratorCache.Put(o)
 

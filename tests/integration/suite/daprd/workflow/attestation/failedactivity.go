@@ -81,7 +81,6 @@ func (f *failedactivity) Run(t *testing.T, ctx context.Context) {
 
 	reg := dworkflow.NewRegistry()
 	reg.AddWorkflowN("attest-fail-activity-wf", func(ctx *dworkflow.WorkflowContext) (any, error) {
-		// Swallow the activity error so the workflow reaches COMPLETED.
 		_ = ctx.CallActivity("blowup").Await(nil)
 		return "wf-done", nil
 	})

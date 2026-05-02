@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -168,6 +169,16 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 
 	if or.streamFns == nil {
 		or.streamFns = make(map[int64]*streamFn)
+	}
+
+	if f.signer != nil {
+		or.signing = &signing.Signing{
+			Signer:            f.signer,
+			ActorID:           actorID,
+			ActorType:         f.actorType,
+			ActivityActorType: f.activityActorType,
+			Reminders:         f.reminders,
+		}
 	}
 
 	// Reset the cache state to force a reload from the state store

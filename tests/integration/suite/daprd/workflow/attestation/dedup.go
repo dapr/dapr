@@ -101,11 +101,7 @@ func (d *dedup) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	atts := fworkflow.ActivityCompletionAttestations(t, ctx, d.db, id)
-	assert.Len(t, atts, callCount, "expected one attestation per activity invocation")
+	assert.Len(t, atts, callCount)
 
-	// The activity executor is the same SPIFFE identity across all
-	// invocations, so ext-sigcert must hold exactly one entry regardless
-	// of how many attestations reference it.
-	assert.Equal(t, 1, fworkflow.ExtSigCertCount(t, ctx, d.db, id),
-		"ext-sigcert must dedup by digest: %d invocations should collapse to 1 entry", callCount)
+	assert.Equal(t, 1, fworkflow.ExtSigCertCount(t, ctx, d.db, id))
 }

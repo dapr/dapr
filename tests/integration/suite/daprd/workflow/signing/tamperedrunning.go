@@ -139,5 +139,5 @@ func (tr *tamperedrunning) Run(tt *testing.T, ctx context.Context) {
 		}
 		assert.Equal(c, wferrors.ErrorTypeHistoryTampered, meta.FailureDetails.GetErrorType())
 		assert.Contains(c, meta.FailureDetails.GetErrorMessage(), "signature verification failed")
-	}, time.Second*10, time.Millisecond*100)
+	}, time.Second*10, time.Millisecond*10)
 }

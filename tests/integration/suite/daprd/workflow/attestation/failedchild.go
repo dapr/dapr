@@ -81,8 +81,6 @@ func (f *failedchild) Run(t *testing.T, ctx context.Context) {
 
 	reg := dworkflow.NewRegistry()
 	reg.AddWorkflowN("attest-fail-parent", func(ctx *dworkflow.WorkflowContext) (any, error) {
-		// Parent deliberately swallows the child's error so the parent
-		// reaches COMPLETED and we can inspect its signed history.
 		_ = ctx.CallChildWorkflow("attest-fail-child").Await(nil)
 		return "parent-done", nil
 	})
@@ -99,8 +97,6 @@ func (f *failedchild) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	// The parent's stored history must hold exactly one child attestation
-	// with FAILED status.
 	atts := fworkflow.ChildCompletionAttestations(t, ctx, f.db, id)
 	require.Len(t, atts, 1)
 
@@ -108,8 +104,7 @@ func (f *failedchild) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, proto.Unmarshal(atts[0].GetPayload(), &payload))
 
 	assert.Equal(t, protos.TerminalStatus_TERMINAL_STATUS_FAILED, payload.GetTerminalStatus())
-	assert.NotEmpty(t, payload.GetIoDigest(),
-		"failed attestation must still commit to an ioDigest (covering the canonical failure serialization)")
+	assert.NotEmpty(t, payload.GetIoDigest())
 
 	fworkflow.AssertSignerCertificateStripped(t, ctx, f.db, id)
 }

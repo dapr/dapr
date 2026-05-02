@@ -223,6 +223,19 @@ func (s *State) AddToHistory(e *backend.HistoryEvent) {
 	s.historyAddedCount++
 }
 
+// FindHistoryEventByID returns the history event whose EventId matches
+// id, or nil if no such event exists. Linear scan; small constant
+// number of TaskScheduled / ChildWorkflowInstanceCreated lookups per
+// inbound completion event.
+func (s *State) FindHistoryEventByID(id int32) *backend.HistoryEvent {
+	for _, e := range s.History {
+		if e.GetEventId() == id {
+			return e
+		}
+	}
+	return nil
+}
+
 func (s *State) AddSigningCertificate(cert *backend.SigningCertificate) {
 	s.SigningCertificates = append(s.SigningCertificates, cert)
 	s.signingCertificatesAddedCount++
@@ -234,19 +247,19 @@ func (s *State) AddSigningCertificate(cert *backend.SigningCertificate) {
 // produces exactly one stored entry and returns the same index both times.
 // digest must be the SHA-256 of certDER (the caller typically already has
 // this value from historysigning.CertDigest). The caller is responsible
-// for verifying that the digest matches certDER before calling — this
-// method does not re-hash on the hot path. Panics if digest is not 32
-// bytes, which indicates a programming error.
-func (s *State) AddExternalCert(digest []byte, certDER []byte) uint64 {
+// for verifying that the digest matches certDER before calling - this
+// method does not re-hash on the hot path. Returns an error if digest is
+// not 32 bytes.
+func (s *State) AddExternalCert(digest []byte, certDER []byte) (uint64, error) {
 	if len(digest) != sha256.Size {
-		panic(fmt.Sprintf("AddExternalCert: digest must be %d bytes, got %d", sha256.Size, len(digest)))
+		return 0, fmt.Errorf("AddExternalCert: digest must be %d bytes, got %d", sha256.Size, len(digest))
 	}
 	if s.externalCertDigestIndex == nil {
 		s.externalCertDigestIndex = make(map[string]uint64, len(s.ExternalSigningCertificates)+1)
 	}
 	key := string(digest)
 	if idx, ok := s.externalCertDigestIndex[key]; ok {
-		return idx
+		return idx, nil
 	}
 	idx := uint64(len(s.ExternalSigningCertificates))
 	// Defensive-copy both byte slices so the stored entry does not alias
@@ -264,7 +277,7 @@ func (s *State) AddExternalCert(digest []byte, certDER []byte) uint64 {
 	})
 	s.externalSigningCertificatesAddedCount++
 	s.externalCertDigestIndex[key] = idx
-	return idx
+	return idx, nil
 }
 
 // LookupExternalCert returns the ExternalSigningCertificate whose digest
@@ -285,7 +298,7 @@ func (s *State) LookupExternalCert(digest []byte) (*backend.ExternalSigningCerti
 // setLoadedExternalCerts populates the external signing certificate table
 // and rebuilds the digest→index map from entries freshly loaded from the
 // state store. Each entry's stored digest must match sha256 of its
-// certificate bytes — otherwise the state store has been tampered with
+// certificate bytes - otherwise the state store has been tampered with
 // (or bit-rotted) since the entry was written.
 //
 // This is the load-time counterpart to AddExternalCert: AddExternalCert
@@ -788,7 +801,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 				return wState, nil
 			}
 			return wState, wferrors.NewVerificationError(
-				fmt.Errorf("external signing certificate state key '%s' declared in metadata but not found in state store — possible tampering", key),
+				fmt.Errorf("external signing certificate state key '%s' declared in metadata but not found in state store - possible tampering", key),
 			)
 		}
 
@@ -926,6 +939,14 @@ func IsTamperMarker(e *backend.HistoryEvent) bool {
 // that are already terminally failed.
 func hasTamperMarker(s *State) bool {
 	return s != nil && len(s.History) > 0 && IsTamperMarker(s.History[len(s.History)-1])
+}
+
+// IsCompleted reports whether the workflow's history ends in any
+// ExecutionCompleted event - the runtime's terminal marker. Operates on
+// stored state directly so callers that have a *State but not yet a
+// runtime state (e.g. mid-load decisions) can check terminality.
+func (s *State) IsCompleted() bool {
+	return s != nil && len(s.History) > 0 && s.History[len(s.History)-1].GetExecutionCompleted() != nil
 }
 
 // MarkAsTamperFailed appends a single terminal ExecutionCompleted(FAILED) event to

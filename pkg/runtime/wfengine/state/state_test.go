@@ -727,7 +727,8 @@ func TestAddExternalCert_AppendsAndTracks(t *testing.T) {
 
 	s := NewState(testOpts())
 
-	idx := s.AddExternalCert(extCertDigest(0xAA), []byte("cert-bytes-A"))
+	idx, err := s.AddExternalCert(extCertDigest(0xAA), []byte("cert-bytes-A"))
+	require.NoError(t, err)
 	assert.Equal(t, uint64(0), idx)
 	require.Len(t, s.ExternalSigningCertificates, 1)
 	assert.Equal(t, []byte("cert-bytes-A"), s.ExternalSigningCertificates[0].GetCertificate())
@@ -740,10 +741,14 @@ func TestAddExternalCert_DedupsByDigest(t *testing.T) {
 
 	s := NewState(testOpts())
 
-	i1 := s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
-	i2 := s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
-	i3 := s.AddExternalCert(extCertDigest(0xBB), []byte("cert-B"))
-	i4 := s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
+	i1, err := s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
+	require.NoError(t, err)
+	i2, err := s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
+	require.NoError(t, err)
+	i3, err := s.AddExternalCert(extCertDigest(0xBB), []byte("cert-B"))
+	require.NoError(t, err)
+	i4, err := s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
+	require.NoError(t, err)
 
 	assert.Equal(t, uint64(0), i1)
 	assert.Equal(t, uint64(0), i2, "same digest must return existing index")
@@ -754,14 +759,13 @@ func TestAddExternalCert_DedupsByDigest(t *testing.T) {
 	assert.Equal(t, 2, s.externalSigningCertificatesAddedCount, "counter must reflect unique additions only")
 }
 
-func TestAddExternalCert_PanicsOnWrongDigestLength(t *testing.T) {
+func TestAddExternalCert_ErrorsOnWrongDigestLength(t *testing.T) {
 	t.Parallel()
 
 	s := NewState(testOpts())
 
-	assert.Panics(t, func() {
-		s.AddExternalCert([]byte{1, 2, 3}, []byte("cert"))
-	})
+	_, err := s.AddExternalCert([]byte{1, 2, 3}, []byte("cert"))
+	require.Error(t, err)
 }
 
 func TestAddExternalCert_CopiesDigestBytes(t *testing.T) {
@@ -770,7 +774,8 @@ func TestAddExternalCert_CopiesDigestBytes(t *testing.T) {
 	s := NewState(testOpts())
 
 	digest := extCertDigest(0xCC)
-	s.AddExternalCert(digest, []byte("cert"))
+	_, err := s.AddExternalCert(digest, []byte("cert"))
+	require.NoError(t, err)
 
 	// Mutating the caller's buffer must not change stored state.
 	digest[0] = 0xFF
@@ -784,7 +789,8 @@ func TestAddExternalCert_CopiesCertificateBytes(t *testing.T) {
 	s := NewState(testOpts())
 
 	cert := []byte("cert-original")
-	s.AddExternalCert(extCertDigest(0xDD), cert)
+	_, err := s.AddExternalCert(extCertDigest(0xDD), cert)
+	require.NoError(t, err)
 
 	// Mutating the caller's cert buffer must not affect stored state.
 	cert[0] = 'X'
@@ -797,8 +803,10 @@ func TestLookupExternalCert_Found(t *testing.T) {
 
 	s := NewState(testOpts())
 
-	s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
-	s.AddExternalCert(extCertDigest(0xBB), []byte("cert-B"))
+	_, err := s.AddExternalCert(extCertDigest(0xAA), []byte("cert-A"))
+	require.NoError(t, err)
+	_, err = s.AddExternalCert(extCertDigest(0xBB), []byte("cert-B"))
+	require.NoError(t, err)
 
 	cert, idx, ok := s.LookupExternalCert(extCertDigest(0xBB))
 	require.True(t, ok)
@@ -963,7 +971,7 @@ func TestSetLoadedExternalCerts_RejectsDigestMismatch(t *testing.T) {
 
 	s := NewState(testOpts())
 
-	// Stored digest does not match sha256(cert) — simulates state store
+	// Stored digest does not match sha256(cert) - simulates state store
 	// tampering or corruption.
 	err := s.setLoadedExternalCerts([]*backend.ExternalSigningCertificate{
 		{Digest: extCertDigest(0xAA), Certificate: []byte("cert-A")},
@@ -971,7 +979,7 @@ func TestSetLoadedExternalCerts_RejectsDigestMismatch(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stored digest does not match")
 
-	// State is left in a clean state — no partial population.
+	// State is left in a clean state - no partial population.
 	assert.Empty(t, s.ExternalSigningCertificates)
 	assert.Nil(t, s.externalCertDigestIndex)
 }

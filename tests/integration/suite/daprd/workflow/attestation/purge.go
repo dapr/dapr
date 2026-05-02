@@ -96,12 +96,9 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	// Sanity: the attestation flow populated ext-sigcert before purge.
-	require.GreaterOrEqual(t, fworkflow.ExtSigCertCount(t, ctx, p.db, id), 1,
-		"expected at least one ext-sigcert entry before purge")
+	require.GreaterOrEqual(t, fworkflow.ExtSigCertCount(t, ctx, p.db, id), 1)
 
 	require.NoError(t, client.PurgeWorkflowState(ctx, id))
 
-	assert.Equal(t, 0, fworkflow.ExtSigCertCount(t, ctx, p.db, id),
-		"ext-sigcert entries must be swept by instance purge")
+	assert.Equal(t, 0, fworkflow.ExtSigCertCount(t, ctx, p.db, id))
 }

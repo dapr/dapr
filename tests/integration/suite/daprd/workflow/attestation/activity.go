@@ -103,13 +103,10 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	// Signed history must still verify end to end.
 	fworkflow.VerifySignatureChain(t, ctx, a.db, id, a.sentry.CABundle().X509.TrustAnchors)
 
-	// Exactly one activity completion attestation should be stored, with
-	// the correct parent binding and terminal status.
 	atts := fworkflow.ActivityCompletionAttestations(t, ctx, a.db, id)
-	require.Len(t, atts, 1, "expected one activity completion attestation")
+	require.Len(t, atts, 1)
 
 	var payload protos.ActivityCompletionAttestationPayload
 	require.NoError(t, proto.Unmarshal(atts[0].GetPayload(), &payload))
@@ -121,16 +118,9 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 	assert.NotEmpty(t, payload.GetIoDigest())
 	assert.NotEmpty(t, payload.GetSignerCertDigest())
 
-	// Companion signer cert must be stripped from the stored event — it
-	// lives in ext-sigcert.
 	fworkflow.AssertSignerCertificateStripped(t, ctx, a.db, id)
 
-	// Exactly one ext-sigcert entry should exist (the activity executor's
-	// cert). In a same-app workflow it is the same SPIFFE identity as the
-	// parent's own sigcert, but content-addressed foreign storage is a
-	// separate table by design.
 	certs := fworkflow.ReadExtSigCerts(t, ctx, a.db, id)
 	require.Len(t, certs, 1)
-	assert.Equal(t, payload.GetSignerCertDigest(), certs[0].GetDigest(),
-		"ext-sigcert digest must match the attestation's signerCertDigest")
+	assert.Equal(t, payload.GetSignerCertDigest(), certs[0].GetDigest())
 }

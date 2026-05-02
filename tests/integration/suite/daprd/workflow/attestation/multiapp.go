@@ -129,25 +129,19 @@ func (m *multiapp) Run(t *testing.T, ctx context.Context) {
 	_, err = client1.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	// Parent's signed history still verifies.
 	fworkflow.VerifySignatureChain(t, ctx, m.db, id, m.sentry.CABundle().X509.TrustAnchors)
-	// Parent's own signing certs belong to the parent app.
 	fworkflow.VerifyCertAppID(t, ctx, m.db, id, "attest-parent-app")
 
-	// The activity attestation carries the child app's SPIFFE identity.
 	atts := fworkflow.ActivityCompletionAttestations(t, ctx, m.db, id)
 	require.Len(t, atts, 1)
 
 	var payload protos.ActivityCompletionAttestationPayload
 	require.NoError(t, proto.Unmarshal(atts[0].GetPayload(), &payload))
 
-	// ext-sigcert should hold exactly the child app's cert (foreign
-	// identity). The digest on the entry matches the signed payload.
 	certs := fworkflow.ReadExtSigCerts(t, ctx, m.db, id)
 	require.Len(t, certs, 1)
 	assert.Equal(t, payload.GetSignerCertDigest(), certs[0].GetDigest())
 
-	// Inspect the SPIFFE ID embedded in the child app's cert.
 	parsed, err := x509.ParseCertificates(certs[0].GetCertificate())
 	require.NoError(t, err)
 	require.NotEmpty(t, parsed)
@@ -155,8 +149,5 @@ func (m *multiapp) Run(t *testing.T, ctx context.Context) {
 	sid, err := spiffeid.FromURI(parsed[0].URIs[0])
 	require.NoError(t, err)
 
-	// The ext-sigcert identity is the child app (not the parent): this is
-	// the whole point of the attestation — cross-identity provenance.
-	assert.True(t, strings.HasSuffix(sid.Path(), "/attest-child-app"),
-		"ext-sigcert SPIFFE ID should be the child app's, got %q", sid.String())
+	assert.True(t, strings.HasSuffix(sid.Path(), "/attest-child-app"))
 }

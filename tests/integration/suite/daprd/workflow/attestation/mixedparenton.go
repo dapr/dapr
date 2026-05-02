@@ -16,16 +16,16 @@ package attestation
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procworkflow "github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -70,10 +70,10 @@ func (m *mixedParentOnChildOff) Run(t *testing.T, ctx context.Context) {
 	id, err := parentClient.ScheduleNewWorkflow(ctx, "attest-mixed-parent-on")
 	require.NoError(t, err)
 
-	assert.Never(t, func() bool {
-		meta, err := parentClient.FetchWorkflowMetadata(ctx, id)
-		return err == nil && api.WorkflowMetadataIsComplete(meta)
-	}, 5*time.Second, 10*time.Millisecond)
+	meta, err := parentClient.WaitForWorkflowCompletion(ctx, id)
+	require.NoError(t, err)
+	assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, meta.GetRuntimeStatus())
+	assert.Equal(t, errors.ErrorTypeHistoryTampered, meta.GetFailureDetails().GetErrorType())
 
 	assert.Equal(t, 0, fworkflow.ExtSigCertCount(t, ctx, m.workflow.DB(), string(id)))
 }

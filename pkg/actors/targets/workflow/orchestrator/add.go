@@ -16,6 +16,7 @@ package orchestrator
 import (
 	"context"
 
+	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -46,14 +47,25 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 		o.activityResultAwaited.CompareAndSwap(true, false)
 	}
 
-	// Verify any attestation on the incoming event against the signed
-	// history and Sentry trust anchors, then absorb the signer certificate
-	// into the ext-sigcert table and strip the companion cert from the
-	// event so the stored form is cert-free. No-op when signing is
-	// disabled.
-	if err := o.verifyInboxAttestation(ctx, state, &e); err != nil {
-		log.Warnf("Workflow actor '%s': rejecting inbox event with invalid attestation: %s", o.actorID, err)
-		return err
+	// Verify any attestation on the incoming event against the signed history
+	// and Sentry trust anchors, then absorb the signer certificate into the
+	// ext-sigcert table and strip the companion cert from the event so the
+	// stored form is cert-free. On any verification failure the workflow is
+	// tombstoned. No-op when signing is disabled.
+	if o.signing != nil {
+		if verr := o.signing.VerifyInboxAttestation(ctx, state, &e); verr != nil {
+			log.Warnf("Workflow actor '%s': attestation verification failed, tombstoning workflow: %s", o.actorID, verr)
+			opts := wfenginestate.Options{
+				AppID:             o.appID,
+				WorkflowActorType: o.actorType,
+				ActivityActorType: o.activityActorType,
+				Signer:            o.signer,
+			}
+			if _, _, terr := o.tombstoneTamperedState(ctx, opts, state, verr); terr != nil {
+				return terr
+			}
+			return verr
+		}
 	}
 
 	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)
