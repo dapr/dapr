@@ -101,6 +101,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		Properties: make(map[string]any, 1),
 	}
 
+	wi.IncomingHistory = state.IncomingHistory
 	// Executing workflow code is a one-way operation. We must wait for the app code to report its completion, which
 	// will trigger this callback channel.
 	callback := make(chan bool, 1)
@@ -202,6 +203,13 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 				state.Generation++
 
+				// The engine carries the propagation chain across CAN by
+				// updating wi.IncomingHistory. Persist any change so the new
+				// generation observes the chain on its next run.
+				if wi.IncomingHistory != state.IncomingHistory {
+					state.SetIncomingHistory(wi.IncomingHistory)
+				}
+
 				if err = o.signAndSaveState(ctx, state); err != nil {
 					o.rstate = rstateSnapshot
 					return todo.RunCompletedFalse, err
@@ -234,6 +242,12 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	if rs.GetContinuedAsNew() {
 		log.Debugf("Workflow actor '%s': workflow with instanceId '%s' continued as new", o.actorID, wi.InstanceID)
 		state.Generation += 1
+		// The engine carries the propagation chain across CAN by updating
+		// wi.IncomingHistory. Persist any change so the new generation sees
+		// the chain on its next run.
+		if wi.IncomingHistory != state.IncomingHistory {
+			state.SetIncomingHistory(wi.IncomingHistory)
+		}
 	}
 
 	if !runtimestate.IsCompleted(rs) {
@@ -269,7 +283,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 
 	// Dispatch activities and messages, collecting failures.
-	activityResult := o.callActivities(ctx, pendingTasks, state)
+	activityResult := o.callActivities(ctx, pendingTasks, state, wi.OutgoingHistory)
 	addResult := o.callAddEventStateMessage(ctx, addWorkflows)
 	createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows)
 
