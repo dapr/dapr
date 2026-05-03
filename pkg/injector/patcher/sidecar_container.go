@@ -191,6 +191,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--dapr-block-shutdown-duration", *c.BlockShutdownDuration)
 	}
 
+	if c.ActorsDisseminateTimeout != nil {
+		args = append(args, "--actors-disseminate-timeout", *c.ActorsDisseminateTimeout)
+	}
+
 	if c.SchedulerAddress != nil {
 		args = append(args, "--scheduler-host-address", *c.SchedulerAddress)
 	} else if c.SchedulerEnabled {
@@ -310,6 +314,13 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 			PeriodSeconds:       c.SidecarLivenessProbePeriodSeconds,
 			FailureThreshold:    c.SidecarLivenessProbeThreshold,
 		},
+	}
+
+	// Native sidecar: set RestartPolicy to Always so Kubernetes treats
+	// this init container as a long-running sidecar (KEP-753).
+	if c.EnableNativeSidecar {
+		policy := corev1.ContainerRestartPolicyAlways
+		container.RestartPolicy = &policy
 	}
 
 	// If the pod contains any of the tolerations specified by the configuration,

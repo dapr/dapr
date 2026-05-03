@@ -39,13 +39,15 @@ var (
 type Event any
 
 type Claim struct {
-	Context context.Context
-	Cancel  context.CancelCauseFunc
+	ActorType string
+	Context   context.Context
+	Cancel    context.CancelCauseFunc
 }
 
 type Acquire struct {
-	Context context.Context
-	RespCh  chan *Claim
+	ActorType string
+	Context   context.Context
+	RespCh    chan *Claim
 }
 
 type releaseClaim struct {
@@ -56,6 +58,17 @@ type CloseLock struct {
 	Error                 error
 	Timeout               *time.Duration
 	DrainRebalancedActors *bool
+}
+
+// CancelTypes drains in-flight claims for the given set of actor types using
+// the same grace-period semantics as CloseLock, but does not terminate the
+// lock loop. Done is closed when the operation completes.
+type CancelTypes struct {
+	Types                 map[string]struct{}
+	Error                 error
+	Timeout               *time.Duration
+	DrainRebalancedActors *bool
+	Done                  chan struct{}
 }
 
 type lock struct {
@@ -79,6 +92,8 @@ func (l *lock) Handle(_ context.Context, event Event) error {
 		l.handleRelease(e)
 	case *CloseLock:
 		l.handleClose(e)
+	case *CancelTypes:
+		l.handleCancelTypes(e)
 	default:
 		panic(fmt.Sprintf("unknown lock event type: %T", e))
 	}
@@ -137,7 +152,8 @@ func (l *lock) handleAcquire(event *Acquire) {
 
 	ctx, cancel := context.WithCancelCause(event.Context)
 	claim := &Claim{
-		Context: ctx,
+		ActorType: event.ActorType,
+		Context:   ctx,
 		Cancel: func(err error) {
 			if done {
 				return
@@ -150,4 +166,52 @@ func (l *lock) handleAcquire(event *Acquire) {
 
 	l.acquires[idx] = claim
 	event.RespCh <- claim
+}
+
+// handleCancelTypes drains all in-flight claims whose ActorType is in the
+// requested set. Same grace-period semantics as handleClose but the lock
+// loop continues running after this returns. Done is closed when the
+// operation finishes so callers can wait synchronously.
+func (l *lock) handleCancelTypes(event *CancelTypes) {
+	defer close(event.Done)
+
+	if len(event.Types) == 0 {
+		return
+	}
+
+	matched := make([]*Claim, 0)
+	for _, claim := range l.acquires {
+		if _, ok := event.Types[claim.ActorType]; ok {
+			matched = append(matched, claim)
+		}
+	}
+	if len(matched) == 0 {
+		return
+	}
+
+	if event.DrainRebalancedActors != nil && !*event.DrainRebalancedActors {
+		for _, claim := range matched {
+			claim.Cancel(event.Error)
+		}
+		return
+	}
+
+	timeout := time.Second * 2
+	if event.Timeout != nil {
+		timeout = *event.Timeout
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	for _, claim := range matched {
+		select {
+		case <-claim.Context.Done():
+		case <-timer.C:
+			log.Errorf("Timed out waiting for actor in-flight lock claims to be released for rebalanced types, force cancelling remaining claims")
+			for _, claim := range matched {
+				claim.Cancel(event.Error)
+			}
+			return
+		}
+	}
 }
