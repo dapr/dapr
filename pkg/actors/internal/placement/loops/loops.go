@@ -94,8 +94,9 @@ type LockRequest struct {
 	*placebase
 	*dissbase
 	*lookupbase
-	Context  context.Context
-	Response chan<- *LockResponse
+	ActorType string
+	Context   context.Context
+	Response  chan<- *LockResponse
 }
 
 type LockResponse struct {

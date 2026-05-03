@@ -36,7 +36,8 @@ type Options struct {
 	KeepAliveTimeout  time.Duration
 	ReplicationFactor int64
 
-	DisseminateTimeout time.Duration
+	DisseminateTimeout        time.Duration
+	DisseminateCoalesceWindow time.Duration
 
 	Peers []peers.PeerInfo
 }
@@ -58,16 +59,17 @@ func New(opts Options) (*Placement, error) {
 	}
 
 	server := server.New(server.Options{
-		NodeID:             opts.NodeID,
-		Port:               opts.Port,
-		ListenAddress:      opts.ListenAddress,
-		Leadership:         leadership,
-		Security:           opts.Security,
-		Healthz:            opts.Healthz,
-		KeepAliveTime:      opts.KeepAliveTime,
-		KeepAliveTimeout:   opts.KeepAliveTimeout,
-		ReplicationFactor:  opts.ReplicationFactor,
-		DisseminateTimeout: opts.DisseminateTimeout,
+		NodeID:                    opts.NodeID,
+		Port:                      opts.Port,
+		ListenAddress:             opts.ListenAddress,
+		Leadership:                leadership,
+		Security:                  opts.Security,
+		Healthz:                   opts.Healthz,
+		KeepAliveTime:             opts.KeepAliveTime,
+		KeepAliveTimeout:          opts.KeepAliveTimeout,
+		ReplicationFactor:         opts.ReplicationFactor,
+		DisseminateTimeout:        opts.DisseminateTimeout,
+		DisseminateCoalesceWindow: opts.DisseminateCoalesceWindow,
 	})
 
 	return &Placement{

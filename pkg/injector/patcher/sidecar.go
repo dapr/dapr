@@ -112,6 +112,7 @@ type SidecarConfig struct {
 	AppHealthProbeTimeout               int32   `annotation:"dapr.io/app-health-probe-timeout" default:"500"` // In milliseconds
 	AppHealthThreshold                  int32   `annotation:"dapr.io/app-health-threshold" default:"3"`
 	PlacementAddress                    string  `annotation:"dapr.io/placement-host-address"`
+	ActorsDisseminateTimeout            *string `annotation:"dapr.io/actors-disseminate-timeout"`
 	SchedulerAddress                    *string `annotation:"dapr.io/scheduler-host-address"`
 	SchedulerEnabled                    bool
 	PluggableComponents                 string  `annotation:"dapr.io/pluggable-components"`
@@ -122,6 +123,7 @@ type SidecarConfig struct {
 	SentryRequestJwtAudiences           string  `annotation:"dapr.io/sentry-request-jwt-audiences"`
 	DaprServiceAnnotations              string  `annotation:"dapr.io/sidecar-svc-annotations"`
 	DisableInitEndpoint                 *string `annotation:"dapr.io/disable-init-endpoints"`
+	EnableNativeSidecar                 bool    `annotation:"dapr.io/enable-native-sidecar"`
 
 	pod *corev1.Pod
 }
