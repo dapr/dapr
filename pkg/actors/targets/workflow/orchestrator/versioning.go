@@ -68,9 +68,12 @@ func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.S
 	hasFilteredNewEvents := len(rs.NewEvents) > 0
 	rs.NewEvents = []*protos.HistoryEvent{}
 
-	lastEvent := rs.OldEvents[len(rs.OldEvents)-1]
 	hasStalledEvent := false
-	if execStalledEvent := lastEvent.GetExecutionStalled(); execStalledEvent == nil || execStalledEvent.GetDescription() != description {
+	var lastStalledEvent *protos.ExecutionStalledEvent
+	if n := len(rs.OldEvents); n > 0 {
+		lastStalledEvent = rs.OldEvents[n-1].GetExecutionStalled()
+	}
+	if lastStalledEvent == nil || lastStalledEvent.GetDescription() != description {
 		hasStalledEvent = true
 		_ = runtimestate.AddEvent(rs, &protos.HistoryEvent{
 			EventId:   -1,

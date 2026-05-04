@@ -63,6 +63,11 @@ type Options struct {
 
 	EnableClusteredDeployment       bool
 	WorkflowsRemoteActivityReminder bool
+
+	// MaxRequestBodySize is the gRPC server max message size in bytes. The
+	// orchestrator uses it to detect and gracefully stall workflows whose
+	// history payload would exceed the GetWorkItems stream limit.
+	MaxRequestBodySize int
 }
 
 type engine struct {
@@ -86,13 +91,14 @@ func New(opts Options) Interface {
 
 	// If no backend was initialized by the manager, create a backend backed by actors
 	abackend := backendactors.New(backendactors.Options{
-		AppID:           opts.AppID,
-		Namespace:       opts.Namespace,
-		Actors:          opts.Actors,
-		Resiliency:      opts.Resiliency,
-		EventSink:       opts.EventSink,
-		ComponentStore:  opts.ComponentStore,
-		RetentionPolicy: retPolicy,
+		AppID:              opts.AppID,
+		Namespace:          opts.Namespace,
+		Actors:             opts.Actors,
+		Resiliency:         opts.Resiliency,
+		EventSink:          opts.EventSink,
+		ComponentStore:     opts.ComponentStore,
+		RetentionPolicy:    retPolicy,
+		MaxRequestBodySize: opts.MaxRequestBodySize,
 
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,

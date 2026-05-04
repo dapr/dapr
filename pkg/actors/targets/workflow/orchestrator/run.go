@@ -96,6 +96,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		Properties: make(map[string]any, 1),
 	}
 
+	if reason, description, oversize := o.workflowPayloadOversize(state); oversize {
+		return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs, reason, description)
+	}
+
 	// Executing workflow code is a one-way operation. We must wait for the app code to report its completion, which
 	// will trigger this callback channel.
 	callback := make(chan bool, 1)
@@ -270,6 +274,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	dispatchErr := errors.Join(activityResult.err, addResult.err, createResult.err)
 	if dispatchErr != nil {
+		if errors.Is(dispatchErr, errPayloadSizeExceeded) {
+			return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs,
+				protos.StalledReason_PAYLOAD_SIZE_EXCEEDED, dispatchErr.Error())
+		}
 		if len(state.History) == 0 && (hasRemoteTasks(pendingTasks) || hasRemoteMessages(createWorkflows)) {
 			// Save state without the events that failed to dispatch so the
 			// workflow transitions to RUNNING. Successfully dispatched items

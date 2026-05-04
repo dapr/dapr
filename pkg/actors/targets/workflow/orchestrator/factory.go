@@ -53,6 +53,11 @@ type Options struct {
 	EventSink        EventSink
 	ActorTypeBuilder *common.ActorTypeBuilder
 	RetentionPolicy  *config.WorkflowStateRetentionPolicy
+
+	// MaxRequestBodySize is the gRPC server max message size in bytes. The
+	// orchestrator stalls workflows whose history payload would exceed this
+	// limit on the GetWorkItems stream.
+	MaxRequestBodySize int
 }
 
 type factory struct {
@@ -61,14 +66,15 @@ type factory struct {
 	activityActorType  string
 	retentionActorType string
 
-	resiliency       resiliency.Provider
-	router           router.Interface
-	reminders        reminders.Interface
-	actorState       state.Interface
-	placement        placement.Interface
-	eventSink        EventSink
-	actorTypeBuilder *common.ActorTypeBuilder
-	retentionPolicy  *config.WorkflowStateRetentionPolicy
+	resiliency         resiliency.Provider
+	router             router.Interface
+	reminders          reminders.Interface
+	actorState         state.Interface
+	placement          placement.Interface
+	eventSink          EventSink
+	actorTypeBuilder   *common.ActorTypeBuilder
+	retentionPolicy    *config.WorkflowStateRetentionPolicy
+	maxRequestBodySize int
 
 	scheduler todo.WorkflowScheduler
 
@@ -119,6 +125,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		actorTypeBuilder:   opts.ActorTypeBuilder,
 		placement:          placement,
 		retentionPolicy:    opts.RetentionPolicy,
+		maxRequestBodySize: opts.MaxRequestBodySize,
 		scheduler:          opts.Scheduler,
 		deactivateCh:       deactivateCh,
 	}, nil
