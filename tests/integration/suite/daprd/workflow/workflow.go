@@ -20,6 +20,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/basic"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/continueasnew"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/dedup"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/disk"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/externalevent"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/get"

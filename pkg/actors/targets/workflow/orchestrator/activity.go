@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -43,6 +44,14 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 
 	var result dispatchResult
 	for _, e := range es {
+		// Don't redispatch activities whose resolution is already in history
+		// or the inbox; the activity actor would just produce another
+		// completion and grow the inbox.
+		if dedup.IsTaskAlreadyResolved(e, state.History, state.Inbox) {
+			log.Debugf("Workflow actor '%s': skipping dispatch of '%s::%d' - resolution already present", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
+			continue
+		}
+
 		err := o.callActivity(ctx, e, dueTime, state.Generation, outgoingHistory[e.GetEventId()])
 		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
