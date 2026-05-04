@@ -134,11 +134,12 @@ func (m *multireplica) Run(t *testing.T, ctx context.Context) {
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Cycle through replicas. Each iteration: kill current, create new
-	// (same app ID, new SVID cert), send event, wait for it to be
-	// processed (signature count increases).
+	// (same app ID, new SVID cert), send event, wait for the new replica
+	// to sign and persist its own cert (so the cert table grows).
 	currentDaprd := m.daprd1
 	for i := 1; i < totalReplicas; i++ {
 		prevSigCount := fworkflow.SignatureCount(t, ctx, m.db, id)
+		prevCertCount := fworkflow.CertificateCount(t, ctx, m.db, id)
 		currentDaprd.Kill(t)
 
 		newDaprd := m.newDaprd(t)
@@ -151,10 +152,12 @@ func (m *multireplica) Run(t *testing.T, ctx context.Context) {
 
 		require.NoError(t, newClient.RaiseEvent(ctx, id, fmt.Sprintf("event-%d", i)))
 
-		// Wait for the new replica to process the event and sign it.
+		// Wait for the new replica to process the event, sign it, and persist its
+		// cert.
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Greater(c, fworkflow.SignatureCount(t, ctx, m.db, id), prevSigCount)
-		}, 10*time.Second, 100*time.Millisecond)
+			assert.Greater(c, fworkflow.CertificateCount(t, ctx, m.db, id), prevCertCount)
+		}, 20*time.Second, 100*time.Millisecond)
 
 		currentDaprd = newDaprd
 	}
