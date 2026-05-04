@@ -59,17 +59,6 @@ func (d *deny) Setup(t *testing.T) []framework.Option {
 	d.sched = scheduler.New(t, scheduler.WithSentry(d.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 	d.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: wfaclconfig
-spec:
-  features:
-  - name: WorkflowAccessPolicy
-    enabled: true`), 0o600))
-
 	policy := []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
@@ -94,7 +83,6 @@ spec:
 	d.caller = daprd.New(t,
 		daprd.WithAppID("wfacl-caller"),
 		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourceFiles(d.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(d.place.Address()),
 		daprd.WithSchedulerAddresses(d.sched.Address()),
@@ -103,7 +91,6 @@ spec:
 	d.target = daprd.New(t,
 		daprd.WithAppID("wfacl-target"),
 		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(targetResDir),
 		daprd.WithResourceFiles(d.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(d.place.Address()),
