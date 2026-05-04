@@ -310,6 +310,7 @@ func newDaprRuntime(ctx context.Context,
 		EnableClusteredDeployment:       globalConfig.IsFeatureEnabled(config.WorkflowsClusteredDeployment),
 		WorkflowsRemoteActivityReminder: globalConfig.IsFeatureEnabled(config.WorkflowsRemoteActivityReminder),
 		ComponentStore:                  compStore,
+		MaxRequestBodySize:              runtimeConfig.maxRequestBodySize,
 	})
 
 	jobsManager, err := scheduler.New(scheduler.Options{

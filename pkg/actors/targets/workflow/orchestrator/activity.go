@@ -61,6 +61,10 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		return nil
 	}
 
+	if err := o.activityPayloadOversize(e, e); err != nil {
+		return err
+	}
+
 	var eventData []byte
 	eventData, err := proto.Marshal(e)
 	if err != nil {

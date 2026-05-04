@@ -518,3 +518,11 @@ func (d *Daprd) Restart(t *testing.T, ctx context.Context) {
 	d.exec = clone
 	d.exec.Run(t, ctx)
 }
+
+// ReplaceArg sets `--<flag>=<value>` on the daprd command line for the next
+// Run/Restart, replacing any existing occurrence of that flag. Existing args
+// remain in place, so this is safe to call between Kill and Restart.
+func (d *Daprd) ReplaceArg(t *testing.T, flag, value string) {
+	t.Helper()
+	d.exec.ReplaceArg(t, flag, value)
+}
