@@ -61,17 +61,6 @@ func (p *partialauthbypass) Setup(t *testing.T) []framework.Option {
 	p.sched = scheduler.New(t, scheduler.WithSentry(p.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 	p.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: wfaclconfig
-spec:
-  features:
-  - name: WorkflowAccessPolicy
-    enabled: true`), 0o600))
-
 	// partialauth-caller has a specific allow plus a specific deny.
 	// Pre-fix: IsCallerKnown returned true (any allow) and non-subject methods
 	// like AddWorkflowEvent / PurgeWorkflowState bypassed the per-name deny.
@@ -108,7 +97,6 @@ spec:
 	p.target = daprd.New(t,
 		daprd.WithAppID("partialauth-target"),
 		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(targetResDir),
 		daprd.WithResourceFiles(p.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(p.place.Address()),
@@ -118,7 +106,6 @@ spec:
 	p.partial = daprd.New(t,
 		daprd.WithAppID("partialauth-caller"),
 		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourceFiles(p.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(p.place.Address()),
 		daprd.WithSchedulerAddresses(p.sched.Address()),
