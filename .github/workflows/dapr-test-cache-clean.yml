@@ -34,8 +34,8 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       - name: "Clean E2E image cache"
         run: |
-          for repo in $(az acr repository list -n dapre2eacr -o tsv); do
+          for repo in $(az acr repository list -n daprtestcacheacr -o tsv); do
             echo "Deleting: $repo"
-            az acr repository delete --repository "$repo" -n dapre2eacr --yes
+            az acr repository delete --repository "$repo" -n daprtestcacheacr --yes
           done
         shell: bash

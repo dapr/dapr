@@ -59,7 +59,7 @@ jobs:
       DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.16.8"
       DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.15.13"
       # Container registry where to cache e2e test images
-      DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+      DAPR_CACHE_REGISTRY: "daprtestcacheacr.azurecr.io"
       PULL_POLICY: IfNotPresent
     strategy:
       fail-fast: false # Keep running if one leg fails.
