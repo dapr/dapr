@@ -67,10 +67,23 @@ type Subscription struct {
 	adapterStreamer rtpubsub.AdapterStreamer
 	adapter         rtpubsub.Adapter
 
-	cancel   func(cause error)
-	closed   atomic.Bool
-	wg       sync.WaitGroup
-	inflight atomic.Int64
+	cancel func(cause error)
+	// drainMu makes the handler's "check drainSealed → wg.Add" region
+	// atomic with respect to Stop's "set drainSealed → wg.Wait" region.
+	// Handlers take RLock; Stop takes Lock when sealing. Without it, a
+	// handler that reads drainSealed=false can still race past Stop's
+	// Wait and panic with "WaitGroup is reused before previous Wait has
+	// returned" — exactly the failure mode contrib retry loops surface.
+	drainMu sync.RWMutex
+	// drainSealed is set after the drain phase completes (inflight=0) and
+	// just before the final wg.Wait. It bars any new wg.Add calls so that
+	// the subsequent Wait can never race with an incoming Add. Handlers
+	// check this BEFORE calling wg.Add (under drainMu.RLock) and take the
+	// <-ctx.Done() block path if set.
+	drainSealed atomic.Bool
+	closed      atomic.Bool
+	wg          sync.WaitGroup
+	inflight    atomic.Int64
 
 	postman postman.Interface
 }
@@ -134,8 +147,20 @@ func New(opts Options) (*Subscription, error) {
 		Topic:    subscribeTopic,
 		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *contribpubsub.NewMessage) error {
+		// Hold drainMu.RLock across the drainSealed check and wg.Add so
+		// the two are atomic with respect to Stop, which takes the write
+		// lock before sealing and waiting. Without this, a handler that
+		// reads drainSealed=false can be preempted past Stop's wg.Wait
+		// and panic on the subsequent wg.Add.
+		s.drainMu.RLock()
+		if s.drainSealed.Load() {
+			s.drainMu.RUnlock()
+			<-ctx.Done()
+			return ctx.Err()
+		}
 		s.wg.Add(1)
 		s.inflight.Add(1)
+		s.drainMu.RUnlock()
 
 		if s.closed.Load() {
 			// Release the WaitGroup before blocking to avoid deadlocking
@@ -412,9 +437,104 @@ func New(opts Options) (*Subscription, error) {
 }
 
 func (s *Subscription) Stop(err ...error) {
-	s.closed.Store(true)
+	cause := errors.Join(err...)
+	graceful := errors.Is(cause, contribpubsub.ErrGracefulShutdown)
+
+	// On graceful shutdown, if the underlying pubsub component supports it,
+	// pause fetching new messages from the broker. While paused, the
+	// session and partition assignments stay alive — and importantly, the
+	// heartbeat loop continues — so any messages already buffered locally
+	// can still be delivered to the app via postman.Deliver. The actual
+	// close (e.g. Kafka's consumerGroup.Close → LeaveGroup) happens via
+	// the existing s.cancel path at the end.
+	paused := false
+	if graceful {
+		if pausable, ok := s.pubsub.Component.(contribpubsub.PausableSubscriber); ok {
+			log.Infof("pausing subscription on topic %s during graceful shutdown", s.topic)
+			// Bound Pause with a timeout so a hung component cannot block
+			// shutdown forever. Stop is invoked synchronously by the
+			// runtime's block-shutdown closer; without a deadline here, a
+			// stuck Pause would prevent the block-shutdown timer from
+			// ever starting.
+			pauseCtx, pauseCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if perr := pausable.Pause(pauseCtx); perr != nil {
+				log.Warnf("failed to pause subscription on topic %s during graceful shutdown: %v", s.topic, perr)
+			} else {
+				paused = true
+			}
+			pauseCancel()
+		}
+	}
+
+	// When pausing succeeded, leave s.closed=false during the drain so
+	// handlers continue delivering buffered messages to the app and we get
+	// SUCCESS/DROP/RETRY back from the app. Pending offsets get marked and
+	// will be flushed by Sarama's auto-commit and the final commit during
+	// session.release(). For non-pausable components or non-graceful Stop,
+	// fall back to close-first behavior — without Pause we have no way to
+	// bound the buffer growth, so blocking incoming work is the only safe
+	// option.
+	if !paused {
+		s.closed.Store(true)
+	}
+
+	// Snapshot inflight up front, then promote it to true if any work is
+	// observed during the drain loop. In the paused (drain-to-app) path
+	// closed stays false during drain, so handler invocations can start
+	// after the initial snapshot — without this update, the 400ms
+	// ack-settle below would be skipped even though the broker is still
+	// awaiting our acks.
 	inflight := s.inflight.Load() > 0
 
+	// Drain via atomic polling rather than wg.Wait. wg.Wait alone is
+	// unsafe here because contrib retry loops can call the handler
+	// repeatedly with wg.Add(1)/wg.Done() bracketed around backoff
+	// sleeps. Between retries the counter momentarily hits 0; if Wait
+	// was in progress it can start to unwind and race the next retry's
+	// Add(1), tripping the "WaitGroup is reused before previous Wait
+	// has returned" panic. atomic.Int64 polling has no such restriction.
+	//
+	// Stable-quiet only applies to the paused (drain-to-app) path. There,
+	// a single inflight=0 reading is not enough: there is a sub-ms gap
+	// between handler return and the contrib consumer goroutine's next
+	// claim.Messages() read, and immediately after Pause returns the
+	// goroutine takes scheduler latency to wake and pick up the first
+	// buffered message. Without the stable window those gaps can cause
+	// Stop to seal before still-buffered messages reach the app.
+	//
+	// On the close-first path (!paused) there is no such window: closed
+	// is already true and new handler invocations self-eject in
+	// microseconds via the closed.Load() branch, so the first inflight=0
+	// reading is the right exit point — matching pre-PR behavior.
+	//
+	// No outer timeout here — the runner's graceful-shutdown-duration
+	// caps the whole close phase, so a stuck handler can't hang shutdown
+	// indefinitely.
+	const drainPollInterval = 20 * time.Millisecond
+	requiredStable := 1
+	if paused {
+		requiredStable = 5 // 100ms of stable quiet
+	}
+	stable := 0
+	for stable < requiredStable {
+		if s.inflight.Load() > 0 {
+			inflight = true
+			stable = 0
+		} else {
+			stable++
+		}
+		time.Sleep(drainPollInterval)
+	}
+
+	// Take the write lock to seal the drain atomically with respect to
+	// any handler that may be sitting between its drainSealed check and
+	// its wg.Add. Once we release, all future handlers will observe
+	// drainSealed=true under their RLock and skip the Add entirely, so
+	// wg.Wait below cannot race with a concurrent Add.
+	s.drainMu.Lock()
+	s.drainSealed.Store(true)
+	s.closed.Store(true)
+	s.drainMu.Unlock()
 	s.wg.Wait()
 
 	if s.adapterStreamer != nil {
@@ -428,7 +548,7 @@ func (s *Subscription) Stop(err ...error) {
 	}
 
 	if len(err) > 0 {
-		s.cancel(errors.Join(err...))
+		s.cancel(cause)
 		return
 	}
 
