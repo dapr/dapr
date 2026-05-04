@@ -53,7 +53,11 @@ func connectTestSession(t *testing.T, url string, httpClient ...*http.Client) *S
 	c := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "v1"}, nil)
 	session, err := c.Connect(context.Background(), transport, nil)
 	require.NoError(t, err)
-	h := &SessionHolder{}
+	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
+	h := &SessionHolder{
+		lifecycleCtx:    lifecycleCtx,
+		lifecycleCancel: lifecycleCancel,
+	}
 	h.session.Store(session)
 	t.Cleanup(func() { h.Close() })
 	return h

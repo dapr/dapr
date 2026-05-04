@@ -145,15 +145,24 @@ func (s *hotReloadToolChange) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("after hot-reload: alpha tool workflow unregistered", func(t *testing.T) {
-		// alpha is no longer registered: dapr's start endpoint hangs on unregistered
-		// workflows (WaitForInstanceStart blocks). runWorkflow's short per-tick
-		// timeout makes that hang surface as an error each tick — we assert the
-		// error eventually appears.
+		// alpha is no longer registered after hot-reload to server B. The runtime
+		// surfaces this in one of two ways depending on platform/timing:
+		//   - WaitForInstanceStart blocks → tryRunWorkflow's per-tick timeout
+		//     returns a polling error.
+		//   - The schedule succeeds and the workflow immediately completes with
+		//     FAILED (durabletask "no handler" fallback).
+		// Either is a valid signal alpha is gone; assert that we don't see a
+		// successful COMPLETED status (which would mean alpha is still wired).
 		input := map[string]any{"arguments": map[string]any{}}
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			_, err := tryRunWorkflow(ctx, s.httpClient, s.daprd.HTTPPort(),
+			status, err := tryRunWorkflow(ctx, s.httpClient, s.daprd.HTTPPort(),
 				mcpnames.MCPCallToolWorkflowName("dynamic", "alpha"), input, 3*time.Second)
-			assert.Error(c, err, "alpha tool start should hang or fail after hot-reload to server B")
+			if err != nil {
+				// Polling error (start hung) — alpha is gone. Pass.
+				return
+			}
+			assert.NotEqual(c, statusCompleted, status.RuntimeStatus,
+				"alpha workflow should not complete successfully after hot-reload to server B")
 		}, 30*time.Second, time.Second)
 	})
 }
