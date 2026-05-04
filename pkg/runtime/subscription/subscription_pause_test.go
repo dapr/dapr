@@ -96,13 +96,31 @@ func (p *pausablePubSub) GetComponentMetadata() (map[string]string, []string, []
 }
 
 // Pause implements contribpubsub.PausableSubscriber.
-func (p *pausablePubSub) Pause(context.Context) error {
+func (p *pausablePubSub) Pause(ctx context.Context) error {
 	p.pauseCalled.Add(1)
 	p.pauseOnce.Do(func() { close(p.pauseStarted) })
 	if p.pauseGate != nil {
-		<-p.pauseGate
+		select {
+		case <-p.pauseGate:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	return nil
+}
+
+// deliver invokes the captured Subscribe handler for the given topic. It
+// simulates a contrib consumer goroutine pulling a buffered message and
+// handing it to the runtime — the path drain-to-app needs to keep alive
+// until the drain seals.
+func (p *pausablePubSub) deliver(ctx context.Context, topic string, data []byte) error {
+	p.mu.Lock()
+	h := p.handlers[topic]
+	p.mu.Unlock()
+	if h == nil {
+		return errors.New("no handler registered for topic")
+	}
+	return h(ctx, &contribpubsub.NewMessage{Data: data, Topic: topic})
 }
 
 // Resume implements contribpubsub.PausableSubscriber.
@@ -222,5 +240,98 @@ func TestStopCallsPauseBeforeClosing(t *testing.T) {
 		"Pause should have been called exactly once")
 	assert.True(t, sub.closed.Load(),
 		"closed must be true after Stop returns")
+}
+
+// TestStopDrainHoldsForBufferedDelivery verifies the stable-quiet drain
+// requirement. A message arriving shortly after Pause returns — exactly
+// the case where Sarama hands a claim-buffered message to the runtime —
+// must reach the app, not be rejected by the drainSealed fast path.
+//
+// Without the stable-quiet guard, the drain loop would observe inflight=0
+// (no handler running yet), seal immediately, and a buffered delivery
+// arriving even a few ms later would return ctx.Err.
+func TestStopDrainHoldsForBufferedDelivery(t *testing.T) {
+	comp := newPausablePubSub()
+	sub := newSubscriptionForTest(t, comp)
+
+	stopDone := make(chan struct{})
+	go func() {
+		sub.Stop(contribpubsub.ErrGracefulShutdown)
+		close(stopDone)
+	}()
+
+	select {
+	case <-comp.pauseStarted:
+	case <-time.After(time.Second * 5):
+		t.Fatal("timeout waiting for Pause to be called")
+	}
+
+	// Inject a message ~30ms after Pause returns. The stable-quiet drain
+	// requires 100ms of consecutive zero-readings before sealing, so this
+	// delivery must land while drainSealed is still false.
+	time.Sleep(30 * time.Millisecond)
+
+	deliverCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	require.NoError(t, comp.deliver(deliverCtx, "topic0", []byte(`{"data":"x"}`)),
+		"message arriving shortly after Pause must be delivered to the app, not rejected by drainSealed")
+
+	select {
+	case <-stopDone:
+	case <-time.After(time.Second * 5):
+		t.Fatal("Stop did not return")
+	}
+}
+
+// TestStopRejectsDeliveryAfterDrainSealed verifies the other side of the
+// drain semantics: once the drain has sealed, subsequent handler invocations
+// must take the drainSealed fast path and return without invoking the app.
+func TestStopRejectsDeliveryAfterDrainSealed(t *testing.T) {
+	comp := newPausablePubSub()
+	sub := newSubscriptionForTest(t, comp)
+
+	sub.Stop(contribpubsub.ErrGracefulShutdown)
+	require.True(t, sub.drainSealed.Load(), "drainSealed must be set after Stop returns")
+
+	deliverCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	err := comp.deliver(deliverCtx, "topic0", []byte(`{"data":"x"}`))
+	require.Error(t, err, "delivery after drain seal must be rejected")
+	require.ErrorIs(t, err, context.DeadlineExceeded,
+		"handler should block on ctx.Done after drainSealed; the test ctx deadline must be the cause")
+}
+
+// TestStopBoundsHungPauseWithTimeout verifies that a Pause implementation
+// that ignores its context and never returns cannot block Stop forever. The
+// 5s timeout in Stop is the runtime's last line of defense before the
+// block-shutdown timer would otherwise be deferred indefinitely.
+func TestStopBoundsHungPauseWithTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping 5s timeout test in -short mode")
+	}
+
+	comp := newPausablePubSub()
+	comp.pauseGate = make(chan struct{}) // never closed; Pause hangs until ctx.Done
+	sub := newSubscriptionForTest(t, comp)
+
+	stopDone := make(chan struct{})
+	start := time.Now()
+	go func() {
+		sub.Stop(contribpubsub.ErrGracefulShutdown)
+		close(stopDone)
+	}()
+
+	select {
+	case <-stopDone:
+	case <-time.After(time.Second * 7):
+		t.Fatal("Stop hung — Pause timeout should have fired within 5s")
+	}
+
+	elapsed := time.Since(start)
+	require.GreaterOrEqual(t, elapsed, 4*time.Second,
+		"Pause should run for several seconds before timing out")
+	require.Less(t, elapsed, 7*time.Second,
+		"Stop should return shortly after Pause timeout fires")
 }
 
