@@ -95,6 +95,11 @@ type Options struct {
 
 	RetentionPolicy *config.WorkflowStateRetentionPolicy
 	Signer          *signer.Signer
+
+	// MaxRequestBodySize is the gRPC server max message size in bytes. The
+	// orchestrator uses it to detect and gracefully stall workflows whose
+	// history payload would exceed the GetWorkItems stream limit.
+	MaxRequestBodySize int
 }
 
 type Actors struct {
@@ -112,6 +117,7 @@ type Actors struct {
 	compStore           *compstore.ComponentStore
 	retentionPolicy     *config.WorkflowStateRetentionPolicy
 	signer              *signer.Signer
+	maxRequestBodySize  int
 
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
@@ -149,6 +155,7 @@ func New(opts Options) *Actors {
 		eventSink:                 opts.EventSink,
 		retentionPolicy:           opts.RetentionPolicy,
 		signer:                    opts.Signer,
+		maxRequestBodySize:        opts.MaxRequestBodySize,
 
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
@@ -171,6 +178,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		RetentionActorType: abe.retentionerActorType,
 		RetentionPolicy:    abe.retentionPolicy,
 		Signer:             abe.signer,
+		MaxRequestBodySize: abe.maxRequestBodySize,
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
