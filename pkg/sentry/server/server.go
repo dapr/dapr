@@ -209,12 +209,20 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		}
 	}
 
+	// The operator and injector serve webhooks that the Kube API server
+	// calls for CRD conversion and sidecar injection. Their certs must use
+	// ECDSA because some managed Kube API servers (e.g. AKS) do not
+	// support Ed25519 for TLS verification.
+	isKubeWebhook := req.GetNamespace() == security.CurrentNamespace() &&
+		(req.GetId() == "dapr-operator" || req.GetId() == "dapr-injector")
+
 	chain, err := s.ca.SignIdentity(ctx, &ca.SignRequest{
-		PublicKey:   csr.PublicKey,
-		TrustDomain: res.TrustDomain.String(),
-		Namespace:   namespace,
-		AppID:       req.GetId(),
-		DNS:         dns,
+		PublicKey:     csr.PublicKey,
+		TrustDomain:  res.TrustDomain.String(),
+		Namespace:    namespace,
+		AppID:        req.GetId(),
+		DNS:          dns,
+		IsKubeWebhook: isKubeWebhook,
 	})
 	if err != nil {
 		log.Errorf("Error signing identity: %v", err)

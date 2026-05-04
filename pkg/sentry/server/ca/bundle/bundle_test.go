@@ -14,6 +14,7 @@ limitations under the License.
 package bundle
 
 import (
+	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
@@ -21,10 +22,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"math/big"
 	"testing"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -79,6 +82,100 @@ func TestGenerateX509Bundle(t *testing.T) {
 		expectedDefaultTTL := time.Hour * 24 * 365
 		require.WithinDuration(t, time.Now().Add(expectedDefaultTTL), rootCert.NotAfter, time.Hour*24)
 	})
+}
+
+func TestGenerateX509Bundle_ECFields(t *testing.T) {
+	_, x509RootKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	bundle, err := GenerateX509(OptionsX509{
+		X509RootKey:      x509RootKey,
+		TrustDomain:      "test.example.com",
+		AllowedClockSkew: 5 * time.Minute,
+	})
+	require.NoError(t, err)
+
+	// EC fields should be populated
+	require.NotEmpty(t, bundle.ECTrustAnchors, "ECTrustAnchors should be populated")
+	require.NotEmpty(t, bundle.ECIssChainPEM, "ECIssChainPEM should be populated")
+	require.NotEmpty(t, bundle.ECIssKeyPEM, "ECIssKeyPEM should be populated")
+	require.NotNil(t, bundle.ECIssChain, "ECIssChain should be populated")
+	require.Len(t, bundle.ECIssChain, 1)
+	require.NotNil(t, bundle.ECIssKey, "ECIssKey should be populated")
+
+	// EC trust anchors should be different from main trust anchors
+	assert.NotEqual(t, bundle.TrustAnchors, bundle.ECTrustAnchors,
+		"ECDSA trust anchors should be independent from Ed25519 trust anchors")
+
+	// EC root should be self-signed ECDSA
+	ecRoot, _ := decodePEM(t, bundle.ECTrustAnchors)
+	require.NotNil(t, ecRoot)
+	assert.IsType(t, &ecdsa.PublicKey{}, ecRoot.PublicKey, "EC root should use ECDSA key")
+	require.NoError(t, ecRoot.CheckSignatureFrom(ecRoot), "EC root should be self-signed")
+
+	// EC issuer should be signed by EC root (not Ed25519 root)
+	require.NoError(t, bundle.ECIssChain[0].CheckSignatureFrom(ecRoot),
+		"EC issuer should be signed by EC root")
+	assert.IsType(t, &ecdsa.PublicKey{}, bundle.ECIssChain[0].PublicKey,
+		"EC issuer should use ECDSA key")
+
+	// Main issuer should still be Ed25519
+	mainRoot, _ := decodePEM(t, bundle.TrustAnchors)
+	assert.IsType(t, ed25519.PublicKey{}, mainRoot.PublicKey,
+		"Main root should remain Ed25519")
+}
+
+func TestGenerateECX509(t *testing.T) {
+	bundle, err := GenerateECX509(OptionsX509{
+		TrustDomain:      "test.example.com",
+		AllowedClockSkew: 5 * time.Minute,
+	})
+	require.NoError(t, err)
+
+	require.NotEmpty(t, bundle.TrustAnchors)
+	require.NotEmpty(t, bundle.IssChainPEM)
+	require.NotEmpty(t, bundle.IssKeyPEM)
+	require.NotNil(t, bundle.IssChain)
+	require.Len(t, bundle.IssChain, 1)
+	require.NotNil(t, bundle.IssKey)
+
+	// Root should be self-signed ECDSA
+	root, _ := decodePEM(t, bundle.TrustAnchors)
+	require.NotNil(t, root)
+	assert.IsType(t, &ecdsa.PublicKey{}, root.PublicKey)
+	assert.True(t, root.IsCA)
+	require.NoError(t, root.CheckSignatureFrom(root))
+
+	// Issuer should be signed by ECDSA root
+	require.NoError(t, bundle.IssChain[0].CheckSignatureFrom(root))
+	assert.IsType(t, &ecdsa.PublicKey{}, bundle.IssChain[0].PublicKey)
+	assert.True(t, bundle.IssChain[0].IsCA)
+
+	// Full chain verification: sign a leaf cert and verify chain
+	leafKey, err := ecdsa.GenerateKey(bundle.IssChain[0].PublicKey.(*ecdsa.PublicKey).Curve, rand.Reader)
+	require.NoError(t, err)
+	leafTmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(99),
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	leafDER, err := x509.CreateCertificate(rand.Reader, leafTmpl, bundle.IssChain[0], &leafKey.PublicKey, bundle.IssKey)
+	require.NoError(t, err)
+	leaf, err := x509.ParseCertificate(leafDER)
+	require.NoError(t, err)
+
+	// Verify leaf → issuer → root chain
+	rootPool := x509.NewCertPool()
+	rootPool.AddCert(root)
+	intPool := x509.NewCertPool()
+	intPool.AddCert(bundle.IssChain[0])
+	_, err = leaf.Verify(x509.VerifyOptions{
+		Roots:         rootPool,
+		Intermediates: intPool,
+	})
+	require.NoError(t, err, "Full ECDSA chain should verify without Ed25519")
 }
 
 func TestGenerateJWTBundle(t *testing.T) {
