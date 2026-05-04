@@ -80,6 +80,13 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 
 	assert.Eventually(t, inActivity.Load, time.Second*10, time.Millisecond*10)
 
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		list := r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs/actorreminder")
+		for _, key := range list {
+			assert.NotContainsf(c, key, "||start-", "start reminder still present: %s", key)
+		}
+	}, time.Second*10, time.Millisecond*10)
+
 	cancel()
 	r.workflow.DaprN(0).Cleanup(t)
 	close(waitCh)
