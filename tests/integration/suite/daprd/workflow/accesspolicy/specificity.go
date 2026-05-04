@@ -71,15 +71,15 @@ spec:
   rules:
   - callers:
     - appID: spec-caller
-    operations:
-    - type: workflow
-      name: "*"
+    workflows:
+    - name: "*"
+      operations: [schedule]
       action: deny
-    - type: workflow
-      name: "Process*"
+    - name: "Process*"
+      operations: [schedule]
       action: allow
-    - type: workflow
-      name: ProcessSecret
+    - name: ProcessSecret
+      operations: [schedule]
       action: deny
 `)
 
