@@ -41,18 +41,18 @@ func init() {
 	suite.Register(new(sameapp))
 }
 
-// sameapp validates that a WorkflowAccessPolicy applied to an app does not
-// block the app's own workflow internals when the app is not listed as a
-// caller in any rule. Specifically, parent/child workflow event delivery via
-// CallActor (e.g. AddWorkflowEvent) routes through the gRPC ACL hook even for
-// same-app calls; the hook must bypass the policy when the caller's
-// mTLS-verified SPIFFE identity matches this app's identity.
+// sameapp validates that an app's own workflow internals (parent/child event
+// delivery via AddWorkflowEvent) are not blocked by a WorkflowAccessPolicy
+// that doesn't list the app as a caller of itself. The cross-app sub-workflow
+// path always routes through the gRPC CallActor endpoint — even when source
+// and target appIDs are identical (same app calling its own actors).
 type sameapp struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
 	sched  *scheduler.Scheduler
 	db     *sqlite.SQLite
-	app    *daprd.Daprd
+	caller *daprd.Daprd
+	target *daprd.Daprd
 }
 
 func (s *sameapp) Setup(t *testing.T) []framework.Option {
@@ -73,8 +73,10 @@ spec:
   - name: WorkflowAccessPolicy
     enabled: true`), 0o600))
 
-	// Policy scoped to "sameapp-target" but with rules referencing only some
-	// hypothetical *other* caller — never the target app itself.
+	// Policy on the target. Only the caller app is listed in any rule; the
+	// target itself is never listed as a caller. This is the natural shape of
+	// a policy meant to gate cross-app access — users don't write rules about
+	// themselves.
 	policy := []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
@@ -83,24 +85,33 @@ metadata:
 scopes:
 - sameapp-target
 spec:
-  defaultAction: allow
+  defaultAction: deny
   rules:
   - callers:
-    - appID: some-other-app
+    - appID: sameapp-caller
     operations:
     - type: workflow
-      name: "*"
-      action: deny
+      name: Parent
+      action: allow
 `)
 
-	resDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(resDir, "policy.yaml"), policy, 0o600))
+	targetResDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))
 
-	s.app = daprd.New(t,
+	s.caller = daprd.New(t,
+		daprd.WithAppID("sameapp-caller"),
+		daprd.WithNamespace("default"),
+		daprd.WithConfigs(configFile),
+		daprd.WithResourceFiles(s.db.GetComponent(t)),
+		daprd.WithPlacementAddresses(s.place.Address()),
+		daprd.WithSchedulerAddresses(s.sched.Address()),
+		daprd.WithSentry(t, s.sentry),
+	)
+	s.target = daprd.New(t,
 		daprd.WithAppID("sameapp-target"),
 		daprd.WithNamespace("default"),
 		daprd.WithConfigs(configFile),
-		daprd.WithResourcesDir(resDir),
+		daprd.WithResourcesDir(targetResDir),
 		daprd.WithResourceFiles(s.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(s.place.Address()),
 		daprd.WithSchedulerAddresses(s.sched.Address()),
@@ -108,49 +119,65 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.sentry, s.place, s.sched, s.db, s.app),
+		framework.WithProcesses(s.sentry, s.place, s.sched, s.db, s.caller, s.target),
 	}
 }
 
 func (s *sameapp) Run(t *testing.T, ctx context.Context) {
 	s.place.WaitUntilRunning(t, ctx)
 	s.sched.WaitUntilRunning(t, ctx)
-	s.app.WaitUntilRunning(t, ctx)
+	s.caller.WaitUntilRunning(t, ctx)
+	s.target.WaitUntilRunning(t, ctx)
 
-	reg := task.NewTaskRegistry()
-
-	// Parent workflow calls a child workflow on the same app. The child
-	// workflow's completion event flows back to the parent via
-	// AddWorkflowEvent, which is the call that gets denied by IsCallerKnown
-	// without the same-app bypass.
-	require.NoError(t, reg.AddWorkflowN("Parent", func(ctx *task.WorkflowContext) (any, error) {
+	// Caller schedules Parent on the target as a child workflow. Parent runs
+	// on the target and itself calls Child as a same-app child workflow.
+	callerReg := task.NewTaskRegistry()
+	require.NoError(t, callerReg.AddWorkflowN("Driver", func(ctx *task.WorkflowContext) (any, error) {
 		var out string
-		if err := ctx.CallChildWorkflow("Child").Await(&out); err != nil {
-			return nil, fmt.Errorf("child workflow failed: %w", err)
+		err := ctx.CallChildWorkflow(
+			"Parent",
+			task.WithChildWorkflowAppID(s.target.AppID()),
+		).Await(&out)
+		if err != nil {
+			return nil, fmt.Errorf("cross-app Parent failed: %w", err)
 		}
 		return out, nil
 	}))
 
-	require.NoError(t, reg.AddWorkflowN("Child", func(ctx *task.WorkflowContext) (any, error) {
+	// Target hosts Parent and Child. Parent calls Child without an explicit
+	// app ID — a same-app sub-workflow on the target. Child's completion
+	// flows back to Parent via AddWorkflowEvent on the target's own actor.
+	targetReg := task.NewTaskRegistry()
+	require.NoError(t, targetReg.AddWorkflowN("Parent", func(ctx *task.WorkflowContext) (any, error) {
+		var out string
+		if err := ctx.CallChildWorkflow("Child").Await(&out); err != nil {
+			return nil, fmt.Errorf("same-app Child failed: %w", err)
+		}
+		return out, nil
+	}))
+	require.NoError(t, targetReg.AddWorkflowN("Child", func(ctx *task.WorkflowContext) (any, error) {
 		return "child-done", nil
 	}))
 
-	appClient := client.NewTaskHubGrpcClient(s.app.GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, appClient.StartWorkItemListener(ctx, reg))
+	callerClient := client.NewTaskHubGrpcClient(s.caller.GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, callerClient.StartWorkItemListener(ctx, callerReg))
+	targetClient := client.NewTaskHubGrpcClient(s.target.GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, targetClient.StartWorkItemListener(ctx, targetReg))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, len(s.app.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
+		assert.GreaterOrEqual(c, len(s.caller.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
+		assert.GreaterOrEqual(c, len(s.target.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 	}, time.Second*20, time.Millisecond*10)
 
-	id, err := appClient.ScheduleNewWorkflow(ctx, "Parent")
+	id, err := callerClient.ScheduleNewWorkflow(ctx, "Driver")
 	require.NoError(t, err)
 
 	completionCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	t.Cleanup(cancel)
-	metadata, err := appClient.WaitForWorkflowCompletion(completionCtx, id, api.WithFetchPayloads(true))
-	require.NoError(t, err, "parent/child workflow should complete; if it hangs, the same-app ACL bypass regressed")
+	metadata, err := callerClient.WaitForWorkflowCompletion(completionCtx, id, api.WithFetchPayloads(true))
+	require.NoError(t, err, "workflow should complete; if it hangs, the same-app ACL bypass regressed (Child→Parent AddWorkflowEvent denied on target)")
 	require.Nil(t, metadata.GetFailureDetails(),
-		"parent workflow should not fail under a policy that doesn't list the app as a caller")
+		"workflow should not fail under a policy that doesn't list the target as a caller of itself")
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
-	assert.Equal(t, `"child-done"`, metadata.GetOutput().GetValue())
+	assert.Contains(t, metadata.GetOutput().GetValue(), "child-done")
 }
