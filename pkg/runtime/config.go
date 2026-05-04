@@ -68,6 +68,12 @@ const (
 	DefaultReadBufferSize = 4 << 10
 	// DefaultGracefulShutdownDuration is the default option for the duration of the graceful shutdown.
 	DefaultGracefulShutdownDuration = time.Second * 5
+	// DefaultActorsDisseminationTimeout is the default daprd-side timeout
+	// for a placement LOCK -> UPDATE -> UNLOCK round. Must be larger than
+	// the placement service --disseminate-timeout (8s default) so that
+	// daprd does not reset the stream before placement can finish a
+	// legitimately slow round.
+	DefaultActorsDisseminationTimeout = time.Second * 30
 	// DefaultAppHealthCheckPath is the default path for HTTP health checks.
 	DefaultAppHealthCheckPath = "/healthz"
 	// DefaultChannelAddress is the default local network address that user application listen on.
@@ -108,6 +114,7 @@ type Config struct {
 	DaprGracefulShutdownSeconds   int
 	DaprBlockShutdownDuration     *time.Duration
 	ActorsService                 string
+	ActorsDisseminationTimeout    time.Duration
 	RemindersService              string
 	SchedulerAddress              []string
 	SchedulerStreams              uint
@@ -145,6 +152,7 @@ type internalConfig struct {
 	appConnectionConfig          config.AppConnectionConfig
 	mode                         modes.DaprMode
 	actorsService                string
+	actorsDisseminationTimeout   time.Duration
 	remindersService             string
 	schedulerAddress             []string
 	schedulerStreams             uint
@@ -349,18 +357,19 @@ func (c *Config) toInternal() (*internalConfig, error) {
 			HealthCheckHTTPPath: c.AppHealthCheckPath,
 			MaxConcurrency:      c.AppMaxConcurrency,
 		},
-		registry:                  registry.New(c.Registry),
-		metricsExporter:           metrics.New(c.Metrics),
-		blockShutdownDuration:     c.DaprBlockShutdownDuration,
-		actorsService:             c.ActorsService,
-		remindersService:          c.RemindersService,
-		schedulerAddress:          c.SchedulerAddress,
-		schedulerStreams:          c.SchedulerStreams,
-		publicListenAddress:       c.DaprPublicListenAddress,
-		internalGRPCListenAddress: c.DaprInternalGRPCListenAddress,
-		healthz:                   c.Healthz,
-		outboundHealthz:           healthz.New(),
-		workflowEventSink:         c.WorkflowEventSink,
+		registry:                   registry.New(c.Registry),
+		metricsExporter:            metrics.New(c.Metrics),
+		blockShutdownDuration:      c.DaprBlockShutdownDuration,
+		actorsService:              c.ActorsService,
+		actorsDisseminationTimeout: c.ActorsDisseminationTimeout,
+		remindersService:           c.RemindersService,
+		schedulerAddress:           c.SchedulerAddress,
+		schedulerStreams:           c.SchedulerStreams,
+		publicListenAddress:        c.DaprPublicListenAddress,
+		internalGRPCListenAddress:  c.DaprInternalGRPCListenAddress,
+		healthz:                    c.Healthz,
+		outboundHealthz:            healthz.New(),
+		workflowEventSink:          c.WorkflowEventSink,
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
@@ -445,6 +454,10 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		intc.gracefulShutdownDuration = DefaultGracefulShutdownDuration
 	} else {
 		intc.gracefulShutdownDuration = time.Duration(c.DaprGracefulShutdownSeconds) * time.Second
+	}
+
+	if intc.actorsDisseminationTimeout <= 0 {
+		intc.actorsDisseminationTimeout = DefaultActorsDisseminationTimeout
 	}
 
 	if intc.appConnectionConfig.MaxConcurrency == -1 {
