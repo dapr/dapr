@@ -221,7 +221,7 @@ func TestBuildHTTPClient_SPIFFEInjectsJWT(t *testing.T) {
 		lastAudience = audience
 		return "spiffe-svid-token", nil
 	})
-	client, err := BuildHTTPClient(context.Background(), srv, nil, fetcher)
+	client, err := BuildHTTPClient(context.Background(), context.Background(), srv, nil, fetcher)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
@@ -263,7 +263,7 @@ func TestBuildHTTPClient_SPIFFEWithoutPrefix(t *testing.T) {
 	fetcher := fakesecurity.New().WithFetchJWT(func(_ context.Context, _ string) (string, error) {
 		return "raw-token", nil
 	})
-	client, err := BuildHTTPClient(context.Background(), srv, nil, fetcher)
+	client, err := BuildHTTPClient(context.Background(), context.Background(), srv, nil, fetcher)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
@@ -309,7 +309,7 @@ func TestBuildHTTPClient_OAuth2InjectsBearer(t *testing.T) {
 
 	cs := newTestCompstore(t, "my-store", map[string]string{"client_secret": "super-secret"}, nil)
 
-	client, err := BuildHTTPClient(context.Background(), srv, cs, nil)
+	client, err := BuildHTTPClient(context.Background(), context.Background(), srv, cs, nil)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, targetServer.URL, nil)
@@ -342,7 +342,7 @@ func TestBuildHTTPClient_OAuth2SecretFetchError(t *testing.T) {
 	}
 
 	cs := newTestCompstore(t, "kubernetes", nil, errors.New("secret store unavailable"))
-	_, err := BuildHTTPClient(context.Background(), srv, cs, nil)
+	_, err := BuildHTTPClient(context.Background(), context.Background(), srv, cs, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "secret store unavailable")
 }
@@ -363,7 +363,7 @@ func TestBuildHTTPClient_StaticHeadersNoAuth(t *testing.T) {
 			},
 		},
 	})
-	client, err := BuildHTTPClient(context.Background(), &srv, nil, nil)
+	client, err := BuildHTTPClient(context.Background(), context.Background(), &srv, nil, nil)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
