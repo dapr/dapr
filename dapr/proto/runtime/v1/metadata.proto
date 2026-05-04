@@ -41,6 +41,7 @@ message GetMetadataResponse {
   optional MetadataScheduler scheduler = 11 [json_name = "scheduler"];
   optional MetadataWorkflows workflows = 12 [json_name = "workflows"];
   repeated MetadataMCPServer mcp_servers = 13 [json_name = "mcpServers"];
+  repeated MetadataWorkflowAccessPolicy workflow_access_policies = 14 [json_name = "workflowAccessPolicies"];
 }
 
 message MetadataWorkflows {
@@ -92,6 +93,13 @@ message MetadataHTTPEndpoint {
 }
 
 message MetadataMCPServer {
+  string name = 1 [json_name = "name"];
+}
+
+// MetadataWorkflowAccessPolicy describes a loaded WorkflowAccessPolicy
+// resource. Lets clients verify which policies are currently in effect on
+// the sidecar, including after a hot reload.
+message MetadataWorkflowAccessPolicy {
   string name = 1 [json_name = "name"];
 }
 
