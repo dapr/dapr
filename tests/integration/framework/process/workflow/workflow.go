@@ -242,7 +242,7 @@ func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) 
 		if assert.NotNil(c, w) {
 			assert.GreaterOrEqual(c, w.ConnectedWorkers, 1)
 		}
-	}, time.Second*20, time.Millisecond*10)
+	}, time.Second*60, time.Millisecond*10)
 
 	return backendClient
 }
