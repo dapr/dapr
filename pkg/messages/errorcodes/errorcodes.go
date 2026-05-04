@@ -142,7 +142,7 @@ var (
 	ServiceInvocationDirectInvoke = ErrorCode{"ERR_DIRECT_INVOKE", "", CategoryServiceInvocation} // Error invoking service
 
 	// ### Bindings API
-	BindingInvokeOutputBinding = ErrorCode{"ERR_INVOKE_OUTPUT_BINDING", "", CategoryBinding} // Error invoking output binding
+	BindingInvokeOutputBinding = ErrorCode{"ERR_INVOKE_OUTPUT_BINDING", "DAPR_BINDING_INVOKE_OUTPUT_BINDING", CategoryBinding} // Error invoking output binding
 
 	// ### Distributed Lock API
 	LockStoreNotConfigured = ErrorCode{"ERR_LOCK_STORE_NOT_CONFIGURED", "", CategoryLock} // Lock store not configured

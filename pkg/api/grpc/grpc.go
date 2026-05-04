@@ -584,7 +584,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	}
 
 	if err != nil {
-		richError := apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.BindingInvokeOutputBinding, fmt.Sprintf(messages.ErrInvokeOutputBinding, in.GetName(), err.Error()))
+		richError := apierrors.Binding(in.GetName()).InvokeOutputBinding(err)
 		apiServerLogger.Debug(richError)
 		return r, richError
 	}
