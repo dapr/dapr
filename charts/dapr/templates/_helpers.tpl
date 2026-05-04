@@ -47,3 +47,12 @@ Formats imagePullSecrets. Input is dict( "imagePullSecrets" .{specific imagePull
 {{- end -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Validates podAntiAffinityPolicy is one of the allowed values.
+*/}}
+{{- define "dapr.validatePodAntiAffinityPolicy" -}}
+{{- if not (or (eq .Values.global.ha.podAntiAffinityPolicy "preferredDuringSchedulingIgnoredDuringExecution") (eq .Values.global.ha.podAntiAffinityPolicy "requiredDuringSchedulingIgnoredDuringExecution")) -}}
+{{- fail "global.ha.podAntiAffinityPolicy must be either 'preferredDuringSchedulingIgnoredDuringExecution' or 'requiredDuringSchedulingIgnoredDuringExecution'" -}}
+{{- end -}}
+{{- end -}}
