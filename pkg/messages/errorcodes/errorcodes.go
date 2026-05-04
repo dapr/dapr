@@ -32,6 +32,7 @@ const (
 	CategoryHealth            Category = "health"
 	CategoryCommon            Category = "common"
 	CategoryPluggable         Category = "pluggable-component"
+	CategoryMetadata          Category = "metadata"
 )
 
 type ErrorCode struct {
@@ -174,6 +175,9 @@ var (
 	SchedulerDeleteJob     = ErrorCode{"DAPR_SCHEDULER_DELETE_JOB", "DAPR_SCHEDULER_DELETE_JOB", CategoryJob}         // Error deleting job
 	SchedulerEmpty         = ErrorCode{"DAPR_SCHEDULER_EMPTY", "DAPR_SCHEDULER_EMPTY", CategoryJob}                   // Required argument is empty
 	SchedulerScheduleEmpty = ErrorCode{"DAPR_SCHEDULER_SCHEDULE_EMPTY", "DAPR_SCHEDULER_SCHEDULE_EMPTY", CategoryJob} // No schedule provided for job
+
+	// ### Metadata API
+	MetadataBodyRead = ErrorCode{"ERR_BODY_READ", "DAPR_METADATA_BODY_READ", CategoryMetadata} // Error reading metadata request body
 
 	// ### Generic
 	CommonGeneric = ErrorCode{"ERROR", "ERROR", CategoryCommon} // Generic error
