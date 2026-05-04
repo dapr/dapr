@@ -51,7 +51,7 @@ type crossreplica struct {
 
 func (cr *crossreplica) Setup(t *testing.T) []framework.Option {
 	cr.place = placement.New(t,
-		placement.WithDisseminateTimeout(time.Second*7),
+		placement.WithDisseminateTimeout(time.Second*2),
 	)
 
 	actor1 := dactors.New(t,
@@ -128,7 +128,7 @@ func (cr *crossreplica) Run(t *testing.T, ctx context.Context) {
 
 	for i := range 2 {
 		connectBlocker(t, fmt.Sprintf("blocker-%d", i))
-		time.Sleep(9 * time.Second)
+		time.Sleep(4 * time.Second)
 	}
 
 	cr.called1.Store(0)
