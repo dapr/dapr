@@ -111,7 +111,18 @@ func (i *inboxoverload) Run(t *testing.T, ctx context.Context) {
 		i.workflow.Scheduler().JobNowActor("new-event-deactivate", "default", appID, actorType, actorID))
 	require.NoError(t, err)
 
-	time.Sleep(5 * time.Second)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		meta := i.workflow.Dapr().GetMetadata(c, ctx)
+		if !assert.NotNil(c, meta.ActorRuntime) {
+			return
+		}
+		for _, a := range meta.ActorRuntime.ActiveActors {
+			if a.Type == actorType {
+				assert.Zero(c, a.Count, "workflow actor %q still has %d active instance(s)", actorType, a.Count)
+				return
+			}
+		}
+	}, 10*time.Second, 50*time.Millisecond)
 
 	db := i.workflow.DB().GetConnection(t)
 	tableName := i.workflow.DB().TableName()

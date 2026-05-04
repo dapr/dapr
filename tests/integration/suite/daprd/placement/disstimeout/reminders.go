@@ -52,7 +52,7 @@ type reminders struct {
 
 func (rm *reminders) Setup(t *testing.T) []framework.Option {
 	rm.place = placement.New(t,
-		placement.WithDisseminateTimeout(time.Second*7),
+		placement.WithDisseminateTimeout(time.Second*2),
 	)
 
 	rm.actors = dactors.New(t,
@@ -114,7 +114,7 @@ func (rm *reminders) Run(t *testing.T, ctx context.Context) {
 
 	for i := range 2 {
 		connectBlocker(t, fmt.Sprintf("blocker-%d", i))
-		time.Sleep(9 * time.Second)
+		time.Sleep(4 * time.Second)
 	}
 
 	rm.reminderCalled.Store(0)
