@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"k8s.io/utils/clock"
@@ -57,8 +58,9 @@ type factory struct {
 	// idleTimeout is the configured max idle time for actors of this kind.
 	idleTimeout time.Duration
 
-	table sync.Map
-	lock  sync.RWMutex
+	table       sync.Map
+	activeCount atomic.Int64
+	lock        sync.RWMutex
 }
 
 func New(opts Options) targets.Factory {
@@ -92,7 +94,13 @@ func (f *factory) GetOrCreate(actorID string) targets.Interface {
 	a, ok := f.table.Load(actorID)
 	if !ok {
 		newApp := f.initApp(actorID)
-		a, _ = f.table.LoadOrStore(actorID, newApp)
+		var loaded bool
+		a, loaded = f.table.LoadOrStore(actorID, newApp)
+		if !loaded {
+			f.idlerQueue.Enqueue(newApp)
+			count := f.activeCount.Add(1)
+			diag.DefaultMonitoring.ActorActiveCount(f.actorType, count)
+		}
 	}
 
 	aa := a.(*app)
@@ -112,8 +120,6 @@ func (f *factory) initApp(actorID string) *app {
 	}
 
 	app.idleAt.Store(new(f.clock.Now().Add(f.idleTimeout)))
-
-	f.idlerQueue.Enqueue(app)
 
 	return app
 }
