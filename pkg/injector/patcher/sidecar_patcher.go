@@ -91,6 +91,16 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 		})
 	}
 
+	// Trust bundle ConfigMap volume — allows Kubernetes to push updated root CAs
+	// (e.g. during rotation) to running pods without a restart.
+	trustBundleVolume := c.getTrustBundleVolume()
+	volumes = append(volumes, trustBundleVolume)
+	volumeMounts = append(volumeMounts, corev1.VolumeMount{
+		Name:      injectorConsts.TrustBundleVolumeName,
+		MountPath: injectorConsts.TrustBundleVolumeMountPath,
+		ReadOnly:  true,
+	})
+
 	// Get the sidecar container
 	sidecarContainer, err := c.getSidecarContainer(getSidecarContainerOpts{
 		ComponentsSocketsVolumeMount: componentsSocketVolumeMount,

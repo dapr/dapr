@@ -44,6 +44,14 @@ const (
 	ComponentsUDSMountPathEnvVar   = "DAPR_COMPONENT_SOCKETS_FOLDER"
 	ComponentsUDSDefaultFolder     = "/tmp/dapr-components-sockets"
 
+	// TrustBundleVolumeName is the name of the volume that mounts the dapr-trust-bundle ConfigMap.
+	// Mounting the ConfigMap as a volume (rather than baking trust anchors into an env var) allows
+	// Kubernetes to push updated root CAs to running pods automatically during rotation.
+	TrustBundleVolumeName = "dapr-trust-bundle" /* #nosec */
+	// TrustBundleVolumeMountPath is where the trust bundle volume is mounted inside daprd.
+	// This matches ControlPlaneDefaultTrustAnchorsPath so daprd can watch the file for live updates.
+	TrustBundleVolumeMountPath = "/var/run/secrets/dapr.io/tls"
+
 	// TODO: @joshvanl: Remove in 1.18
 	SchedulerHostAddressDNSAEnvVar = "DAPR_SCHEDULER_HOST_ADDRESS_DNS_A"
 
