@@ -494,23 +494,29 @@ func (s *Subscription) Stop(err ...error) {
 	// Add(1), tripping the "WaitGroup is reused before previous Wait
 	// has returned" panic. atomic.Int64 polling has no such restriction.
 	//
-	// Require inflight to stay 0 across several consecutive polls before
-	// we exit. A single 0 reading is not enough: there is a sub-ms gap
+	// Stable-quiet only applies to the paused (drain-to-app) path. There,
+	// a single inflight=0 reading is not enough: there is a sub-ms gap
 	// between handler return and the contrib consumer goroutine's next
 	// claim.Messages() read, and immediately after Pause returns the
 	// goroutine takes scheduler latency to wake and pick up the first
-	// buffered message. Without this, those windows can cause Stop to
-	// seal before any of the still-buffered messages reach the app.
+	// buffered message. Without the stable window those gaps can cause
+	// Stop to seal before still-buffered messages reach the app.
+	//
+	// On the close-first path (!paused) there is no such window: closed
+	// is already true and new handler invocations self-eject in
+	// microseconds via the closed.Load() branch, so the first inflight=0
+	// reading is the right exit point — matching pre-PR behavior.
 	//
 	// No outer timeout here — the runner's graceful-shutdown-duration
 	// caps the whole close phase, so a stuck handler can't hang shutdown
 	// indefinitely.
-	const (
-		drainPollInterval = 20 * time.Millisecond
-		drainStableCount  = 5 // 100ms of stable quiet
-	)
+	const drainPollInterval = 20 * time.Millisecond
+	requiredStable := 1
+	if paused {
+		requiredStable = 5 // 100ms of stable quiet
+	}
 	stable := 0
-	for stable < drainStableCount {
+	for stable < requiredStable {
 		if s.inflight.Load() > 0 {
 			inflight = true
 			stable = 0

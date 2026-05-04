@@ -132,6 +132,36 @@ func (p *pausablePubSub) Resume(context.Context) error {
 // Compile-time assertion that the mock implements the interface.
 var _ contribpubsub.PausableSubscriber = (*pausablePubSub)(nil)
 
+// nonPausablePubSub is a mock pubsub that intentionally does NOT implement
+// PausableSubscriber, so Stop's close-first branch is exercised.
+type nonPausablePubSub struct {
+	mu       sync.Mutex
+	handlers map[string]contribpubsub.Handler
+}
+
+func newNonPausablePubSub() *nonPausablePubSub {
+	return &nonPausablePubSub{handlers: make(map[string]contribpubsub.Handler)}
+}
+
+func (p *nonPausablePubSub) Init(context.Context, contribpubsub.Metadata) error {
+	return nil
+}
+func (p *nonPausablePubSub) Features() []contribpubsub.Feature { return nil }
+func (p *nonPausablePubSub) Publish(context.Context, *contribpubsub.PublishRequest) error {
+	return nil
+}
+
+func (p *nonPausablePubSub) Subscribe(_ context.Context, req contribpubsub.SubscribeRequest, handler contribpubsub.Handler) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.handlers[req.Topic] = handler
+	return nil
+}
+func (p *nonPausablePubSub) Close() error { return nil }
+func (p *nonPausablePubSub) GetComponentMetadata() (map[string]string, []string, []string) {
+	return nil, nil, nil
+}
+
 func newSubscriptionForTest(t *testing.T, comp contribpubsub.PubSub) *Subscription {
 	t.Helper()
 
@@ -333,4 +363,30 @@ func TestStopBoundsHungPauseWithTimeout(t *testing.T) {
 		"Pause should run for several seconds before timing out")
 	require.Less(t, elapsed, 7*time.Second,
 		"Stop should return shortly after Pause timeout fires")
+}
+
+// TestStopOnNonPausableComponentClosesPromptly verifies the close-first
+// path. Stable-quiet must NOT apply when the component is non-pausable:
+// closed=true already deflects new handlers in microseconds, so Stop
+// should exit on the first inflight=0 reading and not extend shutdown
+// by 100ms unnecessarily. Regression guard for the !paused fallback.
+func TestStopOnNonPausableComponentClosesPromptly(t *testing.T) {
+	comp := newNonPausablePubSub()
+	sub := newSubscriptionForTest(t, comp)
+
+	// Sanity: the mock must not satisfy PausableSubscriber, otherwise
+	// Stop would take the paused branch.
+	_, ok := any(comp).(contribpubsub.PausableSubscriber)
+	require.False(t, ok, "test mock must not implement PausableSubscriber")
+
+	start := time.Now()
+	sub.Stop(contribpubsub.ErrGracefulShutdown)
+	elapsed := time.Since(start)
+
+	// Close-first should exit on first inflight=0 (~one poll interval),
+	// well below the 100ms stable-quiet window.
+	require.Less(t, elapsed, 80*time.Millisecond,
+		"non-pausable Stop should close promptly without 100ms stable-quiet wait")
+	require.True(t, sub.closed.Load(), "closed must be true after Stop returns")
+	require.True(t, sub.drainSealed.Load(), "drainSealed must be true after Stop returns")
 }
