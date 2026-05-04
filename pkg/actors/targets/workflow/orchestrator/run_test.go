@@ -15,7 +15,9 @@ package orchestrator
 
 import (
 	"context"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,7 +27,9 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/fake"
+	remindersfake "github.com/dapr/dapr/pkg/actors/reminders/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/config"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -311,3 +315,255 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 
 	assert.Equal(t, `3`, o.rstate.GetStartEvent().GetInput().GetValue())
 }
+
+// Test_runWorkflow_emptyInboxTerminalCreatesRetentionReminder verifies the
+// recovery code path added for orphaned-completed-workflows: when a reminder
+// fires on a workflow whose state is already terminal but whose inbox is
+// empty (because a previous run drained the inbox and saved completion, but
+// the retention reminder Create RPC was lost mid-flight to the scheduler),
+// runWorkflow re-issues the retention reminder Create idempotently.
+//
+// Without this path, a completed workflow whose retention reminder was lost
+// would never be purged, even after retention period elapses.
+func Test_runWorkflow_emptyInboxTerminalCreatesRetentionReminder(t *testing.T) {
+	t.Parallel()
+
+	const instanceID = "wf-empty-inbox-terminal"
+	completedAt := time.Now().Add(-1 * time.Hour)
+
+	history := []*backend.HistoryEvent{
+		{
+			EventId: -1, Timestamp: timestamppb.New(completedAt),
+			EventType: &protos.HistoryEvent_OrchestratorStarted{
+				OrchestratorStarted: &protos.OrchestratorStartedEvent{},
+			},
+		},
+		{
+			EventId: -1, Timestamp: timestamppb.New(completedAt),
+			EventType: &protos.HistoryEvent_ExecutionStarted{
+				ExecutionStarted: &protos.ExecutionStartedEvent{
+					Name: "TestWorkflow",
+					OrchestrationInstance: &protos.OrchestrationInstance{
+						InstanceId: instanceID,
+					},
+				},
+			},
+		},
+		{
+			EventId: -1, Timestamp: timestamppb.New(completedAt),
+			EventType: &protos.HistoryEvent_ExecutionCompleted{
+				ExecutionCompleted: &protos.ExecutionCompletedEvent{
+					OrchestrationStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED,
+				},
+			},
+		},
+	}
+
+	state := wfenginestate.NewState(wfenginestate.Options{
+		AppID:             "testapp",
+		WorkflowActorType: "dapr.internal.default.testapp.workflow",
+		ActivityActorType: "dapr.internal.default.testapp.activity",
+	})
+	for _, e := range history {
+		state.AddToHistory(e)
+	}
+	// No inbox events: this is the early-exit precondition.
+
+	rstate := runtimestate.NewOrchestrationRuntimeState(instanceID, nil, history)
+	require.True(t, runtimestate.IsCompleted(rstate),
+		"precondition: rstate must be terminal for the early-exit path to fire")
+
+	var (
+		mu         sync.Mutex
+		gotCreates []*actorapi.CreateReminderRequest
+	)
+	reminders := remindersfake.New().WithCreate(func(_ context.Context, req *actorapi.CreateReminderRequest) error {
+		mu.Lock()
+		defer mu.Unlock()
+		gotCreates = append(gotCreates, req)
+		return nil
+	})
+
+	retentionDur := time.Hour
+	o := &orchestrator{
+		factory: &factory{
+			appID:              "testapp",
+			actorType:          "dapr.internal.default.testapp.workflow",
+			activityActorType:  "dapr.internal.default.testapp.activity",
+			retentionActorType: "dapr.internal.default.testapp.retentioner",
+			reminders:          reminders,
+			actorTypeBuilder:   common.NewActorTypeBuilder("default"),
+			retentionPolicy: &config.WorkflowStateRetentionPolicy{
+				AnyTerminal: &retentionDur,
+			},
+		},
+		actorID: instanceID,
+		state:   state,
+		rstate:  rstate,
+	}
+
+	// Simulate a stale "new-event-..." reminder firing on the now-terminal
+	// workflow. The first run that completed this workflow already drained
+	// the inbox and saved terminal state, but its retention Create may have
+	// been lost (this test exercises only the recovery side of that
+	// scenario).
+	reminder := &actorapi.Reminder{Name: "new-event-stale"}
+	completed, err := o.runWorkflow(t.Context(), reminder)
+	require.NoError(t, err)
+	assert.Equal(t, todo.RunCompletedTrue, completed,
+		"runWorkflow should report success so the firing reminder is consumed")
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, gotCreates, 1,
+		"expected exactly one Create call for the recovered retention reminder")
+
+	got := gotCreates[0]
+	assert.Equal(t, "dapr.internal.default.testapp.retentioner", got.ActorType,
+		"retention reminder must target the retentioner actor type")
+	assert.Equal(t, instanceID, got.ActorID)
+	assert.Equal(t, "anyterminal", got.Name,
+		"retention reminder name must be deterministic (no random suffix) so retries overwrite in place")
+}
+
+// Test_runWorkflow_emptyInboxTerminalNoRetentionPolicy verifies the recovery
+// path is a no-op when no retention policy is configured: the workflow is
+// terminal, inbox is empty, but handleRetention returns nil without creating
+// any reminder. The firing reminder must still be consumed (RunCompletedTrue).
+func Test_runWorkflow_emptyInboxTerminalNoRetentionPolicy(t *testing.T) {
+	t.Parallel()
+
+	const instanceID = "wf-no-retention"
+
+	history := []*backend.HistoryEvent{
+		{
+			EventId: -1, Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_OrchestratorStarted{
+				OrchestratorStarted: &protos.OrchestratorStartedEvent{},
+			},
+		},
+		{
+			EventId: -1, Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_ExecutionCompleted{
+				ExecutionCompleted: &protos.ExecutionCompletedEvent{
+					OrchestrationStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED,
+				},
+			},
+		},
+	}
+
+	state := wfenginestate.NewState(wfenginestate.Options{
+		AppID:             "testapp",
+		WorkflowActorType: "dapr.internal.default.testapp.workflow",
+		ActivityActorType: "dapr.internal.default.testapp.activity",
+	})
+	for _, e := range history {
+		state.AddToHistory(e)
+	}
+
+	rstate := runtimestate.NewOrchestrationRuntimeState(instanceID, nil, history)
+
+	createCalled := false
+	reminders := remindersfake.New().WithCreate(func(_ context.Context, _ *actorapi.CreateReminderRequest) error {
+		createCalled = true
+		return nil
+	})
+
+	o := &orchestrator{
+		factory: &factory{
+			appID:              "testapp",
+			actorType:          "dapr.internal.default.testapp.workflow",
+			activityActorType:  "dapr.internal.default.testapp.activity",
+			retentionActorType: "dapr.internal.default.testapp.retentioner",
+			reminders:          reminders,
+			actorTypeBuilder:   common.NewActorTypeBuilder("default"),
+			retentionPolicy:    nil,
+		},
+		actorID: instanceID,
+		state:   state,
+		rstate:  rstate,
+	}
+
+	reminder := &actorapi.Reminder{Name: "new-event-stale"}
+	completed, err := o.runWorkflow(t.Context(), reminder)
+	require.NoError(t, err)
+	assert.Equal(t, todo.RunCompletedTrue, completed)
+	assert.False(t, createCalled,
+		"no retention reminder should be created when no retention policy is configured")
+}
+
+// Test_runWorkflow_emptyInboxNonTerminalSkipsRetention verifies the recovery
+// path does not fire on a non-terminal workflow with an empty inbox. The
+// existing comment notes this can happen when batch event processing leaves
+// stale reminders behind: the runtime must consume the reminder without
+// touching the retention reminder.
+func Test_runWorkflow_emptyInboxNonTerminalSkipsRetention(t *testing.T) {
+	t.Parallel()
+
+	const instanceID = "wf-non-terminal"
+
+	history := []*backend.HistoryEvent{
+		{
+			EventId: -1, Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_OrchestratorStarted{
+				OrchestratorStarted: &protos.OrchestratorStartedEvent{},
+			},
+		},
+		{
+			EventId: -1, Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_ExecutionStarted{
+				ExecutionStarted: &protos.ExecutionStartedEvent{
+					Name: "TestWorkflow",
+					OrchestrationInstance: &protos.OrchestrationInstance{
+						InstanceId: instanceID,
+					},
+				},
+			},
+		},
+	}
+
+	state := wfenginestate.NewState(wfenginestate.Options{
+		AppID:             "testapp",
+		WorkflowActorType: "dapr.internal.default.testapp.workflow",
+		ActivityActorType: "dapr.internal.default.testapp.activity",
+	})
+	for _, e := range history {
+		state.AddToHistory(e)
+	}
+
+	rstate := runtimestate.NewOrchestrationRuntimeState(instanceID, nil, history)
+	require.False(t, runtimestate.IsCompleted(rstate),
+		"precondition: rstate must be non-terminal for this case")
+
+	createCalled := false
+	reminders := remindersfake.New().WithCreate(func(_ context.Context, _ *actorapi.CreateReminderRequest) error {
+		createCalled = true
+		return nil
+	})
+
+	retentionDur := time.Hour
+	o := &orchestrator{
+		factory: &factory{
+			appID:              "testapp",
+			actorType:          "dapr.internal.default.testapp.workflow",
+			activityActorType:  "dapr.internal.default.testapp.activity",
+			retentionActorType: "dapr.internal.default.testapp.retentioner",
+			reminders:          reminders,
+			actorTypeBuilder:   common.NewActorTypeBuilder("default"),
+			retentionPolicy: &config.WorkflowStateRetentionPolicy{
+				AnyTerminal: &retentionDur,
+			},
+		},
+		actorID: instanceID,
+		state:   state,
+		rstate:  rstate,
+	}
+
+	reminder := &actorapi.Reminder{Name: "new-event-stale"}
+	completed, err := o.runWorkflow(t.Context(), reminder)
+	require.NoError(t, err)
+	assert.Equal(t, todo.RunCompletedTrue, completed)
+	assert.False(t, createCalled,
+		"retention reminder must not be created for a non-terminal workflow")
+}
+

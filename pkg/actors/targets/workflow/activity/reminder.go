@@ -41,7 +41,7 @@ func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent
 
 	// The activity actor should always create reminders for its own actor type
 	// and ID
-	return a.reminders.Create(ctx, &actorapi.CreateReminderRequest{
+	return common.CreateReminderWithRetry(ctx, a.reminders, &actorapi.CreateReminderRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
 		DueTime:   dueTime.Format(time.RFC3339),
@@ -73,7 +73,7 @@ func (a *activity) createWorkflowResultReminder(ctx context.Context, wfActorType
 		return err
 	}
 
-	return a.reminders.Create(ctx, &actorapi.CreateReminderRequest{
+	return common.CreateReminderWithRetry(ctx, a.reminders, &actorapi.CreateReminderRequest{
 		ActorType: wfActorType,
 		ActorID:   wfActorID,
 		DueTime:   "0s",
