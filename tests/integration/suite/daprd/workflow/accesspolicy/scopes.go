@@ -61,17 +61,6 @@ func (s *scopes) Setup(t *testing.T) []framework.Option {
 	s.sched = scheduler.New(t, scheduler.WithSentry(s.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 	s.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: wfaclconfig
-spec:
-  features:
-  - name: WorkflowAccessPolicy
-    enabled: true`), 0o600))
-
 	// Policy denies all callers, scoped only to scope-in. Both sidecars
 	// write the same policy file to disk, but only the in-scope sidecar
 	// should load it after filtering by scopes.
@@ -94,7 +83,6 @@ spec:
 	s.inScope = daprd.New(t,
 		daprd.WithAppID("scope-in"),
 		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(inScopeResDir),
 		daprd.WithResourceFiles(s.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(s.place.Address()),
@@ -104,7 +92,6 @@ spec:
 	s.outScope = daprd.New(t,
 		daprd.WithAppID("scope-out"),
 		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(outScopeResDir),
 		daprd.WithResourceFiles(s.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(s.place.Address()),

@@ -62,17 +62,6 @@ func (ia *invokeactor) Setup(t *testing.T) []framework.Option {
 	ia.sched = scheduler.New(t, scheduler.WithSentry(ia.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 	ia.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: wfaclconfig
-spec:
-  features:
-  - name: WorkflowAccessPolicy
-    enabled: true`), 0o600))
-
 	policy := []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
@@ -103,7 +92,6 @@ spec:
 	ia.target = daprd.New(t,
 		daprd.WithAppID("invokeactor-target"),
 		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(targetResDir),
 		daprd.WithResourceFiles(ia.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(ia.place.Address()),
@@ -113,7 +101,6 @@ spec:
 	ia.attacker = daprd.New(t,
 		daprd.WithAppID("invokeactor-attacker"),
 		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourceFiles(ia.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(ia.place.Address()),
 		daprd.WithSchedulerAddresses(ia.sched.Address()),

@@ -60,17 +60,6 @@ func (h *httpapi) Setup(t *testing.T) []framework.Option {
 	h.sched = scheduler.New(t, scheduler.WithSentry(h.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 	h.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: wfaclconfig
-spec:
-  features:
-  - name: WorkflowAccessPolicy
-    enabled: true`), 0o600))
-
 	policy := []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
@@ -96,7 +85,6 @@ spec:
 	h.daprd = daprd.New(t,
 		daprd.WithAppID("httpapi-app"),
 		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(resDir),
 		daprd.WithResourceFiles(h.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(h.place.Address()),
