@@ -699,15 +699,13 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.flushOutstandingHTTPEndpoints(ctx)
 
-	if a.globalConfig.IsFeatureEnabled(config.MCPServerResource) {
-		err = a.loadMCPServers(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to load mcpservers: %s", err)
-		}
-		a.flushOutstandingMCPServers(ctx)
-		if list := len(a.compStore.ListMCPServers()); list > 0 {
-			log.Debugf("MCP servers loaded: %d; additional handling to be implemented", list)
-		}
+	err = a.loadMCPServers(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load mcpservers: %s", err)
+	}
+	a.flushOutstandingMCPServers(ctx)
+	if list := len(a.compStore.ListMCPServers()); list > 0 {
+		log.Debugf("MCP servers loaded: %d; additional handling to be implemented", list)
 	}
 
 	err = a.loadDeclarativeSubscriptions(ctx)
@@ -756,30 +754,19 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	})
 
 	// Load and apply workflow access policies before starting servers.
-	if a.globalConfig.IsFeatureEnabled(config.WorkflowAccessPolicy) {
-		if err = a.loadWorkflowAccessPolicies(ctx); err != nil {
-			return fmt.Errorf("failed to load workflow access policies: %w", err)
-		}
-
-		a.reloader.SetPolicyRecompiler(reconciler.WorkflowAccessPolicyOptions{
-			AppID:     a.runtimeConfig.id,
-			Loader:    a.reloader.Loader(),
-			CompStore: a.compStore,
-			Recompiler: func(compiled *workflowacl.CompiledPolicies) {
-				a.daprGRPCAPI.SetWorkflowAccessPolicies(compiled)
-			},
-			Healthz: a.runtimeConfig.healthz,
-		})
-	} else {
-		// Signal the reloader that no policy reconciler is needed so Run()
-		// doesn't block waiting.
-		a.reloader.SignalNoPolicyRecompiler()
-
-		// Warn if policies may exist but the feature flag is disabled.
-		// This helps operators catch misconfigurations where they created
-		// WorkflowAccessPolicy resources but forgot to enable the feature.
-		a.warnIfPoliciesExistWithoutFeatureFlag(ctx)
+	if err = a.loadWorkflowAccessPolicies(ctx); err != nil {
+		return fmt.Errorf("failed to load workflow access policies: %w", err)
 	}
+
+	a.reloader.SetPolicyRecompiler(reconciler.WorkflowAccessPolicyOptions{
+		AppID:     a.runtimeConfig.id,
+		Loader:    a.reloader.Loader(),
+		CompStore: a.compStore,
+		Recompiler: func(compiled *workflowacl.CompiledPolicies) {
+			a.daprGRPCAPI.SetWorkflowAccessPolicies(compiled)
+		},
+		Healthz: a.runtimeConfig.healthz,
+	})
 
 	if err = a.runnerCloser.AddCloser(a.daprGRPCAPI); err != nil {
 		return err

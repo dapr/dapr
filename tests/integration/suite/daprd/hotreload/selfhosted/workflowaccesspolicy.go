@@ -59,24 +59,10 @@ func (w *workflowaccesspolicy) Setup(t *testing.T) []framework.Option {
 	w.sched = scheduler.New(t)
 	db := sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true
-  - name: WorkflowAccessPolicy
-    enabled: true`), 0o600))
-
 	w.resDir = t.TempDir()
 
 	w.daprd = daprd.New(t,
 		daprd.WithAppID("wfacl-selfhosted"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(w.resDir),
 		daprd.WithResourceFiles(db.GetComponent(t)),
 		daprd.WithPlacementAddresses(w.place.Address()),
