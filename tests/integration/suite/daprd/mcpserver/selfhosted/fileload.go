@@ -130,14 +130,22 @@ func (s *fileload) Run(t *testing.T, ctx context.Context) {
 		s.logline.EventuallyFoundAll(t)
 	})
 
-	// TODO(sicoyle): Once the metadata API exposes MCPServers (wired in
-	// feat-mcp-crd-plus-rest with ActivateMCPServers), replace this with
-	// metadata API assertions to verify:
-	// - global-mcp and scoped-mcp appear in metadata
-	// - other-app-mcp (wrong scope) does NOT appear
-	// - invalid-mcp (two transports, CEL rejected) does NOT appear
-	t.Run("metadata API does not yet expose MCPServers on this branch", func(t *testing.T) {
-		assert.Empty(t, s.daprd.GetMetaMCPServers(t, ctx),
-			"MCPServers are not yet exposed via metadata API; activation logic is in feat-mcp-crd-plus-rest")
+	t.Run("metadata API exposes loaded MCPServers", func(t *testing.T) {
+		servers := s.daprd.GetMetaMCPServers(t, ctx)
+
+		names := make([]string, 0, len(servers))
+		for _, m := range servers {
+			names = append(names, m.GetName())
+		}
+
+		// Loaded: global-mcp (no scopes) and scoped-mcp (scoped to test-app).
+		assert.ElementsMatch(t, []string{"global-mcp", "scoped-mcp"}, names,
+			"metadata API should expose only the MCPServers loaded for this app")
+		// other-app-mcp is scoped to a different app; invalid-mcp has two transports
+		// and is rejected by validation. Neither should appear.
+		assert.NotContains(t, names, "other-app-mcp",
+			"out-of-scope MCPServer should not be exposed")
+		assert.NotContains(t, names, "invalid-mcp",
+			"validation-rejected MCPServer should not be exposed")
 	})
 }
