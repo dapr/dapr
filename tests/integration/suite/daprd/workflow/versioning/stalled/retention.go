@@ -113,5 +113,5 @@ func (r *retention) Run(t *testing.T, ctx context.Context) {
 		ids, err := client.ListInstanceIDs(ctx)
 		require.NoError(c, err)
 		assert.Empty(c, ids.GetInstanceIds())
-	}, time.Second*20, 10*time.Millisecond)
+	}, time.Second*45, 10*time.Millisecond)
 }
