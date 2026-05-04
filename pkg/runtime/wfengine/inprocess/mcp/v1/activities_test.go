@@ -333,10 +333,10 @@ func TestMakeListToolsActivity_CacheHitConcurrentRoundTrip(t *testing.T) {
 	wg.Add(workers)
 	errs := make(chan error, workers*callsPerWorker)
 
-	for w := 0; w < workers; w++ {
+	for range workers {
 		go func() {
 			defer wg.Done()
-			for c := 0; c < callsPerWorker; c++ {
+			for range callsPerWorker {
 				res, err := activity(&fakeActivityContext{ctx: context.Background()})
 				if err != nil {
 					errs <- err
