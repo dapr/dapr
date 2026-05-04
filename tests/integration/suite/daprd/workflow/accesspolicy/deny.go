@@ -71,9 +71,9 @@ spec:
   rules:
   - callers:
     - appID: wfacl-caller
-    operations:
-    - type: workflow
-      name: DeniedWF
+    workflows:
+    - name: DeniedWF
+      operations: [schedule]
       action: deny
 `)
 

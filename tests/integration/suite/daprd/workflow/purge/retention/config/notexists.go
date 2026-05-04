@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -74,12 +74,26 @@ func (n *notexists) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, n.workflow.Dapr().GetMetaActorRuntime(t, ctx).ActiveActors, 3)
 	}, time.Second*10, time.Millisecond*10)
 
-	dclient := n.workflow.Dapr().GRPCClient(t, ctx)
-	_, err := dclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
-		ActorType: "dapr.internal.default." + n.workflow.Dapr().AppID() + ".retentioner",
-		ActorId:   "helloworld",
-		Name:      "anyterminal-dxnUithe",
-		DueTime:   "3s",
+	// Inject the retentioner reminder via the scheduler directly. The daprd
+	// RegisterActorReminder API rejects "dapr.internal.*" actor types because
+	// they are reserved for the workflow runtime.
+	dueTime := time.Now().Add(3 * time.Second).Format(time.RFC3339)
+	appID := n.workflow.Dapr().AppID()
+	_, err := n.workflow.Scheduler().Client(t, ctx).ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
+		Name: "anyterminal-dxnUithe",
+		Job:  &schedulerv1pb.Job{DueTime: &dueTime},
+		Metadata: &schedulerv1pb.JobMetadata{
+			Namespace: "default",
+			AppId:     appID,
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Actor{
+					Actor: &schedulerv1pb.TargetActorReminder{
+						Type: "dapr.internal.default." + appID + ".retentioner",
+						Id:   "helloworld",
+					},
+				},
+			},
+		},
 	})
 	require.NoError(t, err)
 
