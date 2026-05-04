@@ -99,15 +99,16 @@ var log = logger.NewLogger("dapr.runtime")
 
 // DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
-	runtimeConfig     *internalConfig
-	globalConfig      *config.Configuration
-	accessControlList *config.AccessControlList
-	grpc              *manager.Manager
-	channels          *channels.Channels
-	appConfig         config.ApplicationConfig
-	directMessaging   invokev1.DirectMessaging
-	actors            actors.Interface
-	wfengine          wfengine.Interface
+	runtimeConfig          *internalConfig
+	globalConfig           *config.Configuration
+	accessControlList      *config.AccessControlList
+	grpc                   *manager.Manager
+	channels               *channels.Channels
+	appConfig              config.ApplicationConfig
+	directMessaging        invokev1.DirectMessaging
+	actors                 actors.Interface
+	wfengine               wfengine.Interface
+	workflowAccessPolicies *workflowacl.Holder
 
 	nameResolver          nr.Resolver
 	hostAddress           string
@@ -323,6 +324,8 @@ func newDaprRuntime(ctx context.Context,
 		wfSigner = sec.Signer()
 	}
 
+	workflowAccessPolicies := workflowacl.NewHolder()
+
 	wfe, err := wfengine.New(wfengine.Options{
 		AppID:                           runtimeConfig.id,
 		Namespace:                       namespace,
@@ -339,6 +342,7 @@ func newDaprRuntime(ctx context.Context,
 		Signer:                          wfSigner,
 		InProcessExecutor:               inProcessExec,
 		MaxRequestBodySize:              runtimeConfig.maxRequestBodySize,
+		WorkflowAccessPolicies:          workflowAccessPolicies,
 	})
 	if err != nil {
 		return nil, err
@@ -364,32 +368,33 @@ func newDaprRuntime(ctx context.Context,
 	}
 
 	rt := &DaprRuntime{
-		runtimeConfig:         runtimeConfig,
-		globalConfig:          globalConfig,
-		accessControlList:     accessControlList,
-		grpc:                  grpc,
-		tracerProvider:        nil,
-		resiliency:            resiliencyProvider,
-		appHealthReady:        nil,
-		compStore:             compStore,
-		pubsubAdapter:         pubsubAdapter,
-		pubsubAdapterStreamer: pubsubAdapterStreamer,
-		outbox:                outbox,
-		meta:                  meta,
-		operatorClient:        operatorClient,
-		channels:              channels,
-		sec:                   sec,
-		processor:             processor,
-		jobsManager:           jobsManager,
-		authz:                 authz,
-		reloader:              reloader,
-		namespace:             namespace,
-		initComplete:          make(chan struct{}),
-		isAppHealthy:          make(chan struct{}),
-		clock:                 new(clock.RealClock),
-		httpMiddleware:        httpMiddleware,
-		actors:                actors,
-		wfengine:              wfe,
+		runtimeConfig:          runtimeConfig,
+		globalConfig:           globalConfig,
+		accessControlList:      accessControlList,
+		grpc:                   grpc,
+		tracerProvider:         nil,
+		resiliency:             resiliencyProvider,
+		appHealthReady:         nil,
+		compStore:              compStore,
+		pubsubAdapter:          pubsubAdapter,
+		pubsubAdapterStreamer:  pubsubAdapterStreamer,
+		outbox:                 outbox,
+		meta:                   meta,
+		operatorClient:         operatorClient,
+		channels:               channels,
+		sec:                    sec,
+		processor:              processor,
+		jobsManager:            jobsManager,
+		authz:                  authz,
+		reloader:               reloader,
+		namespace:              namespace,
+		initComplete:           make(chan struct{}),
+		isAppHealthy:           make(chan struct{}),
+		clock:                  new(clock.RealClock),
+		httpMiddleware:         httpMiddleware,
+		actors:                 actors,
+		wfengine:               wfe,
+		workflowAccessPolicies: workflowAccessPolicies,
 	}
 	close(rt.isAppHealthy)
 
@@ -743,17 +748,18 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	// Create and start internal and external gRPC servers
 	a.daprGRPCAPI = grpc.NewAPI(grpc.APIOpts{
-		Universal:             a.daprUniversal,
-		Logger:                logger.NewLogger("dapr.grpc.api"),
-		Channels:              a.channels,
-		PubSubAdapter:         a.pubsubAdapter,
-		PubSubAdapterStreamer: a.pubsubAdapterStreamer,
-		Outbox:                a.outbox,
-		DirectMessaging:       a.directMessaging,
-		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
-		TracingSpec:           a.globalConfig.GetTracingSpec(),
-		AccessControlList:     a.accessControlList,
-		Processor:             a.processor,
+		Universal:              a.daprUniversal,
+		Logger:                 logger.NewLogger("dapr.grpc.api"),
+		Channels:               a.channels,
+		PubSubAdapter:          a.pubsubAdapter,
+		PubSubAdapterStreamer:  a.pubsubAdapterStreamer,
+		Outbox:                 a.outbox,
+		DirectMessaging:        a.directMessaging,
+		SendToOutputBindingFn:  a.processor.Binding().SendToOutputBinding,
+		TracingSpec:            a.globalConfig.GetTracingSpec(),
+		AccessControlList:      a.accessControlList,
+		Processor:              a.processor,
+		WorkflowAccessPolicies: a.workflowAccessPolicies,
 	})
 
 	// Load and apply workflow access policies before starting servers.
@@ -762,13 +768,11 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 
 	a.reloader.SetPolicyRecompiler(reconciler.WorkflowAccessPolicyOptions{
-		AppID:     a.runtimeConfig.id,
-		Loader:    a.reloader.Loader(),
-		CompStore: a.compStore,
-		Recompiler: func(compiled *workflowacl.CompiledPolicies) {
-			a.daprGRPCAPI.SetWorkflowAccessPolicies(compiled)
-		},
-		Healthz: a.runtimeConfig.healthz,
+		AppID:      a.runtimeConfig.id,
+		Loader:     a.reloader.Loader(),
+		CompStore:  a.compStore,
+		Recompiler: a.workflowAccessPolicies.Store,
+		Healthz:    a.runtimeConfig.healthz,
 	})
 
 	if err = a.runnerCloser.AddCloser(a.daprGRPCAPI); err != nil {
@@ -1219,7 +1223,6 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		GRPC:              a.grpc,
 		SchedulerClient:   a.jobsManager.Client(),
 		SchedulerReloader: a.jobsManager,
-		WorkflowACL:       a.buildWorkflowACLChecker(),
 	}); err != nil {
 		return err
 	}
