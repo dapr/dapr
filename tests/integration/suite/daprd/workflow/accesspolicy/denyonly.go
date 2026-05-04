@@ -73,15 +73,14 @@ spec:
   rules:
   - callers:
     - appID: denyonly-target
-    operations:
-    - type: activity
-      name: "*"
+    activities:
+    - name: "*"
       action: allow
   - callers:
     - appID: denyonly-caller
-    operations:
-    - type: workflow
-      name: "*"
+    workflows:
+    - name: "*"
+      operations: [schedule]
       action: deny
 `)
 

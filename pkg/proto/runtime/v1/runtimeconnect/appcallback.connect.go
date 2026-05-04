@@ -152,7 +152,8 @@ func NewAppCallbackClient(httpClient connect.HTTPClient, baseURL string, opts ..
 		onJobEvent: connect.NewClient[v11.JobEventRequest, v11.JobEventResponse](
 			httpClient,
 			baseURL+AppCallbackOnJobEventProcedure,
-			opts...,
+			connect.WithSchema(appCallbackMethods.ByName("OnJobEvent")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -270,7 +271,8 @@ func NewAppCallbackHandler(svc AppCallbackHandler, opts ...connect.HandlerOption
 	appCallbackOnJobEventHandler := connect.NewUnaryHandler(
 		AppCallbackOnJobEventProcedure,
 		svc.OnJobEvent,
-		opts...,
+		connect.WithSchema(appCallbackMethods.ByName("OnJobEvent")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.runtime.v1.AppCallback/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

@@ -187,9 +187,9 @@ func (w *workflowaccesspolicies) Run(t *testing.T, ctx context.Context) {
 				DefaultAction: wfaclapi.PolicyActionDeny,
 				Rules: []wfaclapi.WorkflowAccessPolicyRule{{
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "wfacl-reload-target"}},
-					Operations: []wfaclapi.WorkflowOperationRule{{
-						Type: wfaclapi.WorkflowOperationTypeActivity, Name: "*", Action: wfaclapi.PolicyActionAllow,
-					}},
+					Activities: []wfaclapi.ActivityRule{
+						{Name: "*", Action: wfaclapi.PolicyActionAllow},
+					},
 				}},
 			},
 		}
@@ -220,15 +220,17 @@ func (w *workflowaccesspolicies) Run(t *testing.T, ctx context.Context) {
 				Rules: []wfaclapi.WorkflowAccessPolicyRule{
 					{
 						Callers: []wfaclapi.WorkflowCaller{{AppID: "wfacl-reload-caller"}},
-						Operations: []wfaclapi.WorkflowOperationRule{{
-							Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionAllow,
-						}},
+						Workflows: []wfaclapi.WorkflowRule{
+							{Name: "*", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule}, Action: wfaclapi.PolicyActionAllow},
+						},
 					},
 					{
 						Callers: []wfaclapi.WorkflowCaller{{AppID: "wfacl-reload-target"}},
-						Operations: []wfaclapi.WorkflowOperationRule{
-							{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionAllow},
-							{Type: wfaclapi.WorkflowOperationTypeActivity, Name: "*", Action: wfaclapi.PolicyActionAllow},
+						Workflows: []wfaclapi.WorkflowRule{
+							{Name: "*", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule}, Action: wfaclapi.PolicyActionAllow},
+						},
+						Activities: []wfaclapi.ActivityRule{
+							{Name: "*", Action: wfaclapi.PolicyActionAllow},
 						},
 					},
 				},

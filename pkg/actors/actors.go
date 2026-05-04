@@ -83,7 +83,6 @@ type InitOptions struct {
 	GRPC              *manager.Manager
 	SchedulerClient   schedulerv1pb.SchedulerClient
 	SchedulerReloader schedclient.Reloader
-	WorkflowACL       router.WorkflowACLChecker
 }
 
 // Interface is the main runtime for the actors subsystem.
@@ -240,7 +239,6 @@ func (a *actors) Init(opts InitOptions) error {
 		Resiliency:         a.resiliency,
 		Reminders:          a.reminders,
 		MaxRequestBodySize: a.maxRequestBodySize,
-		WorkflowACL:        opts.WorkflowACL,
 	})
 
 	a.timerStorage = inmemory.New(inmemory.Options{
