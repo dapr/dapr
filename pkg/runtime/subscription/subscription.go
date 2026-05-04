@@ -451,11 +451,18 @@ func (s *Subscription) Stop(err ...error) {
 	if graceful {
 		if pausable, ok := s.pubsub.Component.(contribpubsub.PausableSubscriber); ok {
 			log.Infof("pausing subscription on topic %s during graceful shutdown", s.topic)
-			if perr := pausable.Pause(context.Background()); perr != nil {
+			// Bound Pause with a timeout so a hung component cannot block
+			// shutdown forever. Stop is invoked synchronously by the
+			// runtime's block-shutdown closer; without a deadline here, a
+			// stuck Pause would prevent the block-shutdown timer from
+			// ever starting.
+			pauseCtx, pauseCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if perr := pausable.Pause(pauseCtx); perr != nil {
 				log.Warnf("failed to pause subscription on topic %s during graceful shutdown: %v", s.topic, perr)
 			} else {
 				paused = true
 			}
+			pauseCancel()
 		}
 	}
 
@@ -487,12 +494,29 @@ func (s *Subscription) Stop(err ...error) {
 	// Add(1), tripping the "WaitGroup is reused before previous Wait
 	// has returned" panic. atomic.Int64 polling has no such restriction.
 	//
-	// No inner timeout here — the runner's graceful-shutdown-duration
+	// Require inflight to stay 0 across several consecutive polls before
+	// we exit. A single 0 reading is not enough: there is a sub-ms gap
+	// between handler return and the contrib consumer goroutine's next
+	// claim.Messages() read, and immediately after Pause returns the
+	// goroutine takes scheduler latency to wake and pick up the first
+	// buffered message. Without this, those windows can cause Stop to
+	// seal before any of the still-buffered messages reach the app.
+	//
+	// No outer timeout here — the runner's graceful-shutdown-duration
 	// caps the whole close phase, so a stuck handler can't hang shutdown
 	// indefinitely.
-	const drainPollInterval = 20 * time.Millisecond
-	for s.inflight.Load() > 0 {
-		inflight = true
+	const (
+		drainPollInterval = 20 * time.Millisecond
+		drainStableCount  = 5 // 100ms of stable quiet
+	)
+	stable := 0
+	for stable < drainStableCount {
+		if s.inflight.Load() > 0 {
+			inflight = true
+			stable = 0
+		} else {
+			stable++
+		}
 		time.Sleep(drainPollInterval)
 	}
 
