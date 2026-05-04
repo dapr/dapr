@@ -44,13 +44,13 @@ func (a *api) callActorValidateWorkflowACL(ctx context.Context, in *internalv1pb
 		return err
 	}
 
-	// Same-sidecar self-invocation is unconditionally allowed. WorkflowAccessPolicy
-	// is meant to gate cross-app access; it must not apply to a sidecar talking to
-	// its own actors (e.g. a workflow emitting AddWorkflowEvent back to its parent
-	// instance hosted on the same sidecar). mTLS guarantees the SPIFFE identity is
-	// not spoofable, so callerAppID + callerNamespace matching this sidecar's own
-	// identity is a sound signal of self-call.
-	if a.isSelfCall(callerAppID, callerNamespace) {
+	// Same-app calls are unconditionally allowed. WorkflowAccessPolicy is meant
+	// to gate cross-app access; it must not apply to an app talking to its own
+	// actors — including across replicas, since instances of the same app share
+	// a SPIFFE identity. The most common trigger is workflow internals like
+	// AddWorkflowEvent flowing from a child workflow back to its parent on the
+	// same app. mTLS guarantees the SPIFFE identity is not spoofable.
+	if a.isSameAppIdentity(callerAppID, callerNamespace) {
 		return nil
 	}
 
@@ -103,8 +103,8 @@ func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *inte
 		return err
 	}
 
-	// Self-call from this sidecar's own identity bypasses the policy.
-	if a.isSelfCall(callerAppID, callerNamespace) {
+	// Same-app caller bypasses the policy.
+	if a.isSameAppIdentity(callerAppID, callerNamespace) {
 		return nil
 	}
 
@@ -137,13 +137,14 @@ func (a *api) extractCallerIdentity(ctx context.Context) (appID, namespace strin
 	return spiffeID.AppID(), spiffeID.Namespace(), nil
 }
 
-// isSelfCall reports whether the caller's verified SPIFFE identity matches
-// this sidecar's own appID and namespace. mTLS prevents identity spoofing, so
-// equality is a sound signal that the call originated from this sidecar's own
-// actors talking to its own actors.
-func (a *api) isSelfCall(callerAppID, callerNamespace string) bool {
-	return callerAppID == a.Universal.AppID() &&
-		(callerNamespace == "" || callerNamespace == a.Namespace())
+// isSameAppIdentity reports whether the caller's verified SPIFFE identity
+// matches this app's identity (same appID and namespace). mTLS prevents
+// identity spoofing, so equality is a sound signal that the call originated
+// from this app — either this sidecar talking to its own actors or another
+// instance/replica of the same app. Either case bypasses
+// WorkflowAccessPolicy, which gates only cross-app access.
+func (a *api) isSameAppIdentity(callerAppID, callerNamespace string) bool {
+	return callerAppID == a.Universal.AppID() && callerNamespace == a.Namespace()
 }
 
 // checkNamespace denies cross-namespace calls when policies are active.
