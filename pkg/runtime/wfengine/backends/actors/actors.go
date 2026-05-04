@@ -405,6 +405,7 @@ func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID) (
 		Output:         output,
 		CustomStatus:   rstate.GetCustomStatus(),
 		FailureDetails: failureDetuils,
+		Version:        rstate.GetStartEvent().GetVersion(),
 	}, nil
 }
 

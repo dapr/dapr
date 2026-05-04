@@ -21,6 +21,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -249,8 +250,12 @@ func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, star
 	output, _ := runtimestate.Output(rstate)
 	failureDetails, _ := runtimestate.FailureDetails(rstate)
 	var parentInstanceID string
+	var parentAppID *wrapperspb.StringValue
 	if se != nil && se.GetParentInstance() != nil && se.GetParentInstance().GetWorkflowInstance() != nil {
 		parentInstanceID = se.GetParentInstance().GetWorkflowInstance().GetInstanceId()
+		if se.GetParentInstance().GetAppID() != "" {
+			parentAppID = wrapperspb.String(se.GetParentInstance().GetAppID())
+		}
 	}
 	return &backend.WorkflowMetadata{
 		InstanceId:       rstate.GetInstanceId(),
@@ -264,6 +269,8 @@ func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, star
 		CustomStatus:     rstate.GetCustomStatus(),
 		FailureDetails:   failureDetails,
 		ParentInstanceId: parentInstanceID,
+		ParentAppId:      parentAppID,
+		Version:          startEvent.GetVersion(),
 	}
 }
 
