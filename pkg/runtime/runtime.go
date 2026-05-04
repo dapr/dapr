@@ -334,6 +334,7 @@ func newDaprRuntime(ctx context.Context,
 		WorkflowHistorySigning:          globalConfig.IsFeatureEnabled(config.WorkflowHistorySigning),
 		ComponentStore:                  compStore,
 		Signer:                          wfSigner,
+		MaxRequestBodySize:              runtimeConfig.maxRequestBodySize,
 	})
 	if err != nil {
 		return nil, err
