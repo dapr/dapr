@@ -42,17 +42,6 @@ type mcpserver struct {
 
 func (m *mcpserver) Setup(t *testing.T) []framework.Option {
 	m.resDir = t.TempDir()
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: mcpserver
-spec:
-  features:
-  - name: MCPServerResource
-    enabled: true
-`), 0o600))
 
 	require.NoError(t, os.WriteFile(filepath.Join(m.resDir, "mcp.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -66,7 +55,6 @@ spec:
 `), 0o600))
 
 	m.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(m.resDir),
 		daprd.WithExecOptions(exec.WithEnvVars(t)),
 	)

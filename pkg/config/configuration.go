@@ -68,10 +68,6 @@ const (
 	// history events are signed using the app's X.509 SVID identity,
 	// creating a verifiable chain of signatures. Disabled by default.
 	WorkflowHistorySigning Feature = "WorkflowHistorySigning"
-
-	// Enables workflow access control policies. When enabled, WorkflowAccessPolicy
-	// resources are loaded and enforced at the target sidecar's CallActor handler.
-	WorkflowAccessPolicy Feature = "WorkflowAccessPolicy"
 )
 
 // end feature flags section
