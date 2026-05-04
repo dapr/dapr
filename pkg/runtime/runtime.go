@@ -89,6 +89,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/scheduler"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/crypto/spiffe/signer"
@@ -262,6 +263,7 @@ func newDaprRuntime(ctx context.Context,
 		Mode:                 runtimeConfig.mode,
 		DisseminationTimeout: runtimeConfig.actorsDisseminationTimeout,
 	})
+	inProcessExec := inprocess.NewExecutor()
 
 	processor := processor.New(processor.Options{
 		ID:                              runtimeConfig.id,
@@ -336,13 +338,18 @@ func newDaprRuntime(ctx context.Context,
 		WorkflowsRemoteActivityReminder: globalConfig.IsFeatureEnabled(config.WorkflowsRemoteActivityReminder),
 		WorkflowHistorySigning:          globalConfig.IsFeatureEnabled(config.WorkflowHistorySigning),
 		ComponentStore:                  compStore,
+		Security:                        sec,
 		Signer:                          wfSigner,
+		InProcessExecutor:               inProcessExec,
 		MaxRequestBodySize:              runtimeConfig.maxRequestBodySize,
 		WorkflowAccessPolicies:          workflowAccessPolicies,
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	// Install the wfengine as the processor's internal workflow registrar.
+	processor.SetInternalWorkflows(wfe)
 
 	jobsManager, err := scheduler.New(scheduler.Options{
 		Namespace:        namespace,
@@ -708,9 +715,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return fmt.Errorf("failed to load mcpservers: %s", err)
 	}
 	a.flushOutstandingMCPServers(ctx)
-	if list := len(a.compStore.ListMCPServers()); list > 0 {
-		log.Debugf("MCP servers loaded: %d; additional handling to be implemented", list)
-	}
 
 	err = a.loadDeclarativeSubscriptions(ctx)
 	if err != nil {

@@ -15,6 +15,7 @@ package processor
 
 import (
 	"context"
+	"sync"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
@@ -58,9 +59,14 @@ func (p *Processor) AddPendingMCPServer(ctx context.Context, s mcpserverapi.MCPS
 
 // processMCPServers reads from the pendingMCPServers channel, resolves secrets,
 // and adds each MCPServer to the component store.
+// Workflow registration runs concurrently as each performs a network round-trip to discover tools.
 func (p *Processor) processMCPServers(ctx context.Context) error {
+	var wg sync.WaitGroup
+
 	for s := range p.pendingMCPServers {
 		if s.Name == "" {
+			// Flush sentinel: wait for in-flight registrations before continuing.
+			wg.Wait()
 			continue
 		}
 
@@ -69,12 +75,58 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 			continue
 		}
 
+		if err := validate.MCPServerSecurity(&s, p.kubernetesMode); err != nil {
+			log.Warnf("MCPServer %q failed security validation: %s", s.Name, err)
+			continue
+		}
+
 		p.processMCPServerSecrets(ctx, &s)
 		p.compStore.AddMCPServer(s)
 		log.Infof("MCPServer loaded: %s", s.LogName())
+
+		registrar := p.getInternalWorkflows()
+		if registrar == nil {
+			continue
+		}
+
+		// Skip registration if the runtime is already shutting down — the
+		// derived contexts inside RegisterMCPServer would just error out.
+		if ctx.Err() != nil {
+			continue
+		}
+
+		wg.Add(1)
+		go func(s mcpserverapi.MCPServer) {
+			defer wg.Done()
+			// Recover so a panic in one server's registration does not bring down the whole sidecar.
+			// The failure is isolated to that server.
+			defer func() {
+				if r := recover(); r != nil {
+					log.Errorf("MCPServer %q: panic during workflow registration: %v", s.Name, r)
+				}
+			}()
+			// Ensure workflow actor types are registered with placement before
+			// any internal workflow becomes invokable.
+			if err := registrar.EnsureActorsRegistered(ctx); err != nil {
+				log.Warnf("MCPServer %q: failed to register workflow actors: %s", s.Name, err)
+				return
+			}
+			if err := registrar.RegisterMCPServer(ctx, s, p.compStore, p.security); err != nil {
+				log.Warnf("MCPServer %q: failed to register workflows: %s", s.Name, err)
+			}
+		}(s)
 	}
 
+	wg.Wait()
 	return nil
+}
+
+// DeleteMCPServer removes an MCPServer from the store and unregisters its workflows.
+func (p *Processor) DeleteMCPServer(serverName string) {
+	p.compStore.DeleteMCPServer(serverName)
+	if registrar := p.getInternalWorkflows(); registrar != nil {
+		registrar.UnregisterMCPServer(serverName)
+	}
 }
 
 // processMCPServerSecrets resolves secretKeyRef and envRef entries in the

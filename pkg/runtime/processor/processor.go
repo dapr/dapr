@@ -47,6 +47,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/subscriber"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/wfregistrar"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
@@ -125,6 +126,10 @@ type Processor struct {
 	subscriber      *subscriber.Subscriber
 	reporter        registry.Reporter
 
+	// kubernetesMode is true when running in Kubernetes mode.
+	// Used to reject configurations that are unsafe in a cluster (e.g. stdio transport).
+	kubernetesMode bool
+
 	pendingHTTPEndpoints       chan httpendpointsapi.HTTPEndpoint
 	pendingMCPServers          chan mcpserverapi.MCPServer
 	pendingComponents          chan componentsapi.Component
@@ -137,6 +142,26 @@ type Processor struct {
 	running  atomic.Bool
 	shutdown atomic.Bool
 	closedCh chan struct{}
+
+	// internalWorkflows is set after the workflow engine is created via
+	// SetInternalWorkflows. Used to register internal workflows when resources
+	// are loaded or hot-reloaded.
+	internalWorkflowsLock sync.RWMutex
+	internalWorkflows     wfregistrar.Registrar
+}
+
+// SetInternalWorkflows installs the internal workflow wfregistrar.
+func (p *Processor) SetInternalWorkflows(r wfregistrar.Registrar) {
+	p.internalWorkflowsLock.Lock()
+	defer p.internalWorkflowsLock.Unlock()
+	p.internalWorkflows = r
+}
+
+// getInternalWorkflows returns the wfregistrar, or nil if it has not been set yet.
+func (p *Processor) getInternalWorkflows() wfregistrar.Registrar {
+	p.internalWorkflowsLock.RLock()
+	defer p.internalWorkflowsLock.RUnlock()
+	return p.internalWorkflows
 }
 
 func New(opts Options) *Processor {
@@ -188,6 +213,7 @@ func New(opts Options) *Processor {
 
 	return &Processor{
 		appID:                      opts.ID,
+		kubernetesMode:             opts.Mode == modes.KubernetesMode,
 		pendingHTTPEndpoints:       make(chan httpendpointsapi.HTTPEndpoint),
 		pendingMCPServers:          make(chan mcpserverapi.MCPServer),
 		pendingComponents:          make(chan componentsapi.Component),

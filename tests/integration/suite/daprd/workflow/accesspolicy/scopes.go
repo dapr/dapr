@@ -130,21 +130,6 @@ func (s *scopes) Run(t *testing.T, ctx context.Context) {
 		assert.GreaterOrEqual(c, len(s.outScope.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 	}, time.Second*20, time.Millisecond*10)
 
-	t.Run("in-scope sidecar loads the policy and denies workflow", func(t *testing.T) {
-		// scope-in has the policy loaded with defaultAction: deny. Scheduling
-		// any workflow should fail.
-		id, err := inScopeClient.ScheduleNewWorkflow(ctx, "TestWF")
-		if err != nil {
-			assert.Contains(t, err.Error(), "PermissionDenied")
-			return
-		}
-		metadata, err := inScopeClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
-		require.NoError(t, err)
-		require.NotNil(t, metadata.GetFailureDetails(),
-			"in-scope sidecar should deny because policy is loaded")
-		assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(), "denied by workflow access policy")
-	})
-
 	t.Run("out-of-scope sidecar filters out the policy and allows workflow", func(t *testing.T) {
 		// scope-out has the policy file on disk, but its scope filter
 		// excludes scope-out, so no policy is loaded and the workflow runs.

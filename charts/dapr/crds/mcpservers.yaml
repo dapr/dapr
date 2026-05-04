@@ -94,6 +94,15 @@ spec:
                             properties:
                               audience:
                                 type: string
+                              clientID:
+                                description: |-
+                                  ClientID is the OAuth2 client identifier sent to the token endpoint.
+                                  Required by RFC 6749 for the standard client_credentials flow (form parameter
+                                  or HTTP Basic username). May be left empty for non-standard flows (e.g. JWT-bearer
+                                  assertions or token endpoints that key solely on the client_secret). Client IDs
+                                  are typically public identifiers; use spec.headers with a secretKeyRef if your
+                                  environment requires sourcing the value from a secret store.
+                                type: string
                               issuer:
                                 description: Issuer is the token endpoint of the authorization
                                   server.
@@ -267,6 +276,15 @@ spec:
                             properties:
                               audience:
                                 type: string
+                              clientID:
+                                description: |-
+                                  ClientID is the OAuth2 client identifier sent to the token endpoint.
+                                  Required by RFC 6749 for the standard client_credentials flow (form parameter
+                                  or HTTP Basic username). May be left empty for non-standard flows (e.g. JWT-bearer
+                                  assertions or token endpoints that key solely on the client_secret). Client IDs
+                                  are typically public identifiers; use spec.headers with a secretKeyRef if your
+                                  environment requires sourcing the value from a secret store.
+                                type: string
                               issuer:
                                 description: Issuer is the token endpoint of the authorization
                                   server.
@@ -415,6 +433,12 @@ spec:
                           required:
                           - workflowName
                           type: object
+                        mutate:
+                          description: |-
+                            Mutate, when true, causes the hook's return value to replace the
+                            original result. When false (default),
+                            the hook observes but cannot modify the result.
+                          type: boolean
                       type: object
                     type: array
                   afterListTools:
@@ -444,6 +468,12 @@ spec:
                           required:
                           - workflowName
                           type: object
+                        mutate:
+                          description: |-
+                            Mutate, when true, causes the hook's return value to replace the
+                            original result. When false (default),
+                            the hook observes but cannot modify the result.
+                          type: boolean
                       type: object
                     type: array
                   beforeCallTool:
@@ -474,6 +504,12 @@ spec:
                           required:
                           - workflowName
                           type: object
+                        mutate:
+                          description: |-
+                            Mutate, when true, causes the hook's return value to replace the
+                            arguments flowing to the tool call (e.g. redact PII, inject defaults).
+                            When false (default), the hook validates/gates only — its output is discarded.
+                          type: boolean
                       type: object
                     type: array
                   beforeListTools:

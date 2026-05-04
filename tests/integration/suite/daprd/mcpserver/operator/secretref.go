@@ -140,9 +140,15 @@ func (s *secretref) Run(t *testing.T, ctx context.Context) {
 		s.logline.EventuallyFoundAll(t)
 	})
 
-	// TODO(sicoyle): Once the metadata API exposes MCPServers, add metadata API
-	// checks to verify secreted-mcp appears with resolved headers.
-	t.Run("metadata API does not yet expose MCPServers on this branch", func(t *testing.T) {
-		assert.Empty(t, s.daprd.GetMetaMCPServers(t, ctx))
+	t.Run("metadata API exposes the operator-loaded MCPServer", func(t *testing.T) {
+		servers := s.daprd.GetMetaMCPServers(t, ctx)
+
+		names := make([]string, 0, len(servers))
+		for _, m := range servers {
+			names = append(names, m.GetName())
+		}
+
+		assert.ElementsMatch(t, []string{"secreted-mcp"}, names,
+			"metadata API should expose the operator-loaded MCPServer")
 	})
 }

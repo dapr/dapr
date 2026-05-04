@@ -73,7 +73,8 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 					RuntimeVersion:       out.GetRuntimeVersion(),
 					EnabledFeatures:      out.GetEnabledFeatures(),
 					//nolint:protogetter
-					Scheduler: out.Scheduler,
+					Scheduler:  out.Scheduler,
+					MCPServers: out.GetMcpServers(),
 				}
 
 				// Copy the app connection properties into a custom struct
@@ -180,6 +181,7 @@ type metadataResponse struct {
 	ActorRuntime            metadataActorRuntime                        `json:"actorRuntime,omitzero"`
 	Scheduler               *runtimev1pb.MetadataScheduler              `json:"scheduler,omitempty"`
 	Workflows               metadataWorkflows                           `json:"workflows,omitzero"`
+	MCPServers              []*runtimev1pb.MetadataMCPServer            `json:"mcpServers,omitempty"`
 	WorkflowAccessPolicies  []*runtimev1pb.MetadataWorkflowAccessPolicy `json:"workflowAccessPolicies,omitempty"`
 }
 

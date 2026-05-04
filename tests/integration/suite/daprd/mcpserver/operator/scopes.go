@@ -24,6 +24,7 @@ import (
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	mcpapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
@@ -148,11 +149,28 @@ func (s *scopes) Run(t *testing.T, ctx context.Context) {
 		s.logline2.EventuallyFoundAll(t)
 	})
 
-	// TODO(sicoyle): Once the metadata API exposes MCPServers, add metadata API checks to verify:
-	// - myapp sees global-mcp + scoped-mcp, NOT other-ns-mcp
-	// - otherapp sees global-mcp only, NOT scoped-mcp
-	t.Run("metadata API does not yet expose MCPServers on this branch", func(t *testing.T) {
-		assert.Empty(t, s.daprd1.GetMetaMCPServers(t, ctx))
-		assert.Empty(t, s.daprd2.GetMetaMCPServers(t, ctx))
+	t.Run("metadata API exposes loaded MCPServers", func(t *testing.T) {
+		// myapp is in scoped-mcp's scopes; it should expose both servers.
+		myappNames := mcpServerNames(s.daprd1.GetMetaMCPServers(t, ctx))
+		assert.Contains(t, myappNames, "global-mcp",
+			"myapp should expose global-mcp")
+		assert.Contains(t, myappNames, "scoped-mcp",
+			"myapp should expose scoped-mcp (it is in scopes)")
+
+		// otherapp is NOT in scoped-mcp's scopes; it should expose only global-mcp.
+		otherappNames := mcpServerNames(s.daprd2.GetMetaMCPServers(t, ctx))
+		assert.Contains(t, otherappNames, "global-mcp",
+			"otherapp should expose global-mcp")
+		assert.NotContains(t, otherappNames, "scoped-mcp",
+			"otherapp should NOT expose scoped-mcp (it is not in scopes)")
 	})
+}
+
+// mcpServerNames extracts the Name field from a slice of MetadataMCPServer.
+func mcpServerNames(servers []*runtimev1pb.MetadataMCPServer) []string {
+	names := make([]string, 0, len(servers))
+	for _, m := range servers {
+		names = append(names, m.GetName())
+	}
+	return names
 }
