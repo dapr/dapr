@@ -60,10 +60,17 @@ func New(opts Options) (connector.Interface, error) {
 		resolver = (&net.Resolver{PreferGo: true}).LookupHost
 	}
 
+	// net.SplitHostPort strips brackets from IPv6 literals; re-add them so the
+	// gRPC :authority is a valid URI authority (e.g. "[fd00::1]" not "fd00::1").
+	authority := host
+	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
+		authority = "[" + host + "]"
+	}
+
 	return &dnsLookUpConnector{
 		host:     host,
 		port:     port,
-		gOpts:    append(slices.Clone(opts.GRPCOptions), grpc.WithAuthority(host)),
+		gOpts:    append(slices.Clone(opts.GRPCOptions), grpc.WithAuthority(authority)),
 		resolver: resolver,
 	}, nil
 }
