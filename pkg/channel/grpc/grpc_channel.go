@@ -27,6 +27,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/dapr/dapr/pkg/actors/callbackstream"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/messages"
@@ -41,6 +42,7 @@ import (
 type Channel struct {
 	appCallbackClient      runtimev1pb.AppCallbackClient
 	appCallbackAlphaClient runtimev1pb.AppCallbackAlphaClient
+	actorCallbackStream    *callbackstream.Manager
 	conn                   *grpc.ClientConn
 	baseAddress            string
 	ch                     chan struct{}
@@ -56,11 +58,15 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 	c := &Channel{
 		appCallbackClient:      runtimev1pb.NewAppCallbackClient(conn),
 		appCallbackAlphaClient: runtimev1pb.NewAppCallbackAlphaClient(conn),
-		conn:                   conn,
-		baseAddress:            net.JoinHostPort(baseAddress, strconv.Itoa(port)),
-		tracingSpec:            spec,
-		appMetadataToken:       appAPIToken,
-		maxRequestBodySize:     maxRequestBodySize,
+		// One stream manager per channel. The Dapr API gRPC handler accepts
+		// SubscribeActorEventsAlpha1 streams and registers them here; the
+		// actor transport consumes connections through the same manager.
+		actorCallbackStream: callbackstream.NewManager(),
+		conn:                conn,
+		baseAddress:         net.JoinHostPort(baseAddress, strconv.Itoa(port)),
+		tracingSpec:         spec,
+		appMetadataToken:    appAPIToken,
+		maxRequestBodySize:  maxRequestBodySize,
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan struct{}, maxConcurrency)
@@ -68,9 +74,26 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 	return c
 }
 
+// ActorCallbackStream returns the manager that owns the app-initiated
+// actor callback stream(s) for this channel. Callers hold the returned
+// pointer for the lifetime of the channel.
+func (g *Channel) ActorCallbackStream() *callbackstream.Manager {
+	return g.actorCallbackStream
+}
+
 // GetAppConfig gets application config from user application.
-func (g *Channel) GetAppConfig(_ context.Context, appID string) (*config.ApplicationConfig, error) {
-	return nil, nil
+//
+// With the streaming actor callback protocol the app registers its actor
+// types by opening SubscribeActorEventsAlpha1 and sending an initial
+// message. GetAppConfig is non-blocking: it returns whatever config the
+// stream has registered so far (nil if none). Daprd startup does not
+// wait for the stream — registration is handled imperatively by the
+// SubscribeActorEventsAlpha1 gRPC handler
+// (pkg/api/grpc/actorcallbacks.go), which calls
+// actors.RegisterHosted / UnRegisterHosted directly, mirroring how
+// pkg/api/grpc/subscribe.go handles SubscribeTopicEventsAlpha1.
+func (g *Channel) GetAppConfig(_ context.Context, _ string) (*config.ApplicationConfig, error) {
+	return g.actorCallbackStream.CurrentConfig(), nil
 }
 
 // InvokeMethod invokes user code via gRPC.

@@ -26,7 +26,11 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/app/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/app/transport"
+	grpctransport "github.com/dapr/dapr/pkg/actors/targets/app/transport/grpc"
+	httptransport "github.com/dapr/dapr/pkg/actors/targets/app/transport/http"
 	"github.com/dapr/dapr/pkg/channel"
+	grpcchannel "github.com/dapr/dapr/pkg/channel/grpc"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/concurrency/slice"
@@ -46,7 +50,7 @@ type Options struct {
 
 type factory struct {
 	actorType    string
-	appChannel   channel.AppChannel
+	transport    transport.Invoker
 	resiliency   resiliency.Provider
 	idlerQueue   *queue.Processor[string, *app]
 	reentrancy   *reentrancystore.Store
@@ -68,7 +72,7 @@ func New(opts Options) targets.Factory {
 
 	f := &factory{
 		actorType:    opts.ActorType,
-		appChannel:   opts.AppChannel,
+		transport:    newInvoker(opts.AppChannel, opts.Resiliency, opts.ActorType),
 		resiliency:   opts.Resiliency,
 		placement:    opts.Placement,
 		clock:        opts.clock,
@@ -83,6 +87,20 @@ func New(opts Options) targets.Factory {
 	})
 
 	return f
+}
+
+// newInvoker picks the right transport based on the concrete AppChannel
+// implementation. gRPC channels expose an ActorCallbackStream manager; when
+// present the streaming transport is used so callbacks reach the app
+// through the app-initiated SubscribeActorEventsAlpha1 stream. Anything
+// else falls through to the HTTP callback protocol.
+func newInvoker(ch channel.AppChannel, r resiliency.Provider, actorType string) transport.Invoker {
+	if g, ok := ch.(*grpcchannel.Channel); ok {
+		if mgr := g.ActorCallbackStream(); mgr != nil {
+			return grpctransport.New(mgr, r, actorType)
+		}
+	}
+	return httptransport.New(ch, r, actorType)
 }
 
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
