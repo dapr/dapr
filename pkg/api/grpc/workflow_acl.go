@@ -144,7 +144,7 @@ func (a *api) extractCallerIdentity(ctx context.Context) (appID, namespace strin
 // instance/replica of the same app. Either case bypasses
 // WorkflowAccessPolicy, which gates only cross-app access.
 func (a *api) isSameAppIdentity(callerAppID, callerNamespace string) bool {
-	return callerAppID == a.Universal.AppID() && callerNamespace == a.Namespace()
+	return callerAppID == a.AppID() && callerNamespace == a.Namespace()
 }
 
 // checkNamespace denies cross-namespace calls when policies are active.
