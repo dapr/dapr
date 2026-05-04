@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -433,10 +434,22 @@ func (abe *Actors) AddNewWorkflowEvent(ctx context.Context, id api.InstanceID, e
 		return err
 	}
 
+	// If the event carries a router with a foreign target app ID (e.g. a
+	// recursive ExecutionTerminated for a cross-app sub-orchestrator), the
+	// event must reach the workflow actor in that other app rather than the
+	// local one. Otherwise the local actor reports "no such instance" and
+	// retries forever.
+	actorType := abe.workflowActorType
+	if router := e.GetRouter(); router != nil {
+		if target := router.GetTargetAppID(); target != "" && target != abe.appID {
+			actorType = common.NewActorTypeBuilder(abe.namespace).Workflow(target)
+		}
+	}
+
 	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
 	req := internalsv1pb.
 		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
-		WithActor(abe.workflowActorType, string(id)).
+		WithActor(actorType, string(id)).
 		WithData(data).
 		WithContentType(invokev1.OctetStreamContentType)
 
@@ -530,28 +543,84 @@ func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.Instan
 	return nil
 }
 
-// PurgeWorkflowState deletes all saved state for the specific orchestration instance.
-func (abe *Actors) PurgeWorkflowState(ctx context.Context, id api.InstanceID, force bool) error {
+// PurgeWorkflowState implements backend.Backend.
+//
+// When router is nil or targets the local app, this is a single-instance
+// purge of id and returns 1 on success.
+//
+// When router carries a foreign TargetAppID — set by the recursive purge
+// driver for a child started cross-app — the entire subtree lives on that
+// app, so we delegate to it via an actor invocation: the remote daprd's
+// workflow actor recursively handles its own subtree and returns the count.
+// Mirrors the "each app handles its own subtree" model that recursive
+// terminate already uses.
+func (abe *Actors) PurgeWorkflowState(ctx context.Context, id api.InstanceID, router *protos.TaskRouter, force bool) (int, error) {
 	start := time.Now()
 
-	var err error
-	if force {
-		err = abe.purgeWorkflowForce(ctx, id)
-	} else {
-		err = abe.purgeWorkflow(ctx, id)
-	}
+	count, err := abe.purgeWorkflowState(ctx, id, router, force)
 
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
-		// failed request to PURGE WORKFLOW, record latency and count metrics.
 		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusFailed, elapsed)
-		return err
+		return 0, err
 	}
 
-	// successful request to PURGE WORKFLOW, record latency and count metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusSuccess, elapsed)
+	return count, nil
+}
 
-	return nil
+func (abe *Actors) purgeWorkflowState(ctx context.Context, id api.InstanceID, router *protos.TaskRouter, force bool) (int, error) {
+	if target := router.GetTargetAppID(); target != "" && target != abe.appID {
+		return abe.purgeWorkflowRemote(ctx, id, target, force)
+	}
+
+	if force {
+		if err := abe.purgeWorkflowForce(ctx, id); err != nil {
+			return 0, err
+		}
+	} else {
+		if err := abe.purgeWorkflow(ctx, id); err != nil {
+			return 0, err
+		}
+	}
+
+	return 1, nil
+}
+
+// purgeWorkflowRemote dispatches a recursive-purge actor invocation to the
+// workflow actor on the target app and decodes the count of instances purged.
+func (abe *Actors) purgeWorkflowRemote(ctx context.Context, id api.InstanceID, targetAppID string, force bool) (int, error) {
+	actorRouter, err := abe.actors.Router(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	req := internalsv1pb.
+		NewInternalInvokeRequest(todo.RecursivePurgeWorkflowStateMethod).
+		WithActor(common.NewActorTypeBuilder(abe.namespace).Workflow(targetAppID), string(id))
+
+	if force {
+		req = req.WithMetadata(map[string][]string{
+			todo.MetadataPurgeForce: {"true"},
+		})
+	}
+
+	resp, err := actorRouter.Call(ctx, req)
+	if err != nil {
+		// Actor invocations carry errors as wire strings, so api.ErrInstanceNotFound
+		// from the remote handler arrives unwrapped. Normalise so callers
+		// (durabletask-go's recursive driver) can rely on errors.Is.
+		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
+			return 0, api.ErrInstanceNotFound
+		}
+		return 0, err
+	}
+
+	respProto := new(protos.PurgeInstancesResponse)
+	if err := proto.Unmarshal(resp.GetMessage().GetData().GetValue(), respProto); err != nil {
+		return 0, fmt.Errorf("failed to decode recursive purge response: %w", err)
+	}
+	return int(respProto.GetDeletedInstanceCount()), nil
 }
 
 // Start implements backend.Backend
