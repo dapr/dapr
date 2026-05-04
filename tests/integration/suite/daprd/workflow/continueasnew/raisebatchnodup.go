@@ -25,7 +25,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -78,7 +77,6 @@ func (r *raisebatchnodup) Run(t *testing.T, ctx context.Context) {
 	})
 
 	client := r.workflow.BackendClient(t, ctx)
-	gclient := r.workflow.GRPCClient(t, ctx)
 
 	id, err := client.ScheduleNewWorkflow(ctx, "raisebatchnodup",
 		api.WithInstanceID("raisebatchnodupi"),
@@ -93,12 +91,11 @@ func (r *raisebatchnodup) Run(t *testing.T, ctx context.Context) {
 	actorType := "dapr.internal.default." + appID + ".workflow"
 	actorID := "raisebatchnodupi"
 
-	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
-		ActorType: actorType,
-		ActorId:   actorID,
-		Name:      "new-event-deactivate",
-		DueTime:   "0s",
-	})
+	// Inject the deactivation reminder via the scheduler directly: the
+	// daprd RegisterActorReminder API rejects "dapr.internal.*" actor
+	// types because they are reserved for the workflow runtime.
+	_, err = r.workflow.Scheduler().Client(t, ctx).ScheduleJob(ctx,
+		r.workflow.Scheduler().JobNowActor("new-event-deactivate", "default", appID, actorType, actorID))
 	require.NoError(t, err)
 
 	// Wait for the deactivation reminder to be processed. Poll the state
@@ -130,12 +127,8 @@ func (r *raisebatchnodup) Run(t *testing.T, ctx context.Context) {
 
 	writeInboxToDB(t, ctx, db, tableName, appID, actorType, actorID, totalEvents, wrapperspb.String(`true`))
 
-	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
-		ActorType: actorType,
-		ActorId:   actorID,
-		Name:      "new-event-batch",
-		DueTime:   "0s",
-	})
+	_, err = r.workflow.Scheduler().Client(t, ctx).ScheduleJob(ctx,
+		r.workflow.Scheduler().JobNowActor("new-event-batch", "default", appID, actorType, actorID))
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
