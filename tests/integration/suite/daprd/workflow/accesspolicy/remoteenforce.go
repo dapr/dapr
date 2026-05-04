@@ -78,15 +78,14 @@ spec:
   rules:
   - callers:
     - appID: allowed-caller
-    operations:
-    - type: workflow
-      name: "*"
+    workflows:
+    - name: "*"
+      operations: [schedule]
       action: allow
   - callers:
     - appID: remote-target
-    operations:
-    - type: activity
-      name: "*"
+    activities:
+    - name: "*"
       action: allow
 `)
 

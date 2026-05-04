@@ -16,8 +16,6 @@ package orchestrator
 import (
 	"context"
 
-	"google.golang.org/protobuf/proto"
-
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -28,7 +26,7 @@ const (
 	reminderPrefixTimer    = "timer-"
 )
 
-func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes []byte) error {
+func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryEvent) error {
 	state, _, err := o.loadInternalState(ctx)
 	if err != nil {
 		return err
@@ -37,12 +35,6 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	if state == nil {
 		log.Errorf("Workflow actor '%s': cannot add event to workflow as state has been purged. Ignoring event.", o.actorID)
 		return api.ErrInstanceNotFound
-	}
-
-	var e backend.HistoryEvent
-	err = proto.Unmarshal(historyEventBytes, &e)
-	if err != nil {
-		return err
 	}
 
 	// Only reject user events when the workflow is stalled.
@@ -54,7 +46,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 		o.activityResultAwaited.CompareAndSwap(true, false)
 	}
 	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)
-	state.AddToInbox(&e)
+	state.AddToInbox(e)
 
 	if err := o.signAndSaveState(ctx, state); err != nil {
 		return err
