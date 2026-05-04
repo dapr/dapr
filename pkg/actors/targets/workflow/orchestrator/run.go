@@ -74,6 +74,17 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	if len(state.Inbox) == 0 {
 		// This can happen after multiple events are processed in batches; there may still be reminders around
 		// for some of those already processed events.
+		// If the workflow is terminal, attempt retention reminder creation
+		// idempotently. This recovers a workflow whose completion was
+		// persisted in a prior run but whose retention reminder Create RPC
+		// was lost (e.g. scheduler pod killed mid-call). createRetentionReminder
+		// uses a deterministic name, so re-creating an already-existing
+		// retention reminder is a no-op overwrite.
+		if runtimestate.IsCompleted(o.rstate) {
+			if rerr := o.handleRetention(ctx, runtimestate.RuntimeStatus(o.rstate)); rerr != nil {
+				return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to (re)create retention reminder on empty-inbox completion path: %w", rerr))
+			}
+		}
 		log.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", o.actorID, reminder.Name)
 		return todo.RunCompletedTrue, nil
 	}
@@ -363,13 +374,17 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	if runtimestate.IsCompleted(rs) {
 		log.Infof("Workflow Actor '%s': workflow completed with status '%s' workflowName '%s'", o.actorID, rstatus, workflowName)
+		// Create the retention reminder before deleting reminders. If the
+		// scheduler RPC fails (e.g. pod killed mid-call), returning the
+		// error here lets the firing reminder retry the whole completion
+		// path.
+		if err = o.handleRetention(ctx, rstatus); err != nil {
+			return todo.RunCompletedFalse, err
+		}
 		if hasUnfiredTimers(rs) {
 			if err = o.deleteAllReminders(ctx); err != nil {
 				return todo.RunCompletedFalse, err
 			}
-		}
-		if err = o.handleRetention(ctx, rstatus); err != nil {
-			return todo.RunCompletedFalse, err
 		}
 		return todo.RunCompletedTrue, nil
 	}
@@ -410,6 +425,12 @@ func (*orchestrator) recordWorkflowSchedulingLatency(ctx context.Context, esHist
 	}
 }
 
+// handleRetention creates the retention reminder for a terminal workflow.
+// The reminder name is deterministic, so this is safe to call repeatedly:
+// the scheduler overwrites by name, leaving exactly one retention reminder
+// per workflow. The dueTime is anchored to the workflow's completion time
+// (not time.Now()) so retries on a transient scheduler failure converge to
+// the same dueTime instead of pushing retention back on every attempt.
 func (o *orchestrator) handleRetention(ctx context.Context, status protos.OrchestrationStatus) error {
 	if o.retentionPolicy == nil {
 		return nil
@@ -435,13 +456,21 @@ func (o *orchestrator) handleRetention(ctx context.Context, status protos.Orches
 		name = "anyterminal"
 	}
 
-	if dueTime != nil {
-		log.Debugf("Workflow actor '%s': setting retention reminder for status '%s' with due time '%v'", o.actorID, status.String(), dueTime)
-		_, err := o.createRetentionReminder(ctx, name, time.Now().Add(*dueTime))
-		return err
+	if dueTime == nil {
+		return nil
 	}
 
-	return nil
+	completedAt, err := runtimestate.CompletedTime(o.rstate)
+	if err != nil || completedAt.IsZero() {
+		// Workflow is reported terminal but completion time is missing; fall
+		// back to now so the retention reminder is still scheduled rather
+		// than dropped.
+		completedAt = time.Now()
+	}
+
+	log.Debugf("Workflow actor '%s': setting retention reminder for status '%s' with due time '%v'", o.actorID, status.String(), dueTime)
+	_, err = o.createRetentionReminder(ctx, name, completedAt.Add(*dueTime))
+	return err
 }
 
 // filterValidInboxEvents returns inbox events that pass validation. Result
