@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -91,8 +93,13 @@ func (s *oauth2Auth) Setup(t *testing.T) []framework.Option {
 	s.sched = scheduler.New(t)
 	s.place = placement.New(t)
 
-	// In-memory secret store with the client_secret value.
-	// The MCPServer's oauth2.secretKeyRef points to this.
+	// Write the OAuth2 client_secret to a JSON file backing the local-file
+	// secret store. The MCPServer's oauth2.secretKeyRef points to this.
+	// secretstores.local.file requires a non-empty secretsFile path.
+	secretsDir := t.TempDir()
+	secretsFile := filepath.Join(secretsDir, "secrets.json")
+	require.NoError(t, os.WriteFile(secretsFile,
+		[]byte(`{"mcp-oauth-secret": "test-client-secret-xyz"}`), 0o600))
 	s.daprd = daprd.New(t,
 		daprd.WithAppPort(appProc.Port()),
 		daprd.WithAppProtocol("http"),
@@ -128,8 +135,8 @@ spec:
         name: mcp-oauth-secret
         key: client_secret
 `, mcpSrvProc.Port(), tokenServer.Port()),
-			// In-memory secret store component.
-			`
+			// Local-file secret store component backed by a real JSON file.
+			fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -139,10 +146,10 @@ spec:
   version: v1
   metadata:
   - name: secretsFile
-    value: ""
+    value: %q
   - name: multiValued
     value: "false"
-`,
+`, secretsFile),
 		),
 	)
 
