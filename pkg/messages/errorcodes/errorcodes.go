@@ -55,6 +55,7 @@ var (
 	ActorReminderDelete           = ErrorCode{"ERR_ACTOR_REMINDER_DELETE", "", CategoryActor}         // Error deleting actor reminder
 	ActorReminderGet              = ErrorCode{"ERR_ACTOR_REMINDER_GET", "", CategoryActor}            // Error getting actor reminder
 	ActorReminderNonHosted        = ErrorCode{"ERR_ACTOR_REMINDER_NON_HOSTED", "", CategoryActor}     // Reminder operation on non-hosted actor type
+	ActorTypeReserved             = ErrorCode{"ERR_ACTOR_TYPE_RESERVED", "", CategoryActor}           // User-facing actor API targeting a Dapr-reserved internal actor type
 	ActorReminderNotFound         = ErrorCode{"ERR_ACTOR_REMINDER_NOT_FOUND", "", CategoryActor}      // Actor reminder not found
 	ActorReminderAlreadyExists    = ErrorCode{"ERR_ACTOR_REMINDER_ALREADY_EXISTS", "", CategoryActor} // Actor reminder already exists
 	ActorTimerCreate              = ErrorCode{"ERR_ACTOR_TIMER_CREATE", "", CategoryActor}            // Error creating actor timer

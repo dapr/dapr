@@ -130,13 +130,13 @@ spec:
   rules:
   - callers:
     - appID: "some-app"
-    operations:
-    - type: workflow
-      name: "WF"
+    workflows:
+    - name: "WF"
+      operations: [schedule]
       action: bogus
 `), 0o600))
 
-		v.validationLog.EventuallyContains(t, `\"bad-action\" failed validation`, time.Second*20, time.Millisecond*100)
+		v.validationLog.EventuallyContains(t, `\"bad-action\" failed validation`, time.Second*20, time.Millisecond*10)
 		assert.True(t, v.scheduleAndComplete(ctx, backendClient))
 	})
 
@@ -157,10 +157,10 @@ spec:
       action: allow
 `), 0o600))
 
-		v.validationLog.EventuallyContains(t, `\"bad-type\" failed validation`, time.Second*20, time.Millisecond*100)
+		v.validationLog.EventuallyContains(t, `\"bad-type\" failed validation`, time.Second*20, time.Millisecond*10)
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.True(c, v.scheduleAndComplete(ctx, backendClient))
-		}, time.Second*10, time.Millisecond*200)
+		}, time.Second*20, time.Millisecond*10)
 	})
 
 	t.Run("empty appID is rejected", func(t *testing.T) {
@@ -174,16 +174,16 @@ spec:
   rules:
   - callers:
     - appID: ""
-    operations:
-    - type: workflow
-      name: "WF"
+    workflows:
+    - name: "WF"
+      operations: [schedule]
       action: allow
 `), 0o600))
 
-		v.validationLog.EventuallyContains(t, `\"empty-appid\" failed validation`, time.Second*20, time.Millisecond*100)
+		v.validationLog.EventuallyContains(t, `\"empty-appid\" failed validation`, time.Second*20, time.Millisecond*10)
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.True(c, v.scheduleAndComplete(ctx, backendClient))
-		}, time.Second*10, time.Millisecond*200)
+		}, time.Second*20, time.Millisecond*10)
 	})
 
 	t.Run("empty operations array is rejected", func(t *testing.T) {
@@ -200,10 +200,10 @@ spec:
     operations: []
 `), 0o600))
 
-		v.validationLog.EventuallyContains(t, `\"empty-ops\" failed validation`, time.Second*20, time.Millisecond*100)
+		v.validationLog.EventuallyContains(t, `\"empty-ops\" failed validation`, time.Second*20, time.Millisecond*10)
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.True(c, v.scheduleAndComplete(ctx, backendClient))
-		}, time.Second*10, time.Millisecond*200)
+		}, time.Second*20, time.Millisecond*10)
 	})
 
 	t.Run("invalid defaultAction is rejected", func(t *testing.T) {
@@ -217,16 +217,16 @@ spec:
   rules:
   - callers:
     - appID: "some-app"
-    operations:
-    - type: workflow
-      name: "WF"
+    workflows:
+    - name: "WF"
+      operations: [schedule]
       action: allow
 `), 0o600))
 
-		v.validationLog.EventuallyContains(t, `\"bad-default\" failed validation`, time.Second*20, time.Millisecond*100)
+		v.validationLog.EventuallyContains(t, `\"bad-default\" failed validation`, time.Second*20, time.Millisecond*10)
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.True(c, v.scheduleAndComplete(ctx, backendClient))
-		}, time.Second*10, time.Millisecond*200)
+		}, time.Second*20, time.Millisecond*10)
 	})
 
 	t.Run("valid policy is loaded and enforced after invalid ones", func(t *testing.T) {
@@ -243,15 +243,15 @@ spec:
   rules:
   - callers:
     - appID: "other-app"
-    operations:
-    - type: workflow
-      name: "*"
+    workflows:
+    - name: "*"
+      operations: [schedule]
       action: allow
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			_, err := backendClient.ScheduleNewWorkflow(ctx, "TestWF")
 			assert.Error(c, err, "valid policy should deny local app")
-		}, time.Second*20, time.Millisecond*500)
+		}, time.Second*20, time.Millisecond*10)
 	})
 }
