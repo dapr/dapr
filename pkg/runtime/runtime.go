@@ -338,6 +338,7 @@ func newDaprRuntime(ctx context.Context,
 		ComponentStore:                  compStore,
 		Signer:                          wfSigner,
 		WorkflowAccessPolicies:          workflowAccessPolicies,
+		MaxRequestBodySize:              runtimeConfig.maxRequestBodySize,
 	})
 	if err != nil {
 		return nil, err
