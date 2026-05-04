@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slices"
 
 	"google.golang.org/grpc"
 
@@ -59,10 +60,17 @@ func New(opts Options) (connector.Interface, error) {
 		resolver = (&net.Resolver{PreferGo: true}).LookupHost
 	}
 
+	// net.SplitHostPort strips brackets from IPv6 literals; re-add them so the
+	// gRPC :authority is a valid URI authority (e.g. "[fd00::1]" not "fd00::1").
+	authority := host
+	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
+		authority = "[" + host + "]"
+	}
+
 	return &dnsLookUpConnector{
 		host:     host,
 		port:     port,
-		gOpts:    opts.GRPCOptions,
+		gOpts:    append(slices.Clone(opts.GRPCOptions), grpc.WithAuthority(authority)),
 		resolver: resolver,
 	}, nil
 }
@@ -89,7 +97,8 @@ func (r *dnsLookUpConnector) Connect(ctx context.Context) (*grpc.ClientConn, err
 	hostPort := net.JoinHostPort(addr, r.port)
 	r.current = hostPort
 
-	log.Debugf("Attempting to connect to placement %s", hostPort)
+	log.Debugf("Attempting to connect to placement %s (authority %s)",
+		hostPort, r.host)
 
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, hostPort, r.gOpts...)
@@ -97,7 +106,8 @@ func (r *dnsLookUpConnector) Connect(ctx context.Context) (*grpc.ClientConn, err
 		return nil, err
 	}
 
-	log.Infof("Connected to placement %s", hostPort)
+	log.Infof("Connected to placement %s (authority %s)",
+		hostPort, r.host)
 
 	return conn, nil
 }
