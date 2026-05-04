@@ -203,54 +203,77 @@ func TestAuthorityOptionStability(t *testing.T) {
 	assert.Equal(t, before, len(c.gOpts))
 }
 
-// TestConnectSetsAuthorityHeader verifies that the gRPC :authority header
-// received by the server matches the original DNS hostname, not the resolved
-// IP address. This is the core behaviour that WithAuthority enables — it
-// allows SNI-based TLS gateways to route the connection correctly.
-func TestConnectSetsAuthorityHeader(t *testing.T) {
-	const expectedHost = "dapr-placement-server.dapr-tests.svc.cluster.local"
-
-	// authorityCreds wraps insecure credentials but captures the authority
-	// string that gRPC passes during the client TLS/transport handshake.
-	// When grpc.WithAuthority is set, this value is the overridden authority
-	// (the original DNS name) rather than the dialed IP address.
-	creds := &authorityCreds{
-		TransportCredentials: insecure.NewCredentials(),
-		authority:            new(atomic.Value),
+// TestConnectOverridesClientAuthority verifies that the authority string the
+// client passes into the transport handshake (and therefore uses for SNI /
+// the HTTP/2 :authority pseudo-header) matches the original input hostname,
+// not the resolved IP address. This is the core behaviour that WithAuthority
+// enables — it allows SNI-based TLS gateways to route the connection correctly.
+//
+// The IPv6 case also locks in that bracketed literals stay bracketed in the
+// authority, since net.SplitHostPort strips them from the host field.
+func TestConnectOverridesClientAuthority(t *testing.T) {
+	tests := []struct {
+		name              string
+		address           string
+		expectedAuthority string
+	}{
+		{
+			name:              "DNS hostname",
+			address:           "dapr-placement-server.dapr-tests.svc.cluster.local:50005",
+			expectedAuthority: "dapr-placement-server.dapr-tests.svc.cluster.local",
+		},
+		{
+			name:              "IPv6 literal is bracketed",
+			address:           "[fd00::1]:50005",
+			expectedAuthority: "[fd00::1]",
+		},
 	}
 
-	lis := bufconn.Listen(1024 * 1024)
-	srv := grpc.NewServer()
-	t.Cleanup(srv.Stop)
-	go func() { _ = srv.Serve(lis) }()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// authorityCreds wraps insecure credentials but captures the
+			// authority string that gRPC passes during the client transport
+			// handshake. When grpc.WithAuthority is set, this is the overridden
+			// authority (the original input host) rather than the dialed IP.
+			creds := &authorityCreds{
+				TransportCredentials: insecure.NewCredentials(),
+				authority:            new(atomic.Value),
+			}
 
-	conn, err := New(Options{
-		Address: expectedHost + ":50005",
-		GRPCOptions: []grpc.DialOption{
-			grpc.WithTransportCredentials(creds),
-			grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-				return lis.DialContext(t.Context())
-			}),
-		},
-		resolver: func(ctx context.Context, host string) ([]string, error) {
-			return []string{"127.0.0.1"}, nil
-		},
-	})
-	require.NoError(t, err)
+			lis := bufconn.Listen(1024 * 1024)
+			srv := grpc.NewServer()
+			t.Cleanup(srv.Stop)
+			go func() { _ = srv.Serve(lis) }()
 
-	grpcConn, err := conn.Connect(t.Context())
-	require.NoError(t, err)
-	t.Cleanup(func() { grpcConn.Close() })
+			conn, err := New(Options{
+				Address: tc.address,
+				GRPCOptions: []grpc.DialOption{
+					grpc.WithTransportCredentials(creds),
+					grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+						return lis.DialContext(t.Context())
+					}),
+				},
+				resolver: func(ctx context.Context, host string) ([]string, error) {
+					return []string{"127.0.0.1"}, nil
+				},
+			})
+			require.NoError(t, err)
 
-	// Trigger a real RPC so the transport handshake (and authority capture)
-	// actually happens. The method is unregistered so the server returns
-	// Unimplemented, but that's fine — we only care about the authority.
-	_ = grpcConn.Invoke(t.Context(), "/test.Service/Ping", &emptypb.Empty{}, &emptypb.Empty{})
+			grpcConn, err := conn.Connect(t.Context())
+			require.NoError(t, err)
+			t.Cleanup(func() { grpcConn.Close() })
 
-	got, ok := creds.authority.Load().(string)
-	require.True(t, ok, "transport credentials did not capture the authority")
-	assert.Equal(t, expectedHost, got,
-		"expected :authority to be the original DNS hostname, not the resolved IP")
+			// Trigger a real RPC so the transport handshake (and authority
+			// capture) actually happens. The method is unregistered so the
+			// server returns Unimplemented, but that's fine — we only care
+			// about the authority.
+			_ = grpcConn.Invoke(t.Context(), "/test.Service/Ping", &emptypb.Empty{}, &emptypb.Empty{})
+
+			got, ok := creds.authority.Load().(string)
+			require.True(t, ok, "transport credentials did not capture the authority")
+			assert.Equal(t, tc.expectedAuthority, got)
+		})
+	}
 }
 
 // authorityCreds wraps a credentials.TransportCredentials and records the
