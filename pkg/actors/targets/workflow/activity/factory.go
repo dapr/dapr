@@ -17,6 +17,7 @@ import (
 	"context"
 	"sync"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
@@ -45,6 +46,9 @@ type Options struct {
 	Actors            actors.Interface
 	ActorTypeBuilder  *common.ActorTypeBuilder
 
+	// May be nil when the feature is disabled.
+	WorkflowAccessPolicies *workflowacl.Holder
+
 	WorkflowsRemoteActivityReminder bool
 }
 
@@ -56,11 +60,12 @@ type factory struct {
 	// TODO: @joshvanl: remove in the next version.
 	workflowsRemoteActivityReminder bool
 
-	router           router.Interface
-	state            state.Interface
-	reminders        scheduler.Interface
-	placement        placement.Interface
-	actorTypeBuilder *common.ActorTypeBuilder
+	router                 router.Interface
+	state                  state.Interface
+	reminders              scheduler.Interface
+	placement              placement.Interface
+	actorTypeBuilder       *common.ActorTypeBuilder
+	workflowAccessPolicies *workflowacl.Holder
 
 	scheduler todo.ActivityScheduler
 
@@ -95,15 +100,16 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 	}
 
 	return &factory{
-		appID:             opts.AppID,
-		actorType:         opts.ActivityActorType,
-		router:            router,
-		reminders:         sreminders,
-		scheduler:         opts.Scheduler,
-		placement:         placement,
-		workflowActorType: opts.WorkflowActorType,
-		actorTypeBuilder:  opts.ActorTypeBuilder,
-		state:             state,
+		appID:                  opts.AppID,
+		actorType:              opts.ActivityActorType,
+		router:                 router,
+		reminders:              sreminders,
+		scheduler:              opts.Scheduler,
+		placement:              placement,
+		workflowActorType:      opts.WorkflowActorType,
+		actorTypeBuilder:       opts.ActorTypeBuilder,
+		state:                  state,
+		workflowAccessPolicies: opts.WorkflowAccessPolicies,
 
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 	}, nil

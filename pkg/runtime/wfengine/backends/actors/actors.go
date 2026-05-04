@@ -31,6 +31,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
@@ -95,6 +96,14 @@ type Options struct {
 
 	RetentionPolicy *config.WorkflowStateRetentionPolicy
 	Signer          *signer.Signer
+
+	// MaxRequestBodySize is the gRPC server max message size in bytes. The
+	// orchestrator uses it to detect and gracefully stall workflows whose
+	// history payload would exceed the GetWorkItems stream limit.
+	MaxRequestBodySize int
+
+	// May be nil when the WorkflowAccessPolicy feature is disabled.
+	WorkflowAccessPolicies *workflowacl.Holder
 }
 
 type Actors struct {
@@ -105,13 +114,15 @@ type Actors struct {
 	retentionerActorType string
 	executorActorType    string
 
-	pendingTasksBackend PendingTasksBackend
-	resiliency          resiliency.Provider
-	actors              actors.Interface
-	eventSink           orchestrator.EventSink
-	compStore           *compstore.ComponentStore
-	retentionPolicy     *config.WorkflowStateRetentionPolicy
-	signer              *signer.Signer
+	pendingTasksBackend    PendingTasksBackend
+	resiliency             resiliency.Provider
+	actors                 actors.Interface
+	eventSink              orchestrator.EventSink
+	compStore              *compstore.ComponentStore
+	retentionPolicy        *config.WorkflowStateRetentionPolicy
+	signer                 *signer.Signer
+	maxRequestBodySize     int
+	workflowAccessPolicies *workflowacl.Holder
 
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
@@ -149,6 +160,8 @@ func New(opts Options) *Actors {
 		eventSink:                 opts.EventSink,
 		retentionPolicy:           opts.RetentionPolicy,
 		signer:                    opts.Signer,
+		maxRequestBodySize:        opts.MaxRequestBodySize,
+		workflowAccessPolicies:    opts.WorkflowAccessPolicies,
 
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
@@ -163,14 +176,16 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 
 	actorTypeBuilder := common.NewActorTypeBuilder(abe.namespace)
 	oopts := orchestrator.Options{
-		AppID:              abe.appID,
-		WorkflowActorType:  abe.workflowActorType,
-		ActivityActorType:  abe.activityActorType,
-		Resiliency:         abe.resiliency,
-		Actors:             abe.actors,
-		RetentionActorType: abe.retentionerActorType,
-		RetentionPolicy:    abe.retentionPolicy,
-		Signer:             abe.signer,
+		AppID:                  abe.appID,
+		WorkflowActorType:      abe.workflowActorType,
+		ActivityActorType:      abe.activityActorType,
+		Resiliency:             abe.resiliency,
+		Actors:                 abe.actors,
+		RetentionActorType:     abe.retentionerActorType,
+		RetentionPolicy:        abe.retentionPolicy,
+		Signer:                 abe.signer,
+		MaxRequestBodySize:     abe.maxRequestBodySize,
+		WorkflowAccessPolicies: abe.workflowAccessPolicies,
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
@@ -205,6 +220,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		},
 		Actors:                          abe.actors,
 		ActorTypeBuilder:                actorTypeBuilder,
+		WorkflowAccessPolicies:          abe.workflowAccessPolicies,
 		WorkflowsRemoteActivityReminder: abe.workflowsRemoteActivityReminder,
 	}
 
