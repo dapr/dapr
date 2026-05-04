@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
@@ -42,6 +43,7 @@ type options struct {
 	entityConfig            []entityConfig
 	resources               []string
 	maxBodySize             *string
+	daprdOpts               []daprd.Option
 }
 
 func WithDB(db *sqlite.SQLite) Option {
@@ -152,5 +154,13 @@ func WithResources(resources ...string) Option {
 func WithMaxBodySize(size string) Option {
 	return func(o *options) {
 		o.maxBodySize = &size
+	}
+}
+
+// WithDaprdOptions appends additional daprd options applied when building the
+// underlying daprd process.
+func WithDaprdOptions(dopts ...daprd.Option) Option {
+	return func(o *options) {
+		o.daprdOpts = append(o.daprdOpts, dopts...)
 	}
 }

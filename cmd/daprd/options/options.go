@@ -67,6 +67,7 @@ type Options struct {
 	DaprGracefulShutdownSeconds   int
 	DaprBlockShutdownDuration     *time.Duration
 	ActorsService                 string
+	ActorsDisseminationTimeout    time.Duration
 	RemindersService              string
 	SchedulerAddress              []string
 	SchedulerJobStreams           uint
@@ -176,6 +177,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&placementServiceHostAddr, "placement-host-address", "", "Addresses for Dapr Actor Placement servers (overrides actors-service)")
 	fs.StringSliceVar(&opts.SchedulerAddress, "scheduler-host-address", nil, "Addresses of the Scheduler service instance(s), as comma separated host:port pairs")
 	fs.UintVar(&opts.SchedulerJobStreams, "scheduler-job-streams", 3, "The number of active job streams to connect to the Scheduler service")
+	fs.DurationVar(&opts.ActorsDisseminationTimeout, "actors-disseminate-timeout", runtime.DefaultActorsDisseminationTimeout, "Timeout for the daprd-side actor placement dissemination round; if exceeded, daprd resets its placement stream and halts hosted actors. Should be greater than the placement service --disseminate-timeout (default 8s).")
 
 	// DEPRECATED.
 	fs.StringVar(&opts.RemindersService, "reminders-service", "", "Type and address of the reminders service, in the format 'type:address'")
@@ -270,6 +272,10 @@ func New(origArgs []string) (*Options, error) {
 		if ok {
 			opts.SchedulerAddress = strings.Split(addr, ",")
 		}
+	}
+
+	if opts.ActorsDisseminationTimeout <= 0 {
+		return nil, fmt.Errorf("invalid value for 'actors-disseminate-timeout' option: must be positive, got %s", opts.ActorsDisseminationTimeout)
 	}
 
 	return &opts, nil

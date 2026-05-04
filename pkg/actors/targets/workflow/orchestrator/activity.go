@@ -32,7 +32,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State) dispatchResult {
+func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State, outgoingHistory map[int32]*protos.PropagatedHistory) dispatchResult {
 	var dueTime time.Time
 	if len(state.History) > 0 {
 		dueTime = state.History[0].GetTimestamp().AsTime()
@@ -42,7 +42,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 
 	var result dispatchResult
 	for _, e := range es {
-		err := o.callActivity(ctx, e, dueTime, state.Generation)
+		err := o.callActivity(ctx, e, dueTime, state.Generation, outgoingHistory[e.GetEventId()])
 		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
 				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
@@ -57,15 +57,26 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 	return result
 }
 
-func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, generation uint64) error {
+func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, generation uint64, ph *protos.PropagatedHistory) error {
 	ts := e.GetTaskScheduled()
 	if ts == nil {
 		log.Warnf("Workflow actor '%s': unable to process task '%v'", o.actorID, e)
 		return nil
 	}
 
-	var eventData []byte
-	eventData, err := proto.Marshal(e)
+	// Only wrap in the ActivityInvocation envelope when there is propagated history to carry.
+	var payload proto.Message = e
+	if ph != nil {
+		if o.signer == nil {
+			log.Warnf("Workflow actor '%s': propagating unsigned workflow history to activity '%s::%d' (signing is not configured; chunks cannot be cryptographically verified by the receiver)", o.actorID, ts.GetName(), e.GetEventId())
+		}
+		payload = &protos.ActivityInvocation{
+			HistoryEvent:      e,
+			PropagatedHistory: ph,
+		}
+	}
+
+	invocationData, err := proto.Marshal(payload)
 	if err != nil {
 		return err
 	}
@@ -90,7 +101,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		WithMetadata(map[string][]string{
 			todo.MetadataActivityReminderDueTime: {strconv.FormatInt(dueTime.UnixMilli(), 10)},
 		}).
-		WithData(eventData).
+		WithData(invocationData).
 		WithContentType(invokev1.ProtobufContentType),
 	)
 	if err != nil {
