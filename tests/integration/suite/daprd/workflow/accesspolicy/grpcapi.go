@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -32,7 +33,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/durabletask-go/api"
 	dtclient "github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -41,9 +41,11 @@ func init() {
 	suite.Register(new(grpcapi))
 }
 
-// grpcapi tests workflow access policy enforcement through the gRPC API.
-// Uses a caller and a target daprd: only cross-app calls are subject to
-// the policy.
+// grpcapi tests workflow access policy denial surfaces through the Dapr
+// workflow gRPC API (StartWorkflowBeta1 / GetWorkflowBeta1). The caller
+// daprd schedules and polls workflows via these handlers; the workflow
+// itself does a cross-app child-workflow call that the target's policy
+// gates.
 type grpcapi struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
@@ -125,8 +127,8 @@ func (g *grpcapi) Run(t *testing.T, ctx context.Context) {
 		}
 		return output, nil
 	}))
-	callerClient := dtclient.NewTaskHubGrpcClient(g.caller.GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, callerClient.StartWorkItemListener(ctx, callerReg))
+	callerWfClient := dtclient.NewTaskHubGrpcClient(g.caller.GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, callerWfClient.StartWorkItemListener(ctx, callerReg))
 
 	targetReg := task.NewTaskRegistry()
 	require.NoError(t, targetReg.AddWorkflowN("AllowedWF", func(ctx *task.WorkflowContext) (any, error) {
@@ -135,29 +137,51 @@ func (g *grpcapi) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, targetReg.AddWorkflowN("DeniedWF", func(ctx *task.WorkflowContext) (any, error) {
 		return "denied-should-not-reach", nil
 	}))
-	targetClient := dtclient.NewTaskHubGrpcClient(g.target.GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, targetClient.StartWorkItemListener(ctx, targetReg))
+	targetWfClient := dtclient.NewTaskHubGrpcClient(g.target.GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, targetWfClient.StartWorkItemListener(ctx, targetReg))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, len(g.caller.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 		assert.GreaterOrEqual(c, len(g.target.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 	}, time.Second*20, time.Millisecond*10)
 
+	callerDapr := runtimev1pb.NewDaprClient(g.caller.GRPCConn(t, ctx))
+
 	t.Run("gRPC cross-app start of denied workflow surfaces policy denial", func(t *testing.T) {
-		id, err := callerClient.ScheduleNewWorkflow(ctx, "CallDenied")
-		require.NoError(t, err)
-		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
-		require.NoError(t, err)
-		require.NotNil(t, metadata.GetFailureDetails())
-		assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(), "denied by workflow access policy")
+		state := startAndWaitGRPC(t, ctx, callerDapr, "CallDenied")
+		assert.Equal(t, "FAILED", state.GetRuntimeStatus())
+		assert.Contains(t, state.GetProperties()["dapr.workflow.failure.error_message"], "denied by workflow access policy")
 	})
 
 	t.Run("gRPC cross-app start of allowed workflow succeeds", func(t *testing.T) {
-		id, err := callerClient.ScheduleNewWorkflow(ctx, "CallAllowed")
-		require.NoError(t, err)
-		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
-		require.NoError(t, err)
-		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
-		assert.Nil(t, metadata.GetFailureDetails())
+		state := startAndWaitGRPC(t, ctx, callerDapr, "CallAllowed")
+		assert.Equal(t, "COMPLETED", state.GetRuntimeStatus())
+		assert.Equal(t, `"allowed-ok"`, state.GetProperties()["dapr.workflow.output"])
 	})
+}
+
+func startAndWaitGRPC(t *testing.T, ctx context.Context, c runtimev1pb.DaprClient, workflowName string) *runtimev1pb.GetWorkflowResponse {
+	t.Helper()
+	startResp, err := c.StartWorkflowBeta1(ctx, &runtimev1pb.StartWorkflowRequest{
+		WorkflowComponent: "dapr",
+		WorkflowName:      workflowName,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, startResp.GetInstanceId())
+
+	var state *runtimev1pb.GetWorkflowResponse
+	require.EventuallyWithT(t, func(cc *assert.CollectT) {
+		got, err := c.GetWorkflowBeta1(ctx, &runtimev1pb.GetWorkflowRequest{
+			WorkflowComponent: "dapr",
+			InstanceId:        startResp.GetInstanceId(),
+		})
+		if !assert.NoError(cc, err) {
+			return
+		}
+		if !assert.Contains(cc, []string{"COMPLETED", "FAILED", "TERMINATED"}, got.GetRuntimeStatus(), "still %q", got.GetRuntimeStatus()) {
+			return
+		}
+		state = got
+	}, time.Second*30, time.Millisecond*10)
+	return state
 }

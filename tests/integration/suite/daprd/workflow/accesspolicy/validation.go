@@ -83,6 +83,13 @@ func (v *validation) Run(t *testing.T, ctx context.Context) {
 	v.sched.WaitUntilRunning(t, ctx)
 	v.daprd.WaitUntilRunning(t, ctx)
 
+	assertNoneLoaded := func(t *testing.T) {
+		t.Helper()
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Empty(c, v.daprd.GetMetadata(t, ctx).WorkflowAccessPolicies)
+		}, time.Second*20, time.Millisecond*10)
+	}
+
 	t.Run("empty appID is rejected", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "policy-appid.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -99,6 +106,7 @@ spec:
 `), 0o600))
 
 		v.validationLog.EventuallyContains(t, `\"empty-appid\" failed validation`, time.Second*20, time.Millisecond*10)
+		assertNoneLoaded(t)
 	})
 
 	t.Run("empty operations array is rejected", func(t *testing.T) {
@@ -117,6 +125,7 @@ spec:
 `), 0o600))
 
 		v.validationLog.EventuallyContains(t, `\"empty-ops\" failed validation`, time.Second*20, time.Millisecond*10)
+		assertNoneLoaded(t)
 	})
 
 	t.Run("rule with neither workflows nor activities is rejected", func(t *testing.T) {
@@ -132,6 +141,7 @@ spec:
 `), 0o600))
 
 		v.validationLog.EventuallyContains(t, `\"empty-rule\" failed validation`, time.Second*20, time.Millisecond*10)
+		assertNoneLoaded(t)
 	})
 
 	t.Run("valid policy is loaded after invalid ones are skipped", func(t *testing.T) {
