@@ -334,4 +334,3 @@ func TestStopBoundsHungPauseWithTimeout(t *testing.T) {
 	require.Less(t, elapsed, 7*time.Second,
 		"Stop should return shortly after Pause timeout fires")
 }
-
