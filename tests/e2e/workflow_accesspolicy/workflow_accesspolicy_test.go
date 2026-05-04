@@ -76,6 +76,10 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
+// TestWorkflowAccessPolicy verifies that the WorkflowAccessPolicy CRD applies
+// cleanly under the allow-list schema and that self-calls are exempt from
+// policy enforcement on both the caller (no policy loaded) and the target
+// (policy loaded but caller appID == target appID is exempt).
 func TestWorkflowAccessPolicy(t *testing.T) {
 	callerURL := tr.Platform.AcquireAppExternalURL("wfacl-caller")
 	require.NotEmpty(t, callerURL, "wfacl-caller external URL must not be empty")
@@ -85,8 +89,8 @@ func TestWorkflowAccessPolicy(t *testing.T) {
 
 	require.NoError(t, utils.HealthCheckApps(callerURL, targetURL))
 
-	t.Run("allowed workflow succeeds via Dapr HTTP API", func(t *testing.T) {
-		instanceID := "allowed-" + randomID()
+	t.Run("caller can start its own workflows (no policy on caller sidecar)", func(t *testing.T) {
+		instanceID := "caller-self-" + randomID()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, status, err := utils.HTTPPostWithStatus(
 				fmt.Sprintf("%s/StartWorkflow/dapr/AllowedWorkflow/%s", callerURL, instanceID),
@@ -97,35 +101,23 @@ func TestWorkflowAccessPolicy(t *testing.T) {
 		}, 60*time.Second, 2*time.Second)
 	})
 
-	t.Run("denied workflow fails via Dapr HTTP API", func(t *testing.T) {
-		instanceID := "denied-" + randomID()
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			_, status, err := utils.HTTPPostWithStatus(
-				fmt.Sprintf("%s/StartWorkflow/dapr/DeniedWorkflow/%s", callerURL, instanceID),
-				nil,
-			)
-			assert.NoError(c, err)
-			assert.Equal(c, http.StatusInternalServerError, status)
-		}, 60*time.Second, 2*time.Second)
-	})
-
-	t.Run("unmentioned workflow fails with default deny", func(t *testing.T) {
-		instanceID := "unmentioned-" + randomID()
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			_, status, err := utils.HTTPPostWithStatus(
-				fmt.Sprintf("%s/StartWorkflow/dapr/PlaceOrder/%s", callerURL, instanceID),
-				nil,
-			)
-			assert.NoError(c, err)
-			assert.Equal(c, http.StatusInternalServerError, status)
-		}, 60*time.Second, 2*time.Second)
-	})
-
-	t.Run("target can start its own workflows", func(t *testing.T) {
-		instanceID := "selfcall-" + randomID()
+	t.Run("target can start its own workflows (self-call exempt despite loaded policy)", func(t *testing.T) {
+		instanceID := "target-self-" + randomID()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, status, err := utils.HTTPPostWithStatus(
 				fmt.Sprintf("%s/StartWorkflow/dapr/AllowedWorkflow/%s", targetURL, instanceID),
+				nil,
+			)
+			assert.NoError(c, err)
+			assert.Equalf(c, http.StatusOK, status, "response body: %s", string(resp))
+		}, 60*time.Second, 2*time.Second)
+	})
+
+	t.Run("target can start workflows that the policy does not list (self-call exempt)", func(t *testing.T) {
+		instanceID := "target-unmentioned-" + randomID()
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			resp, status, err := utils.HTTPPostWithStatus(
+				fmt.Sprintf("%s/StartWorkflow/dapr/DeniedWorkflow/%s", targetURL, instanceID),
 				nil,
 			)
 			assert.NoError(c, err)

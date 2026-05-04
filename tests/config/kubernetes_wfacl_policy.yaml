@@ -3,29 +3,13 @@ kind: WorkflowAccessPolicy
 metadata:
   name: wfacl-e2e-policy
 scopes:
-  - wfacl-caller
   - wfacl-target
 spec:
-  defaultAction: deny
   rules:
     - callers:
         - appID: "wfacl-caller"
       workflows:
         - name: "AllowedWorkflow"
           operations: [schedule]
-          action: allow
-        - name: "DeniedWorkflow"
-          operations: [schedule]
-          action: deny
       activities:
         - name: "*"
-          action: allow
-    - callers:
-        - appID: "wfacl-target"
-      workflows:
-        - name: "*"
-          operations: [schedule]
-          action: allow
-      activities:
-        - name: "*"
-          action: allow
