@@ -146,6 +146,7 @@ linters:
         - singleCaseSwitch
         - exitAfterDefer
         - elseif
+        - deprecatedComment
       enabled-tags:
         - performance
       settings:
@@ -236,3 +237,9 @@ linters:
     - testifylint
     - wsl_v5
     - nolintlint
+    - godoclint
+    - iotamixing
+    - modernize
+    - perfsprint
+    - prealloc
+    - unqueryvet
