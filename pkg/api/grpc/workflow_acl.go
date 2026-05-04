@@ -44,6 +44,16 @@ func (a *api) callActorValidateWorkflowACL(ctx context.Context, in *internalv1pb
 		return err
 	}
 
+	// Same-sidecar self-invocation is unconditionally allowed. WorkflowAccessPolicy
+	// is meant to gate cross-app access; it must not apply to a sidecar talking to
+	// its own actors (e.g. a workflow emitting AddWorkflowEvent back to its parent
+	// instance hosted on the same sidecar). mTLS guarantees the SPIFFE identity is
+	// not spoofable, so callerAppID + callerNamespace matching this sidecar's own
+	// identity is a sound signal of self-call.
+	if a.isSelfCall(callerAppID, callerNamespace) {
+		return nil
+	}
+
 	result, err := workflowacl.EnforceRequest(
 		policies, callerAppID,
 		in.GetActor().GetActorType(),
@@ -93,6 +103,11 @@ func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *inte
 		return err
 	}
 
+	// Self-call from this sidecar's own identity bypasses the policy.
+	if a.isSelfCall(callerAppID, callerNamespace) {
+		return nil
+	}
+
 	if nsErr := a.checkNamespace(callerNamespace); nsErr != nil {
 		return nsErr
 	}
@@ -120,6 +135,15 @@ func (a *api) extractCallerIdentity(ctx context.Context) (appID, namespace strin
 	}
 
 	return spiffeID.AppID(), spiffeID.Namespace(), nil
+}
+
+// isSelfCall reports whether the caller's verified SPIFFE identity matches
+// this sidecar's own appID and namespace. mTLS prevents identity spoofing, so
+// equality is a sound signal that the call originated from this sidecar's own
+// actors talking to its own actors.
+func (a *api) isSelfCall(callerAppID, callerNamespace string) bool {
+	return callerAppID == a.Universal.AppID() &&
+		(callerNamespace == "" || callerNamespace == a.Namespace())
 }
 
 // checkNamespace denies cross-namespace calls when policies are active.
