@@ -16,8 +16,6 @@ package accesspolicy
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -62,20 +60,8 @@ func (n *nopolicy) Setup(t *testing.T) []framework.Option {
 	n.sched = scheduler.New(t, scheduler.WithSentry(n.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 	n.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: wfaclconfig
-spec:
-  features:
-  - name: WorkflowAccessPolicy
-    enabled: true`), 0o600))
-
 	commonOpts := []daprd.Option{
 		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourceFiles(n.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(n.place.Address()),
 		daprd.WithSchedulerAddresses(n.sched.Address()),

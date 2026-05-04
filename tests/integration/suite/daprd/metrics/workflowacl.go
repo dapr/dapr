@@ -90,7 +90,6 @@ func (w *workflowacl) Setup(t *testing.T) []framework.Option {
 		},
 	})
 
-	boolTrue := true
 	w.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
 			spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
@@ -102,9 +101,6 @@ func (w *workflowacl) Setup(t *testing.T) []framework.Option {
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "daprsystem"},
 				Spec: configapi.ConfigurationSpec{
-					Features: []configapi.FeatureSpec{
-						{Name: "WorkflowAccessPolicy", Enabled: &boolTrue},
-					},
 					MTLSSpec: &configapi.MTLSSpec{
 						ControlPlaneTrustDomain: "integration.test.dapr.io",
 						SentryAddress:           sen.Address(),
