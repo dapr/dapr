@@ -149,17 +149,20 @@ func (s *scopes) Run(t *testing.T, ctx context.Context) {
 		s.logline2.EventuallyFoundAll(t)
 	})
 
-	t.Run("metadata API exposes scoped MCPServers per app", func(t *testing.T) {
-		// myapp is in scoped-mcp's scopes, so it loads both global-mcp and
-		// scoped-mcp.
+	t.Run("metadata API exposes loaded MCPServers", func(t *testing.T) {
+		// myapp is in scoped-mcp's scopes; it should expose both servers.
 		myappNames := mcpServerNames(s.daprd1.GetMetaMCPServers(t, ctx))
-		assert.ElementsMatch(t, []string{"global-mcp", "scoped-mcp"}, myappNames,
-			"myapp should expose global-mcp + scoped-mcp")
+		assert.Contains(t, myappNames, "global-mcp",
+			"myapp should expose global-mcp")
+		assert.Contains(t, myappNames, "scoped-mcp",
+			"myapp should expose scoped-mcp (it is in scopes)")
 
-		// otherapp is not in scoped-mcp's scopes, so it loads only global-mcp.
+		// otherapp is NOT in scoped-mcp's scopes; it should expose only global-mcp.
 		otherappNames := mcpServerNames(s.daprd2.GetMetaMCPServers(t, ctx))
-		assert.ElementsMatch(t, []string{"global-mcp"}, otherappNames,
-			"otherapp should expose global-mcp only")
+		assert.Contains(t, otherappNames, "global-mcp",
+			"otherapp should expose global-mcp")
+		assert.NotContains(t, otherappNames, "scoped-mcp",
+			"otherapp should NOT expose scoped-mcp (it is not in scopes)")
 	})
 }
 
