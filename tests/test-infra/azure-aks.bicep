@@ -100,11 +100,6 @@ resource aks 'Microsoft.ContainerService/managedClusters@2023-05-01' = {
           type: 'VirtualMachineScaleSets'
           mode: 'System'
           maxPods: 110
-          availabilityZones: [
-            '1'
-            '2'
-            '3'
-          ]
           enableNodePublicIP: false
           vnetSubnetID: enableWindows ? aksVNet::defaultSubnet.id : null
           tags: {}
@@ -122,11 +117,6 @@ resource aks 'Microsoft.ContainerService/managedClusters@2023-05-01' = {
           type: 'VirtualMachineScaleSets'
           mode: 'User'
           maxPods: 110
-          availabilityZones: [
-            '1'
-            '2'
-            '3'
-          ]
           nodeLabels: {}
           nodeTaints: []
           enableNodePublicIP: false
@@ -144,11 +134,6 @@ resource aks 'Microsoft.ContainerService/managedClusters@2023-05-01' = {
           type: 'VirtualMachineScaleSets'
           mode: 'User'
           maxPods: 110
-          availabilityZones: [
-            '1'
-            '2'
-            '3'
-          ]
           nodeLabels: {}
           nodeTaints: []
           enableNodePublicIP: false
