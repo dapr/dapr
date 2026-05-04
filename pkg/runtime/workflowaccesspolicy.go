@@ -82,14 +82,23 @@ func (a *DaprRuntime) loadWorkflowAccessPolicies(ctx context.Context) error {
 }
 
 // buildWorkflowACLChecker creates a WorkflowACLChecker for the actor router.
-// This enforces workflow access policies on local actor calls (same sidecar).
 // Remote calls are enforced at the callee's CallActor gRPC handler.
+// Same-app calls (callerAppID == this sidecar's appID) bypass the policy.
+// WorkflowAccessPolicy is meant to gate cross-app access; an app talking to
+// its own actors must not be subject to it.
 func (a *DaprRuntime) buildWorkflowACLChecker() actorrouter.WorkflowACLChecker {
 	if !a.globalConfig.IsFeatureEnabled(config.WorkflowAccessPolicy) {
 		return nil
 	}
 
 	return func(callerAppID string, req *internalv1pb.InternalInvokeRequest) error {
+		// Same-app self-call. The local actor router only ever passes its
+		// own appID as callerAppID, so any local call here is by definition
+		// an in-app call.
+		if callerAppID == a.runtimeConfig.id {
+			return nil
+		}
+
 		result, err := workflowacl.EnforceRequest(
 			a.daprGRPCAPI.GetWorkflowAccessPolicies(), callerAppID,
 			req.GetActor().GetActorType(),
