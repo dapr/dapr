@@ -67,12 +67,12 @@ spec:
   rules:
   - callers:
     - appID: grpcapi-app
-    operations:
-    - type: workflow
-      name: AllowedWF
+    workflows:
+    - name: AllowedWF
+      operations: [schedule]
       action: allow
-    - type: workflow
-      name: DeniedWF
+    - name: DeniedWF
+      operations: [schedule]
       action: deny
 `)
 

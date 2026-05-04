@@ -113,16 +113,23 @@ type WorkflowAccessPolicySpec struct {
 	Rules []WorkflowAccessPolicyRule `json:"rules,omitempty"`
 }
 
-// WorkflowAccessPolicyRule defines a set of callers and the operations they
-// are allowed or denied.
+// WorkflowAccessPolicyRule defines a set of callers and the workflow and/or
+// activity rules they are allowed or denied. At least one of workflows or
+// activities must be set.
+//
+// +kubebuilder:validation:XValidation:rule="(has(self.workflows) && size(self.workflows) > 0) || (has(self.activities) && size(self.activities) > 0)",message="at least one of workflows or activities must contain a rule"
 type WorkflowAccessPolicyRule struct {
 	// Callers that this rule applies to.
 	// +kubebuilder:validation:MinItems=1
 	Callers []WorkflowCaller `json:"callers"`
 
-	// Operations that the matched callers are allowed/denied to perform.
-	// +kubebuilder:validation:MinItems=1
-	Operations []WorkflowOperationRule `json:"operations"`
+	// Workflows are the workflow rules that the matched callers are allowed/denied.
+	// +optional
+	Workflows []WorkflowRule `json:"workflows,omitempty"`
+
+	// Activities are the activity rules that the matched callers are allowed/denied.
+	// +optional
+	Activities []ActivityRule `json:"activities,omitempty"`
 }
 
 // WorkflowCaller identifies a calling application.
@@ -140,35 +147,43 @@ const (
 	PolicyActionDeny  PolicyAction = "deny"
 )
 
-// WorkflowOperationType is the type of operation: "workflow" or "activity".
-type WorkflowOperationType string
-
-const (
-	WorkflowOperationTypeWorkflow WorkflowOperationType = "workflow"
-	WorkflowOperationTypeActivity WorkflowOperationType = "activity"
-)
-
-// WorkflowOperation is the specific operation being controlled (e.g., "schedule").
+// WorkflowOperation is the specific workflow operation being controlled.
 type WorkflowOperation string
 
 const (
-	WorkflowOperationSchedule WorkflowOperation = "schedule"
+	WorkflowOperationSchedule  WorkflowOperation = "schedule"
+	WorkflowOperationTerminate WorkflowOperation = "terminate"
+	WorkflowOperationRaise     WorkflowOperation = "raise"
+	WorkflowOperationPause     WorkflowOperation = "pause"
+	WorkflowOperationResume    WorkflowOperation = "resume"
+	WorkflowOperationPurge     WorkflowOperation = "purge"
+	WorkflowOperationGet       WorkflowOperation = "get"
+	WorkflowOperationRerun     WorkflowOperation = "rerun"
 )
 
-// WorkflowOperationRule defines access control for a specific workflow or activity operation.
-type WorkflowOperationRule struct {
-	// Type is "workflow" or "activity".
-	// +kubebuilder:validation:Enum=workflow;activity
-	Type WorkflowOperationType `json:"type"`
-
-	// Name is the exact name or glob pattern for the workflow/activity.
+// WorkflowRule defines access control for a workflow operation.
+type WorkflowRule struct {
+	// Name is the exact name or glob pattern for the workflow.
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
-	// Operation defaults to "schedule" if omitted.
-	// +optional
-	// +kubebuilder:validation:Enum=schedule
-	Operation *WorkflowOperation `json:"operation,omitempty"`
+	// Operations is the set of operations this rule applies to.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:items:Enum=schedule;terminate;raise;pause;resume;purge;get;rerun
+	// +listType=set
+	Operations []WorkflowOperation `json:"operations"`
+
+	// Action is "allow" or "deny".
+	// +kubebuilder:validation:Enum=allow;deny
+	Action PolicyAction `json:"action"`
+}
+
+// ActivityRule defines access control for an activity. Activities only have a
+// single operation (schedule), so there is no operation field.
+type ActivityRule struct {
+	// Name is the exact name or glob pattern for the activity.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
 
 	// Action is "allow" or "deny".
 	// +kubebuilder:validation:Enum=allow;deny
