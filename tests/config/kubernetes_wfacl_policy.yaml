@@ -10,22 +10,22 @@ spec:
   rules:
     - callers:
         - appID: "wfacl-caller"
-      operations:
-        - type: workflow
-          name: "AllowedWorkflow"
+      workflows:
+        - name: "AllowedWorkflow"
+          operations: [schedule]
           action: allow
-        - type: workflow
-          name: "DeniedWorkflow"
+        - name: "DeniedWorkflow"
+          operations: [schedule]
           action: deny
-        - type: activity
-          name: "*"
+      activities:
+        - name: "*"
           action: allow
     - callers:
         - appID: "wfacl-target"
-      operations:
-        - type: workflow
-          name: "*"
+      workflows:
+        - name: "*"
+          operations: [schedule]
           action: allow
-        - type: activity
-          name: "*"
+      activities:
+        - name: "*"
           action: allow

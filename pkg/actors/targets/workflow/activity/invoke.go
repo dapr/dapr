@@ -38,6 +38,10 @@ import (
 func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 	method := req.GetMessage().GetMethod()
 
+	if err := a.checkAccessPolicy(method, req.GetMessage().GetData().GetValue(), req.GetMetadata()); err != nil {
+		return nil, err
+	}
+
 	dueTime := time.Now()
 	if s, ok := req.GetMetadata()[todo.MetadataActivityReminderDueTime]; ok && len(s.GetValues()) > 0 {
 		unix, err := strconv.ParseInt(s.GetValues()[0], 10, 64)

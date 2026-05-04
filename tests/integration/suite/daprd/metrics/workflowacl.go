@@ -75,15 +75,17 @@ func (w *workflowacl) Setup(t *testing.T) []framework.Option {
 			Rules: []wfaclapi.WorkflowAccessPolicyRule{
 				{
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "metric-caller"}},
-					Operations: []wfaclapi.WorkflowOperationRule{
-						{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "AllowedWF", Action: wfaclapi.PolicyActionAllow},
+					Workflows: []wfaclapi.WorkflowRule{
+						{Name: "AllowedWF", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule}, Action: wfaclapi.PolicyActionAllow},
 					},
 				},
 				{
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "metric-target"}},
-					Operations: []wfaclapi.WorkflowOperationRule{
-						{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionAllow},
-						{Type: wfaclapi.WorkflowOperationTypeActivity, Name: "*", Action: wfaclapi.PolicyActionAllow},
+					Workflows: []wfaclapi.WorkflowRule{
+						{Name: "*", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule}, Action: wfaclapi.PolicyActionAllow},
+					},
+					Activities: []wfaclapi.ActivityRule{
+						{Name: "*", Action: wfaclapi.PolicyActionAllow},
 					},
 				},
 			},
