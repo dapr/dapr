@@ -76,18 +76,17 @@ spec:
   rules:
   - callers:
     - appID: partialauth-caller
-    operations:
-    - type: workflow
-      name: AllowedWF
+    workflows:
+    - name: AllowedWF
+      operations: [schedule]
       action: allow
-    - type: workflow
-      name: DeniedWF
+    - name: DeniedWF
+      operations: [schedule]
       action: deny
   - callers:
     - appID: partialauth-target
-    operations:
-    - type: activity
-      name: "*"
+    activities:
+    - name: "*"
       action: allow
 `)
 

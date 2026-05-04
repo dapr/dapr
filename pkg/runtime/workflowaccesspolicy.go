@@ -16,19 +16,13 @@ package runtime
 import (
 	"context"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
-	actorrouter "github.com/dapr/dapr/pkg/actors/router"
 	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
-	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/internal/loader"
 	"github.com/dapr/dapr/pkg/internal/loader/disk"
 	"github.com/dapr/dapr/pkg/internal/loader/kubernetes"
 	"github.com/dapr/dapr/pkg/internal/loader/validate"
 	"github.com/dapr/dapr/pkg/modes"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 func (a *DaprRuntime) workflowAccessPolicyLoader() loader.Loader[wfaclapi.WorkflowAccessPolicy] {
@@ -71,40 +65,11 @@ func (a *DaprRuntime) loadWorkflowAccessPolicies(ctx context.Context) error {
 	}
 
 	compiled := workflowacl.Compile(valid)
-	a.daprGRPCAPI.SetWorkflowAccessPolicies(compiled)
+	a.workflowAccessPolicies.Store(compiled)
 
 	if compiled != nil {
 		log.Infof("Loaded %d workflow access policy resource(s)", len(valid))
 	}
 
 	return nil
-}
-
-// buildWorkflowACLChecker creates a WorkflowACLChecker for the actor router.
-// This enforces workflow access policies on local actor calls (same sidecar).
-// Remote calls are enforced at the callee's CallActor gRPC handler.
-func (a *DaprRuntime) buildWorkflowACLChecker() actorrouter.WorkflowACLChecker {
-	return func(callerAppID string, req *internalv1pb.InternalInvokeRequest) error {
-		result, err := workflowacl.EnforceRequest(
-			a.daprGRPCAPI.GetWorkflowAccessPolicies(), callerAppID,
-			req.GetActor().GetActorType(),
-			req.GetMessage().GetMethod(),
-			req.GetMessage().GetData().GetValue(),
-		)
-		if err != nil {
-			return status.Errorf(codes.Internal, "workflow access policy: %v", err)
-		}
-		if result == nil {
-			return nil
-		}
-
-		if !result.Allowed {
-			log.Warnf("Workflow access policy denied app '%s' for %s operation '%s'", callerAppID, result.OpType, result.Operation)
-			diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(result.OpType), result.Operation)
-			return status.Errorf(codes.PermissionDenied, "access denied by workflow access policy")
-		}
-
-		diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, string(result.OpType), result.Operation)
-		return nil
-	}
 }
