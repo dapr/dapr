@@ -363,7 +363,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 // 3. URL parameter: `http://localhost:3500/v1.0/invoke/<app-id>/method/<method>`
 func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string, method string) {
 	if appID := headers.Get(consts.DaprAppIDHeader); appID != "" {
-		targetID, method = appID, strings.TrimPrefix(path.Clean(reqPath), "/")
+		targetID, method = appID, cleanReqPathPreserveTrailingSlash(reqPath)
 		// Delete the header as it should not be passed forward with the request and is only used by the Dapr API
 		headers.Del(consts.DaprAppIDHeader)
 		return targetID, method
@@ -373,7 +373,7 @@ func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string
 		if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(auth, "Basic ")); err == nil {
 			pair := strings.Split(string(s), ":")
 			if len(pair) == 2 && strings.EqualFold(pair[0], consts.DaprAppIDHeader) {
-				return pair[1], strings.TrimPrefix(path.Clean(reqPath), "/")
+				return pair[1], cleanReqPathPreserveTrailingSlash(reqPath)
 			}
 		}
 	}
@@ -405,6 +405,15 @@ func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string
 	}
 
 	return "", ""
+}
+
+func cleanReqPathPreserveTrailingSlash(reqPath string) string {
+	cleaned := path.Clean(reqPath)
+	if strings.HasSuffix(reqPath, "/") && cleaned != "/" {
+		cleaned += "/"
+	}
+
+	return strings.TrimPrefix(cleaned, "/")
 }
 
 // Returns true if a path has the parts as prefix (and a trailing slash), and returns the index of the first byte after the prefix (and after any trailing slashes).
