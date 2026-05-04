@@ -100,7 +100,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	defer cancel()
 
 	_, err = o.router.Call(ctx, internalsv1pb.
-		NewInternalInvokeRequest("Execute").
+		NewInternalInvokeRequest(todo.ExecuteActivityMethod).
 		WithActor(activityActorType, targetActorID).
 		WithMetadata(map[string][]string{
 			todo.MetadataActivityReminderDueTime: {strconv.FormatInt(dueTime.UnixMilli(), 10)},

@@ -18,6 +18,7 @@ import (
 	"errors"
 	"sync"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
@@ -63,6 +64,9 @@ type Options struct {
 	// orchestrator stalls workflows whose history payload would exceed this
 	// limit on the GetWorkItems stream.
 	MaxRequestBodySize int
+
+	// May be nil when the feature is disabled.
+	WorkflowAccessPolicies *workflowacl.Holder
 }
 
 type factory struct {
@@ -71,16 +75,17 @@ type factory struct {
 	activityActorType  string
 	retentionActorType string
 
-	resiliency         resiliency.Provider
-	router             router.Interface
-	reminders          reminders.Interface
-	actorState         state.Interface
-	placement          placement.Interface
-	eventSink          EventSink
-	actorTypeBuilder   *common.ActorTypeBuilder
-	retentionPolicy    *config.WorkflowStateRetentionPolicy
-	signer             *signer.Signer
-	maxRequestBodySize int
+	resiliency             resiliency.Provider
+	router                 router.Interface
+	reminders              reminders.Interface
+	actorState             state.Interface
+	placement              placement.Interface
+	eventSink              EventSink
+	actorTypeBuilder       *common.ActorTypeBuilder
+	retentionPolicy        *config.WorkflowStateRetentionPolicy
+	signer                 *signer.Signer
+	maxRequestBodySize     int
+	workflowAccessPolicies *workflowacl.Holder
 
 	scheduler todo.WorkflowScheduler
 
@@ -119,22 +124,23 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 	}()
 
 	return &factory{
-		appID:              opts.AppID,
-		actorType:          opts.WorkflowActorType,
-		activityActorType:  opts.ActivityActorType,
-		retentionActorType: opts.RetentionActorType,
-		resiliency:         opts.Resiliency,
-		router:             router,
-		reminders:          reminders,
-		actorState:         astate,
-		eventSink:          opts.EventSink,
-		actorTypeBuilder:   opts.ActorTypeBuilder,
-		placement:          placement,
-		retentionPolicy:    opts.RetentionPolicy,
-		signer:             opts.Signer,
-		maxRequestBodySize: opts.MaxRequestBodySize,
-		scheduler:          opts.Scheduler,
-		deactivateCh:       deactivateCh,
+		appID:                  opts.AppID,
+		actorType:              opts.WorkflowActorType,
+		activityActorType:      opts.ActivityActorType,
+		retentionActorType:     opts.RetentionActorType,
+		resiliency:             opts.Resiliency,
+		router:                 router,
+		reminders:              reminders,
+		actorState:             astate,
+		eventSink:              opts.EventSink,
+		actorTypeBuilder:       opts.ActorTypeBuilder,
+		placement:              placement,
+		retentionPolicy:        opts.RetentionPolicy,
+		signer:                 opts.Signer,
+		maxRequestBodySize:     opts.MaxRequestBodySize,
+		workflowAccessPolicies: opts.WorkflowAccessPolicies,
+		scheduler:              opts.Scheduler,
+		deactivateCh:           deactivateCh,
 	}, nil
 }
 

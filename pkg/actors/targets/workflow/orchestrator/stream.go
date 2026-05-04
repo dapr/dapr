@@ -35,9 +35,15 @@ func (o *orchestrator) handleStream(ctx context.Context,
 		return false, fmt.Errorf("unsupported stream method: %s", m)
 	}
 
+	// Load state once and reuse for both the access policy check (workflow
+	// name) and the stream response.
 	_, ometa, err := o.loadInternalState(ctx)
 	if err != nil {
 		return false, err
+	}
+
+	if aerr := o.checkAccessPolicy(ctx, req.GetMessage().GetMethod(), req.GetMessage().GetData().GetValue(), nil, ometa, req.GetMetadata()); aerr != nil {
+		return false, aerr
 	}
 
 	if ometa != nil {

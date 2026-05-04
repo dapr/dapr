@@ -92,6 +92,7 @@ var (
 
 	// Actor.
 	ErrActorReminderOpActorNotHosted = APIError{"operations on actor reminders are only possible on hosted actor types", errorcodes.ActorReminderNonHosted, http.StatusForbidden, grpcCodes.PermissionDenied}
+	ErrActorTypeReserved             = APIError{"actor type %q is reserved for the Dapr workflow runtime; direct actor API access is not permitted", errorcodes.ActorTypeReserved, http.StatusForbidden, grpcCodes.PermissionDenied}
 	ErrActorRuntimeNotFound          = APIError{`the state store is not configured to use the actor runtime. Have you set the - name: actorStateStore value: "true" in your state store component file?`, errorcodes.ActorRuntimeNotFound, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorNoAppChannel             = APIError{"app channel is not initialized", errorcodes.ErrActorNoAppChannel, http.StatusBadRequest, grpcCodes.Unavailable}
 	ErrActorInstanceMissing          = APIError{"actor instance is missing", errorcodes.ActorInstanceMissing, http.StatusBadRequest, grpcCodes.Internal}
