@@ -68,12 +68,18 @@ type Subscription struct {
 	adapter         rtpubsub.Adapter
 
 	cancel func(cause error)
+	// drainMu makes the handler's "check drainSealed → wg.Add" region
+	// atomic with respect to Stop's "set drainSealed → wg.Wait" region.
+	// Handlers take RLock; Stop takes Lock when sealing. Without it, a
+	// handler that reads drainSealed=false can still race past Stop's
+	// Wait and panic with "WaitGroup is reused before previous Wait has
+	// returned" — exactly the failure mode contrib retry loops surface.
+	drainMu sync.RWMutex
 	// drainSealed is set after the drain phase completes (inflight=0) and
 	// just before the final wg.Wait. It bars any new wg.Add calls so that
-	// the subsequent Wait can never race with an incoming Add — preventing
-	// the "WaitGroup is reused before previous Wait has returned" panic
-	// that contrib retry loops can otherwise trigger. Handlers check this
-	// BEFORE calling wg.Add and take the <-ctx.Done() block path if set.
+	// the subsequent Wait can never race with an incoming Add. Handlers
+	// check this BEFORE calling wg.Add (under drainMu.RLock) and take the
+	// <-ctx.Done() block path if set.
 	drainSealed atomic.Bool
 	closed      atomic.Bool
 	wg          sync.WaitGroup
@@ -141,17 +147,20 @@ func New(opts Options) (*Subscription, error) {
 		Topic:    subscribeTopic,
 		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *contribpubsub.NewMessage) error {
-		// Check drainSealed BEFORE wg.Add. Stop sets this just before calling
-		// wg.Wait so any handler that gets here after the flag is set skips
-		// the Add entirely — preventing the WaitGroup reuse panic that
-		// contrib retry loops can otherwise trigger.
+		// Hold drainMu.RLock across the drainSealed check and wg.Add so
+		// the two are atomic with respect to Stop, which takes the write
+		// lock before sealing and waiting. Without this, a handler that
+		// reads drainSealed=false can be preempted past Stop's wg.Wait
+		// and panic on the subsequent wg.Add.
+		s.drainMu.RLock()
 		if s.drainSealed.Load() {
+			s.drainMu.RUnlock()
 			<-ctx.Done()
 			return ctx.Err()
 		}
-
 		s.wg.Add(1)
 		s.inflight.Add(1)
+		s.drainMu.RUnlock()
 
 		if s.closed.Load() {
 			// Release the WaitGroup before blocking to avoid deadlocking
@@ -462,30 +471,40 @@ func (s *Subscription) Stop(err ...error) {
 		s.closed.Store(true)
 	}
 
+	// Snapshot inflight up front, then promote it to true if any work is
+	// observed during the drain loop. In the paused (drain-to-app) path
+	// closed stays false during drain, so handler invocations can start
+	// after the initial snapshot — without this update, the 400ms
+	// ack-settle below would be skipped even though the broker is still
+	// awaiting our acks.
 	inflight := s.inflight.Load() > 0
 
-	// Drain via atomic polling rather than wg.Wait. wg.Wait is unsafe
-	// here because contrib retry loops can call the handler repeatedly
-	// with wg.Add(1)/wg.Done() bracketed around backoff sleeps. Between
-	// retries the counter momentarily hits 0; if Wait was in progress it
-	// can start to unwind and race the next retry's Add(1), tripping the
-	// "WaitGroup is reused before previous Wait has returned" panic.
-	// atomic.Int64 polling has no such restriction.
+	// Drain via atomic polling rather than wg.Wait. wg.Wait alone is
+	// unsafe here because contrib retry loops can call the handler
+	// repeatedly with wg.Add(1)/wg.Done() bracketed around backoff
+	// sleeps. Between retries the counter momentarily hits 0; if Wait
+	// was in progress it can start to unwind and race the next retry's
+	// Add(1), tripping the "WaitGroup is reused before previous Wait
+	// has returned" panic. atomic.Int64 polling has no such restriction.
 	//
 	// No inner timeout here — the runner's graceful-shutdown-duration
 	// caps the whole close phase, so a stuck handler can't hang shutdown
 	// indefinitely.
 	const drainPollInterval = 20 * time.Millisecond
 	for s.inflight.Load() > 0 {
+		inflight = true
 		time.Sleep(drainPollInterval)
 	}
 
-	// Bar any new wg.Add calls and run wg.Wait as a final safety net.
-	// After drainSealed is set, handlers see it and skip Add entirely
-	// (taking the <-ctx.Done() block path instead), so the subsequent
-	// Wait can never race with an incoming Add.
+	// Take the write lock to seal the drain atomically with respect to
+	// any handler that may be sitting between its drainSealed check and
+	// its wg.Add. Once we release, all future handlers will observe
+	// drainSealed=true under their RLock and skip the Add entirely, so
+	// wg.Wait below cannot race with a concurrent Add.
+	s.drainMu.Lock()
 	s.drainSealed.Store(true)
 	s.closed.Store(true)
+	s.drainMu.Unlock()
 	s.wg.Wait()
 
 	if s.adapterStreamer != nil {
