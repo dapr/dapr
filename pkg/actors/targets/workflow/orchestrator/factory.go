@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -168,6 +169,20 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 
 	if or.streamFns == nil {
 		or.streamFns = make(map[int64]*streamFn)
+	}
+
+	// Always allocate Signing, even when f.signer is nil. The
+	// attestation/sign methods on Signing are no-ops when Signer is
+	// nil, but Tombstone (called from tombstoneTamperedState on a
+	// load-time VerificationError) does not depend on Signer and must
+	// work for unsigned workflows that hit metadata-bounds or
+	// missing-key tampering.
+	or.signing = &signing.Signing{
+		Signer:            f.signer,
+		ActorID:           actorID,
+		ActorType:         f.actorType,
+		ActivityActorType: f.activityActorType,
+		Reminders:         f.reminders,
 	}
 
 	// Reset the cache state to force a reload from the state store

@@ -41,9 +41,10 @@ type daprdOptionConfig struct {
 }
 
 type options struct {
-	daprds int
-	skipDB bool
-	mtls   bool
+	daprds          int
+	skipDB          bool
+	mtls            bool
+	signingDisabled []int
 
 	orchestrators    []orchestratorConfig
 	activities       []activityConfig
@@ -112,6 +113,15 @@ func WithMTLS(t *testing.T) Option {
 	t.Helper()
 	return func(o *options) {
 		o.mtls = true
+	}
+}
+
+// WithSigningDisabledN excludes the daprd at the given index from having
+// the WorkflowHistorySigning feature flag set. Has no effect without
+// WithMTLS.
+func WithSigningDisabledN(index int) Option {
+	return func(o *options) {
+		o.signingDisabled = append(o.signingDisabled, index)
 	}
 }
 

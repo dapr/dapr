@@ -27,7 +27,9 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 )
 
 var activityCache = &sync.Pool{
@@ -45,6 +47,10 @@ type Options struct {
 	Scheduler         todo.ActivityScheduler
 	Actors            actors.Interface
 	ActorTypeBuilder  *common.ActorTypeBuilder
+	// Signer produces activity completion attestations so a receiving
+	// parent workflow can cryptographically verify the activity's identity,
+	// input, and output. Nil when signing is disabled for this deployment.
+	Signer *signer.Signer
 
 	// May be nil when the feature is disabled.
 	WorkflowAccessPolicies *workflowacl.Holder
@@ -66,6 +72,7 @@ type factory struct {
 	placement              placement.Interface
 	actorTypeBuilder       *common.ActorTypeBuilder
 	workflowAccessPolicies *workflowacl.Holder
+	signing                *signing.Signing
 
 	scheduler todo.ActivityScheduler
 
@@ -99,7 +106,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
-	return &factory{
+	f := &factory{
 		appID:                  opts.AppID,
 		actorType:              opts.ActivityActorType,
 		router:                 router,
@@ -108,11 +115,15 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		placement:              placement,
 		workflowActorType:      opts.WorkflowActorType,
 		actorTypeBuilder:       opts.ActorTypeBuilder,
-		state:                  state,
 		workflowAccessPolicies: opts.WorkflowAccessPolicies,
+		state:                  state,
 
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
-	}, nil
+	}
+	if opts.Signer != nil {
+		f.signing = &signing.Signing{Signer: opts.Signer}
+	}
+	return f, nil
 }
 
 func (f *factory) GetOrCreate(actorID string) targets.Interface {

@@ -53,7 +53,7 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	if err != nil {
 		var verifyErr *wferrors.VerificationError
 		if errors.As(err, &verifyErr) {
-			if !isCompleted(state) {
+			if !state.IsCompleted() {
 				return o.tombstoneTamperedState(ctx, opts, state, err)
 			}
 		}
@@ -71,7 +71,7 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	// nothing to validate and the history-index build is pure waste. Skip
 	// when the workflow is already terminal, so we don't re-detect the same
 	// condition on every load.
-	if o.signer != nil && len(state.Inbox) > 0 && !isCompleted(state) {
+	if o.signer != nil && len(state.Inbox) > 0 && !state.IsCompleted() {
 		if filtered := filterValidInboxEvents(state); len(filtered) != len(state.Inbox) {
 			cause := fmt.Errorf("workflow actor '%s': inbox contained %d events that did not match signed history (state store tampering)",
 				o.actorID, len(state.Inbox)-len(filtered))
@@ -87,43 +87,60 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	return state, o.ometa, nil
 }
 
-// tombstoneTamperedState appends an unsigned ExecutionCompleted(FAILED)
-// tamper marker to the workflow's history (see [wfenginestate.MarkAsTamperFailed])
-// so it surfaces as terminally FAILED on every subsequent load. The original
-// (untrusted) history, inbox, signatures, and certs are left intact for
-// forensics. The actor's reminders are deleted to stop further activations
-// from firing against the dead workflow.
+// tombstoneTamperedState invokes the signing tombstone path (append
+// tamper marker + delete reminders) and refreshes the orchestrator's
+// cached state/runtime/metadata views with the new failed state.
 func (o *orchestrator) tombstoneTamperedState(ctx context.Context, opts wfenginestate.Options, prior *wfenginestate.State, cause error) (*wfenginestate.State, *backend.WorkflowMetadata, error) {
-	log.Warnf("Workflow actor '%s': tampering detected, marking workflow as FAILED: %s", o.actorID, cause)
-
-	failed, err := wfenginestate.MarkAsTamperFailed(ctx, o.actorState, o.actorID, opts, prior, cause)
+	failed, err := o.signing.Tombstone(ctx, o.actorState, opts, prior, cause)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to append tamper marker: %w", err)
+		return nil, nil, err
 	}
-
-	o.failSignatureVerification(ctx)
 
 	o.state = failed
 	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, failed.CustomStatus, failed.History)
 	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(failed))
 
+	if o.eventSink != nil {
+		o.eventSink(o.ometa)
+	}
+	o.notifyStreams()
+
 	return failed, o.ometa, nil
 }
 
-// isCompleted reports whether the loaded workflow's history ends in an
-// ExecutionCompleted event of any kind (the runtime's terminal marker).
-// There is nothing for the orchestrator actor to do on a terminal workflow,
-// so the tamper-marker append is skipped — the reader path is responsible
-// for surfacing the verification error to clients.
-func isCompleted(s *wfenginestate.State) bool {
-	return s != nil && len(s.History) > 0 && s.History[len(s.History)-1].GetExecutionCompleted() != nil
+// notifyStreams pushes the current cached metadata to all registered
+// runtime-status stream watchers and removes any whose condition fired or
+// whose callback errored. Safe to call with no streams registered.
+func (o *orchestrator) notifyStreams() {
+	if len(o.streamFns) == 0 {
+		return
+	}
+	arstate, err := anypb.New(o.ometa)
+	if err != nil {
+		return
+	}
+	streamReq := &internalsv1pb.InternalInvokeResponse{
+		Status:  &internalsv1pb.Status{Code: http.StatusOK},
+		Message: &commonv1pb.InvokeResponse{Data: arstate},
+	}
+	for idx, stream := range o.streamFns {
+		if stream.done.Load() {
+			delete(o.streamFns, idx)
+			continue
+		}
+		ok, ferr := stream.fn(streamReq)
+		if ferr != nil || ok {
+			stream.errCh <- ferr
+			delete(o.streamFns, idx)
+		}
+	}
 }
 
 // signAndSaveState signs any newly added history events and then persists
 // the state. This is the single entry point for all state persistence —
 // callers must never call saveInternalState directly.
 func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestate.State) error {
-	if err := o.signNewEvents(state); err != nil {
+	if err := o.signing.SignNewEvents(state); err != nil {
 		return fmt.Errorf("failed to sign new history events: %w", err)
 	}
 	return o.saveInternalState(ctx, state)
@@ -152,32 +169,7 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 	if o.eventSink != nil {
 		o.eventSink(o.ometa)
 	}
-
-	if len(o.streamFns) > 0 {
-		arstate, err := anypb.New(o.ometa)
-		if err != nil {
-			return err
-		}
-
-		streamReq := &internalsv1pb.InternalInvokeResponse{
-			Status:  &internalsv1pb.Status{Code: http.StatusOK},
-			Message: &commonv1pb.InvokeResponse{Data: arstate},
-		}
-
-		var ok bool
-		for idx, stream := range o.streamFns {
-			if stream.done.Load() {
-				delete(o.streamFns, idx)
-				continue
-			}
-
-			ok, err = stream.fn(streamReq)
-			if err != nil || ok {
-				stream.errCh <- err
-				delete(o.streamFns, idx)
-			}
-		}
-	}
+	o.notifyStreams()
 
 	return nil
 }
@@ -295,13 +287,6 @@ func (o *orchestrator) purgeWorkflowState(ctx context.Context, meta map[string]*
 	retentionCall := ok && len(s.GetValues()) > 0 && s.GetValues()[0] == "true"
 
 	return o.cleanupWorkflowStateInternal(ctx, state, !retentionCall)
-}
-
-// metaFlagSet reports whether the given key is set to "true" in the actor
-// invocation metadata.
-func metaFlagSet(meta map[string]*internalsv1pb.ListStringValue, key string) bool {
-	v, ok := meta[key]
-	return ok && len(v.GetValues()) > 0 && v.GetValues()[0] == "true"
 }
 
 func (o *orchestrator) getExecutionStartedEvent(state *wfenginestate.State) *protos.ExecutionStartedEvent {

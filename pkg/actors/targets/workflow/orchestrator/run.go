@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -294,6 +295,28 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 		default:
 			return todo.RunCompletedTrue, fmt.Errorf("workflow actor '%s': don't know how to process outbound message '%v'", o.actorID, msg)
+		}
+	}
+
+	// Attach an attestation to each outbound child-completion message so
+	// the receiving parent can cryptographically verify this child
+	// executed the invocation it's reporting on. No-op when signing is
+	// disabled.
+	if o.signing.Signer != nil && len(addWorkflows) > 0 {
+		started := o.getExecutionStartedEvent(state)
+		parent := started.GetParentInstance()
+		if parent == nil || parent.GetWorkflowInstance() == nil {
+			return todo.RunCompletedFalse, fmt.Errorf("workflow actor '%s': cannot build child attestation without parent instance info", o.actorID)
+		}
+		params := signing.ChildAttestationParams{
+			ParentInstanceID:      parent.GetWorkflowInstance().GetInstanceId(),
+			ParentTaskScheduledID: parent.GetTaskScheduledId(),
+			Input:                 started.GetInput(),
+		}
+		for _, msg := range addWorkflows {
+			if err = o.signing.AttachChildCompletionAttestation(ctx, msg.GetHistoryEvent(), params); err != nil {
+				return todo.RunCompletedFalse, fmt.Errorf("workflow actor '%s': %w", o.actorID, err)
+			}
 		}
 	}
 

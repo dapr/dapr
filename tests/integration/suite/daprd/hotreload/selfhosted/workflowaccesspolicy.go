@@ -112,7 +112,7 @@ spec:
     - appID: "wfacl-selfhosted"
     workflows:
     - name: "*"
-      operations: [schedule]
+      operations: [schedule, get]
       action: allow
 `
 		require.NoError(t, os.WriteFile(filepath.Join(w.resDir, "policy.yaml"), []byte(policyYAML), 0o600))
