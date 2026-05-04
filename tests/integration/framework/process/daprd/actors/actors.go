@@ -123,6 +123,8 @@ func New(t *testing.T, fopts ...Option) *Actors {
 		dopts = append(dopts, daprd.WithMaxBodySize(*opts.maxBodySize))
 	}
 
+	dopts = append(dopts, opts.daprdOpts...)
+
 	return &Actors{
 		app:                app,
 		db:                 opts.db,

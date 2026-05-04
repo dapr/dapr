@@ -28,6 +28,15 @@ minActorApiLevel: 0
 keepAliveTime: 2s
 keepAliveTimeout: 3s
 disseminateTimeout: 8s
+# Post-round coalesce window. When >0, after a dissemination round
+# completes the next round is deferred by this window so additional host
+# registers/disconnects arriving inside it collapse into a single
+# follow-up round. The first event in REPORT state still fires
+# immediately, so cold-starts and isolated churn stay responsive.
+# Default 0 disables coalescing and is the right choice for most
+# clusters. Set 100ms-250ms only if you observe round thrashing during
+# bulk events such as 100+ replica scale-ups or rolling restarts.
+disseminateCoalesceWindow: 0s
 
 cluster:
   forceInMemoryLog: false
