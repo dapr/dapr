@@ -40,7 +40,9 @@ func (s *Signing) cacheCertChainTrust(digest []byte, chainDER []byte) {
 	if err != nil {
 		// Parsing failure here is benign - we just don't cache. The
 		// next attestation using the same cert will pay full chain-of-
-		// trust verification again.
+		// trust verification again. Log so the failure isn't entirely
+		// silent.
+		log.Warnf("Workflow actor '%s': failed to parse leaf cert for chain-of-trust cache, will re-verify on next attestation: %s", s.ActorID, err)
 		return
 	}
 	s.certVerifyCache.Store(string(digest), certValidityWindow{

@@ -48,88 +48,68 @@ func (s *Signing) VerifyInboxAttestation(ctx context.Context, state *wfenginesta
 	switch body := e.GetEventType().(type) {
 	case *protos.HistoryEvent_ChildWorkflowInstanceCompleted:
 		c := body.ChildWorkflowInstanceCompleted
-		if c.GetAttestation() == nil {
-			diag.DefaultWorkflowMonitoring.AttestationVerified(ctx, diag.AttestationKindChild, diag.AttestationResultReject, 0)
-			return fmt.Errorf("child completion missing required attestation for task %d", c.GetTaskScheduledId())
-		}
-		start := time.Now()
-		err := s.verifyChild(ctx, verifyChildOptions{
-			state:          state,
-			taskID:         c.GetTaskScheduledId(),
-			att:            c.GetAttestation(),
-			certDER:        c.GetSignerCertificate(),
-			eventTS:        now,
-			output:         c.GetResult(),
-			expectedStatus: protos.TerminalStatus_TERMINAL_STATUS_COMPLETED,
-		})
-		recordAttestationVerify(ctx, diag.AttestationKindChild, err, start)
-		if err != nil {
+		if err := runVerify(ctx, diag.AttestationKindChild, c.GetTaskScheduledId(), "child completion", c.GetAttestation() != nil, func() error {
+			return s.verifyChild(ctx, verifyChildOptions{
+				state:          state,
+				taskID:         c.GetTaskScheduledId(),
+				att:            c.GetAttestation(),
+				certDER:        c.GetSignerCertificate(),
+				eventTS:        now,
+				output:         c.GetResult(),
+				expectedStatus: protos.TerminalStatus_TERMINAL_STATUS_COMPLETED,
+			})
+		}); err != nil {
 			return err
 		}
 		c.SignerCertificate = nil
 
 	case *protos.HistoryEvent_ChildWorkflowInstanceFailed:
 		f := body.ChildWorkflowInstanceFailed
-		if f.GetAttestation() == nil {
-			diag.DefaultWorkflowMonitoring.AttestationVerified(ctx, diag.AttestationKindChild, diag.AttestationResultReject, 0)
-			return fmt.Errorf("child failure missing required attestation for task %d", f.GetTaskScheduledId())
-		}
-		start := time.Now()
-		err := s.verifyChild(ctx, verifyChildOptions{
-			state:          state,
-			taskID:         f.GetTaskScheduledId(),
-			att:            f.GetAttestation(),
-			certDER:        f.GetSignerCertificate(),
-			eventTS:        now,
-			failure:        f.GetFailureDetails(),
-			expectedStatus: protos.TerminalStatus_TERMINAL_STATUS_FAILED,
-		})
-		recordAttestationVerify(ctx, diag.AttestationKindChild, err, start)
-		if err != nil {
+		if err := runVerify(ctx, diag.AttestationKindChild, f.GetTaskScheduledId(), "child failure", f.GetAttestation() != nil, func() error {
+			return s.verifyChild(ctx, verifyChildOptions{
+				state:          state,
+				taskID:         f.GetTaskScheduledId(),
+				att:            f.GetAttestation(),
+				certDER:        f.GetSignerCertificate(),
+				eventTS:        now,
+				failure:        f.GetFailureDetails(),
+				expectedStatus: protos.TerminalStatus_TERMINAL_STATUS_FAILED,
+			})
+		}); err != nil {
 			return err
 		}
 		f.SignerCertificate = nil
 
 	case *protos.HistoryEvent_TaskCompleted:
 		c := body.TaskCompleted
-		if c.GetAttestation() == nil {
-			diag.DefaultWorkflowMonitoring.AttestationVerified(ctx, diag.AttestationKindActivity, diag.AttestationResultReject, 0)
-			return fmt.Errorf("activity completion missing required attestation for task %d", c.GetTaskScheduledId())
-		}
-		start := time.Now()
-		err := s.verifyActivity(ctx, verifyActivityOptions{
-			state:          state,
-			taskID:         c.GetTaskScheduledId(),
-			att:            c.GetAttestation(),
-			certDER:        c.GetSignerCertificate(),
-			eventTS:        now,
-			output:         c.GetResult(),
-			expectedStatus: protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_COMPLETED,
-		})
-		recordAttestationVerify(ctx, diag.AttestationKindActivity, err, start)
-		if err != nil {
+		if err := runVerify(ctx, diag.AttestationKindActivity, c.GetTaskScheduledId(), "activity completion", c.GetAttestation() != nil, func() error {
+			return s.verifyActivity(ctx, verifyActivityOptions{
+				state:          state,
+				taskID:         c.GetTaskScheduledId(),
+				att:            c.GetAttestation(),
+				certDER:        c.GetSignerCertificate(),
+				eventTS:        now,
+				output:         c.GetResult(),
+				expectedStatus: protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_COMPLETED,
+			})
+		}); err != nil {
 			return err
 		}
 		c.SignerCertificate = nil
 
 	case *protos.HistoryEvent_TaskFailed:
 		f := body.TaskFailed
-		if f.GetAttestation() == nil {
-			diag.DefaultWorkflowMonitoring.AttestationVerified(ctx, diag.AttestationKindActivity, diag.AttestationResultReject, 0)
-			return fmt.Errorf("activity failure missing required attestation for task %d", f.GetTaskScheduledId())
-		}
-		start := time.Now()
-		err := s.verifyActivity(ctx, verifyActivityOptions{
-			state:          state,
-			taskID:         f.GetTaskScheduledId(),
-			att:            f.GetAttestation(),
-			certDER:        f.GetSignerCertificate(),
-			eventTS:        now,
-			failure:        f.GetFailureDetails(),
-			expectedStatus: protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_FAILED,
-		})
-		recordAttestationVerify(ctx, diag.AttestationKindActivity, err, start)
-		if err != nil {
+		if err := runVerify(ctx, diag.AttestationKindActivity, f.GetTaskScheduledId(), "activity failure", f.GetAttestation() != nil, func() error {
+			return s.verifyActivity(ctx, verifyActivityOptions{
+				state:          state,
+				taskID:         f.GetTaskScheduledId(),
+				att:            f.GetAttestation(),
+				certDER:        f.GetSignerCertificate(),
+				eventTS:        now,
+				failure:        f.GetFailureDetails(),
+				expectedStatus: protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_FAILED,
+			})
+		}); err != nil {
 			return err
 		}
 		f.SignerCertificate = nil
@@ -138,12 +118,22 @@ func (s *Signing) VerifyInboxAttestation(ctx context.Context, state *wfenginesta
 	return nil
 }
 
-func recordAttestationVerify(ctx context.Context, kind string, verifyErr error, start time.Time) {
+// runVerify wraps the per-event verification boilerplate: reject with a
+// recorded metric when the attestation is missing, otherwise time the
+// verify call and record the result.
+func runVerify(ctx context.Context, kind string, taskID int32, eventDesc string, hasAttestation bool, verify func() error) error {
+	if !hasAttestation {
+		diag.DefaultWorkflowMonitoring.AttestationVerified(ctx, kind, diag.AttestationResultReject, 0)
+		return fmt.Errorf("%s missing required attestation for task %d", eventDesc, taskID)
+	}
+	start := time.Now()
+	err := verify()
 	result := diag.AttestationResultOK
-	if verifyErr != nil {
+	if err != nil {
 		result = diag.AttestationResultReject
 	}
 	diag.DefaultWorkflowMonitoring.AttestationVerified(ctx, kind, result, float64(time.Since(start).Milliseconds()))
+	return err
 }
 
 type verifyChildOptions struct {

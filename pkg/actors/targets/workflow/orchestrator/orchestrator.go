@@ -127,9 +127,7 @@ func (o *orchestrator) Deactivate(ctx context.Context) error {
 		stream.errCh <- targeterrors.NewClosed("deactivated")
 	}
 	clear(o.streamFns)
-	if o.signing != nil {
-		o.signing.Reset()
-	}
+	o.signing.Reset()
 	o.wg.Wait()
 	orchestratorCache.Put(o)
 

@@ -67,26 +67,24 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// ext-sigcert table and strip the companion cert from the event so the
 	// stored form is cert-free. On any verification failure the workflow is
 	// tombstoned. No-op when signing is disabled.
-	if o.signing != nil {
-		if verr := o.signing.VerifyInboxAttestation(ctx, state, e); verr != nil {
-			log.Warnf("Workflow actor '%s': attestation verification failed, tombstoning workflow: %s", o.actorID, verr)
-			opts := wfenginestate.Options{
-				AppID:             o.appID,
-				WorkflowActorType: o.actorType,
-				ActivityActorType: o.activityActorType,
-				Signer:            o.signer,
-			}
-			if _, _, terr := o.tombstoneTamperedState(ctx, opts, state, verr); terr != nil {
-				return terr
-			}
-			// Return ErrInstanceNotFound rather than the verification
-			// error so the activity actor on the sender side recognizes
-			// the workflow as gone and stops re-executing the activity.
-			// The reason for tombstoning is preserved in the workflow's
-			// FailureDetails (errorType=DAPR_WORKFLOW_HISTORY_TAMPERED,
-			// errorMessage=verr.Error()) for callers polling metadata.
-			return api.ErrInstanceNotFound
+	if verr := o.signing.VerifyInboxAttestation(ctx, state, e); verr != nil {
+		log.Warnf("Workflow actor '%s': attestation verification failed, tombstoning workflow: %s", o.actorID, verr)
+		opts := wfenginestate.Options{
+			AppID:             o.appID,
+			WorkflowActorType: o.actorType,
+			ActivityActorType: o.activityActorType,
+			Signer:            o.signer,
 		}
+		if _, _, terr := o.tombstoneTamperedState(ctx, opts, state, verr); terr != nil {
+			return terr
+		}
+		// Return ErrInstanceNotFound rather than the verification
+		// error so the activity actor on the sender side recognizes
+		// the workflow as gone and stops re-executing the activity.
+		// The reason for tombstoning is preserved in the workflow's
+		// FailureDetails (errorType=DAPR_WORKFLOW_HISTORY_TAMPERED,
+		// errorMessage=verr.Error()) for callers polling metadata.
+		return api.ErrInstanceNotFound
 	}
 
 	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)

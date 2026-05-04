@@ -38,8 +38,7 @@ type ChildAttestationParams struct {
 // signed by this workflow's identity and attaches it (plus the signer's
 // certificate chain as a companion) to the given outbound history event.
 // The event must be either a ChildWorkflowInstanceCompletedEvent or a
-// ChildWorkflowInstanceFailedEvent - other event types are ignored.
-// No-op if Signer is nil.
+// ChildWorkflowInstanceFailedEvent. No-op if Signer is nil.
 func (s *Signing) AttachChildCompletionAttestation(ctx context.Context, evt *backend.HistoryEvent, params ChildAttestationParams) error {
 	if s.Signer == nil {
 		return nil
@@ -59,7 +58,7 @@ func (s *Signing) AttachChildCompletionAttestation(ctx context.Context, evt *bac
 		in.FailureDetails = body.ChildWorkflowInstanceFailed.GetFailureDetails()
 		in.TerminalStatus = protos.TerminalStatus_TERMINAL_STATUS_FAILED
 	default:
-		return nil
+		return fmt.Errorf("AttachChildCompletionAttestation called on unsupported event type %T", body)
 	}
 
 	att, certChainDER, err := historysigning.BuildChildAttestation(s.Signer, in)
@@ -94,8 +93,7 @@ type ActivityAttestationParams struct {
 // AttachActivityCompletionAttestation builds an
 // ActivityCompletionAttestation signed by this executor's identity and
 // attaches it (plus the signer's certificate chain as a companion) to the
-// outbound TaskCompleted or TaskFailed event. Other event types are
-// ignored. No-op if Signer is nil.
+// outbound TaskCompleted or TaskFailed event. No-op if Signer is nil.
 func (s *Signing) AttachActivityCompletionAttestation(ctx context.Context, evt *backend.HistoryEvent, params ActivityAttestationParams) error {
 	if s.Signer == nil {
 		return nil
@@ -117,7 +115,7 @@ func (s *Signing) AttachActivityCompletionAttestation(ctx context.Context, evt *
 		in.FailureDetails = body.TaskFailed.GetFailureDetails()
 		in.TerminalStatus = protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_FAILED
 	default:
-		return nil
+		return fmt.Errorf("AttachActivityCompletionAttestation called on unsupported event type %T", body)
 	}
 
 	att, certChainDER, err := historysigning.BuildActivityAttestation(s.Signer, in)

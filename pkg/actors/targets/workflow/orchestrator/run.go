@@ -291,7 +291,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// the receiving parent can cryptographically verify this child
 	// executed the invocation it's reporting on. No-op when signing is
 	// disabled.
-	if o.signing != nil && len(addWorkflows) > 0 {
+	if o.signing.Signer != nil && len(addWorkflows) > 0 {
 		started := o.getExecutionStartedEvent(state)
 		parent := started.GetParentInstance()
 		if parent == nil || parent.GetWorkflowInstance() == nil {

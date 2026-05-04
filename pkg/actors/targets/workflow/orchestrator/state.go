@@ -140,10 +140,8 @@ func (o *orchestrator) notifyStreams() {
 // the state. This is the single entry point for all state persistence —
 // callers must never call saveInternalState directly.
 func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestate.State) error {
-	if o.signing != nil {
-		if err := o.signing.SignNewEvents(state); err != nil {
-			return fmt.Errorf("failed to sign new history events: %w", err)
-		}
+	if err := o.signing.SignNewEvents(state); err != nil {
+		return fmt.Errorf("failed to sign new history events: %w", err)
 	}
 	return o.saveInternalState(ctx, state)
 }

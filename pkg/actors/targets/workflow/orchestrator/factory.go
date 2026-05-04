@@ -171,14 +171,18 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 		or.streamFns = make(map[int64]*streamFn)
 	}
 
-	if f.signer != nil {
-		or.signing = &signing.Signing{
-			Signer:            f.signer,
-			ActorID:           actorID,
-			ActorType:         f.actorType,
-			ActivityActorType: f.activityActorType,
-			Reminders:         f.reminders,
-		}
+	// Always allocate Signing, even when f.signer is nil. The
+	// attestation/sign methods on Signing are no-ops when Signer is
+	// nil, but Tombstone (called from tombstoneTamperedState on a
+	// load-time VerificationError) does not depend on Signer and must
+	// work for unsigned workflows that hit metadata-bounds or
+	// missing-key tampering.
+	or.signing = &signing.Signing{
+		Signer:            f.signer,
+		ActorID:           actorID,
+		ActorType:         f.actorType,
+		ActivityActorType: f.activityActorType,
+		Reminders:         f.reminders,
 	}
 
 	// Reset the cache state to force a reload from the state store
