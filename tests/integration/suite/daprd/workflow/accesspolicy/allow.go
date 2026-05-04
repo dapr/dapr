@@ -71,15 +71,13 @@ spec:
   rules:
   - callers:
     - appID: wfacl-caller
-    operations:
-    - type: activity
-      name: AllowedActivity
+    activities:
+    - name: AllowedActivity
       action: allow
   - callers:
     - appID: wfacl-target
-    operations:
-    - type: activity
-      name: "*"
+    activities:
+    - name: "*"
       action: allow
 `)
 

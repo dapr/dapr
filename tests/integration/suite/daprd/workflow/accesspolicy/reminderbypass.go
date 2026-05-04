@@ -72,18 +72,17 @@ spec:
   rules:
   - callers:
     - appID: legit-caller
-    operations:
-    - type: workflow
-      name: "*"
+    workflows:
+    - name: "*"
+      operations: [schedule]
       action: allow
-    - type: activity
-      name: "*"
+    activities:
+    - name: "*"
       action: allow
   - callers:
     - appID: bypass-target
-    operations:
-    - type: activity
-      name: "*"
+    activities:
+    - name: "*"
       action: allow
 `)
 

@@ -29,6 +29,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/reminders"
@@ -177,6 +178,12 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
+	if err := a.universal.RejectInternalActorType(actorType); err != nil {
+		respondWithError(w, err)
+		return
+	}
+
 	var req actorapi.CreateReminderRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -194,7 +201,7 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Name = name
-	req.ActorType = chi.URLParamFromCtx(ctx, actorTypeParam)
+	req.ActorType = actorType
 	req.ActorID = chi.URLParamFromCtx(ctx, actorIDParam)
 
 	rem, err := a.universal.ActorReminders(ctx)
@@ -232,6 +239,12 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
+	if err := a.universal.RejectInternalActorType(actorType); err != nil {
+		respondWithError(w, err)
+		return
+	}
+
 	var req actorapi.CreateTimerRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -249,7 +262,7 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Name = name
-	req.ActorType = chi.URLParamFromCtx(ctx, actorTypeParam)
+	req.ActorType = actorType
 	req.ActorID = chi.URLParamFromCtx(ctx, actorIDParam)
 
 	timers, err := a.universal.ActorTimers(ctx)
@@ -287,6 +300,10 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
+	if err := a.universal.RejectInternalActorType(actorType); err != nil {
+		respondWithError(w, err)
+		return
+	}
 	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
 
 	var ops []actorapi.TransactionalOperation
@@ -442,7 +459,11 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 		// Save headers to internal metadata
 		WithHTTPHeaders(r.Header)
 
-		// Unlike other actor calls, resiliency is handled here for invocation.
+	// Drop caller-identity headers that the client may have sent; the
+	// router stamps the trusted local sidecar identity itself.
+	workflowacl.StripUntrustedCallerIdentity(req.GetMetadata())
+
+	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
 	policyDef := a.universal.Resiliency().ActorPreLockPolicy(actorType, actorID)
 	policyRunner := resiliency.NewRunner[*internalsv1pb.InternalInvokeResponse](ctx, policyDef)
@@ -498,13 +519,18 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
+	if err := a.universal.RejectInternalActorType(actorType); err != nil {
+		respondWithError(w, err)
+		return
+	}
+
 	astate, err := a.universal.ActorState(ctx)
 	if err != nil {
 		respondWithError(w, err)
 		return
 	}
 
-	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
 	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
 	key := chi.URLParamFromCtx(ctx, stateKeyParam)
 
