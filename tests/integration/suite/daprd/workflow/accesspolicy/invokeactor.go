@@ -70,19 +70,12 @@ metadata:
 scopes:
 - invokeactor-target
 spec:
-  defaultAction: deny
   rules:
   - callers:
     - appID: legit-caller
     workflows:
     - name: "*"
       operations: [schedule]
-      action: allow
-  - callers:
-    - appID: invokeactor-target
-    activities:
-    - name: "*"
-      action: allow
 `)
 
 	targetResDir := t.TempDir()

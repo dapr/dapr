@@ -15,6 +15,7 @@ package accesspolicy
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -41,13 +42,14 @@ func init() {
 }
 
 // scopes tests that a policy's `scopes` field controls which apps load the
-// policy. A policy scoped only to app-a must not be loaded by app-b, leaving
-// app-b in allow-all mode. A policy with no scopes applies to all apps.
+// policy. A policy scoped only to scope-in must not be loaded by scope-out
+// even when the same file is on disk; scope-out remains in allow-all mode.
 type scopes struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
 	sched  *scheduler.Scheduler
 	db     *sqlite.SQLite
+	caller *daprd.Daprd
 	// inScope loads the policy (included in scopes).
 	inScope *daprd.Daprd
 	// outScope does not load the policy (not included in scopes).
@@ -61,9 +63,9 @@ func (s *scopes) Setup(t *testing.T) []framework.Option {
 	s.sched = scheduler.New(t, scheduler.WithSentry(s.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 	s.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	// Policy denies all callers, scoped only to scope-in. Both sidecars
-	// write the same policy file to disk, but only the in-scope sidecar
-	// should load it after filtering by scopes.
+	// Policy scoped only to scope-in lists no callers, so cross-app calls
+	// to scope-in are denied. Both sidecars write the same policy file to
+	// disk; only the in-scope sidecar should load it after scope filtering.
 	policy := []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
@@ -72,7 +74,12 @@ metadata:
 scopes:
 - scope-in
 spec:
-  defaultAction: deny
+  rules:
+  - callers:
+    - appID: some-other-caller
+    workflows:
+    - name: "*"
+      operations: [schedule]
 `)
 
 	inScopeResDir := t.TempDir()
@@ -80,6 +87,14 @@ spec:
 	outScopeResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(outScopeResDir, "policy.yaml"), policy, 0o600))
 
+	s.caller = daprd.New(t,
+		daprd.WithAppID("scope-caller"),
+		daprd.WithNamespace("default"),
+		daprd.WithResourceFiles(s.db.GetComponent(t)),
+		daprd.WithPlacementAddresses(s.place.Address()),
+		daprd.WithSchedulerAddresses(s.sched.Address()),
+		daprd.WithSentry(t, s.sentry),
+	)
 	s.inScope = daprd.New(t,
 		daprd.WithAppID("scope-in"),
 		daprd.WithNamespace("default"),
@@ -100,61 +115,74 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.sentry, s.place, s.sched, s.db, s.inScope, s.outScope),
+		framework.WithProcesses(s.sentry, s.place, s.sched, s.db, s.caller, s.inScope, s.outScope),
 	}
 }
 
 func (s *scopes) Run(t *testing.T, ctx context.Context) {
 	s.place.WaitUntilRunning(t, ctx)
 	s.sched.WaitUntilRunning(t, ctx)
+	s.caller.WaitUntilRunning(t, ctx)
 	s.inScope.WaitUntilRunning(t, ctx)
 	s.outScope.WaitUntilRunning(t, ctx)
 
-	inScopeReg := task.NewTaskRegistry()
-	outScopeReg := task.NewTaskRegistry()
+	callerReg := task.NewTaskRegistry()
+	require.NoError(t, callerReg.AddWorkflowN("CallInScope", func(ctx *task.WorkflowContext) (any, error) {
+		var output string
+		err := ctx.CallChildWorkflow("TestWF", task.WithChildWorkflowAppID(s.inScope.AppID())).Await(&output)
+		if err != nil {
+			return nil, fmt.Errorf("child failed: %w", err)
+		}
+		return output, nil
+	}))
+	require.NoError(t, callerReg.AddWorkflowN("CallOutScope", func(ctx *task.WorkflowContext) (any, error) {
+		var output string
+		err := ctx.CallChildWorkflow("TestWF", task.WithChildWorkflowAppID(s.outScope.AppID())).Await(&output)
+		if err != nil {
+			return nil, fmt.Errorf("child failed: %w", err)
+		}
+		return output, nil
+	}))
+	callerClient := client.NewTaskHubGrpcClient(s.caller.GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, callerClient.StartWorkItemListener(ctx, callerReg))
 
+	inScopeReg := task.NewTaskRegistry()
 	require.NoError(t, inScopeReg.AddWorkflowN("TestWF", func(ctx *task.WorkflowContext) (any, error) {
 		return "in-scope-ran", nil
 	}))
+	inScopeClient := client.NewTaskHubGrpcClient(s.inScope.GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, inScopeClient.StartWorkItemListener(ctx, inScopeReg))
+
+	outScopeReg := task.NewTaskRegistry()
 	require.NoError(t, outScopeReg.AddWorkflowN("TestWF", func(ctx *task.WorkflowContext) (any, error) {
 		return "out-scope-ran", nil
 	}))
-
-	inScopeClient := client.NewTaskHubGrpcClient(s.inScope.GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, inScopeClient.StartWorkItemListener(ctx, inScopeReg))
 	outScopeClient := client.NewTaskHubGrpcClient(s.outScope.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, outScopeClient.StartWorkItemListener(ctx, outScopeReg))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.GreaterOrEqual(c, len(s.caller.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 		assert.GreaterOrEqual(c, len(s.inScope.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 		assert.GreaterOrEqual(c, len(s.outScope.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 	}, time.Second*20, time.Millisecond*10)
 
-	t.Run("in-scope sidecar loads the policy and denies workflow", func(t *testing.T) {
-		// scope-in has the policy loaded with defaultAction: deny. Scheduling
-		// any workflow should fail.
-		id, err := inScopeClient.ScheduleNewWorkflow(ctx, "TestWF")
-		if err != nil {
-			assert.Contains(t, err.Error(), "PermissionDenied")
-			return
-		}
-		metadata, err := inScopeClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
+	t.Run("in-scope sidecar loads the policy and denies cross-app workflow", func(t *testing.T) {
+		id, err := callerClient.ScheduleNewWorkflow(ctx, "CallInScope")
+		require.NoError(t, err)
+		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		require.NotNil(t, metadata.GetFailureDetails(),
 			"in-scope sidecar should deny because policy is loaded")
 		assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(), "denied by workflow access policy")
 	})
 
-	t.Run("out-of-scope sidecar filters out the policy and allows workflow", func(t *testing.T) {
-		// scope-out has the policy file on disk, but its scope filter
-		// excludes scope-out, so no policy is loaded and the workflow runs.
-		id, err := outScopeClient.ScheduleNewWorkflow(ctx, "TestWF")
+	t.Run("out-of-scope sidecar filters out the policy and allows cross-app workflow", func(t *testing.T) {
+		id, err := callerClient.ScheduleNewWorkflow(ctx, "CallOutScope")
 		require.NoError(t, err)
-		metadata, err := outScopeClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
+		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		require.Nilf(t, metadata.GetFailureDetails(),
 			"out-of-scope sidecar should allow because policy is not loaded, got: %v", metadata.GetFailureDetails())
 		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
-		assert.Equal(t, `"out-scope-ran"`, metadata.GetOutput().GetValue())
 	})
 }

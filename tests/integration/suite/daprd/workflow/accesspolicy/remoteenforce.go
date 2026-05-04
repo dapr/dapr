@@ -74,19 +74,12 @@ metadata:
 scopes:
 - remote-target
 spec:
-  defaultAction: deny
   rules:
   - callers:
     - appID: allowed-caller
     workflows:
     - name: "*"
       operations: [schedule]
-      action: allow
-  - callers:
-    - appID: remote-target
-    activities:
-    - name: "*"
-      action: allow
 `)
 
 	targetResDir := t.TempDir()

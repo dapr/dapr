@@ -15,6 +15,7 @@ package accesspolicy
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,9 +23,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	grpcstatus "google.golang.org/grpc/status"
 
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -33,6 +32,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
 	dtclient "github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -42,12 +42,15 @@ func init() {
 }
 
 // grpcapi tests workflow access policy enforcement through the gRPC API.
+// Uses a caller and a target daprd: only cross-app calls are subject to
+// the policy.
 type grpcapi struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
 	sched  *scheduler.Scheduler
 	db     *sqlite.SQLite
-	daprd  *daprd.Daprd
+	caller *daprd.Daprd
+	target *daprd.Daprd
 }
 
 func (g *grpcapi) Setup(t *testing.T) []framework.Option {
@@ -62,25 +65,30 @@ apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
   name: grpcapi-test
+scopes:
+- grpcapi-target
 spec:
-  defaultAction: deny
   rules:
   - callers:
-    - appID: grpcapi-app
+    - appID: grpcapi-caller
     workflows:
     - name: AllowedWF
       operations: [schedule]
-      action: allow
-    - name: DeniedWF
-      operations: [schedule]
-      action: deny
 `)
 
 	resDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(resDir, "policy.yaml"), policy, 0o600))
 
-	g.daprd = daprd.New(t,
-		daprd.WithAppID("grpcapi-app"),
+	g.caller = daprd.New(t,
+		daprd.WithAppID("grpcapi-caller"),
+		daprd.WithNamespace("default"),
+		daprd.WithResourceFiles(g.db.GetComponent(t)),
+		daprd.WithPlacementAddresses(g.place.Address()),
+		daprd.WithSchedulerAddresses(g.sched.Address()),
+		daprd.WithSentry(t, g.sentry),
+	)
+	g.target = daprd.New(t,
+		daprd.WithAppID("grpcapi-target"),
 		daprd.WithNamespace("default"),
 		daprd.WithResourcesDir(resDir),
 		daprd.WithResourceFiles(g.db.GetComponent(t)),
@@ -90,68 +98,66 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(g.sentry, g.place, g.sched, g.db, g.daprd),
+		framework.WithProcesses(g.sentry, g.place, g.sched, g.db, g.caller, g.target),
 	}
 }
 
-//nolint:staticcheck
 func (g *grpcapi) Run(t *testing.T, ctx context.Context) {
 	g.place.WaitUntilRunning(t, ctx)
 	g.sched.WaitUntilRunning(t, ctx)
-	g.daprd.WaitUntilRunning(t, ctx)
+	g.caller.WaitUntilRunning(t, ctx)
+	g.target.WaitUntilRunning(t, ctx)
 
-	registry := task.NewTaskRegistry()
-	require.NoError(t, registry.AddWorkflowN("AllowedWF", func(ctx *task.WorkflowContext) (any, error) {
+	callerReg := task.NewTaskRegistry()
+	require.NoError(t, callerReg.AddWorkflowN("CallAllowed", func(ctx *task.WorkflowContext) (any, error) {
+		var output string
+		err := ctx.CallChildWorkflow("AllowedWF", task.WithChildWorkflowAppID(g.target.AppID())).Await(&output)
+		if err != nil {
+			return nil, fmt.Errorf("child failed: %w", err)
+		}
+		return output, nil
+	}))
+	require.NoError(t, callerReg.AddWorkflowN("CallDenied", func(ctx *task.WorkflowContext) (any, error) {
+		var output string
+		err := ctx.CallChildWorkflow("DeniedWF", task.WithChildWorkflowAppID(g.target.AppID())).Await(&output)
+		if err != nil {
+			return nil, fmt.Errorf("child failed: %w", err)
+		}
+		return output, nil
+	}))
+	callerClient := dtclient.NewTaskHubGrpcClient(g.caller.GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, callerClient.StartWorkItemListener(ctx, callerReg))
+
+	targetReg := task.NewTaskRegistry()
+	require.NoError(t, targetReg.AddWorkflowN("AllowedWF", func(ctx *task.WorkflowContext) (any, error) {
 		return "allowed-ok", nil
 	}))
-	require.NoError(t, registry.AddWorkflowN("DeniedWF", func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, targetReg.AddWorkflowN("DeniedWF", func(ctx *task.WorkflowContext) (any, error) {
 		return "denied-should-not-reach", nil
 	}))
-
-	backendClient := dtclient.NewTaskHubGrpcClient(g.daprd.GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, backendClient.StartWorkItemListener(ctx, registry))
+	targetClient := dtclient.NewTaskHubGrpcClient(g.target.GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, targetClient.StartWorkItemListener(ctx, targetReg))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, len(g.daprd.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
+		assert.GreaterOrEqual(c, len(g.caller.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
+		assert.GreaterOrEqual(c, len(g.target.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 	}, time.Second*20, time.Millisecond*10)
 
-	daprClient := runtimev1pb.NewDaprClient(g.daprd.GRPCConn(t, ctx))
-
-	t.Run("gRPC start denied workflow returns PermissionDenied", func(t *testing.T) {
-		_, err := daprClient.StartWorkflowAlpha1(ctx, &runtimev1pb.StartWorkflowRequest{
-			WorkflowComponent: "dapr",
-			WorkflowName:      "DeniedWF",
-		})
-		require.Error(t, err)
-		st, ok := grpcstatus.FromError(err)
-		require.True(t, ok, "expected gRPC status error")
-		assert.Contains(t, st.Message(), "access denied by workflow access policy")
-	})
-
-	t.Run("gRPC start allowed workflow succeeds", func(t *testing.T) {
-		resp, err := daprClient.StartWorkflowAlpha1(ctx, &runtimev1pb.StartWorkflowRequest{
-			WorkflowComponent: "dapr",
-			WorkflowName:      "AllowedWF",
-		})
+	t.Run("gRPC cross-app start of denied workflow surfaces policy denial", func(t *testing.T) {
+		id, err := callerClient.ScheduleNewWorkflow(ctx, "CallDenied")
 		require.NoError(t, err)
-		assert.NotEmpty(t, resp.GetInstanceId())
+		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
+		require.NoError(t, err)
+		require.NotNil(t, metadata.GetFailureDetails())
+		assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(), "denied by workflow access policy")
 	})
 
-	t.Run("gRPC terminate exercises actor path", func(t *testing.T) {
-		_, err := daprClient.TerminateWorkflowAlpha1(ctx, &runtimev1pb.TerminateWorkflowRequest{
-			WorkflowComponent: "dapr",
-			InstanceId:        "fake-instance",
-		})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "instance")
-	})
-
-	t.Run("gRPC purge exercises actor path", func(t *testing.T) {
-		_, err := daprClient.PurgeWorkflowAlpha1(ctx, &runtimev1pb.PurgeWorkflowRequest{
-			WorkflowComponent: "dapr",
-			InstanceId:        "fake-instance",
-		})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "instance")
+	t.Run("gRPC cross-app start of allowed workflow succeeds", func(t *testing.T) {
+		id, err := callerClient.ScheduleNewWorkflow(ctx, "CallAllowed")
+		require.NoError(t, err)
+		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
+		require.NoError(t, err)
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
+		assert.Nil(t, metadata.GetFailureDetails())
 	})
 }

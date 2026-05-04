@@ -40,12 +40,11 @@ func init() {
 	suite.Register(new(partialauthbypass))
 }
 
-// partialauthbypass exercises the bypass cicoyle flagged in the PR review:
-// a caller with a specific allow + specific deny on the target's policy
-// must not be able to invoke non-subject methods (AddWorkflowEvent,
-// PurgeWorkflowState, etc.) on a denied workflow's actor. Without the fix,
-// IsCallerKnown returned true for any caller with at least one allow rule,
-// granting access to non-subject methods regardless of the specific deny.
+// partialauthbypass verifies that under the allow-list model a cross-app
+// caller listed in the policy for one operation cannot reach methods that
+// require a different operation. A caller that is allow-listed for
+// `schedule` on `AllowedWF` must not be able to invoke `AddWorkflowEvent`
+// or `PurgeWorkflowState` on any workflow instance.
 type partialauthbypass struct {
 	sentry  *sentry.Sentry
 	place   *placement.Placement
@@ -61,9 +60,6 @@ func (p *partialauthbypass) Setup(t *testing.T) []framework.Option {
 	p.sched = scheduler.New(t, scheduler.WithSentry(p.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 	p.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	// partialauth-caller has a specific allow plus a specific deny.
-	// Pre-fix: IsCallerKnown returned true (any allow) and non-subject methods
-	// like AddWorkflowEvent / PurgeWorkflowState bypassed the per-name deny.
 	policy := []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
@@ -72,22 +68,12 @@ metadata:
 scopes:
 - partialauth-target
 spec:
-  defaultAction: deny
   rules:
   - callers:
     - appID: partialauth-caller
     workflows:
     - name: AllowedWF
       operations: [schedule]
-      action: allow
-    - name: DeniedWF
-      operations: [schedule]
-      action: deny
-  - callers:
-    - appID: partialauth-target
-    activities:
-    - name: "*"
-      action: allow
 `)
 
 	targetResDir := t.TempDir()

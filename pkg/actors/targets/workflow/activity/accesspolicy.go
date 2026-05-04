@@ -34,17 +34,26 @@ func (a *activity) checkAccessPolicy(method string, data []byte, md map[string]*
 		return nil
 	}
 
-	name, err := workflowacl.ActivityNameFromExecute(method, data)
-	if err != nil {
-		log.Warnf("Activity actor '%s': workflow access policy denied call '%s': could not extract name from request: %v", a.actorID, method, err)
-		diag.DefaultMonitoring.WorkflowACLActionDenied(workflowacl.CallerAppID(md), string(workflowacl.OperationTypeActivity), method)
-		return status.Errorf(codes.PermissionDenied, "%s: malformed request for method '%s'", workflowACLDeniedMsg, method)
-	}
-	if name == "" {
+	// Self-calls are exempt: the policy is a cross-app gate.
+	callerAppID := workflowacl.CallerAppID(md)
+	if callerAppID == a.appID {
 		return nil
 	}
 
-	callerAppID := workflowacl.CallerAppID(md)
+	name, err := workflowacl.ActivityNameFromExecute(method, data)
+	if err != nil {
+		log.Warnf("Activity actor '%s': workflow access policy denied call '%s': could not extract name from request: %v", a.actorID, method, err)
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeActivity), method)
+		return status.Errorf(codes.PermissionDenied, "%s: malformed request for method '%s'", workflowACLDeniedMsg, method)
+	}
+	if name == "" {
+		// Non-Execute methods on the activity actor are only valid from the
+		// local daprd. Cross-app callers cannot invoke them.
+		log.Warnf("Activity actor '%s': workflow access policy denied cross-app call to non-Execute method '%s' from app '%s'", a.actorID, method, callerAppID)
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeActivity), method)
+		return status.Errorf(codes.PermissionDenied, "%s: app '%s' cannot invoke method '%s'", workflowACLDeniedMsg, callerAppID, method)
+	}
+
 	if callerAppID == "" {
 		log.Warnf("Activity actor '%s': workflow access policy denied call '%s' with missing caller identity", a.actorID, method)
 		diag.DefaultMonitoring.WorkflowACLActionDenied("", string(workflowacl.OperationTypeActivity), string(wfaclapi.WorkflowOperationSchedule))

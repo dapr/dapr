@@ -79,13 +79,11 @@ metadata:
   name: peropconfig
 spec:
   features:
-  - name: WorkflowAccessPolicy
-    enabled: true
   - name: HotReload
     enabled: true`), 0o600))
 
 	p.resDir = t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(p.resDir, "perop-init.yaml"), p.policyAllowAll("perop-init"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(p.resDir, "perop-init.yaml"), p.policyAllowAllOps("perop-init"), 0o600))
 
 	p.caller = daprd.New(t,
 		daprd.WithAppID(peropCallerAppID),
@@ -112,7 +110,7 @@ spec:
 	}
 }
 
-func (p *peroperation) policyAllowAll(name string) []byte {
+func (p *peroperation) policyAllowAllOps(name string) []byte {
 	return []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
@@ -121,23 +119,12 @@ metadata:
 scopes:
 - ` + peropTargetAppID + `
 spec:
-  defaultAction: deny
   rules:
-  - callers:
-    - appID: ` + peropTargetAppID + `
-    workflows:
-    - name: "*"
-      operations: [schedule, terminate, raise, pause, resume, purge, get, rerun]
-      action: allow
-    activities:
-    - name: "*"
-      action: allow
   - callers:
     - appID: ` + peropCallerAppID + `
     workflows:
     - name: "*"
       operations: [schedule, terminate, raise, pause, resume, purge, get, rerun]
-      action: allow
 `)
 }
 
@@ -150,30 +137,19 @@ metadata:
 scopes:
 - ` + peropTargetAppID + `
 spec:
-  defaultAction: deny
   rules:
-  - callers:
-    - appID: ` + peropTargetAppID + `
-    workflows:
-    - name: "*"
-      operations: [schedule, terminate, raise, pause, resume, purge, get, rerun]
-      action: allow
-    activities:
-    - name: "*"
-      action: allow
   - callers:
     - appID: ` + callerAppID + `
     workflows:
     - name: "PerOpWF"
       operations: [` + op + `]
-      action: allow
 `)
 }
 
 func (p *peroperation) applyPolicyAllowAll(t *testing.T, ctx context.Context) {
 	t.Helper()
 	name := p.nextPolicyName()
-	p.writePolicy(t, ctx, name, p.policyAllowAll(name))
+	p.writePolicy(t, ctx, name, p.policyAllowAllOps(name))
 }
 
 func (p *peroperation) applyPolicyOnlyAllowOp(t *testing.T, ctx context.Context, callerAppID, op string) {
@@ -242,131 +218,69 @@ func (p *peroperation) Run(t *testing.T, ctx context.Context) {
 		return id
 	}
 
-	t.Run("local", func(t *testing.T) {
-		t.Run("schedule", func(t *testing.T) {
-			p.applyPolicyOnlyAllowOp(t, ctx, peropTargetAppID, "schedule")
-			id, err := targetClient.ScheduleNewWorkflow(ctx, "PerOpWF")
-			require.NoError(t, err)
-			_, _ = targetClient.WaitForWorkflowStart(ctx, id)
-		})
-
-		t.Run("terminate", func(t *testing.T) {
-			id := scheduleInstance(t)
-			p.applyPolicyOnlyAllowOp(t, ctx, peropTargetAppID, "terminate")
-			require.NoError(t, targetClient.TerminateWorkflow(ctx, id))
-		})
-
-		t.Run("raise event", func(t *testing.T) {
-			id := scheduleInstance(t)
-			p.applyPolicyOnlyAllowOp(t, ctx, peropTargetAppID, "raise")
-			require.NoError(t, targetClient.RaiseEvent(ctx, id, "FinishEvent", api.WithEventPayload("done")))
-		})
-
-		t.Run("pause and resume", func(t *testing.T) {
-			id := scheduleInstance(t)
-			p.applyPolicyOnlyAllowOp(t, ctx, peropTargetAppID, "pause")
-			require.NoError(t, targetClient.SuspendWorkflow(ctx, id, ""))
-
-			p.applyPolicyOnlyAllowOp(t, ctx, peropTargetAppID, "resume")
-			require.NoError(t, targetClient.ResumeWorkflow(ctx, id, ""))
-		})
-
-		t.Run("purge after termination", func(t *testing.T) {
-			id := scheduleInstance(t)
-			require.NoError(t, targetClient.TerminateWorkflow(ctx, id))
-			_, err := targetClient.WaitForWorkflowCompletion(ctx, id)
-			require.NoError(t, err)
-
-			p.applyPolicyOnlyAllowOp(t, ctx, peropTargetAppID, "purge")
-			require.NoError(t, targetClient.PurgeWorkflowState(ctx, id))
-		})
-
-		t.Run("get", func(t *testing.T) {
-			id := scheduleInstance(t)
-			p.applyPolicyOnlyAllowOp(t, ctx, peropTargetAppID, "get")
-			meta, err := targetClient.FetchWorkflowMetadata(ctx, id)
-			require.NoError(t, err)
-			assert.Equal(t, "PerOpWF", meta.GetName())
-		})
-
-		t.Run("rerun", func(t *testing.T) {
-			id := scheduleInstance(t)
-			require.NoError(t, targetClient.TerminateWorkflow(ctx, id))
-			_, err := targetClient.WaitForWorkflowCompletion(ctx, id)
-			require.NoError(t, err)
-
-			p.applyPolicyOnlyAllowOp(t, ctx, peropTargetAppID, "rerun")
-			newID, err := targetClient.RerunWorkflowFromEvent(ctx, id, 0)
-			require.NoError(t, err)
-			assert.NotEmpty(t, newID)
-		})
-	})
-
 	// Cross-sidecar terminate/raise/etc aren't exposed by the durabletask client
 	// (it targets the local daprd), so we bypass the SDK and craft raw
 	// InvokeActor calls.
 	callerActorClient := runtimev1pb.NewDaprClient(p.caller.GRPCConn(t, ctx))
 	targetWorkflowActorType := "dapr.internal.default." + peropTargetAppID + ".workflow"
 
-	t.Run("remote", func(t *testing.T) {
-		t.Run("schedule allowed", func(t *testing.T) {
-			p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "schedule")
-			payload := mustMarshalCreate(t, "PerOpWF", "remote-schedule-1")
-			_, err := callerActorClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
-				ActorType: targetWorkflowActorType,
-				ActorId:   "remote-schedule-1",
-				Method:    "CreateWorkflowInstance",
-				Data:      payload,
-			})
-			require.NoError(t, err, "remote schedule must succeed when policy allows it")
+	t.Run("schedule allowed", func(t *testing.T) {
+		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "schedule")
+		payload := mustMarshalCreate(t, "PerOpWF", "remote-schedule-1")
+		_, err := callerActorClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
+			ActorType: targetWorkflowActorType,
+			ActorId:   "remote-schedule-1",
+			Method:    "CreateWorkflowInstance",
+			Data:      payload,
 		})
+		require.NoError(t, err, "remote schedule must succeed when policy allows it")
+	})
 
-		t.Run("schedule denied when only terminate is allowed", func(t *testing.T) {
-			p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "terminate")
-			payload := mustMarshalCreate(t, "PerOpWF", "remote-schedule-2")
-			_, err := callerActorClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
-				ActorType: targetWorkflowActorType,
-				ActorId:   "remote-schedule-2",
-				Method:    "CreateWorkflowInstance",
-				Data:      payload,
-			})
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "access denied by workflow access policy")
+	t.Run("schedule denied when only terminate is allowed", func(t *testing.T) {
+		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "terminate")
+		payload := mustMarshalCreate(t, "PerOpWF", "remote-schedule-2")
+		_, err := callerActorClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
+			ActorType: targetWorkflowActorType,
+			ActorId:   "remote-schedule-2",
+			Method:    "CreateWorkflowInstance",
+			Data:      payload,
 		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "access denied by workflow access policy")
+	})
 
-		t.Run("terminate denied when only schedule is allowed", func(t *testing.T) {
-			id := scheduleInstance(t)
-			p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "schedule")
-			payload := mustMarshalHistoryEvent(t, &protos.HistoryEvent{
-				EventType: &protos.HistoryEvent_ExecutionTerminated{
-					ExecutionTerminated: &protos.ExecutionTerminatedEvent{},
-				},
-			})
-			_, err := callerActorClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
-				ActorType: targetWorkflowActorType,
-				ActorId:   string(id),
-				Method:    "AddWorkflowEvent",
-				Data:      payload,
-			})
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "access denied by workflow access policy")
+	t.Run("terminate denied when only schedule is allowed", func(t *testing.T) {
+		id := scheduleInstance(t)
+		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "schedule")
+		payload := mustMarshalHistoryEvent(t, &protos.HistoryEvent{
+			EventType: &protos.HistoryEvent_ExecutionTerminated{
+				ExecutionTerminated: &protos.ExecutionTerminatedEvent{},
+			},
 		})
-
-		t.Run("purge denied when only get is allowed", func(t *testing.T) {
-			id := scheduleInstance(t)
-			require.NoError(t, targetClient.TerminateWorkflow(ctx, id))
-			_, err := targetClient.WaitForWorkflowCompletion(ctx, id)
-			require.NoError(t, err)
-
-			p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "get")
-			_, err = callerActorClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
-				ActorType: targetWorkflowActorType,
-				ActorId:   string(id),
-				Method:    "PurgeWorkflowState",
-			})
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "access denied by workflow access policy")
+		_, err := callerActorClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
+			ActorType: targetWorkflowActorType,
+			ActorId:   string(id),
+			Method:    "AddWorkflowEvent",
+			Data:      payload,
 		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "access denied by workflow access policy")
+	})
+
+	t.Run("purge denied when only get is allowed", func(t *testing.T) {
+		id := scheduleInstance(t)
+		require.NoError(t, targetClient.TerminateWorkflow(ctx, id))
+		_, err := targetClient.WaitForWorkflowCompletion(ctx, id)
+		require.NoError(t, err)
+
+		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "get")
+		_, err = callerActorClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
+			ActorType: targetWorkflowActorType,
+			ActorId:   string(id),
+			Method:    "PurgeWorkflowState",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "access denied by workflow access policy")
 	})
 
 	p.applyPolicyAllowAll(t, ctx)
