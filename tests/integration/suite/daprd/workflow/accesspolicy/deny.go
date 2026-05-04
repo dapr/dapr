@@ -41,8 +41,8 @@ func init() {
 	suite.Register(new(deny))
 }
 
-// deny tests that cross-app workflow calls are rejected when the
-// WorkflowAccessPolicy explicitly denies the operation.
+// deny tests that cross-app workflow calls are rejected by default when a
+// WorkflowAccessPolicy is loaded but no rule grants the caller access.
 type deny struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
@@ -59,6 +59,8 @@ func (d *deny) Setup(t *testing.T) []framework.Option {
 	d.sched = scheduler.New(t, scheduler.WithSentry(d.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 	d.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
+	// Policy lists a different app as caller, so wfacl-caller is implicitly
+	// denied when it tries to schedule a workflow on the target.
 	policy := []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
@@ -67,14 +69,12 @@ metadata:
 scopes:
 - wfacl-target
 spec:
-  defaultAction: allow
   rules:
   - callers:
-    - appID: wfacl-caller
+    - appID: some-other-app
     workflows:
-    - name: DeniedWF
+    - name: "*"
       operations: [schedule]
-      action: deny
 `)
 
 	targetResDir := t.TempDir()

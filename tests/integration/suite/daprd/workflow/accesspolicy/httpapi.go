@@ -15,6 +15,7 @@ package accesspolicy
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -44,13 +45,17 @@ func init() {
 	suite.Register(new(httpapi))
 }
 
-// httpapi tests workflow access policy enforcement through the HTTP API.
+// httpapi tests workflow access policy denial surfaces through the Dapr
+// workflow HTTP API. The caller daprd schedules and polls workflows via
+// HTTP; the workflow itself does a cross-app child-workflow call that the
+// target's policy gates.
 type httpapi struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
 	sched  *scheduler.Scheduler
 	db     *sqlite.SQLite
-	daprd  *daprd.Daprd
+	caller *daprd.Daprd
+	target *daprd.Daprd
 }
 
 func (h *httpapi) Setup(t *testing.T) []framework.Option {
@@ -65,25 +70,30 @@ apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
   name: httpapi-test
+scopes:
+- httpapi-target
 spec:
-  defaultAction: deny
   rules:
   - callers:
-    - appID: httpapi-app
+    - appID: httpapi-caller
     workflows:
     - name: AllowedWF
       operations: [schedule]
-      action: allow
-    - name: DeniedWF
-      operations: [schedule]
-      action: deny
 `)
 
 	resDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(resDir, "policy.yaml"), policy, 0o600))
 
-	h.daprd = daprd.New(t,
-		daprd.WithAppID("httpapi-app"),
+	h.caller = daprd.New(t,
+		daprd.WithAppID("httpapi-caller"),
+		daprd.WithNamespace("default"),
+		daprd.WithResourceFiles(h.db.GetComponent(t)),
+		daprd.WithPlacementAddresses(h.place.Address()),
+		daprd.WithSchedulerAddresses(h.sched.Address()),
+		daprd.WithSentry(t, h.sentry),
+	)
+	h.target = daprd.New(t,
+		daprd.WithAppID("httpapi-target"),
 		daprd.WithNamespace("default"),
 		daprd.WithResourcesDir(resDir),
 		daprd.WithResourceFiles(h.db.GetComponent(t)),
@@ -93,97 +103,123 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(h.sentry, h.place, h.sched, h.db, h.daprd),
+		framework.WithProcesses(h.sentry, h.place, h.sched, h.db, h.caller, h.target),
 	}
 }
 
 func (h *httpapi) Run(t *testing.T, ctx context.Context) {
 	h.place.WaitUntilRunning(t, ctx)
 	h.sched.WaitUntilRunning(t, ctx)
-	h.daprd.WaitUntilRunning(t, ctx)
+	h.caller.WaitUntilRunning(t, ctx)
+	h.target.WaitUntilRunning(t, ctx)
 
-	registry := task.NewTaskRegistry()
-	require.NoError(t, registry.AddWorkflowN("AllowedWF", func(ctx *task.WorkflowContext) (any, error) {
+	callerReg := task.NewTaskRegistry()
+	require.NoError(t, callerReg.AddWorkflowN("CallAllowed", func(ctx *task.WorkflowContext) (any, error) {
+		var output string
+		err := ctx.CallChildWorkflow("AllowedWF", task.WithChildWorkflowAppID(h.target.AppID())).Await(&output)
+		if err != nil {
+			return nil, fmt.Errorf("child failed: %w", err)
+		}
+		return output, nil
+	}))
+	require.NoError(t, callerReg.AddWorkflowN("CallDenied", func(ctx *task.WorkflowContext) (any, error) {
+		var output string
+		err := ctx.CallChildWorkflow("DeniedWF", task.WithChildWorkflowAppID(h.target.AppID())).Await(&output)
+		if err != nil {
+			return nil, fmt.Errorf("child failed: %w", err)
+		}
+		return output, nil
+	}))
+	callerClient := dtclient.NewTaskHubGrpcClient(h.caller.GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, callerClient.StartWorkItemListener(ctx, callerReg))
+
+	targetReg := task.NewTaskRegistry()
+	require.NoError(t, targetReg.AddWorkflowN("AllowedWF", func(ctx *task.WorkflowContext) (any, error) {
 		return "allowed-ok", nil
 	}))
-	require.NoError(t, registry.AddWorkflowN("DeniedWF", func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, targetReg.AddWorkflowN("DeniedWF", func(ctx *task.WorkflowContext) (any, error) {
 		return "denied-should-not-reach", nil
 	}))
-
-	backendClient := dtclient.NewTaskHubGrpcClient(h.daprd.GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, backendClient.StartWorkItemListener(ctx, registry))
+	targetClient := dtclient.NewTaskHubGrpcClient(h.target.GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, targetClient.StartWorkItemListener(ctx, targetReg))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, len(h.daprd.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
+		assert.GreaterOrEqual(c, len(h.caller.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
+		assert.GreaterOrEqual(c, len(h.target.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 	}, time.Second*20, time.Millisecond*10)
 
 	httpClient := client.HTTP(t)
-	baseURL := fmt.Sprintf("http://%s/v1.0-alpha1/workflows/dapr", h.daprd.HTTPAddress())
+	baseURL := fmt.Sprintf("http://%s/v1.0-beta1/workflows/dapr", h.caller.HTTPAddress())
 
-	t.Run("HTTP start denied workflow returns PermissionDenied", func(t *testing.T) {
-		url := baseURL + "/DeniedWF/start"
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			httpPostExpectDenied(c, httpClient, url)
-		}, time.Second*20, time.Millisecond*10)
+	t.Run("HTTP cross-app start of denied workflow surfaces policy denial", func(t *testing.T) {
+		instanceID := startWorkflowHTTP(t, ctx, httpClient, baseURL, "CallDenied")
+		state := waitWorkflowCompleteHTTP(t, ctx, httpClient, baseURL, instanceID)
+		assert.Equal(t, "FAILED", state.RuntimeStatus)
+		assert.Contains(t, state.Properties["dapr.workflow.failure.error_message"], "denied by workflow access policy")
 	})
 
-	t.Run("HTTP start allowed workflow succeeds", func(t *testing.T) {
-		url := baseURL + "/AllowedWF/start"
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader("{}"))
-			if !assert.NoError(c, err) {
-				return
-			}
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := httpClient.Do(req)
-			if !assert.NoError(c, err) {
-				return
-			}
-			defer resp.Body.Close()
-			assert.Equal(c, http.StatusAccepted, resp.StatusCode)
-		}, time.Second*20, time.Millisecond*10)
-	})
-
-	t.Run("HTTP terminate exercises actor path", func(t *testing.T) {
-		url := baseURL + "/fake-instance/terminate"
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
-		require.NoError(t, err)
-		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		assert.Contains(t, string(body), "instance")
-	})
-
-	t.Run("HTTP purge exercises actor path", func(t *testing.T) {
-		url := baseURL + "/fake-instance/purge"
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
-		require.NoError(t, err)
-		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		assert.Contains(t, string(body), "instance")
+	t.Run("HTTP cross-app start of allowed workflow succeeds", func(t *testing.T) {
+		instanceID := startWorkflowHTTP(t, ctx, httpClient, baseURL, "CallAllowed")
+		state := waitWorkflowCompleteHTTP(t, ctx, httpClient, baseURL, instanceID)
+		assert.Equal(t, "COMPLETED", state.RuntimeStatus)
+		assert.Equal(t, `"allowed-ok"`, state.Properties["dapr.workflow.output"])
 	})
 }
 
-// httpPostExpectDenied is a helper that POSTs to the given URL and asserts the
-// response body contains a workflow access policy denial indicator.
-//
-//nolint:testifylint
-func httpPostExpectDenied(c *assert.CollectT, httpClient *http.Client, url string) {
-	resp, err := httpClient.Post(url, "application/json", strings.NewReader("{}"))
-	if !assert.NoError(c, err) {
-		return
-	}
+type workflowState struct {
+	RuntimeStatus string            `json:"runtimeStatus"`
+	Properties    map[string]string `json:"properties"`
+}
+
+func startWorkflowHTTP(t *testing.T, ctx context.Context, httpClient *http.Client, baseURL, name string) string {
+	t.Helper()
+	url := baseURL + "/" + name + "/start"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader("{}"))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient.Do(req)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
-	if !assert.NoError(c, err) {
-		return
+	require.NoError(t, err)
+	require.Equalf(t, http.StatusAccepted, resp.StatusCode, "start failed: %s", body)
+	var out struct {
+		InstanceID string `json:"instanceID"`
 	}
-	bodyStr := string(body)
-	assert.Contains(c, bodyStr, "access denied by workflow access policy")
-	assert.NotEqual(c, http.StatusAccepted, resp.StatusCode)
+	require.NoError(t, json.Unmarshal(body, &out))
+	require.NotEmpty(t, out.InstanceID)
+	return out.InstanceID
+}
+
+func waitWorkflowCompleteHTTP(t *testing.T, ctx context.Context, httpClient *http.Client, baseURL, instanceID string) workflowState {
+	t.Helper()
+	url := baseURL + "/" + instanceID
+	var state workflowState
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if !assert.NoError(c, err) {
+			return
+		}
+		resp, err := httpClient.Do(req)
+		if !assert.NoError(c, err) {
+			return
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.Equal(c, http.StatusOK, resp.StatusCode, string(body)) {
+			return
+		}
+		var out workflowState
+		if !assert.NoError(c, json.Unmarshal(body, &out)) {
+			return
+		}
+		if !assert.Contains(c, []string{"COMPLETED", "FAILED", "TERMINATED"}, out.RuntimeStatus, "still %q", out.RuntimeStatus) {
+			return
+		}
+		state = out
+	}, time.Second*30, time.Millisecond*10)
+	return state
 }

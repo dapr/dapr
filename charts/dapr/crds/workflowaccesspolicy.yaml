@@ -47,44 +47,31 @@ spec:
           spec:
             description: WorkflowAccessPolicySpec defines the desired state of WorkflowAccessPolicy.
             properties:
-              defaultAction:
-                default: deny
-                description: DefaultAction is the action when no rule matches. Defaults
-                  to "deny" if omitted.
-                enum:
-                - allow
-                - deny
-                type: string
               rules:
-                description: Rules defines ingress rules for which callers can perform
+                description: Rules defines the allow-list of which callers can perform
                   which operations.
                 items:
                   description: |-
-                    WorkflowAccessPolicyRule defines a set of callers and the workflow and/or
-                    activity rules they are allowed or denied. At least one of workflows or
+                    WorkflowAccessPolicyRule grants the listed callers access to the listed
+                    workflows and/or activities. Presence of a matching rule grants access; if
+                    no rule matches, the call is denied. At least one of workflows or
                     activities must be set.
                   properties:
                     activities:
                       description: Activities are the activity rules that the matched
-                        callers are allowed/denied.
+                        callers are allowed.
                       items:
                         description: |-
-                          ActivityRule defines access control for an activity. Activities only have a
-                          single operation (schedule), so there is no operation field.
+                          ActivityRule grants the matched callers access to schedule the activity
+                          whose name matches Name (exact or glob). Activities only have one
+                          operation (schedule).
                         properties:
-                          action:
-                            description: Action is "allow" or "deny".
-                            enum:
-                            - allow
-                            - deny
-                            type: string
                           name:
                             description: Name is the exact name or glob pattern for
                               the activity.
                             minLength: 1
                             type: string
                         required:
-                        - action
                         - name
                         type: object
                       type: array
@@ -104,17 +91,12 @@ spec:
                       type: array
                     workflows:
                       description: Workflows are the workflow rules that the matched
-                        callers are allowed/denied.
+                        callers are allowed.
                       items:
-                        description: WorkflowRule defines access control for a workflow
-                          operation.
+                        description: |-
+                          WorkflowRule grants the matched callers access to the listed operations on
+                          workflows whose name matches Name (exact or glob).
                         properties:
-                          action:
-                            description: Action is "allow" or "deny".
-                            enum:
-                            - allow
-                            - deny
-                            type: string
                           name:
                             description: Name is the exact name or glob pattern for
                               the workflow.
@@ -124,6 +106,8 @@ spec:
                             description: Operations is the set of operations this
                               rule applies to.
                             items:
+                              description: WorkflowOperation is the specific workflow
+                                operation being controlled.
                               enum:
                               - schedule
                               - terminate
@@ -138,7 +122,6 @@ spec:
                             type: array
                             x-kubernetes-list-type: set
                         required:
-                        - action
                         - name
                         - operations
                         type: object
