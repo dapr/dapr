@@ -70,7 +70,6 @@ func (w *workflowaccesspolicies) Setup(t *testing.T) []framework.Option {
 		Kind:    "WorkflowAccessPolicy",
 	})
 
-	boolTrue := true
 	w.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
 			spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
@@ -85,10 +84,6 @@ func (w *workflowaccesspolicies) Setup(t *testing.T) []framework.Option {
 					MTLSSpec: &configapi.MTLSSpec{
 						ControlPlaneTrustDomain: "integration.test.dapr.io",
 						SentryAddress:           sen.Address(),
-					},
-					Features: []configapi.FeatureSpec{
-						{Name: "HotReload", Enabled: &boolTrue},
-						{Name: "WorkflowAccessPolicy", Enabled: &boolTrue},
 					},
 				},
 			}},
