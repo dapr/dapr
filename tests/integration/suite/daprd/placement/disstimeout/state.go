@@ -47,7 +47,7 @@ type state struct {
 
 func (s *state) Setup(t *testing.T) []framework.Option {
 	s.place = placement.New(t,
-		placement.WithDisseminateTimeout(time.Second*7),
+		placement.WithDisseminateTimeout(time.Second*2),
 	)
 
 	s.actors = dactors.New(t,
@@ -116,7 +116,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 
 	for i := range 2 {
 		connectBlocker(t, fmt.Sprintf("blocker-%d", i))
-		time.Sleep(9 * time.Second)
+		time.Sleep(4 * time.Second)
 	}
 
 	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
