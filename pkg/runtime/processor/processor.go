@@ -131,6 +131,7 @@ type Processor struct {
 	pendingComponentsWaiting   sync.RWMutex
 	pendingComponentDependents map[string][]componentsapi.Component
 	subErrCh                   chan error
+	processErr                 atomic.Pointer[error]
 
 	lock     sync.RWMutex
 	chlock   sync.RWMutex
@@ -266,6 +267,19 @@ func (p *Processor) Process(ctx context.Context) error {
 			return nil
 		},
 	).Run(ctx)
+}
+
+// setProcessError stores the first processing error encountered.
+func (p *Processor) setProcessError(err error) {
+	p.processErr.CompareAndSwap(nil, &err)
+}
+
+// ProcessError returns the first processing error encountered, or nil if no error occurred.
+func (p *Processor) ProcessError() error {
+	if err := p.processErr.Load(); err != nil {
+		return *err
+	}
+	return nil
 }
 
 // DefaultReporter is the default resource reporter for the registry. It does nothing.
