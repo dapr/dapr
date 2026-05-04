@@ -191,6 +191,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--dapr-block-shutdown-duration", *c.BlockShutdownDuration)
 	}
 
+	if c.ActorsDisseminateTimeout != nil {
+		args = append(args, "--actors-disseminate-timeout", *c.ActorsDisseminateTimeout)
+	}
+
 	if c.SchedulerAddress != nil {
 		args = append(args, "--scheduler-host-address", *c.SchedulerAddress)
 	} else if c.SchedulerEnabled {
