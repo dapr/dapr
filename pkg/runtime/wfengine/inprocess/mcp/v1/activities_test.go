@@ -126,7 +126,7 @@ func TestMakeCallToolActivity_HeaderInjection(t *testing.T) {
 	})
 	store.AddMCPServer(server)
 
-	httpClient, err := mcpauth.BuildHTTPClient(context.Background(), &server, store, nil)
+	httpClient, err := mcpauth.BuildHTTPClient(context.Background(), context.Background(), &server, store, nil)
 	require.NoError(t, err)
 
 	activity := makeCallToolActivity(server, connectTestSession(t, ts.URL, httpClient), &toolSchemaCache{}, Options{Store: store})
@@ -206,7 +206,7 @@ func TestMakeCallToolActivity_SPIFFEAuth(t *testing.T) {
 		return "svid-12345", nil
 	})
 
-	httpClient, err := mcpauth.BuildHTTPClient(context.Background(), &server, store, fetcher)
+	httpClient, err := mcpauth.BuildHTTPClient(context.Background(), context.Background(), &server, store, fetcher)
 	require.NoError(t, err)
 
 	activity := makeCallToolActivity(server, connectTestSession(t, ts.URL, httpClient), &toolSchemaCache{}, Options{Store: store, Security: fetcher})

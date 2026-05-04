@@ -40,6 +40,12 @@ type SessionHolder struct {
 	mu      sync.Mutex // guards reconnect/close
 	closed  atomic.Bool
 
+	// lifecycleCtx scopes background work owned by this holder.
+	// This includes OAuth2 TokenSource,
+	// whose refresher must keep running for the lifetime of the underlying http.Client.
+	lifecycleCtx    context.Context
+	lifecycleCancel context.CancelFunc
+
 	server *mcpserverapi.MCPServer
 	store  *compstore.ComponentStore
 	sec    security.Handler
@@ -48,13 +54,18 @@ type SessionHolder struct {
 // newSessionHolder creates a holder and eagerly connects using the given context.
 // Returns an error if the initial connection fails (like component Init).
 func NewSessionHolder(ctx context.Context, server *mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) (*SessionHolder, error) {
+	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	h := &SessionHolder{
-		server: server,
-		store:  store,
-		sec:    sec,
+		lifecycleCtx:    lifecycleCtx,
+		lifecycleCancel: lifecycleCancel,
+		server:          server,
+		store:           store,
+		sec:             sec,
 	}
 	session, err := h.connect(ctx)
 	if err != nil {
+		// Release the lifecycle ctx since we never returned a usable holder.
+		lifecycleCancel()
 		return nil, err
 	}
 	h.session.Store(session)
@@ -119,6 +130,8 @@ func (h *SessionHolder) Close() {
 	if !h.closed.CompareAndSwap(false, true) {
 		return
 	}
+	// Stop background work owned by this holder
+	h.lifecycleCancel()
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if s := h.session.Load(); s != nil {
@@ -129,8 +142,9 @@ func (h *SessionHolder) Close() {
 
 // connect builds an HTTP client, transport, and MCP session.
 // The caller's context controls the connection deadline.
+// The lifecycleCtx is passed separately for background work (token refresh) that must outlive the connect call.
 func (h *SessionHolder) connect(ctx context.Context) (*mcp.ClientSession, error) {
-	httpClient, err := mcpauth.BuildHTTPClient(ctx, h.server, h.store, h.sec)
+	httpClient, err := mcpauth.BuildHTTPClient(ctx, h.lifecycleCtx, h.server, h.store, h.sec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build HTTP client for %q: %w", h.server.Name, err)
 	}

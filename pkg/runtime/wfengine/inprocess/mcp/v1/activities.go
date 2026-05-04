@@ -45,13 +45,14 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *SessionHolder,
 			return &wfv1.ListMCPToolsResponse{Tools: cached}, nil
 		}
 
-		callCtx := ctx.Context()
+		baseCtx := ctx.Context()
 		timeout := CallTimeout(&server)
-		workerLog.Debugf("list-tools: MCPServer %q timeout=%s", serverName, timeout)
-		callCtx, cancel := withDeadline(callCtx, timeout)
-		defer cancel()
+		workerLog.Debugf("list-tools: MCPServer %q per-page timeout=%s", serverName, timeout)
 
-		session, err := holder.Session(callCtx)
+		// Use the per-page timeout for the initial Session() call.
+		sessionCtx, sessionCancel := withDeadline(baseCtx, timeout)
+		session, err := holder.Session(sessionCtx)
+		sessionCancel()
 		if err != nil {
 			return &wfv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: %w", err)
 		}
@@ -65,20 +66,25 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *SessionHolder,
 			if cursor != "" {
 				params.Cursor = cursor
 			}
-			result, err := session.ListTools(callCtx, params)
+			// Apply the timeout per network call rather than across the whole pagination loop.
+			pageCtx, pageCancel := withDeadline(baseCtx, timeout)
+			result, err := session.ListTools(pageCtx, params)
 			if err != nil {
 				if isConnectionClosed(err) {
 					workerLog.Warnf("list-tools: connection lost for %q, reconnecting", serverName)
-					session, err = holder.Reconnect(callCtx)
+					session, err = holder.Reconnect(pageCtx)
 					if err != nil {
+						pageCancel()
 						return &wfv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: reconnect failed for %q: %w", serverName, err)
 					}
-					result, err = session.ListTools(callCtx, params)
+					result, err = session.ListTools(pageCtx, params)
 				}
 				if err != nil {
+					pageCancel()
 					return &wfv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: MCP call failed for %q: %w", serverName, err)
 				}
 			}
+			pageCancel()
 
 			for _, t := range result.Tools {
 				td := &wfv1.MCPToolDefinition{

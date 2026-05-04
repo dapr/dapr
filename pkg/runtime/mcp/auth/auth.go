@@ -54,8 +54,14 @@ func HTTPTransportConfig(server *mcpserverapi.MCPServer) ([]commonapi.NameValueP
 //
 // OAuth2 and SPIFFE are mutually exclusive in practice; if both are configured,
 // OAuth2 takes precedence and SPIFFE is ignored.
+//
+// setupCtx controls one-shot setup work (secret fetches).
+// lifecycleCtx controls background work that must outlive the connection setup,
+// specifically the OAuth2 token refresher,
+// which is invoked on every token expiry for the lifetime of the returned client.
 func BuildHTTPClient(
-	ctx context.Context,
+	setupCtx context.Context,
+	lifecycleCtx context.Context,
 	server *mcpserverapi.MCPServer,
 	secrets *compstore.ComponentStore,
 	jwt security.Handler,
@@ -80,7 +86,7 @@ func BuildHTTPClient(
 
 	// OAuth2 client credentials — wraps raw transport with token injection.
 	if authCfg != nil && authCfg.OAuth2 != nil && secrets != nil {
-		client, err := buildOAuth2Client(ctx, authCfg, secrets, authTransport)
+		client, err := buildOAuth2Client(setupCtx, lifecycleCtx, authCfg, secrets, authTransport)
 		if err != nil {
 			return nil, err
 		}
@@ -120,8 +126,12 @@ func BuildHTTPClient(
 
 // buildOAuth2Client fetches the client_secret from the secret store and builds
 // an http.Client that injects an OAuth2 Bearer token on every request.
+//
+// setupCtx is used for the one-shot client_secret fetch from the secret store.
+// lifecycleCtx is captured by the OAuth2 TokenSource and used for every subsequent token refresh.
 func buildOAuth2Client(
-	ctx context.Context,
+	setupCtx context.Context,
+	lifecycleCtx context.Context,
 	authCfg *mcpserverapi.MCPAuth,
 	secrets *compstore.ComponentStore,
 	base http.RoundTripper,
@@ -136,7 +146,7 @@ func buildOAuth2Client(
 		storeName = *authCfg.SecretStore
 	}
 
-	clientSecret, err := secrets.GetSecret(ctx, storeName, o.SecretKeyRef.Name, o.SecretKeyRef.Key)
+	clientSecret, err := secrets.GetSecret(setupCtx, storeName, o.SecretKeyRef.Name, o.SecretKeyRef.Key)
 	if err != nil {
 		return nil, fmt.Errorf("OAuth2 credential retrieval failed: %w", errors.Join(autherrors.ErrSecretFetch, err))
 	}
@@ -151,7 +161,7 @@ func buildOAuth2Client(
 		cfg.EndpointParams = map[string][]string{audienceKey: {*o.Audience}}
 	}
 
-	tokenSource := cfg.TokenSource(ctx)
+	tokenSource := cfg.TokenSource(lifecycleCtx)
 	return &http.Client{
 		Transport: &oauth2.Transport{
 			Source: tokenSource,
