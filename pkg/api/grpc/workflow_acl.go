@@ -27,13 +27,16 @@ import (
 
 const workflowACLDeniedMsg = "access denied by workflow access policy"
 
-// callActorValidateWorkflowACL checks whether the caller is allowed to invoke
-// the target workflow or activity based on WorkflowAccessPolicy resources.
-// Returns nil if no policy applies or the call is allowed; returns
-// PermissionDenied if denied.
+// Per-operation enforcement happens inside the actor itself (orchestrator /
+// activity targets) so the workflow name is resolved against locked state
+// without a TOCTOU race. This handler only authenticates the caller and
+// stamps identity for the in-actor check.
 func (a *api) callActorValidateWorkflowACL(ctx context.Context, in *internalv1pb.InternalInvokeRequest) error {
-	policies := a.workflowAccessPolicies.Load()
+	if _, isWorkflowOrActivityActor := workflowacl.ParseActorType(in.GetActor().GetActorType()); !isWorkflowOrActivityActor {
+		return nil
+	}
 
+	policies := a.workflowAccessPolicies.Load()
 	callerAppID, callerNamespace, err := a.extractCallerIdentity(ctx)
 	if err != nil {
 		// Identity extraction only fails if mTLS is missing. If there are
@@ -44,17 +47,7 @@ func (a *api) callActorValidateWorkflowACL(ctx context.Context, in *internalv1pb
 		return err
 	}
 
-	result, err := workflowacl.EnforceRequest(
-		policies, callerAppID,
-		in.GetActor().GetActorType(),
-		in.GetMessage().GetMethod(),
-		in.GetMessage().GetData().GetValue(),
-	)
-	if err != nil {
-		a.logger.Errorf("Failed to enforce workflow access policy for app '%s': %v", callerAppID, err)
-		return status.Error(codes.Internal, "failed to enforce workflow access policy")
-	}
-	if result == nil {
+	if policies == nil {
 		return nil
 	}
 
@@ -62,20 +55,12 @@ func (a *api) callActorValidateWorkflowACL(ctx context.Context, in *internalv1pb
 		return nsErr
 	}
 
-	if !result.Allowed {
-		a.logger.Warnf("Workflow access policy denied app '%s' for %s operation '%s'", callerAppID, result.OpType, result.Operation)
-		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(result.OpType), result.Operation)
-		return status.Errorf(codes.PermissionDenied, workflowACLDeniedMsg)
-	}
-
-	diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, string(result.OpType), result.Operation)
+	workflowacl.SetCallerIdentity(in, callerAppID, callerNamespace)
 	return nil
 }
 
-// callActorReminderValidateWorkflowACL checks whether the caller is allowed to
-// invoke reminders on a workflow/activity actor. This prevents a malicious
-// sidecar from injecting fake activity results or workflow events via the
-// CallActorReminder gRPC endpoint.
+// Reminders use the coarse IsCallerKnown fallback because their names are
+// internal scheduling artifacts that don't map to per-operation rules.
 func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *internalv1pb.Reminder) error {
 	actorType := in.GetActorType()
 	opType, isWorkflowOrActivityActor := workflowacl.ParseActorType(actorType)

@@ -35,8 +35,6 @@ import (
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/task"
-
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 func init() {
@@ -92,7 +90,6 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 	})
 
 	client := r.workflow.BackendClient(t, ctx)
-	gclient := r.workflow.GRPCClient(t, ctx)
 
 	id, err := client.ScheduleNewWorkflow(ctx, "raisebatch",
 		api.WithInstanceID("raisebatchi"),
@@ -109,13 +106,11 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 
 	// Force the actor to deactivate by firing a dummy reminder. The reminder
 	// finds an empty inbox and returns RunCompletedTrue, which triggers
-	// deactivation and clears the in-memory cache.
-	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
-		ActorType: actorType,
-		ActorId:   actorID,
-		Name:      "new-event-deactivate",
-		DueTime:   "0s",
-	})
+	// deactivation and clears the in-memory cache. Goes via the scheduler
+	// directly because the daprd RegisterActorReminder API rejects
+	// "dapr.internal.*" actor types.
+	_, err = r.workflow.Scheduler().Client(t, ctx).ScheduleJob(ctx,
+		r.workflow.Scheduler().JobNowActor("new-event-deactivate", "default", appID, actorType, actorID))
 	require.NoError(t, err)
 
 	time.Sleep(2 * time.Second)
@@ -124,12 +119,8 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 	tableName := r.workflow.DB().TableName()
 	writeInboxToDB(t, ctx, db, tableName, appID, actorType, actorID, totalEvents)
 
-	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
-		ActorType: actorType,
-		ActorId:   actorID,
-		Name:      "new-event-batch",
-		DueTime:   "0s",
-	})
+	_, err = r.workflow.Scheduler().Client(t, ctx).ScheduleJob(ctx,
+		r.workflow.Scheduler().JobNowActor("new-event-batch", "default", appID, actorType, actorID))
 	require.NoError(t, err)
 
 	time.Sleep(2 * time.Second)

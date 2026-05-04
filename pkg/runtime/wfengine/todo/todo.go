@@ -31,6 +31,7 @@ const (
 	WaitForRuntimeStatus              = "WaitForRuntimeStatus"
 	ForkWorkflowHistory               = "ForkWorkflowHistory"
 	RerunWorkflowInstance             = "RerunWorkflowInstance"
+	ExecuteActivityMethod             = "Execute"
 
 	MetadataActivityReminderDueTime = "dueTime"
 	MetadataPurgeRetentionCall      = "PurgeRetentionCall"

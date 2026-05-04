@@ -20,6 +20,8 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/backend"
 )
 
@@ -27,9 +29,6 @@ const (
 	actorTypePrefix = "dapr.internal."
 	suffixWorkflow  = ".workflow"
 	suffixActivity  = ".activity"
-
-	methodCreateWorkflowInstance = "CreateWorkflowInstance"
-	methodExecute                = "Execute"
 )
 
 // OperationType represents the type of workflow operation being performed.
@@ -58,55 +57,78 @@ func ParseActorType(actorType string) (OperationType, bool) {
 	}
 }
 
-// ExtractOperationName extracts the workflow or activity name from the request
-// method and payload. Returns the name and true if extraction succeeded, or
-// empty string and false if the method is not subject to access control
-// (e.g. AddWorkflowEvent, PurgeWorkflowState).
-func ExtractOperationName(opType OperationType, method string, data []byte) (string, bool, error) {
-	switch opType {
-	case OperationTypeWorkflow:
-		return extractWorkflowName(method, data)
-	case OperationTypeActivity:
-		return extractActivityName(method, data)
+// WorkflowOperationFromMethod returns the WorkflowOperation for a workflow
+// actor method. An empty operation with nil error means the method is not
+// subject to access control (an internal/system method). AddWorkflowEvent's
+// operation is encoded in the HistoryEvent payload; parsedAddEvent must be
+// non-nil for that method so we don't unmarshal twice on the hot path.
+func WorkflowOperationFromMethod(method string, parsedAddEvent *backend.HistoryEvent) (wfaclapi.WorkflowOperation, error) {
+	switch method {
+	case todo.CreateWorkflowInstanceMethod:
+		return wfaclapi.WorkflowOperationSchedule, nil
+
+	case todo.AddWorkflowEventMethod:
+		if parsedAddEvent == nil {
+			return "", errors.New("AddWorkflowEvent: parsed event is required to derive the operation")
+		}
+		return operationFromHistoryEvent(parsedAddEvent)
+
+	case todo.PurgeWorkflowStateMethod:
+		return wfaclapi.WorkflowOperationPurge, nil
+
+	case todo.WaitForRuntimeStatus:
+		return wfaclapi.WorkflowOperationGet, nil
+
+	case todo.ForkWorkflowHistory, todo.RerunWorkflowInstance:
+		return wfaclapi.WorkflowOperationRerun, nil
+
 	default:
-		return "", false, nil
+		return "", nil
 	}
 }
 
-func extractWorkflowName(method string, data []byte) (string, bool, error) {
-	if method != methodCreateWorkflowInstance {
-		// Only CreateWorkflowInstance is subject to access control (schedule
-		// operation).
-		return "", false, nil
-	}
-
-	var req backend.CreateWorkflowInstanceRequest
-	if err := proto.Unmarshal(data, &req); err != nil {
-		return "", false, fmt.Errorf("failed to unmarshal CreateWorkflowInstanceRequest: %w", err)
-	}
-
-	es := req.GetStartEvent().GetExecutionStarted()
-	if es == nil {
-		return "", false, errors.New("CreateWorkflowInstanceRequest missing ExecutionStarted event")
-	}
-
-	return es.GetName(), true, nil
-}
-
-func extractActivityName(method string, data []byte) (string, bool, error) {
-	if method != methodExecute {
-		return "", false, nil
+// ActivityNameFromExecute returns the activity name from an Execute method
+// payload. An empty name with nil error means the method is not Execute
+// (no other activity methods are subject to access control).
+func ActivityNameFromExecute(method string, data []byte) (string, error) {
+	if method != todo.ExecuteActivityMethod {
+		return "", nil
 	}
 
 	var his backend.HistoryEvent
 	if err := proto.Unmarshal(data, &his); err != nil {
-		return "", false, fmt.Errorf("failed to unmarshal activity HistoryEvent: %w", err)
+		return "", fmt.Errorf("failed to unmarshal activity HistoryEvent: %w", err)
 	}
-
 	ts := his.GetTaskScheduled()
 	if ts == nil {
-		return "", false, errors.New("activity HistoryEvent missing TaskScheduled")
+		return "", errors.New("activity HistoryEvent missing TaskScheduled")
 	}
+	return ts.GetName(), nil
+}
 
-	return ts.GetName(), true, nil
+func WorkflowNameFromCreateRequest(data []byte) (string, error) {
+	var req backend.CreateWorkflowInstanceRequest
+	if err := proto.Unmarshal(data, &req); err != nil {
+		return "", fmt.Errorf("failed to unmarshal CreateWorkflowInstanceRequest: %w", err)
+	}
+	es := req.GetStartEvent().GetExecutionStarted()
+	if es == nil {
+		return "", errors.New("CreateWorkflowInstanceRequest missing ExecutionStarted event")
+	}
+	return es.GetName(), nil
+}
+
+func operationFromHistoryEvent(ev *backend.HistoryEvent) (wfaclapi.WorkflowOperation, error) {
+	switch {
+	case ev.GetExecutionTerminated() != nil:
+		return wfaclapi.WorkflowOperationTerminate, nil
+	case ev.GetEventRaised() != nil:
+		return wfaclapi.WorkflowOperationRaise, nil
+	case ev.GetExecutionSuspended() != nil:
+		return wfaclapi.WorkflowOperationPause, nil
+	case ev.GetExecutionResumed() != nil:
+		return wfaclapi.WorkflowOperationResume, nil
+	default:
+		return "", fmt.Errorf("AddWorkflowEvent HistoryEvent has unsupported event type %T", ev.GetEventType())
+	}
 }
