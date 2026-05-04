@@ -9,11 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
@@ -255,6 +257,91 @@ func TestPatchDaprService(t *testing.T) {
 	assert.Len(t, actualService.OwnerReferences, 1)
 	assert.Equal(t, "Deployment", actualService.OwnerReferences[0].Kind)
 	assert.Equal(t, "app", actualService.OwnerReferences[0].Name)
+}
+
+func TestReconcileDeletesOwnedDaprServiceWhenNotAnnotated(t *testing.T) {
+	testDaprHandler := getTestDaprHandler()
+
+	s := runtime.NewScheme()
+	err := scheme.AddToScheme(s)
+	require.NoError(t, err)
+	testDaprHandler.Scheme = s
+
+	deployment := getDeployment("myapp", "false")
+	cli := fake.NewClientBuilder().WithScheme(s).WithObjects(deployment.GetObject()).Build()
+	testDaprHandler.Client = cli
+
+	ctx := t.Context()
+	serviceName := types.NamespacedName{
+		Namespace: "test",
+		Name:      testDaprHandler.daprServiceName("myapp"),
+	}
+
+	err = testDaprHandler.createDaprService(ctx, serviceName, deployment)
+	require.NoError(t, err)
+
+	reconciler := &Reconciler{
+		DaprHandler: testDaprHandler,
+		newWrapper: func() ObjectWrapper {
+			return &DeploymentWrapper{}
+		},
+	}
+
+	_, err = reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Namespace: "test",
+			Name:      "app",
+		},
+	})
+	require.NoError(t, err)
+
+	var actualService corev1.Service
+	err = cli.Get(ctx, serviceName, &actualService)
+	require.True(t, apierrors.IsNotFound(err))
+}
+
+func TestReconcileDeletesOwnedDaprServiceWhenOwnerMissing(t *testing.T) {
+	testDaprHandler := getTestDaprHandler()
+
+	s := runtime.NewScheme()
+	err := scheme.AddToScheme(s)
+	require.NoError(t, err)
+	testDaprHandler.Scheme = s
+
+	deployment := getDeployment("myapp", "true")
+	cli := fake.NewClientBuilder().WithScheme(s).WithObjects(deployment.GetObject()).Build()
+	testDaprHandler.Client = cli
+
+	ctx := t.Context()
+	serviceName := types.NamespacedName{
+		Namespace: "test",
+		Name:      testDaprHandler.daprServiceName("myapp"),
+	}
+
+	err = testDaprHandler.createDaprService(ctx, serviceName, deployment)
+	require.NoError(t, err)
+
+	err = cli.Delete(ctx, deployment.GetObject())
+	require.NoError(t, err)
+
+	reconciler := &Reconciler{
+		DaprHandler: testDaprHandler,
+		newWrapper: func() ObjectWrapper {
+			return &DeploymentWrapper{}
+		},
+	}
+
+	_, err = reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Namespace: "test",
+			Name:      "app",
+		},
+	})
+	require.NoError(t, err)
+
+	var actualService corev1.Service
+	err = cli.Get(ctx, serviceName, &actualService)
+	require.True(t, apierrors.IsNotFound(err))
 }
 
 func TestGetGRPCPort(t *testing.T) {
