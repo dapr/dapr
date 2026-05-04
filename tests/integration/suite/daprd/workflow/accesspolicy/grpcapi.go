@@ -57,17 +57,6 @@ func (g *grpcapi) Setup(t *testing.T) []framework.Option {
 	g.sched = scheduler.New(t, scheduler.WithSentry(g.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 	g.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: wfaclconfig
-spec:
-  features:
-  - name: WorkflowAccessPolicy
-    enabled: true`), 0o600))
-
 	policy := []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
@@ -93,7 +82,6 @@ spec:
 	g.daprd = daprd.New(t,
 		daprd.WithAppID("grpcapi-app"),
 		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(resDir),
 		daprd.WithResourceFiles(g.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(g.place.Address()),
