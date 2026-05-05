@@ -516,12 +516,15 @@ func (s *Subscription) Stop(err ...error) {
 		requiredStable = 5 // 100ms of stable quiet
 	}
 	stable := 0
-	for stable < requiredStable {
+	for {
 		if s.inflight.Load() > 0 {
 			inflight = true
 			stable = 0
 		} else {
 			stable++
+			if stable >= requiredStable {
+				break
+			}
 		}
 		time.Sleep(drainPollInterval)
 	}
