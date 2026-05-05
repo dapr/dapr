@@ -16,6 +16,7 @@ package workflow
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/accesspolicy"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/apphealth"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/attestation"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/basic"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/continueasnew"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp"
