@@ -56,9 +56,9 @@ func (d *dissemination) Run(t *testing.T, ctx context.Context) {
 	activityStarted := make(chan struct{})
 	releaseActivity := make(chan struct{})
 
-	d.workflow.Registry().AddWorkflowN("dedup-dissemination", func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, d.workflow.Registry().AddWorkflowN("dedup-dissemination", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, ctx.CallActivity("slow").Await(nil)
-	})
+	}))
 	require.NoError(t, d.workflow.Registry().AddActivityN("slow", func(ctx task.ActivityContext) (any, error) {
 		activityCalls.Add(1)
 		startOnce.Do(func() { close(activityStarted) })

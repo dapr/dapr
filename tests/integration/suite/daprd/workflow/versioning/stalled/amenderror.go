@@ -49,7 +49,7 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 		return nil, ctx.WaitForSingleEvent("Continue", -1).Await(nil)
 	}
 
-	d.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, wfFn)
+	require.NoError(t, d.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, wfFn))
 
 	clientCtx, cancelClient := context.WithCancel(ctx)
 	defer cancelClient()
@@ -61,7 +61,7 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 
 	cancelClient()
 	d.workflow.ResetRegistry(t)
-	d.workflow.Registry().AddVersionedWorkflowN("workflow", "v2", true, wfFn)
+	require.NoError(t, d.workflow.Registry().AddVersionedWorkflowN("workflow", "v2", true, wfFn))
 	clientCtx, cancelClient = context.WithCancel(ctx)
 	defer cancelClient()
 	client = d.workflow.BackendClient(t, clientCtx)
@@ -76,7 +76,7 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 
 	cancelClient()
 	d.workflow.ResetRegistry(t)
-	d.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, wfFn)
+	require.NoError(t, d.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, wfFn))
 	clientCtx, cancelClient = context.WithCancel(ctx)
 	defer cancelClient()
 	client = d.workflow.BackendClient(t, clientCtx)
