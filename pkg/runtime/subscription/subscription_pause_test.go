@@ -390,3 +390,42 @@ func TestStopOnNonPausableComponentClosesPromptly(t *testing.T) {
 	require.True(t, sub.closed.Load(), "closed must be true after Stop returns")
 	require.True(t, sub.drainSealed.Load(), "drainSealed must be true after Stop returns")
 }
+
+// TestStopDrainCeilingForcesSealOnStuckInflight verifies the worst-case
+// ceiling: when inflight never stabilizes (e.g. a broken app keeps
+// returning RETRY and contrib's retry loop keeps re-invoking the handler),
+// Stop must seal anyway after drainMaxDuration so it cannot block
+// StopAllSubscriptionsForever indefinitely.
+func TestStopDrainCeilingForcesSealOnStuckInflight(t *testing.T) {
+	prev := drainMaxDuration
+	drainMaxDuration = 200 * time.Millisecond
+	t.Cleanup(func() { drainMaxDuration = prev })
+
+	comp := newPausablePubSub()
+	sub := newSubscriptionForTest(t, comp)
+
+	// Hold inflight at 1 forever to simulate a stuck handler.
+	sub.inflight.Add(1)
+	t.Cleanup(func() { sub.inflight.Add(-1) })
+
+	stopDone := make(chan struct{})
+	start := time.Now()
+	go func() {
+		sub.Stop(contribpubsub.ErrGracefulShutdown)
+		close(stopDone)
+	}()
+
+	select {
+	case <-stopDone:
+	case <-time.After(time.Second * 2):
+		t.Fatal("Stop did not honor drainMaxDuration; would block shutdown indefinitely")
+	}
+
+	elapsed := time.Since(start)
+	require.GreaterOrEqual(t, elapsed, drainMaxDuration,
+		"Stop should drain for at least drainMaxDuration before sealing")
+	require.Less(t, elapsed, time.Second,
+		"Stop should seal shortly after drainMaxDuration; not run forever")
+	require.True(t, sub.drainSealed.Load(),
+		"drainSealed must be set even when inflight never stabilized")
+}
