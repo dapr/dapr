@@ -106,16 +106,6 @@ spec:
 		daprd.WithAppID("test-app"),
 		daprd.WithResourcesDir(resDir),
 		daprd.WithLogLineStdout(s.logline),
-		daprd.WithConfigManifests(t, `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: mcpconfig
-spec:
-  features:
-  - name: MCPServerResource
-    enabled: true
-`),
 	)
 
 	return []framework.Option{

@@ -54,11 +54,8 @@ func (c *configuration) Setup(t *testing.T) []framework.Option {
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: hotreloading
+  name: tracing
 spec:
-  features:
-  - name: HotReload
-    enabled: true
   tracing:
     samplingRate: "0"`), 0o600))
 

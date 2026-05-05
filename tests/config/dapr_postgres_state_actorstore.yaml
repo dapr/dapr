@@ -47,3 +47,5 @@ scopes:
 - workflowsapp-retention
 - perf-workflowsapp
 - perf-workflowsapp-actors
+- wfacl-caller
+- wfacl-target

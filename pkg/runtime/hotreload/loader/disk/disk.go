@@ -24,6 +24,7 @@ import (
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	loaderdisk "github.com/dapr/dapr/pkg/internal/loader/disk"
 	"github.com/dapr/dapr/pkg/internal/loader/disk/dirdata"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -43,14 +44,15 @@ type Options struct {
 }
 
 type disk struct {
-	dirs           []string
-	components     *resource[compapi.Component]
-	subscriptions  *resource[subapi.Subscription]
-	mcpServers     *resource[mcpserverapi.MCPServer]
-	configurations *resource[configapi.Configuration]
-	httpEndpoints  *resource[httpendpointapi.HTTPEndpoint]
-	resiliencies   *resource[resiliencyapi.Resiliency]
-	fs             *fswatcher.FSWatcher
+	dirs                   []string
+	components             *resource[compapi.Component]
+	subscriptions          *resource[subapi.Subscription]
+	mcpServers             *resource[mcpserverapi.MCPServer]
+	configurations         *resource[configapi.Configuration]
+	httpEndpoints          *resource[httpendpointapi.HTTPEndpoint]
+	resiliencies           *resource[resiliencyapi.Resiliency]
+	workflowAccessPolicies *resource[wfaclapi.WorkflowAccessPolicy]
+	fs                     *fswatcher.FSWatcher
 }
 
 func New(opts Options) (loader.Interface, error) {
@@ -110,6 +112,15 @@ func New(opts Options) (loader.Interface, error) {
 				store: store.NewMCPServers(opts.ComponentStore),
 			},
 		),
+		workflowAccessPolicies: newResource[wfaclapi.WorkflowAccessPolicy](
+			resourceOptions[wfaclapi.WorkflowAccessPolicy]{
+				loader: loaderdisk.NewWorkflowAccessPolicies(loaderdisk.Options{
+					AppID: opts.AppID,
+					Paths: opts.Dirs,
+				}),
+				store: store.NewWorkflowAccessPolicies(opts.ComponentStore),
+			},
+		),
 	}, nil
 }
 
@@ -123,6 +134,7 @@ func (d *disk) Run(ctx context.Context) error {
 		d.configurations.run,
 		d.httpEndpoints.run,
 		d.resiliencies.run,
+		d.workflowAccessPolicies.run,
 		func(ctx context.Context) error {
 			return d.fs.Run(ctx, eventCh)
 		},
@@ -159,6 +171,9 @@ func (d *disk) Run(ctx context.Context) error {
 					if err := d.resiliencies.trigger(ctx, dirData); err != nil {
 						return err
 					}
+					if err := d.workflowAccessPolicies.trigger(ctx, dirData); err != nil {
+						return err
+					}
 				}
 			}
 		},
@@ -187,4 +202,8 @@ func (d *disk) HTTPEndpoints() loader.Loader[httpendpointapi.HTTPEndpoint] {
 
 func (d *disk) Resiliencies() loader.Loader[resiliencyapi.Resiliency] {
 	return d.resiliencies
+}
+
+func (d *disk) WorkflowAccessPolicies() loader.Loader[wfaclapi.WorkflowAccessPolicy] {
+	return d.workflowAccessPolicies
 }

@@ -50,7 +50,6 @@ func (j *jobsundeliveredtotal) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-//nolint:testifylint
 func (j *jobsundeliveredtotal) Run(t *testing.T, ctx context.Context) {
 	j.actors.WaitUntilRunning(t, ctx)
 
@@ -96,7 +95,7 @@ func (j *jobsundeliveredtotal) Run(t *testing.T, ctx context.Context) {
 		if !assert.True(c, ok) {
 			return
 		}
-		assert.Equal(c, 5.0, total["type=job"])
-		assert.Equal(c, 3.0, total["type=actor"])
+		assert.InDelta(c, 5.0, total["type=job"], 0.01)
+		assert.InDelta(c, 3.0, total["type=actor"], 0.01)
 	}, time.Second*15, time.Millisecond*10)
 }

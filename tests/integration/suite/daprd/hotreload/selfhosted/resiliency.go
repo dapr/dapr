@@ -46,19 +46,7 @@ func (r *resiliency) Setup(t *testing.T) []framework.Option {
 	r.logOut = log.New()
 	r.resDir = t.TempDir()
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true`), 0o600))
-
 	r.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(r.resDir),
 		daprd.WithExecOptions(exec.WithStdout(r.logOut), exec.WithStderr(r.logOut)),
 	)
