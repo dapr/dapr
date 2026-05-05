@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/components-contrib/metadata"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
+	pluggablepubsub "github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -462,12 +463,19 @@ func (s *Subscription) Stop(err ...error) {
 			// stuck Pause would prevent the block-shutdown timer from
 			// ever starting.
 			pauseCtx, pauseCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			if perr := pausable.Pause(pauseCtx); perr != nil {
-				log.Warnf("failed to pause subscription on topic %s during graceful shutdown: %v", s.topic, perr)
-			} else {
-				paused = true
-			}
+			perr := pausable.Pause(pauseCtx)
 			pauseCancel()
+			switch {
+			case perr == nil:
+				paused = true
+			case errors.Is(perr, pluggablepubsub.ErrPausableUnimplemented):
+				// Legacy pluggable that does not opt in to
+				// pause-and-drain. Fall back silently to
+				// close-first; the wrapper already logged at
+				// debug.
+			default:
+				log.Warnf("failed to pause subscription on topic %s during graceful shutdown: %v", s.topic, perr)
+			}
 		}
 	}
 

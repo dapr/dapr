@@ -16,6 +16,7 @@ package pubsub
 import (
 	"context"
 	"io"
+	"sync/atomic"
 	"testing"
 
 	"github.com/dapr/components-contrib/metadata"
@@ -29,13 +30,34 @@ type component struct {
 	impl      pubsub.PubSub
 	pmrReqCh  chan<- *compv1pb.PullMessagesRequest
 	pmrRespCh <-chan *compv1pb.PullMessagesResponse
+
+	// paused gates PullMessages from forwarding new messages from
+	// pmrRespCh while the component is paused — faithfully simulating
+	// Kafka's PauseAll semantics for integration tests of the runtime's
+	// pause-and-drain shutdown path.
+	paused        atomic.Bool
+	pauseCalled   atomic.Int64
+	resumeCalled  atomic.Int64
+	pauseStartCh  chan struct{}
+	pauseStartOnc atomicOnce
+}
+
+// atomicOnce mirrors sync.Once but the channel-firing variant we want
+// here: close pauseStartCh only on the first Pause invocation.
+type atomicOnce struct{ done atomic.Bool }
+
+func (o *atomicOnce) Do(f func()) {
+	if o.done.CompareAndSwap(false, true) {
+		f()
+	}
 }
 
 func newComponent(t *testing.T, opts options) *component {
 	return &component{
-		impl:      opts.pubsub,
-		pmrReqCh:  opts.pmrReqCh,
-		pmrRespCh: opts.pmrRespCh,
+		impl:         opts.pubsub,
+		pmrReqCh:     opts.pmrReqCh,
+		pmrRespCh:    opts.pmrRespCh,
+		pauseStartCh: make(chan struct{}),
 	}
 }
 
@@ -112,6 +134,19 @@ func (c *component) PullMessages(req compv1pb.PubSub_PullMessagesServer) error {
 			return nil
 		}
 	}
+}
+
+func (c *component) Pause(ctx context.Context, req *compv1pb.PauseRequest) (*compv1pb.PauseResponse, error) {
+	c.pauseCalled.Add(1)
+	c.paused.Store(true)
+	c.pauseStartOnc.Do(func() { close(c.pauseStartCh) })
+	return new(compv1pb.PauseResponse), nil
+}
+
+func (c *component) Resume(ctx context.Context, req *compv1pb.ResumeRequest) (*compv1pb.ResumeResponse, error) {
+	c.resumeCalled.Add(1)
+	c.paused.Store(false)
+	return new(compv1pb.ResumeResponse), nil
 }
 
 func (c *component) Ping(ctx context.Context, req *compv1pb.PingRequest) (*compv1pb.PingResponse, error) {

@@ -95,3 +95,23 @@ func (b *Broker) PublishHelloWorld(topic string) <-chan *compv1.PullMessagesRequ
 
 	return b.pmrReqCh
 }
+
+// PauseCalled reports how many times the runtime invoked Pause on the
+// pluggable server. Used by tests asserting the pause-and-drain shutdown
+// path was exercised.
+func (b *Broker) PauseCalled() int64 {
+	return b.inmem.PauseCalled()
+}
+
+// IsPaused reports whether the pluggable server is currently in the
+// paused state.
+func (b *Broker) IsPaused() bool {
+	return b.inmem.IsPaused()
+}
+
+// PauseStarted returns a channel that is closed the first time Pause is
+// called. Tests use this to wait for the runtime's shutdown path to
+// invoke Pause without polling.
+func (b *Broker) PauseStarted() <-chan struct{} {
+	return b.inmem.PauseStarted()
+}
