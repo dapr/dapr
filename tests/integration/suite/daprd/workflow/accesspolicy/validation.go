@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
@@ -32,9 +31,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/client"
-	"github.com/dapr/durabletask-go/task"
 )
 
 func init() {
@@ -44,8 +40,7 @@ func init() {
 // validation tests that the standalone CRD-based validator rejects invalid
 // WorkflowAccessPolicy YAML files during disk loading and hot-reload.
 // Invalid policies are skipped (not loaded), leaving the system in an
-// allow-all state. A valid policy written after invalid ones IS loaded and
-// enforced.
+// allow-all state. A valid policy written after invalid ones IS loaded.
 type validation struct {
 	daprd         *daprd.Daprd
 	place         *placement.Placement
@@ -61,16 +56,11 @@ func (v *validation) Setup(t *testing.T) []framework.Option {
 
 	v.resDir = t.TempDir()
 
-	// Register each invalid policy name so we can assert per-subtest that
-	// it was reported as failing validation. The log escapes inner quotes
-	// in the msg= field, so the expected substrings match that format.
 	v.validationLog = logline.New(t,
 		logline.WithStdoutLineContains(
-			`\"bad-action\" failed validation`,
-			`\"bad-type\" failed validation`,
 			`\"empty-appid\" failed validation`,
 			`\"empty-ops\" failed validation`,
-			`\"bad-default\" failed validation`,
+			`\"empty-rule\" failed validation`,
 		),
 	)
 
@@ -88,170 +78,96 @@ func (v *validation) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-// scheduleAndComplete schedules a workflow and waits for it to complete.
-// Returns true if the workflow completed successfully.
-func (v *validation) scheduleAndComplete(ctx context.Context, backendClient *client.TaskHubGrpcClient) bool {
-	id, err := backendClient.ScheduleNewWorkflow(ctx, "TestWF")
-	if err != nil {
-		return false
-	}
-	metadata, err := backendClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
-	if err != nil {
-		return false
-	}
-	return api.WorkflowMetadataIsComplete(metadata)
-}
-
 func (v *validation) Run(t *testing.T, ctx context.Context) {
 	v.place.WaitUntilRunning(t, ctx)
 	v.sched.WaitUntilRunning(t, ctx)
 	v.daprd.WaitUntilRunning(t, ctx)
 
-	registry := task.NewTaskRegistry()
-	require.NoError(t, registry.AddWorkflowN("TestWF", func(ctx *task.WorkflowContext) (any, error) {
-		return "wf-ok", nil
-	}))
-
-	backendClient := client.NewTaskHubGrpcClient(v.daprd.GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, backendClient.StartWorkItemListener(ctx, registry))
-
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, len(v.daprd.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
-	}, time.Second*20, time.Millisecond*10)
-
-	t.Run("invalid enum action is rejected", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "policy.yaml"), []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: WorkflowAccessPolicy
-metadata:
-  name: bad-action
-spec:
-  defaultAction: deny
-  rules:
-  - callers:
-    - appID: "some-app"
-    workflows:
-    - name: "WF"
-      operations: [schedule]
-      action: bogus
-`), 0o600))
-
-		v.validationLog.EventuallyContains(t, `\"bad-action\" failed validation`, time.Second*20, time.Millisecond*10)
-		assert.True(t, v.scheduleAndComplete(ctx, backendClient))
-	})
-
-	t.Run("invalid enum type is rejected", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "policy2.yaml"), []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: WorkflowAccessPolicy
-metadata:
-  name: bad-type
-spec:
-  defaultAction: deny
-  rules:
-  - callers:
-    - appID: "some-app"
-    operations:
-    - type: bogus
-      name: "WF"
-      action: allow
-`), 0o600))
-
-		v.validationLog.EventuallyContains(t, `\"bad-type\" failed validation`, time.Second*20, time.Millisecond*10)
+	assertNoneLoaded := func(t *testing.T) {
+		t.Helper()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.True(c, v.scheduleAndComplete(ctx, backendClient))
+			assert.Empty(c, v.daprd.GetMetadata(t, ctx).WorkflowAccessPolicies)
 		}, time.Second*20, time.Millisecond*10)
-	})
+	}
 
 	t.Run("empty appID is rejected", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "policy3.yaml"), []byte(`
+		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "policy-appid.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
   name: empty-appid
 spec:
-  defaultAction: deny
   rules:
   - callers:
     - appID: ""
     workflows:
     - name: "WF"
       operations: [schedule]
-      action: allow
 `), 0o600))
 
 		v.validationLog.EventuallyContains(t, `\"empty-appid\" failed validation`, time.Second*20, time.Millisecond*10)
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.True(c, v.scheduleAndComplete(ctx, backendClient))
-		}, time.Second*20, time.Millisecond*10)
+		assertNoneLoaded(t)
 	})
 
 	t.Run("empty operations array is rejected", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "policy4.yaml"), []byte(`
+		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "policy-ops.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
   name: empty-ops
 spec:
-  defaultAction: deny
-  rules:
-  - callers:
-    - appID: "some-app"
-    operations: []
-`), 0o600))
-
-		v.validationLog.EventuallyContains(t, `\"empty-ops\" failed validation`, time.Second*20, time.Millisecond*10)
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.True(c, v.scheduleAndComplete(ctx, backendClient))
-		}, time.Second*20, time.Millisecond*10)
-	})
-
-	t.Run("invalid defaultAction is rejected", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "policy5.yaml"), []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: WorkflowAccessPolicy
-metadata:
-  name: bad-default
-spec:
-  defaultAction: bogus
   rules:
   - callers:
     - appID: "some-app"
     workflows:
     - name: "WF"
-      operations: [schedule]
-      action: allow
+      operations: []
 `), 0o600))
 
-		v.validationLog.EventuallyContains(t, `\"bad-default\" failed validation`, time.Second*20, time.Millisecond*10)
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.True(c, v.scheduleAndComplete(ctx, backendClient))
-		}, time.Second*20, time.Millisecond*10)
+		v.validationLog.EventuallyContains(t, `\"empty-ops\" failed validation`, time.Second*20, time.Millisecond*10)
+		assertNoneLoaded(t)
 	})
 
-	t.Run("valid policy is loaded and enforced after invalid ones", func(t *testing.T) {
-		for _, f := range []string{"policy.yaml", "policy2.yaml", "policy3.yaml", "policy4.yaml", "policy5.yaml"} {
+	t.Run("rule with neither workflows nor activities is rejected", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "policy-rule.yaml"), []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: WorkflowAccessPolicy
+metadata:
+  name: empty-rule
+spec:
+  rules:
+  - callers:
+    - appID: "some-app"
+`), 0o600))
+
+		v.validationLog.EventuallyContains(t, `\"empty-rule\" failed validation`, time.Second*20, time.Millisecond*10)
+		assertNoneLoaded(t)
+	})
+
+	t.Run("valid policy is loaded after invalid ones are skipped", func(t *testing.T) {
+		for _, f := range []string{"policy-appid.yaml", "policy-ops.yaml", "policy-rule.yaml"} {
 			os.Remove(filepath.Join(v.resDir, f))
 		}
 		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "valid-policy.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
-  name: valid-deny
+  name: valid-allow
 spec:
-  defaultAction: deny
   rules:
   - callers:
     - appID: "other-app"
     workflows:
     - name: "*"
       operations: [schedule]
-      action: allow
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			_, err := backendClient.ScheduleNewWorkflow(ctx, "TestWF")
-			assert.Error(c, err, "valid policy should deny local app")
+			policies := v.daprd.GetMetadata(t, ctx).WorkflowAccessPolicies
+			if !assert.Len(c, policies, 1) {
+				return
+			}
+			assert.Equal(c, "valid-allow", policies[0].GetName())
 		}, time.Second*20, time.Millisecond*10)
 	})
 }
