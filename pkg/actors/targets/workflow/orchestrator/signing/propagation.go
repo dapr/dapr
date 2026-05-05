@@ -16,7 +16,6 @@ package signing
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -34,39 +33,27 @@ import (
 // Failure: returns an error and absorbs nothing. Caller must reject the
 // inbound message (do not persist or run).
 //
-// No-op when Signer is nil.
+// No-op when Signer is nil. A non-nil ph is always passed to the
+// verifier even if len(ph.GetChunks()) == 0; the verifier rejects
+// payloads where chunks fail to cover the events array, which catches
+// a tampered payload that strips chunks but leaves events intact.
 func (s *Signing) VerifyAndAbsorbPropagatedHistory(ph *protos.PropagatedHistory, state *wfenginestate.State) error {
-	if s.Signer == nil || ph == nil || len(ph.GetChunks()) == 0 {
+	if s.Signer == nil || ph == nil {
 		return nil
 	}
 
-	// Build skip set for cert digests we've already chain-verified this
-	// actor lifetime. Use time.Now() as the conservative ingestion-time
-	// check, mirroring VerifyInboxAttestation: the propagated payload's
-	// events bear timestamps from the (possibly compromised) sender, so
-	// we can't trust them for the validity check at receive time. Once
-	// these events become part of our own signed history, downstream
-	// re-checks use event timestamps.
-	now := time.Now()
-	skip := make(map[string]struct{})
-	for _, chunk := range ph.GetChunks() {
-		for _, der := range chunk.GetSigningCertChains() {
-			digest := historysigning.CertDigest(der)
-			if s.certChainTrustVerified(digest, now) {
-				skip[string(digest)] = struct{}{}
-			}
-		}
-	}
-
 	res, err := historysigning.VerifyPropagatedHistory(historysigning.VerifyPropagationOptions{
-		History:                     ph,
-		Signer:                      s.Signer,
-		SkipChainOfTrustCertDigests: skip,
+		History: ph,
+		Signer:  s.Signer,
 	})
 	if err != nil {
 		return err
 	}
 
+	// Absorb verified foreign certs. AddExternalCert is idempotent on
+	// digest, so re-absorbing a cert this orchestrator has already seen
+	// is a no-op write-side, and updating the per-orchestrator
+	// chain-of-trust cache is cheap enough to do unconditionally.
 	for digestStr, der := range res.VerifiedCerts {
 		digest := []byte(digestStr)
 		if _, addErr := state.AddExternalCert(digest, der); addErr != nil {
@@ -82,9 +69,11 @@ func (s *Signing) VerifyAndAbsorbPropagatedHistory(ph *protos.PropagatedHistory,
 // absorbing certs into a state.State. Use for stateless callers (e.g. the
 // activity actor) that have no ext-sigcert table to populate. Returns an
 // error on any verification failure; the caller should reject the
-// invocation. No-op when Signer is nil.
+// invocation. No-op when Signer is nil. A non-nil ph is always passed to
+// the verifier even if it carries no chunks; the verifier rejects payloads
+// where chunks fail to cover the events array.
 func (s *Signing) VerifyPropagatedHistoryStateless(ph *protos.PropagatedHistory) error {
-	if s.Signer == nil || ph == nil || len(ph.GetChunks()) == 0 {
+	if s.Signer == nil || ph == nil {
 		return nil
 	}
 	_, err := historysigning.VerifyPropagatedHistory(historysigning.VerifyPropagationOptions{

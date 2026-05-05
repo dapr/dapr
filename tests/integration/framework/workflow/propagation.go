@@ -70,10 +70,14 @@ func ReadPropagatedHistory(t *testing.T, ctx context.Context, db *sqlite.SQLite,
 	conn := db.GetConnection(t)
 	tableName := db.TableName()
 
+	// Escape the needle so that wildcard chars in instance IDs (workflows
+	// can use arbitrary strings via WithInstanceID) don't silently expand
+	// the match.
+	likePattern := `%` + EscapeLike(needle) + `%propagated-history`
 	rows, err := conn.QueryContext(ctx,
 		//nolint:gosec
-		"SELECT key, value, is_binary FROM "+tableName+" WHERE key LIKE '%' || ? || '%' AND key LIKE '%propagated-history'",
-		needle,
+		"SELECT key, value, is_binary FROM "+tableName+" WHERE key LIKE ? ESCAPE '\\'",
+		likePattern,
 	)
 	require.NoError(t, err)
 	defer rows.Close()

@@ -16,6 +16,7 @@ package signed
 import (
 	"context"
 	"crypto/x509"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -116,10 +117,13 @@ func (s *lineage) Run(t *testing.T, ctx context.Context) {
 		require.NotEmpty(t, parsed[0].URIs)
 		sid, err := spiffeid.FromURI(parsed[0].URIs[0])
 		require.NoError(t, err)
-		segs := sid.Path()
-		// SPIFFE path is /ns/<namespace>/<app-id>
-		appID := segs[len("/ns/default/"):]
-		gotApps[appID] = true
+		// SPIFFE path is /ns/<namespace>/<app-id>; take the last
+		// segment instead of slicing on a hard-coded prefix so the
+		// test doesn't panic if the namespace differs from default
+		// or the format ever changes.
+		segs := strings.Split(sid.Path(), "/")
+		require.NotEmpty(t, segs)
+		gotApps[segs[len(segs)-1]] = true
 	}
 	assert.True(t, gotApps[s.workflow.Dapr().AppID()],
 		"App0's identity should be among absorbed foreign certs")
