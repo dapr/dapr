@@ -69,6 +69,11 @@ type Options struct {
 	WorkflowsRemoteActivityReminder bool
 	WorkflowHistorySigning          bool
 
+	// MaxRequestBodySize is the gRPC server max message size in bytes. The
+	// orchestrator uses it to detect and gracefully stall workflows whose
+	// history payload would exceed the GetWorkItems stream limit.
+	MaxRequestBodySize int
+
 	// Signer provides cryptographic signing and verification. If nil, history
 	// signing is disabled.
 	Signer *signer.Signer
@@ -119,6 +124,7 @@ func New(opts Options) (Interface, error) {
 		RetentionPolicy:        retPolicy,
 		Signer:                 s,
 		WorkflowAccessPolicies: opts.WorkflowAccessPolicies,
+		MaxRequestBodySize:     opts.MaxRequestBodySize,
 
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,

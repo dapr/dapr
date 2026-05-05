@@ -62,6 +62,11 @@ type Options struct {
 
 	// May be nil when the feature is disabled.
 	WorkflowAccessPolicies *workflowacl.Holder
+
+	// MaxRequestBodySize is the gRPC server max message size in bytes. The
+	// orchestrator stalls workflows whose history payload would exceed this
+	// limit on the GetWorkItems stream.
+	MaxRequestBodySize int
 }
 
 type factory struct {
@@ -80,6 +85,7 @@ type factory struct {
 	retentionPolicy        *config.WorkflowStateRetentionPolicy
 	signer                 *signer.Signer
 	workflowAccessPolicies *workflowacl.Holder
+	maxRequestBodySize     int
 
 	scheduler todo.WorkflowScheduler
 
@@ -132,6 +138,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		retentionPolicy:        opts.RetentionPolicy,
 		signer:                 opts.Signer,
 		workflowAccessPolicies: opts.WorkflowAccessPolicies,
+		maxRequestBodySize:     opts.MaxRequestBodySize,
 		scheduler:              opts.Scheduler,
 		deactivateCh:           deactivateCh,
 	}, nil
