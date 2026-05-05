@@ -181,12 +181,15 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 			return ok
 		}, &d.waitingToDelete)
 
-		// If a coalesce window is configured and there is something queued,
-		// defer the next round so additional churn arriving in the window
-		// folds into a single follow-up round. The first event that arrived
-		// in REPORT state already triggered THIS round immediately, so cold
-		// starts stay responsive.
-		if d.coalesceWindow > 0 && (len(d.waitingToDelete) > 0 || len(d.waitingToDisseminate) > 0) {
+		// If a coalesce window is configured, always arm the timer after a
+		// round completes so any churn arriving inside the window folds
+		// into a single follow-up round. Without this, an UNLOCK ack and a
+		// new ConnAdd that race through the disseminator's event queue can
+		// be processed in either order: if the ConnAdd loses the race, the
+		// queue is empty here and a cold-start round fires immediately for
+		// the late arrival, defeating coalescing. handleCoalesceFire is a
+		// no-op when queues are empty when the timer elapses.
+		if d.coalesceWindow > 0 {
 			d.startCoalesceTimer()
 			return
 		}
