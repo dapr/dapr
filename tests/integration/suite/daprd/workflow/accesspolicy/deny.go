@@ -155,4 +155,7 @@ func (d *deny) Run(t *testing.T, ctx context.Context) {
 	require.NotNil(t, metadata.GetFailureDetails(),
 		"orchestration should fail because the sub-orchestrator call is denied")
 	assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(), "denied by workflow access policy")
+	assert.NotContains(t, metadata.GetFailureDetails().GetErrorMessage(),
+		"required history not satisfied",
+		"plain (non-requires) denials must not surface the requires-unmet message")
 }

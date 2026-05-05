@@ -20,6 +20,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
 
@@ -58,55 +59,67 @@ func ParseActorType(actorType string) (OperationType, bool) {
 	}
 }
 
-// ExtractOperationName extracts the workflow or activity name from the request
-// method and payload. Returns the name and true if extraction succeeded, or
-// empty string and false if the method is not subject to access control
-// (e.g. AddWorkflowEvent, PurgeWorkflowState).
-func ExtractOperationName(opType OperationType, method string, data []byte) (string, bool, error) {
+// ExtractRequest extracts the workflow or activity name AND the optional
+// PropagatedHistory carried by the request payload. The PropagatedHistory is
+// used by RequiredEvent rules to gate operations on the caller's prior
+// history.
+func ExtractRequest(opType OperationType, method string, data []byte) (string, *protos.PropagatedHistory, bool, error) {
 	switch opType {
 	case OperationTypeWorkflow:
-		return extractWorkflowName(method, data)
+		return extractWorkflowRequest(method, data)
 	case OperationTypeActivity:
-		return extractActivityName(method, data)
+		return extractActivityRequest(method, data)
 	default:
-		return "", false, nil
+		return "", nil, false, nil
 	}
 }
 
-func extractWorkflowName(method string, data []byte) (string, bool, error) {
+func extractWorkflowRequest(method string, data []byte) (string, *protos.PropagatedHistory, bool, error) {
 	if method != methodCreateWorkflowInstance {
 		// Only CreateWorkflowInstance is subject to access control (schedule
 		// operation).
-		return "", false, nil
+		return "", nil, false, nil
 	}
 
 	var req backend.CreateWorkflowInstanceRequest
 	if err := proto.Unmarshal(data, &req); err != nil {
-		return "", false, fmt.Errorf("failed to unmarshal CreateWorkflowInstanceRequest: %w", err)
+		return "", nil, false, fmt.Errorf("failed to unmarshal CreateWorkflowInstanceRequest: %w", err)
 	}
 
 	es := req.GetStartEvent().GetExecutionStarted()
 	if es == nil {
-		return "", false, errors.New("CreateWorkflowInstanceRequest missing ExecutionStarted event")
+		return "", nil, false, errors.New("CreateWorkflowInstanceRequest missing ExecutionStarted event")
 	}
 
-	return es.GetName(), true, nil
+	return es.GetName(), req.GetPropagatedHistory(), true, nil
 }
 
-func extractActivityName(method string, data []byte) (string, bool, error) {
+func extractActivityRequest(method string, data []byte) (string, *protos.PropagatedHistory, bool, error) {
 	if method != methodExecute {
-		return "", false, nil
+		return "", nil, false, nil
+	}
+
+	// HistoryEvent & optional PropagatedHistory. Try the ActivityInvocation first
+	// and fall back to the legacy raw HistoryEvent payload (which has no
+	// propagated history).
+	var invocation protos.ActivityInvocation
+	if envErr := proto.Unmarshal(data, &invocation); envErr == nil && invocation.GetHistoryEvent() != nil {
+		ts := invocation.GetHistoryEvent().GetTaskScheduled()
+		if ts == nil {
+			return "", nil, false, errors.New("activity HistoryEvent missing TaskScheduled")
+		}
+		return ts.GetName(), invocation.GetPropagatedHistory(), true, nil
 	}
 
 	var his backend.HistoryEvent
 	if err := proto.Unmarshal(data, &his); err != nil {
-		return "", false, fmt.Errorf("failed to unmarshal activity HistoryEvent: %w", err)
+		return "", nil, false, fmt.Errorf("failed to unmarshal activity HistoryEvent: %w", err)
 	}
 
 	ts := his.GetTaskScheduled()
 	if ts == nil {
-		return "", false, errors.New("activity HistoryEvent missing TaskScheduled")
+		return "", nil, false, errors.New("activity HistoryEvent missing TaskScheduled")
 	}
 
-	return ts.GetName(), true, nil
+	return ts.GetName(), nil, true, nil
 }

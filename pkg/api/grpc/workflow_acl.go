@@ -25,7 +25,17 @@ import (
 	"github.com/dapr/dapr/pkg/security/spiffe"
 )
 
-const workflowACLDeniedMsg = "access denied by workflow access policy"
+const (
+	workflowACLDeniedMsg        = "access denied by workflow access policy"
+	workflowACLRequiresUnmetMsg = "access denied by workflow access policy [requires]"
+)
+
+func deniedMsgFor(reason workflowacl.DenialReason) string {
+	if reason == workflowacl.DenialReasonRequiresUnmet {
+		return workflowACLRequiresUnmetMsg
+	}
+	return workflowACLDeniedMsg
+}
 
 // callActorValidateWorkflowACL checks whether the caller is allowed to invoke
 // the target workflow or activity based on WorkflowAccessPolicy resources.
@@ -63,9 +73,9 @@ func (a *api) callActorValidateWorkflowACL(ctx context.Context, in *internalv1pb
 	}
 
 	if !result.Allowed {
-		a.logger.Warnf("Workflow access policy denied app '%s' for %s operation '%s'", callerAppID, result.OpType, result.Operation)
-		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(result.OpType), result.Operation)
-		return status.Errorf(codes.PermissionDenied, workflowACLDeniedMsg)
+		a.logger.Warnf("Workflow access policy denied app '%s' for %s operation '%s' (reason=%s)", callerAppID, result.OpType, result.Operation, result.Reason)
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(result.OpType), result.Operation, string(result.Reason))
+		return status.Error(codes.PermissionDenied, deniedMsgFor(result.Reason))
 	}
 
 	diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, string(result.OpType), result.Operation)
@@ -99,7 +109,7 @@ func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *inte
 
 	if !policies.IsCallerKnown(callerAppID, opType) {
 		a.logger.Warnf("Workflow access policy denied app '%s' from invoking workflow reminders", callerAppID)
-		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, "reminder", "invoke")
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, "reminder", "invoke", string(workflowacl.DenialReasonNotAllowed))
 		return status.Errorf(codes.PermissionDenied, workflowACLDeniedMsg)
 	}
 

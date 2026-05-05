@@ -78,7 +78,7 @@ func TestParseActorType(t *testing.T) {
 	}
 }
 
-func TestExtractOperationName_Workflow(t *testing.T) {
+func TestExtractRequest_Workflow(t *testing.T) {
 	t.Run("CreateWorkflowInstance extracts workflow name", func(t *testing.T) {
 		req := &protos.CreateWorkflowInstanceRequest{
 			StartEvent: &protos.HistoryEvent{
@@ -95,33 +95,33 @@ func TestExtractOperationName_Workflow(t *testing.T) {
 		data, err := proto.Marshal(req)
 		require.NoError(t, err)
 
-		name, subject, err := ExtractOperationName(OperationTypeWorkflow, "CreateWorkflowInstance", data)
+		name, _, subject, err := ExtractRequest(OperationTypeWorkflow, "CreateWorkflowInstance", data)
 		require.NoError(t, err)
 		assert.True(t, subject)
 		assert.Equal(t, "ProcessOrder", name)
 	})
 
 	t.Run("AddWorkflowEvent is not subject to enforcement", func(t *testing.T) {
-		name, subject, err := ExtractOperationName(OperationTypeWorkflow, "AddWorkflowEvent", nil)
+		name, _, subject, err := ExtractRequest(OperationTypeWorkflow, "AddWorkflowEvent", nil)
 		require.NoError(t, err)
 		assert.False(t, subject)
 		assert.Empty(t, name)
 	})
 
 	t.Run("PurgeWorkflowState is not subject to enforcement", func(t *testing.T) {
-		name, subject, err := ExtractOperationName(OperationTypeWorkflow, "PurgeWorkflowState", nil)
+		name, _, subject, err := ExtractRequest(OperationTypeWorkflow, "PurgeWorkflowState", nil)
 		require.NoError(t, err)
 		assert.False(t, subject)
 		assert.Empty(t, name)
 	})
 
 	t.Run("invalid data returns error", func(t *testing.T) {
-		_, _, err := ExtractOperationName(OperationTypeWorkflow, "CreateWorkflowInstance", []byte("invalid"))
+		_, _, _, err := ExtractRequest(OperationTypeWorkflow, "CreateWorkflowInstance", []byte("invalid"))
 		require.Error(t, err)
 	})
 }
 
-func TestExtractOperationName_Activity(t *testing.T) {
+func TestExtractRequest_Activity(t *testing.T) {
 	t.Run("Execute extracts activity name", func(t *testing.T) {
 		his := &protos.HistoryEvent{
 			EventType: &protos.HistoryEvent_TaskScheduled{
@@ -134,21 +134,21 @@ func TestExtractOperationName_Activity(t *testing.T) {
 		data, err := proto.Marshal(his)
 		require.NoError(t, err)
 
-		name, subject, err := ExtractOperationName(OperationTypeActivity, "Execute", data)
+		name, _, subject, err := ExtractRequest(OperationTypeActivity, "Execute", data)
 		require.NoError(t, err)
 		assert.True(t, subject)
 		assert.Equal(t, "ChargePayment", name)
 	})
 
 	t.Run("non-Execute method is not subject", func(t *testing.T) {
-		name, subject, err := ExtractOperationName(OperationTypeActivity, "SomeOtherMethod", nil)
+		name, _, subject, err := ExtractRequest(OperationTypeActivity, "SomeOtherMethod", nil)
 		require.NoError(t, err)
 		assert.False(t, subject)
 		assert.Empty(t, name)
 	})
 
 	t.Run("invalid data returns error", func(t *testing.T) {
-		_, _, err := ExtractOperationName(OperationTypeActivity, "Execute", []byte("invalid"))
+		_, _, _, err := ExtractRequest(OperationTypeActivity, "Execute", []byte("invalid"))
 		require.Error(t, err)
 	})
 }
@@ -172,7 +172,7 @@ func TestParseActorType_JustPrefix(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestExtractOperationName_WorkflowNilStartEvent(t *testing.T) {
+func TestExtractRequest_WorkflowNilStartEvent(t *testing.T) {
 	req := &protos.CreateWorkflowInstanceRequest{
 		StartEvent: &protos.HistoryEvent{
 			// No ExecutionStarted event set.
@@ -181,48 +181,48 @@ func TestExtractOperationName_WorkflowNilStartEvent(t *testing.T) {
 	data, err := proto.Marshal(req)
 	require.NoError(t, err)
 
-	_, _, err = ExtractOperationName(OperationTypeWorkflow, "CreateWorkflowInstance", data)
+	_, _, _, err = ExtractRequest(OperationTypeWorkflow, "CreateWorkflowInstance", data)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ExecutionStarted")
 }
 
-func TestExtractOperationName_WorkflowEmptyData(t *testing.T) {
-	_, _, err := ExtractOperationName(OperationTypeWorkflow, "CreateWorkflowInstance", []byte{})
+func TestExtractRequest_WorkflowEmptyData(t *testing.T) {
+	_, _, _, err := ExtractRequest(OperationTypeWorkflow, "CreateWorkflowInstance", []byte{})
 	// Empty protobuf unmarshals to zero-value struct, but StartEvent will be nil.
 	// The code checks for nil ExecutionStarted and returns an error.
 	require.Error(t, err)
 }
 
-func TestExtractOperationName_ActivityNilTaskScheduled(t *testing.T) {
+func TestExtractRequest_ActivityNilTaskScheduled(t *testing.T) {
 	his := &protos.HistoryEvent{
 		// No TaskScheduled event set.
 	}
 	data, err := proto.Marshal(his)
 	require.NoError(t, err)
 
-	_, _, err = ExtractOperationName(OperationTypeActivity, "Execute", data)
+	_, _, _, err = ExtractRequest(OperationTypeActivity, "Execute", data)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "TaskScheduled")
 }
 
-func TestExtractOperationName_ActivityEmptyData(t *testing.T) {
-	_, _, err := ExtractOperationName(OperationTypeActivity, "Execute", []byte{})
+func TestExtractRequest_ActivityEmptyData(t *testing.T) {
+	_, _, _, err := ExtractRequest(OperationTypeActivity, "Execute", []byte{})
 	// Empty protobuf → nil TaskScheduled → error.
 	require.Error(t, err)
 }
 
-func TestExtractOperationName_UnknownOpType(t *testing.T) {
-	name, subject, err := ExtractOperationName(OperationType("unknown"), "AnyMethod", nil)
+func TestExtractRequest_UnknownOpType(t *testing.T) {
+	name, _, subject, err := ExtractRequest(OperationType("unknown"), "AnyMethod", nil)
 	require.NoError(t, err)
 	assert.False(t, subject)
 	assert.Empty(t, name)
 }
 
-func TestExtractOperationName_WorkflowNonSubjectMethods(t *testing.T) {
+func TestExtractRequest_WorkflowNonSubjectMethods(t *testing.T) {
 	// All methods other than CreateWorkflowInstance should not be subject to enforcement.
 	for _, method := range []string{"AddWorkflowEvent", "PurgeWorkflowState", "GetWorkflowState", "AnyOtherMethod"} {
 		t.Run(method, func(t *testing.T) {
-			name, subject, err := ExtractOperationName(OperationTypeWorkflow, method, nil)
+			name, _, subject, err := ExtractRequest(OperationTypeWorkflow, method, nil)
 			require.NoError(t, err)
 			assert.False(t, subject)
 			assert.Empty(t, name)
@@ -230,14 +230,87 @@ func TestExtractOperationName_WorkflowNonSubjectMethods(t *testing.T) {
 	}
 }
 
-func TestExtractOperationName_ActivityNonSubjectMethods(t *testing.T) {
+func TestExtractRequest_ActivityNonSubjectMethods(t *testing.T) {
 	// All methods other than Execute should not be subject to enforcement.
 	for _, method := range []string{"SomeOtherMethod", "Init", "Reminder", ""} {
 		t.Run(method, func(t *testing.T) {
-			name, subject, err := ExtractOperationName(OperationTypeActivity, method, nil)
+			name, _, subject, err := ExtractRequest(OperationTypeActivity, method, nil)
 			require.NoError(t, err)
 			assert.False(t, subject)
 			assert.Empty(t, name)
 		})
 	}
+}
+
+func TestExtractRequest_WorkflowReturnsPropagatedHistory(t *testing.T) {
+	hist := &protos.PropagatedHistory{
+		Events: []*protos.HistoryEvent{
+			{EventId: 1, EventType: &protos.HistoryEvent_TaskScheduled{TaskScheduled: &protos.TaskScheduledEvent{Name: "Step1"}}},
+		},
+	}
+	req := &protos.CreateWorkflowInstanceRequest{
+		StartEvent: &protos.HistoryEvent{
+			EventType: &protos.HistoryEvent_ExecutionStarted{
+				ExecutionStarted: &protos.ExecutionStartedEvent{
+					Name:             "ProcessOrder",
+					WorkflowInstance: &protos.WorkflowInstance{InstanceId: "i-1"},
+				},
+			},
+		},
+		PropagatedHistory: hist,
+	}
+	data, err := proto.Marshal(req)
+	require.NoError(t, err)
+
+	name, history, subject, err := ExtractRequest(OperationTypeWorkflow, "CreateWorkflowInstance", data)
+	require.NoError(t, err)
+	assert.True(t, subject)
+	assert.Equal(t, "ProcessOrder", name)
+	require.NotNil(t, history)
+	require.Len(t, history.GetEvents(), 1)
+	assert.Equal(t, "Step1", history.GetEvents()[0].GetTaskScheduled().GetName())
+}
+
+func TestExtractRequest_ActivityEnvelopeWithPropagatedHistory(t *testing.T) {
+	envelope := &protos.ActivityInvocation{
+		HistoryEvent: &protos.HistoryEvent{
+			EventId: 7,
+			EventType: &protos.HistoryEvent_TaskScheduled{
+				TaskScheduled: &protos.TaskScheduledEvent{Name: "ChargePayment"},
+			},
+		},
+		PropagatedHistory: &protos.PropagatedHistory{
+			Events: []*protos.HistoryEvent{
+				{EventId: 1, EventType: &protos.HistoryEvent_TaskScheduled{TaskScheduled: &protos.TaskScheduledEvent{Name: "FraudCheck"}}},
+				{EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 1}}},
+			},
+		},
+	}
+	data, err := proto.Marshal(envelope)
+	require.NoError(t, err)
+
+	name, history, subject, err := ExtractRequest(OperationTypeActivity, "Execute", data)
+	require.NoError(t, err)
+	assert.True(t, subject)
+	assert.Equal(t, "ChargePayment", name)
+	require.NotNil(t, history)
+	require.Len(t, history.GetEvents(), 2)
+}
+
+func TestExtractRequest_ActivityLegacyHistoryEvent(t *testing.T) {
+	// Pre-propagation daprds use the raw HistoryEvent. ExtractRequest must
+	// still extract the activity name and return a nil history.
+	his := &protos.HistoryEvent{
+		EventType: &protos.HistoryEvent_TaskScheduled{
+			TaskScheduled: &protos.TaskScheduledEvent{Name: "LegacyActivity"},
+		},
+	}
+	data, err := proto.Marshal(his)
+	require.NoError(t, err)
+
+	name, history, subject, err := ExtractRequest(OperationTypeActivity, "Execute", data)
+	require.NoError(t, err)
+	assert.True(t, subject)
+	assert.Equal(t, "LegacyActivity", name)
+	assert.Nil(t, history)
 }

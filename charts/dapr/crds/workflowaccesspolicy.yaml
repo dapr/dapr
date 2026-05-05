@@ -100,6 +100,58 @@ spec:
                             enum:
                             - schedule
                             type: string
+                          requires:
+                            description: |-
+                              Requires is a list of history events that must all be present in
+                              the caller's propagated workflow history for this rule to apply.
+                              Nothing is required if empty.
+                            items:
+                              description: |-
+                                RequiredEvent describes a history event that must be present in
+                                the caller's propagated workflow history before the enclosing
+                                operation rule applies. The event category is inferred from
+                                which *Name field is set, exactly one must be set.
+                              x-kubernetes-validations:
+                              - rule: "(has(self.activityName) ? 1 : 0) + (has(self.workflowName) ? 1 : 0) + (has(self.eventName) ? 1 : 0) == 1"
+                                message: "exactly one of activityName, workflowName, or eventName must be set"
+                              properties:
+                                activityName:
+                                  description: |-
+                                    ActivityName, when set, restricts the match to events
+                                    produced by the named activity.
+                                  type: string
+                                appID:
+                                  description: |-
+                                    AppID, when set, requires the matched event to have been
+                                    produced by the named app.
+                                  type: string
+                                eventName:
+                                  description: |-
+                                    EventName, when set, restricts the match to an external
+                                    event with the given name. Only valid with status=Raised.
+                                  type: string
+                                status:
+                                  description: |-
+                                    Status is the lifecycle phase that the matched history event
+                                    must have. Started, Completed and Failed apply uniformly to
+                                    activities, child workflows and the workflow's own execution
+                                    (resolved by which *Name field is set). Raised is reserved
+                                    for external events.
+                                  enum:
+                                  - Started
+                                  - Completed
+                                  - Failed
+                                  - Raised
+                                  type: string
+                                workflowName:
+                                  description: |-
+                                    WorkflowName, when set, restricts the match to a workflow or
+                                    child-workflow event produced by the named workflow.
+                                  type: string
+                              required:
+                              - status
+                              type: object
+                            type: array
                           type:
                             description: Type is "workflow" or "activity".
                             enum:

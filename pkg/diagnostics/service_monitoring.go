@@ -263,7 +263,7 @@ func (s *serviceMetrics) Init(meter view.Meter, appID string, latencyDistributio
 		diagUtils.NewMeasureView(s.globalPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey}, view.Count()),
 
 		diagUtils.NewMeasureView(s.workflowACLAllowed, []tag.Key{appIDKey, sourceAppIDKey, operationKey, typeKey}, view.Count()),
-		diagUtils.NewMeasureView(s.workflowACLDenied, []tag.Key{appIDKey, sourceAppIDKey, operationKey, typeKey}, view.Count()),
+		diagUtils.NewMeasureView(s.workflowACLDenied, []tag.Key{appIDKey, sourceAppIDKey, operationKey, typeKey, failReasonKey}, view.Count()),
 
 		diagUtils.NewMeasureView(s.serviceInvocationRequestSentTotal, []tag.Key{appIDKey, destinationAppIDKey, typeKey}, view.Count()),
 		diagUtils.NewMeasureView(s.serviceInvocationRequestReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey}, view.Count()),
@@ -541,8 +541,9 @@ func (s *serviceMetrics) WorkflowACLActionAllowed(callerAppID, opType, operation
 	}
 }
 
-// WorkflowACLActionDenied records a workflow/activity operation denied by workflow access policy.
-func (s *serviceMetrics) WorkflowACLActionDenied(callerAppID, opType, operation string) {
+// WorkflowACLActionDenied records a workflow/activity operation denied by
+// workflow access policy. `reason` distinguishes "NotAllowed" from "RequiresUnmet".
+func (s *serviceMetrics) WorkflowACLActionDenied(callerAppID, opType, operation, reason string) {
 	if s.enabled {
 		stats.RecordWithOptions(
 			s.ctx,
@@ -552,7 +553,8 @@ func (s *serviceMetrics) WorkflowACLActionDenied(callerAppID, opType, operation 
 				appIDKey, s.appID,
 				sourceAppIDKey, callerAppID,
 				operationKey, operation,
-				typeKey, opType)...),
+				typeKey, opType,
+				failReasonKey, reason)...),
 			stats.WithMeasurements(s.workflowACLDenied.M(1)))
 	}
 }

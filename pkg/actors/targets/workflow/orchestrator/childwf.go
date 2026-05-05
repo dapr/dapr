@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -124,6 +125,34 @@ func isPermissionDenied(err error) bool {
 	return false
 }
 
+const requiresUnmetMarker = "[requires]"
+
+func isPermissionDeniedRequiresUnmet(err error) bool {
+	if err == nil {
+		return false
+	}
+	if st, ok := status.FromError(err); ok && st.Code() == codes.PermissionDenied {
+		return strings.Contains(st.Message(), requiresUnmetMarker)
+	}
+	var wrapped interface{ GRPCStatus() *status.Status }
+	if errors.As(err, &wrapped) {
+		s := wrapped.GRPCStatus()
+		if s.Code() == codes.PermissionDenied {
+			return strings.Contains(s.Message(), requiresUnmetMarker)
+		}
+	}
+	return false
+}
+
+func aclFailureType(err error) (string, string) {
+	if isPermissionDeniedRequiresUnmet(err) {
+		return "WorkflowAccessPolicyRequiresUnmet",
+			"access denied by workflow access policy: required history not satisfied"
+	}
+	return "WorkflowAccessPolicyDenied",
+		"access denied by workflow access policy"
+}
+
 // failChildWorkflowACL creates a ChildWorkflowInstanceFailed event on the
 // parent orchestrator when the child workflow call is rejected by a
 // WorkflowAccessPolicy. It uses a reminder-based approach to deliver the
@@ -132,6 +161,7 @@ func isPermissionDenied(err error) bool {
 // taskScheduledID is the correlation ID that the parent orchestrator engine
 // uses to match this failure with the original sub-orchestration request.
 func (o *orchestrator) failChildWorkflowACL(ctx context.Context, taskScheduledID int32, callErr error) error {
+	errType, errMsg := aclFailureType(callErr)
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
@@ -139,8 +169,8 @@ func (o *orchestrator) failChildWorkflowACL(ctx context.Context, taskScheduledID
 			ChildWorkflowInstanceFailed: &protos.ChildWorkflowInstanceFailedEvent{
 				TaskScheduledId: taskScheduledID,
 				FailureDetails: &protos.TaskFailureDetails{
-					ErrorType:    "WorkflowAccessPolicyDenied",
-					ErrorMessage: "access denied by workflow access policy",
+					ErrorType:    errType,
+					ErrorMessage: errMsg,
 				},
 			},
 		},

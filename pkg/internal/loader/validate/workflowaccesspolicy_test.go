@@ -157,3 +157,68 @@ func TestWorkflowAccessPolicy_MultipleRulesOneInvalid(t *testing.T) {
 	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }
+
+func TestWorkflowAccessPolicy_ValidRequires(t *testing.T) {
+	p := validPolicy()
+	p.Spec.Rules[0].Operations[0].Requires = []wfaclapi.RequiredEvent{
+		{
+			Status:       wfaclapi.RequiredStatusCompleted,
+			ActivityName: "FraudCheckPassed",
+		},
+		{
+			Status:       wfaclapi.RequiredStatusCompleted,
+			ActivityName: "HumanApprovalReceived",
+			AppID:        "approvals-service",
+		},
+	}
+	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
+}
+
+func TestWorkflowAccessPolicy_RequiresEventRaised(t *testing.T) {
+	p := validPolicy()
+	p.Spec.Rules[0].Operations[0].Requires = []wfaclapi.RequiredEvent{{
+		Status:    wfaclapi.RequiredStatusRaised,
+		EventName: "ManagerApproved",
+	}}
+	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
+}
+
+func TestWorkflowAccessPolicy_InvalidRequiresStatus(t *testing.T) {
+	p := validPolicy()
+	p.Spec.Rules[0].Operations[0].Requires = []wfaclapi.RequiredEvent{{
+		Status: wfaclapi.RequiredStatus("bogus"),
+	}}
+	err := WorkflowAccessPolicy(t.Context(), p)
+	require.Error(t, err)
+}
+
+func TestWorkflowAccessPolicy_RequiresMissingStatus(t *testing.T) {
+	p := validPolicy()
+	p.Spec.Rules[0].Operations[0].Requires = []wfaclapi.RequiredEvent{{
+		ActivityName: "OnlyName",
+	}}
+	err := WorkflowAccessPolicy(t.Context(), p)
+	require.Error(t, err)
+}
+
+func TestWorkflowAccessPolicy_RequiresNoNameRejected(t *testing.T) {
+	p := validPolicy()
+	p.Spec.Rules[0].Operations[0].Requires = []wfaclapi.RequiredEvent{{
+		Status: wfaclapi.RequiredStatusCompleted,
+	}}
+	err := WorkflowAccessPolicy(t.Context(), p)
+	require.Error(t, err, "no *Name field set must be rejected")
+	assert.Contains(t, err.Error(), "exactly one of activityName, workflowName, or eventName")
+}
+
+func TestWorkflowAccessPolicy_RequiresMultipleNamesRejected(t *testing.T) {
+	p := validPolicy()
+	p.Spec.Rules[0].Operations[0].Requires = []wfaclapi.RequiredEvent{{
+		Status:       wfaclapi.RequiredStatusCompleted,
+		ActivityName: "FraudCheckPassed",
+		WorkflowName: "AlsoSet",
+	}}
+	err := WorkflowAccessPolicy(t.Context(), p)
+	require.Error(t, err, "more than one *Name field set must be rejected")
+	assert.Contains(t, err.Error(), "exactly one of activityName, workflowName, or eventName")
+}
