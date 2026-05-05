@@ -30,14 +30,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(mixedParentOnChildOff))
+	suite.Register(new(mixedParentOn))
 }
 
-type mixedParentOnChildOff struct {
+type mixedParentOn struct {
 	workflow *procworkflow.Workflow
 }
 
-func (m *mixedParentOnChildOff) Setup(t *testing.T) []framework.Option {
+func (m *mixedParentOn) Setup(t *testing.T) []framework.Option {
 	m.workflow = procworkflow.New(t,
 		procworkflow.WithDaprds(2),
 		procworkflow.WithMTLS(t),
@@ -48,7 +48,7 @@ func (m *mixedParentOnChildOff) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (m *mixedParentOnChildOff) Run(t *testing.T, ctx context.Context) {
+func (m *mixedParentOn) Run(t *testing.T, ctx context.Context) {
 	m.workflow.WaitUntilRunning(t, ctx)
 
 	parentReg := m.workflow.Registry()

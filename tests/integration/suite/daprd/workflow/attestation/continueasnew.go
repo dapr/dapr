@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -28,6 +29,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api/protos"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
 )
 
@@ -104,8 +106,18 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
+	// ContinueAsNew clears the prior history on each iteration. After 3
+	// CAN cycles, only the final iteration's single "noop" activity
+	// attestation survives in the parent's signed history. The earlier
+	// two iterations' attestations are gone with their cleared history.
 	atts := fworkflow.ActivityCompletionAttestations(t, ctx, c.db, id)
-	assert.Len(t, atts, 1)
+	require.Len(t, atts, 1)
+
+	var payload protos.ActivityCompletionAttestationPayload
+	require.NoError(t, proto.Unmarshal(atts[0].GetPayload(), &payload))
+	assert.Equal(t, "noop", payload.GetActivityName())
+	assert.Equal(t, id, payload.GetParentInstanceId())
+	assert.Equal(t, protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_COMPLETED, payload.GetTerminalStatus())
 
 	assert.Equal(t, 1, fworkflow.ExtSigCertCount(t, ctx, c.db, id))
 }

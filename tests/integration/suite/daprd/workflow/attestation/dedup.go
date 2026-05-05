@@ -100,8 +100,16 @@ func (d *dedup) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
+	// All callCount invocations sign with the same SPIFFE identity (one
+	// daprd, same activity actor host). The dedup under test is at the
+	// ext-sigcert table level: every attestation references the same
+	// signerCertDigest, so the foreign-cert table holds exactly one
+	// entry regardless of how many attestations point at it. The N
+	// attestations in stored history are expected (one per invocation);
+	// the 1-entry ext-sigcert table is the dedup invariant.
 	atts := fworkflow.ActivityCompletionAttestations(t, ctx, d.db, id)
-	assert.Len(t, atts, callCount)
-
+	require.Len(t, atts, callCount)
+	certs := fworkflow.ReadExtSigCerts(t, ctx, d.db, id)
+	require.Len(t, certs, 1)
 	assert.Equal(t, 1, fworkflow.ExtSigCertCount(t, ctx, d.db, id))
 }

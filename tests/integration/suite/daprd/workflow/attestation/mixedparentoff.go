@@ -29,14 +29,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(mixedParentOffChildOn))
+	suite.Register(new(mixedParentOff))
 }
 
-type mixedParentOffChildOn struct {
+type mixedParentOff struct {
 	workflow *procworkflow.Workflow
 }
 
-func (m *mixedParentOffChildOn) Setup(t *testing.T) []framework.Option {
+func (m *mixedParentOff) Setup(t *testing.T) []framework.Option {
 	m.workflow = procworkflow.New(t,
 		procworkflow.WithDaprds(2),
 		procworkflow.WithMTLS(t),
@@ -47,7 +47,7 @@ func (m *mixedParentOffChildOn) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (m *mixedParentOffChildOn) Run(t *testing.T, ctx context.Context) {
+func (m *mixedParentOff) Run(t *testing.T, ctx context.Context) {
 	m.workflow.WaitUntilRunning(t, ctx)
 
 	parentReg := m.workflow.Registry()
@@ -73,5 +73,12 @@ func (m *mixedParentOffChildOn) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.True(t, api.WorkflowMetadataIsComplete(meta))
 
+	// Parent has no signer, so verifyInboxAttestation is a no-op: it
+	// neither verifies the child's attestation nor strips it from the
+	// stored event. The attestation field arrives with the child's
+	// TaskCompleted and is preserved through to history. ext-sigcert is
+	// untouched (only the verify path absorbs into it).
+	atts := fworkflow.ActivityCompletionAttestations(t, ctx, m.workflow.DB(), string(id))
+	assert.Len(t, atts, 1, "child's attestation is preserved on the parent's stored event when the parent has no signer")
 	assert.Equal(t, 0, fworkflow.ExtSigCertCount(t, ctx, m.workflow.DB(), string(id)))
 }

@@ -96,9 +96,11 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
+	require.Len(t, fworkflow.ActivityCompletionAttestations(t, ctx, p.db, id), 1)
 	require.GreaterOrEqual(t, fworkflow.ExtSigCertCount(t, ctx, p.db, id), 1)
 
 	require.NoError(t, client.PurgeWorkflowState(ctx, id))
 
+	assert.Empty(t, fworkflow.ActivityCompletionAttestations(t, ctx, p.db, id))
 	assert.Equal(t, 0, fworkflow.ExtSigCertCount(t, ctx, p.db, id))
 }
