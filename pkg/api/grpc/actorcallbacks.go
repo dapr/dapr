@@ -19,6 +19,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/dapr/dapr/pkg/actors/callbackstream"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
@@ -149,8 +150,8 @@ func (a *api) actorCallbackStream() *callbackstream.Manager {
 func initialToAppConfig(req *runtimev1pb.SubscribeActorEventsRequestInitialAlpha1) *config.ApplicationConfig {
 	cfg := &config.ApplicationConfig{
 		Entities:                req.GetEntities(),
-		ActorIdleTimeout:        req.GetActorIdleTimeout(),
-		DrainOngoingCallTimeout: req.GetDrainOngoingCallTimeout(),
+		ActorIdleTimeout:        durationToString(req.GetActorIdleTimeout()),
+		DrainOngoingCallTimeout: durationToString(req.GetDrainOngoingCallTimeout()),
 		Reentrancy:              reentrancyConfigFromProto(req.GetReentrancy()),
 	}
 	if req.DrainRebalancedActors != nil {
@@ -162,8 +163,8 @@ func initialToAppConfig(req *runtimev1pb.SubscribeActorEventsRequestInitialAlpha
 		for _, ec := range entityCfgs {
 			converted := config.EntityConfig{
 				Entities:                ec.GetEntities(),
-				ActorIdleTimeout:        ec.GetActorIdleTimeout(),
-				DrainOngoingCallTimeout: ec.GetDrainOngoingCallTimeout(),
+				ActorIdleTimeout:        durationToString(ec.GetActorIdleTimeout()),
+				DrainOngoingCallTimeout: durationToString(ec.GetDrainOngoingCallTimeout()),
 				Reentrancy:              reentrancyConfigFromProto(ec.GetReentrancy()),
 			}
 			if ec.DrainRebalancedActors != nil {
@@ -174,6 +175,17 @@ func initialToAppConfig(req *runtimev1pb.SubscribeActorEventsRequestInitialAlpha
 		}
 	}
 	return cfg
+}
+
+// durationToString converts an optional protobuf Duration to the
+// duration-string form (e.g. "1h", "30s") that the internal
+// ApplicationConfig still uses. nil and zero values map to "" so the
+// runtime falls back to its defaults.
+func durationToString(d *durationpb.Duration) string {
+	if d == nil {
+		return ""
+	}
+	return d.AsDuration().String()
 }
 
 func reentrancyConfigFromProto(r *runtimev1pb.ActorReentrancyConfig) config.ReentrancyConfig {

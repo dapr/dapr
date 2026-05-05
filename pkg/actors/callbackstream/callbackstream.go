@@ -19,6 +19,13 @@ limitations under the License.
 // The design mirrors the pubsub SubscribeTopicEventsAlpha1 stream: the app
 // is the gRPC client, disconnect fails in-flight work immediately, and
 // multiple concurrent connections from the same app are permitted.
+//
+// Connection-set state (the active stream list and the latest registration
+// config) is owned by a single goroutine that drains a kit/events/loop
+// queue. Every state mutation goes through Handle, so there are no locks
+// on the Manager itself. Per-connection request correlation still uses
+// sync.Map (lock-free) because Send and Deliver may interleave at high
+// frequency and don't need full serialization.
 package callbackstream
 
 import (
@@ -30,6 +37,8 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
 )
 
@@ -43,20 +52,60 @@ var ErrNoConnection = errors.New("actor host is not connected")
 // app closed the stream.
 var ErrDisconnected = errors.New("actor host disconnected before responding")
 
-// Manager holds the set of active actor callback streams. It is safe for
-// concurrent use by the gRPC server (which registers streams) and the
-// actor transport (which sends callbacks).
+// loopFactory creates the per-Manager event loop. 64 is plenty for register
+// and close events, which are rare relative to per-callback Send traffic
+// (Send goes through atomic snapshots instead, see latest below).
+var loopFactory = loop.New[event](64)
+
+// Manager holds the set of active actor callback streams. Concurrent
+// callers register/close streams and pick connections without locks: state
+// mutations are serialized through an event loop, and the hot read path
+// (Send / CurrentConfig / HasConnection) reads an atomic.Pointer snapshot
+// maintained by that loop.
 type Manager struct {
-	mu              sync.RWMutex
-	conns           []*Connection
-	registrationCfg *config.ApplicationConfig
+	loop loop.Interface[event]
+
+	// latest is the loop's published view of "most recent registered
+	// connection + config". Hot Send paths read it without any
+	// synchronisation; the loop replaces it on Register/Close.
+	latest atomic.Pointer[snapshot]
 
 	connIDSeq atomic.Uint64
+
+	// conns is the authoritative connection list. Only the loop reads or
+	// writes it. Used to drive snapshot updates.
+	conns []*Connection
 }
 
-// NewManager returns a new Manager with no active connections.
+// snapshot is an immutable view of Manager state, replaced atomically by
+// the loop. Callers on the read path never mutate this struct.
+type snapshot struct {
+	latestConn *Connection
+	cfg        *config.ApplicationConfig
+}
+
+// NewManager returns a new Manager with no active connections. The
+// caller must invoke Run to drive the event loop.
 func NewManager() *Manager {
-	return &Manager{}
+	m := &Manager{}
+	m.loop = loopFactory.NewLoop(m)
+	m.latest.Store(&snapshot{})
+	return m
+}
+
+// Run drives the Manager's event loop until ctx is cancelled. Mirrors the
+// hotreload reconciler / scheduler stream-loop wiring: the loop runs in
+// one goroutine, a sibling watcher closes it on ctx cancel.
+func (m *Manager) Run(ctx context.Context) error {
+	defer loopFactory.CacheLoop(m.loop)
+	return concurrency.NewRunnerManager(
+		m.loop.Run,
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			m.loop.Close(&eventStop{})
+			return nil
+		},
+	).Run(ctx)
 }
 
 // Connection represents a single live actor host stream. It exposes a send
@@ -88,16 +137,19 @@ type pendingResult struct {
 }
 
 // Done returns a channel that is closed when the connection is terminated.
-// Handlers that drain Outbox should select on this channel to exit, since
-// Outbox itself is never closed (avoids a send-on-closed-channel panic when
-// a concurrent Send caller is mid-flight).
+// Handlers that drain Outbox should select on this channel to exit.
 func (c *Connection) Done() <-chan struct{} {
 	return c.ctx.Done()
 }
 
-// Register installs a new connection. The caller is responsible for draining
-// Outbox and calling Deliver for each inbound response. When the stream ends,
-// the caller must invoke Close (or let the context cancel).
+// Register installs a new connection. The caller is responsible for
+// draining Outbox and calling Deliver for each inbound response. When the
+// stream ends, the caller must invoke Close (or let the context cancel).
+//
+// Register blocks until the loop has published the new connection on the
+// snapshot read path. This guarantees that callers which immediately
+// invoke Send observe the connection — a property the test harness and
+// the production API handler both rely on.
 func (m *Manager) Register(ctx context.Context, cfg *config.ApplicationConfig) *Connection {
 	cctx, cancel := context.WithCancelCause(ctx)
 	conn := &Connection{
@@ -109,10 +161,9 @@ func (m *Manager) Register(ctx context.Context, cfg *config.ApplicationConfig) *
 		cancel: cancel,
 	}
 
-	m.mu.Lock()
-	m.conns = append(m.conns, conn)
-	m.registrationCfg = cfg
-	m.mu.Unlock()
+	done := make(chan struct{})
+	m.loop.Enqueue(&eventRegister{conn: conn, done: done})
+	<-done
 
 	log.Debugf("Registered actor callback stream (connID=%d, entities=%v)", conn.ID, cfg.Entities)
 	return conn
@@ -120,6 +171,10 @@ func (m *Manager) Register(ctx context.Context, cfg *config.ApplicationConfig) *
 
 // Close terminates a connection: cancels its context, fails every pending
 // request, and removes it from the manager. Safe to call multiple times.
+//
+// Close cancels the connection synchronously so concurrent Send callers
+// observe the cancellation immediately. The loop only handles the
+// bookkeeping (conns slice fixup, snapshot recompute).
 func (m *Manager) Close(conn *Connection, cause error) {
 	conn.once.Do(func() {
 		if cause == nil {
@@ -127,7 +182,9 @@ func (m *Manager) Close(conn *Connection, cause error) {
 		}
 		conn.cancel(cause)
 
-		// Fail every pending request.
+		// Fail every pending request. Done outside the loop because each
+		// in-flight Send is owned by its caller's goroutine and the result
+		// channel is per-Send — no Manager-wide coordination needed.
 		conn.pending.Range(func(k, v any) bool {
 			ch, ok := v.(chan pendingResult)
 			if ok {
@@ -146,18 +203,7 @@ func (m *Manager) Close(conn *Connection, cause error) {
 		// c.ctx.Done() and the API handler's drain loop selects on
 		// conn.Done().
 
-		m.mu.Lock()
-		for i, c := range m.conns {
-			if c == conn {
-				m.conns = append(m.conns[:i], m.conns[i+1:]...)
-				break
-			}
-		}
-		if len(m.conns) == 0 {
-			m.registrationCfg = nil
-		}
-		m.mu.Unlock()
-
+		m.loop.Enqueue(&eventClose{conn: conn})
 		log.Debugf("Closed actor callback stream (connID=%d): %v", conn.ID, cause)
 	})
 }
@@ -192,16 +238,12 @@ func (c *Connection) Deliver(msg *runtimev1pb.SubscribeActorEventsRequestAlpha1)
 // pkg/api/grpc/actorcallbacks.go), mirroring how
 // pkg/api/grpc/subscribe.go reacts to SubscribeTopicEventsAlpha1.
 func (m *Manager) CurrentConfig() *config.ApplicationConfig {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.registrationCfg
+	return m.latest.Load().cfg
 }
 
 // HasConnection reports whether at least one app is currently streaming.
 func (m *Manager) HasConnection() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return len(m.conns) > 0
+	return m.latest.Load().latestConn != nil
 }
 
 // Send issues a callback request over an available connection and blocks
@@ -213,26 +255,14 @@ func (m *Manager) Send(
 	ctx context.Context,
 	build func(id string) *runtimev1pb.SubscribeActorEventsResponseAlpha1,
 ) (*runtimev1pb.SubscribeActorEventsRequestAlpha1, error) {
-	conn := m.pickConnection()
+	conn := m.latest.Load().latestConn
 	if conn == nil {
 		return nil, ErrNoConnection
 	}
-	return conn.sendLocked(ctx, build)
+	return conn.send(ctx, build)
 }
 
-// pickConnection returns the most recently registered connection, or nil.
-// Using LIFO keeps semantics predictable when duplicate connections exist
-// (usually during a restart overlap).
-func (m *Manager) pickConnection() *Connection {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if len(m.conns) == 0 {
-		return nil
-	}
-	return m.conns[len(m.conns)-1]
-}
-
-func (c *Connection) sendLocked(
+func (c *Connection) send(
 	ctx context.Context,
 	build func(id string) *runtimev1pb.SubscribeActorEventsResponseAlpha1,
 ) (*runtimev1pb.SubscribeActorEventsRequestAlpha1, error) {
@@ -262,6 +292,56 @@ func (c *Connection) sendLocked(
 		c.pending.Delete(id)
 		return nil, context.Cause(c.ctx)
 	}
+}
+
+// event is the sealed set of messages handled by Manager's loop.
+type event interface{ isCallbackEvent() }
+
+type eventRegister struct {
+	conn *Connection
+	done chan<- struct{}
+}
+type (
+	eventClose struct{ conn *Connection }
+	eventStop  struct{}
+)
+
+func (*eventRegister) isCallbackEvent() {}
+func (*eventClose) isCallbackEvent()    {}
+func (*eventStop) isCallbackEvent()     {}
+
+// Handle is the loop's serial event handler. It is the only goroutine that
+// touches m.conns, so no locks are needed there. The atomic snapshot
+// (m.latest) is updated here too — that's what every hot-path read sees.
+func (m *Manager) Handle(_ context.Context, ev event) error {
+	switch e := ev.(type) {
+	case *eventRegister:
+		m.conns = append(m.conns, e.conn)
+		m.publishSnapshot()
+		close(e.done)
+	case *eventClose:
+		for i, c := range m.conns {
+			if c == e.conn {
+				m.conns = append(m.conns[:i], m.conns[i+1:]...)
+				break
+			}
+		}
+		m.publishSnapshot()
+	case *eventStop:
+		// Loop exit signalled by Run's shutdown goroutine.
+	}
+	return nil
+}
+
+// publishSnapshot rebuilds the atomic snapshot to reflect the current
+// loop-owned conns slice. Always called from inside Handle.
+func (m *Manager) publishSnapshot() {
+	if len(m.conns) == 0 {
+		m.latest.Store(&snapshot{})
+		return
+	}
+	last := m.conns[len(m.conns)-1]
+	m.latest.Store(&snapshot{latestConn: last, cfg: last.Config})
 }
 
 // requestID extracts the correlation id from any app → daprd oneof variant

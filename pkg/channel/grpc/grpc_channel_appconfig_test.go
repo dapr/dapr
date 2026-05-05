@@ -31,8 +31,27 @@ func newChannelWithStream(mgr *callbackstream.Manager) *Channel {
 	return &Channel{actorCallbackStream: mgr}
 }
 
-func TestGetAppConfig_ReturnsRegisteredConfig(t *testing.T) {
+// newManager creates a Manager and runs its event loop with a per-test
+// context. The goroutine is reaped automatically when the test finishes
+// via the cancel + Wait pair.
+func newManager(t *testing.T) *callbackstream.Manager {
+	t.Helper()
 	mgr := callbackstream.NewManager()
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = mgr.Run(ctx)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	return mgr
+}
+
+func TestGetAppConfig_ReturnsRegisteredConfig(t *testing.T) {
+	mgr := newManager(t)
 	c := newChannelWithStream(mgr)
 
 	drainTrue := true
@@ -68,7 +87,7 @@ func TestGetAppConfig_ReturnsRegisteredConfig(t *testing.T) {
 // immediately so daprd startup is not stalled for apps that don't host
 // actors.
 func TestGetAppConfig_ReturnsNilWhenNoRegistration(t *testing.T) {
-	mgr := callbackstream.NewManager()
+	mgr := newManager(t)
 	c := newChannelWithStream(mgr)
 
 	cfg, err := c.GetAppConfig(t.Context(), "app-1")
@@ -81,7 +100,7 @@ func TestGetAppConfig_ReturnsNilWhenNoRegistration(t *testing.T) {
 // currently holds a stream. Used by the API handler to identify a
 // reconnecting app's hosted types.
 func TestCurrentConfig_ReflectsLatestRegistration(t *testing.T) {
-	mgr := callbackstream.NewManager()
+	mgr := newManager(t)
 	assert.Nil(t, mgr.CurrentConfig())
 
 	expected := &config.ApplicationConfig{Entities: []string{"orders"}}

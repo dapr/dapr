@@ -58,15 +58,11 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 	c := &Channel{
 		appCallbackClient:      runtimev1pb.NewAppCallbackClient(conn),
 		appCallbackAlphaClient: runtimev1pb.NewAppCallbackAlphaClient(conn),
-		// One stream manager per channel. The Dapr API gRPC handler accepts
-		// SubscribeActorEventsAlpha1 streams and registers them here; the
-		// actor transport consumes connections through the same manager.
-		actorCallbackStream: callbackstream.NewManager(),
-		conn:                conn,
-		baseAddress:         net.JoinHostPort(baseAddress, strconv.Itoa(port)),
-		tracingSpec:         spec,
-		appMetadataToken:    appAPIToken,
-		maxRequestBodySize:  maxRequestBodySize,
+		conn:                   conn,
+		baseAddress:            net.JoinHostPort(baseAddress, strconv.Itoa(port)),
+		tracingSpec:            spec,
+		appMetadataToken:       appAPIToken,
+		maxRequestBodySize:     maxRequestBodySize,
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan struct{}, maxConcurrency)
@@ -74,9 +70,17 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 	return c
 }
 
+// SetActorCallbackStream attaches the runtime-owned stream manager that
+// the Dapr gRPC API handler registers SubscribeActorEventsAlpha1 streams
+// with, and that the actor transport consumes when sending callbacks.
+// Injected once during channel refresh; the manager's lifecycle (its
+// event loop) is driven by the runtime's RunnerCloserManager.
+func (g *Channel) SetActorCallbackStream(m *callbackstream.Manager) {
+	g.actorCallbackStream = m
+}
+
 // ActorCallbackStream returns the manager that owns the app-initiated
-// actor callback stream(s) for this channel. Callers hold the returned
-// pointer for the lifetime of the channel.
+// actor callback stream(s) for this channel.
 func (g *Channel) ActorCallbackStream() *callbackstream.Manager {
 	return g.actorCallbackStream
 }

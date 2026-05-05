@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -54,7 +55,7 @@ func (d *deactivation) Setup(t *testing.T) []framework.Option {
 		procgrpcapp.WithActorRegistration(func() *rtv1.SubscribeActorEventsRequestInitialAlpha1 {
 			return &rtv1.SubscribeActorEventsRequestInitialAlpha1{
 				Entities:         []string{"myactortype"},
-				ActorIdleTimeout: "1s",
+				ActorIdleTimeout: durationpb.New(time.Second),
 			}
 		}),
 		procgrpcapp.WithOnActorDeactivateFn(func(_ context.Context, r *rtv1.SubscribeActorEventsResponseDeactivateRequestAlpha1) (*rtv1.SubscribeActorEventsRequestDeactivateResponseAlpha1, error) {

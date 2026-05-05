@@ -16,6 +16,7 @@ syntax = "proto3";
 package dapr.proto.runtime.v1;
 
 import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
 import "dapr/proto/common/v1/common.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
@@ -208,14 +209,14 @@ message SubscribeActorEventsRequestInitialAlpha1 {
   // entities is the list of actor types this app hosts.
   repeated string entities = 1;
 
-  // actor_idle_timeout is the default idle timeout for all actor types as
-  // a duration string (e.g. "1h"). Empty means use Dapr's default.
-  string actor_idle_timeout = 2;
+  // actor_idle_timeout is the default idle timeout for all actor types.
+  // Unset means use Dapr's default.
+  optional google.protobuf.Duration actor_idle_timeout = 2;
 
   // drain_ongoing_call_timeout is the duration Dapr waits for ongoing
-  // invocations to finish when an actor is rebalanced (e.g. "30s"). Empty
-  // means use Dapr's default.
-  string drain_ongoing_call_timeout = 3;
+  // invocations to finish when an actor is rebalanced. Unset means use
+  // Dapr's default.
+  optional google.protobuf.Duration drain_ongoing_call_timeout = 3;
 
   // drain_rebalanced_actors, when true, instructs Dapr to drain invocations
   // from a rebalanced actor rather than aborting them.
@@ -223,7 +224,7 @@ message SubscribeActorEventsRequestInitialAlpha1 {
 
   // reentrancy is the default reentrancy configuration applied to all
   // actor types.
-  ActorReentrancyConfig reentrancy = 5;
+  optional ActorReentrancyConfig reentrancy = 5;
 
   // entities_config applies per-actor-type overrides on top of the
   // defaults above.
@@ -337,10 +338,10 @@ message SubscribeActorEventsResponseDeactivateRequestAlpha1 {
 // a specific set of entities.
 message ActorEntityConfig {
   repeated string entities = 1;
-  string actor_idle_timeout = 2;
-  string drain_ongoing_call_timeout = 3;
+  optional google.protobuf.Duration actor_idle_timeout = 2;
+  optional google.protobuf.Duration drain_ongoing_call_timeout = 3;
   optional bool drain_rebalanced_actors = 4;
-  ActorReentrancyConfig reentrancy = 5;
+  optional ActorReentrancyConfig reentrancy = 5;
 }
 
 // ActorReentrancyConfig configures actor reentrancy behavior.
