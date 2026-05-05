@@ -15,21 +15,22 @@ package continueasnew
 
 import (
 	"context"
+	"encoding/base64"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/task"
-
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 func init() {
@@ -76,7 +77,6 @@ func (r *raisebatchnodup) Run(t *testing.T, ctx context.Context) {
 	})
 
 	client := r.workflow.BackendClient(t, ctx)
-	gclient := r.workflow.GRPCClient(t, ctx)
 
 	id, err := client.ScheduleNewWorkflow(ctx, "raisebatchnodup",
 		api.WithInstanceID("raisebatchnodupi"),
@@ -91,26 +91,44 @@ func (r *raisebatchnodup) Run(t *testing.T, ctx context.Context) {
 	actorType := "dapr.internal.default." + appID + ".workflow"
 	actorID := "raisebatchnodupi"
 
-	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
-		ActorType: actorType,
-		ActorId:   actorID,
-		Name:      "new-event-deactivate",
-		DueTime:   "0s",
-	})
+	// Inject the deactivation reminder via the scheduler directly: the
+	// daprd RegisterActorReminder API rejects "dapr.internal.*" actor
+	// types because they are reserved for the workflow runtime.
+	_, err = r.workflow.Scheduler().Client(t, ctx).ScheduleJob(ctx,
+		r.workflow.Scheduler().JobNowActor("new-event-deactivate", "default", appID, actorType, actorID))
 	require.NoError(t, err)
 
-	time.Sleep(2 * time.Second)
-
+	// Wait for the deactivation reminder to be processed. Poll the state
+	// store until the workflow metadata generation has advanced (CAN
+	// increments generation).
 	db := r.workflow.DB().GetConnection(t)
 	tableName := r.workflow.DB().TableName()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		var gen int64
+		metaKey := appID + "||" + actorType + "||" + actorID + "||metadata"
+		//nolint:gosec
+		row := db.QueryRowContext(ctx, "SELECT value FROM '"+tableName+"' WHERE key = ?", metaKey)
+		var val string
+		if !assert.NoError(c, row.Scan(&val)) {
+			return
+		}
+		raw, derr := base64.StdEncoding.DecodeString(val)
+		if !assert.NoError(c, derr) {
+			return
+		}
+		var meta backend.BackendWorkflowStateMetadata
+		if !assert.NoError(c, proto.Unmarshal(raw, &meta)) {
+			return
+		}
+		//nolint:gosec
+		gen = int64(meta.GetGeneration())
+		assert.Greater(c, gen, int64(1), "generation should advance from CAN")
+	}, 10*time.Second, 10*time.Millisecond)
+
 	writeInboxToDB(t, ctx, db, tableName, appID, actorType, actorID, totalEvents, wrapperspb.String(`true`))
 
-	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
-		ActorType: actorType,
-		ActorId:   actorID,
-		Name:      "new-event-batch",
-		DueTime:   "0s",
-	})
+	_, err = r.workflow.Scheduler().Client(t, ctx).ScheduleJob(ctx,
+		r.workflow.Scheduler().JobNowActor("new-event-batch", "default", appID, actorType, actorID))
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {

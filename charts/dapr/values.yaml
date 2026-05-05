@@ -29,6 +29,9 @@ global:
   ha:
     enabled: false
     topologyKey: "topology.kubernetes.io/zone"
+    # Pod anti-affinity scheduling policy: use the full Kubernetes field name.
+    # Valid values: "preferredDuringSchedulingIgnoredDuringExecution" or "requiredDuringSchedulingIgnoredDuringExecution".
+    podAntiAffinityPolicy: preferredDuringSchedulingIgnoredDuringExecution
     replicaCount: 3
     disruption:
       minimumAvailable: ""

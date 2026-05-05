@@ -168,7 +168,7 @@ func TestHandleCloseStream_RemovesFromStreams(t *testing.T) {
 	d := newTestDisseminator(t)
 	addFakeStream(d, 0, []string{"actorA"})
 
-	d.handleCloseStream(&loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
+	d.handleCloseStream(t.Context(), &loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
 
 	assert.NotContains(t, d.streams, uint64(0))
 	assert.Equal(t, int64(0), d.connCount.Load())
@@ -180,7 +180,7 @@ func TestHandleCloseStream_QueuesDeleteDuringRound(t *testing.T) {
 	addFakeStream(d, 1, []string{"actorA"})
 	d.currentOperation = v1pb.HostOperation_LOCK
 
-	d.handleCloseStream(&loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
+	d.handleCloseStream(t.Context(), &loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
 
 	assert.NotContains(t, d.streams, uint64(0))
 	assert.Contains(t, d.waitingToDelete, uint64(0))
@@ -193,7 +193,7 @@ func TestHandleCloseStream_ProcessesImmediatelyInReportState(t *testing.T) {
 	addFakeStream(d, 1, []string{"actorA"})
 	d.currentOperation = v1pb.HostOperation_REPORT
 
-	d.handleCloseStream(&loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
+	d.handleCloseStream(t.Context(), &loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
 
 	assert.False(t, d.store.Has(0))
 	assert.Equal(t, v1pb.HostOperation_LOCK, d.currentOperation)
@@ -208,7 +208,7 @@ func TestHandleCloseStream_DecrementsTargetState(t *testing.T) {
 	d.streamsInTargetState = 1
 	d.streams[0].currentState = v1pb.HostOperation_LOCK
 
-	d.handleCloseStream(&loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
+	d.handleCloseStream(t.Context(), &loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
 
 	assert.Equal(t, 0, d.streamsInTargetState)
 }
@@ -223,7 +223,7 @@ func TestHandleCloseStream_AdvancesPhaseWhenLastNonResponder(t *testing.T) {
 	d.streams[0].currentState = v1pb.HostOperation_LOCK
 	d.streams[1].currentState = v1pb.HostOperation_REPORT
 
-	d.handleCloseStream(&loops.ConnCloseStream{StreamIDx: 1, Namespace: "default"})
+	d.handleCloseStream(t.Context(), &loops.ConnCloseStream{StreamIDx: 1, Namespace: "default"})
 
 	assert.Equal(t, v1pb.HostOperation_UPDATE, d.currentOperation)
 }
@@ -233,14 +233,14 @@ func TestHandleCloseStream_NoActorsSkipsDissemination(t *testing.T) {
 	addFakeStream(d, 0, nil)
 	addFakeStream(d, 1, []string{"actorA"})
 
-	d.handleCloseStream(&loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
+	d.handleCloseStream(t.Context(), &loops.ConnCloseStream{StreamIDx: 0, Namespace: "default"})
 
 	assert.Equal(t, v1pb.HostOperation_REPORT, d.currentOperation)
 }
 
 func TestHandleCloseStream_IgnoresUnknownStream(t *testing.T) {
 	d := newTestDisseminator(t)
-	d.handleCloseStream(&loops.ConnCloseStream{StreamIDx: 999, Namespace: "default"})
+	d.handleCloseStream(t.Context(), &loops.ConnCloseStream{StreamIDx: 999, Namespace: "default"})
 }
 
 func TestAdvancePhase_LockToUpdate(t *testing.T) {
@@ -250,7 +250,7 @@ func TestAdvancePhase_LockToUpdate(t *testing.T) {
 	d.currentOperation = v1pb.HostOperation_LOCK
 	d.streamsInTargetState = 1
 
-	d.advancePhase()
+	d.advancePhase(t.Context())
 
 	assert.Equal(t, v1pb.HostOperation_UPDATE, d.currentOperation)
 	assert.Equal(t, 0, d.streamsInTargetState)
@@ -264,7 +264,7 @@ func TestAdvancePhase_UpdateToUnlock(t *testing.T) {
 	d.currentOperation = v1pb.HostOperation_UPDATE
 	d.streamsInTargetState = 1
 
-	d.advancePhase()
+	d.advancePhase(t.Context())
 
 	assert.Equal(t, v1pb.HostOperation_UNLOCK, d.currentOperation)
 	assert.Equal(t, 0, d.streamsInTargetState)
@@ -278,7 +278,7 @@ func TestAdvancePhase_UnlockToReport(t *testing.T) {
 	d.currentOperation = v1pb.HostOperation_UNLOCK
 	d.streamsInTargetState = 1
 
-	d.advancePhase()
+	d.advancePhase(t.Context())
 
 	assert.Equal(t, v1pb.HostOperation_REPORT, d.currentOperation)
 }
@@ -292,7 +292,7 @@ func TestAdvancePhase_UnlockProcessesWaitingDeletes(t *testing.T) {
 	d.waitingToDelete = []uint64{99}
 	d.store.Set(99, host("gone", "actorA"))
 
-	d.advancePhase()
+	d.advancePhase(t.Context())
 
 	assert.False(t, d.store.Has(99))
 	assert.Equal(t, v1pb.HostOperation_LOCK, d.currentOperation)
@@ -306,7 +306,7 @@ func TestAdvancePhase_NoAdvanceIfNotAllResponded(t *testing.T) {
 	d.currentOperation = v1pb.HostOperation_LOCK
 	d.streamsInTargetState = 1
 
-	d.advancePhase()
+	d.advancePhase(t.Context())
 
 	assert.Equal(t, v1pb.HostOperation_LOCK, d.currentOperation)
 }
@@ -358,6 +358,108 @@ func TestProcessWaitingDeletes_NoopIfNoStreams(t *testing.T) {
 	d.processWaitingDeletes()
 
 	assert.Equal(t, v1pb.HostOperation_REPORT, d.currentOperation)
+}
+
+func TestProcessWaitingDisseminate_EmptyQueue_Noop(t *testing.T) {
+	d := newTestDisseminator(t)
+	addFakeStream(d, 0, []string{"actorA"})
+
+	d.processWaitingDisseminate(t.Context(), false)
+
+	assert.Equal(t, v1pb.HostOperation_REPORT, d.currentOperation)
+	assert.Equal(t, uint64(0), d.currentVersion)
+}
+
+func TestProcessWaitingDisseminate_EmptyQueue_ForceRoundIgnored(t *testing.T) {
+	// forceRound only forces a follow-up round when there is queued work to
+	// drain. With nothing queued, the caller is responsible for not calling
+	// us at all.
+	d := newTestDisseminator(t)
+	addFakeStream(d, 0, []string{"actorA"})
+
+	d.processWaitingDisseminate(t.Context(), true)
+
+	assert.Equal(t, v1pb.HostOperation_REPORT, d.currentOperation)
+}
+
+func TestProcessWaitingDisseminate_AddStreamPaths(t *testing.T) {
+	t.Skip("paths that hit addStream require a real gRPC stream — covered by integration test coalesce")
+}
+
+func TestHandleCoalesceFire_EmptyQueues_ClearsTimer(t *testing.T) {
+	d := newTestDisseminator(t)
+	addFakeStream(d, 0, []string{"actorA"})
+	d.coalesceWindow = time.Hour
+	timer := time.AfterFunc(time.Hour, func() {})
+	t.Cleanup(func() { timer.Stop() })
+	d.coalesceTimer = timer
+
+	d.handleCoalesceFire(t.Context())
+
+	assert.Nil(t, d.coalesceTimer)
+	assert.Equal(t, v1pb.HostOperation_REPORT, d.currentOperation)
+}
+
+func TestHandleCoalesceFire_DeletesOnly_StartsRound(t *testing.T) {
+	d := newTestDisseminator(t)
+	addFakeStream(d, 0, []string{"actorA"})
+	d.store.Set(99, host("departed", "actorA"))
+	d.waitingToDelete = []uint64{99}
+	d.coalesceWindow = time.Hour
+	timer := time.AfterFunc(time.Hour, func() {})
+	t.Cleanup(func() { timer.Stop() })
+	d.coalesceTimer = timer
+
+	d.handleCoalesceFire(t.Context())
+
+	assert.Nil(t, d.coalesceTimer)
+	assert.False(t, d.store.Has(99))
+	assert.Nil(t, d.waitingToDelete)
+	assert.Equal(t, v1pb.HostOperation_LOCK, d.currentOperation)
+}
+
+func TestHandleCoalesceFire_DeletesPlusAdds_AddPathRequiresStream(t *testing.T) {
+	t.Skip("paths that drain waitingToDisseminate require a real gRPC stream — covered by integration test coalesce")
+}
+
+func TestAdvancePhase_UnlockArmsCoalesceTimer(t *testing.T) {
+	d := newTestDisseminator(t)
+	addFakeStream(d, 0, []string{"actorA"})
+	d.currentVersion = 1
+	d.currentOperation = v1pb.HostOperation_UNLOCK
+	d.streamsInTargetState = 1
+	d.coalesceWindow = time.Hour
+	d.waitingToDelete = []uint64{99}
+	d.store.Set(99, host("queued", "actorA"))
+
+	d.advancePhase(t.Context())
+	t.Cleanup(func() {
+		if d.coalesceTimer != nil {
+			d.coalesceTimer.Stop()
+		}
+	})
+
+	assert.Equal(t, v1pb.HostOperation_REPORT, d.currentOperation)
+	assert.NotNil(t, d.coalesceTimer, "coalesce timer should be armed when queues are non-empty")
+	// Deletes stay queued until the timer fires.
+	assert.True(t, d.store.Has(99))
+	assert.Equal(t, []uint64{99}, d.waitingToDelete)
+}
+
+func TestAdvancePhase_UnlockNoCoalesceWindow_DrainsDeletes(t *testing.T) {
+	d := newTestDisseminator(t)
+	addFakeStream(d, 0, []string{"actorA"})
+	d.currentVersion = 1
+	d.currentOperation = v1pb.HostOperation_UNLOCK
+	d.streamsInTargetState = 1
+	d.waitingToDelete = []uint64{99}
+	d.store.Set(99, host("departed", "actorA"))
+
+	d.advancePhase(t.Context())
+
+	assert.Nil(t, d.coalesceTimer)
+	assert.False(t, d.store.Has(99))
+	assert.Equal(t, v1pb.HostOperation_LOCK, d.currentOperation)
 }
 
 func TestReportedLock_AdvancesToUpdate(t *testing.T) {

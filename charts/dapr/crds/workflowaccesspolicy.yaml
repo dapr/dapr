@@ -1,0 +1,158 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  name: workflowaccesspolicies.dapr.io
+  labels:
+    app.kubernetes.io/part-of: "dapr"
+spec:
+  group: dapr.io
+  names:
+    kind: WorkflowAccessPolicy
+    listKind: WorkflowAccessPolicyList
+    plural: workflowaccesspolicies
+    singular: workflowaccesspolicy
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          WorkflowAccessPolicy controls which app IDs are permitted to schedule
+          specific workflows and activities on a target application.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          scopes:
+            items:
+              type: string
+            type: array
+          spec:
+            description: WorkflowAccessPolicySpec defines the desired state of WorkflowAccessPolicy.
+            properties:
+              defaultAction:
+                default: deny
+                description: DefaultAction is the action when no rule matches. Defaults
+                  to "deny" if omitted.
+                enum:
+                - allow
+                - deny
+                type: string
+              rules:
+                description: Rules defines ingress rules for which callers can perform
+                  which operations.
+                items:
+                  description: |-
+                    WorkflowAccessPolicyRule defines a set of callers and the workflow and/or
+                    activity rules they are allowed or denied. At least one of workflows or
+                    activities must be set.
+                  properties:
+                    activities:
+                      description: Activities are the activity rules that the matched
+                        callers are allowed/denied.
+                      items:
+                        description: |-
+                          ActivityRule defines access control for an activity. Activities only have a
+                          single operation (schedule), so there is no operation field.
+                        properties:
+                          action:
+                            description: Action is "allow" or "deny".
+                            enum:
+                            - allow
+                            - deny
+                            type: string
+                          name:
+                            description: Name is the exact name or glob pattern for
+                              the activity.
+                            minLength: 1
+                            type: string
+                        required:
+                        - action
+                        - name
+                        type: object
+                      type: array
+                    callers:
+                      description: Callers that this rule applies to.
+                      items:
+                        description: WorkflowCaller identifies a calling application.
+                        properties:
+                          appID:
+                            description: AppID is the Dapr app ID of the caller.
+                            minLength: 1
+                            type: string
+                        required:
+                        - appID
+                        type: object
+                      minItems: 1
+                      type: array
+                    workflows:
+                      description: Workflows are the workflow rules that the matched
+                        callers are allowed/denied.
+                      items:
+                        description: WorkflowRule defines access control for a workflow
+                          operation.
+                        properties:
+                          action:
+                            description: Action is "allow" or "deny".
+                            enum:
+                            - allow
+                            - deny
+                            type: string
+                          name:
+                            description: Name is the exact name or glob pattern for
+                              the workflow.
+                            minLength: 1
+                            type: string
+                          operations:
+                            description: Operations is the set of operations this
+                              rule applies to.
+                            items:
+                              enum:
+                              - schedule
+                              - terminate
+                              - raise
+                              - pause
+                              - resume
+                              - purge
+                              - get
+                              - rerun
+                              type: string
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: set
+                        required:
+                        - action
+                        - name
+                        - operations
+                        type: object
+                      type: array
+                  required:
+                  - callers
+                  type: object
+                  x-kubernetes-validations:
+                  - message: at least one of workflows or activities must contain
+                      a rule
+                    rule: (has(self.workflows) && size(self.workflows) > 0) || (has(self.activities)
+                      && size(self.activities) > 0)
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true

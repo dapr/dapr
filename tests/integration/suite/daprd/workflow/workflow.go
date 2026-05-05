@@ -14,10 +14,12 @@ limitations under the License.
 package workflow
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/accesspolicy"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/apphealth"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/basic"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/continueasnew"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/disk"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/externalevent"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/get"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/globalmaxconcurrent"
@@ -28,6 +30,8 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/memory"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/nostatestore"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/patching"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/payloadsize"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/propagation"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/purge"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/raise/deletetimer"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/reconnect"
@@ -36,6 +40,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/retries"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/security"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/signing"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/starttime"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/taskexecutionid"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/terminate"

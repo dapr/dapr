@@ -37,8 +37,6 @@ import (
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/task"
-
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 func init() {
@@ -92,7 +90,6 @@ func (i *inboxoverload) Run(t *testing.T, ctx context.Context) {
 	})
 
 	client := i.workflow.BackendClient(t, ctx)
-	gclient := i.workflow.GRPCClient(t, ctx)
 
 	id, err := client.ScheduleNewWorkflow(ctx, "inboxoverload",
 		api.WithInstanceID("inboxoverloadi"),
@@ -107,26 +104,32 @@ func (i *inboxoverload) Run(t *testing.T, ctx context.Context) {
 	actorType := "dapr.internal.default." + appID + ".workflow"
 	actorID := "inboxoverloadi"
 
-	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
-		ActorType: actorType,
-		ActorId:   actorID,
-		Name:      "new-event-deactivate",
-		DueTime:   "0s",
-	})
+	// Inject the deactivation reminder via the scheduler directly: the
+	// daprd RegisterActorReminder API rejects "dapr.internal.*" actor
+	// types because they are reserved for the workflow runtime.
+	_, err = i.workflow.Scheduler().Client(t, ctx).ScheduleJob(ctx,
+		i.workflow.Scheduler().JobNowActor("new-event-deactivate", "default", appID, actorType, actorID))
 	require.NoError(t, err)
 
-	time.Sleep(5 * time.Second)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		meta := i.workflow.Dapr().GetMetadata(c, ctx)
+		if !assert.NotNil(c, meta.ActorRuntime) {
+			return
+		}
+		for _, a := range meta.ActorRuntime.ActiveActors {
+			if a.Type == actorType {
+				assert.Zero(c, a.Count, "workflow actor %q still has %d active instance(s)", actorType, a.Count)
+				return
+			}
+		}
+	}, 10*time.Second, 50*time.Millisecond)
 
 	db := i.workflow.DB().GetConnection(t)
 	tableName := i.workflow.DB().TableName()
 	writeUniquePayloadInbox(t, ctx, db, tableName, appID, actorType, actorID, totalEvents)
 
-	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
-		ActorType: actorType,
-		ActorId:   actorID,
-		Name:      "new-event-batch",
-		DueTime:   "0s",
-	})
+	_, err = i.workflow.Scheduler().Client(t, ctx).ScheduleJob(ctx,
+		i.workflow.Scheduler().JobNowActor("new-event-batch", "default", appID, actorType, actorID))
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {

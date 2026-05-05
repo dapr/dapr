@@ -122,6 +122,12 @@ func (f *Fork) Build() (*state.State, error) {
 
 	f.newState.AddToInbox(found)
 
+	// Preserve the propagated history received from the caller so the reran
+	// workflow can continue lineage forwarding to its own children
+	if f.oldState.IncomingHistory != nil {
+		f.newState.SetIncomingHistory(f.oldState.IncomingHistory)
+	}
+
 	return f.newState, nil
 }
 

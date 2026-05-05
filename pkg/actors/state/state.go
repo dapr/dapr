@@ -94,7 +94,7 @@ func (s *state) Get(ctx context.Context, req *api.GetStateRequest, lock bool) (*
 	if lock {
 		var cancel context.CancelCauseFunc
 		var err error
-		ctx, cancel, err = s.placement.Lock(ctx)
+		ctx, cancel, err = s.placement.Lock(ctx, req.ActorType)
 		if err != nil {
 			return nil, err
 		}
@@ -141,7 +141,7 @@ func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock 
 	if lock {
 		var cancel context.CancelCauseFunc
 		var err error
-		ctx, cancel, err = s.placement.Lock(ctx)
+		ctx, cancel, err = s.placement.Lock(ctx, req.ActorType)
 		if err != nil {
 			return nil, err
 		}
@@ -195,7 +195,7 @@ func (s *state) TransactionalStateOperation(ctx context.Context, ignoreHosted bo
 	if lock {
 		var cancel context.CancelCauseFunc
 		var err error
-		ctx, cancel, err = s.placement.Lock(ctx)
+		ctx, cancel, err = s.placement.Lock(ctx, req.ActorType)
 		if err != nil {
 			return err
 		}

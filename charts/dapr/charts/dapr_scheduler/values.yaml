@@ -57,13 +57,13 @@ etcdClientPassword: ""
 workers: 2048
 
 livenessProbe:
-  initialDelaySeconds: 10
-  periodSeconds: 3
+  initialDelaySeconds: 180
+  periodSeconds: 10
   failureThreshold: 5
 readinessProbe:
-  initialDelaySeconds: 3
-  periodSeconds: 3
-  failureThreshold: 5
+  initialDelaySeconds: 1
+  periodSeconds: 1
+  failureThreshold: 3
 
 debug:
   enabled: false

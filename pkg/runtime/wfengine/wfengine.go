@@ -17,6 +17,7 @@ package wfengine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -25,6 +26,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/components-contrib/workflows"
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/config"
@@ -34,6 +36,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/logger"
 )
 
@@ -64,6 +67,19 @@ type Options struct {
 
 	EnableClusteredDeployment       bool
 	WorkflowsRemoteActivityReminder bool
+	WorkflowHistorySigning          bool
+
+	// MaxRequestBodySize is the gRPC server max message size in bytes. The
+	// orchestrator uses it to detect and gracefully stall workflows whose
+	// history payload would exceed the GetWorkItems stream limit.
+	MaxRequestBodySize int
+
+	// Signer provides cryptographic signing and verification. If nil, history
+	// signing is disabled.
+	Signer *signer.Signer
+
+	// May be nil when the WorkflowAccessPolicy feature is disabled.
+	WorkflowAccessPolicies *workflowacl.Holder
 }
 
 type engine struct {
@@ -79,21 +95,36 @@ type engine struct {
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 }
 
-func New(opts Options) Interface {
+func New(opts Options) (Interface, error) {
 	var retPolicy *config.WorkflowStateRetentionPolicy
 	if opts.Spec != nil {
 		retPolicy = opts.Spec.StateRetentionPolicy
 	}
 
+	// Disable history signing if the WorkflowHistorySigning feature flag is not
+	// enabled.
+	s := opts.Signer
+	if !opts.WorkflowHistorySigning {
+		s = nil
+	} else if s == nil {
+		// The feature flag is explicitly enabled but mTLS is not available. This
+		// is a misconfiguration. Signing requires mTLS for the SPIFFE identity
+		// used as the signing key.
+		return nil, errors.New("WorkflowHistorySigning feature flag is enabled but mTLS is not configured; workflow history signing requires mTLS to be active")
+	}
+
 	// If no backend was initialized by the manager, create a backend backed by actors
 	abackend := backendactors.New(backendactors.Options{
-		AppID:           opts.AppID,
-		Namespace:       opts.Namespace,
-		Actors:          opts.Actors,
-		Resiliency:      opts.Resiliency,
-		EventSink:       opts.EventSink,
-		ComponentStore:  opts.ComponentStore,
-		RetentionPolicy: retPolicy,
+		AppID:                  opts.AppID,
+		Namespace:              opts.Namespace,
+		Actors:                 opts.Actors,
+		Resiliency:             opts.Resiliency,
+		EventSink:              opts.EventSink,
+		ComponentStore:         opts.ComponentStore,
+		RetentionPolicy:        retPolicy,
+		Signer:                 s,
+		MaxRequestBodySize:     opts.MaxRequestBodySize,
+		WorkflowAccessPolicies: opts.WorkflowAccessPolicies,
 
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
@@ -141,7 +172,6 @@ func New(opts Options) Interface {
 		}
 	}
 
-	// There are separate "workers" for executing orchestrations (workflows) and activities
 	oworker := backend.NewWorkflowWorker(backend.WorkflowWorkerOptions{
 		Backend:  abackend,
 		Executor: executor,
@@ -176,7 +206,7 @@ func New(opts Options) Interface {
 			logger: wfBackendLogger,
 			client: backend.NewTaskHubClient(abackend),
 		},
-	}
+	}, nil
 }
 
 func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {

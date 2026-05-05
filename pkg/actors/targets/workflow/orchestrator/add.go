@@ -16,8 +16,6 @@ package orchestrator
 import (
 	"context"
 
-	"google.golang.org/protobuf/proto"
-
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -28,7 +26,7 @@ const (
 	reminderPrefixTimer    = "timer-"
 )
 
-func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes []byte) error {
+func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryEvent) error {
 	state, _, err := o.loadInternalState(ctx)
 	if err != nil {
 		return err
@@ -37,12 +35,6 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	if state == nil {
 		log.Errorf("Workflow actor '%s': cannot add event to workflow as state has been purged. Ignoring event.", o.actorID)
 		return api.ErrInstanceNotFound
-	}
-
-	var e backend.HistoryEvent
-	err = proto.Unmarshal(historyEventBytes, &e)
-	if err != nil {
-		return err
 	}
 
 	// Only reject user events when the workflow is stalled.
@@ -54,20 +46,20 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 		o.activityResultAwaited.CompareAndSwap(true, false)
 	}
 	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)
-	state.AddToInbox(&e)
+	state.AddToInbox(e)
 
-	if err := o.saveInternalState(ctx, state); err != nil {
+	if err := o.signAndSaveState(ctx, state); err != nil {
 		return err
 	}
 
-	// For activity completion events, we want to create the reminder on the same app where this workflow actor is
-	// hosted, so use the source app from the router.
-	// For sub-orchestrator completion events we want to create the reminder on the current app.
+	// The reminder must always fire on the actor that holds the state — i.e.
+	// the local one we just appended to. For activity completion events the
+	// router's source app is the workflow's app (so equal to o.appID anyway),
+	// but for cross-app events flowing INTO this actor (e.g. a recursive
+	// ExecutionTerminated from a parent in another app), router.SourceAppID is
+	// the *sender's* app, which would route the reminder to a non-existent
+	// remote actor and retry forever.
 	sourceAppID := o.appID
-	returningToParent := e.GetChildWorkflowInstanceCompleted() != nil || e.GetChildWorkflowInstanceFailed() != nil
-	if !returningToParent && e.GetRouter() != nil {
-		sourceAppID = e.GetRouter().GetSourceAppID()
-	}
 
 	dueTime := e.Timestamp.AsTime()
 	if len(state.History) > 0 {

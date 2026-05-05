@@ -18,6 +18,7 @@ import (
 
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 )
@@ -36,6 +37,11 @@ func (s *subscriptions) update(ctx context.Context, sub subapi.Subscription) {
 	oldSub, exists := s.store.GetDeclarativeSubscription(sub.Name)
 
 	if exists {
+		if differ.AreSame(*oldSub.Comp, sub) {
+			log.Debugf("Subscription update skipped: no changes detected: %s", sub.Name)
+			return
+		}
+
 		log.Infof("Closing existing Subscription to reload: %s", *oldSub.Name)
 
 		err := s.proc.CloseSubscription(ctx, oldSub.Comp)

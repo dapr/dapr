@@ -84,6 +84,12 @@ const (
 	// OperatorResiliencyUpdateProcedure is the fully-qualified name of the Operator's ResiliencyUpdate
 	// RPC.
 	OperatorResiliencyUpdateProcedure = "/dapr.proto.operator.v1.Operator/ResiliencyUpdate"
+	// OperatorListWorkflowAccessPolicyProcedure is the fully-qualified name of the Operator's
+	// ListWorkflowAccessPolicy RPC.
+	OperatorListWorkflowAccessPolicyProcedure = "/dapr.proto.operator.v1.Operator/ListWorkflowAccessPolicy"
+	// OperatorWorkflowAccessPolicyUpdateProcedure is the fully-qualified name of the Operator's
+	// WorkflowAccessPolicyUpdate RPC.
+	OperatorWorkflowAccessPolicyUpdateProcedure = "/dapr.proto.operator.v1.Operator/WorkflowAccessPolicyUpdate"
 )
 
 // OperatorClient is a client for the dapr.proto.operator.v1.Operator service.
@@ -116,6 +122,10 @@ type OperatorClient interface {
 	ConfigurationUpdate(context.Context, *connect.Request[v1.ConfigurationUpdateRequest]) (*connect.ServerStreamForClient[v1.ConfigurationUpdateEvent], error)
 	// Sends events to Dapr sidecars upon resiliency changes.
 	ResiliencyUpdate(context.Context, *connect.Request[v1.ResiliencyUpdateRequest]) (*connect.ServerStreamForClient[v1.ResiliencyUpdateEvent], error)
+	// Returns a list of workflow access policies
+	ListWorkflowAccessPolicy(context.Context, *connect.Request[v1.ListWorkflowAccessPolicyRequest]) (*connect.Response[v1.ListWorkflowAccessPolicyResponse], error)
+	// Sends events to Dapr sidecars upon workflow access policy changes.
+	WorkflowAccessPolicyUpdate(context.Context, *connect.Request[v1.WorkflowAccessPolicyUpdateRequest]) (*connect.ServerStreamForClient[v1.WorkflowAccessPolicyUpdateEvent], error)
 }
 
 // NewOperatorClient constructs a client for the dapr.proto.operator.v1.Operator service. By
@@ -213,25 +223,39 @@ func NewOperatorClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(operatorMethods.ByName("ResiliencyUpdate")),
 			connect.WithClientOptions(opts...),
 		),
+		listWorkflowAccessPolicy: connect.NewClient[v1.ListWorkflowAccessPolicyRequest, v1.ListWorkflowAccessPolicyResponse](
+			httpClient,
+			baseURL+OperatorListWorkflowAccessPolicyProcedure,
+			connect.WithSchema(operatorMethods.ByName("ListWorkflowAccessPolicy")),
+			connect.WithClientOptions(opts...),
+		),
+		workflowAccessPolicyUpdate: connect.NewClient[v1.WorkflowAccessPolicyUpdateRequest, v1.WorkflowAccessPolicyUpdateEvent](
+			httpClient,
+			baseURL+OperatorWorkflowAccessPolicyUpdateProcedure,
+			connect.WithSchema(operatorMethods.ByName("WorkflowAccessPolicyUpdate")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // operatorClient implements OperatorClient.
 type operatorClient struct {
-	componentUpdate     *connect.Client[v1.ComponentUpdateRequest, v1.ComponentUpdateEvent]
-	listComponents      *connect.Client[v1.ListComponentsRequest, v1.ListComponentResponse]
-	getConfiguration    *connect.Client[v1.GetConfigurationRequest, v1.GetConfigurationResponse]
-	listSubscriptions   *connect.Client[emptypb.Empty, v1.ListSubscriptionsResponse]
-	getResiliency       *connect.Client[v1.GetResiliencyRequest, v1.GetResiliencyResponse]
-	listResiliency      *connect.Client[v1.ListResiliencyRequest, v1.ListResiliencyResponse]
-	listSubscriptionsV2 *connect.Client[v1.ListSubscriptionsRequest, v1.ListSubscriptionsResponse]
-	subscriptionUpdate  *connect.Client[v1.SubscriptionUpdateRequest, v1.SubscriptionUpdateEvent]
-	listHTTPEndpoints   *connect.Client[v1.ListHTTPEndpointsRequest, v1.ListHTTPEndpointsResponse]
-	hTTPEndpointUpdate  *connect.Client[v1.HTTPEndpointUpdateRequest, v1.HTTPEndpointUpdateEvent]
-	listMCPServers      *connect.Client[v1.ListMCPServersRequest, v1.ListMCPServersResponse]
-	mCPServerUpdate     *connect.Client[v1.MCPServerUpdateRequest, v1.MCPServerUpdateEvent]
-	configurationUpdate *connect.Client[v1.ConfigurationUpdateRequest, v1.ConfigurationUpdateEvent]
-	resiliencyUpdate    *connect.Client[v1.ResiliencyUpdateRequest, v1.ResiliencyUpdateEvent]
+	componentUpdate            *connect.Client[v1.ComponentUpdateRequest, v1.ComponentUpdateEvent]
+	listComponents             *connect.Client[v1.ListComponentsRequest, v1.ListComponentResponse]
+	getConfiguration           *connect.Client[v1.GetConfigurationRequest, v1.GetConfigurationResponse]
+	listSubscriptions          *connect.Client[emptypb.Empty, v1.ListSubscriptionsResponse]
+	getResiliency              *connect.Client[v1.GetResiliencyRequest, v1.GetResiliencyResponse]
+	listResiliency             *connect.Client[v1.ListResiliencyRequest, v1.ListResiliencyResponse]
+	listSubscriptionsV2        *connect.Client[v1.ListSubscriptionsRequest, v1.ListSubscriptionsResponse]
+	subscriptionUpdate         *connect.Client[v1.SubscriptionUpdateRequest, v1.SubscriptionUpdateEvent]
+	listHTTPEndpoints          *connect.Client[v1.ListHTTPEndpointsRequest, v1.ListHTTPEndpointsResponse]
+	hTTPEndpointUpdate         *connect.Client[v1.HTTPEndpointUpdateRequest, v1.HTTPEndpointUpdateEvent]
+	listMCPServers             *connect.Client[v1.ListMCPServersRequest, v1.ListMCPServersResponse]
+	mCPServerUpdate            *connect.Client[v1.MCPServerUpdateRequest, v1.MCPServerUpdateEvent]
+	configurationUpdate        *connect.Client[v1.ConfigurationUpdateRequest, v1.ConfigurationUpdateEvent]
+	resiliencyUpdate           *connect.Client[v1.ResiliencyUpdateRequest, v1.ResiliencyUpdateEvent]
+	listWorkflowAccessPolicy   *connect.Client[v1.ListWorkflowAccessPolicyRequest, v1.ListWorkflowAccessPolicyResponse]
+	workflowAccessPolicyUpdate *connect.Client[v1.WorkflowAccessPolicyUpdateRequest, v1.WorkflowAccessPolicyUpdateEvent]
 }
 
 // ComponentUpdate calls dapr.proto.operator.v1.Operator.ComponentUpdate.
@@ -304,6 +328,16 @@ func (c *operatorClient) ResiliencyUpdate(ctx context.Context, req *connect.Requ
 	return c.resiliencyUpdate.CallServerStream(ctx, req)
 }
 
+// ListWorkflowAccessPolicy calls dapr.proto.operator.v1.Operator.ListWorkflowAccessPolicy.
+func (c *operatorClient) ListWorkflowAccessPolicy(ctx context.Context, req *connect.Request[v1.ListWorkflowAccessPolicyRequest]) (*connect.Response[v1.ListWorkflowAccessPolicyResponse], error) {
+	return c.listWorkflowAccessPolicy.CallUnary(ctx, req)
+}
+
+// WorkflowAccessPolicyUpdate calls dapr.proto.operator.v1.Operator.WorkflowAccessPolicyUpdate.
+func (c *operatorClient) WorkflowAccessPolicyUpdate(ctx context.Context, req *connect.Request[v1.WorkflowAccessPolicyUpdateRequest]) (*connect.ServerStreamForClient[v1.WorkflowAccessPolicyUpdateEvent], error) {
+	return c.workflowAccessPolicyUpdate.CallServerStream(ctx, req)
+}
+
 // OperatorHandler is an implementation of the dapr.proto.operator.v1.Operator service.
 type OperatorHandler interface {
 	// Sends events to Dapr sidecars upon component changes.
@@ -334,6 +368,10 @@ type OperatorHandler interface {
 	ConfigurationUpdate(context.Context, *connect.Request[v1.ConfigurationUpdateRequest], *connect.ServerStream[v1.ConfigurationUpdateEvent]) error
 	// Sends events to Dapr sidecars upon resiliency changes.
 	ResiliencyUpdate(context.Context, *connect.Request[v1.ResiliencyUpdateRequest], *connect.ServerStream[v1.ResiliencyUpdateEvent]) error
+	// Returns a list of workflow access policies
+	ListWorkflowAccessPolicy(context.Context, *connect.Request[v1.ListWorkflowAccessPolicyRequest]) (*connect.Response[v1.ListWorkflowAccessPolicyResponse], error)
+	// Sends events to Dapr sidecars upon workflow access policy changes.
+	WorkflowAccessPolicyUpdate(context.Context, *connect.Request[v1.WorkflowAccessPolicyUpdateRequest], *connect.ServerStream[v1.WorkflowAccessPolicyUpdateEvent]) error
 }
 
 // NewOperatorHandler builds an HTTP handler from the service implementation. It returns the path on
@@ -427,6 +465,18 @@ func NewOperatorHandler(svc OperatorHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(operatorMethods.ByName("ResiliencyUpdate")),
 		connect.WithHandlerOptions(opts...),
 	)
+	operatorListWorkflowAccessPolicyHandler := connect.NewUnaryHandler(
+		OperatorListWorkflowAccessPolicyProcedure,
+		svc.ListWorkflowAccessPolicy,
+		connect.WithSchema(operatorMethods.ByName("ListWorkflowAccessPolicy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	operatorWorkflowAccessPolicyUpdateHandler := connect.NewServerStreamHandler(
+		OperatorWorkflowAccessPolicyUpdateProcedure,
+		svc.WorkflowAccessPolicyUpdate,
+		connect.WithSchema(operatorMethods.ByName("WorkflowAccessPolicyUpdate")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/dapr.proto.operator.v1.Operator/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case OperatorComponentUpdateProcedure:
@@ -457,6 +507,10 @@ func NewOperatorHandler(svc OperatorHandler, opts ...connect.HandlerOption) (str
 			operatorConfigurationUpdateHandler.ServeHTTP(w, r)
 		case OperatorResiliencyUpdateProcedure:
 			operatorResiliencyUpdateHandler.ServeHTTP(w, r)
+		case OperatorListWorkflowAccessPolicyProcedure:
+			operatorListWorkflowAccessPolicyHandler.ServeHTTP(w, r)
+		case OperatorWorkflowAccessPolicyUpdateProcedure:
+			operatorWorkflowAccessPolicyUpdateHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -520,4 +574,12 @@ func (UnimplementedOperatorHandler) ConfigurationUpdate(context.Context, *connec
 
 func (UnimplementedOperatorHandler) ResiliencyUpdate(context.Context, *connect.Request[v1.ResiliencyUpdateRequest], *connect.ServerStream[v1.ResiliencyUpdateEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.operator.v1.Operator.ResiliencyUpdate is not implemented"))
+}
+
+func (UnimplementedOperatorHandler) ListWorkflowAccessPolicy(context.Context, *connect.Request[v1.ListWorkflowAccessPolicyRequest]) (*connect.Response[v1.ListWorkflowAccessPolicyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.operator.v1.Operator.ListWorkflowAccessPolicy is not implemented"))
+}
+
+func (UnimplementedOperatorHandler) WorkflowAccessPolicyUpdate(context.Context, *connect.Request[v1.WorkflowAccessPolicyUpdateRequest], *connect.ServerStream[v1.WorkflowAccessPolicyUpdateEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.operator.v1.Operator.WorkflowAccessPolicyUpdate is not implemented"))
 }
