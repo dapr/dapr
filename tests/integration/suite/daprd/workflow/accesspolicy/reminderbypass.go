@@ -61,29 +61,22 @@ func (r *reminderbypass) Setup(t *testing.T) []framework.Option {
 	r.sched = scheduler.New(t, scheduler.WithSentry(r.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 	r.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	// Policy only allows "legit-caller". "attacker-app" is not in any rule.
+	// Policy only allows "legit-caller". "attacker-app" is not in any rule
+	// and is implicitly denied by the default-deny semantics.
 	policy := []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
   name: bypass-test
 spec:
-  defaultAction: deny
   rules:
   - callers:
     - appID: legit-caller
     workflows:
     - name: "*"
       operations: [schedule]
-      action: allow
     activities:
     - name: "*"
-      action: allow
-  - callers:
-    - appID: bypass-target
-    activities:
-    - name: "*"
-      action: allow
 `)
 
 	// Both sidecars load the policy: the attacker's local router check also

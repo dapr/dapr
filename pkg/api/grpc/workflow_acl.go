@@ -59,12 +59,12 @@ func (a *api) callActorValidateWorkflowACL(ctx context.Context, in *internalv1pb
 	return nil
 }
 
-// Reminders use the coarse IsCallerKnown fallback because their names are
-// internal scheduling artifacts that don't map to per-operation rules.
+// Reminders are scheduled internally by the workflow engine on the same
+// daprd that owns the actor. Cross-app callers cannot legitimately reach
+// this endpoint; when policies are loaded, only the local daprd is
+// permitted to invoke workflow/activity reminders.
 func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *internalv1pb.Reminder) error {
-	actorType := in.GetActorType()
-	opType, isWorkflowOrActivityActor := workflowacl.ParseActorType(actorType)
-	if !isWorkflowOrActivityActor {
+	if _, isWorkflowOrActivityActor := workflowacl.ParseActorType(in.GetActorType()); !isWorkflowOrActivityActor {
 		return nil
 	}
 
@@ -82,8 +82,8 @@ func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *inte
 		return nsErr
 	}
 
-	if !policies.IsCallerKnown(callerAppID, opType) {
-		a.logger.Warnf("Workflow access policy denied app '%s' from invoking workflow reminders", callerAppID)
+	if callerAppID != a.AppID() {
+		a.logger.Warnf("Workflow access policy denied cross-app reminder invocation from app '%s'", callerAppID)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, "reminder", "invoke")
 		return status.Errorf(codes.PermissionDenied, workflowACLDeniedMsg)
 	}
