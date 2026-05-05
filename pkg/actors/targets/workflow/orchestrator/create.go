@@ -65,6 +65,7 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 	if state == nil {
 		state = wfenginestate.NewState(wfenginestate.Options{
 			AppID:             o.appID,
+			Namespace:         o.namespace,
 			WorkflowActorType: o.actorType,
 			ActivityActorType: o.activityActorType,
 		})

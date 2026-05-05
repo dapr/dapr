@@ -34,10 +34,11 @@ func init() {
 	suite.Register(new(outofbounds))
 }
 
-// outofbounds verifies the chunk-range bounds check: extending a chunk's
-// eventCount past the events array must be rejected. This guards against
-// a tamperer who extends the chunk boundary to claim ownership of more
-// events than the producer actually signed.
+// outofbounds verifies that truncating a chunk's rawEvents (removing entries
+// the producer actually signed) is rejected. Counterpart to extrarawevents:
+// extrarawevents extends past what was signed; this trims short of it.
+// EventsDigest is length-prefixed, so adding or removing entries both
+// invalidate the chunk's signature.
 type outofbounds struct {
 	workflow *procworkflow.Workflow
 
@@ -97,11 +98,15 @@ func (s *outofbounds) Run(t *testing.T, ctx context.Context) {
 	_, err = client1.WaitForWorkflowStart(ctx, api.InstanceID(childID))
 	require.NoError(t, err)
 
-	// Extend the chunk's eventCount past the end of the events array.
+	// Drop the chunk's last rawEvent. The chunk's signature was over the
+	// original count of entries; removing one shifts EventsDigest and the
+	// signature no longer verifies.
 	key, ph := fworkflow.ReadPropagatedHistory(t, ctx, s.workflow.DB(), childID)
 	require.NotEmpty(t, ph.GetChunks())
-	//nolint:gosec // small test value, no overflow risk
-	ph.GetChunks()[0].EventCount = int32(len(ph.GetEvents()) + 5)
+	require.GreaterOrEqual(t, len(ph.GetChunks()[0].GetRawEvents()), 2,
+		"sanity: chunk should have at least two rawEvents so we can drop one and still have a non-empty chunk")
+	chunk := ph.GetChunks()[0]
+	chunk.RawEvents = chunk.GetRawEvents()[:len(chunk.GetRawEvents())-1]
 	fworkflow.WritePropagatedHistory(t, ctx, s.workflow.DB(), key, ph)
 
 	s.workflow.DaprN(1).Restart(t, ctx)
@@ -114,6 +119,6 @@ func (s *outofbounds) Run(t *testing.T, ctx context.Context) {
 		meta, err := client1.FetchWorkflowMetadata(ctx, api.InstanceID(childID))
 		assert.NoError(c, err)
 		assert.Equal(c, api.RUNTIME_STATUS_FAILED, meta.GetRuntimeStatus(),
-			"out-of-bounds chunk eventCount must tombstone the child")
+			"truncating a chunk's rawEvents must tombstone the child")
 	}, 20*time.Second, 10*time.Millisecond)
 }

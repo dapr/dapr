@@ -33,18 +33,19 @@ import (
 // Failure: returns an error and absorbs nothing. Caller must reject the
 // inbound message (do not persist or run).
 //
-// No-op when Signer is nil. A non-nil ph is always passed to the
-// verifier even if len(ph.GetChunks()) == 0; the verifier rejects
-// payloads where chunks fail to cover the events array, which catches
-// a tampered payload that strips chunks but leaves events intact.
+// No-op when Signer is nil. Each chunk owns its own rawEvents and signing
+// material; verification rejects mismatches such as empty rawEvents with
+// signatures attached, or signatures that do not chain over the chunk's
+// rawEvents.
 func (s *Signing) VerifyAndAbsorbPropagatedHistory(ph *protos.PropagatedHistory, state *wfenginestate.State) error {
 	if s.Signer == nil || ph == nil {
 		return nil
 	}
 
 	res, err := historysigning.VerifyPropagatedHistory(historysigning.VerifyPropagationOptions{
-		History: ph,
-		Signer:  s.Signer,
+		History:           ph,
+		Signer:            s.Signer,
+		ExpectedNamespace: s.Namespace,
 	})
 	if err != nil {
 		return err
@@ -69,16 +70,15 @@ func (s *Signing) VerifyAndAbsorbPropagatedHistory(ph *protos.PropagatedHistory,
 // absorbing certs into a state.State. Use for stateless callers (e.g. the
 // activity actor) that have no ext-sigcert table to populate. Returns an
 // error on any verification failure; the caller should reject the
-// invocation. No-op when Signer is nil. A non-nil ph is always passed to
-// the verifier even if it carries no chunks; the verifier rejects payloads
-// where chunks fail to cover the events array.
+// invocation. No-op when Signer is nil.
 func (s *Signing) VerifyPropagatedHistoryStateless(ph *protos.PropagatedHistory) error {
 	if s.Signer == nil || ph == nil {
 		return nil
 	}
 	_, err := historysigning.VerifyPropagatedHistory(historysigning.VerifyPropagationOptions{
-		History: ph,
-		Signer:  s.Signer,
+		History:           ph,
+		Signer:            s.Signer,
+		ExpectedNamespace: s.Namespace,
 	})
 	return err
 }
@@ -88,10 +88,12 @@ func (s *Signing) VerifyPropagatedHistoryStateless(ph *protos.PropagatedHistory)
 // PropagatedHistory. Lineage chunks (events produced by upstream apps) are
 // forwarded verbatim - they were already signed by their producer.
 //
-// The current-app chunk is identified by chunk.AppId == s.OwnAppID.
-// Signing is a fresh single-batch signature over the chunk's events:
-// receivers verify the chain self-consistently and the leaf SPIFFE
-// identity against chunk.appId.
+// The current-app chunk is identified by chunk.AppId == ownAppID. Each
+// chunk owns its own rawEvents bytes (already populated by
+// AssembleProtoPropagatedHistory). Signing is a fresh single-batch
+// signature over those bytes; receivers verify the chain self-consistently
+// and the leaf SPIFFE identity against chunk.appId and the receiver's
+// expected namespace.
 //
 // No-op when Signer is nil.
 func (s *Signing) SignOutgoingPropagatedHistory(ph *protos.PropagatedHistory, ownAppID string) error {
@@ -106,20 +108,9 @@ func (s *Signing) SignOutgoingPropagatedHistory(ph *protos.PropagatedHistory, ow
 			continue
 		}
 
-		start := int(chunk.GetStartEventIndex())
-		count := int(chunk.GetEventCount())
-		if start < 0 || count <= 0 || start+count > len(ph.GetEvents()) {
-			return fmt.Errorf("own-app propagated chunk has invalid range [%d, %d) over %d events", start, start+count, len(ph.GetEvents()))
-		}
-		chunkEvents := ph.GetEvents()[start : start+count]
-
-		rawEvents := make([][]byte, len(chunkEvents))
-		for i, e := range chunkEvents {
-			data, err := historysigning.MarshalEvent(e)
-			if err != nil {
-				return fmt.Errorf("failed to marshal event %d for outbound chunk: %w", start+i, err)
-			}
-			rawEvents[i] = data
+		rawEvents := chunk.GetRawEvents()
+		if len(rawEvents) == 0 {
+			return fmt.Errorf("own-app propagated chunk has empty rawEvents (app %q)", chunk.GetAppId())
 		}
 
 		// Single-batch fresh signature. StartEventIndex is 0 (chunk-

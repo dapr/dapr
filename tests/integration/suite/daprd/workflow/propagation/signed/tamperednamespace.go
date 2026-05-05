@@ -31,20 +31,16 @@ import (
 )
 
 func init() {
-	suite.Register(new(emptychunkwithsigs))
+	suite.Register(new(tamperednamespace))
 }
 
-// emptychunkwithsigs verifies the "empty event range but signatures attached"
-// reject branch: a tamperer cannot zero out a chunk's eventCount while keeping
-// its signatures (which would otherwise let them claim ownership of zero
-// events with valid-looking artifacts).
-type emptychunkwithsigs struct {
+type tamperednamespace struct {
 	workflow *procworkflow.Workflow
 
 	childInstanceID atomic.Value // string
 }
 
-func (s *emptychunkwithsigs) Setup(t *testing.T) []framework.Option {
+func (s *tamperednamespace) Setup(t *testing.T) []framework.Option {
 	s.workflow = procworkflow.New(t,
 		procworkflow.WithDaprds(2),
 		procworkflow.WithMTLS(t),
@@ -52,13 +48,13 @@ func (s *emptychunkwithsigs) Setup(t *testing.T) []framework.Option {
 	return []framework.Option{framework.WithProcesses(s.workflow)}
 }
 
-func (s *emptychunkwithsigs) Run(t *testing.T, ctx context.Context) {
+func (s *tamperednamespace) Run(t *testing.T, ctx context.Context) {
 	s.workflow.WaitUntilRunning(t, ctx)
 
 	app0Reg := s.workflow.Registry()
 	app1Reg := s.workflow.RegistryN(1)
 
-	app1Reg.AddWorkflowN("emptyChunkChild", func(ctx *task.WorkflowContext) (any, error) {
+	app1Reg.AddWorkflowN("nsSwapChild", func(ctx *task.WorkflowContext) (any, error) {
 		s.childInstanceID.Store(string(ctx.ID))
 		var p string
 		if err := ctx.WaitForSingleEvent("continue", 30*time.Second).Await(&p); err != nil {
@@ -67,9 +63,9 @@ func (s *emptychunkwithsigs) Run(t *testing.T, ctx context.Context) {
 		return p, nil
 	})
 
-	app0Reg.AddWorkflowN("emptyChunkParent", func(ctx *task.WorkflowContext) (any, error) {
+	app0Reg.AddWorkflowN("nsSwapParent", func(ctx *task.WorkflowContext) (any, error) {
 		var out string
-		return out, ctx.CallChildWorkflow("emptyChunkChild",
+		return out, ctx.CallChildWorkflow("nsSwapChild",
 			task.WithChildWorkflowAppID(s.workflow.DaprN(1).AppID()),
 			task.WithHistoryPropagation(api.PropagateLineage()),
 		).Await(&out)
@@ -78,7 +74,7 @@ func (s *emptychunkwithsigs) Run(t *testing.T, ctx context.Context) {
 	client0 := s.workflow.BackendClient(t, ctx)
 	client1 := s.workflow.BackendClientN(t, ctx, 1)
 
-	_, err := client0.ScheduleNewWorkflow(ctx, "emptyChunkParent")
+	_, err := client0.ScheduleNewWorkflow(ctx, "nsSwapParent")
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -97,14 +93,18 @@ func (s *emptychunkwithsigs) Run(t *testing.T, ctx context.Context) {
 	_, err = client1.WaitForWorkflowStart(ctx, api.InstanceID(childID))
 	require.NoError(t, err)
 
-	// Drop rawEvents but leave signatures + certs intact. The verifier must
-	// reject the chunk because empty rawEvents with attached signing material
-	// is a mismatch between what the producer signed and what is on the wire.
+	// Re-sign the chunk under a fresh leaf cert that chains cleanly to
+	// Sentry (so chain-of-trust passes) but whose SPIFFE ID has the same
+	// app-id under a different namespace. The verifier accepts the
+	// chain, accepts the signature against the new leaf, but the
+	// namespace-component identity check rejects.
 	key, ph := fworkflow.ReadPropagatedHistory(t, ctx, s.workflow.DB(), childID)
 	require.NotEmpty(t, ph.GetChunks())
-	require.NotEmpty(t, ph.GetChunks()[0].GetRawSignatures(),
-		"sanity: chunk should have signatures before tampering")
-	ph.GetChunks()[0].RawEvents = nil
+	require.NotEmpty(t, ph.GetChunks()[0].GetSigningCertChains())
+
+	producerAppID := ph.GetChunks()[0].GetAppId()
+	require.NotEmpty(t, producerAppID)
+	fworkflow.ForgeChunkWithSpiffePath(t, s.workflow.Sentry(), ph.GetChunks()[0], "/ns/wrong-namespace/"+producerAppID)
 	fworkflow.WritePropagatedHistory(t, ctx, s.workflow.DB(), key, ph)
 
 	s.workflow.DaprN(1).Restart(t, ctx)
@@ -117,6 +117,6 @@ func (s *emptychunkwithsigs) Run(t *testing.T, ctx context.Context) {
 		meta, err := client1.FetchWorkflowMetadata(ctx, api.InstanceID(childID))
 		assert.NoError(c, err)
 		assert.Equal(c, api.RUNTIME_STATUS_FAILED, meta.GetRuntimeStatus(),
-			"empty chunk with attached signatures must tombstone the child")
+			"signing cert with mismatched namespace must tombstone the child")
 	}, 20*time.Second, 10*time.Millisecond)
 }

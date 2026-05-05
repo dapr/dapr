@@ -104,15 +104,15 @@ func (s *tamperedevent) Run(t *testing.T, ctx context.Context) {
 	_, err = client1.WaitForWorkflowStart(ctx, api.InstanceID(childID))
 	require.NoError(t, err)
 
-	// Flip a byte inside the chunk's first event. This invalidates the
+	// Flip a byte inside the chunk's first rawEvent. This invalidates the
 	// chunk's signature on next load.
 	key, ph := fworkflow.ReadPropagatedHistory(t, ctx, s.workflow.DB(), childID)
-	require.NotEmpty(t, ph.GetEvents())
-	require.NotEmpty(t, ph.GetEvents()[0].GetEventType())
+	require.NotEmpty(t, ph.GetChunks())
+	require.NotEmpty(t, ph.GetChunks()[0].GetRawEvents())
+	require.NotEmpty(t, ph.GetChunks()[0].GetRawEvents()[0],
+		"sanity: chunk's first rawEvent should be non-empty")
 
-	// Mutate by changing event ID — a small, deterministic mutation that
-	// definitely changes the marshaled bytes.
-	ph.GetEvents()[0].EventId = ph.GetEvents()[0].GetEventId() + 9999
+	ph.GetChunks()[0].GetRawEvents()[0][0] ^= 0xFF
 	fworkflow.WritePropagatedHistory(t, ctx, s.workflow.DB(), key, ph)
 
 	// Restart App1's daprd so the orchestrator actor reloads from the

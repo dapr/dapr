@@ -42,6 +42,7 @@ var activityCache = &sync.Pool{
 
 type Options struct {
 	AppID             string
+	Namespace         string
 	ActivityActorType string
 	WorkflowActorType string
 	Scheduler         todo.ActivityScheduler
@@ -121,7 +122,10 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 	}
 	if opts.Signer != nil {
-		f.signing = &signing.Signing{Signer: opts.Signer}
+		f.signing = &signing.Signing{
+			Signer:    opts.Signer,
+			Namespace: opts.Namespace,
+		}
 	}
 	return f, nil
 }

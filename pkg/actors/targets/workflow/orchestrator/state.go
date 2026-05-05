@@ -43,6 +43,7 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 
 	opts := wfenginestate.Options{
 		AppID:             o.appID,
+		Namespace:         o.namespace,
 		WorkflowActorType: o.actorType,
 		ActivityActorType: o.activityActorType,
 		Signer:            o.signer,
