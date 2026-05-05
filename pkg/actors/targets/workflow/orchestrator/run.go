@@ -321,7 +321,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 
 	// Dispatch activities and messages, collecting failures.
-	activityResult := o.callActivities(ctx, pendingTasks, state, wi.OutgoingHistory)
+	activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory)
 	addResult := o.callAddEventStateMessage(ctx, addWorkflows)
 	createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows)
 

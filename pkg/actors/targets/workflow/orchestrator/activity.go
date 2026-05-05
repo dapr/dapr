@@ -34,7 +34,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State, outgoingHistory map[int32]*protos.PropagatedHistory) dispatchResult {
+func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, outgoingHistory map[int32]*protos.PropagatedHistory) dispatchResult {
 	var dueTime time.Time
 	if len(state.History) > 0 {
 		dueTime = state.History[0].GetTimestamp().AsTime()
@@ -44,10 +44,14 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 
 	var result dispatchResult
 	for _, e := range es {
-		// Don't redispatch activities whose resolution is already in history
-		// or the inbox; the activity actor would just produce another
-		// completion and grow the inbox.
-		if dedup.IsTaskAlreadyResolved(e, state.History, state.Inbox) {
+		// Don't redispatch activities whose resolution is already known to the
+		// current generation's runtime state. We check rs.OldEvents/NewEvents
+		// rather than state.History/state.Inbox because the persisted state has
+		// not been updated yet for this work item; in particular after a
+		// ContinueAsNew the persisted history still reflects the previous
+		// generation, while rs has been reset by the engine and only contains
+		// the current generation's events.
+		if dedup.IsTaskAlreadyResolved(e, rs.GetOldEvents(), rs.GetNewEvents()) {
 			log.Debugf("Workflow actor '%s': skipping dispatch of '%s::%d' - resolution already present", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
 			continue
 		}
