@@ -484,33 +484,34 @@ func (s *Subscription) Stop(err ...error) {
 	}
 
 	// Snapshot inflight up front, then promote it to true if any work is
-	// observed during the drain loop. In the paused (drain-to-app) path
-	// closed stays false during drain, so handler invocations can start
-	// after the initial snapshot — without this update, the 400ms
+	// observed during the paused drain loop. In the paused (drain-to-app)
+	// path closed stays false during drain, so handler invocations can
+	// start after the initial snapshot — without this update, the 400ms
 	// ack-settle below would be skipped even though the broker is still
-	// awaiting our acks.
+	// awaiting our acks. On the close-first path no further handlers can
+	// start, so the snapshot alone is sufficient.
 	inflight := s.inflight.Load() > 0
 
-	// Drain via atomic polling rather than wg.Wait. wg.Wait alone is
-	// unsafe here because contrib retry loops can call the handler
-	// repeatedly with wg.Add(1)/wg.Done() bracketed around backoff
-	// sleeps. Between retries the counter momentarily hits 0; if Wait
-	// was in progress it can start to unwind and race the next retry's
-	// Add(1), tripping the "WaitGroup is reused before previous Wait
-	// has returned" panic. atomic.Int64 polling has no such restriction.
-	//
-	// Stable-quiet only applies to the paused (drain-to-app) path. There,
-	// a single inflight=0 reading is not enough: there is a sub-ms gap
-	// between handler return and the contrib consumer goroutine's next
+	// Stable-quiet polling only applies to the paused (drain-to-app) path.
+	// There, a single inflight=0 reading is not enough: there is a sub-ms
+	// gap between handler return and the contrib consumer goroutine's next
 	// claim.Messages() read, and immediately after Pause returns the
 	// goroutine takes scheduler latency to wake and pick up the first
 	// buffered message. Without the stable window those gaps can cause
 	// Stop to seal before still-buffered messages reach the app.
 	//
-	// On the close-first path (!paused) there is no such window: closed
-	// is already true and new handler invocations self-eject in
-	// microseconds via the closed.Load() branch, so the first inflight=0
-	// reading is the right exit point — matching pre-PR behavior.
+	// We poll atomically rather than calling wg.Wait here because contrib
+	// retry loops bracket the handler with wg.Add(1)/wg.Done() around
+	// backoff sleeps. Between retries the counter momentarily hits 0; if
+	// Wait was in progress it can start to unwind and race the next
+	// retry's Add(1), tripping the "WaitGroup is reused before previous
+	// Wait has returned" panic. atomic.Int64 polling has no such
+	// restriction.
+	//
+	// On the close-first path (!paused) closed is already true and new
+	// handler invocations self-eject in microseconds via the closed.Load()
+	// branch, so we skip polling entirely — the wg.Wait() after seal is
+	// the real drain.
 	//
 	// drainMaxDuration caps the worst case. With closed=false during the
 	// paused drain, an app that keeps returning RETRY (or is unavailable)
@@ -518,29 +519,28 @@ func (s *Subscription) Stop(err ...error) {
 	// may not stabilize. Without a ceiling, Stop would block
 	// StopAllSubscriptionsForever and the runtime's block-shutdown timer
 	// would never start, eventually leading to a kubelet SIGKILL.
-	const drainPollInterval = 20 * time.Millisecond
-	requiredStable := 1
 	if paused {
-		requiredStable = 5 // 100ms of stable quiet
-	}
-	deadline := time.Now().Add(drainMaxDuration)
-	stable := 0
-	for {
-		if s.inflight.Load() > 0 {
-			inflight = true
-			stable = 0
-		} else {
-			stable++
-			if stable >= requiredStable {
+		drainPollInterval := 20 * time.Millisecond
+		requiredStable := 5 // 100ms of stable quiet
+		deadline := time.Now().Add(drainMaxDuration)
+		stable := 0
+		for {
+			if s.inflight.Load() > 0 {
+				inflight = true
+				stable = 0
+			} else {
+				stable++
+				if stable >= requiredStable {
+					break
+				}
+			}
+			if time.Now().After(deadline) {
+				log.Warnf("drain exceeded %s; sealing with inflight=%d on topic %s",
+					drainMaxDuration, s.inflight.Load(), s.topic)
 				break
 			}
+			time.Sleep(drainPollInterval)
 		}
-		if time.Now().After(deadline) {
-			log.Warnf("drain exceeded %s; sealing with inflight=%d on topic %s",
-				drainMaxDuration, s.inflight.Load(), s.topic)
-			break
-		}
-		time.Sleep(drainPollInterval)
 	}
 
 	// Take the write lock to seal the drain atomically with respect to
