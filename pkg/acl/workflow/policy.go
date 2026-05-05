@@ -15,7 +15,6 @@ package workflow
 
 import (
 	"path"
-	"strings"
 
 	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/kit/logger"
@@ -24,14 +23,12 @@ import (
 var log = logger.NewLogger("dapr.acl.workflow")
 
 // CompiledPolicies holds pre-processed workflow access policies for a single
-// target app. It is built from one or more WorkflowAccessPolicy resources that
-// apply to the app (via scopes).
+// target app, built from one or more WorkflowAccessPolicy resources scoped to
+// the app. The policy is a pure allow-list: presence of a matching rule
+// grants access; absence denies. A nil *CompiledPolicies means no policies
+// are loaded, in which case all calls are allowed.
 type CompiledPolicies struct {
-	rules         []compiledRule
-	defaultAction wfaclapi.PolicyAction // "allow" or "deny" - deny if any policy says deny
-
-	wildcardAllowed map[string]map[OperationType]struct{}
-	hasDeny         map[string]map[OperationType]struct{}
+	rules []compiledRule
 }
 
 type compiledRule struct {
@@ -40,32 +37,14 @@ type compiledRule struct {
 }
 
 type compiledOp struct {
-	opType        OperationType
-	operation     wfaclapi.WorkflowOperation
-	pattern       string
-	action        wfaclapi.PolicyAction
-	literalPrefix int // length of literal prefix before first wildcard
-	isExact       bool
+	opType    OperationType
+	operation wfaclapi.WorkflowOperation
+	pattern   string
 }
 
-// Compile builds a CompiledPolicies from a set of WorkflowAccessPolicy
-// resources that all apply to the same target app. Returns nil if no policies
-// are provided (indicating no access control).
 func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 	if len(policies) == 0 {
 		return nil
-	}
-
-	// Compute the aggregate default action. If ANY policy specifies "deny"
-	// (or leaves it empty, which defaults to "deny"), the result is deny.
-	// Only if ALL policies explicitly say "allow" does the default become allow.
-	defaultAction := wfaclapi.PolicyActionAllow
-	for _, policy := range policies {
-		da := policy.Spec.DefaultAction
-		if da == "" || da == wfaclapi.PolicyActionDeny {
-			defaultAction = wfaclapi.PolicyActionDeny
-			break
-		}
 	}
 
 	var rules []compiledRule
@@ -73,8 +52,6 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 		for _, rule := range policy.Spec.Rules {
 			// Defense-in-depth: skip rules with empty callers. The CRD
 			// validates MinItems=1 but standalone mode could bypass validation.
-			// An empty callers list would match ALL callers, violating
-			// least-privilege.
 			if len(rule.Callers) == 0 {
 				log.Warnf("WorkflowAccessPolicy '%s' has a rule with empty callers, skipping (defense-in-depth)", policy.Name)
 				continue
@@ -97,16 +74,11 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 					continue
 				}
 
-				prefix := literalPrefixLen(wf.Name)
-				exact := !containsWildcard(wf.Name)
 				for _, operation := range wf.Operations {
 					cr.operations = append(cr.operations, compiledOp{
-						opType:        OperationTypeWorkflow,
-						operation:     operation,
-						pattern:       wf.Name,
-						action:        wf.Action,
-						literalPrefix: prefix,
-						isExact:       exact,
+						opType:    OperationTypeWorkflow,
+						operation: operation,
+						pattern:   wf.Name,
 					})
 				}
 			}
@@ -118,12 +90,9 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 				}
 
 				cr.operations = append(cr.operations, compiledOp{
-					opType:        OperationTypeActivity,
-					operation:     wfaclapi.WorkflowOperationSchedule,
-					pattern:       act.Name,
-					action:        act.Action,
-					literalPrefix: literalPrefixLen(act.Name),
-					isExact:       !containsWildcard(act.Name),
+					opType:    OperationTypeActivity,
+					operation: wfaclapi.WorkflowOperationSchedule,
+					pattern:   act.Name,
 				})
 			}
 
@@ -133,58 +102,17 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 		}
 	}
 
-	wildcardAllowed := make(map[string]map[OperationType]struct{})
-	hasDeny := make(map[string]map[OperationType]struct{})
-	for i := range rules {
-		for _, op := range rules[i].operations {
-			for id := range rules[i].callerAppIDs {
-				if op.action == wfaclapi.PolicyActionAllow && op.pattern == "*" {
-					if wildcardAllowed[id] == nil {
-						wildcardAllowed[id] = make(map[OperationType]struct{})
-					}
-					wildcardAllowed[id][op.opType] = struct{}{}
-				}
-				if op.action == wfaclapi.PolicyActionDeny {
-					if hasDeny[id] == nil {
-						hasDeny[id] = make(map[OperationType]struct{})
-					}
-					hasDeny[id][op.opType] = struct{}{}
-				}
-			}
-		}
-	}
-
-	return &CompiledPolicies{
-		rules:           rules,
-		defaultAction:   defaultAction,
-		wildcardAllowed: wildcardAllowed,
-		hasDeny:         hasDeny,
-	}
+	return &CompiledPolicies{rules: rules}
 }
 
-// Coarse fallback for reminders: caller needs a wildcard allow AND no
-// denies for opType - any narrower rule means conditional trust, which
-// could let the caller tamper with instances they're specifically denied.
-func (cp *CompiledPolicies) IsCallerKnown(callerAppID string, opType OperationType) bool {
-	if cp == nil {
-		return true
-	}
-	if _, ok := cp.hasDeny[callerAppID][opType]; ok {
-		return false
-	}
-	_, ok := cp.wildcardAllowed[callerAppID][opType]
-	return ok
-}
-
-// Evaluate checks whether the given caller is allowed to perform the specified
-// operation. Returns true if allowed, false if denied.
+// Evaluate returns true if any rule grants the caller access to perform the
+// operation on opName. A nil *CompiledPolicies means no policies are loaded
+// and all calls are allowed.
 func (cp *CompiledPolicies) Evaluate(callerAppID string, opType OperationType, operation wfaclapi.WorkflowOperation, opName string) bool {
 	if cp == nil {
-		// No policies means allow all (backward compatible).
 		return true
 	}
 
-	var bestMatch *compiledOp
 	for i := range cp.rules {
 		rule := &cp.rules[i]
 
@@ -195,63 +123,16 @@ func (cp *CompiledPolicies) Evaluate(callerAppID string, opType OperationType, o
 		for j := range rule.operations {
 			op := &rule.operations[j]
 
-			if op.opType != opType {
-				continue
-			}
-			if op.operation != operation {
+			if op.opType != opType || op.operation != operation {
 				continue
 			}
 
 			matched, err := path.Match(op.pattern, opName)
-			if err != nil || !matched {
-				continue
-			}
-
-			if bestMatch == nil || isMoreSpecific(op, bestMatch) {
-				bestMatch = op
+			if err == nil && matched {
+				return true
 			}
 		}
 	}
 
-	if bestMatch == nil {
-		// No rule matched - use the aggregate default action.
-		return cp.defaultAction == wfaclapi.PolicyActionAllow
-	}
-
-	return bestMatch.action == wfaclapi.PolicyActionAllow
-}
-
-// isMoreSpecific returns true if a is more specific than b. Specificity rules
-// (from proposal):
-// 1. Longest literal prefix wins.
-// 2. Exact match beats wildcard match.
-// 3. Deny beats allow at same specificity.
-func isMoreSpecific(a, b *compiledOp) bool {
-	if a.literalPrefix != b.literalPrefix {
-		return a.literalPrefix > b.literalPrefix
-	}
-	if a.isExact != b.isExact {
-		return a.isExact
-	}
-	// Deny takes precedence over allow at same specificity (fail-closed).
-	if a.action != b.action {
-		return a.action == wfaclapi.PolicyActionDeny
-	}
 	return false
-}
-
-// literalPrefixLen returns the length of the string before the first wildcard
-// character (*, ?, or [).
-func literalPrefixLen(pattern string) int {
-	for i, c := range pattern {
-		if c == '*' || c == '?' || c == '[' {
-			return i
-		}
-	}
-	return len(pattern)
-}
-
-// containsWildcard returns true if the pattern contains any glob wildcard.
-func containsWildcard(pattern string) bool {
-	return strings.ContainsAny(pattern, "*?[")
 }
