@@ -21,7 +21,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -65,38 +64,46 @@ func (r *reservedChars) Run(t *testing.T, ctx context.Context) {
 
 	tests := []struct {
 		name         string
-		methodSuffix string // what we put after /method/
-		expectedBody string // "<Path>|<RawQuery"
+		methodSuffix string
+		wantStatus   int
+		wantBody     string
+		wantBodySub  string
 	}{
 		{
 			name:         "hash in method path",
 			methodSuffix: "test%23stream",
-			expectedBody: "/test#stream|",
+			wantStatus:   http.StatusInternalServerError,
+			wantBodySub:  `invalid method: method contains forbidden character`,
 		},
 		{
 			name:         "question mark in method path",
 			methodSuffix: "test%3Fstream",
-			expectedBody: "/test?stream|",
+			wantStatus:   http.StatusInternalServerError,
+			wantBodySub:  `invalid method: method contains forbidden character`,
 		},
 		{
 			name:         "quote in method path",
 			methodSuffix: "test%22stream",
-			expectedBody: `/test"stream|`,
+			wantStatus:   200,
+			wantBody:     `/test"stream|`,
 		},
 		{
 			name:         "percent in method path",
 			methodSuffix: "test%25stream",
-			expectedBody: "/test%stream|",
+			wantStatus:   200,
+			wantBody:     "/test%stream|",
 		},
 		{
 			name:         "asterisk in method path",
 			methodSuffix: "test%2Astream",
-			expectedBody: "/test*stream|",
+			wantStatus:   200,
+			wantBody:     "/test*stream|",
 		},
 		{
 			name:         "backslash in method path",
 			methodSuffix: "test%5Cstream",
-			expectedBody: `/test\stream|`,
+			wantStatus:   200,
+			wantBody:     `/test\stream|`,
 		},
 	}
 
@@ -119,8 +126,14 @@ func (r *reservedChars) Run(t *testing.T, ctx context.Context) {
 			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 
-			assert.Equal(t, http.StatusOK, resp.StatusCode)
-			assert.Equal(t, tt.expectedBody, strings.TrimSpace(string(body)))
+			require.Equal(t, tt.wantStatus, resp.StatusCode)
+
+			got := strings.TrimSpace(string(body))
+			if tt.wantStatus == http.StatusOK {
+				require.Equal(t, tt.wantBody, got)
+			} else {
+				require.Contains(t, got, tt.wantBodySub)
+			}
 		})
 	}
 }
