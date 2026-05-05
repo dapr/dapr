@@ -89,12 +89,10 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		baseDopts = append(baseDopts, daprd.WithResourceFiles(db.GetComponent(t)))
 	}
 
+	var signingDopts []daprd.Option
 	if sen != nil {
-		// Signing requires mTLS for the SPIFFE identity, so when this
-		// framework is configured with mTLS we also enable the
-		// WorkflowHistorySigning feature flag on every daprd.
-		baseDopts = append(baseDopts,
-			daprd.WithSentry(t, sen),
+		baseDopts = append(baseDopts, daprd.WithSentry(t, sen))
+		signingDopts = []daprd.Option{
 			daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
@@ -104,16 +102,25 @@ spec:
   - name: WorkflowHistorySigning
     enabled: true
 `),
-		)
+		}
 	}
 
 	baseDopts = append(baseDopts, daprd.WithScheduler(sched))
 
+	signingDisabled := make(map[int]bool, len(opts.signingDisabled))
+	for _, idx := range opts.signingDisabled {
+		signingDisabled[idx] = true
+	}
+
 	daprds := make([]*daprd.Daprd, opts.daprds)
 
 	for i := range daprds {
-		dopts := make([]daprd.Option, 0, len(baseDopts))
+		dopts := make([]daprd.Option, 0, len(baseDopts)+len(signingDopts))
 		dopts = append(dopts, baseDopts...)
+
+		if !signingDisabled[i] {
+			dopts = append(dopts, signingDopts...)
+		}
 
 		// Add specific opts for this daprd
 		for _, daprdOpt := range opts.daprdOptions {

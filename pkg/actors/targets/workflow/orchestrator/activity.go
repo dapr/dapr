@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -133,15 +134,7 @@ func (o *orchestrator) failActivityACL(ctx context.Context, e *backend.HistoryEv
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
-		EventType: &protos.HistoryEvent_TaskFailed{
-			TaskFailed: &protos.TaskFailedEvent{
-				TaskScheduledId: e.GetEventId(),
-				FailureDetails: &protos.TaskFailureDetails{
-					ErrorType:    "WorkflowAccessPolicyDenied",
-					ErrorMessage: "access denied by workflow access policy",
-				},
-			},
-		},
+		EventType: events.NewTaskFailedEventType(e.GetEventId(), "WorkflowAccessPolicyDenied", "access denied by workflow access policy", false),
 	}
 
 	if _, err := o.createWorkflowReminder(ctx, common.ReminderPrefixActivityResult, failedEvent, time.Now(), o.appID, nil); err != nil {
