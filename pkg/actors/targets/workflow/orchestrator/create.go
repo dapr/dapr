@@ -72,6 +72,9 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 		o.ometa = o.ometaFromState(o.rstate, startEvent.GetExecutionStarted())
 
 		if propagatedHistory != nil {
+			if err := o.signing.VerifyAndAbsorbPropagatedHistory(propagatedHistory, state); err != nil {
+				return fmt.Errorf("workflow actor '%s': propagated history verification failed: %w", o.actorID, err)
+			}
 			state.SetIncomingHistory(propagatedHistory)
 		}
 		return o.scheduleWorkflowStart(ctx, startEvent, state)
@@ -101,6 +104,9 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 	log.Infof("Workflow actor '%s': workflow was previously completed and is being recreated", o.actorID)
 	state.Reset()
 	if propagatedHistory != nil {
+		if err := o.signing.VerifyAndAbsorbPropagatedHistory(propagatedHistory, state); err != nil {
+			return fmt.Errorf("workflow actor '%s': propagated history verification failed: %w", o.actorID, err)
+		}
 		state.SetIncomingHistory(propagatedHistory)
 	}
 	return o.scheduleWorkflowStart(ctx, startEvent, state)

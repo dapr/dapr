@@ -79,6 +79,19 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 		}
 	}
 
+	// Re-verify any persisted IncomingHistory on cold start. The state store is
+	// not in the trust boundary, and verifySignatureChain only covers
+	// state.History, not the propagated-history key. So an attacker who edits
+	// the persisted propagated-history bytes alone is only caught here. Skip on
+	// terminal workflows for the same reason as inbox-tamper above.
+	if o.signing.Signer != nil && state.IncomingHistory != nil && !state.IsCompleted() {
+		if err := o.signing.VerifyAndAbsorbPropagatedHistory(state.IncomingHistory, state); err != nil {
+			cause := fmt.Errorf("workflow actor '%s': persisted propagated history failed verification (state store tampering): %w",
+				o.actorID, err)
+			return o.tombstoneTamperedState(ctx, opts, state, cause)
+		}
+	}
+
 	// Update cached state
 	o.state = state
 	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)

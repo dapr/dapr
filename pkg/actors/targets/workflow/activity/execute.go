@@ -50,6 +50,18 @@ func (a *activity) executeActivity(ctx context.Context, name string, invocation 
 	}
 	workflowID := a.actorID[0:endIndex]
 
+	// Cryptographically verify any propagated history before letting the
+	// activity see it. Activities are stateless workers with no
+	// ext-sigcert table to absorb certs into, so this is a verify-or-
+	// reject gate. No-op when signing is disabled. On failure, abort
+	// activity execution: the caller (parent workflow) gets a recoverable
+	// error and the activity never runs.
+	if a.signing != nil && invocation.GetPropagatedHistory() != nil {
+		if err := a.signing.VerifyPropagatedHistoryStateless(invocation.GetPropagatedHistory()); err != nil {
+			return fmt.Errorf("activity '%s::%d' rejecting invocation: propagated history verification failed: %w", activityName, taskEvent.GetEventId(), err)
+		}
+	}
+
 	wi := &backend.ActivityWorkItem{
 		SequenceNumber:  int64(taskEvent.GetEventId()),
 		InstanceID:      api.InstanceID(workflowID),

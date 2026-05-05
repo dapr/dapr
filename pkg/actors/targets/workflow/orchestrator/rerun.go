@@ -178,6 +178,21 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 
 	rerunRS := runtimestate.NewWorkflowRuntimeState(o.actorID, newState.CustomStatus, newState.History)
 
+	// Attach this workflow's signatures + cert chain to the current-app
+	// chunk of each outbound PropagatedHistory. Lineage chunks pass
+	// through verbatim. signAndSaveState above already populated
+	// state.Signatures / state.RawSignatures. No-op if signing is off.
+	for _, ph := range outgoingActPropHist {
+		if err = o.signing.SignOutgoingPropagatedHistory(ph, o.appID); err != nil {
+			return err
+		}
+	}
+	for _, ph := range outgoingChildPropHist {
+		if err = o.signing.SignOutgoingPropagatedHistory(ph, o.appID); err != nil {
+			return err
+		}
+	}
+
 	if err = errors.Join(
 		o.callChildWorkflows(ctx, startedEvent.GetName(), childWFs, outgoingChildPropHist),
 		o.callActivities(ctx, activities, newState, rerunRS, outgoingActPropHist).err,

@@ -16,7 +16,6 @@ package propagation
 import (
 	"context"
 	"encoding/base64"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,16 +24,12 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procworkflow "github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
 )
-
-// escapeLike escapes the SQL LIKE wildcards (%, _) and the backslash escape
-// char in s so the result is safe to interpolate as a literal prefix in a
-// parameterized LIKE pattern using `ESCAPE '\'`.
-var escapeLike = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace
 
 func init() {
 	suite.Register(new(dbpersisttrustboundary))
@@ -137,7 +132,7 @@ func (d *dbpersisttrustboundary) Run(t *testing.T, ctx context.Context) {
 	tableName := d.workflow.DB().TableName()
 
 	app2AppID := d.workflow.DaprN(2).AppID()
-	likePattern := escapeLike(app2AppID) + `%propagated-history`
+	likePattern := fworkflow.EscapeLike(app2AppID) + `%propagated-history`
 	rows, err := db.QueryContext(ctx,
 		//nolint:gosec
 		"SELECT key, value, is_binary FROM "+tableName+
