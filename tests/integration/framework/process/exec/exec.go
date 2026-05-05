@@ -101,6 +101,21 @@ func (e *Exec) Clone(t *testing.T) *Exec {
 	return New(t, e.binPath, e.args, e.fopts...)
 }
 
+// ReplaceArg sets `--<flag>=<value>` on the next Run/Restart, replacing any
+// existing occurrence of that flag. Useful for tests that need to change a
+// daprd flag (e.g. --max-body-size) and then restart.
+func (e *Exec) ReplaceArg(t *testing.T, flag, value string) {
+	t.Helper()
+	prefix := "--" + flag + "="
+	for i, a := range e.args {
+		if strings.HasPrefix(a, prefix) {
+			e.args[i] = prefix + value
+			return
+		}
+	}
+	e.args = append(e.args, prefix+value)
+}
+
 func (e *Exec) Run(t *testing.T, ctx context.Context) {
 	t.Helper()
 
