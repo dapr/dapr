@@ -15,34 +15,32 @@ package listen
 
 import (
 	"context"
-	"errors"
 	"net"
-	"syscall"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
 )
 
-// TCP wraps net.Listen("tcp", addr) with a short retry on transient EADDRINUSE
-// during in-process rebind. After Listener.Close() returns the kernel can
-// still hold the bind for a few hundred milliseconds while accepted
-// connections drain. Particularly visible on Windows during SIGHUP-driven
-// runtime restart cycles, where the new runtime's net.Listen races the old
-// listener's teardown.
+// TCP wraps net.Listen("tcp", addr) with a retry budget around bind
+// failures. After Listener.Close() returns, the kernel can still hold the
+// bind for hundreds of milliseconds while accepted connections drain. Most
+// visible on Windows during SIGHUP-driven runtime restart cycles, where
+// the new runtime's net.Listen races the old listener's teardown of its
+// accepted connections.
+//
+// The platform-specific control hook (see listen_*.go) sets
+// SO_REUSEADDR-equivalent options where they help, and the retry covers
+// any remaining transient failure window. Real conflicts (port held by a
+// different process for the whole budget) still surface.
 func TCP(ctx context.Context, addr string) (net.Listener, error) {
+	lc := net.ListenConfig{Control: control}
+
 	bo := backoff.NewExponentialBackOff()
-	bo.InitialInterval = 50 * time.Millisecond
-	bo.MaxInterval = 200 * time.Millisecond
-	bo.MaxElapsedTime = 2 * time.Second
+	bo.InitialInterval = 100 * time.Millisecond
+	bo.MaxInterval = 500 * time.Millisecond
+	bo.MaxElapsedTime = 10 * time.Second
 
 	return backoff.RetryWithData(func() (net.Listener, error) {
-		l, err := net.Listen("tcp", addr)
-		if err == nil {
-			return l, nil
-		}
-		if !errors.Is(err, syscall.EADDRINUSE) {
-			return nil, backoff.Permanent(err)
-		}
-		return nil, err
+		return lc.Listen(ctx, "tcp", addr)
 	}, backoff.WithContext(bo, ctx))
 }
