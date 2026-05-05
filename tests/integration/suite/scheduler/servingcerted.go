@@ -34,9 +34,10 @@ type servingcerted struct {
 }
 
 func (s *servingcerted) Setup(t *testing.T) []framework.Option {
-	s.sentry = procsentry.New(t, procsentry.WithTrustDomain("integration.test.dapr.io"))
+	s.sentry = procsentry.New(t)
 	s.scheduler = procscheduler.New(t,
 		procscheduler.WithSentry(s.sentry),
+		procscheduler.WithID("dapr-scheduler-server-0"),
 	)
 	return []framework.Option{
 		framework.WithProcesses(s.sentry, s.scheduler),

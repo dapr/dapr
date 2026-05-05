@@ -36,7 +36,7 @@ type servingcerted struct {
 }
 
 func (s *servingcerted) Setup(t *testing.T) []framework.Option {
-	s.sentry = procsentry.New(t, procsentry.WithTrustDomain("integration.test.dapr.io"))
+	s.sentry = procsentry.New(t)
 	s.daprd = daprd.New(t,
 		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(s.sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(s.sentry.Address()),
