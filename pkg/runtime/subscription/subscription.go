@@ -90,6 +90,11 @@ type Subscription struct {
 
 var log = logger.NewLogger("dapr.runtime.processor.subscription")
 
+// drainMaxDuration caps how long Stop's drain loop will wait for
+// inflight to reach a stable zero. Exposed as a var so tests can
+// shorten it without sleeping for the full production ceiling.
+var drainMaxDuration = 30 * time.Second
+
 const (
 	BinaryCloudEventHeaderPrefix = "ce_"
 	DefaultCloudEventContentType = "application/json"
@@ -507,14 +512,18 @@ func (s *Subscription) Stop(err ...error) {
 	// microseconds via the closed.Load() branch, so the first inflight=0
 	// reading is the right exit point — matching pre-PR behavior.
 	//
-	// No outer timeout here — the runner's graceful-shutdown-duration
-	// caps the whole close phase, so a stuck handler can't hang shutdown
-	// indefinitely.
+	// drainMaxDuration caps the worst case. With closed=false during the
+	// paused drain, an app that keeps returning RETRY (or is unavailable)
+	// can keep contrib's retry loop re-invoking the handler, so inflight
+	// may not stabilize. Without a ceiling, Stop would block
+	// StopAllSubscriptionsForever and the runtime's block-shutdown timer
+	// would never start, eventually leading to a kubelet SIGKILL.
 	const drainPollInterval = 20 * time.Millisecond
 	requiredStable := 1
 	if paused {
 		requiredStable = 5 // 100ms of stable quiet
 	}
+	deadline := time.Now().Add(drainMaxDuration)
 	stable := 0
 	for {
 		if s.inflight.Load() > 0 {
@@ -525,6 +534,11 @@ func (s *Subscription) Stop(err ...error) {
 			if stable >= requiredStable {
 				break
 			}
+		}
+		if time.Now().After(deadline) {
+			log.Warnf("drain exceeded %s; sealing with inflight=%d on topic %s",
+				drainMaxDuration, s.inflight.Load(), s.topic)
+			break
 		}
 		time.Sleep(drainPollInterval)
 	}
