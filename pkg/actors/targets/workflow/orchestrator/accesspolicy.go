@@ -40,20 +40,26 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 		return nil
 	}
 
-	operation, err := workflowacl.WorkflowOperationFromMethod(method, parsedAddEvent)
-	if err != nil {
-		// Fail closed on malformed requests - same outcome from the caller's
-		// perspective as a denied operation, and avoids leaking parsing
-		// details to a potentially malicious caller.
-		log.Warnf("Workflow actor '%s': workflow access policy denied call '%s': could not derive operation from request: %v", o.actorID, method, err)
-		diag.DefaultMonitoring.WorkflowACLActionDenied(workflowacl.CallerAppID(md), string(workflowacl.OperationTypeWorkflow), method)
-		return status.Errorf(codes.PermissionDenied, "%s: malformed request for method '%s'", workflowACLDeniedMsg, method)
-	}
-	if operation == "" {
+	// Self-calls are exempt: the policy is a cross-app gate.
+	callerAppID := workflowacl.CallerAppID(md)
+	if callerAppID == o.appID {
 		return nil
 	}
 
-	callerAppID := workflowacl.CallerAppID(md)
+	operation, err := workflowacl.WorkflowOperationFromMethod(method, parsedAddEvent)
+	if err != nil {
+		log.Warnf("Workflow actor '%s': workflow access policy denied call '%s': could not derive operation from request: %v", o.actorID, method, err)
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), method)
+		return status.Errorf(codes.PermissionDenied, "%s: malformed request for method '%s'", workflowACLDeniedMsg, method)
+	}
+	if operation == "" {
+		// Non-subject methods (reminders, internal protocol) are only valid
+		// from the local daprd. Cross-app callers cannot invoke them.
+		log.Warnf("Workflow actor '%s': workflow access policy denied cross-app call to non-subject method '%s' from app '%s'", o.actorID, method, callerAppID)
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), method)
+		return status.Errorf(codes.PermissionDenied, "%s: app '%s' cannot invoke method '%s'", workflowACLDeniedMsg, callerAppID, method)
+	}
+
 	if callerAppID == "" {
 		log.Warnf("Workflow actor '%s': workflow access policy denied call '%s' with missing caller identity", o.actorID, method)
 		diag.DefaultMonitoring.WorkflowACLActionDenied("", string(workflowacl.OperationTypeWorkflow), string(operation))
