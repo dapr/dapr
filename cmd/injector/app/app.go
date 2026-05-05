@@ -33,7 +33,9 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/crypto/spiffe"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 	"github.com/dapr/kit/signals"
 )
 
@@ -109,6 +111,10 @@ func Run() {
 		MTLSEnabled:             true,
 		Mode:                    modes.KubernetesMode,
 		Healthz:                 healthz,
+		// The injector serves a mutating admission webhook to the Kubernetes
+		// API server, which on some cloud distributions rejects Ed25519
+		// serving certs.
+		KeyAlgorithm: ptr.Of(spiffe.KeyAlgorithmRSA),
 	})
 	if err != nil {
 		log.Fatal(err)

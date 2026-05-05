@@ -514,8 +514,8 @@ github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0c
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf/go.mod h1:NawmfMN065wKn8Jk39E1iwwgWe3kti/MfHBy1jQmSZs=
 github.com/dapr/durabletask-go v0.11.4-0.20260501180811-87617bcc7be2 h1:Rf1cpQZqTnUpv63zybZB8thGi16HOo9CVhPlYrNb760=
 github.com/dapr/durabletask-go v0.11.4-0.20260501180811-87617bcc7be2/go.mod h1:/qqf208i7YnZgQ6Yxuee42yk+DLnZYe7horTwo0fVYI=
-github.com/dapr/kit v0.17.1-0.20260501143900-6e5616aa395f h1:MhfxLLreLwYsrMqFDFx99KGnkh+Z6kYo3wmsNtxo8kE=
-github.com/dapr/kit v0.17.1-0.20260501143900-6e5616aa395f/go.mod h1:2v02LZdXzPmOadxoT6EMEt0bsEYe6h1fn2ndYWmylCg=
+github.com/dapr/kit v0.17.1-0.20260505124817-5579fd105e21 h1:eQaTMLBT+Z5X4imJ5C9iE83n7LOW/L1KHXcttHD9y/Q=
+github.com/dapr/kit v0.17.1-0.20260505124817-5579fd105e21/go.mod h1:2v02LZdXzPmOadxoT6EMEt0bsEYe6h1fn2ndYWmylCg=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
