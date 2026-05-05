@@ -26,6 +26,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
@@ -34,8 +35,30 @@ func (o *orchestrator) createWorkflowReminder(ctx context.Context, namePrefix st
 	return o.createReminderWithType(ctx, namePrefix, data, start, actorType, concurrencyKey)
 }
 
-func (o *orchestrator) createRetentionReminder(ctx context.Context, namePrefix string, start time.Time) (string, error) {
-	return o.createReminderWithType(ctx, namePrefix, nil, start, o.retentionActorType, nil)
+// createRetentionReminder creates the retention reminder that triggers
+// workflow purge. Unlike start/new-event reminders, this uses a deterministic
+// name (no random suffix) so the call is idempotent: the scheduler's
+// overwrite-by-name semantics ensure that retrying a Create after a transient
+// scheduler failure converges on a single retention reminder rather than
+// accumulating duplicates.
+func (o *orchestrator) createRetentionReminder(ctx context.Context, name string, start time.Time) (string, error) {
+	dueTime := start.UTC().Format(time.RFC3339)
+
+	return name, common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
+		ActorType: o.retentionActorType,
+		ActorID:   o.actorID,
+		DueTime:   dueTime,
+		Name:      name,
+		// One shot, retry forever, every second.
+		FailurePolicy: &commonv1pb.JobFailurePolicy{
+			Policy: &commonv1pb.JobFailurePolicy_Constant{
+				Constant: &commonv1pb.JobFailurePolicyConstant{
+					Interval:   durationpb.New(time.Second),
+					MaxRetries: nil,
+				},
+			},
+		},
+	})
 }
 
 func (o *orchestrator) createReminderWithType(ctx context.Context, namePrefix string, data proto.Message, start time.Time, actorType string, concurrencyKey *string) (string, error) {
@@ -58,7 +81,7 @@ func (o *orchestrator) createReminderWithType(ctx context.Context, namePrefix st
 
 	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, dueTime)
 
-	return reminderName, o.reminders.Create(ctx, &actorapi.CreateReminderRequest{
+	return reminderName, common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
 		ActorType: actorType,
 		ActorID:   o.actorID,
 		Data:      adata,
