@@ -71,7 +71,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	var stage atomic.Int64
 
 	reg := task.NewTaskRegistry()
-	reg.AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	reg.AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		var input int
 		require.NoError(t, ctx.GetInput(&input))
 
@@ -154,9 +154,9 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, int64(2), stage.Load())
 	}, time.Second*3, time.Millisecond*10)
 
-	metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID("my-custom-instance-id"))
+	metadata, err := backendClient.WaitForWorkflowCompletion(ctx, api.InstanceID("my-custom-instance-id"))
 	require.NoError(t, err)
-	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 	_, err = gclient.PurgeWorkflowBeta1(ctx, &rtv1.PurgeWorkflowRequest{
 		InstanceId:        "my-custom-instance-id",
@@ -167,7 +167,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	stage.Store(0)
 
 	// Workflow client
-	_, err = backendClient.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("my-custom-instance-id"), api.WithInput(1))
+	_, err = backendClient.ScheduleNewWorkflow(ctx, "foo", api.WithInstanceID("my-custom-instance-id"), api.WithInput(1))
 	require.NoError(t, err)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(1), stage.Load())
@@ -179,6 +179,6 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, int64(2), stage.Load())
 	}, time.Second*3, time.Millisecond*10)
 
-	_, err = backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID("my-custom-instance-id"))
+	_, err = backendClient.WaitForWorkflowCompletion(ctx, api.InstanceID("my-custom-instance-id"))
 	require.NoError(t, err)
 }

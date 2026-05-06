@@ -95,16 +95,16 @@ func (c *child) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("child workflow", func(t *testing.T) {
 		r := task.NewTaskRegistry()
-		r.AddOrchestratorN("root", func(ctx *task.OrchestrationContext) (any, error) {
+		r.AddWorkflowN("root", func(ctx *task.WorkflowContext) (any, error) {
 			var input string
 			if err := ctx.GetInput(&input); err != nil {
 				return nil, err
 			}
 			var output string
-			err := ctx.CallSubOrchestrator("child", task.WithSubOrchestratorInput(input)).Await(&output)
+			err := ctx.CallChildWorkflow("child", task.WithChildWorkflowInput(input)).Await(&output)
 			return output, err
 		})
-		r.AddOrchestratorN("child", func(ctx *task.OrchestrationContext) (any, error) {
+		r.AddWorkflowN("child", func(ctx *task.WorkflowContext) (any, error) {
 			var input string
 			if err := ctx.GetInput(&input); err != nil {
 				return nil, err
@@ -116,9 +116,9 @@ func (c *child) Run(t *testing.T, ctx context.Context) {
 		defer cancelTaskhub()
 
 		id := api.InstanceID(c.startWorkflow(ctx, t, "root", "Dapr"))
-		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+		metadata, err := backendClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 		assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 	})
 }

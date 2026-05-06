@@ -54,7 +54,7 @@ func (p *pagination) Setup(t *testing.T) []framework.Option {
 func (p *pagination) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
-	p.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	p.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, nil
 	})
 
@@ -66,7 +66,7 @@ func (p *pagination) Run(t *testing.T, ctx context.Context) {
 	errCh := make(chan error, 100)
 	for range n {
 		go func() {
-			id, err := client.ScheduleNewOrchestration(ctx, "foo")
+			id, err := client.ScheduleNewWorkflow(ctx, "foo")
 			errCh <- err
 			ids.Append(id.String())
 		}()

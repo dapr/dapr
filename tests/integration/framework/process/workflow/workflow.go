@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
@@ -38,6 +39,7 @@ type Workflow struct {
 	db           *sqlite.SQLite
 	place        *placement.Placement
 	sched        *scheduler.Scheduler
+	sentry       *sentry.Sentry
 	daprds       []*daprd.Daprd
 }
 
@@ -61,7 +63,23 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		sqlite.WithActorStateStore(true),
 		sqlite.WithCreateStateTables(),
 	)
-	place := placement.New(t)
+
+	var sen *sentry.Sentry
+	var placementOpts []placement.Option
+	var schedulerOpts []scheduler.Option
+	schedulerOpts = append(schedulerOpts, opts.schedulerOptions...)
+	if opts.mtls {
+		sen = sentry.New(t)
+		placementOpts = append(placementOpts, placement.WithSentry(t, sen))
+		// Scheduler ID must match the TLS cert DNS names issued by Sentry.
+		schedulerOpts = append(schedulerOpts,
+			scheduler.WithSentry(sen),
+			scheduler.WithID("dapr-scheduler-server-0"),
+		)
+	}
+
+	place := placement.New(t, placementOpts...)
+	sched := scheduler.New(t, schedulerOpts...)
 
 	baseDopts := []daprd.Option{
 		daprd.WithPlacementAddresses(place.Address()),
@@ -71,14 +89,38 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		baseDopts = append(baseDopts, daprd.WithResourceFiles(db.GetComponent(t)))
 	}
 
-	sched := scheduler.New(t)
+	var signingDopts []daprd.Option
+	if sen != nil {
+		baseDopts = append(baseDopts, daprd.WithSentry(t, sen))
+		signingDopts = []daprd.Option{
+			daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: propagation-signing
+spec:
+  features:
+  - name: WorkflowHistorySigning
+    enabled: true
+`),
+		}
+	}
+
 	baseDopts = append(baseDopts, daprd.WithScheduler(sched))
+
+	signingDisabled := make(map[int]bool, len(opts.signingDisabled))
+	for _, idx := range opts.signingDisabled {
+		signingDisabled[idx] = true
+	}
 
 	daprds := make([]*daprd.Daprd, opts.daprds)
 
 	for i := range daprds {
-		dopts := make([]daprd.Option, 0, len(baseDopts))
+		dopts := make([]daprd.Option, 0, len(baseDopts)+len(signingDopts))
 		dopts = append(dopts, baseDopts...)
+
+		if !signingDisabled[i] {
+			dopts = append(dopts, signingDopts...)
+		}
 
 		// Add specific opts for this daprd
 		for _, daprdOpt := range opts.daprdOptions {
@@ -98,7 +140,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	// Apply orchestrators & activities to the registry
 	for _, orch := range opts.orchestrators {
 		if orch.index < len(daprds) {
-			require.NoError(t, registries[orch.index].AddOrchestratorN(orch.name, orch.fn))
+			require.NoError(t, registries[orch.index].AddWorkflowN(orch.name, orch.fn))
 		}
 	}
 	for _, act := range opts.activities {
@@ -112,6 +154,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		db:           db,
 		place:        place,
 		sched:        sched,
+		sentry:       sen,
 		daprds:       daprds,
 	}
 
@@ -124,6 +167,9 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 
 func (w *Workflow) Run(t *testing.T, ctx context.Context) {
 	w.db.Run(t, ctx)
+	if w.sentry != nil {
+		w.sentry.Run(t, ctx)
+	}
 	w.place.Run(t, ctx)
 	if w.sched != nil {
 		w.sched.Run(t, ctx)
@@ -141,6 +187,9 @@ func (w *Workflow) Cleanup(t *testing.T) {
 		w.sched.Cleanup(t)
 	}
 	w.place.Cleanup(t)
+	if w.sentry != nil {
+		w.sentry.Cleanup(t)
+	}
 	w.db.Cleanup(t)
 }
 

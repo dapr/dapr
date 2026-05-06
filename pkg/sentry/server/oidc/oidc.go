@@ -154,7 +154,7 @@ func New(opts Options) (*Server, error) {
 			return nil, fmt.Errorf("failed to join path for authorization endpoint: %w", err)
 		}
 
-		log.Infof("Using path prefix %q for OIDC HTTP endpoints", opts.PathPrefix)
+		log.Infof("Using path prefix %q for OIDC HTTP endpoints", *opts.PathPrefix)
 	}
 
 	return &Server{
@@ -201,7 +201,7 @@ func (s *Server) Run(ctx context.Context) error {
 				break
 			}
 
-			log.Warnf("Waiting for TLS certificate and key files to be available: %s, %s", s.tlsCertPath, s.tlsKeyPath)
+			log.Warnf("Waiting for TLS certificate and key files to be available: %v, %v", s.tlsCertPath, s.tlsKeyPath)
 
 			select {
 			case <-time.After(5 * time.Second):

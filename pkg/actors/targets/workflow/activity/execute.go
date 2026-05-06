@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -30,10 +31,12 @@ import (
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *backend.HistoryEvent) error {
+func (a *activity) executeActivity(ctx context.Context, name string, invocation *protos.ActivityInvocation) error {
+	taskEvent := invocation.GetHistoryEvent()
 	activityName := ""
 	if ts := taskEvent.GetTaskScheduled(); ts != nil {
 		activityName = ts.GetName()
@@ -48,10 +51,11 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	workflowID := a.actorID[0:endIndex]
 
 	wi := &backend.ActivityWorkItem{
-		SequenceNumber: int64(taskEvent.GetEventId()),
-		InstanceID:     api.InstanceID(workflowID),
-		NewEvent:       taskEvent,
-		Properties:     make(map[string]any),
+		SequenceNumber:  int64(taskEvent.GetEventId()),
+		InstanceID:      api.InstanceID(workflowID),
+		NewEvent:        taskEvent,
+		Properties:      make(map[string]any),
+		IncomingHistory: invocation.GetPropagatedHistory(),
 	}
 
 	// Executing activity code is a one-way operation. We must wait for the app code to report its completion, which
@@ -102,6 +106,25 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 		}
 	}
 	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, name)
+
+	// Attach an attestation so the parent workflow can cryptographically
+	// verify this activity's identity, input, and output. No-op when
+	// signing is disabled.
+	if a.signing != nil && wi.Result != nil {
+		scheduled := taskEvent.GetTaskScheduled()
+		if scheduled == nil {
+			executionStatus = diag.StatusRecoverable
+			return wferrors.NewRecoverable(fmt.Errorf("activity actor '%s': cannot build activity attestation without TaskScheduledEvent", a.actorID))
+		}
+		if attachErr := a.signing.AttachActivityCompletionAttestation(ctx, wi.Result, signing.ActivityAttestationParams{
+			ParentInstanceID: workflowID,
+			ActivityName:     activityName,
+			Input:            scheduled.GetInput(),
+		}); attachErr != nil {
+			executionStatus = diag.StatusRecoverable
+			return wferrors.NewRecoverable(fmt.Errorf("activity actor '%s': %w", a.actorID, attachErr))
+		}
+	}
 
 	// send completed event to orchestrator wf actor
 	wfActorType := a.workflowActorType

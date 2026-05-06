@@ -84,7 +84,6 @@ func newTestProc(setters ...newTestProcOptions) (*Processor, *registry.Registry)
 		}),
 		Resiliency:     resiliency.New(log),
 		Mode:           modes.StandaloneMode,
-		PodName:        "testPodName",
 		OperatorClient: nil,
 		GRPC:           nil,
 		Channels:       new(channels.Channels),

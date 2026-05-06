@@ -23,6 +23,7 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/backend"
@@ -31,7 +32,7 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.actors.targets.orchestrator")
 
-type EventSink func(*backend.OrchestrationMetadata)
+type EventSink func(*backend.WorkflowMetadata)
 
 type orchestrator struct {
 	*factory
@@ -39,8 +40,8 @@ type orchestrator struct {
 	actorID string
 
 	state  *wfenginestate.State
-	rstate *backend.OrchestrationRuntimeState
-	ometa  *backend.OrchestrationMetadata
+	rstate *backend.WorkflowRuntimeState
+	ometa  *backend.WorkflowMetadata
 
 	activityResultAwaited atomic.Bool
 	lock                  *lock.Stallable
@@ -49,6 +50,8 @@ type orchestrator struct {
 
 	streamFns map[int64]*streamFn
 	streamIDx int64
+
+	signing *signing.Signing
 }
 
 type streamFn struct {
@@ -124,6 +127,7 @@ func (o *orchestrator) Deactivate(ctx context.Context) error {
 		stream.errCh <- targeterrors.NewClosed("deactivated")
 	}
 	clear(o.streamFns)
+	o.signing.Reset()
 	o.wg.Wait()
 	orchestratorCache.Put(o)
 

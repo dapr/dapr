@@ -156,7 +156,6 @@ func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateReques
 		CancelWatch:    cancel,
 		Stream:         stream,
 		Namespace:      in.GetNamespace(),
-		PodName:        in.GetPodName(),
 		KubeClient:     a.Client,
 		ProcessSecrets: processHTTPEndpointSecrets,
 	})

@@ -24,15 +24,18 @@ const (
 	// TODO: @joshvanl: remove
 	CallbackChannelProperty = "dapr.callback"
 
-	CreateWorkflowInstanceMethod = "CreateWorkflowInstance"
-	AddWorkflowEventMethod       = "AddWorkflowEvent"
-	PurgeWorkflowStateMethod     = "PurgeWorkflowState"
-	WaitForRuntimeStatus         = "WaitForRuntimeStatus"
-	ForkWorkflowHistory          = "ForkWorkflowHistory"
-	RerunWorkflowInstance        = "RerunWorkflowInstance"
+	CreateWorkflowInstanceMethod      = "CreateWorkflowInstance"
+	AddWorkflowEventMethod            = "AddWorkflowEvent"
+	PurgeWorkflowStateMethod          = "PurgeWorkflowState"
+	RecursivePurgeWorkflowStateMethod = "RecursivePurgeWorkflowState"
+	WaitForRuntimeStatus              = "WaitForRuntimeStatus"
+	ForkWorkflowHistory               = "ForkWorkflowHistory"
+	RerunWorkflowInstance             = "RerunWorkflowInstance"
+	ExecuteActivityMethod             = "Execute"
 
 	MetadataActivityReminderDueTime = "dueTime"
 	MetadataPurgeRetentionCall      = "PurgeRetentionCall"
+	MetadataPurgeForce              = "PurgeForce"
 
 	ActorTypePrefix = "dapr.internal."
 )
@@ -43,7 +46,7 @@ var (
 )
 
 // WorkflowScheduler is a func interface for pushing workflow (orchestration) work items into the durabletask backend
-type WorkflowScheduler func(ctx context.Context, wi *backend.OrchestrationWorkItem) error
+type WorkflowScheduler func(ctx context.Context, wi *backend.WorkflowWorkItem) error
 
 // ActivityScheduler is a func interface for pushing activity work items into the durabletask backend
 type ActivityScheduler func(ctx context.Context, wi *backend.ActivityWorkItem) error

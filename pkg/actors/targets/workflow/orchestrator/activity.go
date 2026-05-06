@@ -21,15 +21,20 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State) error {
+func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, outgoingHistory map[int32]*protos.PropagatedHistory) dispatchResult {
 	var dueTime time.Time
 	if len(state.History) > 0 {
 		dueTime = state.History[0].GetTimestamp().AsTime()
@@ -37,30 +42,59 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 		dueTime = state.Inbox[0].GetTimestamp().AsTime()
 	}
 
+	var result dispatchResult
 	for _, e := range es {
-		err := o.callActivity(ctx, e, dueTime, state.Generation)
+		// Don't redispatch activities whose resolution is already known to the
+		// current generation's runtime state. We check rs.OldEvents/NewEvents
+		// rather than state.History/state.Inbox because the persisted state has
+		// not been updated yet for this work item; in particular after a
+		// ContinueAsNew the persisted history still reflects the previous
+		// generation, while rs has been reset by the engine and only contains
+		// the current generation's events.
+		if dedup.IsTaskAlreadyResolved(e, rs.GetOldEvents(), rs.GetNewEvents()) {
+			log.Debugf("Workflow actor '%s': skipping dispatch of '%s::%d' - resolution already present", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
+			continue
+		}
+
+		err := o.callActivity(ctx, e, dueTime, state.Generation, outgoingHistory[e.GetEventId()])
 		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
 				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
 				continue
 			}
 
-			return err
+			result.recordFailure(e.GetEventId(), err)
+			continue
 		}
 	}
 
-	return nil
+	return result
 }
 
-func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, generation uint64) error {
+func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, generation uint64, ph *protos.PropagatedHistory) error {
 	ts := e.GetTaskScheduled()
 	if ts == nil {
 		log.Warnf("Workflow actor '%s': unable to process task '%v'", o.actorID, e)
 		return nil
 	}
 
-	var eventData []byte
-	eventData, err := proto.Marshal(e)
+	// Only wrap in the ActivityInvocation envelope when there is propagated history to carry.
+	var payload proto.Message = e
+	if ph != nil {
+		if o.signer == nil {
+			log.Warnf("Workflow actor '%s': propagating unsigned workflow history to activity '%s::%d' (signing is not configured; chunks cannot be cryptographically verified by the receiver)", o.actorID, ts.GetName(), e.GetEventId())
+		}
+		payload = &protos.ActivityInvocation{
+			HistoryEvent:      e,
+			PropagatedHistory: ph,
+		}
+	}
+
+	if err := o.activityPayloadOversize(payload, e); err != nil {
+		return err
+	}
+
+	invocationData, err := proto.Marshal(payload)
 	if err != nil {
 		return err
 	}
@@ -76,23 +110,53 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 
 	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", o.actorID, activityActorType, targetActorID)
 
+	ctx, cancel := context.WithTimeout(ctx, dispatchTimeout)
+	defer cancel()
+
 	_, err = o.router.Call(ctx, internalsv1pb.
-		NewInternalInvokeRequest("Execute").
+		NewInternalInvokeRequest(todo.ExecuteActivityMethod).
 		WithActor(activityActorType, targetActorID).
 		WithMetadata(map[string][]string{
 			todo.MetadataActivityReminderDueTime: {strconv.FormatInt(dueTime.UnixMilli(), 10)},
 		}).
-		WithData(eventData).
+		WithData(invocationData).
 		WithContentType(invokev1.ProtobufContentType),
 	)
 	if err != nil {
+		// If the call was denied by a workflow access policy, fail the
+		// activity task immediately rather than retrying.
+		if isPermissionDenied(err) {
+			log.Errorf("Workflow actor '%s': activity '%s' denied by workflow access policy: %v", o.actorID, ts.GetName(), err)
+			return o.failActivityACL(ctx, e)
+		}
+
+		if router := e.GetRouter(); router != nil && router.TargetAppID != nil {
+			return fmt.Errorf("failed to dispatch activity '%s' to remote app '%s' (the app may not be available): %w", ts.GetName(), router.GetTargetAppID(), err)
+		}
+
 		return fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.GetName(), err)
 	}
 
 	return nil
 }
 
+// failActivityACL creates a TaskFailed event on the parent orchestrator when
+// the activity call is rejected by a WorkflowAccessPolicy. Uses a reminder to
+// deliver the event in a fresh execution cycle.
+func (o *orchestrator) failActivityACL(ctx context.Context, e *backend.HistoryEvent) error {
+	failedEvent := &protos.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.New(time.Now()),
+		EventType: events.NewTaskFailedEventType(e.GetEventId(), "WorkflowAccessPolicyDenied", "access denied by workflow access policy", false),
+	}
+
+	if _, err := o.createWorkflowReminder(ctx, common.ReminderPrefixActivityResult, failedEvent, time.Now(), o.appID, nil); err != nil {
+		return fmt.Errorf("failed to create activity failure reminder: %w", err)
+	}
+
+	return nil
+}
+
 func buildActivityActorID(workflowID string, taskID int32, generation uint64) string {
-	// An activity can be identified by its name followed by its task ID and generation. Example: SayHello::0::1, SayHello::1::1, etc.
 	return workflowID + "::" + strconv.Itoa(int(taskID)) + "::" + strconv.FormatUint(generation, 10)
 }

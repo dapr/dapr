@@ -24,7 +24,7 @@ import (
 )
 
 // GetStablePort returns an available TCP port.
-// It first attempts to get a free port that is between start and start+2047, which is calculated in a deterministic way based on the current process' environment.
+// It first attempts to get a free port that is calculated in a deterministic way based on the current process' environment, capped to the valid TCP port range.
 // If no available port can be found, it returns a random port (which could be outside of the range defined above).
 func GetStablePort(start int, appID string) (int, error) {
 	// Try determining a "stable" port
@@ -43,8 +43,13 @@ func GetStablePort(start int, appID string) (int, error) {
 	// Compute the SHA-256 hash to generate a "random", but stable, sequence of binary values
 	h := sha256.Sum256(base)
 
-	// Get the first 11 bits (0-2047) as "random number"
-	rnd := int(h[0]) + int(h[1]>>5)<<8
+	// Use the first 16 bits of the hash as a "random number", then modulo
+	// by the remaining port range to ensure the result is a valid TCP port.
+	maxOffset := 65535 - start
+	if maxOffset <= 0 {
+		return freeport.GetFreePort()
+	}
+	rnd := (int(h[0]) | int(h[1])<<8) % maxOffset
 	port := start + rnd
 
 	// Check if the port is available

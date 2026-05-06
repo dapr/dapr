@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -560,7 +561,13 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
 	msg := req.Message()
 	verb := msg.GetHttpExtension().GetVerb().String()
-	method := msg.GetMethod()
+	// Defense-in-depth: resolve path traversal before building the outbound
+	// URL. The caller should have already normalized via NormalizeMethod, but
+	// we apply path.Clean here to guarantee no ../ reaches the target app.
+	method := path.Clean(msg.GetMethod())
+	if method == "." {
+		method = ""
+	}
 	var headers []commonapi.NameValuePair
 
 	uri := strings.Builder{}
@@ -668,7 +675,26 @@ func (h *Channel) parseChannelResponse(channelResp *http.Response) (*invokev1.In
 }
 
 func copyHeader(dst http.Header, src http.Header) {
+	// Build set of headers nominated by Connection header per RFC 7230 Section 6.1.
+	connHeaders := make(map[string]struct{})
+	for _, v := range src.Values("Connection") {
+		for token := range strings.SplitSeq(v, ",") {
+			token = strings.TrimSpace(token)
+			if token != "" {
+				connHeaders[http.CanonicalHeaderKey(token)] = struct{}{}
+			}
+		}
+	}
+
 	for k, vv := range src {
+		// Strip hop-by-hop headers per RFC 7230 Section 6.1,
+		// including headers nominated by the Connection header.
+		if invokev1.IsHopByHopHeader(k) {
+			continue
+		}
+		if _, ok := connHeaders[k]; ok {
+			continue
+		}
 		for _, v := range vv {
 			dst.Add(k, v)
 		}

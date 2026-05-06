@@ -13,7 +13,7 @@ spec:
 {{- if eq .Values.global.ha.enabled true }}
   replicas: {{ .Values.global.ha.replicaCount }}
 {{- else }}
-  replicas: {{ .Values.replicaCount }}  
+  replicas: {{ .Values.replicaCount }}
 {{- end }}
   selector:
     matchLabels:
@@ -172,6 +172,8 @@ spec:
           value: {{ .Values.sidecarDropALLCapabilities | toString | toYaml }}
         - name: SIDECAR_READ_ONLY_ROOT_FILESYSTEM
           value: {{ .Values.sidecarReadOnlyRootFilesystem | toString | toYaml }}
+        - name: NATIVE_SIDECAR_ENABLED
+          value: {{ .Values.nativeSidecar | toString | toYaml }}
 
         - name: NAMESPACE
           valueFrom:

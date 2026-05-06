@@ -83,7 +83,7 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 	_, err := r.daprd.GRPCClient(t, ctx).ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     "test",
-			Schedule: new("@every 1s"),
+			Schedule: new("@every 100ms"),
 		},
 	})
 	require.NoError(t, err)

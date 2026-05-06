@@ -74,35 +74,35 @@ func (c *crossworkflow) Run(t *testing.T, ctx context.Context) {
 
 	evs := resp.Events
 
-	// Can have 1 or 2 `GetOrchestratorStarted` events depending on timing.
+	// Can have 1 or 2 `GetWorkflowStarted` events depending on timing.
 	require.True(t, len(evs) == 7 || len(evs) == 6)
 
-	assert.NotNil(t, evs[0].GetOrchestratorStarted())
+	assert.NotNil(t, evs[0].GetWorkflowStarted())
 	assert.NotNil(t, evs[1].GetExecutionStarted())
 	assert.Equal(t, "foo", evs[1].GetExecutionStarted().GetName())
-	assert.Equal(t, "abc", evs[1].GetExecutionStarted().GetOrchestrationInstance().GetInstanceId())
+	assert.Equal(t, "abc", evs[1].GetExecutionStarted().GetWorkflowInstance().GetInstanceId())
 	assert.Equal(t, c.workflow.DaprN(0).AppID(), evs[1].GetRouter().GetSourceAppID())
 
-	assert.NotNil(t, evs[2].GetSubOrchestrationInstanceCreated())
-	assert.Equal(t, "abc:0000", evs[2].GetSubOrchestrationInstanceCreated().GetInstanceId())
-	assert.Equal(t, "bar", evs[2].GetSubOrchestrationInstanceCreated().GetName())
+	assert.NotNil(t, evs[2].GetChildWorkflowInstanceCreated())
+	assert.Equal(t, "abc:0000", evs[2].GetChildWorkflowInstanceCreated().GetInstanceId())
+	assert.Equal(t, "bar", evs[2].GetChildWorkflowInstanceCreated().GetName())
 	assert.Equal(t, c.workflow.DaprN(0).AppID(), evs[2].GetRouter().GetSourceAppID())
 	assert.Equal(t, c.workflow.DaprN(1).AppID(), evs[2].GetRouter().GetTargetAppID())
 
-	assert.NotNil(t, evs[3].GetOrchestratorStarted())
+	assert.NotNil(t, evs[3].GetWorkflowStarted())
 
 	// The index of the next events depends on whether there are 6 or 7 events
 	// total.
 	i := 4
 	if len(evs) == 7 {
 		i = 5
-		assert.NotNil(t, evs[4].GetOrchestratorStarted())
+		assert.NotNil(t, evs[4].GetWorkflowStarted())
 	}
 
-	assert.NotNil(t, evs[i].GetSubOrchestrationInstanceCompleted())
+	assert.NotNil(t, evs[i].GetChildWorkflowInstanceCompleted())
 	assert.Equal(t, c.workflow.DaprN(1).AppID(), evs[i].GetRouter().GetSourceAppID())
 	assert.Equal(t, c.workflow.DaprN(0).AppID(), evs[i].GetRouter().GetTargetAppID())
 
-	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[i+1].GetExecutionCompleted().GetOrchestrationStatus().String())
+	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[i+1].GetExecutionCompleted().GetWorkflowStatus().String())
 	assert.Equal(t, c.workflow.Dapr().AppID(), evs[i+1].GetRouter().GetSourceAppID())
 }

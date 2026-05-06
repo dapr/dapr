@@ -33,6 +33,7 @@ import (
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
+	"github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -295,6 +296,10 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 
 // CallActor invokes a virtual actor.
 func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	if err := a.callActorValidateWorkflowACL(ctx, in); err != nil {
+		return nil, err
+	}
+
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
 	var res *internalv1pb.InternalInvokeResponse
 	router, err := a.ActorRouter(ctx)
@@ -328,6 +333,12 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 // CallActorReminder invokes an internal virtual actor.
 func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) (*emptypb.Empty, error) {
+	// Enforce workflow access policy on reminder calls to prevent a malicious
+	// sidecar from injecting fake activity results or workflow events.
+	if err := a.callActorReminderValidateWorkflowACL(ctx, in); err != nil {
+		return nil, err
+	}
+
 	router, err := a.ActorRouter(ctx)
 	if err != nil {
 		return nil, err
@@ -349,6 +360,10 @@ func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) 
 }
 
 func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream internalv1pb.ServiceInvocation_CallActorStreamServer) error {
+	if err := a.callActorValidateWorkflowACL(stream.Context(), req); err != nil {
+		return err
+	}
+
 	router, err := a.ActorRouter(stream.Context())
 	if err != nil {
 		return err
@@ -369,11 +384,24 @@ func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream in
 	return nil
 }
 
-// Used by CallLocal and CallLocalStream to check the request against the access control list
+// Used by CallLocal and CallLocalStream to check the request against the access control list.
+// The method is normalized (forbidden characters rejected, path traversal resolved) as
+// defense-in-depth before ACL evaluation. The normalized form is written back to the
+// request so dispatch uses the same canonical string.
 func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMethodRequest) error {
+	// Normalize method as defense-in-depth (caller should have already normalized).
+	operation := req.Message().GetMethod()
+	normalized, err := method.NormalizeMethod(operation)
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, "invalid method: %v", err)
+	}
+	if normalized != operation {
+		req.Message().Method = normalized
+		operation = normalized
+	}
+
 	if a.accessControlList != nil {
 		// An access control policy has been specified for the app. Apply the policies.
-		operation := req.Message().GetMethod()
 		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
 		// Get the HTTP verb in case the application protocol is "http"
 		appProtocolIsHTTP := a.AppConnectionConfig().Protocol.IsHTTP()

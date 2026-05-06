@@ -50,7 +50,7 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 	ranContinueAsNew := false
 	var runNumber atomic.Uint32
 
-	require.NoError(t, c.workflow.Registry().AddOrchestratorN("cap", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, c.workflow.Registry().AddWorkflowN("cap", func(ctx *task.WorkflowContext) (any, error) {
 		currentRun := runNumber.Add(1)
 		if currentRun > 1 {
 			patchesFound = append(patchesFound, ctx.IsPatched("patch1"))
@@ -69,9 +69,9 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 	}))
 
 	client := c.workflow.BackendClient(t, ctx)
-	id, err := client.ScheduleNewOrchestration(ctx, "cap")
+	id, err := client.ScheduleNewWorkflow(ctx, "cap")
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	assert.Equal(t, []bool{false, true, true}, patchesFound)

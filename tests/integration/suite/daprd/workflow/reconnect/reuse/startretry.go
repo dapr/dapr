@@ -58,7 +58,7 @@ func (a *startretry) Run(t *testing.T, ctx context.Context) {
 
 	worker1Ctx, worker1Cancel := context.WithCancel(ctx)
 
-	a.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	a.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		a.orchestratorCalls.Add(1)
 		if a.orchestratorCalls.Load() == 1 {
 			close(a.workflowStarted)
@@ -83,7 +83,7 @@ func (a *startretry) Run(t *testing.T, ctx context.Context) {
 
 	// scheduling a workflow with a provided start time
 	// this call won't wait for the workflow to start executing
-	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithStartTime(time.Now()))
+	id, err := client.ScheduleNewWorkflow(ctx, "foo", api.WithStartTime(time.Now()))
 	require.NoError(t, err)
 
 	<-a.workflowStarted
@@ -112,7 +112,7 @@ func (a *startretry) Run(t *testing.T, ctx context.Context) {
 
 	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
 	t.Cleanup(waitCompletionCancel)
-	meta, err := client.WaitForOrchestrationCompletion(waitCompletionCtx, id)
+	meta, err := client.WaitForWorkflowCompletion(waitCompletionCtx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), meta.GetRuntimeStatus().String())
 

@@ -54,6 +54,10 @@ func (p *Processor) processHTTPEndpoints(ctx context.Context) error {
 	return nil
 }
 
+// processHTTPEndpointSecrets resolves secretKeyRef entries in the endpoint's
+// headers and TLS config. Unlike components,
+// HTTP endpoints load after all secret store components are initialized,
+// so we can resolve their secrets directly and immediately.
 func (p *Processor) processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint) {
 	_, _ = p.secret.ProcessResource(ctx, endpoint)
 

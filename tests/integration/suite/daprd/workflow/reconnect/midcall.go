@@ -53,7 +53,7 @@ func (m *midcall) Run(t *testing.T, ctx context.Context) {
 	m.workflow.WaitUntilRunning(t, ctx)
 
 	var here atomic.Int64
-	m.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	m.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		here.Add(1)
 		return nil, ctx.WaitForSingleEvent("bar", time.Minute).Await(nil)
 	})
@@ -67,7 +67,7 @@ func (m *midcall) Run(t *testing.T, ctx context.Context) {
 	ids := make([]api.InstanceID, 5)
 	var err error
 	for i := range 5 {
-		ids[i], err = client1.ScheduleNewOrchestration(ctx, "foo")
+		ids[i], err = client1.ScheduleNewWorkflow(ctx, "foo")
 		require.NoError(t, err)
 	}
 
@@ -86,7 +86,7 @@ func (m *midcall) Run(t *testing.T, ctx context.Context) {
 
 	for _, id := range ids {
 		go func(id api.InstanceID) {
-			_, ferr := client1.WaitForOrchestrationStart(ctx, id)
+			_, ferr := client1.WaitForWorkflowStart(ctx, id)
 			errCh <- ferr
 		}(id)
 	}

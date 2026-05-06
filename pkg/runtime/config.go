@@ -26,6 +26,8 @@ import (
 
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
@@ -66,6 +68,12 @@ const (
 	DefaultReadBufferSize = 4 << 10
 	// DefaultGracefulShutdownDuration is the default option for the duration of the graceful shutdown.
 	DefaultGracefulShutdownDuration = time.Second * 5
+	// DefaultActorsDisseminationTimeout is the default daprd-side timeout
+	// for a placement LOCK -> UPDATE -> UNLOCK round. Must be larger than
+	// the placement service --disseminate-timeout (8s default) so that
+	// daprd does not reset the stream before placement can finish a
+	// legitimately slow round.
+	DefaultActorsDisseminationTimeout = time.Second * 30
 	// DefaultAppHealthCheckPath is the default path for HTTP health checks.
 	DefaultAppHealthCheckPath = "/healthz"
 	// DefaultChannelAddress is the default local network address that user application listen on.
@@ -106,6 +114,7 @@ type Config struct {
 	DaprGracefulShutdownSeconds   int
 	DaprBlockShutdownDuration     *time.Duration
 	ActorsService                 string
+	ActorsDisseminationTimeout    time.Duration
 	RemindersService              string
 	SchedulerAddress              []string
 	SchedulerStreams              uint
@@ -143,6 +152,7 @@ type internalConfig struct {
 	appConnectionConfig          config.AppConnectionConfig
 	mode                         modes.DaprMode
 	actorsService                string
+	actorsDisseminationTimeout   time.Duration
 	remindersService             string
 	schedulerAddress             []string
 	schedulerStreams             uint
@@ -216,11 +226,11 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	}
 
 	namespace := os.Getenv("NAMESPACE")
-	podName := os.Getenv("POD_NAME")
 
 	var (
-		globalConfig *config.Configuration
-		configErr    error
+		globalConfig      *config.Configuration
+		configAPIResource *configapi.Configuration
+		configErr         error
 	)
 
 	if len(intc.config) > 0 {
@@ -232,7 +242,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 			}
 
 			log.Debug("Loading Kubernetes config resource: " + intc.config[0])
-			globalConfig, configErr = config.LoadKubernetesConfiguration(intc.config[0], namespace, podName, operatorClient)
+			globalConfig, configAPIResource, configErr = config.LoadKubernetesConfiguration(intc.config[0], namespace, operatorClient)
 		case modes.StandaloneMode:
 			log.Debug("Loading config from file(s): " + strings.Join(intc.config, ", "))
 			globalConfig, configErr = config.LoadStandaloneConfiguration(intc.config...)
@@ -284,21 +294,21 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 
 		err = diag.InitMetrics(meter, intc.id, namespace, metricsSpec)
 		if err != nil {
-			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
+			log.Error(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
 		}
 	}
 
 	// Load Resiliency
 	var resiliencyProvider *resiliencyConfig.Resiliency
-
+	var resiliencyConfigs []*resiliencyapi.Resiliency
 	switch intc.mode {
 	case modes.KubernetesMode:
-		resiliencyConfigs := resiliencyConfig.LoadKubernetesResiliency(log, intc.id, namespace, operatorClient)
+		resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, intc.id, namespace, operatorClient)
 		log.Debugf("Found %d resiliency configurations from Kubernetes", len(resiliencyConfigs))
 		resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
 	case modes.StandaloneMode:
 		if len(intc.standalone.ResourcesPath) > 0 {
-			resiliencyConfigs := resiliencyConfig.LoadLocalResiliency(log, intc.id, intc.standalone.ResourcesPath...)
+			resiliencyConfigs = resiliencyConfig.LoadLocalResiliency(log, intc.id, intc.standalone.ResourcesPath...)
 			log.Debugf("Found %d resiliency configurations in resources path", len(resiliencyConfigs))
 			resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
 		} else {
@@ -319,7 +329,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		intc.enableAPILogging = new(globalConfig.GetAPILoggingSpec().Enabled)
 	}
 
-	return newDaprRuntime(ctx, cfg.Security, intc, globalConfig, accessControlList, resiliencyProvider)
+	return newDaprRuntime(ctx, cfg.Security, intc, globalConfig, accessControlList, resiliencyProvider, configAPIResource, resiliencyConfigs)
 }
 
 func (c *Config) toInternal() (*internalConfig, error) {
@@ -347,18 +357,19 @@ func (c *Config) toInternal() (*internalConfig, error) {
 			HealthCheckHTTPPath: c.AppHealthCheckPath,
 			MaxConcurrency:      c.AppMaxConcurrency,
 		},
-		registry:                  registry.New(c.Registry),
-		metricsExporter:           metrics.New(c.Metrics),
-		blockShutdownDuration:     c.DaprBlockShutdownDuration,
-		actorsService:             c.ActorsService,
-		remindersService:          c.RemindersService,
-		schedulerAddress:          c.SchedulerAddress,
-		schedulerStreams:          c.SchedulerStreams,
-		publicListenAddress:       c.DaprPublicListenAddress,
-		internalGRPCListenAddress: c.DaprInternalGRPCListenAddress,
-		healthz:                   c.Healthz,
-		outboundHealthz:           healthz.New(),
-		workflowEventSink:         c.WorkflowEventSink,
+		registry:                   registry.New(c.Registry),
+		metricsExporter:            metrics.New(c.Metrics),
+		blockShutdownDuration:      c.DaprBlockShutdownDuration,
+		actorsService:              c.ActorsService,
+		actorsDisseminationTimeout: c.ActorsDisseminationTimeout,
+		remindersService:           c.RemindersService,
+		schedulerAddress:           c.SchedulerAddress,
+		schedulerStreams:           c.SchedulerStreams,
+		publicListenAddress:        c.DaprPublicListenAddress,
+		internalGRPCListenAddress:  c.DaprInternalGRPCListenAddress,
+		healthz:                    c.Healthz,
+		outboundHealthz:            healthz.New(),
+		workflowEventSink:          c.WorkflowEventSink,
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
@@ -443,6 +454,10 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		intc.gracefulShutdownDuration = DefaultGracefulShutdownDuration
 	} else {
 		intc.gracefulShutdownDuration = time.Duration(c.DaprGracefulShutdownSeconds) * time.Second
+	}
+
+	if intc.actorsDisseminationTimeout <= 0 {
+		intc.actorsDisseminationTimeout = DefaultActorsDisseminationTimeout
 	}
 
 	if intc.appConnectionConfig.MaxConcurrency == -1 {

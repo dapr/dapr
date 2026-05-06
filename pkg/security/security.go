@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/crypto/spiffe"
 	spiffecontext "github.com/dapr/kit/crypto/spiffe/context"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/crypto/spiffe/trustanchors"
 	"github.com/dapr/kit/crypto/spiffe/trustanchors/file"
 	"github.com/dapr/kit/crypto/spiffe/trustanchors/static"
@@ -67,6 +68,10 @@ type Handler interface {
 	ID() spiffeid.ID
 	WatchTrustAnchors(context.Context, chan<- []byte)
 	IdentityDir() *string
+
+	// Signer returns a Signer for signing and verifying using the workload's
+	// identity and trust anchors. Returns nil if mTLS is not enabled.
+	Signer() *signer.Signer
 }
 
 // Provider is the security provider.
@@ -144,6 +149,13 @@ type Options struct {
 
 	// JwtAudiences is the list of JWT audiences to be included in the certificate request.
 	JwtAudiences []string
+
+	// KeyAlgorithm selects the algorithm used for the workload's private key.
+	// When nil, defaults to Ed25519. Set to a pointer to
+	// spiffe.KeyAlgorithmRSA for components whose certificates are consumed by
+	// the Kubernetes API server (i.e. admission webhook serving), since some
+	// cloud distributions reject Ed25519 keys for that purpose.
+	KeyAlgorithm *spiffe.KeyAlgorithm
 }
 
 type provider struct {
@@ -243,6 +255,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 			RequestSVIDFn:       reqFn,
 			WriteIdentityToFile: opts.WriteIdentityToFile,
 			TrustAnchors:        trustAnchors,
+			KeyAlgorithm:        opts.KeyAlgorithm,
 		})
 	} else {
 		log.Warn("mTLS is disabled. Skipping certificate request and tls validation")
@@ -488,6 +501,13 @@ func (s *security) WithSVIDContext(ctx context.Context) context.Context {
 
 func (s *security) IdentityDir() *string {
 	return s.identityDir
+}
+
+func (s *security) Signer() *signer.Signer {
+	if s.spiffe == nil {
+		return nil
+	}
+	return signer.New(s.spiffe.X509SVIDSource(), s.trustAnchors)
 }
 
 func (s *security) ID() spiffeid.ID {

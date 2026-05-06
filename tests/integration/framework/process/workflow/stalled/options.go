@@ -19,11 +19,11 @@ type Option func(*options)
 
 type options struct {
 	initialReplica string
-	workflows      map[string]task.Orchestrator
+	workflows      map[string]task.Workflow
 	activities     map[string]task.Activity
 }
 
-func WithNamedWorkflowReplica(name string, workflow task.Orchestrator) Option {
+func WithNamedWorkflowReplica(name string, workflow task.Workflow) Option {
 	return func(o *options) {
 		o.workflows[name] = workflow
 	}

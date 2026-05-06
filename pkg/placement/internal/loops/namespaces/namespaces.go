@@ -30,10 +30,11 @@ import (
 var log = logger.NewLogger("dapr.placement.server.loops.namespaces")
 
 type Options struct {
-	CancelPool           context.CancelCauseFunc
-	ReplicationFactor    int64
-	Authorizer           *authorizer.Authorizer
-	DisseminationTimeout time.Duration
+	CancelPool                  context.CancelCauseFunc
+	ReplicationFactor           int64
+	Authorizer                  *authorizer.Authorizer
+	DisseminationTimeout        time.Duration
+	DisseminationCoalesceWindow time.Duration
 }
 
 type disseminatorLoop struct {
@@ -44,9 +45,10 @@ type disseminatorLoop struct {
 // namespaces is the main control loop for managing stream
 // connections for each namespace.
 type namespaces struct {
-	cancelPool           context.CancelCauseFunc
-	replicationFactor    int64
-	disseminationTimeout time.Duration
+	cancelPool                  context.CancelCauseFunc
+	replicationFactor           int64
+	disseminationTimeout        time.Duration
+	disseminationCoalesceWindow time.Duration
 
 	// disseminators holds the active namespace connections.
 	disseminators map[string]*disseminatorLoop
@@ -58,11 +60,12 @@ type namespaces struct {
 
 func New(opts Options) loop.Interface[loops.EventNamespace] {
 	ns := &namespaces{
-		cancelPool:           opts.CancelPool,
-		replicationFactor:    opts.ReplicationFactor,
-		disseminators:        make(map[string]*disseminatorLoop),
-		authorizer:           opts.Authorizer,
-		disseminationTimeout: opts.DisseminationTimeout,
+		cancelPool:                  opts.CancelPool,
+		replicationFactor:           opts.ReplicationFactor,
+		disseminators:               make(map[string]*disseminatorLoop),
+		authorizer:                  opts.Authorizer,
+		disseminationTimeout:        opts.DisseminationTimeout,
+		disseminationCoalesceWindow: opts.DisseminationCoalesceWindow,
 	}
 
 	ns.loop = loop.New[loops.EventNamespace](1024).NewLoop(ns)
@@ -94,11 +97,12 @@ func (n *namespaces) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 	dissLoop, ok := n.disseminators[ns]
 	if !ok {
 		loop := disseminator.New(disseminator.Options{
-			ReplicationFactor:    n.replicationFactor,
-			NamespaceLoop:        n.loop,
-			Authorizer:           n.authorizer,
-			DisseminationTimeout: n.disseminationTimeout,
-			Namespace:            ns,
+			ReplicationFactor:           n.replicationFactor,
+			NamespaceLoop:               n.loop,
+			Authorizer:                  n.authorizer,
+			DisseminationTimeout:        n.disseminationTimeout,
+			DisseminationCoalesceWindow: n.disseminationCoalesceWindow,
+			Namespace:                   ns,
 		})
 
 		n.wg.Go(func() {

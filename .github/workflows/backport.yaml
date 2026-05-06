@@ -22,18 +22,6 @@ permissions: {}
 
 jobs:
   backport:
-    name: Backport
-    runs-on: ubuntu-latest
-    if: >
-      github.event.pull_request.merged
-      && (
-        github.event.action == 'closed'
-        || (
-          github.event.action == 'labeled'
-          && contains(github.event.label.name, 'backport')
-        )
-      )
-    steps:
-      - uses: tibdex/backport@9565281eda0731b1d20c4025c43339fb0a23812e
-        with:
-          github_token: ${{ secrets.DAPR_BOT_TOKEN }}
+    uses: dapr/.github/.github/workflows/backport.yaml@main
+    secrets:
+      dapr_bot_token: ${{ secrets.DAPR_BOT_TOKEN }}

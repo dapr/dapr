@@ -51,7 +51,7 @@ func (d *rerun) Run(t *testing.T, ctx context.Context) {
 
 	calledV1 := atomic.Bool{}
 	calledV2 := atomic.Bool{}
-	require.NoError(t, d.workflow.Registry().AddVersionedOrchestratorN("workflow", "v1", true, func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, d.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, func(ctx *task.WorkflowContext) (any, error) {
 		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
 			return nil, err
 		}
@@ -60,15 +60,15 @@ func (d *rerun) Run(t *testing.T, ctx context.Context) {
 	}))
 
 	client := d.workflow.BackendClient(t, ctx)
-	id, err := client.ScheduleNewOrchestration(ctx, "workflow")
+	id, err := client.ScheduleNewWorkflow(ctx, "workflow")
 	require.NoError(t, err)
 
-	wf.WaitForOrchestratorStartedEvent(t, ctx, client, id)
+	wf.WaitForWorkflowStartedEvent(t, ctx, client, id)
 
 	require.False(t, calledV1.Load())
 	require.False(t, calledV2.Load())
 
-	require.NoError(t, d.workflow.Registry().AddVersionedOrchestratorN("workflow", "v2", true, func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, d.workflow.Registry().AddVersionedWorkflowN("workflow", "v2", true, func(ctx *task.WorkflowContext) (any, error) {
 		if err = ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
 			return nil, err
 		}
@@ -77,13 +77,13 @@ func (d *rerun) Run(t *testing.T, ctx context.Context) {
 	}))
 
 	require.NoError(t, client.RaiseEvent(ctx, id, "Continue"))
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	require.True(t, calledV1.Load())
 	require.False(t, calledV2.Load())
 
-	orchestratorStarted := wf.GetLastHistoryEventOfType[protos.HistoryEvent_OrchestratorStarted](t, ctx, client, id)
-	require.NotNil(t, orchestratorStarted.GetOrchestratorStarted().GetVersion())
-	require.Equal(t, "v1", orchestratorStarted.GetOrchestratorStarted().GetVersion().GetName())
+	orchestratorStarted := wf.GetLastHistoryEventOfType[protos.HistoryEvent_WorkflowStarted](t, ctx, client, id)
+	require.NotNil(t, orchestratorStarted.GetWorkflowStarted().GetVersion())
+	require.Equal(t, "v1", orchestratorStarted.GetWorkflowStarted().GetVersion().GetName())
 }

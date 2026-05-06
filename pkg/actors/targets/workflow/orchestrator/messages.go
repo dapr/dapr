@@ -26,21 +26,34 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) error {
+func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, events []*backend.WorkflowRuntimeStateMessage) dispatchResult {
 	msgs := make([]proto.Message, len(events))
 	historyEvents := make([]*backend.HistoryEvent, len(events))
 	targets := make([]string, len(events))
+	actionIDs := make([]int32, len(events))
 
 	for i, msg := range events {
-		msgs[i] = &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
+		req := &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
+		if ph := msg.GetPropagatedHistory(); ph != nil {
+			if o.signer == nil {
+				log.Warnf("Workflow actor '%s': propagating unsigned workflow history to child workflow '%s' (signing is not configured; chunks cannot be cryptographically verified by the receiver)", o.actorID, msg.GetTargetInstanceId())
+			}
+			req.PropagatedHistory = ph
+		}
+		msgs[i] = req
 		historyEvents[i] = msg.GetHistoryEvent()
-		targets[i] = msg.GetTargetInstanceID()
+		targets[i] = msg.GetTargetInstanceId()
+		if es := msg.GetHistoryEvent().GetExecutionStarted(); es != nil && es.GetParentInstance() != nil {
+			actionIDs[i] = es.GetParentInstance().GetTaskScheduledId()
+		} else {
+			actionIDs[i] = msg.GetHistoryEvent().GetEventId()
+		}
 	}
 
-	return o.callStateMessages(ctx, msgs, historyEvents, targets, todo.CreateWorkflowInstanceMethod)
+	return o.callStateMessages(ctx, msgs, historyEvents, targets, actionIDs, todo.CreateWorkflowInstanceMethod)
 }
 
-func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) error {
+func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*backend.WorkflowRuntimeStateMessage) dispatchResult {
 	msgs := make([]proto.Message, len(events))
 	historyEvents := make([]*backend.HistoryEvent, len(events))
 	targets := make([]string, len(events))
@@ -48,20 +61,25 @@ func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*b
 	for i, msg := range events {
 		msgs[i] = msg.GetHistoryEvent()
 		historyEvents[i] = msg.GetHistoryEvent()
-		targets[i] = msg.GetTargetInstanceID()
+		targets[i] = msg.GetTargetInstanceId()
 	}
 
-	return o.callStateMessages(ctx, msgs, historyEvents, targets, todo.AddWorkflowEventMethod)
+	return o.callStateMessages(ctx, msgs, historyEvents, targets, nil, todo.AddWorkflowEventMethod)
 }
 
-func (o *orchestrator) callStateMessages(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, method string) error {
+func (o *orchestrator) callStateMessages(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, actionIDs []int32, method string) dispatchResult {
+	var result dispatchResult
 	for i, msg := range msgs {
 		if err := o.callStateMessage(ctx, msg, historyEvents[i], targets[i], method); err != nil {
-			return err
+			eventID := historyEvents[i].GetEventId()
+			if actionIDs != nil {
+				eventID = actionIDs[i]
+			}
+			result.recordFailure(eventID, err)
+			continue
 		}
 	}
-
-	return nil
+	return result
 }
 
 func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, historyEvent *backend.HistoryEvent, target string, method string) error {
@@ -73,26 +91,24 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 
 	if historyEvent != nil && historyEvent.GetRouter() != nil {
 		router := historyEvent.GetRouter()
-		log.Debugf("Cross-app suborchestrator call: target appID=%s, source appID=%s", router.GetTargetAppID(), router.GetSourceAppID())
+		log.Debugf("Cross-app child workflow call: target appID=%s, source appID=%s", router.GetTargetAppID(), router.GetSourceAppID())
 
 		switch m := m.(type) {
 		case *backend.CreateWorkflowInstanceRequest:
-			// If target app is specified and different from current app, use cross-app actor type
 			if router.TargetAppID != nil {
 				actorType = o.actorTypeBuilder.Workflow(router.GetTargetAppID())
 			}
 		case *backend.HistoryEvent:
 			var routeAppID string
-			if m.GetSubOrchestrationInstanceCompleted() != nil || m.GetSubOrchestrationInstanceFailed() != nil {
+			if m.GetChildWorkflowInstanceCompleted() != nil || m.GetChildWorkflowInstanceFailed() != nil {
 				if router.TargetAppID == nil {
-					return errors.New("sub-orchestrator completion events should have a target appID")
+					return errors.New("child workflow completion events should have a target appID")
 				}
 				routeAppID = router.GetTargetAppID()
 			} else {
 				routeAppID = router.GetSourceAppID()
 			}
 
-			// If route app is specified and different from current app, use cross-app actor type
 			if routeAppID != "" && routeAppID != o.appID {
 				actorType = o.actorTypeBuilder.Workflow(routeAppID)
 			}
@@ -101,12 +117,31 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 
 	log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s||%s'", o.actorID, method, actorType, target)
 
-	if _, err = o.router.Call(ctx, internalsv1pb.
+	callCtx, cancel := context.WithTimeout(ctx, dispatchTimeout)
+	defer cancel()
+
+	if _, err = o.router.Call(callCtx, internalsv1pb.
 		NewInternalInvokeRequest(method).
 		WithActor(actorType, target).
 		WithData(b).
 		WithContentType(invokev1.ProtobufContentType),
 	); err != nil {
+		// If the call was denied by a workflow access policy, fail the child
+		// orchestration immediately rather than retrying. Only do this when
+		// we can correlate the failure to a parent task via ParentInstance.
+		if isPermissionDenied(err) && historyEvent != nil {
+			if es := historyEvent.GetExecutionStarted(); es != nil && es.GetParentInstance() != nil {
+				if fErr := o.failChildWorkflowACL(ctx, es.GetParentInstance().GetTaskScheduledId(), err); fErr != nil {
+					return fmt.Errorf("failed to record child workflow failure: %w (original: %v)", fErr, err)
+				}
+				return nil
+			}
+		}
+
+		if router := historyEvent.GetRouter(); router != nil && router.TargetAppID != nil {
+			return fmt.Errorf("failed to invoke '%s' on remote app '%s' (the app may not be available): %w", method, router.GetTargetAppID(), err)
+		}
+
 		return fmt.Errorf("failed to invoke method '%s' on actor '%s': %w", method, target, err)
 	}
 

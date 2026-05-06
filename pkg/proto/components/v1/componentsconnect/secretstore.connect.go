@@ -30,7 +30,7 @@ import (
 // generated with a version of connect newer than the one compiled into your binary. You can fix the
 // problem by either regenerating this code with an older version of connect or updating the connect
 // version compiled into your binary.
-const _ = connect.IsAtLeastVersion0_1_0
+const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// SecretStoreName is the fully-qualified name of the SecretStore service.
@@ -80,31 +80,37 @@ type SecretStoreClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewSecretStoreClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SecretStoreClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	secretStoreMethods := v1.File_dapr_proto_components_v1_secretstore_proto.Services().ByName("SecretStore").Methods()
 	return &secretStoreClient{
 		init: connect.NewClient[v1.SecretStoreInitRequest, v1.SecretStoreInitResponse](
 			httpClient,
 			baseURL+SecretStoreInitProcedure,
-			opts...,
+			connect.WithSchema(secretStoreMethods.ByName("Init")),
+			connect.WithClientOptions(opts...),
 		),
 		features: connect.NewClient[v1.FeaturesRequest, v1.FeaturesResponse](
 			httpClient,
 			baseURL+SecretStoreFeaturesProcedure,
-			opts...,
+			connect.WithSchema(secretStoreMethods.ByName("Features")),
+			connect.WithClientOptions(opts...),
 		),
 		get: connect.NewClient[v1.GetSecretRequest, v1.GetSecretResponse](
 			httpClient,
 			baseURL+SecretStoreGetProcedure,
-			opts...,
+			connect.WithSchema(secretStoreMethods.ByName("Get")),
+			connect.WithClientOptions(opts...),
 		),
 		bulkGet: connect.NewClient[v1.BulkGetSecretRequest, v1.BulkGetSecretResponse](
 			httpClient,
 			baseURL+SecretStoreBulkGetProcedure,
-			opts...,
+			connect.WithSchema(secretStoreMethods.ByName("BulkGet")),
+			connect.WithClientOptions(opts...),
 		),
 		ping: connect.NewClient[v1.PingRequest, v1.PingResponse](
 			httpClient,
 			baseURL+SecretStorePingProcedure,
-			opts...,
+			connect.WithSchema(secretStoreMethods.ByName("Ping")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -163,30 +169,36 @@ type SecretStoreHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewSecretStoreHandler(svc SecretStoreHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	secretStoreMethods := v1.File_dapr_proto_components_v1_secretstore_proto.Services().ByName("SecretStore").Methods()
 	secretStoreInitHandler := connect.NewUnaryHandler(
 		SecretStoreInitProcedure,
 		svc.Init,
-		opts...,
+		connect.WithSchema(secretStoreMethods.ByName("Init")),
+		connect.WithHandlerOptions(opts...),
 	)
 	secretStoreFeaturesHandler := connect.NewUnaryHandler(
 		SecretStoreFeaturesProcedure,
 		svc.Features,
-		opts...,
+		connect.WithSchema(secretStoreMethods.ByName("Features")),
+		connect.WithHandlerOptions(opts...),
 	)
 	secretStoreGetHandler := connect.NewUnaryHandler(
 		SecretStoreGetProcedure,
 		svc.Get,
-		opts...,
+		connect.WithSchema(secretStoreMethods.ByName("Get")),
+		connect.WithHandlerOptions(opts...),
 	)
 	secretStoreBulkGetHandler := connect.NewUnaryHandler(
 		SecretStoreBulkGetProcedure,
 		svc.BulkGet,
-		opts...,
+		connect.WithSchema(secretStoreMethods.ByName("BulkGet")),
+		connect.WithHandlerOptions(opts...),
 	)
 	secretStorePingHandler := connect.NewUnaryHandler(
 		SecretStorePingProcedure,
 		svc.Ping,
-		opts...,
+		connect.WithSchema(secretStoreMethods.ByName("Ping")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.components.v1.SecretStore/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

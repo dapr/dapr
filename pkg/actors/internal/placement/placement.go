@@ -46,7 +46,7 @@ var log = logger.NewLogger("dapr.runtime.actors.placement")
 
 type Interface interface {
 	Run(context.Context) error
-	Lock(context.Context) (context.Context, context.CancelCauseFunc, error)
+	Lock(ctx context.Context, actorType string) (context.Context, context.CancelCauseFunc, error)
 	LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error)
 	IsActorHosted(ctx context.Context, actorType, actorID string) bool
 	Ready() bool
@@ -65,6 +65,11 @@ type Options struct {
 	Table     table.Interface
 	Healthz   healthz.Healthz
 	Mode      modes.DaprMode
+
+	// DisseminationTimeout is the daprd-side timeout for a placement
+	// LOCK -> UPDATE -> UNLOCK round. If the round exceeds this, daprd
+	// resets its placement stream and halts hosted actors.
+	DisseminationTimeout time.Duration
 }
 
 type placement struct {
@@ -72,7 +77,6 @@ type placement struct {
 	port     string
 	table    table.Interface
 	ready    *atomic.Bool
-	errCh    chan error
 
 	loop loop.Interface[loops.EventPlace]
 }
@@ -125,8 +129,6 @@ func New(opts Options) (Interface, error) {
 
 	var ready atomic.Bool
 
-	errCh := make(chan error, 1)
-
 	return &placement{
 		ready:    &ready,
 		hostname: opts.Hostname,
@@ -148,10 +150,7 @@ func New(opts Options) (Interface, error) {
 				ApiLevel:  20,
 				Namespace: opts.Namespace,
 			},
-			DisseminationTimeout: time.Second * 5,
-			Cancel: func(cause error) {
-				errCh <- cause
-			},
+			DisseminationTimeout: opts.DisseminationTimeout,
 		}),
 	}, nil
 }
@@ -168,14 +167,6 @@ func (p *placement) Run(ctx context.Context) error {
 
 	return concurrency.NewRunnerManager(
 		p.loop.Run,
-		func(ctx context.Context) error {
-			select {
-			case err := <-p.errCh:
-				return err
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		},
 		func(ctx context.Context) error {
 			p.loop.Enqueue(&loops.PlacementReconnect{
 				ActorTypes: new(atypes),
@@ -196,11 +187,12 @@ func (p *placement) Run(ctx context.Context) error {
 	).Run(ctx)
 }
 
-func (p *placement) Lock(ctx context.Context) (context.Context, context.CancelCauseFunc, error) {
+func (p *placement) Lock(ctx context.Context, actorType string) (context.Context, context.CancelCauseFunc, error) {
 	ch := make(chan *loops.LockResponse, 1)
 	p.loop.Enqueue(&loops.LockRequest{
-		Context:  ctx,
-		Response: ch,
+		ActorType: actorType,
+		Context:   ctx,
+		Response:  ch,
 	})
 
 	select {

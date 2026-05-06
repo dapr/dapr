@@ -50,7 +50,7 @@ func (a *activity) Setup(t *testing.T) []framework.Option {
 func (a *activity) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
-	require.NoError(t, a.workflow.RegistryN(0).AddOrchestratorN("activity", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, a.workflow.RegistryN(0).AddWorkflowN("activity", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("abc", task.WithActivityInput("abc")).Await(nil))
 		return nil, nil
 	}))
@@ -74,12 +74,12 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 
 	var err error
 	for i := range n {
-		ids[i], err = client.ScheduleNewOrchestration(ctx, "activity")
+		ids[i], err = client.ScheduleNewWorkflow(ctx, "activity")
 		require.NoError(t, err)
 	}
 
 	for i := range n {
-		_, err = client.WaitForOrchestrationCompletion(ctx, ids[i])
+		_, err = client.WaitForWorkflowCompletion(ctx, ids[i])
 		require.NoError(t, err)
 	}
 }

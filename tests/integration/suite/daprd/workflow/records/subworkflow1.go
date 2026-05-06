@@ -45,11 +45,11 @@ func (a *subworkflow1) Setup(t *testing.T) []framework.Option {
 func (a *subworkflow1) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
-	a.workflow.Registry().AddOrchestratorN("records", func(ctx *task.OrchestrationContext) (any, error) {
-		require.NoError(t, ctx.CallSubOrchestrator("records2").Await(nil))
+	a.workflow.Registry().AddWorkflowN("records", func(ctx *task.WorkflowContext) (any, error) {
+		require.NoError(t, ctx.CallChildWorkflow("records2").Await(nil))
 		return nil, nil
 	})
-	a.workflow.Registry().AddOrchestratorN("records2", func(ctx *task.OrchestrationContext) (any, error) {
+	a.workflow.Registry().AddWorkflowN("records2", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, nil
 	})
 
@@ -62,10 +62,10 @@ func (a *subworkflow1) Run(t *testing.T, ctx context.Context) {
 
 	client := a.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "records")
+	id, err := client.ScheduleNewWorkflow(ctx, "records")
 	require.NoError(t, err)
 
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	// 1. ExecutionStarted – records orchestration begins

@@ -368,7 +368,7 @@ func (g *grpc) sendToDeadLetter(ctx context.Context, name string, msg *contribpu
 
 	err := g.adapter.Publish(ctx, req)
 	if err != nil {
-		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
+		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 		return err
 	}
 

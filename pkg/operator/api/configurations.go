@@ -16,6 +16,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -26,6 +27,8 @@ import (
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/operator/api/authz"
+	loopsclient "github.com/dapr/dapr/pkg/operator/api/loops/client"
+	"github.com/dapr/dapr/pkg/operator/api/loops/sender"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
@@ -42,7 +45,7 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 	}
 
 	if err := processConfigurationSecrets(ctx, &config, in.GetNamespace(), a.Client); err != nil {
-		log.Warnf("error processing configuration %s secrets from pod %s/%s: %s", config.Name, in.GetNamespace(), in.GetPodName(), err)
+		log.Warnf("error processing configuration %s secrets in namespace %s: %s", config.Name, in.GetNamespace(), err)
 		return nil, fmt.Errorf("error processing configuration secrets: %w", err)
 	}
 
@@ -93,6 +96,48 @@ func processConfigurationSecrets(ctx context.Context, config *configurationapi.C
 		otel.Headers[i].Value = commonapi.DynamicValue{
 			JSON: apiextensionsV1.JSON{Raw: jsonVal},
 		}
+	}
+
+	return nil
+}
+
+// ConfigurationUpdate handles configuration update streaming for a connected client.
+// Each client connection gets its own client loop that watches the informer
+// and sends updates over the gRPC stream.
+func (a *apiServer) ConfigurationUpdate(in *operatorv1pb.ConfigurationUpdateRequest, srv operatorv1pb.Operator_ConfigurationUpdateServer) error { //nolint:nosnakecase
+	if a.closed.Load() {
+		return errors.New("server is closed")
+	}
+
+	log.Info("sidecar connected for configuration updates")
+
+	ctx := srv.Context()
+
+	// Verify authorization via informer's WatchUpdates, which checks SPIFFE ID
+	ch, cancel, err := a.configInformer.WatchUpdates(ctx, in.GetNamespace())
+	if err != nil {
+		return err
+	}
+
+	stream, err := sender.New(srv)
+	if err != nil {
+		return err
+	}
+
+	// Create a client for this connection
+	client := loopsclient.New(loopsclient.Options[configurationapi.Configuration]{
+		EventCh:        ch,
+		CancelWatch:    cancel,
+		Stream:         stream,
+		Namespace:      in.GetNamespace(),
+		KubeClient:     a.Client,
+		ProcessSecrets: processConfigurationSecrets,
+	})
+	defer client.CacheLoop()
+
+	// Run the client - this will block until context is done or event channel closes
+	if err := client.Run(ctx); err != nil {
+		log.Warnf("configuration client loop ended with error: %s", err)
 	}
 
 	return nil

@@ -30,7 +30,7 @@ import (
 // generated with a version of connect newer than the one compiled into your binary. You can fix the
 // problem by either regenerating this code with an older version of connect or updating the connect
 // version compiled into your binary.
-const _ = connect.IsAtLeastVersion0_1_0
+const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// InputBindingName is the fully-qualified name of the InputBinding service.
@@ -86,21 +86,25 @@ type InputBindingClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewInputBindingClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) InputBindingClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	inputBindingMethods := v1.File_dapr_proto_components_v1_bindings_proto.Services().ByName("InputBinding").Methods()
 	return &inputBindingClient{
 		init: connect.NewClient[v1.InputBindingInitRequest, v1.InputBindingInitResponse](
 			httpClient,
 			baseURL+InputBindingInitProcedure,
-			opts...,
+			connect.WithSchema(inputBindingMethods.ByName("Init")),
+			connect.WithClientOptions(opts...),
 		),
 		read: connect.NewClient[v1.ReadRequest, v1.ReadResponse](
 			httpClient,
 			baseURL+InputBindingReadProcedure,
-			opts...,
+			connect.WithSchema(inputBindingMethods.ByName("Read")),
+			connect.WithClientOptions(opts...),
 		),
 		ping: connect.NewClient[v1.PingRequest, v1.PingResponse](
 			httpClient,
 			baseURL+InputBindingPingProcedure,
-			opts...,
+			connect.WithSchema(inputBindingMethods.ByName("Ping")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -146,20 +150,24 @@ type InputBindingHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewInputBindingHandler(svc InputBindingHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	inputBindingMethods := v1.File_dapr_proto_components_v1_bindings_proto.Services().ByName("InputBinding").Methods()
 	inputBindingInitHandler := connect.NewUnaryHandler(
 		InputBindingInitProcedure,
 		svc.Init,
-		opts...,
+		connect.WithSchema(inputBindingMethods.ByName("Init")),
+		connect.WithHandlerOptions(opts...),
 	)
 	inputBindingReadHandler := connect.NewBidiStreamHandler(
 		InputBindingReadProcedure,
 		svc.Read,
-		opts...,
+		connect.WithSchema(inputBindingMethods.ByName("Read")),
+		connect.WithHandlerOptions(opts...),
 	)
 	inputBindingPingHandler := connect.NewUnaryHandler(
 		InputBindingPingProcedure,
 		svc.Ping,
-		opts...,
+		connect.WithSchema(inputBindingMethods.ByName("Ping")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.components.v1.InputBinding/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -211,26 +219,31 @@ type OutputBindingClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewOutputBindingClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) OutputBindingClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	outputBindingMethods := v1.File_dapr_proto_components_v1_bindings_proto.Services().ByName("OutputBinding").Methods()
 	return &outputBindingClient{
 		init: connect.NewClient[v1.OutputBindingInitRequest, v1.OutputBindingInitResponse](
 			httpClient,
 			baseURL+OutputBindingInitProcedure,
-			opts...,
+			connect.WithSchema(outputBindingMethods.ByName("Init")),
+			connect.WithClientOptions(opts...),
 		),
 		invoke: connect.NewClient[v1.InvokeRequest, v1.InvokeResponse](
 			httpClient,
 			baseURL+OutputBindingInvokeProcedure,
-			opts...,
+			connect.WithSchema(outputBindingMethods.ByName("Invoke")),
+			connect.WithClientOptions(opts...),
 		),
 		listOperations: connect.NewClient[v1.ListOperationsRequest, v1.ListOperationsResponse](
 			httpClient,
 			baseURL+OutputBindingListOperationsProcedure,
-			opts...,
+			connect.WithSchema(outputBindingMethods.ByName("ListOperations")),
+			connect.WithClientOptions(opts...),
 		),
 		ping: connect.NewClient[v1.PingRequest, v1.PingResponse](
 			httpClient,
 			baseURL+OutputBindingPingProcedure,
-			opts...,
+			connect.WithSchema(outputBindingMethods.ByName("Ping")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -281,25 +294,30 @@ type OutputBindingHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewOutputBindingHandler(svc OutputBindingHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	outputBindingMethods := v1.File_dapr_proto_components_v1_bindings_proto.Services().ByName("OutputBinding").Methods()
 	outputBindingInitHandler := connect.NewUnaryHandler(
 		OutputBindingInitProcedure,
 		svc.Init,
-		opts...,
+		connect.WithSchema(outputBindingMethods.ByName("Init")),
+		connect.WithHandlerOptions(opts...),
 	)
 	outputBindingInvokeHandler := connect.NewUnaryHandler(
 		OutputBindingInvokeProcedure,
 		svc.Invoke,
-		opts...,
+		connect.WithSchema(outputBindingMethods.ByName("Invoke")),
+		connect.WithHandlerOptions(opts...),
 	)
 	outputBindingListOperationsHandler := connect.NewUnaryHandler(
 		OutputBindingListOperationsProcedure,
 		svc.ListOperations,
-		opts...,
+		connect.WithSchema(outputBindingMethods.ByName("ListOperations")),
+		connect.WithHandlerOptions(opts...),
 	)
 	outputBindingPingHandler := connect.NewUnaryHandler(
 		OutputBindingPingProcedure,
 		svc.Ping,
-		opts...,
+		connect.WithSchema(outputBindingMethods.ByName("Ping")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.components.v1.OutputBinding/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

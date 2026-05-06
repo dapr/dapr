@@ -100,6 +100,24 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 		}
 	}
 
+	// MCP servers
+	mcpServers := a.compStore.ListMCPServers()
+	registeredMCPServers := make([]*runtimev1pb.MetadataMCPServer, len(mcpServers))
+	for i, m := range mcpServers {
+		registeredMCPServers[i] = &runtimev1pb.MetadataMCPServer{
+			Name: m.Name,
+		}
+	}
+
+	// Workflow access policies
+	wfaclPolicies := a.compStore.ListWorkflowAccessPolicies()
+	registeredWFACLs := make([]*runtimev1pb.MetadataWorkflowAccessPolicy, len(wfaclPolicies))
+	for i, p := range wfaclPolicies {
+		registeredWFACLs[i] = &runtimev1pb.MetadataWorkflowAccessPolicy{
+			Name: p.Name,
+		}
+	}
+
 	var sched *runtimev1pb.MetadataScheduler
 	if a.scheduler != nil {
 		if addr := a.scheduler.Addresses(); len(addr) > 0 {
@@ -116,12 +134,14 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 		ActiveActorsCount:       actorRuntime.GetActiveActors(), // Alias for backwards-compatibility
 		Subscriptions:           ps,
 		HttpEndpoints:           registeredHTTPEndpoints,
+		McpServers:              registeredMCPServers,
 		AppConnectionProperties: appConnectionProperties,
 		RuntimeVersion:          buildinfo.Version(),
 		EnabledFeatures:         a.globalConfig.EnabledFeatures(),
 		ActorRuntime:            actorRuntime,
 		Scheduler:               sched,
 		Workflows:               workflowsMetadata,
+		WorkflowAccessPolicies:  registeredWFACLs,
 	}, nil
 }
 

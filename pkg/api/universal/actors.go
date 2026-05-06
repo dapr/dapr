@@ -25,13 +25,29 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/messaging/method"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
+// RejectInternalActorType returns an error when actorType is a Dapr-reserved
+// internal actor type (workflow, activity, executor, retentioner). The runtime
+// owns these actors' lifecycle; direct user access via the generic actor APIs
+// would corrupt workflow state or bypass per-operation policy.
+func (a *Universal) RejectInternalActorType(actorType string) error {
+	if !workflowacl.IsInternalActorType(actorType) {
+		return nil
+	}
+	return messages.ErrActorTypeReserved.WithFormat(actorType)
+}
+
 func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error) {
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
+	}
 	timers, err := a.ActorTimers(ctx)
 	if err != nil {
 		return nil, err
@@ -52,6 +68,12 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 			a.logger.Debug(err)
 			return nil, err
 		}
+	}
+
+	if vErr := method.ValidateName(in.GetName()); vErr != nil {
+		vErr = messages.ErrBadRequest.WithFormat(vErr)
+		a.logger.Debug(vErr)
+		return nil, vErr
 	}
 
 	req := &api.CreateTimerRequest{
@@ -75,6 +97,9 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 }
 
 func (a *Universal) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*emptypb.Empty, error) {
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
+	}
 	timers, err := a.ActorTimers(ctx)
 	if err != nil {
 		return nil, err
@@ -91,6 +116,9 @@ func (a *Universal) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.Un
 }
 
 func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error) {
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
+	}
 	r, err := a.ActorReminders(ctx)
 	if err != nil {
 		return nil, err
@@ -111,6 +139,12 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 			a.logger.Debug(err)
 			return nil, err
 		}
+	}
+
+	if vErr := method.ValidateName(in.GetName()); vErr != nil {
+		vErr = messages.ErrBadRequest.WithFormat(vErr)
+		a.logger.Debug(vErr)
+		return nil, vErr
 	}
 
 	//nolint:protogetter
@@ -147,6 +181,9 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 }
 
 func (a *Universal) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*emptypb.Empty, error) {
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
+	}
 	r, err := a.ActorReminders(ctx)
 	if err != nil {
 		return nil, err
@@ -173,6 +210,9 @@ func (a *Universal) UnregisterActorReminder(ctx context.Context, in *runtimev1pb
 }
 
 func (a *Universal) GetActorReminder(ctx context.Context, in *runtimev1pb.GetActorReminderRequest) (*runtimev1pb.GetActorReminderResponse, error) {
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
+	}
 	r, err := a.ActorReminders(ctx)
 	if err != nil {
 		return nil, err
@@ -221,6 +261,9 @@ func (a *Universal) GetActorReminder(ctx context.Context, in *runtimev1pb.GetAct
 }
 
 func (a *Universal) UnregisterActorRemindersByType(ctx context.Context, in *runtimev1pb.UnregisterActorRemindersByTypeRequest) (*runtimev1pb.UnregisterActorRemindersByTypeResponse, error) {
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
+	}
 	r, err := a.ActorReminders(ctx)
 	if err != nil {
 		return nil, err
@@ -251,6 +294,9 @@ func (a *Universal) UnregisterActorRemindersByType(ctx context.Context, in *runt
 }
 
 func (a *Universal) ListActorReminders(ctx context.Context, req *runtimev1pb.ListActorRemindersRequest) (*runtimev1pb.ListActorRemindersResponse, error) {
+	if err := a.RejectInternalActorType(req.GetActorType()); err != nil {
+		return nil, err
+	}
 	r, err := a.ActorReminders(ctx)
 	if err != nil {
 		return nil, err

@@ -30,7 +30,6 @@ type httpendpoints struct {
 	config    config.KubernetesConfig
 	client    operatorv1pb.OperatorClient
 	namespace string
-	podName   string
 }
 
 // NewHTTPEndpoints returns a new Kubernetes loader.
@@ -39,7 +38,6 @@ func NewHTTPEndpoints(opts Options) loader.Loader[endpointapi.HTTPEndpoint] {
 		config:    opts.Config,
 		client:    opts.Client,
 		namespace: opts.Namespace,
-		podName:   opts.PodName,
 	}
 }
 

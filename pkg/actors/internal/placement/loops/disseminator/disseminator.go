@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
@@ -49,7 +50,7 @@ type Options struct {
 	HTarget       healthz.Target
 
 	DisseminationTimeout time.Duration
-	Cancel               context.CancelCauseFunc
+	Ready                *atomic.Bool
 
 	Inflight  *inflight.Inflight
 	Namespace string
@@ -65,10 +66,10 @@ type disseminator struct {
 	actorTable   table.Interface
 	scheduler    schedclient.Reloader
 	healthTarget healthz.Target
+	ready        *atomic.Bool
 
 	timeout        time.Duration
 	timeoutQ       *timeout.Timeout
-	cancel         context.CancelCauseFunc
 	timeoutVersion uint64
 
 	streamLoop loop.Interface[loops.EventStream]
@@ -77,6 +78,14 @@ type disseminator struct {
 
 	currentOperation v1pb.HostOperation
 	currentVersion   uint64
+
+	// roundChangedTypes accumulates the union of actor types whose hash
+	// ring changed across all UPDATE messages since the last UNLOCK. The
+	// placement server may compress multiple rounds (LOCK n, UPDATE n,
+	// LOCK n+1, UPDATE n+1, UNLOCK n+1) by eliding intermediate UNLOCKs;
+	// in that case, the final UNLOCK must release every type accumulated
+	// across the compressed rounds, not just the most recent UPDATE.
+	roundChangedTypes map[string]struct{}
 }
 
 func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
@@ -89,7 +98,10 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 
 	diss.currentOperation = v1pb.HostOperation_LOCK
 	diss.currentVersion = 0
+	diss.timeoutVersion = 0
+	diss.roundChangedTypes = make(map[string]struct{})
 	diss.healthTarget = opts.HTarget
+	diss.ready = opts.Ready
 
 	diss.loop = LoopFactoryCache.NewLoop(diss)
 	diss.inflight = opts.Inflight
@@ -99,8 +111,6 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 		Loop:    diss.loop,
 		Timeout: opts.DisseminationTimeout,
 	})
-	diss.cancel = opts.Cancel
-
 	diss.streamLoop = stream.New(ctx, stream.Options{
 		Channel:       opts.Channel,
 		PlacementLoop: opts.PlacementLoop,
@@ -142,7 +152,7 @@ func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 	defer d.wg.Wait()
 
 	d.streamLoop.Close(shutdown)
-	d.inflight.Lock(shutdown.Error)
+	d.inflight.Close(shutdown.Error)
 	d.timeoutQ.Close()
 
 	stream.LoopFactory.CacheLoop(d.streamLoop)
@@ -155,10 +165,17 @@ func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.Dissemi
 		return
 	}
 
-	log.Warnf("Dissemination timeout for version %d, shutting down", timeout.Version)
+	log.Warnf("Dissemination timeout for version %d, closing stream to reconnect", timeout.Version)
 
-	d.cancel(fmt.Errorf("dissemination timeout after %s for version %d",
-		d.timeout,
-		timeout.Version,
-	))
+	// Close the stream rather than killing the placement subsystem. The recv
+	// goroutine will exit and enqueue ConnCloseStream to the placement loop,
+	// which will shut down this disseminator, halt actors, and reconnect to
+	// placement. This ensures actor operations are unblocked promptly instead
+	// of hanging until the server-side timeout resolves the slow peer.
+	d.streamLoop.Close(&loops.Shutdown{
+		Error: fmt.Errorf("dissemination timeout after %s for version %d",
+			d.timeout,
+			timeout.Version,
+		),
+	})
 }

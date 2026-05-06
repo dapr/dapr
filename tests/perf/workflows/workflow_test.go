@@ -35,9 +35,9 @@ import (
 )
 
 var (
-	tr          *runner.TestRunner
+	tr            *runner.TestRunner
 	appNamePrefix = "perf-workflowsapp"
-	appName     string // actual app name including backend suffix
+	appName       string // actual app name including backend suffix
 )
 
 type K6RunConfig struct {

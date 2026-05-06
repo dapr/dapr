@@ -79,7 +79,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	r.AddActivityN("activity_failure", func(ctx task.ActivityContext) (any, error) {
 		return nil, errors.New("failure")
 	})
-	r.AddOrchestratorN("workflow", func(ctx *task.OrchestrationContext) (any, error) {
+	r.AddWorkflowN("workflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, err
@@ -95,11 +95,11 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	taskhubClient.StartWorkItemListener(ctx, r)
 
 	t.Run("successful workflow execution", func(t *testing.T) {
-		id, err := taskhubClient.ScheduleNewOrchestration(ctx, "workflow", api.WithInput("activity_success"))
+		id, err := taskhubClient.ScheduleNewWorkflow(ctx, "workflow", api.WithInput("activity_success"))
 		require.NoError(t, err)
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 		// Verify metrics
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -113,11 +113,11 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		}, time.Second*5, time.Millisecond*10)
 	})
 	t.Run("failed workflow execution", func(t *testing.T) {
-		id, err := taskhubClient.ScheduleNewOrchestration(ctx, "workflow", api.WithInput("activity_failure"))
+		id, err := taskhubClient.ScheduleNewWorkflow(ctx, "workflow", api.WithInput("activity_failure"))
 		require.NoError(t, err)
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 		// Verify metrics
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {

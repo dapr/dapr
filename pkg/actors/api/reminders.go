@@ -45,6 +45,11 @@ type CreateReminderRequest struct {
 	Overwrite *bool      `json:"overwrite"`
 
 	FailurePolicy *commonv1.JobFailurePolicy `json:"failure_policy,omitempty"`
+
+	// ConcurrencyKey is an optional key used for per-name concurrency limiting
+	// at the scheduler level. For activities this is the activity name, for
+	// workflows this is the workflow name.
+	ConcurrencyKey *string `json:"-"`
 }
 
 // ActorKey returns the key of the actor for this reminder.

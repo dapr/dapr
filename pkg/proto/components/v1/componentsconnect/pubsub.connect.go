@@ -30,7 +30,7 @@ import (
 // generated with a version of connect newer than the one compiled into your binary. You can fix the
 // problem by either regenerating this code with an older version of connect or updating the connect
 // version compiled into your binary.
-const _ = connect.IsAtLeastVersion0_1_0
+const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// PubSubName is the fully-qualified name of the PubSub service.
@@ -88,36 +88,43 @@ type PubSubClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewPubSubClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PubSubClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	pubSubMethods := v1.File_dapr_proto_components_v1_pubsub_proto.Services().ByName("PubSub").Methods()
 	return &pubSubClient{
 		init: connect.NewClient[v1.PubSubInitRequest, v1.PubSubInitResponse](
 			httpClient,
 			baseURL+PubSubInitProcedure,
-			opts...,
+			connect.WithSchema(pubSubMethods.ByName("Init")),
+			connect.WithClientOptions(opts...),
 		),
 		features: connect.NewClient[v1.FeaturesRequest, v1.FeaturesResponse](
 			httpClient,
 			baseURL+PubSubFeaturesProcedure,
-			opts...,
+			connect.WithSchema(pubSubMethods.ByName("Features")),
+			connect.WithClientOptions(opts...),
 		),
 		publish: connect.NewClient[v1.PublishRequest, v1.PublishResponse](
 			httpClient,
 			baseURL+PubSubPublishProcedure,
-			opts...,
+			connect.WithSchema(pubSubMethods.ByName("Publish")),
+			connect.WithClientOptions(opts...),
 		),
 		bulkPublish: connect.NewClient[v1.BulkPublishRequest, v1.BulkPublishResponse](
 			httpClient,
 			baseURL+PubSubBulkPublishProcedure,
-			opts...,
+			connect.WithSchema(pubSubMethods.ByName("BulkPublish")),
+			connect.WithClientOptions(opts...),
 		),
 		pullMessages: connect.NewClient[v1.PullMessagesRequest, v1.PullMessagesResponse](
 			httpClient,
 			baseURL+PubSubPullMessagesProcedure,
-			opts...,
+			connect.WithSchema(pubSubMethods.ByName("PullMessages")),
+			connect.WithClientOptions(opts...),
 		),
 		ping: connect.NewClient[v1.PingRequest, v1.PingResponse](
 			httpClient,
 			baseURL+PubSubPingProcedure,
-			opts...,
+			connect.WithSchema(pubSubMethods.ByName("Ping")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -188,35 +195,42 @@ type PubSubHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewPubSubHandler(svc PubSubHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	pubSubMethods := v1.File_dapr_proto_components_v1_pubsub_proto.Services().ByName("PubSub").Methods()
 	pubSubInitHandler := connect.NewUnaryHandler(
 		PubSubInitProcedure,
 		svc.Init,
-		opts...,
+		connect.WithSchema(pubSubMethods.ByName("Init")),
+		connect.WithHandlerOptions(opts...),
 	)
 	pubSubFeaturesHandler := connect.NewUnaryHandler(
 		PubSubFeaturesProcedure,
 		svc.Features,
-		opts...,
+		connect.WithSchema(pubSubMethods.ByName("Features")),
+		connect.WithHandlerOptions(opts...),
 	)
 	pubSubPublishHandler := connect.NewUnaryHandler(
 		PubSubPublishProcedure,
 		svc.Publish,
-		opts...,
+		connect.WithSchema(pubSubMethods.ByName("Publish")),
+		connect.WithHandlerOptions(opts...),
 	)
 	pubSubBulkPublishHandler := connect.NewUnaryHandler(
 		PubSubBulkPublishProcedure,
 		svc.BulkPublish,
-		opts...,
+		connect.WithSchema(pubSubMethods.ByName("BulkPublish")),
+		connect.WithHandlerOptions(opts...),
 	)
 	pubSubPullMessagesHandler := connect.NewBidiStreamHandler(
 		PubSubPullMessagesProcedure,
 		svc.PullMessages,
-		opts...,
+		connect.WithSchema(pubSubMethods.ByName("PullMessages")),
+		connect.WithHandlerOptions(opts...),
 	)
 	pubSubPingHandler := connect.NewUnaryHandler(
 		PubSubPingProcedure,
 		svc.Ping,
-		opts...,
+		connect.WithSchema(pubSubMethods.ByName("Ping")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.components.v1.PubSub/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

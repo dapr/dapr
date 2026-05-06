@@ -104,20 +104,25 @@ func New(t *testing.T, fopts ...Option) *Injector {
 		"-kubeconfig=" + kubeapi.KubeconfigPath(t),
 	}
 
+	envVars := []string{
+		"KUBERNETES_SERVICE_HOST", "anything",
+		"NAMESPACE", *opts.namespace,
+		"SIDECAR_IMAGE", opts.sidecarImage,
+		"DAPR_TRUST_ANCHORS_FILE", opts.sentry.TrustAnchorsFile(t),
+		"DAPR_CONTROL_PLANE_TRUST_DOMAIN", opts.sentry.TrustDomain(t),
+		"DAPR_SENTRY_ADDRESS", opts.sentry.Address(),
+	}
+	if opts.allowedServiceAccounts != nil {
+		envVars = append(envVars, "ALLOWED_SERVICE_ACCOUNTS", *opts.allowedServiceAccounts)
+	}
+
 	return &Injector{
 		kubeapi: kubeapi,
 		exec: exec.New(t,
 			binary.EnvValue("injector"), args,
 			append(
 				opts.execOpts,
-				exec.WithEnvVars(t,
-					"KUBERNETES_SERVICE_HOST", "anything",
-					"NAMESPACE", *opts.namespace,
-					"SIDECAR_IMAGE", opts.sidecarImage,
-					"DAPR_TRUST_ANCHORS_FILE", opts.sentry.TrustAnchorsFile(t),
-					"DAPR_CONTROL_PLANE_TRUST_DOMAIN", opts.sentry.TrustDomain(t),
-					"DAPR_SENTRY_ADDRESS", opts.sentry.Address(),
-				),
+				exec.WithEnvVars(t, envVars...),
 			)...,
 		),
 		freeport:    fp,

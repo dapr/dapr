@@ -56,7 +56,7 @@ func Test_generic(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 
-		streamer.establishFn = func(context.Context, operatorpb.OperatorClient, string, string) error {
+		streamer.establishFn = func(context.Context, operatorpb.OperatorClient, string) error {
 			return errors.New("test error")
 		}
 
@@ -114,7 +114,7 @@ func Test_generic(t *testing.T) {
 		var calls int
 
 		retried := make(chan struct{})
-		streamer.establishFn = func(context.Context, operatorpb.OperatorClient, string, string) error {
+		streamer.establishFn = func(context.Context, operatorpb.OperatorClient, string) error {
 			defer func() { calls++ }()
 
 			if calls == 3 {
@@ -186,15 +186,15 @@ func Test_generic(t *testing.T) {
 }
 
 type fakeStreamer[T differ.Resource] struct {
-	listFn      func(context.Context, operatorpb.OperatorClient, string, string) ([][]byte, error)
+	listFn      func(context.Context, operatorpb.OperatorClient, string) ([][]byte, error)
 	closeFn     func() error
 	recvFn      func(context.Context) (*loader.Event[T], error)
-	establishFn func(context.Context, operatorpb.OperatorClient, string, string) error
+	establishFn func(context.Context, operatorpb.OperatorClient, string) error
 }
 
 func newFakeStreamer() *fakeStreamer[componentsapi.Component] {
 	return &fakeStreamer[componentsapi.Component]{
-		listFn: func(context.Context, operatorpb.OperatorClient, string, string) ([][]byte, error) {
+		listFn: func(context.Context, operatorpb.OperatorClient, string) ([][]byte, error) {
 			return nil, nil
 		},
 		closeFn: func() error {
@@ -203,15 +203,15 @@ func newFakeStreamer() *fakeStreamer[componentsapi.Component] {
 		recvFn: func(context.Context) (*loader.Event[componentsapi.Component], error) {
 			return nil, nil
 		},
-		establishFn: func(context.Context, operatorpb.OperatorClient, string, string) error {
+		establishFn: func(context.Context, operatorpb.OperatorClient, string) error {
 			return nil
 		},
 	}
 }
 
 //nolint:unused
-func (f *fakeStreamer[T]) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error) {
-	return f.listFn(ctx, opclient, ns, podName)
+func (f *fakeStreamer[T]) list(ctx context.Context, opclient operatorpb.OperatorClient, ns string) ([][]byte, error) {
+	return f.listFn(ctx, opclient, ns)
 }
 
 //nolint:unused
@@ -225,6 +225,6 @@ func (f *fakeStreamer[T]) recv(ctx context.Context) (*loader.Event[T], error) {
 }
 
 //nolint:unused
-func (f *fakeStreamer[T]) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) error {
-	return f.establishFn(ctx, opclient, ns, podName)
+func (f *fakeStreamer[T]) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns string) error {
+	return f.establishFn(ctx, opclient, ns)
 }

@@ -66,6 +66,7 @@ type Scheduler struct {
 	id                 string
 	etcdInitialCluster string
 	etcdClientPort     int
+	etcdSpaceQuota     *string
 	sentry             *sentry.Sentry
 
 	embed    bool
@@ -169,6 +170,10 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		args = append(args, fmt.Sprintf("--workers=%d", *opts.workers))
 	}
 
+	if opts.etcdSpaceQuota != nil {
+		args = append(args, "--etcd-space-quota="+*opts.etcdSpaceQuota)
+	}
+
 	return &Scheduler{
 		exec: exec.New(t, binary.EnvValue("scheduler"), args,
 			append(opts.execOpts, exec.WithEnvVars(t,
@@ -183,6 +188,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		metricsPort:        opts.metricsPort,
 		etcdInitialCluster: *opts.etcdInitialCluster,
 		etcdClientPort:     opts.etcdClientPort,
+		etcdSpaceQuota:     opts.etcdSpaceQuota,
 		dataDir:            dataDir,
 		sentry:             opts.sentry,
 		namespace:          opts.namespace,
@@ -210,6 +216,14 @@ func (s *Scheduler) Kill(t *testing.T) {
 		s.httpClient.CloseIdleConnections()
 	}
 	s.exec.Kill(t)
+}
+
+func (s *Scheduler) Restart(t *testing.T, ctx context.Context) {
+	t.Helper()
+	clone := s.exec.Clone(t)
+	s.Kill(t)
+	s.exec = clone
+	s.exec.Run(t, ctx)
 }
 
 func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
@@ -245,6 +259,29 @@ func (s *Scheduler) WaitUntilLeadership(t *testing.T, ctx context.Context, leade
 			assert.Len(col, resp.Kvs, leaders)
 		}
 	}, 10*time.Second, 10*time.Millisecond)
+}
+
+// WaitUntilSidecarsConnected blocks until the scheduler has exactly `want`
+// sidecar stream connections and that count has remained stable across 20
+// consecutive polls (~1s). This catches the startup window where daprd's
+// WatchHosts stream can trigger a short disconnect/reconnect cycle of all
+// scheduler job streams, during which a newly-scheduled job can be delivered
+// to streams that are about to disconnect as well as their replacements.
+func (s *Scheduler) WaitUntilSidecarsConnected(t *testing.T, ctx context.Context, want int) {
+	t.Helper()
+
+	const stableObservations = 20
+	var consecutive int
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		got := int(s.Metrics(c, ctx).All()["dapr_scheduler_sidecars_connected"])
+		if got != want {
+			consecutive = 0
+			assert.Equal(c, want, got)
+			return
+		}
+		consecutive++
+		assert.GreaterOrEqual(c, consecutive, stableObservations)
+	}, 20*time.Second, 50*time.Millisecond)
 }
 
 func (s *Scheduler) ID() string {

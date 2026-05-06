@@ -14,6 +14,8 @@ limitations under the License.
 package informer
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -22,8 +24,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/cache"
+	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -31,6 +37,16 @@ import (
 	"github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/kit/crypto/test"
 )
+
+// fakeCache is a minimal ctrlcache.Cache stub that only implements GetInformer.
+type fakeCache struct {
+	ctrlcache.Cache
+	getInformerErr error
+}
+
+func (f *fakeCache) GetInformer(ctx context.Context, obj client.Object, opts ...ctrlcache.InformerGetOption) (ctrlcache.Informer, error) {
+	return nil, f.getInformerErr
+}
 
 func Test_WatchUpdates(t *testing.T) {
 	t.Run("bad authz should error", func(t *testing.T) {
@@ -127,6 +143,55 @@ func Test_WatchUpdates(t *testing.T) {
 				}
 			}
 		}
+	})
+}
+
+func Test_Run(t *testing.T) {
+	t.Run("NoKindMatchError should not return error", func(t *testing.T) {
+		i := New[compapi.Component](Options{
+			Cache: &fakeCache{
+				getInformerErr: &apimeta.NoKindMatchError{
+					GroupKind:        schema.GroupKind{Group: "dapr.io", Kind: "Component"},
+					SearchedVersions: []string{"v1alpha1"},
+				},
+			},
+		})
+
+		ctx, cancel := context.WithCancel(t.Context())
+
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- i.Run(ctx)
+		}()
+
+		// Ensure Run blocks (does not return immediately).
+		select {
+		case err := <-errCh:
+			t.Fatalf("expected Run to block, but it returned: %v", err)
+		case <-time.After(100 * time.Millisecond):
+		}
+
+		cancel()
+
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("expected Run to return after context cancellation")
+		}
+	})
+
+	t.Run("other errors should be returned", func(t *testing.T) {
+		i := New[compapi.Component](Options{
+			Cache: &fakeCache{
+				getInformerErr: errors.New("some other error"),
+			},
+		})
+
+		err := i.Run(t.Context())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unable to get setup Component informer")
+		assert.Contains(t, err.Error(), "some other error")
 	})
 }
 

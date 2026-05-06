@@ -45,6 +45,11 @@ func (p *placement) Setup(t *testing.T) []framework.Option {
 }
 
 func (p *placement) Run(t *testing.T, ctx context.Context) {
+	// Wait for placement to be fully ready (healthz returns 200) before
+	// checking TCP ports. This avoids a race where TCP ports are open but
+	// the Raft server hasn't initialized yet, causing fatal crashes.
+	p.proc.WaitUntilRunning(t, ctx)
+
 	dialer := net.Dialer{Timeout: time.Second * 5}
 	for name, port := range map[string]int{
 		"port":           p.proc.Port(),

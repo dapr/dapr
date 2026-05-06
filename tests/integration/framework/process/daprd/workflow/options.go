@@ -27,11 +27,11 @@ type options struct {
 	registry *task.TaskRegistry
 }
 
-func WithAddOrchestratorN(t *testing.T, name string, or func(*task.OrchestrationContext) (any, error)) Option {
+func WithAddWorkflowN(t *testing.T, name string, or func(*task.WorkflowContext) (any, error)) Option {
 	t.Helper()
 
 	return func(o *options) {
-		require.NoError(t, o.registry.AddOrchestratorN(name, or))
+		require.NoError(t, o.registry.AddWorkflowN(name, or))
 	}
 }
 

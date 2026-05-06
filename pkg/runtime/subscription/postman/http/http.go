@@ -157,7 +157,7 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 
 	// Every error from now on is a retriable error.
 	errMsg := fmt.Sprintf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[contribpubsub.IDField], cloudEvent[contribpubsub.TopicField], body, statusCode)
-	log.Warnf(errMsg)
+	log.Warn(errMsg)
 	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
 	// return error status code for resiliency to decide on retry
 	// TODO: Update types to uint32
@@ -424,7 +424,7 @@ func (h *http) sendBulkToDeadLetter(ctx context.Context,
 
 	_, err := h.adapter.BulkPublish(ctx, req)
 	if err != nil {
-		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
+		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 	}
 
 	return err
@@ -441,7 +441,7 @@ func (h *http) sendToDeadLetter(ctx context.Context, name string, msg *contribpu
 
 	err := h.adapter.Publish(ctx, req)
 	if err != nil {
-		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
+		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 		return err
 	}
 

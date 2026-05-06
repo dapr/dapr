@@ -32,7 +32,7 @@ func Test_GetOrCreate(t *testing.T) {
 		AppID:             "appID",
 		ActivityActorType: "activity",
 		WorkflowActorType: "workflow",
-		Scheduler: func(context.Context, *backend.OrchestrationWorkItem) error {
+		Scheduler: func(context.Context, *backend.WorkflowWorkItem) error {
 			return nil
 		},
 		Actors: fake.New(),
@@ -76,7 +76,7 @@ func Test_HaltAll(t *testing.T) {
 		AppID:             "appID",
 		ActivityActorType: "activity",
 		WorkflowActorType: "workflow",
-		Scheduler: func(context.Context, *backend.OrchestrationWorkItem) error {
+		Scheduler: func(context.Context, *backend.WorkflowWorkItem) error {
 			return nil
 		},
 		Actors: fake.New(),
@@ -114,7 +114,7 @@ func Test_HaltNonHosted(t *testing.T) {
 		AppID:             "appID",
 		ActivityActorType: "activity",
 		WorkflowActorType: "workflow",
-		Scheduler: func(context.Context, *backend.OrchestrationWorkItem) error {
+		Scheduler: func(context.Context, *backend.WorkflowWorkItem) error {
 			return nil
 		},
 		Actors: fake.New().WithPlacement(func(context.Context) (placement.Interface, error) {

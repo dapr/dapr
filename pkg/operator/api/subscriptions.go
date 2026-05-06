@@ -34,7 +34,7 @@ func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*
 	return a.ListSubscriptionsV2(ctx, &operatorv1pb.ListSubscriptionsRequest{})
 }
 
-// ListSubscriptionsV2 returns a list of Dapr pub/sub subscriptions. Use ListSubscriptionsRequest to expose pod info.
+// ListSubscriptionsV2 returns a list of Dapr pub/sub subscriptions.
 func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest) (*operatorv1pb.ListSubscriptionsResponse, error) {
 	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 		}
 		b, err := json.Marshal(&s)
 		if err != nil {
-			log.Warnf("error marshalling subscription for pod %s/%s: %s", in.GetNamespace(), in.GetPodName(), err)
+			log.Warnf("error marshalling subscription in namespace %s: %s", in.GetNamespace(), err)
 			continue
 		}
 		resp.Subscriptions = append(resp.GetSubscriptions(), b)
@@ -96,7 +96,6 @@ func (a *apiServer) SubscriptionUpdate(in *operatorv1pb.SubscriptionUpdateReques
 		CancelWatch: cancel,
 		Stream:      stream,
 		Namespace:   in.GetNamespace(),
-		PodName:     in.GetPodName(),
 	})
 	defer client.CacheLoop()
 

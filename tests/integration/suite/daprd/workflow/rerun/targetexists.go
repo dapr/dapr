@@ -48,7 +48,7 @@ func (e *targetexists) Setup(t *testing.T) []framework.Option {
 func (e *targetexists) Run(t *testing.T, ctx context.Context) {
 	e.workflow.WaitUntilRunning(t, ctx)
 
-	e.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	e.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
 	})
@@ -58,14 +58,14 @@ func (e *targetexists) Run(t *testing.T, ctx context.Context) {
 
 	client := e.workflow.BackendClient(t, ctx)
 
-	_, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
+	_, err := client.ScheduleNewWorkflow(ctx, "foo", api.WithInstanceID("abc"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, api.InstanceID("abc"))
+	_, err = client.WaitForWorkflowCompletion(ctx, api.InstanceID("abc"))
 	require.NoError(t, err)
 
-	_, err = client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("xyz"))
+	_, err = client.ScheduleNewWorkflow(ctx, "foo", api.WithInstanceID("xyz"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, api.InstanceID("xyz"))
+	_, err = client.WaitForWorkflowCompletion(ctx, api.InstanceID("xyz"))
 	require.NoError(t, err)
 
 	_, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc"), 0, api.WithRerunNewInstanceID("xyz"))

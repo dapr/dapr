@@ -181,7 +181,7 @@ jobs:
       run: |
         make build-linux
         make docker-build
-        make docker-push
+        make docker-push-retry
 
     - name: Build and push test apps
       run: |

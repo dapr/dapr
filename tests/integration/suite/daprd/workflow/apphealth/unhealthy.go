@@ -75,7 +75,7 @@ func (a *unhealthy) Setup(t *testing.T) []framework.Option {
 func (a *unhealthy) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
-	a.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	a.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		if err := ctx.CallActivity("bar").Await(nil); err != nil {
 			return nil, err
 		}
@@ -103,9 +103,9 @@ func (a *unhealthy) Run(t *testing.T, ctx context.Context) {
 			len(a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 2)
 	}, time.Second*10, time.Millisecond*10)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "foo")
+	id, err := client.ScheduleNewWorkflow(ctx, "foo")
 	require.NoError(t, err, "failed to schedule workflow")
-	meta, err := client.WaitForOrchestrationCompletion(ctx, id)
+	meta, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), meta.GetRuntimeStatus().String())
 }

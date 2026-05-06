@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/inflight"
 	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
 	healthzfake "github.com/dapr/dapr/pkg/healthz/fake"
 	loopfake "github.com/dapr/kit/events/loop/fake"
@@ -52,6 +53,7 @@ func TestHandleCloseStream_NotReady(t *testing.T) {
 			htarget:    ht,
 			dissLoop:   dissLoop,
 			actorTable: tablefake.New(),
+			inflight:   inflight.New(inflight.Options{Hostname: "localhost", Port: "3500"}),
 			idx:        1,
 		}
 

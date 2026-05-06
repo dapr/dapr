@@ -35,10 +35,9 @@ type subscriptions struct {
 // the generic operator.
 //
 //nolint:unused
-func (s *subscriptions) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error) {
+func (s *subscriptions) list(ctx context.Context, opclient operatorpb.OperatorClient, ns string) ([][]byte, error) {
 	resp, err := opclient.ListSubscriptionsV2(ctx, &operatorpb.ListSubscriptionsRequest{
 		Namespace: ns,
-		PodName:   podName,
 	})
 
 	// Ignore proto marshal nil errors from older gRPC servers.
@@ -92,10 +91,9 @@ func (s *subscriptions) recv(ctx context.Context) (*loader.Event[subapi.Subscrip
 }
 
 //nolint:unused
-func (s *subscriptions) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) error {
+func (s *subscriptions) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns string) error {
 	stream, err := opclient.SubscriptionUpdate(ctx, &operatorpb.SubscriptionUpdateRequest{
 		Namespace: ns,
-		PodName:   podName,
 	})
 	if err != nil {
 		return err

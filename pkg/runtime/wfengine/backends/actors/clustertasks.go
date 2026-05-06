@@ -103,7 +103,7 @@ func (be *ClusterTasksBackend) WaitForActivityCompletion(req *protos.ActivityReq
 		}
 
 		key := backend.GetActivityExecutionKey(
-			req.GetOrchestrationInstance().GetInstanceId(),
+			req.GetWorkflowInstance().GetInstanceId(),
 			req.GetTaskId(),
 		)
 		sreq := internalsv1pb.
@@ -137,7 +137,7 @@ func (be *ClusterTasksBackend) WaitForActivityCompletion(req *protos.ActivityReq
 	}
 }
 
-func (be *ClusterTasksBackend) CompleteOrchestratorTask(ctx context.Context, resp *protos.OrchestratorResponse) error {
+func (be *ClusterTasksBackend) CompleteWorkflowTask(ctx context.Context, resp *protos.WorkflowResponse) error {
 	router, err := be.actors.Router(ctx)
 	if err != nil {
 		return err
@@ -159,7 +159,7 @@ func (be *ClusterTasksBackend) CompleteOrchestratorTask(ctx context.Context, res
 	return err
 }
 
-func (be *ClusterTasksBackend) CancelOrchestratorTask(ctx context.Context, id api.InstanceID) error {
+func (be *ClusterTasksBackend) CancelWorkflowTask(ctx context.Context, id api.InstanceID) error {
 	router, err := be.actors.Router(ctx)
 	if err != nil {
 		return err
@@ -175,8 +175,8 @@ func (be *ClusterTasksBackend) CancelOrchestratorTask(ctx context.Context, id ap
 	return err
 }
 
-func (be *ClusterTasksBackend) WaitForOrchestratorCompletion(req *protos.OrchestratorRequest) func(context.Context) (*protos.OrchestratorResponse, error) {
-	return func(ctx context.Context) (*protos.OrchestratorResponse, error) {
+func (be *ClusterTasksBackend) WaitForWorkflowTaskCompletion(req *protos.WorkflowRequest) func(context.Context) (*protos.WorkflowResponse, error) {
+	return func(ctx context.Context) (*protos.WorkflowResponse, error) {
 		router, err := be.actors.Router(ctx)
 		if err != nil {
 			return nil, err
@@ -187,7 +187,7 @@ func (be *ClusterTasksBackend) WaitForOrchestratorCompletion(req *protos.Orchest
 			WithActor(be.executorActorType, req.GetInstanceId()).
 			WithContentType(invokev1.ProtobufContentType)
 
-		var resp protos.OrchestratorResponse
+		var resp protos.WorkflowResponse
 
 		err = router.CallStream(ctx, sreq, func(res *internalsv1pb.InternalInvokeResponse) (bool, error) {
 			if res == nil {

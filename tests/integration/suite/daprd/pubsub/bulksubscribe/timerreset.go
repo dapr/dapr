@@ -38,9 +38,10 @@ func init() {
 	suite.Register(new(timerReset))
 }
 
-// timerReset verifies that after a count-based batch flush, the bulk
-// subscriber resets its await-duration timer so the next batch gets the full
-// window. This is the regression test for dapr/dapr#9211.
+// timerReset verifies that bulk subscribe flushes messages promptly via
+// drain-and-flush. After a count-based batch flush, the next message should
+// be flushed immediately rather than waiting for the await-duration timer.
+// This is the regression test for dapr/dapr#9727.
 type timerReset struct {
 	daprd  *daprd.Daprd
 	app    *app.App
@@ -148,43 +149,24 @@ func (tr *timerReset) Run(t *testing.T, ctx context.Context) {
 	firstFlushTime := tr.deliveries[0].time
 	tr.mu.Unlock()
 
-	// Immediately publish 1 more message. If the timer was properly reset,
-	// this message should NOT be delivered for ~1500ms.
+	// Immediately publish 1 more message. With drain-and-flush, this
+	// message should be flushed promptly (not waiting for the timer).
 	tr.publish(t, ctx, `{"id": 99}`)
 
-	// Verify the message is NOT delivered prematurely (within 500ms).
-	// Without the fix, the old timer would still be running and could fire
-	// much sooner than 1500ms.
-	select {
-	case <-tr.deliveryCh:
-		tr.mu.Lock()
-
-		elapsed := tr.deliveries[len(tr.deliveries)-1].time.Sub(firstFlushTime)
-		tr.mu.Unlock()
-
-		if elapsed < 800*time.Millisecond {
-			t.Fatalf("message was flushed prematurely at %v after count-based flush; "+
-				"timer should have been reset to 1500ms", elapsed)
-		}
-		// If we got here with elapsed >= 800ms, the timer was reset (OK).
-	case <-time.After(500 * time.Millisecond):
-		// Good — no premature delivery within 500ms.
-	}
-
-	// Now wait for the timer-based flush to actually deliver the message.
-	tr.waitForDelivery(t, ctx, "second batch (timer-based flush)")
+	// Wait for the drain-and-flush to deliver the extra message.
+	tr.waitForDelivery(t, ctx, "second batch (drain-and-flush)")
 
 	tr.mu.Lock()
 	require.Len(t, tr.deliveries, 2, "expected exactly 2 deliveries total")
 	assert.Equal(t, 1, tr.deliveries[1].entries, "second batch should contain 1 entry")
 
-	// The second delivery should happen roughly 1500ms after the first,
-	// proving the timer was reset.
+	// The second delivery should happen promptly after the first, not
+	// waiting for the full 1500ms timer. Use 1000ms (2/3 of the timer)
+	// as the upper bound — generous enough for CI scheduling jitter
+	// while still distinguishing drain-and-flush from timer-based flush.
 	elapsed := tr.deliveries[1].time.Sub(firstFlushTime)
-	assert.Greater(t, elapsed, 1000*time.Millisecond,
-		"second flush should happen at least 1000ms after count-based flush (timer reset to 1500ms)")
-	assert.Less(t, elapsed, 4000*time.Millisecond,
-		"second flush should not take excessively long")
+	assert.Less(t, elapsed, 1000*time.Millisecond,
+		"second flush should happen promptly via drain-and-flush, not waiting for timer")
 	tr.mu.Unlock()
 }
 

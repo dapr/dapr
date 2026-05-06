@@ -149,6 +149,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.blockShutdownDuration != nil {
 		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
 	}
+	if opts.actorsDisseminateTimeout != nil {
+		args = append(args, "--actors-disseminate-timeout="+opts.actorsDisseminateTimeout.String())
+	}
 	if len(opts.schedulerAddresses) > 0 {
 		args = append(args, "--scheduler-host-address="+strings.Join(opts.schedulerAddresses, ","))
 	}
@@ -427,6 +430,10 @@ func (d *Daprd) GetMetaHTTPEndpoints(t assert.TestingT, ctx context.Context) []*
 	return d.meta(t, ctx).HTTPEndpoints
 }
 
+func (d *Daprd) GetMetaMCPServers(t assert.TestingT, ctx context.Context) []*rtv1.MetadataMCPServer {
+	return d.meta(t, ctx).MCPServers
+}
+
 func (d *Daprd) GetMetaScheduler(t assert.TestingT, ctx context.Context) *rtv1.MetadataScheduler {
 	return d.meta(t, ctx).Scheduler
 }
@@ -441,12 +448,14 @@ func (d *Daprd) GetMetadata(t assert.TestingT, ctx context.Context) *Metadata {
 
 // Metadata is a subset of metadataResponse defined in pkg/api/http/metadata.go:160
 type Metadata struct {
-	RegisteredComponents []*rtv1.RegisteredComponents         `json:"components,omitempty"`
-	Subscriptions        []MetadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
-	HTTPEndpoints        []*rtv1.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
-	Scheduler            *rtv1.MetadataScheduler              `json:"scheduler,omitempty"`
-	ActorRuntime         *MetadataActorRuntime                `json:"actorRuntime,omitempty"`
-	Workflows            *MetadataWorkflows                   `json:"workflows"`
+	RegisteredComponents   []*rtv1.RegisteredComponents         `json:"components,omitempty"`
+	Subscriptions          []MetadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
+	HTTPEndpoints          []*rtv1.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
+	MCPServers             []*rtv1.MetadataMCPServer            `json:"mcpServers,omitempty"`
+	Scheduler              *rtv1.MetadataScheduler              `json:"scheduler,omitempty"`
+	ActorRuntime           *MetadataActorRuntime                `json:"actorRuntime,omitempty"`
+	Workflows              *MetadataWorkflows                   `json:"workflows"`
+	WorkflowAccessPolicies []*rtv1.MetadataWorkflowAccessPolicy `json:"workflowAccessPolicies,omitempty"`
 }
 
 // MetadataResponsePubsubSubscription copied from pkg/api/http/metadata.go:172 to be able to use in integration tests until we move to Proto format
@@ -517,6 +526,14 @@ func (d *Daprd) Restart(t *testing.T, ctx context.Context) {
 	d.exec.Kill(t)
 	d.exec = clone
 	d.exec.Run(t, ctx)
+}
+
+// ReplaceArg sets `--<flag>=<value>` on the daprd command line for the next
+// Run/Restart, replacing any existing occurrence of that flag. Existing args
+// remain in place, so this is safe to call between Kill and Restart.
+func (d *Daprd) ReplaceArg(t *testing.T, flag, value string) {
+	t.Helper()
+	d.exec.ReplaceArg(t, flag, value)
 }
 
 func (d *Daprd) SignalHUP(t *testing.T) {

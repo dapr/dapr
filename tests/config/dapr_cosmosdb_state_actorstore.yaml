@@ -65,3 +65,5 @@ scopes:
 - workflowsapp
 - workflowsapp-actors
 - workflowsapp-retention
+- wfacl-caller
+- wfacl-target

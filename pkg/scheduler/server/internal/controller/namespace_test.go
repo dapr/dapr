@@ -28,8 +28,48 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	clientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	cronpkg "github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
 	cronfake "github.com/dapr/dapr/pkg/scheduler/server/internal/cron/fake"
 )
+
+// Test_SetCron_SwapAcrossRestarts simulates the app.go server restart loop.
+// A single Controller is created once, then SetCron is called with a new cron
+// on each "restart". The namespace reconciler must use the latest cron each
+// time. This verifies that the reconciler doesn't hold onto a stale cron instance across restarts.
+func Test_SetCron_SwapAcrossRestarts(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	nsReader := clientfake.NewClientBuilder().WithScheme(scheme).Build()
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-ns"}}
+
+	c := new(Controller)
+	nsctrl := &namespace{ctrl: c, nsReader: nsReader}
+
+	// Before SetCron is called, reconcile should return an error.
+	_, err := nsctrl.Reconcile(t.Context(), req)
+	require.ErrorContains(t, err, "controller cron not yet initialized")
+
+	// Simulate three server restarts, each with a different cron instance.
+	// Each cron records which "generation" was called so we can verify the
+	// reconciler always uses the latest one.
+	for i := range 3 {
+		var calledGen int
+		fakeCron := cronfake.New().WithClient(func(context.Context) (api.Interface, error) {
+			calledGen = i
+			return etcdcronfake.New(), nil
+		})
+
+		var cronIface cronpkg.Interface = fakeCron
+		c.SetCron(cronIface)
+
+		_, err := nsctrl.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		assert.Equal(t, i, calledGen,
+			"reconciler should use cron from restart generation %d", i)
+	}
+}
 
 func Test_Reconcile(t *testing.T) {
 	tests := map[string]struct {
@@ -83,8 +123,11 @@ func Test_Reconcile(t *testing.T) {
 				nsReaderBuilder.WithObjects(test.ns)
 			}
 
+			c := new(Controller)
+			var cronIface cronpkg.Interface = cron
+			c.SetCron(cronIface)
 			nsctrl := &namespace{
-				cron:     cron,
+				ctrl:     c,
 				nsReader: nsReaderBuilder.Build(),
 			}
 

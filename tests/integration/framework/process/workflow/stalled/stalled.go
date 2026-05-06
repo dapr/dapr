@@ -45,7 +45,7 @@ func New(t *testing.T, fopts ...Option) *Stalled {
 	t.Helper()
 
 	opts := options{
-		workflows:  map[string]task.Orchestrator{},
+		workflows:  map[string]task.Workflow{},
 		activities: map[string]task.Activity{},
 	}
 
@@ -81,7 +81,7 @@ func (f *Stalled) Cleanup(t *testing.T) {
 	f.workflows.Cleanup(t)
 }
 
-func (f *Stalled) workflowWrapper(ctx *task.OrchestrationContext) (any, error) {
+func (f *Stalled) workflowWrapper(ctx *task.WorkflowContext) (any, error) {
 	if wf, ok := f.options.workflows[f.runWorkflowReplica]; !ok {
 		return nil, fmt.Errorf("workflow replica %s not found", f.runWorkflowReplica)
 	} else {
@@ -95,9 +95,9 @@ func (f *Stalled) ScheduleWorkflow(t *testing.T, ctx context.Context) api.Instan
 	ctx, cancel := context.WithCancel(ctx)
 	f.currentClientCancel = cancel
 	f.CurrentClient = f.workflows.BackendClient(t, ctx)
-	id, err := f.CurrentClient.ScheduleNewOrchestration(ctx, "Orchestrator")
+	id, err := f.CurrentClient.ScheduleNewWorkflow(ctx, "Orchestrator")
 	require.NoError(t, err)
-	_, err = f.CurrentClient.WaitForOrchestrationStart(ctx, id)
+	_, err = f.CurrentClient.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
 	return id
 }
@@ -119,7 +119,7 @@ func (f *Stalled) restart(t *testing.T, ctx context.Context) {
 func (f *Stalled) waitForStatus(t *testing.T, ctx context.Context, id api.InstanceID, status protos.OrchestrationStatus) {
 	t.Helper()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		md, err := f.CurrentClient.FetchOrchestrationMetadata(ctx, id)
+		md, err := f.CurrentClient.FetchWorkflowMetadata(ctx, id)
 		require.NoError(c, err)
 		assert.Equal(c, status.String(), md.RuntimeStatus.String())
 	}, 20*time.Second, 10*time.Millisecond)
@@ -150,7 +150,7 @@ func (f *Stalled) WaitForNumberOfOrchestrationStartedEvents(t *testing.T, ctx co
 		require.NoError(c, err)
 		count := 0
 		for _, event := range hist.Events {
-			if event.GetOrchestratorStarted() != nil {
+			if event.GetWorkflowStarted() != nil {
 				count++
 			}
 		}
