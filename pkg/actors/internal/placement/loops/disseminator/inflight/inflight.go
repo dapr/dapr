@@ -15,6 +15,7 @@ package inflight
 
 import (
 	"context"
+	"maps"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -335,8 +336,6 @@ func (i *Inflight) SetEntityDrainOngoingCallTimeouts(timeouts map[string]time.Du
 		return
 	}
 	cp := make(map[string]time.Duration, len(timeouts))
-	for k, v := range timeouts {
-		cp[k] = v
-	}
+	maps.Copy(cp, timeouts)
 	i.entityDrainTimeouts.Store(&cp)
 }
