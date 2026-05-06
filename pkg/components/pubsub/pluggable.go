@@ -29,12 +29,9 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-// ErrPausableUnimplemented is returned by Pause/Resume when the remote
-// pluggable server does not implement the optional pause RPC. Runtime
-// callers should treat it as "this component does not opt in to
-// pause-and-drain" and fall back to close-first shutdown — without
-// surfacing a warning, since pre-pause-and-drain plugins are valid
-// implementations of the pluggable contract.
+// ErrPausableUnimplemented signals that the remote pluggable server does
+// not implement the optional Pause/Resume RPCs. Runtime falls back to
+// close-first shutdown silently in that case.
 var ErrPausableUnimplemented = errors.New("pluggable pubsub does not support Pause/Resume")
 
 // grpcPubSub is a implementation of a pubsub over a gRPC Protocol.
@@ -240,12 +237,9 @@ func (p *grpcPubSub) Subscribe(ctx context.Context, req pubsub.SubscribeRequest,
 	return p.pullMessages(ctx, subscription, handler)
 }
 
-// Pause implements pubsub.PausableSubscriber. It calls the optional Pause
-// RPC on the remote pluggable server. If the server does not implement it
-// (gRPC Unimplemented), Pause returns ErrPausableUnimplemented so the
-// runtime falls back to close-first shutdown — preserving back-compat
-// with plugins built before pause-and-drain existed. Logged at debug so
-// legacy plugins do not flood logs on every graceful shutdown.
+// Pause implements pubsub.PausableSubscriber. Returns
+// ErrPausableUnimplemented when the remote does not implement the RPC,
+// so legacy plugins fall back to close-first shutdown.
 func (p *grpcPubSub) Pause(ctx context.Context) error {
 	_, err := p.Client.Pause(ctx, &proto.PauseRequest{})
 	if status.Code(err) == codes.Unimplemented {
@@ -255,8 +249,7 @@ func (p *grpcPubSub) Pause(ctx context.Context) error {
 	return err
 }
 
-// Resume implements pubsub.PausableSubscriber. Same Unimplemented
-// fallback as Pause.
+// Resume implements pubsub.PausableSubscriber.
 func (p *grpcPubSub) Resume(ctx context.Context) error {
 	_, err := p.Client.Resume(ctx, &proto.ResumeRequest{})
 	if status.Code(err) == codes.Unimplemented {
@@ -266,10 +259,6 @@ func (p *grpcPubSub) Resume(ctx context.Context) error {
 	return err
 }
 
-// Compile-time assertion that grpcPubSub implements PausableSubscriber.
-// Runtime's type assertion succeeds for ALL pluggable pubsubs; servers
-// that don't implement the new RPCs return Unimplemented and the runtime
-// falls back to close-first shutdown.
 var _ pubsub.PausableSubscriber = (*grpcPubSub)(nil)
 
 // fromConnector creates a new GRPC pubsub using the given underlying connector.

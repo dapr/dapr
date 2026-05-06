@@ -35,9 +35,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/subscription/postman/http"
 )
 
-// pausablePubSub is a mock pubsub that implements both contribpubsub.PubSub
-// and contribpubsub.PausableSubscriber, used for testing the runtime's
-// pause-and-drain shutdown path.
+// pausablePubSub is a mock that implements PausableSubscriber for tests.
 type pausablePubSub struct {
 	mu       sync.Mutex
 	handlers map[string]contribpubsub.Handler
@@ -109,10 +107,8 @@ func (p *pausablePubSub) Pause(ctx context.Context) error {
 	return nil
 }
 
-// deliver invokes the captured Subscribe handler for the given topic. It
-// simulates a contrib consumer goroutine pulling a buffered message and
-// handing it to the runtime — the path drain-to-app needs to keep alive
-// until the drain seals.
+// deliver invokes the captured Subscribe handler for the given topic,
+// simulating a contrib consumer goroutine pulling a buffered message.
 func (p *pausablePubSub) deliver(ctx context.Context, topic string, data []byte) error {
 	p.mu.Lock()
 	h := p.handlers[topic]
@@ -132,8 +128,7 @@ func (p *pausablePubSub) Resume(context.Context) error {
 // Compile-time assertion that the mock implements the interface.
 var _ contribpubsub.PausableSubscriber = (*pausablePubSub)(nil)
 
-// nonPausablePubSub is a mock pubsub that intentionally does NOT implement
-// PausableSubscriber, so Stop's close-first branch is exercised.
+// nonPausablePubSub intentionally omits PausableSubscriber.
 type nonPausablePubSub struct {
 	mu       sync.Mutex
 	handlers map[string]contribpubsub.Handler
@@ -226,10 +221,7 @@ func TestStopDoesNotPauseOnNonGracefulShutdown(t *testing.T) {
 	})
 }
 
-// TestStopCallsPauseBeforeClosing verifies that on graceful shutdown with a
-// PausableSubscriber, Pause is called before Stop returns. Pause must run
-// before s.cancel so the broker stops fetching while the contrib's
-// Subscribe goroutine is winding down.
+// TestStopCallsPauseBeforeClosing — Pause must run before Stop returns.
 func TestStopCallsPauseBeforeClosing(t *testing.T) {
 	comp := newPausablePubSub()
 	// Block Pause briefly so we can observe Stop's progress.
@@ -272,14 +264,8 @@ func TestStopCallsPauseBeforeClosing(t *testing.T) {
 		"closed must be true after Stop returns")
 }
 
-// TestStopDrainHoldsForBufferedDelivery verifies the stable-quiet drain
-// requirement. A message arriving shortly after Pause returns — exactly
-// the case where Sarama hands a claim-buffered message to the runtime —
-// must reach the app, not be rejected by the drainSealed fast path.
-//
-// Without the stable-quiet guard, the drain loop would observe inflight=0
-// (no handler running yet), seal immediately, and a buffered delivery
-// arriving even a few ms later would return ctx.Err.
+// TestStopDrainHoldsForBufferedDelivery — stable-quiet keeps drain open
+// long enough for a delivery arriving shortly after Pause to reach the app.
 func TestStopDrainHoldsForBufferedDelivery(t *testing.T) {
 	comp := newPausablePubSub()
 	sub := newSubscriptionForTest(t, comp)
@@ -313,9 +299,8 @@ func TestStopDrainHoldsForBufferedDelivery(t *testing.T) {
 	}
 }
 
-// TestStopRejectsDeliveryAfterDrainSealed verifies the other side of the
-// drain semantics: once the drain has sealed, subsequent handler invocations
-// must take the drainSealed fast path and return without invoking the app.
+// TestStopRejectsDeliveryAfterDrainSealed — post-seal deliveries take the
+// drainSealed fast path (block on ctx.Done) instead of invoking the app.
 func TestStopRejectsDeliveryAfterDrainSealed(t *testing.T) {
 	comp := newPausablePubSub()
 	sub := newSubscriptionForTest(t, comp)
@@ -332,10 +317,8 @@ func TestStopRejectsDeliveryAfterDrainSealed(t *testing.T) {
 		"handler should block on ctx.Done after drainSealed; the test ctx deadline must be the cause")
 }
 
-// TestStopBoundsHungPauseWithTimeout verifies that a Pause implementation
-// that ignores its context and never returns cannot block Stop forever. The
-// 5s timeout in Stop is the runtime's last line of defense before the
-// block-shutdown timer would otherwise be deferred indefinitely.
+// TestStopBoundsHungPauseWithTimeout — a Pause that ignores ctx must
+// not block Stop past the 5s timeout.
 func TestStopBoundsHungPauseWithTimeout(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping 5s timeout test in -short mode")
@@ -365,17 +348,12 @@ func TestStopBoundsHungPauseWithTimeout(t *testing.T) {
 		"Stop should return shortly after Pause timeout fires")
 }
 
-// TestStopOnNonPausableComponentClosesPromptly verifies the close-first
-// path. Stable-quiet must NOT apply when the component is non-pausable:
-// closed=true already deflects new handlers in microseconds, so Stop
-// should exit on the first inflight=0 reading and not extend shutdown
-// by 100ms unnecessarily. Regression guard for the !paused fallback.
+// TestStopOnNonPausableComponentClosesPromptly — close-first path must
+// exit on first inflight=0 (no stable-quiet wait).
 func TestStopOnNonPausableComponentClosesPromptly(t *testing.T) {
 	comp := newNonPausablePubSub()
 	sub := newSubscriptionForTest(t, comp)
 
-	// Sanity: the mock must not satisfy PausableSubscriber, otherwise
-	// Stop would take the paused branch.
 	_, ok := any(comp).(contribpubsub.PausableSubscriber)
 	require.False(t, ok, "test mock must not implement PausableSubscriber")
 
@@ -391,11 +369,9 @@ func TestStopOnNonPausableComponentClosesPromptly(t *testing.T) {
 	require.True(t, sub.drainSealed.Load(), "drainSealed must be true after Stop returns")
 }
 
-// TestStopDrainCeilingForcesSealOnStuckInflight verifies the worst-case
-// ceiling: when inflight never stabilizes (e.g. a broken app keeps
-// returning RETRY and contrib's retry loop keeps re-invoking the handler),
-// Stop must seal anyway after drainMaxDuration so it cannot block
-// StopAllSubscriptionsForever indefinitely.
+// TestStopDrainCeilingForcesSealOnStuckInflight — drainMaxDuration caps
+// the worst case where a stuck handler holds both wg and inflight. Stop
+// must still return via force-cancel + bounded wg.Wait.
 func TestStopDrainCeilingForcesSealOnStuckInflight(t *testing.T) {
 	prev := drainMaxDuration
 	drainMaxDuration = 200 * time.Millisecond
@@ -404,7 +380,7 @@ func TestStopDrainCeilingForcesSealOnStuckInflight(t *testing.T) {
 	comp := newPausablePubSub()
 	sub := newSubscriptionForTest(t, comp)
 
-	// Hold inflight at 1 forever to simulate a stuck handler.
+	// Simulate a stuck handler holding inflight at 1 forever.
 	sub.inflight.Add(1)
 	t.Cleanup(func() { sub.inflight.Add(-1) })
 
@@ -418,7 +394,7 @@ func TestStopDrainCeilingForcesSealOnStuckInflight(t *testing.T) {
 	select {
 	case <-stopDone:
 	case <-time.After(time.Second * 2):
-		t.Fatal("Stop did not honor drainMaxDuration; would block shutdown indefinitely")
+		t.Fatal("Stop did not honor drainMaxDuration; would block StopAllSubscriptionsForever")
 	}
 
 	elapsed := time.Since(start)
