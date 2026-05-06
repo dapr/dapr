@@ -66,6 +66,7 @@ type Inflight struct {
 	port                    string
 	drainOngoingCallTimeout atomic.Pointer[time.Duration]
 	drainRebalancedActors   atomic.Pointer[bool]
+	entityDrainTimeouts     atomic.Pointer[map[string]time.Duration]
 
 	queued       map[string][]func()
 	blockedTypes map[string]struct{}
@@ -178,9 +179,10 @@ func (i *Inflight) LockTypes(types []string) {
 }
 
 // CancelClaimsForTypes drains in-flight claims for the given actor types,
-// using the configured drain timeout. Blocks until drain completes. Should
-// be called AFTER LockTypes so no new claims are issued for these types
-// concurrently with the drain.
+// using the configured drain timeout. Per-entity drain timeouts (set via
+// SetEntityDrainOngoingCallTimeouts) override the global timeout for their
+// type. Blocks until drain completes. Should be called AFTER LockTypes so
+// no new claims are issued for these types concurrently with the drain.
 func (i *Inflight) CancelClaimsForTypes(types []string, err error) {
 	if i.lock == nil || len(types) == 0 {
 		return
@@ -189,11 +191,25 @@ func (i *Inflight) CancelClaimsForTypes(types []string, err error) {
 	for _, t := range types {
 		set[t] = struct{}{}
 	}
+
+	var perType map[string]time.Duration
+	if entityTimeouts := i.entityDrainTimeouts.Load(); entityTimeouts != nil {
+		for _, t := range types {
+			if v, ok := (*entityTimeouts)[t]; ok {
+				if perType == nil {
+					perType = make(map[string]time.Duration)
+				}
+				perType[t] = v
+			}
+		}
+	}
+
 	done := make(chan struct{})
 	i.lock.Enqueue(&lock.CancelTypes{
 		Types:                 set,
 		Error:                 err,
 		Timeout:               i.drainOngoingCallTimeout.Load(),
+		PerTypeTimeouts:       perType,
 		DrainRebalancedActors: i.drainRebalancedActors.Load(),
 		Done:                  done,
 	})
@@ -308,4 +324,19 @@ func (i *Inflight) resolve(req *api.LookupActorRequest) (*api.LookupActorRespons
 func (i *Inflight) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration) {
 	i.drainRebalancedActors.Store(drain)
 	i.drainOngoingCallTimeout.Store(timeout)
+}
+
+// SetEntityDrainOngoingCallTimeouts replaces the per-actor-type drain
+// timeouts. A nil or empty map means "no per-type overrides; fall back to
+// the global timeout for every type".
+func (i *Inflight) SetEntityDrainOngoingCallTimeouts(timeouts map[string]time.Duration) {
+	if len(timeouts) == 0 {
+		i.entityDrainTimeouts.Store(nil)
+		return
+	}
+	cp := make(map[string]time.Duration, len(timeouts))
+	for k, v := range timeouts {
+		cp[k] = v
+	}
+	i.entityDrainTimeouts.Store(&cp)
 }
