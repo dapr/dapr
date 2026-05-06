@@ -703,7 +703,7 @@ func (a *api) onGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 func (a *api) getConfigurationStoreWithRequestValidation(w nethttp.ResponseWriter, r *nethttp.Request) (configuration.Store, string, error) {
 	if a.universal.CompStore().ConfigurationsLen() == 0 {
-		resp := messages.NewAPIErrorHTTP(messages.ErrConfigurationStoresNotConfigured, errorcodes.ConfigurationStoreNotConfigured, nethttp.StatusInternalServerError)
+		resp := apierrors.Configuration("").StoreNotConfigured()
 		respondWithError(w, resp)
 		log.Debug(resp)
 		return nil, "", errors.New(resp.Message())
@@ -713,7 +713,7 @@ func (a *api) getConfigurationStoreWithRequestValidation(w nethttp.ResponseWrite
 
 	conf, ok := a.universal.CompStore().GetConfiguration(storeName)
 	if !ok {
-		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrConfigurationStoreNotFound, storeName), errorcodes.ConfigurationStoreNotFound, nethttp.StatusBadRequest)
+		resp := apierrors.Configuration(storeName).StoreNotFound()
 		respondWithError(w, resp)
 		log.Debug(resp)
 		return nil, "", errors.New(resp.Message())
