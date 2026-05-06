@@ -128,12 +128,14 @@ func (d *disseminator) advancePhase(ctx context.Context) {
 		d.timeoutQ.Dequeue(d.currentVersion)
 		log.Debugf("Dissemination of version %d in %s complete (via stream close)", d.currentVersion, d.namespace)
 
-		// Mirror handleReportedUnlock's completion path: drain any work
-		// queued during this round (deletions and new connections that
-		// arrived mid-round). Without this, queued ConnAdd events sit in
-		// waitingToDisseminate forever when the round completes via a
-		// stream close instead of via reported UNLOCK acks.
-		if d.coalesceWindow > 0 && (len(d.waitingToDelete) > 0 || len(d.waitingToDisseminate) > 0) {
+		// Always arm the coalesce timer after a round completes when coalesceWindow > 0,
+		// regardless of whether anything is currently queued.
+		// An UNLOCK ack and a new ConnAdd that race through the disseminator's
+		// event queue can be processed in either order;
+		// if the ConnAdd loses the race,
+		// the queue is empty here and a cold-start round fires immediately for the late arrival,
+		// defeating coalescing. handleCoalesceFire is a no-op when queues are empty when the timer elapses.
+		if d.coalesceWindow > 0 {
 			d.startCoalesceTimer()
 			return
 		}

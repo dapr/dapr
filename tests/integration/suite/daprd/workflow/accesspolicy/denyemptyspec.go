@@ -38,13 +38,10 @@ import (
 )
 
 func init() {
-	suite.Register(new(denyonly))
+	suite.Register(new(denyemptyspec))
 }
 
-// denyonly validates that a caller appearing only in deny rules cannot invoke
-// any workflow methods on the target. IsCallerKnown requires at least one
-// allow rule, so deny-only callers are fully rejected.
-type denyonly struct {
+type denyemptyspec struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
 	sched  *scheduler.Scheduler
@@ -53,42 +50,36 @@ type denyonly struct {
 	target *daprd.Daprd
 }
 
-func (d *denyonly) Setup(t *testing.T) []framework.Option {
+func (d *denyemptyspec) Setup(t *testing.T) []framework.Option {
 	d.sentry = sentry.New(t)
 
 	d.place = placement.New(t, placement.WithSentry(t, d.sentry))
 	d.sched = scheduler.New(t, scheduler.WithSentry(d.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 	d.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	// denyonly-caller appears ONLY in a deny rule.
 	policy := []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
-  name: denyonly-test
+  name: deny-empty-spec-test
 scopes:
-- denyonly-target
-spec:
-  defaultAction: deny
-  rules:
-  - callers:
-    - appID: denyonly-target
-    activities:
-    - name: "*"
-      action: allow
-  - callers:
-    - appID: denyonly-caller
-    workflows:
-    - name: "*"
-      operations: [schedule]
-      action: deny
+- wfacl-empty-target
+spec: {}
 `)
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))
 
+	d.caller = daprd.New(t,
+		daprd.WithAppID("wfacl-empty-caller"),
+		daprd.WithNamespace("default"),
+		daprd.WithResourceFiles(d.db.GetComponent(t)),
+		daprd.WithPlacementAddresses(d.place.Address()),
+		daprd.WithSchedulerAddresses(d.sched.Address()),
+		daprd.WithSentry(t, d.sentry),
+	)
 	d.target = daprd.New(t,
-		daprd.WithAppID("denyonly-target"),
+		daprd.WithAppID("wfacl-empty-target"),
 		daprd.WithNamespace("default"),
 		daprd.WithResourcesDir(targetResDir),
 		daprd.WithResourceFiles(d.db.GetComponent(t)),
@@ -96,38 +87,30 @@ spec:
 		daprd.WithSchedulerAddresses(d.sched.Address()),
 		daprd.WithSentry(t, d.sentry),
 	)
-	d.caller = daprd.New(t,
-		daprd.WithAppID("denyonly-caller"),
-		daprd.WithNamespace("default"),
-		daprd.WithResourceFiles(d.db.GetComponent(t)),
-		daprd.WithPlacementAddresses(d.place.Address()),
-		daprd.WithSchedulerAddresses(d.sched.Address()),
-		daprd.WithSentry(t, d.sentry),
-	)
 
 	return []framework.Option{
-		framework.WithProcesses(d.sentry, d.place, d.sched, d.db, d.target, d.caller),
+		framework.WithProcesses(d.sentry, d.place, d.sched, d.db, d.caller, d.target),
 	}
 }
 
-func (d *denyonly) Run(t *testing.T, ctx context.Context) {
+func (d *denyemptyspec) Run(t *testing.T, ctx context.Context) {
 	d.place.WaitUntilRunning(t, ctx)
 	d.sched.WaitUntilRunning(t, ctx)
-	d.target.WaitUntilRunning(t, ctx)
 	d.caller.WaitUntilRunning(t, ctx)
+	d.target.WaitUntilRunning(t, ctx)
 
 	callerReg := task.NewTaskRegistry()
-	require.NoError(t, callerReg.AddWorkflowN("TryScheduleFromDenyOnly", func(ctx *task.WorkflowContext) (any, error) {
+	targetReg := task.NewTaskRegistry()
+
+	require.NoError(t, callerReg.AddWorkflowN("TestDeniedWF", func(ctx *task.WorkflowContext) (any, error) {
 		var output string
-		err := ctx.CallChildWorkflow("AllowedWF", task.WithChildWorkflowAppID(d.target.AppID())).Await(&output)
+		err := ctx.CallChildWorkflow("DeniedWF", task.WithChildWorkflowAppID(d.target.AppID())).Await(&output)
 		if err != nil {
 			return nil, fmt.Errorf("sub-orchestrator failed: %w", err)
 		}
 		return output, nil
 	}))
-
-	targetReg := task.NewTaskRegistry()
-	require.NoError(t, targetReg.AddWorkflowN("AllowedWF", func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, targetReg.AddWorkflowN("DeniedWF", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, nil
 	}))
 
@@ -141,15 +124,12 @@ func (d *denyonly) Run(t *testing.T, ctx context.Context) {
 		assert.GreaterOrEqual(c, len(d.target.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 	}, time.Second*20, time.Millisecond*10)
 
-	id, err := callerClient.ScheduleNewWorkflow(ctx, "TryScheduleFromDenyOnly")
-	if err != nil {
-		assert.Contains(t, err.Error(), "PermissionDenied")
-		return
-	}
+	id, err := callerClient.ScheduleNewWorkflow(ctx, "TestDeniedWF")
+	require.NoError(t, err)
 
 	metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
 	require.NotNil(t, metadata.GetFailureDetails(),
-		"deny-only caller should not be able to schedule workflows on target")
+		"orchestration should fail because the sub-orchestrator call is denied")
 	assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(), "denied by workflow access policy")
 }

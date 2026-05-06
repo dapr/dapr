@@ -179,16 +179,18 @@ func (w *workflowaccesspolicies) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("add deny policy via informer, cross-app workflow denied", func(t *testing.T) {
+		// Adding any policy on the target flips it to default-deny. The
+		// rule below grants access to a different caller (not the test
+		// caller), so the test caller is implicitly denied.
 		policy := &wfaclapi.WorkflowAccessPolicy{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "WorkflowAccessPolicy"},
 			ObjectMeta: metav1.ObjectMeta{Name: "deny-caller", Namespace: "default"},
 			Scoped:     common.Scoped{Scopes: []string{"wfacl-reload-target"}},
 			Spec: wfaclapi.WorkflowAccessPolicySpec{
-				DefaultAction: wfaclapi.PolicyActionDeny,
 				Rules: []wfaclapi.WorkflowAccessPolicyRule{{
-					Callers: []wfaclapi.WorkflowCaller{{AppID: "wfacl-reload-target"}},
-					Activities: []wfaclapi.ActivityRule{
-						{Name: "*", Action: wfaclapi.PolicyActionAllow},
+					Callers: []wfaclapi.WorkflowCaller{{AppID: "some-other-app"}},
+					Workflows: []wfaclapi.WorkflowRule{
+						{Name: "*", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule}},
 					},
 				}},
 			},
@@ -216,24 +218,12 @@ func (w *workflowaccesspolicies) Run(t *testing.T, ctx context.Context) {
 			ObjectMeta: metav1.ObjectMeta{Name: "deny-caller", Namespace: "default"},
 			Scoped:     common.Scoped{Scopes: []string{"wfacl-reload-target"}},
 			Spec: wfaclapi.WorkflowAccessPolicySpec{
-				DefaultAction: wfaclapi.PolicyActionDeny,
-				Rules: []wfaclapi.WorkflowAccessPolicyRule{
-					{
-						Callers: []wfaclapi.WorkflowCaller{{AppID: "wfacl-reload-caller"}},
-						Workflows: []wfaclapi.WorkflowRule{
-							{Name: "*", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule}, Action: wfaclapi.PolicyActionAllow},
-						},
+				Rules: []wfaclapi.WorkflowAccessPolicyRule{{
+					Callers: []wfaclapi.WorkflowCaller{{AppID: "wfacl-reload-caller"}},
+					Workflows: []wfaclapi.WorkflowRule{
+						{Name: "*", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule}},
 					},
-					{
-						Callers: []wfaclapi.WorkflowCaller{{AppID: "wfacl-reload-target"}},
-						Workflows: []wfaclapi.WorkflowRule{
-							{Name: "*", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule}, Action: wfaclapi.PolicyActionAllow},
-						},
-						Activities: []wfaclapi.ActivityRule{
-							{Name: "*", Action: wfaclapi.PolicyActionAllow},
-						},
-					},
-				},
+				}},
 			},
 		}
 		w.pStore.Set(policy)

@@ -71,24 +71,12 @@ func (w *workflowacl) Setup(t *testing.T) []framework.Option {
 		ObjectMeta: metav1.ObjectMeta{Name: "metric-test", Namespace: "default"},
 		Scoped:     common.Scoped{Scopes: []string{"metric-target"}},
 		Spec: wfaclapi.WorkflowAccessPolicySpec{
-			DefaultAction: wfaclapi.PolicyActionDeny,
-			Rules: []wfaclapi.WorkflowAccessPolicyRule{
-				{
-					Callers: []wfaclapi.WorkflowCaller{{AppID: "metric-caller"}},
-					Workflows: []wfaclapi.WorkflowRule{
-						{Name: "AllowedWF", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule}, Action: wfaclapi.PolicyActionAllow},
-					},
+			Rules: []wfaclapi.WorkflowAccessPolicyRule{{
+				Callers: []wfaclapi.WorkflowCaller{{AppID: "metric-caller"}},
+				Workflows: []wfaclapi.WorkflowRule{
+					{Name: "AllowedWF", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule}},
 				},
-				{
-					Callers: []wfaclapi.WorkflowCaller{{AppID: "metric-target"}},
-					Workflows: []wfaclapi.WorkflowRule{
-						{Name: "*", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule}, Action: wfaclapi.PolicyActionAllow},
-					},
-					Activities: []wfaclapi.ActivityRule{
-						{Name: "*", Action: wfaclapi.PolicyActionAllow},
-					},
-				},
-			},
+			}},
 		},
 	})
 

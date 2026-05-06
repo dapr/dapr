@@ -102,19 +102,14 @@ func (w WorkflowAccessPolicy) EmptyMetaDeepCopy() metav1.Object {
 
 // WorkflowAccessPolicySpec defines the desired state of WorkflowAccessPolicy.
 type WorkflowAccessPolicySpec struct {
-	// DefaultAction is the action when no rule matches. Defaults to "deny" if omitted.
-	// +optional
-	// +kubebuilder:default="deny"
-	// +kubebuilder:validation:Enum=allow;deny
-	DefaultAction PolicyAction `json:"defaultAction,omitempty"`
-
-	// Rules defines ingress rules for which callers can perform which operations.
+	// Rules defines the allow-list of which callers can perform which operations.
 	// +optional
 	Rules []WorkflowAccessPolicyRule `json:"rules,omitempty"`
 }
 
-// WorkflowAccessPolicyRule defines a set of callers and the workflow and/or
-// activity rules they are allowed or denied. At least one of workflows or
+// WorkflowAccessPolicyRule grants the listed callers access to the listed
+// workflows and/or activities. Presence of a matching rule grants access; if
+// no rule matches, the call is denied. At least one of workflows or
 // activities must be set.
 //
 // +kubebuilder:validation:XValidation:rule="(has(self.workflows) && size(self.workflows) > 0) || (has(self.activities) && size(self.activities) > 0)",message="at least one of workflows or activities must contain a rule"
@@ -123,11 +118,11 @@ type WorkflowAccessPolicyRule struct {
 	// +kubebuilder:validation:MinItems=1
 	Callers []WorkflowCaller `json:"callers"`
 
-	// Workflows are the workflow rules that the matched callers are allowed/denied.
+	// Workflows are the workflow rules that the matched callers are allowed.
 	// +optional
 	Workflows []WorkflowRule `json:"workflows,omitempty"`
 
-	// Activities are the activity rules that the matched callers are allowed/denied.
+	// Activities are the activity rules that the matched callers are allowed.
 	// +optional
 	Activities []ActivityRule `json:"activities,omitempty"`
 }
@@ -138,14 +133,6 @@ type WorkflowCaller struct {
 	// +kubebuilder:validation:MinLength=1
 	AppID string `json:"appID"`
 }
-
-// PolicyAction is the action to take: "allow" or "deny".
-type PolicyAction string
-
-const (
-	PolicyActionAllow PolicyAction = "allow"
-	PolicyActionDeny  PolicyAction = "deny"
-)
 
 // WorkflowOperation is the specific workflow operation being controlled.
 type WorkflowOperation string
@@ -161,7 +148,8 @@ const (
 	WorkflowOperationRerun     WorkflowOperation = "rerun"
 )
 
-// WorkflowRule defines access control for a workflow operation.
+// WorkflowRule grants the matched callers access to the listed operations on
+// workflows whose name matches Name (exact or glob).
 type WorkflowRule struct {
 	// Name is the exact name or glob pattern for the workflow.
 	// +kubebuilder:validation:MinLength=1
@@ -172,22 +160,15 @@ type WorkflowRule struct {
 	// +kubebuilder:validation:items:Enum=schedule;terminate;raise;pause;resume;purge;get;rerun
 	// +listType=set
 	Operations []WorkflowOperation `json:"operations"`
-
-	// Action is "allow" or "deny".
-	// +kubebuilder:validation:Enum=allow;deny
-	Action PolicyAction `json:"action"`
 }
 
-// ActivityRule defines access control for an activity. Activities only have a
-// single operation (schedule), so there is no operation field.
+// ActivityRule grants the matched callers access to schedule the activity
+// whose name matches Name (exact or glob). Activities only have one
+// operation (schedule).
 type ActivityRule struct {
 	// Name is the exact name or glob pattern for the activity.
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
-
-	// Action is "allow" or "deny".
-	// +kubebuilder:validation:Enum=allow;deny
-	Action PolicyAction `json:"action"`
 }
 
 // +kubebuilder:object:root=true

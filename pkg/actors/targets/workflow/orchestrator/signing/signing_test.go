@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package orchestrator
+package signing
 
 import (
 	"crypto/ed25519"
@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -112,10 +113,10 @@ func testHistoryEvent(id int32) *backend.HistoryEvent {
 func TestSignNewEvents_NilCrypto(t *testing.T) {
 	t.Parallel()
 
-	o := &orchestrator{factory: &factory{signer: nil}}
+	o := &Signing{Signer: nil}
 	s := testState(testHistoryEvent(0))
 
-	err := o.signNewEvents(s)
+	err := o.SignNewEvents(s)
 	require.NoError(t, err)
 
 	assert.Empty(t, s.Signatures)
@@ -126,13 +127,13 @@ func TestSignNewEvents_ZeroEvents(t *testing.T) {
 	t.Parallel()
 
 	certDER, priv := generateTestCert(t)
-	o := &orchestrator{factory: &factory{signer: testSigner(t, certDER, priv)}}
+	o := &Signing{Signer: testSigner(t, certDER, priv)}
 	// Start with history already persisted (no pending additions) by
 	// clearing change tracking, mirroring a freshly-loaded state.
 	s := testState(testHistoryEvent(0))
 	s.ResetChangeTracking()
 
-	err := o.signNewEvents(s)
+	err := o.SignNewEvents(s)
 	require.NoError(t, err)
 
 	assert.Empty(t, s.Signatures)
@@ -143,7 +144,7 @@ func TestSignNewEvents_SignsAndAppends(t *testing.T) {
 	t.Parallel()
 
 	certDER, priv := generateTestCert(t)
-	o := &orchestrator{factory: &factory{signer: testSigner(t, certDER, priv)}}
+	o := &Signing{Signer: testSigner(t, certDER, priv)}
 
 	events := []*backend.HistoryEvent{
 		testHistoryEvent(0),
@@ -152,7 +153,7 @@ func TestSignNewEvents_SignsAndAppends(t *testing.T) {
 	}
 	s := testState(events...)
 
-	err := o.signNewEvents(s)
+	err := o.SignNewEvents(s)
 	require.NoError(t, err)
 
 	assert.Len(t, s.Signatures, 1)
@@ -168,7 +169,7 @@ func TestSignNewEvents_ChainsToExistingSignature(t *testing.T) {
 	t.Parallel()
 
 	certDER, priv := generateTestCert(t)
-	o := &orchestrator{factory: &factory{signer: testSigner(t, certDER, priv)}}
+	o := &Signing{Signer: testSigner(t, certDER, priv)}
 
 	// First batch: sign 2 events.
 	events := []*backend.HistoryEvent{
@@ -177,7 +178,7 @@ func TestSignNewEvents_ChainsToExistingSignature(t *testing.T) {
 	}
 	s := testState(events...)
 
-	err := o.signNewEvents(s)
+	err := o.SignNewEvents(s)
 	require.NoError(t, err)
 	require.Len(t, s.Signatures, 1)
 	require.Len(t, s.SigningCertificates, 1)
@@ -187,7 +188,7 @@ func TestSignNewEvents_ChainsToExistingSignature(t *testing.T) {
 	s.ResetChangeTracking()
 	s.AddToHistory(testHistoryEvent(2))
 
-	err = o.signNewEvents(s)
+	err = o.SignNewEvents(s)
 	require.NoError(t, err)
 
 	require.Len(t, s.Signatures, 2)
@@ -204,7 +205,7 @@ func TestSignNewEvents_SetsMarshaledNewHistory(t *testing.T) {
 	t.Parallel()
 
 	certDER, priv := generateTestCert(t)
-	o := &orchestrator{factory: &factory{signer: testSigner(t, certDER, priv)}}
+	o := &Signing{Signer: testSigner(t, certDER, priv)}
 
 	events := []*backend.HistoryEvent{
 		testHistoryEvent(0),
@@ -212,7 +213,7 @@ func TestSignNewEvents_SetsMarshaledNewHistory(t *testing.T) {
 	}
 	s := testState(events...)
 
-	err := o.signNewEvents(s)
+	err := o.SignNewEvents(s)
 	require.NoError(t, err)
 
 	// Verify the marshaled bytes were set by checking GetSaveRequest produces
@@ -246,7 +247,7 @@ func TestSignNewEvents_VerifiesWithHistorySigning(t *testing.T) {
 
 	certDER, priv := generateTestCert(t)
 	sig := testSigner(t, certDER, priv)
-	o := &orchestrator{factory: &factory{signer: sig}}
+	o := &Signing{Signer: sig}
 
 	events := []*backend.HistoryEvent{
 		testHistoryEvent(0),
@@ -255,7 +256,7 @@ func TestSignNewEvents_VerifiesWithHistorySigning(t *testing.T) {
 	}
 	st := testState(events...)
 
-	err := o.signNewEvents(st)
+	err := o.SignNewEvents(st)
 	require.NoError(t, err)
 
 	// Independently verify the signature using historysigning.VerifySignature.
@@ -277,7 +278,7 @@ func TestSignNewEvents_RoundTripDeterminism(t *testing.T) {
 
 	certDER, priv := generateTestCert(t)
 	sgn := testSignerWithTrust(t, certDER, priv, true)
-	o := &orchestrator{factory: &factory{signer: sgn}}
+	o := &Signing{Signer: sgn}
 
 	// Sign two batches to test chain linking across a save cycle.
 	events := []*backend.HistoryEvent{
@@ -286,7 +287,7 @@ func TestSignNewEvents_RoundTripDeterminism(t *testing.T) {
 	}
 	st := testState(events...)
 
-	err := o.signNewEvents(st)
+	err := o.SignNewEvents(st)
 	require.NoError(t, err)
 	require.Len(t, st.Signatures, 1)
 	require.Len(t, st.RawSignatures, 1)
@@ -348,7 +349,7 @@ func TestSignNewEvents_RoundTripDeterminism(t *testing.T) {
 	st.RawSignatures = savedRawSigs
 	st.AddToHistory(testHistoryEvent(2))
 
-	err = o.signNewEvents(st)
+	err = o.SignNewEvents(st)
 	require.NoError(t, err)
 	require.Len(t, st.Signatures, 2)
 	require.Len(t, st.RawSignatures, 2)
@@ -366,4 +367,147 @@ func TestSignNewEvents_RoundTripDeterminism(t *testing.T) {
 		Signer:        sgn,
 	})
 	require.NoError(t, err, "chained signatures must verify after round-trip")
+}
+
+func makeTaskScheduledEvent(eventID int32, name string, input string) *backend.HistoryEvent {
+	return &backend.HistoryEvent{
+		EventId:   eventID,
+		Timestamp: timestamppb.New(time.Date(2026, 3, 18, 12, 0, int(eventID), 0, time.UTC)),
+		EventType: &protos.HistoryEvent_TaskScheduled{
+			TaskScheduled: &protos.TaskScheduledEvent{
+				Name:  name,
+				Input: wrapperspb.String(input),
+			},
+		},
+	}
+}
+
+func makeChildCreatedEvent(eventID int32, instanceID string, input string) *backend.HistoryEvent {
+	return &backend.HistoryEvent{
+		EventId:   eventID,
+		Timestamp: timestamppb.New(time.Date(2026, 3, 18, 12, 0, int(eventID), 0, time.UTC)),
+		EventType: &protos.HistoryEvent_ChildWorkflowInstanceCreated{
+			ChildWorkflowInstanceCreated: &protos.ChildWorkflowInstanceCreatedEvent{
+				InstanceId: instanceID,
+				Input:      wrapperspb.String(input),
+			},
+		},
+	}
+}
+
+func TestVerifyInboxAttestation_TamperedActivitySignatureReturnsError(t *testing.T) {
+	t.Parallel()
+
+	certDER, priv := generateTestCert(t)
+	sgn := testSignerWithTrust(t, certDER, priv, true)
+
+	const taskID int32 = 7
+	st := testState(makeTaskScheduledEvent(taskID, "say", "hello"))
+
+	o := &Signing{Signer: sgn, ActorID: "parent-instance"}
+
+	att, certChain, err := historysigning.BuildActivityAttestation(sgn, historysigning.ActivityAttestationInput{
+		ParentInstanceId:      o.ActorID,
+		ParentTaskScheduledId: taskID,
+		ActivityName:          "say",
+		Input:                 wrapperspb.String("hello"),
+		Output:                wrapperspb.String("world"),
+		TerminalStatus:        protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_COMPLETED,
+	})
+	require.NoError(t, err)
+
+	tamperedSig := make([]byte, len(att.GetSignature()))
+	copy(tamperedSig, att.GetSignature())
+	tamperedSig[0] ^= 0xFF
+	att.Signature = tamperedSig
+
+	e := &backend.HistoryEvent{
+		EventId:   100,
+		Timestamp: timestamppb.New(time.Now()),
+		EventType: &protos.HistoryEvent_TaskCompleted{
+			TaskCompleted: &protos.TaskCompletedEvent{
+				TaskScheduledId:   taskID,
+				Result:            wrapperspb.String("world"),
+				Attestation:       att,
+				SignerCertificate: certChain,
+			},
+		},
+	}
+
+	err = o.VerifyInboxAttestation(t.Context(), st, e)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "verification failed")
+	assert.NotNil(t, e.GetTaskCompleted(), "event must not be mutated; caller decides what to do")
+	assert.Empty(t, st.ExternalSigningCertificates, "tampered attestation must not absorb signer cert")
+}
+
+func TestVerifyInboxAttestation_TamperedChildSignatureReturnsError(t *testing.T) {
+	t.Parallel()
+
+	certDER, priv := generateTestCert(t)
+	sgn := testSignerWithTrust(t, certDER, priv, true)
+
+	const taskID int32 = 9
+	st := testState(makeChildCreatedEvent(taskID, "child-instance", "in"))
+
+	o := &Signing{Signer: sgn, ActorID: "parent-instance"}
+
+	att, certChain, err := historysigning.BuildChildAttestation(sgn, historysigning.ChildAttestationInput{
+		ParentInstanceId:      o.ActorID,
+		ParentTaskScheduledId: taskID,
+		Input:                 wrapperspb.String("in"),
+		Output:                wrapperspb.String("out"),
+		TerminalStatus:        protos.TerminalStatus_TERMINAL_STATUS_COMPLETED,
+	})
+	require.NoError(t, err)
+
+	tamperedPayload := make([]byte, len(att.GetPayload()))
+	copy(tamperedPayload, att.GetPayload())
+	tamperedPayload[len(tamperedPayload)-1] ^= 0xFF
+	att.Payload = tamperedPayload
+
+	e := &backend.HistoryEvent{
+		EventId:   200,
+		Timestamp: timestamppb.New(time.Now()),
+		EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{
+			ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{
+				TaskScheduledId:   taskID,
+				Result:            wrapperspb.String("out"),
+				Attestation:       att,
+				SignerCertificate: certChain,
+			},
+		},
+	}
+
+	err = o.VerifyInboxAttestation(t.Context(), st, e)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "verification failed")
+	assert.NotNil(t, e.GetChildWorkflowInstanceCompleted())
+	assert.Empty(t, st.ExternalSigningCertificates)
+}
+
+func TestVerifyInboxAttestation_MissingActivityAttestationReturnsError(t *testing.T) {
+	t.Parallel()
+
+	certDER, priv := generateTestCert(t)
+	sgn := testSignerWithTrust(t, certDER, priv, true)
+
+	const taskID int32 = 5
+	st := testState(makeTaskScheduledEvent(taskID, "noop", ""))
+
+	o := &Signing{Signer: sgn, ActorID: "parent-instance"}
+
+	e := &backend.HistoryEvent{
+		EventId:   300,
+		Timestamp: timestamppb.New(time.Now()),
+		EventType: &protos.HistoryEvent_TaskCompleted{
+			TaskCompleted: &protos.TaskCompletedEvent{
+				TaskScheduledId: taskID,
+			},
+		},
+	}
+
+	err := o.VerifyInboxAttestation(t.Context(), st, e)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing required attestation")
 }
