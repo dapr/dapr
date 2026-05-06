@@ -27,17 +27,16 @@ import (
 func makeWFPolicy(name string) wfaclapi.WorkflowAccessPolicy {
 	return wfaclapi.WorkflowAccessPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
-		Spec: wfaclapi.WorkflowAccessPolicySpec{
-			DefaultAction: wfaclapi.PolicyActionDeny,
-		},
 	}
 }
 
-func makeWFPolicyWithAction(name string, action wfaclapi.PolicyAction) wfaclapi.WorkflowAccessPolicy {
+func makeWFPolicyWithCaller(name, callerAppID string) wfaclapi.WorkflowAccessPolicy {
 	return wfaclapi.WorkflowAccessPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: wfaclapi.WorkflowAccessPolicySpec{
-			DefaultAction: action,
+			Rules: []wfaclapi.WorkflowAccessPolicyRule{{
+				Callers: []wfaclapi.WorkflowCaller{{AppID: callerAppID}},
+			}},
 		},
 	}
 }
@@ -57,13 +56,13 @@ func TestWorkflowAccessPolicy_AddAndList(t *testing.T) {
 
 func TestWorkflowAccessPolicy_AddReplace(t *testing.T) {
 	s := New()
-	s.AddWorkflowAccessPolicy(makeWFPolicyWithAction("p1", wfaclapi.PolicyActionDeny))
-	s.AddWorkflowAccessPolicy(makeWFPolicyWithAction("p1", wfaclapi.PolicyActionAllow))
+	s.AddWorkflowAccessPolicy(makeWFPolicyWithCaller("p1", "first"))
+	s.AddWorkflowAccessPolicy(makeWFPolicyWithCaller("p1", "second"))
 
 	list := s.ListWorkflowAccessPolicies()
 	require.Len(t, list, 1)
 	assert.Equal(t, "p1", list[0].Name)
-	assert.Equal(t, wfaclapi.PolicyActionAllow, list[0].Spec.DefaultAction)
+	assert.Equal(t, "second", list[0].Spec.Rules[0].Callers[0].AppID)
 }
 
 func TestWorkflowAccessPolicy_Delete(t *testing.T) {

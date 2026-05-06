@@ -66,17 +66,6 @@ func (r *remoteenforce) Setup(t *testing.T) []framework.Option {
 	r.sched = scheduler.New(t, scheduler.WithSentry(r.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 	r.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: wfaclconfig
-spec:
-  features:
-  - name: WorkflowAccessPolicy
-    enabled: true`), 0o600))
-
 	policy := []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
@@ -85,20 +74,12 @@ metadata:
 scopes:
 - remote-target
 spec:
-  defaultAction: deny
   rules:
   - callers:
     - appID: allowed-caller
-    operations:
-    - type: workflow
-      name: "*"
-      action: allow
-  - callers:
-    - appID: remote-target
-    operations:
-    - type: activity
-      name: "*"
-      action: allow
+    workflows:
+    - name: "*"
+      operations: [schedule]
 `)
 
 	targetResDir := t.TempDir()
@@ -107,7 +88,6 @@ spec:
 	r.caller = daprd.New(t,
 		daprd.WithAppID("remote-caller"),
 		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourceFiles(r.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithSchedulerAddresses(r.sched.Address()),
@@ -116,7 +96,6 @@ spec:
 	r.target = daprd.New(t,
 		daprd.WithAppID("remote-target"),
 		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(targetResDir),
 		daprd.WithResourceFiles(r.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(r.place.Address()),
