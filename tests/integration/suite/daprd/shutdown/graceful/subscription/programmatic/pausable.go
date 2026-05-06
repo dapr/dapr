@@ -35,15 +35,9 @@ func init() {
 	suite.Register(new(pausable))
 }
 
-// pausable verifies the runtime's pause-and-drain shutdown path on a
-// pluggable pubsub component that implements PausableSubscriber. It
-// asserts that on graceful shutdown:
-//   - The runtime invokes Pause on the component.
-//   - A message that was already in flight when shutdown started is
-//     delivered to the app and ack'd to the broker (drain-to-app).
-//   - A message that arrives after the drain has sealed is neither
-//     ack'd nor nack'd (matches the close-first contract for messages
-//     arriving post-shutdown).
+// pausable verifies the runtime's pause-and-drain shutdown path: Pause
+// is invoked, in-flight messages drain to the app, post-shutdown
+// publishes get neither ack nor nack.
 type pausable struct {
 	daprd  *daprd.Daprd
 	broker *broker.Broker
@@ -69,10 +63,7 @@ func (p *pausable) Setup(t *testing.T) []framework.Option {
 	p.daprd = daprd.New(t,
 		p.broker.DaprdOptions(t, "mypub",
 			daprd.WithAppPort(app.Port()),
-			// Block-shutdown-duration is what triggers
-			// StopAllSubscriptionsForever in the runtime; without
-			// it, subscriptions never see graceful Stop and the
-			// pause-and-drain path is dead code.
+			// Required: only block-shutdown invokes StopAllSubscriptionsForever.
 			daprd.WithDaprBlockShutdownDuration("10s"),
 		)...,
 	)
@@ -89,16 +80,16 @@ func (p *pausable) Run(t *testing.T, ctx context.Context) {
 
 	assert.Len(t, p.daprd.GetMetaSubscriptions(t, ctx), 1)
 
-	// Publish one message; the app handler blocks on closeInvoke so
-	// the message stays in flight when shutdown begins below — exactly
-	// the drain-to-app scenario.
+	// Publish; handler blocks on closeInvoke so the message is in
+	// flight when shutdown begins.
 	ackCh := p.broker.PublishHelloWorld("a")
 	require.Eventually(t, p.inInvoke.Load, time.Second*10, time.Millisecond*10)
 
-	// Trigger graceful shutdown. Stop runs synchronously inside the
-	// runtime's block-shutdown closer, so we observe progress via the
-	// broker side-channels.
-	go p.daprd.Cleanup(t)
+	cleanupDone := make(chan struct{})
+	go func() {
+		p.daprd.Cleanup(t)
+		close(cleanupDone)
+	}()
 
 	select {
 	case <-p.broker.PauseStarted():
@@ -108,15 +99,13 @@ func (p *pausable) Run(t *testing.T, ctx context.Context) {
 	assert.GreaterOrEqual(t, p.broker.PauseCalled(), int64(1),
 		"Pause should be called at least once on graceful shutdown")
 
-	// Stop must still be in flight — drain is waiting for the in-flight
-	// handler to complete. No ack should reach the broker yet.
+	// Drain is waiting for the in-flight handler; no ack yet.
 	select {
 	case req := <-ackCh:
 		assert.Fail(t, "unexpected ack returned before handler completed", req)
 	case <-time.After(time.Second * 2):
 	}
 
-	// Release the handler. Drain delivers the result; ack flows back.
 	close(p.closeInvoke)
 
 	select {
@@ -127,5 +116,21 @@ func (p *pausable) Run(t *testing.T, ctx context.Context) {
 			"buffered message should be ACK'd to the broker during drain-to-app")
 	case <-time.After(time.Second * 10):
 		assert.Fail(t, "timeout waiting for drain ack")
+	}
+
+	// Wait for daprd to fully exit before the post-shutdown publish, so
+	// the still-open PullMessages stream cannot race-deliver it.
+	select {
+	case <-cleanupDone:
+	case <-time.After(time.Second * 30):
+		t.Fatal("daprd did not finish shutting down within block-shutdown window")
+	}
+
+	// Post-shutdown publish: stream is closed, no ack/nack should fire.
+	ackCh = p.broker.PublishHelloWorld("a")
+	select {
+	case req := <-ackCh:
+		assert.Failf(t, "expected no ack/nack after daprd shutdown", "got: %v", req)
+	case <-time.After(time.Second * 3):
 	}
 }
