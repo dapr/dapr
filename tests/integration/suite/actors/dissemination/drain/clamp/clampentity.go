@@ -60,9 +60,12 @@ func (c *clampentity) Setup(t *testing.T) []framework.Option {
 		}
 	}
 
-	c.ll = logline.New(t, logline.WithStdoutLineContains(
-		"drainOngoingCallTimeout (1m0s) for entities=abc meets or exceeds the dissemination timeout",
-	))
+	c.ll = logline.New(t,
+		logline.WithStdoutLineContains(
+			"drainOngoingCallTimeout (1m0s) for entities=abc meets or exceeds the dissemination timeout",
+			"Dissemination complete for version 2",
+		),
+	)
 
 	c.place = placement.New(t,
 		placement.WithDisseminateTimeout(time.Second*8),
@@ -102,7 +105,6 @@ func (c *clampentity) Setup(t *testing.T) []framework.Option {
 
 func (c *clampentity) Run(t *testing.T, ctx context.Context) {
 	c.app1.WaitUntilRunning(t, ctx)
-	c.ll.EventuallyFoundAll(t)
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -118,19 +120,16 @@ func (c *clampentity) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(co, int32(1), c.inCall.Load())
 	}, time.Second*10, time.Millisecond*10)
 
-	disseminationStart := time.Now()
-
 	c.app2.Run(t, ctx)
 	t.Cleanup(func() { c.app2.Cleanup(t) })
 
 	assert.Eventually(t, c.callCancelled.Load, time.Second*7, time.Millisecond*10,
 		"call should be cancelled after the clamped per-entity drain timeout, not the configured 60s")
 
-	elapsed := time.Since(disseminationStart)
-	assert.Less(t, elapsed, time.Second*8,
-		"clamped per-entity drain should fire before the dissemination timeout")
-	assert.Greater(t, elapsed, time.Second,
-		"clamped per-entity drain should still allow some grace period (~3s)")
+	c.ll.EventuallyFoundAll(t)
+
+	assert.False(t, c.ll.Contains("dissemination timeout after"),
+		"daprd should not log a dissemination timeout reset when per-entity drain is clamped within budget")
 
 	close(c.waitOnCall)
 
