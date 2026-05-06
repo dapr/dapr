@@ -27,6 +27,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -34,7 +35,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName string, es []*protos.HistoryEvent) error {
+func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName string, es []*protos.HistoryEvent, outgoingHistory map[int32]*protos.PropagatedHistory) error {
 	log.Debugf("Workflow actor '%s': calling %d child workflows", o.actorID, len(es))
 
 	for _, e := range es {
@@ -64,9 +65,17 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 			},
 		}
 
-		reqP, err := proto.Marshal(&backend.CreateWorkflowInstanceRequest{
+		createReq := &backend.CreateWorkflowInstanceRequest{
 			StartEvent: startEvent,
-		})
+		}
+		if ph := outgoingHistory[e.GetEventId()]; ph != nil {
+			if o.signer == nil {
+				log.Warnf("Workflow actor '%s': propagating unsigned workflow history to child workflow '%s' (signing is not configured; chunks cannot be cryptographically verified by the receiver)", o.actorID, createSO.GetInstanceId())
+			}
+			createReq.PropagatedHistory = ph
+		}
+
+		reqP, err := proto.Marshal(createReq)
 		if err != nil {
 			return fmt.Errorf("failed to marshal child workflow request: %w", err)
 		}
@@ -127,15 +136,7 @@ func (o *orchestrator) failChildWorkflowACL(ctx context.Context, taskScheduledID
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
-		EventType: &protos.HistoryEvent_ChildWorkflowInstanceFailed{
-			ChildWorkflowInstanceFailed: &protos.ChildWorkflowInstanceFailedEvent{
-				TaskScheduledId: taskScheduledID,
-				FailureDetails: &protos.TaskFailureDetails{
-					ErrorType:    "WorkflowAccessPolicyDenied",
-					ErrorMessage: "access denied by workflow access policy",
-				},
-			},
-		},
+		EventType: events.NewChildWorkflowFailedEventType(taskScheduledID, "WorkflowAccessPolicyDenied", "access denied by workflow access policy", false),
 	}
 
 	log.Warnf("Workflow actor '%s': child workflow denied by access policy: %v", o.actorID, callErr)

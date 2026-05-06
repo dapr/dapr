@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -32,7 +33,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State) dispatchResult {
+func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State, outgoingHistory map[int32]*protos.PropagatedHistory) dispatchResult {
 	var dueTime time.Time
 	if len(state.History) > 0 {
 		dueTime = state.History[0].GetTimestamp().AsTime()
@@ -42,7 +43,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 
 	var result dispatchResult
 	for _, e := range es {
-		err := o.callActivity(ctx, e, dueTime, state.Generation)
+		err := o.callActivity(ctx, e, dueTime, state.Generation, outgoingHistory[e.GetEventId()])
 		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
 				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
@@ -57,15 +58,30 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 	return result
 }
 
-func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, generation uint64) error {
+func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, generation uint64, ph *protos.PropagatedHistory) error {
 	ts := e.GetTaskScheduled()
 	if ts == nil {
 		log.Warnf("Workflow actor '%s': unable to process task '%v'", o.actorID, e)
 		return nil
 	}
 
-	var eventData []byte
-	eventData, err := proto.Marshal(e)
+	// Only wrap in the ActivityInvocation envelope when there is propagated history to carry.
+	var payload proto.Message = e
+	if ph != nil {
+		if o.signer == nil {
+			log.Warnf("Workflow actor '%s': propagating unsigned workflow history to activity '%s::%d' (signing is not configured; chunks cannot be cryptographically verified by the receiver)", o.actorID, ts.GetName(), e.GetEventId())
+		}
+		payload = &protos.ActivityInvocation{
+			HistoryEvent:      e,
+			PropagatedHistory: ph,
+		}
+	}
+
+	if err := o.activityPayloadOversize(payload, e); err != nil {
+		return err
+	}
+
+	invocationData, err := proto.Marshal(payload)
 	if err != nil {
 		return err
 	}
@@ -85,12 +101,12 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	defer cancel()
 
 	_, err = o.router.Call(ctx, internalsv1pb.
-		NewInternalInvokeRequest("Execute").
+		NewInternalInvokeRequest(todo.ExecuteActivityMethod).
 		WithActor(activityActorType, targetActorID).
 		WithMetadata(map[string][]string{
 			todo.MetadataActivityReminderDueTime: {strconv.FormatInt(dueTime.UnixMilli(), 10)},
 		}).
-		WithData(eventData).
+		WithData(invocationData).
 		WithContentType(invokev1.ProtobufContentType),
 	)
 	if err != nil {
@@ -118,15 +134,7 @@ func (o *orchestrator) failActivityACL(ctx context.Context, e *backend.HistoryEv
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
-		EventType: &protos.HistoryEvent_TaskFailed{
-			TaskFailed: &protos.TaskFailedEvent{
-				TaskScheduledId: e.GetEventId(),
-				FailureDetails: &protos.TaskFailureDetails{
-					ErrorType:    "WorkflowAccessPolicyDenied",
-					ErrorMessage: "access denied by workflow access policy",
-				},
-			},
-		},
+		EventType: events.NewTaskFailedEventType(e.GetEventId(), "WorkflowAccessPolicyDenied", "access denied by workflow access policy", false),
 	}
 
 	if _, err := o.createWorkflowReminder(ctx, common.ReminderPrefixActivityResult, failedEvent, time.Now(), o.appID, nil); err != nil {

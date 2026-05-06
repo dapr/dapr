@@ -16,7 +16,6 @@ package validate
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -30,15 +29,13 @@ func validPolicy() *wfaclapi.WorkflowAccessPolicy {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
 		Scoped:     common.Scoped{Scopes: []string{"app-a"}},
 		Spec: wfaclapi.WorkflowAccessPolicySpec{
-			DefaultAction: wfaclapi.PolicyActionDeny,
 			Rules: []wfaclapi.WorkflowAccessPolicyRule{
 				{
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "caller-app"}},
-					Operations: []wfaclapi.WorkflowOperationRule{
+					Workflows: []wfaclapi.WorkflowRule{
 						{
-							Type:   wfaclapi.WorkflowOperationTypeWorkflow,
-							Name:   "ProcessOrder",
-							Action: wfaclapi.PolicyActionAllow,
+							Name:       "ProcessOrder",
+							Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule},
 						},
 					},
 				},
@@ -48,61 +45,50 @@ func validPolicy() *wfaclapi.WorkflowAccessPolicy {
 }
 
 func TestWorkflowAccessPolicy_ValidPolicy(t *testing.T) {
-	err := WorkflowAccessPolicy(t.Context(), validPolicy())
-	require.NoError(t, err)
+	require.NoError(t, WorkflowAccessPolicy(t.Context(), validPolicy()))
 }
 
 func TestWorkflowAccessPolicy_ValidWithGlob(t *testing.T) {
 	p := validPolicy()
-	p.Spec.Rules[0].Operations[0].Name = "Process*"
+	p.Spec.Rules[0].Workflows[0].Name = "Process*"
 	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
 }
 
-func TestWorkflowAccessPolicy_ValidAllowDefaultAction(t *testing.T) {
+func TestWorkflowAccessPolicy_ValidActivityRule(t *testing.T) {
 	p := validPolicy()
-	p.Spec.DefaultAction = wfaclapi.PolicyActionAllow
+	p.Spec.Rules[0].Workflows = nil
+	p.Spec.Rules[0].Activities = []wfaclapi.ActivityRule{
+		{Name: "ChargePayment"},
+	}
 	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
 }
 
-func TestWorkflowAccessPolicy_ValidActivityType(t *testing.T) {
+func TestWorkflowAccessPolicy_AllNewWorkflowOperations(t *testing.T) {
 	p := validPolicy()
-	p.Spec.Rules[0].Operations[0].Type = wfaclapi.WorkflowOperationTypeActivity
+	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowOperation{
+		wfaclapi.WorkflowOperationSchedule,
+		wfaclapi.WorkflowOperationTerminate,
+		wfaclapi.WorkflowOperationRaise,
+		wfaclapi.WorkflowOperationPause,
+		wfaclapi.WorkflowOperationResume,
+		wfaclapi.WorkflowOperationPurge,
+		wfaclapi.WorkflowOperationGet,
+		wfaclapi.WorkflowOperationRerun,
+	}
 	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
 }
 
-func TestWorkflowAccessPolicy_ValidWithOperation(t *testing.T) {
+func TestWorkflowAccessPolicy_BothWorkflowsAndActivities(t *testing.T) {
 	p := validPolicy()
-	op := wfaclapi.WorkflowOperationSchedule
-	p.Spec.Rules[0].Operations[0].Operation = &op
+	p.Spec.Rules[0].Activities = []wfaclapi.ActivityRule{
+		{Name: "ChargePayment"},
+	}
 	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
-}
-
-func TestWorkflowAccessPolicy_InvalidAction(t *testing.T) {
-	p := validPolicy()
-	p.Spec.Rules[0].Operations[0].Action = wfaclapi.PolicyAction("bogus")
-	err := WorkflowAccessPolicy(t.Context(), p)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "bogus")
-}
-
-func TestWorkflowAccessPolicy_InvalidType(t *testing.T) {
-	p := validPolicy()
-	p.Spec.Rules[0].Operations[0].Type = wfaclapi.WorkflowOperationType("bogus")
-	err := WorkflowAccessPolicy(t.Context(), p)
-	require.Error(t, err)
-}
-
-func TestWorkflowAccessPolicy_InvalidDefaultAction(t *testing.T) {
-	p := validPolicy()
-	p.Spec.DefaultAction = wfaclapi.PolicyAction("bogus")
-	err := WorkflowAccessPolicy(t.Context(), p)
-	require.Error(t, err)
 }
 
 func TestWorkflowAccessPolicy_InvalidOperation(t *testing.T) {
 	p := validPolicy()
-	op := wfaclapi.WorkflowOperation("bogus")
-	p.Spec.Rules[0].Operations[0].Operation = &op
+	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperation("bogus")}
 	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }
@@ -114,9 +100,9 @@ func TestWorkflowAccessPolicy_EmptyAppID(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestWorkflowAccessPolicy_EmptyName(t *testing.T) {
+func TestWorkflowAccessPolicy_EmptyWorkflowName(t *testing.T) {
 	p := validPolicy()
-	p.Spec.Rules[0].Operations[0].Name = ""
+	p.Spec.Rules[0].Workflows[0].Name = ""
 	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }
@@ -130,13 +116,20 @@ func TestWorkflowAccessPolicy_EmptyCallers(t *testing.T) {
 
 func TestWorkflowAccessPolicy_EmptyOperations(t *testing.T) {
 	p := validPolicy()
-	p.Spec.Rules[0].Operations = []wfaclapi.WorkflowOperationRule{}
+	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowOperation{}
+	err := WorkflowAccessPolicy(t.Context(), p)
+	require.Error(t, err)
+}
+
+func TestWorkflowAccessPolicy_NeitherWorkflowsNorActivities(t *testing.T) {
+	p := validPolicy()
+	p.Spec.Rules[0].Workflows = nil
+	p.Spec.Rules[0].Activities = nil
 	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }
 
 func TestWorkflowAccessPolicy_EmptySpec(t *testing.T) {
-	// Empty spec with no rules should be valid (rules are optional).
 	p := &wfaclapi.WorkflowAccessPolicy{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "WorkflowAccessPolicy"},
 		ObjectMeta: metav1.ObjectMeta{Name: "empty"},
@@ -147,11 +140,10 @@ func TestWorkflowAccessPolicy_EmptySpec(t *testing.T) {
 
 func TestWorkflowAccessPolicy_MultipleRulesOneInvalid(t *testing.T) {
 	p := validPolicy()
-	// Add a second rule with invalid action.
 	p.Spec.Rules = append(p.Spec.Rules, wfaclapi.WorkflowAccessPolicyRule{
 		Callers: []wfaclapi.WorkflowCaller{{AppID: "other"}},
-		Operations: []wfaclapi.WorkflowOperationRule{
-			{Type: wfaclapi.WorkflowOperationType("bad"), Name: "wf", Action: wfaclapi.PolicyActionAllow},
+		Workflows: []wfaclapi.WorkflowRule{
+			{Name: "wf", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperation("bad")}},
 		},
 	})
 	err := WorkflowAccessPolicy(t.Context(), p)

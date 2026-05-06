@@ -21,6 +21,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
@@ -57,6 +58,8 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 		return err
 	}
 
+	propagatedHistory := createWorkflowInstanceRequest.GetPropagatedHistory()
+
 	// orchestration didn't exist
 	// create a new state entry if one doesn't already exist
 	if state == nil {
@@ -67,14 +70,18 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 		})
 		o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
 		o.ometa = o.ometaFromState(o.rstate, startEvent.GetExecutionStarted())
+
+		if propagatedHistory != nil {
+			state.SetIncomingHistory(propagatedHistory)
+		}
 		return o.scheduleWorkflowStart(ctx, startEvent, state)
 	}
 
 	// orchestration already existed: create instance only if previous one is completed
-	return o.createIfCompleted(ctx, o.rstate, state, startEvent)
+	return o.createIfCompleted(ctx, o.rstate, state, startEvent, propagatedHistory)
 }
 
-func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.WorkflowRuntimeState, state *wfenginestate.State, startEvent *backend.HistoryEvent) error {
+func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.WorkflowRuntimeState, state *wfenginestate.State, startEvent *backend.HistoryEvent, propagatedHistory *protos.PropagatedHistory) error {
 	// We block (re)creation of existing workflows unless they are in a completed state
 	// Or if they still have any pending activity result awaited.
 	if !runtimestate.IsCompleted(rs) {
@@ -93,6 +100,9 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 	}
 	log.Infof("Workflow actor '%s': workflow was previously completed and is being recreated", o.actorID)
 	state.Reset()
+	if propagatedHistory != nil {
+		state.SetIncomingHistory(propagatedHistory)
+	}
 	return o.scheduleWorkflowStart(ctx, startEvent, state)
 }
 

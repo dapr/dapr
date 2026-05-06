@@ -171,6 +171,7 @@ func runWithContext(ctx context.Context, opts *options.Options) error {
 			rt, rerr := runtime.FromConfig(ctx, &runtime.Config{
 				AppID:                         opts.AppID,
 				ActorsService:                 opts.ActorsService,
+				ActorsDisseminationTimeout:    opts.ActorsDisseminationTimeout,
 				RemindersService:              opts.RemindersService,
 				SchedulerAddress:              opts.SchedulerAddress,
 				SchedulerStreams:              opts.SchedulerJobStreams,

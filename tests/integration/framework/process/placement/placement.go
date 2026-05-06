@@ -117,6 +117,10 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		args = append(args, "--disseminate-timeout="+opts.disseminateTimeout.String())
 	}
 
+	if opts.disseminateCoalesceWindow != nil {
+		args = append(args, "--disseminate-coalesce-window="+opts.disseminateCoalesceWindow.String())
+	}
+
 	return &Placement{
 		exec: exec.New(t, binary.EnvValue("placement"), args,
 			append(opts.execOpts, exec.WithEnvVars(t,

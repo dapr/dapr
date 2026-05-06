@@ -27,21 +27,22 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent, dueTime time.Time, activityName *string) error {
+func (a *activity) createReminder(ctx context.Context, invocation *protos.ActivityInvocation, dueTime time.Time, activityName *string) error {
 	const reminderName = "run-activity"
 	log.Debugf("Activity actor '%s||%s': creating reminder '%s' with dueTime=%s", a.actorType, a.actorID, reminderName, dueTime)
 
-	anydata, err := anypb.New(his)
+	anydata, err := anypb.New(invocation)
 	if err != nil {
 		return err
 	}
 
 	// The activity actor should always create reminders for its own actor type
 	// and ID
-	return a.reminders.Create(ctx, &actorapi.CreateReminderRequest{
+	return common.CreateReminderWithRetry(ctx, a.reminders, &actorapi.CreateReminderRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
 		DueTime:   dueTime.Format(time.RFC3339),
@@ -74,7 +75,7 @@ func (a *activity) createWorkflowResultReminder(ctx context.Context, wfActorType
 		return err
 	}
 
-	return a.reminders.Create(ctx, &actorapi.CreateReminderRequest{
+	return common.CreateReminderWithRetry(ctx, a.reminders, &actorapi.CreateReminderRequest{
 		ActorType: wfActorType,
 		ActorID:   wfActorID,
 		DueTime:   "0s",

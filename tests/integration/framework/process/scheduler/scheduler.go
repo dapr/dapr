@@ -66,6 +66,7 @@ type Scheduler struct {
 	id                 string
 	etcdInitialCluster string
 	etcdClientPort     int
+	etcdSpaceQuota     *string
 	sentry             *sentry.Sentry
 
 	embed    bool
@@ -169,6 +170,10 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		args = append(args, fmt.Sprintf("--workers=%d", *opts.workers))
 	}
 
+	if opts.etcdSpaceQuota != nil {
+		args = append(args, "--etcd-space-quota="+*opts.etcdSpaceQuota)
+	}
+
 	return &Scheduler{
 		exec: exec.New(t, binary.EnvValue("scheduler"), args,
 			append(opts.execOpts, exec.WithEnvVars(t,
@@ -183,6 +188,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		metricsPort:        opts.metricsPort,
 		etcdInitialCluster: *opts.etcdInitialCluster,
 		etcdClientPort:     opts.etcdClientPort,
+		etcdSpaceQuota:     opts.etcdSpaceQuota,
 		dataDir:            dataDir,
 		sentry:             opts.sentry,
 		namespace:          opts.namespace,
@@ -210,6 +216,14 @@ func (s *Scheduler) Kill(t *testing.T) {
 		s.httpClient.CloseIdleConnections()
 	}
 	s.exec.Kill(t)
+}
+
+func (s *Scheduler) Restart(t *testing.T, ctx context.Context) {
+	t.Helper()
+	clone := s.exec.Clone(t)
+	s.Kill(t)
+	s.exec = clone
+	s.exec.Run(t, ctx)
 }
 
 func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
