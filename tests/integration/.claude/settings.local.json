@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//keep/home/go/src/github.com/dapr/dapr/**)",
+      "Bash(go build *)",
+      "Bash(go env *)",
+      "Bash(go vet *)"
+    ]
+  }
+}
