@@ -149,6 +149,13 @@ type Options struct {
 
 	// JwtAudiences is the list of JWT audiences to be included in the certificate request.
 	JwtAudiences []string
+
+	// KeyAlgorithm selects the algorithm used for the workload's private key.
+	// When nil, defaults to Ed25519. Set to a pointer to
+	// spiffe.KeyAlgorithmRSA for components whose certificates are consumed by
+	// the Kubernetes API server (i.e. admission webhook serving), since some
+	// cloud distributions reject Ed25519 keys for that purpose.
+	KeyAlgorithm *spiffe.KeyAlgorithm
 }
 
 type provider struct {
@@ -248,6 +255,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 			RequestSVIDFn:       reqFn,
 			WriteIdentityToFile: opts.WriteIdentityToFile,
 			TrustAnchors:        trustAnchors,
+			KeyAlgorithm:        opts.KeyAlgorithm,
 		})
 	} else {
 		log.Warn("mTLS is disabled. Skipping certificate request and tls validation")

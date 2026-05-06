@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/components-contrib/workflows"
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/config"
@@ -68,9 +69,17 @@ type Options struct {
 	WorkflowsRemoteActivityReminder bool
 	WorkflowHistorySigning          bool
 
+	// MaxRequestBodySize is the gRPC server max message size in bytes. The
+	// orchestrator uses it to detect and gracefully stall workflows whose
+	// history payload would exceed the GetWorkItems stream limit.
+	MaxRequestBodySize int
+
 	// Signer provides cryptographic signing and verification. If nil, history
 	// signing is disabled.
 	Signer *signer.Signer
+
+	// May be nil when the WorkflowAccessPolicy feature is disabled.
+	WorkflowAccessPolicies *workflowacl.Holder
 }
 
 type engine struct {
@@ -106,14 +115,16 @@ func New(opts Options) (Interface, error) {
 
 	// If no backend was initialized by the manager, create a backend backed by actors
 	abackend := backendactors.New(backendactors.Options{
-		AppID:           opts.AppID,
-		Namespace:       opts.Namespace,
-		Actors:          opts.Actors,
-		Resiliency:      opts.Resiliency,
-		EventSink:       opts.EventSink,
-		ComponentStore:  opts.ComponentStore,
-		RetentionPolicy: retPolicy,
-		Signer:          s,
+		AppID:                  opts.AppID,
+		Namespace:              opts.Namespace,
+		Actors:                 opts.Actors,
+		Resiliency:             opts.Resiliency,
+		EventSink:              opts.EventSink,
+		ComponentStore:         opts.ComponentStore,
+		RetentionPolicy:        retPolicy,
+		Signer:                 s,
+		MaxRequestBodySize:     opts.MaxRequestBodySize,
+		WorkflowAccessPolicies: opts.WorkflowAccessPolicies,
 
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,

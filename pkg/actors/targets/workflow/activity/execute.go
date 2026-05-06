@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -105,6 +106,25 @@ func (a *activity) executeActivity(ctx context.Context, name string, invocation 
 		}
 	}
 	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, name)
+
+	// Attach an attestation so the parent workflow can cryptographically
+	// verify this activity's identity, input, and output. No-op when
+	// signing is disabled.
+	if a.signing != nil && wi.Result != nil {
+		scheduled := taskEvent.GetTaskScheduled()
+		if scheduled == nil {
+			executionStatus = diag.StatusRecoverable
+			return wferrors.NewRecoverable(fmt.Errorf("activity actor '%s': cannot build activity attestation without TaskScheduledEvent", a.actorID))
+		}
+		if attachErr := a.signing.AttachActivityCompletionAttestation(ctx, wi.Result, signing.ActivityAttestationParams{
+			ParentInstanceID: workflowID,
+			ActivityName:     activityName,
+			Input:            scheduled.GetInput(),
+		}); attachErr != nil {
+			executionStatus = diag.StatusRecoverable
+			return wferrors.NewRecoverable(fmt.Errorf("activity actor '%s': %w", a.actorID, attachErr))
+		}
+	}
 
 	// send completed event to orchestrator wf actor
 	wfActorType := a.workflowActorType

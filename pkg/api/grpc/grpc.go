@@ -86,11 +86,6 @@ type API interface {
 
 	// Dapr Service methods
 	runtimev1pb.DaprServer
-
-	// SetWorkflowAccessPolicies atomically updates the workflow access policies.
-	SetWorkflowAccessPolicies(policies *workflowacl.CompiledPolicies)
-	// GetWorkflowAccessPolicies returns the current compiled workflow access policies.
-	GetWorkflowAccessPolicies() *workflowacl.CompiledPolicies
 }
 
 type api struct {
@@ -104,7 +99,7 @@ type api struct {
 	sendToOutputBindingFn  func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec            config.TracingSpec
 	accessControlList      *config.AccessControlList
-	workflowAccessPolicies atomic.Pointer[workflowacl.CompiledPolicies]
+	workflowAccessPolicies *workflowacl.Holder
 	processor              *processor.Processor
 	wg                     sync.WaitGroup
 
@@ -114,46 +109,37 @@ type api struct {
 
 // APIOpts contains options for NewAPI.
 type APIOpts struct {
-	Universal             *universal.Universal
-	Logger                logger.Logger
-	Channels              *channels.Channels
-	PubSubAdapter         runtimePubsub.Adapter
-	PubSubAdapterStreamer runtimePubsub.AdapterStreamer
-	Outbox                outbox.Outbox
-	DirectMessaging       invokev1.DirectMessaging
-	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	TracingSpec           config.TracingSpec
-	AccessControlList     *config.AccessControlList
-	Processor             *processor.Processor
+	Universal              *universal.Universal
+	Logger                 logger.Logger
+	Channels               *channels.Channels
+	PubSubAdapter          runtimePubsub.Adapter
+	PubSubAdapterStreamer  runtimePubsub.AdapterStreamer
+	Outbox                 outbox.Outbox
+	DirectMessaging        invokev1.DirectMessaging
+	SendToOutputBindingFn  func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	TracingSpec            config.TracingSpec
+	AccessControlList      *config.AccessControlList
+	Processor              *processor.Processor
+	WorkflowAccessPolicies *workflowacl.Holder
 }
 
 // NewAPI returns a new gRPC API.
 func NewAPI(opts APIOpts) API {
 	return &api{
-		Universal:             opts.Universal,
-		logger:                opts.Logger,
-		directMessaging:       opts.DirectMessaging,
-		channels:              opts.Channels,
-		pubsubAdapter:         opts.PubSubAdapter,
-		pubsubAdapterStreamer: opts.PubSubAdapterStreamer,
-		outbox:                opts.Outbox,
-		sendToOutputBindingFn: opts.SendToOutputBindingFn,
-		tracingSpec:           opts.TracingSpec,
-		accessControlList:     opts.AccessControlList,
-		processor:             opts.Processor,
-		closeCh:               make(chan struct{}),
+		Universal:              opts.Universal,
+		logger:                 opts.Logger,
+		directMessaging:        opts.DirectMessaging,
+		channels:               opts.Channels,
+		pubsubAdapter:          opts.PubSubAdapter,
+		pubsubAdapterStreamer:  opts.PubSubAdapterStreamer,
+		outbox:                 opts.Outbox,
+		sendToOutputBindingFn:  opts.SendToOutputBindingFn,
+		tracingSpec:            opts.TracingSpec,
+		accessControlList:      opts.AccessControlList,
+		processor:              opts.Processor,
+		workflowAccessPolicies: opts.WorkflowAccessPolicies,
+		closeCh:                make(chan struct{}),
 	}
-}
-
-// SetWorkflowAccessPolicies atomically sets the compiled workflow access
-// policies used for enforcement in CallActor/CallActorStream.
-func (a *api) SetWorkflowAccessPolicies(policies *workflowacl.CompiledPolicies) {
-	a.workflowAccessPolicies.Store(policies)
-}
-
-// GetWorkflowAccessPolicies returns the current compiled workflow access policies.
-func (a *api) GetWorkflowAccessPolicies() *workflowacl.CompiledPolicies {
-	return a.workflowAccessPolicies.Load()
 }
 
 // validateAndGetPubsubAndTopic validates the request parameters and returns the pubsub interface, pubsub name, topic name, rawPayload metadata if set
@@ -1084,6 +1070,10 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 }
 
 func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error) {
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
+	}
+
 	astate, err := a.ActorState(ctx)
 	if err != nil {
 		apiServerLogger.Debug(err)
@@ -1119,6 +1109,10 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 }
 
 func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
+	}
+
 	astate, err := a.ActorState(ctx)
 	if err != nil {
 		apiServerLogger.Debug(err)
@@ -1217,6 +1211,10 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	in.Method = normalized
 
 	req := in.ToInternalInvokeRequest()
+
+	// Drop caller-identity headers that the client may have set; the
+	// router stamps the trusted local sidecar identity itself.
+	workflowacl.StripUntrustedCallerIdentity(req.GetMetadata())
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.

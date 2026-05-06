@@ -48,7 +48,7 @@ type inflight struct {
 
 func (inf *inflight) Setup(t *testing.T) []framework.Option {
 	inf.place = placement.New(t,
-		placement.WithDisseminateTimeout(time.Second*7),
+		placement.WithDisseminateTimeout(time.Second*2),
 	)
 
 	inf.actors = dactors.New(t,
