@@ -42,10 +42,10 @@ const (
 	testLabel       = "jobs"
 
 	// Target QPS for job scheduling.
-	targetScheduleQPS float64 = 500
+	targetScheduleQPS float64 = 700
 
 	// Target QPS for job triggering.
-	targetTriggerQPS float64 = 500
+	targetTriggerQPS float64 = 8000
 )
 
 var tr *runner.TestRunner
@@ -269,6 +269,6 @@ func TestJobTriggerPerformance(t *testing.T) {
 
 	assert.Equal(t, 0, restarts)
 	if triggerQPS < targetTriggerQPS {
-		assert.InDelta(t, targetTriggerQPS, triggerQPS, 100)
+		assert.InDelta(t, targetTriggerQPS, triggerQPS, 500)
 	}
 }
