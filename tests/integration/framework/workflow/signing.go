@@ -134,12 +134,13 @@ func VerifySignatureChain(t *testing.T, ctx context.Context, db *sqlite.SQLite, 
 	authorities := parsePEMCertificates(t, trustAnchors)
 	s := signer.New(nil, fake.New(authorities...))
 
-	require.NoError(t, historysigning.VerifyChain(historysigning.VerifyChainOptions{
+	_, err := historysigning.VerifyChain(historysigning.VerifyChainOptions{
 		RawSignatures: data.RawSignatures,
 		Certs:         data.Certs,
 		AllRawEvents:  data.RawEvents,
 		Signer:        s,
-	}))
+	})
+	require.NoError(t, err)
 }
 
 // parsePEMCertificates parses a PEM-encoded certificate bundle into x509

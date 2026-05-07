@@ -168,9 +168,16 @@ func (d *dbpersisttrustboundary) Run(t *testing.T, ctx context.Context) {
 		chunk := ph.GetChunks()[0]
 		assert.Equal(t, app1AppID, chunk.GetAppId(), "chunk.AppId should be App1, not App0")
 		assert.Equal(t, "middleWf", chunk.GetWorkflowName(), "chunk.WorkflowName should be middleWf, not rootWf")
-		assert.Equal(t, int32(0), chunk.GetStartEventIndex(), "chunk.StartEventIndex")
-		assert.Equal(t, int32(len(ph.GetEvents())), chunk.GetEventCount(), //nolint:gosec
-			"chunk.EventCount should match events length")
+		require.NotEmpty(t, chunk.GetRawEvents(), "chunk should carry raw events for App1's middleWf")
+
+		// New API: events live as raw bytes per chunk. Decode for shape
+		// inspection.
+		events := make([]*protos.HistoryEvent, len(chunk.GetRawEvents()))
+		for i, raw := range chunk.GetRawEvents() {
+			events[i] = new(protos.HistoryEvent)
+			require.NoError(t, proto.Unmarshal(raw, events[i]),
+				"chunk rawEvents[%d] should unmarshal as HistoryEvent", i)
+		}
 
 		// No App0 chunk leaked
 		for _, c := range ph.GetChunks() {
@@ -180,7 +187,7 @@ func (d *dbpersisttrustboundary) Run(t *testing.T, ctx context.Context) {
 
 		// No App0 events leaked into the events slice, must not contain
 		// rootWf/app0Act events (trust boundary)
-		for _, e := range ph.GetEvents() {
+		for _, e := range events {
 			if ts := e.GetTaskScheduled(); ts != nil {
 				assert.NotEqual(t, activityApp0Act, ts.GetName(),
 					"app0Act should NOT appear in the leaf's persisted events (trust boundary)")
@@ -197,7 +204,7 @@ func (d *dbpersisttrustboundary) Run(t *testing.T, ctx context.Context) {
 
 		// App1's events
 		var sawApp1Act, sawMiddleStarted bool
-		for _, e := range ph.GetEvents() {
+		for _, e := range events {
 			if ts := e.GetTaskScheduled(); ts != nil && ts.GetName() == "app1Act" {
 				sawApp1Act = true
 			}

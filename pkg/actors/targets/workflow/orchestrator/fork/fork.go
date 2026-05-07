@@ -165,6 +165,11 @@ func (f *Fork) handleBefore(his *backend.HistoryEvent) {
 		delete(f.unfinishedChildWorkflows, his.GetChildWorkflowInstanceFailed().GetTaskScheduledId())
 
 	default:
+		// DetachedWorkflowInstanceCreated falls into this branch: detached
+		// spawns are fire-and-forget, so there is no completion or failure to
+		// pair them with — copying the audit event into the new history is
+		// the right thing to do, mirroring how a freshly client-scheduled
+		// workflow has no upstream linkage on rerun.
 		f.newState.AddToHistory(his)
 	}
 }
@@ -214,6 +219,13 @@ func (f *Fork) handleFound(i int, his *backend.HistoryEvent) (*protos.HistoryEve
 		}
 
 		return his, nil
+
+	case *protos.HistoryEvent_DetachedWorkflowInstanceCreated:
+		// Detached spawns are fire-and-forget: there is no awaitable Task on
+		// the caller and no completion or failure event ever flows back. The
+		// caller-side history records only that a spawn happened, so there
+		// is nothing to re-execute by rerunning this point in the workflow.
+		return nil, status.Errorf(codes.InvalidArgument, "event '%d' is a detached workflow spawn and cannot be rerun: detached spawns are fire-and-forget and have no replayable continuation in the caller", f.targetEventID)
 
 	default:
 		return nil, status.Errorf(codes.NotFound, "target event '%T' with ID '%d' is not an event that can be rerun", his.GetEventType(), f.targetEventID)

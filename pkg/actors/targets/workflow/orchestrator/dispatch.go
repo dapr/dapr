@@ -54,5 +54,7 @@ func hasRemoteMessages(msgs []*backend.WorkflowRuntimeStateMessage) bool {
 }
 
 func isDispatchableEvent(e *backend.HistoryEvent) bool {
-	return e.GetTaskScheduled() != nil || e.GetChildWorkflowInstanceCreated() != nil
+	return e.GetTaskScheduled() != nil ||
+		e.GetChildWorkflowInstanceCreated() != nil ||
+		e.GetDetachedWorkflowInstanceCreated() != nil
 }

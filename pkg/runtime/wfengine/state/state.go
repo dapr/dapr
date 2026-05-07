@@ -1019,7 +1019,7 @@ func verifySignatureChain(s *State, sgn *signer.Signer) error {
 				coveredEvents, len(rawEvents))
 		}
 	}
-	if err := historysigning.VerifyChain(historysigning.VerifyChainOptions{
+	if _, err := historysigning.VerifyChain(historysigning.VerifyChainOptions{
 		RawSignatures: s.RawSignatures,
 		Certs:         s.SigningCertificates,
 		AllRawEvents:  rawEvents,
