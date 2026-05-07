@@ -228,7 +228,7 @@ func (l *lock) handleCancelTypes(event *CancelTypes) {
 				select {
 				case <-claim.Context.Done():
 				case <-timer.C:
-					log.Errorf("Timed out waiting for actor in-flight lock claims to be released for rebalanced types, force cancelling remaining claims")
+					log.Errorf("Timed out waiting for actor type '%s' in-flight lock claims to be released for rebalanced types, force cancelling remaining claims", actorType)
 					for _, claim := range claims {
 						claim.Cancel(event.Error)
 					}

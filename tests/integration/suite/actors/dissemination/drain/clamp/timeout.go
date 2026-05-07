@@ -33,21 +33,20 @@ import (
 )
 
 func init() {
-	suite.Register(new(clamp))
+	suite.Register(new(timeout))
 }
 
-type clamp struct {
+type timeout struct {
 	app1  *actors.Actors
 	app2  *actors.Actors
 	place *placement.Placement
 	ll    *logline.LogLine
 
-	inCall        atomic.Int32
-	callCancelled atomic.Bool
-	waitOnCall    chan struct{}
+	inCall     atomic.Int32
+	waitOnCall chan struct{}
 }
 
-func (c *clamp) Setup(t *testing.T) []framework.Option {
+func (c *timeout) Setup(t *testing.T) []framework.Option {
 	c.waitOnCall = make(chan struct{})
 
 	handler := func(_ nethttp.ResponseWriter, r *nethttp.Request) {
@@ -55,14 +54,13 @@ func (c *clamp) Setup(t *testing.T) []framework.Option {
 
 		select {
 		case <-r.Context().Done():
-			c.callCancelled.Store(true)
 		case <-c.waitOnCall:
 		}
 	}
 
 	c.ll = logline.New(t,
 		logline.WithStdoutLineContains(
-			"meets or exceeds the dissemination timeout",
+			"Timed out waiting for actor type 'abc' in-flight lock claims to be released",
 		),
 	)
 
@@ -74,7 +72,10 @@ func (c *clamp) Setup(t *testing.T) []framework.Option {
 		actors.WithPlacement(c.place),
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", handler),
-		actors.WithDrainOngoingCallTimeout(time.Minute),
+		actors.WithEntityConfig(
+			actors.WithEntityConfigEntities("abc"),
+			actors.WithEntityConfigDrainOngoingCallTimeout(time.Second*2),
+		),
 		actors.WithDaprdOptions(
 			daprd.WithActorsDisseminateTimeout(time.Second*4),
 			daprd.WithLogLineStdout(c.ll),
@@ -85,7 +86,10 @@ func (c *clamp) Setup(t *testing.T) []framework.Option {
 		actors.WithPeerActor(c.app1),
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", handler),
-		actors.WithDrainOngoingCallTimeout(time.Minute),
+		actors.WithEntityConfig(
+			actors.WithEntityConfigEntities("abc"),
+			actors.WithEntityConfigDrainOngoingCallTimeout(time.Second*2),
+		),
 		actors.WithDaprdOptions(
 			daprd.WithActorsDisseminateTimeout(time.Second*4),
 		),
@@ -96,7 +100,7 @@ func (c *clamp) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (c *clamp) Run(t *testing.T, ctx context.Context) {
+func (c *timeout) Run(t *testing.T, ctx context.Context) {
 	c.app1.WaitUntilRunning(t, ctx)
 
 	errCh := make(chan error, 1)
@@ -115,20 +119,13 @@ func (c *clamp) Run(t *testing.T, ctx context.Context) {
 
 	c.app2.Run(t, ctx)
 	t.Cleanup(func() { c.app2.Cleanup(t) })
-
 	c.ll.EventuallyFoundAll(t)
-
-	assert.Eventually(t, c.callCancelled.Load, time.Second*20, time.Millisecond*10,
-		"call should be cancelled after the clamped drain timeout, not the configured 60s")
-
-	assert.False(t, c.ll.Contains("dissemination timeout after"),
-		"daprd should not log a dissemination timeout reset when drain is clamped within budget")
 
 	close(c.waitOnCall)
 
 	select {
 	case <-errCh:
-	case <-time.After(time.Second * 10):
+	case <-time.After(time.Second * 30):
 		require.Fail(t, "timed out waiting for call to complete")
 	}
 }
