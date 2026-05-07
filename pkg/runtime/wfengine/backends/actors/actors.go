@@ -177,6 +177,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 	actorTypeBuilder := common.NewActorTypeBuilder(abe.namespace)
 	oopts := orchestrator.Options{
 		AppID:                  abe.appID,
+		Namespace:              abe.namespace,
 		WorkflowActorType:      abe.workflowActorType,
 		ActivityActorType:      abe.activityActorType,
 		Resiliency:             abe.resiliency,
@@ -202,6 +203,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 
 	aopts := activity.Options{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		ActivityActorType: abe.activityActorType,
 		WorkflowActorType: abe.workflowActorType,
 		Scheduler: func(ctx context.Context, wi *backend.ActivityWorkItem) error {
@@ -669,6 +671,7 @@ func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*s
 	// and let them detect it.
 	wstate, err := state.LoadWorkflowState(ctx, astate, string(id), state.Options{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
 		Signer:            abe.signer,
@@ -813,6 +816,7 @@ func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstan
 
 	resp, err := state.LoadWorkflowState(ctx, ss, req.GetInstanceId(), state.Options{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
 		Signer:            abe.signer,

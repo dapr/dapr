@@ -46,6 +46,7 @@ var orchestratorCache = sync.Pool{
 
 type Options struct {
 	AppID              string
+	Namespace          string
 	WorkflowActorType  string
 	ActivityActorType  string
 	RetentionActorType string
@@ -72,6 +73,7 @@ type Options struct {
 
 type factory struct {
 	appID              string
+	namespace          string
 	actorType          string
 	activityActorType  string
 	retentionActorType string
@@ -126,6 +128,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 
 	return &factory{
 		appID:                  opts.AppID,
+		namespace:              opts.Namespace,
 		actorType:              opts.WorkflowActorType,
 		activityActorType:      opts.ActivityActorType,
 		retentionActorType:     opts.RetentionActorType,
@@ -179,6 +182,7 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 	// missing-key tampering.
 	or.signing = &signing.Signing{
 		Signer:            f.signer,
+		Namespace:         f.namespace,
 		ActorID:           actorID,
 		ActorType:         f.actorType,
 		ActivityActorType: f.activityActorType,

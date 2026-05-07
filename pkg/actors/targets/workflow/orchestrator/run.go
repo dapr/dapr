@@ -320,6 +320,28 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 
+	// Attach a fresh chunk-local signature + cert chain to the current-app
+	// chunk of every outbound PropagatedHistory so the receiver can
+	// cryptographically verify the chunk against this app's identity.
+	// Lineage chunks from upstream apps are forwarded verbatim. No-op
+	// when signing is disabled.
+	//
+	// Two sources of outbound PropagatedHistory:
+	//   - wi.OutgoingHistory: keyed by action ID, used for activity
+	//     dispatch (callActivities).
+	//   - createWorkflows[i].PropagatedHistory: per child-workflow
+	//     creation message, consumed by callCreateWorkflowStateMessage.
+	for _, ph := range wi.OutgoingHistory {
+		if err = o.signing.SignOutgoingPropagatedHistory(ph, o.appID); err != nil {
+			return todo.RunCompletedFalse, err
+		}
+	}
+	for _, msg := range createWorkflows {
+		if err = o.signing.SignOutgoingPropagatedHistory(msg.GetPropagatedHistory(), o.appID); err != nil {
+			return todo.RunCompletedFalse, err
+		}
+	}
+
 	// Dispatch activities and messages, collecting failures.
 	activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory)
 	addResult := o.callAddEventStateMessage(ctx, addWorkflows)
