@@ -176,9 +176,11 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 	outgoingActPropHist := buildRerunOutgoingHistory(activities, newState, o.actorID, o.appID, taskScheduledScope)
 	outgoingChildPropHist := buildRerunOutgoingHistory(childWFs, newState, o.actorID, o.appID, childWorkflowCreatedScope)
 
+	rerunRS := runtimestate.NewWorkflowRuntimeState(o.actorID, newState.CustomStatus, newState.History)
+
 	if err = errors.Join(
 		o.callChildWorkflows(ctx, startedEvent.GetName(), childWFs, outgoingChildPropHist),
-		o.callActivities(ctx, activities, newState, outgoingActPropHist).err,
+		o.callActivities(ctx, activities, newState, rerunRS, outgoingActPropHist).err,
 		o.createTimers(ctx, timers, newState.Generation),
 	); err != nil {
 		return err
