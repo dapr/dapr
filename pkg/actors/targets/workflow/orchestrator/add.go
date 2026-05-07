@@ -81,6 +81,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 		log.Warnf("Workflow actor '%s': attestation verification failed, tombstoning workflow: %s", o.actorID, verr)
 		opts := wfenginestate.Options{
 			AppID:             o.appID,
+			Namespace:         o.namespace,
 			WorkflowActorType: o.actorType,
 			ActivityActorType: o.activityActorType,
 			Signer:            o.signer,

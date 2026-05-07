@@ -286,3 +286,11 @@ func (w *Workflow) DB() *sqlite.SQLite {
 func (w *Workflow) Scheduler() *scheduler.Scheduler {
 	return w.sched
 }
+
+// Sentry returns the test-framework Sentry instance backing this workflow's
+// mTLS, or nil if the workflow was created without WithMTLS. Tests use this
+// to mint identity-tampered leaf certs that still pass chain-of-trust, so
+// they can isolate the receiver's identity check from the chain check.
+func (w *Workflow) Sentry() *sentry.Sentry {
+	return w.sentry
+}
