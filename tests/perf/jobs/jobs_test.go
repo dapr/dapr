@@ -185,73 +185,65 @@ func TestJobSchedulingPerformance(t *testing.T) {
 	}
 }
 
-// TestJobTriggerPerformance uses Fortio to schedule jobs with a short due time
-// and measures how quickly they are all triggered back to the app.
 func TestJobTriggerPerformance(t *testing.T) {
 	testAppURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
 
-	t.Logf("waiting until test app is available: %s", testAppURL+"/health")
+	t.Logf("test app url: %s", testAppURL+"/health")
 	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
 	require.NoError(t, err)
 
-	testerAppURL := tr.Platform.AcquireAppExternalURL(testerAppName)
-	require.NotEmpty(t, testerAppURL, "tester app external URL must not be empty")
-
-	_, err = utils.HTTPGetNTimes(testerAppURL, numHealthChecks)
-	require.NoError(t, err)
-
-	// Reset the triggered count so this test starts from zero.
 	_, err = utils.HTTPGet(fmt.Sprintf("%s/resetTriggeredCount", testAppURL))
 	require.NoError(t, err)
 
-	// Use Fortio to schedule jobs with a 1s due time. Each job gets a unique
-	// name via {uuid} and will trigger back to the app ~1s after creation.
-	p := perf.Params(
-		perf.WithQPS(1000),
-		perf.WithConnections(16),
-		perf.WithDuration("1m"),
-		perf.WithPayload(`{"dueTime":"1s","data":"trigger-perf"}`),
+	const (
+		jobCount = 20000
+		workers  = 50
 	)
+	jobPayload := []byte(`{"dueTime":"1s","data":"trigger-perf"}`)
 
-	p.TargetEndpoint = "http://127.0.0.1:3500/v1.0/jobs/{uuid}"
-	body, err := json.Marshal(&p)
-	require.NoError(t, err)
+	worker := func(i int) {
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			_, err := utils.HTTPPost(fmt.Sprintf("%s/scheduleJob/perf-%d", testAppURL, i), jobPayload)
+			assert.NoError(c, err)
+		}, 10*time.Second, time.Second)
 
-	t.Log("running job trigger dapr test...")
-	daprResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
-	t.Logf("job trigger scheduling results: %s", string(daprResp))
-	require.NoError(t, err)
-	require.NotEmpty(t, daprResp)
-	require.False(t, strings.HasPrefix(string(daprResp), "error"), string(daprResp))
+		if (i+1)%5000 == 0 {
+			fmt.Printf("Jobs scheduled: %d\n", i+1)
+		}
+	}
 
-	var daprResult perf.TestResult
-	err = json.Unmarshal(daprResp, &daprResult)
-	require.NoErrorf(t, err, "failed to unmarshal: %s", string(daprResp))
+	ch := make(chan int)
+	for j := 0; j < workers; j++ {
+		go func() {
+			for i := range ch {
+				worker(i)
+			}
+		}()
+	}
 
-	totalScheduled := daprResult.DurationHistogram.Count
-	successful := daprResult.RetCodes.Num200 + daprResult.RetCodes.Num204
-	failed := daprResult.RetCodes.Num400 + daprResult.RetCodes.Num500
-	t.Logf("total jobs scheduled: %d (successful=%d [200s=%d, 204s=%d], failed=%d [400s=%d, 500s=%d])",
-		totalScheduled, successful, daprResult.RetCodes.Num200, daprResult.RetCodes.Num204,
-		failed, daprResult.RetCodes.Num400, daprResult.RetCodes.Num500)
+	scheduleStart := time.Now()
+	for i := 0; i < jobCount; i++ {
+		ch <- i
+	}
+	close(ch)
+	scheduleDuration := time.Since(scheduleStart)
+	scheduleQPS := float64(jobCount) / scheduleDuration.Seconds()
+	t.Logf("Scheduled %d jobs in %s (%.1fqps)", jobCount, scheduleDuration, scheduleQPS)
 
-	expectedTriggers := successful
-	require.Greater(t, expectedTriggers, 0, "expected at least some jobs to be scheduled successfully")
-
-	t.Logf("waiting for %d jobs to be triggered...", expectedTriggers)
+	t.Logf("Waiting for %d jobs to trigger", jobCount)
 	triggerStart := time.Now()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := utils.HTTPGet(fmt.Sprintf("%s/triggeredCount", testAppURL))
 		assert.NoError(c, err)
-		count, err := strconv.Atoi(strings.TrimSpace(string(resp)))
+		gotCount, err := strconv.Atoi(strings.TrimSpace(string(resp)))
 		assert.NoError(c, err)
-		assert.GreaterOrEqual(c, count, expectedTriggers)
+		assert.GreaterOrEqual(c, gotCount, jobCount)
 	}, 120*time.Second, 500*time.Millisecond)
 
 	triggerDuration := time.Since(triggerStart)
-	triggerQPS := float64(expectedTriggers) / triggerDuration.Seconds()
-	t.Logf("all %d jobs triggered in %s (%.1f triggers/s)", expectedTriggers, triggerDuration, triggerQPS)
+	triggerQPS := float64(jobCount) / triggerDuration.Seconds()
+	t.Logf("Triggered %d jobs in %s (%.1fqps)", jobCount, triggerDuration, triggerQPS)
 
 	appUsage, err := tr.Platform.GetAppUsage(appName)
 	require.NoError(t, err)
@@ -263,23 +255,18 @@ func TestJobTriggerPerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	utils.LogPerfTestResourceUsage(appUsage, sidecarUsage, restarts, 0)
-	utils.LogPerfTestSummary(daprResp)
 
 	summary.ForTest(t).
 		Service(appName).
-		Client(testerAppName).
+		Client(appName).
 		CPU(appUsage.CPUm).
 		Memory(appUsage.MemoryMb).
 		SidecarCPU(sidecarUsage.CPUm).
 		SidecarMemory(sidecarUsage.MemoryMb).
 		Restarts(restarts).
 		ActualQPS(triggerQPS).
-		Params(p).
-		OutputFortio(daprResult).
 		Flush()
 
-	assert.Equal(t, 0, daprResult.RetCodes.Num400)
-	assert.Equal(t, 0, daprResult.RetCodes.Num500)
 	assert.Equal(t, 0, restarts)
 	if triggerQPS < targetTriggerQPS {
 		assert.InDelta(t, targetTriggerQPS, triggerQPS, 100)

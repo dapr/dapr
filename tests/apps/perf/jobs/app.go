@@ -15,42 +15,75 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"sync/atomic"
 )
 
 const appPort = 3000
 
-var triggeredCount atomic.Int64
+var (
+	triggeredCount atomic.Int64
+	httpClient     = &http.Client{}
+	daprBaseURL    = ""
+)
 
-// jobHandler receives triggered jobs from the Dapr sidecar.
 func jobHandler(w http.ResponseWriter, r *http.Request) {
 	triggeredCount.Add(1)
 	w.WriteHeader(http.StatusOK)
 }
 
-// triggeredCountHandler returns the number of triggered jobs.
 func triggeredCountHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, strconv.FormatInt(triggeredCount.Load(), 10))
 }
 
-// resetTriggeredCountHandler resets the triggered count to zero.
 func resetTriggeredCountHandler(w http.ResponseWriter, r *http.Request) {
 	triggeredCount.Store(0)
 	w.WriteHeader(http.StatusOK)
 }
 
-// healthHandler returns a 200 OK for health checks.
+func scheduleJobHandler(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimPrefix(r.URL.Path, "/scheduleJob/")
+	if name == "" {
+		http.Error(w, "missing job name", http.StatusBadRequest)
+		return
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, daprBaseURL+name, r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
+}
+
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
 func main() {
-	// Receive triggered jobs from Dapr sidecar at /job/{name}
+	daprPort := os.Getenv("DAPR_HTTP_PORT")
+	if daprPort == "" {
+		daprPort = "3500"
+	}
+	daprBaseURL = "http://127.0.0.1:" + daprPort + "/v1.0/jobs/"
+
 	http.HandleFunc("/job/", jobHandler)
+	http.HandleFunc("/scheduleJob/", scheduleJobHandler)
 	http.HandleFunc("/triggeredCount", triggeredCountHandler)
 	http.HandleFunc("/resetTriggeredCount", resetTriggeredCountHandler)
 	http.HandleFunc("/health", healthHandler)
