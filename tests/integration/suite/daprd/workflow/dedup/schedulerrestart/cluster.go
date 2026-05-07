@@ -127,7 +127,7 @@ func (s *schedulercluster) Run(t *testing.T, ctx context.Context) {
 	}, 30*time.Second, 10*time.Millisecond)
 
 	// Kill one of three; remaining two keep quorum.
-	s.schedulers[0].Kill(t)
+	s.schedulers[0].RestartGraceful(t, ctx)
 
 	require.Never(t, func() bool {
 		return calls.Load() > 1
