@@ -258,12 +258,17 @@ func ForgeChunkWithSpiffePath(t *testing.T, sen *sentry.Sentry, chunk *protos.Pr
 	chain = append(chain, leafDER...)
 	chain = append(chain, caBundle.IssChain[0].Raw...)
 
-	// Build a fresh HistorySignature over the chunk's rawEvents, signed by
-	// the leaf's private key. No previous-signature digest because this
-	// is a single-batch chunk-local signature (matches how the producer
-	// signs chunks at dispatch time).
+	// Build a fresh HistorySignature over the chunk's rawEvents, signed
+	// by the leaf's private key. No previous-signature digest because
+	// this is a single-batch chunk-local signature (matches how the
+	// producer signs chunks at dispatch time). Bind the chunk's existing
+	// instance/workflow name so the signature stays self-consistent and
+	// the test fails purely on the SPIFFE identity check.
 	eventsDigest := historysigning.EventsDigest(chunk.GetRawEvents())
-	sigInput := historysigning.SignatureInput(nil, eventsDigest)
+	sigInput := historysigning.SignatureInput(nil, eventsDigest, &historysigning.PropagationContext{
+		InstanceID:   chunk.GetInstanceId(),
+		WorkflowName: chunk.GetWorkflowName(),
+	})
 	sigBytes := ed25519.Sign(priv, sigInput)
 
 	histSig := &protos.HistorySignature{

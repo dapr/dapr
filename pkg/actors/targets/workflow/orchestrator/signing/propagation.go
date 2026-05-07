@@ -33,12 +33,20 @@ import (
 // Failure: returns an error and absorbs nothing. Caller must reject the
 // inbound message (do not persist or run).
 //
-// No-op when Signer is nil. Each chunk owns its own rawEvents and signing
-// material; verification rejects mismatches such as empty rawEvents with
-// signatures attached, or signatures that do not chain over the chunk's
-// rawEvents.
+// When ph is nil, returns nil (nothing to verify). When ph is non-nil but
+// Signer is nil, the receiver has signing disabled so this is a no-op
+// accept; if any chunk carries signing material, a warning is logged so
+// operators notice that signed payloads from a peer are flowing through an
+// unverified receiver. Each chunk otherwise owns its own rawEvents and
+// signing material; verification rejects mismatches such as empty
+// rawEvents, missing signatures, or signatures that do not chain over the
+// chunk's rawEvents.
 func (s *Signing) VerifyAndAbsorbPropagatedHistory(ph *protos.PropagatedHistory, state *wfenginestate.State) error {
-	if s.Signer == nil || ph == nil {
+	if ph == nil {
+		return nil
+	}
+	if s.Signer == nil {
+		warnIfSigned(ph, "VerifyAndAbsorbPropagatedHistory")
 		return nil
 	}
 
@@ -70,9 +78,18 @@ func (s *Signing) VerifyAndAbsorbPropagatedHistory(ph *protos.PropagatedHistory,
 // absorbing certs into a state.State. Use for stateless callers (e.g. the
 // activity actor) that have no ext-sigcert table to populate. Returns an
 // error on any verification failure; the caller should reject the
-// invocation. No-op when Signer is nil.
+// invocation.
+//
+// When ph is nil, returns nil. When ph is non-nil but Signer is nil, the
+// receiver has signing disabled so verification is skipped; if any chunk
+// carries signing material, a warning is logged so operators can detect
+// that signed peer payloads are flowing through an unverified receiver.
 func (s *Signing) VerifyPropagatedHistoryStateless(ph *protos.PropagatedHistory) error {
-	if s.Signer == nil || ph == nil {
+	if ph == nil {
+		return nil
+	}
+	if s.Signer == nil {
+		warnIfSigned(ph, "VerifyPropagatedHistoryStateless")
 		return nil
 	}
 	_, err := historysigning.VerifyPropagatedHistory(historysigning.VerifyPropagationOptions{
@@ -81,6 +98,22 @@ func (s *Signing) VerifyPropagatedHistoryStateless(ph *protos.PropagatedHistory)
 		ExpectedNamespace: s.Namespace,
 	})
 	return err
+}
+
+// warnIfSigned logs a warning if the propagated history carries any
+// signing material. This catches the mixed-environment case where a
+// signing-enabled producer sent a signed payload to a signing-disabled
+// receiver - the receiver cannot verify the signatures, but should
+// surface the discrepancy so operators notice that signing is
+// inconsistently configured across the deployment.
+func warnIfSigned(ph *protos.PropagatedHistory, caller string) {
+	for i, chunk := range ph.GetChunks() {
+		if len(chunk.GetRawSignatures()) > 0 || len(chunk.GetSigningCertChains()) > 0 {
+			log.Warnf("%s: receiver has signing disabled but inbound propagated history chunk %d (app %q) carries %d signatures and %d cert chains; payload accepted unverified",
+				caller, i, chunk.GetAppId(), len(chunk.GetRawSignatures()), len(chunk.GetSigningCertChains()))
+			return
+		}
+	}
 }
 
 // SignOutgoingPropagatedHistory attaches a fresh chunk-local signature +
@@ -114,12 +147,19 @@ func (s *Signing) SignOutgoingPropagatedHistory(ph *protos.PropagatedHistory, ow
 		}
 
 		// Single-batch fresh signature. StartEventIndex is 0 (chunk-
-		// local indexing) and there is no previous signature.
+		// local indexing) and there is no previous signature. Bind
+		// the chunk's instance and workflow name into the signature so
+		// a chunk lifted from this instance can't be relabeled and
+		// replayed under a different instance.
 		res, err := historysigning.Sign(s.Signer, historysigning.SignOptions{
 			RawEvents:            rawEvents,
 			StartEventIndex:      0,
 			PreviousSignatureRaw: nil,
 			ExistingCerts:        nil,
+			PropagationContext: &historysigning.PropagationContext{
+				InstanceID:   chunk.GetInstanceId(),
+				WorkflowName: chunk.GetWorkflowName(),
+			},
 		})
 		if err != nil {
 			return fmt.Errorf("failed to sign outbound propagated chunk: %w", err)

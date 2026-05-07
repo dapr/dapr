@@ -69,7 +69,7 @@ type Options struct {
 
 type State struct {
 	appID             string
-	Namespace         string
+	namespace         string
 	workflowActorType string
 	activityActorType string
 
@@ -135,7 +135,7 @@ func NewState(opts Options) *State {
 	return &State{
 		Generation:        1,
 		appID:             opts.AppID,
-		Namespace:         opts.Namespace,
+		namespace:         opts.Namespace,
 		workflowActorType: opts.WorkflowActorType,
 		activityActorType: opts.ActivityActorType,
 	}
@@ -1044,7 +1044,7 @@ func verifySignatureChain(s *State, sgn *signer.Signer) error {
 	// guaranteed non-empty here because LoadWorkflowState rejects signed
 	// workflows with empty values.
 	for i, cert := range s.SigningCertificates {
-		if err := verifyCertAppIdentity(cert.GetCertificate(), s.appID, s.Namespace); err != nil {
+		if err := verifyCertAppIdentity(cert.GetCertificate(), s.appID, s.namespace); err != nil {
 			return fmt.Errorf("signing certificate %d: %w", i, err)
 		}
 	}

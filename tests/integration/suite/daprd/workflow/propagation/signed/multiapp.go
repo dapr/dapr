@@ -36,11 +36,11 @@ func init() {
 	suite.Register(new(multiapp))
 }
 
-// multiapp is the cross-app counterpart to multiapp, but with
-// WorkflowHistorySigning enabled. The parent on App0 propagates its signed
-// history to a child on App1; App1's daprd verifies the propagated chunk's
-// signatures + cert against App0's SPIFFE identity before letting the child
-// run, and absorbs App0's signing cert into its own ext-sigcert table.
+// multiapp is the signing-enabled counterpart to the unsigned cross-app
+// propagation test in the parent package. The parent on App0 propagates its
+// signed history to a child on App1; App1's daprd verifies the propagated
+// chunk's signatures + cert against App0's SPIFFE identity before letting the
+// child run, and absorbs App0's signing cert into its own ext-sigcert table.
 type multiapp struct {
 	workflow *procworkflow.Workflow
 

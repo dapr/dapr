@@ -107,7 +107,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
-	f := &factory{
+	return &factory{
 		appID:                  opts.AppID,
 		actorType:              opts.ActivityActorType,
 		router:                 router,
@@ -119,15 +119,13 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		workflowAccessPolicies: opts.WorkflowAccessPolicies,
 		state:                  state,
 
-		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
-	}
-	if opts.Signer != nil {
-		f.signing = &signing.Signing{
+		signing: &signing.Signing{
 			Signer:    opts.Signer,
 			Namespace: opts.Namespace,
-		}
-	}
-	return f, nil
+		},
+
+		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
+	}, nil
 }
 
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
