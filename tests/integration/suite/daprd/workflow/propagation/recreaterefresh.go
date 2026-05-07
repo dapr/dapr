@@ -23,6 +23,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procworkflow "github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
@@ -95,7 +96,7 @@ func (r *recreaterefresh) Run(t *testing.T, ctx context.Context) {
 	require.True(t, r.firstRunObservedHistory.Load(),
 		"first run (via parent) should have received propagated history")
 
-	require.Equal(t, 1, countPropagatedHistoryRows(t, ctx, r.workflow, childID),
+	require.Equal(t, 1, fworkflow.CountPropagatedHistoryRows(t, ctx, r.workflow.DB(), childID),
 		"expected exactly one propagated-history row for the child after run 1")
 
 	// Schedule the child wf on App1 under the same instance ID w/o propagation
@@ -104,30 +105,6 @@ func (r *recreaterefresh) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	_, err = client1.WaitForWorkflowCompletion(ctx, childID)
 	require.NoError(t, err)
-	assert.Equal(t, 0, countPropagatedHistoryRows(t, ctx, r.workflow, childID),
+	assert.Equal(t, 0, fworkflow.CountPropagatedHistoryRows(t, ctx, r.workflow.DB(), childID),
 		"propagated-history row must be deleted after recreate-without-propagation")
-}
-
-// countPropagatedHistoryRows from the state store
-func countPropagatedHistoryRows(t *testing.T, ctx context.Context, wf *procworkflow.Workflow, instanceID string) int {
-	t.Helper()
-	db := wf.DB().GetConnection(t)
-	tableName := wf.DB().TableName()
-
-	likePattern := `%` + escapeLike(instanceID) + `%propagated-history`
-	rows, err := db.QueryContext(ctx,
-		//nolint:gosec
-		"SELECT key FROM "+tableName+
-			` WHERE key LIKE ? ESCAPE '\'`, likePattern)
-	require.NoError(t, err)
-	defer rows.Close()
-
-	var n int
-	for rows.Next() {
-		var key string
-		require.NoError(t, rows.Scan(&key))
-		n++
-	}
-	require.NoError(t, rows.Err())
-	return n
 }

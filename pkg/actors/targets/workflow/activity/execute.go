@@ -50,6 +50,17 @@ func (a *activity) executeActivity(ctx context.Context, name string, invocation 
 	}
 	workflowID := a.actorID[0:endIndex]
 
+	// Cryptographically verify any propagated history before letting the
+	// activity see it. Activities are stateless workers with no
+	// ext-sigcert table to absorb certs into, so this is a verify-or-
+	// reject gate. The helper handles the disabled-signer case (logs a
+	// warning if a signed payload arrives) and the nil-payload case
+	// internally. On failure, abort activity execution: the caller (parent
+	// workflow) gets a recoverable error and the activity never runs.
+	if err := a.signing.VerifyPropagatedHistoryStateless(invocation.GetPropagatedHistory()); err != nil {
+		return fmt.Errorf("activity '%s::%d' rejecting invocation: propagated history verification failed: %w", activityName, taskEvent.GetEventId(), err)
+	}
+
 	wi := &backend.ActivityWorkItem{
 		SequenceNumber:  int64(taskEvent.GetEventId()),
 		InstanceID:      api.InstanceID(workflowID),
@@ -109,8 +120,9 @@ func (a *activity) executeActivity(ctx context.Context, name string, invocation 
 
 	// Attach an attestation so the parent workflow can cryptographically
 	// verify this activity's identity, input, and output. No-op when
-	// signing is disabled.
-	if a.signing != nil && wi.Result != nil {
+	// signing is disabled (AttachActivityCompletionAttestation handles
+	// the nil-Signer case internally).
+	if wi.Result != nil {
 		scheduled := taskEvent.GetTaskScheduled()
 		if scheduled == nil {
 			executionStatus = diag.StatusRecoverable

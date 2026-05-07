@@ -27,6 +27,7 @@ import (
 
 type Options struct {
 	AppID             string
+	Namespace         string
 	ActorType         string
 	ActivityActorType string
 	InstanceID        string
@@ -65,6 +66,7 @@ func New(opts Options) *Fork {
 		targetEventID: opts.TargetEventID,
 		newState: state.NewState(state.Options{
 			AppID:             opts.AppID,
+			Namespace:         opts.Namespace,
 			WorkflowActorType: opts.ActorType,
 			ActivityActorType: opts.ActivityActorType,
 		}),

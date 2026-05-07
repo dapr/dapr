@@ -67,6 +67,7 @@ func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) 
 		NewInstanceID:              rerunReq.GetNewInstanceID(),
 		NewChildWorkflowInstanceID: rerunReq.NewChildWorkflowInstanceID,
 		AppID:                      o.appID,
+		Namespace:                  o.namespace,
 		ActorType:                  o.actorType,
 		ActivityActorType:          o.activityActorType,
 		//nolint:gosec
@@ -155,6 +156,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 
 	newState := wfenginestate.NewState(wfenginestate.Options{
 		AppID:             o.appID,
+		Namespace:         o.namespace,
 		WorkflowActorType: o.actorType,
 		ActivityActorType: o.activityActorType,
 	})
@@ -173,10 +175,31 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 	// discarded. Non-propagating tasks stay non-propagating & propagating
 	// tasks are re-issued with a chunk reflecting the rerunning workflow's
 	// current state plus whatever lineage it received from its parent.
-	outgoingActPropHist := buildRerunOutgoingHistory(activities, newState, o.actorID, o.appID, taskScheduledScope)
-	outgoingChildPropHist := buildRerunOutgoingHistory(childWFs, newState, o.actorID, o.appID, childWorkflowCreatedScope)
+	outgoingActPropHist, err := buildRerunOutgoingHistory(activities, newState, o.actorID, o.appID, taskScheduledScope)
+	if err != nil {
+		return err
+	}
+	outgoingChildPropHist, err := buildRerunOutgoingHistory(childWFs, newState, o.actorID, o.appID, childWorkflowCreatedScope)
+	if err != nil {
+		return err
+	}
 
 	rerunRS := runtimestate.NewWorkflowRuntimeState(o.actorID, newState.CustomStatus, newState.History)
+
+	// Attach this workflow's signatures + cert chain to the current-app
+	// chunk of each outbound PropagatedHistory. Lineage chunks pass
+	// through verbatim. signAndSaveState above already populated
+	// state.Signatures / state.RawSignatures. No-op if signing is off.
+	for _, ph := range outgoingActPropHist {
+		if err = o.signing.SignOutgoingPropagatedHistory(ph, o.appID); err != nil {
+			return err
+		}
+	}
+	for _, ph := range outgoingChildPropHist {
+		if err = o.signing.SignOutgoingPropagatedHistory(ph, o.appID); err != nil {
+			return err
+		}
+	}
 
 	if err = errors.Join(
 		o.callChildWorkflows(ctx, startedEvent.GetName(), childWFs, outgoingChildPropHist),
@@ -203,7 +226,7 @@ func buildRerunOutgoingHistory(
 	instanceID string,
 	appID string,
 	scopeOf func(*protos.HistoryEvent) protos.HistoryPropagationScope,
-) map[int32]*protos.PropagatedHistory {
+) (map[int32]*protos.PropagatedHistory, error) {
 	var out map[int32]*protos.PropagatedHistory
 	var rt *protos.WorkflowRuntimeState
 	for _, e := range events {
@@ -214,7 +237,10 @@ func buildRerunOutgoingHistory(
 		if rt == nil {
 			rt = runtimestate.NewWorkflowRuntimeState(instanceID, nil, state.History)
 		}
-		chunk := runtimestate.AssembleProtoPropagatedHistory(rt, scope, state.IncomingHistory, appID)
+		chunk, err := runtimestate.AssembleProtoPropagatedHistory(rt, scope, state.IncomingHistory, appID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to assemble propagated history for event %d: %w", e.GetEventId(), err)
+		}
 		if chunk == nil {
 			continue
 		}
@@ -223,5 +249,5 @@ func buildRerunOutgoingHistory(
 		}
 		out[e.GetEventId()] = chunk
 	}
-	return out
+	return out, nil
 }
