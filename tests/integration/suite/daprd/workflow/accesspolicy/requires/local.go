@@ -103,10 +103,12 @@ spec:
       name: ProcessPayment
       action: allow
       requires:
-      - status: Completed
-        activityName: FraudCheckPassed
-      - status: Completed
-        activityName: HumanApprovalReceived
+      - eventType: activity
+        status: Completed
+        name: FraudCheckPassed
+      - eventType: activity
+        status: Completed
+        name: HumanApprovalReceived
 `)
 
 	resDir := t.TempDir()

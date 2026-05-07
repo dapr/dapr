@@ -49,7 +49,7 @@ func init() {
 // previously completed `FraudCheckPassed` AND `HumanApprovalReceived`
 // activities AND propagates that history along with the call.
 //
-// verify the following for same-app callers:
+// verify the following for cross-app callers:
 //   - history satisfies both requirements and is propagated  = allowed
 //   - history is missing one of the required completions     = denied
 //   - history is complete but the caller does not propagate  = denied
@@ -104,23 +104,27 @@ spec:
       name: ProcessPayment
       action: allow
       requires:
-      - status: Completed
-        activityName: FraudCheckPassed
-      - status: Completed
-        activityName: HumanApprovalReceived
+      - eventType: activity
+        status: Completed
+        name: FraudCheckPassed
+      - eventType: activity
+        status: Completed
+        name: HumanApprovalReceived
     - type: activity
       name: ProcessPaymentAppGated
       action: allow
       requires:
-      - status: Completed
-        activityName: FraudCheckPassed
+      - eventType: activity
+        status: Completed
+        name: FraudCheckPassed
         appID: wfacl-requires-caller
     - type: activity
       name: ProcessPaymentAppMismatch
       action: allow
       requires:
-      - status: Completed
-        activityName: FraudCheckPassed
+      - eventType: activity
+        status: Completed
+        name: FraudCheckPassed
         appID: nonexistent-app
     - type: activity
       name: LogReceipt

@@ -30,7 +30,7 @@ var log = logger.NewLogger("dapr.acl.workflow")
 // apply to the app (via scopes).
 type CompiledPolicies struct {
 	rules         []compiledRule
-	defaultAction wfaclapi.PolicyAction // "allow" or "deny" - deny if any policy says deny
+	defaultAction wfaclapi.PolicyAction
 
 	// wildcardAllowed[caller][opType] is set when the caller has at least one
 	// allow rule with name="*" for opType. Required for IsCallerKnown because
@@ -57,11 +57,9 @@ type compiledOp struct {
 	opType        OperationType
 	pattern       string
 	action        wfaclapi.PolicyAction
-	literalPrefix int // length of literal prefix before first wildcard
+	literalPrefix int
 	isExact       bool
-	// requires is the list of history events that must all be satisfied by
-	// the caller's propagated history for this rule to apply
-	requires []wfaclapi.RequiredEvent
+	requires      []wfaclapi.RequiredEvent
 }
 
 // Compile builds a CompiledPolicies from a set of WorkflowAccessPolicy
@@ -104,7 +102,6 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 			}
 
 			for _, op := range rule.Operations {
-				// Validate glob pattern
 				if _, err := path.Match(op.Name, ""); err != nil {
 					log.Warnf("Invalid glob pattern '%s' in WorkflowAccessPolicy '%s', skipping operation", op.Name, policy.Name)
 					continue
@@ -187,7 +184,6 @@ func (cp *CompiledPolicies) IsCallerKnown(callerAppID string, opType OperationTy
 // unmet Requires, otherwise NotAllowed.
 func (cp *CompiledPolicies) Evaluate(callerAppID string, opType OperationType, opName string, history *protos.PropagatedHistory) (bool, DenialReason) {
 	if cp == nil {
-		// No policies means allow all (backward compatible).
 		return true, DenialReasonNone
 	}
 
@@ -196,7 +192,6 @@ func (cp *CompiledPolicies) Evaluate(callerAppID string, opType OperationType, o
 	for i := range cp.rules {
 		rule := &cp.rules[i]
 
-		// Check if this rule applies to the caller.
 		if len(rule.callerAppIDs) > 0 {
 			if _, ok := rule.callerAppIDs[callerAppID]; !ok {
 				continue
@@ -206,12 +201,10 @@ func (cp *CompiledPolicies) Evaluate(callerAppID string, opType OperationType, o
 		for j := range rule.operations {
 			op := &rule.operations[j]
 
-			// Check operation type matches.
 			if op.opType != opType {
 				continue
 			}
 
-			// Check name matches glob pattern.
 			matched, err := path.Match(op.pattern, opName)
 			if err != nil || !matched {
 				continue
@@ -224,7 +217,6 @@ func (cp *CompiledPolicies) Evaluate(callerAppID string, opType OperationType, o
 				continue
 			}
 
-			// Select the most specific match.
 			if bestMatch == nil || isMoreSpecific(op, bestMatch) {
 				bestMatch = op
 			}
@@ -266,8 +258,6 @@ func isMoreSpecific(a, b *compiledOp) bool {
 	return false
 }
 
-// literalPrefixLen returns the length of the string before the first wildcard
-// character (*, ?, or [).
 func literalPrefixLen(pattern string) int {
 	for i, c := range pattern {
 		if c == '*' || c == '?' || c == '[' {
@@ -277,9 +267,20 @@ func literalPrefixLen(pattern string) int {
 	return len(pattern)
 }
 
-// containsWildcard returns true if the pattern contains any glob wildcard.
 func containsWildcard(pattern string) bool {
 	return strings.ContainsAny(pattern, "*?[")
+}
+
+const (
+	DeniedMessageBase         = "access denied by workflow access policy"
+	DeniedMarkerRequiresUnmet = "[requires]"
+)
+
+func DeniedMessageFor(reason DenialReason) string {
+	if reason == DenialReasonRequiresUnmet {
+		return DeniedMessageBase + " " + DeniedMarkerRequiresUnmet
+	}
+	return DeniedMessageBase
 }
 
 // DenialReason explains why a request was denied; empty when allowed.
@@ -342,9 +343,8 @@ func EnforceRequest(policies *CompiledPolicies, callerAppID string, actorType st
 	}, nil
 }
 
-// requiresSatisfied reports whether every entry in `requires` can be located
-// in the provided propagated history. Returns false if history is nil or
-// empty when there is at least one requirement.
+// requiresSatisfied reports whether every requires entry has a matching
+// event in history.
 func requiresSatisfied(requires []wfaclapi.RequiredEvent, history *protos.PropagatedHistory) bool {
 	if len(requires) == 0 {
 		return true
@@ -353,8 +353,7 @@ func requiresSatisfied(requires []wfaclapi.RequiredEvent, history *protos.Propag
 		return false
 	}
 
-	// Index TaskScheduled/ChildWorkflowInstanceCreated by event ID so
-	// completion and failure events can resolve their name.
+	// Index by event ID so completion/failure events can resolve their scheduled name.
 	events := history.GetEvents()
 	taskScheduledByID := make(map[int32]*protos.TaskScheduledEvent, len(events))
 	childCreatedByID := make(map[int32]*protos.ChildWorkflowInstanceCreatedEvent, len(events))
@@ -367,24 +366,35 @@ func requiresSatisfied(requires []wfaclapi.RequiredEvent, history *protos.Propag
 		}
 	}
 
+	// Build event-index
+	chunkByEventIdx := make([]*protos.PropagatedHistoryChunk, len(events))
+	for _, c := range history.GetChunks() {
+		start := int(c.GetStartEventIndex())
+		end := start + int(c.GetEventCount())
+		if end > len(events) {
+			end = len(events)
+		}
+		for i := start; i < end; i++ {
+			chunkByEventIdx[i] = c
+		}
+	}
+
 	for i := range requires {
-		if !findMatchingEvent(&requires[i], history, taskScheduledByID, childCreatedByID) {
+		if !findMatchingEvent(&requires[i], events, chunkByEventIdx, taskScheduledByID, childCreatedByID) {
 			return false
 		}
 	}
 	return true
 }
 
-// findMatchingEvent returns true when at least one event in history
-// satisfies req.
+// findMatchingEvent reports whether any event in events satisfies req.
 func findMatchingEvent(
 	req *wfaclapi.RequiredEvent,
-	history *protos.PropagatedHistory,
+	events []*protos.HistoryEvent,
+	chunkByEventIdx []*protos.PropagatedHistoryChunk,
 	taskScheduledByID map[int32]*protos.TaskScheduledEvent,
 	childCreatedByID map[int32]*protos.ChildWorkflowInstanceCreatedEvent,
 ) bool {
-	events := history.GetEvents()
-	chunks := history.GetChunks()
 	for idx, e := range events {
 		if !eventStatusMatches(req, e, taskScheduledByID, childCreatedByID) {
 			continue
@@ -393,9 +403,9 @@ func findMatchingEvent(
 		// PropagatedHistoryChunk carries the producing app's namespace; a
 		// matching `Namespace` field would then live alongside `AppID` on
 		// RequiredEvent.
-		if req.AppID != "" {
-			chunk := chunkForEventIndex(chunks, idx)
-			if chunk == nil || chunk.GetAppId() != req.AppID {
+		if req.AppID != nil {
+			chunk := chunkByEventIdx[idx]
+			if chunk == nil || chunk.GetAppId() != *req.AppID {
 				continue
 			}
 		}
@@ -404,85 +414,70 @@ func findMatchingEvent(
 	return false
 }
 
-// eventStatusMatches returns true when `e` is the kind of history event
-// described by `req`. Exactly one *Name field on `req` is set (validated by
-// the CRD); it both narrows the category and enforces the name filter.
+// eventStatusMatches reports whether e is the kind of history event described by req.
 func eventStatusMatches(
 	req *wfaclapi.RequiredEvent,
 	e *protos.HistoryEvent,
 	taskScheduledByID map[int32]*protos.TaskScheduledEvent,
 	childCreatedByID map[int32]*protos.ChildWorkflowInstanceCreatedEvent,
 ) bool {
-	switch req.Status {
-	case wfaclapi.RequiredStatusStarted:
-		switch {
-		case req.ActivityName != "":
+	switch req.EventType {
+	case wfaclapi.RequiredEventTypeActivity:
+		switch req.Status {
+		case wfaclapi.RequiredStatusStarted:
 			ts := e.GetTaskScheduled()
-			return ts != nil && ts.GetName() == req.ActivityName
-		case req.WorkflowName != "":
-			if es := e.GetExecutionStarted(); es != nil && es.GetName() == req.WorkflowName {
-				return true
-			}
-			if cwc := e.GetChildWorkflowInstanceCreated(); cwc != nil && cwc.GetName() == req.WorkflowName {
-				return true
-			}
-			return false
-		}
-
-	case wfaclapi.RequiredStatusCompleted:
-		switch {
-		case req.ActivityName != "":
+			return ts != nil && ts.GetName() == req.Name
+		case wfaclapi.RequiredStatusCompleted:
 			tc := e.GetTaskCompleted()
 			if tc == nil {
 				return false
 			}
 			ts, ok := taskScheduledByID[tc.GetTaskScheduledId()]
-			return ok && ts.GetName() == req.ActivityName
-		case req.WorkflowName != "":
-			if cwc := e.GetChildWorkflowInstanceCompleted(); cwc != nil {
-				cc, ok := childCreatedByID[cwc.GetTaskScheduledId()]
-				return ok && cc.GetName() == req.WorkflowName
-			}
-			return false
-		}
-
-	case wfaclapi.RequiredStatusFailed:
-		switch {
-		case req.ActivityName != "":
+			return ok && ts.GetName() == req.Name
+		case wfaclapi.RequiredStatusFailed:
 			tf := e.GetTaskFailed()
 			if tf == nil {
 				return false
 			}
 			ts, ok := taskScheduledByID[tf.GetTaskScheduledId()]
-			return ok && ts.GetName() == req.ActivityName
-		case req.WorkflowName != "":
+			return ok && ts.GetName() == req.Name
+		}
+
+	case wfaclapi.RequiredEventTypeWorkflow:
+		switch req.Status {
+		case wfaclapi.RequiredStatusStarted:
+			// "workflow" started covers either the workflow's own
+			// ExecutionStarted or a child-workflow creation.
+			if es := e.GetExecutionStarted(); es != nil && es.GetName() == req.Name {
+				return true
+			}
+			if cwc := e.GetChildWorkflowInstanceCreated(); cwc != nil && cwc.GetName() == req.Name {
+				return true
+			}
+			return false
+		case wfaclapi.RequiredStatusCompleted:
+			// ExecutionCompleted carries no name on the event itself, so a
+			// name filter only matches a child-workflow completion.
+			if cwc := e.GetChildWorkflowInstanceCompleted(); cwc != nil {
+				cc, ok := childCreatedByID[cwc.GetTaskScheduledId()]
+				return ok && cc.GetName() == req.Name
+			}
+			return false
+		case wfaclapi.RequiredStatusFailed:
 			cwf := e.GetChildWorkflowInstanceFailed()
 			if cwf == nil {
 				return false
 			}
 			cc, ok := childCreatedByID[cwf.GetTaskScheduledId()]
-			return ok && cc.GetName() == req.WorkflowName
+			return ok && cc.GetName() == req.Name
 		}
 
-	case wfaclapi.RequiredStatusRaised:
-		if req.EventName == "" || req.ActivityName != "" || req.WorkflowName != "" {
+	case wfaclapi.RequiredEventTypeEvent:
+		if req.Status != wfaclapi.RequiredStatusRaised {
 			return false
 		}
 		er := e.GetEventRaised()
-		return er != nil && er.GetName() == req.EventName
+		return er != nil && er.GetName() == req.Name
 	}
 	return false
-}
-
-// chunkForEventIndex returns the propagated chunk that owns the event at
-// the given index in PropagatedHistory.events, or nil if not found.
-func chunkForEventIndex(chunks []*protos.PropagatedHistoryChunk, eventIdx int) *protos.PropagatedHistoryChunk {
-	for _, c := range chunks {
-		start := int(c.GetStartEventIndex())
-		end := start + int(c.GetEventCount())
-		if eventIdx >= start && eventIdx < end {
-			return c
-		}
-	}
-	return nil
 }

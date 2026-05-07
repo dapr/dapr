@@ -106,11 +106,7 @@ func (a *DaprRuntime) buildWorkflowACLChecker() actorrouter.WorkflowACLChecker {
 		if !result.Allowed {
 			log.Warnf("Workflow access policy denied app '%s' for %s operation '%s' (reason=%s)", callerAppID, result.OpType, result.Operation, result.Reason)
 			diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(result.OpType), result.Operation, string(result.Reason))
-			msg := "access denied by workflow access policy"
-			if result.Reason == workflowacl.DenialReasonRequiresUnmet {
-				msg = "access denied by workflow access policy [requires]"
-			}
-			return status.Error(codes.PermissionDenied, msg)
+			return status.Error(codes.PermissionDenied, workflowacl.DeniedMessageFor(result.Reason))
 		}
 
 		diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, string(result.OpType), result.Operation)

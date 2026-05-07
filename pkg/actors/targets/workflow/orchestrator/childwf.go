@@ -27,6 +27,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -125,20 +126,18 @@ func isPermissionDenied(err error) bool {
 	return false
 }
 
-const requiresUnmetMarker = "[requires]"
-
 func isPermissionDeniedRequiresUnmet(err error) bool {
 	if err == nil {
 		return false
 	}
 	if st, ok := status.FromError(err); ok && st.Code() == codes.PermissionDenied {
-		return strings.Contains(st.Message(), requiresUnmetMarker)
+		return strings.Contains(st.Message(), workflowacl.DeniedMarkerRequiresUnmet)
 	}
 	var wrapped interface{ GRPCStatus() *status.Status }
 	if errors.As(err, &wrapped) {
 		s := wrapped.GRPCStatus()
 		if s.Code() == codes.PermissionDenied {
-			return strings.Contains(s.Message(), requiresUnmetMarker)
+			return strings.Contains(s.Message(), workflowacl.DeniedMarkerRequiresUnmet)
 		}
 	}
 	return false

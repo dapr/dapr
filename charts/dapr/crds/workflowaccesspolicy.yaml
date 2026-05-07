@@ -104,51 +104,52 @@ spec:
                             description: |-
                               Requires is a list of history events that must all be present in
                               the caller's propagated workflow history for this rule to apply.
-                              Nothing is required if empty.
+                              Entries are evaluated as a set — order is not significant, and
+                              the events themselves need not appear in any particular order.
+                              When empty, no requirements apply.
                             items:
                               description: |-
                                 RequiredEvent describes a history event that must be present in
-                                the caller's propagated workflow history before the enclosing
-                                operation rule applies. The event category is inferred from
-                                which *Name field is set, exactly one must be set.
+                                the caller's propagated workflow history. eventType=event must
+                                be paired with status=Raised; eventType=activity|workflow forbids
+                                status=Raised.
                               x-kubernetes-validations:
-                              - rule: "(has(self.activityName) ? 1 : 0) + (has(self.workflowName) ? 1 : 0) + (has(self.eventName) ? 1 : 0) == 1"
-                                message: "exactly one of activityName, workflowName, or eventName must be set"
+                              - rule: "self.eventType == 'event' ? self.status == 'Raised' : self.status != 'Raised'"
+                                message: "eventType=event requires status=Raised; eventType=activity|workflow forbids status=Raised"
                               properties:
-                                activityName:
-                                  description: |-
-                                    ActivityName, when set, restricts the match to events
-                                    produced by the named activity.
-                                  type: string
                                 appID:
                                   description: |-
                                     AppID, when set, requires the matched event to have been
                                     produced by the named app.
                                   type: string
-                                eventName:
+                                eventType:
+                                  description: EventType is the category of history event to match.
+                                  enum:
+                                  - activity
+                                  - workflow
+                                  - event
+                                  type: string
+                                name:
                                   description: |-
-                                    EventName, when set, restricts the match to an external
-                                    event with the given name. Only valid with status=Raised.
+                                    Name is the activity/workflow name (eventType=activity|workflow)
+                                    or the external event name (eventType=event).
+                                  minLength: 1
                                   type: string
                                 status:
                                   description: |-
-                                    Status is the lifecycle phase that the matched history event
-                                    must have. Started, Completed and Failed apply uniformly to
-                                    activities, child workflows and the workflow's own execution
-                                    (resolved by which *Name field is set). Raised is reserved
-                                    for external events.
+                                    Status is the lifecycle phase the matched event must have.
+                                    Started/Completed/Failed apply to eventType=activity and
+                                    eventType=workflow; Raised is the only valid status for
+                                    eventType=event.
                                   enum:
                                   - Started
                                   - Completed
                                   - Failed
                                   - Raised
                                   type: string
-                                workflowName:
-                                  description: |-
-                                    WorkflowName, when set, restricts the match to a workflow or
-                                    child-workflow event produced by the named workflow.
-                                  type: string
                               required:
+                              - eventType
+                              - name
                               - status
                               type: object
                             type: array

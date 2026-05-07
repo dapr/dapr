@@ -25,18 +25,6 @@ import (
 	"github.com/dapr/dapr/pkg/security/spiffe"
 )
 
-const (
-	workflowACLDeniedMsg        = "access denied by workflow access policy"
-	workflowACLRequiresUnmetMsg = "access denied by workflow access policy [requires]"
-)
-
-func deniedMsgFor(reason workflowacl.DenialReason) string {
-	if reason == workflowacl.DenialReasonRequiresUnmet {
-		return workflowACLRequiresUnmetMsg
-	}
-	return workflowACLDeniedMsg
-}
-
 // callActorValidateWorkflowACL checks whether the caller is allowed to invoke
 // the target workflow or activity based on WorkflowAccessPolicy resources.
 // Returns nil if no policy applies or the call is allowed; returns
@@ -75,7 +63,7 @@ func (a *api) callActorValidateWorkflowACL(ctx context.Context, in *internalv1pb
 	if !result.Allowed {
 		a.logger.Warnf("Workflow access policy denied app '%s' for %s operation '%s' (reason=%s)", callerAppID, result.OpType, result.Operation, result.Reason)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(result.OpType), result.Operation, string(result.Reason))
-		return status.Error(codes.PermissionDenied, deniedMsgFor(result.Reason))
+		return status.Error(codes.PermissionDenied, workflowacl.DeniedMessageFor(result.Reason))
 	}
 
 	diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, string(result.OpType), result.Operation)
@@ -110,7 +98,7 @@ func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *inte
 	if !policies.IsCallerKnown(callerAppID, opType) {
 		a.logger.Warnf("Workflow access policy denied app '%s' from invoking workflow reminders", callerAppID)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, "reminder", "invoke", string(workflowacl.DenialReasonNotAllowed))
-		return status.Errorf(codes.PermissionDenied, workflowACLDeniedMsg)
+		return status.Errorf(codes.PermissionDenied, workflowacl.DeniedMessageBase)
 	}
 
 	diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, "reminder", "invoke")
@@ -126,7 +114,7 @@ func (a *api) extractCallerIdentity(ctx context.Context) (appID, namespace strin
 		return "", "", status.Error(codes.Internal, "workflow access policy: failed to extract caller identity")
 	}
 	if !ok {
-		return "", "", status.Error(codes.PermissionDenied, workflowACLDeniedMsg)
+		return "", "", status.Error(codes.PermissionDenied, workflowacl.DeniedMessageBase)
 	}
 
 	return spiffeID.AppID(), spiffeID.Namespace(), nil
@@ -136,7 +124,7 @@ func (a *api) extractCallerIdentity(ctx context.Context) (appID, namespace strin
 func (a *api) checkNamespace(callerNamespace string) error {
 	if callerNamespace != "" && callerNamespace != a.Namespace() {
 		a.logger.Warnf("Workflow access policy denied cross-namespace call (caller namespace '%s' != target namespace '%s')", callerNamespace, a.Namespace())
-		return status.Errorf(codes.PermissionDenied, workflowACLDeniedMsg)
+		return status.Errorf(codes.PermissionDenied, workflowacl.DeniedMessageBase)
 	}
 	return nil
 }

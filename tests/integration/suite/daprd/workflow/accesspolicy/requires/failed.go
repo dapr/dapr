@@ -111,8 +111,9 @@ spec:
       name: Compensate
       action: allow
       requires:
-      - status: Failed
-        activityName: ChargeCard
+      - eventType: activity
+        status: Failed
+        name: ChargeCard
 `)
 
 	resDir := t.TempDir()

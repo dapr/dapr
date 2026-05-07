@@ -175,18 +175,27 @@ type WorkflowOperationRule struct {
 	Action PolicyAction `json:"action"`
 
 	// Requires is a list of history events that must all be present in the
-	// caller's propagated workflow history for this rule to apply. When set,
-	// the rule only matches if every entry can be located in the caller's
-	// history. When the field is omitted/empty, means nothing is required.
+	// caller's propagated workflow history for this rule to apply. Entries
+	// are evaluated as a set — the order of entries is not significant, and
+	// the events themselves need not appear in any particular order in the
+	// caller's history. When the field is omitted/empty, no requirements
+	// apply.
 	// +optional
 	Requires []RequiredEvent `json:"requires,omitempty"`
 }
 
+// RequiredEventType is the category of history event a RequiredEvent matches.
+type RequiredEventType string
+
+const (
+	RequiredEventTypeActivity RequiredEventType = "activity"
+	RequiredEventTypeWorkflow RequiredEventType = "workflow"
+	RequiredEventTypeEvent    RequiredEventType = "event"
+)
+
 // RequiredStatus is the lifecycle phase of a history event referenced by a
-// RequiredEvent. Started, Completed and Failed apply uniformly to activities,
-// child workflows, and the workflow's own execution. The category is inferred
-// from which *Name field is set on the enclosing RequiredEvent. Raised
-// matches external events.
+// RequiredEvent. Started/Completed/Failed apply to eventType=activity and
+// eventType=workflow; Raised is the only valid status for eventType=event.
 type RequiredStatus string
 
 const (
@@ -197,32 +206,28 @@ const (
 )
 
 // RequiredEvent is a single entry in a rule's Requires list. It matches when
-// the caller's propagated history contains an event with the given Status
-// produced by the named activity / workflow / external event. Exactly one
-// of activityName, workflowName, or eventName must be set.
+// the caller's propagated history contains an event of the given EventType
+// and Status with the given Name. eventType=event must be paired with
+// status=Raised; eventType=activity/workflow forbids status=Raised.
 //
-// +kubebuilder:validation:XValidation:rule="(has(self.activityName) ? 1 : 0) + (has(self.workflowName) ? 1 : 0) + (has(self.eventName) ? 1 : 0) == 1",message="exactly one of activityName, workflowName, or eventName must be set"
+// +kubebuilder:validation:XValidation:rule="self.eventType == 'event' ? self.status == 'Raised' : self.status != 'Raised'",message="eventType=event requires status=Raised; eventType=activity|workflow forbids status=Raised"
 type RequiredEvent struct {
+	// EventType is the category of history event to match.
+	// +kubebuilder:validation:Enum=activity;workflow;event
+	EventType RequiredEventType `json:"eventType"`
+
+	// Status is the lifecycle phase the matched event must have.
 	// +kubebuilder:validation:Enum=Started;Completed;Failed;Raised
 	Status RequiredStatus `json:"status"`
 
-	// ActivityName restricts the match to events produced by the named activity.
-	// +optional
-	ActivityName string `json:"activityName,omitempty"`
-
-	// WorkflowName restricts the match to events produced by the named workflow
-	// (own or child).
-	// +optional
-	WorkflowName string `json:"workflowName,omitempty"`
-
-	// EventName restricts the match to an external event with the given name.
-	// Only valid with Status=Raised.
-	// +optional
-	EventName string `json:"eventName,omitempty"`
+	// Name is the activity/workflow name (eventType=activity|workflow) or
+	// the external event name (eventType=event).
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
 
 	// AppID restricts the match to events produced by the named app.
 	// +optional
-	AppID string `json:"appID,omitempty"`
+	AppID *string `json:"appID,omitempty"`
 }
 
 // +kubebuilder:object:root=true

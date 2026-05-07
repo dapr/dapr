@@ -16,6 +16,7 @@ package validate
 import (
 	"testing"
 
+	"github.com/dapr/kit/ptr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -162,13 +163,15 @@ func TestWorkflowAccessPolicy_ValidRequires(t *testing.T) {
 	p := validPolicy()
 	p.Spec.Rules[0].Operations[0].Requires = []wfaclapi.RequiredEvent{
 		{
-			Status:       wfaclapi.RequiredStatusCompleted,
-			ActivityName: "FraudCheckPassed",
+			EventType: wfaclapi.RequiredEventTypeActivity,
+			Status:    wfaclapi.RequiredStatusCompleted,
+			Name:      "FraudCheckPassed",
 		},
 		{
-			Status:       wfaclapi.RequiredStatusCompleted,
-			ActivityName: "HumanApprovalReceived",
-			AppID:        "approvals-service",
+			EventType: wfaclapi.RequiredEventTypeActivity,
+			Status:    wfaclapi.RequiredStatusCompleted,
+			Name:      "HumanApprovalReceived",
+			AppID:     ptr.Of("approvals-service"),
 		},
 	}
 	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
@@ -177,8 +180,9 @@ func TestWorkflowAccessPolicy_ValidRequires(t *testing.T) {
 func TestWorkflowAccessPolicy_RequiresEventRaised(t *testing.T) {
 	p := validPolicy()
 	p.Spec.Rules[0].Operations[0].Requires = []wfaclapi.RequiredEvent{{
+		EventType: wfaclapi.RequiredEventTypeEvent,
 		Status:    wfaclapi.RequiredStatusRaised,
-		EventName: "ManagerApproved",
+		Name:      "ManagerApproved",
 	}}
 	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
 }
@@ -186,7 +190,9 @@ func TestWorkflowAccessPolicy_RequiresEventRaised(t *testing.T) {
 func TestWorkflowAccessPolicy_InvalidRequiresStatus(t *testing.T) {
 	p := validPolicy()
 	p.Spec.Rules[0].Operations[0].Requires = []wfaclapi.RequiredEvent{{
-		Status: wfaclapi.RequiredStatus("bogus"),
+		EventType: wfaclapi.RequiredEventTypeActivity,
+		Status:    wfaclapi.RequiredStatus("bogus"),
+		Name:      "X",
 	}}
 	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
@@ -195,30 +201,53 @@ func TestWorkflowAccessPolicy_InvalidRequiresStatus(t *testing.T) {
 func TestWorkflowAccessPolicy_RequiresMissingStatus(t *testing.T) {
 	p := validPolicy()
 	p.Spec.Rules[0].Operations[0].Requires = []wfaclapi.RequiredEvent{{
-		ActivityName: "OnlyName",
+		EventType: wfaclapi.RequiredEventTypeActivity,
+		Name:      "OnlyName",
 	}}
 	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }
 
-func TestWorkflowAccessPolicy_RequiresNoNameRejected(t *testing.T) {
+func TestWorkflowAccessPolicy_RequiresMissingEventType(t *testing.T) {
 	p := validPolicy()
 	p.Spec.Rules[0].Operations[0].Requires = []wfaclapi.RequiredEvent{{
 		Status: wfaclapi.RequiredStatusCompleted,
+		Name:   "X",
 	}}
 	err := WorkflowAccessPolicy(t.Context(), p)
-	require.Error(t, err, "no *Name field set must be rejected")
-	assert.Contains(t, err.Error(), "exactly one of activityName, workflowName, or eventName")
+	require.Error(t, err)
 }
 
-func TestWorkflowAccessPolicy_RequiresMultipleNamesRejected(t *testing.T) {
+func TestWorkflowAccessPolicy_RequiresMissingName(t *testing.T) {
 	p := validPolicy()
 	p.Spec.Rules[0].Operations[0].Requires = []wfaclapi.RequiredEvent{{
-		Status:       wfaclapi.RequiredStatusCompleted,
-		ActivityName: "FraudCheckPassed",
-		WorkflowName: "AlsoSet",
+		EventType: wfaclapi.RequiredEventTypeActivity,
+		Status:    wfaclapi.RequiredStatusCompleted,
 	}}
 	err := WorkflowAccessPolicy(t.Context(), p)
-	require.Error(t, err, "more than one *Name field set must be rejected")
-	assert.Contains(t, err.Error(), "exactly one of activityName, workflowName, or eventName")
+	require.Error(t, err)
+}
+
+func TestWorkflowAccessPolicy_EventTypeEventForbidsNonRaisedStatus(t *testing.T) {
+	p := validPolicy()
+	p.Spec.Rules[0].Operations[0].Requires = []wfaclapi.RequiredEvent{{
+		EventType: wfaclapi.RequiredEventTypeEvent,
+		Status:    wfaclapi.RequiredStatusCompleted, // invalid combo
+		Name:      "ManagerApproved",
+	}}
+	err := WorkflowAccessPolicy(t.Context(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "eventType=event requires status=Raised")
+}
+
+func TestWorkflowAccessPolicy_NonEventTypeForbidsRaisedStatus(t *testing.T) {
+	p := validPolicy()
+	p.Spec.Rules[0].Operations[0].Requires = []wfaclapi.RequiredEvent{{
+		EventType: wfaclapi.RequiredEventTypeActivity,
+		Status:    wfaclapi.RequiredStatusRaised, // invalid combo
+		Name:      "X",
+	}}
+	err := WorkflowAccessPolicy(t.Context(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forbids status=Raised")
 }

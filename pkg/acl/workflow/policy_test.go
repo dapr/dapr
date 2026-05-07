@@ -23,6 +23,7 @@ import (
 
 	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/durabletask-go/api/protos"
+	"github.com/dapr/kit/ptr"
 )
 
 // evalAllowed runs Evaluate and returns just the allow/deny decision- used by tests
@@ -951,8 +952,8 @@ func TestEvaluateWithHistory_RequiresActivityCompleted(t *testing.T) {
 				Name:   "ProcessPayment",
 				Action: wfaclapi.PolicyActionAllow,
 				Requires: []wfaclapi.RequiredEvent{
-					{Status: wfaclapi.RequiredStatusCompleted, ActivityName: "FraudCheckPassed"},
-					{Status: wfaclapi.RequiredStatusCompleted, ActivityName: "HumanApprovalReceived"},
+					{EventType: wfaclapi.RequiredEventTypeActivity, Status: wfaclapi.RequiredStatusCompleted, Name: "FraudCheckPassed"},
+					{EventType: wfaclapi.RequiredEventTypeActivity, Status: wfaclapi.RequiredStatusCompleted, Name: "HumanApprovalReceived"},
 				},
 			}},
 		}}),
@@ -998,7 +999,7 @@ func TestEvaluateWithHistory_RequiresFallsThroughToOtherRules(t *testing.T) {
 					Name:   "Sensitive",
 					Action: wfaclapi.PolicyActionDeny,
 					Requires: []wfaclapi.RequiredEvent{
-						{Status: wfaclapi.RequiredStatusRaised, EventName: "DeleteApprovedByOps"},
+						{EventType: wfaclapi.RequiredEventTypeEvent, Status: wfaclapi.RequiredStatusRaised, Name: "DeleteApprovedByOps"},
 					},
 				},
 			},
@@ -1022,9 +1023,10 @@ func TestEvaluateWithHistory_RequiresAppIDFilter(t *testing.T) {
 				Name:   "ProcessPayment",
 				Action: wfaclapi.PolicyActionAllow,
 				Requires: []wfaclapi.RequiredEvent{{
-					Status:       wfaclapi.RequiredStatusCompleted,
-					ActivityName: "FraudCheckPassed",
-					AppID:        "fraud-service",
+					EventType: wfaclapi.RequiredEventTypeActivity,
+					Status:    wfaclapi.RequiredStatusCompleted,
+					Name:      "FraudCheckPassed",
+					AppID:     ptr.Of("fraud-service"),
 				}},
 			}},
 		}}),
@@ -1056,7 +1058,7 @@ func TestEvaluateWithHistory_RequiresActivityFailed(t *testing.T) {
 				Name:   "Compensate",
 				Action: wfaclapi.PolicyActionAllow,
 				Requires: []wfaclapi.RequiredEvent{{
-					Status: wfaclapi.RequiredStatusFailed, ActivityName: "ChargeCard",
+					EventType: wfaclapi.RequiredEventTypeActivity, Status: wfaclapi.RequiredStatusFailed, Name: "ChargeCard",
 				}},
 			}},
 		}}),
@@ -1085,7 +1087,7 @@ func TestEvaluateWithHistory_RequiresEventRaisedNameMustMatch(t *testing.T) {
 				Name:   "Refund",
 				Action: wfaclapi.PolicyActionAllow,
 				Requires: []wfaclapi.RequiredEvent{{
-					Status: wfaclapi.RequiredStatusRaised, EventName: "ManagerApproved",
+					EventType: wfaclapi.RequiredEventTypeEvent, Status: wfaclapi.RequiredStatusRaised, Name: "ManagerApproved",
 				}},
 			}},
 		}}),
@@ -1120,7 +1122,7 @@ func TestRequiresSatisfied_NilHistoryWithNoRequires(t *testing.T) {
 func TestRequiresSatisfied_NilHistoryWithRequires(t *testing.T) {
 	assert.False(t, requiresSatisfied(
 		[]wfaclapi.RequiredEvent{{
-			Status: wfaclapi.RequiredStatusCompleted, ActivityName: "Prereq",
+			EventType: wfaclapi.RequiredEventTypeActivity, Status: wfaclapi.RequiredStatusCompleted, Name: "Prereq",
 		}},
 		nil,
 	))
@@ -1145,14 +1147,14 @@ func TestRequiresSatisfied_ChunkBoundaryLookup(t *testing.T) {
 	// Require completion of "B" produced by "second-app" — should match.
 	assert.True(t, requiresSatisfied(
 		[]wfaclapi.RequiredEvent{{
-			Status: wfaclapi.RequiredStatusCompleted, ActivityName: "B", AppID: "second-app",
+			EventType: wfaclapi.RequiredEventTypeActivity, Status: wfaclapi.RequiredStatusCompleted, Name: "B", AppID: ptr.Of("second-app"),
 		}},
 		hist,
 	))
 	// Require completion of "B" produced by "first-app" — should not match.
 	assert.False(t, requiresSatisfied(
 		[]wfaclapi.RequiredEvent{{
-			Status: wfaclapi.RequiredStatusCompleted, ActivityName: "B", AppID: "first-app",
+			EventType: wfaclapi.RequiredEventTypeActivity, Status: wfaclapi.RequiredStatusCompleted, Name: "B", AppID: ptr.Of("first-app"),
 		}},
 		hist,
 	))
@@ -1186,7 +1188,7 @@ func TestEvaluateWithHistory_RequiresStartedAppliesUniformly(t *testing.T) {
 					Type: wfaclapi.WorkflowOperationTypeActivity, Name: "Notify",
 					Action: wfaclapi.PolicyActionAllow,
 					Requires: []wfaclapi.RequiredEvent{{
-						Status: wfaclapi.RequiredStatusStarted, ActivityName: "ChargeCard",
+						EventType: wfaclapi.RequiredEventTypeActivity, Status: wfaclapi.RequiredStatusStarted, Name: "ChargeCard",
 					}},
 				}},
 			}}),
@@ -1209,7 +1211,7 @@ func TestEvaluateWithHistory_RequiresStartedAppliesUniformly(t *testing.T) {
 					Type: wfaclapi.WorkflowOperationTypeActivity, Name: "Notify",
 					Action: wfaclapi.PolicyActionAllow,
 					Requires: []wfaclapi.RequiredEvent{{
-						Status: wfaclapi.RequiredStatusStarted, WorkflowName: "ChildOrder",
+						EventType: wfaclapi.RequiredEventTypeWorkflow, Status: wfaclapi.RequiredStatusStarted, Name: "ChildOrder",
 					}},
 				}},
 			}}),
@@ -1234,7 +1236,7 @@ func TestEvaluateWithHistory_RequiresStartedAppliesUniformly(t *testing.T) {
 					Type: wfaclapi.WorkflowOperationTypeActivity, Name: "Notify",
 					Action: wfaclapi.PolicyActionAllow,
 					Requires: []wfaclapi.RequiredEvent{{
-						Status: wfaclapi.RequiredStatusStarted, WorkflowName: "ParentOrder",
+						EventType: wfaclapi.RequiredEventTypeWorkflow, Status: wfaclapi.RequiredStatusStarted, Name: "ParentOrder",
 					}},
 				}},
 			}}),
@@ -1264,7 +1266,7 @@ func TestEnforceRequest_DenialReason(t *testing.T) {
 					Type: wfaclapi.WorkflowOperationTypeActivity, Name: "ProcessPayment",
 					Action: wfaclapi.PolicyActionAllow,
 					Requires: []wfaclapi.RequiredEvent{{
-						Status: wfaclapi.RequiredStatusCompleted, ActivityName: "FraudCheckPassed",
+						EventType: wfaclapi.RequiredEventTypeActivity, Status: wfaclapi.RequiredStatusCompleted, Name: "FraudCheckPassed",
 					}},
 				},
 				{
@@ -1323,7 +1325,7 @@ func TestEnforceRequest_DenialReason(t *testing.T) {
 						Type: wfaclapi.WorkflowOperationTypeActivity, Name: "ProcessPayment",
 						Action: wfaclapi.PolicyActionAllow,
 						Requires: []wfaclapi.RequiredEvent{{
-							Status: wfaclapi.RequiredStatusCompleted, ActivityName: "FraudCheckPassed",
+							EventType: wfaclapi.RequiredEventTypeActivity, Status: wfaclapi.RequiredStatusCompleted, Name: "FraudCheckPassed",
 						}},
 					},
 				},
@@ -1346,7 +1348,7 @@ func TestEnforceRequest_DenialReason(t *testing.T) {
 					Name:   "GatedWF",
 					Action: wfaclapi.PolicyActionAllow,
 					Requires: []wfaclapi.RequiredEvent{{
-						Status: wfaclapi.RequiredStatusCompleted, ActivityName: "Prereq",
+						EventType: wfaclapi.RequiredEventTypeActivity, Status: wfaclapi.RequiredStatusCompleted, Name: "Prereq",
 					}},
 				}},
 			}}),
@@ -1384,7 +1386,7 @@ func TestEvaluate_RuleWithRequiresIgnoredWithoutHistory(t *testing.T) {
 				Type: wfaclapi.WorkflowOperationTypeActivity, Name: "Pay",
 				Action: wfaclapi.PolicyActionAllow,
 				Requires: []wfaclapi.RequiredEvent{{
-					Status: wfaclapi.RequiredStatusCompleted, ActivityName: "FraudCheckPassed",
+					EventType: wfaclapi.RequiredEventTypeActivity, Status: wfaclapi.RequiredStatusCompleted, Name: "FraudCheckPassed",
 				}},
 			}},
 		}}),
