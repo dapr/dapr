@@ -500,8 +500,9 @@ func (s *Subscription) Stop(err ...error) {
 	}
 	// If there were in-flight requests then wait some time for the result to be
 	// sent to the broker. This is because the message result context is
-	// disparate.
-	if inflight {
+	// disparate. Skipped on ceiling hit: handlers were force-canceled above
+	// and won't be acking, so the wait is wasted shutdown time.
+	if inflight && !hitCeiling {
 		time.Sleep(time.Millisecond * 400)
 	}
 
