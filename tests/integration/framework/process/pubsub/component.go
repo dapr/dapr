@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -43,20 +44,10 @@ type component struct {
 	pauseCalled   atomic.Int64
 	resumeCalled  atomic.Int64
 	pauseStartCh  chan struct{}
-	pauseStartOnc atomicOnce
+	pauseStartOnc sync.Once
 	// pausable opts in to Pause/Resume; default is non-pausable
 	// (returns codes.Unimplemented), matching most pubsub components.
 	pausable bool
-}
-
-// atomicOnce mirrors sync.Once but the channel-firing variant we want
-// here: close pauseStartCh only on the first Pause invocation.
-type atomicOnce struct{ done atomic.Bool }
-
-func (o *atomicOnce) Do(f func()) {
-	if o.done.CompareAndSwap(false, true) {
-		f()
-	}
 }
 
 func newComponent(t *testing.T, opts options) *component {
