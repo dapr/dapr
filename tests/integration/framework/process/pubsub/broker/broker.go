@@ -33,16 +33,41 @@ type Broker struct {
 	socket *socket.Socket
 }
 
-func New(t *testing.T) *Broker {
+// Option configures broker creation.
+type Option func(*brokerOptions)
+
+type brokerOptions struct {
+	pausable bool
+}
+
+// WithPausable opts the pluggable server in to the Pause/Resume RPCs.
+// Default is non-pausable (returns codes.Unimplemented), matching the
+// majority of pubsub components.
+func WithPausable() Option {
+	return func(o *brokerOptions) {
+		o.pausable = true
+	}
+}
+
+func New(t *testing.T, opts ...Option) *Broker {
+	bo := new(brokerOptions)
+	for _, fn := range opts {
+		fn(bo)
+	}
+
 	pmrReqCh := make(chan *compv1.PullMessagesRequest, 1)
 	pmrRespCh := make(chan *compv1.PullMessagesResponse, 1)
 
 	socket := socket.New(t)
-	inmem := pubsub.New(t,
+	psOpts := []pubsub.Option{
 		pubsub.WithSocket(socket),
 		pubsub.WithPullMessagesChannel(pmrReqCh, pmrRespCh),
 		pubsub.WithPubSub(inmemory.NewWrappedInMemory(t)),
-	)
+	}
+	if bo.pausable {
+		psOpts = append(psOpts, pubsub.WithPausable())
+	}
+	inmem := pubsub.New(t, psOpts...)
 
 	return &Broker{
 		pmrReqCh:  pmrReqCh,

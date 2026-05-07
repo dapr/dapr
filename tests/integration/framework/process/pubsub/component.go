@@ -20,6 +20,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	compv1pb "github.com/dapr/dapr/pkg/proto/components/v1"
@@ -41,6 +44,9 @@ type component struct {
 	resumeCalled  atomic.Int64
 	pauseStartCh  chan struct{}
 	pauseStartOnc atomicOnce
+	// pausable opts in to Pause/Resume; default is non-pausable
+	// (returns codes.Unimplemented), matching most pubsub components.
+	pausable bool
 }
 
 // atomicOnce mirrors sync.Once but the channel-firing variant we want
@@ -59,6 +65,7 @@ func newComponent(t *testing.T, opts options) *component {
 		pmrReqCh:     opts.pmrReqCh,
 		pmrRespCh:    opts.pmrRespCh,
 		pauseStartCh: make(chan struct{}),
+		pausable:     opts.pausable,
 	}
 }
 
@@ -176,6 +183,9 @@ func cleanShutdown(err error) error {
 
 func (c *component) Pause(ctx context.Context, req *compv1pb.PauseRequest) (*compv1pb.PauseResponse, error) {
 	c.pauseCalled.Add(1)
+	if !c.pausable {
+		return nil, status.Error(codes.Unimplemented, "pause not implemented")
+	}
 	c.paused.Store(true)
 	c.pauseStartOnc.Do(func() { close(c.pauseStartCh) })
 	return new(compv1pb.PauseResponse), nil
@@ -183,6 +193,9 @@ func (c *component) Pause(ctx context.Context, req *compv1pb.PauseRequest) (*com
 
 func (c *component) Resume(ctx context.Context, req *compv1pb.ResumeRequest) (*compv1pb.ResumeResponse, error) {
 	c.resumeCalled.Add(1)
+	if !c.pausable {
+		return nil, status.Error(codes.Unimplemented, "resume not implemented")
+	}
 	c.paused.Store(false)
 	return new(compv1pb.ResumeResponse), nil
 }

@@ -32,13 +32,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(pausable))
+	suite.Register(new(nonPausable))
 }
 
-// pausable verifies the runtime's pause-and-drain shutdown path: Pause
-// is invoked, in-flight messages drain to the app, post-shutdown
-// publishes get neither ack nor nack.
-type pausable struct {
+// nonPausable verifies the close-first shutdown path: the pluggable server
+// returns Unimplemented from Pause, the runtime falls back silently to
+// close-first, and the in-flight handler still drains via the post-seal
+// inflight wait. Mirrors pausable.go but with a non-pausable broker.
+type nonPausable struct {
 	daprd  *daprd.Daprd
 	broker *broker.Broker
 
@@ -46,7 +47,7 @@ type pausable struct {
 	closeInvoke chan struct{}
 }
 
-func (p *pausable) Setup(t *testing.T) []framework.Option {
+func (p *nonPausable) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
 	app := app.New(t,
@@ -58,7 +59,7 @@ func (p *pausable) Setup(t *testing.T) []framework.Option {
 	)
 
 	p.closeInvoke = make(chan struct{})
-	p.broker = broker.New(t, broker.WithPausable())
+	p.broker = broker.New(t)
 
 	p.daprd = daprd.New(t,
 		p.broker.DaprdOptions(t, "mypub",
@@ -73,15 +74,15 @@ func (p *pausable) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (p *pausable) Run(t *testing.T, ctx context.Context) {
+func (p *nonPausable) Run(t *testing.T, ctx context.Context) {
 	p.daprd.Run(t, ctx)
 	p.daprd.WaitUntilRunning(t, ctx)
 	t.Cleanup(func() { p.daprd.Cleanup(t) })
 
 	assert.Len(t, p.daprd.GetMetaSubscriptions(t, ctx), 1)
 
-	// Publish; handler blocks on closeInvoke so the message is in
-	// flight when shutdown begins.
+	// Publish; handler blocks on closeInvoke so the message is in flight
+	// when shutdown begins.
 	ackCh := p.broker.PublishHelloWorld("a")
 	require.Eventually(t, p.inInvoke.Load, time.Second*10, time.Millisecond*10)
 
@@ -91,15 +92,18 @@ func (p *pausable) Run(t *testing.T, ctx context.Context) {
 		close(cleanupDone)
 	}()
 
-	select {
-	case <-p.broker.PauseStarted():
-	case <-time.After(time.Second * 10):
-		t.Fatal("Pause was not invoked on the pluggable component during graceful shutdown")
-	}
-	assert.GreaterOrEqual(t, p.broker.PauseCalled(), int64(1),
-		"Pause should be called at least once on graceful shutdown")
+	// Pause IS still invoked by the runtime — it's the broker that
+	// returns Unimplemented. The runtime treats that as ErrPausableUnimplemented
+	// and falls back silently to close-first; nothing is paused.
+	require.Eventually(t, func() bool {
+		return p.broker.PauseCalled() >= 1
+	}, time.Second*10, time.Millisecond*10,
+		"runtime should attempt Pause even on a non-pausable component")
+	assert.False(t, p.broker.IsPaused(),
+		"broker should not be in paused state after Unimplemented response")
 
-	// Drain is waiting for the in-flight handler; no ack yet.
+	// Post-seal wait holds Stop until the in-flight handler completes;
+	// no ack should arrive before we release closeInvoke.
 	select {
 	case req := <-ackCh:
 		assert.Fail(t, "unexpected ack returned before handler completed", req)
@@ -108,18 +112,19 @@ func (p *pausable) Run(t *testing.T, ctx context.Context) {
 
 	close(p.closeInvoke)
 
+	// Handler completes; ack flows back. Close-first path still preserves
+	// the in-flight message via the post-seal inflight wait.
 	select {
 	case req := <-ackCh:
 		assert.Nil(t, req.GetAckError(),
-			"buffered message should not be NACK'd during drain")
+			"in-flight message should not be NACK'd on close-first path")
 		assert.Equal(t, "foo", req.GetAckMessageId(),
-			"buffered message should be ACK'd to the broker during drain-to-app")
+			"in-flight message should be ACK'd to the broker")
 	case <-time.After(time.Second * 10):
-		assert.Fail(t, "timeout waiting for drain ack")
+		assert.Fail(t, "timeout waiting for ack on close-first path")
 	}
 
-	// Wait for daprd to fully exit before the post-shutdown publish, so
-	// the still-open PullMessages stream cannot race-deliver it.
+	// Wait for daprd to fully exit before the post-shutdown publish.
 	// Block-shutdown is configured at 10s, plus a small buffer.
 	select {
 	case <-cleanupDone:
