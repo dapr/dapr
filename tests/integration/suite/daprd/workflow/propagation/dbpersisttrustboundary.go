@@ -16,7 +16,6 @@ package propagation
 import (
 	"context"
 	"encoding/base64"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,16 +24,12 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procworkflow "github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
 )
-
-// escapeLike escapes the SQL LIKE wildcards (%, _) and the backslash escape
-// char in s so the result is safe to interpolate as a literal prefix in a
-// parameterized LIKE pattern using `ESCAPE '\'`.
-var escapeLike = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace
 
 func init() {
 	suite.Register(new(dbpersisttrustboundary))
@@ -137,7 +132,7 @@ func (d *dbpersisttrustboundary) Run(t *testing.T, ctx context.Context) {
 	tableName := d.workflow.DB().TableName()
 
 	app2AppID := d.workflow.DaprN(2).AppID()
-	likePattern := escapeLike(app2AppID) + `%propagated-history`
+	likePattern := fworkflow.EscapeLike(app2AppID) + `%propagated-history`
 	rows, err := db.QueryContext(ctx,
 		//nolint:gosec
 		"SELECT key, value, is_binary FROM "+tableName+
@@ -168,9 +163,6 @@ func (d *dbpersisttrustboundary) Run(t *testing.T, ctx context.Context) {
 		chunk := ph.GetChunks()[0]
 		assert.Equal(t, app1AppID, chunk.GetAppId(), "chunk.AppId should be App1, not App0")
 		assert.Equal(t, "middleWf", chunk.GetWorkflowName(), "chunk.WorkflowName should be middleWf, not rootWf")
-		assert.Equal(t, int32(0), chunk.GetStartEventIndex(), "chunk.StartEventIndex")
-		assert.Equal(t, int32(len(ph.GetEvents())), chunk.GetEventCount(), //nolint:gosec
-			"chunk.EventCount should match events length")
 
 		// No App0 chunk leaked
 		for _, c := range ph.GetChunks() {
@@ -178,31 +170,28 @@ func (d *dbpersisttrustboundary) Run(t *testing.T, ctx context.Context) {
 			assert.NotEqual(t, "rootWf", c.GetWorkflowName(), "no chunk should be rootWf")
 		}
 
-		// No App0 events leaked into the events slice, must not contain
-		// rootWf/app0Act events (trust boundary)
-		for _, e := range ph.GetEvents() {
+		// Decode the chunk's rawEvents and assert no App0 events leaked.
+		var sawApp1Act, sawMiddleStarted bool
+		for j, raw := range chunk.GetRawEvents() {
+			var e protos.HistoryEvent
+			require.NoError(t, proto.Unmarshal(raw, &e), "rawEvent %d should decode", j)
 			if ts := e.GetTaskScheduled(); ts != nil {
 				assert.NotEqual(t, activityApp0Act, ts.GetName(),
 					"app0Act should NOT appear in the leaf's persisted events (trust boundary)")
+				if ts.GetName() == "app1Act" {
+					sawApp1Act = true
+				}
 			}
 			if es := e.GetExecutionStarted(); es != nil {
 				assert.NotEqual(t, "rootWf", es.GetName(),
 					"rootWf ExecutionStarted should NOT appear (trust boundary)")
+				if es.GetName() == "middleWf" {
+					sawMiddleStarted = true
+				}
 			}
 			if cw := e.GetChildWorkflowInstanceCreated(); cw != nil {
 				assert.NotEqual(t, "middleWf", cw.GetName(),
-					"App0's ChildWorkflowInstanceCreated(middleWf) should NOT appear — that event belongs to App0's history")
-			}
-		}
-
-		// App1's events
-		var sawApp1Act, sawMiddleStarted bool
-		for _, e := range ph.GetEvents() {
-			if ts := e.GetTaskScheduled(); ts != nil && ts.GetName() == "app1Act" {
-				sawApp1Act = true
-			}
-			if es := e.GetExecutionStarted(); es != nil && es.GetName() == "middleWf" {
-				sawMiddleStarted = true
+					"App0's ChildWorkflowInstanceCreated(middleWf) should NOT appear - that event belongs to App0's history")
 			}
 		}
 		assert.True(t, sawApp1Act, "app1Act TaskScheduled should be present")
