@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
 func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) error {
@@ -164,9 +165,12 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 	}
 
 	startedEvent := o.getExecutionStartedEvent(newState)
+
+	rerunRS := runtimestate.NewOrchestrationRuntimeState(o.actorID, newState.CustomStatus, newState.History)
+
 	if err = errors.Join(
 		o.callChildWorkflows(ctx, startedEvent.GetName(), childWFs),
-		o.callActivities(ctx, activities, newState).err,
+		o.callActivities(ctx, activities, newState, rerunRS).err,
 		o.createTimers(ctx, timers, newState.Generation),
 	); err != nil {
 		return err

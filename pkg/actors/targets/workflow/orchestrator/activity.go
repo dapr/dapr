@@ -22,6 +22,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -29,7 +30,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State) dispatchResult {
+func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State, rs *backend.OrchestrationRuntimeState) dispatchResult {
 	var dueTime time.Time
 	if len(state.History) > 0 {
 		dueTime = state.History[0].GetTimestamp().AsTime()
@@ -39,6 +40,18 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 
 	var result dispatchResult
 	for _, e := range es {
+		// Don't redispatch activities whose resolution is already known to the
+		// current generation's runtime state. We check rs.OldEvents/NewEvents
+		// rather than state.History/state.Inbox because the persisted state has
+		// not been updated yet for this work item; in particular after a
+		// ContinueAsNew the persisted history still reflects the previous
+		// generation, while rs has been reset by the engine and only contains
+		// the current generation's events.
+		if dedup.IsTaskAlreadyResolved(e, rs.GetOldEvents(), rs.GetNewEvents()) {
+			log.Debugf("Workflow actor '%s': skipping dispatch of '%s::%d' - resolution already present", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
+			continue
+		}
+
 		err := o.callActivity(ctx, e, dueTime, state.Generation)
 		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
