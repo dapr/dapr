@@ -120,9 +120,10 @@ func (p *pausable) Run(t *testing.T, ctx context.Context) {
 
 	// Wait for daprd to fully exit before the post-shutdown publish, so
 	// the still-open PullMessages stream cannot race-deliver it.
+	// Block-shutdown is configured at 10s, plus a small buffer.
 	select {
 	case <-cleanupDone:
-	case <-time.After(time.Second * 30):
+	case <-time.After(time.Second * 12):
 		t.Fatal("daprd did not finish shutting down within block-shutdown window")
 	}
 

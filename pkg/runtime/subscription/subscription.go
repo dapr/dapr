@@ -447,12 +447,13 @@ func (s *Subscription) Stop(err ...error) {
 
 	// Atomic polling rather than wg.Wait — contrib retry loops can
 	// bracket the handler with Add/Done around backoffs and race Wait.
-	// drainMaxDuration caps the worst case (stuck app keeping inflight up).
+	// Single shared deadline across the paused drain + post-seal wait so
+	// total Stop time is bounded by drainMaxDuration, not 2x.
+	deadline := time.Now().Add(drainMaxDuration)
 	hitCeiling := false
 	if paused {
 		drainPollInterval := 20 * time.Millisecond
 		requiredStable := 5 // 100ms of stable quiet
-		deadline := time.Now().Add(drainMaxDuration)
 		stable := 0
 		for {
 			if s.inflight.Load() > 0 {
@@ -479,15 +480,17 @@ func (s *Subscription) Stop(err ...error) {
 	s.closed.Store(true)
 
 	// On ceiling hit, force-cancel so stuck handlers' HTTP/gRPC calls
-	// error out via ctx propagation.
+	// error out via ctx propagation. Join with the original cause so
+	// downstream cause-based checks still see the graceful-shutdown
+	// signal alongside the ceiling-exceeded reason.
 	if hitCeiling {
-		s.cancel(errors.New("subscription drain ceiling exceeded"))
+		s.cancel(errors.Join(cause, errors.New("subscription drain ceiling exceeded")))
 	}
 
-	// Wait for any handler still actively processing to finish before
-	// running ack-settle and the final cancel. Bounded so a handler
-	// that ignores ctx.Done cannot block shutdown indefinitely.
-	deadline := time.Now().Add(drainMaxDuration)
+	// Catch any handler that snuck in between drainSealed.Load and
+	// inflight.Add — those resolve in microseconds via ctx propagation.
+	// Reuses the same deadline; if the drain loop already burned it,
+	// this exits immediately.
 	for s.inflight.Load() > 0 && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
