@@ -229,13 +229,14 @@ func TestJobTriggerPerformance(t *testing.T) {
 	err = json.Unmarshal(daprResp, &daprResult)
 	require.NoErrorf(t, err, "failed to unmarshal: %s", string(daprResp))
 
-	// The total number of jobs scheduled is the sum of all returned status codes.
-	totalScheduled := daprResult.RetCodes.Num200 + daprResult.RetCodes.Num400 + daprResult.RetCodes.Num500
-	t.Logf("total jobs scheduled: %d (200s=%d, 400s=%d, 500s=%d)",
-		totalScheduled, daprResult.RetCodes.Num200, daprResult.RetCodes.Num400, daprResult.RetCodes.Num500)
+	totalScheduled := daprResult.DurationHistogram.Count
+	successful := daprResult.RetCodes.Num200 + daprResult.RetCodes.Num204
+	failed := daprResult.RetCodes.Num400 + daprResult.RetCodes.Num500
+	t.Logf("total jobs scheduled: %d (successful=%d [200s=%d, 204s=%d], failed=%d [400s=%d, 500s=%d])",
+		totalScheduled, successful, daprResult.RetCodes.Num200, daprResult.RetCodes.Num204,
+		failed, daprResult.RetCodes.Num400, daprResult.RetCodes.Num500)
 
-	// Wait for all successfully scheduled jobs to be triggered.
-	expectedTriggers := daprResult.RetCodes.Num200
+	expectedTriggers := successful
 	require.Greater(t, expectedTriggers, 0, "expected at least some jobs to be scheduled successfully")
 
 	t.Logf("waiting for %d jobs to be triggered...", expectedTriggers)
