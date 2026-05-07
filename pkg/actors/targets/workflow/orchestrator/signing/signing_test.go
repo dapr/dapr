@@ -266,7 +266,7 @@ func TestSignNewEvents_VerifiesWithHistorySigning(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	err = historysigning.VerifySignature(sig, st.Signatures[0], st.SigningCertificates, rawEvents)
+	err = historysigning.VerifySignature(sig, st.Signatures[0], st.SigningCertificates, rawEvents, nil)
 	require.NoError(t, err)
 }
 
@@ -331,7 +331,7 @@ func TestSignNewEvents_RoundTripDeterminism(t *testing.T) {
 	require.Len(t, rawEvents, 2)
 
 	// Verify chain using loaded raw bytes (same as LoadWorkflowState would).
-	err = historysigning.VerifyChain(historysigning.VerifyChainOptions{
+	_, err = historysigning.VerifyChain(historysigning.VerifyChainOptions{
 		RawSignatures: [][]byte{sigBytes},
 		Certs:         st.SigningCertificates,
 		AllRawEvents:  rawEvents,
@@ -360,7 +360,7 @@ func TestSignNewEvents_RoundTripDeterminism(t *testing.T) {
 	rawEvents = append(rawEvents, newRaw)
 
 	// Verify full chain with both signatures.
-	err = historysigning.VerifyChain(historysigning.VerifyChainOptions{
+	_, err = historysigning.VerifyChain(historysigning.VerifyChainOptions{
 		RawSignatures: st.RawSignatures,
 		Certs:         st.SigningCertificates,
 		AllRawEvents:  rawEvents,
