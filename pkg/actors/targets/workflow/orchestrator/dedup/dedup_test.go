@@ -58,8 +58,8 @@ func childCompleted(id int32) *backend.HistoryEvent {
 	return &backend.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.Now(),
-		EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{
-			ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{
+		EventType: &protos.HistoryEvent_SubOrchestrationInstanceCompleted{
+			SubOrchestrationInstanceCompleted: &protos.SubOrchestrationInstanceCompletedEvent{
 				TaskScheduledId: id,
 			},
 		},
@@ -103,7 +103,7 @@ func TestIsDuplicateCompletion(t *testing.T) {
 		{name: "different id", event: taskCompleted(2), history: []*backend.HistoryEvent{taskCompleted(1)}, want: false},
 		{name: "TimerFired matched", event: timerFired(7), history: []*backend.HistoryEvent{timerFired(7)}, want: true},
 		{name: "Timer id same as Task id is not a match", event: timerFired(1), history: []*backend.HistoryEvent{taskCompleted(1)}, want: false},
-		{name: "ChildWorkflowInstanceCompleted matched", event: childCompleted(4), history: []*backend.HistoryEvent{childCompleted(4)}, want: true},
+		{name: "SubOrchestrationInstanceCompleted matched", event: childCompleted(4), history: []*backend.HistoryEvent{childCompleted(4)}, want: true},
 		{name: "EventRaised never deduped here", event: eventRaised("approval"), history: []*backend.HistoryEvent{eventRaised("approval")}, want: false},
 		{name: "inbox match wins over history mismatch", event: taskCompleted(5), history: []*backend.HistoryEvent{taskCompleted(99)}, inbox: []*backend.HistoryEvent{taskCompleted(5)}, want: true},
 	}
