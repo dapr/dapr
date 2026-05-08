@@ -22,6 +22,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,7 +43,7 @@ const (
 	testLabel       = "jobs"
 
 	// Target QPS for job scheduling.
-	targetScheduleQPS float64 = 750
+	targetScheduleQPS float64 = 600
 
 	// Target QPS for job triggering.
 	targetTriggerQPS float64 = 12700
@@ -213,9 +214,12 @@ func TestJobTriggerPerformance(t *testing.T) {
 		}
 	}
 
+	var wg sync.WaitGroup
 	ch := make(chan int)
 	for j := 0; j < workers; j++ {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			for i := range ch {
 				worker(i)
 			}
@@ -227,6 +231,7 @@ func TestJobTriggerPerformance(t *testing.T) {
 		ch <- i
 	}
 	close(ch)
+	wg.Wait()
 	scheduleDuration := time.Since(scheduleStart)
 	scheduleQPS := float64(jobCount) / scheduleDuration.Seconds()
 	t.Logf("Scheduled %d jobs in %s (%.1fqps)", jobCount, scheduleDuration, scheduleQPS)

@@ -33,6 +33,8 @@ var (
 )
 
 func jobHandler(w http.ResponseWriter, r *http.Request) {
+	io.Copy(io.Discard, r.Body)
+	r.Body.Close()
 	triggeredCount.Add(1)
 	w.WriteHeader(http.StatusOK)
 }
@@ -68,7 +70,9 @@ func scheduleJobHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Printf("failed to copy sidecar response for job %q: %v", name, err)
+	}
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
