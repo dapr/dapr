@@ -442,6 +442,14 @@ func (d *Daprd) GetMetaActorRuntime(t assert.TestingT, ctx context.Context) *Met
 	return d.meta(t, ctx).ActorRuntime
 }
 
+func (d *Daprd) GetMetaResiliencies(t assert.TestingT, ctx context.Context) []*rtv1.MetadataResiliency {
+	return d.meta(t, ctx).Resiliencies
+}
+
+func (d *Daprd) GetMetaWorkflowAccessPolicies(t assert.TestingT, ctx context.Context) []*rtv1.MetadataWorkflowAccessPolicy {
+	return d.meta(t, ctx).WorkflowAccessPolicies
+}
+
 func (d *Daprd) GetMetadata(t assert.TestingT, ctx context.Context) *Metadata {
 	return d.meta(t, ctx)
 }
@@ -456,6 +464,7 @@ type Metadata struct {
 	ActorRuntime           *MetadataActorRuntime                `json:"actorRuntime,omitempty"`
 	Workflows              *MetadataWorkflows                   `json:"workflows"`
 	WorkflowAccessPolicies []*rtv1.MetadataWorkflowAccessPolicy `json:"workflowAccessPolicies,omitempty"`
+	Resiliencies           []*rtv1.MetadataResiliency           `json:"resiliencies,omitempty"`
 }
 
 // MetadataResponsePubsubSubscription copied from pkg/api/http/metadata.go:172 to be able to use in integration tests until we move to Proto format

@@ -111,7 +111,7 @@ func TestClose(t *testing.T) {
 			Healthz:        healthz.New(),
 			WorkflowEngine: wfenginefake.New(),
 		})
-		require.NoError(t, server.StartNonBlocking())
+		require.NoError(t, server.StartNonBlocking(t.Context()))
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		require.NoError(t, server.Close())
 	})
@@ -144,7 +144,7 @@ func TestClose(t *testing.T) {
 			Healthz:        healthz.New(),
 			WorkflowEngine: wfenginefake.New(),
 		})
-		require.NoError(t, server.StartNonBlocking())
+		require.NoError(t, server.StartNonBlocking(t.Context()))
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		require.NoError(t, server.Close())
 	})
