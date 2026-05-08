@@ -20,6 +20,8 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -28,9 +30,6 @@ const (
 	actorTypePrefix = "dapr.internal."
 	suffixWorkflow  = ".workflow"
 	suffixActivity  = ".activity"
-
-	methodCreateWorkflowInstance = "CreateWorkflowInstance"
-	methodExecute                = "Execute"
 )
 
 // OperationType represents the type of workflow operation being performed.
@@ -59,67 +58,94 @@ func ParseActorType(actorType string) (OperationType, bool) {
 	}
 }
 
-// ExtractRequest extracts the workflow or activity name AND the optional
-// PropagatedHistory carried by the request payload. The PropagatedHistory is
-// used by RequiredEvent rules to gate operations on the caller's prior
-// history.
-func ExtractRequest(opType OperationType, method string, data []byte) (string, *protos.PropagatedHistory, bool, error) {
-	switch opType {
-	case OperationTypeWorkflow:
-		return extractWorkflowRequest(method, data)
-	case OperationTypeActivity:
-		return extractActivityRequest(method, data)
+// WorkflowOperationFromMethod returns the WorkflowOperation for a workflow
+// actor method. An empty operation with nil error means the method is not
+// subject to access control (an internal/system method). AddWorkflowEvent's
+// operation is encoded in the HistoryEvent payload; parsedAddEvent must be
+// non-nil for that method so we don't unmarshal twice on the hot path.
+func WorkflowOperationFromMethod(method string, parsedAddEvent *backend.HistoryEvent) (wfaclapi.WorkflowOperation, error) {
+	switch method {
+	case todo.CreateWorkflowInstanceMethod:
+		return wfaclapi.WorkflowOperationSchedule, nil
+
+	case todo.AddWorkflowEventMethod:
+		if parsedAddEvent == nil {
+			return "", errors.New("AddWorkflowEvent: parsed event is required to derive the operation")
+		}
+		return operationFromHistoryEvent(parsedAddEvent)
+
+	case todo.PurgeWorkflowStateMethod:
+		return wfaclapi.WorkflowOperationPurge, nil
+
+	case todo.WaitForRuntimeStatus:
+		return wfaclapi.WorkflowOperationGet, nil
+
+	case todo.ForkWorkflowHistory, todo.RerunWorkflowInstance:
+		return wfaclapi.WorkflowOperationRerun, nil
+
 	default:
-		return "", nil, false, nil
+		return "", nil
 	}
 }
 
-func extractWorkflowRequest(method string, data []byte) (string, *protos.PropagatedHistory, bool, error) {
-	if method != methodCreateWorkflowInstance {
-		// Only CreateWorkflowInstance is subject to access control (schedule
-		// operation).
-		return "", nil, false, nil
+// ActivityNameFromExecute returns the activity name and (optionally) the
+// propagated history from an Execute method payload. Activities are
+// dispatched either as a raw HistoryEvent (legacy) or wrapped in an
+// ActivityInvocation envelope that also carries propagated history. An
+// empty name with nil history and nil error means the method is not
+// Execute (no other activity methods are subject to access control).
+func ActivityNameFromExecute(method string, data []byte) (string, *protos.PropagatedHistory, error) {
+	if method != todo.ExecuteActivityMethod {
+		return "", nil, nil
 	}
 
-	var req backend.CreateWorkflowInstanceRequest
-	if err := proto.Unmarshal(data, &req); err != nil {
-		return "", nil, false, fmt.Errorf("failed to unmarshal CreateWorkflowInstanceRequest: %w", err)
-	}
-
-	es := req.GetStartEvent().GetExecutionStarted()
-	if es == nil {
-		return "", nil, false, errors.New("CreateWorkflowInstanceRequest missing ExecutionStarted event")
-	}
-
-	return es.GetName(), req.GetPropagatedHistory(), true, nil
-}
-
-func extractActivityRequest(method string, data []byte) (string, *protos.PropagatedHistory, bool, error) {
-	if method != methodExecute {
-		return "", nil, false, nil
-	}
-
-	// HistoryEvent & optional PropagatedHistory. Try the ActivityInvocation first
-	// and fall back to the legacy raw HistoryEvent payload (which has no
-	// propagated history).
+	// Try the ActivityInvocation envelope first; fall back to a raw
+	// HistoryEvent for rolling-upgrade compatibility with older daprds.
 	var invocation protos.ActivityInvocation
 	if envErr := proto.Unmarshal(data, &invocation); envErr == nil && invocation.GetHistoryEvent() != nil {
 		ts := invocation.GetHistoryEvent().GetTaskScheduled()
 		if ts == nil {
-			return "", nil, false, errors.New("activity HistoryEvent missing TaskScheduled")
+			return "", nil, errors.New("activity HistoryEvent missing TaskScheduled")
 		}
-		return ts.GetName(), invocation.GetPropagatedHistory(), true, nil
+		return ts.GetName(), invocation.GetPropagatedHistory(), nil
 	}
 
 	var his backend.HistoryEvent
 	if err := proto.Unmarshal(data, &his); err != nil {
-		return "", nil, false, fmt.Errorf("failed to unmarshal activity HistoryEvent: %w", err)
+		return "", nil, fmt.Errorf("failed to unmarshal activity HistoryEvent: %w", err)
 	}
-
 	ts := his.GetTaskScheduled()
 	if ts == nil {
-		return "", nil, false, errors.New("activity HistoryEvent missing TaskScheduled")
+		return "", nil, errors.New("activity HistoryEvent missing TaskScheduled")
 	}
+	return ts.GetName(), nil, nil
+}
 
-	return ts.GetName(), nil, true, nil
+// WorkflowNameFromCreateRequest returns the workflow name and propagated
+// history from a CreateWorkflowInstanceRequest payload.
+func WorkflowNameFromCreateRequest(data []byte) (string, *protos.PropagatedHistory, error) {
+	var req backend.CreateWorkflowInstanceRequest
+	if err := proto.Unmarshal(data, &req); err != nil {
+		return "", nil, fmt.Errorf("failed to unmarshal CreateWorkflowInstanceRequest: %w", err)
+	}
+	es := req.GetStartEvent().GetExecutionStarted()
+	if es == nil {
+		return "", nil, errors.New("CreateWorkflowInstanceRequest missing ExecutionStarted event")
+	}
+	return es.GetName(), req.GetPropagatedHistory(), nil
+}
+
+func operationFromHistoryEvent(ev *backend.HistoryEvent) (wfaclapi.WorkflowOperation, error) {
+	switch {
+	case ev.GetExecutionTerminated() != nil:
+		return wfaclapi.WorkflowOperationTerminate, nil
+	case ev.GetEventRaised() != nil:
+		return wfaclapi.WorkflowOperationRaise, nil
+	case ev.GetExecutionSuspended() != nil:
+		return wfaclapi.WorkflowOperationPause, nil
+	case ev.GetExecutionResumed() != nil:
+		return wfaclapi.WorkflowOperationResume, nil
+	default:
+		return "", fmt.Errorf("AddWorkflowEvent HistoryEvent has unsupported event type %T", ev.GetEventType())
+	}
 }

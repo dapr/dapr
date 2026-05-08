@@ -43,7 +43,7 @@ type tablecorrect struct {
 
 func (tc *tablecorrect) Setup(t *testing.T) []framework.Option {
 	tc.place = placement.New(t,
-		placement.WithDisseminateTimeout(time.Second*7),
+		placement.WithDisseminateTimeout(time.Second*2),
 	)
 
 	tc.actors = dactors.New(t,
@@ -95,7 +95,7 @@ func (tc *tablecorrect) Run(t *testing.T, ctx context.Context) {
 
 	for i := range 2 {
 		connectBlocker(t, "blocker-tc-"+string(rune('a'+i)))
-		time.Sleep(9 * time.Second)
+		time.Sleep(4 * time.Second)
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {

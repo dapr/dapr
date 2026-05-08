@@ -95,14 +95,11 @@ metadata:
 scopes:
 - wfacl-requires-target
 spec:
-  defaultAction: deny
   rules:
   - callers:
     - appID: wfacl-requires-caller
-    operations:
-    - type: activity
-      name: ProcessPayment
-      action: allow
+    activities:
+    - name: ProcessPayment
       requires:
       - eventType: activity
         status: Completed
@@ -110,31 +107,19 @@ spec:
       - eventType: activity
         status: Completed
         name: HumanApprovalReceived
-    - type: activity
-      name: ProcessPaymentAppGated
-      action: allow
+    - name: ProcessPaymentAppGated
       requires:
       - eventType: activity
         status: Completed
         name: FraudCheckPassed
         appID: wfacl-requires-caller
-    - type: activity
-      name: ProcessPaymentAppMismatch
-      action: allow
+    - name: ProcessPaymentAppMismatch
       requires:
       - eventType: activity
         status: Completed
         name: FraudCheckPassed
         appID: nonexistent-app
-    - type: activity
-      name: LogReceipt
-      action: allow
-  - callers:
-    - appID: wfacl-requires-target
-    operations:
-    - type: activity
-      name: "*"
-      action: allow
+    - name: LogReceipt
 `)
 
 	targetResDir := t.TempDir()

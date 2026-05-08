@@ -17,6 +17,7 @@ import (
 	"context"
 	"sync"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
@@ -26,7 +27,9 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 )
 
 var activityCache = &sync.Pool{
@@ -44,6 +47,13 @@ type Options struct {
 	Scheduler         todo.ActivityScheduler
 	Actors            actors.Interface
 	ActorTypeBuilder  *common.ActorTypeBuilder
+	// Signer produces activity completion attestations so a receiving
+	// parent workflow can cryptographically verify the activity's identity,
+	// input, and output. Nil when signing is disabled for this deployment.
+	Signer *signer.Signer
+
+	// May be nil when the feature is disabled.
+	WorkflowAccessPolicies *workflowacl.Holder
 
 	WorkflowsRemoteActivityReminder bool
 }
@@ -56,16 +66,22 @@ type factory struct {
 	// TODO: @joshvanl: remove in the next version.
 	workflowsRemoteActivityReminder bool
 
-	router           router.Interface
-	state            state.Interface
-	reminders        scheduler.Interface
-	placement        placement.Interface
-	actorTypeBuilder *common.ActorTypeBuilder
+	router                 router.Interface
+	state                  state.Interface
+	reminders              scheduler.Interface
+	placement              placement.Interface
+	actorTypeBuilder       *common.ActorTypeBuilder
+	workflowAccessPolicies *workflowacl.Holder
+	signing                *signing.Signing
 
 	scheduler todo.ActivityScheduler
 
 	table sync.Map
 	lock  sync.Mutex
+
+	// selfCallerWarnOnce ensures the "policy lists own appID" warning is
+	// only emitted once per factory lifetime instead of on every self-call.
+	selfCallerWarnOnce sync.Once
 }
 
 func New(ctx context.Context, opts Options) (targets.Factory, error) {
@@ -94,19 +110,24 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
-	return &factory{
-		appID:             opts.AppID,
-		actorType:         opts.ActivityActorType,
-		router:            router,
-		reminders:         sreminders,
-		scheduler:         opts.Scheduler,
-		placement:         placement,
-		workflowActorType: opts.WorkflowActorType,
-		actorTypeBuilder:  opts.ActorTypeBuilder,
-		state:             state,
+	f := &factory{
+		appID:                  opts.AppID,
+		actorType:              opts.ActivityActorType,
+		router:                 router,
+		reminders:              sreminders,
+		scheduler:              opts.Scheduler,
+		placement:              placement,
+		workflowActorType:      opts.WorkflowActorType,
+		actorTypeBuilder:       opts.ActorTypeBuilder,
+		workflowAccessPolicies: opts.WorkflowAccessPolicies,
+		state:                  state,
 
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
-	}, nil
+	}
+	if opts.Signer != nil {
+		f.signing = &signing.Signing{Signer: opts.Signer}
+	}
+	return f, nil
 }
 
 func (f *factory) GetOrCreate(actorID string) targets.Interface {

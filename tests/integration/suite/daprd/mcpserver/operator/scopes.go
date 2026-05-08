@@ -69,22 +69,12 @@ func (s *scopes) Setup(t *testing.T) []framework.Option {
 		kubernetes.WithDaprConfigurationGet(t, &configapi.Configuration{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 			ObjectMeta: metav1.ObjectMeta{Name: "mcpconfig", Namespace: "default"},
-			Spec: configapi.ConfigurationSpec{
-				Features: []configapi.FeatureSpec{
-					{Name: "MCPServerResource", Enabled: new(true)},
-				},
-			},
 		}),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ConfigurationList"},
 			Items: []configapi.Configuration{{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 				ObjectMeta: metav1.ObjectMeta{Name: "mcpconfig", Namespace: "default"},
-				Spec: configapi.ConfigurationSpec{
-					Features: []configapi.FeatureSpec{
-						{Name: "MCPServerResource", Enabled: new(true)},
-					},
-				},
 			}},
 		}),
 		kubernetes.WithClusterDaprMCPServerList(t, &mcpapi.MCPServerList{

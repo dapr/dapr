@@ -29,6 +29,7 @@ import (
 
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -126,6 +127,10 @@ func isPermissionDenied(err error) bool {
 	return false
 }
 
+// isPermissionDeniedRequiresUnmet returns true when the error is a
+// PermissionDenied carrying the requires-unmet sentinel suffix. The marker
+// constant lives in pkg/acl/workflow so the producer (gRPC handler / per-actor
+// enforcement) and consumer (orchestrator deny-translation) stay in sync.
 func isPermissionDeniedRequiresUnmet(err error) bool {
 	if err == nil {
 		return false
@@ -143,6 +148,10 @@ func isPermissionDeniedRequiresUnmet(err error) bool {
 	return false
 }
 
+// aclFailureType returns the (ErrorType, ErrorMessage) pair to write on a
+// TaskFailed/ChildWorkflowInstanceFailed event for a policy denial.
+// Public messages stay opaque about which rule/entry was violated; the type
+// lets workflow authors branch on cause programmatically.
 func aclFailureType(err error) (string, string) {
 	if isPermissionDeniedRequiresUnmet(err) {
 		return "WorkflowAccessPolicyRequiresUnmet",
@@ -164,15 +173,7 @@ func (o *orchestrator) failChildWorkflowACL(ctx context.Context, taskScheduledID
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
-		EventType: &protos.HistoryEvent_ChildWorkflowInstanceFailed{
-			ChildWorkflowInstanceFailed: &protos.ChildWorkflowInstanceFailedEvent{
-				TaskScheduledId: taskScheduledID,
-				FailureDetails: &protos.TaskFailureDetails{
-					ErrorType:    errType,
-					ErrorMessage: errMsg,
-				},
-			},
-		},
+		EventType: events.NewChildWorkflowFailedEventType(taskScheduledID, errType, errMsg, false),
 	}
 
 	log.Warnf("Workflow actor '%s': child workflow denied by access policy: %v", o.actorID, callErr)

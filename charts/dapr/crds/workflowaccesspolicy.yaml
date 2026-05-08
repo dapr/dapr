@@ -47,80 +47,47 @@ spec:
           spec:
             description: WorkflowAccessPolicySpec defines the desired state of WorkflowAccessPolicy.
             properties:
-              defaultAction:
-                default: deny
-                description: DefaultAction is the action when no rule matches. Defaults
-                  to "deny" if omitted.
-                enum:
-                - allow
-                - deny
-                type: string
               rules:
-                description: Rules defines ingress rules for which callers can perform
+                description: Rules defines the allow-list of which callers can perform
                   which operations.
                 items:
                   description: |-
-                    WorkflowAccessPolicyRule defines a set of callers and the operations they
-                    are allowed or denied.
+                    WorkflowAccessPolicyRule grants the listed callers access to the listed
+                    workflows and/or activities. Presence of a matching rule grants access; if
+                    no rule matches, the call is denied. At least one of workflows or
+                    activities must be set.
                   properties:
-                    callers:
-                      description: Callers that this rule applies to.
+                    activities:
+                      description: Activities are the activity rules that the matched
+                        callers are allowed.
                       items:
-                        description: WorkflowCaller identifies a calling application.
+                        description: |-
+                          ActivityRule grants the matched callers access to schedule the activity
+                          whose name matches Name (exact or glob). Activities only have one
+                          operation (schedule).
                         properties:
-                          appID:
-                            description: AppID is the Dapr app ID of the caller.
-                            minLength: 1
-                            type: string
-                        required:
-                        - appID
-                        type: object
-                      minItems: 1
-                      type: array
-                    operations:
-                      description: Operations that the matched callers are allowed/denied
-                        to perform.
-                      items:
-                        description: WorkflowOperationRule defines access control
-                          for a specific workflow or activity operation.
-                        properties:
-                          action:
-                            description: Action is "allow" or "deny".
-                            enum:
-                            - allow
-                            - deny
-                            type: string
                           name:
                             description: Name is the exact name or glob pattern for
-                              the workflow/activity.
+                              the activity.
                             minLength: 1
-                            type: string
-                          operation:
-                            description: Operation defaults to "schedule" if omitted.
-                            enum:
-                            - schedule
                             type: string
                           requires:
                             description: |-
-                              Requires is a list of history events that must all be present in
-                              the caller's propagated workflow history for this rule to apply.
-                              Entries are evaluated as a set — order is not significant, and
-                              the events themselves need not appear in any particular order.
-                              When empty, no requirements apply.
+                              Requires is a list of history events that must all be present in the
+                              caller's propagated workflow history for this rule to apply. Entries
+                              are evaluated as a set — order is not significant.
                             items:
                               description: |-
                                 RequiredEvent describes a history event that must be present in
-                                the caller's propagated workflow history. eventType=event must
-                                be paired with status=Raised; eventType=activity|workflow forbids
+                                the caller's propagated workflow history. eventType=event must be
+                                paired with status=Raised; eventType=activity|workflow forbids
                                 status=Raised.
                               x-kubernetes-validations:
                               - rule: "self.eventType == 'event' ? self.status == 'Raised' : self.status != 'Raised'"
                                 message: "eventType=event requires status=Raised; eventType=activity|workflow forbids status=Raised"
                               properties:
                                 appID:
-                                  description: |-
-                                    AppID, when set, requires the matched event to have been
-                                    produced by the named app.
+                                  description: AppID restricts the match to events produced by the named app.
                                   type: string
                                 eventType:
                                   description: EventType is the category of history event to match.
@@ -136,15 +103,10 @@ spec:
                                   minLength: 1
                                   type: string
                                 status:
-                                  description: |-
-                                    Status is the lifecycle phase the matched event must have.
-                                    Started/Completed/Failed apply to eventType=activity and
-                                    eventType=workflow; Raised is the only valid status for
-                                    eventType=event.
+                                  description: Status is the lifecycle phase the matched event must have.
                                   enum:
                                   - Started
                                   - Completed
-                                  - Failed
                                   - Raised
                                   type: string
                               required:
@@ -153,23 +115,116 @@ spec:
                               - status
                               type: object
                             type: array
-                          type:
-                            description: Type is "workflow" or "activity".
-                            enum:
-                            - workflow
-                            - activity
+                        required:
+                        - name
+                        type: object
+                      type: array
+                    callers:
+                      description: Callers that this rule applies to.
+                      items:
+                        description: WorkflowCaller identifies a calling application.
+                        properties:
+                          appID:
+                            description: AppID is the Dapr app ID of the caller.
+                            minLength: 1
                             type: string
                         required:
-                        - action
-                        - name
-                        - type
+                        - appID
                         type: object
                       minItems: 1
                       type: array
+                    workflows:
+                      description: Workflows are the workflow rules that the matched
+                        callers are allowed.
+                      items:
+                        description: |-
+                          WorkflowRule grants the matched callers access to the listed operations on
+                          workflows whose name matches Name (exact or glob).
+                        properties:
+                          name:
+                            description: Name is the exact name or glob pattern for
+                              the workflow.
+                            minLength: 1
+                            type: string
+                          operations:
+                            description: Operations is the set of operations this
+                              rule applies to.
+                            items:
+                              description: WorkflowOperation is the specific workflow
+                                operation being controlled.
+                              enum:
+                              - schedule
+                              - terminate
+                              - raise
+                              - pause
+                              - resume
+                              - purge
+                              - get
+                              - rerun
+                              type: string
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: set
+                          requires:
+                            description: |-
+                              Requires is a list of history events that must all be present in the
+                              caller's propagated workflow history for this rule to apply. Entries
+                              are evaluated as a set — order is not significant. Only meaningful
+                              for operations that carry propagated history (currently `schedule`);
+                              rules whose `requires` cover other operations will fail-closed
+                              because no history is available to satisfy them.
+                            items:
+                              description: |-
+                                RequiredEvent describes a history event that must be present in
+                                the caller's propagated workflow history. eventType=event must be
+                                paired with status=Raised; eventType=activity|workflow forbids
+                                status=Raised.
+                              x-kubernetes-validations:
+                              - rule: "self.eventType == 'event' ? self.status == 'Raised' : self.status != 'Raised'"
+                                message: "eventType=event requires status=Raised; eventType=activity|workflow forbids status=Raised"
+                              properties:
+                                appID:
+                                  description: AppID restricts the match to events produced by the named app.
+                                  type: string
+                                eventType:
+                                  description: EventType is the category of history event to match.
+                                  enum:
+                                  - activity
+                                  - workflow
+                                  - event
+                                  type: string
+                                name:
+                                  description: |-
+                                    Name is the activity/workflow name (eventType=activity|workflow)
+                                    or the external event name (eventType=event).
+                                  minLength: 1
+                                  type: string
+                                status:
+                                  description: Status is the lifecycle phase the matched event must have.
+                                  enum:
+                                  - Started
+                                  - Completed
+                                  - Raised
+                                  type: string
+                              required:
+                              - eventType
+                              - name
+                              - status
+                              type: object
+                            type: array
+                        required:
+                        - name
+                        - operations
+                        type: object
+                      type: array
                   required:
                   - callers
-                  - operations
                   type: object
+                  x-kubernetes-validations:
+                  - message: at least one of workflows or activities must contain
+                      a rule
+                    rule: (has(self.workflows) && size(self.workflows) > 0) || (has(self.activities)
+                      && size(self.activities) > 0)
                 type: array
             type: object
         type: object

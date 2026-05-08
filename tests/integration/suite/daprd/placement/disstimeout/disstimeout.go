@@ -43,7 +43,7 @@ type disstimeout struct {
 
 func (d *disstimeout) Setup(t *testing.T) []framework.Option {
 	d.place = placement.New(t,
-		placement.WithDisseminateTimeout(time.Second*7),
+		placement.WithDisseminateTimeout(time.Second*2),
 	)
 
 	d.actors = dactors.New(t,
@@ -100,7 +100,7 @@ func (d *disstimeout) Run(t *testing.T, ctx context.Context) {
 
 	for i := range 2 {
 		connectBlocker(t, fmt.Sprintf("blocker-%d", i))
-		time.Sleep(9 * time.Second)
+		time.Sleep(4 * time.Second)
 
 		rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		req, err = http.NewRequestWithContext(rctx, http.MethodPost, reqURL, nil)

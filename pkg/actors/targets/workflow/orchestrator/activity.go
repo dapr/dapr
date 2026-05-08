@@ -24,6 +24,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -32,7 +34,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State, outgoingHistory map[int32]*protos.PropagatedHistory) dispatchResult {
+func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, outgoingHistory map[int32]*protos.PropagatedHistory) dispatchResult {
 	var dueTime time.Time
 	if len(state.History) > 0 {
 		dueTime = state.History[0].GetTimestamp().AsTime()
@@ -42,6 +44,18 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 
 	var result dispatchResult
 	for _, e := range es {
+		// Don't redispatch activities whose resolution is already known to the
+		// current generation's runtime state. We check rs.OldEvents/NewEvents
+		// rather than state.History/state.Inbox because the persisted state has
+		// not been updated yet for this work item; in particular after a
+		// ContinueAsNew the persisted history still reflects the previous
+		// generation, while rs has been reset by the engine and only contains
+		// the current generation's events.
+		if dedup.IsTaskAlreadyResolved(e, rs.GetOldEvents(), rs.GetNewEvents()) {
+			log.Debugf("Workflow actor '%s': skipping dispatch of '%s::%d' - resolution already present", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
+			continue
+		}
+
 		err := o.callActivity(ctx, e, dueTime, state.Generation, outgoingHistory[e.GetEventId()])
 		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
@@ -76,6 +90,10 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		}
 	}
 
+	if err := o.activityPayloadOversize(payload, e); err != nil {
+		return err
+	}
+
 	invocationData, err := proto.Marshal(payload)
 	if err != nil {
 		return err
@@ -96,7 +114,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	defer cancel()
 
 	_, err = o.router.Call(ctx, internalsv1pb.
-		NewInternalInvokeRequest("Execute").
+		NewInternalInvokeRequest(todo.ExecuteActivityMethod).
 		WithActor(activityActorType, targetActorID).
 		WithMetadata(map[string][]string{
 			todo.MetadataActivityReminderDueTime: {strconv.FormatInt(dueTime.UnixMilli(), 10)},
@@ -124,21 +142,14 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 
 // failActivityACL creates a TaskFailed event on the parent orchestrator when
 // the activity call is rejected by a WorkflowAccessPolicy. Uses a reminder to
-// deliver the event in a fresh execution cycle.
+// deliver the event in a fresh execution cycle. callErr is inspected so
+// requires-unmet denials surface a distinct ErrorType.
 func (o *orchestrator) failActivityACL(ctx context.Context, e *backend.HistoryEvent, callErr error) error {
 	errType, errMsg := aclFailureType(callErr)
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
-		EventType: &protos.HistoryEvent_TaskFailed{
-			TaskFailed: &protos.TaskFailedEvent{
-				TaskScheduledId: e.GetEventId(),
-				FailureDetails: &protos.TaskFailureDetails{
-					ErrorType:    errType,
-					ErrorMessage: errMsg,
-				},
-			},
-		},
+		EventType: events.NewTaskFailedEventType(e.GetEventId(), errType, errMsg, false),
 	}
 
 	if _, err := o.createWorkflowReminder(ctx, common.ReminderPrefixActivityResult, failedEvent, time.Now(), o.appID, nil); err != nil {

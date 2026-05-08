@@ -71,26 +71,15 @@ func (w *workflowacl) Setup(t *testing.T) []framework.Option {
 		ObjectMeta: metav1.ObjectMeta{Name: "metric-test", Namespace: "default"},
 		Scoped:     common.Scoped{Scopes: []string{"metric-target"}},
 		Spec: wfaclapi.WorkflowAccessPolicySpec{
-			DefaultAction: wfaclapi.PolicyActionDeny,
-			Rules: []wfaclapi.WorkflowAccessPolicyRule{
-				{
-					Callers: []wfaclapi.WorkflowCaller{{AppID: "metric-caller"}},
-					Operations: []wfaclapi.WorkflowOperationRule{
-						{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "AllowedWF", Action: wfaclapi.PolicyActionAllow},
-					},
+			Rules: []wfaclapi.WorkflowAccessPolicyRule{{
+				Callers: []wfaclapi.WorkflowCaller{{AppID: "metric-caller"}},
+				Workflows: []wfaclapi.WorkflowRule{
+					{Name: "AllowedWF", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule}},
 				},
-				{
-					Callers: []wfaclapi.WorkflowCaller{{AppID: "metric-target"}},
-					Operations: []wfaclapi.WorkflowOperationRule{
-						{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionAllow},
-						{Type: wfaclapi.WorkflowOperationTypeActivity, Name: "*", Action: wfaclapi.PolicyActionAllow},
-					},
-				},
-			},
+			}},
 		},
 	})
 
-	boolTrue := true
 	w.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
 			spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
@@ -102,9 +91,6 @@ func (w *workflowacl) Setup(t *testing.T) []framework.Option {
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "daprsystem"},
 				Spec: configapi.ConfigurationSpec{
-					Features: []configapi.FeatureSpec{
-						{Name: "WorkflowAccessPolicy", Enabled: &boolTrue},
-					},
 					MTLSSpec: &configapi.MTLSSpec{
 						ControlPlaneTrustDomain: "integration.test.dapr.io",
 						SentryAddress:           sen.Address(),

@@ -153,6 +153,7 @@ spec:
         - "--keepalive-time={{ .Values.keepAliveTime }}"
         - "--keepalive-timeout={{ .Values.keepAliveTimeout }}"
         - "--disseminate-timeout={{ .Values.disseminateTimeout }}"
+        - "--disseminate-coalesce-window={{ .Values.disseminateCoalesceWindow }}"
 {{- if eq .Values.global.prometheus.enabled true }}
         - "--enable-metrics"
         - "--metrics-port"
@@ -227,8 +228,19 @@ spec:
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
 {{- end }}
-{{- if .Values.global.ha.enabled }}
+{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
+{{- include "dapr.validatePodAntiAffinityPolicy" . }}
         podAntiAffinity:
+{{- if eq .Values.global.ha.podAntiAffinityPolicy "requiredDuringSchedulingIgnoredDuringExecution" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - dapr-placement-server
+            topologyKey: {{ .Values.global.ha.topologyKey }}
+{{- else }}
           preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100
             podAffinityTerm:
@@ -239,6 +251,7 @@ spec:
                   values:
                   - dapr-placement-server
               topologyKey: {{ .Values.global.ha.topologyKey }}
+{{- end }}
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:

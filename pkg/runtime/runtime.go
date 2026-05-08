@@ -98,15 +98,16 @@ var log = logger.NewLogger("dapr.runtime")
 
 // DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
-	runtimeConfig     *internalConfig
-	globalConfig      *config.Configuration
-	accessControlList *config.AccessControlList
-	grpc              *manager.Manager
-	channels          *channels.Channels
-	appConfig         config.ApplicationConfig
-	directMessaging   invokev1.DirectMessaging
-	actors            actors.Interface
-	wfengine          wfengine.Interface
+	runtimeConfig          *internalConfig
+	globalConfig           *config.Configuration
+	accessControlList      *config.AccessControlList
+	grpc                   *manager.Manager
+	channels               *channels.Channels
+	appConfig              config.ApplicationConfig
+	directMessaging        invokev1.DirectMessaging
+	actors                 actors.Interface
+	wfengine               wfengine.Interface
+	workflowAccessPolicies *workflowacl.Holder
 
 	nameResolver          nr.Resolver
 	hostAddress           string
@@ -250,15 +251,16 @@ func newDaprRuntime(ctx context.Context,
 		Namespace: namespace,
 		Port:      runtimeConfig.internalGRPCPort,
 		// TODO: @joshvanl
-		PlacementAddresses: strings.Split(strings.TrimPrefix(runtimeConfig.actorsService, "placement:"), ","),
-		HealthEndpoint:     channels.AppHTTPEndpoint(),
-		Resiliency:         resiliencyProvider,
-		Security:           sec,
-		Healthz:            runtimeConfig.healthz,
-		CompStore:          compStore,
-		StateTTLEnabled:    globalConfig.IsFeatureEnabled(config.ActorStateTTL),
-		MaxRequestBodySize: runtimeConfig.maxRequestBodySize,
-		Mode:               runtimeConfig.mode,
+		PlacementAddresses:   strings.Split(strings.TrimPrefix(runtimeConfig.actorsService, "placement:"), ","),
+		HealthEndpoint:       channels.AppHTTPEndpoint(),
+		Resiliency:           resiliencyProvider,
+		Security:             sec,
+		Healthz:              runtimeConfig.healthz,
+		CompStore:            compStore,
+		StateTTLEnabled:      globalConfig.IsFeatureEnabled(config.ActorStateTTL),
+		MaxRequestBodySize:   runtimeConfig.maxRequestBodySize,
+		Mode:                 runtimeConfig.mode,
+		DisseminationTimeout: runtimeConfig.actorsDisseminationTimeout,
 	})
 
 	processor := processor.New(processor.Options{
@@ -320,6 +322,8 @@ func newDaprRuntime(ctx context.Context,
 		wfSigner = sec.Signer()
 	}
 
+	workflowAccessPolicies := workflowacl.NewHolder()
+
 	wfe, err := wfengine.New(wfengine.Options{
 		AppID:                           runtimeConfig.id,
 		Namespace:                       namespace,
@@ -333,6 +337,8 @@ func newDaprRuntime(ctx context.Context,
 		WorkflowHistorySigning:          globalConfig.IsFeatureEnabled(config.WorkflowHistorySigning),
 		ComponentStore:                  compStore,
 		Signer:                          wfSigner,
+		MaxRequestBodySize:              runtimeConfig.maxRequestBodySize,
+		WorkflowAccessPolicies:          workflowAccessPolicies,
 	})
 	if err != nil {
 		return nil, err
@@ -355,32 +361,33 @@ func newDaprRuntime(ctx context.Context,
 	}
 
 	rt := &DaprRuntime{
-		runtimeConfig:         runtimeConfig,
-		globalConfig:          globalConfig,
-		accessControlList:     accessControlList,
-		grpc:                  grpc,
-		tracerProvider:        nil,
-		resiliency:            resiliencyProvider,
-		appHealthReady:        nil,
-		compStore:             compStore,
-		pubsubAdapter:         pubsubAdapter,
-		pubsubAdapterStreamer: pubsubAdapterStreamer,
-		outbox:                outbox,
-		meta:                  meta,
-		operatorClient:        operatorClient,
-		channels:              channels,
-		sec:                   sec,
-		processor:             processor,
-		jobsManager:           jobsManager,
-		authz:                 authz,
-		reloader:              reloader,
-		namespace:             namespace,
-		initComplete:          make(chan struct{}),
-		isAppHealthy:          make(chan struct{}),
-		clock:                 new(clock.RealClock),
-		httpMiddleware:        httpMiddleware,
-		actors:                actors,
-		wfengine:              wfe,
+		runtimeConfig:          runtimeConfig,
+		globalConfig:           globalConfig,
+		accessControlList:      accessControlList,
+		grpc:                   grpc,
+		tracerProvider:         nil,
+		resiliency:             resiliencyProvider,
+		appHealthReady:         nil,
+		compStore:              compStore,
+		pubsubAdapter:          pubsubAdapter,
+		pubsubAdapterStreamer:  pubsubAdapterStreamer,
+		outbox:                 outbox,
+		meta:                   meta,
+		operatorClient:         operatorClient,
+		channels:               channels,
+		sec:                    sec,
+		processor:              processor,
+		jobsManager:            jobsManager,
+		authz:                  authz,
+		reloader:               reloader,
+		namespace:              namespace,
+		initComplete:           make(chan struct{}),
+		isAppHealthy:           make(chan struct{}),
+		clock:                  new(clock.RealClock),
+		httpMiddleware:         httpMiddleware,
+		actors:                 actors,
+		wfengine:               wfe,
+		workflowAccessPolicies: workflowAccessPolicies,
 	}
 	close(rt.isAppHealthy)
 
@@ -696,15 +703,13 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.flushOutstandingHTTPEndpoints(ctx)
 
-	if a.globalConfig.IsFeatureEnabled(config.MCPServerResource) {
-		err = a.loadMCPServers(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to load mcpservers: %s", err)
-		}
-		a.flushOutstandingMCPServers(ctx)
-		if list := len(a.compStore.ListMCPServers()); list > 0 {
-			log.Debugf("MCP servers loaded: %d; additional handling to be implemented", list)
-		}
+	err = a.loadMCPServers(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load mcpservers: %s", err)
+	}
+	a.flushOutstandingMCPServers(ctx)
+	if list := len(a.compStore.ListMCPServers()); list > 0 {
+		log.Debugf("MCP servers loaded: %d; additional handling to be implemented", list)
 	}
 
 	err = a.loadDeclarativeSubscriptions(ctx)
@@ -739,44 +744,32 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	// Create and start internal and external gRPC servers
 	a.daprGRPCAPI = grpc.NewAPI(grpc.APIOpts{
-		Universal:             a.daprUniversal,
-		Logger:                logger.NewLogger("dapr.grpc.api"),
-		Channels:              a.channels,
-		PubSubAdapter:         a.pubsubAdapter,
-		PubSubAdapterStreamer: a.pubsubAdapterStreamer,
-		Outbox:                a.outbox,
-		DirectMessaging:       a.directMessaging,
-		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
-		TracingSpec:           a.globalConfig.GetTracingSpec(),
-		AccessControlList:     a.accessControlList,
-		Processor:             a.processor,
+		Universal:              a.daprUniversal,
+		Logger:                 logger.NewLogger("dapr.grpc.api"),
+		Channels:               a.channels,
+		PubSubAdapter:          a.pubsubAdapter,
+		PubSubAdapterStreamer:  a.pubsubAdapterStreamer,
+		Outbox:                 a.outbox,
+		DirectMessaging:        a.directMessaging,
+		SendToOutputBindingFn:  a.processor.Binding().SendToOutputBinding,
+		TracingSpec:            a.globalConfig.GetTracingSpec(),
+		AccessControlList:      a.accessControlList,
+		Processor:              a.processor,
+		WorkflowAccessPolicies: a.workflowAccessPolicies,
 	})
 
 	// Load and apply workflow access policies before starting servers.
-	if a.globalConfig.IsFeatureEnabled(config.WorkflowAccessPolicy) {
-		if err = a.loadWorkflowAccessPolicies(ctx); err != nil {
-			return fmt.Errorf("failed to load workflow access policies: %w", err)
-		}
-
-		a.reloader.SetPolicyRecompiler(reconciler.WorkflowAccessPolicyOptions{
-			AppID:     a.runtimeConfig.id,
-			Loader:    a.reloader.Loader(),
-			CompStore: a.compStore,
-			Recompiler: func(compiled *workflowacl.CompiledPolicies) {
-				a.daprGRPCAPI.SetWorkflowAccessPolicies(compiled)
-			},
-			Healthz: a.runtimeConfig.healthz,
-		})
-	} else {
-		// Signal the reloader that no policy reconciler is needed so Run()
-		// doesn't block waiting.
-		a.reloader.SignalNoPolicyRecompiler()
-
-		// Warn if policies may exist but the feature flag is disabled.
-		// This helps operators catch misconfigurations where they created
-		// WorkflowAccessPolicy resources but forgot to enable the feature.
-		a.warnIfPoliciesExistWithoutFeatureFlag(ctx)
+	if err = a.loadWorkflowAccessPolicies(ctx); err != nil {
+		return fmt.Errorf("failed to load workflow access policies: %w", err)
 	}
+
+	a.reloader.SetPolicyRecompiler(reconciler.WorkflowAccessPolicyOptions{
+		AppID:      a.runtimeConfig.id,
+		Loader:     a.reloader.Loader(),
+		CompStore:  a.compStore,
+		Recompiler: a.workflowAccessPolicies.Store,
+		Healthz:    a.runtimeConfig.healthz,
+	})
 
 	if err = a.runnerCloser.AddCloser(a.daprGRPCAPI); err != nil {
 		return err
@@ -1226,7 +1219,6 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		GRPC:              a.grpc,
 		SchedulerClient:   a.jobsManager.Client(),
 		SchedulerReloader: a.jobsManager,
-		WorkflowACL:       a.buildWorkflowACLChecker(),
 	}); err != nil {
 		return err
 	}

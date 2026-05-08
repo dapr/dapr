@@ -41,8 +41,8 @@ func init() {
 	suite.Register(new(deny))
 }
 
-// deny tests that cross-app workflow calls are rejected when the
-// WorkflowAccessPolicy explicitly denies the operation.
+// deny tests that cross-app workflow calls are rejected by default when a
+// WorkflowAccessPolicy is loaded but no rule grants the caller access.
 type deny struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
@@ -59,17 +59,8 @@ func (d *deny) Setup(t *testing.T) []framework.Option {
 	d.sched = scheduler.New(t, scheduler.WithSentry(d.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 	d.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: wfaclconfig
-spec:
-  features:
-  - name: WorkflowAccessPolicy
-    enabled: true`), 0o600))
-
+	// Policy lists a different app as caller, so wfacl-caller is implicitly
+	// denied when it tries to schedule a workflow on the target.
 	policy := []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
@@ -78,14 +69,12 @@ metadata:
 scopes:
 - wfacl-target
 spec:
-  defaultAction: allow
   rules:
   - callers:
-    - appID: wfacl-caller
-    operations:
-    - type: workflow
-      name: DeniedWF
-      action: deny
+    - appID: some-other-app
+    workflows:
+    - name: "*"
+      operations: [schedule]
 `)
 
 	targetResDir := t.TempDir()
@@ -94,7 +83,6 @@ spec:
 	d.caller = daprd.New(t,
 		daprd.WithAppID("wfacl-caller"),
 		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourceFiles(d.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(d.place.Address()),
 		daprd.WithSchedulerAddresses(d.sched.Address()),
@@ -103,7 +91,6 @@ spec:
 	d.target = daprd.New(t,
 		daprd.WithAppID("wfacl-target"),
 		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(targetResDir),
 		daprd.WithResourceFiles(d.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(d.place.Address()),
