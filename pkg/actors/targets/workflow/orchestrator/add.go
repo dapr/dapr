@@ -16,6 +16,7 @@ package orchestrator
 import (
 	"context"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
@@ -58,6 +59,15 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 		return api.ErrStalled
 	}
 
+	// Drop completion events whose resolution is already in history or the
+	// inbox; otherwise an inbox redelivery (e.g. an activity actor reminder
+	// firing twice during pod migration) would pin the workflow in a
+	// replay/spin loop.
+	if dedup.IsDuplicateCompletion(e, state.History, state.Inbox) {
+		log.Debugf("Workflow actor '%s': dropping duplicate completion event already present in history/inbox", o.actorID)
+		return nil
+	}
+
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
 		o.activityResultAwaited.CompareAndSwap(true, false)
 	}
@@ -71,6 +81,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 		log.Warnf("Workflow actor '%s': attestation verification failed, tombstoning workflow: %s", o.actorID, verr)
 		opts := wfenginestate.Options{
 			AppID:             o.appID,
+			Namespace:         o.namespace,
 			WorkflowActorType: o.actorType,
 			ActivityActorType: o.activityActorType,
 			Signer:            o.signer,

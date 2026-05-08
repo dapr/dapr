@@ -28,6 +28,7 @@ var log = logger.NewLogger("dapr.runtime.actors.targets.orchestrator.signing")
 // no-ops when Signer is nil.
 type Signing struct {
 	Signer            *signer.Signer
+	Namespace         string
 	ActorID           string
 	ActorType         string
 	ActivityActorType string

@@ -61,6 +61,7 @@ var wfLogger = logger.NewLogger("dapr.runtime.actor.target.workflow.state")
 
 type Options struct {
 	AppID             string
+	Namespace         string
 	WorkflowActorType string
 	ActivityActorType string
 	Signer            *signer.Signer
@@ -68,6 +69,7 @@ type Options struct {
 
 type State struct {
 	appID             string
+	namespace         string
 	workflowActorType string
 	activityActorType string
 
@@ -133,6 +135,7 @@ func NewState(opts Options) *State {
 	return &State{
 		Generation:        1,
 		appID:             opts.AppID,
+		namespace:         opts.Namespace,
 		workflowActorType: opts.WorkflowActorType,
 		activityActorType: opts.ActivityActorType,
 	}
@@ -896,6 +899,11 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 				fmt.Errorf("workflow '%s' has signed history but app ID is not configured; cannot verify signer identity", actorID),
 			)
 		}
+		if opts.Namespace == "" {
+			return wState, wferrors.NewConfigurationError(
+				fmt.Errorf("workflow '%s' has signed history but namespace is not configured; cannot verify signer identity", actorID),
+			)
+		}
 		if err := verifySignatureChain(wState, opts.Signer); err != nil {
 			return wState, wferrors.NewVerificationError(
 				fmt.Errorf("workflow history signature verification failed for '%s': %w", actorID, err),
@@ -1019,7 +1027,7 @@ func verifySignatureChain(s *State, sgn *signer.Signer) error {
 				coveredEvents, len(rawEvents))
 		}
 	}
-	if err := historysigning.VerifyChain(historysigning.VerifyChainOptions{
+	if _, err := historysigning.VerifyChain(historysigning.VerifyChainOptions{
 		RawSignatures: s.RawSignatures,
 		Certs:         s.SigningCertificates,
 		AllRawEvents:  rawEvents,
@@ -1028,13 +1036,15 @@ func verifySignatureChain(s *State, sgn *signer.Signer) error {
 		return err
 	}
 
-	// Verify that all signing certificates belong to the expected app. This
-	// prevents cross-app signature forgery where App B signs events for App A's
-	// workflow using a valid certificate from the same trust domain. The appID
-	// is guaranteed non-empty here because LoadWorkflowState rejects signed
-	// workflows with an empty AppID.
+	// Verify that all signing certificates belong to the expected app and
+	// namespace. This prevents cross-app signature forgery where App B signs
+	// events for App A's workflow using a valid certificate from the same
+	// trust domain, and cross-namespace forgery where the same app-id in a
+	// different namespace forges signatures. AppID and Namespace are
+	// guaranteed non-empty here because LoadWorkflowState rejects signed
+	// workflows with empty values.
 	for i, cert := range s.SigningCertificates {
-		if err := verifyCertAppIdentity(cert.GetCertificate(), s.appID); err != nil {
+		if err := verifyCertAppIdentity(cert.GetCertificate(), s.appID, s.namespace); err != nil {
 			return fmt.Errorf("signing certificate %d: %w", i, err)
 		}
 	}
@@ -1043,10 +1053,16 @@ func verifySignatureChain(s *State, sgn *signer.Signer) error {
 }
 
 // verifyCertAppIdentity checks that a DER-encoded signing certificate chain
-// contains a SPIFFE ID matching the expected app ID. SPIFFE IDs follow the
-// pattern: spiffe://<trust-domain>/ns/<namespace>/<app-id>
+// contains a SPIFFE ID matching the expected app ID and namespace. SPIFFE
+// IDs follow the pattern: spiffe://<trust-domain>/ns/<namespace>/<app-id>
 // The function validates the full path structure, not just the last segment.
-func verifyCertAppIdentity(certChainDER []byte, expectedAppID string) error {
+func verifyCertAppIdentity(certChainDER []byte, expectedAppID, expectedNamespace string) error {
+	if expectedAppID == "" {
+		return errors.New("expectedAppID must not be empty")
+	}
+	if expectedNamespace == "" {
+		return errors.New("expectedNamespace must not be empty")
+	}
 	if len(certChainDER) == 0 {
 		return errors.New("certificate chain is empty")
 	}
@@ -1071,8 +1087,12 @@ func verifyCertAppIdentity(certChainDER []byte, expectedAppID string) error {
 	if len(segments) != 4 || segments[0] != "" || segments[1] != "ns" || segments[2] == "" || segments[3] == "" {
 		return fmt.Errorf("SPIFFE ID %q does not match expected path format /ns/<namespace>/<app-id>", spiffeID)
 	}
+	certNamespace := segments[2]
 	certAppID := segments[3]
 
+	if certNamespace != expectedNamespace {
+		return fmt.Errorf("certificate SPIFFE ID namespace %q does not match expected namespace %q", certNamespace, expectedNamespace)
+	}
 	if certAppID != expectedAppID {
 		return fmt.Errorf("certificate SPIFFE ID app %q does not match expected app %q", certAppID, expectedAppID)
 	}
