@@ -67,6 +67,7 @@ func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) 
 		NewInstanceID:              rerunReq.GetNewInstanceID(),
 		NewChildWorkflowInstanceID: rerunReq.NewChildWorkflowInstanceID,
 		AppID:                      o.appID,
+		Namespace:                  o.namespace,
 		ActorType:                  o.actorType,
 		ActivityActorType:          o.activityActorType,
 		//nolint:gosec
@@ -155,6 +156,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 
 	newState := wfenginestate.NewState(wfenginestate.Options{
 		AppID:             o.appID,
+		Namespace:         o.namespace,
 		WorkflowActorType: o.actorType,
 		ActivityActorType: o.activityActorType,
 	})
@@ -183,6 +185,21 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 	}
 
 	rerunRS := runtimestate.NewWorkflowRuntimeState(o.actorID, newState.CustomStatus, newState.History)
+
+	// Attach this workflow's signatures + cert chain to the current-app
+	// chunk of each outbound PropagatedHistory. Lineage chunks pass
+	// through verbatim. signAndSaveState above already populated
+	// state.Signatures / state.RawSignatures. No-op if signing is off.
+	for _, ph := range outgoingActPropHist {
+		if err = o.signing.SignOutgoingPropagatedHistory(ph, o.appID); err != nil {
+			return err
+		}
+	}
+	for _, ph := range outgoingChildPropHist {
+		if err = o.signing.SignOutgoingPropagatedHistory(ph, o.appID); err != nil {
+			return err
+		}
+	}
 
 	if err = errors.Join(
 		o.callChildWorkflows(ctx, startedEvent.GetName(), childWFs, outgoingChildPropHist),
@@ -222,7 +239,7 @@ func buildRerunOutgoingHistory(
 		}
 		chunk, err := runtimestate.AssembleProtoPropagatedHistory(rt, scope, state.IncomingHistory, appID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to assemble propagated history for rerun event %d: %w", e.GetEventId(), err)
+			return nil, fmt.Errorf("failed to assemble propagated history for event %d: %w", e.GetEventId(), err)
 		}
 		if chunk == nil {
 			continue

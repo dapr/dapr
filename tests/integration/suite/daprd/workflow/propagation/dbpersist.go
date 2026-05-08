@@ -121,17 +121,8 @@ func (d *dbpersist) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, string(parentID), chunk.GetInstanceId(), "chunk.InstanceId should equal parent's workflow ID")
 		assert.Equal(t, parentAppID, chunk.GetAppId(), "chunk.AppId should equal parent's Dapr app ID")
 
-		// New API: chunk owns rawEvents bytes per event. Decode them on
-		// demand for shape assertions; the chunk's length is len(rawEvents).
 		require.Len(t, chunk.GetRawEvents(), 6,
 			"parent should have produced 6 events: WorkflowStarted x2, ExecutionStarted, TaskScheduled, TaskCompleted, ChildWorkflowInstanceCreated")
-
-		events := make([]*protos.HistoryEvent, len(chunk.GetRawEvents()))
-		for i, raw := range chunk.GetRawEvents() {
-			events[i] = new(protos.HistoryEvent)
-			require.NoError(t, proto.Unmarshal(raw, events[i]),
-				"chunk rawEvents[%d] should unmarshal as HistoryEvent", i)
-		}
 
 		var (
 			wfStartedCount   int
@@ -143,7 +134,9 @@ func (d *dbpersist) Run(t *testing.T, ctx context.Context) {
 			childCreatedOK   bool
 			childCreatedName string
 		)
-		for _, e := range events {
+		for _, raw := range chunk.GetRawEvents() {
+			var e protos.HistoryEvent
+			require.NoError(t, proto.Unmarshal(raw, &e), "rawEvent should decode")
 			switch {
 			case e.GetWorkflowStarted() != nil:
 				wfStartedCount++

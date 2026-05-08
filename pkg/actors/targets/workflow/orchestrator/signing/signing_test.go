@@ -266,7 +266,7 @@ func TestSignNewEvents_VerifiesWithHistorySigning(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	err = historysigning.VerifySignature(sig, st.Signatures[0], st.SigningCertificates, rawEvents)
+	err = historysigning.VerifySignature(sig, st.Signatures[0], st.SigningCertificates, rawEvents, nil)
 	require.NoError(t, err)
 }
 
