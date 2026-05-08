@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/dapr/components-contrib/metadata"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
+	pluggablepubsub "github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -67,15 +67,19 @@ type Subscription struct {
 	adapterStreamer rtpubsub.AdapterStreamer
 	adapter         rtpubsub.Adapter
 
-	cancel   func(cause error)
-	closed   atomic.Bool
-	wg       sync.WaitGroup
-	inflight atomic.Int64
+	cancel      func(cause error)
+	drainSealed atomic.Bool
+	closed      atomic.Bool
+	inflight    atomic.Int64
 
 	postman postman.Interface
 }
 
 var log = logger.NewLogger("dapr.runtime.processor.subscription")
+
+// drainMaxDuration caps how long Stop will wait for the drain to settle.
+// var rather than const so tests can shorten it.
+var drainMaxDuration = 30 * time.Second
 
 const (
 	BinaryCloudEventHeaderPrefix = "ce_"
@@ -134,32 +138,27 @@ func New(opts Options) (*Subscription, error) {
 		Topic:    subscribeTopic,
 		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *contribpubsub.NewMessage) error {
-		s.wg.Add(1)
+		// drainSealed bars new work after Stop has sealed the drain.
+		if s.drainSealed.Load() {
+			<-ctx.Done()
+			return ctx.Err()
+		}
 		s.inflight.Add(1)
 
+		// closed signals shutdown is in progress; block on ctx.Done
+		// rather than returning an error (which would cause the broker
+		// to NACK the message and route it to a dead-letter queue
+		// instead of redelivering on rebalance). Decrement before
+		// blocking so Stop's inflight wait can proceed.
 		if s.closed.Load() {
-			// Release the WaitGroup before blocking to avoid deadlocking
-			// with Subscription.Stop() which calls wg.Wait().
-			s.wg.Done()
 			s.inflight.Add(-1)
-			// Block until the handler context is cancelled rather than
-			// returning an error. Returning an error causes the broker to
-			// NACK the message (e.g. routing it to a dead-letter queue),
-			// which is incorrect during graceful shutdown. By blocking, the
-			// message is held until the broker connection is closed, allowing
-			// the broker to redeliver the message to another consumer. We
-			// block on the handler context (tied to the broker's pull stream)
-			// rather than the subscription context because the subscription
-			// context may already be cancelled by the time this message
-			// arrives.
 			<-ctx.Done()
 			return ctx.Err()
 		}
 
-		wgReleased := false
+		released := false
 		defer func() {
-			if !wgReleased {
-				s.wg.Done()
+			if !released {
 				s.inflight.Add(-1)
 			}
 		}()
@@ -370,14 +369,13 @@ func New(opts Options) (*Subscription, error) {
 			return nil, pErr
 		})
 		// When the subscription is closing (e.g. during shutdown or
-		// hot-reload), block on the handler context rather than returning an
-		// error. Returning an error causes the broker to NACK the message
-		// (e.g. routing it to a dead-letter queue), which is incorrect
-		// during graceful shutdown. Release the WaitGroup before blocking to
-		// avoid deadlocking with Subscription.Stop() which calls wg.Wait().
+		// hot-reload), block on the handler context rather than returning
+		// an error. Returning an error causes the broker to NACK the
+		// message (e.g. routing it to a dead-letter queue), which is
+		// incorrect during graceful shutdown. Decrement inflight before
+		// blocking so Stop's wait can proceed.
 		if err != nil && (s.closed.Load() || errors.Is(err, rtpubsub.ErrSubscriptionClosed)) {
-			wgReleased = true
-			s.wg.Done()
+			released = true
 			s.inflight.Add(-1)
 			<-ctx.Done()
 			return ctx.Err()
@@ -412,23 +410,104 @@ func New(opts Options) (*Subscription, error) {
 }
 
 func (s *Subscription) Stop(err ...error) {
-	s.closed.Store(true)
+	cause := errors.Join(err...)
+	graceful := errors.Is(cause, contribpubsub.ErrGracefulShutdown)
+
+	// Pause-and-drain on graceful shutdown: keep the broker session
+	// alive so messages already buffered locally still flow to the app.
+	// s.cancel at the end performs the actual close.
+	paused := false
+	if graceful {
+		if pausable, ok := s.pubsub.Component.(contribpubsub.PausableSubscriber); ok {
+			log.Infof("pausing subscription on topic %s during graceful shutdown", s.topic)
+			// Bound Pause so a hung component cannot block shutdown forever.
+			pauseCtx, pauseCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			perr := pausable.Pause(pauseCtx)
+			pauseCancel()
+			switch {
+			case perr == nil:
+				paused = true
+			case errors.Is(perr, pluggablepubsub.ErrPausableUnimplemented):
+				// Legacy pluggable; fall back to close-first silently.
+			default:
+				log.Warnf("failed to pause subscription on topic %s during graceful shutdown: %v", s.topic, perr)
+			}
+		}
+	}
+
+	// On the close-first path closed is set up front so new handlers
+	// self-eject; on the paused path closed stays false during drain.
+	if !paused {
+		s.closed.Store(true)
+	}
+
+	// Snapshot inflight; promoted to true if work is observed during drain
+	// so the 400ms ack-settle below still fires.
 	inflight := s.inflight.Load() > 0
 
-	s.wg.Wait()
+	// Atomic polling rather than wg.Wait — contrib retry loops can
+	// bracket the handler with Add/Done around backoffs and race Wait.
+	// Single shared deadline across the paused drain + post-seal wait so
+	// total Stop time is bounded by drainMaxDuration, not 2x.
+	deadline := time.Now().Add(drainMaxDuration)
+	hitCeiling := false
+	if paused {
+		drainPollInterval := 20 * time.Millisecond
+		requiredStable := 5 // 100ms of stable quiet
+		stable := 0
+		for {
+			if s.inflight.Load() > 0 {
+				inflight = true
+				stable = 0
+			} else {
+				stable++
+				if stable >= requiredStable {
+					break
+				}
+			}
+			if time.Now().After(deadline) {
+				log.Warnf("drain exceeded %s; sealing with inflight=%d on topic %s",
+					drainMaxDuration, s.inflight.Load(), s.topic)
+				hitCeiling = true
+				break
+			}
+			time.Sleep(drainPollInterval)
+		}
+	}
+
+	// Seal: bar new work and signal shutdown to in-flight handlers.
+	s.drainSealed.Store(true)
+	s.closed.Store(true)
+
+	// On ceiling hit, force-cancel so stuck handlers' HTTP/gRPC calls
+	// error out via ctx propagation. Join with the original cause so
+	// downstream cause-based checks still see the graceful-shutdown
+	// signal alongside the ceiling-exceeded reason.
+	if hitCeiling {
+		s.cancel(errors.Join(cause, errors.New("subscription drain ceiling exceeded")))
+	}
+
+	// Catch any handler that snuck in between drainSealed.Load and
+	// inflight.Add — those resolve in microseconds via ctx propagation.
+	// Reuses the same deadline; if the drain loop already burned it,
+	// this exits immediately.
+	for s.inflight.Load() > 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
 
 	if s.adapterStreamer != nil {
 		s.adapterStreamer.Close(s.adapterStreamer.StreamerKey(s.pubsubName, s.topic), s.connectionID)
 	}
 	// If there were in-flight requests then wait some time for the result to be
 	// sent to the broker. This is because the message result context is
-	// disparate.
-	if inflight {
+	// disparate. Skipped on ceiling hit: handlers were force-canceled above
+	// and won't be acking, so the wait is wasted shutdown time.
+	if inflight && !hitCeiling {
 		time.Sleep(time.Millisecond * 400)
 	}
 
 	if len(err) > 0 {
-		s.cancel(errors.Join(err...))
+		s.cancel(cause)
 		return
 	}
 

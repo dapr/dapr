@@ -36,6 +36,8 @@ const (
 	PubSub_Publish_FullMethodName      = "/dapr.proto.components.v1.PubSub/Publish"
 	PubSub_BulkPublish_FullMethodName  = "/dapr.proto.components.v1.PubSub/BulkPublish"
 	PubSub_PullMessages_FullMethodName = "/dapr.proto.components.v1.PubSub/PullMessages"
+	PubSub_Pause_FullMethodName        = "/dapr.proto.components.v1.PubSub/Pause"
+	PubSub_Resume_FullMethodName       = "/dapr.proto.components.v1.PubSub/Resume"
 	PubSub_Ping_FullMethodName         = "/dapr.proto.components.v1.PubSub/Ping"
 )
 
@@ -57,6 +59,14 @@ type PubSubClient interface {
 	// the stream. The first message MUST contain a `topic` attribute on it that
 	// should be used for the entire streaming pull.
 	PullMessages(ctx context.Context, opts ...grpc.CallOption) (PubSub_PullMessagesClient, error)
+	// Pause stops the component from delivering new messages to daprd while
+	// keeping existing subscription state alive. Servers MAY return
+	// UNIMPLEMENTED if they do not support pause-and-drain semantics; daprd
+	// will fall back to close-first shutdown in that case. Idempotent.
+	Pause(ctx context.Context, in *PauseRequest, opts ...grpc.CallOption) (*PauseResponse, error)
+	// Resume reverses a prior Pause. Servers MAY return UNIMPLEMENTED.
+	// Idempotent.
+	Resume(ctx context.Context, in *ResumeRequest, opts ...grpc.CallOption) (*ResumeResponse, error)
 	// Ping the pubsub. Used for liveness porpuses.
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
 }
@@ -136,6 +146,24 @@ func (x *pubSubPullMessagesClient) Recv() (*PullMessagesResponse, error) {
 	return m, nil
 }
 
+func (c *pubSubClient) Pause(ctx context.Context, in *PauseRequest, opts ...grpc.CallOption) (*PauseResponse, error) {
+	out := new(PauseResponse)
+	err := c.cc.Invoke(ctx, PubSub_Pause_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pubSubClient) Resume(ctx context.Context, in *ResumeRequest, opts ...grpc.CallOption) (*ResumeResponse, error) {
+	out := new(ResumeResponse)
+	err := c.cc.Invoke(ctx, PubSub_Resume_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *pubSubClient) Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error) {
 	out := new(PingResponse)
 	err := c.cc.Invoke(ctx, PubSub_Ping_FullMethodName, in, out, opts...)
@@ -163,6 +191,14 @@ type PubSubServer interface {
 	// the stream. The first message MUST contain a `topic` attribute on it that
 	// should be used for the entire streaming pull.
 	PullMessages(PubSub_PullMessagesServer) error
+	// Pause stops the component from delivering new messages to daprd while
+	// keeping existing subscription state alive. Servers MAY return
+	// UNIMPLEMENTED if they do not support pause-and-drain semantics; daprd
+	// will fall back to close-first shutdown in that case. Idempotent.
+	Pause(context.Context, *PauseRequest) (*PauseResponse, error)
+	// Resume reverses a prior Pause. Servers MAY return UNIMPLEMENTED.
+	// Idempotent.
+	Resume(context.Context, *ResumeRequest) (*ResumeResponse, error)
 	// Ping the pubsub. Used for liveness porpuses.
 	Ping(context.Context, *PingRequest) (*PingResponse, error)
 }
@@ -185,6 +221,12 @@ func (UnimplementedPubSubServer) BulkPublish(context.Context, *BulkPublishReques
 }
 func (UnimplementedPubSubServer) PullMessages(PubSub_PullMessagesServer) error {
 	return status.Errorf(codes.Unimplemented, "method PullMessages not implemented")
+}
+func (UnimplementedPubSubServer) Pause(context.Context, *PauseRequest) (*PauseResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Pause not implemented")
+}
+func (UnimplementedPubSubServer) Resume(context.Context, *ResumeRequest) (*ResumeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Resume not implemented")
 }
 func (UnimplementedPubSubServer) Ping(context.Context, *PingRequest) (*PingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ping not implemented")
@@ -299,6 +341,42 @@ func (x *pubSubPullMessagesServer) Recv() (*PullMessagesRequest, error) {
 	return m, nil
 }
 
+func _PubSub_Pause_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PubSubServer).Pause(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PubSub_Pause_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PubSubServer).Pause(ctx, req.(*PauseRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PubSub_Resume_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResumeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PubSubServer).Resume(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PubSub_Resume_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PubSubServer).Resume(ctx, req.(*ResumeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _PubSub_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PingRequest)
 	if err := dec(in); err != nil {
@@ -339,6 +417,14 @@ var PubSub_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BulkPublish",
 			Handler:    _PubSub_BulkPublish_Handler,
+		},
+		{
+			MethodName: "Pause",
+			Handler:    _PubSub_Pause_Handler,
+		},
+		{
+			MethodName: "Resume",
+			Handler:    _PubSub_Resume_Handler,
 		},
 		{
 			MethodName: "Ping",
