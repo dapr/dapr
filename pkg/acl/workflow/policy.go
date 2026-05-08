@@ -16,6 +16,8 @@ package workflow
 import (
 	"path"
 
+	"google.golang.org/protobuf/proto"
+
 	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/kit/logger"
@@ -193,44 +195,46 @@ func (cp *CompiledPolicies) ListsCaller(appID string) bool {
 	return false
 }
 
+// decodedEvent pairs a HistoryEvent decoded from chunk.RawEvents with the
+// chunk that produced it, so AppID-filtered requires can check the producer.
+type decodedEvent struct {
+	e     *protos.HistoryEvent
+	chunk *protos.PropagatedHistoryChunk
+}
+
 // requiresSatisfied reports whether every requires entry has a matching
 // event in history.
 func requiresSatisfied(requires []wfaclapi.RequiredEvent, history *protos.PropagatedHistory) bool {
 	if len(requires) == 0 {
 		return true
 	}
-	if history == nil || len(history.GetEvents()) == 0 {
+	if history == nil || len(history.GetChunks()) == 0 {
 		return false
 	}
 
-	// Index by event ID so completion/failure events can resolve their scheduled name.
-	events := history.GetEvents()
-	taskScheduledByID := make(map[int32]*protos.TaskScheduledEvent, len(events))
-	childCreatedByID := make(map[int32]*protos.ChildWorkflowInstanceCreatedEvent, len(events))
-	for _, e := range events {
-		if ts := e.GetTaskScheduled(); ts != nil {
-			taskScheduledByID[e.GetEventId()] = ts
-		}
-		if cc := e.GetChildWorkflowInstanceCreated(); cc != nil {
-			childCreatedByID[e.GetEventId()] = cc
-		}
-	}
-
-	// Build event-index
-	chunkByEventIdx := make([]*protos.PropagatedHistoryChunk, len(events))
-	for _, c := range history.GetChunks() {
-		start := int(c.GetStartEventIndex())
-		end := start + int(c.GetEventCount())
-		if end > len(events) {
-			end = len(events)
-		}
-		for i := start; i < end; i++ {
-			chunkByEventIdx[i] = c
+	// Decode every chunk's raw events once; index by event ID so
+	// completion events can resolve their scheduled name.
+	var events []decodedEvent
+	taskScheduledByID := make(map[int32]*protos.TaskScheduledEvent)
+	childCreatedByID := make(map[int32]*protos.ChildWorkflowInstanceCreatedEvent)
+	for _, chunk := range history.GetChunks() {
+		for _, raw := range chunk.GetRawEvents() {
+			e := &protos.HistoryEvent{}
+			if err := proto.Unmarshal(raw, e); err != nil {
+				continue
+			}
+			events = append(events, decodedEvent{e: e, chunk: chunk})
+			if ts := e.GetTaskScheduled(); ts != nil {
+				taskScheduledByID[e.GetEventId()] = ts
+			}
+			if cc := e.GetChildWorkflowInstanceCreated(); cc != nil {
+				childCreatedByID[e.GetEventId()] = cc
+			}
 		}
 	}
 
 	for i := range requires {
-		if !findMatchingEvent(&requires[i], events, chunkByEventIdx, taskScheduledByID, childCreatedByID) {
+		if !findMatchingEvent(&requires[i], events, taskScheduledByID, childCreatedByID) {
 			return false
 		}
 	}
@@ -240,22 +244,20 @@ func requiresSatisfied(requires []wfaclapi.RequiredEvent, history *protos.Propag
 // findMatchingEvent reports whether any event in events satisfies req.
 func findMatchingEvent(
 	req *wfaclapi.RequiredEvent,
-	events []*protos.HistoryEvent,
-	chunkByEventIdx []*protos.PropagatedHistoryChunk,
+	events []decodedEvent,
 	taskScheduledByID map[int32]*protos.TaskScheduledEvent,
 	childCreatedByID map[int32]*protos.ChildWorkflowInstanceCreatedEvent,
 ) bool {
-	for idx, e := range events {
-		if !eventStatusMatches(req, e, taskScheduledByID, childCreatedByID) {
+	for _, de := range events {
+		if !eventStatusMatches(req, de.e, taskScheduledByID, childCreatedByID) {
 			continue
 		}
-		// TODO: also gate on chunk.GetNamespace() once durabletask-go's
-		// PropagatedHistoryChunk carries the producing app's namespace; a
-		// matching `Namespace` field would then live alongside `AppID` on
-		// RequiredEvent.
+		// TODO: also gate on chunk namespace once durabletask-go's
+		// PropagatedHistoryChunk carries the producing app's namespace;
+		// a matching `Namespace` field would then live alongside `AppID`
+		// on RequiredEvent.
 		if req.AppID != nil {
-			chunk := chunkByEventIdx[idx]
-			if chunk == nil || chunk.GetAppId() != *req.AppID {
+			if de.chunk == nil || de.chunk.GetAppId() != *req.AppID {
 				continue
 			}
 		}
