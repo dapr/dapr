@@ -33,16 +33,41 @@ type Broker struct {
 	socket *socket.Socket
 }
 
-func New(t *testing.T) *Broker {
+// Option configures broker creation.
+type Option func(*brokerOptions)
+
+type brokerOptions struct {
+	pausable bool
+}
+
+// WithPausable opts the pluggable server in to the Pause/Resume RPCs.
+// Default is non-pausable (returns codes.Unimplemented), matching the
+// majority of pubsub components.
+func WithPausable() Option {
+	return func(o *brokerOptions) {
+		o.pausable = true
+	}
+}
+
+func New(t *testing.T, opts ...Option) *Broker {
+	bo := new(brokerOptions)
+	for _, fn := range opts {
+		fn(bo)
+	}
+
 	pmrReqCh := make(chan *compv1.PullMessagesRequest, 1)
 	pmrRespCh := make(chan *compv1.PullMessagesResponse, 1)
 
 	socket := socket.New(t)
-	inmem := pubsub.New(t,
+	psOpts := []pubsub.Option{
 		pubsub.WithSocket(socket),
 		pubsub.WithPullMessagesChannel(pmrReqCh, pmrRespCh),
 		pubsub.WithPubSub(inmemory.NewWrappedInMemory(t)),
-	)
+	}
+	if bo.pausable {
+		psOpts = append(psOpts, pubsub.WithPausable())
+	}
+	inmem := pubsub.New(t, psOpts...)
 
 	return &Broker{
 		pmrReqCh:  pmrReqCh,
@@ -94,4 +119,24 @@ func (b *Broker) PublishHelloWorld(topic string) <-chan *compv1.PullMessagesRequ
 	}
 
 	return b.pmrReqCh
+}
+
+// PauseCalled reports how many times the runtime invoked Pause on the
+// pluggable server. Used by tests asserting the pause-and-drain shutdown
+// path was exercised.
+func (b *Broker) PauseCalled() int64 {
+	return b.inmem.PauseCalled()
+}
+
+// IsPaused reports whether the pluggable server is currently in the
+// paused state.
+func (b *Broker) IsPaused() bool {
+	return b.inmem.IsPaused()
+}
+
+// PauseStarted returns a channel that is closed the first time Pause is
+// called. Tests use this to wait for the runtime's shutdown path to
+// invoke Pause without polling.
+func (b *Broker) PauseStarted() <-chan struct{} {
+	return b.inmem.PauseStarted()
 }
