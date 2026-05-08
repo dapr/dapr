@@ -14,11 +14,8 @@ limitations under the License.
 package mcpserver
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -158,26 +155,15 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "Hello, Dapr!")
 	})
 
-	t.Run("non-existent tool workflow name rejected as reserved-prefix-not-registered", func(t *testing.T) {
-		// dapr.internal.mcp.<server>.CallTool.<tool> uses the reserved internal
-		// prefix; if the tool isn't actually registered, StartWorkflow rejects
-		// synchronously with 400.
-		body, err := json.Marshal(map[string]any{"arguments": map[string]any{}})
-		require.NoError(t, err)
-		reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start",
-			s.daprd.HTTPPort(),
-			mcpnames.MCPCallToolWorkflowName("multi-tool", "nonexistent_tool"))
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(body))
-		require.NoError(t, err)
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := s.httpClient.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		respBody, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		assert.Contains(t, string(respBody), "ERR_WORKFLOW_NAME_RESERVED")
+	t.Run("non-existent tool workflow fails with not-registered", func(t *testing.T) {
+		// dapr.internal.mcp.<server>.CallTool.<tool> for an unregistered tool:
+		// StartWorkflow accepts the call; the workflow itself transitions to
+		// FAILED with "is not registered" in the failure details.
+		input := map[string]any{"arguments": map[string]any{}}
+		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+			mcpnames.MCPCallToolWorkflowName("multi-tool", "nonexistent_tool"), input, 30*time.Second)
+		require.Equal(t, statusFailed, status.RuntimeStatus)
+		assert.Contains(t, status.Properties["dapr.workflow.failure.error_message"], "is not registered")
 	})
 
 	t.Run("tool name is derived from workflow name", func(t *testing.T) {

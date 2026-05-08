@@ -14,11 +14,9 @@ limitations under the License.
 package mcpserver
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"testing"
 
@@ -26,7 +24,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -121,24 +118,4 @@ func (s *accessPolicyScoped) Run(t *testing.T, ctx context.Context) {
 		}
 	})
 
-	t.Run("scoped out MCPServer workflow not registered", func(t *testing.T) {
-		// MCPServer filtered out by appID scoping → its workflow was never
-		// registered. StartWorkflow rejects synchronously via the
-		// reserved-prefix-not-registered check.
-		body, err := json.Marshal(map[string]any{})
-		require.NoError(t, err)
-		reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start",
-			s.daprd.HTTPPort(), mcpnames.MCPListToolsWorkflowName("restricted-mcp"))
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(body))
-		require.NoError(t, err)
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := s.httpClient.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		respBody, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		assert.Contains(t, string(respBody), "ERR_WORKFLOW_NAME_RESERVED")
-	})
 }

@@ -26,7 +26,7 @@ import (
 
 // hookChildWorkflowOpts builds the CallChildWorkflow options for a middleware hook.
 // When the hook's AppID is set, the child workflow targets the remote app via service invocation.
-func hookChildWorkflowOpts(wf *mcpserverapi.MCPMiddlewareWorkflow, input any) []task.ChildWorkflowOption {
+func hookChildWorkflowOpts(wf mcpserverapi.MCPMiddlewareWorkflow, input any) []task.ChildWorkflowOption {
 	opts := []task.ChildWorkflowOption{task.WithChildWorkflowInput(input)}
 	if wf.AppID != nil {
 		opts = append(opts, task.WithChildWorkflowAppID(*wf.AppID))
@@ -53,9 +53,6 @@ func runBeforeCallTool(
 		Name: serverName, ToolName: tool, Arguments: arguments,
 	}
 	for _, hook := range server.Spec.Middleware.BeforeCallTool {
-		if hook.Workflow == nil {
-			continue
-		}
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
 			hookChildWorkflowOpts(hook.Workflow, input)...)
 		if hook.Mutate != nil && *hook.Mutate {
@@ -93,9 +90,6 @@ func runAfterCallTool(
 		Name: serverName, ToolName: tool, Arguments: arguments, Result: result,
 	}
 	for _, hook := range server.Spec.Middleware.AfterCallTool {
-		if hook.Workflow == nil {
-			continue
-		}
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
 			hookChildWorkflowOpts(hook.Workflow, input)...)
 		if hook.Mutate != nil && *hook.Mutate {
@@ -128,9 +122,6 @@ func runBeforeListTools(
 	}
 	input := &wfv1.MCPBeforeListToolsHookInput{Name: serverName}
 	for _, hook := range server.Spec.Middleware.BeforeListTools {
-		if hook.Workflow == nil {
-			continue
-		}
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
 			hookChildWorkflowOpts(hook.Workflow, input)...)
 		if err := t.Await(nil); err != nil {
@@ -154,9 +145,6 @@ func runAfterListTools(
 	}
 	input := &wfv1.MCPAfterListToolsHookInput{Name: serverName, Result: result}
 	for _, hook := range server.Spec.Middleware.AfterListTools {
-		if hook.Workflow == nil {
-			continue
-		}
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
 			hookChildWorkflowOpts(hook.Workflow, input)...)
 		if hook.Mutate != nil && *hook.Mutate {

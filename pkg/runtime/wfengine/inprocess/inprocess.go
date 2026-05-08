@@ -20,7 +20,6 @@ package inprocess
 
 import (
 	"context"
-	"time"
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -56,12 +55,6 @@ func (e *Executor) Backend() backend.Executor {
 	return e.executor
 }
 
-// HasWorkflow reports whether a workflow with the given name is registered.
-func (e *Executor) HasWorkflow(name string) bool {
-	_, _, err := e.registry.ResolveWorkflow(name, nil)
-	return err == nil
-}
-
 // RegisterMCPServer eagerly connects to the MCPServer, discovers its tools,
 // and installs per-tool CallTool workflows plus a ListTools workflow into the
 // shared task registry. Called by the processor on initial load and hot-reload.
@@ -74,21 +67,9 @@ func (e *Executor) UnregisterMCPServer(serverName string) {
 	e.mcp.unregister(serverName)
 }
 
-// shutdownCloseTimeout caps closeAll on shutdown so unbounded session
-// network teardown can't exceed the runtime graceful-shutdown time.
-const shutdownCloseTimeout = 2 * time.Second
-
 // Run blocks until ctx is cancelled, then closes every holder.
 func (e *Executor) Run(ctx context.Context) error {
 	<-ctx.Done()
-	done := make(chan struct{})
-	go func() {
-		e.mcp.closeAll()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(shutdownCloseTimeout):
-	}
+	e.mcp.closeAll()
 	return nil
 }

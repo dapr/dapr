@@ -16,7 +16,6 @@ package universal
 import (
 	"context"
 	"errors"
-	"strings"
 	"unicode"
 
 	"github.com/google/uuid"
@@ -28,7 +27,6 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/durabletask-go/api"
 )
 
@@ -89,17 +87,6 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 
 	if in.GetWorkflowName() == "" {
 		err := messages.ErrWorkflowNameMissing
-		a.logger.Debug(err)
-		return &runtimev1pb.StartWorkflowResponse{}, err
-	}
-
-	// Names with the reserved prefix are routed to the in-process executor,
-	// and the workflow actor type only registers when a managed workflow loads —
-	// so without this gate, calls to unregistered reserved-prefix names hang on actor lookup.
-	// Reject them up-front instead.
-	if strings.HasPrefix(in.GetWorkflowName(), wfengine.ReservedWorkflowNamePrefix) &&
-		!a.workflowEngine.InProcessExecutor().HasWorkflow(in.GetWorkflowName()) {
-		err := messages.ErrWorkflowNameReserved.WithFormat(in.GetWorkflowName(), wfengine.ReservedWorkflowNamePrefix)
 		a.logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}

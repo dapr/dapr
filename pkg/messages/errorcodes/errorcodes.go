@@ -78,7 +78,6 @@ var (
 	WorkflowComponentNotFound         = ErrorCode{"ERR_WORKFLOW_COMPONENT_NOT_FOUND", "", CategoryWorkflow} // Workflow component not found
 	WorkflowEventNameMissing          = ErrorCode{"ERR_WORKFLOW_EVENT_NAME_MISSING", "", CategoryWorkflow}  // Missing workflow event name
 	WorkflowNameMissing               = ErrorCode{"ERR_WORKFLOW_NAME_MISSING", "", CategoryWorkflow}        // Workflow name not configured
-	WorkflowNameReserved              = ErrorCode{"ERR_WORKFLOW_NAME_RESERVED", "", CategoryWorkflow}       // Workflow name uses a reserved prefix
 	WorkflowInstanceIDInvalid         = ErrorCode{"ERR_INSTANCE_ID_INVALID", "", CategoryWorkflow}          // Invalid workflow instance ID. (Only alphanumeric and underscore characters are allowed)
 	WorkflowInstanceIDNotFound        = ErrorCode{"ERR_INSTANCE_ID_NOT_FOUND", "", CategoryWorkflow}        // Workflow instance ID not found
 	WorkflowInstanceIDProvidedMissing = ErrorCode{"ERR_INSTANCE_ID_PROVIDED_MISSING", "", CategoryWorkflow} // Missing workflow instance ID

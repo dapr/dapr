@@ -14,18 +14,13 @@ limitations under the License.
 package mcpserver
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
-	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -95,24 +90,17 @@ func (s *listToolsUnreachable) Run(t *testing.T, ctx context.Context) {
 
 	s.httpClient = fclient.HTTP(t)
 
-	t.Run("ListTools fails when MCP server is unreachable", func(t *testing.T) {
-		// Eager tool discovery failed (endpoint unreachable) and ignoreErrors=true
-		// kept the sidecar up, so per-server workflows were never registered.
-		// StartWorkflow rejects synchronously via the reserved-prefix-not-registered check.
-		body, err := json.Marshal(map[string]any{})
-		require.NoError(t, err)
-		reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start",
-			s.daprd.HTTPPort(), mcpnames.MCPListToolsWorkflowName("dead-server"))
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(body))
-		require.NoError(t, err)
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := s.httpClient.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		respBody, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		assert.Contains(t, string(respBody), "ERR_WORKFLOW_NAME_RESERVED")
+	t.Run("daprd survives when MCP server is unreachable", func(t *testing.T) {
+		// `WaitUntilRunning` (above) already proves daprd didn't crash —
+		// `ignoreErrors: true` swallowed the registration failure. Confirm
+		// the resource is still in compStore (the metadata API surface)
+		// even though its workflows weren't registered.
+		servers := s.daprd.GetMetaMCPServers(t, ctx)
+		names := make([]string, 0, len(servers))
+		for _, m := range servers {
+			names = append(names, m.GetName())
+		}
+		assert.Contains(t, names, "dead-server",
+			"unreachable MCPServer should still appear in metadata when ignoreErrors=true")
 	})
 }

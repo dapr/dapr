@@ -416,15 +416,24 @@ spec:
                     description: |-
                       AfterCallTool hooks are invoked in order after each CallTool.
                       Receives {mcpServer, toolName, arguments, result} as input.
-                      Errors are logged but do not affect the result.
+                      Errors fail the workflow — after-hooks act as authorization gates.
                     items:
                       description: |-
-                        MCPMiddlewareHook is a single middleware hook. Exactly one field must be set.
-                        Currently only Workflow is supported; additional hook types (e.g. HTTP callback,
-                        policy evaluation) may be added in future.
+                        MutatingMCPMiddlewareHook extends MCPMiddlewareHook with the ability to
+                        replace the data flowing through the pipeline when Mutate is true.
                       properties:
+                        mutate:
+                          description: |-
+                            Mutate, when true, causes the hook's return value to replace the data
+                            flowing through the pipeline:
+                              - beforeCallTool: replaces the arguments sent to the tool call
+                                (e.g. redact PII, inject defaults).
+                              - afterCallTool / afterListTools: replaces the result returned to the caller.
+                            When false (default), the hook validates/observes only — its output is discarded.
+                          type: boolean
                         workflow:
-                          description: Workflow invokes a Dapr workflow as the hook.
+                          description: Workflow is the Dapr workflow to invoke as
+                            the hook.
                           properties:
                             appID:
                               description: |-
@@ -439,12 +448,8 @@ spec:
                           required:
                           - workflowName
                           type: object
-                        mutate:
-                          description: |-
-                            Mutate, when true, causes the hook's return value to replace the
-                            original result. When false (default),
-                            the hook observes but cannot modify the result.
-                          type: boolean
+                      required:
+                      - workflow
                       type: object
                     type: array
                   afterListTools:
@@ -454,12 +459,21 @@ spec:
                       Errors are logged but do not affect the result.
                     items:
                       description: |-
-                        MCPMiddlewareHook is a single middleware hook. Exactly one field must be set.
-                        Currently only Workflow is supported; additional hook types (e.g. HTTP callback,
-                        policy evaluation) may be added in future.
+                        MutatingMCPMiddlewareHook extends MCPMiddlewareHook with the ability to
+                        replace the data flowing through the pipeline when Mutate is true.
                       properties:
+                        mutate:
+                          description: |-
+                            Mutate, when true, causes the hook's return value to replace the data
+                            flowing through the pipeline:
+                              - beforeCallTool: replaces the arguments sent to the tool call
+                                (e.g. redact PII, inject defaults).
+                              - afterCallTool / afterListTools: replaces the result returned to the caller.
+                            When false (default), the hook validates/observes only — its output is discarded.
+                          type: boolean
                         workflow:
-                          description: Workflow invokes a Dapr workflow as the hook.
+                          description: Workflow is the Dapr workflow to invoke as
+                            the hook.
                           properties:
                             appID:
                               description: |-
@@ -474,28 +488,33 @@ spec:
                           required:
                           - workflowName
                           type: object
-                        mutate:
-                          description: |-
-                            Mutate, when true, causes the hook's return value to replace the
-                            original result. When false (default),
-                            the hook observes but cannot modify the result.
-                          type: boolean
+                      required:
+                      - workflow
                       type: object
                     type: array
                   beforeCallTool:
                     description: |-
                       BeforeCallTool hooks are invoked in order before each CallTool.
                       Receives {mcpServer, toolName, arguments} as input.
-                      If any hook returns an error, the chain stops and the error is returned
-                      as CallToolResult{isError: true}.
+                      If any hook returns an error, the chain stops and the workflow completes
+                      with CallToolResult{isError: true} so the agent/LLM can self-correct.
                     items:
                       description: |-
-                        MCPMiddlewareHook is a single middleware hook. Exactly one field must be set.
-                        Currently only Workflow is supported; additional hook types (e.g. HTTP callback,
-                        policy evaluation) may be added in future.
+                        MutatingMCPMiddlewareHook extends MCPMiddlewareHook with the ability to
+                        replace the data flowing through the pipeline when Mutate is true.
                       properties:
+                        mutate:
+                          description: |-
+                            Mutate, when true, causes the hook's return value to replace the data
+                            flowing through the pipeline:
+                              - beforeCallTool: replaces the arguments sent to the tool call
+                                (e.g. redact PII, inject defaults).
+                              - afterCallTool / afterListTools: replaces the result returned to the caller.
+                            When false (default), the hook validates/observes only — its output is discarded.
+                          type: boolean
                         workflow:
-                          description: Workflow invokes a Dapr workflow as the hook.
+                          description: Workflow is the Dapr workflow to invoke as
+                            the hook.
                           properties:
                             appID:
                               description: |-
@@ -510,12 +529,8 @@ spec:
                           required:
                           - workflowName
                           type: object
-                        mutate:
-                          description: |-
-                            Mutate, when true, causes the hook's return value to replace the
-                            arguments flowing to the tool call (e.g. redact PII, inject defaults).
-                            When false (default), the hook validates/gates only — its output is discarded.
-                          type: boolean
+                      required:
+                      - workflow
                       type: object
                     type: array
                   beforeListTools:
@@ -524,13 +539,11 @@ spec:
                       Receives {mcpServer} as input.
                       If any hook returns an error, the chain stops and the error is returned.
                     items:
-                      description: |-
-                        MCPMiddlewareHook is a single middleware hook. Exactly one field must be set.
-                        Currently only Workflow is supported; additional hook types (e.g. HTTP callback,
-                        policy evaluation) may be added in future.
+                      description: MCPMiddlewareHook is a single middleware hook.
                       properties:
                         workflow:
-                          description: Workflow invokes a Dapr workflow as the hook.
+                          description: Workflow is the Dapr workflow to invoke as
+                            the hook.
                           properties:
                             appID:
                               description: |-
@@ -545,6 +558,8 @@ spec:
                           required:
                           - workflowName
                           type: object
+                      required:
+                      - workflow
                       type: object
                     type: array
                 type: object

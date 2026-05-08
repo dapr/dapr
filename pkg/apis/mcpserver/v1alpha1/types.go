@@ -330,13 +330,11 @@ type MCPMiddleware struct {
 	AfterListTools []MutatingMCPMiddlewareHook `json:"afterListTools,omitempty"`
 }
 
-// MCPMiddlewareHook is a single middleware hook. Exactly one field must be set.
-// Currently only Workflow is supported; additional hook types (e.g. HTTP callback,
-// policy evaluation) may be added in future.
+// MCPMiddlewareHook is a single middleware hook.
 type MCPMiddlewareHook struct {
-	// Workflow invokes a Dapr workflow as the hook.
-	//+optional
-	Workflow *MCPMiddlewareWorkflow `json:"workflow,omitempty"`
+	// Workflow is the Dapr workflow to invoke as the hook.
+	//+kubebuilder:validation:Required
+	Workflow MCPMiddlewareWorkflow `json:"workflow"`
 }
 
 // MutatingMCPMiddlewareHook extends MCPMiddlewareHook with the ability to
