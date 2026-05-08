@@ -51,6 +51,7 @@ type Interface interface {
 	IsActorHosted(ctx context.Context, actorType, actorID string) bool
 	Ready() bool
 	SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration)
+	SetEntityDrainOngoingCallTimeouts(timeouts map[string]time.Duration)
 }
 
 type Options struct {
@@ -250,5 +251,11 @@ func (p *placement) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Durati
 	p.loop.Enqueue(&loops.SetDrainOngoingCallTimeout{
 		Drain:   drain,
 		Timeout: timeout,
+	})
+}
+
+func (p *placement) SetEntityDrainOngoingCallTimeouts(timeouts map[string]time.Duration) {
+	p.loop.Enqueue(&loops.SetEntityDrainOngoingCallTimeouts{
+		Timeouts: timeouts,
 	})
 }
