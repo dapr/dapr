@@ -42,10 +42,10 @@ const (
 	testLabel       = "jobs"
 
 	// Target QPS for job scheduling.
-	targetScheduleQPS float64 = 700
+	targetScheduleQPS float64 = 750
 
 	// Target QPS for job triggering.
-	targetTriggerQPS float64 = 8000
+	targetTriggerQPS float64 = 12700
 )
 
 var tr *runner.TestRunner
