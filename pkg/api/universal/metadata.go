@@ -118,6 +118,15 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 		}
 	}
 
+	// Resiliency resources
+	resiliencies := a.compStore.ListResiliencyResources()
+	registeredResiliencies := make([]*runtimev1pb.MetadataResiliency, len(resiliencies))
+	for i, r := range resiliencies {
+		registeredResiliencies[i] = &runtimev1pb.MetadataResiliency{
+			Name: r.Name,
+		}
+	}
+
 	var sched *runtimev1pb.MetadataScheduler
 	if a.scheduler != nil {
 		if addr := a.scheduler.Addresses(); len(addr) > 0 {
@@ -142,6 +151,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 		Scheduler:               sched,
 		Workflows:               workflowsMetadata,
 		WorkflowAccessPolicies:  registeredWFACLs,
+		Resiliencies:            registeredResiliencies,
 	}, nil
 }
 

@@ -42,6 +42,7 @@ message GetMetadataResponse {
   optional MetadataWorkflows workflows = 12 [json_name = "workflows"];
   repeated MetadataMCPServer mcp_servers = 13 [json_name = "mcpServers"];
   repeated MetadataWorkflowAccessPolicy workflow_access_policies = 14 [json_name = "workflowAccessPolicies"];
+  repeated MetadataResiliency resiliencies = 15 [json_name = "resiliencies"];
 }
 
 message MetadataWorkflows {
@@ -100,6 +101,13 @@ message MetadataMCPServer {
 // resource. Lets clients verify which policies are currently in effect on
 // the sidecar, including after a hot reload.
 message MetadataWorkflowAccessPolicy {
+  string name = 1 [json_name = "name"];
+}
+
+// MetadataResiliency describes a loaded Resiliency resource. Lets clients
+// verify which resiliency resources are currently in effect on the sidecar,
+// including after a hot reload.
+message MetadataResiliency {
   string name = 1 [json_name = "name"];
 }
 
