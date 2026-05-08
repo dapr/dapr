@@ -136,6 +136,7 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 				}
 
 				res.WorkflowAccessPolicies = out.GetWorkflowAccessPolicies()
+				res.Resiliencies = out.GetResiliencies()
 
 				return res, nil
 			},
@@ -181,6 +182,7 @@ type metadataResponse struct {
 	Scheduler               *runtimev1pb.MetadataScheduler              `json:"scheduler,omitempty"`
 	Workflows               metadataWorkflows                           `json:"workflows,omitzero"`
 	WorkflowAccessPolicies  []*runtimev1pb.MetadataWorkflowAccessPolicy `json:"workflowAccessPolicies,omitempty"`
+	Resiliencies            []*runtimev1pb.MetadataResiliency           `json:"resiliencies,omitempty"`
 }
 
 type metadataWorkflows struct {
