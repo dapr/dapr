@@ -506,8 +506,8 @@ github.com/cyphar/filepath-securejoin v0.6.1 h1:5CeZ1jPXEiYt3+Z6zqprSAgSWiggmpVy
 github.com/cyphar/filepath-securejoin v0.6.1/go.mod h1:A8hd4EnAeyujCJRrICiOWqjS1AX0a9kM5XL+NwKoYSc=
 github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjmUv0qGF43aKCIKVE9A=
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
-github.com/dapr/components-contrib v1.17.4 h1:5kfTfnOkDeB1ZyOescO4asRCT2BW7xLxPzxCCUwPARo=
-github.com/dapr/components-contrib v1.17.4/go.mod h1:lVPRj9ywzkUWoKXxRTAJbvS+Vg8A882av/nynGstNE4=
+github.com/dapr/components-contrib v1.17.5 h1:QHm8maDqa+qPfAnj0JBEidCpzdK6UNFEXoq0qk+NXqE=
+github.com/dapr/components-contrib v1.17.5/go.mod h1:lVPRj9ywzkUWoKXxRTAJbvS+Vg8A882av/nynGstNE4=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf h1:vRT6BytcXSseSg+VZthVm93niltGVOFbhLeRXbwyWKI=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf/go.mod h1:NawmfMN065wKn8Jk39E1iwwgWe3kti/MfHBy1jQmSZs=
 github.com/dapr/durabletask-go v0.11.5 h1:+6QYX3Vit3GTFzLA8vNrd+AfQBSU4P07EdGBreHqSL8=
@@ -536,8 +536,8 @@ github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cu
 github.com/dgryski/go-sip13 v0.0.0-20181026042036-e10d5fee7954/go.mod h1:vAd38F8PWV+bWy6jNmig1y/TA+kYO4g3RSRF0IAv0no=
 github.com/dgryski/trifles v0.0.0-20230903005119-f50d829f2e54 h1:SG7nF6SRlWhcT7cNTs5R6Hk4V2lcmLz2NsG2VnInyNo=
 github.com/dgryski/trifles v0.0.0-20230903005119-f50d829f2e54/go.mod h1:if7Fbed8SFyPtHLHbg49SI7NAdJiC5WIA09pe59rfAA=
-github.com/diagridio/go-etcd-cron v0.12.4 h1:pc0Jk0M5MjrQ7uGydYuX93dKzWfulInA8XAh+i7GQFI=
-github.com/diagridio/go-etcd-cron v0.12.4/go.mod h1:XpjpGLT4WzS/eE+20h4aUl2yFtudShbrKK7cPQMtMJ0=
+github.com/diagridio/go-etcd-cron v0.12.5-0.20260430160035-0e8ef88f5628 h1:+cnJrLG6wSXtiJPTSK9uoWx4QE6d4SyNsPZCgVCgUNs=
+github.com/diagridio/go-etcd-cron v0.12.5-0.20260430160035-0e8ef88f5628/go.mod h1:Hj7WYwxoYBjV2sOc7ycOy/fZhFVHBetYSZ78C5PcoZc=
 github.com/didip/tollbooth/v7 v7.0.1 h1:TkT4sBKoQoHQFPf7blQ54iHrZiTDnr8TceU+MulVAog=
 github.com/didip/tollbooth/v7 v7.0.1/go.mod h1:VZhDSGl5bDSPj4wPsih3PFa4Uh9Ghv8hgacaTm5PRT4=
 github.com/dimfeld/httptreemux v5.0.1+incompatible h1:Qj3gVcDNoOthBAqftuD596rm4wg/adLLz5xh5CmpiCA=
