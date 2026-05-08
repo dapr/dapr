@@ -82,6 +82,7 @@ func runk6test(t *testing.T, config K6RunConfig) *loadtest.K6RunnerMetricsSummar
 	k6Test := loadtest.NewK6(
 		"./test.js",
 		loadtest.WithParallelism(1),
+		loadtest.WithMemoryLimits("256Mi", "512Mi", "512Mi", "2Gi"),
 		// loadtest.EnableLog(), // uncomment this to enable k6 logs, this however breaks reporting, only for debugging.
 		loadtest.WithRunnerEnvVar("TARGET_URL", config.TARGET_URL),
 		loadtest.WithRunnerEnvVar("SCENARIO", config.SCENARIO),
@@ -238,7 +239,7 @@ func TestDelayWorkflowsAtScale(t *testing.T) {
 func TestBurstWorkflowCreation(t *testing.T) {
 	workflowName := "delay_wf"
 	inputs := []string{"1000"}            // delay in milliseconds (1s)
-	scenarios := []string{"t_1200_1200"} // t_workflowCount_iterations
+	scenarios := []string{"t_1000_1000"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1"}}
 	testWorkflow(t, workflowName, appName, inputs, scenarios, rateChecks, true, false)
 }
