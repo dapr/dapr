@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -67,6 +68,7 @@ type directMessaging struct {
 	resolver            nr.Resolver
 	resolverMulti       nr.ResolverMulti
 	hostAddress         string
+	hostFwdAddr         string
 	hostName            string
 	maxRequestBodySize  int
 	proxy               Proxy
@@ -106,6 +108,12 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) invokev1.DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
 
+	// RFC 7239: IPv6 addresses must be quoted and bracketed in the Forwarded header.
+	hFwdAddr := hAddr
+	if ip := net.ParseIP(hAddr); ip != nil && ip.To4() == nil {
+		hFwdAddr = `"[` + hAddr + `]"`
+	}
+
 	dm := &directMessaging{
 		appID:               opts.AppID,
 		namespace:           opts.Namespace,
@@ -119,6 +127,7 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) invokev1.DirectMessaging {
 		readBufferSize:      opts.ReadBufferSize,
 		resiliency:          opts.Resiliency,
 		hostAddress:         hAddr,
+		hostFwdAddr:         hFwdAddr,
 		hostName:            hName,
 		compStore:           opts.CompStore,
 	}
@@ -578,13 +587,16 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 		// Add X-Forwarded-For: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For
 		addOrCreate("X-Forwarded-For", d.hostAddress)
 
-		forwardedHeaderValue += "for=" + d.hostAddress + ";by=" + d.hostAddress + ";"
+		forwardedHeaderValue += "for=" + d.hostFwdAddr + ";by=" + d.hostFwdAddr
 	}
 
 	if d.hostName != "" {
 		// Add X-Forwarded-Host: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
 		addOrCreate("X-Forwarded-Host", d.hostName)
 
+		if forwardedHeaderValue != "" {
+			forwardedHeaderValue += ";"
+		}
 		forwardedHeaderValue += "host=" + d.hostName
 	}
 
