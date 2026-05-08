@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
@@ -79,6 +80,12 @@ type factory struct {
 
 	table sync.Map
 	lock  sync.Mutex
+
+	// inflight tracks activity executions whose WorkItem is currently in
+	// the durabletask queue or being processed by the SDK. Keyed by the
+	// composite (activity actor ID, TaskExecutionId) value produced by
+	// inflight.Key. See the inflight subpackage for semantics.
+	inflight inflight.Map
 }
 
 func New(ctx context.Context, opts Options) (targets.Factory, error) {
