@@ -56,6 +56,11 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.actor")
 
+// defaultDisseminationTimeout is the daprd-side timeout for completing a
+// placement LOCK -> UPDATE -> UNLOCK round. It is not user-configurable in
+// release-1.17 and matches the value passed to the placement loop.
+const defaultDisseminationTimeout = time.Second * 5
+
 type Options struct {
 	AppID              string
 	Namespace          string
@@ -130,8 +135,9 @@ type actors struct {
 	registerDoneCh   chan struct{}
 	registerDoneLock sync.RWMutex
 
-	clock clock.Clock
-	mode  modes.DaprMode
+	clock                clock.Clock
+	mode                 modes.DaprMode
+	disseminationTimeout time.Duration
 }
 
 // New create a new actors runtime with given config.
@@ -162,8 +168,9 @@ func New(opts Options) Interface {
 		initDoneCh:         make(chan struct{}),
 		registerDoneCh:     make(chan struct{}),
 		maxRequestBodySize: opts.MaxRequestBodySize,
-		mode:               opts.Mode,
-		reentrancyStore:    reentrancystore.New(),
+		mode:                 opts.Mode,
+		reentrancyStore:      reentrancystore.New(),
+		disseminationTimeout: defaultDisseminationTimeout,
 	}
 }
 
@@ -388,7 +395,7 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 
 	entityConfigs := make(map[string]api.EntityConfig)
 	for _, entityConfg := range cfg.EntityConfigs {
-		config := api.TranslateEntityConfig(entityConfg)
+		config := api.TranslateEntityConfig(entityConfg, a.disseminationTimeout)
 		for _, entity := range entityConfg.Entities {
 			var found bool
 			for _, hostedType := range cfg.HostedActorTypes {
@@ -412,6 +419,7 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		if err != nil {
 			return fmt.Errorf("failed to parse drain ongoing call timeout: %s", err)
 		}
+		drainOngoingCallTimeout = api.ClampDrainOngoingCallTimeout(drainOngoingCallTimeout, a.disseminationTimeout, "global config")
 	}
 
 	idleTimeout := api.DefaultIdleTimeout
@@ -463,6 +471,18 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 	// dissemination, in-flight actor calls are given the configured time to
 	// complete before being forcefully cancelled.
 	a.placement.SetDrainOngoingCallTimeout(cfg.DrainRebalancedActors, &drainOngoingCallTimeout)
+
+	var entityDrainTimeouts map[string]time.Duration
+	for actorType, c := range entityConfigs {
+		if c.DrainOngoingCallTimeout == nil {
+			continue
+		}
+		if entityDrainTimeouts == nil {
+			entityDrainTimeouts = make(map[string]time.Duration)
+		}
+		entityDrainTimeouts[actorType] = *c.DrainOngoingCallTimeout
+	}
+	a.placement.SetEntityDrainOngoingCallTimeouts(entityDrainTimeouts)
 
 	return nil
 }

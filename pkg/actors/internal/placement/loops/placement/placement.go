@@ -116,6 +116,8 @@ func (p *placement) Handle(ctx context.Context, event loops.Event) error {
 		p.handleUpdateTypes(e)
 	case *loops.SetDrainOngoingCallTimeout:
 		p.handleSetDrainOngoingCallTimeout(e)
+	case *loops.SetEntityDrainOngoingCallTimeouts:
+		p.inflight.SetEntityDrainOngoingCallTimeouts(e.Timeouts)
 	case *loops.Shutdown:
 		p.handleShutdown(e)
 	default:

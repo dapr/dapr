@@ -167,6 +167,12 @@ func (l *LogLine) StdoutBuffer() []byte {
 	return l.got.Bytes()
 }
 
+func (l *LogLine) Contains(s string) bool {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	return bytes.Contains(l.got.Bytes(), []byte(s))
+}
+
 func (l *LogLine) EventuallyFoundAll(t *testing.T) {
 	assert.Eventually(t, l.FoundAll, time.Second*15, time.Millisecond*10)
 }
