@@ -22,13 +22,14 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 const appPort = 3000
 
 var (
 	triggeredCount atomic.Int64
-	httpClient     = &http.Client{}
+	httpClient     = &http.Client{Timeout: 30 * time.Second}
 	daprBaseURL    = ""
 )
 

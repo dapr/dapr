@@ -141,13 +141,13 @@ func TestJobSchedulingPerformance(t *testing.T) {
 	require.NotEmpty(t, daprResp)
 	require.False(t, strings.HasPrefix(string(daprResp), "error"), string(daprResp))
 
-	appUsage, err := tr.Platform.GetAppUsage(appName)
+	appUsage, err := tr.Platform.GetAppUsage(testerAppName)
 	require.NoError(t, err)
 
-	sidecarUsage, err := tr.Platform.GetSidecarUsage(appName)
+	sidecarUsage, err := tr.Platform.GetSidecarUsage(testerAppName)
 	require.NoError(t, err)
 
-	restarts, err := tr.Platform.GetTotalRestarts(appName)
+	restarts, err := tr.Platform.GetTotalRestarts(testerAppName)
 	require.NoError(t, err)
 
 	utils.LogPerfTestResourceUsage(appUsage, sidecarUsage, restarts, 0)
@@ -166,7 +166,7 @@ func TestJobSchedulingPerformance(t *testing.T) {
 	t.Logf("actual QPS: %.2f, target QPS: %.0f", daprResult.ActualQPS, targetScheduleQPS)
 
 	summary.ForTest(t).
-		Service(appName).
+		Service(testerAppName).
 		Client(testerAppName).
 		CPU(appUsage.CPUm).
 		Memory(appUsage.MemoryMb).
