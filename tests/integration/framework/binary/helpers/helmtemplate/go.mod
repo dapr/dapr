@@ -1,6 +1,6 @@
 module helm
 
-go 1.25.9
+go 1.26.3
 
 require (
 	github.com/spf13/pflag v1.0.7
