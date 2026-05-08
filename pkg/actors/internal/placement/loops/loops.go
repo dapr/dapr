@@ -128,6 +128,13 @@ type SetDrainOngoingCallTimeout struct {
 	Timeout *time.Duration
 }
 
+// SetEntityDrainOngoingCallTimeouts replaces the per-actor-type drain
+// timeouts. nil/empty means "remove all overrides".
+type SetEntityDrainOngoingCallTimeouts struct {
+	*placebase
+	Timeouts map[string]time.Duration
+}
+
 func IsActorLocal(targetActorAddress, hostAddress string, port string) bool {
 	if targetActorAddress == hostAddress+":"+port {
 		// Easy case when there is a perfect match
