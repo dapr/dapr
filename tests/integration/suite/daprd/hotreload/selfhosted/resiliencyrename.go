@@ -30,17 +30,15 @@ import (
 )
 
 func init() {
-	suite.Register(new(resiliency))
+	suite.Register(new(resiliencyrename))
 }
 
-// resiliency tests that resiliency resources are hot-reloaded via file watcher
-// in selfhosted mode when HotReload feature is enabled.
-type resiliency struct {
+type resiliencyrename struct {
 	daprd  *daprd.Daprd
 	resDir string
 }
 
-func (r *resiliency) Setup(t *testing.T) []framework.Option {
+func (r *resiliencyrename) Setup(t *testing.T) []framework.Option {
 	r.resDir = t.TempDir()
 
 	r.daprd = daprd.New(t,
@@ -52,7 +50,7 @@ func (r *resiliency) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (r *resiliency) Run(t *testing.T, ctx context.Context) {
+func (r *resiliencyrename) Run(t *testing.T, ctx context.Context) {
 	r.daprd.WaitUntilRunning(t, ctx)
 
 	writeResiliency := func(t *testing.T, name string) {
@@ -79,19 +77,13 @@ spec:
 		return names
 	}
 
-	t.Run("adding resiliency file triggers reload", func(t *testing.T) {
-		writeResiliency(t, "myresiliency")
+	writeResiliency(t, "myresiliency")
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.ElementsMatch(c, []string{"myresiliency"}, resiliencyNames(c))
+	}, 20*time.Second, 10*time.Millisecond)
 
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.ElementsMatch(c, []string{"myresiliency"}, resiliencyNames(c))
-		}, 20*time.Second, 10*time.Millisecond)
-	})
-
-	t.Run("deleting resiliency file triggers reload", func(t *testing.T) {
-		require.NoError(t, os.Remove(filepath.Join(r.resDir, "resiliency.yaml")))
-
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Empty(c, resiliencyNames(c))
-		}, 20*time.Second, 10*time.Millisecond)
-	})
+	writeResiliency(t, "myresiliency-v2")
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.ElementsMatch(c, []string{"myresiliency-v2"}, resiliencyNames(c))
+	}, 20*time.Second, 10*time.Millisecond)
 }

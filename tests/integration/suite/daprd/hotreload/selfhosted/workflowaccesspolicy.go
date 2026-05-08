@@ -99,6 +99,15 @@ func (w *workflowaccesspolicy) Run(t *testing.T, ctx context.Context) {
 		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	})
 
+	policyNames := func(t assert.TestingT) []string {
+		policies := w.daprd.GetMetaWorkflowAccessPolicies(t, ctx)
+		names := make([]string, 0, len(policies))
+		for _, p := range policies {
+			names = append(names, p.GetName())
+		}
+		return names
+	}
+
 	t.Run("write policy and delete it, verifying hot-reload picks up changes", func(t *testing.T) {
 		policyYAML := `
 apiVersion: dapr.io/v1alpha1
@@ -118,23 +127,27 @@ spec:
 		require.NoError(t, os.WriteFile(filepath.Join(w.resDir, "policy.yaml"), []byte(policyYAML), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			id, err := backendClient.ScheduleNewWorkflow(ctx, "TestWF")
-			assert.NoError(c, err)
-			metadata, err := backendClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
-			assert.NoError(c, err)
-			assert.True(c, api.WorkflowMetadataIsComplete(metadata))
-		}, time.Second*20, time.Millisecond*100)
+			assert.ElementsMatch(c, []string{"allow-self"}, policyNames(c))
+		}, time.Second*20, time.Millisecond*10)
+
+		id, err := backendClient.ScheduleNewWorkflow(ctx, "TestWF")
+		require.NoError(t, err)
+		metadata, err := backendClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
+		require.NoError(t, err)
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	})
 
 	t.Run("delete policy file, workflow succeeds (nil policies = allow all)", func(t *testing.T) {
 		require.NoError(t, os.Remove(filepath.Join(w.resDir, "policy.yaml")))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			id, err := backendClient.ScheduleNewWorkflow(ctx, "TestWF")
-			assert.NoError(c, err)
-			metadata, err := backendClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
-			assert.NoError(c, err)
-			assert.True(c, api.WorkflowMetadataIsComplete(metadata))
-		}, time.Second*20, time.Millisecond*100)
+			assert.Empty(c, policyNames(c))
+		}, time.Second*20, time.Millisecond*10)
+
+		id, err := backendClient.ScheduleNewWorkflow(ctx, "TestWF")
+		require.NoError(t, err)
+		metadata, err := backendClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
+		require.NoError(t, err)
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	})
 }
