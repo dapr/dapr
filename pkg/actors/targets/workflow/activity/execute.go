@@ -18,21 +18,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
-
-	"google.golang.org/protobuf/proto"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
-	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/messages"
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
-	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
-	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
-	"github.com/dapr/durabletask-go/backend"
 )
 
 func (a *activity) executeActivity(ctx context.Context, name string, invocation *protos.ActivityInvocation) error {
@@ -61,141 +51,29 @@ func (a *activity) executeActivity(ctx context.Context, name string, invocation 
 		return fmt.Errorf("activity '%s::%d' rejecting invocation: propagated history verification failed: %w", activityName, taskEvent.GetEventId(), err)
 	}
 
-	wi := &backend.ActivityWorkItem{
-		SequenceNumber:  int64(taskEvent.GetEventId()),
-		InstanceID:      api.InstanceID(workflowID),
-		NewEvent:        taskEvent,
-		Properties:      make(map[string]any),
-		IncomingHistory: invocation.GetPropagatedHistory(),
-	}
-
-	// Executing activity code is a one-way operation. We must wait for the app code to report its completion, which
-	// will trigger this callback channel.
-	// TODO: Need to come up with a design for timeouts. Some activities may need to run for hours but we also need
-	//       to handle the case where the app crashes and never responds to the workflow. It may be necessary to
-	//       introduce some kind of heartbeat protocol to help identify such cases.
-	callback := make(chan bool, 1)
-	wi.Properties[todo.CallbackChannelProperty] = callback
-	log.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", a.actorID, name, wi.InstanceID)
-	elapsed := float64(0)
-	start := time.Now()
-	err := a.scheduler(ctx, wi)
-	elapsed = diag.ElapsedSince(start)
-
-	if errors.Is(err, context.DeadlineExceeded) {
-		diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusRecoverable, elapsed)
-		return wferrors.NewRecoverable(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
-	} else if err != nil {
-		diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusRecoverable, elapsed)
-		return wferrors.NewRecoverable(fmt.Errorf("failed to schedule an activity execution: %w", err))
-	}
-	diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusSuccess, elapsed)
-
-	// Activity execution started
-	start = time.Now()
-	executionStatus := ""
-	elapsed = float64(0)
-	// Record metrics on exit
-	defer func() {
-		if executionStatus != "" {
-			diag.DefaultWorkflowMonitoring.ActivityExecutionEvent(ctx, activityName, executionStatus, elapsed)
-		}
-	}()
-
-	select {
-	case <-ctx.Done():
-		// Activity execution failed with recoverable error
-		elapsed = diag.ElapsedSince(start)
-		executionStatus = diag.StatusRecoverable
-		return ctx.Err() // will be retried
-	case completed := <-callback:
-		elapsed = diag.ElapsedSince(start)
-		if !completed {
-			// Activity execution failed with recoverable error
-			executionStatus = diag.StatusRecoverable
-			return wferrors.NewRecoverable(todo.ErrExecutionAborted) // AbandonActivityWorkItem was called
-		}
-	}
-	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, name)
-
-	// Attach an attestation so the parent workflow can cryptographically
-	// verify this activity's identity, input, and output. No-op when
-	// signing is disabled (AttachActivityCompletionAttestation handles
-	// the nil-Signer case internally).
-	if wi.Result != nil {
-		scheduled := taskEvent.GetTaskScheduled()
-		if scheduled == nil {
-			executionStatus = diag.StatusRecoverable
-			return wferrors.NewRecoverable(fmt.Errorf("activity actor '%s': cannot build activity attestation without TaskScheduledEvent", a.actorID))
-		}
-		if attachErr := a.signing.AttachActivityCompletionAttestation(ctx, wi.Result, signing.ActivityAttestationParams{
-			ParentInstanceID: workflowID,
-			ActivityName:     activityName,
-			Input:            scheduled.GetInput(),
-		}); attachErr != nil {
-			executionStatus = diag.StatusRecoverable
-			return wferrors.NewRecoverable(fmt.Errorf("activity actor '%s': %w", a.actorID, attachErr))
+	key := inflight.Key(a.actorID, taskEvent)
+	call, owner := a.inflight.Acquire(key)
+	if !owner {
+		// A previous reminder for this activity scheduling is already in
+		// flight (or just finished and its outcome is still cached). Wait
+		// for its result and surface the same outcome so the scheduler's
+		// retry can be acked without dispatching the activity to the SDK
+		// again. The owner is responsible for posting the result to the
+		// workflow actor.
+		log.Debugf("Activity actor '%s': following in-flight execution of '%s'", a.actorID, name)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-call.Done():
+			return call.Err()
 		}
 	}
 
-	// send completed event to orchestrator wf actor
-	wfActorType := a.workflowActorType
-	if router := taskEvent.GetRouter(); router != nil {
-		wfActorType = a.actorTypeBuilder.Workflow(router.GetSourceAppID())
-	}
-
-	// TODO: @joshvanl: remove `a.workflowsRemoteActivityReminder` check in later
-	// version.
-	if a.workflowsRemoteActivityReminder && a.actorNotReachable(ctx, wfActorType, workflowID) {
-		err = a.createWorkflowResultReminder(ctx, wfActorType, workflowID, wi.Result)
-	} else {
-		// publish the result back to the workflow actor as a new event to be processed
-		var resultData []byte
-		resultData, err = proto.Marshal(wi.Result)
-		if err != nil {
-			// Returning non-recoverable error
-			executionStatus = diag.StatusFailed
-			return err
-		}
-
-		req := internalsv1pb.
-			NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
-			WithActor(wfActorType, workflowID).
-			WithData(resultData).
-			WithContentType(invokev1.ProtobufContentType)
-		_, err = a.router.Call(ctx, req)
-	}
-
-	switch {
-	case err != nil:
-		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
-			log.Errorf("Activity actor '%s': workflow actor instance not found when reporting activity result for workflow with instanceId '%s': %s", a.actorID, wi.InstanceID, err)
-			executionStatus = diag.StatusFailed
-			return nil
-		}
-
-		if a.workflowsRemoteActivityReminder {
-			if cerr := a.createWorkflowResultReminder(ctx, wfActorType, workflowID, wi.Result); cerr == nil {
-				return nil
-			}
-		}
-
-		// Returning recoverable error, record metrics
-		executionStatus = diag.StatusRecoverable
-		return wferrors.NewRecoverable(fmt.Errorf("failed to invoke '%s' method on workflow actor: %w", todo.AddWorkflowEventMethod, err))
-	case wi.Result.GetTaskCompleted() != nil:
-		// Activity execution completed successfully
-		executionStatus = diag.StatusSuccess
-	case wi.Result.GetTaskFailed() != nil:
-		// Activity execution failed
-		executionStatus = diag.StatusFailed
-	}
-
-	return nil
+	return a.runOwned(ctx, key, call, name, activityName, workflowID, taskEvent, invocation)
 }
 
-func (a *activity) actorNotReachable(ctx context.Context, wfActorType, workflowID string) bool {
-	_, _, cancel, err := a.placement.LookupActor(ctx, &actorsapi.LookupActorRequest{
+func (f *factory) actorNotReachable(ctx context.Context, wfActorType, workflowID string) bool {
+	_, _, cancel, err := f.placement.LookupActor(ctx, &actorsapi.LookupActorRequest{
 		ActorType: wfActorType,
 		ActorID:   workflowID,
 	})
