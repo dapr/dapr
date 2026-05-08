@@ -213,6 +213,28 @@ func (s *Scheduler) Kill(t *testing.T) {
 	s.exec.Kill(t)
 }
 
+func (s *Scheduler) Restart(t *testing.T, ctx context.Context) {
+	t.Helper()
+	clone := s.exec.Clone(t)
+	s.Kill(t)
+	s.exec = clone
+	s.exec.Run(t, ctx)
+}
+
+// RestartGraceful is like Restart but interrupts the scheduler with SIGINT
+// instead of SIGKILL. The graceful path lets diagrid-cron's leadership
+// package revoke its etcd lease on the way out, so the replacement
+// instance can claim leadership immediately rather than waiting for the
+// 20s lease TTL to expire. Use this when the test only needs to exercise
+// behaviour that is independent of crash semantics.
+func (s *Scheduler) RestartGraceful(t *testing.T, ctx context.Context) {
+	t.Helper()
+	clone := s.exec.Clone(t)
+	s.Cleanup(t)
+	s.exec = clone
+	s.exec.Run(t, ctx)
+}
+
 func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	client := client.HTTP(t)
 
