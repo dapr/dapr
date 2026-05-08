@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.26.2
+go 1.26.3
 
 require (
 	connectrpc.com/connect v1.19.1
