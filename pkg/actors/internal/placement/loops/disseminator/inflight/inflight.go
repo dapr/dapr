@@ -15,6 +15,7 @@ package inflight
 
 import (
 	"context"
+	"maps"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -50,6 +51,7 @@ type Inflight struct {
 	port                    string
 	drainOngoingCallTimeout atomic.Pointer[time.Duration]
 	drainRebalancedActors   atomic.Pointer[bool]
+	entityDrainTimeouts     atomic.Pointer[map[string]time.Duration]
 
 	acquires []func()
 	lock     loop.Interface[lock.Event]
@@ -78,13 +80,38 @@ func (i *Inflight) Lock(err error) {
 
 	i.lock.Close(&lock.CloseLock{
 		Error:                 err,
-		Timeout:               i.drainOngoingCallTimeout.Load(),
+		Timeout:               i.effectiveDrainTimeout(),
 		DrainRebalancedActors: i.drainRebalancedActors.Load(),
 	})
 	i.wg.Wait()
 	lo := i.lock
 	i.lock = nil
 	lock.LoopFactory.CacheLoop(lo)
+}
+
+// effectiveDrainTimeout returns the largest of the global drain timeout and
+// any configured per-entity drain timeouts. Release-1.17 closes the entire
+// inflight lock in a single round (it does not track claims by actor type),
+// so the round must run long enough for the longest-configured drain to
+// complete; using the max preserves the upstream "round wall-clock is
+// bounded by the largest per-type drain" semantic.
+func (i *Inflight) effectiveDrainTimeout() *time.Duration {
+	global := i.drainOngoingCallTimeout.Load()
+	entityTimeouts := i.entityDrainTimeouts.Load()
+	if entityTimeouts == nil || len(*entityTimeouts) == 0 {
+		return global
+	}
+
+	var maxT time.Duration
+	if global != nil {
+		maxT = *global
+	}
+	for _, t := range *entityTimeouts {
+		if t > maxT {
+			maxT = t
+		}
+	}
+	return &maxT
 }
 
 func (i *Inflight) Set(in *v1pb.PlacementTables, version uint64) {
@@ -208,4 +235,17 @@ func (i *Inflight) resolve(req *api.LookupActorRequest) (*api.LookupActorRespons
 func (i *Inflight) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration) {
 	i.drainRebalancedActors.Store(drain)
 	i.drainOngoingCallTimeout.Store(timeout)
+}
+
+// SetEntityDrainOngoingCallTimeouts replaces the per-actor-type drain
+// timeouts. A nil or empty map means "no per-type overrides; fall back to
+// the global timeout for every type".
+func (i *Inflight) SetEntityDrainOngoingCallTimeouts(timeouts map[string]time.Duration) {
+	if len(timeouts) == 0 {
+		i.entityDrainTimeouts.Store(nil)
+		return
+	}
+	cp := make(map[string]time.Duration, len(timeouts))
+	maps.Copy(cp, timeouts)
+	i.entityDrainTimeouts.Store(&cp)
 }
