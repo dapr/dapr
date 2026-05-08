@@ -56,11 +56,11 @@ func newMCPRegistry(registry *task.TaskRegistry) *mcpRegistry {
 // the registry so the per-server mutex stays stable across re-registration.
 func (r *mcpRegistry) entry(name string) *mcpEntry {
 	r.entriesMu.RLock()
-	if existing, ok := r.entries[name]; ok {
-		r.entriesMu.RUnlock()
+	existing, ok := r.entries[name]
+	r.entriesMu.RUnlock()
+	if ok {
 		return existing
 	}
-	r.entriesMu.RUnlock()
 
 	r.entriesMu.Lock()
 	defer r.entriesMu.Unlock()
@@ -124,8 +124,8 @@ func (r *mcpRegistry) register(ctx context.Context, server mcpserverapi.MCPServe
 	return nil
 }
 
-// cancel teardown for runtime shutdown.
-func (r *mcpRegistry) cancel() {
+// closeAll closes every holder.
+func (r *mcpRegistry) closeAll() {
 	r.entriesMu.Lock()
 	entries := make([]*mcpEntry, 0, len(r.entries))
 	for _, e := range r.entries {
@@ -135,7 +135,7 @@ func (r *mcpRegistry) cancel() {
 
 	for _, entry := range entries {
 		if h := entry.holder; h != nil {
-			h.Cancel()
+			h.Close()
 		}
 	}
 }

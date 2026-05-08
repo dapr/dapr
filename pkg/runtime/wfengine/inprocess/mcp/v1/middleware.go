@@ -28,7 +28,7 @@ import (
 // When the hook's AppID is set, the child workflow targets the remote app via service invocation.
 func hookChildWorkflowOpts(wf *mcpserverapi.MCPMiddlewareWorkflow, input any) []task.ChildWorkflowOption {
 	opts := []task.ChildWorkflowOption{task.WithChildWorkflowInput(input)}
-	if wf.AppID != nil && *wf.AppID != "" {
+	if wf.AppID != nil {
 		opts = append(opts, task.WithChildWorkflowAppID(*wf.AppID))
 	}
 	return opts

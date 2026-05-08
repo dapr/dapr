@@ -64,13 +64,6 @@ type Interface interface {
 	Client() workflows.Workflow
 	RuntimeMetadata() *runtimev1pb.MetadataWorkflows
 	InProcessExecutor() *inprocess.Executor
-
-	// HasInProcessWorkflow reports whether a workflow with the given name is
-	// registered in the in-process registry. Used by the Universal API to
-	// distinguish legitimate calls to managed workflows from attempts to use
-	// the reserved prefix for user workflows.
-	HasInProcessWorkflow(name string) bool
-
 	ActivityActorType() string
 	WorkflowActorType() string
 }
@@ -282,10 +275,13 @@ func (wfe *engine) EnsureActorsRegistered(ctx context.Context) error {
 	return nil
 }
 
-// RegisterMCPServer forwards to the in-process executor.
-// Implements processor.internalWorkflowRegistrar.
+// RegisterMCPServer installs workflows and ensures actors are registered.
+// Refcount bumps only on success.
 func (wfe *engine) RegisterMCPServer(ctx context.Context, server mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) error {
-	return wfe.inProcessExec.RegisterMCPServer(ctx, server, store, sec)
+	if err := wfe.inProcessExec.RegisterMCPServer(ctx, server, store, sec); err != nil {
+		return err
+	}
+	return wfe.EnsureActorsRegistered(ctx)
 }
 
 // UnregisterMCPServer forwards to the in-process executor and decrements the
@@ -310,10 +306,6 @@ func (wfe *engine) UnregisterMCPServer(serverName string) {
 
 func (wfe *engine) InProcessExecutor() *inprocess.Executor {
 	return wfe.inProcessExec
-}
-
-func (wfe *engine) HasInProcessWorkflow(name string) bool {
-	return wfe.inProcessExec.HasWorkflow(name)
 }
 
 func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {

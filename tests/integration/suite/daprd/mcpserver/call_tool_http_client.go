@@ -80,16 +80,6 @@ func (s *callToolHTTPClient) Setup(t *testing.T) []framework.Option {
 		daprd.WithPlacementAddresses(s.place.Address()),
 		daprd.WithSchedulerAddresses(s.sched.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithConfigManifests(t, `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: mcpconfig
-spec:
-  features:
-  - name: MCPServerResource
-    enabled: true
-`),
 		daprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer

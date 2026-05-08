@@ -136,7 +136,6 @@ type Processor struct {
 	pendingComponentsWaiting   sync.RWMutex
 	pendingComponentDependents map[string][]componentsapi.Component
 	subErrCh                   chan error
-	mcpErrCh                   chan error
 
 	lock     sync.RWMutex
 	chlock   sync.RWMutex
@@ -149,10 +148,9 @@ type Processor struct {
 	inProcessWorkflowsLock sync.RWMutex
 	inProcessWorkflows     wfregistrar.Registrar
 
-	// mcpLifecycleLocks is a sync.Map[string]*sync.Mutex keyed by MCPServer
-	// name. Held during the compStore + registrar mutations on both Add and
-	// Delete paths so they remain atomic per-server.
-	mcpLifecycleLocks sync.Map
+	// mcpMu serializes Add (channel reader) vs Delete (called externally
+	// from the hot-reload reconciler) on compStore + registrar state.
+	mcpMu sync.Mutex
 }
 
 // SetInProcessWorkflows installs the in-process workflow wfregistrar.
@@ -224,7 +222,6 @@ func New(opts Options) *Processor {
 		pendingComponents:          make(chan componentsapi.Component),
 		pendingComponentDependents: make(map[string][]componentsapi.Component),
 		subErrCh:                   make(chan error),
-		mcpErrCh:                   make(chan error),
 		closedCh:                   make(chan struct{}),
 		compStore:                  opts.ComponentStore,
 		state:                      state,
@@ -282,7 +279,6 @@ func (p *Processor) Process(ctx context.Context) error {
 		p.processComponents,
 		p.processHTTPEndpoints,
 		p.processMCPServers,
-		p.processMCPServerErrors,
 		p.processSubscriptions,
 		p.subscriber.Run,
 		func(ctx context.Context) error {

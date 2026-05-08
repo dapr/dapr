@@ -50,7 +50,7 @@ func HTTPTransportConfig(server *mcpserverapi.MCPServer) ([]commonapi.NameValueP
 
 // BuildHTTPClient returns an http.Client configured with:
 //  1. Static header injection from transport headers.
-//  2. OAuth2 client credentials token injection (if auth.oauth2 is set and secrets != nil).
+//  2. OAuth2 client credentials token injection (if auth.oauth2 is set; errors if secrets is nil).
 //  3. SPIFFE JWT injection via the configured header (if auth.spiffe.jwt is set and jwt != nil).
 //
 // OAuth2 and SPIFFE are mutually exclusive in practice; if both are configured,
@@ -90,7 +90,10 @@ func BuildHTTPClient(
 	var authTransport http.RoundTripper = transport
 
 	// OAuth2 client credentials — wraps raw transport with token injection.
-	if authCfg != nil && authCfg.OAuth2 != nil && secrets != nil {
+	if authCfg != nil && authCfg.OAuth2 != nil {
+		if secrets == nil {
+			return nil, errors.New("auth.oauth2 is configured but no secret store is available")
+		}
 		client, err := buildOAuth2Client(setupCtx, lifecycleCtx, authCfg, secrets, authTransport)
 		if err != nil {
 			return nil, err

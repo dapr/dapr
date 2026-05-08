@@ -333,12 +333,10 @@ func TestMakeListToolsActivity_CacheHitConcurrentRoundTrip(t *testing.T) {
 	const callsPerWorker = 10
 
 	var wg sync.WaitGroup
-	wg.Add(workers)
 	errs := make(chan error, workers*callsPerWorker)
 
 	for range workers {
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range callsPerWorker {
 				res, err := activity(&fakeActivityContext{ctx: context.Background()})
 				if err != nil {
@@ -376,7 +374,7 @@ func TestMakeListToolsActivity_CacheHitConcurrentRoundTrip(t *testing.T) {
 					}
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)

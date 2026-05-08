@@ -122,10 +122,9 @@ func (s *accessPolicyScoped) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("scoped out MCPServer workflow not registered", func(t *testing.T) {
-		// Because the MCPServer was filtered out by appID scoping, its workflow
-		// (dapr.internal.mcp.restricted-mcp.ListTools) was never registered in the
-		// in-process task registry. The Universal API rejects unregistered
-		// reserved-prefix workflow names synchronously with 400 + ERR_WORKFLOW_NAME_RESERVED.
+		// MCPServer filtered out by appID scoping → its workflow was never
+		// registered. StartWorkflow rejects synchronously via the
+		// reserved-prefix-not-registered check.
 		body, err := json.Marshal(map[string]any{})
 		require.NoError(t, err)
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start",

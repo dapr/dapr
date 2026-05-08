@@ -33,110 +33,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// InProcessWorkflow identifies a category of Dapr internal workflow.
-// Workflow name format: dapr.internal.<workflow>.<resource>.<method>
-//
-// SDKs map enum values to string prefixes:
-//
-//	IN_PROCESS_WORKFLOW_MCP → "dapr.internal.mcp."
-type InProcessWorkflow int32
-
-const (
-	// MCP: Model Context Protocol server orchestrations.
-	// Prefix: "dapr.internal.mcp."
-	InProcessWorkflow_IN_PROCESS_WORKFLOW_MCP InProcessWorkflow = 0
-)
-
-// Enum value maps for InProcessWorkflow.
-var (
-	InProcessWorkflow_name = map[int32]string{
-		0: "IN_PROCESS_WORKFLOW_MCP",
-	}
-	InProcessWorkflow_value = map[string]int32{
-		"IN_PROCESS_WORKFLOW_MCP": 0,
-	}
-)
-
-func (x InProcessWorkflow) Enum() *InProcessWorkflow {
-	p := new(InProcessWorkflow)
-	*p = x
-	return p
-}
-
-func (x InProcessWorkflow) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (InProcessWorkflow) Descriptor() protoreflect.EnumDescriptor {
-	return file_dapr_proto_workflows_v1_mcp_proto_enumTypes[0].Descriptor()
-}
-
-func (InProcessWorkflow) Type() protoreflect.EnumType {
-	return &file_dapr_proto_workflows_v1_mcp_proto_enumTypes[0]
-}
-
-func (x InProcessWorkflow) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use InProcessWorkflow.Descriptor instead.
-func (InProcessWorkflow) EnumDescriptor() ([]byte, []int) {
-	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{0}
-}
-
-// MCPMethod identifies an operation within the MCP internal workflow.
-// SDKs map enum values to PascalCase method suffixes:
-//
-//	MCP_METHOD_LIST_TOOLS → ".ListTools"
-//	MCP_METHOD_CALL_TOOL  → ".CallTool"
-type MCPMethod int32
-
-const (
-	// Discovers available tools on an MCPServer.
-	MCPMethod_MCP_METHOD_LIST_TOOLS MCPMethod = 0
-	// Invokes a specific tool on an MCPServer.
-	MCPMethod_MCP_METHOD_CALL_TOOL MCPMethod = 1
-)
-
-// Enum value maps for MCPMethod.
-var (
-	MCPMethod_name = map[int32]string{
-		0: "MCP_METHOD_LIST_TOOLS",
-		1: "MCP_METHOD_CALL_TOOL",
-	}
-	MCPMethod_value = map[string]int32{
-		"MCP_METHOD_LIST_TOOLS": 0,
-		"MCP_METHOD_CALL_TOOL":  1,
-	}
-)
-
-func (x MCPMethod) Enum() *MCPMethod {
-	p := new(MCPMethod)
-	*p = x
-	return p
-}
-
-func (x MCPMethod) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (MCPMethod) Descriptor() protoreflect.EnumDescriptor {
-	return file_dapr_proto_workflows_v1_mcp_proto_enumTypes[1].Descriptor()
-}
-
-func (MCPMethod) Type() protoreflect.EnumType {
-	return &file_dapr_proto_workflows_v1_mcp_proto_enumTypes[1]
-}
-
-func (x MCPMethod) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use MCPMethod.Descriptor instead.
-func (MCPMethod) EnumDescriptor() ([]byte, []int) {
-	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{1}
-}
-
 // ListMCPToolsResponse is the output of a ListTools workflow.
 type ListMCPToolsResponse struct {
 	state         protoimpl.MessageState
@@ -1003,23 +899,16 @@ var file_dapr_proto_workflows_v1_mcp_proto_rawDesc = []byte{
 	0x01, 0x28, 0x0b, 0x32, 0x2d, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
 	0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69,
 	0x73, 0x74, 0x4d, 0x43, 0x50, 0x54, 0x6f, 0x6f, 0x6c, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x52, 0x06, 0x72, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x2a, 0x30, 0x0a, 0x11, 0x49, 0x6e,
-	0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x12,
-	0x1b, 0x0a, 0x17, 0x49, 0x4e, 0x5f, 0x50, 0x52, 0x4f, 0x43, 0x45, 0x53, 0x53, 0x5f, 0x57, 0x4f,
-	0x52, 0x4b, 0x46, 0x4c, 0x4f, 0x57, 0x5f, 0x4d, 0x43, 0x50, 0x10, 0x00, 0x2a, 0x40, 0x0a, 0x09,
-	0x4d, 0x43, 0x50, 0x4d, 0x65, 0x74, 0x68, 0x6f, 0x64, 0x12, 0x19, 0x0a, 0x15, 0x4d, 0x43, 0x50,
-	0x5f, 0x4d, 0x45, 0x54, 0x48, 0x4f, 0x44, 0x5f, 0x4c, 0x49, 0x53, 0x54, 0x5f, 0x54, 0x4f, 0x4f,
-	0x4c, 0x53, 0x10, 0x00, 0x12, 0x18, 0x0a, 0x14, 0x4d, 0x43, 0x50, 0x5f, 0x4d, 0x45, 0x54, 0x48,
-	0x4f, 0x44, 0x5f, 0x43, 0x41, 0x4c, 0x4c, 0x5f, 0x54, 0x4f, 0x4f, 0x4c, 0x10, 0x01, 0x42, 0x7f,
-	0x0a, 0x14, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c,
-	0x6f, 0x77, 0x73, 0x2e, 0x76, 0x31, 0x42, 0x12, 0x44, 0x61, 0x70, 0x72, 0x57, 0x6f, 0x72, 0x6b,
-	0x66, 0x6c, 0x6f, 0x77, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x35, 0x67, 0x69, 0x74, 0x68,
-	0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70, 0x72,
-	0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x77, 0x6f, 0x72, 0x6b, 0x66,
-	0x6c, 0x6f, 0x77, 0x73, 0x2f, 0x76, 0x31, 0x3b, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77,
-	0x73, 0xaa, 0x02, 0x1b, 0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e,
-	0x41, 0x75, 0x74, 0x6f, 0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31, 0x62,
-	0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x73, 0x65, 0x52, 0x06, 0x72, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x42, 0x7f, 0x0a, 0x14, 0x69, 0x6f,
+	0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0x2e,
+	0x76, 0x31, 0x42, 0x12, 0x44, 0x61, 0x70, 0x72, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77,
+	0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x35, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63,
+	0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67,
+	0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73,
+	0x2f, 0x76, 0x31, 0x3b, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0xaa, 0x02, 0x1b,
+	0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x41, 0x75, 0x74, 0x6f,
+	0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x33,
 }
 
 var (
@@ -1034,39 +923,36 @@ func file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_workflows_v1_mcp_proto_rawDescData
 }
 
-var file_dapr_proto_workflows_v1_mcp_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_dapr_proto_workflows_v1_mcp_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_dapr_proto_workflows_v1_mcp_proto_goTypes = []interface{}{
-	(InProcessWorkflow)(0),              // 0: dapr.proto.workflows.v1.InProcessWorkflow
-	(MCPMethod)(0),                      // 1: dapr.proto.workflows.v1.MCPMethod
-	(*ListMCPToolsResponse)(nil),        // 2: dapr.proto.workflows.v1.ListMCPToolsResponse
-	(*MCPToolDefinition)(nil),           // 3: dapr.proto.workflows.v1.MCPToolDefinition
-	(*CallMCPToolResponse)(nil),         // 4: dapr.proto.workflows.v1.CallMCPToolResponse
-	(*MCPContentBlock)(nil),             // 5: dapr.proto.workflows.v1.MCPContentBlock
-	(*MCPTextContent)(nil),              // 6: dapr.proto.workflows.v1.MCPTextContent
-	(*MCPBinaryContent)(nil),            // 7: dapr.proto.workflows.v1.MCPBinaryContent
-	(*MCPResourceContent)(nil),          // 8: dapr.proto.workflows.v1.MCPResourceContent
-	(*MCPCallToolWorkflowInput)(nil),    // 9: dapr.proto.workflows.v1.MCPCallToolWorkflowInput
-	(*MCPBeforeCallToolHookInput)(nil),  // 10: dapr.proto.workflows.v1.MCPBeforeCallToolHookInput
-	(*MCPAfterCallToolHookInput)(nil),   // 11: dapr.proto.workflows.v1.MCPAfterCallToolHookInput
-	(*MCPBeforeListToolsHookInput)(nil), // 12: dapr.proto.workflows.v1.MCPBeforeListToolsHookInput
-	(*MCPAfterListToolsHookInput)(nil),  // 13: dapr.proto.workflows.v1.MCPAfterListToolsHookInput
-	(*structpb.Struct)(nil),             // 14: google.protobuf.Struct
+	(*ListMCPToolsResponse)(nil),        // 0: dapr.proto.workflows.v1.ListMCPToolsResponse
+	(*MCPToolDefinition)(nil),           // 1: dapr.proto.workflows.v1.MCPToolDefinition
+	(*CallMCPToolResponse)(nil),         // 2: dapr.proto.workflows.v1.CallMCPToolResponse
+	(*MCPContentBlock)(nil),             // 3: dapr.proto.workflows.v1.MCPContentBlock
+	(*MCPTextContent)(nil),              // 4: dapr.proto.workflows.v1.MCPTextContent
+	(*MCPBinaryContent)(nil),            // 5: dapr.proto.workflows.v1.MCPBinaryContent
+	(*MCPResourceContent)(nil),          // 6: dapr.proto.workflows.v1.MCPResourceContent
+	(*MCPCallToolWorkflowInput)(nil),    // 7: dapr.proto.workflows.v1.MCPCallToolWorkflowInput
+	(*MCPBeforeCallToolHookInput)(nil),  // 8: dapr.proto.workflows.v1.MCPBeforeCallToolHookInput
+	(*MCPAfterCallToolHookInput)(nil),   // 9: dapr.proto.workflows.v1.MCPAfterCallToolHookInput
+	(*MCPBeforeListToolsHookInput)(nil), // 10: dapr.proto.workflows.v1.MCPBeforeListToolsHookInput
+	(*MCPAfterListToolsHookInput)(nil),  // 11: dapr.proto.workflows.v1.MCPAfterListToolsHookInput
+	(*structpb.Struct)(nil),             // 12: google.protobuf.Struct
 }
 var file_dapr_proto_workflows_v1_mcp_proto_depIdxs = []int32{
-	3,  // 0: dapr.proto.workflows.v1.ListMCPToolsResponse.tools:type_name -> dapr.proto.workflows.v1.MCPToolDefinition
-	14, // 1: dapr.proto.workflows.v1.MCPToolDefinition.input_schema:type_name -> google.protobuf.Struct
-	5,  // 2: dapr.proto.workflows.v1.CallMCPToolResponse.content:type_name -> dapr.proto.workflows.v1.MCPContentBlock
-	6,  // 3: dapr.proto.workflows.v1.MCPContentBlock.text:type_name -> dapr.proto.workflows.v1.MCPTextContent
-	7,  // 4: dapr.proto.workflows.v1.MCPContentBlock.image:type_name -> dapr.proto.workflows.v1.MCPBinaryContent
-	7,  // 5: dapr.proto.workflows.v1.MCPContentBlock.audio:type_name -> dapr.proto.workflows.v1.MCPBinaryContent
-	8,  // 6: dapr.proto.workflows.v1.MCPContentBlock.resource_link:type_name -> dapr.proto.workflows.v1.MCPResourceContent
-	8,  // 7: dapr.proto.workflows.v1.MCPContentBlock.embedded_resource:type_name -> dapr.proto.workflows.v1.MCPResourceContent
-	14, // 8: dapr.proto.workflows.v1.MCPCallToolWorkflowInput.arguments:type_name -> google.protobuf.Struct
-	14, // 9: dapr.proto.workflows.v1.MCPBeforeCallToolHookInput.arguments:type_name -> google.protobuf.Struct
-	14, // 10: dapr.proto.workflows.v1.MCPAfterCallToolHookInput.arguments:type_name -> google.protobuf.Struct
-	4,  // 11: dapr.proto.workflows.v1.MCPAfterCallToolHookInput.result:type_name -> dapr.proto.workflows.v1.CallMCPToolResponse
-	2,  // 12: dapr.proto.workflows.v1.MCPAfterListToolsHookInput.result:type_name -> dapr.proto.workflows.v1.ListMCPToolsResponse
+	1,  // 0: dapr.proto.workflows.v1.ListMCPToolsResponse.tools:type_name -> dapr.proto.workflows.v1.MCPToolDefinition
+	12, // 1: dapr.proto.workflows.v1.MCPToolDefinition.input_schema:type_name -> google.protobuf.Struct
+	3,  // 2: dapr.proto.workflows.v1.CallMCPToolResponse.content:type_name -> dapr.proto.workflows.v1.MCPContentBlock
+	4,  // 3: dapr.proto.workflows.v1.MCPContentBlock.text:type_name -> dapr.proto.workflows.v1.MCPTextContent
+	5,  // 4: dapr.proto.workflows.v1.MCPContentBlock.image:type_name -> dapr.proto.workflows.v1.MCPBinaryContent
+	5,  // 5: dapr.proto.workflows.v1.MCPContentBlock.audio:type_name -> dapr.proto.workflows.v1.MCPBinaryContent
+	6,  // 6: dapr.proto.workflows.v1.MCPContentBlock.resource_link:type_name -> dapr.proto.workflows.v1.MCPResourceContent
+	6,  // 7: dapr.proto.workflows.v1.MCPContentBlock.embedded_resource:type_name -> dapr.proto.workflows.v1.MCPResourceContent
+	12, // 8: dapr.proto.workflows.v1.MCPCallToolWorkflowInput.arguments:type_name -> google.protobuf.Struct
+	12, // 9: dapr.proto.workflows.v1.MCPBeforeCallToolHookInput.arguments:type_name -> google.protobuf.Struct
+	12, // 10: dapr.proto.workflows.v1.MCPAfterCallToolHookInput.arguments:type_name -> google.protobuf.Struct
+	2,  // 11: dapr.proto.workflows.v1.MCPAfterCallToolHookInput.result:type_name -> dapr.proto.workflows.v1.CallMCPToolResponse
+	0,  // 12: dapr.proto.workflows.v1.MCPAfterListToolsHookInput.result:type_name -> dapr.proto.workflows.v1.ListMCPToolsResponse
 	13, // [13:13] is the sub-list for method output_type
 	13, // [13:13] is the sub-list for method input_type
 	13, // [13:13] is the sub-list for extension type_name
@@ -1238,14 +1124,13 @@ func file_dapr_proto_workflows_v1_mcp_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_dapr_proto_workflows_v1_mcp_proto_rawDesc,
-			NumEnums:      2,
+			NumEnums:      0,
 			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_dapr_proto_workflows_v1_mcp_proto_goTypes,
 		DependencyIndexes: file_dapr_proto_workflows_v1_mcp_proto_depIdxs,
-		EnumInfos:         file_dapr_proto_workflows_v1_mcp_proto_enumTypes,
 		MessageInfos:      file_dapr_proto_workflows_v1_mcp_proto_msgTypes,
 	}.Build()
 	File_dapr_proto_workflows_v1_mcp_proto = out.File

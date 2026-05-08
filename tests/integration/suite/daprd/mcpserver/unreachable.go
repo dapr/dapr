@@ -66,16 +66,6 @@ func (s *listToolsUnreachable) Setup(t *testing.T) []framework.Option {
 		daprd.WithPlacementAddresses(s.place.Address()),
 		daprd.WithSchedulerAddresses(s.sched.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithConfigManifests(t, `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: mcpconfig
-spec:
-  features:
-  - name: MCPServerResource
-    enabled: true
-`),
 		daprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
@@ -106,11 +96,9 @@ func (s *listToolsUnreachable) Run(t *testing.T, ctx context.Context) {
 	s.httpClient = fclient.HTTP(t)
 
 	t.Run("ListTools fails when MCP server is unreachable", func(t *testing.T) {
-		// Eager tool discovery during MCPServer registration failed because the
-		// endpoint is unreachable; with ignoreErrors=true the sidecar stays up
-		// but the per-server workflows are not registered. StartWorkflow then
-		// rejects the call synchronously via the reserved-prefix-not-registered
-		// validation.
+		// Eager tool discovery failed (endpoint unreachable) and ignoreErrors=true
+		// kept the sidecar up, so per-server workflows were never registered.
+		// StartWorkflow rejects synchronously via the reserved-prefix-not-registered check.
 		body, err := json.Marshal(map[string]any{})
 		require.NoError(t, err)
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start",

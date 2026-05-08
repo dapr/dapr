@@ -456,13 +456,7 @@ func newDaprRuntime(ctx context.Context,
 
 			return nil
 		},
-		// Cancel MCP holders' lifecycle contexts on shutdown so background
-		// work (token refreshers, lazy reconnects) exits.
-		func(ctx context.Context) error {
-			<-ctx.Done()
-			inProcessExec.Cancel()
-			return nil
-		},
+		inProcessExec.Run,
 	)
 
 	if err := rt.runnerCloser.AddCloser(
@@ -717,12 +711,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.flushOutstandingHTTPEndpoints(ctx)
 
-	err = a.loadMCPServers(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to load mcpservers: %s", err)
-	}
-	a.flushOutstandingMCPServers(ctx)
-
 	err = a.loadDeclarativeSubscriptions(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load declarative subscriptions: %s", err)
@@ -830,6 +818,12 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	if err := a.initActors(ctx); err != nil {
 		return fmt.Errorf("failed to initialize actors: %w", err)
 	}
+
+	// MCPServers register workflow actors and must run after initActors.
+	if err := a.loadMCPServers(ctx); err != nil {
+		return fmt.Errorf("failed to load mcpservers: %s", err)
+	}
+	a.flushOutstandingMCPServers(ctx)
 
 	if a.runtimeConfig.appConnectionConfig.MaxConcurrency > 0 {
 		log.Infof("app max concurrency set to %v", a.runtimeConfig.appConnectionConfig.MaxConcurrency)

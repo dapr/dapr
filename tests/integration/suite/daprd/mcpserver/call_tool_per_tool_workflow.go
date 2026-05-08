@@ -160,10 +160,8 @@ func (s *callToolPerToolWorkflow) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("non-existent tool workflow name rejected as reserved-prefix-not-registered", func(t *testing.T) {
 		// dapr.internal.mcp.<server>.CallTool.<tool> uses the reserved internal
-		// prefix; if the workflow isn't actually registered as a managed
-		// workflow, StartWorkflow rejects it synchronously with 400 to surface
-		// the misconfiguration rather than silently dispatching to a non-existent
-		// in-process orchestrator.
+		// prefix; if the tool isn't actually registered, StartWorkflow rejects
+		// synchronously with 400.
 		body, err := json.Marshal(map[string]any{"arguments": map[string]any{}})
 		require.NoError(t, err)
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start",

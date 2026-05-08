@@ -97,7 +97,7 @@ func RegisterMCPServer(opts RegisterOptions) ([]string, error) {
 	listCache.store(tools)
 
 	activityOpts := Options{Store: opts.Store, Security: opts.Security}
-	orchestrator := makeOrchestrator(opts.Server, opts.Store)
+	orchestrator := makeWorkflow(opts.Server, opts.Store)
 	listActivity := makeListToolsActivity(opts.Server, opts.Holder, schemas, listCache)
 	callActivity := makeCallToolActivity(opts.Server, opts.Holder, schemas, activityOpts)
 
@@ -184,101 +184,102 @@ func DiscoverTools(ctx context.Context, holder *SessionHolder) ([]*wfv1.MCPToolD
 	return nil, fmt.Errorf("MCP server returned more than %d pages of tools — refusing to truncate", maxListToolsPages)
 }
 
-// makeOrchestrator returns the wildcard orchestrator function, closing over the
-// component store for middleware lookup.
-//
-// For each suffix:
-//
-// ListTools path:
-//   - beforeListTools is awaited; any error fails the workflow.
-//   - dapr.internal.mcp.list-tools activity errors fail the workflow.
-//   - afterListTools hooks are awaited; errors are logged but do not affect the result.
-//
-// CallTool path:
-//   - beforeCallTool is awaited; any error aborts with CallMCPToolResponse{IsError:true}.
-//   - dapr.internal.mcp.call-tool activity errors are returned as CallMCPToolResponse{IsError:true}.
-//   - afterCallTool hooks are awaited; errors are logged but do not affect the result.
-func makeOrchestrator(server mcpserverapi.MCPServer, store *compstore.ComponentStore) func(*task.WorkflowContext) (any, error) {
+// mcpWorkflowName is a parsed dapr.internal.mcp.<server>.<method>[.<tool>].
+type mcpWorkflowName struct {
+	method string
+	tool   string // CallTool only
+}
+
+func parseMCPWorkflowName(name string) (mcpWorkflowName, error) {
+	if !strings.HasPrefix(name, mcpnames.MCPWorkflowPrefix) {
+		return mcpWorkflowName{}, fmt.Errorf("unknown MCP workflow name %q: expected prefix %q",
+			name, mcpnames.MCPWorkflowPrefix)
+	}
+	parts := strings.Split(name[len(mcpnames.MCPWorkflowPrefix):], ".")
+	if len(parts) < 2 {
+		return mcpWorkflowName{}, fmt.Errorf("unknown MCP workflow name %q: missing method segment", name)
+	}
+	switch {
+	case parts[1] == mcpnames.MCPMethodListTools && len(parts) == 2:
+		return mcpWorkflowName{method: mcpnames.MCPMethodListTools}, nil
+	case parts[1] == mcpnames.MCPMethodCallTool && len(parts) == 3:
+		return mcpWorkflowName{method: mcpnames.MCPMethodCallTool, tool: parts[2]}, nil
+	default:
+		return mcpWorkflowName{}, fmt.Errorf("unknown MCP workflow name %q: expected method %q or %q",
+			name, mcpnames.MCPMethodListTools, mcpnames.MCPMethodCallTool)
+	}
+}
+
+// listToolsWorkflow: beforeListTools -> list-tools activity -> afterListTools.
+func listToolsWorkflow(ctx *task.WorkflowContext, server *mcpserverapi.MCPServer, serverName string) (any, error) {
+	if err := runBeforeListTools(ctx, server, serverName); err != nil {
+		return nil, fmt.Errorf("beforeListTools failed: %w", err)
+	}
+	var result wfv1.ListMCPToolsResponse
+	t := ctx.CallActivity(mcpnames.MCPListToolsActivityName(serverName), task.WithActivityInput(nil))
+	if err := t.Await(&result); err != nil {
+		return nil, fmt.Errorf("list-tools activity failed: %w", err)
+	}
+	final, err := runAfterListTools(ctx, server, serverName, &result)
+	if err != nil {
+		return nil, fmt.Errorf("afterListTools failed: %w", err)
+	}
+	return final, nil
+}
+
+// callToolWorkflow: parse input -> beforeCallTool -> call-tool -> afterCallTool.
+// before/activity errors route through afterCallTool with isError=true.
+func callToolWorkflow(ctx *task.WorkflowContext, server *mcpserverapi.MCPServer, serverName, toolName string) (any, error) {
+	var input wfv1.MCPCallToolWorkflowInput
+	if err := ctx.GetInput(&input); err != nil {
+		return errorResult("failed to parse CallToolInput: %s", err), nil
+	}
+
+	arguments, err := runBeforeCallTool(ctx, server, serverName, toolName, input.GetArguments())
+	if err != nil {
+		return errorResult("beforeCallTool: %s", err), nil
+	}
+
+	var argMap map[string]any
+	if arguments != nil {
+		argMap = arguments.AsMap()
+	}
+
+	var result wfv1.CallMCPToolResponse
+	t := ctx.CallActivity(
+		mcpnames.MCPCallToolActivityName(serverName),
+		task.WithActivityInput(activityCallToolInput{ToolName: toolName, Arguments: argMap}),
+	)
+	if err := t.Await(&result); err != nil {
+		final, hookErr := runAfterCallTool(ctx, server, serverName, toolName, arguments, errorResult("%s", err))
+		if hookErr != nil {
+			return nil, fmt.Errorf("afterCallTool failed: %w", hookErr)
+		}
+		return final, nil
+	}
+
+	final, hookErr := runAfterCallTool(ctx, server, serverName, toolName, arguments, &result)
+	if hookErr != nil {
+		return nil, fmt.Errorf("afterCallTool failed: %w", hookErr)
+	}
+	return final, nil
+}
+
+// makeWorkflow returns the workflow that dispatches by method segment.
+func makeWorkflow(server mcpserverapi.MCPServer, store *compstore.ComponentStore) func(*task.WorkflowContext) (any, error) {
 	serverName := server.Name
 	return func(ctx *task.WorkflowContext) (any, error) {
-		name := ctx.Name
-
-		// MCP workflow names are: <MCPWorkflowPrefix.><server>.<method>[.<tool>]
-		if !strings.HasPrefix(name, mcpnames.MCPWorkflowPrefix) {
-			return nil, fmt.Errorf("unknown MCP workflow name %q: expected prefix %q",
-				name, mcpnames.MCPWorkflowPrefix)
+		parsed, err := parseMCPWorkflowName(ctx.Name)
+		if err != nil {
+			return nil, err
 		}
-		parts := strings.Split(name[len(mcpnames.MCPWorkflowPrefix):], ".")
-		if len(parts) < 2 {
-			return nil, fmt.Errorf("unknown MCP workflow name %q: missing method segment", name)
-		}
-		method := parts[1]
-
-		switch {
-		case method == mcpnames.MCPMethodListTools && len(parts) == 2:
-			if err := runBeforeListTools(ctx, &server, serverName); err != nil {
-				return nil, fmt.Errorf("beforeListTools failed: %w", err)
-			}
-
-			var result wfv1.ListMCPToolsResponse
-			t := ctx.CallActivity(mcpnames.MCPListToolsActivityName(serverName), task.WithActivityInput(nil))
-			if err := t.Await(&result); err != nil {
-				return nil, fmt.Errorf("list-tools activity failed: %w", err)
-			}
-
-			final, err := runAfterListTools(ctx, &server, serverName, &result)
-			if err != nil {
-				return nil, fmt.Errorf("afterListTools failed: %w", err)
-			}
-			return final, nil
-
-		case method == mcpnames.MCPMethodCallTool && len(parts) == 3:
-			toolName := parts[2]
-
-			var input wfv1.MCPCallToolWorkflowInput
-			if err := ctx.GetInput(&input); err != nil {
-				return errorResult("failed to parse CallToolInput: %s", err), nil
-			}
-
-			// beforeCallTool middleware pipeline — may mutate arguments.
-			arguments, err := runBeforeCallTool(ctx, &server, serverName, toolName, input.GetArguments())
-			if err != nil {
-				// Return isError result (not a workflow failure) so the calling agent/LLM
-				// receives a structured error it can act on — retry, pick another tool, or
-				// inform the user — rather than a raw workflow failure with no content.
-				return errorResult("beforeCallTool: %s", err), nil
-			}
-
-			// Convert structpb.Struct → map[string]any for the activity (MCP SDK needs a map).
-			var argMap map[string]any
-			if arguments != nil {
-				argMap = arguments.AsMap()
-			}
-
-			actInput := activityCallToolInput{
-				ToolName:  toolName,
-				Arguments: argMap,
-			}
-			var result wfv1.CallMCPToolResponse
-			t := ctx.CallActivity(mcpnames.MCPCallToolActivityName(serverName), task.WithActivityInput(actInput))
-			if err := t.Await(&result); err != nil {
-				errResult := errorResult("%s", err)
-				final, hookErr := runAfterCallTool(ctx, &server, serverName, toolName, arguments, errResult)
-				if hookErr != nil {
-					return nil, fmt.Errorf("afterCallTool failed: %w", hookErr)
-				}
-				return final, nil
-			}
-
-			final, hookErr := runAfterCallTool(ctx, &server, serverName, toolName, arguments, &result)
-			if hookErr != nil {
-				return nil, fmt.Errorf("afterCallTool failed: %w", hookErr)
-			}
-			return final, nil
-
+		switch parsed.method {
+		case mcpnames.MCPMethodListTools:
+			return listToolsWorkflow(ctx, &server, serverName)
+		case mcpnames.MCPMethodCallTool:
+			return callToolWorkflow(ctx, &server, serverName, parsed.tool)
 		default:
-			return nil, fmt.Errorf("unknown MCP workflow name %q: expected method %q or %q",
-				name, mcpnames.MCPMethodListTools, mcpnames.MCPMethodCallTool)
+			return nil, fmt.Errorf("unknown MCP method %q in workflow %q", parsed.method, ctx.Name)
 		}
 	}
 }
@@ -305,7 +306,7 @@ func buildTransport(server *mcpserverapi.MCPServer, httpClient *http.Client) (mc
 			HTTPClient: httpClient,
 			// Disable the standalone SSE GET stream. The SDK sends GET / for
 			// server-initiated notifications, but this blocks Client.Connect
-			// synchronously (via sessionUpdated → connectStandaloneSSE) until
+			// synchronously (via sessionUpdated -> connectStandaloneSSE) until
 			// the HTTP client timeout fires if the server doesn't support it.
 			// Dapr's MCP integration is request/response only (ListTools,
 			// CallTool) and doesn't need server push.

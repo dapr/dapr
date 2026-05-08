@@ -121,16 +121,6 @@ func (s *spiffeAuth) Setup(t *testing.T) []framework.Option {
 		daprd.WithEnableMTLS(true),
 		daprd.WithNamespace("default"),
 		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithConfigManifests(t, `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: mcpconfig
-spec:
-  features:
-  - name: MCPServerResource
-    enabled: true
-`),
 		daprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer

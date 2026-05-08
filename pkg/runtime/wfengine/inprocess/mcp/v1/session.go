@@ -124,14 +124,13 @@ func (h *SessionHolder) Reconnect(ctx context.Context) (*mcp.ClientSession, erro
 	return session, nil
 }
 
-// Close cancels the lifecycle ctx and issues the session DELETE.
-// Use Cancel for runtime shutdown — the DELETE can hang past budget.
-// Idempotent.
+// Close cancels the lifecycle ctx and closes the MCP session.
+// The underlying MCP session.Close issues an HTTP DELETE a context the SDK builds and detaches internally.
+// We cannot pass our own context to it, so we can't externally cancel/timeout it.
 func (h *SessionHolder) Close() {
 	if !h.closed.CompareAndSwap(false, true) {
 		return
 	}
-	// Stop background work owned by this holder
 	h.lifecycleCancel()
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -139,13 +138,6 @@ func (h *SessionHolder) Close() {
 		(*s).Close()
 		h.session.Store(nil)
 	}
-}
-
-func (h *SessionHolder) Cancel() {
-	if !h.closed.CompareAndSwap(false, true) {
-		return
-	}
-	h.lifecycleCancel()
 }
 
 // connect builds an HTTP client, transport, and MCP session.

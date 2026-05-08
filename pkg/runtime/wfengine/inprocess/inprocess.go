@@ -20,6 +20,7 @@ package inprocess
 
 import (
 	"context"
+	"time"
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -55,10 +56,7 @@ func (e *Executor) Backend() backend.Executor {
 	return e.executor
 }
 
-// HasWorkflow reports whether a workflow with the given name is registered
-// in the in-process registry. Used by the API layer to distinguish
-// legitimate calls to managed workflows from attempts to use the reserved
-// prefix for user workflows (which would never reach an SDK worker).
+// HasWorkflow reports whether a workflow with the given name is registered.
 func (e *Executor) HasWorkflow(name string) bool {
 	_, _, err := e.registry.ResolveWorkflow(name, nil)
 	return err == nil
@@ -76,8 +74,21 @@ func (e *Executor) UnregisterMCPServer(serverName string) {
 	e.mcp.unregister(serverName)
 }
 
-// Cancel cancels every holder's lifecycle without the per-session
-// DELETE. Used by runtime shutdown; see SessionHolder.Cancel.
-func (e *Executor) Cancel() {
-	e.mcp.cancel()
+// shutdownCloseTimeout caps closeAll on shutdown so unbounded session
+// network teardown can't exceed the runtime graceful-shutdown time.
+const shutdownCloseTimeout = 2 * time.Second
+
+// Run blocks until ctx is cancelled, then closes every holder.
+func (e *Executor) Run(ctx context.Context) error {
+	<-ctx.Done()
+	done := make(chan struct{})
+	go func() {
+		e.mcp.closeAll()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(shutdownCloseTimeout):
+	}
+	return nil
 }

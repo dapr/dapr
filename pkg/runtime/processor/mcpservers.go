@@ -16,7 +16,6 @@ package processor
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
@@ -36,13 +35,6 @@ func (r mcpStdioEnvResource) NameValuePairs() []commonapi.NameValuePair {
 		return nil
 	}
 	return r.Spec.Endpoint.Stdio.Env
-}
-
-// mcpLifecycleLock returns the per-server-name mutex used to serialize the
-// compStore + registrar mutations on Add and Delete.
-func (p *Processor) mcpLifecycleLock(name string) *sync.Mutex {
-	actual, _ := p.mcpLifecycleLocks.LoadOrStore(name, &sync.Mutex{})
-	return actual.(*sync.Mutex)
 }
 
 // AddPendingMCPServer enqueues an MCPServer for processing.
@@ -65,33 +57,9 @@ func (p *Processor) AddPendingMCPServer(ctx context.Context, s mcpserverapi.MCPS
 	}
 }
 
-// processMCPServerErrors returns the first async MCPServer registration error
-// to the runner manager.
-func (p *Processor) processMCPServerErrors(ctx context.Context) error {
-	select {
-	case <-ctx.Done():
-		return nil
-	case <-p.closedCh:
-		return nil
-	case err := <-p.mcpErrCh:
-		return err
-	}
-}
-
-// errorMCPServers forwards an async registration error.
-func (p *Processor) errorMCPServers(ctx context.Context, err error) {
-	select {
-	case p.mcpErrCh <- err:
-	case <-ctx.Done():
-	case <-p.closedCh:
-	}
-}
-
 // processMCPServers resolves secrets and registers workflows for each MCPServer.
 // Failures fail the runtime by default; spec.ignoreErrors=true opts out.
 func (p *Processor) processMCPServers(ctx context.Context) error {
-	var wg sync.WaitGroup
-
 	process := func(s mcpserverapi.MCPServer) error {
 		if err := validate.MCPServer(ctx, &s); err != nil {
 			err = fmt.Errorf("MCPServer %q failed validation: %w", s.Name, err)
@@ -114,6 +82,16 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 		}
 
 		p.processMCPServerSecrets(ctx, &s)
+
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
+		p.mcpMu.Lock()
+		defer p.mcpMu.Unlock()
+
 		p.compStore.AddMCPServer(s)
 		log.Infof("MCPServer loaded: %s", s.LogName())
 
@@ -122,74 +100,34 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 			return nil
 		}
 
-		// Skip registration if the runtime is already shutting down — the
-		// derived contexts inside RegisterMCPServer would just error out.
-		select {
-		case <-ctx.Done():
-			return nil
-		default:
+		if err := registrar.RegisterMCPServer(ctx, s, p.compStore, p.security); err != nil {
+			err = fmt.Errorf("MCPServer %q: failed to register workflows: %w", s.Name, err)
+			if s.Spec.IgnoreErrors {
+				log.Errorf("Ignoring error processing MCPServer: %s", err)
+				return nil
+			}
+			log.Warnf("Error processing MCPServer, daprd will exit gracefully: %s", err)
+			return err
 		}
-
-		wg.Add(1)
-		go func(s mcpserverapi.MCPServer) {
-			defer wg.Done()
-
-			lock := p.mcpLifecycleLock(s.Name)
-			lock.Lock()
-			defer lock.Unlock()
-
-			// If Delete arrived between channel processing and
-			// us acquiring the lock, the server is gone — skip registration.
-			if _, ok := p.compStore.GetMCPServer(s.Name); !ok {
-				return
-			}
-
-			// Register the activity/workflow handlers in the in-process registry
-			// before telling placement we're online for the workflow actor types.
-			if err := registrar.RegisterMCPServer(ctx, s, p.compStore, p.security); err != nil {
-				err = fmt.Errorf("MCPServer %q: failed to register workflows: %w", s.Name, err)
-				if !s.Spec.IgnoreErrors {
-					log.Warnf("Async error processing MCPServer, daprd will exit gracefully: %s", err)
-					p.errorMCPServers(ctx, err)
-					return
-				}
-				log.Errorf("Ignoring async error processing MCPServer: %s", err)
-				return
-			}
-			if err := registrar.EnsureActorsRegistered(ctx); err != nil {
-				err = fmt.Errorf("MCPServer %q: failed to register workflow actors: %w", s.Name, err)
-				if !s.Spec.IgnoreErrors {
-					log.Warnf("Async error processing MCPServer, daprd will exit gracefully: %s", err)
-					p.errorMCPServers(ctx, err)
-					return
-				}
-				log.Errorf("Ignoring async error processing MCPServer: %s", err)
-			}
-		}(s)
 		return nil
 	}
 
 	for s := range p.pendingMCPServers {
 		if s.Name == "" {
-			// Flush sentinel: wait for in-flight registrations before continuing.
-			wg.Wait()
 			continue
 		}
 		if err := process(s); err != nil {
-			wg.Wait()
 			return err
 		}
 	}
 
-	wg.Wait()
 	return nil
 }
 
 // DeleteMCPServer removes an MCPServer from the store and unregisters its workflows.
 func (p *Processor) DeleteMCPServer(serverName string) {
-	lock := p.mcpLifecycleLock(serverName)
-	lock.Lock()
-	defer lock.Unlock()
+	p.mcpMu.Lock()
+	defer p.mcpMu.Unlock()
 
 	p.compStore.DeleteMCPServer(serverName)
 	if registrar := p.getInProcessWorkflows(); registrar != nil {

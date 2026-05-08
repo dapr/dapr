@@ -90,16 +90,6 @@ func (s *hotReload) Setup(t *testing.T) []framework.Option {
 		daprd.WithSchedulerAddresses(s.sched.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithResourcesDir(s.resourceDir),
-		daprd.WithConfigManifests(t, `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: mcpconfig
-spec:
-  features:
-  - name: MCPServerResource
-    enabled: true
-`),
 	)
 
 	return []framework.Option{
