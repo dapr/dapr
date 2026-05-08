@@ -63,10 +63,16 @@ type CloseLock struct {
 // CancelTypes drains in-flight claims for the given set of actor types using
 // the same grace-period semantics as CloseLock, but does not terminate the
 // lock loop. Done is closed when the operation completes.
+//
+// PerTypeTimeouts overrides Timeout per actor type when present; types
+// without an entry fall back to Timeout, then to a 2-second default. Each
+// actor type drains in parallel against its own timer so the round wall-clock
+// is bounded by the largest per-type drain, not the sum.
 type CancelTypes struct {
 	Types                 map[string]struct{}
 	Error                 error
 	Timeout               *time.Duration
+	PerTypeTimeouts       map[string]time.Duration
 	DrainRebalancedActors *bool
 	Done                  chan struct{}
 }
@@ -172,6 +178,11 @@ func (l *lock) handleAcquire(event *Acquire) {
 // requested set. Same grace-period semantics as handleClose but the lock
 // loop continues running after this returns. Done is closed when the
 // operation finishes so callers can wait synchronously.
+//
+// Claims are grouped by actor type and drained in parallel: each group runs
+// against its own timer, using event.PerTypeTimeouts when set for that type
+// and falling back to event.Timeout otherwise. Total wall-clock is bounded
+// by the largest per-type drain, not the sum.
 func (l *lock) handleCancelTypes(event *CancelTypes) {
 	defer close(event.Done)
 
@@ -179,39 +190,52 @@ func (l *lock) handleCancelTypes(event *CancelTypes) {
 		return
 	}
 
-	matched := make([]*Claim, 0)
+	byType := make(map[string][]*Claim)
 	for _, claim := range l.acquires {
 		if _, ok := event.Types[claim.ActorType]; ok {
-			matched = append(matched, claim)
+			byType[claim.ActorType] = append(byType[claim.ActorType], claim)
 		}
 	}
-	if len(matched) == 0 {
+	if len(byType) == 0 {
 		return
 	}
 
 	if event.DrainRebalancedActors != nil && !*event.DrainRebalancedActors {
-		for _, claim := range matched {
-			claim.Cancel(event.Error)
+		for _, claims := range byType {
+			for _, claim := range claims {
+				claim.Cancel(event.Error)
+			}
 		}
 		return
 	}
 
-	timeout := time.Second * 2
+	defaultTimeout := time.Second * 2
 	if event.Timeout != nil {
-		timeout = *event.Timeout
+		defaultTimeout = *event.Timeout
 	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
 
-	for _, claim := range matched {
-		select {
-		case <-claim.Context.Done():
-		case <-timer.C:
-			log.Errorf("Timed out waiting for actor in-flight lock claims to be released for rebalanced types, force cancelling remaining claims")
-			for _, claim := range matched {
-				claim.Cancel(event.Error)
-			}
-			return
+	var wg sync.WaitGroup
+	for actorType, claims := range byType {
+		timeout := defaultTimeout
+		if t, ok := event.PerTypeTimeouts[actorType]; ok {
+			timeout = t
 		}
+
+		wg.Go(func() {
+			timer := time.NewTimer(timeout)
+			defer timer.Stop()
+			for _, claim := range claims {
+				select {
+				case <-claim.Context.Done():
+				case <-timer.C:
+					log.Errorf("Timed out waiting for actor type '%s' in-flight lock claims to be released for rebalanced types, force cancelling remaining claims", actorType)
+					for _, claim := range claims {
+						claim.Cancel(event.Error)
+					}
+					return
+				}
+			}
+		})
 	}
+	wg.Wait()
 }
