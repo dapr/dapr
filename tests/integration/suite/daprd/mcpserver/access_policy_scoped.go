@@ -117,5 +117,4 @@ func (s *accessPolicyScoped) Run(t *testing.T, ctx context.Context) {
 				"MCPServer scoped to other-app should not appear in my-agent's metadata")
 		}
 	})
-
 }
