@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	orcherrors "github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -332,10 +333,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// violation. Fail the parent terminally with the denial details so
 		// the operator sees a FAILED status instead of a phantom COMPLETED
 		// caller whose spawn never landed.
-		var denyErr *detachedSpawnDeniedError
+		var denyErr *orcherrors.DetachedSpawnDenied
 		if errors.As(dispatchErr, &denyErr) {
 			executionStatus = diag.StatusFailed
-			return todo.RunCompletedTrue, o.failParentDetachedDenied(ctx, state, rs, denyErr)
+			return todo.RunCompletedTrue, o.failParentDetachedWorkflowACL(ctx, state, rs, denyErr)
 		}
 		if errors.Is(dispatchErr, errPayloadSizeExceeded) {
 			return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs,

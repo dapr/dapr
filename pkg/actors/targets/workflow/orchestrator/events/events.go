@@ -49,3 +49,18 @@ func NewChildWorkflowFailedEventType(taskID int32, errorType, errorMessage strin
 		},
 	}
 }
+
+// NewExecutionCompletedFailedEvent builds an ExecutionCompletedEvent for
+// a workflow that the runtime is forcing to a terminal FAILED state. The
+// returned value is suitable for use as both the standalone
+// rs.CompletedEvent and the inner body of a HistoryEvent_ExecutionCompleted
+// oneof.
+func NewExecutionCompletedFailedEvent(errorType, errorMessage string) *protos.ExecutionCompletedEvent {
+	return &protos.ExecutionCompletedEvent{
+		WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED,
+		FailureDetails: &protos.TaskFailureDetails{
+			ErrorType:    errorType,
+			ErrorMessage: errorMessage,
+		},
+	}
+}

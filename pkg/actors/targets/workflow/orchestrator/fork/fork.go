@@ -165,11 +165,6 @@ func (f *Fork) handleBefore(his *backend.HistoryEvent) {
 		delete(f.unfinishedChildWorkflows, his.GetChildWorkflowInstanceFailed().GetTaskScheduledId())
 
 	default:
-		// DetachedWorkflowInstanceCreated falls into this branch: detached
-		// spawns are fire-and-forget, so there is no completion or failure to
-		// pair them with — copying the audit event into the new history is
-		// the right thing to do, mirroring how a freshly client-scheduled
-		// workflow has no upstream linkage on rerun.
 		f.newState.AddToHistory(his)
 	}
 }

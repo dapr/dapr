@@ -19,93 +19,13 @@ import (
 	"fmt"
 
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
+	orcherrors "github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/errors"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
-	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
-
-// detachedSpawnDeniedError signals that a detached workflow spawn was
-// rejected by the target app's WorkflowAccessPolicy. The dispatch path
-// returns this so run.go can fail the parent terminally instead of
-// silently dropping the action — the orchestrator function has already
-// returned synchronously from ScheduleNewWorkflow with a non-empty
-// instance ID, so the operator's only signal that something went wrong
-// is the parent's terminal status.
-type detachedSpawnDeniedError struct {
-	instanceID  string
-	targetAppID string
-	cause       error
-}
-
-func (e *detachedSpawnDeniedError) Error() string {
-	return fmt.Sprintf("detached workflow spawn '%s' denied by access policy on app '%s': %v", e.instanceID, e.targetAppID, e.cause)
-}
-
-func (e *detachedSpawnDeniedError) Unwrap() error { return e.cause }
-
-// failParentDetachedDenied marks the parent orchestration as terminally
-// FAILED in response to a detached spawn that was rejected by the target
-// app's WorkflowAccessPolicy. The orchestrator function may have already
-// staged an ExecutionCompletedEvent (success) for this run; we override
-// it with a FAILED variant so the persisted terminal state reflects the
-// fact that the orchestration could not fulfill its scheduling intent.
-// Returns nil so the caller can mark the reminder as completed and stop
-// retrying — the denial is permanent.
-func (o *orchestrator) failParentDetachedDenied(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, denyErr *detachedSpawnDeniedError) error {
-	failureDetails := &protos.TaskFailureDetails{
-		ErrorType:    "WorkflowAccessPolicyDenied",
-		ErrorMessage: denyErr.Error(),
-	}
-	completed := &protos.ExecutionCompletedEvent{
-		WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED,
-		FailureDetails: failureDetails,
-	}
-	rs.CompletedEvent = completed
-	rs.CompletedTime = timestamppb.Now()
-
-	// Replace the orchestrator's pending ExecutionCompletedEvent (if any)
-	// with the FAILED variant so caller history records the same terminal
-	// status that rs.CompletedEvent points to. If the orchestrator did not
-	// emit a terminal event this run (rare — only with mid-flight dispatch
-	// of a fresh-state remote action), append one so the workflow lands in
-	// a terminal state instead of stalling.
-	var replaced bool
-	for i := range rs.NewEvents {
-		if rs.NewEvents[i].GetExecutionCompleted() != nil {
-			rs.NewEvents[i] = &protos.HistoryEvent{
-				EventId:   rs.NewEvents[i].GetEventId(),
-				Timestamp: rs.NewEvents[i].GetTimestamp(),
-				EventType: &protos.HistoryEvent_ExecutionCompleted{
-					ExecutionCompleted: completed,
-				},
-			}
-			replaced = true
-			break
-		}
-	}
-	if !replaced {
-		rs.NewEvents = append(rs.NewEvents, &protos.HistoryEvent{
-			EventId:   -1,
-			Timestamp: timestamppb.Now(),
-			EventType: &protos.HistoryEvent_ExecutionCompleted{
-				ExecutionCompleted: completed,
-			},
-		})
-	}
-
-	state.ApplyRuntimeStateChanges(rs)
-	if err := o.signAndSaveState(ctx, state); err != nil {
-		return fmt.Errorf("failed to persist terminal failure for denied detached spawn: %w", err)
-	}
-
-	log.Warnf("Workflow actor '%s': failing parent terminally because detached workflow spawn was denied by access policy: %v", o.actorID, denyErr)
-	return nil
-}
 
 func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, events []*backend.WorkflowRuntimeStateMessage, newEvents []*backend.HistoryEvent) dispatchResult {
 	msgs := make([]proto.Message, len(events))
@@ -259,10 +179,10 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 				if r := historyEvent.GetRouter(); r != nil && r.GetTargetAppID() != "" {
 					targetAppID = r.GetTargetAppID()
 				}
-				return &detachedSpawnDeniedError{
-					instanceID:  target,
-					targetAppID: targetAppID,
-					cause:       err,
+				return &orcherrors.DetachedSpawnDenied{
+					InstanceID:  target,
+					TargetAppID: targetAppID,
+					Cause:       err,
 				}
 			}
 		}
