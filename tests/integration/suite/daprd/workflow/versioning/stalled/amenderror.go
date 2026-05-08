@@ -15,8 +15,10 @@ package stalled
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -42,25 +44,22 @@ func (d *amenderror) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (d *amenderror) registerActivity(registry *task.TaskRegistry) {
-	registry.AddActivityN("activity", func(ctx task.ActivityContext) (any, error) {
-		return nil, nil
-	})
-}
-
 func (d *amenderror) Run(t *testing.T, ctx context.Context) {
-	d.registerActivity(d.workflow.Registry())
 	d.workflow.WaitUntilRunning(t, ctx)
 
-	d.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
-			return nil, err
+	var runv1, runv2 atomic.Bool
+
+	makeWF := func(ran *atomic.Bool) task.Workflow {
+		return func(ctx *task.WorkflowContext) (any, error) {
+			if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+				return nil, err
+			}
+			ran.Store(true)
+			return nil, nil
 		}
-		if err := ctx.CallActivity("activity").Await(nil); err != nil {
-			return nil, err
-		}
-		return nil, nil
-	})
+	}
+
+	require.NoError(t, d.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, makeWF(&runv1)))
 
 	clientCtx, cancelClient := context.WithCancel(ctx)
 	defer cancelClient()
@@ -72,16 +71,7 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 
 	cancelClient()
 	d.workflow.ResetRegistry(t)
-	d.registerActivity(d.workflow.Registry())
-	d.workflow.Registry().AddVersionedWorkflowN("workflow", "v2", true, func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
-			return nil, err
-		}
-		if err := ctx.CallActivity("activity").Await(nil); err != nil {
-			return nil, err
-		}
-		return nil, nil
-	})
+	require.NoError(t, d.workflow.Registry().AddVersionedWorkflowN("workflow", "v2", true, makeWF(&runv2)))
 	clientCtx, cancelClient = context.WithCancel(ctx)
 	defer cancelClient()
 	client = d.workflow.BackendClient(t, clientCtx)
@@ -93,23 +83,17 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	require.NotNil(t, lastEvent)
 	require.Equal(t, protos.StalledReason_VERSION_NOT_AVAILABLE, lastEvent.GetExecutionStalled().GetReason())
 	require.Equal(t, "Version not available: v1", lastEvent.GetExecutionStalled().GetDescription())
+	assert.False(t, runv2.Load(), "v2 must not have executed against a v1 workflow instance")
 
 	cancelClient()
 	d.workflow.ResetRegistry(t)
-	d.registerActivity(d.workflow.Registry())
-	d.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
-			return nil, err
-		}
-		if err := ctx.CallActivity("activity").Await(nil); err != nil {
-			return nil, err
-		}
-		return nil, nil
-	})
+	require.NoError(t, d.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, makeWF(&runv1)))
 	clientCtx, cancelClient = context.WithCancel(ctx)
 	defer cancelClient()
 	client = d.workflow.BackendClient(t, clientCtx)
 	md, completeErr := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, completeErr)
 	require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, md.RuntimeStatus)
+	assert.True(t, runv1.Load(), "v1 must have executed after re-registration")
+	assert.False(t, runv2.Load(), "v2 must never have executed for this v1 instance")
 }
