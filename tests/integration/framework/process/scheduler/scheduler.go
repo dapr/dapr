@@ -226,6 +226,14 @@ func (s *Scheduler) Restart(t *testing.T, ctx context.Context) {
 	s.exec.Run(t, ctx)
 }
 
+func (s *Scheduler) RestartGraceful(t *testing.T, ctx context.Context) {
+	t.Helper()
+	clone := s.exec.Clone(t)
+	s.Cleanup(t)
+	s.exec = clone
+	s.exec.Run(t, ctx)
+}
+
 func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	client := client.HTTP(t)
 
