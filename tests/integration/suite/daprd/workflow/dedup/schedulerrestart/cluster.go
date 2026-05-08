@@ -126,7 +126,9 @@ func (s *schedulercluster) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, int32(1), calls.Load())
 	}, 30*time.Second, 10*time.Millisecond)
 
-	// Kill one of three; remaining two keep quorum.
+	// Gracefully restart one of three; the remaining two keep quorum so
+	// cron continues firing and we can exercise the at-least-once
+	// redelivery path against a still-active cluster.
 	s.schedulers[0].RestartGraceful(t, ctx)
 
 	require.Never(t, func() bool {

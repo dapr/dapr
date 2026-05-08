@@ -91,15 +91,21 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 		// Snapshot the actorID since the *activity may be recycled
 		// (HaltAll/HaltNonHosted) before the watcher finishes; everything
 		// else the watcher uses is factory-level read-only state or args.
-		go a.watchAndPublish(a.actorID, key, call, callback, wi, taskEvent, name, activityName, workflowID, start)
+		go a.watchAndPublish(ctx, a.actorID, key, call, callback, wi, taskEvent, name, activityName, workflowID, start)
 		return ctx.Err()
 	case completed := <-callback:
 		execErr := a.publishResult(ctx, a.actorID, completed, wi, taskEvent, name, activityName, workflowID, start)
 		call.Finish(execErr)
-		// Keep the cached outcome around briefly so a cron retry that arrived
+		// On success, cache the outcome briefly so a cron retry that arrived
 		// while we were running becomes a follower and acks SUCCESS without
-		// dispatching a duplicate WorkItem.
-		a.inflight.ReleaseAfter(key, call, inflightCacheTTL)
+		// dispatching a duplicate WorkItem. On error, release immediately so
+		// subsequent cron retries become fresh owners and can re-attempt
+		// rather than reading the cached failure for the full TTL window.
+		if execErr == nil {
+			a.inflight.ReleaseAfter(key, call, inflightCacheTTL)
+		} else {
+			a.inflight.Release(key, call)
+		}
 		return execErr
 	}
 }

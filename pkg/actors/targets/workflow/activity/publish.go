@@ -44,13 +44,26 @@ const detachedPublishTimeout = 30 * time.Second
 // from factory-level fields that are immutable post-init. Crucially it does
 // not invoke any method on the activity actor itself, so the actor's
 // turn-based contract is preserved.
-func (f *factory) watchAndPublish(actorID, key string, call *inflight.Call, callback chan bool, wi *backend.ActivityWorkItem, taskEvent *backend.HistoryEvent, name, activityName, workflowID string, start time.Time) {
+//
+// origCtx is the (already-cancelled) ctx from the owner; we strip
+// cancellation but keep trace context and values via context.WithoutCancel,
+// then apply a fresh detachedPublishTimeout deadline so a misbehaving
+// downstream cannot block this goroutine indefinitely.
+func (f *factory) watchAndPublish(origCtx context.Context, actorID, key string, call *inflight.Call, callback chan bool, wi *backend.ActivityWorkItem, taskEvent *backend.HistoryEvent, name, activityName, workflowID string, start time.Time) {
 	completed := <-callback
-	bgCtx, cancel := context.WithTimeout(context.Background(), detachedPublishTimeout)
+	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(origCtx), detachedPublishTimeout)
 	defer cancel()
-	execErr := f.publishResult(bgCtx, actorID, completed, wi, taskEvent, name, activityName, workflowID, start)
+	execErr := f.publishResult(pubCtx, actorID, completed, wi, taskEvent, name, activityName, workflowID, start)
 	call.Finish(execErr)
-	f.inflight.ReleaseAfter(key, call, inflightCacheTTL)
+	// Cache the outcome for follower retries only on success; on error,
+	// release immediately so subsequent cron retries become fresh owners
+	// and can re-attempt rather than seeing the cached failure for the
+	// full TTL window.
+	if execErr == nil {
+		f.inflight.ReleaseAfter(key, call, inflightCacheTTL)
+	} else {
+		f.inflight.Release(key, call)
+	}
 }
 
 // publishResult handles everything after the SDK callback has fired: it
