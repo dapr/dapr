@@ -89,9 +89,9 @@ func (d *disseminator) doReport(streamIDx uint64, host *v1pb.Host) {
 		return
 	}
 
-	d.timeoutQ.Dequeue(d.currentVersion)
 	d.currentVersion++
 	d.timeoutQ.Enqueue(d.currentVersion)
+	d.timeoutQ.Dequeue(d.currentVersion - 1)
 	d.currentOperation = v1pb.HostOperation_LOCK
 	d.streamsInTargetState = 0
 
