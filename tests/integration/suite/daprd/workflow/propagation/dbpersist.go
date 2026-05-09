@@ -120,11 +120,8 @@ func (d *dbpersist) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "parentWf", chunk.GetWorkflowName(), "chunk.WorkflowName")
 		assert.Equal(t, string(parentID), chunk.GetInstanceId(), "chunk.InstanceId should equal parent's workflow ID")
 		assert.Equal(t, parentAppID, chunk.GetAppId(), "chunk.AppId should equal parent's Dapr app ID")
-		assert.Equal(t, int32(0), chunk.GetStartEventIndex(), "chunk.StartEventIndex should be 0")
-		assert.Equal(t, int32(len(ph.GetEvents())), chunk.GetEventCount(), //nolint:gosec
-			"chunk.EventCount should match the number of persisted events")
 
-		require.Len(t, ph.GetEvents(), 6,
+		require.Len(t, chunk.GetRawEvents(), 6,
 			"parent should have produced 6 events: WorkflowStarted x2, ExecutionStarted, TaskScheduled, TaskCompleted, ChildWorkflowInstanceCreated")
 
 		var (
@@ -137,7 +134,9 @@ func (d *dbpersist) Run(t *testing.T, ctx context.Context) {
 			childCreatedOK   bool
 			childCreatedName string
 		)
-		for _, e := range ph.GetEvents() {
+		for _, raw := range chunk.GetRawEvents() {
+			var e protos.HistoryEvent
+			require.NoError(t, proto.Unmarshal(raw, &e), "rawEvent should decode")
 			switch {
 			case e.GetWorkflowStarted() != nil:
 				wfStartedCount++

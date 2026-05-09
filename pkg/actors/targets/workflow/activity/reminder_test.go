@@ -42,16 +42,26 @@ func Test_ReminderPayload_PreservesPropagation(t *testing.T) {
 		},
 		PropagatedHistory: &protos.PropagatedHistory{
 			Scope: protos.HistoryPropagationScope_HISTORY_PROPAGATION_SCOPE_LINEAGE,
-			Events: []*protos.HistoryEvent{
-				{EventId: 1, EventType: &protos.HistoryEvent_ExecutionStarted{
-					ExecutionStarted: &protos.ExecutionStartedEvent{Name: "parentWf"},
-				}},
-				{EventId: 2, EventType: &protos.HistoryEvent_TaskScheduled{
-					TaskScheduled: &protos.TaskScheduledEvent{Name: "someEarlierActivity"},
-				}},
-			},
 			Chunks: []*protos.PropagatedHistoryChunk{
-				{AppId: "app0", InstanceId: "wf-1", WorkflowName: "parentWf", StartEventIndex: 0, EventCount: 2},
+				{
+					AppId:        "app0",
+					InstanceId:   "wf-1",
+					WorkflowName: "parentWf",
+					RawEvents: [][]byte{
+						mustMarshalHistoryEvent(t, &protos.HistoryEvent{
+							EventId: 1,
+							EventType: &protos.HistoryEvent_ExecutionStarted{
+								ExecutionStarted: &protos.ExecutionStartedEvent{Name: "parentWf"},
+							},
+						}),
+						mustMarshalHistoryEvent(t, &protos.HistoryEvent{
+							EventId: 2,
+							EventType: &protos.HistoryEvent_TaskScheduled{
+								TaskScheduled: &protos.TaskScheduledEvent{Name: "someEarlierActivity"},
+							},
+						}),
+					},
+				},
 			},
 		},
 	}
@@ -71,10 +81,17 @@ func Test_ReminderPayload_PreservesPropagation(t *testing.T) {
 	ph := decoded.GetPropagatedHistory()
 	require.NotNil(t, ph, "PropagatedHistory should survive reminder round-trip (durability guarantee)")
 	assert.Equal(t, protos.HistoryPropagationScope_HISTORY_PROPAGATION_SCOPE_LINEAGE, ph.GetScope())
-	require.Len(t, ph.GetEvents(), 2, "propagated events should be preserved")
 	require.Len(t, ph.GetChunks(), 1, "propagated chunks should be preserved")
 	assert.Equal(t, "app0", ph.GetChunks()[0].GetAppId())
 	assert.Equal(t, "parentWf", ph.GetChunks()[0].GetWorkflowName())
+	assert.Len(t, ph.GetChunks()[0].GetRawEvents(), 2, "chunk's rawEvents should be preserved")
+}
+
+func mustMarshalHistoryEvent(t *testing.T, e *protos.HistoryEvent) []byte {
+	t.Helper()
+	b, err := proto.MarshalOptions{Deterministic: true}.Marshal(e)
+	require.NoError(t, err)
+	return b
 }
 
 // Test_DecodeActivityInvocation_LegacyHistoryEventPayload verifies backward

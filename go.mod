@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.26.2
+go 1.26.3
 
 require (
 	connectrpc.com/connect v1.19.1
@@ -11,8 +11,8 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
-	github.com/dapr/components-contrib v1.17.3
-	github.com/dapr/durabletask-go v0.11.4-0.20260501180811-87617bcc7be2
+	github.com/dapr/components-contrib v1.17.4
+	github.com/dapr/durabletask-go v0.11.4-0.20260507145406-1a28750c6025
 	github.com/dapr/kit v0.17.1-0.20260505124817-5579fd105e21
 	github.com/diagridio/go-etcd-cron v0.12.5-0.20260430160035-0e8ef88f5628
 	github.com/evanphx/json-patch/v5 v5.9.0
@@ -63,10 +63,11 @@ require (
 	go.opentelemetry.io/proto/otlp v1.9.0
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/ratelimit v0.3.0
-	golang.org/x/crypto v0.49.0
-	golang.org/x/net v0.52.0
+	golang.org/x/crypto v0.50.0
+	golang.org/x/net v0.53.0
 	golang.org/x/oauth2 v0.34.0
 	golang.org/x/sync v0.20.0
+	golang.org/x/sys v0.43.0
 	gonum.org/v1/plot v0.16.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260128011058-8636f8732409
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260316180232-0b37fe3546d5
@@ -466,8 +467,7 @@ require (
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/image v0.39.0 // indirect
 	golang.org/x/mod v0.34.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/term v0.41.0 // indirect
+	golang.org/x/term v0.42.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
 	golang.org/x/tools v0.43.0 // indirect

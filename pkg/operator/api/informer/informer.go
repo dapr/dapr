@@ -112,6 +112,9 @@ func (i *informer[T]) Run(ctx context.Context) error {
 		},
 	})
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
 		return fmt.Errorf("unable to add %s informer event handler: %w", zero.Kind(), err)
 	}
 

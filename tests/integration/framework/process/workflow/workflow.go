@@ -66,6 +66,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 
 	var sen *sentry.Sentry
 	var placementOpts []placement.Option
+	placementOpts = append(placementOpts, opts.placementOptions...)
 	var schedulerOpts []scheduler.Option
 	schedulerOpts = append(schedulerOpts, opts.schedulerOptions...)
 	if opts.mtls {
@@ -285,4 +286,12 @@ func (w *Workflow) DB() *sqlite.SQLite {
 
 func (w *Workflow) Scheduler() *scheduler.Scheduler {
 	return w.sched
+}
+
+func (w *Workflow) Sentry() *sentry.Sentry {
+	return w.sentry
+}
+
+func (w *Workflow) Placement() *placement.Placement {
+	return w.place
 }
