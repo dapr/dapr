@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -50,6 +51,7 @@ type options struct {
 	activities       []activityConfig
 	daprdOptions     []daprdOptionConfig
 	schedulerOptions []scheduler.Option
+	placementOptions []placement.Option
 }
 
 func WithAddOrchestrator(t *testing.T, name string, or func(*task.WorkflowContext) (any, error)) Option {
@@ -128,5 +130,11 @@ func WithSigningDisabledN(index int) Option {
 func WithSchedulerOptions(opts ...scheduler.Option) Option {
 	return func(o *options) {
 		o.schedulerOptions = append(o.schedulerOptions, opts...)
+	}
+}
+
+func WithPlacementOptions(opts ...placement.Option) Option {
+	return func(o *options) {
+		o.placementOptions = append(o.placementOptions, opts...)
 	}
 }

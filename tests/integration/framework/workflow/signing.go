@@ -15,15 +15,22 @@ package workflow
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
+	"math/big"
+	"net/url"
 	"testing"
+	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
@@ -134,12 +141,13 @@ func VerifySignatureChain(t *testing.T, ctx context.Context, db *sqlite.SQLite, 
 	authorities := parsePEMCertificates(t, trustAnchors)
 	s := signer.New(nil, fake.New(authorities...))
 
-	require.NoError(t, historysigning.VerifyChain(historysigning.VerifyChainOptions{
+	_, err := historysigning.VerifyChain(historysigning.VerifyChainOptions{
 		RawSignatures: data.RawSignatures,
 		Certs:         data.Certs,
 		AllRawEvents:  data.RawEvents,
 		Signer:        s,
-	}))
+	})
+	require.NoError(t, err)
 }
 
 // parsePEMCertificates parses a PEM-encoded certificate bundle into x509
@@ -198,4 +206,81 @@ func VerifyCertAppID(t *testing.T, ctx context.Context, db *sqlite.SQLite, insta
 
 		assert.Equal(t, expectedID, id, "signing certificate %d SPIFFE ID mismatch", i)
 	}
+}
+
+// ForgeChunkWithSpiffePath rewrites a single PropagatedHistoryChunk so its
+// signing material attests to spiffe://<sentry-trust-domain><spiffePath> -
+// a cert that the test framework's Sentry would not have issued in
+// production (e.g. wrong namespace) but that nevertheless chains cleanly
+// to that Sentry's trust anchor.
+//
+// The leaf cert is freshly issued against Sentry's IssChain, and a fresh
+// HistorySignature over chunk.RawEvents is produced with the matching
+// private key, then written into chunk.RawSignatures. The result: the
+// receiver's chain-of-trust verification and per-signature cryptographic
+// verification both succeed; only the SPIFFE identity check (app or
+// namespace component) can fire. This isolates the identity gate from
+// the chain gate in tampering tests.
+//
+// Mutates chunk in place. Caller should set the modified chunk back into
+// the persisted PropagatedHistory before re-loading.
+func ForgeChunkWithSpiffePath(t *testing.T, sen *sentry.Sentry, chunk *protos.PropagatedHistoryChunk, spiffePath string) {
+	t.Helper()
+	require.NotNil(t, sen, "sentry must not be nil; spin the workflow up with WithMTLS")
+	require.NotNil(t, chunk)
+	require.NotEmpty(t, chunk.GetRawEvents(), "chunk must have rawEvents to re-sign")
+
+	td := spiffeid.RequireTrustDomainFromString(sen.TrustDomain(t))
+	// spiffeid.FromPath validates the path so a typo here is caught at
+	// test compile time rather than misleading the assertion.
+	id, err := spiffeid.FromPath(td, spiffePath)
+	require.NoError(t, err)
+
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	caBundle := sen.CABundle().X509
+	require.NotEmpty(t, caBundle.IssChain, "sentry CA bundle has no issuance chain")
+
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "issued-by-test"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		URIs:         []*url.URL{id.URL()},
+	}
+	leafDER, err := x509.CreateCertificate(rand.Reader, template, caBundle.IssChain[0], pub, caBundle.IssKey)
+	require.NoError(t, err)
+
+	// Wire shape: leaf DER concatenated with intermediate DER (same as
+	// signer.Signer.CertChainDER produces and what BuildSignedChunk persists).
+	chain := make([]byte, 0, len(leafDER)+len(caBundle.IssChain[0].Raw))
+	chain = append(chain, leafDER...)
+	chain = append(chain, caBundle.IssChain[0].Raw...)
+
+	// Build a fresh HistorySignature over the chunk's rawEvents, signed
+	// by the leaf's private key. No previous-signature digest because
+	// this is a single-batch chunk-local signature (matches how the
+	// producer signs chunks at dispatch time). Bind the chunk's existing
+	// instance/workflow name so the signature stays self-consistent and
+	// the test fails purely on the SPIFFE identity check.
+	eventsDigest := historysigning.EventsDigest(chunk.GetRawEvents())
+	sigInput := historysigning.SignatureInput(nil, eventsDigest, &historysigning.PropagationContext{
+		InstanceID:   chunk.GetInstanceId(),
+		WorkflowName: chunk.GetWorkflowName(),
+	})
+	sigBytes := ed25519.Sign(priv, sigInput)
+
+	histSig := &protos.HistorySignature{
+		StartEventIndex:  0,
+		EventCount:       uint64(len(chunk.GetRawEvents())),
+		EventsDigest:     eventsDigest,
+		CertificateIndex: 0,
+		Signature:        sigBytes,
+	}
+	rawSig, err := proto.MarshalOptions{Deterministic: true}.Marshal(histSig)
+	require.NoError(t, err)
+
+	chunk.RawSignatures = [][]byte{rawSig}
+	chunk.SigningCertChains = [][]byte{chain}
 }
