@@ -59,7 +59,7 @@ func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent
 	})
 }
 
-func (a *activity) createWorkflowResultReminder(ctx context.Context, wfActorType, wfActorID string, result *backend.HistoryEvent) error {
+func (f *factory) createWorkflowResultReminder(ctx context.Context, wfActorType, wfActorID string, result *backend.HistoryEvent) error {
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
 	if err != nil {
@@ -73,7 +73,7 @@ func (a *activity) createWorkflowResultReminder(ctx context.Context, wfActorType
 		return err
 	}
 
-	return common.CreateReminderWithRetry(ctx, a.reminders, &actorapi.CreateReminderRequest{
+	return common.CreateReminderWithRetry(ctx, f.reminders, &actorapi.CreateReminderRequest{
 		ActorType: wfActorType,
 		ActorID:   wfActorID,
 		DueTime:   "0s",
