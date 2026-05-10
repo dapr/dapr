@@ -238,14 +238,14 @@ func (w *WorkflowSpec) GetMaxConcurrentWorkflowInvocations() *int32 {
 	if w == nil || w.MaxConcurrentWorkflowInvocations <= 0 {
 		return nil
 	}
-	return new(w.MaxConcurrentWorkflowInvocations)
+	return &w.MaxConcurrentWorkflowInvocations
 }
 
 func (w *WorkflowSpec) GetMaxConcurrentActivityInvocations() *int32 {
 	if w == nil || w.MaxConcurrentActivityInvocations <= 0 {
 		return nil
 	}
-	return new(w.MaxConcurrentActivityInvocations)
+	return &w.MaxConcurrentActivityInvocations
 }
 
 func (w *WorkflowSpec) GetGlobalMaxConcurrentWorkflowInvocations() *int32 {
