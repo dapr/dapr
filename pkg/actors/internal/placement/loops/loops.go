@@ -15,7 +15,7 @@ package loops
 
 import (
 	"context"
-	"strings"
+	"net"
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -136,13 +136,16 @@ type SetEntityDrainOngoingCallTimeouts struct {
 }
 
 func IsActorLocal(targetActorAddress, hostAddress string, port string) bool {
-	if targetActorAddress == hostAddress+":"+port {
+	if targetActorAddress == net.JoinHostPort(hostAddress, port) {
 		// Easy case when there is a perfect match
 		return true
 	}
 
-	if utils.IsLocalhost(hostAddress) && strings.HasSuffix(targetActorAddress, ":"+port) {
-		return utils.IsLocalhost(targetActorAddress[0 : len(targetActorAddress)-len(port)-1])
+	if utils.IsLocalhost(hostAddress) {
+		tHost, tPort, err := net.SplitHostPort(targetActorAddress)
+		if err == nil && tPort == port {
+			return utils.IsLocalhost(tHost)
+		}
 	}
 
 	return false
