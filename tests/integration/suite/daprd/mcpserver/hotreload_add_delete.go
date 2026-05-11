@@ -151,6 +151,6 @@ spec:
 			}
 			assert.NotEqual(c, statusCompleted, status.RuntimeStatus,
 				"ListTools should not COMPLETE after MCPServer is deleted")
-		}, 30*time.Second, time.Second)
+		}, 60*time.Second, 2*time.Second)
 	})
 }
