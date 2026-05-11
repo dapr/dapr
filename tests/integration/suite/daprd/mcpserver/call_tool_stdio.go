@@ -74,7 +74,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	if err := srv.Run(ctx, mcp.NewStdioTransport()); err != nil && ctx.Err() == nil {
+	if err := srv.Run(ctx, &mcp.StdioTransport{}); err != nil && ctx.Err() == nil {
 		os.Exit(1)
 	}
 }
