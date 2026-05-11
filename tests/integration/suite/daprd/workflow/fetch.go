@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,8 +71,9 @@ func (f *fetch) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(t, `"input value"`, meta.GetInput().GetValue())
 			assert.Equal(t, `"return value"`, meta.GetOutput().GetValue())
 			assert.Equal(t, `my custom status`, meta.GetCustomStatus().GetValue())
+			assert.NotNil(t, meta.GetStartedAt())
+			assert.False(t, meta.GetStartedAt().AsTime().Before(meta.GetCreatedAt().AsTime()))
 			assert.Nil(t, meta.GetVersion())
-
 		})
 
 		t.Run("grpc", func(t *testing.T) {
@@ -131,5 +133,29 @@ func (f *fetch) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, `"return value"`, meta.GetOutput().GetValue())
 		assert.Equal(t, `my custom status`, meta.GetCustomStatus().GetValue())
 		assert.Equal(t, "v1", meta.GetVersion().GetValue())
+	})
+
+	t.Run("fetch started at in metadata", func(t *testing.T) {
+		f.workflow.Registry().AddWorkflowN("delayed", func(ctx *task.WorkflowContext) (any, error) {
+			return nil, nil
+		})
+
+		id, err := client.ScheduleNewWorkflow(ctx, "delayed", api.WithStartTime(time.Now().Add(time.Second)))
+		require.NoError(t, err)
+		_, err = client.WaitForWorkflowCompletion(ctx, id)
+		require.NoError(t, err)
+
+		meta, err := client.FetchWorkflowMetadata(ctx, id)
+		require.NoError(t, err)
+
+		require.NotNil(t, meta.GetCreatedAt())
+		require.NotNil(t, meta.GetStartedAt())
+
+		createdAt := meta.GetCreatedAt().AsTime()
+		startedAt := meta.GetStartedAt().AsTime()
+		assert.False(t, startedAt.Before(createdAt),
+			"StartedAt (%s) must not be before CreatedAt (%s)", startedAt, createdAt)
+		assert.True(t, startedAt.Before(time.Now()),
+			"StartedAt (%s) must be before current time", startedAt)
 	})
 }
