@@ -89,6 +89,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/scheduler"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/crypto/spiffe/signer"
@@ -262,6 +263,7 @@ func newDaprRuntime(ctx context.Context,
 		Mode:                 runtimeConfig.mode,
 		DisseminationTimeout: runtimeConfig.actorsDisseminationTimeout,
 	})
+	inProcessExec := inprocess.NewExecutor()
 
 	processor := processor.New(processor.Options{
 		ID:                              runtimeConfig.id,
@@ -336,13 +338,18 @@ func newDaprRuntime(ctx context.Context,
 		WorkflowsRemoteActivityReminder: globalConfig.IsFeatureEnabled(config.WorkflowsRemoteActivityReminder),
 		WorkflowHistorySigning:          globalConfig.IsFeatureEnabled(config.WorkflowHistorySigning),
 		ComponentStore:                  compStore,
+		Security:                        sec,
 		Signer:                          wfSigner,
+		InProcessExecutor:               inProcessExec,
 		MaxRequestBodySize:              runtimeConfig.maxRequestBodySize,
 		WorkflowAccessPolicies:          workflowAccessPolicies,
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	// Install the wfengine as the processor's internal workflow registrar.
+	processor.SetInProcessWorkflows(wfe)
 
 	jobsManager, err := scheduler.New(scheduler.Options{
 		Namespace:        namespace,
@@ -449,6 +456,7 @@ func newDaprRuntime(ctx context.Context,
 
 			return nil
 		},
+		inProcessExec.Run,
 	)
 
 	if err := rt.runnerCloser.AddCloser(
@@ -703,15 +711,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.flushOutstandingHTTPEndpoints(ctx)
 
-	err = a.loadMCPServers(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to load mcpservers: %s", err)
-	}
-	a.flushOutstandingMCPServers(ctx)
-	if list := len(a.compStore.ListMCPServers()); list > 0 {
-		log.Debugf("MCP servers loaded: %d; additional handling to be implemented", list)
-	}
-
 	err = a.loadDeclarativeSubscriptions(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load declarative subscriptions: %s", err)
@@ -775,7 +774,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return err
 	}
 
-	err = a.startGRPCAPIServer(a.daprGRPCAPI, a.runtimeConfig.apiGRPCPort)
+	err = a.startGRPCAPIServer(ctx, a.daprGRPCAPI, a.runtimeConfig.apiGRPCPort)
 	if err != nil {
 		return fmt.Errorf("failed to start API gRPC server: %w", err)
 	}
@@ -787,7 +786,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 
 	// Start HTTP Server
-	err = a.startHTTPServer()
+	err = a.startHTTPServer(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start HTTP server: %w", err)
 	}
@@ -801,7 +800,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	log.Infof("The request body size parameter is: %v bytes", a.runtimeConfig.maxRequestBodySize)
 
 	// Start internal gRPC server (used for sidecar-to-sidecar communication)
-	err = a.startGRPCInternalServer(a.daprGRPCAPI)
+	err = a.startGRPCInternalServer(ctx, a.daprGRPCAPI)
 	if err != nil {
 		return fmt.Errorf("failed to start internal gRPC server: %w", err)
 	}
@@ -819,6 +818,12 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	if err := a.initActors(ctx); err != nil {
 		return fmt.Errorf("failed to initialize actors: %w", err)
 	}
+
+	// MCPServers register workflow actors and must run after initActors.
+	if err := a.loadMCPServers(ctx); err != nil {
+		return fmt.Errorf("failed to load mcpservers: %s", err)
+	}
+	a.flushOutstandingMCPServers(ctx)
 
 	if a.runtimeConfig.appConnectionConfig.MaxConcurrency > 0 {
 		log.Infof("app max concurrency set to %v", a.runtimeConfig.appConnectionConfig.MaxConcurrency)
@@ -1001,7 +1006,7 @@ func (a *DaprRuntime) initProxy() {
 	})
 }
 
-func (a *DaprRuntime) startHTTPServer() error {
+func (a *DaprRuntime) startHTTPServer(ctx context.Context) error {
 	getMetricSpec := a.globalConfig.GetMetricsSpec()
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
 		Universal:             a.daprUniversal,
@@ -1043,7 +1048,7 @@ func (a *DaprRuntime) startHTTPServer() error {
 		Middleware:  a.httpMiddleware.BuildPipelineFromSpec("server", a.globalConfig.Spec.HTTPPipelineSpec),
 		APISpec:     a.globalConfig.GetAPISpec(),
 	})
-	err := server.StartNonBlocking()
+	err := server.StartNonBlocking(ctx)
 	if err != nil {
 		return err
 	}
@@ -1056,7 +1061,7 @@ func (a *DaprRuntime) startHTTPServer() error {
 	return nil
 }
 
-func (a *DaprRuntime) startGRPCInternalServer(api grpc.API) error {
+func (a *DaprRuntime) startGRPCInternalServer(ctx context.Context, api grpc.API) error {
 	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
 	serverConf := a.getNewServerConfig([]string{a.runtimeConfig.internalGRPCListenAddress}, a.runtimeConfig.internalGRPCPort)
 	a.grpcInternalServer = grpc.NewInternalServer(grpc.OptionsInternal{
@@ -1069,7 +1074,7 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API) error {
 		Healthz:     a.runtimeConfig.healthz,
 	})
 
-	err := a.grpcInternalServer.StartNonBlocking()
+	err := a.grpcInternalServer.StartNonBlocking(ctx)
 	if err != nil {
 		return err
 	}
@@ -1077,7 +1082,7 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API) error {
 	return nil
 }
 
-func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
+func (a *DaprRuntime) startGRPCAPIServer(ctx context.Context, api grpc.API, port int) error {
 	serverConf := a.getNewServerConfig(a.runtimeConfig.apiListenAddresses, port)
 	a.grpcAPIServer = grpc.NewAPIServer(grpc.Options{
 		API:            api,
@@ -1090,7 +1095,7 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 		Healthz:        a.runtimeConfig.healthz,
 	})
 
-	err := a.grpcAPIServer.StartNonBlocking()
+	err := a.grpcAPIServer.StartNonBlocking(ctx)
 	if err != nil {
 		return err
 	}

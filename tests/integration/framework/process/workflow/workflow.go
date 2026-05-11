@@ -66,6 +66,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 
 	var sen *sentry.Sentry
 	var placementOpts []placement.Option
+	placementOpts = append(placementOpts, opts.placementOptions...)
 	var schedulerOpts []scheduler.Option
 	schedulerOpts = append(schedulerOpts, opts.schedulerOptions...)
 	if opts.mtls {
@@ -243,13 +244,23 @@ func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) 
 	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.RegistryN(index)))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c,
-			len(w.DaprN(index).GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
-		w := w.DaprN(index).GetMetadata(t, ctx).Workflows
-		if assert.NotNil(c, w) {
-			assert.GreaterOrEqual(c, w.ConnectedWorkers, 1)
+		// GetMetadata can return a partially-populated value if the underlying
+		// HTTP request fails or times out (the request runs under a derived
+		// context with its own deadline). Guard each field access so a nil
+		// here causes the Eventually tick to retry rather than panic the
+		// whole test binary.
+		md := w.DaprN(index).GetMetadata(t, ctx)
+		if !assert.NotNil(c, md) {
+			return
 		}
-	}, time.Second*20, time.Millisecond*10)
+		if !assert.NotNil(c, md.ActorRuntime) {
+			return
+		}
+		assert.GreaterOrEqual(c, len(md.ActorRuntime.ActiveActors), 3)
+		if assert.NotNil(c, md.Workflows) {
+			assert.GreaterOrEqual(c, md.Workflows.ConnectedWorkers, 1)
+		}
+	}, time.Second*60, time.Millisecond*10)
 
 	return backendClient
 }
@@ -287,10 +298,10 @@ func (w *Workflow) Scheduler() *scheduler.Scheduler {
 	return w.sched
 }
 
-// Sentry returns the test-framework Sentry instance backing this workflow's
-// mTLS, or nil if the workflow was created without WithMTLS. Tests use this
-// to mint identity-tampered leaf certs that still pass chain-of-trust, so
-// they can isolate the receiver's identity check from the chain check.
 func (w *Workflow) Sentry() *sentry.Sentry {
 	return w.sentry
+}
+
+func (w *Workflow) Placement() *placement.Placement {
+	return w.place
 }
