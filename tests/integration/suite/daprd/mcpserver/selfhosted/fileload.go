@@ -43,12 +43,17 @@ type fileload struct {
 func (s *fileload) Setup(t *testing.T) []framework.Option {
 	resDir := t.TempDir()
 
+	// ignoreErrors=true on every resource: this test runs without placement,
+	// so EnsureActorsRegistered would otherwise fail and shut down daprd, and
+	// the invalid-mcp validation failure would do the same. Both are expected
+	// here — we're verifying file-load behaviour, not workflow invocation.
 	require.NoError(t, os.WriteFile(filepath.Join(resDir, "global.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
   name: global-mcp
 spec:
+  ignoreErrors: true
   endpoint:
     streamableHTTP:
       url: http://example.com/mcp
@@ -60,6 +65,7 @@ kind: MCPServer
 metadata:
   name: scoped-mcp
 spec:
+  ignoreErrors: true
   endpoint:
     sse:
       url: http://scoped.example.com/sse
@@ -74,6 +80,7 @@ kind: MCPServer
 metadata:
   name: other-app-mcp
 spec:
+  ignoreErrors: true
   endpoint:
     streamableHTTP:
       url: http://other.example.com/mcp
@@ -81,13 +88,15 @@ scopes:
 - different-app
 `), 0o600))
 
-	// Invalid: two transports — should be rejected by validation.
+	// Invalid: two transports — should be rejected by validation but not
+	// terminate daprd because ignoreErrors=true on the spec.
 	require.NoError(t, os.WriteFile(filepath.Join(resDir, "invalid.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
   name: invalid-mcp
 spec:
+  ignoreErrors: true
   endpoint:
     streamableHTTP:
       url: http://example.com/mcp
@@ -120,14 +129,22 @@ func (s *fileload) Run(t *testing.T, ctx context.Context) {
 		s.logline.EventuallyFoundAll(t)
 	})
 
-	// TODO(sicoyle): Once the metadata API exposes MCPServers (wired in
-	// feat-mcp-crd-plus-rest with ActivateMCPServers), replace this with
-	// metadata API assertions to verify:
-	// - global-mcp and scoped-mcp appear in metadata
-	// - other-app-mcp (wrong scope) does NOT appear
-	// - invalid-mcp (two transports, CEL rejected) does NOT appear
-	t.Run("metadata API does not yet expose MCPServers on this branch", func(t *testing.T) {
-		assert.Empty(t, s.daprd.GetMetaMCPServers(t, ctx),
-			"MCPServers are not yet exposed via metadata API; activation logic is in feat-mcp-crd-plus-rest")
+	t.Run("metadata API exposes loaded MCPServers", func(t *testing.T) {
+		servers := s.daprd.GetMetaMCPServers(t, ctx)
+
+		names := make([]string, 0, len(servers))
+		for _, m := range servers {
+			names = append(names, m.GetName())
+		}
+
+		// Loaded: global-mcp (no scopes) and scoped-mcp (scoped to test-app).
+		assert.ElementsMatch(t, []string{"global-mcp", "scoped-mcp"}, names,
+			"metadata API should expose only the MCPServers loaded for this app")
+		// other-app-mcp is scoped to a different app; invalid-mcp has two transports
+		// and is rejected by validation. Neither should appear.
+		assert.NotContains(t, names, "other-app-mcp",
+			"out-of-scope MCPServer should not be exposed")
+		assert.NotContains(t, names, "invalid-mcp",
+			"validation-rejected MCPServer should not be exposed")
 	})
 }
