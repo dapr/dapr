@@ -780,7 +780,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return err
 	}
 
-	err = a.startGRPCAPIServer(a.daprGRPCAPI, a.runtimeConfig.apiGRPCPort)
+	err = a.startGRPCAPIServer(ctx, a.daprGRPCAPI, a.runtimeConfig.apiGRPCPort)
 	if err != nil {
 		return fmt.Errorf("failed to start API gRPC server: %w", err)
 	}
@@ -792,7 +792,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 
 	// Start HTTP Server
-	err = a.startHTTPServer()
+	err = a.startHTTPServer(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start HTTP server: %w", err)
 	}
@@ -806,7 +806,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	log.Infof("The request body size parameter is: %v bytes", a.runtimeConfig.maxRequestBodySize)
 
 	// Start internal gRPC server (used for sidecar-to-sidecar communication)
-	err = a.startGRPCInternalServer(a.daprGRPCAPI)
+	err = a.startGRPCInternalServer(ctx, a.daprGRPCAPI)
 	if err != nil {
 		return fmt.Errorf("failed to start internal gRPC server: %w", err)
 	}
@@ -1006,7 +1006,7 @@ func (a *DaprRuntime) initProxy() {
 	})
 }
 
-func (a *DaprRuntime) startHTTPServer() error {
+func (a *DaprRuntime) startHTTPServer(ctx context.Context) error {
 	getMetricSpec := a.globalConfig.GetMetricsSpec()
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
 		Universal:             a.daprUniversal,
@@ -1048,7 +1048,7 @@ func (a *DaprRuntime) startHTTPServer() error {
 		Middleware:  a.httpMiddleware.BuildPipelineFromSpec("server", a.globalConfig.Spec.HTTPPipelineSpec),
 		APISpec:     a.globalConfig.GetAPISpec(),
 	})
-	err := server.StartNonBlocking()
+	err := server.StartNonBlocking(ctx)
 	if err != nil {
 		return err
 	}
@@ -1061,7 +1061,7 @@ func (a *DaprRuntime) startHTTPServer() error {
 	return nil
 }
 
-func (a *DaprRuntime) startGRPCInternalServer(api grpc.API) error {
+func (a *DaprRuntime) startGRPCInternalServer(ctx context.Context, api grpc.API) error {
 	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
 	serverConf := a.getNewServerConfig([]string{a.runtimeConfig.internalGRPCListenAddress}, a.runtimeConfig.internalGRPCPort)
 	a.grpcInternalServer = grpc.NewInternalServer(grpc.OptionsInternal{
@@ -1074,7 +1074,7 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API) error {
 		Healthz:     a.runtimeConfig.healthz,
 	})
 
-	err := a.grpcInternalServer.StartNonBlocking()
+	err := a.grpcInternalServer.StartNonBlocking(ctx)
 	if err != nil {
 		return err
 	}
@@ -1082,7 +1082,7 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API) error {
 	return nil
 }
 
-func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
+func (a *DaprRuntime) startGRPCAPIServer(ctx context.Context, api grpc.API, port int) error {
 	serverConf := a.getNewServerConfig(a.runtimeConfig.apiListenAddresses, port)
 	a.grpcAPIServer = grpc.NewAPIServer(grpc.Options{
 		API:            api,
@@ -1095,7 +1095,7 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 		Healthz:        a.runtimeConfig.healthz,
 	})
 
-	err := a.grpcAPIServer.StartNonBlocking()
+	err := a.grpcAPIServer.StartNonBlocking(ctx)
 	if err != nil {
 		return err
 	}
