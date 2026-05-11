@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -97,7 +98,11 @@ require github.com/modelcontextprotocol/go-sdk v1.6.0
 
 	// Build the server binary. This requires the MCP SDK to be available
 	// in the module cache (it is, since the main dapr module depends on it).
-	binPath := filepath.Join(tmpDir, "stdiosrv-bin")
+	binName := "stdiosrv-bin"
+	if runtime.GOOS == "windows" {
+		binName += ".exe"
+	}
+	binPath := filepath.Join(tmpDir, binName)
 	t.Logf("Building stdio MCP server binary at %s", binPath)
 
 	// Populate go.sum from the module cache. The temp module has no go.sum,
