@@ -134,6 +134,7 @@ func (s *signatureStripped) assertLoadFails(t *testing.T, ctx context.Context, i
 	t.Helper()
 	s.daprd.Restart(t, ctx)
 	s.daprd.WaitUntilRunning(t, ctx)
+	s.daprd.WaitUntilActorsReady(t, ctx)
 
 	client := dworkflow.NewClient(s.daprd.GRPCConn(t, ctx))
 	require.NoError(t, client.StartWorker(ctx, dworkflow.NewRegistry()))

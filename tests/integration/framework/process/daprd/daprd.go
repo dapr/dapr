@@ -236,6 +236,52 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	}, 30*time.Second, 10*time.Millisecond)
 }
 
+// WaitUntilActorsReady blocks until the actor runtime reports hostReady=true
+// via the metadata endpoint. This indicates actor type registration with
+// placement has completed and the runtime can accept actor API calls
+// (including workflow operations that use actor reminders).
+//
+// Use this after Restart() when tests immediately invoke workflow or actor
+// APIs, to avoid "operations on actor reminders are only possible on hosted
+// actor types" errors during the post-restart registration window.
+//
+// Only call this when the daprd is expected to have actor placement enabled.
+// If actors are disabled or placement is not configured, this will timeout.
+func (d *Daprd) WaitUntilActorsReady(t *testing.T, ctx context.Context) {
+	t.Helper()
+
+	client := client.HTTP(t)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		cctx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		req, err := http.NewRequestWithContext(cctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/metadata", d.HTTPAddress()), nil)
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		if !assert.NoError(c, err) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equal(c, http.StatusOK, resp.StatusCode) {
+			return
+		}
+		body, err := io.ReadAll(resp.Body)
+		if !assert.NoError(c, err) {
+			return
+		}
+		var meta Metadata
+		if !assert.NoError(c, json.Unmarshal(body, &meta)) {
+			return
+		}
+		if meta.ActorRuntime == nil {
+			assert.Fail(c, "actorRuntime is nil (actors may be disabled)")
+			return
+		}
+		assert.True(c, meta.ActorRuntime.HostReady,
+			"actorRuntime.hostReady is false (status=%s, placement=%s)",
+			meta.ActorRuntime.RuntimeStatus, meta.ActorRuntime.Placement)
+	}, 30*time.Second, 10*time.Millisecond)
+}
+
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 	switch d.appProtocol {
 	case "http":
