@@ -47,6 +47,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/subscriber"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/wfregistrar"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
@@ -125,6 +126,10 @@ type Processor struct {
 	subscriber      *subscriber.Subscriber
 	reporter        registry.Reporter
 
+	// kubernetesMode is true when running in Kubernetes mode.
+	// Used to reject configurations that are unsafe in a cluster (e.g. stdio transport).
+	kubernetesMode bool
+
 	pendingHTTPEndpoints       chan httpendpointsapi.HTTPEndpoint
 	pendingMCPServers          chan mcpserverapi.MCPServer
 	pendingComponents          chan componentsapi.Component
@@ -137,6 +142,29 @@ type Processor struct {
 	running  atomic.Bool
 	shutdown atomic.Bool
 	closedCh chan struct{}
+
+	// inProcessWorkflows is set after the workflow engine is created via SetInProcessWorkflows.
+	// Used to register in-process workflows when resources are loaded or hot-reloaded.
+	inProcessWorkflowsLock sync.RWMutex
+	inProcessWorkflows     wfregistrar.Registrar
+
+	// mcpMu serializes Add (channel reader) vs Delete (called externally
+	// from the hot-reload reconciler) on compStore + registrar state.
+	mcpMu sync.Mutex
+}
+
+// SetInProcessWorkflows installs the in-process workflow wfregistrar.
+func (p *Processor) SetInProcessWorkflows(r wfregistrar.Registrar) {
+	p.inProcessWorkflowsLock.Lock()
+	defer p.inProcessWorkflowsLock.Unlock()
+	p.inProcessWorkflows = r
+}
+
+// getInProcessWorkflows returns the wfregistrar, or nil if it has not been set yet.
+func (p *Processor) getInProcessWorkflows() wfregistrar.Registrar {
+	p.inProcessWorkflowsLock.RLock()
+	defer p.inProcessWorkflowsLock.RUnlock()
+	return p.inProcessWorkflows
 }
 
 func New(opts Options) *Processor {
@@ -188,6 +216,7 @@ func New(opts Options) *Processor {
 
 	return &Processor{
 		appID:                      opts.ID,
+		kubernetesMode:             opts.Mode == modes.KubernetesMode,
 		pendingHTTPEndpoints:       make(chan httpendpointsapi.HTTPEndpoint),
 		pendingMCPServers:          make(chan mcpserverapi.MCPServer),
 		pendingComponents:          make(chan componentsapi.Component),
