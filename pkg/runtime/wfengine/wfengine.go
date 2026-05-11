@@ -105,13 +105,11 @@ type engine struct {
 	actors               actors.Interface
 	getWorkItemsCount    atomic.Int32
 	mcpRegistrationCount atomic.Int32
-	// actorRegLock guards the registration counters and actorsRegistered.
-	// Held by the GetWorkItems connect/disconnect callbacks, EnsureActorsRegistered,
-	// and UnregisterMCPServer so all paths can read and write the registration
-	// state without racing.
-	actorRegLock sync.Mutex
-	// actorsRegistered tracks whether workflow actor types are currently
-	// registered with placement. Guarded by actorRegLock.
+	// actorRegLock makes the "increment+check+RegisterActors" and
+	// "decrement+check+UnRegisterActors" sequences atomic, so concurrent
+	// connects/disconnects and MCP register/unregister cannot double-register
+	// or unregister while another path believes actors are still live.
+	actorRegLock     sync.Mutex
 	actorsRegistered bool
 
 	worker        backend.TaskHubWorker

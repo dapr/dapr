@@ -16,6 +16,8 @@ package reconciler
 import (
 	"context"
 
+	"k8s.io/utils/clock"
+
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
@@ -29,39 +31,72 @@ type subscriptions struct {
 	loader.Loader[subapi.Subscription]
 }
 
+func NewSubscriptions(opts Options[subapi.Subscription]) *Reconciler[subapi.Subscription] {
+	r := &Reconciler[subapi.Subscription]{
+		kind:    subapi.Kind,
+		htarget: opts.Healthz.AddTarget("subscription-reconciler"),
+		clock:   clock.RealClock{},
+		manager: &subscriptions{
+			Loader: opts.Loader.Subscriptions(),
+			store:  opts.CompStore,
+			proc:   opts.Processor,
+		},
+	}
+	r.loop = loopFactory.NewLoop(r)
+	return r
+}
+
 // The go linter does not yet understand that these functions are being used by
 // the generic reconciler.
 //
 //nolint:unused
-func (s *subscriptions) update(ctx context.Context, sub subapi.Subscription) {
+func (s *subscriptions) update(ctx context.Context, sub subapi.Subscription) error {
 	oldSub, exists := s.store.GetDeclarativeSubscription(sub.Name)
 
 	if exists {
 		if differ.AreSame(*oldSub.Comp, sub) {
 			log.Debugf("Subscription update skipped: no changes detected: %s", sub.Name)
-			return
+			return nil
+		}
+
+		// See components.update for the rationale on this guard.
+		if sub.GetGeneration() > 0 && sub.GetGeneration() < oldSub.Comp.GetGeneration() {
+			log.Warnf("Ignoring stale Subscription event for %s (generation %d < installed %d)",
+				sub.Name, sub.GetGeneration(), oldSub.Comp.GetGeneration())
+			return nil
 		}
 
 		log.Infof("Closing existing Subscription to reload: %s", *oldSub.Name)
 
-		err := s.proc.CloseSubscription(ctx, oldSub.Comp)
-		if err != nil {
+		if err := s.proc.CloseSubscription(ctx, oldSub.Comp); err != nil {
 			log.Errorf("Failed to close existing Subscription: %s", err)
-			return
+			return nil
 		}
 	}
 
 	log.Infof("Adding Subscription for processing: %s", sub.Name)
 
-	if s.proc.AddPendingSubscription(ctx, sub) {
+	res := s.proc.AddPendingSubscription(ctx, sub)
+	if res == nil {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return nil
+	case err := <-res:
+		if err != nil {
+			log.Errorf("error adding subscription %s: %s", sub.Name, err)
+			return nil
+		}
 		log.Infof("Subscription updated: %s", sub.Name)
+		return nil
 	}
 }
 
 //nolint:unused
-func (s *subscriptions) delete(ctx context.Context, sub subapi.Subscription) {
-	err := s.proc.CloseSubscription(ctx, &sub)
-	if err != nil {
+func (s *subscriptions) delete(ctx context.Context, sub subapi.Subscription) error {
+	if err := s.proc.CloseSubscription(ctx, &sub); err != nil {
 		log.Errorf("Failed to close Subscription: %s", err)
 	}
+	return nil
 }
