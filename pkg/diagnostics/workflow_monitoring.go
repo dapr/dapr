@@ -99,10 +99,20 @@ type workflowMetrics struct {
 	// attestationCertCacheCount records per-orchestrator cert chain-of-
 	// trust cache lookups, tagged by outcome (hit/miss).
 	attestationCertCacheCount *stats.Int64Measure
-	appID                     string
-	enabled                   bool
-	namespace                 string
-	meter                     stats.Recorder
+	// workflowPayloadSizeRatio records the serialized size of workflow
+	// payloads sent to the SDK as a fraction of the configured gRPC max
+	// body size. Operators use this to track how close payloads are to
+	// the threshold that triggers a PAYLOAD_SIZE_EXCEEDED stall (~0.95).
+	// Only recorded when --max-body-size is configured.
+	workflowPayloadSizeRatio *stats.Float64Measure
+	// activityPayloadSizeRatio records activity payloads as a fraction of
+	// the configured gRPC max body size. Same headroom intent as
+	// workflowPayloadSizeRatio.
+	activityPayloadSizeRatio *stats.Float64Measure
+	appID                    string
+	enabled                  bool
+	namespace                string
+	meter                    stats.Recorder
 }
 
 func newWorkflowMetrics() *workflowMetrics {
@@ -159,6 +169,14 @@ func newWorkflowMetrics() *workflowMetrics {
 			"runtime/workflow/attestation/cert_cache/count",
 			"The number of per-orchestrator cert chain-of-trust cache lookups, by outcome.",
 			stats.UnitDimensionless),
+		workflowPayloadSizeRatio: stats.Float64(
+			"runtime/workflow/payload/size_ratio",
+			"Workflow payload size as a fraction of the configured gRPC max body size; values >=0.95 trip the stall, values >1 exceed the limit.",
+			stats.UnitDimensionless),
+		activityPayloadSizeRatio: stats.Float64(
+			"runtime/workflow/activity/payload/size_ratio",
+			"Activity payload size as a fraction of the configured gRPC max body size; values >=0.95 trip the stall, values >1 exceed the limit.",
+			stats.UnitDimensionless),
 	}
 }
 
@@ -186,7 +204,9 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 		diagUtils.NewMeasureView(w.attestationGeneratedCount, []tag.Key{appIDKey, namespaceKey, attestationKindKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.attestationVerifiedCount, []tag.Key{appIDKey, namespaceKey, attestationKindKey, attestationResultKey}, view.Count()),
 		diagUtils.NewMeasureView(w.attestationVerifyLatency, []tag.Key{appIDKey, namespaceKey, attestationKindKey, attestationResultKey}, latencyDistribution),
-		diagUtils.NewMeasureView(w.attestationCertCacheCount, []tag.Key{appIDKey, namespaceKey, certCacheOutcomeKey}, view.Count()))
+		diagUtils.NewMeasureView(w.attestationCertCacheCount, []tag.Key{appIDKey, namespaceKey, certCacheOutcomeKey}, view.Count()),
+		diagUtils.NewMeasureView(w.workflowPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, payloadRatioDistribution),
+		diagUtils.NewMeasureView(w.activityPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey, activityNameKey}, payloadRatioDistribution))
 }
 
 // WorkflowOperationEvent records total number of Successful/Failed workflow Operations requests. It also records latency for those requests.
@@ -299,4 +319,30 @@ func (w *workflowMetrics) AttestationCertCacheLookup(ctx context.Context, outcom
 		stats.WithRecorder(w.meter),
 		stats.WithTags(diagUtils.WithTags(w.attestationCertCacheCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, certCacheOutcomeKey, outcome)...),
 		stats.WithMeasurements(w.attestationCertCacheCount.M(1)))
+}
+
+// WorkflowPayloadSizeRatio records a workflow payload size as a fraction
+// of the configured gRPC max body size. Callers should skip recording
+// when no max body size is configured (ratio is undefined).
+func (w *workflowMetrics) WorkflowPayloadSizeRatio(ctx context.Context, workflowName string, ratio float64) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.workflowPayloadSizeRatio.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName)...),
+		stats.WithMeasurements(w.workflowPayloadSizeRatio.M(ratio)))
+}
+
+// ActivityPayloadSizeRatio records an activity payload size as a fraction
+// of the configured gRPC max body size. Callers should skip recording
+// when no max body size is configured.
+func (w *workflowMetrics) ActivityPayloadSizeRatio(ctx context.Context, workflowName, activityName string, ratio float64) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.activityPayloadSizeRatio.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName, activityNameKey, activityName)...),
+		stats.WithMeasurements(w.activityPayloadSizeRatio.M(ratio)))
 }
