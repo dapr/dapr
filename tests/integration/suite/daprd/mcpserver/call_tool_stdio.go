@@ -92,7 +92,7 @@ func (s *callToolStdio) Setup(t *testing.T) []framework.Option {
 
 go 1.24
 
-require github.com/modelcontextprotocol/go-sdk v1.5.0
+require github.com/modelcontextprotocol/go-sdk v1.6.0
 `), 0o600))
 
 	// Build the server binary. This requires the MCP SDK to be available
@@ -100,7 +100,15 @@ require github.com/modelcontextprotocol/go-sdk v1.5.0
 	binPath := filepath.Join(tmpDir, "stdiosrv-bin")
 	t.Logf("Building stdio MCP server binary at %s", binPath)
 
-	// Use `go build` to compile the stdio server.
+	// Populate go.sum from the module cache. The temp module has no go.sum,
+	// and `go build` refuses to run without it. `go mod tidy` resolves deps
+	// (already cached by the main dapr module) and writes go.sum into serverDir.
+	tidy := exec.Command("go", "mod", "tidy")
+	tidy.Dir = serverDir
+	if out, err := tidy.CombinedOutput(); err != nil {
+		t.Skipf("skipping stdio test: failed to tidy stdio server module: %s\n%s", err, out)
+	}
+
 	// This test is skipped if the build fails (e.g. in CI without module cache).
 	cmd := exec.Command("go", "build", "-o", binPath, ".")
 	cmd.Dir = serverDir
