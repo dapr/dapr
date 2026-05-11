@@ -34,7 +34,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/clock"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
@@ -53,21 +52,14 @@ import (
 	"github.com/dapr/dapr/pkg/api/universal"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	endpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
-	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
-	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/config/protocol"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/internal/loader"
-	"github.com/dapr/dapr/pkg/internal/loader/disk"
-	"github.com/dapr/dapr/pkg/internal/loader/kubernetes"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	middlewarehttp "github.com/dapr/dapr/pkg/middleware/http"
@@ -715,14 +707,18 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return fmt.Errorf("failed to load components: %s", err)
 	}
 
-	a.flushOutstandingComponents(ctx)
+	if err = a.flushOutstandingComponents(ctx); err != nil {
+		return err
+	}
 
 	err = a.loadHTTPEndpoints(ctx)
 	if err != nil {
 		log.Warnf("failed to load HTTP endpoints: %s", err)
 	}
 
-	a.flushOutstandingHTTPEndpoints(ctx)
+	if err = a.flushOutstandingHTTPEndpoints(ctx); err != nil {
+		return err
+	}
 
 	err = a.loadDeclarativeSubscriptions(ctx)
 	if err != nil {
@@ -828,7 +824,9 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	if err := a.loadMCPServers(ctx); err != nil {
 		return fmt.Errorf("failed to load mcpservers: %s", err)
 	}
-	a.flushOutstandingMCPServers(ctx)
+	if err := a.flushOutstandingMCPServers(ctx); err != nil {
+		return err
+	}
 
 	a.runtimeConfig.outboundHealthz.AddTarget("app").Ready()
 
@@ -1246,197 +1244,6 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 	return nil
 }
 
-func (a *DaprRuntime) loadComponents(ctx context.Context) error {
-	var loader loader.Loader[compapi.Component]
-
-	switch a.runtimeConfig.mode {
-	case modes.KubernetesMode:
-		loader = kubernetes.NewComponents(kubernetes.Options{
-			Config:    a.runtimeConfig.kubernetes,
-			Client:    a.operatorClient,
-			Namespace: a.namespace,
-		})
-	case modes.StandaloneMode:
-		loader = disk.NewComponents(disk.Options{
-			AppID: a.runtimeConfig.id,
-			Paths: a.runtimeConfig.standalone.ResourcesPath,
-		})
-	default:
-		return nil
-	}
-
-	log.Info("Loading components…")
-
-	comps, err := loader.Load(ctx)
-	if err != nil {
-		return err
-	}
-
-	authorizedComps := a.authz.GetAuthorizedObjects(comps, a.authz.IsObjectAuthorized).([]compapi.Component)
-
-	// Iterate through the list twice
-	// First, we look for secret stores and load those, then all other components
-	// Sure, we could sort the list of authorizedComps... but this is simpler and most certainly faster
-	for _, comp := range authorizedComps {
-		if strings.HasPrefix(comp.Spec.Type, string(components.CategorySecretStore)+".") {
-			log.Debug("Found component: " + comp.LogName())
-
-			if !a.processor.AddPendingComponent(ctx, comp) {
-				return nil
-			}
-		}
-	}
-
-	for _, comp := range authorizedComps {
-		if !strings.HasPrefix(comp.Spec.Type, string(components.CategorySecretStore)+".") {
-			log.Debug("Found component: " + comp.LogName())
-
-			if !a.processor.AddPendingComponent(ctx, comp) {
-				return nil
-			}
-		}
-	}
-
-	return nil
-}
-
-func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
-	var loader loader.Loader[subapi.Subscription]
-
-	switch a.runtimeConfig.mode {
-	case modes.KubernetesMode:
-		loader = kubernetes.NewSubscriptions(kubernetes.Options{
-			Client:    a.operatorClient,
-			Namespace: a.namespace,
-		})
-	case modes.StandaloneMode:
-		loader = disk.NewSubscriptions(disk.Options{
-			AppID: a.runtimeConfig.id,
-			Paths: a.runtimeConfig.standalone.ResourcesPath,
-		})
-	default:
-		return nil
-	}
-
-	log.Info("Loading Declarative Subscriptions…")
-
-	subs, err := loader.Load(ctx)
-	if err != nil {
-		return err
-	}
-
-	for _, s := range subs {
-		log.Infof("Found Subscription: %s", s.Name)
-	}
-
-	a.processor.AddPendingSubscription(ctx, subs...)
-
-	return nil
-}
-
-func (a *DaprRuntime) flushOutstandingHTTPEndpoints(ctx context.Context) {
-	log.Info("Waiting for all outstanding http endpoints to be processed…")
-	// We flush by sending a no-op http endpoint. Since the processHTTPEndpoints goroutine only reads one http endpoint at a time,
-	// We know that once the no-op http endpoint is read from the channel, all previous http endpoints will have been fully processed.
-	a.processor.AddPendingEndpoint(ctx, endpointapi.HTTPEndpoint{})
-	log.Info("All outstanding http endpoints processed")
-}
-
-func (a *DaprRuntime) flushOutstandingMCPServers(ctx context.Context) {
-	log.Info("Waiting for all outstanding MCP servers to be processed…")
-	// Send a no-op sentinel so that processMCPServers drains all previously enqueued items first.
-	a.processor.AddPendingMCPServer(ctx, mcpserverapi.MCPServer{})
-	log.Info("All outstanding MCP servers processed")
-}
-
-func (a *DaprRuntime) loadMCPServers(ctx context.Context) error {
-	var l loader.Loader[mcpserverapi.MCPServer]
-
-	switch a.runtimeConfig.mode {
-	case modes.KubernetesMode:
-		l = kubernetes.NewMCPServers(kubernetes.Options{
-			Config:    a.runtimeConfig.kubernetes,
-			Client:    a.operatorClient,
-			Namespace: a.namespace,
-		})
-	case modes.StandaloneMode:
-		l = disk.NewMCPServers(disk.Options{
-			AppID: a.runtimeConfig.id,
-			Paths: a.runtimeConfig.standalone.ResourcesPath,
-		})
-	default:
-		return nil
-	}
-
-	log.Info("Loading MCP servers…")
-
-	servers, err := l.Load(ctx)
-	if err != nil {
-		return err
-	}
-
-	authorizedServers, ok := a.authz.GetAuthorizedObjects(servers, a.authz.IsObjectAuthorized).([]mcpserverapi.MCPServer)
-	if !ok {
-		return errors.New("unexpected type from GetAuthorizedObjects for MCPServers")
-	}
-
-	for _, s := range authorizedServers {
-		log.Infof("Found MCP server: %s", s.Name)
-		if !a.processor.AddPendingMCPServer(ctx, s) {
-			return nil
-		}
-	}
-
-	return nil
-}
-
-func (a *DaprRuntime) flushOutstandingComponents(ctx context.Context) {
-	log.Info("Waiting for all outstanding components to be processed…")
-	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
-	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
-	a.processor.AddPendingComponent(ctx, compapi.Component{})
-	log.Info("All outstanding components processed")
-}
-
-func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
-	var loader loader.Loader[endpointapi.HTTPEndpoint]
-
-	switch a.runtimeConfig.mode {
-	case modes.KubernetesMode:
-		loader = kubernetes.NewHTTPEndpoints(kubernetes.Options{
-			Config:    a.runtimeConfig.kubernetes,
-			Client:    a.operatorClient,
-			Namespace: a.namespace,
-		})
-	case modes.StandaloneMode:
-		loader = disk.NewHTTPEndpoints(disk.Options{
-			AppID: a.runtimeConfig.id,
-			Paths: a.runtimeConfig.standalone.ResourcesPath,
-		})
-	default:
-		return nil
-	}
-
-	log.Info("Loading endpoints…")
-
-	endpoints, err := loader.Load(ctx)
-	if err != nil {
-		return err
-	}
-
-	authorizedHTTPEndpoints := a.authz.GetAuthorizedObjects(endpoints, a.authz.IsObjectAuthorized).([]endpointapi.HTTPEndpoint)
-
-	for _, e := range authorizedHTTPEndpoints {
-		log.Infof("Found http endpoint: %s", e.Name)
-
-		if !a.processor.AddPendingEndpoint(ctx, e) {
-			return nil
-		}
-	}
-
-	return nil
-}
-
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations.
 func (a *DaprRuntime) ShutdownWithWait() {
 	a.runnerCloser.Close()
@@ -1546,26 +1353,6 @@ func (a *DaprRuntime) loadAppConfiguration(ctx context.Context) {
 				log.Warnf("remindersStoragePartitions is deprecated and will be removed in future versions (entity: %v)", e.Entities)
 			}
 		}
-	}
-}
-
-func (a *DaprRuntime) appendBuiltinSecretStore(ctx context.Context) {
-	if a.runtimeConfig.disableBuiltinK8sSecretStore {
-		return
-	}
-
-	switch a.runtimeConfig.mode {
-	case modes.KubernetesMode:
-		// Preload Kubernetes secretstore
-		a.processor.AddPendingComponent(ctx, compapi.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: secretstoresLoader.BuiltinKubernetesSecretStore,
-			},
-			Spec: compapi.ComponentSpec{
-				Type:    "secretstores.kubernetes",
-				Version: components.FirstStableVersion,
-			},
-		})
 	}
 }
 
