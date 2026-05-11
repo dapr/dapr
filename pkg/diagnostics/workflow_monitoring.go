@@ -325,7 +325,7 @@ func (w *workflowMetrics) AttestationCertCacheLookup(ctx context.Context, outcom
 // of the configured gRPC max body size. Callers should skip recording
 // when no max body size is configured (ratio is undefined).
 func (w *workflowMetrics) WorkflowPayloadSizeRatio(ctx context.Context, workflowName string, ratio float64) {
-	if !w.IsEnabled() || ratio <= 0 {
+	if !w.IsEnabled() {
 		return
 	}
 	stats.RecordWithOptions(ctx,
@@ -338,7 +338,7 @@ func (w *workflowMetrics) WorkflowPayloadSizeRatio(ctx context.Context, workflow
 // of the configured gRPC max body size. Callers should skip recording
 // when no max body size is configured.
 func (w *workflowMetrics) ActivityPayloadSizeRatio(ctx context.Context, workflowName, activityName string, ratio float64) {
-	if !w.IsEnabled() || ratio <= 0 {
+	if !w.IsEnabled() {
 		return
 	}
 	stats.RecordWithOptions(ctx,
