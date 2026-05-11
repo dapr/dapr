@@ -16,6 +16,7 @@ package operator
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,7 +28,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -36,22 +36,15 @@ func init() {
 	suite.Register(new(mcpserver))
 }
 
-// mcpserver verifies that MCPServer resources are detected by the operator hot-reload stream.
-// The metadata API does not yet expose MCPServers, so we verify via log matching for now.
-// TODO(sicoyle): revise this test to check the metadata API and add full lifecycle
-// (add/delete) tests once MCPServers are exposed via metadata.
+// mcpserver verifies MCPServer hot-reload lifecycle via the operator stream
+// and the metadata API: add, verify in metadata, delete, verify removed.
 type mcpserver struct {
 	daprd    *daprd.Daprd
-	logline  *logline.LogLine
 	operator *operator.Operator
 }
 
 func (m *mcpserver) Setup(t *testing.T) []framework.Option {
 	sentry := sentry.New(t)
-
-	m.logline = logline.New(t,
-		logline.WithStdoutLineContains("MCPServer updated via hot-reload: weather-mcp"),
-	)
 
 	m.operator = operator.New(t,
 		operator.WithSentry(sentry),
@@ -62,14 +55,13 @@ func (m *mcpserver) Setup(t *testing.T) []framework.Option {
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(m.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
-		daprd.WithLogLineStdout(m.logline),
 		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors),
 		)),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(m.logline, sentry, m.operator, m.daprd),
+		framework.WithProcesses(sentry, m.operator, m.daprd),
 	}
 }
 
@@ -80,33 +72,44 @@ func (m *mcpserver) Run(t *testing.T, ctx context.Context) {
 		require.Empty(t, m.daprd.GetMetaMCPServers(t, ctx))
 	})
 
-	t.Run("adding an MCPServer via operator update is detected", func(t *testing.T) {
-		newServer := mcpserverapi.MCPServer{
-			ObjectMeta: metav1.ObjectMeta{Name: "weather-mcp", Namespace: "default"},
-			Spec: mcpserverapi.MCPServerSpec{
-				Endpoint: mcpserverapi.MCPEndpoint{
-					StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
-						URL: "http://example.com/mcp",
-					},
+	weatherMCP := mcpserverapi.MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "weather-mcp", Namespace: "default"},
+		Spec: mcpserverapi.MCPServerSpec{
+			// example.com is unreachable; ignoreErrors keeps daprd up.
+			IgnoreErrors: true,
+			Endpoint: mcpserverapi.MCPEndpoint{
+				StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
+					URL: "http://example.com/mcp",
 				},
 			},
-		}
-		m.operator.AddMCPServers(newServer)
+		},
+	}
+
+	t.Run("add MCPServer appears in metadata", func(t *testing.T) {
+		m.operator.AddMCPServers(weatherMCP)
 		m.operator.MCPServerUpdateEvent(t, ctx, &operator.MCPServerUpdateEvent{
-			MCPServer: &newServer,
+			MCPServer: &weatherMCP,
 			EventType: operatorv1.ResourceEventType_CREATED,
 		})
 
-		m.logline.EventuallyFoundAll(t)
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			servers := m.daprd.GetMetaMCPServers(c, ctx)
+			assert.Len(c, servers, 1)
+			if len(servers) > 0 {
+				assert.Equal(c, "weather-mcp", servers[0].GetName())
+			}
+		}, 10*time.Second, 200*time.Millisecond)
 	})
 
-	// TODO(sicoyle): Once the metadata API exposes MCPServers,
-	// replace log assertions with metadata API checks and add full hot-reload lifecycle tests:
-	// - Verify MCPServer appears in metadata after add
-	// - Delete MCPServer → metadata shows 0
-	// - Re-add MCPServer → metadata shows 1
-	t.Run("metadata API does not yet expose MCPServers on this branch", func(t *testing.T) {
-		assert.Empty(t, m.daprd.GetMetaMCPServers(t, ctx),
-			"MCPServers are not yet exposed via metadata API; activation logic is in feat-mcp-crd-plus-rest")
+	t.Run("delete MCPServer removes from metadata", func(t *testing.T) {
+		m.operator.MCPServerUpdateEvent(t, ctx, &operator.MCPServerUpdateEvent{
+			MCPServer: &weatherMCP,
+			EventType: operatorv1.ResourceEventType_DELETED,
+		})
+
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			servers := m.daprd.GetMetaMCPServers(c, ctx)
+			assert.Empty(c, servers)
+		}, 10*time.Second, 200*time.Millisecond)
 	})
 }
