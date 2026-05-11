@@ -107,7 +107,8 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		Properties: make(map[string]any, 1),
 	}
 
-	if reason, description, oversize := o.workflowPayloadOversize(state); oversize {
+	workflowName := o.getExecutionStartedEvent(state).GetName()
+	if reason, description, oversize := o.workflowPayloadOversize(ctx, state, workflowName); oversize {
 		return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs, reason, description)
 	}
 
@@ -122,7 +123,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// which will skip recording metrics for this execution.
 		executionStatus = ""
 	}
-	workflowName := o.getExecutionStartedEvent(state).GetName()
 	// Request to execute workflow
 	log.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", o.actorID, wi.InstanceID)
 	// Schedule the workflow execution by signaling the backend

@@ -38,6 +38,8 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 		dueTime = state.Inbox[0].GetTimestamp().AsTime()
 	}
 
+	workflowName := o.getExecutionStartedEvent(state).GetName()
+
 	var result dispatchResult
 	for _, e := range es {
 		// Don't redispatch activities whose resolution is already known to the
@@ -52,7 +54,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 			continue
 		}
 
-		err := o.callActivity(ctx, e, dueTime, state.Generation)
+		err := o.callActivity(ctx, e, dueTime, state.Generation, workflowName)
 		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
 				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
@@ -67,14 +69,14 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 	return result
 }
 
-func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, generation uint64) error {
+func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, generation uint64, workflowName string) error {
 	ts := e.GetTaskScheduled()
 	if ts == nil {
 		log.Warnf("Workflow actor '%s': unable to process task '%v'", o.actorID, e)
 		return nil
 	}
 
-	if err := o.activityPayloadOversize(e, e); err != nil {
+	if err := o.activityPayloadOversize(ctx, e, e, workflowName); err != nil {
 		return err
 	}
 
