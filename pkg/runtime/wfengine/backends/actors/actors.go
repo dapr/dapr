@@ -69,7 +69,6 @@ const (
 	ActivityNameLabelKey    = "activity"
 	ExecutorNameLabelKey    = "executor"
 	RetentionerNameLabelKey = "retentioner"
-	ActorTypePrefix         = "dapr.internal."
 )
 
 type Options struct {
