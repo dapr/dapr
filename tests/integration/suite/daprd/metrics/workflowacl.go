@@ -217,9 +217,9 @@ func (w *workflowacl) Run(t *testing.T, ctx context.Context) {
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			metrics := w.target.Metrics(c, ctx).All()
-			denyKey := "dapr_runtime_workflow_acl_action_denied_total|app_id:metric-target|operation:schedule|reason:NotAllowed|src_app_id:metric-caller|type:workflow"
+			denyKey := "dapr_runtime_workflow_acl_action_denied_total|app_id:metric-target|operation:schedule|src_app_id:metric-caller|type:workflow"
 			assert.GreaterOrEqual(c, int(metrics[denyKey]), 1,
-				"expected at least 1 workflow ACL deny metric on target with reason=NotAllowed")
+				"expected at least 1 workflow ACL deny metric on target")
 		}, time.Second*10, time.Millisecond*10)
 	})
 }

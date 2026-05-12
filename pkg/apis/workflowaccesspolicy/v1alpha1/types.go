@@ -157,10 +157,12 @@ type WorkflowRule struct {
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
-	// Operations is the set of operations this rule applies to.
+	// Operations are the operation entries this rule applies to. Multiple
+	// entries with the same operation name are permitted (and only useful
+	// for `schedule`, since it's the only operation that can carry a
+	// `requires` gate): they compose as OR — access is allowed if any
+	// matching entry's `requires` is satisfied.
 	// +kubebuilder:validation:MinItems=1
-	// +listType=map
-	// +listMapKey=name
 	Operations []WorkflowRuleOperation `json:"operations"`
 }
 

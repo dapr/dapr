@@ -444,3 +444,51 @@ func TestEvaluate_SkipsDecodeWhenMatchingRuleHasNoRequires(t *testing.T) {
 	assert.True(t, allowed)
 	assert.Equal(t, DenialReasonNone, reason)
 }
+
+// Multiple schedule entries with different requires compose as OR: access
+// is allowed if any matching entry's requires is satisfied.
+func TestEvaluate_MultipleScheduleEntriesOR(t *testing.T) {
+	cp := Compile([]wfaclapi.WorkflowAccessPolicy{{Spec: wfaclapi.WorkflowAccessPolicySpec{
+		Rules: []wfaclapi.WorkflowAccessPolicyRule{{
+			Callers: []wfaclapi.WorkflowCaller{{AppID: "caller-app"}},
+			Workflows: []wfaclapi.WorkflowRule{{
+				Name: "GatedWF",
+				Operations: []wfaclapi.WorkflowRuleOperation{
+					{Name: wfaclapi.WorkflowOperationSchedule, Requires: []wfaclapi.RequiredEvent{
+						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "PathA"),
+					}},
+					{Name: wfaclapi.WorkflowOperationSchedule, Requires: []wfaclapi.RequiredEvent{
+						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "PathB"),
+					}},
+				},
+			}},
+		}},
+	}}})
+
+	t.Run("allowed when first entry's requires is satisfied", func(t *testing.T) {
+		history := historyFromChunks(chunkFromEvents(t, "caller-app",
+			taskScheduled(1, "PathA"), taskCompleted(2, 1),
+		))
+		allowed, reason := cp.Evaluate("caller-app", OperationTypeWorkflow, wfaclapi.WorkflowOperationSchedule, "GatedWF", history)
+		assert.True(t, allowed)
+		assert.Equal(t, DenialReasonNone, reason)
+	})
+
+	t.Run("allowed when second entry's requires is satisfied", func(t *testing.T) {
+		history := historyFromChunks(chunkFromEvents(t, "caller-app",
+			taskScheduled(1, "PathB"), taskCompleted(2, 1),
+		))
+		allowed, reason := cp.Evaluate("caller-app", OperationTypeWorkflow, wfaclapi.WorkflowOperationSchedule, "GatedWF", history)
+		assert.True(t, allowed)
+		assert.Equal(t, DenialReasonNone, reason)
+	})
+
+	t.Run("denied when neither entry's requires is satisfied", func(t *testing.T) {
+		history := historyFromChunks(chunkFromEvents(t, "caller-app",
+			taskScheduled(1, "Unrelated"), taskCompleted(2, 1),
+		))
+		allowed, reason := cp.Evaluate("caller-app", OperationTypeWorkflow, wfaclapi.WorkflowOperationSchedule, "GatedWF", history)
+		assert.False(t, allowed)
+		assert.Equal(t, DenialReasonRequiresUnmet, reason)
+	})
+}

@@ -25,8 +25,6 @@ import (
 	"github.com/dapr/dapr/pkg/security/spiffe"
 )
 
-const workflowACLDeniedMsg = "access denied by workflow access policy"
-
 // Per-operation enforcement happens inside the actor itself (orchestrator /
 // activity targets) so the workflow name is resolved against locked state
 // without a TOCTOU race. This handler only authenticates the caller and
@@ -84,8 +82,8 @@ func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *inte
 
 	if callerAppID != a.AppID() {
 		a.logger.Warnf("Workflow access policy denied cross-app reminder invocation from app '%s'", callerAppID)
-		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, "reminder", "invoke", string(workflowacl.DenialReasonNotAllowed))
-		return status.Errorf(codes.PermissionDenied, workflowACLDeniedMsg)
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, "reminder", "invoke")
+		return status.Errorf(codes.PermissionDenied, workflowacl.DeniedMessageBase)
 	}
 
 	diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, "reminder", "invoke")
@@ -101,7 +99,7 @@ func (a *api) extractCallerIdentity(ctx context.Context) (appID, namespace strin
 		return "", "", status.Error(codes.Internal, "workflow access policy: failed to extract caller identity")
 	}
 	if !ok {
-		return "", "", status.Error(codes.PermissionDenied, workflowACLDeniedMsg)
+		return "", "", status.Error(codes.PermissionDenied, workflowacl.DeniedMessageBase)
 	}
 
 	return spiffeID.AppID(), spiffeID.Namespace(), nil
@@ -111,7 +109,7 @@ func (a *api) extractCallerIdentity(ctx context.Context) (appID, namespace strin
 func (a *api) checkNamespace(callerNamespace string) error {
 	if callerNamespace != "" && callerNamespace != a.Namespace() {
 		a.logger.Warnf("Workflow access policy denied cross-namespace call (caller namespace '%s' != target namespace '%s')", callerNamespace, a.Namespace())
-		return status.Errorf(codes.PermissionDenied, workflowACLDeniedMsg)
+		return status.Errorf(codes.PermissionDenied, workflowacl.DeniedMessageBase)
 	}
 	return nil
 }

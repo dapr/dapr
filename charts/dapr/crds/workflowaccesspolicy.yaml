@@ -221,9 +221,6 @@ spec:
                               type: object
                             minItems: 1
                             type: array
-                            x-kubernetes-list-type: map
-                            x-kubernetes-list-map-keys:
-                            - name
                         required:
                         - name
                         - operations

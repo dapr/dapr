@@ -46,27 +46,33 @@ func (a *activity) checkAccessPolicy(method string, data []byte, md map[string]*
 	name, history, err := workflowacl.ActivityNameFromExecute(method, data)
 	if err != nil {
 		log.Warnf("Activity actor '%s': workflow access policy denied call '%s': could not extract name from request: %v", a.actorID, method, err)
-		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeActivity), method, string(workflowacl.DenialReasonNotAllowed))
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeActivity), method)
 		return status.Errorf(codes.PermissionDenied, "%s: malformed request for method '%s'", workflowacl.DeniedMessageBase, method)
 	}
 	if name == "" {
 		// Non-Execute methods on the activity actor are only valid from the
 		// local daprd. Cross-app callers cannot invoke them.
 		log.Warnf("Activity actor '%s': workflow access policy denied cross-app call to non-Execute method '%s' from app '%s'", a.actorID, method, callerAppID)
-		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeActivity), method, string(workflowacl.DenialReasonNotAllowed))
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeActivity), method)
 		return status.Errorf(codes.PermissionDenied, "%s: app '%s' cannot invoke method '%s'", workflowacl.DeniedMessageBase, callerAppID, method)
 	}
 
 	if callerAppID == "" {
 		log.Warnf("Activity actor '%s': workflow access policy denied call '%s' with missing caller identity", a.actorID, method)
-		diag.DefaultMonitoring.WorkflowACLActionDenied("", string(workflowacl.OperationTypeActivity), string(wfaclapi.WorkflowOperationSchedule), string(workflowacl.DenialReasonNotAllowed))
+		diag.DefaultMonitoring.WorkflowACLActionDenied("", string(workflowacl.OperationTypeActivity), string(wfaclapi.WorkflowOperationSchedule))
 		return status.Errorf(codes.PermissionDenied, "%s: caller identity missing on activity '%s' schedule", workflowacl.DeniedMessageBase, name)
+	}
+
+	if err := a.signing.VerifyPropagatedHistoryStateless(history); err != nil {
+		log.Warnf("Activity actor '%s': workflow access policy denied app '%s' on activity '%s': propagated history verification failed: %v", a.actorID, callerAppID, name, err)
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeActivity), string(wfaclapi.WorkflowOperationSchedule))
+		return status.Errorf(codes.PermissionDenied, "%s: app '%s' schedule on activity '%s'", workflowacl.DeniedMessageBase, callerAppID, name)
 	}
 
 	allowed, reason := policies.Evaluate(callerAppID, workflowacl.OperationTypeActivity, wfaclapi.WorkflowOperationSchedule, name, history)
 	if !allowed {
 		log.Warnf("Activity actor '%s': workflow access policy denied app '%s' on activity '%s' (reason=%s)", a.actorID, callerAppID, name, reason)
-		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeActivity), string(wfaclapi.WorkflowOperationSchedule), string(reason))
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeActivity), string(wfaclapi.WorkflowOperationSchedule))
 		return status.Errorf(codes.PermissionDenied, "%s: app '%s' schedule on activity '%s'", workflowacl.DeniedMessageBase, callerAppID, name)
 	}
 

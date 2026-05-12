@@ -53,20 +53,20 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 	operation, err := workflowacl.WorkflowOperationFromMethod(method, parsedAddEvent)
 	if err != nil {
 		log.Warnf("Workflow actor '%s': workflow access policy denied call '%s': could not derive operation from request: %v", o.actorID, method, err)
-		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), method, string(workflowacl.DenialReasonNotAllowed))
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), method)
 		return status.Errorf(codes.PermissionDenied, "%s: malformed request for method '%s'", workflowacl.DeniedMessageBase, method)
 	}
 	if operation == "" {
 		// Non-subject methods (reminders, internal protocol) are only valid
 		// from the local daprd. Cross-app callers cannot invoke them.
 		log.Warnf("Workflow actor '%s': workflow access policy denied cross-app call to non-subject method '%s' from app '%s'", o.actorID, method, callerAppID)
-		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), method, string(workflowacl.DenialReasonNotAllowed))
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), method)
 		return status.Errorf(codes.PermissionDenied, "%s: app '%s' cannot invoke method '%s'", workflowacl.DeniedMessageBase, callerAppID, method)
 	}
 
 	if callerAppID == "" {
 		log.Warnf("Workflow actor '%s': workflow access policy denied call '%s' with missing caller identity", o.actorID, method)
-		diag.DefaultMonitoring.WorkflowACLActionDenied("", string(workflowacl.OperationTypeWorkflow), string(operation), string(workflowacl.DenialReasonNotAllowed))
+		diag.DefaultMonitoring.WorkflowACLActionDenied("", string(workflowacl.OperationTypeWorkflow), string(operation))
 		return status.Errorf(codes.PermissionDenied, "%s: caller identity missing on workflow '%s' operation", workflowacl.DeniedMessageBase, operation)
 	}
 
@@ -76,10 +76,16 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 		return status.Error(codes.Internal, "failed to evaluate workflow access policy")
 	}
 
+	if err := o.signing.VerifyPropagatedHistoryStateless(history); err != nil {
+		log.Warnf("Workflow actor '%s': workflow access policy denied app '%s' operation '%s' on '%s': propagated history verification failed: %v", o.actorID, callerAppID, operation, name, err)
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), string(operation))
+		return status.Errorf(codes.PermissionDenied, "%s: app '%s' operation '%s' on workflow '%s' (instance '%s')", workflowacl.DeniedMessageBase, callerAppID, operation, name, o.actorID)
+	}
+
 	allowed, reason := policies.Evaluate(callerAppID, workflowacl.OperationTypeWorkflow, operation, name, history)
 	if !allowed {
 		log.Warnf("Workflow actor '%s': workflow access policy denied app '%s' operation '%s' on '%s' (reason=%s)", o.actorID, callerAppID, operation, name, reason)
-		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), string(operation), string(reason))
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), string(operation))
 		return status.Errorf(codes.PermissionDenied, "%s: app '%s' operation '%s' on workflow '%s' (instance '%s')", workflowacl.DeniedMessageBase, callerAppID, operation, name, o.actorID)
 	}
 
