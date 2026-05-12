@@ -24,24 +24,18 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/callbackstream"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/targets/app/transport"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-
-	"google.golang.org/protobuf/types/known/anypb"
 )
-
-// errorResponseHeader is the HTTP-protocol marker that downstream code
-// (notably pkg/actors/router/router.go) inspects to decide whether a
-// response represents an application-level actor error. The streaming
-// transport synthesizes it on responses when error=true so router-side
-// code keeps working unchanged.
-const errorResponseHeader = "X-Daprerrorresponseheader"
 
 // Transport delivers actor callbacks over the SubscribeActorEventsAlpha1
 // stream registered in callbackstream.Manager.
@@ -249,19 +243,19 @@ func flattenFirstValue(md map[string]*internalv1pb.ListStringValue) map[string]s
 
 // buildInternalResponse converts an SubscribeActorEventsRequestInvokeResponseAlpha1 into the internal
 // proto shape the rest of the runtime expects. When the app signals an
-// actor error we also set the X-Daprerrorresponseheader marker so
-// cross-daprd paths that inspect headers (router.callRemoteActor) keep
-// recognizing the error.
+// actor error we also set the ErrorResponseHeader marker so cross-daprd
+// paths that inspect headers (router.callRemoteActor) keep recognizing
+// the error.
 func buildInternalResponse(resp *runtimev1pb.SubscribeActorEventsRequestInvokeResponseAlpha1) *internalv1pb.InternalInvokeResponse {
 	headers := expandSingleValue(resp.GetMetadata())
 	if resp.GetError() {
-		headers[errorResponseHeader] = &internalv1pb.ListStringValue{Values: []string{"true"}}
+		headers[transport.ErrorResponseHeader] = &internalv1pb.ListStringValue{Values: []string{"true"}}
 	}
 	return &internalv1pb.InternalInvokeResponse{
 		Status:  &internalv1pb.Status{Code: 200},
 		Headers: headers,
 		Message: &commonv1pb.InvokeResponse{
-			ContentType: resp.GetMetadata()["content-type"],
+			ContentType: resp.GetMetadata()[invokev1.ContentTypeHeader],
 			Data:        &anypb.Any{Value: resp.GetData()},
 		},
 	}

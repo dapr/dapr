@@ -20,6 +20,17 @@ limitations under the License.
 // is the gRPC client, disconnect fails in-flight work immediately, and
 // multiple concurrent connections from the same app are permitted.
 //
+// Multi-connection routing (rolling-restart semantic): Send always picks
+// the most recently registered connection. Older connections do not
+// receive any new Send traffic once a newer one registers, but their
+// in-flight requests stay routed to them — Deliver looks up the response
+// by request id on the connection that owns it, so the work an older
+// stream had already accepted completes naturally. This matches the
+// rolling-restart scenario where pod B opens its stream before pod A
+// finishes draining: A wraps up its in-flight invocations while every
+// new callback goes to B. See TestMultipleConns_OlderConnDrainsInFlight
+// in callbackstream_test.go for the regression guard.
+//
 // Connection-set state (the active stream list and the latest registration
 // config) is owned by a single goroutine that drains a kit/events/loop
 // queue. Every state mutation goes through Handle, so there are no locks

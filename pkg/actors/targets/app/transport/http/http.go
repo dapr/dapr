@@ -30,6 +30,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/targets/app/transport"
 	"github.com/dapr/dapr/pkg/channel"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -122,14 +123,14 @@ func (t *Transport) Invoke(ctx context.Context, req *internalv1pb.InternalInvoke
 
 	// .NET SDK signals actor failure through a response header instead of a
 	// non-2xx status code.
-	if _, ok := res.GetHeaders()["X-Daprerrorresponseheader"]; ok {
+	if _, ok := res.GetHeaders()[transport.ErrorResponseHeader]; ok {
 		return res, actorerrors.NewActorError(res)
 	}
 
 	// Shared code path with reminders/timers means invoke responses may also
 	// carry the reminder-cancel header. Only recurring callbacks act on it;
 	// invoke callers simply surface the error.
-	if v := res.GetHeaders()["X-Daprremindercancel"]; v != nil && len(v.GetValues()) > 0 && strings.IsTruthy(v.GetValues()[0]) {
+	if v := res.GetHeaders()[transport.ReminderCancelHeader]; v != nil && len(v.GetValues()) > 0 && strings.IsTruthy(v.GetValues()[0]) {
 		return res, actorerrors.ErrReminderCanceled
 	}
 

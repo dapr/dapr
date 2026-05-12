@@ -14,6 +14,7 @@ limitations under the License.
 package grpc
 
 import (
+	"context"
 	"errors"
 	"io"
 
@@ -26,6 +27,7 @@ import (
 	grpcchannel "github.com/dapr/dapr/pkg/channel/grpc"
 	"github.com/dapr/dapr/pkg/config"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/kit/concurrency"
 )
 
 // SubscribeActorEventsAlpha1 is the server-side endpoint of the
@@ -57,7 +59,7 @@ func (a *api) SubscribeActorEventsAlpha1(stream runtimev1pb.Dapr_SubscribeActorE
 	// Entities list still transitions the actor runtime out of
 	// INITIALIZING — matches the HTTP /dapr/config 404 path), then
 	// register the stream connection with the manager for Send/Deliver
-	// routing. Both are unregistered on exit.
+	// routing.
 	if err := a.Actors().RegisterHosted(hostconfig.Config{
 		EntityConfigs:           cfg.EntityConfigs,
 		DrainRebalancedActors:   cfg.DrainRebalancedActors,
@@ -69,9 +71,15 @@ func (a *api) SubscribeActorEventsAlpha1(stream runtimev1pb.Dapr_SubscribeActorE
 	}); err != nil {
 		return status.Errorf(codes.Internal, "failed to register hosted actors: %v", err)
 	}
-	defer a.Actors().UnRegisterHosted(cfg.Entities...)
 	conn := mgr.Register(stream.Context(), cfg)
-	defer mgr.Close(conn, nil)
+	// Cleanup runs as one deferred block so ordering is explicit: drop the
+	// actor types from the runtime table first so daprd routes no further
+	// new traffic to this connection, then close the connection to fail
+	// any in-flight Sends with ErrDisconnected.
+	defer func() {
+		a.Actors().UnRegisterHosted(cfg.Entities...)
+		mgr.Close(conn, nil)
+	}()
 
 	// Ack the registration.
 	if err := stream.Send(&runtimev1pb.SubscribeActorEventsResponseAlpha1{
@@ -82,49 +90,88 @@ func (a *api) SubscribeActorEventsAlpha1(stream runtimev1pb.Dapr_SubscribeActorE
 		return err
 	}
 
-	errCh := make(chan error, 2)
+	// Drive send and recv as siblings under a RunnerManager so cleanup is
+	// explicit: whichever loop returns first causes the manager to cancel
+	// the shared context, and the other loop unwinds promptly. This mirrors
+	// the scheduler streamer pattern (pkg/runtime/scheduler/internal/cluster/streamer.go).
+	return concurrency.NewRunnerManager(
+		func(ctx context.Context) error { return recvLoop(ctx, stream, conn) },
+		func(ctx context.Context) error { return sendLoop(ctx, stream, conn, a.closeCh) },
+	).Run(stream.Context())
+}
 
-	// Recv loop: route every inbound response to the pending caller.
+// recvLoop reads inbound messages from the stream and routes them to the
+// pending caller. stream.Recv blocks until the underlying gRPC stream
+// produces a message or is torn down, so the actual read runs on an inner
+// goroutine — the outer loop selects on ctx so a sibling runner returning
+// (sendLoop exit, a.closeCh) unwinds recv promptly. The inner goroutine
+// then exits naturally when gRPC cancels stream.Context() after the
+// handler returns.
+func recvLoop(
+	ctx context.Context,
+	stream runtimev1pb.Dapr_SubscribeActorEventsAlpha1Server,
+	conn *callbackstream.Connection,
+) error {
+	type recvResult struct {
+		msg *runtimev1pb.SubscribeActorEventsRequestAlpha1
+		err error
+	}
+	results := make(chan recvResult, 1)
 	go func() {
+		defer close(results)
 		for {
-			msg, recvErr := stream.Recv()
-			if recvErr != nil {
-				if errors.Is(recvErr, io.EOF) {
-					errCh <- nil
-					return
-				}
-				errCh <- recvErr
+			msg, err := stream.Recv()
+			results <- recvResult{msg, err}
+			if err != nil {
 				return
 			}
-			conn.Deliver(msg)
 		}
 	}()
 
-	// Send loop: drain the connection's outbox. Outbox is never closed by
-	// the manager (senders can race with close), so exit on conn.Done()
-	// instead of ranging on the channel.
-	go func() {
-		for {
-			select {
-			case <-conn.Done():
-				errCh <- nil
-				return
-			case out := <-conn.Outbox:
-				if sendErr := stream.Send(out); sendErr != nil {
-					errCh <- sendErr
-					return
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case r, ok := <-results:
+			if !ok {
+				return nil
+			}
+			if r.err != nil {
+				if errors.Is(r.err, io.EOF) {
+					return nil
 				}
+				return r.err
+			}
+			conn.Deliver(r.msg)
+		}
+	}
+}
+
+// sendLoop drains the connection's outbox and writes each message to the
+// stream. Exits on ctx cancel (sibling recv returned or RunnerManager is
+// unwinding), conn.Done (manager closed the connection), or a.closeCh
+// (api server shutdown). Outbox is intentionally never closed by the
+// manager so we exit via conn.Done instead of ranging on it — see
+// callbackstream.Connection.Outbox.
+func sendLoop(
+	ctx context.Context,
+	stream runtimev1pb.Dapr_SubscribeActorEventsAlpha1Server,
+	conn *callbackstream.Connection,
+	closeCh <-chan struct{},
+) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-conn.Done():
+			return nil
+		case <-closeCh:
+			return nil
+		case out := <-conn.Outbox:
+			if err := stream.Send(out); err != nil {
+				return err
 			}
 		}
-	}()
-
-	select {
-	case <-stream.Context().Done():
-		return stream.Context().Err()
-	case <-a.closeCh:
-		return nil
-	case err := <-errCh:
-		return err
 	}
 }
 

@@ -243,6 +243,85 @@ func TestSend_InflightFailsOnConnClose(t *testing.T) {
 	}
 }
 
+// TestMultipleConns_OlderConnDrainsInFlight is the regression guard for
+// the documented rolling-restart semantic: once a newer connection
+// registers, every new Send goes to it, but Sends that the older
+// connection already accepted (the request message has landed in its
+// Outbox) still complete on the older connection. Pod A finishes its
+// in-flight work while every new callback goes to pod B.
+func TestMultipleConns_OlderConnDrainsInFlight(t *testing.T) {
+	mgr := runManager(t)
+
+	c1 := mgr.Register(t.Context(), &config.ApplicationConfig{Entities: []string{"v1"}})
+	t.Cleanup(func() { mgr.Close(c1, nil) })
+
+	// Start an in-flight Send on c1 but don't drain its Outbox yet — the
+	// request sits buffered on c1, awaiting a reply.
+	type result struct {
+		msg *runtimev1pb.SubscribeActorEventsRequestAlpha1
+		err error
+	}
+	c1ResCh := make(chan result, 1)
+	go func() {
+		msg, err := mgr.Send(t.Context(), invokeBuild("typeA-on-c1"))
+		c1ResCh <- result{msg, err}
+	}()
+
+	// Wait for the request to actually land in c1's Outbox before the
+	// second connection arrives, so we know c1 owns this in-flight Send.
+	var inflightOnC1 *runtimev1pb.SubscribeActorEventsResponseAlpha1
+	select {
+	case inflightOnC1 = <-c1.Outbox:
+	case <-time.After(time.Second):
+		t.Fatal("inflight Send did not reach c1 outbox")
+	}
+
+	// New connection takes over — the snapshot must flip to c2 so further
+	// Sends route there, not back to c1.
+	c2 := mgr.Register(t.Context(), &config.ApplicationConfig{Entities: []string{"v2"}})
+	t.Cleanup(func() { mgr.Close(c2, nil) })
+
+	// New Send must land on c2, not c1.
+	c2ResCh := make(chan result, 1)
+	go func() {
+		msg, err := mgr.Send(t.Context(), invokeBuild("typeA-on-c2"))
+		c2ResCh <- result{msg, err}
+	}()
+	var newOnC2 *runtimev1pb.SubscribeActorEventsResponseAlpha1
+	select {
+	case newOnC2 = <-c2.Outbox:
+	case <-time.After(time.Second):
+		t.Fatal("new Send did not reach c2 outbox after c2 registered")
+	}
+	// Sanity: c1 must not have received the new request.
+	select {
+	case spurious := <-c1.Outbox:
+		t.Fatalf("c1 should not see new traffic after c2 registered, got %T", spurious.GetResponseType())
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	// Now complete both: c1 first to prove its in-flight wasn't lost, then
+	// c2 to prove the new request was routed there. Order matters as the
+	// test of the semantic — pod A drains its tail.
+	c1.Deliver(invokeReply(inflightOnC1.GetInvokeRequest().GetId()))
+	select {
+	case r := <-c1ResCh:
+		require.NoError(t, r.err)
+		require.NotNil(t, r.msg.GetInvokeResponse())
+	case <-time.After(time.Second):
+		t.Fatal("c1 in-flight Send never returned after Deliver")
+	}
+
+	c2.Deliver(invokeReply(newOnC2.GetInvokeRequest().GetId()))
+	select {
+	case r := <-c2ResCh:
+		require.NoError(t, r.err)
+		require.NotNil(t, r.msg.GetInvokeResponse())
+	case <-time.After(time.Second):
+		t.Fatal("c2 Send never returned after Deliver")
+	}
+}
+
 // TestRegister_AfterFullDisconnectRestoresRouting verifies that the
 // manager recovers when an app drops all streams and then reconnects —
 // the Kubernetes pod-restart scenario. Without this, a daprd that lost

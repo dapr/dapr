@@ -23,13 +23,29 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
+// Header keys shared by both transports so the wire contract for app-side
+// actor callback responses can't drift between HTTP and gRPC.
+const (
+	// ErrorResponseHeader is set by the app on a callback response to
+	// signal an application-level actor error. The HTTP transport reads
+	// it from the response headers as-is; the gRPC transport synthesizes
+	// it on the InternalInvokeResponse when the app sets error=true so
+	// cross-daprd paths (notably pkg/actors/router/router.go) keep
+	// recognising the error.
+	ErrorResponseHeader = "X-Daprerrorresponseheader"
+
+	// ReminderCancelHeader is set by the app on a reminder or timer
+	// response to ask Dapr to stop firing the recurring callback.
+	ReminderCancelHeader = "X-Daprremindercancel"
+)
+
 // Invoker delivers actor callbacks to the user application.
 //
 // Error semantics:
 //   - Invoke returns the raw InternalInvokeResponse so the caller can forward
 //     response headers unchanged. When the app signals an application-level
 //     error, the returned error is an *actorerrors.ActorError and the response
-//     carries the X-Daprerrorresponseheader header (synthesized if needed so
+//     carries the ErrorResponseHeader header (synthesized if needed so
 //     cross-daprd paths keep working).
 //   - InvokeReminder and InvokeTimer return actorerrors.ErrReminderCanceled
 //     when the app asks to cancel the recurring callback.
