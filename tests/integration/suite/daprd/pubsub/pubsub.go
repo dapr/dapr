@@ -14,6 +14,7 @@ limitations under the License.
 package pubsub
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/bulksubscribe"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/contentlength"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/grpc"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/grpc/traceparent"
