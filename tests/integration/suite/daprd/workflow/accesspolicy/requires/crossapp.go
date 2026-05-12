@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -42,18 +43,7 @@ func init() {
 	suite.Register(new(crossapp))
 }
 
-// crossapp verifies that WorkflowAccessPolicy rules with a
-// `requires` block gate cross-app activity invocations on the contents of
-// the caller's propagated history. The target app exposes a sensitive
-// `ProcessPayment` activity that may only run when the caller has
-// previously completed `FraudCheckPassed` AND `HumanApprovalReceived`
-// activities AND propagates that history along with the call.
-//
-// verify the following for cross-app callers:
-//   - history satisfies both requirements and is propagated  = allowed
-//   - history is missing one of the required completions     = denied
-//   - history is complete but the caller does not propagate  = denied
-//   - sibling activity with no `requires` block still works as before
+// Multi-requires + AppID-filter coverage for cross-app activity invocations.
 type crossapp struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
@@ -63,6 +53,17 @@ type crossapp struct {
 	target *daprd.Daprd
 
 	targetActivityRuns atomic.Int64
+
+	processPayment            string
+	processPaymentAppGated    string
+	processPaymentAppMismatch string
+	logReceipt                string
+	wfFullHistory             string
+	wfPartialHistory          string
+	wfNoPropagation           string
+	wfAppIDMatch              string
+	wfAppIDMismatch           string
+	wfLogReceipt              string
 }
 
 func (r *crossapp) Setup(t *testing.T) []framework.Option {
@@ -72,72 +73,74 @@ func (r *crossapp) Setup(t *testing.T) []framework.Option {
 	r.sched = scheduler.New(t, scheduler.WithSentry(r.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 	r.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: wfaclrequiresconfig
-spec:
-  features:
-  - name: WorkflowAccessPolicy
-    enabled: true
-`), 0o600))
+	callerID := "caller-" + uuid.NewString()
+	targetID := "target-" + uuid.NewString()
+	ns := uuid.NewString()
 
-	// `ProcessPayment` only runs when both required ActivityCompleted events
-	// (FraudCheckPassed + HumanApprovalReceived) appear in the caller's
-	// propagated history. `LogReceipt` has no requires block
-	policy := []byte(`
+	r.processPayment = "process-payment-" + uuid.NewString()
+	r.processPaymentAppGated = "process-payment-app-gated-" + uuid.NewString()
+	r.processPaymentAppMismatch = "process-payment-app-mismatch-" + uuid.NewString()
+	r.logReceipt = "log-receipt-" + uuid.NewString()
+	r.wfFullHistory = "wf-full-" + uuid.NewString()
+	r.wfPartialHistory = "wf-partial-" + uuid.NewString()
+	r.wfNoPropagation = "wf-no-prop-" + uuid.NewString()
+	r.wfAppIDMatch = "wf-appid-match-" + uuid.NewString()
+	r.wfAppIDMismatch = "wf-appid-mismatch-" + uuid.NewString()
+	r.wfLogReceipt = "wf-log-receipt-" + uuid.NewString()
+
+	policy := []byte(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
   name: requires-test
 scopes:
-- wfacl-requires-target
+- %s
 spec:
   rules:
   - callers:
-    - appID: wfacl-requires-caller
+    - appID: %s
     activities:
-    - name: ProcessPayment
+    - name: %s
       requires:
       - eventType: activity
         status: Completed
-        name: FraudCheckPassed
+        name: fraud-check
       - eventType: activity
         status: Completed
-        name: HumanApprovalReceived
-    - name: ProcessPaymentAppGated
+        name: human-approval
+    - name: %s
       requires:
       - eventType: activity
         status: Completed
-        name: FraudCheckPassed
-        appID: wfacl-requires-caller
-    - name: ProcessPaymentAppMismatch
+        name: fraud-check
+        appID: %s
+    - name: %s
       requires:
       - eventType: activity
         status: Completed
-        name: FraudCheckPassed
+        name: fraud-check
         appID: nonexistent-app
-    - name: LogReceipt
-`)
+    - name: %s
+`, targetID, callerID,
+		r.processPayment,
+		r.processPaymentAppGated, callerID,
+		r.processPaymentAppMismatch,
+		r.logReceipt))
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))
 
 	r.caller = daprd.New(t,
-		daprd.WithAppID("wfacl-requires-caller"),
-		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
+		daprd.WithAppID(callerID),
+		daprd.WithNamespace(ns),
 		daprd.WithResourceFiles(r.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithSchedulerAddresses(r.sched.Address()),
 		daprd.WithSentry(t, r.sentry),
 	)
 	r.target = daprd.New(t,
-		daprd.WithAppID("wfacl-requires-target"),
-		daprd.WithNamespace("default"),
-		daprd.WithConfigs(configFile),
+		daprd.WithAppID(targetID),
+		daprd.WithNamespace(ns),
 		daprd.WithResourcesDir(targetResDir),
 		daprd.WithResourceFiles(r.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(r.place.Address()),
@@ -160,129 +163,111 @@ func (r *crossapp) Run(t *testing.T, ctx context.Context) {
 	targetReg := task.NewTaskRegistry()
 	targetAppID := r.target.AppID()
 
-	// `WF_FullHistory` runs FraudCheckPassed + HumanApprovalReceived locally
-	// then calls ProcessPayment on the target with PropagateOwnHistory.
-	require.NoError(t, callerReg.AddWorkflowN("WF_FullHistory", func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.CallActivity("FraudCheckPassed").Await(nil); err != nil {
-			return nil, fmt.Errorf("FraudCheckPassed failed: %w", err)
+	require.NoError(t, callerReg.AddWorkflowN(r.wfFullHistory, func(ctx *task.WorkflowContext) (any, error) {
+		if err := ctx.CallActivity("fraud-check").Await(nil); err != nil {
+			return nil, fmt.Errorf("fraud-check failed: %w", err)
 		}
-		if err := ctx.CallActivity("HumanApprovalReceived").Await(nil); err != nil {
-			return nil, fmt.Errorf("HumanApprovalReceived failed: %w", err)
+		if err := ctx.CallActivity("human-approval").Await(nil); err != nil {
+			return nil, fmt.Errorf("human-approval failed: %w", err)
 		}
 		var out string
-		if err := ctx.CallActivity("ProcessPayment",
+		if err := ctx.CallActivity(r.processPayment,
 			task.WithActivityAppID(targetAppID),
 			task.WithHistoryPropagation(api.PropagateOwnHistory()),
 		).Await(&out); err != nil {
-			return nil, fmt.Errorf("ProcessPayment failed: %w", err)
+			return nil, fmt.Errorf("%s failed: %w", r.processPayment, err)
 		}
 		return out, nil
 	}))
 
-	// `WF_PartialHistory` runs only FraudCheckPassed (skips approval) and
-	// propagates that partial history to ProcessPayment. The target's
-	// requires block is not satisfied = access should be denied.
-	require.NoError(t, callerReg.AddWorkflowN("WF_PartialHistory", func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.CallActivity("FraudCheckPassed").Await(nil); err != nil {
-			return nil, fmt.Errorf("FraudCheckPassed failed: %w", err)
+	require.NoError(t, callerReg.AddWorkflowN(r.wfPartialHistory, func(ctx *task.WorkflowContext) (any, error) {
+		if err := ctx.CallActivity("fraud-check").Await(nil); err != nil {
+			return nil, fmt.Errorf("fraud-check failed: %w", err)
 		}
 		var out string
-		if err := ctx.CallActivity("ProcessPayment",
+		if err := ctx.CallActivity(r.processPayment,
 			task.WithActivityAppID(targetAppID),
 			task.WithHistoryPropagation(api.PropagateOwnHistory()),
 		).Await(&out); err != nil {
-			return nil, fmt.Errorf("ProcessPayment failed: %w", err)
+			return nil, fmt.Errorf("%s failed: %w", r.processPayment, err)
 		}
 		return out, nil
 	}))
 
-	// `WF_NoPropagation` runs all the prereq activities but does NOT
-	// pass PropagateOwnHistory. The target therefore sees no propagated
-	// history = access should be denied even though the caller's local
-	// history contains the required events.
-	require.NoError(t, callerReg.AddWorkflowN("WF_NoPropagation", func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.CallActivity("FraudCheckPassed").Await(nil); err != nil {
-			return nil, fmt.Errorf("FraudCheckPassed failed: %w", err)
+	require.NoError(t, callerReg.AddWorkflowN(r.wfNoPropagation, func(ctx *task.WorkflowContext) (any, error) {
+		if err := ctx.CallActivity("fraud-check").Await(nil); err != nil {
+			return nil, fmt.Errorf("fraud-check failed: %w", err)
 		}
-		if err := ctx.CallActivity("HumanApprovalReceived").Await(nil); err != nil {
-			return nil, fmt.Errorf("HumanApprovalReceived failed: %w", err)
+		if err := ctx.CallActivity("human-approval").Await(nil); err != nil {
+			return nil, fmt.Errorf("human-approval failed: %w", err)
 		}
 		var out string
-		if err := ctx.CallActivity("ProcessPayment",
+		if err := ctx.CallActivity(r.processPayment,
 			task.WithActivityAppID(targetAppID),
 		).Await(&out); err != nil {
-			return nil, fmt.Errorf("ProcessPayment failed: %w", err)
+			return nil, fmt.Errorf("%s failed: %w", r.processPayment, err)
 		}
 		return out, nil
 	}))
 
-	// `WF_AppIDMatch` runs FraudCheckPassed then calls
-	// ProcessPaymentAppGated. The target's rule requires appID matching the
-	// caller — the propagated chunk's appID is wfacl-requires-caller, which
-	// matches = allowed.
-	require.NoError(t, callerReg.AddWorkflowN("WF_AppIDMatch", func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.CallActivity("FraudCheckPassed").Await(nil); err != nil {
-			return nil, fmt.Errorf("FraudCheckPassed failed: %w", err)
+	require.NoError(t, callerReg.AddWorkflowN(r.wfAppIDMatch, func(ctx *task.WorkflowContext) (any, error) {
+		if err := ctx.CallActivity("fraud-check").Await(nil); err != nil {
+			return nil, fmt.Errorf("fraud-check failed: %w", err)
 		}
 		var out string
-		if err := ctx.CallActivity("ProcessPaymentAppGated",
+		if err := ctx.CallActivity(r.processPaymentAppGated,
 			task.WithActivityAppID(targetAppID),
 			task.WithHistoryPropagation(api.PropagateOwnHistory()),
 		).Await(&out); err != nil {
-			return nil, fmt.Errorf("ProcessPaymentAppGated failed: %w", err)
+			return nil, fmt.Errorf("%s failed: %w", r.processPaymentAppGated, err)
 		}
 		return out, nil
 	}))
 
-	// `WF_AppIDMismatch` runs FraudCheckPassed then calls
-	// ProcessPaymentAppMismatch. The target's rule pins appID to a
-	// non-existent app = chunk appID never matches = denied.
-	require.NoError(t, callerReg.AddWorkflowN("WF_AppIDMismatch", func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.CallActivity("FraudCheckPassed").Await(nil); err != nil {
-			return nil, fmt.Errorf("FraudCheckPassed failed: %w", err)
+	require.NoError(t, callerReg.AddWorkflowN(r.wfAppIDMismatch, func(ctx *task.WorkflowContext) (any, error) {
+		if err := ctx.CallActivity("fraud-check").Await(nil); err != nil {
+			return nil, fmt.Errorf("fraud-check failed: %w", err)
 		}
 		var out string
-		if err := ctx.CallActivity("ProcessPaymentAppMismatch",
+		if err := ctx.CallActivity(r.processPaymentAppMismatch,
 			task.WithActivityAppID(targetAppID),
 			task.WithHistoryPropagation(api.PropagateOwnHistory()),
 		).Await(&out); err != nil {
-			return nil, fmt.Errorf("ProcessPaymentAppMismatch failed: %w", err)
+			return nil, fmt.Errorf("%s failed: %w", r.processPaymentAppMismatch, err)
 		}
 		return out, nil
 	}))
 
-	// `WF_LogReceipt` invokes a sibling activity `LogReceipt` that has no
-	// requires block
-	require.NoError(t, callerReg.AddWorkflowN("WF_LogReceipt", func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, callerReg.AddWorkflowN(r.wfLogReceipt, func(ctx *task.WorkflowContext) (any, error) {
 		var out string
-		if err := ctx.CallActivity("LogReceipt",
+		if err := ctx.CallActivity(r.logReceipt,
 			task.WithActivityAppID(targetAppID),
 		).Await(&out); err != nil {
-			return nil, fmt.Errorf("LogReceipt failed: %w", err)
+			return nil, fmt.Errorf("%s failed: %w", r.logReceipt, err)
 		}
 		return out, nil
 	}))
 
-	require.NoError(t, callerReg.AddActivityN("FraudCheckPassed", func(ctx task.ActivityContext) (any, error) {
+	require.NoError(t, callerReg.AddActivityN("fraud-check", func(ctx task.ActivityContext) (any, error) {
 		return "fraud-ok", nil
 	}))
-	require.NoError(t, callerReg.AddActivityN("HumanApprovalReceived", func(ctx task.ActivityContext) (any, error) {
+	require.NoError(t, callerReg.AddActivityN("human-approval", func(ctx task.ActivityContext) (any, error) {
 		return "approved", nil
 	}))
 
-	require.NoError(t, targetReg.AddActivityN("ProcessPayment", func(ctx task.ActivityContext) (any, error) {
+	require.NoError(t, targetReg.AddActivityN(r.processPayment, func(ctx task.ActivityContext) (any, error) {
 		r.targetActivityRuns.Add(1)
 		return "payment-processed", nil
 	}))
-	require.NoError(t, targetReg.AddActivityN("ProcessPaymentAppGated", func(ctx task.ActivityContext) (any, error) {
+	require.NoError(t, targetReg.AddActivityN(r.processPaymentAppGated, func(ctx task.ActivityContext) (any, error) {
 		r.targetActivityRuns.Add(1)
 		return "payment-app-gated", nil
 	}))
-	require.NoError(t, targetReg.AddActivityN("ProcessPaymentAppMismatch", func(ctx task.ActivityContext) (any, error) {
+	require.NoError(t, targetReg.AddActivityN(r.processPaymentAppMismatch, func(ctx task.ActivityContext) (any, error) {
 		r.targetActivityRuns.Add(1)
 		return "payment-app-mismatch", nil
 	}))
-	require.NoError(t, targetReg.AddActivityN("LogReceipt", func(ctx task.ActivityContext) (any, error) {
+	require.NoError(t, targetReg.AddActivityN(r.logReceipt, func(ctx task.ActivityContext) (any, error) {
 		return "logged", nil
 	}))
 
@@ -299,7 +284,7 @@ func (r *crossapp) Run(t *testing.T, ctx context.Context) {
 	t.Run("allowed when both required activities are present in propagated history", func(t *testing.T) {
 		before := r.targetActivityRuns.Load()
 
-		id, err := callerClient.ScheduleNewWorkflow(ctx, "WF_FullHistory")
+		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfFullHistory)
 		require.NoError(t, err)
 
 		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
@@ -307,16 +292,16 @@ func (r *crossapp) Run(t *testing.T, ctx context.Context) {
 		require.True(t, api.WorkflowMetadataIsComplete(metadata),
 			"workflow should complete when requires are satisfied")
 		assert.Nil(t, metadata.GetFailureDetails(),
-			"WF_FullHistory should succeed: %v", metadata.GetFailureDetails())
+			"caller should succeed: %v", metadata.GetFailureDetails())
 		assert.Equal(t, `"payment-processed"`, metadata.GetOutput().GetValue())
 		assert.Equal(t, before+1, r.targetActivityRuns.Load(),
-			"ProcessPayment activity body should have run exactly once on target")
+			"gated activity should have run exactly once on target")
 	})
 
 	t.Run("denied when one required activity is missing from history", func(t *testing.T) {
 		before := r.targetActivityRuns.Load()
 
-		id, err := callerClient.ScheduleNewWorkflow(ctx, "WF_PartialHistory")
+		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfPartialHistory)
 		require.NoError(t, err)
 
 		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
@@ -324,16 +309,15 @@ func (r *crossapp) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, metadata.GetFailureDetails(),
 			"workflow should fail when a required activity is missing from propagated history")
 		assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(),
-			"required history not satisfied",
-			"requires-driven denials must surface a distinct error message so workflow authors can branch on the cause")
+			"access denied by workflow access policy")
 		assert.Equal(t, before, r.targetActivityRuns.Load(),
-			"ProcessPayment must NOT execute on the target when access is denied")
+			"gated activity must NOT execute on the target when access is denied")
 	})
 
 	t.Run("denied when caller does not propagate history", func(t *testing.T) {
 		before := r.targetActivityRuns.Load()
 
-		id, err := callerClient.ScheduleNewWorkflow(ctx, "WF_NoPropagation")
+		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfNoPropagation)
 		require.NoError(t, err)
 
 		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
@@ -341,45 +325,44 @@ func (r *crossapp) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, metadata.GetFailureDetails(),
 			"workflow should fail when caller does not propagate history")
 		assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(),
-			"required history not satisfied",
-			"no propagated history means requires can't be satisfied = distinct deny reason")
+			"access denied by workflow access policy")
 		assert.Equal(t, before, r.targetActivityRuns.Load(),
-			"ProcessPayment must NOT execute on the target when access is denied")
+			"gated activity must NOT execute on the target when access is denied")
 	})
 
 	t.Run("rule without requires is unaffected by absence of history", func(t *testing.T) {
-		id, err := callerClient.ScheduleNewWorkflow(ctx, "WF_LogReceipt")
+		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfLogReceipt)
 		require.NoError(t, err)
 
 		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		require.True(t, api.WorkflowMetadataIsComplete(metadata))
 		assert.Nil(t, metadata.GetFailureDetails(),
-			"WF_LogReceipt should succeed: %v", metadata.GetFailureDetails())
+			"log-receipt workflow should succeed: %v", metadata.GetFailureDetails())
 		assert.Equal(t, `"logged"`, metadata.GetOutput().GetValue())
 	})
 
 	t.Run("allowed when requires.appID matches the producing chunk's appID", func(t *testing.T) {
 		before := r.targetActivityRuns.Load()
 
-		id, err := callerClient.ScheduleNewWorkflow(ctx, "WF_AppIDMatch")
+		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfAppIDMatch)
 		require.NoError(t, err)
 
 		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		require.True(t, api.WorkflowMetadataIsComplete(metadata))
 		assert.Nil(t, metadata.GetFailureDetails(),
-			"WF_AppIDMatch should succeed when chunk appID matches the requires entry: %v",
+			"caller should succeed when chunk appID matches the requires entry: %v",
 			metadata.GetFailureDetails())
 		assert.Equal(t, `"payment-app-gated"`, metadata.GetOutput().GetValue())
 		assert.Equal(t, before+1, r.targetActivityRuns.Load(),
-			"ProcessPaymentAppGated should have run exactly once on target")
+			"appID-gated activity should have run exactly once on target")
 	})
 
 	t.Run("denied when requires.appID points to a different app than the chunk", func(t *testing.T) {
 		before := r.targetActivityRuns.Load()
 
-		id, err := callerClient.ScheduleNewWorkflow(ctx, "WF_AppIDMismatch")
+		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfAppIDMismatch)
 		require.NoError(t, err)
 
 		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
@@ -387,9 +370,8 @@ func (r *crossapp) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, metadata.GetFailureDetails(),
 			"workflow should fail when requires.appID doesn't match the producing chunk")
 		assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(),
-			"required history not satisfied",
-			"appID-filter mismatch is a requires-unmet denial")
+			"access denied by workflow access policy")
 		assert.Equal(t, before, r.targetActivityRuns.Load(),
-			"ProcessPaymentAppMismatch must NOT execute on the target when appID filter excludes the chunk")
+			"appID-mismatch activity must NOT execute on the target when appID filter excludes the chunk")
 	})
 }

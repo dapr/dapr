@@ -67,7 +67,7 @@ func (a *activity) checkAccessPolicy(method string, data []byte, md map[string]*
 	if !allowed {
 		log.Warnf("Activity actor '%s': workflow access policy denied app '%s' on activity '%s' (reason=%s)", a.actorID, callerAppID, name, reason)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeActivity), string(wfaclapi.WorkflowOperationSchedule), string(reason))
-		return status.Errorf(codes.PermissionDenied, "%s: app '%s' schedule on activity '%s'", workflowacl.DeniedMessageFor(reason), callerAppID, name)
+		return status.Errorf(codes.PermissionDenied, "%s: app '%s' schedule on activity '%s'", workflowacl.DeniedMessageBase, callerAppID, name)
 	}
 
 	diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, string(workflowacl.OperationTypeActivity), string(wfaclapi.WorkflowOperationSchedule))

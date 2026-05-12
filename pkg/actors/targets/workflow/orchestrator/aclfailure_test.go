@@ -32,11 +32,6 @@ func TestIsPermissionDenied(t *testing.T) {
 		assert.True(t, isPermissionDenied(err))
 	})
 
-	t.Run("PermissionDenied with requires marker", func(t *testing.T) {
-		err := status.Error(codes.PermissionDenied, "access denied by workflow access policy [requires]")
-		assert.True(t, isPermissionDenied(err))
-	})
-
 	t.Run("non-PermissionDenied gRPC error", func(t *testing.T) {
 		err := status.Error(codes.NotFound, "not found")
 		assert.False(t, isPermissionDenied(err))
@@ -47,39 +42,8 @@ func TestIsPermissionDenied(t *testing.T) {
 	})
 }
 
-func TestIsPermissionDeniedRequiresUnmet(t *testing.T) {
-	t.Run("nil error", func(t *testing.T) {
-		assert.False(t, isPermissionDeniedRequiresUnmet(nil))
-	})
-
-	t.Run("plain PermissionDenied (no marker)", func(t *testing.T) {
-		err := status.Error(codes.PermissionDenied, "access denied by workflow access policy")
-		assert.False(t, isPermissionDeniedRequiresUnmet(err))
-	})
-
-	t.Run("PermissionDenied with requires marker", func(t *testing.T) {
-		err := status.Error(codes.PermissionDenied, "access denied by workflow access policy [requires]")
-		assert.True(t, isPermissionDeniedRequiresUnmet(err))
-	})
-
-	t.Run("requires marker on non-PermissionDenied is ignored", func(t *testing.T) {
-		err := status.Error(codes.Internal, "[requires] some unrelated message")
-		assert.False(t, isPermissionDeniedRequiresUnmet(err))
-	})
-}
-
-func TestACLFailureType(t *testing.T) {
-	t.Run("plain deny = WorkflowAccessPolicyDenied", func(t *testing.T) {
-		err := status.Error(codes.PermissionDenied, "access denied by workflow access policy")
-		errType, errMsg := aclFailureType(err)
-		assert.Equal(t, "WorkflowAccessPolicyDenied", errType)
-		assert.Equal(t, "access denied by workflow access policy", errMsg)
-	})
-
-	t.Run("requires-unmet = WorkflowAccessPolicyRequiresUnmet", func(t *testing.T) {
-		err := status.Error(codes.PermissionDenied, "access denied by workflow access policy [requires]")
-		errType, errMsg := aclFailureType(err)
-		assert.Equal(t, "WorkflowAccessPolicyRequiresUnmet", errType)
-		assert.Equal(t, "access denied by workflow access policy: required history not satisfied", errMsg)
-	})
+func TestACLFailureType_Uniform(t *testing.T) {
+	errType, errMsg := aclFailureType()
+	assert.Equal(t, "WorkflowAccessPolicyDenied", errType)
+	assert.Equal(t, "access denied by workflow access policy", errMsg)
 }

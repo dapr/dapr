@@ -25,19 +25,9 @@ import (
 
 var log = logger.NewLogger("dapr.acl.workflow")
 
-const (
-	DeniedMessageBase         = "access denied by workflow access policy"
-	DeniedMarkerRequiresUnmet = "[requires]"
-)
+const DeniedMessageBase = "access denied by workflow access policy"
 
-func DeniedMessageFor(reason DenialReason) string {
-	if reason == DenialReasonRequiresUnmet {
-		return DeniedMessageBase + " " + DeniedMarkerRequiresUnmet
-	}
-	return DeniedMessageBase
-}
-
-// DenialReason explains why a request was denied; empty when allowed.
+// DenialReason is for local metrics/logging only; never put on the wire.
 type DenialReason string
 
 const (
@@ -195,15 +185,15 @@ func (cp *CompiledPolicies) ListsCaller(appID string) bool {
 	return false
 }
 
-// decodedEvent pairs a HistoryEvent decoded from chunk.RawEvents with the
-// chunk that produced it, so AppID-filtered requires can check the producer.
-type decodedEvent struct {
-	e     *protos.HistoryEvent
-	chunk *protos.PropagatedHistoryChunk
+// Lookups are scoped per-chunk: event IDs only unique within their producer.
+type decodedChunk struct {
+	chunk             *protos.PropagatedHistoryChunk
+	events            []*protos.HistoryEvent
+	taskScheduledByID map[int32]*protos.TaskScheduledEvent
+	childCreatedByID  map[int32]*protos.ChildWorkflowInstanceCreatedEvent
 }
 
-// requiresSatisfied reports whether every requires entry has a matching
-// event in history.
+// Fails closed: unmarshal failure means a tampered/corrupted chunk.
 func requiresSatisfied(requires []wfaclapi.RequiredEvent, history *protos.PropagatedHistory) bool {
 	if len(requires) == 0 {
 		return true
@@ -212,56 +202,52 @@ func requiresSatisfied(requires []wfaclapi.RequiredEvent, history *protos.Propag
 		return false
 	}
 
-	// Decode every chunk's raw events once; index by event ID so
-	// completion events can resolve their scheduled name.
-	var events []decodedEvent
-	taskScheduledByID := make(map[int32]*protos.TaskScheduledEvent)
-	childCreatedByID := make(map[int32]*protos.ChildWorkflowInstanceCreatedEvent)
+	chunks := make([]decodedChunk, 0, len(history.GetChunks()))
 	for _, chunk := range history.GetChunks() {
+		if chunk == nil {
+			continue
+		}
+		dc := decodedChunk{
+			chunk:             chunk,
+			taskScheduledByID: make(map[int32]*protos.TaskScheduledEvent),
+			childCreatedByID:  make(map[int32]*protos.ChildWorkflowInstanceCreatedEvent),
+		}
 		for _, raw := range chunk.GetRawEvents() {
 			e := &protos.HistoryEvent{}
 			if err := proto.Unmarshal(raw, e); err != nil {
-				continue
+				log.Warnf("WorkflowAccessPolicy: malformed raw event in chunk (app=%q): %v", chunk.GetAppId(), err)
+				return false
 			}
-			events = append(events, decodedEvent{e: e, chunk: chunk})
+			dc.events = append(dc.events, e)
 			if ts := e.GetTaskScheduled(); ts != nil {
-				taskScheduledByID[e.GetEventId()] = ts
+				dc.taskScheduledByID[e.GetEventId()] = ts
 			}
 			if cc := e.GetChildWorkflowInstanceCreated(); cc != nil {
-				childCreatedByID[e.GetEventId()] = cc
+				dc.childCreatedByID[e.GetEventId()] = cc
 			}
 		}
+		chunks = append(chunks, dc)
 	}
 
 	for i := range requires {
-		if !findMatchingEvent(&requires[i], events, taskScheduledByID, childCreatedByID) {
+		if !findMatchingEvent(&requires[i], chunks) {
 			return false
 		}
 	}
 	return true
 }
 
-// findMatchingEvent reports whether any event in events satisfies req.
-func findMatchingEvent(
-	req *wfaclapi.RequiredEvent,
-	events []decodedEvent,
-	taskScheduledByID map[int32]*protos.TaskScheduledEvent,
-	childCreatedByID map[int32]*protos.ChildWorkflowInstanceCreatedEvent,
-) bool {
-	for _, de := range events {
-		if !eventStatusMatches(req, de.e, taskScheduledByID, childCreatedByID) {
+func findMatchingEvent(req *wfaclapi.RequiredEvent, chunks []decodedChunk) bool {
+	for _, dc := range chunks {
+		// TODO: gate on chunk namespace once durabletask-go's chunk carries it.
+		if req.AppID != nil && dc.chunk.GetAppId() != *req.AppID {
 			continue
 		}
-		// TODO: also gate on chunk namespace once durabletask-go's
-		// PropagatedHistoryChunk carries the producing app's namespace;
-		// a matching `Namespace` field would then live alongside `AppID`
-		// on RequiredEvent.
-		if req.AppID != nil {
-			if de.chunk == nil || de.chunk.GetAppId() != *req.AppID {
-				continue
+		for _, e := range dc.events {
+			if eventStatusMatches(req, e, dc.taskScheduledByID, dc.childCreatedByID) {
+				return true
 			}
 		}
-		return true
 	}
 	return false
 }

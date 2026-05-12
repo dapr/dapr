@@ -80,7 +80,7 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 	if !allowed {
 		log.Warnf("Workflow actor '%s': workflow access policy denied app '%s' operation '%s' on '%s' (reason=%s)", o.actorID, callerAppID, operation, name, reason)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), string(operation), string(reason))
-		return status.Errorf(codes.PermissionDenied, "%s: app '%s' operation '%s' on workflow '%s' (instance '%s')", workflowacl.DeniedMessageFor(reason), callerAppID, operation, name, o.actorID)
+		return status.Errorf(codes.PermissionDenied, "%s: app '%s' operation '%s' on workflow '%s' (instance '%s')", workflowacl.DeniedMessageBase, callerAppID, operation, name, o.actorID)
 	}
 
 	diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, string(workflowacl.OperationTypeWorkflow), string(operation))

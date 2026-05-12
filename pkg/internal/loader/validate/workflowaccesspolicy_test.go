@@ -149,3 +149,88 @@ func TestWorkflowAccessPolicy_MultipleRulesOneInvalid(t *testing.T) {
 	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }
+
+func withRequires(reqs ...wfaclapi.RequiredEvent) *wfaclapi.WorkflowAccessPolicy {
+	p := validPolicy()
+	p.Spec.Rules[0].Workflows = nil
+	p.Spec.Rules[0].Activities = []wfaclapi.ActivityRule{{
+		Name:     "ProcessPayment",
+		Requires: reqs,
+	}}
+	return p
+}
+
+func TestWorkflowAccessPolicy_RequiredEvent_StatusMatrix(t *testing.T) {
+	cases := []struct {
+		name      string
+		eventType wfaclapi.RequiredEventType
+		status    wfaclapi.RequiredStatus
+		wantErr   bool
+	}{
+		{"activity+Started is valid", wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusStarted, false},
+		{"activity+Completed is valid", wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, false},
+		{"activity+Raised is rejected", wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusRaised, true},
+		{"workflow+Started is valid", wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusStarted, false},
+		{"workflow+Completed is valid", wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusCompleted, false},
+		{"workflow+Raised is rejected", wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusRaised, true},
+		{"event+Raised is valid", wfaclapi.RequiredEventTypeEvent, wfaclapi.RequiredStatusRaised, false},
+		{"event+Started is rejected", wfaclapi.RequiredEventTypeEvent, wfaclapi.RequiredStatusStarted, true},
+		{"event+Completed is rejected", wfaclapi.RequiredEventTypeEvent, wfaclapi.RequiredStatusCompleted, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := withRequires(wfaclapi.RequiredEvent{
+				EventType: tc.eventType,
+				Status:    tc.status,
+				Name:      "FraudCheck",
+			})
+			err := WorkflowAccessPolicy(t.Context(), p)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestWorkflowAccessPolicy_RequiredEvent_InvalidEventTypeEnum(t *testing.T) {
+	p := withRequires(wfaclapi.RequiredEvent{
+		EventType: wfaclapi.RequiredEventType("bogus"),
+		Status:    wfaclapi.RequiredStatusCompleted,
+		Name:      "FraudCheck",
+	})
+	err := WorkflowAccessPolicy(t.Context(), p)
+	require.Error(t, err)
+}
+
+func TestWorkflowAccessPolicy_RequiredEvent_InvalidStatusEnum(t *testing.T) {
+	p := withRequires(wfaclapi.RequiredEvent{
+		EventType: wfaclapi.RequiredEventTypeActivity,
+		Status:    wfaclapi.RequiredStatus("bogus"),
+		Name:      "FraudCheck",
+	})
+	err := WorkflowAccessPolicy(t.Context(), p)
+	require.Error(t, err)
+}
+
+func TestWorkflowAccessPolicy_RequiredEvent_EmptyName(t *testing.T) {
+	p := withRequires(wfaclapi.RequiredEvent{
+		EventType: wfaclapi.RequiredEventTypeActivity,
+		Status:    wfaclapi.RequiredStatusCompleted,
+		Name:      "",
+	})
+	err := WorkflowAccessPolicy(t.Context(), p)
+	require.Error(t, err)
+}
+
+func TestWorkflowAccessPolicy_RequiredEvent_OnWorkflowRule(t *testing.T) {
+	p := validPolicy()
+	p.Spec.Rules[0].Workflows[0].Requires = []wfaclapi.RequiredEvent{{
+		EventType: wfaclapi.RequiredEventTypeEvent,
+		Status:    wfaclapi.RequiredStatusCompleted, // invalid: event must be Raised
+		Name:      "SignalX",
+	}}
+	err := WorkflowAccessPolicy(t.Context(), p)
+	require.Error(t, err)
+}

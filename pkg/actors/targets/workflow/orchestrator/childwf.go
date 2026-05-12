@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,7 +26,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -93,7 +91,8 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 			// If the call was denied by a workflow access policy, fail the
 			// child orchestration immediately rather than retrying.
 			if isPermissionDenied(err) {
-				return o.failChildWorkflowACL(ctx, e.GetEventId(), err)
+				log.Warnf("Workflow actor '%s': child workflow '%s' denied by access policy: %v", o.actorID, id, err)
+				return o.failChildWorkflowACL(ctx, e.GetEventId())
 			}
 			return fmt.Errorf("failed to call child workflow '%s': %w", id, err)
 		}
@@ -127,36 +126,7 @@ func isPermissionDenied(err error) bool {
 	return false
 }
 
-// isPermissionDeniedRequiresUnmet returns true when the error is a
-// PermissionDenied carrying the requires-unmet sentinel suffix. The marker
-// constant lives in pkg/acl/workflow so the producer (gRPC handler / per-actor
-// enforcement) and consumer (orchestrator deny-translation) stay in sync.
-func isPermissionDeniedRequiresUnmet(err error) bool {
-	if err == nil {
-		return false
-	}
-	if st, ok := status.FromError(err); ok && st.Code() == codes.PermissionDenied {
-		return strings.Contains(st.Message(), workflowacl.DeniedMarkerRequiresUnmet)
-	}
-	var wrapped interface{ GRPCStatus() *status.Status }
-	if errors.As(err, &wrapped) {
-		s := wrapped.GRPCStatus()
-		if s.Code() == codes.PermissionDenied {
-			return strings.Contains(s.Message(), workflowacl.DeniedMarkerRequiresUnmet)
-		}
-	}
-	return false
-}
-
-// aclFailureType returns the (ErrorType, ErrorMessage) pair to write on a
-// TaskFailed/ChildWorkflowInstanceFailed event for a policy denial.
-// Public messages stay opaque about which rule/entry was violated; the type
-// lets workflow authors branch on cause programmatically.
-func aclFailureType(err error) (string, string) {
-	if isPermissionDeniedRequiresUnmet(err) {
-		return "WorkflowAccessPolicyRequiresUnmet",
-			"access denied by workflow access policy: required history not satisfied"
-	}
+func aclFailureType() (string, string) {
 	return "WorkflowAccessPolicyDenied",
 		"access denied by workflow access policy"
 }
@@ -168,15 +138,13 @@ func aclFailureType(err error) (string, string) {
 // run loop's ClearInbox/saveInternalState calls.
 // taskScheduledID is the correlation ID that the parent orchestrator engine
 // uses to match this failure with the original sub-orchestration request.
-func (o *orchestrator) failChildWorkflowACL(ctx context.Context, taskScheduledID int32, callErr error) error {
-	errType, errMsg := aclFailureType(callErr)
+func (o *orchestrator) failChildWorkflowACL(ctx context.Context, taskScheduledID int32) error {
+	errType, errMsg := aclFailureType()
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
 		EventType: events.NewChildWorkflowFailedEventType(taskScheduledID, errType, errMsg, false),
 	}
-
-	log.Warnf("Workflow actor '%s': child workflow denied by access policy: %v", o.actorID, callErr)
 
 	// Create a reminder that carries the failure event. When this
 	// reminder fires (in a fresh execution cycle after the current run
