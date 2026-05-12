@@ -54,7 +54,14 @@ spec:
     spec:
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
+    {{- with .Values.global.initContainers.scheduler }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
       containers:
+    {{- with .Values.global.extraContainers.scheduler }}
+        {{- toYaml . | nindent 6 }}
+    {{- end }}
       - name: dapr-scheduler-server
         livenessProbe:
           httpGet:
