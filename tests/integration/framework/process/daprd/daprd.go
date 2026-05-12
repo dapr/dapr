@@ -255,7 +255,9 @@ func (d *Daprd) WaitUntilActorsReady(t *testing.T, ctx context.Context) {
 		cctx, cancel := context.WithTimeout(ctx, time.Second)
 		defer cancel()
 		req, err := http.NewRequestWithContext(cctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/metadata", d.HTTPAddress()), nil)
-		require.NoError(t, err)
+		if !assert.NoError(c, err) {
+			return
+		}
 		resp, err := client.Do(req)
 		if !assert.NoError(c, err) {
 			return
