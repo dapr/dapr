@@ -36,6 +36,8 @@ type Executor struct {
 	registry *task.TaskRegistry
 	executor backend.Executor
 	mcp      *mcpRegistry
+
+	onMCPTeardown func(name string)
 }
 
 // NewExecutor creates an in-process executor with an empty registry.
@@ -50,6 +52,15 @@ func NewExecutor() *Executor {
 	}
 }
 
+// SetOnMCPTeardown registers a callback invoked once per MCPServer entry that
+// is torn down during Run's shutdown path. The callback receives the server
+// name and runs synchronously inside closeAll, after the holder has been
+// closed. Used by the workflow engine to keep its actor refcount balanced
+// when shutdown bypasses the normal UnregisterMCPServer path.
+func (e *Executor) SetOnMCPTeardown(fn func(name string)) {
+	e.onMCPTeardown = fn
+}
+
 // Backend returns the underlying backend.Executor for use by the workflow engine.
 func (e *Executor) Backend() backend.Executor {
 	return e.executor
@@ -62,14 +73,17 @@ func (e *Executor) RegisterMCPServer(ctx context.Context, server mcpserverapi.MC
 	return e.mcp.register(ctx, server, store, sec)
 }
 
-// UnregisterMCPServer removes the workflows for a deleted MCPServer.
-func (e *Executor) UnregisterMCPServer(serverName string) {
-	e.mcp.unregister(serverName)
+// UnregisterMCPServer removes the workflows for a deleted MCPServer. Returns
+// true iff the entry was actually registered (so callers can balance their own
+// refcount without over-decrementing for a server whose registration failed or
+// was already torn down).
+func (e *Executor) UnregisterMCPServer(serverName string) bool {
+	return e.mcp.unregister(serverName)
 }
 
 // Run blocks until ctx is cancelled, then closes every holder.
 func (e *Executor) Run(ctx context.Context) error {
 	<-ctx.Done()
-	e.mcp.closeAll()
+	e.mcp.closeAll(e.onMCPTeardown)
 	return nil
 }
