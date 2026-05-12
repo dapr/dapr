@@ -61,6 +61,7 @@ func (v *validation) Setup(t *testing.T) []framework.Option {
 			`\"event-with-completed\" failed validation`,
 			`\"activity-with-raised\" failed validation`,
 			`\"workflow-with-raised\" failed validation`,
+			`\"requires-on-terminate\" failed validation`,
 		),
 	)
 
@@ -147,8 +148,31 @@ spec:
 		assertNoneLoaded(t)
 	})
 
+	t.Run("requires on non-schedule operation is rejected", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "requires-on-terminate.yaml"), []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: WorkflowAccessPolicy
+metadata:
+  name: requires-on-terminate
+spec:
+  rules:
+  - callers:
+    - appID: caller
+    workflows:
+    - name: TargetWF
+      operations:
+      - name: terminate
+        requires:
+        - eventType: activity
+          status: Completed
+          name: X
+`), 0o600))
+		v.logs.EventuallyContains(t, `\"requires-on-terminate\" failed validation`, time.Second*20, time.Millisecond*10)
+		assertNoneLoaded(t)
+	})
+
 	t.Run("valid combinations load successfully", func(t *testing.T) {
-		for _, f := range []string{"event-started.yaml", "event-completed.yaml", "activity-raised.yaml", "workflow-raised.yaml"} {
+		for _, f := range []string{"event-started.yaml", "event-completed.yaml", "activity-raised.yaml", "workflow-raised.yaml", "requires-on-terminate.yaml"} {
 			os.Remove(filepath.Join(v.resDir, f))
 		}
 		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "valid.yaml"),

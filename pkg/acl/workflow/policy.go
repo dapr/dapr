@@ -89,12 +89,17 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 					continue
 				}
 
-				for _, operation := range wf.Operations {
+				for _, op := range wf.Operations {
+					// requires is only valid on schedule
+					if len(op.Requires) > 0 && op.Name != wfaclapi.WorkflowOperationSchedule {
+						log.Warnf("WorkflowAccessPolicy '%s': requires is only valid on schedule, skipping operation '%s' on workflow '%s'", policy.Name, op.Name, wf.Name)
+						continue
+					}
 					cr.operations = append(cr.operations, compiledOp{
 						opType:    OperationTypeWorkflow,
-						operation: operation,
+						operation: op.Name,
 						pattern:   wf.Name,
-						requires:  wf.Requires,
+						requires:  op.Requires,
 					})
 				}
 			}

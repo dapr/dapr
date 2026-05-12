@@ -75,7 +75,8 @@ spec:
     - appID: legit-caller
     workflows:
     - name: "*"
-      operations: [schedule]
+      operations:
+      - name: schedule
 `)
 
 	targetResDir := t.TempDir()

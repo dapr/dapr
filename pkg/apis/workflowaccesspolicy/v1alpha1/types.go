@@ -159,16 +159,26 @@ type WorkflowRule struct {
 
 	// Operations is the set of operations this rule applies to.
 	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:items:Enum=schedule;terminate;raise;pause;resume;purge;get;rerun
-	// +listType=set
-	Operations []WorkflowOperation `json:"operations"`
+	// +listType=map
+	// +listMapKey=name
+	Operations []WorkflowRuleOperation `json:"operations"`
+}
+
+// WorkflowRuleOperation is a single allowed operation on a workflow, with an
+// optional `requires` gate. `requires` is only meaningful — and only
+// accepted — when Name is `schedule`, since schedule is the only operation
+// that carries propagated workflow history to check against.
+//
+// +kubebuilder:validation:XValidation:rule="!has(self.requires) || size(self.requires) == 0 || self.name == 'schedule'",message="requires is only valid when name is 'schedule'"
+type WorkflowRuleOperation struct {
+	// Name is the operation this entry applies to.
+	// +kubebuilder:validation:Enum=schedule;terminate;raise;pause;resume;purge;get;rerun
+	Name WorkflowOperation `json:"name"`
 
 	// Requires is a list of history events that must all be present in the
-	// caller's propagated workflow history for this rule to apply. Entries
-	// are evaluated as a set — order is not significant. Only meaningful
-	// for operations that carry propagated history (currently `schedule`);
-	// rules whose `requires` cover other operations will fail-closed
-	// because no history is available to satisfy them.
+	// caller's propagated workflow history for this entry to apply. Entries
+	// are evaluated as a set — order is not significant. Only valid when
+	// Name is `schedule`.
 	// +optional
 	Requires []RequiredEvent `json:"requires,omitempty"`
 }

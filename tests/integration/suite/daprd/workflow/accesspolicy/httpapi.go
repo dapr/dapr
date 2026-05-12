@@ -78,7 +78,8 @@ spec:
     - appID: httpapi-caller
     workflows:
     - name: AllowedWF
-      operations: [schedule]
+      operations:
+      - name: schedule
 `)
 
 	resDir := t.TempDir()
