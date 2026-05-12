@@ -115,7 +115,8 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	wi.IncomingHistory = state.IncomingHistory
 
-	if reason, description, oversize := o.workflowPayloadOversize(state); oversize {
+	workflowName := o.getExecutionStartedEvent(state).GetName()
+	if reason, description, oversize := o.workflowPayloadOversize(ctx, state, workflowName); oversize {
 		return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs, reason, description)
 	}
 	// Executing workflow code is a one-way operation. We must wait for the app code to report its completion, which
@@ -129,7 +130,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// which will skip recording metrics for this execution.
 		executionStatus = ""
 	}
-	workflowName := o.getExecutionStartedEvent(state).GetName()
 	// Request to execute workflow
 	log.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", o.actorID, wi.InstanceID)
 	// Schedule the workflow execution by signaling the backend
