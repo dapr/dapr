@@ -81,7 +81,7 @@ func (r *child) Setup(t *testing.T) []framework.Option {
 	r.wfNoPropagation = "wf-no-propagation-" + uuid.NewString()
 	r.wfPublic = "wf-public-" + uuid.NewString()
 
-	policy := []byte(fmt.Sprintf(`
+	policy := fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
@@ -103,7 +103,7 @@ spec:
     - name: %s
       operations:
       - name: schedule
-`, targetID, callerID, r.sensitiveChildWF, r.publicChildWF))
+`, targetID, callerID, r.sensitiveChildWF, r.publicChildWF)
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))

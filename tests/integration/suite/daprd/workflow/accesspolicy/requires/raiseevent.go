@@ -74,7 +74,7 @@ func (r *raiseevent) Setup(t *testing.T) []framework.Option {
 	r.wfAfterSignal = "wf-after-signal-" + uuid.NewString()
 	r.wfNoSignal = "wf-no-signal-" + uuid.NewString()
 
-	policy := []byte(fmt.Sprintf(`
+	policy := fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
@@ -91,7 +91,7 @@ spec:
       - eventType: event
         status: Raised
         name: approval-signal
-`, targetID, callerID, r.gatedActivity))
+`, targetID, callerID, r.gatedActivity)
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))

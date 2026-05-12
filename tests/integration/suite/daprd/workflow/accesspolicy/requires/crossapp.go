@@ -88,7 +88,7 @@ func (r *crossapp) Setup(t *testing.T) []framework.Option {
 	r.wfAppIDMismatch = "wf-appid-mismatch-" + uuid.NewString()
 	r.wfLogReceipt = "wf-log-receipt-" + uuid.NewString()
 
-	policy := []byte(fmt.Sprintf(`
+	policy := fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
@@ -125,7 +125,7 @@ spec:
 		r.processPayment,
 		r.processPaymentAppGated, callerID,
 		r.processPaymentAppMismatch,
-		r.logReceipt))
+		r.logReceipt)
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))

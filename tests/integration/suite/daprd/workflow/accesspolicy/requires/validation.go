@@ -85,7 +85,7 @@ func (v *validation) Run(t *testing.T, ctx context.Context) {
 	v.daprd.WaitUntilRunning(t, ctx)
 
 	policyYAML := func(name string, requires string) []byte {
-		return []byte(fmt.Sprintf(`
+		return fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
@@ -98,7 +98,7 @@ spec:
     - name: GatedActivity
       requires:
 %s
-`, name, requires))
+`, name, requires)
 	}
 
 	assertNoneLoaded := func(t *testing.T) {

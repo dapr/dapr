@@ -73,7 +73,7 @@ func (r *workflow) Setup(t *testing.T) []framework.Option {
 	r.otherWFName = "other-" + uuid.NewString()
 	r.activityName = "gated-" + uuid.NewString()
 
-	policy := []byte(fmt.Sprintf(`
+	policy := fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
@@ -90,7 +90,7 @@ spec:
       - eventType: workflow
         status: Started
         name: %s
-`, targetID, callerID, r.activityName, r.requiredWFName))
+`, targetID, callerID, r.activityName, r.requiredWFName)
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))

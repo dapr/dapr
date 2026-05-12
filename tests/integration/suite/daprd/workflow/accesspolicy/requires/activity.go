@@ -74,7 +74,7 @@ func (r *activity) Setup(t *testing.T) []framework.Option {
 	r.wfWithPreflight = "wf-with-preflight-" + uuid.NewString()
 	r.wfNoPreflight = "wf-no-preflight-" + uuid.NewString()
 
-	policy := []byte(fmt.Sprintf(`
+	policy := fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
@@ -91,7 +91,7 @@ spec:
       - eventType: activity
         status: Completed
         name: preflight
-`, targetID, callerID, r.gatedActivity))
+`, targetID, callerID, r.gatedActivity)
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))
