@@ -45,6 +45,7 @@ type Fake struct {
 	grpcDialOptionUnknownTrustDomainFn func(ns, appID string) grpc.DialOption
 	grpcServerOptionMTLSFn             func() grpc.ServerOption
 	grpcServerOptionNoClientAuthFn     func() grpc.ServerOption
+	fetchJWTFn                         func(context.Context, string) (string, error)
 }
 
 func New() *Fake {
@@ -247,6 +248,18 @@ func (f *Fake) Run(ctx context.Context) error {
 
 func (f *Fake) Handler(context.Context) (security.Handler, error) {
 	return f, nil
+}
+
+func (f *Fake) WithFetchJWT(fn func(context.Context, string) (string, error)) *Fake {
+	f.fetchJWTFn = fn
+	return f
+}
+
+func (f *Fake) FetchJWT(ctx context.Context, audience string) (string, error) {
+	if f.fetchJWTFn != nil {
+		return f.fetchJWTFn(ctx, audience)
+	}
+	return "", nil
 }
 
 func (f *Fake) Signer() *signer.Signer {

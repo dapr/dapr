@@ -137,6 +137,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if len(opts.sentryAddress) > 0 {
 		args = append(args, "--sentry-address="+opts.sentryAddress)
 	}
+	if len(opts.sentryRequestJwtAudiences) > 0 {
+		args = append(args, "--sentry-request-jwt-audiences="+strings.Join(opts.sentryRequestJwtAudiences, ","))
+	}
 	if len(opts.controlPlaneAddress) > 0 {
 		args = append(args, "--control-plane-address="+opts.controlPlaneAddress)
 	}
