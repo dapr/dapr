@@ -61,6 +61,44 @@ func (o *orchestrator) createRetentionReminder(ctx context.Context, name string,
 	})
 }
 
+// createWorkflowReminderWithName creates a reminder with a caller-supplied
+// deterministic name. Use this when retries must collapse onto a single
+// scheduler entry (overwrite-by-name) rather than piling up under random
+// suffixes.
+func (o *orchestrator) createWorkflowReminderWithName(ctx context.Context, reminderName string, data proto.Message, start time.Time, targetAppID string, concurrencyKey *string) error {
+	actorType := o.actorTypeBuilder.Workflow(targetAppID)
+	dueTime := start.UTC().Format(time.RFC3339)
+
+	var adata *anypb.Any
+	if data != nil {
+		var err error
+		adata, err = anypb.New(data)
+		if err != nil {
+			return err
+		}
+	}
+
+	log.Debugf("Workflow actor '%s||%s': creating deterministic '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, dueTime)
+
+	return common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
+		ActorType: actorType,
+		ActorID:   o.actorID,
+		Data:      adata,
+		DueTime:   dueTime,
+		Name:      reminderName,
+		// One shot, retry forever, every second.
+		FailurePolicy: &commonv1pb.JobFailurePolicy{
+			Policy: &commonv1pb.JobFailurePolicy_Constant{
+				Constant: &commonv1pb.JobFailurePolicyConstant{
+					Interval:   durationpb.New(time.Second),
+					MaxRetries: nil,
+				},
+			},
+		},
+		ConcurrencyKey: concurrencyKey,
+	})
+}
+
 func (o *orchestrator) createReminderWithType(ctx context.Context, namePrefix string, data proto.Message, start time.Time, actorType string, concurrencyKey *string) (string, error) {
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
