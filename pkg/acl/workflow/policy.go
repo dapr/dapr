@@ -134,6 +134,15 @@ func (cp *CompiledPolicies) Evaluate(callerAppID string, opType OperationType, o
 		return true, DenialReasonNone
 	}
 
+	// decode propagated history on the first matching rule that
+	// actually carries a requires block. Subsequent rules reuse the cached
+	// result. Skipped entirely if no matching rule has requires.
+	var (
+		chunks        []decodedChunk
+		chunksDecoded bool
+		chunksOK      bool
+	)
+
 	var requiresNotMet bool
 	for i := range cp.rules {
 		rule := &cp.rules[i]
@@ -154,9 +163,19 @@ func (cp *CompiledPolicies) Evaluate(callerAppID string, opType OperationType, o
 				continue
 			}
 
-			if len(op.requires) > 0 && !requiresSatisfied(op.requires, history) {
-				requiresNotMet = true
-				continue
+			if len(op.requires) > 0 {
+				if !chunksDecoded {
+					if history != nil && len(history.GetChunks()) > 0 {
+						chunks, chunksOK = decodeHistoryChunks(history)
+					} else {
+						chunksOK = true
+					}
+					chunksDecoded = true
+				}
+				if !chunksOK || len(chunks) == 0 || !requiresMatchChunks(op.requires, chunks) {
+					requiresNotMet = true
+					continue
+				}
 			}
 
 			return true, DenialReasonNone
@@ -194,14 +213,7 @@ type decodedChunk struct {
 }
 
 // Fails closed: unmarshal failure means a tampered/corrupted chunk.
-func requiresSatisfied(requires []wfaclapi.RequiredEvent, history *protos.PropagatedHistory) bool {
-	if len(requires) == 0 {
-		return true
-	}
-	if history == nil || len(history.GetChunks()) == 0 {
-		return false
-	}
-
+func decodeHistoryChunks(history *protos.PropagatedHistory) ([]decodedChunk, bool) {
 	chunks := make([]decodedChunk, 0, len(history.GetChunks()))
 	for _, chunk := range history.GetChunks() {
 		if chunk == nil {
@@ -216,7 +228,7 @@ func requiresSatisfied(requires []wfaclapi.RequiredEvent, history *protos.Propag
 			e := &protos.HistoryEvent{}
 			if err := proto.Unmarshal(raw, e); err != nil {
 				log.Warnf("WorkflowAccessPolicy: malformed raw event in chunk (app=%q): %v", chunk.GetAppId(), err)
-				return false
+				return nil, false
 			}
 			dc.events = append(dc.events, e)
 			if ts := e.GetTaskScheduled(); ts != nil {
@@ -228,7 +240,10 @@ func requiresSatisfied(requires []wfaclapi.RequiredEvent, history *protos.Propag
 		}
 		chunks = append(chunks, dc)
 	}
+	return chunks, true
+}
 
+func requiresMatchChunks(requires []wfaclapi.RequiredEvent, chunks []decodedChunk) bool {
 	for i := range requires {
 		if !findMatchingEvent(&requires[i], chunks) {
 			return false

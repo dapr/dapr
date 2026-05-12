@@ -45,6 +45,13 @@ func historyFromChunks(chunks ...*protos.PropagatedHistoryChunk) *protos.Propaga
 	return &protos.PropagatedHistory{Chunks: chunks}
 }
 
+func decode(t *testing.T, history *protos.PropagatedHistory) []decodedChunk {
+	t.Helper()
+	chunks, ok := decodeHistoryChunks(history)
+	require.True(t, ok)
+	return chunks
+}
+
 func taskScheduled(eventID int32, name string) *protos.HistoryEvent {
 	return &protos.HistoryEvent{
 		EventId: eventID,
@@ -109,212 +116,213 @@ func reqWithAppID(eventType wfaclapi.RequiredEventType, status wfaclapi.Required
 	return r
 }
 
-func TestRequiresSatisfied_EmptyRequiresAlwaysTrue(t *testing.T) {
-	assert.True(t, requiresSatisfied(nil, nil))
-	assert.True(t, requiresSatisfied([]wfaclapi.RequiredEvent{}, historyFromChunks()))
+func TestRequiresMatchChunks_EmptyRequiresAlwaysTrue(t *testing.T) {
+	assert.True(t, requiresMatchChunks(nil, nil))
+	assert.True(t, requiresMatchChunks([]wfaclapi.RequiredEvent{}, nil))
 }
 
-func TestRequiresSatisfied_NoHistoryFailsClosed(t *testing.T) {
+func TestRequiresMatchChunks_NoChunksDenies(t *testing.T) {
 	requires := []wfaclapi.RequiredEvent{
 		req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "A"),
 	}
-	assert.False(t, requiresSatisfied(requires, nil))
-	assert.False(t, requiresSatisfied(requires, historyFromChunks()))
+	assert.False(t, requiresMatchChunks(requires, nil))
+	assert.False(t, requiresMatchChunks(requires, []decodedChunk{}))
 }
 
-func TestRequiresSatisfied_ActivityStarted(t *testing.T) {
-	history := historyFromChunks(
+func TestRequiresMatchChunks_ActivityStarted(t *testing.T) {
+	chunks := decode(t, historyFromChunks(
 		chunkFromEvents(t, "app-a", taskScheduled(1, "FraudCheck")),
-	)
+	))
 
 	t.Run("matches when scheduled", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusStarted, "FraudCheck"),
 		}
-		assert.True(t, requiresSatisfied(requires, history))
+		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
 
 	t.Run("denies when name differs", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusStarted, "OtherActivity"),
 		}
-		assert.False(t, requiresSatisfied(requires, history))
+		assert.False(t, requiresMatchChunks(requires, chunks))
 	})
 }
 
-func TestRequiresSatisfied_ActivityCompleted(t *testing.T) {
-	history := historyFromChunks(
+func TestRequiresMatchChunks_ActivityCompleted(t *testing.T) {
+	chunks := decode(t, historyFromChunks(
 		chunkFromEvents(t, "app-a",
 			taskScheduled(5, "FraudCheck"),
 			taskCompleted(6, 5),
 		),
-	)
+	))
 
 	t.Run("matches when scheduled+completed paired", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck"),
 		}
-		assert.True(t, requiresSatisfied(requires, history))
+		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
 
 	t.Run("denies when only scheduled (no completion event)", func(t *testing.T) {
-		onlyScheduled := historyFromChunks(
+		onlyScheduled := decode(t, historyFromChunks(
 			chunkFromEvents(t, "app-a", taskScheduled(5, "FraudCheck")),
-		)
+		))
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck"),
 		}
-		assert.False(t, requiresSatisfied(requires, onlyScheduled))
+		assert.False(t, requiresMatchChunks(requires, onlyScheduled))
 	})
 
 	t.Run("denies when completion's TaskScheduledId resolves to a different name", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "Other"),
 		}
-		assert.False(t, requiresSatisfied(requires, history))
+		assert.False(t, requiresMatchChunks(requires, chunks))
 	})
 }
 
-func TestRequiresSatisfied_WorkflowStarted(t *testing.T) {
+func TestRequiresMatchChunks_WorkflowStarted(t *testing.T) {
 	t.Run("matches ExecutionStarted by name", func(t *testing.T) {
-		history := historyFromChunks(
+		chunks := decode(t, historyFromChunks(
 			chunkFromEvents(t, "app-a", executionStarted(0, "OrderWF")),
-		)
+		))
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusStarted, "OrderWF"),
 		}
-		assert.True(t, requiresSatisfied(requires, history))
+		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
 
 	t.Run("matches ChildWorkflowInstanceCreated by name", func(t *testing.T) {
-		history := historyFromChunks(
+		chunks := decode(t, historyFromChunks(
 			chunkFromEvents(t, "app-a", childCreated(2, "SubOrderWF")),
-		)
+		))
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusStarted, "SubOrderWF"),
 		}
-		assert.True(t, requiresSatisfied(requires, history))
+		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
 
 	t.Run("denies when name differs", func(t *testing.T) {
-		history := historyFromChunks(
+		chunks := decode(t, historyFromChunks(
 			chunkFromEvents(t, "app-a", executionStarted(0, "OrderWF")),
-		)
+		))
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusStarted, "OtherWF"),
 		}
-		assert.False(t, requiresSatisfied(requires, history))
+		assert.False(t, requiresMatchChunks(requires, chunks))
 	})
 }
 
-func TestRequiresSatisfied_WorkflowCompleted(t *testing.T) {
+func TestRequiresMatchChunks_WorkflowCompleted(t *testing.T) {
 	t.Run("matches ChildWorkflowInstanceCompleted by paired creation name", func(t *testing.T) {
-		history := historyFromChunks(
+		chunks := decode(t, historyFromChunks(
 			chunkFromEvents(t, "app-a",
 				childCreated(2, "SubOrderWF"),
 				childCompleted(7, 2),
 			),
-		)
+		))
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusCompleted, "SubOrderWF"),
 		}
-		assert.True(t, requiresSatisfied(requires, history))
+		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
 
 	t.Run("denies when only creation event (no completion)", func(t *testing.T) {
-		history := historyFromChunks(
+		chunks := decode(t, historyFromChunks(
 			chunkFromEvents(t, "app-a", childCreated(2, "SubOrderWF")),
-		)
+		))
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusCompleted, "SubOrderWF"),
 		}
-		assert.False(t, requiresSatisfied(requires, history))
+		assert.False(t, requiresMatchChunks(requires, chunks))
 	})
 }
 
-func TestRequiresSatisfied_EventRaised(t *testing.T) {
-	history := historyFromChunks(
+func TestRequiresMatchChunks_EventRaised(t *testing.T) {
+	chunks := decode(t, historyFromChunks(
 		chunkFromEvents(t, "app-a", eventRaised(3, "ApprovalSignal")),
-	)
+	))
 
 	t.Run("matches when raised by name", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeEvent, wfaclapi.RequiredStatusRaised, "ApprovalSignal"),
 		}
-		assert.True(t, requiresSatisfied(requires, history))
+		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
 
 	t.Run("denies when name differs", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeEvent, wfaclapi.RequiredStatusRaised, "OtherSignal"),
 		}
-		assert.False(t, requiresSatisfied(requires, history))
+		assert.False(t, requiresMatchChunks(requires, chunks))
 	})
 }
 
-func TestRequiresSatisfied_AppIDFilter(t *testing.T) {
-	history := historyFromChunks(
+func TestRequiresMatchChunks_AppIDFilter(t *testing.T) {
+	chunks := decode(t, historyFromChunks(
 		chunkFromEvents(t, "app-a", taskScheduled(1, "FraudCheck")),
 		chunkFromEvents(t, "app-b", taskScheduled(1, "FraudCheck")),
-	)
+	))
 
 	t.Run("matches when chunk appID matches filter", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
 			reqWithAppID(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusStarted, "FraudCheck", "app-b"),
 		}
-		assert.True(t, requiresSatisfied(requires, history))
+		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
 
 	t.Run("denies when no chunk's appID matches filter", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
 			reqWithAppID(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusStarted, "FraudCheck", "app-c"),
 		}
-		assert.False(t, requiresSatisfied(requires, history))
+		assert.False(t, requiresMatchChunks(requires, chunks))
 	})
 
 	t.Run("nil AppID matches any chunk", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusStarted, "FraudCheck"),
 		}
-		assert.True(t, requiresSatisfied(requires, history))
+		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
 }
 
-func TestRequiresSatisfied_MultipleRequiresAllMustMatch(t *testing.T) {
-	history := historyFromChunks(
+func TestRequiresMatchChunks_MultipleRequiresAllMustMatch(t *testing.T) {
+	chunks := decode(t, historyFromChunks(
 		chunkFromEvents(t, "app-a",
 			taskScheduled(1, "FraudCheck"),
 			taskCompleted(2, 1),
 		),
-	)
+	))
 
 	t.Run("denies when any single requires entry is unmet", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck"),
 			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "HumanApprovalReceived"),
 		}
-		assert.False(t, requiresSatisfied(requires, history))
+		assert.False(t, requiresMatchChunks(requires, chunks))
 	})
 
 	t.Run("allows only when every entry is met", func(t *testing.T) {
-		fullHistory := historyFromChunks(
+		fullChunks := decode(t, historyFromChunks(
 			chunkFromEvents(t, "app-a",
 				taskScheduled(1, "FraudCheck"),
 				taskCompleted(2, 1),
 				taskScheduled(3, "HumanApprovalReceived"),
 				taskCompleted(4, 3),
 			),
-		)
+		))
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck"),
 			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "HumanApprovalReceived"),
 		}
-		assert.True(t, requiresSatisfied(requires, fullHistory))
+		assert.True(t, requiresMatchChunks(requires, fullChunks))
 	})
 }
 
-func TestRequiresSatisfied_NoCollisionAcrossChunks(t *testing.T) {
-	history := historyFromChunks(
+// Regression: chunks from different apps can share event IDs.
+func TestRequiresMatchChunks_NoCollisionAcrossChunks(t *testing.T) {
+	chunks := decode(t, historyFromChunks(
 		chunkFromEvents(t, "app-a",
 			taskScheduled(1, "OtherActivity"),
 		),
@@ -322,34 +330,42 @@ func TestRequiresSatisfied_NoCollisionAcrossChunks(t *testing.T) {
 			taskScheduled(1, "FraudCheck"),
 			taskCompleted(2, 1),
 		),
-	)
+	))
 
 	t.Run("completion in chunk B resolves to chunk B's scheduled name", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck"),
 		}
-		assert.True(t, requiresSatisfied(requires, history))
+		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
 
 	t.Run("chunk A is not falsely credited with the completion from chunk B", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
 			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "OtherActivity"),
 		}
-		assert.False(t, requiresSatisfied(requires, history))
+		assert.False(t, requiresMatchChunks(requires, chunks))
 	})
 }
 
-func TestRequiresSatisfied_MalformedRawEventFailsClosed(t *testing.T) {
+func TestDecodeHistoryChunks_MalformedRawEventFailsClosed(t *testing.T) {
 	history := &protos.PropagatedHistory{
 		Chunks: []*protos.PropagatedHistoryChunk{{
 			AppId:     "app-a",
 			RawEvents: [][]byte{{0xFF, 0xFE, 0xFD}},
 		}},
 	}
-	requires := []wfaclapi.RequiredEvent{
-		req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck"),
-	}
-	assert.False(t, requiresSatisfied(requires, history))
+	_, ok := decodeHistoryChunks(history)
+	assert.False(t, ok)
+}
+
+func TestDecodeHistoryChunks_NilAndEmpty(t *testing.T) {
+	chunks, ok := decodeHistoryChunks(nil)
+	assert.True(t, ok)
+	assert.Empty(t, chunks)
+
+	chunks, ok = decodeHistoryChunks(&protos.PropagatedHistory{})
+	assert.True(t, ok)
+	assert.Empty(t, chunks)
 }
 
 func TestEvaluate_RequiresIntegratesWithRuleMatching(t *testing.T) {
@@ -389,4 +405,42 @@ func TestEvaluate_RequiresIntegratesWithRuleMatching(t *testing.T) {
 		assert.False(t, allowed)
 		assert.Equal(t, DenialReasonNotAllowed, reason)
 	})
+
+	t.Run("malformed propagated history denies requires-bearing rule", func(t *testing.T) {
+		bad := &protos.PropagatedHistory{Chunks: []*protos.PropagatedHistoryChunk{{
+			AppId:     "caller-app",
+			RawEvents: [][]byte{{0xFF, 0xFE, 0xFD}},
+		}}}
+		allowed, reason := cp.Evaluate("caller-app", OperationTypeActivity, wfaclapi.WorkflowOperationSchedule, "ProcessPayment", bad)
+		assert.False(t, allowed)
+		assert.Equal(t, DenialReasonRequiresUnmet, reason)
+	})
+}
+
+// when the matching rule has no requires, Evaluate never
+// touches the propagated history. Malformed bytes that would fail decode
+// must not affect the result.
+func TestEvaluate_SkipsDecodeWhenMatchingRuleHasNoRequires(t *testing.T) {
+	// Two rules in the same policy: a requires-bearing one for "SensitiveAct"
+	// and a no-requires one for "PlainAct". Scheduling PlainAct must not
+	// trigger a decode of the propagated chunks.
+	cp := Compile([]wfaclapi.WorkflowAccessPolicy{{Spec: wfaclapi.WorkflowAccessPolicySpec{
+		Rules: []wfaclapi.WorkflowAccessPolicyRule{{
+			Callers: []wfaclapi.WorkflowCaller{{AppID: "caller-app"}},
+			Activities: []wfaclapi.ActivityRule{
+				{Name: "SensitiveAct", Requires: []wfaclapi.RequiredEvent{
+					req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck"),
+				}},
+				{Name: "PlainAct"},
+			},
+		}},
+	}}})
+
+	bad := &protos.PropagatedHistory{Chunks: []*protos.PropagatedHistoryChunk{{
+		AppId:     "caller-app",
+		RawEvents: [][]byte{{0xFF, 0xFE, 0xFD}},
+	}}}
+	allowed, reason := cp.Evaluate("caller-app", OperationTypeActivity, wfaclapi.WorkflowOperationSchedule, "PlainAct", bad)
+	assert.True(t, allowed)
+	assert.Equal(t, DenialReasonNone, reason)
 }
