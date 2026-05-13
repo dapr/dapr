@@ -15,6 +15,7 @@ package orchestrator
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -164,7 +165,7 @@ func Test_addWorkflowEvent_dedupReAssertsReminder(t *testing.T) {
 		"reminder must target the workflow actor that holds the inbox row")
 	assert.Equal(t, instanceID, got.ActorID)
 
-	wantName := "new-event-tc-" + itoa(scheduled)
+	wantName := "new-event-tc-" + strconv.Itoa(int(scheduled))
 	assert.Equal(t, wantName, got.Name,
 		"reminder name must be the deterministic new-event-tc-<TaskScheduledId> so retries collapse onto a single scheduler entry rather than accumulating")
 	assert.True(t, strings.HasPrefix(got.Name, reminderPrefixNewEvent+"-"),
@@ -176,27 +177,4 @@ func Test_addWorkflowEvent_dedupReAssertsReminder(t *testing.T) {
 		"dedup branch must not append to the inbox (the duplicate is already there)")
 	assert.Len(t, wfState.History, len(history),
 		"dedup branch must not touch history")
-}
-
-func itoa(i int32) string {
-	const digits = "0123456789"
-	if i == 0 {
-		return "0"
-	}
-	neg := i < 0
-	if neg {
-		i = -i
-	}
-	var buf [12]byte
-	pos := len(buf)
-	for i > 0 {
-		pos--
-		buf[pos] = digits[i%10]
-		i /= 10
-	}
-	if neg {
-		pos--
-		buf[pos] = '-'
-	}
-	return string(buf[pos:])
 }

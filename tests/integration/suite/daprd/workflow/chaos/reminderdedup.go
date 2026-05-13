@@ -89,7 +89,7 @@ func (s *reminderdedup) Run(t *testing.T, ctx context.Context) {
 
 	const wfID = "reminderdedup-wf"
 
-	activityStarted := make(chan struct{})
+	activityStarted := make(chan struct{}, 1)
 	releaseActivity := make(chan struct{})
 
 	r := s.workflow.Registry()

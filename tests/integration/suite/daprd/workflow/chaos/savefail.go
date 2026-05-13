@@ -92,7 +92,7 @@ func (s *savefail) Run(t *testing.T, ctx context.Context) {
 
 	const wfID = "savefail-wf"
 
-	activityStarted := make(chan struct{})
+	activityStarted := make(chan struct{}, 1)
 	releaseActivity := make(chan struct{})
 
 	r := s.workflow.Registry()
