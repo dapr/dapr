@@ -30,8 +30,8 @@ const (
 	// signal an application-level actor error. The HTTP transport reads
 	// it from the response headers as-is; the gRPC transport synthesizes
 	// it on the InternalInvokeResponse when the app sets error=true so
-	// cross-daprd paths (notably pkg/actors/router/router.go) keep
-	// recognising the error.
+	// cross-daprd paths (notably pkg/actors/router/router.go) can detect
+	// the error from response headers alone.
 	ErrorResponseHeader = "X-Daprerrorresponseheader"
 
 	// ReminderCancelHeader is set by the app on a reminder or timer
@@ -42,11 +42,11 @@ const (
 // Invoker delivers actor callbacks to the user application.
 //
 // Error semantics:
-//   - Invoke returns the raw InternalInvokeResponse so the caller can forward
-//     response headers unchanged. When the app signals an application-level
-//     error, the returned error is an *actorerrors.ActorError and the response
-//     carries the ErrorResponseHeader header (synthesized if needed so
-//     cross-daprd paths keep working).
+//   - Invoke returns the raw InternalInvokeResponse so callers can forward
+//     response headers verbatim. When the app signals an application-level
+//     error, the returned error is an *actorerrors.ActorError and the
+//     response carries the ErrorResponseHeader header (synthesized when
+//     necessary so cross-daprd paths can detect the error from headers).
 //   - InvokeReminder and InvokeTimer return actorerrors.ErrReminderCanceled
 //     when the app asks to cancel the recurring callback.
 //   - Method-not-found is wrapped in backoff.Permanent so resiliency treats

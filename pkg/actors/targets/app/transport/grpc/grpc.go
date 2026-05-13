@@ -55,9 +55,9 @@ func New(stream *callbackstream.Manager, resiliency resiliency.Provider, actorTy
 }
 
 // Invoke delivers an actor method call through the stream. The returned
-// InternalInvokeResponse is synthesized from the app's reply so callers
-// that rely on HTTP-shaped signals (notably the X-Daprerrorresponseheader
-// router check) keep working without changes.
+// InternalInvokeResponse is synthesized from the app's reply, including
+// the X-Daprerrorresponseheader marker the router uses to detect
+// application-level actor errors.
 func (t *Transport) Invoke(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	actorID := req.GetActor().GetActorId()
 	msg := req.GetMessage()
@@ -244,8 +244,7 @@ func flattenFirstValue(md map[string]*internalv1pb.ListStringValue) map[string]s
 // buildInternalResponse converts an SubscribeActorEventsRequestInvokeResponseAlpha1 into the internal
 // proto shape the rest of the runtime expects. When the app signals an
 // actor error we also set the ErrorResponseHeader marker so cross-daprd
-// paths that inspect headers (router.callRemoteActor) keep recognizing
-// the error.
+// paths that inspect headers (router.callRemoteActor) detect the error.
 func buildInternalResponse(resp *runtimev1pb.SubscribeActorEventsRequestInvokeResponseAlpha1) *internalv1pb.InternalInvokeResponse {
 	headers := expandSingleValue(resp.GetMetadata())
 	if resp.GetError() {

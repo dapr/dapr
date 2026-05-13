@@ -11,11 +11,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package http implements the transport.Invoker interface against the legacy
-// HTTP actor callback protocol. The wire shape is the original Dapr actor
-// protocol: PUT /actors/{type}/{id}/method/{method}, POST/DELETE /actors/...,
-// with X-Daprerrorresponseheader and X-Daprremindercancel response headers
-// used to signal actor errors and reminder cancellation.
+// Package http implements the transport.Invoker interface for the HTTP
+// actor callback protocol: PUT /actors/{type}/{id}/method/{method},
+// POST/DELETE /actors/..., with X-Daprerrorresponseheader and
+// X-Daprremindercancel response headers signalling actor errors and
+// reminder cancellation respectively.
 package http
 
 import (
@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/app/transport"
 	"github.com/dapr/dapr/pkg/channel"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -56,9 +57,10 @@ func New(appChannel channel.AppChannel, resiliency resiliency.Provider, actorTyp
 	}
 }
 
-// Invoke runs req against the app over HTTP. Response headers and status code
-// are preserved in the returned InternalInvokeResponse so upstream callers
-// (router, cross-daprd service invocation) keep seeing the same signals.
+// Invoke runs req against the app over HTTP. Response headers and status
+// code are forwarded verbatim through the returned InternalInvokeResponse
+// so the router and cross-daprd service invocation see the same signals
+// the app produced.
 func (t *Transport) Invoke(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	actorID := req.GetActor().GetActorId()
 
@@ -68,11 +70,19 @@ func (t *Transport) Invoke(ctx context.Context, req *internalv1pb.InternalInvoke
 	}
 	defer imReq.Close()
 
-	// Rewrite the method to the actor method path and force PUT per the HTTP
-	// actor protocol contract.
+	// Rewrite the method to the actor method path and force PUT per the
+	// HTTP actor protocol contract. Normalize the caller-supplied portion
+	// (the method name, or the "remind/<name>" / "timer/<name>" forms used
+	// by reminders and timers) BEFORE concatenating the namespace prefix
+	// so path-traversal sequences inside the name can't chew through
+	// "actors/{type}/{id}/method/".
 	msg := imReq.Message()
 	originalMethod := msg.GetMethod()
-	msg.Method = "actors/" + t.actorType + "/" + actorID + "/method/" + msg.GetMethod()
+	cleanedMethod, err := method.NormalizeMethod(msg.GetMethod())
+	if err != nil {
+		return nil, fmt.Errorf("invalid method name: %w", err)
+	}
+	msg.Method = "actors/" + t.actorType + "/" + actorID + "/method/" + cleanedMethod
 	defer func() {
 		msg.Method = originalMethod
 	}()

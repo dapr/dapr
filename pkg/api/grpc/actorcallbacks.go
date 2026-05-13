@@ -53,13 +53,12 @@ func (a *api) SubscribeActorEventsAlpha1(stream runtimev1pb.Dapr_SubscribeActorE
 	}
 	cfg := initialToAppConfig(initial)
 
-	// Mirror the subscriptions flow (pkg/api/grpc/subscribe.go): drive the
-	// lifecycle imperatively from the API handler rather than through a
-	// callback. Register the actor types with the runtime (an empty
-	// Entities list still transitions the actor runtime out of
-	// INITIALIZING — matches the HTTP /dapr/config 404 path), then
-	// register the stream connection with the manager for Send/Deliver
-	// routing.
+	// Drive the lifecycle imperatively from the API handler, the same shape
+	// as the subscriptions flow in pkg/api/grpc/subscribe.go. Register the
+	// actor types with the runtime — an empty Entities list still
+	// transitions the actor runtime out of INITIALIZING, mirroring the
+	// HTTP /dapr/config 404 path — then register the stream connection
+	// with the manager for Send/Deliver routing.
 	if err := a.Actors().RegisterHosted(hostconfig.Config{
 		EntityConfigs:           cfg.EntityConfigs,
 		DrainRebalancedActors:   cfg.DrainRebalancedActors,
@@ -121,7 +120,14 @@ func recvLoop(
 		defer close(results)
 		for {
 			msg, err := stream.Recv()
-			results <- recvResult{msg, err}
+			// Select on ctx so a cancelled outer loop doesn't deadlock the
+			// inner goroutine on a full results buffer. If ctx is already
+			// done, drop the message and exit — there's no consumer left.
+			select {
+			case results <- recvResult{msg, err}:
+			case <-ctx.Done():
+				return
+			}
 			if err != nil {
 				return
 			}
@@ -226,7 +232,7 @@ func initialToAppConfig(req *runtimev1pb.SubscribeActorEventsRequestInitialAlpha
 
 // durationToString converts an optional protobuf Duration to the
 // duration-string form (e.g. "1h", "30s") that the internal
-// ApplicationConfig still uses. nil and zero values map to "" so the
+// ApplicationConfig carries. nil and zero values map to "" so the
 // runtime falls back to its defaults.
 func durationToString(d *durationpb.Duration) string {
 	if d == nil {

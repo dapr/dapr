@@ -16,7 +16,6 @@ package app
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -27,7 +26,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/key"
 	"github.com/dapr/dapr/pkg/actors/targets/app/lock"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/messaging/method"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/kit/logger"
 )
@@ -62,16 +60,11 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 }
 
 func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error {
-	// Reject names that could alter the synthetic path the HTTP transport
-	// builds ("remind/<name>" → "actors/{type}/{id}/method/remind/<name>").
-	// Guards against legacy persisted reminder names containing "/", "..",
-	// or control characters.
-	if err := method.ValidateName(reminder.Name); err != nil {
-		return fmt.Errorf("invalid reminder name: %w", err)
-	}
-
-	// Build a minimal request for the lock. Method matches the historical
-	// path "remind/<name>" so reentrancy bookkeeping is unchanged.
+	// Build a minimal request for the reentrancy lock keyed on
+	// "remind/<name>". Reminder names may contain '/' (e.g. workflow-style
+	// keys), so the name is passed through verbatim here — path-traversal
+	// sanitization happens in the HTTP transport where the method is
+	// embedded in a URL path.
 	lockReq := internalv1pb.NewInternalInvokeRequest("remind/"+reminder.Name).
 		WithActor(reminder.ActorType, reminder.ActorID)
 
@@ -94,12 +87,8 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error 
 }
 
 func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
-	// Reject names that could alter the synthetic path the HTTP transport
-	// builds — see InvokeReminder.
-	if err := method.ValidateName(reminder.Name); err != nil {
-		return fmt.Errorf("invalid timer name: %w", err)
-	}
-
+	// See InvokeReminder for the path-sanitization split between the app
+	// layer and the HTTP transport.
 	lockReq := internalv1pb.NewInternalInvokeRequest("timer/"+reminder.Name).
 		WithActor(reminder.ActorType, reminder.ActorID)
 

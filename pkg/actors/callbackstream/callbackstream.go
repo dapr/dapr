@@ -34,7 +34,7 @@ limitations under the License.
 // Connection-set state (the active stream list and the latest registration
 // config) is owned by a single goroutine that drains a kit/events/loop
 // queue. Every state mutation goes through Handle, so there are no locks
-// on the Manager itself. Per-connection request correlation still uses
+// on the Manager itself. Per-connection request correlation uses
 // sync.Map (lock-free) because Send and Deliver may interleave at high
 // frequency and don't need full serialization.
 package callbackstream
