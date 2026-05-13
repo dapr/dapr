@@ -14,6 +14,8 @@ limitations under the License.
 package events
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/dapr/durabletask-go/api/protos"
@@ -35,7 +37,16 @@ func NewEventReminderName(prefix string, e *backend.HistoryEvent) string {
 	case *protos.HistoryEvent_ChildWorkflowInstanceFailed:
 		return fmt.Sprintf("%s-cwf-%d", prefix, evt.ChildWorkflowInstanceFailed.GetTaskScheduledId())
 	case *protos.HistoryEvent_EventRaised:
-		return fmt.Sprintf("%s-er-%s", prefix, evt.EventRaised.GetName())
+		// Hash the user-supplied event name so the reminder name stays bounded and
+		// never contains scheduler-key separators (e.g. "||"). Empty names fall
+		// back to the event timestamp so genuinely distinct unnamed events still
+		// produce distinct reminders.
+		name := evt.EventRaised.GetName()
+		if name == "" {
+			return fmt.Sprintf("%s-er-%d", prefix, e.GetTimestamp().AsTime().UnixNano())
+		}
+		sum := sha256.Sum256([]byte(name))
+		return fmt.Sprintf("%s-er-%s", prefix, hex.EncodeToString(sum[:12]))
 	case *protos.HistoryEvent_TimerFired:
 		return fmt.Sprintf("%s-tmf-%d", prefix, evt.TimerFired.GetTimerId())
 	case *protos.HistoryEvent_ExecutionStarted:
