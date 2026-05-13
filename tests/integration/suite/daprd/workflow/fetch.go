@@ -140,7 +140,9 @@ func (f *fetch) Run(t *testing.T, ctx context.Context) {
 			return nil, nil
 		})
 
-		id, err := client.ScheduleNewWorkflow(ctx, "delayed", api.WithStartTime(time.Now().Add(time.Second)))
+		// delay long enough to make assertions with toleration still valid
+		startTime := time.Now().Add(3 * time.Second).Truncate(time.Millisecond)
+		id, err := client.ScheduleNewWorkflow(ctx, "delayed", api.WithStartTime(startTime))
 		require.NoError(t, err)
 		_, err = client.WaitForWorkflowCompletion(ctx, id)
 		require.NoError(t, err)
@@ -151,10 +153,14 @@ func (f *fetch) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, meta.GetCreatedAt())
 		require.NotNil(t, meta.GetStartedAt())
 
-		createdAt := meta.GetCreatedAt().AsTime()
-		startedAt := meta.GetStartedAt().AsTime()
+		createdAt := meta.GetCreatedAt().AsTime().Truncate(time.Millisecond)
+		startedAt := meta.GetStartedAt().AsTime().Truncate(time.Millisecond)
 		assert.False(t, startedAt.Before(createdAt),
 			"StartedAt (%s) must not be before CreatedAt (%s)", startedAt, createdAt)
+		// Scheduler reminders can fire within a small coalescing window
+		// around the scheduled time, so allow a tolerance
+		assert.WithinDuration(t, startTime, startedAt, 1*time.Second,
+			"StartedAt (%s) should be within 2s of the scheduled start time (%s)", startedAt, startTime)
 		assert.True(t, startedAt.Before(time.Now()),
 			"StartedAt (%s) must be before current time", startedAt)
 	})
