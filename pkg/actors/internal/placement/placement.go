@@ -212,6 +212,16 @@ func (p *placement) Ready() bool {
 	return p.ready.Load()
 }
 
+// lookupActorMaxWait bounds how long LookupActor will wait for the placement
+// loop to dequeue and respond to its request. A healthy lookup resolves in
+// single-digit milliseconds; the timeout is a safety net for pathological
+// cases where the in-process placement state machine is mid-update
+// (dissemination stall after fleet restart, etc.) and the caller passed a
+// lifecycle context with no per-call deadline. Returning the timeout lets the
+// caller treat it as a transient failure and retry instead of parking the
+// goroutine indefinitely.
+const lookupActorMaxWait = 10 * time.Second
+
 func (p *placement) LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
 	ch := make(chan *loops.LookupResponse, 1)
 	p.loop.Enqueue(&loops.LookupRequest{
@@ -220,9 +230,14 @@ func (p *placement) LookupActor(ctx context.Context, req *api.LookupActorRequest
 		Response: ch,
 	})
 
+	timer := time.NewTimer(lookupActorMaxWait)
+	defer timer.Stop()
+
 	select {
 	case <-ctx.Done():
 		return nil, nil, nil, ctx.Err()
+	case <-timer.C:
+		return nil, nil, nil, fmt.Errorf("placement lookup timed out after %s for actor %s/%s", lookupActorMaxWait, req.ActorType, req.ActorID)
 	case resp := <-ch:
 		if resp.Error != nil {
 			return nil, nil, nil, resp.Error
