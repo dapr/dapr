@@ -287,3 +287,135 @@ func compactJSON(t *testing.T, data []byte) []byte {
 	require.NoError(t, err)
 	return out.Bytes()
 }
+
+// TestReminderSubSecondPrecision verifies that sub-second precision in
+// RegisteredTime and ExpirationTime survives a JSON round-trip. Earlier
+// versions formatted with time.RFC3339 and explicitly truncated to seconds
+// on unmarshal, causing short timers (e.g. 2s) to fire ahead of schedule
+// because the registered time was rounded down to the prior whole second.
+func TestReminderSubSecondPrecision(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nanos survive JSON round-trip", func(t *testing.T) {
+		t.Parallel()
+		fractional := time.Date(2026, 5, 14, 10, 30, 0, 500_000_000, time.UTC)
+
+		r := Reminder{
+			ActorID:        "id",
+			ActorType:      "type",
+			Name:           "name",
+			RegisteredTime: fractional,
+			ExpirationTime: fractional.Add(time.Minute + 250*time.Millisecond),
+		}
+		var err error
+		r.Period, err = NewReminderPeriod("")
+		require.NoError(t, err)
+
+		encoded, err := json.Marshal(&r)
+		require.NoError(t, err)
+		require.Contains(t, string(encoded), `"registeredTime":"2026-05-14T10:30:00.5Z"`)
+		require.Contains(t, string(encoded), `"expirationTime":"2026-05-14T10:31:00.75Z"`)
+
+		var dec Reminder
+		require.NoError(t, json.Unmarshal(encoded, &dec))
+		require.True(t, dec.RegisteredTime.Equal(r.RegisteredTime),
+			"RegisteredTime nanos not preserved: got %s want %s", dec.RegisteredTime, r.RegisteredTime)
+		require.True(t, dec.ExpirationTime.Equal(r.ExpirationTime),
+			"ExpirationTime nanos not preserved: got %s want %s", dec.ExpirationTime, r.ExpirationTime)
+	})
+
+	t.Run("legacy whole-second RFC3339 still parses", func(t *testing.T) {
+		t.Parallel()
+		const legacy = `{"registeredTime":"2023-03-07T18:29:04Z","expirationTime":"2023-03-07T18:30:00Z","actorID":"id","actorType":"type","name":"name"}`
+
+		var dec Reminder
+		require.NoError(t, json.Unmarshal([]byte(legacy), &dec))
+		require.Equal(t, time.Date(2023, 3, 7, 18, 29, 4, 0, time.UTC), dec.RegisteredTime)
+		require.Equal(t, time.Date(2023, 3, 7, 18, 30, 0, 0, time.UTC), dec.ExpirationTime)
+	})
+}
+
+// TestReminderTrackSubSecondPrecision verifies LastFiredTime preserves
+// sub-second precision through a JSON round-trip and that whole-second
+// RFC3339 values still parse (backwards compatibility).
+func TestReminderTrackSubSecondPrecision(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nanos survive round-trip", func(t *testing.T) {
+		t.Parallel()
+		fractional := time.Date(2026, 5, 14, 10, 30, 0, 750_000_000, time.UTC)
+
+		tr := ReminderTrack{
+			LastFiredTime:  fractional,
+			RepetitionLeft: 3,
+		}
+		encoded, err := json.Marshal(&tr)
+		require.NoError(t, err)
+		require.Contains(t, string(encoded), `"lastFiredTime":"2026-05-14T10:30:00.75Z"`)
+
+		var dec ReminderTrack
+		require.NoError(t, json.Unmarshal(encoded, &dec))
+		require.True(t, dec.LastFiredTime.Equal(tr.LastFiredTime),
+			"LastFiredTime nanos not preserved: got %s want %s", dec.LastFiredTime, tr.LastFiredTime)
+		require.Equal(t, 3, dec.RepetitionLeft)
+	})
+
+	t.Run("legacy whole-second value parses", func(t *testing.T) {
+		t.Parallel()
+		const legacy = `{"lastFiredTime":"2023-03-07T18:29:04Z","RepetitionLeft":1}`
+
+		var dec ReminderTrack
+		require.NoError(t, json.Unmarshal([]byte(legacy), &dec))
+		require.Equal(t, time.Date(2023, 3, 7, 18, 29, 4, 0, time.UTC), dec.LastFiredTime)
+	})
+}
+
+// TestSetReminderTimesSubSecond verifies that parsing duration-style
+// dueTime strings (e.g. "1500ms") preserves sub-second offset from now.
+// Earlier code truncated to whole seconds, causing a 2s timer registered
+// at t=10.8s to fire at t=12.0s instead of t=12.8s.
+func TestSetReminderTimesSubSecond(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 5, 14, 10, 30, 0, 800_000_000, time.UTC)
+
+	t.Run("millisecond dueTime preserves offset", func(t *testing.T) {
+		t.Parallel()
+		req := CreateReminderRequest{
+			ActorID:   "id",
+			ActorType: "type",
+			Name:      "name",
+			DueTime:   "1500ms",
+		}
+		r, err := req.NewReminder(now)
+		require.NoError(t, err)
+		require.Equal(t, now.Add(1500*time.Millisecond), r.RegisteredTime)
+	})
+
+	t.Run("fractional second dueTime preserves offset", func(t *testing.T) {
+		t.Parallel()
+		req := CreateReminderRequest{
+			ActorID:   "id",
+			ActorType: "type",
+			Name:      "name",
+			DueTime:   "2.5s",
+		}
+		r, err := req.NewReminder(now)
+		require.NoError(t, err)
+		require.Equal(t, now.Add(2500*time.Millisecond), r.RegisteredTime)
+	})
+
+	t.Run("two-second timer fires after full two seconds from now", func(t *testing.T) {
+		t.Parallel()
+		req := CreateTimerRequest{
+			ActorID:   "id",
+			ActorType: "type",
+			Name:      "name",
+			DueTime:   "2s",
+		}
+		r, err := req.NewReminder(now)
+		require.NoError(t, err)
+		require.Equal(t, now.Add(2*time.Second), r.RegisteredTime,
+			"timer fire time must be exactly 2s after registration, even when registration time has sub-second nanos")
+	})
+}
