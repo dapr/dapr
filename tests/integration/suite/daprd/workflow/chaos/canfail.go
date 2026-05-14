@@ -67,7 +67,7 @@ func (c *canfail) Run(t *testing.T, ctx context.Context) {
 
 	const wfID = "canfail-wf"
 
-	activityStarted := make(chan struct{})
+	activityStarted := make(chan struct{}, 1)
 	releaseActivity := make(chan struct{})
 
 	r := c.workflow.Registry()
