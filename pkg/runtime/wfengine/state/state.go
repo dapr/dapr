@@ -33,7 +33,11 @@ const (
 	inboxKeyPrefix   = "inbox"
 	historyKeyPrefix = "history"
 	customStatusKey  = "customStatus"
-	metadataKey      = "metadata"
+	// MetadataKey is the state-store key holding the workflow's metadata row
+	// (history/inbox lengths + generation). Exported so other packages can
+	// refresh just this row to pick up the latest ETag without reloading the
+	// full workflow state.
+	MetadataKey = "metadata"
 )
 
 var wfLogger = logger.NewLogger("dapr.runtime.actor.target.workflow.state")
@@ -53,6 +57,17 @@ type State struct {
 	History      []*backend.HistoryEvent
 	CustomStatus *wrapperspb.StringValue
 	Generation   uint64
+
+	// metadataETag is the state store's row-version token for the metadata
+	// key, captured at load time and refreshed after every successful save.
+	// Used as the version anchor for optimistic concurrency: every save
+	// upserts the metadata row with this ETag, so a peer host that wrote
+	// state under a stale snapshot causes our Multi to fail with an
+	// ETagMismatch instead of silently overwriting persisted events. nil
+	// means "no prior ETag known" (e.g. workflow is being created for the
+	// first time, or the cache was just invalidated). Not persisted; lives
+	// only in the in-memory cache.
+	metadataETag *string
 
 	// change tracking
 	inboxAddedCount     int
@@ -94,6 +109,21 @@ func (s *State) ResetChangeTracking() {
 	s.inboxRemovedCount = 0
 	s.historyAddedCount = 0
 	s.historyRemovedCount = 0
+}
+
+// MetadataETag returns the cached metadata ETag, or nil if none is known.
+// Callers performing optimistic concurrency pass this through to the metadata
+// TransactionalUpsert via [GetSaveRequest].
+func (s *State) MetadataETag() *string {
+	return s.metadataETag
+}
+
+// SetMetadataETag updates the cached metadata ETag. Called after a successful
+// save to record the new row-version token returned by a follow-up
+// metadata-only Get, so the next save can present it as the prior ETag for
+// the optimistic-concurrency check.
+func (s *State) SetMetadataETag(etag *string) {
+	s.metadataETag = etag
 }
 
 func (s *State) ApplyRuntimeStateChanges(rs *backend.OrchestrationRuntimeState) {
@@ -175,10 +205,21 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 	}
 
 	// Every time we save, we also update the metadata with information about the size of the history and inbox,
-	// as well as the generation of the workflow.
+	// as well as the generation of the workflow. The metadata Upsert carries
+	// the prior ETag so the whole transaction acts as one optimistic-
+	// concurrency check: any peer host that saved underneath us since our
+	// last load has bumped the row's ETag, so our Multi will fail with
+	// ETagMismatch instead of silently overwriting their writes. A nil
+	// metadataETag means "no prior version known" (first save of a brand-new
+	// workflow, or post-invalidation reload) and falls through to a blind
+	// upsert, which is the correct semantics for those cases.
 	req.Operations = append(req.Operations, api.TransactionalOperation{
 		Operation: api.Upsert,
-		Request:   api.TransactionalUpsert{Key: metadataKey, Value: metaProto},
+		Request: api.TransactionalUpsert{
+			Key:   MetadataKey,
+			Value: metaProto,
+			ETag:  s.metadataETag,
+		},
 	})
 
 	return req, nil
@@ -261,7 +302,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	req := api.GetStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,
-		Key:       metadataKey,
+		Key:       MetadataKey,
 	}
 	res, err := state.Get(ctx, &req, false)
 	if err != nil {
@@ -288,6 +329,10 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	// Load inbox, history, and custom status using a bulk request
 	wState := NewState(opts)
 	wState.Generation = metadata.GetGeneration()
+	// Capture the metadata ETag for optimistic-concurrency on the next save.
+	// nil here just means the store didn't return one for this row, which is
+	// also fine: the next save will fall through to a blind upsert.
+	wState.metadataETag = res.ETag
 	wState.Inbox = make([]*backend.HistoryEvent, 0, metadata.GetInboxLength())
 	wState.History = make([]*backend.HistoryEvent, 0, metadata.GetHistoryLength())
 
@@ -328,37 +373,37 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	var key string
 	for i := range metadata.GetInboxLength() {
 		key = getMultiEntryKeyName(inboxKeyPrefix, i)
-		if bulkRes[key] == nil {
+		if bulkRes[key].Data == nil {
 			wfLogger.Warnf("Failed to load inbox state key '%s': not found", key)
 			continue
 		}
 		var hist backend.HistoryEvent
-		if err = proto.Unmarshal(bulkRes[key], &hist); err != nil {
+		if err = proto.Unmarshal(bulkRes[key].Data, &hist); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key '%s': %w", key, err)
 		}
 		wState.Inbox = append(wState.Inbox, &hist)
 	}
 	for i := range metadata.GetHistoryLength() {
 		key = getMultiEntryKeyName(historyKeyPrefix, i)
-		if bulkRes[key] == nil {
+		if bulkRes[key].Data == nil {
 			wfLogger.Warnf("Failed to load history state key '%s': not found", key)
 			continue
 		}
 		var hist backend.HistoryEvent
-		if err = proto.Unmarshal(bulkRes[key], &hist); err != nil {
+		if err = proto.Unmarshal(bulkRes[key].Data, &hist); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from history state key '%s': %w", key, err)
 		}
 		wState.History = append(wState.History, &hist)
 	}
 
-	if len(bulkRes[customStatusKey]) > 0 {
+	if len(bulkRes[customStatusKey].Data) > 0 {
 		wState.CustomStatus = &wrapperspb.StringValue{}
-		err = proto.Unmarshal(bulkRes[customStatusKey], wState.CustomStatus)
+		err = proto.Unmarshal(bulkRes[customStatusKey].Data, wState.CustomStatus)
 		if err != nil {
 			// Fallback to JSON unmarshaling
 			var customStatusValue string
 			// TODO: @famarting: remove in v1.16
-			if jerr := json.Unmarshal(bulkRes[customStatusKey], &customStatusValue); jerr != nil {
+			if jerr := json.Unmarshal(bulkRes[customStatusKey].Data, &customStatusValue); jerr != nil {
 				return nil, fmt.Errorf("failed to unmarshal custom status key entry: %w", err)
 			}
 			wState.CustomStatus.Value = customStatusValue
@@ -394,7 +439,7 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 		},
 		api.TransactionalOperation{
 			Operation: api.Delete,
-			Request:   api.TransactionalDelete{Key: metadataKey},
+			Request:   api.TransactionalDelete{Key: MetadataKey},
 		},
 	)
 

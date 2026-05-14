@@ -134,6 +134,7 @@ func (s *state) Get(ctx context.Context, req *api.GetStateRequest, lock bool) (*
 	return &api.StateResponse{
 		Data:     resp.Data,
 		Metadata: resp.Metadata,
+		ETag:     resp.ETag,
 	}, nil
 }
 
@@ -185,7 +186,10 @@ func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock 
 		}
 
 		// Trim the prefix from the key
-		bulkRes[strings.TrimPrefix(r.Key, baseKey)] = r.Data
+		bulkRes[strings.TrimPrefix(r.Key, baseKey)] = api.BulkStateEntry{
+			Data: r.Data,
+			ETag: r.ETag,
+		}
 	}
 
 	return bulkRes, nil
