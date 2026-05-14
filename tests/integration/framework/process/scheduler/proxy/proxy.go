@@ -127,6 +127,16 @@ func (p *Proxy) Cleanup(t *testing.T) {
 		if err := <-p.serveErr; err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			require.NoError(t, err)
 		}
+	} else if p.ports != nil {
+		// Run never executed (setup-time failure): the reservation made in
+		// New was never released by Run, so release it here to avoid
+		// leaking the port for the rest of the test process lifetime.
+		p.ports.Free(t)
+	}
+	if p.listener != nil {
+		// GracefulStop closes the listener, but close it again explicitly
+		// for symmetry in case the server never started serving.
+		_ = p.listener.Close()
 	}
 	if p.upstream != nil {
 		require.NoError(t, p.upstream.Close())
