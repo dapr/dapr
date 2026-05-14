@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -29,6 +30,7 @@ import (
 	wfclient "github.com/dapr/durabletask-go/workflow"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -42,7 +44,37 @@ type remotestream struct {
 }
 
 func (r *remotestream) Setup(t *testing.T) []framework.Option {
-	r.workflow = workflow.New(t, workflow.WithDaprds(2))
+	// Share a single appID across both daprds and enable
+	// WorkflowsClusteredDeployment so they form a single cluster of workflow
+	// actor hosts. Without this each daprd would default to a random UUID
+	// appID, host its own actor type, and never route a workflow call
+	// across the cluster - so the cross-daprd CallActorStream path the test
+	// is asserting on would not be exercised at all.
+	uid, err := uuid.NewRandom()
+	require.NoError(t, err)
+	appID := uid.String()
+
+	config := `
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+    name: workflowsclustereddeployment
+spec:
+    features:
+    - name: WorkflowsClusteredDeployment
+      enabled: true
+`
+
+	wopts := make([]workflow.Option, 0, 3)
+	wopts = append(wopts, workflow.WithDaprds(2))
+	for i := range 2 {
+		wopts = append(wopts, workflow.WithDaprdOptions(i,
+			daprd.WithAppID(appID),
+			daprd.WithConfigManifests(t, config),
+		))
+	}
+
+	r.workflow = workflow.New(t, wopts...)
 	return []framework.Option{
 		framework.WithProcesses(r.workflow),
 	}
