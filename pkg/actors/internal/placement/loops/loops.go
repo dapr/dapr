@@ -50,6 +50,13 @@ type EventLookup interface{ isEventLookup() }
 type PlacementReconnect struct {
 	*placebase
 	ActorTypes *[]string
+	// TransientPrior is true when this reconnect was triggered by a close
+	// that was itself a transient "not a leader" rejection (i.e. routine
+	// placement leadership churn). Consumers use it to demote per-cycle
+	// log lines on the connect path to debug so the rapid back-to-back
+	// reconnects under leader churn don't spam the runtime log. Initial
+	// startup and real failures leave this as false.
+	TransientPrior bool
 }
 
 type UpdateTypes struct {
