@@ -18,6 +18,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/apphealth"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/attestation"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/basic"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/chaos"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/continueasnew"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/dedup"
