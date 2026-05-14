@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/dapr/dapr/pkg/api/universal"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/os"
@@ -64,7 +65,7 @@ func (f *forcegrpc) Run(t *testing.T, ctx context.Context) {
 	f.daprd.Run(t, ctx)
 	f.daprd.WaitUntilRunning(t, ctx)
 
-	mdCtx := metadata.NewOutgoingContext(ctx, metadata.Pairs("dapr-force-shutdown", "true"))
+	mdCtx := metadata.NewOutgoingContext(ctx, metadata.Pairs(universal.ForceShutdownMetadataKey, "true"))
 	_, err := f.daprd.GRPCClient(t, ctx).Shutdown(mdCtx, &rtv1.ShutdownRequest{})
 	require.NoError(t, err)
 

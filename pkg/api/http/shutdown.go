@@ -24,10 +24,6 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-// forceShutdownHeader is the HTTP header that maps onto the
-// universal.ForceShutdownMetadataKey gRPC metadata key.
-const forceShutdownHeader = "Dapr-Force-Shutdown"
-
 func (a *api) constructShutdownEndpoints() []endpoints.Endpoint {
 	return []endpoints.Endpoint{
 		{
@@ -49,7 +45,7 @@ func (a *api) constructShutdownEndpoints() []endpoints.Endpoint {
 
 func (a *api) onShutdown(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if strings.EqualFold(r.Header.Get(forceShutdownHeader), "true") {
+	if strings.EqualFold(r.Header.Get(universal.ForceShutdownMetadataKey), "true") {
 		ctx = grpcMetadata.NewIncomingContext(ctx, grpcMetadata.Pairs(
 			universal.ForceShutdownMetadataKey, "true",
 		))

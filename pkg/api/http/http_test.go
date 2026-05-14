@@ -840,7 +840,7 @@ func TestShutdownEndpoints(t *testing.T) {
 
 	t.Run("Force shutdown via header - 204", func(t *testing.T) {
 		apiPath := apiVersionV1 + "/shutdown"
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil, "Dapr-Force-Shutdown", "true")
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil, universal.ForceShutdownMetadataKey, "true")
 		assert.Equal(t, 204, resp.StatusCode)
 		select {
 		case <-time.After(2 * time.Second):

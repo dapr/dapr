@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dapr/dapr/pkg/api/universal"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -62,7 +63,7 @@ func (f *forcehttp) Run(t *testing.T, ctx context.Context) {
 	f.daprd.WaitUntilRunning(t, ctx)
 
 	f.daprd.HTTPPost(t, ctx, "/v1.0/shutdown", nil, http.StatusNoContent,
-		"Dapr-Force-Shutdown", "true",
+		universal.ForceShutdownMetadataKey, "true",
 	)
 
 	f.logline.EventuallyFoundAll(t)
