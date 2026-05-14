@@ -15,7 +15,6 @@ package retentioner
 
 import (
 	"context"
-	"sync"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -24,12 +23,10 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 )
 
-var retentionerCache = &sync.Pool{
-	New: func() any {
-		return &retentioner{
-			lock: lock.New(),
-		}
-	},
+func newRetentioner() *retentioner {
+	return &retentioner{
+		lock: lock.New(),
+	}
 }
 
 type Options struct {
@@ -59,7 +56,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 }
 
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
-	r := retentionerCache.Get().(*retentioner)
+	r := newRetentioner()
 	r.factory = f
 	r.actorID = actorID
 	return r

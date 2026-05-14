@@ -33,12 +33,10 @@ import (
 	"github.com/dapr/kit/crypto/spiffe/signer"
 )
 
-var activityCache = &sync.Pool{
-	New: func() any {
-		return &activity{
-			lock: lock.New(),
-		}
-	},
+func newActivity() *activity {
+	return &activity{
+		lock: lock.New(),
+	}
 }
 
 type Options struct {
@@ -138,24 +136,13 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
 	a, ok := f.table.Load(actorID)
 	if !ok {
-		newActivity := f.initActivity(activityCache.Get(), actorID)
-		var loaded bool
-		a, loaded = f.table.LoadOrStore(actorID, newActivity)
-		if loaded {
-			activityCache.Put(newActivity)
-		}
+		fresh := newActivity()
+		fresh.factory = f
+		fresh.actorID = actorID
+		a, _ = f.table.LoadOrStore(actorID, fresh)
 	}
 
 	return a.(*activity)
-}
-
-func (f *factory) initActivity(a any, actorID string) *activity {
-	act := a.(*activity)
-
-	act.factory = f
-	act.actorID = actorID
-
-	return act
 }
 
 func (f *factory) HaltAll(ctx context.Context) error {
