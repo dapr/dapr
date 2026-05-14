@@ -30,17 +30,22 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
-func (o *orchestrator) createWorkflowReminder(ctx context.Context, namePrefix string, data proto.Message, start time.Time, targetAppID string, concurrencyKey *string) (string, error) {
+// createWorkflowReminder schedules a wake-up reminder on the workflow actor.
+// The reminderName is used verbatim: callers that want retries to collapse
+// onto a single scheduler entry (overwrite-by-name) must pass a deterministic
+// name (e.g. events.EventReminderName(prefix, event)); callers without a
+// stable identity must build one with randomReminderName so unrelated
+// reminders do not clobber each other.
+func (o *orchestrator) createWorkflowReminder(ctx context.Context, reminderName string, data proto.Message, start time.Time, targetAppID string, concurrencyKey *string) error {
 	actorType := o.actorTypeBuilder.Workflow(targetAppID)
-	return o.createReminderWithType(ctx, namePrefix, data, start, actorType, concurrencyKey)
+	return o.createReminderWithType(ctx, reminderName, data, start, actorType, concurrencyKey)
 }
 
 // createRetentionReminder creates the retention reminder that triggers
-// workflow purge. Unlike start/new-event reminders, this uses a deterministic
-// name (no random suffix) so the call is idempotent: the scheduler's
-// overwrite-by-name semantics ensure that retrying a Create after a transient
-// scheduler failure converges on a single retention reminder rather than
-// accumulating duplicates.
+// workflow purge. The name is deterministic so the call is idempotent: the
+// scheduler's overwrite-by-name semantics ensure that retrying a Create
+// after a transient scheduler failure converges on a single retention
+// reminder rather than accumulating duplicates.
 func (o *orchestrator) createRetentionReminder(ctx context.Context, name string, start time.Time) (string, error) {
 	dueTime := start.UTC().Format(time.RFC3339)
 
@@ -61,27 +66,31 @@ func (o *orchestrator) createRetentionReminder(ctx context.Context, name string,
 	})
 }
 
-func (o *orchestrator) createReminderWithType(ctx context.Context, namePrefix string, data proto.Message, start time.Time, actorType string, concurrencyKey *string) (string, error) {
+// randomReminderName returns the prefix with a random suffix appended.
+// Use for reminders that have no stable identity to deduplicate retries by.
+func randomReminderName(prefix string) (string, error) {
 	b := make([]byte, 6)
-	_, err := io.ReadFull(rand.Reader, b)
-	if err != nil {
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
 		return "", fmt.Errorf("failed to generate reminder ID: %w", err)
 	}
+	return prefix + "-" + base64.RawURLEncoding.EncodeToString(b), nil
+}
 
+func (o *orchestrator) createReminderWithType(ctx context.Context, reminderName string, data proto.Message, start time.Time, actorType string, concurrencyKey *string) error {
 	dueTime := start.UTC().Format(time.RFC3339)
-	reminderName := namePrefix + "-" + base64.RawURLEncoding.EncodeToString(b)
 
 	var adata *anypb.Any
 	if data != nil {
+		var err error
 		adata, err = anypb.New(data)
 		if err != nil {
-			return "", err
+			return err
 		}
 	}
 
 	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, dueTime)
 
-	return reminderName, common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
+	return common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
 		ActorType: actorType,
 		ActorID:   o.actorID,
 		Data:      adata,

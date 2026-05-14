@@ -145,7 +145,11 @@ func (o *orchestrator) failChildWorkflowACL(ctx context.Context, taskScheduledID
 	// reminder fires (in a fresh execution cycle after the current run
 	// completes), handleReminder routes it to addWorkflowEvent which
 	// adds the event to the inbox and triggers re-execution.
-	if _, err := o.createWorkflowReminder(ctx, common.ReminderPrefixActivityResult, failedEvent, time.Now(), o.appID, nil); err != nil {
+	reminderName, err := randomReminderName(common.ReminderPrefixActivityResult)
+	if err != nil {
+		return fmt.Errorf("failed to create failure reminder: %w", err)
+	}
+	if err := o.createWorkflowReminder(ctx, reminderName, failedEvent, time.Now(), o.appID, nil); err != nil {
 		return fmt.Errorf("failed to create failure reminder: %w", err)
 	}
 
