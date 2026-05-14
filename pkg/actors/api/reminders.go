@@ -63,7 +63,7 @@ func (req CreateReminderRequest) Key() string {
 }
 
 // NewReminder returns a new Reminder from a CreateReminderRequest object.
-func (req CreateReminderRequest) NewReminder(now time.Time, truncate bool) (reminder *Reminder, err error) {
+func (req CreateReminderRequest) NewReminder(now time.Time) (reminder *Reminder, err error) {
 	reminder = &Reminder{
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
@@ -71,7 +71,7 @@ func (req CreateReminderRequest) NewReminder(now time.Time, truncate bool) (remi
 		Data:      req.Data,
 	}
 
-	err = setReminderTimes(reminder, req.DueTime, req.Period, req.TTL, now, "reminder", truncate)
+	err = setReminderTimes(reminder, req.DueTime, req.Period, req.TTL, now, "reminder")
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func (req CreateTimerRequest) Key() string {
 }
 
 // NewReminder returns a new Timer from a CreateTimerRequest object.
-func (req CreateTimerRequest) NewReminder(now time.Time, truncate bool) (reminder *Reminder, err error) {
+func (req CreateTimerRequest) NewReminder(now time.Time) (reminder *Reminder, err error) {
 	reminder = &Reminder{
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
@@ -143,7 +143,7 @@ func (req CreateTimerRequest) NewReminder(now time.Time, truncate bool) (reminde
 		Data:      req.Data,
 	}
 
-	err = setReminderTimes(reminder, req.DueTime, req.Period, req.TTL, now, "timer", truncate)
+	err = setReminderTimes(reminder, req.DueTime, req.Period, req.TTL, now, "timer")
 	if err != nil {
 		return nil, err
 	}
@@ -178,12 +178,12 @@ func (req *CreateTimerRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func setReminderTimes(reminder *Reminder, dueTime string, period string, ttl string, now time.Time, logMsg string, truncate bool) (err error) {
+func setReminderTimes(reminder *Reminder, dueTime string, period string, ttl string, now time.Time, logMsg string) (err error) {
 	// Due time and registered time
 	reminder.RegisteredTime = now
 	reminder.DueTime = dueTime
 	if dueTime != "" {
-		reminder.RegisteredTime, err = parseTimeTruncateSeconds(dueTime, &now, truncate)
+		reminder.RegisteredTime, err = parseReminderTime(dueTime, &now)
 		if err != nil {
 			return fmt.Errorf("error parsing %s due time: %w", logMsg, err)
 		}
@@ -197,7 +197,7 @@ func setReminderTimes(reminder *Reminder, dueTime string, period string, ttl str
 
 	// Set expiration time if configured
 	if ttl != "" {
-		reminder.ExpirationTime, err = parseTimeTruncateSeconds(ttl, &reminder.RegisteredTime, truncate)
+		reminder.ExpirationTime, err = parseReminderTime(ttl, &reminder.RegisteredTime)
 		if err != nil {
 			return fmt.Errorf("error parsing %s TTL: %w", logMsg, err)
 		}
