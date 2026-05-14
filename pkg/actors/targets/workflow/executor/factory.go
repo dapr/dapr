@@ -25,12 +25,10 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
-var executorCache = &sync.Pool{
-	New: func() any {
-		return &executor{
-			lock: lock.New(),
-		}
-	},
+func newExecutor() *executor {
+	return &executor{
+		lock: lock.New(),
+	}
 }
 
 type Options struct {
@@ -72,12 +70,8 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
 	a, ok := f.table.Load(actorID)
 	if !ok {
-		newActivity := f.initExecutor(executorCache.Get(), actorID)
-		var loaded bool
-		a, loaded = f.table.LoadOrStore(actorID, newActivity)
-		if loaded {
-			executorCache.Put(newActivity)
-		}
+		fresh := f.initExecutor(newExecutor(), actorID)
+		a, _ = f.table.LoadOrStore(actorID, fresh)
 	}
 
 	return a.(*executor)

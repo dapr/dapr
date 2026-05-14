@@ -36,12 +36,10 @@ import (
 	"github.com/dapr/kit/crypto/spiffe/signer"
 )
 
-var orchestratorCache = sync.Pool{
-	New: func() any {
-		return &orchestrator{
-			lock: lock.NewStallable(),
-		}
-	},
+func newOrchestrator() *orchestrator {
+	return &orchestrator{
+		lock: lock.NewStallable(),
+	}
 }
 
 type Options struct {
@@ -151,12 +149,8 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
 	o, ok := f.table.Load(actorID)
 	if !ok {
-		newO := f.initOrchestrator(orchestratorCache.Get(), actorID)
-		var loaded bool
-		o, loaded = f.table.LoadOrStore(actorID, newO)
-		if loaded {
-			orchestratorCache.Put(newO)
-		}
+		fresh := f.initOrchestrator(newOrchestrator(), actorID)
+		o, _ = f.table.LoadOrStore(actorID, fresh)
 	}
 
 	return o.(*orchestrator)
