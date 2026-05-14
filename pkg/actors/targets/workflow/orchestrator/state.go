@@ -141,13 +141,14 @@ func (o *orchestrator) notifyStreams() {
 		Status:  &internalsv1pb.Status{Code: http.StatusOK},
 		Message: &commonv1pb.InvokeResponse{Data: arstate},
 	}
+	isTerminal := api.WorkflowMetadataIsComplete(o.ometa)
 	for idx, stream := range o.streamFns {
 		if stream.done.Load() {
 			delete(o.streamFns, idx)
 			continue
 		}
 		ok, ferr := stream.fn(streamReq)
-		if ferr != nil || ok {
+		if ferr != nil || ok || isTerminal {
 			stream.errCh <- ferr
 			delete(o.streamFns, idx)
 		}
