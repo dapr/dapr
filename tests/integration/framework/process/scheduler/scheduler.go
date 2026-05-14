@@ -93,7 +93,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		metricsPort:              fp.Port(t),
 		etcdClientPort:           fp.Port(t),
 		namespace:                "default",
-		etcdBackendBatchInterval: "50ms",
+		etcdBackendBatchInterval: "100ms",
 		workers:                  new(uint32(128)),
 	}
 
