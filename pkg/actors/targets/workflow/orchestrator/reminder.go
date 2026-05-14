@@ -47,7 +47,7 @@ func (o *orchestrator) createWorkflowReminder(ctx context.Context, reminderName 
 // after a transient scheduler failure converges on a single retention
 // reminder rather than accumulating duplicates.
 func (o *orchestrator) createRetentionReminder(ctx context.Context, name string, start time.Time) (string, error) {
-	dueTime := start.UTC().Format(time.RFC3339)
+	dueTime := start.UTC().Format(time.RFC3339Nano)
 
 	return name, common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
 		ActorType: o.retentionActorType,
@@ -77,7 +77,7 @@ func randomReminderName(prefix string) (string, error) {
 }
 
 func (o *orchestrator) createReminderWithType(ctx context.Context, reminderName string, data proto.Message, start time.Time, actorType string, concurrencyKey *string) error {
-	dueTime := start.UTC().Format(time.RFC3339)
+	dueTime := start.UTC().Format(time.RFC3339Nano)
 
 	var adata *anypb.Any
 	if data != nil {
