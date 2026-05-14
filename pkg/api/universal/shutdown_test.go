@@ -14,7 +14,6 @@ limitations under the License.
 package universal
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -26,10 +25,7 @@ import (
 )
 
 func TestShutdown(t *testing.T) {
-	type result struct {
-		graceful bool
-		exitCode int
-	}
+	const negativeWait = 200 * time.Millisecond
 
 	tests := map[string]struct {
 		metadata  map[string]string
@@ -62,14 +58,15 @@ func TestShutdown(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			resCh := make(chan result, 2)
+			shutdownCh := make(chan struct{}, 1)
+			exitCh := make(chan int, 1)
 			fakeAPI := New(Options{
 				Logger: testLogger,
 				ShutdownFn: func() {
-					resCh <- result{graceful: true}
+					shutdownCh <- struct{}{}
 				},
 				ExitFn: func(code int) {
-					resCh <- result{exitCode: code}
+					exitCh <- code
 				},
 			})
 
@@ -81,38 +78,33 @@ func TestShutdown(t *testing.T) {
 			_, err := fakeAPI.Shutdown(ctx, &runtimev1pb.ShutdownRequest{})
 			require.NoError(t, err)
 
-			select {
-			case res := <-resCh:
-				if tc.wantGrace {
-					assert.True(t, res.graceful, "expected graceful shutdown, got %+v", res)
+			if tc.wantGrace {
+				select {
+				case <-shutdownCh:
+				case <-time.After(time.Second):
+					t.Fatal("graceful shutdownFn not invoked within 1 second")
 				}
-				if tc.wantExit {
-					assert.Equal(t, tc.wantCode, res.exitCode)
+				// Ensure exitFn is never invoked on the graceful path.
+				select {
+				case code := <-exitCh:
+					t.Fatalf("exitFn unexpectedly invoked with code %d on graceful path", code)
+				case <-time.After(negativeWait):
 				}
-			case <-time.After(time.Second):
-				t.Fatal("no shutdown or exit invoked within 1 second")
+			}
+			if tc.wantExit {
+				select {
+				case code := <-exitCh:
+					assert.Equal(t, tc.wantCode, code)
+				case <-time.After(time.Second):
+					t.Fatal("exitFn not invoked within 1 second")
+				}
+				// Ensure shutdownFn is never invoked on the force path.
+				select {
+				case <-shutdownCh:
+					t.Fatal("graceful shutdownFn unexpectedly invoked on force path")
+				case <-time.After(negativeWait):
+				}
 			}
 		})
-	}
-}
-
-func TestShutdownNoForceWithoutMetadata(t *testing.T) {
-	resCh := make(chan struct{}, 1)
-	fakeAPI := New(Options{
-		Logger: testLogger,
-		ShutdownFn: func() {
-			resCh <- struct{}{}
-		},
-		ExitFn: func(int) {
-			t.Error("exitFn should not be called on graceful path")
-		},
-	})
-
-	_, err := fakeAPI.Shutdown(context.Background(), &runtimev1pb.ShutdownRequest{})
-	require.NoError(t, err)
-	select {
-	case <-resCh:
-	case <-time.After(time.Second):
-		t.Fatal("graceful shutdownFn not invoked within 1 second")
 	}
 }

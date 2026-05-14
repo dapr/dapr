@@ -820,6 +820,8 @@ func TestShutdownEndpoints(t *testing.T) {
 	fakeServer.StartServer(testAPI.constructShutdownEndpoints(), nil)
 	defer fakeServer.Shutdown()
 
+	const negativeWait = 200 * time.Millisecond
+
 	t.Run("Shutdown successfully - 204", func(t *testing.T) {
 		apiPath := apiVersionV1 + "/shutdown"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
@@ -832,7 +834,7 @@ func TestShutdownEndpoints(t *testing.T) {
 		select {
 		case code := <-exitCh:
 			t.Fatalf("exit unexpectedly invoked with code %d on graceful path", code)
-		default:
+		case <-time.After(negativeWait):
 		}
 	})
 
@@ -849,7 +851,7 @@ func TestShutdownEndpoints(t *testing.T) {
 		select {
 		case <-shutdownCh:
 			t.Fatal("graceful shutdownFn unexpectedly invoked on force path")
-		default:
+		case <-time.After(negativeWait):
 		}
 	})
 }

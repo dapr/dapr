@@ -16,11 +16,11 @@ package api
 import (
 	"context"
 	"net/http"
-	"runtime"
 	"testing"
 	"time"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -39,9 +39,7 @@ type forcehttp struct {
 }
 
 func (f *forcehttp) Setup(t *testing.T) []framework.Option {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping test on windows which relies on unix process signals")
-	}
+	os.SkipWindows(t)
 
 	f.logline = logline.New(t,
 		logline.WithStdoutLineContains(
