@@ -119,9 +119,7 @@ func (o *orchestrator) Deactivate(ctx context.Context) error {
 	defer unlock()
 
 	o.table.Delete(o.actorID)
-	o.state = nil
-	o.rstate = nil
-	o.ometa = nil
+	o.invalidateCachedState()
 	o.lock.Close()
 	for _, stream := range o.streamFns {
 		stream.errCh <- targeterrors.NewClosed("deactivated")
