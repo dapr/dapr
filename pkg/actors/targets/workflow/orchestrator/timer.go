@@ -91,7 +91,7 @@ func (o *orchestrator) createTimer(ctx context.Context, e *backend.HistoryEvent,
 
 func (o *orchestrator) createTimerReminder(ctx context.Context, name string, data proto.Message, start time.Time) error {
 	actorType := o.actorTypeBuilder.Workflow(o.appID)
-	dueTime := start.UTC().Format(time.RFC3339)
+	dueTime := start.UTC().Format(time.RFC3339Nano)
 
 	adata, err := anypb.New(data)
 	if err != nil {
