@@ -45,7 +45,7 @@ func (a *activity) createReminder(ctx context.Context, invocation *protos.Activi
 	return common.CreateReminderWithRetry(ctx, a.reminders, &actorapi.CreateReminderRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
-		DueTime:   dueTime.Format(time.RFC3339),
+		DueTime:   dueTime.Format(time.RFC3339Nano),
 		Name:      reminderName,
 		// One shot, retry forever, every second.
 		FailurePolicy: &commonv1pb.JobFailurePolicy{
