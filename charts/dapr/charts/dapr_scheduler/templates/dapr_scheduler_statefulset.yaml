@@ -29,7 +29,7 @@ spec:
       {{- end }}
       resources:
         requests:
-          storage: {{ .Values.cluster.storageSize }}
+          storage: {{ include "dapr_scheduler.storageSize" . }}
   {{- end }}
   template:
     metadata:
@@ -181,6 +181,7 @@ spec:
         - "--etcd-max-wals={{ .Values.etcdMaxWals }}"
         - "--etcd-backend-batch-limit={{ .Values.etcdBackendBatchLimit }}"
         - "--etcd-backend-batch-interval={{ .Values.etcdBackendBatchInterval }}"
+        - "--etcd-max-txn-ops={{ .Values.etcdMaxTxnOps }}"
         - "--etcd-experimental-bootstrap-defrag-threshold-megabytes={{ .Values.etcdDefragThresholdMB }}"
         - "--etcd-initial-election-tick-advance={{ .Values.etcdInitialElectionTickAdvance }}"
         - "--etcd-metrics={{ .Values.etcdMetrics }}"
