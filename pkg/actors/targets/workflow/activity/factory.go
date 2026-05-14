@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
@@ -32,16 +33,15 @@ import (
 	"github.com/dapr/kit/crypto/spiffe/signer"
 )
 
-var activityCache = &sync.Pool{
-	New: func() any {
-		return &activity{
-			lock: lock.New(),
-		}
-	},
+func newActivity() *activity {
+	return &activity{
+		lock: lock.New(),
+	}
 }
 
 type Options struct {
 	AppID             string
+	Namespace         string
 	ActivityActorType string
 	WorkflowActorType string
 	Scheduler         todo.ActivityScheduler
@@ -78,6 +78,12 @@ type factory struct {
 
 	table sync.Map
 	lock  sync.Mutex
+
+	// inflight tracks activity executions whose WorkItem is currently in
+	// the durabletask queue or being processed by the SDK. Keyed by the
+	// composite (activity actor ID, TaskExecutionId) value produced by
+	// inflight.Key. See the inflight subpackage for semantics.
+	inflight inflight.Map
 }
 
 func New(ctx context.Context, opts Options) (targets.Factory, error) {
@@ -106,7 +112,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
-	f := &factory{
+	return &factory{
 		appID:                  opts.AppID,
 		actorType:              opts.ActivityActorType,
 		router:                 router,
@@ -118,35 +124,25 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		workflowAccessPolicies: opts.WorkflowAccessPolicies,
 		state:                  state,
 
+		signing: &signing.Signing{
+			Signer:    opts.Signer,
+			Namespace: opts.Namespace,
+		},
+
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
-	}
-	if opts.Signer != nil {
-		f.signing = &signing.Signing{Signer: opts.Signer}
-	}
-	return f, nil
+	}, nil
 }
 
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
 	a, ok := f.table.Load(actorID)
 	if !ok {
-		newActivity := f.initActivity(activityCache.Get(), actorID)
-		var loaded bool
-		a, loaded = f.table.LoadOrStore(actorID, newActivity)
-		if loaded {
-			activityCache.Put(newActivity)
-		}
+		fresh := newActivity()
+		fresh.factory = f
+		fresh.actorID = actorID
+		a, _ = f.table.LoadOrStore(actorID, fresh)
 	}
 
 	return a.(*activity)
-}
-
-func (f *factory) initActivity(a any, actorID string) *activity {
-	act := a.(*activity)
-
-	act.factory = f
-	act.actorID = actorID
-
-	return act
 }
 
 func (f *factory) HaltAll(ctx context.Context) error {

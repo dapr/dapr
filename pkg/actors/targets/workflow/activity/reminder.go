@@ -45,7 +45,7 @@ func (a *activity) createReminder(ctx context.Context, invocation *protos.Activi
 	return common.CreateReminderWithRetry(ctx, a.reminders, &actorapi.CreateReminderRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
-		DueTime:   dueTime.Format(time.RFC3339),
+		DueTime:   dueTime.Format(time.RFC3339Nano),
 		Name:      reminderName,
 		// One shot, retry forever, every second.
 		FailurePolicy: &commonv1pb.JobFailurePolicy{
@@ -61,7 +61,7 @@ func (a *activity) createReminder(ctx context.Context, invocation *protos.Activi
 	})
 }
 
-func (a *activity) createWorkflowResultReminder(ctx context.Context, wfActorType, wfActorID string, result *backend.HistoryEvent) error {
+func (f *factory) createWorkflowResultReminder(ctx context.Context, wfActorType, wfActorID string, result *backend.HistoryEvent) error {
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
 	if err != nil {
@@ -75,7 +75,7 @@ func (a *activity) createWorkflowResultReminder(ctx context.Context, wfActorType
 		return err
 	}
 
-	return common.CreateReminderWithRetry(ctx, a.reminders, &actorapi.CreateReminderRequest{
+	return common.CreateReminderWithRetry(ctx, f.reminders, &actorapi.CreateReminderRequest{
 		ActorType: wfActorType,
 		ActorID:   wfActorID,
 		DueTime:   "0s",

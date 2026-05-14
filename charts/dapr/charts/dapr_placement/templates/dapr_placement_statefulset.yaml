@@ -45,7 +45,14 @@ spec:
     spec:
       securityContext:
         fsGroup: {{ .Values.fsGroup }}
+    {{- with .Values.global.initContainers.placement }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
       containers:
+    {{- with .Values.global.extraContainers.placement }}
+        {{- toYaml . | nindent 6 }}
+    {{- end }}
       - name: dapr-placement-server
         livenessProbe:
           httpGet:

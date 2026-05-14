@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -115,7 +116,8 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	wi.IncomingHistory = state.IncomingHistory
 
-	if reason, description, oversize := o.workflowPayloadOversize(state); oversize {
+	workflowName := o.getExecutionStartedEvent(state).GetName()
+	if reason, description, oversize := o.workflowPayloadOversize(ctx, state, workflowName); oversize {
 		return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs, reason, description)
 	}
 	// Executing workflow code is a one-way operation. We must wait for the app code to report its completion, which
@@ -129,7 +131,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// which will skip recording metrics for this execution.
 		executionStatus = ""
 	}
-	workflowName := o.getExecutionStartedEvent(state).GetName()
 	// Request to execute workflow
 	log.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", o.actorID, wi.InstanceID)
 	// Schedule the workflow execution by signaling the backend
@@ -226,15 +227,17 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 					state.SetIncomingHistory(wi.IncomingHistory)
 				}
 
+				if len(carryover) > 0 {
+					reminderName := events.EventReminderName(reminderPrefixNewEvent, carryover[0])
+					if err = o.createWorkflowReminder(ctx, reminderName, nil, time.Now(), o.appID, &workflowName); err != nil {
+						o.invalidateCachedState()
+						return todo.RunCompletedFalse, err
+					}
+				}
+
 				if err = o.signAndSaveState(ctx, state); err != nil {
 					o.rstate = rstateSnapshot
 					return todo.RunCompletedFalse, err
-				}
-
-				if len(carryover) > 0 {
-					if _, err = o.createWorkflowReminder(ctx, reminderPrefixNewEvent, nil, time.Now(), o.appID, &workflowName); err != nil {
-						return todo.RunCompletedFalse, err
-					}
 				}
 			} else {
 				o.rstate = rstateSnapshot
@@ -320,8 +323,30 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 
+	// Attach a fresh chunk-local signature + cert chain to the current-app
+	// chunk of every outbound PropagatedHistory so the receiver can
+	// cryptographically verify the chunk against this app's identity.
+	// Lineage chunks from upstream apps are forwarded verbatim. No-op
+	// when signing is disabled.
+	//
+	// Two sources of outbound PropagatedHistory:
+	//   - wi.OutgoingHistory: keyed by action ID, used for activity
+	//     dispatch (callActivities).
+	//   - createWorkflows[i].PropagatedHistory: per child-workflow
+	//     creation message, consumed by callCreateWorkflowStateMessage.
+	for _, ph := range wi.OutgoingHistory {
+		if err = o.signing.SignOutgoingPropagatedHistory(ph, o.appID); err != nil {
+			return todo.RunCompletedFalse, err
+		}
+	}
+	for _, msg := range createWorkflows {
+		if err = o.signing.SignOutgoingPropagatedHistory(msg.GetPropagatedHistory(), o.appID); err != nil {
+			return todo.RunCompletedFalse, err
+		}
+	}
+
 	// Dispatch activities and messages, collecting failures.
-	activityResult := o.callActivities(ctx, pendingTasks, state, wi.OutgoingHistory)
+	activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory)
 	addResult := o.callAddEventStateMessage(ctx, addWorkflows)
 	createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows)
 

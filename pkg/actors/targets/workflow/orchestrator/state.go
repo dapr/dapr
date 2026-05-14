@@ -43,6 +43,7 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 
 	opts := wfenginestate.Options{
 		AppID:             o.appID,
+		Namespace:         o.namespace,
 		WorkflowActorType: o.actorType,
 		ActivityActorType: o.activityActorType,
 		Signer:            o.signer,
@@ -75,6 +76,23 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 		if filtered := filterValidInboxEvents(state); len(filtered) != len(state.Inbox) {
 			cause := fmt.Errorf("workflow actor '%s': inbox contained %d events that did not match signed history (state store tampering)",
 				o.actorID, len(state.Inbox)-len(filtered))
+			return o.tombstoneTamperedState(ctx, opts, state, cause)
+		}
+	}
+
+	// Re-verify any persisted IncomingHistory on cold start. The state store is
+	// not in the trust boundary, and verifySignatureChain only covers
+	// state.History, not the propagated-history key. So an attacker who edits
+	// the persisted propagated-history bytes alone is only caught here. Skip on
+	// terminal workflows for the same reason as inbox-tamper above.
+	// VerifyAndAbsorbPropagatedHistory handles the disabled-signer case
+	// (warns when a signed payload arrives at an unsigned receiver) and
+	// the nil-payload case internally; only the terminal check stays here
+	// to avoid re-tombstoning an already-completed workflow on every load.
+	if state.IncomingHistory != nil && !state.IsCompleted() {
+		if err := o.signing.VerifyAndAbsorbPropagatedHistory(state.IncomingHistory, state); err != nil {
+			cause := fmt.Errorf("workflow actor '%s': persisted propagated history failed verification (state store tampering): %w",
+				o.actorID, err)
 			return o.tombstoneTamperedState(ctx, opts, state, cause)
 		}
 	}
@@ -123,27 +141,39 @@ func (o *orchestrator) notifyStreams() {
 		Status:  &internalsv1pb.Status{Code: http.StatusOK},
 		Message: &commonv1pb.InvokeResponse{Data: arstate},
 	}
+	isTerminal := api.WorkflowMetadataIsComplete(o.ometa)
 	for idx, stream := range o.streamFns {
 		if stream.done.Load() {
 			delete(o.streamFns, idx)
 			continue
 		}
 		ok, ferr := stream.fn(streamReq)
-		if ferr != nil || ok {
+		if ferr != nil || ok || isTerminal {
 			stream.errCh <- ferr
 			delete(o.streamFns, idx)
 		}
 	}
 }
 
-// signAndSaveState signs any newly added history events and then persists
-// the state. This is the single entry point for all state persistence —
-// callers must never call saveInternalState directly.
+// signAndSaveState signs any newly added history events and then persists the
+// state. This is the single entry point for all state persistence; callers
+// must never call saveInternalState directly.
 func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestate.State) error {
 	if err := o.signing.SignNewEvents(state); err != nil {
+		o.invalidateCachedState()
 		return fmt.Errorf("failed to sign new history events: %w", err)
 	}
-	return o.saveInternalState(ctx, state)
+	if err := o.saveInternalState(ctx, state); err != nil {
+		o.invalidateCachedState()
+		return err
+	}
+	return nil
+}
+
+func (o *orchestrator) invalidateCachedState() {
+	o.state = nil
+	o.rstate = nil
+	o.ometa = nil
 }
 
 func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State) error {

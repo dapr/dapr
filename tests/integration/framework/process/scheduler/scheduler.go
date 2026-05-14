@@ -93,7 +93,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		metricsPort:              fp.Port(t),
 		etcdClientPort:           fp.Port(t),
 		namespace:                "default",
-		etcdBackendBatchInterval: "50ms",
+		etcdBackendBatchInterval: "100ms",
 		workers:                  new(uint32(128)),
 	}
 
@@ -222,6 +222,14 @@ func (s *Scheduler) Restart(t *testing.T, ctx context.Context) {
 	t.Helper()
 	clone := s.exec.Clone(t)
 	s.Kill(t)
+	s.exec = clone
+	s.exec.Run(t, ctx)
+}
+
+func (s *Scheduler) RestartGraceful(t *testing.T, ctx context.Context) {
+	t.Helper()
+	clone := s.exec.Clone(t)
+	s.Cleanup(t)
 	s.exec = clone
 	s.exec.Run(t, ctx)
 }
