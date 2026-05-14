@@ -119,6 +119,7 @@ func Run() {
 					EtcdMaxWALs:                    opts.EtcdMaxWALs,
 					EtcdBackendBatchLimit:          opts.EtcdBackendBatchLimit,
 					EtcdBackendBatchInterval:       opts.EtcdBackendBatchInterval,
+					EtcdMaxTxnOps:                  opts.EtcdMaxTxnOps,
 					EtcdDefragThresholdMB:          opts.EtcdDefragThresholdMB,
 					EtcdInitialElectionTickAdvance: opts.EtcdInitialElectionTickAdvance,
 					EtcdMetrics:                    opts.EtcdMetrics,

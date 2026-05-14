@@ -66,6 +66,7 @@ type Options struct {
 	EtcdMaxWALs                    uint
 	EtcdBackendBatchLimit          int
 	EtcdBackendBatchInterval       string
+	EtcdMaxTxnOps                  uint
 	EtcdDefragThresholdMB          uint
 	EtcdInitialElectionTickAdvance bool
 	EtcdMetrics                    string
@@ -122,6 +123,7 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		MaxWALs:                    opts.EtcdMaxWALs,
 		BackendBatchLimit:          opts.EtcdBackendBatchLimit,
 		BackendBatchInterval:       opts.EtcdBackendBatchInterval,
+		MaxTxnOps:                  opts.EtcdMaxTxnOps,
 		DefragThresholdMB:          opts.EtcdDefragThresholdMB,
 		InitialElectionTickAdvance: opts.EtcdInitialElectionTickAdvance,
 		Metrics:                    opts.EtcdMetrics,
