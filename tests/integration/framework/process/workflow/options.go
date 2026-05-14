@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -43,9 +44,11 @@ type options struct {
 	daprds int
 	skipDB bool
 
-	orchestrators []orchestratorConfig
-	activities    []activityConfig
-	daprdOptions  []daprdOptionConfig
+	orchestrators     []orchestratorConfig
+	activities        []activityConfig
+	daprdOptions      []daprdOptionConfig
+	schedulerInstance *scheduler.Scheduler
+	schedulerAddress  *string
 }
 
 func WithAddOrchestrator(t *testing.T, name string, or func(*task.OrchestrationContext) (any, error)) Option {
@@ -100,5 +103,24 @@ func WithDaprdOptions(index int, opts ...daprd.Option) Option {
 func WithNoDB() Option {
 	return func(o *options) {
 		o.skipDB = true
+	}
+}
+
+// WithSchedulerInstance lets a test supply a pre-constructed scheduler. The
+// framework uses this scheduler instead of creating its own and skips
+// adding it to its process list (the caller is responsible for that).
+// Combine with WithSchedulerAddress when interposing a proxy.
+func WithSchedulerInstance(sched *scheduler.Scheduler) Option {
+	return func(o *options) {
+		o.schedulerInstance = sched
+	}
+}
+
+// WithSchedulerAddress overrides the address used for the daprd's
+// --scheduler-host-address flag. Use this to point daprd at a proxy that
+// fronts the real scheduler.
+func WithSchedulerAddress(addr string) Option {
+	return func(o *options) {
+		o.schedulerAddress = &addr
 	}
 }

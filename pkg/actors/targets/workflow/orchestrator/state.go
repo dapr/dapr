@@ -59,16 +59,24 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	return state, o.ometa, nil
 }
 
+func (o *orchestrator) invalidateCachedState() {
+	o.state = nil
+	o.rstate = nil
+	o.ometa = nil
+}
+
 func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State) error {
 	// generate and run a state store operation that saves all changes
 	req, err := state.GetSaveRequest(o.actorID)
 	if err != nil {
+		o.invalidateCachedState()
 		return err
 	}
 
 	log.Debugf("Workflow actor '%s': saving %d keys to actor state store", o.actorID, len(req.Operations))
 
 	if err = o.actorState.TransactionalStateOperation(ctx, true, req, false); err != nil {
+		o.invalidateCachedState()
 		return err
 	}
 

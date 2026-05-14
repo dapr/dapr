@@ -15,12 +15,9 @@ package orchestrator
 
 import (
 	"errors"
-	"time"
 
 	"github.com/dapr/durabletask-go/backend"
 )
-
-const dispatchTimeout = 2 * time.Second
 
 type dispatchResult struct {
 	failedEventIDs map[int32]struct{}
