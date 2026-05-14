@@ -113,7 +113,10 @@ spec:
 	}
 
 	if opts.schedulerAddress != nil {
-		baseDopts = append(baseDopts, daprd.WithSchedulerAddresses(*opts.schedulerAddress))
+		// Reset so a caller-supplied override (e.g. a proxy in front of the
+		// scheduler) truly replaces any addresses appended by other option
+		// layers, instead of being one entry among many.
+		baseDopts = append(baseDopts, daprd.WithSchedulerAddressesReset(*opts.schedulerAddress))
 	} else {
 		baseDopts = append(baseDopts, daprd.WithScheduler(sched))
 	}

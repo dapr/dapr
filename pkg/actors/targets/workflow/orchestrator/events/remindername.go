@@ -22,11 +22,11 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-// NewEventReminderName builds a deterministic name for the wake-up reminder
+// EventReminderName builds a deterministic name for the wake-up reminder
 // that drains the workflow inbox after an event is appended. Retries of the
 // same inbox append must collapse onto a single scheduler entry (the scheduler
 // overwrites by name) instead of accumulating under random suffixes.
-func NewEventReminderName(prefix string, e *backend.HistoryEvent) string {
+func EventReminderName(prefix string, e *backend.HistoryEvent) string {
 	switch evt := e.GetEventType().(type) {
 	case *protos.HistoryEvent_TaskCompleted:
 		return fmt.Sprintf("%s-tc-%d", prefix, evt.TaskCompleted.GetTaskScheduledId())

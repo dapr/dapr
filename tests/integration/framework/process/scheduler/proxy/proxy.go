@@ -23,7 +23,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -58,8 +57,9 @@ type Proxy struct {
 	upstream *grpc.ClientConn
 	client   schedulerv1pb.SchedulerClient
 
-	runOnce sync.Once
-	done    chan struct{}
+	runOnce  sync.Once
+	done     chan struct{}
+	serveErr chan error
 
 	mu       sync.Mutex
 	armed    map[string]armConfig
@@ -73,20 +73,21 @@ type armConfig struct {
 	notify    chan struct{}
 }
 
-// New returns a proxy that wraps the given scheduler. The proxy must be
-// added to the framework's process list (after the scheduler) so it boots
-// once the upstream is reachable. daprd should be configured with
-// daprd.WithSchedulerAddresses(proxy.Address()) instead of pointing at the
-// scheduler directly.
+// New returns a proxy that wraps the given scheduler. The proxy waits for
+// the upstream to be reachable on Run, so framework process ordering
+// relative to the scheduler is not required. daprd should be configured
+// with daprd.WithSchedulerAddresses(proxy.Address()) instead of pointing at
+// the scheduler directly.
 func New(t *testing.T, sched *scheduler.Scheduler) *Proxy {
 	t.Helper()
 	fp := ports.Reserve(t, 1)
 	return &Proxy{
-		sched: sched,
-		ports: fp,
-		port:  fp.Port(t),
-		armed: make(map[string]armConfig),
-		done:  make(chan struct{}),
+		sched:    sched,
+		ports:    fp,
+		port:     fp.Port(t),
+		armed:    make(map[string]armConfig),
+		done:     make(chan struct{}),
+		serveErr: make(chan error, 1),
 	}
 }
 
@@ -113,7 +114,7 @@ func (p *Proxy) Run(t *testing.T, ctx context.Context) {
 		schedulerv1pb.RegisterSchedulerServer(p.grpcSrv, p)
 
 		go func() {
-			_ = p.grpcSrv.Serve(lis)
+			p.serveErr <- p.grpcSrv.Serve(lis)
 			close(p.done)
 		}()
 	})
@@ -122,9 +123,13 @@ func (p *Proxy) Run(t *testing.T, ctx context.Context) {
 func (p *Proxy) Cleanup(t *testing.T) {
 	if p.grpcSrv != nil {
 		p.grpcSrv.GracefulStop()
+		<-p.done
+		if err := <-p.serveErr; err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			require.NoError(t, err)
+		}
 	}
 	if p.upstream != nil {
-		assert.NoError(t, p.upstream.Close())
+		require.NoError(t, p.upstream.Close())
 	}
 }
 
@@ -221,7 +226,9 @@ func (p *Proxy) DeleteByNamePrefix(ctx context.Context, req *schedulerv1pb.Delet
 }
 
 // WatchJobs bidirectionally forwards messages between the daprd-side stream
-// and the upstream scheduler stream.
+// and the upstream scheduler stream. When either direction errors we cancel
+// the shared context to unblock the other goroutine and drain its error so
+// no goroutine leaks.
 func (p *Proxy) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error {
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
@@ -261,11 +268,13 @@ func (p *Proxy) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error 
 		}
 	}()
 
-	err = <-errCh
-	if errors.Is(err, io.EOF) {
+	first := <-errCh
+	cancel()
+	<-errCh
+	if errors.Is(first, io.EOF) {
 		return nil
 	}
-	return err
+	return first
 }
 
 // WatchHosts forwards host updates from the upstream scheduler, rewriting

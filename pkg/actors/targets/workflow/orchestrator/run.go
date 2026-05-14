@@ -228,9 +228,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 				}
 
 				if len(carryover) > 0 {
-					reminderName := events.NewEventReminderName(reminderPrefixNewEvent, carryover[0])
-					if err = o.createWorkflowReminderWithName(ctx, reminderName, nil, time.Now(), o.appID, &workflowName); err != nil {
-						o.rstate = rstateSnapshot
+					reminderName := events.EventReminderName(reminderPrefixNewEvent, carryover[0])
+					if err = o.createWorkflowReminder(ctx, reminderName, nil, time.Now(), o.appID, &workflowName); err != nil {
+						o.invalidateCachedState()
 						return todo.RunCompletedFalse, err
 					}
 				}
