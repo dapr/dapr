@@ -25,9 +25,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/encoding/protojson"
+	"encoding/json"
 
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -124,9 +123,9 @@ func (s *hotReloadToolChange) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.Equal(t, statusCompleted, status.RuntimeStatus)
 
-		var result wfv1.CallMCPToolResponse
-		require.NoError(t, protojson.Unmarshal([]byte(status.Properties["dapr.workflow.output"]), &result))
-		assert.False(t, result.GetIsError())
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(status.Properties["dapr.workflow.output"]), &result))
+		assert.False(t, result.IsError)
 	})
 
 	// Hot-reload: switch to server B.

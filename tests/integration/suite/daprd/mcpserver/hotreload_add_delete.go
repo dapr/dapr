@@ -25,9 +25,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/encoding/protojson"
+	"encoding/json"
 
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -123,12 +122,12 @@ spec:
 			if !assert.Equal(c, statusCompleted, status.RuntimeStatus) {
 				return
 			}
-			var result wfv1.ListMCPToolsResponse
-			if !assert.NoError(c, protojson.Unmarshal([]byte(status.Properties["dapr.workflow.output"]), &result)) {
+			var result mcp.ListToolsResult
+			if !assert.NoError(c, json.Unmarshal([]byte(status.Properties["dapr.workflow.output"]), &result)) {
 				return
 			}
-			assert.Len(c, result.GetTools(), 1)
-			assert.Equal(c, "dynamic_tool", result.GetTools()[0].GetName())
+			assert.Len(c, result.Tools, 1)
+			assert.Equal(c, "dynamic_tool", result.Tools[0].Name)
 		}, 30*time.Second, time.Second)
 	})
 

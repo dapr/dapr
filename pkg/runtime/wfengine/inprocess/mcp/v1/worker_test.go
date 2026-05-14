@@ -121,8 +121,8 @@ func newMCPTestServer(t *testing.T, capturedHeader *string) *httptest.Server {
 }
 
 // namedServer constructs an MCPServer with the given name and spec.
-func namedServer(name string, spec mcpserverapi.MCPServerSpec) mcpserverapi.MCPServer {
-	s := mcpserverapi.MCPServer{Spec: spec}
+func namedServer(name string, srvSpec mcpserverapi.MCPServerSpec) mcpserverapi.MCPServer {
+	s := mcpserverapi.MCPServer{Spec: srvSpec}
 	s.Name = name
 	return s
 }
@@ -205,119 +205,63 @@ func TestBuildTransport_SSE(t *testing.T) {
 	assert.Equal(t, "http://example.com/sse", st.Endpoint)
 }
 
-func TestConvertCallToolResult(t *testing.T) {
-	t.Run("text content", func(t *testing.T) {
-		r := &mcp.CallToolResult{
-			IsError: false,
-			Content: []mcp.Content{&mcp.TextContent{Text: "hello"}},
-		}
-		got := convertCallToolResult(r)
-		assert.False(t, got.GetIsError())
-		require.Len(t, got.GetContent(), 1)
-		assert.NotNil(t, got.GetContent()[0].GetText())
-		assert.Equal(t, "hello", got.GetContent()[0].GetText().GetText())
-	})
-
-	t.Run("image content", func(t *testing.T) {
-		r := &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.ImageContent{Data: []byte("imgdata"), MIMEType: "image/png"},
+// TestSDKContentMarshalsSpecShape locks in the contract that the upstream
+// MCP SDK content types serialize to the MCP wire spec — i.e. flat tagged
+// unions with a `type` discriminator. This is the property that lets daprd
+// return `*mcp.CallToolResult` directly from activities without a translation
+// layer. If the SDK ever drops a custom MarshalJSON or changes the wire
+// shape, this test fails loudly.
+func TestSDKContentMarshalsSpecShape(t *testing.T) {
+	cases := []struct {
+		name        string
+		content     mcp.Content
+		wantType    string
+		wantSubstrs []string
+	}{
+		{
+			name:        "text",
+			content:     &mcp.TextContent{Text: "hello"},
+			wantType:    "text",
+			wantSubstrs: []string{`"text":"hello"`},
+		},
+		{
+			name:        "image",
+			content:     &mcp.ImageContent{Data: []byte("imgdata"), MIMEType: "image/png"},
+			wantType:    "image",
+			wantSubstrs: []string{`"mimeType":"image/png"`, `"data":"aW1nZGF0YQ=="`},
+		},
+		{
+			name:        "audio",
+			content:     &mcp.AudioContent{Data: []byte("audio"), MIMEType: "audio/wav"},
+			wantType:    "audio",
+			wantSubstrs: []string{`"mimeType":"audio/wav"`},
+		},
+		{
+			name: "resource_link",
+			content: &mcp.ResourceLink{
+				URI: "file:///tmp/report.pdf", Name: "report", MIMEType: "application/pdf",
 			},
-		}
-		got := convertCallToolResult(r)
-		assert.False(t, got.GetIsError())
-		content := got.GetContent()
-		require.Len(t, content, 1)
-		assert.NotNil(t, content[0].GetImage())
-		assert.Equal(t, "image/png", content[0].GetImage().GetMimeType())
-		assert.Equal(t, []byte("imgdata"), content[0].GetImage().GetData())
-	})
-
-	t.Run("audio content", func(t *testing.T) {
-		r := &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.AudioContent{Data: []byte("audiodata"), MIMEType: "audio/wav"},
-			},
-		}
-		got := convertCallToolResult(r)
-		assert.False(t, got.GetIsError())
-		content := got.GetContent()
-		require.Len(t, content, 1)
-		assert.NotNil(t, content[0].GetAudio())
-		assert.Equal(t, "audio/wav", content[0].GetAudio().GetMimeType())
-		assert.Equal(t, []byte("audiodata"), content[0].GetAudio().GetData())
-	})
-
-	t.Run("resource link content", func(t *testing.T) {
-		r := &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.ResourceLink{
-					URI:      "file:///tmp/report.pdf",
-					Name:     "report",
-					MIMEType: "application/pdf",
-				},
-			},
-		}
-		got := convertCallToolResult(r)
-		assert.False(t, got.GetIsError())
-		content := got.GetContent()
-		require.Len(t, content, 1)
-		assert.NotNil(t, content[0].GetResourceLink())
-		assert.Contains(t, string(content[0].GetResourceLink().GetResource()), "file:///tmp/report.pdf")
-		assert.Contains(t, string(content[0].GetResourceLink().GetResource()), "report")
-	})
-
-	t.Run("embedded resource content", func(t *testing.T) {
-		r := &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.EmbeddedResource{
-					Resource: &mcp.ResourceContents{
-						URI:  "file:///tmp/data.txt",
-						Text: "some file contents",
-					},
-				},
-			},
-		}
-		got := convertCallToolResult(r)
-		assert.False(t, got.GetIsError())
-		content := got.GetContent()
-		require.Len(t, content, 1)
-		assert.NotNil(t, content[0].GetEmbeddedResource())
-		assert.Contains(t, string(content[0].GetEmbeddedResource().GetResource()), "file:///tmp/data.txt")
-		assert.Contains(t, string(content[0].GetEmbeddedResource().GetResource()), "some file contents")
-	})
-
-	t.Run("mixed content types", func(t *testing.T) {
-		r := &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: "here is the report"},
-				&mcp.ImageContent{Data: []byte("png"), MIMEType: "image/png"},
-				&mcp.AudioContent{Data: []byte("mp3"), MIMEType: "audio/mp3"},
-				&mcp.ResourceLink{URI: "file:///report.pdf", Name: "report"},
-			},
-		}
-		got := convertCallToolResult(r)
-		assert.False(t, got.GetIsError())
-		content := got.GetContent()
-		require.Len(t, content, 4)
-		assert.NotNil(t, content[0].GetText())
-		assert.NotNil(t, content[1].GetImage())
-		assert.NotNil(t, content[2].GetAudio())
-		assert.NotNil(t, content[3].GetResourceLink())
-	})
-
-	t.Run("error result", func(t *testing.T) {
-		r := &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "err"}}}
-		got := convertCallToolResult(r)
-		assert.True(t, got.GetIsError())
-		require.NotEmpty(t, got.GetContent())
-		assert.Equal(t, "err", got.GetContent()[0].GetText().GetText())
-	})
-
-	t.Run("empty content", func(t *testing.T) {
-		r := &mcp.CallToolResult{Content: nil}
-		got := convertCallToolResult(r)
-		assert.False(t, got.GetIsError())
-		assert.Empty(t, got.GetContent())
-	})
+			wantType:    "resource_link",
+			wantSubstrs: []string{`"uri":"file:///tmp/report.pdf"`, `"name":"report"`},
+		},
+		{
+			name: "embedded resource",
+			content: &mcp.EmbeddedResource{Resource: &mcp.ResourceContents{
+				URI: "file:///tmp/data.txt", Text: "some file contents",
+			}},
+			wantType:    "resource",
+			wantSubstrs: []string{`"uri":"file:///tmp/data.txt"`, `"text":"some file contents"`},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			b, err := json.Marshal(tc.content)
+			require.NoError(t, err)
+			assert.Contains(t, string(b), `"type":"`+tc.wantType+`"`,
+				"each MCP content type must include its `type` discriminator on the wire")
+			for _, sub := range tc.wantSubstrs {
+				assert.Contains(t, string(b), sub)
+			}
+		})
+	}
 }

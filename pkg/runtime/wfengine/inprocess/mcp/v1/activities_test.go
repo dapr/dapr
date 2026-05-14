@@ -24,12 +24,12 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/structpb"
+	"encoding/json"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
+	
+	mcptypes "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/types"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	mcpauth "github.com/dapr/dapr/pkg/runtime/mcp/auth"
 	fakesecurity "github.com/dapr/dapr/pkg/security/fake"
@@ -53,10 +53,10 @@ func TestMakeListToolsActivity_RealServer(t *testing.T) {
 	result, err := activity(actCtx)
 	require.NoError(t, err)
 
-	listResult, ok := result.(*wfv1.ListMCPToolsResponse)
+	listResult, ok := result.(*mcp.ListToolsResult)
 	require.True(t, ok)
-	require.Len(t, listResult.GetTools(), 1)
-	assert.Equal(t, "greet", listResult.GetTools()[0].GetName())
+	require.Len(t, listResult.Tools, 1)
+	assert.Equal(t, "greet", listResult.Tools[0].Name)
 }
 
 func TestMakeListToolsActivity_CachesToolSchema(t *testing.T) {
@@ -98,7 +98,7 @@ func TestMakeCallToolActivity_RealServer(t *testing.T) {
 	activity := makeCallToolActivity(server, connectTestSession(t, ts.URL), &toolSchemaCache{}, Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx: context.Background(),
-		input: activityCallToolInput{
+		input: mcptypes.CallToolActivityInput{
 			ToolName:  "greet",
 			Arguments: map[string]any{"name": "dapr"},
 		},
@@ -107,11 +107,11 @@ func TestMakeCallToolActivity_RealServer(t *testing.T) {
 	result, err := activity(actCtx)
 	require.NoError(t, err)
 
-	callResult, ok := result.(*wfv1.CallMCPToolResponse)
+	callResult, ok := result.(*mcp.CallToolResult)
 	require.True(t, ok)
-	assert.False(t, callResult.GetIsError(), "expected success result")
-	require.NotEmpty(t, callResult.GetContent())
-	assert.Contains(t, callResult.GetContent()[0].GetText().GetText(), "dapr")
+	assert.False(t, callResult.IsError, "expected success result")
+	require.NotEmpty(t, callResult.Content)
+	assert.Contains(t, extractText(callResult.Content[0]), "dapr")
 }
 
 func TestMakeCallToolActivity_HeaderInjection(t *testing.T) {
@@ -135,7 +135,7 @@ func TestMakeCallToolActivity_HeaderInjection(t *testing.T) {
 	activity := makeCallToolActivity(server, connectTestSession(t, ts.URL, httpClient), &toolSchemaCache{}, Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx: context.Background(),
-		input: activityCallToolInput{
+		input: mcptypes.CallToolActivityInput{
 			ToolName:  "greet",
 			Arguments: map[string]any{"name": "dapr"},
 		},
@@ -166,7 +166,7 @@ func TestMakeCallToolActivity_MissingRequiredArg(t *testing.T) {
 	activity := makeCallToolActivity(server, connectTestSession(t, ts.URL), schemas, Options{Store: store})
 	actCtx := &fakeActivityContext{
 		ctx: context.Background(),
-		input: activityCallToolInput{
+		input: mcptypes.CallToolActivityInput{
 			ToolName:  "greet",
 			Arguments: map[string]any{}, // missing "name" which is required
 		},
@@ -174,11 +174,11 @@ func TestMakeCallToolActivity_MissingRequiredArg(t *testing.T) {
 
 	result, err := activity(actCtx)
 	require.NoError(t, err, "validation failure should not be an activity error")
-	callResult, ok := result.(*wfv1.CallMCPToolResponse)
+	callResult, ok := result.(*mcp.CallToolResult)
 	require.True(t, ok)
-	assert.True(t, callResult.GetIsError())
-	assert.Contains(t, callResult.GetContent()[0].GetText().GetText(), "missing required")
-	assert.Contains(t, callResult.GetContent()[0].GetText().GetText(), "name")
+	assert.True(t, callResult.IsError)
+	assert.Contains(t, extractText(callResult.Content[0]), "missing required")
+	assert.Contains(t, extractText(callResult.Content[0]), "name")
 }
 
 func TestMakeCallToolActivity_SPIFFEAuth(t *testing.T) {
@@ -215,7 +215,7 @@ func TestMakeCallToolActivity_SPIFFEAuth(t *testing.T) {
 	activity := makeCallToolActivity(server, connectTestSession(t, ts.URL, httpClient), &toolSchemaCache{}, Options{Store: store, Security: fetcher})
 	actCtx := &fakeActivityContext{
 		ctx: context.Background(),
-		input: activityCallToolInput{
+		input: mcptypes.CallToolActivityInput{
 			ToolName:  "greet",
 			Arguments: map[string]any{"name": "dapr"},
 		},
@@ -223,13 +223,22 @@ func TestMakeCallToolActivity_SPIFFEAuth(t *testing.T) {
 
 	result, err := activity(actCtx)
 	require.NoError(t, err)
-	callResult, ok := result.(*wfv1.CallMCPToolResponse)
+	callResult, ok := result.(*mcp.CallToolResult)
 	require.True(t, ok)
-	assert.False(t, callResult.GetIsError(), "expected success result")
+	assert.False(t, callResult.IsError, "expected success result")
 	assert.Equal(t, "SVID svid-12345", capturedHeader)
 }
 
-func realisticToolDef(t *testing.T, name string) *wfv1.MCPToolDefinition {
+// extractText extracts text from an mcp.Content if it is a TextContent.
+// Returns "" for any other variant.
+func extractText(c mcp.Content) string {
+	if tc, ok := c.(*mcp.TextContent); ok {
+		return tc.Text
+	}
+	return ""
+}
+
+func realisticToolDef(t *testing.T, name string) *mcp.Tool {
 	t.Helper()
 	desc := "tool " + name
 	schemaMap := map[string]any{
@@ -262,12 +271,10 @@ func realisticToolDef(t *testing.T, name string) *wfv1.MCPToolDefinition {
 		"required":             []any{"city"},
 		"additionalProperties": false,
 	}
-	schema, err := structpb.NewStruct(schemaMap)
-	require.NoError(t, err, "structpb.NewStruct must accept a realistic schema")
-	return &wfv1.MCPToolDefinition{
+	return &mcp.Tool{
 		Name:        name,
-		Description: &desc,
-		InputSchema: schema,
+		Description: desc,
+		InputSchema: schemaMap,
 	}
 }
 
@@ -276,7 +283,7 @@ func realisticToolDef(t *testing.T, name string) *wfv1.MCPToolDefinition {
 // round-trips through protojson without error.
 func TestMakeListToolsActivity_CacheHitSingleCall(t *testing.T) {
 	listCache := &toolListCache{}
-	listCache.store([]*wfv1.MCPToolDefinition{
+	listCache.store([]*mcp.Tool{
 		realisticToolDef(t, "alpha"),
 		realisticToolDef(t, "beta"),
 	})
@@ -293,16 +300,16 @@ func TestMakeListToolsActivity_CacheHitSingleCall(t *testing.T) {
 
 	res, err := activity(&fakeActivityContext{ctx: context.Background()})
 	require.NoError(t, err)
-	listResp, ok := res.(*wfv1.ListMCPToolsResponse)
+	listResp, ok := res.(*mcp.ListToolsResult)
 	require.True(t, ok, "expected *ListMCPToolsResponse, got %T", res)
-	require.Len(t, listResp.GetTools(), 2)
+	require.Len(t, listResp.Tools, 2)
 
-	bytes, err := protojson.Marshal(listResp)
-	require.NoError(t, err, "protojson.Marshal of cache-hit response must succeed")
+	bytes, err := json.Marshal(listResp)
+	require.NoError(t, err, "json.Marshal of cache-hit response must succeed")
 
-	var rt wfv1.ListMCPToolsResponse
-	require.NoError(t, protojson.Unmarshal(bytes, &rt), "protojson round-trip must succeed")
-	require.Len(t, rt.GetTools(), 2)
+	var rt mcp.ListToolsResult
+	require.NoError(t, json.Unmarshal(bytes, &rt), "protojson round-trip must succeed")
+	require.Len(t, rt.Tools, 2)
 }
 
 // TestMakeListToolsActivity_CacheHitConcurrentRoundTrip exercises the
@@ -311,7 +318,7 @@ func TestMakeListToolsActivity_CacheHitSingleCall(t *testing.T) {
 func TestMakeListToolsActivity_CacheHitConcurrentRoundTrip(t *testing.T) {
 	listCache := &toolListCache{}
 	const toolCount = 8
-	cached := make([]*wfv1.MCPToolDefinition, toolCount)
+	cached := make([]*mcp.Tool, toolCount)
 	expectedNames := make([]string, toolCount)
 	for i := range cached {
 		name := "tool" + string(rune('a'+i))
@@ -343,28 +350,28 @@ func TestMakeListToolsActivity_CacheHitConcurrentRoundTrip(t *testing.T) {
 					errs <- err
 					return
 				}
-				resp, ok := res.(*wfv1.ListMCPToolsResponse)
+				resp, ok := res.(*mcp.ListToolsResult)
 				if !ok {
 					errs <- assert.AnError
 					return
 				}
-				bytes, err := protojson.Marshal(resp)
+				bytes, err := json.Marshal(resp)
 				if err != nil {
 					errs <- err
 					return
 				}
-				var rt wfv1.ListMCPToolsResponse
-				if err := protojson.Unmarshal(bytes, &rt); err != nil {
+				var rt mcp.ListToolsResult
+				if err := json.Unmarshal(bytes, &rt); err != nil {
 					errs <- err
 					return
 				}
-				if got := len(rt.GetTools()); got != toolCount {
+				if got := len(rt.Tools); got != toolCount {
 					errs <- assert.AnError
 					return
 				}
-				gotNames := make([]string, len(rt.GetTools()))
-				for i, td := range rt.GetTools() {
-					gotNames[i] = td.GetName()
+				gotNames := make([]string, len(rt.Tools))
+				for i, td := range rt.Tools {
+					gotNames[i] = td.Name
 				}
 				sort.Strings(gotNames)
 				for i := range gotNames {
@@ -532,82 +539,38 @@ func TestCallToolOnce_ReconnectFailureMessage(t *testing.T) {
 	assert.Contains(t, err.Error(), `call-tool: reconnect failed for "myserver"`)
 }
 
-// --- toolDefinitionFromMCP ---
+// --- cacheToolSchema ---
 
-func TestToolDefinitionFromMCP_FullTool(t *testing.T) {
+func TestCacheToolSchema_CachesObjectSchema(t *testing.T) {
 	schemas := &toolSchemaCache{}
 	tool := &mcp.Tool{
-		Name:        "greet",
-		Description: "Returns a greeting",
+		Name: "greet",
 		InputSchema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"name": map[string]any{"type": "string"},
-			},
+			"type":     "object",
 			"required": []any{"name"},
 		},
 	}
-
-	td, err := toolDefinitionFromMCP(tool, "myserver", schemas)
-	require.NoError(t, err)
-	require.NotNil(t, td)
-	assert.Equal(t, "greet", td.GetName())
-	require.NotNil(t, td.Description)
-	assert.Equal(t, "Returns a greeting", td.GetDescription())
-	require.NotNil(t, td.GetInputSchema())
-
-	cached, ok := schemas.get("greet")
-	assert.True(t, ok, "input schema must be cached on success")
-	assert.NotEmpty(t, cached)
+	cacheToolSchema(tool, schemas)
+	raw, ok := schemas.get("greet")
+	require.True(t, ok, "schema must be cached")
+	require.NotEmpty(t, raw)
 }
 
-func TestToolDefinitionFromMCP_NoDescription(t *testing.T) {
-	tool := &mcp.Tool{
-		Name:        "noop",
-		InputSchema: map[string]any{"type": "object"},
-	}
-	td, err := toolDefinitionFromMCP(tool, "myserver", &toolSchemaCache{})
-	require.NoError(t, err)
-	assert.Nil(t, td.Description, "empty description must produce nil pointer")
-}
-
-func TestToolDefinitionFromMCP_NoInputSchema(t *testing.T) {
+func TestCacheToolSchema_NoOpOnNilSchema(t *testing.T) {
 	schemas := &toolSchemaCache{}
-	tool := &mcp.Tool{Name: "schemaless"}
-
-	td, err := toolDefinitionFromMCP(tool, "myserver", schemas)
-	require.NoError(t, err)
-	assert.Nil(t, td.GetInputSchema(), "missing input schema must produce nil")
-
+	cacheToolSchema(&mcp.Tool{Name: "schemaless"}, schemas)
 	_, ok := schemas.get("schemaless")
 	assert.False(t, ok, "no schema should be cached when InputSchema is nil")
 }
 
-func TestToolDefinitionFromMCP_NonObjectSchema(t *testing.T) {
-	tool := &mcp.Tool{
-		Name:        "weird",
-		InputSchema: "this-is-a-string-not-an-object",
-	}
-	_, err := toolDefinitionFromMCP(tool, "myserver", &toolSchemaCache{})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "non-object inputSchema")
-	assert.Contains(t, err.Error(), `"weird"`)
-	assert.Contains(t, err.Error(), `"myserver"`)
-}
-
-func TestToolDefinitionFromMCP_NonFiniteNumberFails(t *testing.T) {
-	// json.Marshal rejects NaN; structpb may also reject it depending on
-	// version. Either rejection is acceptable — what matters is that the
-	// helper returns an error with both tool and server context.
-	tool := &mcp.Tool{
-		Name: "nansy",
-		InputSchema: map[string]any{
-			"type":    "number",
-			"default": math.NaN(),
-		},
-	}
-	_, err := toolDefinitionFromMCP(tool, "myserver", &toolSchemaCache{})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `"nansy"`)
-	assert.Contains(t, err.Error(), `"myserver"`)
+func TestCacheToolSchema_BestEffortOnNonSerializable(t *testing.T) {
+	// json.Marshal rejects NaN — cacheToolSchema must swallow the error and
+	// leave the cache untouched rather than failing the activity.
+	schemas := &toolSchemaCache{}
+	cacheToolSchema(&mcp.Tool{
+		Name:        "nansy",
+		InputSchema: map[string]any{"default": math.NaN()},
+	}, schemas)
+	_, ok := schemas.get("nansy")
+	assert.False(t, ok, "cache write must be skipped when schema fails to marshal")
 }
