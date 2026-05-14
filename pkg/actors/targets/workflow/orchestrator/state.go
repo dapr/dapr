@@ -154,14 +154,25 @@ func (o *orchestrator) notifyStreams() {
 	}
 }
 
-// signAndSaveState signs any newly added history events and then persists
-// the state. This is the single entry point for all state persistence —
-// callers must never call saveInternalState directly.
+// signAndSaveState signs any newly added history events and then persists the
+// state. This is the single entry point for all state persistence; callers
+// must never call saveInternalState directly.
 func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestate.State) error {
 	if err := o.signing.SignNewEvents(state); err != nil {
+		o.invalidateCachedState()
 		return fmt.Errorf("failed to sign new history events: %w", err)
 	}
-	return o.saveInternalState(ctx, state)
+	if err := o.saveInternalState(ctx, state); err != nil {
+		o.invalidateCachedState()
+		return err
+	}
+	return nil
+}
+
+func (o *orchestrator) invalidateCachedState() {
+	o.state = nil
+	o.rstate = nil
+	o.ometa = nil
 }
 
 func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State) error {

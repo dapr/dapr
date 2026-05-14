@@ -245,6 +245,17 @@ func WithSchedulerAddresses(addresses ...string) Option {
 	}
 }
 
+// WithSchedulerAddressesReset replaces any previously configured scheduler
+// addresses with the supplied set. Use this when a later option layer needs
+// to redirect daprd away from a scheduler address an earlier layer already
+// added (for example pointing daprd at a scheduler proxy instead of the
+// real scheduler).
+func WithSchedulerAddressesReset(addresses ...string) Option {
+	return func(o *options) {
+		o.schedulerAddresses = append([]string(nil), addresses...)
+	}
+}
+
 func WithDisableInitEndpoints(endpoints ...string) Option {
 	return func(o *options) {
 		o.disableInitEndpoints = append(o.disableInitEndpoints, endpoints...)

@@ -112,9 +112,6 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 
 	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", o.actorID, activityActorType, targetActorID)
 
-	ctx, cancel := context.WithTimeout(ctx, dispatchTimeout)
-	defer cancel()
-
 	_, err = o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest(todo.ExecuteActivityMethod).
 		WithActor(activityActorType, targetActorID).
@@ -152,7 +149,11 @@ func (o *orchestrator) failActivityACL(ctx context.Context, e *backend.HistoryEv
 		EventType: events.NewTaskFailedEventType(e.GetEventId(), "WorkflowAccessPolicyDenied", "access denied by workflow access policy", false),
 	}
 
-	if _, err := o.createWorkflowReminder(ctx, common.ReminderPrefixActivityResult, failedEvent, time.Now(), o.appID, nil); err != nil {
+	reminderName, err := randomReminderName(common.ReminderPrefixActivityResult)
+	if err != nil {
+		return fmt.Errorf("failed to create activity failure reminder: %w", err)
+	}
+	if err := o.createWorkflowReminder(ctx, reminderName, failedEvent, time.Now(), o.appID, nil); err != nil {
 		return fmt.Errorf("failed to create activity failure reminder: %w", err)
 	}
 
