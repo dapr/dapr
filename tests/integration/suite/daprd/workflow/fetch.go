@@ -118,7 +118,6 @@ func (f *fetch) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("fetch version in metadata", func(t *testing.T) {
 		f.workflow.Registry().AddVersionedWorkflowN("versioned", "v1", true, func(ctx *task.WorkflowContext) (any, error) {
-			ctx.SetCustomStatus("my custom status")
 			return "return value", nil
 		})
 
