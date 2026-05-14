@@ -17,7 +17,6 @@ import (
 	"context"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
@@ -62,11 +61,11 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 
 	// Drop completion events whose resolution is already in history or the
 	// inbox; otherwise an inbox redelivery (e.g. an activity actor reminder
-	// firing twice during pod migration) would pin the workflow in a
-	// replay/spin loop.
+	// firing twice during pod migration) would pin the workflow in a replay/spin
+	// loop.
 	if dedup.IsDuplicateCompletion(e, state.History, state.Inbox) {
-		log.Debugf("Workflow actor '%s': dropping duplicate completion event already present in history/inbox", o.actorID)
-		return nil
+		log.Debugf("Workflow actor '%s': dropping duplicate completion event already present in history/inbox; re-asserting wake-up reminder so the inbox row is not stranded", o.actorID)
+		return o.assertNewEventReminder(ctx, e, state)
 	}
 
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
@@ -111,15 +110,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// source app. For cross-app events (e.g. ExecutionTerminated from a
 	// parent in another app), router.SourceAppID is the sender's app and
 	// would route the reminder to a non-existent remote actor.
-	sourceAppID := o.appID
-	dueTime := e.Timestamp.AsTime()
-	if len(state.History) > 0 {
-		dueTime = state.History[0].Timestamp.AsTime()
-	}
-	wfName := o.getExecutionStartedEvent(state).GetName()
-	reminderName := events.EventReminderName(reminderPrefixNewEvent, e)
-
-	if err := o.createWorkflowReminder(ctx, reminderName, nil, dueTime, sourceAppID, &wfName); err != nil {
+	if err := o.assertNewEventReminder(ctx, e, state); err != nil {
 		return err
 	}
 
