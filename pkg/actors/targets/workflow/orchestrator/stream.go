@@ -52,7 +52,8 @@ func (o *orchestrator) handleStream(ctx context.Context,
 			Status:  &internalsv1pb.Status{Code: http.StatusOK},
 			Message: &commonv1pb.InvokeResponse{Data: arstate},
 		})
-		if err != nil || ok {
+		// Short-circuit when the workflow is already in a terminal state.
+		if err != nil || ok || api.OrchestrationMetadataIsComplete(ometa) {
 			if api.OrchestrationMetadataIsComplete(ometa) {
 				o.factory.deactivate(o)
 			}

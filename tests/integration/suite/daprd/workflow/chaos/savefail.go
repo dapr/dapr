@@ -104,7 +104,7 @@ func (s *savefail) Run(t *testing.T, ctx context.Context) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-releaseActivity:
-			return "done", nil
+			return nil, nil
 		}
 	}))
 

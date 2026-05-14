@@ -102,6 +102,7 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 			Message: &commonv1pb.InvokeResponse{Data: arstate},
 		}
 
+		isTerminal := api.OrchestrationMetadataIsComplete(o.ometa)
 		var ok bool
 		for idx, stream := range o.streamFns {
 			if stream.done.Load() {
@@ -110,7 +111,7 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 			}
 
 			ok, err = stream.fn(streamReq)
-			if err != nil || ok {
+			if err != nil || ok || isTerminal {
 				stream.errCh <- err
 				delete(o.streamFns, idx)
 			}
