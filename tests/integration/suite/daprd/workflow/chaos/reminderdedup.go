@@ -16,6 +16,7 @@ package chaos
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -89,13 +90,13 @@ func (s *reminderdedup) Run(t *testing.T, ctx context.Context) {
 
 	const wfID = "reminderdedup-wf"
 
-	activityStarted := make(chan struct{})
+	var activityStarted atomic.Bool
 	releaseActivity := make(chan struct{})
 
 	r := s.workflow.Registry()
 
 	require.NoError(t, r.AddActivityN("act", func(actx task.ActivityContext) (any, error) {
-		activityStarted <- struct{}{}
+		activityStarted.Store(true)
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -123,11 +124,7 @@ func (s *reminderdedup) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	select {
-	case <-activityStarted:
-	case <-time.After(15 * time.Second):
-		require.Fail(t, "activity did not start")
-	}
+	require.Eventually(t, activityStarted.Load, 15*time.Second, 10*time.Millisecond, "activity did not start")
 
 	s.store.ArmFailures(wfID+"||inbox-", 3, nil)
 

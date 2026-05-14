@@ -123,7 +123,6 @@ func (o *orchestrator) Deactivate(ctx context.Context) error {
 	}
 	clear(o.streamFns)
 	o.wg.Wait()
-	orchestratorCache.Put(o)
 
 	return nil
 }

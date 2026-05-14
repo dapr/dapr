@@ -107,7 +107,6 @@ func (e *executor) Deactivate(_ context.Context) error {
 	close(e.closeCh)
 	e.table.Delete(e.actorID)
 	e.wg.Wait()
-	executorCache.Put(e)
 	return nil
 }
 

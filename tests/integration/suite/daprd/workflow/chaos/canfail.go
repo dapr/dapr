@@ -15,6 +15,7 @@ package chaos
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -67,13 +68,13 @@ func (c *canfail) Run(t *testing.T, ctx context.Context) {
 
 	const wfID = "canfail-wf"
 
-	activityStarted := make(chan struct{})
+	var activityStarted atomic.Bool
 	releaseActivity := make(chan struct{})
 
 	r := c.workflow.Registry()
 
 	require.NoError(t, r.AddActivityN("act", func(actx task.ActivityContext) (any, error) {
-		activityStarted <- struct{}{}
+		activityStarted.Store(true)
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -104,11 +105,7 @@ func (c *canfail) Run(t *testing.T, ctx context.Context) {
 	// failure lands on the ScheduleJob that addWorkflowEvent makes for the
 	// activity-result wake-up reminder rather than on the workflow-start
 	// or activity-schedule reminders.
-	select {
-	case <-activityStarted:
-	case <-time.After(15 * time.Second):
-		require.Fail(t, "activity did not start")
-	}
+	require.Eventually(t, activityStarted.Load, 15*time.Second, 10*time.Millisecond, "activity did not start")
 
 	failedCh := make(chan struct{})
 	// codes.Internal is non-transient so daprd's CreateReminderWithRetry
