@@ -73,10 +73,7 @@ func (c *canfail) Run(t *testing.T, ctx context.Context) {
 	r := c.workflow.Registry()
 
 	require.NoError(t, r.AddActivityN("act", func(actx task.ActivityContext) (any, error) {
-		select {
-		case activityStarted <- struct{}{}:
-		default:
-		}
+		activityStarted <- struct{}{}
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
