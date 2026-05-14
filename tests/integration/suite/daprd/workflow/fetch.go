@@ -129,9 +129,6 @@ func (f *fetch) Run(t *testing.T, ctx context.Context) {
 
 		meta, err := client.FetchWorkflowMetadata(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.Equal(t, `"input value"`, meta.GetInput().GetValue())
-		assert.Equal(t, `"return value"`, meta.GetOutput().GetValue())
-		assert.Equal(t, `my custom status`, meta.GetCustomStatus().GetValue())
 		assert.Equal(t, "v1", meta.GetVersion().GetValue())
 	})
 

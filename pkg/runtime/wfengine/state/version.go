@@ -19,21 +19,19 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-// WorkflowVersion returns the version recorded on the most recent
-// WorkflowStarted history event, or nil if none is set.
-//
-// The runtime-resolved version is *not* stored on ExecutionStartedEvent
-// (the event returned by WorkflowRuntimeState.GetStartEvent), so reading
-// rstate.GetStartEvent().GetVersion() returns nil.
+// WorkflowVersion returns the version recorded on the first WorkflowStarted history event, or nil if none is set.
 func WorkflowVersion(events []*backend.HistoryEvent) *wrapperspb.StringValue {
-	for i := len(events) - 1; i >= 0; i-- {
-		ws := events[i].GetWorkflowStarted()
-		if ws == nil {
-			continue
-		}
-		if name := ws.GetVersion().GetName(); name != "" {
-			return wrapperspb.String(name)
-		}
+	if len(events) == 0 {
+		return nil
 	}
+
+	ws := events[0].GetWorkflowStarted()
+	if ws == nil {
+		return nil
+	}
+	if name := ws.GetVersion().GetName(); name != "" {
+		return wrapperspb.String(name)
+	}
+
 	return nil
 }
