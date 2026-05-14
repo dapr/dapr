@@ -26,14 +26,6 @@ import (
 // that drains the workflow inbox after an event is appended. Retries of the
 // same inbox append must collapse onto a single scheduler entry (the scheduler
 // overwrites by name) instead of accumulating under random suffixes.
-//
-// EventRaised: a named user event keys on the SHA-256 of its name (truncated
-// to 12 bytes purely to bound the reminder name length, since 96 bits is more
-// than enough collision resistance for this dedup scope). Empty names fall
-// back to the event timestamp. Two distinct EventRaised events that share a
-// name therefore share a single wake-up reminder; this is safe because the
-// reminder only wakes the actor to drain the inbox, and both events are
-// already durable in the inbox.
 func EventReminderName(prefix string, e *backend.HistoryEvent) string {
 	switch evt := e.GetEventType().(type) {
 	case *protos.HistoryEvent_TaskCompleted:
