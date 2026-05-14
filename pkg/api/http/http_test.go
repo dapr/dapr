@@ -802,12 +802,17 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 func TestShutdownEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
-	shutdownCh := make(chan struct{})
+	shutdownCh := make(chan struct{}, 1)
+	exitCh := make(chan int, 1)
 	testAPI := &api{
 		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
+			Logger: logger.NewLogger("test.api.http.shutdown"),
 			ShutdownFn: func() {
-				close(shutdownCh)
+				shutdownCh <- struct{}{}
+			},
+			ExitFn: func(code int) {
+				exitCh <- code
 			},
 		}),
 	}
@@ -823,7 +828,28 @@ func TestShutdownEndpoints(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("Did not shut down within 1 second")
 		case <-shutdownCh:
-			// All good
+		}
+		select {
+		case code := <-exitCh:
+			t.Fatalf("exit unexpectedly invoked with code %d on graceful path", code)
+		default:
+		}
+	})
+
+	t.Run("Force shutdown via header - 204", func(t *testing.T) {
+		apiPath := apiVersionV1 + "/shutdown"
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil, "Dapr-Force-Shutdown", "true")
+		assert.Equal(t, 204, resp.StatusCode)
+		select {
+		case <-time.After(2 * time.Second):
+			t.Fatal("Did not force exit within 2 seconds")
+		case code := <-exitCh:
+			assert.Equal(t, 1, code)
+		}
+		select {
+		case <-shutdownCh:
+			t.Fatal("graceful shutdownFn unexpectedly invoked on force path")
+		default:
 		}
 	})
 }

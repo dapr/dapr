@@ -15,12 +15,18 @@ package http
 
 import (
 	"net/http"
+	"strings"
 
-	"google.golang.org/protobuf/types/known/emptypb"
+	grpcMetadata "google.golang.org/grpc/metadata"
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
+	"github.com/dapr/dapr/pkg/api/universal"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
+
+// forceShutdownHeader is the HTTP header that maps onto the
+// universal.ForceShutdownMetadataKey gRPC metadata key.
+const forceShutdownHeader = "Dapr-Force-Shutdown"
 
 func (a *api) constructShutdownEndpoints() []endpoints.Endpoint {
 	return []endpoints.Endpoint{
@@ -33,18 +39,25 @@ func (a *api) constructShutdownEndpoints() []endpoints.Endpoint {
 				Version:              endpoints.EndpointGroupVersion1,
 				AppendSpanAttributes: nil, // TODO
 			},
-			Handler: UniversalHTTPHandler(
-				a.universal.Shutdown,
-				UniversalHTTPHandlerOpts[*runtimev1pb.ShutdownRequest, *emptypb.Empty]{
-					OutModifier: func(out *emptypb.Empty) (any, error) {
-						// Nullify the response so status code is 204
-						return nil, nil
-					},
-				},
-			),
+			Handler: a.onShutdown,
 			Settings: endpoints.EndpointSettings{
 				Name: "Shutdown",
 			},
 		},
 	}
+}
+
+func (a *api) onShutdown(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if strings.EqualFold(r.Header.Get(forceShutdownHeader), "true") {
+		ctx = grpcMetadata.NewIncomingContext(ctx, grpcMetadata.Pairs(
+			universal.ForceShutdownMetadataKey, "true",
+		))
+	}
+
+	if _, err := a.universal.Shutdown(ctx, &runtimev1pb.ShutdownRequest{}); err != nil {
+		respondWithError(w, err)
+		return
+	}
+	respondWithEmpty(w)
 }

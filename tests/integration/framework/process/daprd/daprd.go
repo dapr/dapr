@@ -222,6 +222,24 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 	}, 20*time.Second, 10*time.Millisecond)
 }
 
+// WaitUntilExit waits for daprd to exit on its own (e.g. via the shutdown
+// API), then calls Cleanup so the framework can assert the exit code.
+// kill.Interrupt is a no-op on an already-dead process. The HTTP port is
+// polled; once dialing fails, the process has exited.
+func (d *Daprd) WaitUntilExit(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	addr := d.HTTPAddress()
+	assert.Eventuallyf(t, func() bool {
+		conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+		if err != nil {
+			return true
+		}
+		conn.Close()
+		return false
+	}, timeout, 10*time.Millisecond, "daprd HTTP port %s remained open; process did not exit", addr)
+	d.Cleanup(t)
+}
+
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	t.Helper()
 
