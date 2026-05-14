@@ -155,6 +155,18 @@ func TestResponseWriterUnwrap(t *testing.T) {
 	}
 }
 
+func TestResponseWriterFlushWritesStatusOK(t *testing.T) {
+	rec := httptest.NewRecorder()
+	rw := NewResponseWriter(rec)
+
+	rw.(http.Flusher).Flush()
+
+	require.Equal(t, http.StatusOK, rw.Status())
+	require.True(t, rw.Written())
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.True(t, rec.Flushed)
+}
+
 // mockReader only implements io.Reader without other methods like WriterTo
 type mockReader struct {
 	readStr string
