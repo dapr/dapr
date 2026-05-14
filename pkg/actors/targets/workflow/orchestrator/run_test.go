@@ -28,6 +28,7 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/fake"
 	remindersfake "github.com/dapr/dapr/pkg/actors/reminders/fake"
+	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/config"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -541,6 +542,15 @@ func Test_runWorkflow_emptyInboxNonTerminalSkipsRetention(t *testing.T) {
 		return nil
 	})
 
+	// The empty-inbox+non-terminal path drops the in-memory cache and reloads
+	// from the store to guard against placement-rebalance staleness. Return an
+	// empty payload so the reload reports "no state" and the function returns
+	// without touching retention. Verifies the retention guard fires even
+	// after the cache-invalidating reload.
+	actorState := statefake.New().WithGetFn(func(_ context.Context, _ *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
+		return &actorapi.StateResponse{}, nil
+	})
+
 	retentionDur := time.Hour
 	o := &orchestrator{
 		factory: &factory{
@@ -549,6 +559,7 @@ func Test_runWorkflow_emptyInboxNonTerminalSkipsRetention(t *testing.T) {
 			activityActorType:  "dapr.internal.default.testapp.activity",
 			retentionActorType: "dapr.internal.default.testapp.retentioner",
 			reminders:          reminders,
+			actorState:         actorState,
 			actorTypeBuilder:   common.NewActorTypeBuilder("default"),
 			retentionPolicy: &config.WorkflowStateRetentionPolicy{
 				AnyTerminal: &retentionDur,

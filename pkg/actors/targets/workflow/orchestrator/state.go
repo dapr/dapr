@@ -22,6 +22,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	contribstate "github.com/dapr/components-contrib/state"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -186,11 +187,49 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 	log.Debugf("Workflow actor '%s': saving %d keys to actor state store", o.actorID, len(req.Operations))
 
 	if err = o.actorState.TransactionalStateOperation(ctx, true, req, false); err != nil {
+		// ETagMismatch means a peer host wrote to this workflow's metadata
+		// row underneath us between our load and this save. The whole Multi
+		// rolled back atomically, so the durable state still reflects the
+		// peer's view; our in-memory state is stale. The caller
+		// (signAndSaveState) handles cache invalidation on any error from
+		// this function; we just classify the error here so the log line
+		// distinguishes peer-write conflicts from real save failures, and
+		// the caller's recoverable-error retry path re-runs the operation
+		// against the updated state on the next firing.
+		var etagErr *contribstate.ETagError
+		if errors.As(err, &etagErr) && etagErr.Kind() == contribstate.ETagMismatch {
+			log.Debugf("Workflow actor '%s': save aborted by peer write (etag mismatch); surfacing for retry", o.actorID)
+		}
 		return err
 	}
 
 	// ResetChangeTracking should always be called after a save operation succeeds
 	state.ResetChangeTracking()
+
+	// Refresh the metadata ETag for the next save. Multi does not return new
+	// ETags, so we read just the metadata row back. A read error here is
+	// non-fatal: the persisted save is durable, we just don't know the new
+	// version token; drop the cache and let the next operation reload. A nil
+	// response or nil ETag is fine: we record whatever the store returned
+	// and the next save proceeds with that (which falls through to a blind
+	// upsert if no ETag is known, the same semantics as a brand-new
+	// workflow).
+	// TODO: @joshvanl: add etag support to Multi and remove this extra read.
+	metaRes, metaErr := o.actorState.Get(ctx, &actorsapi.GetStateRequest{
+		ActorType: o.actorType,
+		ActorID:   o.actorID,
+		Key:       wfenginestate.MetadataKey,
+	}, false)
+	if metaErr != nil {
+		log.Debugf("Workflow actor '%s': failed to refresh metadata etag after save (%v); next operation will reload", o.actorID, metaErr)
+		o.invalidateCachedState()
+		return nil
+	}
+	if metaRes != nil {
+		state.SetMetadataETag(metaRes.ETag)
+	} else {
+		state.SetMetadataETag(nil)
+	}
 
 	// Update cached state
 	o.state = state
