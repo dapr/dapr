@@ -19,7 +19,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -54,11 +53,11 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 
 	// Drop completion events whose resolution is already in history or the
 	// inbox; otherwise an inbox redelivery (e.g. an activity actor reminder
-	// firing twice during pod migration) would pin the workflow in a
-	// replay/spin loop.
+	// firing twice during pod migration) would pin the workflow in a replay/spin
+	// loop.
 	if dedup.IsDuplicateCompletion(&e, state.History, state.Inbox) {
-		log.Debugf("Workflow actor '%s': dropping duplicate completion event already present in history/inbox", o.actorID)
-		return nil
+		log.Debugf("Workflow actor '%s': dropping duplicate completion event already present in history/inbox; re-asserting wake-up reminder so the inbox row is not stranded", o.actorID)
+		return o.assertNewEventReminder(ctx, &e, state)
 	}
 
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
@@ -73,21 +72,11 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	// and then failed, a retry would see the orphan event in the cached
 	// inbox, dedup would drop it, and cron would auto-delete the reminder.
 	//
-	// For activity completion events, we want to create the reminder on the same app where this workflow actor is
-	// hosted, so use the source app from the router.
-	// For sub-orchestrator completion events we want to create the reminder on the current app.
-	sourceAppID := o.appID
-	returningToParent := e.GetSubOrchestrationInstanceCompleted() != nil || e.GetSubOrchestrationInstanceFailed() != nil
-	if !returningToParent && e.GetRouter() != nil {
-		sourceAppID = e.GetRouter().GetSourceAppID()
-	}
-
-	dueTime := e.Timestamp.AsTime()
-	if len(state.History) > 0 {
-		dueTime = state.History[0].Timestamp.AsTime()
-	}
-	reminderName := events.EventReminderName(reminderPrefixNewEvent, &e)
-	if err := o.createWorkflowReminder(ctx, reminderName, nil, dueTime, sourceAppID); err != nil {
+	// The reminder must target the local actor (o.appID), not the router's
+	// source app. For cross-app events (e.g. ExecutionTerminated from a
+	// parent in another app), router.SourceAppID is the sender's app and
+	// would route the reminder to a non-existent remote actor.
+	if err := o.assertNewEventReminder(ctx, &e, state); err != nil {
 		return err
 	}
 
