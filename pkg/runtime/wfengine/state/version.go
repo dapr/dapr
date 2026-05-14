@@ -19,19 +19,19 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-// WorkflowVersion returns the version recorded on the first WorkflowStarted history event, or nil if none is set.
+// WorkflowVersion returns the version recorded on the first
+// WorkflowStarted history event, or nil if none is set.
 func WorkflowVersion(events []*backend.HistoryEvent) *wrapperspb.StringValue {
-	if len(events) == 0 {
-		return nil
+	for i := range events {
+		ws := events[i].GetWorkflowStarted()
+		if ws == nil {
+			continue
+		}
+		if name := ws.GetVersion().GetName(); name != "" {
+			return wrapperspb.String(name)
+		}
+		// all WorkflowStarted have the same version, not need for further search
+		break
 	}
-
-	ws := events[0].GetWorkflowStarted()
-	if ws == nil {
-		return nil
-	}
-	if name := ws.GetVersion().GetName(); name != "" {
-		return wrapperspb.String(name)
-	}
-
 	return nil
 }
