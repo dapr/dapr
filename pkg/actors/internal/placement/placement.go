@@ -220,9 +220,6 @@ func (p *placement) LookupActor(ctx context.Context, req *api.LookupActorRequest
 		Response: ch,
 	})
 
-	timer := time.NewTimer(lookupActorMaxWait)
-	defer timer.Stop()
-
 	select {
 	case <-ctx.Done():
 		return nil, nil, nil, ctx.Err()
