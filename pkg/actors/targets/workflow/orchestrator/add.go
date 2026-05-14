@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -63,13 +64,15 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
 		o.activityResultAwaited.CompareAndSwap(true, false)
 	}
-	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)
-	state.AddToInbox(&e)
 
-	if err := o.saveInternalState(ctx, state); err != nil {
-		return err
-	}
-
+	// Create the wake-up reminder BEFORE mutating any state. If reminder
+	// creation fails we return without touching the in-memory inbox, so a
+	// retry sees clean state and dedup stays exact. If we instead saved
+	// first and then failed to create the reminder, the event would be
+	// durable but un-driven; if we mutated the in-memory inbox before save
+	// and then failed, a retry would see the orphan event in the cached
+	// inbox, dedup would drop it, and cron would auto-delete the reminder.
+	//
 	// For activity completion events, we want to create the reminder on the same app where this workflow actor is
 	// hosted, so use the source app from the router.
 	// For sub-orchestrator completion events we want to create the reminder on the current app.
@@ -83,7 +86,14 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	if len(state.History) > 0 {
 		dueTime = state.History[0].Timestamp.AsTime()
 	}
-	if _, err := o.createWorkflowReminder(ctx, reminderPrefixNewEvent, nil, dueTime, sourceAppID); err != nil {
+	reminderName := events.EventReminderName(reminderPrefixNewEvent, &e)
+	if err := o.createWorkflowReminder(ctx, reminderName, nil, dueTime, sourceAppID); err != nil {
+		return err
+	}
+
+	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)
+	state.AddToInbox(&e)
+	if err := o.saveInternalState(ctx, state); err != nil {
 		return err
 	}
 

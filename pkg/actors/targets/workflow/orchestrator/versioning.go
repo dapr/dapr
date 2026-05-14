@@ -99,9 +99,7 @@ func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.S
 	defer unlock()
 
 	// Clear in-memory state to save resources as stalling is indefinite.
-	o.state = nil
-	o.rstate = nil
-	o.ometa = nil
+	o.invalidateCachedState()
 
 	<-ctx.Done()
 
