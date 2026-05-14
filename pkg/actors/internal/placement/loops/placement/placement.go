@@ -181,7 +181,11 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		}
 	}
 
-	log.Infof("Connected to placement service: %s", p.connector.Address())
+	if recon.TransientPrior {
+		log.Debugf("Connected to placement service: %s", p.connector.Address())
+	} else {
+		log.Infof("Connected to placement service: %s", p.connector.Address())
+	}
 
 	p.idx++
 
@@ -210,7 +214,11 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		p.host.Entities = *recon.ActorTypes
 	}
 
-	log.Infof("Reporting initial host to placement service with initial types %v", p.host.GetEntities())
+	if recon.TransientPrior {
+		log.Debugf("Reporting initial host to placement service with initial types %v", p.host.GetEntities())
+	} else {
+		log.Infof("Reporting initial host to placement service with initial types %v", p.host.GetEntities())
+	}
 	p.dissLoop.Enqueue(&loops.ReportHost{
 		Host: proto.Clone(p.host).(*v1pb.Host),
 	})
@@ -245,8 +253,18 @@ func (p *placement) handleCloseStream(ctx context.Context, closeStream *loops.Co
 		return ctx.Err()
 	}
 
-	log.Infof("Placement stream closed: %v. Reconnecting...", closeStream.Error)
-	return p.handleReconnect(ctx, new(loops.PlacementReconnect))
+	// Classify this close so the matching reconnect's per-cycle log lines
+	// (Connected to placement service, Reporting initial host) follow the
+	// same level. Threaded onto the PlacementReconnect event we hand to
+	// handleReconnect rather than carried as receiver state, so there's no
+	// stale carry-over between unrelated close events.
+	transient := loops.IsTransientLeaderError(closeStream.Error)
+	if transient {
+		log.Debugf("Placement stream closed: %v. Reconnecting...", closeStream.Error)
+	} else {
+		log.Infof("Placement stream closed: %v. Reconnecting...", closeStream.Error)
+	}
+	return p.handleReconnect(ctx, &loops.PlacementReconnect{TransientPrior: transient})
 }
 
 func (p *placement) handleShutdown(shutdown *loops.Shutdown) {
