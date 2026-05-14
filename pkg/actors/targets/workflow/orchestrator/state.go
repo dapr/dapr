@@ -190,13 +190,15 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 		// ETagMismatch means a peer host wrote to this workflow's metadata
 		// row underneath us between our load and this save. The whole Multi
 		// rolled back atomically, so the durable state still reflects the
-		// peer's view; our in-memory state is stale. Invalidate so the next
-		// load reads fresh from the store, and surface the error so the
-		// caller's recoverable-error retry path re-runs the operation
-		// against the updated state.
+		// peer's view; our in-memory state is stale. The caller
+		// (signAndSaveState) handles cache invalidation on any error from
+		// this function; we just classify the error here so the log line
+		// distinguishes peer-write conflicts from real save failures, and
+		// the caller's recoverable-error retry path re-runs the operation
+		// against the updated state on the next firing.
 		var etagErr *contribstate.ETagError
 		if errors.As(err, &etagErr) && etagErr.Kind() == contribstate.ETagMismatch {
-			log.Debugf("Workflow actor '%s': save aborted by peer write (etag mismatch); invalidating cache and surfacing for retry", o.actorID)
+			log.Debugf("Workflow actor '%s': save aborted by peer write (etag mismatch); surfacing for retry", o.actorID)
 		}
 		return err
 	}
