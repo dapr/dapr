@@ -78,6 +78,8 @@ type placement struct {
 
 	dissTimeout time.Duration
 
+	lastCloseTransient bool
+
 	wg sync.WaitGroup
 }
 
@@ -181,7 +183,11 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		}
 	}
 
-	log.Infof("Connected to placement service: %s", p.connector.Address())
+	if p.lastCloseTransient {
+		log.Debugf("Connected to placement service: %s", p.connector.Address())
+	} else {
+		log.Infof("Connected to placement service: %s", p.connector.Address())
+	}
 
 	p.idx++
 
@@ -210,7 +216,11 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		p.host.Entities = *recon.ActorTypes
 	}
 
-	log.Infof("Reporting initial host to placement service with initial types %v", p.host.GetEntities())
+	if p.lastCloseTransient {
+		log.Debugf("Reporting initial host to placement service with initial types %v", p.host.GetEntities())
+	} else {
+		log.Infof("Reporting initial host to placement service with initial types %v", p.host.GetEntities())
+	}
 	p.dissLoop.Enqueue(&loops.ReportHost{
 		Host: proto.Clone(p.host).(*v1pb.Host),
 	})
@@ -245,7 +255,16 @@ func (p *placement) handleCloseStream(ctx context.Context, closeStream *loops.Co
 		return ctx.Err()
 	}
 
-	log.Infof("Placement stream closed: %v. Reconnecting...", closeStream.Error)
+	// Record whether this close was the expected "not a leader" rejection,
+	// then demote that path's reconnect line to debug so the cycle doesn't
+	// spam the log. The flag is read by handleReconnect to mirror the
+	// downgrade on the connect-side info lines.
+	p.lastCloseTransient = loops.IsTransientLeaderError(closeStream.Error)
+	if p.lastCloseTransient {
+		log.Debugf("Placement stream closed: %v. Reconnecting...", closeStream.Error)
+	} else {
+		log.Infof("Placement stream closed: %v. Reconnecting...", closeStream.Error)
+	}
 	return p.handleReconnect(ctx, new(loops.PlacementReconnect))
 }
 

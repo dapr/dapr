@@ -657,7 +657,7 @@ func TestLoadWorkflowState_TamperMarkerBypassesConfigurationError(t *testing.T) 
 			out := api.BulkStateResponse{}
 			for _, k := range req.Keys {
 				if v, ok := bulk[k]; ok {
-					out[k] = v
+					out[k] = api.BulkStateEntry{Data: v}
 				}
 			}
 			return out, nil
