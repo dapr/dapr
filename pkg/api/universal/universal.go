@@ -113,6 +113,15 @@ func (a *Universal) AppConnectionConfig() config.AppConnectionConfig {
 	return a.appConnectionConfig
 }
 
+// Actors returns the actor runtime. Callers (notably the gRPC API
+// handler for SubscribeActorEventsAlpha1) use it to drive
+// RegisterHosted/UnRegisterHosted imperatively from the stream
+// lifecycle, mirroring how subscriptions go through CompStore and
+// processor.Subscriber().
+func (a *Universal) Actors() actors.Interface {
+	return a.actors
+}
+
 func (a *Universal) ActorRouter(ctx context.Context) (router.Interface, error) {
 	if err := a.actors.WaitForRegisteredHosts(ctx); err != nil {
 		return nil, err
