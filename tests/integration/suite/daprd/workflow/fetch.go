@@ -71,7 +71,6 @@ func (f *fetch) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(t, `"return value"`, meta.GetOutput().GetValue())
 			assert.Equal(t, `my custom status`, meta.GetCustomStatus().GetValue())
 			assert.Nil(t, meta.GetVersion())
-
 		})
 
 		t.Run("grpc", func(t *testing.T) {
@@ -89,7 +88,8 @@ func (f *fetch) Run(t *testing.T, ctx context.Context) {
 		})
 
 		t.Run("http", func(t *testing.T) {
-			req, err := http.NewRequestWithContext(ctx,
+			req, err := http.NewRequestWithContext(
+				ctx,
 				http.MethodGet,
 				fmt.Sprintf("http://%s/v1.0-beta1/workflows/dapr/%s", f.workflow.Dapr().HTTPAddress(), id),
 				nil,
