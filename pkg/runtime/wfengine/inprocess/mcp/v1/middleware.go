@@ -17,11 +17,12 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/dapr/durabletask-go/task"
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // hookChildWorkflowOpts builds the CallChildWorkflow options for a middleware hook.
@@ -62,7 +63,7 @@ func runBeforeCallTool(
 			hookChildWorkflowOpts(hook.Workflow, input)...)
 		if hook.Mutate != nil && *hook.Mutate {
 			var mutated wfv1.MCPBeforeCallToolHookInput
-			if err := t.Await(&mutated); err != nil {
+			if err = t.Await(&mutated); err != nil {
 				return nil, err
 			}
 			arguments = structAsArgs(mutated.GetArguments())
@@ -73,7 +74,7 @@ func runBeforeCallTool(
 					hook.Workflow.WorkflowName, tool, serverName, err)
 			}
 		} else {
-			if err := t.Await(nil); err != nil {
+			if err = t.Await(nil); err != nil {
 				return nil, err
 			}
 		}
@@ -117,25 +118,26 @@ func runAfterCallTool(
 			hookChildWorkflowOpts(hook.Workflow, input)...)
 		if hook.Mutate != nil && *hook.Mutate {
 			var mutated wfv1.MCPAfterCallToolHookInput
-			if err := t.Await(&mutated); err != nil {
+			if err = t.Await(&mutated); err != nil {
 				return nil, fmt.Errorf("afterCallTool mutating hook %q failed for tool %q on MCPServer %q: %w",
 					hook.Workflow.WorkflowName, tool, serverName, err)
 			}
 			var mutatedResult mcp.CallToolResult
-			if err := json.Unmarshal(mutated.GetResult(), &mutatedResult); err != nil {
+			if err = json.Unmarshal(mutated.GetResult(), &mutatedResult); err != nil {
 				return nil, fmt.Errorf("afterCallTool mutating hook %q returned malformed result for tool %q on MCPServer %q: %w",
 					hook.Workflow.WorkflowName, tool, serverName, err)
 			}
 			result = &mutatedResult
 			// Update the input for the next hook so it sees the mutated result.
-			b, err := json.Marshal(result)
+			var b []byte
+			b, err = json.Marshal(result)
 			if err != nil {
 				return nil, fmt.Errorf("afterCallTool mutating hook %q returned unmarshalable result for tool %q on MCPServer %q: %w",
 					hook.Workflow.WorkflowName, tool, serverName, err)
 			}
 			input.Result = b
 		} else {
-			if err := t.Await(nil); err != nil {
+			if err = t.Await(nil); err != nil {
 				return nil, fmt.Errorf("afterCallTool hook %q failed for tool %q on MCPServer %q: %w",
 					hook.Workflow.WorkflowName, tool, serverName, err)
 			}
@@ -189,24 +191,25 @@ func runAfterListTools(
 			hookChildWorkflowOpts(hook.Workflow, input)...)
 		if hook.Mutate != nil && *hook.Mutate {
 			var mutated wfv1.MCPAfterListToolsHookInput
-			if err := t.Await(&mutated); err != nil {
+			if err = t.Await(&mutated); err != nil {
 				return nil, fmt.Errorf("afterListTools mutating hook %q failed for MCPServer %q: %w",
 					hook.Workflow.WorkflowName, serverName, err)
 			}
 			var mutatedResult mcp.ListToolsResult
-			if err := json.Unmarshal(mutated.GetResult(), &mutatedResult); err != nil {
+			if err = json.Unmarshal(mutated.GetResult(), &mutatedResult); err != nil {
 				return nil, fmt.Errorf("afterListTools mutating hook %q returned malformed result for MCPServer %q: %w",
 					hook.Workflow.WorkflowName, serverName, err)
 			}
 			result = &mutatedResult
-			b, err := json.Marshal(result)
+			var b []byte
+			b, err = json.Marshal(result)
 			if err != nil {
 				return nil, fmt.Errorf("afterListTools mutating hook %q returned unmarshalable result for MCPServer %q: %w",
 					hook.Workflow.WorkflowName, serverName, err)
 			}
 			input.Result = b
 		} else {
-			if err := t.Await(nil); err != nil {
+			if err = t.Await(nil); err != nil {
 				return nil, fmt.Errorf("afterListTools hook %q failed for MCPServer %q: %w",
 					hook.Workflow.WorkflowName, serverName, err)
 			}
