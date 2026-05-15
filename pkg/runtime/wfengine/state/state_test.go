@@ -491,6 +491,64 @@ func TestGetSaveRequest_MetadataIncludesSigningLengths(t *testing.T) {
 	assert.Equal(t, uint64(1), meta.GetSignatureLength())
 }
 
+// TestGetSaveRequest_MetadataETag asserts that the cached metadata ETag is
+// the version anchor for the whole save: it flows onto the metadata Upsert
+// when set, and is omitted (blind upsert semantics) when nil. The two cases
+// correspond to the steady-state save-after-load path and the first-save /
+// post-invalidation path respectively.
+func TestGetSaveRequest_MetadataETag(t *testing.T) {
+	t.Parallel()
+
+	findMetadataUpsert := func(t *testing.T, req *api.TransactionalRequest) api.TransactionalUpsert {
+		t.Helper()
+		for _, op := range req.Operations {
+			if op.Operation != api.Upsert {
+				continue
+			}
+			u, ok := op.Request.(api.TransactionalUpsert)
+			if !ok {
+				continue
+			}
+			if u.Key == MetadataKey {
+				return u
+			}
+		}
+		t.Fatalf("metadata upsert not found in save request")
+		return api.TransactionalUpsert{}
+	}
+
+	t.Run("etag set is attached to metadata upsert", func(t *testing.T) {
+		t.Parallel()
+
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		etag := "abc-123"
+		s.SetMetadataETag(&etag)
+
+		req, err := s.GetSaveRequest("actor1")
+		require.NoError(t, err)
+
+		u := findMetadataUpsert(t, req)
+		require.NotNil(t, u.ETag, "metadata upsert must carry the cached ETag when one is known")
+		assert.Equal(t, etag, *u.ETag)
+	})
+
+	t.Run("nil etag falls through to blind upsert", func(t *testing.T) {
+		t.Parallel()
+
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		// metadataETag intentionally left nil (brand-new workflow / post-
+		// invalidation reload).
+
+		req, err := s.GetSaveRequest("actor1")
+		require.NoError(t, err)
+
+		u := findMetadataUpsert(t, req)
+		assert.Nil(t, u.ETag, "no ETag means no version check - blind upsert")
+	})
+}
+
 func tamperMarkerEvent() *backend.HistoryEvent {
 	return &backend.HistoryEvent{
 		EventId:   -1,
@@ -657,7 +715,7 @@ func TestLoadWorkflowState_TamperMarkerBypassesConfigurationError(t *testing.T) 
 			out := api.BulkStateResponse{}
 			for _, k := range req.Keys {
 				if v, ok := bulk[k]; ok {
-					out[k] = v
+					out[k] = api.BulkStateEntry{Data: v}
 				}
 			}
 			return out, nil
