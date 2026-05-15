@@ -280,7 +280,7 @@ func realisticToolDef(t *testing.T, name string) *mcp.Tool {
 
 // TestMakeListToolsActivity_CacheHitSingleCall is a sanity check that the
 // cache-hit branch returns the cached tools verbatim and the response
-// round-trips through protojson without error.
+// round-trips through encoding/json without error.
 func TestMakeListToolsActivity_CacheHitSingleCall(t *testing.T) {
 	listCache := &toolListCache{}
 	listCache.store([]*mcp.Tool{
@@ -301,19 +301,19 @@ func TestMakeListToolsActivity_CacheHitSingleCall(t *testing.T) {
 	res, err := activity(&fakeActivityContext{ctx: context.Background()})
 	require.NoError(t, err)
 	listResp, ok := res.(*mcp.ListToolsResult)
-	require.True(t, ok, "expected *ListMCPToolsResponse, got %T", res)
+	require.True(t, ok, "expected *mcp.ListToolsResult, got %T", res)
 	require.Len(t, listResp.Tools, 2)
 
 	bytes, err := json.Marshal(listResp)
 	require.NoError(t, err, "json.Marshal of cache-hit response must succeed")
 
 	var rt mcp.ListToolsResult
-	require.NoError(t, json.Unmarshal(bytes, &rt), "protojson round-trip must succeed")
+	require.NoError(t, json.Unmarshal(bytes, &rt), "json round-trip must succeed")
 	require.Len(t, rt.Tools, 2)
 }
 
 // TestMakeListToolsActivity_CacheHitConcurrentRoundTrip exercises the
-// cache-hit path under concurrent load with a full protojson marshal /
+// cache-hit path under concurrent load with a full encoding/json marshal /
 // unmarshal round-trip per call.
 func TestMakeListToolsActivity_CacheHitConcurrentRoundTrip(t *testing.T) {
 	listCache := &toolListCache{}

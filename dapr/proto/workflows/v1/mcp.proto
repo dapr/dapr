@@ -24,13 +24,14 @@ option go_package = "github.com/dapr/dapr/pkg/proto/workflows/v1;workflows";
 
 // ---- Middleware hook framing messages ----
 //
-// MCP-spec wire types (Tool, CallToolResult, ContentBlock, etc) are NOT defined here.
-// They live as Go types under pkg/runtime/wfengine/inprocess/mcp/v1/spec/v<DATE>/,
+// MCP-spec wire types (Tool, CallToolResult, ContentBlock, etc.) are NOT defined here.
+// The Go wire types used by the runtime come from the upstream MCP SDK:
+// github.com/modelcontextprotocol/go-sdk/mcp
 // and are serialized to JSON matching the MCP specification.
 //
-// Hook input messages carry the MCP-spec JSON as `bytes result` so hook
+// Hook input messages carry MCP-spec JSON as `bytes result` so hook
 // workflows in any language can deserialize using their language's
-// MCP SDK without depending on Dapr-defined MCP types.
+// MCP SDK without depending on Dapr-defined MCP wire types.
 
 // MCPBeforeCallToolHookInput is received by beforeCallTool middleware hooks.
 // When the hook has mutate=true, its return value (same shape) replaces

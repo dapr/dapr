@@ -17,16 +17,15 @@ import "google.golang.org/protobuf/types/known/structpb"
 
 // argsAsStruct converts a Go map of tool arguments into google.protobuf.Struct
 // for use inside hook input messages (which carry arguments as Struct so any
-// language can deserialize them generically).
-func argsAsStruct(args map[string]any) *structpb.Struct {
+// language can deserialize them generically). Returns an error if the map
+// contains values that cannot be represented as a protobuf Struct so callers
+// can fail the workflow rather than silently dropping arguments (which would
+// change authz/mutation behavior).
+func argsAsStruct(args map[string]any) (*structpb.Struct, error) {
 	if args == nil {
-		return nil
+		return nil, nil
 	}
-	s, err := structpb.NewStruct(args)
-	if err != nil {
-		return nil
-	}
-	return s
+	return structpb.NewStruct(args)
 }
 
 // structAsArgs converts a google.protobuf.Struct back into a Go map.
