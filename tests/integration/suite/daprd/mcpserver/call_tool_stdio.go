@@ -15,6 +15,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"os/exec"
@@ -25,9 +26,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"encoding/json"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -35,6 +34,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func init() {

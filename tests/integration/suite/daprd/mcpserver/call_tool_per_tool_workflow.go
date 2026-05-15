@@ -15,6 +15,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
@@ -23,7 +24,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"encoding/json"
 
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"

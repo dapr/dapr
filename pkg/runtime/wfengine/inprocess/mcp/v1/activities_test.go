@@ -15,6 +15,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"sort"
 	"sync"
@@ -24,14 +25,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"encoding/json"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
-	
-	mcptypes "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/types"
+
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	mcpauth "github.com/dapr/dapr/pkg/runtime/mcp/auth"
+	mcptypes "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/types"
 	fakesecurity "github.com/dapr/dapr/pkg/security/fake"
 )
 

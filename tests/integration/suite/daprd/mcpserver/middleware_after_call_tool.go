@@ -15,6 +15,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -26,7 +27,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"encoding/json"
 
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"

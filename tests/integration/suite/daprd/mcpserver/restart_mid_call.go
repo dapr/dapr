@@ -15,6 +15,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync/atomic"
@@ -24,7 +25,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"encoding/json"
 
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
