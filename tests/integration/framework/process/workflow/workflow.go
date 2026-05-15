@@ -39,6 +39,7 @@ type Workflow struct {
 	db           *sqlite.SQLite
 	place        *placement.Placement
 	sched        *scheduler.Scheduler
+	ownsSched    bool
 	sentry       *sentry.Sentry
 	daprds       []*daprd.Daprd
 }
@@ -80,7 +81,12 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	}
 
 	place := placement.New(t, placementOpts...)
-	sched := scheduler.New(t, schedulerOpts...)
+	sched := opts.schedulerInstance
+	ownsSched := false
+	if sched == nil {
+		sched = scheduler.New(t, schedulerOpts...)
+		ownsSched = true
+	}
 
 	baseDopts := []daprd.Option{
 		daprd.WithPlacementAddresses(place.Address()),
@@ -106,7 +112,14 @@ spec:
 		}
 	}
 
-	baseDopts = append(baseDopts, daprd.WithScheduler(sched))
+	if opts.schedulerAddress != nil {
+		// Reset so a caller-supplied override (e.g. a proxy in front of the
+		// scheduler) truly replaces any addresses appended by other option
+		// layers, instead of being one entry among many.
+		baseDopts = append(baseDopts, daprd.WithSchedulerAddressesReset(*opts.schedulerAddress))
+	} else {
+		baseDopts = append(baseDopts, daprd.WithScheduler(sched))
+	}
 
 	signingDisabled := make(map[int]bool, len(opts.signingDisabled))
 	for _, idx := range opts.signingDisabled {
@@ -155,6 +168,7 @@ spec:
 		db:           db,
 		place:        place,
 		sched:        sched,
+		ownsSched:    ownsSched,
 		sentry:       sen,
 		daprds:       daprds,
 	}
@@ -172,7 +186,7 @@ func (w *Workflow) Run(t *testing.T, ctx context.Context) {
 		w.sentry.Run(t, ctx)
 	}
 	w.place.Run(t, ctx)
-	if w.sched != nil {
+	if w.ownsSched {
 		w.sched.Run(t, ctx)
 	}
 	for _, daprd := range w.daprds {
@@ -184,7 +198,7 @@ func (w *Workflow) Cleanup(t *testing.T) {
 	for _, daprd := range w.daprds {
 		daprd.Cleanup(t)
 	}
-	if w.sched != nil {
+	if w.ownsSched {
 		w.sched.Cleanup(t)
 	}
 	w.place.Cleanup(t)
