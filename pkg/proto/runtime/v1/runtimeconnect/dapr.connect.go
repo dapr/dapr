@@ -105,6 +105,9 @@ const (
 	DaprExecuteActorStateTransactionProcedure = "/dapr.proto.runtime.v1.Dapr/ExecuteActorStateTransaction"
 	// DaprInvokeActorProcedure is the fully-qualified name of the Dapr's InvokeActor RPC.
 	DaprInvokeActorProcedure = "/dapr.proto.runtime.v1.Dapr/InvokeActor"
+	// DaprSubscribeActorEventsAlpha1Procedure is the fully-qualified name of the Dapr's
+	// SubscribeActorEventsAlpha1 RPC.
+	DaprSubscribeActorEventsAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/SubscribeActorEventsAlpha1"
 	// DaprGetConfigurationAlpha1Procedure is the fully-qualified name of the Dapr's
 	// GetConfigurationAlpha1 RPC.
 	DaprGetConfigurationAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/GetConfigurationAlpha1"
@@ -272,6 +275,13 @@ type DaprClient interface {
 	ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(context.Context, *connect.Request[v1.InvokeActorRequest]) (*connect.Response[v1.InvokeActorResponse], error)
+	// SubscribeActorEventsAlpha1 is the app-initiated stream over which an
+	// actor host receives invocation, reminder, timer, and deactivation
+	// callbacks from Dapr. The first message the app sends must be a
+	// SubscribeActorEventsRequestInitialAlpha1 registering the actor types
+	// it hosts. Apps using this RPC do not need to expose a server port for
+	// actor callbacks.
+	SubscribeActorEventsAlpha1(context.Context) *connect.BidiStreamForClient[v1.SubscribeActorEventsRequestAlpha1, v1.SubscribeActorEventsResponseAlpha1]
 	// GetConfiguration gets configuration from configuration store.
 	GetConfigurationAlpha1(context.Context, *connect.Request[v1.GetConfigurationRequest]) (*connect.Response[v1.GetConfigurationResponse], error)
 	// GetConfiguration gets configuration from configuration store.
@@ -549,6 +559,12 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			httpClient,
 			baseURL+DaprInvokeActorProcedure,
 			connect.WithSchema(daprMethods.ByName("InvokeActor")),
+			connect.WithClientOptions(opts...),
+		),
+		subscribeActorEventsAlpha1: connect.NewClient[v1.SubscribeActorEventsRequestAlpha1, v1.SubscribeActorEventsResponseAlpha1](
+			httpClient,
+			baseURL+DaprSubscribeActorEventsAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("SubscribeActorEventsAlpha1")),
 			connect.WithClientOptions(opts...),
 		),
 		getConfigurationAlpha1: connect.NewClient[v1.GetConfigurationRequest, v1.GetConfigurationResponse](
@@ -857,6 +873,7 @@ type daprClient struct {
 	getActorReminder               *connect.Client[v1.GetActorReminderRequest, v1.GetActorReminderResponse]
 	executeActorStateTransaction   *connect.Client[v1.ExecuteActorStateTransactionRequest, emptypb.Empty]
 	invokeActor                    *connect.Client[v1.InvokeActorRequest, v1.InvokeActorResponse]
+	subscribeActorEventsAlpha1     *connect.Client[v1.SubscribeActorEventsRequestAlpha1, v1.SubscribeActorEventsResponseAlpha1]
 	getConfigurationAlpha1         *connect.Client[v1.GetConfigurationRequest, v1.GetConfigurationResponse]
 	getConfiguration               *connect.Client[v1.GetConfigurationRequest, v1.GetConfigurationResponse]
 	subscribeConfigurationAlpha1   *connect.Client[v1.SubscribeConfigurationRequest, v1.SubscribeConfigurationResponse]
@@ -1030,6 +1047,11 @@ func (c *daprClient) ExecuteActorStateTransaction(ctx context.Context, req *conn
 // InvokeActor calls dapr.proto.runtime.v1.Dapr.InvokeActor.
 func (c *daprClient) InvokeActor(ctx context.Context, req *connect.Request[v1.InvokeActorRequest]) (*connect.Response[v1.InvokeActorResponse], error) {
 	return c.invokeActor.CallUnary(ctx, req)
+}
+
+// SubscribeActorEventsAlpha1 calls dapr.proto.runtime.v1.Dapr.SubscribeActorEventsAlpha1.
+func (c *daprClient) SubscribeActorEventsAlpha1(ctx context.Context) *connect.BidiStreamForClient[v1.SubscribeActorEventsRequestAlpha1, v1.SubscribeActorEventsResponseAlpha1] {
+	return c.subscribeActorEventsAlpha1.CallBidiStream(ctx)
 }
 
 // GetConfigurationAlpha1 calls dapr.proto.runtime.v1.Dapr.GetConfigurationAlpha1.
@@ -1340,6 +1362,13 @@ type DaprHandler interface {
 	ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(context.Context, *connect.Request[v1.InvokeActorRequest]) (*connect.Response[v1.InvokeActorResponse], error)
+	// SubscribeActorEventsAlpha1 is the app-initiated stream over which an
+	// actor host receives invocation, reminder, timer, and deactivation
+	// callbacks from Dapr. The first message the app sends must be a
+	// SubscribeActorEventsRequestInitialAlpha1 registering the actor types
+	// it hosts. Apps using this RPC do not need to expose a server port for
+	// actor callbacks.
+	SubscribeActorEventsAlpha1(context.Context, *connect.BidiStream[v1.SubscribeActorEventsRequestAlpha1, v1.SubscribeActorEventsResponseAlpha1]) error
 	// GetConfiguration gets configuration from configuration store.
 	GetConfigurationAlpha1(context.Context, *connect.Request[v1.GetConfigurationRequest]) (*connect.Response[v1.GetConfigurationResponse], error)
 	// GetConfiguration gets configuration from configuration store.
@@ -1613,6 +1642,12 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 		DaprInvokeActorProcedure,
 		svc.InvokeActor,
 		connect.WithSchema(daprMethods.ByName("InvokeActor")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprSubscribeActorEventsAlpha1Handler := connect.NewBidiStreamHandler(
+		DaprSubscribeActorEventsAlpha1Procedure,
+		svc.SubscribeActorEventsAlpha1,
+		connect.WithSchema(daprMethods.ByName("SubscribeActorEventsAlpha1")),
 		connect.WithHandlerOptions(opts...),
 	)
 	daprGetConfigurationAlpha1Handler := connect.NewUnaryHandler(
@@ -1943,6 +1978,8 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 			daprExecuteActorStateTransactionHandler.ServeHTTP(w, r)
 		case DaprInvokeActorProcedure:
 			daprInvokeActorHandler.ServeHTTP(w, r)
+		case DaprSubscribeActorEventsAlpha1Procedure:
+			daprSubscribeActorEventsAlpha1Handler.ServeHTTP(w, r)
 		case DaprGetConfigurationAlpha1Procedure:
 			daprGetConfigurationAlpha1Handler.ServeHTTP(w, r)
 		case DaprGetConfigurationProcedure:
@@ -2142,6 +2179,10 @@ func (UnimplementedDaprHandler) ExecuteActorStateTransaction(context.Context, *c
 
 func (UnimplementedDaprHandler) InvokeActor(context.Context, *connect.Request[v1.InvokeActorRequest]) (*connect.Response[v1.InvokeActorResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.InvokeActor is not implemented"))
+}
+
+func (UnimplementedDaprHandler) SubscribeActorEventsAlpha1(context.Context, *connect.BidiStream[v1.SubscribeActorEventsRequestAlpha1, v1.SubscribeActorEventsResponseAlpha1]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.SubscribeActorEventsAlpha1 is not implemented"))
 }
 
 func (UnimplementedDaprHandler) GetConfigurationAlpha1(context.Context, *connect.Request[v1.GetConfigurationRequest]) (*connect.Response[v1.GetConfigurationResponse], error) {

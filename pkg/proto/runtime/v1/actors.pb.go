@@ -23,6 +23,7 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	anypb "google.golang.org/protobuf/types/known/anypb"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -1264,6 +1265,1180 @@ func (*UnregisterActorRemindersByTypeResponse) Descriptor() ([]byte, []int) {
 	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{17}
 }
 
+// SubscribeActorEventsRequestAlpha1 is a message flowing from the app to
+// daprd on the actor event stream. The first message must be the initial
+// request (registering the actor host); every subsequent message must be a
+// response correlated by id to a request previously emitted by daprd.
+type SubscribeActorEventsRequestAlpha1 struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Types that are assignable to RequestType:
+	//
+	//	*SubscribeActorEventsRequestAlpha1_InitialRequest
+	//	*SubscribeActorEventsRequestAlpha1_InvokeResponse
+	//	*SubscribeActorEventsRequestAlpha1_ReminderResponse
+	//	*SubscribeActorEventsRequestAlpha1_TimerResponse
+	//	*SubscribeActorEventsRequestAlpha1_DeactivateResponse
+	//	*SubscribeActorEventsRequestAlpha1_RequestFailed
+	RequestType isSubscribeActorEventsRequestAlpha1_RequestType `protobuf_oneof:"request_type"`
+}
+
+func (x *SubscribeActorEventsRequestAlpha1) Reset() {
+	*x = SubscribeActorEventsRequestAlpha1{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[18]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubscribeActorEventsRequestAlpha1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeActorEventsRequestAlpha1) ProtoMessage() {}
+
+func (x *SubscribeActorEventsRequestAlpha1) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[18]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeActorEventsRequestAlpha1.ProtoReflect.Descriptor instead.
+func (*SubscribeActorEventsRequestAlpha1) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{18}
+}
+
+func (m *SubscribeActorEventsRequestAlpha1) GetRequestType() isSubscribeActorEventsRequestAlpha1_RequestType {
+	if m != nil {
+		return m.RequestType
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsRequestAlpha1) GetInitialRequest() *SubscribeActorEventsRequestInitialAlpha1 {
+	if x, ok := x.GetRequestType().(*SubscribeActorEventsRequestAlpha1_InitialRequest); ok {
+		return x.InitialRequest
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsRequestAlpha1) GetInvokeResponse() *SubscribeActorEventsRequestInvokeResponseAlpha1 {
+	if x, ok := x.GetRequestType().(*SubscribeActorEventsRequestAlpha1_InvokeResponse); ok {
+		return x.InvokeResponse
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsRequestAlpha1) GetReminderResponse() *SubscribeActorEventsRequestReminderResponseAlpha1 {
+	if x, ok := x.GetRequestType().(*SubscribeActorEventsRequestAlpha1_ReminderResponse); ok {
+		return x.ReminderResponse
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsRequestAlpha1) GetTimerResponse() *SubscribeActorEventsRequestReminderResponseAlpha1 {
+	if x, ok := x.GetRequestType().(*SubscribeActorEventsRequestAlpha1_TimerResponse); ok {
+		return x.TimerResponse
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsRequestAlpha1) GetDeactivateResponse() *SubscribeActorEventsRequestDeactivateResponseAlpha1 {
+	if x, ok := x.GetRequestType().(*SubscribeActorEventsRequestAlpha1_DeactivateResponse); ok {
+		return x.DeactivateResponse
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsRequestAlpha1) GetRequestFailed() *SubscribeActorEventsRequestFailedAlpha1 {
+	if x, ok := x.GetRequestType().(*SubscribeActorEventsRequestAlpha1_RequestFailed); ok {
+		return x.RequestFailed
+	}
+	return nil
+}
+
+type isSubscribeActorEventsRequestAlpha1_RequestType interface {
+	isSubscribeActorEventsRequestAlpha1_RequestType()
+}
+
+type SubscribeActorEventsRequestAlpha1_InitialRequest struct {
+	InitialRequest *SubscribeActorEventsRequestInitialAlpha1 `protobuf:"bytes,1,opt,name=initial_request,json=initialRequest,proto3,oneof"`
+}
+
+type SubscribeActorEventsRequestAlpha1_InvokeResponse struct {
+	InvokeResponse *SubscribeActorEventsRequestInvokeResponseAlpha1 `protobuf:"bytes,2,opt,name=invoke_response,json=invokeResponse,proto3,oneof"`
+}
+
+type SubscribeActorEventsRequestAlpha1_ReminderResponse struct {
+	ReminderResponse *SubscribeActorEventsRequestReminderResponseAlpha1 `protobuf:"bytes,3,opt,name=reminder_response,json=reminderResponse,proto3,oneof"`
+}
+
+type SubscribeActorEventsRequestAlpha1_TimerResponse struct {
+	TimerResponse *SubscribeActorEventsRequestReminderResponseAlpha1 `protobuf:"bytes,4,opt,name=timer_response,json=timerResponse,proto3,oneof"`
+}
+
+type SubscribeActorEventsRequestAlpha1_DeactivateResponse struct {
+	DeactivateResponse *SubscribeActorEventsRequestDeactivateResponseAlpha1 `protobuf:"bytes,5,opt,name=deactivate_response,json=deactivateResponse,proto3,oneof"`
+}
+
+type SubscribeActorEventsRequestAlpha1_RequestFailed struct {
+	// request_failed is sent in place of a typed response when the app
+	// cannot process the request (e.g. the actor method does not exist).
+	// The id correlates back to the originating request; the code is a gRPC
+	// status code (see google.golang.org/grpc/codes) and lets daprd map
+	// codes.NotFound to a permanent, non-retryable failure.
+	RequestFailed *SubscribeActorEventsRequestFailedAlpha1 `protobuf:"bytes,6,opt,name=request_failed,json=requestFailed,proto3,oneof"`
+}
+
+func (*SubscribeActorEventsRequestAlpha1_InitialRequest) isSubscribeActorEventsRequestAlpha1_RequestType() {
+}
+
+func (*SubscribeActorEventsRequestAlpha1_InvokeResponse) isSubscribeActorEventsRequestAlpha1_RequestType() {
+}
+
+func (*SubscribeActorEventsRequestAlpha1_ReminderResponse) isSubscribeActorEventsRequestAlpha1_RequestType() {
+}
+
+func (*SubscribeActorEventsRequestAlpha1_TimerResponse) isSubscribeActorEventsRequestAlpha1_RequestType() {
+}
+
+func (*SubscribeActorEventsRequestAlpha1_DeactivateResponse) isSubscribeActorEventsRequestAlpha1_RequestType() {
+}
+
+func (*SubscribeActorEventsRequestAlpha1_RequestFailed) isSubscribeActorEventsRequestAlpha1_RequestType() {
+}
+
+// SubscribeActorEventsRequestInitialAlpha1 is the first message the app
+// sends when opening the stream. It advertises the actor types the app
+// hosts and the runtime configuration that applies to them.
+type SubscribeActorEventsRequestInitialAlpha1 struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// entities is the list of actor types this app hosts.
+	Entities []string `protobuf:"bytes,1,rep,name=entities,proto3" json:"entities,omitempty"`
+	// actor_idle_timeout is the default idle timeout for all actor types.
+	// Unset means use Dapr's default.
+	ActorIdleTimeout *durationpb.Duration `protobuf:"bytes,2,opt,name=actor_idle_timeout,json=actorIdleTimeout,proto3,oneof" json:"actor_idle_timeout,omitempty"`
+	// drain_ongoing_call_timeout is the duration Dapr waits for ongoing
+	// invocations to finish when an actor is rebalanced. Unset means use
+	// Dapr's default.
+	DrainOngoingCallTimeout *durationpb.Duration `protobuf:"bytes,3,opt,name=drain_ongoing_call_timeout,json=drainOngoingCallTimeout,proto3,oneof" json:"drain_ongoing_call_timeout,omitempty"`
+	// drain_rebalanced_actors, when true, instructs Dapr to drain invocations
+	// from a rebalanced actor rather than aborting them.
+	DrainRebalancedActors *bool `protobuf:"varint,4,opt,name=drain_rebalanced_actors,json=drainRebalancedActors,proto3,oneof" json:"drain_rebalanced_actors,omitempty"`
+	// reentrancy is the default reentrancy configuration applied to all
+	// actor types.
+	Reentrancy *ActorReentrancyConfig `protobuf:"bytes,5,opt,name=reentrancy,proto3,oneof" json:"reentrancy,omitempty"`
+	// entities_config applies per-actor-type overrides on top of the
+	// defaults above.
+	EntitiesConfig []*ActorEntityConfig `protobuf:"bytes,6,rep,name=entities_config,json=entitiesConfig,proto3" json:"entities_config,omitempty"`
+}
+
+func (x *SubscribeActorEventsRequestInitialAlpha1) Reset() {
+	*x = SubscribeActorEventsRequestInitialAlpha1{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[19]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubscribeActorEventsRequestInitialAlpha1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeActorEventsRequestInitialAlpha1) ProtoMessage() {}
+
+func (x *SubscribeActorEventsRequestInitialAlpha1) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[19]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeActorEventsRequestInitialAlpha1.ProtoReflect.Descriptor instead.
+func (*SubscribeActorEventsRequestInitialAlpha1) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *SubscribeActorEventsRequestInitialAlpha1) GetEntities() []string {
+	if x != nil {
+		return x.Entities
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsRequestInitialAlpha1) GetActorIdleTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.ActorIdleTimeout
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsRequestInitialAlpha1) GetDrainOngoingCallTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.DrainOngoingCallTimeout
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsRequestInitialAlpha1) GetDrainRebalancedActors() bool {
+	if x != nil && x.DrainRebalancedActors != nil {
+		return *x.DrainRebalancedActors
+	}
+	return false
+}
+
+func (x *SubscribeActorEventsRequestInitialAlpha1) GetReentrancy() *ActorReentrancyConfig {
+	if x != nil {
+		return x.Reentrancy
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsRequestInitialAlpha1) GetEntitiesConfig() []*ActorEntityConfig {
+	if x != nil {
+		return x.EntitiesConfig
+	}
+	return nil
+}
+
+// SubscribeActorEventsRequestInvokeResponseAlpha1 is the app's response to
+// a SubscribeActorEventsResponseInvokeRequestAlpha1 (actor method call).
+type SubscribeActorEventsRequestInvokeResponseAlpha1 struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id   string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Data []byte `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	// metadata carries response-level headers, including "content-type".
+	Metadata map[string]string `protobuf:"bytes,3,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	// error, when true, signals that data is an application-defined error
+	// payload returned from the actor method. Dapr passes the payload
+	// through to the original caller verbatim.
+	Error bool `protobuf:"varint,4,opt,name=error,proto3" json:"error,omitempty"`
+}
+
+func (x *SubscribeActorEventsRequestInvokeResponseAlpha1) Reset() {
+	*x = SubscribeActorEventsRequestInvokeResponseAlpha1{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[20]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubscribeActorEventsRequestInvokeResponseAlpha1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeActorEventsRequestInvokeResponseAlpha1) ProtoMessage() {}
+
+func (x *SubscribeActorEventsRequestInvokeResponseAlpha1) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[20]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeActorEventsRequestInvokeResponseAlpha1.ProtoReflect.Descriptor instead.
+func (*SubscribeActorEventsRequestInvokeResponseAlpha1) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *SubscribeActorEventsRequestInvokeResponseAlpha1) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsRequestInvokeResponseAlpha1) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsRequestInvokeResponseAlpha1) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsRequestInvokeResponseAlpha1) GetError() bool {
+	if x != nil {
+		return x.Error
+	}
+	return false
+}
+
+// SubscribeActorEventsRequestReminderResponseAlpha1 is the app's response
+// to both reminder and timer callbacks. The cancel flag signals that the
+// reminder or timer should not fire again.
+type SubscribeActorEventsRequestReminderResponseAlpha1 struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id     string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Cancel bool   `protobuf:"varint,2,opt,name=cancel,proto3" json:"cancel,omitempty"`
+}
+
+func (x *SubscribeActorEventsRequestReminderResponseAlpha1) Reset() {
+	*x = SubscribeActorEventsRequestReminderResponseAlpha1{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[21]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubscribeActorEventsRequestReminderResponseAlpha1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeActorEventsRequestReminderResponseAlpha1) ProtoMessage() {}
+
+func (x *SubscribeActorEventsRequestReminderResponseAlpha1) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[21]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeActorEventsRequestReminderResponseAlpha1.ProtoReflect.Descriptor instead.
+func (*SubscribeActorEventsRequestReminderResponseAlpha1) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *SubscribeActorEventsRequestReminderResponseAlpha1) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsRequestReminderResponseAlpha1) GetCancel() bool {
+	if x != nil {
+		return x.Cancel
+	}
+	return false
+}
+
+// SubscribeActorEventsRequestDeactivateResponseAlpha1 is the app's ack
+// for a SubscribeActorEventsResponseDeactivateRequestAlpha1.
+type SubscribeActorEventsRequestDeactivateResponseAlpha1 struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+}
+
+func (x *SubscribeActorEventsRequestDeactivateResponseAlpha1) Reset() {
+	*x = SubscribeActorEventsRequestDeactivateResponseAlpha1{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[22]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubscribeActorEventsRequestDeactivateResponseAlpha1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeActorEventsRequestDeactivateResponseAlpha1) ProtoMessage() {}
+
+func (x *SubscribeActorEventsRequestDeactivateResponseAlpha1) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[22]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeActorEventsRequestDeactivateResponseAlpha1.ProtoReflect.Descriptor instead.
+func (*SubscribeActorEventsRequestDeactivateResponseAlpha1) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *SubscribeActorEventsRequestDeactivateResponseAlpha1) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// SubscribeActorEventsRequestFailedAlpha1 signals an app-side failure for
+// a previously received request. The id correlates with the originating
+// request, the code is a gRPC status code.
+type SubscribeActorEventsRequestFailedAlpha1 struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id      string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Code    uint32 `protobuf:"varint,2,opt,name=code,proto3" json:"code,omitempty"`
+	Message string `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+}
+
+func (x *SubscribeActorEventsRequestFailedAlpha1) Reset() {
+	*x = SubscribeActorEventsRequestFailedAlpha1{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[23]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubscribeActorEventsRequestFailedAlpha1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeActorEventsRequestFailedAlpha1) ProtoMessage() {}
+
+func (x *SubscribeActorEventsRequestFailedAlpha1) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[23]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeActorEventsRequestFailedAlpha1.ProtoReflect.Descriptor instead.
+func (*SubscribeActorEventsRequestFailedAlpha1) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *SubscribeActorEventsRequestFailedAlpha1) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsRequestFailedAlpha1) GetCode() uint32 {
+	if x != nil {
+		return x.Code
+	}
+	return 0
+}
+
+func (x *SubscribeActorEventsRequestFailedAlpha1) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+// SubscribeActorEventsResponseAlpha1 is a message flowing from daprd to
+// the app on the actor event stream. The first message is the initial
+// response acknowledging registration; every subsequent message is a
+// callback request with a unique id the app must echo on its response.
+type SubscribeActorEventsResponseAlpha1 struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Types that are assignable to ResponseType:
+	//
+	//	*SubscribeActorEventsResponseAlpha1_InitialResponse
+	//	*SubscribeActorEventsResponseAlpha1_InvokeRequest
+	//	*SubscribeActorEventsResponseAlpha1_ReminderRequest
+	//	*SubscribeActorEventsResponseAlpha1_TimerRequest
+	//	*SubscribeActorEventsResponseAlpha1_DeactivateRequest
+	ResponseType isSubscribeActorEventsResponseAlpha1_ResponseType `protobuf_oneof:"response_type"`
+}
+
+func (x *SubscribeActorEventsResponseAlpha1) Reset() {
+	*x = SubscribeActorEventsResponseAlpha1{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[24]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubscribeActorEventsResponseAlpha1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeActorEventsResponseAlpha1) ProtoMessage() {}
+
+func (x *SubscribeActorEventsResponseAlpha1) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[24]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeActorEventsResponseAlpha1.ProtoReflect.Descriptor instead.
+func (*SubscribeActorEventsResponseAlpha1) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{24}
+}
+
+func (m *SubscribeActorEventsResponseAlpha1) GetResponseType() isSubscribeActorEventsResponseAlpha1_ResponseType {
+	if m != nil {
+		return m.ResponseType
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsResponseAlpha1) GetInitialResponse() *SubscribeActorEventsResponseInitialAlpha1 {
+	if x, ok := x.GetResponseType().(*SubscribeActorEventsResponseAlpha1_InitialResponse); ok {
+		return x.InitialResponse
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsResponseAlpha1) GetInvokeRequest() *SubscribeActorEventsResponseInvokeRequestAlpha1 {
+	if x, ok := x.GetResponseType().(*SubscribeActorEventsResponseAlpha1_InvokeRequest); ok {
+		return x.InvokeRequest
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsResponseAlpha1) GetReminderRequest() *SubscribeActorEventsResponseReminderRequestAlpha1 {
+	if x, ok := x.GetResponseType().(*SubscribeActorEventsResponseAlpha1_ReminderRequest); ok {
+		return x.ReminderRequest
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsResponseAlpha1) GetTimerRequest() *SubscribeActorEventsResponseTimerRequestAlpha1 {
+	if x, ok := x.GetResponseType().(*SubscribeActorEventsResponseAlpha1_TimerRequest); ok {
+		return x.TimerRequest
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsResponseAlpha1) GetDeactivateRequest() *SubscribeActorEventsResponseDeactivateRequestAlpha1 {
+	if x, ok := x.GetResponseType().(*SubscribeActorEventsResponseAlpha1_DeactivateRequest); ok {
+		return x.DeactivateRequest
+	}
+	return nil
+}
+
+type isSubscribeActorEventsResponseAlpha1_ResponseType interface {
+	isSubscribeActorEventsResponseAlpha1_ResponseType()
+}
+
+type SubscribeActorEventsResponseAlpha1_InitialResponse struct {
+	InitialResponse *SubscribeActorEventsResponseInitialAlpha1 `protobuf:"bytes,1,opt,name=initial_response,json=initialResponse,proto3,oneof"`
+}
+
+type SubscribeActorEventsResponseAlpha1_InvokeRequest struct {
+	InvokeRequest *SubscribeActorEventsResponseInvokeRequestAlpha1 `protobuf:"bytes,2,opt,name=invoke_request,json=invokeRequest,proto3,oneof"`
+}
+
+type SubscribeActorEventsResponseAlpha1_ReminderRequest struct {
+	ReminderRequest *SubscribeActorEventsResponseReminderRequestAlpha1 `protobuf:"bytes,3,opt,name=reminder_request,json=reminderRequest,proto3,oneof"`
+}
+
+type SubscribeActorEventsResponseAlpha1_TimerRequest struct {
+	TimerRequest *SubscribeActorEventsResponseTimerRequestAlpha1 `protobuf:"bytes,4,opt,name=timer_request,json=timerRequest,proto3,oneof"`
+}
+
+type SubscribeActorEventsResponseAlpha1_DeactivateRequest struct {
+	DeactivateRequest *SubscribeActorEventsResponseDeactivateRequestAlpha1 `protobuf:"bytes,5,opt,name=deactivate_request,json=deactivateRequest,proto3,oneof"`
+}
+
+func (*SubscribeActorEventsResponseAlpha1_InitialResponse) isSubscribeActorEventsResponseAlpha1_ResponseType() {
+}
+
+func (*SubscribeActorEventsResponseAlpha1_InvokeRequest) isSubscribeActorEventsResponseAlpha1_ResponseType() {
+}
+
+func (*SubscribeActorEventsResponseAlpha1_ReminderRequest) isSubscribeActorEventsResponseAlpha1_ResponseType() {
+}
+
+func (*SubscribeActorEventsResponseAlpha1_TimerRequest) isSubscribeActorEventsResponseAlpha1_ResponseType() {
+}
+
+func (*SubscribeActorEventsResponseAlpha1_DeactivateRequest) isSubscribeActorEventsResponseAlpha1_ResponseType() {
+}
+
+// SubscribeActorEventsResponseInitialAlpha1 acks the app's registration
+// message. An empty body indicates success; failures are surfaced as a
+// gRPC error on the stream itself.
+type SubscribeActorEventsResponseInitialAlpha1 struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *SubscribeActorEventsResponseInitialAlpha1) Reset() {
+	*x = SubscribeActorEventsResponseInitialAlpha1{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[25]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubscribeActorEventsResponseInitialAlpha1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeActorEventsResponseInitialAlpha1) ProtoMessage() {}
+
+func (x *SubscribeActorEventsResponseInitialAlpha1) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[25]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeActorEventsResponseInitialAlpha1.ProtoReflect.Descriptor instead.
+func (*SubscribeActorEventsResponseInitialAlpha1) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{25}
+}
+
+// SubscribeActorEventsResponseInvokeRequestAlpha1 is the callback payload
+// daprd sends when an actor method is invoked. The app echoes id on its
+// SubscribeActorEventsRequestInvokeResponseAlpha1.
+type SubscribeActorEventsResponseInvokeRequestAlpha1 struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id        string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ActorType string `protobuf:"bytes,2,opt,name=actor_type,json=actorType,proto3" json:"actor_type,omitempty"`
+	ActorId   string `protobuf:"bytes,3,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	Method    string `protobuf:"bytes,4,opt,name=method,proto3" json:"method,omitempty"`
+	Data      []byte `protobuf:"bytes,5,opt,name=data,proto3" json:"data,omitempty"`
+	// metadata carries request-level headers from the original caller,
+	// including "content-type" and "Dapr-Reentrancy-Id" when reentrancy is
+	// enabled for the actor type.
+	Metadata map[string]string `protobuf:"bytes,6,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+}
+
+func (x *SubscribeActorEventsResponseInvokeRequestAlpha1) Reset() {
+	*x = SubscribeActorEventsResponseInvokeRequestAlpha1{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[26]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubscribeActorEventsResponseInvokeRequestAlpha1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeActorEventsResponseInvokeRequestAlpha1) ProtoMessage() {}
+
+func (x *SubscribeActorEventsResponseInvokeRequestAlpha1) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[26]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeActorEventsResponseInvokeRequestAlpha1.ProtoReflect.Descriptor instead.
+func (*SubscribeActorEventsResponseInvokeRequestAlpha1) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *SubscribeActorEventsResponseInvokeRequestAlpha1) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseInvokeRequestAlpha1) GetActorType() string {
+	if x != nil {
+		return x.ActorType
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseInvokeRequestAlpha1) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseInvokeRequestAlpha1) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseInvokeRequestAlpha1) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *SubscribeActorEventsResponseInvokeRequestAlpha1) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+// SubscribeActorEventsResponseReminderRequestAlpha1 is the callback
+// payload daprd sends when an actor reminder fires.
+type SubscribeActorEventsResponseReminderRequestAlpha1 struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id        string     `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ActorType string     `protobuf:"bytes,2,opt,name=actor_type,json=actorType,proto3" json:"actor_type,omitempty"`
+	ActorId   string     `protobuf:"bytes,3,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	Name      string     `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	DueTime   string     `protobuf:"bytes,5,opt,name=due_time,json=dueTime,proto3" json:"due_time,omitempty"`
+	Period    string     `protobuf:"bytes,6,opt,name=period,proto3" json:"period,omitempty"`
+	Data      *anypb.Any `protobuf:"bytes,7,opt,name=data,proto3" json:"data,omitempty"`
+}
+
+func (x *SubscribeActorEventsResponseReminderRequestAlpha1) Reset() {
+	*x = SubscribeActorEventsResponseReminderRequestAlpha1{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[27]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubscribeActorEventsResponseReminderRequestAlpha1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeActorEventsResponseReminderRequestAlpha1) ProtoMessage() {}
+
+func (x *SubscribeActorEventsResponseReminderRequestAlpha1) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[27]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeActorEventsResponseReminderRequestAlpha1.ProtoReflect.Descriptor instead.
+func (*SubscribeActorEventsResponseReminderRequestAlpha1) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *SubscribeActorEventsResponseReminderRequestAlpha1) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseReminderRequestAlpha1) GetActorType() string {
+	if x != nil {
+		return x.ActorType
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseReminderRequestAlpha1) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseReminderRequestAlpha1) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseReminderRequestAlpha1) GetDueTime() string {
+	if x != nil {
+		return x.DueTime
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseReminderRequestAlpha1) GetPeriod() string {
+	if x != nil {
+		return x.Period
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseReminderRequestAlpha1) GetData() *anypb.Any {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+// SubscribeActorEventsResponseTimerRequestAlpha1 is the callback payload
+// daprd sends when an actor timer fires.
+type SubscribeActorEventsResponseTimerRequestAlpha1 struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id        string     `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ActorType string     `protobuf:"bytes,2,opt,name=actor_type,json=actorType,proto3" json:"actor_type,omitempty"`
+	ActorId   string     `protobuf:"bytes,3,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	Name      string     `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	DueTime   string     `protobuf:"bytes,5,opt,name=due_time,json=dueTime,proto3" json:"due_time,omitempty"`
+	Period    string     `protobuf:"bytes,6,opt,name=period,proto3" json:"period,omitempty"`
+	Callback  string     `protobuf:"bytes,7,opt,name=callback,proto3" json:"callback,omitempty"`
+	Data      *anypb.Any `protobuf:"bytes,8,opt,name=data,proto3" json:"data,omitempty"`
+}
+
+func (x *SubscribeActorEventsResponseTimerRequestAlpha1) Reset() {
+	*x = SubscribeActorEventsResponseTimerRequestAlpha1{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[28]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubscribeActorEventsResponseTimerRequestAlpha1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeActorEventsResponseTimerRequestAlpha1) ProtoMessage() {}
+
+func (x *SubscribeActorEventsResponseTimerRequestAlpha1) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[28]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeActorEventsResponseTimerRequestAlpha1.ProtoReflect.Descriptor instead.
+func (*SubscribeActorEventsResponseTimerRequestAlpha1) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *SubscribeActorEventsResponseTimerRequestAlpha1) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseTimerRequestAlpha1) GetActorType() string {
+	if x != nil {
+		return x.ActorType
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseTimerRequestAlpha1) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseTimerRequestAlpha1) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseTimerRequestAlpha1) GetDueTime() string {
+	if x != nil {
+		return x.DueTime
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseTimerRequestAlpha1) GetPeriod() string {
+	if x != nil {
+		return x.Period
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseTimerRequestAlpha1) GetCallback() string {
+	if x != nil {
+		return x.Callback
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseTimerRequestAlpha1) GetData() *anypb.Any {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+// SubscribeActorEventsResponseDeactivateRequestAlpha1 is the callback
+// payload daprd sends when an actor instance is being deactivated.
+type SubscribeActorEventsResponseDeactivateRequestAlpha1 struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id        string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ActorType string `protobuf:"bytes,2,opt,name=actor_type,json=actorType,proto3" json:"actor_type,omitempty"`
+	ActorId   string `protobuf:"bytes,3,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+}
+
+func (x *SubscribeActorEventsResponseDeactivateRequestAlpha1) Reset() {
+	*x = SubscribeActorEventsResponseDeactivateRequestAlpha1{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[29]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubscribeActorEventsResponseDeactivateRequestAlpha1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeActorEventsResponseDeactivateRequestAlpha1) ProtoMessage() {}
+
+func (x *SubscribeActorEventsResponseDeactivateRequestAlpha1) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[29]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeActorEventsResponseDeactivateRequestAlpha1.ProtoReflect.Descriptor instead.
+func (*SubscribeActorEventsResponseDeactivateRequestAlpha1) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *SubscribeActorEventsResponseDeactivateRequestAlpha1) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseDeactivateRequestAlpha1) GetActorType() string {
+	if x != nil {
+		return x.ActorType
+	}
+	return ""
+}
+
+func (x *SubscribeActorEventsResponseDeactivateRequestAlpha1) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
+}
+
+// ActorEntityConfig overrides the default actor runtime configuration for
+// a specific set of entities.
+type ActorEntityConfig struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Entities                []string               `protobuf:"bytes,1,rep,name=entities,proto3" json:"entities,omitempty"`
+	ActorIdleTimeout        *durationpb.Duration   `protobuf:"bytes,2,opt,name=actor_idle_timeout,json=actorIdleTimeout,proto3,oneof" json:"actor_idle_timeout,omitempty"`
+	DrainOngoingCallTimeout *durationpb.Duration   `protobuf:"bytes,3,opt,name=drain_ongoing_call_timeout,json=drainOngoingCallTimeout,proto3,oneof" json:"drain_ongoing_call_timeout,omitempty"`
+	DrainRebalancedActors   *bool                  `protobuf:"varint,4,opt,name=drain_rebalanced_actors,json=drainRebalancedActors,proto3,oneof" json:"drain_rebalanced_actors,omitempty"`
+	Reentrancy              *ActorReentrancyConfig `protobuf:"bytes,5,opt,name=reentrancy,proto3,oneof" json:"reentrancy,omitempty"`
+}
+
+func (x *ActorEntityConfig) Reset() {
+	*x = ActorEntityConfig{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[30]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ActorEntityConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ActorEntityConfig) ProtoMessage() {}
+
+func (x *ActorEntityConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[30]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ActorEntityConfig.ProtoReflect.Descriptor instead.
+func (*ActorEntityConfig) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ActorEntityConfig) GetEntities() []string {
+	if x != nil {
+		return x.Entities
+	}
+	return nil
+}
+
+func (x *ActorEntityConfig) GetActorIdleTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.ActorIdleTimeout
+	}
+	return nil
+}
+
+func (x *ActorEntityConfig) GetDrainOngoingCallTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.DrainOngoingCallTimeout
+	}
+	return nil
+}
+
+func (x *ActorEntityConfig) GetDrainRebalancedActors() bool {
+	if x != nil && x.DrainRebalancedActors != nil {
+		return *x.DrainRebalancedActors
+	}
+	return false
+}
+
+func (x *ActorEntityConfig) GetReentrancy() *ActorReentrancyConfig {
+	if x != nil {
+		return x.Reentrancy
+	}
+	return nil
+}
+
+// ActorReentrancyConfig configures actor reentrancy behavior.
+type ActorReentrancyConfig struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Enabled       bool   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	MaxStackDepth *int32 `protobuf:"varint,2,opt,name=max_stack_depth,json=maxStackDepth,proto3,oneof" json:"max_stack_depth,omitempty"`
+}
+
+func (x *ActorReentrancyConfig) Reset() {
+	*x = ActorReentrancyConfig{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[31]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ActorReentrancyConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ActorReentrancyConfig) ProtoMessage() {}
+
+func (x *ActorReentrancyConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[31]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ActorReentrancyConfig.ProtoReflect.Descriptor instead.
+func (*ActorReentrancyConfig) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *ActorReentrancyConfig) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *ActorReentrancyConfig) GetMaxStackDepth() int32 {
+	if x != nil && x.MaxStackDepth != nil {
+		return *x.MaxStackDepth
+	}
+	return 0
+}
+
 var File_dapr_proto_runtime_v1_actors_proto protoreflect.FileDescriptor
 
 var file_dapr_proto_runtime_v1_actors_proto_rawDesc = []byte{
@@ -1272,6 +2447,8 @@ var file_dapr_proto_runtime_v1_actors_proto_rawDesc = []byte{
 	0x72, 0x6f, 0x74, 0x6f, 0x12, 0x15, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
 	0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x1a, 0x19, 0x67, 0x6f, 0x6f,
 	0x67, 0x6c, 0x65, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x61, 0x6e, 0x79,
+	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x1e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2f, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x64, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e,
 	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x21, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x72, 0x6f,
 	0x74, 0x6f, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x2f, 0x63, 0x6f, 0x6d,
 	0x6d, 0x6f, 0x6e, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0xde, 0x01, 0x0a, 0x19, 0x52, 0x65,
@@ -1459,14 +2636,270 @@ var file_dapr_proto_runtime_v1_actors_proto_rawDesc = []byte{
 	0x74, 0x6f, 0x72, 0x5f, 0x69, 0x64, 0x22, 0x28, 0x0a, 0x26, 0x55, 0x6e, 0x72, 0x65, 0x67, 0x69,
 	0x73, 0x74, 0x65, 0x72, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x52, 0x65, 0x6d, 0x69, 0x6e, 0x64, 0x65,
 	0x72, 0x73, 0x42, 0x79, 0x54, 0x79, 0x70, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x76, 0x31, 0x42, 0x0a,
-	0x44, 0x61, 0x70, 0x72, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x31, 0x67, 0x69, 0x74, 0x68,
-	0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70, 0x72,
-	0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x72, 0x75, 0x6e, 0x74, 0x69,
-	0x6d, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0xaa, 0x02, 0x1b,
-	0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x41, 0x75, 0x74, 0x6f,
-	0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x33,
+	0x22, 0xe6, 0x05, 0x0a, 0x21, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x41, 0x63,
+	0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x6a, 0x0a, 0x0f, 0x69, 0x6e, 0x69, 0x74, 0x69, 0x61,
+	0x6c, 0x5f, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32,
+	0x3f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e,
+	0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62,
+	0x65, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x49, 0x6e, 0x69, 0x74, 0x69, 0x61, 0x6c, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31,
+	0x48, 0x00, 0x52, 0x0e, 0x69, 0x6e, 0x69, 0x74, 0x69, 0x61, 0x6c, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x12, 0x71, 0x0a, 0x0f, 0x69, 0x6e, 0x76, 0x6f, 0x6b, 0x65, 0x5f, 0x72, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x46, 0x2e, 0x64, 0x61,
+	0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65,
+	0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x41, 0x63, 0x74,
+	0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49,
+	0x6e, 0x76, 0x6f, 0x6b, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x41, 0x6c, 0x70,
+	0x68, 0x61, 0x31, 0x48, 0x00, 0x52, 0x0e, 0x69, 0x6e, 0x76, 0x6f, 0x6b, 0x65, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x77, 0x0a, 0x11, 0x72, 0x65, 0x6d, 0x69, 0x6e, 0x64, 0x65,
+	0x72, 0x5f, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x48, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75,
+	0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69,
+	0x62, 0x65, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x52, 0x65, 0x6d, 0x69, 0x6e, 0x64, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x48, 0x00, 0x52, 0x10, 0x72, 0x65,
+	0x6d, 0x69, 0x6e, 0x64, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x71,
+	0x0a, 0x0e, 0x74, 0x69, 0x6d, 0x65, 0x72, 0x5f, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x48, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53,
+	0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65,
+	0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x52, 0x65, 0x6d, 0x69, 0x6e, 0x64,
+	0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31,
+	0x48, 0x00, 0x52, 0x0d, 0x74, 0x69, 0x6d, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x12, 0x7d, 0x0a, 0x13, 0x64, 0x65, 0x61, 0x63, 0x74, 0x69, 0x76, 0x61, 0x74, 0x65, 0x5f,
+	0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x4a,
+	0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74,
+	0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65,
+	0x41, 0x63, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x44, 0x65, 0x61, 0x63, 0x74, 0x69, 0x76, 0x61, 0x74, 0x65, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x48, 0x00, 0x52, 0x12, 0x64, 0x65,
+	0x61, 0x63, 0x74, 0x69, 0x76, 0x61, 0x74, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x67, 0x0a, 0x0e, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x66, 0x61, 0x69, 0x6c,
+	0x65, 0x64, 0x18, 0x06, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x3e, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31,
+	0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x45,
+	0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x46, 0x61, 0x69, 0x6c,
+	0x65, 0x64, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x48, 0x00, 0x52, 0x0d, 0x72, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x46, 0x61, 0x69, 0x6c, 0x65, 0x64, 0x42, 0x0e, 0x0a, 0x0c, 0x72, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x22, 0xb5, 0x04, 0x0a, 0x28, 0x53, 0x75,
+	0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e,
+	0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49, 0x6e, 0x69, 0x74, 0x69, 0x61, 0x6c,
+	0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x1a, 0x0a, 0x08, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x69,
+	0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x09, 0x52, 0x08, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x69,
+	0x65, 0x73, 0x12, 0x4c, 0x0a, 0x12, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x69, 0x64, 0x6c, 0x65,
+	0x5f, 0x74, 0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x19,
+	0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66,
+	0x2e, 0x44, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x48, 0x00, 0x52, 0x10, 0x61, 0x63, 0x74,
+	0x6f, 0x72, 0x49, 0x64, 0x6c, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74, 0x88, 0x01, 0x01,
+	0x12, 0x5b, 0x0a, 0x1a, 0x64, 0x72, 0x61, 0x69, 0x6e, 0x5f, 0x6f, 0x6e, 0x67, 0x6f, 0x69, 0x6e,
+	0x67, 0x5f, 0x63, 0x61, 0x6c, 0x6c, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74, 0x18, 0x03,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x19, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x44, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x48,
+	0x01, 0x52, 0x17, 0x64, 0x72, 0x61, 0x69, 0x6e, 0x4f, 0x6e, 0x67, 0x6f, 0x69, 0x6e, 0x67, 0x43,
+	0x61, 0x6c, 0x6c, 0x54, 0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74, 0x88, 0x01, 0x01, 0x12, 0x3b, 0x0a,
+	0x17, 0x64, 0x72, 0x61, 0x69, 0x6e, 0x5f, 0x72, 0x65, 0x62, 0x61, 0x6c, 0x61, 0x6e, 0x63, 0x65,
+	0x64, 0x5f, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x73, 0x18, 0x04, 0x20, 0x01, 0x28, 0x08, 0x48, 0x02,
+	0x52, 0x15, 0x64, 0x72, 0x61, 0x69, 0x6e, 0x52, 0x65, 0x62, 0x61, 0x6c, 0x61, 0x6e, 0x63, 0x65,
+	0x64, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x73, 0x88, 0x01, 0x01, 0x12, 0x51, 0x0a, 0x0a, 0x72, 0x65,
+	0x65, 0x6e, 0x74, 0x72, 0x61, 0x6e, 0x63, 0x79, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2c,
+	0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74,
+	0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x52, 0x65, 0x65, 0x6e,
+	0x74, 0x72, 0x61, 0x6e, 0x63, 0x79, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x48, 0x03, 0x52, 0x0a,
+	0x72, 0x65, 0x65, 0x6e, 0x74, 0x72, 0x61, 0x6e, 0x63, 0x79, 0x88, 0x01, 0x01, 0x12, 0x51, 0x0a,
+	0x0f, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x5f, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67,
+	0x18, 0x06, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x28, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41,
+	0x63, 0x74, 0x6f, 0x72, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67,
+	0x52, 0x0e, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67,
+	0x42, 0x15, 0x0a, 0x13, 0x5f, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x69, 0x64, 0x6c, 0x65, 0x5f,
+	0x74, 0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74, 0x42, 0x1d, 0x0a, 0x1b, 0x5f, 0x64, 0x72, 0x61, 0x69,
+	0x6e, 0x5f, 0x6f, 0x6e, 0x67, 0x6f, 0x69, 0x6e, 0x67, 0x5f, 0x63, 0x61, 0x6c, 0x6c, 0x5f, 0x74,
+	0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74, 0x42, 0x1a, 0x0a, 0x18, 0x5f, 0x64, 0x72, 0x61, 0x69, 0x6e,
+	0x5f, 0x72, 0x65, 0x62, 0x61, 0x6c, 0x61, 0x6e, 0x63, 0x65, 0x64, 0x5f, 0x61, 0x63, 0x74, 0x6f,
+	0x72, 0x73, 0x42, 0x0d, 0x0a, 0x0b, 0x5f, 0x72, 0x65, 0x65, 0x6e, 0x74, 0x72, 0x61, 0x6e, 0x63,
+	0x79, 0x22, 0x9a, 0x02, 0x0a, 0x2f, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x41,
+	0x63, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x49, 0x6e, 0x76, 0x6f, 0x6b, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x41,
+	0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x61, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x0c, 0x52, 0x04, 0x64, 0x61, 0x74, 0x61, 0x12, 0x70, 0x0a, 0x08, 0x6d, 0x65, 0x74,
+	0x61, 0x64, 0x61, 0x74, 0x61, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x54, 0x2e, 0x64, 0x61,
+	0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65,
+	0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x41, 0x63, 0x74,
+	0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49,
+	0x6e, 0x76, 0x6f, 0x6b, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x41, 0x6c, 0x70,
+	0x68, 0x61, 0x31, 0x2e, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x45, 0x6e, 0x74, 0x72,
+	0x79, 0x52, 0x08, 0x6d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x12, 0x14, 0x0a, 0x05, 0x65,
+	0x72, 0x72, 0x6f, 0x72, 0x18, 0x04, 0x20, 0x01, 0x28, 0x08, 0x52, 0x05, 0x65, 0x72, 0x72, 0x6f,
+	0x72, 0x1a, 0x3b, 0x0a, 0x0d, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x45, 0x6e, 0x74,
+	0x72, 0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0x5b,
+	0x0a, 0x31, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x41, 0x63, 0x74, 0x6f, 0x72,
+	0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x52, 0x65, 0x6d,
+	0x69, 0x6e, 0x64, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x41, 0x6c, 0x70,
+	0x68, 0x61, 0x31, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x02, 0x69, 0x64, 0x12, 0x16, 0x0a, 0x06, 0x63, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x08, 0x52, 0x06, 0x63, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x22, 0x45, 0x0a, 0x33, 0x53,
+	0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65,
+	0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x44, 0x65, 0x61, 0x63, 0x74, 0x69,
+	0x76, 0x61, 0x74, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x41, 0x6c, 0x70, 0x68,
+	0x61, 0x31, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02,
+	0x69, 0x64, 0x22, 0x67, 0x0a, 0x27, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x41,
+	0x63, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x46, 0x61, 0x69, 0x6c, 0x65, 0x64, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x0e, 0x0a,
+	0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x12, 0x0a,
+	0x04, 0x63, 0x6f, 0x64, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x04, 0x63, 0x6f, 0x64,
+	0x65, 0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x03, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0xf7, 0x04, 0x0a, 0x22,
+	0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x45, 0x76,
+	0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x41, 0x6c, 0x70, 0x68,
+	0x61, 0x31, 0x12, 0x6d, 0x0a, 0x10, 0x69, 0x6e, 0x69, 0x74, 0x69, 0x61, 0x6c, 0x5f, 0x72, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x40, 0x2e, 0x64,
+	0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d,
+	0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x41, 0x63,
+	0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x49, 0x6e, 0x69, 0x74, 0x69, 0x61, 0x6c, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x48, 0x00,
+	0x52, 0x0f, 0x69, 0x6e, 0x69, 0x74, 0x69, 0x61, 0x6c, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x12, 0x6f, 0x0a, 0x0e, 0x69, 0x6e, 0x76, 0x6f, 0x6b, 0x65, 0x5f, 0x72, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x46, 0x2e, 0x64, 0x61, 0x70, 0x72,
+	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76,
+	0x31, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x41, 0x63, 0x74, 0x6f, 0x72,
+	0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x49, 0x6e,
+	0x76, 0x6f, 0x6b, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x41, 0x6c, 0x70, 0x68, 0x61,
+	0x31, 0x48, 0x00, 0x52, 0x0d, 0x69, 0x6e, 0x76, 0x6f, 0x6b, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x12, 0x75, 0x0a, 0x10, 0x72, 0x65, 0x6d, 0x69, 0x6e, 0x64, 0x65, 0x72, 0x5f, 0x72,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x48, 0x2e, 0x64,
+	0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d,
+	0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x41, 0x63,
+	0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x52, 0x65, 0x6d, 0x69, 0x6e, 0x64, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x48, 0x00, 0x52, 0x0f, 0x72, 0x65, 0x6d, 0x69, 0x6e, 0x64,
+	0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x6c, 0x0a, 0x0d, 0x74, 0x69, 0x6d,
+	0x65, 0x72, 0x5f, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x45, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75,
+	0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69,
+	0x62, 0x65, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x48, 0x00, 0x52, 0x0c, 0x74, 0x69, 0x6d, 0x65, 0x72,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x7b, 0x0a, 0x12, 0x64, 0x65, 0x61, 0x63, 0x74,
+	0x69, 0x76, 0x61, 0x74, 0x65, 0x5f, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x05, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x4a, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x73,
+	0x63, 0x72, 0x69, 0x62, 0x65, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x44, 0x65, 0x61, 0x63, 0x74, 0x69, 0x76, 0x61,
+	0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x48,
+	0x00, 0x52, 0x11, 0x64, 0x65, 0x61, 0x63, 0x74, 0x69, 0x76, 0x61, 0x74, 0x65, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x42, 0x0f, 0x0a, 0x0d, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x5f, 0x74, 0x79, 0x70, 0x65, 0x22, 0x2b, 0x0a, 0x29, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69,
+	0x62, 0x65, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x49, 0x6e, 0x69, 0x74, 0x69, 0x61, 0x6c, 0x41, 0x6c, 0x70, 0x68,
+	0x61, 0x31, 0x22, 0xd6, 0x02, 0x0a, 0x2f, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65,
+	0x41, 0x63, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x49, 0x6e, 0x76, 0x6f, 0x6b, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f,
+	0x74, 0x79, 0x70, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x61, 0x63, 0x74, 0x6f,
+	0x72, 0x54, 0x79, 0x70, 0x65, 0x12, 0x19, 0x0a, 0x08, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x69,
+	0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x49, 0x64,
+	0x12, 0x16, 0x0a, 0x06, 0x6d, 0x65, 0x74, 0x68, 0x6f, 0x64, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x06, 0x6d, 0x65, 0x74, 0x68, 0x6f, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x61,
+	0x18, 0x05, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x04, 0x64, 0x61, 0x74, 0x61, 0x12, 0x70, 0x0a, 0x08,
+	0x6d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x18, 0x06, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x54,
+	0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74,
+	0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65,
+	0x41, 0x63, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x49, 0x6e, 0x76, 0x6f, 0x6b, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x2e, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x45,
+	0x6e, 0x74, 0x72, 0x79, 0x52, 0x08, 0x6d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x1a, 0x3b,
+	0x0a, 0x0d, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12,
+	0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65,
+	0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0xee, 0x01, 0x0a, 0x31,
+	0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x45, 0x76,
+	0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x52, 0x65, 0x6d, 0x69,
+	0x6e, 0x64, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x41, 0x6c, 0x70, 0x68, 0x61,
+	0x31, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69,
+	0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x54, 0x79, 0x70, 0x65,
+	0x12, 0x19, 0x0a, 0x08, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x07, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x49, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x6e,
+	0x61, 0x6d, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12,
+	0x19, 0x0a, 0x08, 0x64, 0x75, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x07, 0x64, 0x75, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x12, 0x16, 0x0a, 0x06, 0x70, 0x65,
+	0x72, 0x69, 0x6f, 0x64, 0x18, 0x06, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x70, 0x65, 0x72, 0x69,
+	0x6f, 0x64, 0x12, 0x28, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x61, 0x18, 0x07, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x14, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62,
+	0x75, 0x66, 0x2e, 0x41, 0x6e, 0x79, 0x52, 0x04, 0x64, 0x61, 0x74, 0x61, 0x22, 0x87, 0x02, 0x0a,
+	0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x45,
+	0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x54, 0x69, 0x6d,
+	0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12,
+	0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12,
+	0x1d, 0x0a, 0x0a, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x09, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x54, 0x79, 0x70, 0x65, 0x12, 0x19,
+	0x0a, 0x08, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x07, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x49, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d,
+	0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x19, 0x0a,
+	0x08, 0x64, 0x75, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x07, 0x64, 0x75, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x12, 0x16, 0x0a, 0x06, 0x70, 0x65, 0x72, 0x69,
+	0x6f, 0x64, 0x18, 0x06, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64,
+	0x12, 0x1a, 0x0a, 0x08, 0x63, 0x61, 0x6c, 0x6c, 0x62, 0x61, 0x63, 0x6b, 0x18, 0x07, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x08, 0x63, 0x61, 0x6c, 0x6c, 0x62, 0x61, 0x63, 0x6b, 0x12, 0x28, 0x0a, 0x04,
+	0x64, 0x61, 0x74, 0x61, 0x18, 0x08, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x14, 0x2e, 0x67, 0x6f, 0x6f,
+	0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x41, 0x6e, 0x79,
+	0x52, 0x04, 0x64, 0x61, 0x74, 0x61, 0x22, 0x7f, 0x0a, 0x33, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72,
+	0x69, 0x62, 0x65, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x44, 0x65, 0x61, 0x63, 0x74, 0x69, 0x76, 0x61, 0x74, 0x65,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x0e, 0x0a,
+	0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x1d, 0x0a,
+	0x0a, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x09, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x54, 0x79, 0x70, 0x65, 0x12, 0x19, 0x0a, 0x08,
+	0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07,
+	0x61, 0x63, 0x74, 0x6f, 0x72, 0x49, 0x64, 0x22, 0xcb, 0x03, 0x0a, 0x11, 0x41, 0x63, 0x74, 0x6f,
+	0x72, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x1a, 0x0a,
+	0x08, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x09, 0x52,
+	0x08, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x12, 0x4c, 0x0a, 0x12, 0x61, 0x63, 0x74,
+	0x6f, 0x72, 0x5f, 0x69, 0x64, 0x6c, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x19, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x44, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+	0x48, 0x00, 0x52, 0x10, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x49, 0x64, 0x6c, 0x65, 0x54, 0x69, 0x6d,
+	0x65, 0x6f, 0x75, 0x74, 0x88, 0x01, 0x01, 0x12, 0x5b, 0x0a, 0x1a, 0x64, 0x72, 0x61, 0x69, 0x6e,
+	0x5f, 0x6f, 0x6e, 0x67, 0x6f, 0x69, 0x6e, 0x67, 0x5f, 0x63, 0x61, 0x6c, 0x6c, 0x5f, 0x74, 0x69,
+	0x6d, 0x65, 0x6f, 0x75, 0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x19, 0x2e, 0x67, 0x6f,
+	0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x44, 0x75,
+	0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x48, 0x01, 0x52, 0x17, 0x64, 0x72, 0x61, 0x69, 0x6e, 0x4f,
+	0x6e, 0x67, 0x6f, 0x69, 0x6e, 0x67, 0x43, 0x61, 0x6c, 0x6c, 0x54, 0x69, 0x6d, 0x65, 0x6f, 0x75,
+	0x74, 0x88, 0x01, 0x01, 0x12, 0x3b, 0x0a, 0x17, 0x64, 0x72, 0x61, 0x69, 0x6e, 0x5f, 0x72, 0x65,
+	0x62, 0x61, 0x6c, 0x61, 0x6e, 0x63, 0x65, 0x64, 0x5f, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x73, 0x18,
+	0x04, 0x20, 0x01, 0x28, 0x08, 0x48, 0x02, 0x52, 0x15, 0x64, 0x72, 0x61, 0x69, 0x6e, 0x52, 0x65,
+	0x62, 0x61, 0x6c, 0x61, 0x6e, 0x63, 0x65, 0x64, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x73, 0x88, 0x01,
+	0x01, 0x12, 0x51, 0x0a, 0x0a, 0x72, 0x65, 0x65, 0x6e, 0x74, 0x72, 0x61, 0x6e, 0x63, 0x79, 0x18,
+	0x05, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2c, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x63,
+	0x74, 0x6f, 0x72, 0x52, 0x65, 0x65, 0x6e, 0x74, 0x72, 0x61, 0x6e, 0x63, 0x79, 0x43, 0x6f, 0x6e,
+	0x66, 0x69, 0x67, 0x48, 0x03, 0x52, 0x0a, 0x72, 0x65, 0x65, 0x6e, 0x74, 0x72, 0x61, 0x6e, 0x63,
+	0x79, 0x88, 0x01, 0x01, 0x42, 0x15, 0x0a, 0x13, 0x5f, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x69,
+	0x64, 0x6c, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74, 0x42, 0x1d, 0x0a, 0x1b, 0x5f,
+	0x64, 0x72, 0x61, 0x69, 0x6e, 0x5f, 0x6f, 0x6e, 0x67, 0x6f, 0x69, 0x6e, 0x67, 0x5f, 0x63, 0x61,
+	0x6c, 0x6c, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74, 0x42, 0x1a, 0x0a, 0x18, 0x5f, 0x64,
+	0x72, 0x61, 0x69, 0x6e, 0x5f, 0x72, 0x65, 0x62, 0x61, 0x6c, 0x61, 0x6e, 0x63, 0x65, 0x64, 0x5f,
+	0x61, 0x63, 0x74, 0x6f, 0x72, 0x73, 0x42, 0x0d, 0x0a, 0x0b, 0x5f, 0x72, 0x65, 0x65, 0x6e, 0x74,
+	0x72, 0x61, 0x6e, 0x63, 0x79, 0x22, 0x72, 0x0a, 0x15, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x52, 0x65,
+	0x65, 0x6e, 0x74, 0x72, 0x61, 0x6e, 0x63, 0x79, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x18,
+	0x0a, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52,
+	0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x12, 0x2b, 0x0a, 0x0f, 0x6d, 0x61, 0x78, 0x5f,
+	0x73, 0x74, 0x61, 0x63, 0x6b, 0x5f, 0x64, 0x65, 0x70, 0x74, 0x68, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x05, 0x48, 0x00, 0x52, 0x0d, 0x6d, 0x61, 0x78, 0x53, 0x74, 0x61, 0x63, 0x6b, 0x44, 0x65, 0x70,
+	0x74, 0x68, 0x88, 0x01, 0x01, 0x42, 0x12, 0x0a, 0x10, 0x5f, 0x6d, 0x61, 0x78, 0x5f, 0x73, 0x74,
+	0x61, 0x63, 0x6b, 0x5f, 0x64, 0x65, 0x70, 0x74, 0x68, 0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e,
+	0x64, 0x61, 0x70, 0x72, 0x2e, 0x76, 0x31, 0x42, 0x0a, 0x44, 0x61, 0x70, 0x72, 0x50, 0x72, 0x6f,
+	0x74, 0x6f, 0x73, 0x5a, 0x31, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f,
+	0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x2f, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x72,
+	0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0xaa, 0x02, 0x1b, 0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c,
+	0x69, 0x65, 0x6e, 0x74, 0x2e, 0x41, 0x75, 0x74, 0x6f, 0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70,
+	0x63, 0x2e, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -1481,48 +2914,87 @@ func file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_runtime_v1_actors_proto_rawDescData
 }
 
-var file_dapr_proto_runtime_v1_actors_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_dapr_proto_runtime_v1_actors_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_dapr_proto_runtime_v1_actors_proto_goTypes = []interface{}{
-	(*RegisterActorTimerRequest)(nil),              // 0: dapr.proto.runtime.v1.RegisterActorTimerRequest
-	(*UnregisterActorTimerRequest)(nil),            // 1: dapr.proto.runtime.v1.UnregisterActorTimerRequest
-	(*RegisterActorReminderRequest)(nil),           // 2: dapr.proto.runtime.v1.RegisterActorReminderRequest
-	(*UnregisterActorReminderRequest)(nil),         // 3: dapr.proto.runtime.v1.UnregisterActorReminderRequest
-	(*GetActorStateRequest)(nil),                   // 4: dapr.proto.runtime.v1.GetActorStateRequest
-	(*GetActorStateResponse)(nil),                  // 5: dapr.proto.runtime.v1.GetActorStateResponse
-	(*ExecuteActorStateTransactionRequest)(nil),    // 6: dapr.proto.runtime.v1.ExecuteActorStateTransactionRequest
-	(*TransactionalActorStateOperation)(nil),       // 7: dapr.proto.runtime.v1.TransactionalActorStateOperation
-	(*InvokeActorRequest)(nil),                     // 8: dapr.proto.runtime.v1.InvokeActorRequest
-	(*InvokeActorResponse)(nil),                    // 9: dapr.proto.runtime.v1.InvokeActorResponse
-	(*GetActorReminderRequest)(nil),                // 10: dapr.proto.runtime.v1.GetActorReminderRequest
-	(*GetActorReminderResponse)(nil),               // 11: dapr.proto.runtime.v1.GetActorReminderResponse
-	(*ListActorRemindersRequest)(nil),              // 12: dapr.proto.runtime.v1.ListActorRemindersRequest
-	(*ListActorRemindersResponse)(nil),             // 13: dapr.proto.runtime.v1.ListActorRemindersResponse
-	(*NamedActorReminder)(nil),                     // 14: dapr.proto.runtime.v1.NamedActorReminder
-	(*ActorReminder)(nil),                          // 15: dapr.proto.runtime.v1.ActorReminder
-	(*UnregisterActorRemindersByTypeRequest)(nil),  // 16: dapr.proto.runtime.v1.UnregisterActorRemindersByTypeRequest
-	(*UnregisterActorRemindersByTypeResponse)(nil), // 17: dapr.proto.runtime.v1.UnregisterActorRemindersByTypeResponse
-	nil,                         // 18: dapr.proto.runtime.v1.GetActorStateResponse.MetadataEntry
-	nil,                         // 19: dapr.proto.runtime.v1.TransactionalActorStateOperation.MetadataEntry
-	nil,                         // 20: dapr.proto.runtime.v1.InvokeActorRequest.MetadataEntry
-	(*v1.JobFailurePolicy)(nil), // 21: dapr.proto.common.v1.JobFailurePolicy
-	(*anypb.Any)(nil),           // 22: google.protobuf.Any
+	(*RegisterActorTimerRequest)(nil),                           // 0: dapr.proto.runtime.v1.RegisterActorTimerRequest
+	(*UnregisterActorTimerRequest)(nil),                         // 1: dapr.proto.runtime.v1.UnregisterActorTimerRequest
+	(*RegisterActorReminderRequest)(nil),                        // 2: dapr.proto.runtime.v1.RegisterActorReminderRequest
+	(*UnregisterActorReminderRequest)(nil),                      // 3: dapr.proto.runtime.v1.UnregisterActorReminderRequest
+	(*GetActorStateRequest)(nil),                                // 4: dapr.proto.runtime.v1.GetActorStateRequest
+	(*GetActorStateResponse)(nil),                               // 5: dapr.proto.runtime.v1.GetActorStateResponse
+	(*ExecuteActorStateTransactionRequest)(nil),                 // 6: dapr.proto.runtime.v1.ExecuteActorStateTransactionRequest
+	(*TransactionalActorStateOperation)(nil),                    // 7: dapr.proto.runtime.v1.TransactionalActorStateOperation
+	(*InvokeActorRequest)(nil),                                  // 8: dapr.proto.runtime.v1.InvokeActorRequest
+	(*InvokeActorResponse)(nil),                                 // 9: dapr.proto.runtime.v1.InvokeActorResponse
+	(*GetActorReminderRequest)(nil),                             // 10: dapr.proto.runtime.v1.GetActorReminderRequest
+	(*GetActorReminderResponse)(nil),                            // 11: dapr.proto.runtime.v1.GetActorReminderResponse
+	(*ListActorRemindersRequest)(nil),                           // 12: dapr.proto.runtime.v1.ListActorRemindersRequest
+	(*ListActorRemindersResponse)(nil),                          // 13: dapr.proto.runtime.v1.ListActorRemindersResponse
+	(*NamedActorReminder)(nil),                                  // 14: dapr.proto.runtime.v1.NamedActorReminder
+	(*ActorReminder)(nil),                                       // 15: dapr.proto.runtime.v1.ActorReminder
+	(*UnregisterActorRemindersByTypeRequest)(nil),               // 16: dapr.proto.runtime.v1.UnregisterActorRemindersByTypeRequest
+	(*UnregisterActorRemindersByTypeResponse)(nil),              // 17: dapr.proto.runtime.v1.UnregisterActorRemindersByTypeResponse
+	(*SubscribeActorEventsRequestAlpha1)(nil),                   // 18: dapr.proto.runtime.v1.SubscribeActorEventsRequestAlpha1
+	(*SubscribeActorEventsRequestInitialAlpha1)(nil),            // 19: dapr.proto.runtime.v1.SubscribeActorEventsRequestInitialAlpha1
+	(*SubscribeActorEventsRequestInvokeResponseAlpha1)(nil),     // 20: dapr.proto.runtime.v1.SubscribeActorEventsRequestInvokeResponseAlpha1
+	(*SubscribeActorEventsRequestReminderResponseAlpha1)(nil),   // 21: dapr.proto.runtime.v1.SubscribeActorEventsRequestReminderResponseAlpha1
+	(*SubscribeActorEventsRequestDeactivateResponseAlpha1)(nil), // 22: dapr.proto.runtime.v1.SubscribeActorEventsRequestDeactivateResponseAlpha1
+	(*SubscribeActorEventsRequestFailedAlpha1)(nil),             // 23: dapr.proto.runtime.v1.SubscribeActorEventsRequestFailedAlpha1
+	(*SubscribeActorEventsResponseAlpha1)(nil),                  // 24: dapr.proto.runtime.v1.SubscribeActorEventsResponseAlpha1
+	(*SubscribeActorEventsResponseInitialAlpha1)(nil),           // 25: dapr.proto.runtime.v1.SubscribeActorEventsResponseInitialAlpha1
+	(*SubscribeActorEventsResponseInvokeRequestAlpha1)(nil),     // 26: dapr.proto.runtime.v1.SubscribeActorEventsResponseInvokeRequestAlpha1
+	(*SubscribeActorEventsResponseReminderRequestAlpha1)(nil),   // 27: dapr.proto.runtime.v1.SubscribeActorEventsResponseReminderRequestAlpha1
+	(*SubscribeActorEventsResponseTimerRequestAlpha1)(nil),      // 28: dapr.proto.runtime.v1.SubscribeActorEventsResponseTimerRequestAlpha1
+	(*SubscribeActorEventsResponseDeactivateRequestAlpha1)(nil), // 29: dapr.proto.runtime.v1.SubscribeActorEventsResponseDeactivateRequestAlpha1
+	(*ActorEntityConfig)(nil),                                   // 30: dapr.proto.runtime.v1.ActorEntityConfig
+	(*ActorReentrancyConfig)(nil),                               // 31: dapr.proto.runtime.v1.ActorReentrancyConfig
+	nil,                                                         // 32: dapr.proto.runtime.v1.GetActorStateResponse.MetadataEntry
+	nil,                                                         // 33: dapr.proto.runtime.v1.TransactionalActorStateOperation.MetadataEntry
+	nil,                                                         // 34: dapr.proto.runtime.v1.InvokeActorRequest.MetadataEntry
+	nil,                                                         // 35: dapr.proto.runtime.v1.SubscribeActorEventsRequestInvokeResponseAlpha1.MetadataEntry
+	nil,                                                         // 36: dapr.proto.runtime.v1.SubscribeActorEventsResponseInvokeRequestAlpha1.MetadataEntry
+	(*v1.JobFailurePolicy)(nil),                                 // 37: dapr.proto.common.v1.JobFailurePolicy
+	(*anypb.Any)(nil),                                           // 38: google.protobuf.Any
+	(*durationpb.Duration)(nil),                                 // 39: google.protobuf.Duration
 }
 var file_dapr_proto_runtime_v1_actors_proto_depIdxs = []int32{
-	21, // 0: dapr.proto.runtime.v1.RegisterActorReminderRequest.failure_policy:type_name -> dapr.proto.common.v1.JobFailurePolicy
-	18, // 1: dapr.proto.runtime.v1.GetActorStateResponse.metadata:type_name -> dapr.proto.runtime.v1.GetActorStateResponse.MetadataEntry
+	37, // 0: dapr.proto.runtime.v1.RegisterActorReminderRequest.failure_policy:type_name -> dapr.proto.common.v1.JobFailurePolicy
+	32, // 1: dapr.proto.runtime.v1.GetActorStateResponse.metadata:type_name -> dapr.proto.runtime.v1.GetActorStateResponse.MetadataEntry
 	7,  // 2: dapr.proto.runtime.v1.ExecuteActorStateTransactionRequest.operations:type_name -> dapr.proto.runtime.v1.TransactionalActorStateOperation
-	22, // 3: dapr.proto.runtime.v1.TransactionalActorStateOperation.value:type_name -> google.protobuf.Any
-	19, // 4: dapr.proto.runtime.v1.TransactionalActorStateOperation.metadata:type_name -> dapr.proto.runtime.v1.TransactionalActorStateOperation.MetadataEntry
-	20, // 5: dapr.proto.runtime.v1.InvokeActorRequest.metadata:type_name -> dapr.proto.runtime.v1.InvokeActorRequest.MetadataEntry
-	22, // 6: dapr.proto.runtime.v1.GetActorReminderResponse.data:type_name -> google.protobuf.Any
+	38, // 3: dapr.proto.runtime.v1.TransactionalActorStateOperation.value:type_name -> google.protobuf.Any
+	33, // 4: dapr.proto.runtime.v1.TransactionalActorStateOperation.metadata:type_name -> dapr.proto.runtime.v1.TransactionalActorStateOperation.MetadataEntry
+	34, // 5: dapr.proto.runtime.v1.InvokeActorRequest.metadata:type_name -> dapr.proto.runtime.v1.InvokeActorRequest.MetadataEntry
+	38, // 6: dapr.proto.runtime.v1.GetActorReminderResponse.data:type_name -> google.protobuf.Any
 	14, // 7: dapr.proto.runtime.v1.ListActorRemindersResponse.reminders:type_name -> dapr.proto.runtime.v1.NamedActorReminder
 	15, // 8: dapr.proto.runtime.v1.NamedActorReminder.reminder:type_name -> dapr.proto.runtime.v1.ActorReminder
-	22, // 9: dapr.proto.runtime.v1.ActorReminder.data:type_name -> google.protobuf.Any
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	38, // 9: dapr.proto.runtime.v1.ActorReminder.data:type_name -> google.protobuf.Any
+	19, // 10: dapr.proto.runtime.v1.SubscribeActorEventsRequestAlpha1.initial_request:type_name -> dapr.proto.runtime.v1.SubscribeActorEventsRequestInitialAlpha1
+	20, // 11: dapr.proto.runtime.v1.SubscribeActorEventsRequestAlpha1.invoke_response:type_name -> dapr.proto.runtime.v1.SubscribeActorEventsRequestInvokeResponseAlpha1
+	21, // 12: dapr.proto.runtime.v1.SubscribeActorEventsRequestAlpha1.reminder_response:type_name -> dapr.proto.runtime.v1.SubscribeActorEventsRequestReminderResponseAlpha1
+	21, // 13: dapr.proto.runtime.v1.SubscribeActorEventsRequestAlpha1.timer_response:type_name -> dapr.proto.runtime.v1.SubscribeActorEventsRequestReminderResponseAlpha1
+	22, // 14: dapr.proto.runtime.v1.SubscribeActorEventsRequestAlpha1.deactivate_response:type_name -> dapr.proto.runtime.v1.SubscribeActorEventsRequestDeactivateResponseAlpha1
+	23, // 15: dapr.proto.runtime.v1.SubscribeActorEventsRequestAlpha1.request_failed:type_name -> dapr.proto.runtime.v1.SubscribeActorEventsRequestFailedAlpha1
+	39, // 16: dapr.proto.runtime.v1.SubscribeActorEventsRequestInitialAlpha1.actor_idle_timeout:type_name -> google.protobuf.Duration
+	39, // 17: dapr.proto.runtime.v1.SubscribeActorEventsRequestInitialAlpha1.drain_ongoing_call_timeout:type_name -> google.protobuf.Duration
+	31, // 18: dapr.proto.runtime.v1.SubscribeActorEventsRequestInitialAlpha1.reentrancy:type_name -> dapr.proto.runtime.v1.ActorReentrancyConfig
+	30, // 19: dapr.proto.runtime.v1.SubscribeActorEventsRequestInitialAlpha1.entities_config:type_name -> dapr.proto.runtime.v1.ActorEntityConfig
+	35, // 20: dapr.proto.runtime.v1.SubscribeActorEventsRequestInvokeResponseAlpha1.metadata:type_name -> dapr.proto.runtime.v1.SubscribeActorEventsRequestInvokeResponseAlpha1.MetadataEntry
+	25, // 21: dapr.proto.runtime.v1.SubscribeActorEventsResponseAlpha1.initial_response:type_name -> dapr.proto.runtime.v1.SubscribeActorEventsResponseInitialAlpha1
+	26, // 22: dapr.proto.runtime.v1.SubscribeActorEventsResponseAlpha1.invoke_request:type_name -> dapr.proto.runtime.v1.SubscribeActorEventsResponseInvokeRequestAlpha1
+	27, // 23: dapr.proto.runtime.v1.SubscribeActorEventsResponseAlpha1.reminder_request:type_name -> dapr.proto.runtime.v1.SubscribeActorEventsResponseReminderRequestAlpha1
+	28, // 24: dapr.proto.runtime.v1.SubscribeActorEventsResponseAlpha1.timer_request:type_name -> dapr.proto.runtime.v1.SubscribeActorEventsResponseTimerRequestAlpha1
+	29, // 25: dapr.proto.runtime.v1.SubscribeActorEventsResponseAlpha1.deactivate_request:type_name -> dapr.proto.runtime.v1.SubscribeActorEventsResponseDeactivateRequestAlpha1
+	36, // 26: dapr.proto.runtime.v1.SubscribeActorEventsResponseInvokeRequestAlpha1.metadata:type_name -> dapr.proto.runtime.v1.SubscribeActorEventsResponseInvokeRequestAlpha1.MetadataEntry
+	38, // 27: dapr.proto.runtime.v1.SubscribeActorEventsResponseReminderRequestAlpha1.data:type_name -> google.protobuf.Any
+	38, // 28: dapr.proto.runtime.v1.SubscribeActorEventsResponseTimerRequestAlpha1.data:type_name -> google.protobuf.Any
+	39, // 29: dapr.proto.runtime.v1.ActorEntityConfig.actor_idle_timeout:type_name -> google.protobuf.Duration
+	39, // 30: dapr.proto.runtime.v1.ActorEntityConfig.drain_ongoing_call_timeout:type_name -> google.protobuf.Duration
+	31, // 31: dapr.proto.runtime.v1.ActorEntityConfig.reentrancy:type_name -> dapr.proto.runtime.v1.ActorReentrancyConfig
+	32, // [32:32] is the sub-list for method output_type
+	32, // [32:32] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_dapr_proto_runtime_v1_actors_proto_init() }
@@ -1747,19 +3219,205 @@ func file_dapr_proto_runtime_v1_actors_proto_init() {
 				return nil
 			}
 		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubscribeActorEventsRequestAlpha1); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubscribeActorEventsRequestInitialAlpha1); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubscribeActorEventsRequestInvokeResponseAlpha1); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubscribeActorEventsRequestReminderResponseAlpha1); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubscribeActorEventsRequestDeactivateResponseAlpha1); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubscribeActorEventsRequestFailedAlpha1); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubscribeActorEventsResponseAlpha1); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[25].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubscribeActorEventsResponseInitialAlpha1); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[26].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubscribeActorEventsResponseInvokeRequestAlpha1); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[27].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubscribeActorEventsResponseReminderRequestAlpha1); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[28].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubscribeActorEventsResponseTimerRequestAlpha1); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[29].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubscribeActorEventsResponseDeactivateRequestAlpha1); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[30].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ActorEntityConfig); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[31].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ActorReentrancyConfig); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	file_dapr_proto_runtime_v1_actors_proto_msgTypes[2].OneofWrappers = []interface{}{}
 	file_dapr_proto_runtime_v1_actors_proto_msgTypes[11].OneofWrappers = []interface{}{}
 	file_dapr_proto_runtime_v1_actors_proto_msgTypes[12].OneofWrappers = []interface{}{}
 	file_dapr_proto_runtime_v1_actors_proto_msgTypes[15].OneofWrappers = []interface{}{}
 	file_dapr_proto_runtime_v1_actors_proto_msgTypes[16].OneofWrappers = []interface{}{}
+	file_dapr_proto_runtime_v1_actors_proto_msgTypes[18].OneofWrappers = []interface{}{
+		(*SubscribeActorEventsRequestAlpha1_InitialRequest)(nil),
+		(*SubscribeActorEventsRequestAlpha1_InvokeResponse)(nil),
+		(*SubscribeActorEventsRequestAlpha1_ReminderResponse)(nil),
+		(*SubscribeActorEventsRequestAlpha1_TimerResponse)(nil),
+		(*SubscribeActorEventsRequestAlpha1_DeactivateResponse)(nil),
+		(*SubscribeActorEventsRequestAlpha1_RequestFailed)(nil),
+	}
+	file_dapr_proto_runtime_v1_actors_proto_msgTypes[19].OneofWrappers = []interface{}{}
+	file_dapr_proto_runtime_v1_actors_proto_msgTypes[24].OneofWrappers = []interface{}{
+		(*SubscribeActorEventsResponseAlpha1_InitialResponse)(nil),
+		(*SubscribeActorEventsResponseAlpha1_InvokeRequest)(nil),
+		(*SubscribeActorEventsResponseAlpha1_ReminderRequest)(nil),
+		(*SubscribeActorEventsResponseAlpha1_TimerRequest)(nil),
+		(*SubscribeActorEventsResponseAlpha1_DeactivateRequest)(nil),
+	}
+	file_dapr_proto_runtime_v1_actors_proto_msgTypes[30].OneofWrappers = []interface{}{}
+	file_dapr_proto_runtime_v1_actors_proto_msgTypes[31].OneofWrappers = []interface{}{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_dapr_proto_runtime_v1_actors_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   21,
+			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
