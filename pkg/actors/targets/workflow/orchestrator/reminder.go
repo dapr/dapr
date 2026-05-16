@@ -27,7 +27,10 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/durabletask-go/backend"
 )
 
 // createWorkflowReminder schedules a wake-up reminder on the workflow actor.
@@ -64,6 +67,18 @@ func (o *orchestrator) createRetentionReminder(ctx context.Context, name string,
 			},
 		},
 	})
+}
+
+// assertNewEventReminder creates (or overwrites by name) the deterministic
+// new-event wake-up reminder for the workflow actor that holds e in its inbox.
+func (o *orchestrator) assertNewEventReminder(ctx context.Context, e *backend.HistoryEvent, state *wfenginestate.State) error {
+	dueTime := e.Timestamp.AsTime()
+	if len(state.History) > 0 {
+		dueTime = state.History[0].Timestamp.AsTime()
+	}
+	wfName := o.getExecutionStartedEvent(state).GetName()
+	reminderName := events.EventReminderName(reminderPrefixNewEvent, e)
+	return o.createWorkflowReminder(ctx, reminderName, nil, dueTime, o.appID, &wfName)
 }
 
 // randomReminderName returns the prefix with a random suffix appended.

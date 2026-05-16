@@ -44,6 +44,7 @@ import (
 
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/callbackstream"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/api/grpc"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
@@ -217,6 +218,8 @@ func newDaprRuntime(ctx context.Context,
 	httpMiddleware := middlewarehttp.New()
 	httpMiddlewareApp := httpMiddleware.BuildPipelineFromSpec("app", globalConfig.Spec.AppHTTPPipelineSpec)
 
+	actorCallbackStream := callbackstream.NewManager()
+
 	channels := channels.New(channels.Options{
 		Registry:            runtimeConfig.registry,
 		ComponentStore:      compStore,
@@ -228,6 +231,7 @@ func newDaprRuntime(ctx context.Context,
 		GRPC:                grpc,
 		AppMiddleware:       httpMiddlewareApp,
 		AppAPIToken:         appAPIToken,
+		ActorCallbackStream: actorCallbackStream,
 	})
 
 	pubsubAdapter := publisher.New(publisher.Options{
@@ -411,6 +415,7 @@ func newDaprRuntime(ctx context.Context,
 		rt.actors.Run,
 		rt.wfengine.Run,
 		rt.jobsManager.Run,
+		actorCallbackStream.Run,
 		func(ctx context.Context) error {
 			start := time.Now()
 
