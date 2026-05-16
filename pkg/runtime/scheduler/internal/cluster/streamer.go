@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/router"
@@ -134,6 +135,8 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 
 	case *schedulerv1pb.JobTargetMetadata_Actor:
+		actorType := meta.GetTarget().GetActor().GetType()
+
 		err := s.invokeActorReminder(ctx, job)
 		if err == nil {
 			return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
@@ -150,13 +153,20 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		}
 
 		// If the actor was hosted on another instance, the error will be a gRPC status error,
-		// so we need to unwrap it and match on the error message
+		// so we need to unwrap it and match on the error message.
 		if st, ok := status.FromError(err); ok {
 			if st.Code() == codes.FailedPrecondition {
 				return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
 			}
 
-			if st.Message() == actorerrors.ErrReminderCanceled.Error() {
+			// Recognise the user-app "cancel this reminder" signal that crossed a
+			// daprd-to-daprd boundary: app.go raises ErrReminderCanceled when the
+			// app responded with the X-Daprremindercancel header, and gRPC strips
+			// the sentinel wrapping so we only see the message text on this side.
+			// Map it to SUCCESS so the scheduler deletes the recurring job rather
+			// than retrying forever.
+			_, isInternalActor := workflowacl.ParseActorType(actorType)
+			if !isInternalActor && st.Message() == actorerrors.ErrReminderCanceled.Error() {
 				return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 			}
 		}

@@ -41,11 +41,12 @@ func init() {
 
 // savefail verifies that when the state-store Multi for an activity result
 // addWorkflowEvent transiently fails, the workflow still completes:
-//  1. addWorkflowEvent creates the wake-up reminder BEFORE mutating state, so
-//     the reminder is in the scheduler even when the save that follows fails.
-//  2. signAndSaveState invalidates the orchestrator's cached state on failure,
-//     so the redelivered activity result is not dedup-dropped against the
-//     orphan event that the failed save left in the in-memory inbox.
+//  1. signAndSaveState invalidates the orchestrator's cached state on failure
+//     and returns an error to the activity actor, which retries
+//     AddWorkflowEvent. The retry reloads from the clean store and proceeds.
+//  2. addWorkflowEvent saves the inbox event BEFORE creating the wake-up
+//     reminder, so the firing reminder always finds the event in the store
+//     even if it lands on a peer host during a placement rebalance.
 type savefail struct {
 	workflow *workflow.Workflow
 	ss       *statestore.StateStore
@@ -92,7 +93,7 @@ func (s *savefail) Run(t *testing.T, ctx context.Context) {
 
 	const wfID = "savefail-wf"
 
-	activityStarted := make(chan struct{})
+	activityStarted := make(chan struct{}, 1)
 	releaseActivity := make(chan struct{})
 
 	r := s.workflow.Registry()
@@ -103,7 +104,7 @@ func (s *savefail) Run(t *testing.T, ctx context.Context) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-releaseActivity:
-			return "done", nil
+			return nil, nil
 		}
 	}))
 

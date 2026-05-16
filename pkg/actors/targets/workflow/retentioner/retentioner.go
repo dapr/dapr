@@ -76,7 +76,6 @@ func (r *retentioner) InvokeTimer(ctx context.Context, reminder *actorapi.Remind
 }
 
 func (r *retentioner) Deactivate(context.Context) error {
-	retentionerCache.Put(r)
 	return nil
 }
 
