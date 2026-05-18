@@ -27,6 +27,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -135,15 +136,7 @@ func (o *orchestrator) failChildWorkflowACL(ctx context.Context, taskScheduledID
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
-		EventType: &protos.HistoryEvent_ChildWorkflowInstanceFailed{
-			ChildWorkflowInstanceFailed: &protos.ChildWorkflowInstanceFailedEvent{
-				TaskScheduledId: taskScheduledID,
-				FailureDetails: &protos.TaskFailureDetails{
-					ErrorType:    "WorkflowAccessPolicyDenied",
-					ErrorMessage: "access denied by workflow access policy",
-				},
-			},
-		},
+		EventType: events.NewChildWorkflowFailedEventType(taskScheduledID, "WorkflowAccessPolicyDenied", "access denied by workflow access policy", false),
 	}
 
 	log.Warnf("Workflow actor '%s': child workflow denied by access policy: %v", o.actorID, callErr)
@@ -152,7 +145,11 @@ func (o *orchestrator) failChildWorkflowACL(ctx context.Context, taskScheduledID
 	// reminder fires (in a fresh execution cycle after the current run
 	// completes), handleReminder routes it to addWorkflowEvent which
 	// adds the event to the inbox and triggers re-execution.
-	if _, err := o.createWorkflowReminder(ctx, common.ReminderPrefixActivityResult, failedEvent, time.Now(), o.appID, nil); err != nil {
+	reminderName, err := randomReminderName(common.ReminderPrefixActivityResult)
+	if err != nil {
+		return fmt.Errorf("failed to create failure reminder: %w", err)
+	}
+	if err := o.createWorkflowReminder(ctx, reminderName, failedEvent, time.Now(), o.appID, nil); err != nil {
 		return fmt.Errorf("failed to create failure reminder: %w", err)
 	}
 

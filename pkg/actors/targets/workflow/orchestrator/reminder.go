@@ -26,39 +26,86 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) createWorkflowReminder(ctx context.Context, namePrefix string, data proto.Message, start time.Time, targetAppID string, concurrencyKey *string) (string, error) {
+// createWorkflowReminder schedules a wake-up reminder on the workflow actor.
+// The reminderName is used verbatim: callers that want retries to collapse
+// onto a single scheduler entry (overwrite-by-name) must pass a deterministic
+// name (e.g. events.EventReminderName(prefix, event)); callers without a
+// stable identity must build one with randomReminderName so unrelated
+// reminders do not clobber each other.
+func (o *orchestrator) createWorkflowReminder(ctx context.Context, reminderName string, data proto.Message, start time.Time, targetAppID string, concurrencyKey *string) error {
 	actorType := o.actorTypeBuilder.Workflow(targetAppID)
-	return o.createReminderWithType(ctx, namePrefix, data, start, actorType, concurrencyKey)
+	return o.createReminderWithType(ctx, reminderName, data, start, actorType, concurrencyKey)
 }
 
-func (o *orchestrator) createRetentionReminder(ctx context.Context, namePrefix string, start time.Time) (string, error) {
-	return o.createReminderWithType(ctx, namePrefix, nil, start, o.retentionActorType, nil)
+// createRetentionReminder creates the retention reminder that triggers
+// workflow purge. The name is deterministic so the call is idempotent: the
+// scheduler's overwrite-by-name semantics ensure that retrying a Create
+// after a transient scheduler failure converges on a single retention
+// reminder rather than accumulating duplicates.
+func (o *orchestrator) createRetentionReminder(ctx context.Context, name string, start time.Time) (string, error) {
+	dueTime := start.UTC().Format(time.RFC3339Nano)
+
+	return name, common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
+		ActorType: o.retentionActorType,
+		ActorID:   o.actorID,
+		DueTime:   dueTime,
+		Name:      name,
+		// One shot, retry forever, every second.
+		FailurePolicy: &commonv1pb.JobFailurePolicy{
+			Policy: &commonv1pb.JobFailurePolicy_Constant{
+				Constant: &commonv1pb.JobFailurePolicyConstant{
+					Interval:   durationpb.New(time.Second),
+					MaxRetries: nil,
+				},
+			},
+		},
+	})
 }
 
-func (o *orchestrator) createReminderWithType(ctx context.Context, namePrefix string, data proto.Message, start time.Time, actorType string, concurrencyKey *string) (string, error) {
+// assertNewEventReminder creates (or overwrites by name) the deterministic
+// new-event wake-up reminder for the workflow actor that holds e in its inbox.
+func (o *orchestrator) assertNewEventReminder(ctx context.Context, e *backend.HistoryEvent, state *wfenginestate.State) error {
+	dueTime := e.Timestamp.AsTime()
+	if len(state.History) > 0 {
+		dueTime = state.History[0].Timestamp.AsTime()
+	}
+	wfName := o.getExecutionStartedEvent(state).GetName()
+	reminderName := events.EventReminderName(reminderPrefixNewEvent, e)
+	return o.createWorkflowReminder(ctx, reminderName, nil, dueTime, o.appID, &wfName)
+}
+
+// randomReminderName returns the prefix with a random suffix appended.
+// Use for reminders that have no stable identity to deduplicate retries by.
+func randomReminderName(prefix string) (string, error) {
 	b := make([]byte, 6)
-	_, err := io.ReadFull(rand.Reader, b)
-	if err != nil {
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
 		return "", fmt.Errorf("failed to generate reminder ID: %w", err)
 	}
+	return prefix + "-" + base64.RawURLEncoding.EncodeToString(b), nil
+}
 
-	dueTime := start.UTC().Format(time.RFC3339)
-	reminderName := namePrefix + "-" + base64.RawURLEncoding.EncodeToString(b)
+func (o *orchestrator) createReminderWithType(ctx context.Context, reminderName string, data proto.Message, start time.Time, actorType string, concurrencyKey *string) error {
+	dueTime := start.UTC().Format(time.RFC3339Nano)
 
 	var adata *anypb.Any
 	if data != nil {
+		var err error
 		adata, err = anypb.New(data)
 		if err != nil {
-			return "", err
+			return err
 		}
 	}
 
 	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, dueTime)
 
-	return reminderName, o.reminders.Create(ctx, &actorapi.CreateReminderRequest{
+	return common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
 		ActorType: actorType,
 		ActorID:   o.actorID,
 		Data:      adata,

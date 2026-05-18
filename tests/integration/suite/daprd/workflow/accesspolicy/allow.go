@@ -67,20 +67,11 @@ metadata:
 scopes:
 - wfacl-target
 spec:
-  defaultAction: deny
   rules:
   - callers:
     - appID: wfacl-caller
-    operations:
-    - type: activity
-      name: AllowedActivity
-      action: allow
-  - callers:
-    - appID: wfacl-target
-    operations:
-    - type: activity
-      name: "*"
-      action: allow
+    activities:
+    - name: AllowedActivity
 `)
 
 	targetResDir := t.TempDir()

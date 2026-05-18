@@ -83,7 +83,6 @@ type InitOptions struct {
 	GRPC              *manager.Manager
 	SchedulerClient   schedulerv1pb.SchedulerClient
 	SchedulerReloader schedclient.Reloader
-	WorkflowACL       router.WorkflowACLChecker
 }
 
 // Interface is the main runtime for the actors subsystem.
@@ -240,7 +239,6 @@ func (a *actors) Init(opts InitOptions) error {
 		Resiliency:         a.resiliency,
 		Reminders:          a.reminders,
 		MaxRequestBodySize: a.maxRequestBodySize,
-		WorkflowACL:        opts.WorkflowACL,
 	})
 
 	a.timerStorage = inmemory.New(inmemory.Options{
@@ -399,7 +397,7 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 
 	entityConfigs := make(map[string]api.EntityConfig)
 	for _, entityConfg := range cfg.EntityConfigs {
-		config := api.TranslateEntityConfig(entityConfg)
+		config := api.TranslateEntityConfig(entityConfg, a.disseminationTimeout)
 		for _, entity := range entityConfg.Entities {
 			var found bool
 			if slices.Contains(cfg.HostedActorTypes, entity) {
@@ -420,6 +418,7 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		if err != nil {
 			return fmt.Errorf("failed to parse drain ongoing call timeout: %s", err)
 		}
+		drainOngoingCallTimeout = api.ClampDrainOngoingCallTimeout(drainOngoingCallTimeout, a.disseminationTimeout, "global config")
 	}
 
 	idleTimeout := api.DefaultIdleTimeout
@@ -471,6 +470,18 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 	// dissemination, in-flight actor calls are given the configured time to
 	// complete before being forcefully cancelled.
 	a.placement.SetDrainOngoingCallTimeout(cfg.DrainRebalancedActors, &drainOngoingCallTimeout)
+
+	var entityDrainTimeouts map[string]time.Duration
+	for actorType, c := range entityConfigs {
+		if c.DrainOngoingCallTimeout == nil {
+			continue
+		}
+		if entityDrainTimeouts == nil {
+			entityDrainTimeouts = make(map[string]time.Duration)
+		}
+		entityDrainTimeouts[actorType] = *c.DrainOngoingCallTimeout
+	}
+	a.placement.SetEntityDrainOngoingCallTimeouts(entityDrainTimeouts)
 
 	return nil
 }

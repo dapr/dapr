@@ -137,6 +137,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if len(opts.sentryAddress) > 0 {
 		args = append(args, "--sentry-address="+opts.sentryAddress)
 	}
+	if len(opts.sentryRequestJwtAudiences) > 0 {
+		args = append(args, "--sentry-request-jwt-audiences="+strings.Join(opts.sentryRequestJwtAudiences, ","))
+	}
 	if len(opts.controlPlaneAddress) > 0 {
 		args = append(args, "--control-plane-address="+opts.controlPlaneAddress)
 	}
@@ -217,6 +220,30 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 		net.Close()
 		return true
 	}, 20*time.Second, 10*time.Millisecond)
+}
+
+// WaitUntilExit waits for daprd to exit on its own (e.g. via the shutdown
+// API) and asserts the expected exit code via the framework. The HTTP port
+// is polled; once dialing fails, the process has exited. Unlike Cleanup,
+// no signal is sent to the process, which avoids racing with self-exit
+// paths where signaling an already-reaped PID would fail.
+func (d *Daprd) WaitUntilExit(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	addr := d.HTTPAddress()
+	assert.Eventuallyf(t, func() bool {
+		conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+		if err != nil {
+			return true
+		}
+		conn.Close()
+		return false
+	}, timeout, 10*time.Millisecond, "daprd HTTP port %s remained open; process did not exit", addr)
+	d.cleanupOnce.Do(func() {
+		if d.httpClient != nil {
+			d.httpClient.CloseIdleConnections()
+		}
+		d.exec.AwaitExit(t)
+	})
 }
 
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
@@ -442,19 +469,29 @@ func (d *Daprd) GetMetaActorRuntime(t assert.TestingT, ctx context.Context) *Met
 	return d.meta(t, ctx).ActorRuntime
 }
 
+func (d *Daprd) GetMetaResiliencies(t assert.TestingT, ctx context.Context) []*rtv1.MetadataResiliency {
+	return d.meta(t, ctx).Resiliencies
+}
+
+func (d *Daprd) GetMetaWorkflowAccessPolicies(t assert.TestingT, ctx context.Context) []*rtv1.MetadataWorkflowAccessPolicy {
+	return d.meta(t, ctx).WorkflowAccessPolicies
+}
+
 func (d *Daprd) GetMetadata(t assert.TestingT, ctx context.Context) *Metadata {
 	return d.meta(t, ctx)
 }
 
 // Metadata is a subset of metadataResponse defined in pkg/api/http/metadata.go:160
 type Metadata struct {
-	RegisteredComponents []*rtv1.RegisteredComponents         `json:"components,omitempty"`
-	Subscriptions        []MetadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
-	HTTPEndpoints        []*rtv1.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
-	MCPServers           []*rtv1.MetadataMCPServer            `json:"mcpServers,omitempty"`
-	Scheduler            *rtv1.MetadataScheduler              `json:"scheduler,omitempty"`
-	ActorRuntime         *MetadataActorRuntime                `json:"actorRuntime,omitempty"`
-	Workflows            *MetadataWorkflows                   `json:"workflows"`
+	RegisteredComponents   []*rtv1.RegisteredComponents         `json:"components,omitempty"`
+	Subscriptions          []MetadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
+	HTTPEndpoints          []*rtv1.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
+	MCPServers             []*rtv1.MetadataMCPServer            `json:"mcpServers,omitempty"`
+	Scheduler              *rtv1.MetadataScheduler              `json:"scheduler,omitempty"`
+	ActorRuntime           *MetadataActorRuntime                `json:"actorRuntime,omitempty"`
+	Workflows              *MetadataWorkflows                   `json:"workflows"`
+	WorkflowAccessPolicies []*rtv1.MetadataWorkflowAccessPolicy `json:"workflowAccessPolicies,omitempty"`
+	Resiliencies           []*rtv1.MetadataResiliency           `json:"resiliencies,omitempty"`
 }
 
 // MetadataResponsePubsubSubscription copied from pkg/api/http/metadata.go:172 to be able to use in integration tests until we move to Proto format

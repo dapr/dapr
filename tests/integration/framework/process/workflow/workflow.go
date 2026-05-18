@@ -39,6 +39,7 @@ type Workflow struct {
 	db           *sqlite.SQLite
 	place        *placement.Placement
 	sched        *scheduler.Scheduler
+	ownsSched    bool
 	sentry       *sentry.Sentry
 	daprds       []*daprd.Daprd
 }
@@ -66,6 +67,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 
 	var sen *sentry.Sentry
 	var placementOpts []placement.Option
+	placementOpts = append(placementOpts, opts.placementOptions...)
 	var schedulerOpts []scheduler.Option
 	schedulerOpts = append(schedulerOpts, opts.schedulerOptions...)
 	if opts.mtls {
@@ -79,7 +81,12 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	}
 
 	place := placement.New(t, placementOpts...)
-	sched := scheduler.New(t, schedulerOpts...)
+	sched := opts.schedulerInstance
+	ownsSched := false
+	if sched == nil {
+		sched = scheduler.New(t, schedulerOpts...)
+		ownsSched = true
+	}
 
 	baseDopts := []daprd.Option{
 		daprd.WithPlacementAddresses(place.Address()),
@@ -89,12 +96,10 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		baseDopts = append(baseDopts, daprd.WithResourceFiles(db.GetComponent(t)))
 	}
 
+	var signingDopts []daprd.Option
 	if sen != nil {
-		// Signing requires mTLS for the SPIFFE identity, so when this
-		// framework is configured with mTLS we also enable the
-		// WorkflowHistorySigning feature flag on every daprd.
-		baseDopts = append(baseDopts,
-			daprd.WithSentry(t, sen),
+		baseDopts = append(baseDopts, daprd.WithSentry(t, sen))
+		signingDopts = []daprd.Option{
 			daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
@@ -104,16 +109,32 @@ spec:
   - name: WorkflowHistorySigning
     enabled: true
 `),
-		)
+		}
 	}
 
-	baseDopts = append(baseDopts, daprd.WithScheduler(sched))
+	if opts.schedulerAddress != nil {
+		// Reset so a caller-supplied override (e.g. a proxy in front of the
+		// scheduler) truly replaces any addresses appended by other option
+		// layers, instead of being one entry among many.
+		baseDopts = append(baseDopts, daprd.WithSchedulerAddressesReset(*opts.schedulerAddress))
+	} else {
+		baseDopts = append(baseDopts, daprd.WithScheduler(sched))
+	}
+
+	signingDisabled := make(map[int]bool, len(opts.signingDisabled))
+	for _, idx := range opts.signingDisabled {
+		signingDisabled[idx] = true
+	}
 
 	daprds := make([]*daprd.Daprd, opts.daprds)
 
 	for i := range daprds {
-		dopts := make([]daprd.Option, 0, len(baseDopts))
+		dopts := make([]daprd.Option, 0, len(baseDopts)+len(signingDopts))
 		dopts = append(dopts, baseDopts...)
+
+		if !signingDisabled[i] {
+			dopts = append(dopts, signingDopts...)
+		}
 
 		// Add specific opts for this daprd
 		for _, daprdOpt := range opts.daprdOptions {
@@ -147,6 +168,7 @@ spec:
 		db:           db,
 		place:        place,
 		sched:        sched,
+		ownsSched:    ownsSched,
 		sentry:       sen,
 		daprds:       daprds,
 	}
@@ -164,7 +186,7 @@ func (w *Workflow) Run(t *testing.T, ctx context.Context) {
 		w.sentry.Run(t, ctx)
 	}
 	w.place.Run(t, ctx)
-	if w.sched != nil {
+	if w.ownsSched {
 		w.sched.Run(t, ctx)
 	}
 	for _, daprd := range w.daprds {
@@ -176,7 +198,7 @@ func (w *Workflow) Cleanup(t *testing.T) {
 	for _, daprd := range w.daprds {
 		daprd.Cleanup(t)
 	}
-	if w.sched != nil {
+	if w.ownsSched {
 		w.sched.Cleanup(t)
 	}
 	w.place.Cleanup(t)
@@ -236,13 +258,23 @@ func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) 
 	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.RegistryN(index)))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c,
-			len(w.DaprN(index).GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
-		w := w.DaprN(index).GetMetadata(t, ctx).Workflows
-		if assert.NotNil(c, w) {
-			assert.GreaterOrEqual(c, w.ConnectedWorkers, 1)
+		// GetMetadata can return a partially-populated value if the underlying
+		// HTTP request fails or times out (the request runs under a derived
+		// context with its own deadline). Guard each field access so a nil
+		// here causes the Eventually tick to retry rather than panic the
+		// whole test binary.
+		md := w.DaprN(index).GetMetadata(t, ctx)
+		if !assert.NotNil(c, md) {
+			return
 		}
-	}, time.Second*20, time.Millisecond*10)
+		if !assert.NotNil(c, md.ActorRuntime) {
+			return
+		}
+		assert.GreaterOrEqual(c, len(md.ActorRuntime.ActiveActors), 3)
+		if assert.NotNil(c, md.Workflows) {
+			assert.GreaterOrEqual(c, md.Workflows.ConnectedWorkers, 1)
+		}
+	}, time.Second*60, time.Millisecond*10)
 
 	return backendClient
 }
@@ -278,4 +310,12 @@ func (w *Workflow) DB() *sqlite.SQLite {
 
 func (w *Workflow) Scheduler() *scheduler.Scheduler {
 	return w.sched
+}
+
+func (w *Workflow) Sentry() *sentry.Sentry {
+	return w.sentry
+}
+
+func (w *Workflow) Placement() *placement.Placement {
+	return w.place
 }

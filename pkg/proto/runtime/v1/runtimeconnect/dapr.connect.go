@@ -105,6 +105,9 @@ const (
 	DaprExecuteActorStateTransactionProcedure = "/dapr.proto.runtime.v1.Dapr/ExecuteActorStateTransaction"
 	// DaprInvokeActorProcedure is the fully-qualified name of the Dapr's InvokeActor RPC.
 	DaprInvokeActorProcedure = "/dapr.proto.runtime.v1.Dapr/InvokeActor"
+	// DaprSubscribeActorEventsAlpha1Procedure is the fully-qualified name of the Dapr's
+	// SubscribeActorEventsAlpha1 RPC.
+	DaprSubscribeActorEventsAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/SubscribeActorEventsAlpha1"
 	// DaprGetConfigurationAlpha1Procedure is the fully-qualified name of the Dapr's
 	// GetConfigurationAlpha1 RPC.
 	DaprGetConfigurationAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/GetConfigurationAlpha1"
@@ -272,6 +275,13 @@ type DaprClient interface {
 	ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(context.Context, *connect.Request[v1.InvokeActorRequest]) (*connect.Response[v1.InvokeActorResponse], error)
+	// SubscribeActorEventsAlpha1 is the app-initiated stream over which an
+	// actor host receives invocation, reminder, timer, and deactivation
+	// callbacks from Dapr. The first message the app sends must be a
+	// SubscribeActorEventsRequestInitialAlpha1 registering the actor types
+	// it hosts. Apps using this RPC do not need to expose a server port for
+	// actor callbacks.
+	SubscribeActorEventsAlpha1(context.Context) *connect.BidiStreamForClient[v1.SubscribeActorEventsRequestAlpha1, v1.SubscribeActorEventsResponseAlpha1]
 	// GetConfiguration gets configuration from configuration store.
 	GetConfigurationAlpha1(context.Context, *connect.Request[v1.GetConfigurationRequest]) (*connect.Response[v1.GetConfigurationResponse], error)
 	// GetConfiguration gets configuration from configuration store.
@@ -551,6 +561,12 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			connect.WithSchema(daprMethods.ByName("InvokeActor")),
 			connect.WithClientOptions(opts...),
 		),
+		subscribeActorEventsAlpha1: connect.NewClient[v1.SubscribeActorEventsRequestAlpha1, v1.SubscribeActorEventsResponseAlpha1](
+			httpClient,
+			baseURL+DaprSubscribeActorEventsAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("SubscribeActorEventsAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
 		getConfigurationAlpha1: connect.NewClient[v1.GetConfigurationRequest, v1.GetConfigurationResponse](
 			httpClient,
 			baseURL+DaprGetConfigurationAlpha1Procedure,
@@ -764,7 +780,8 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 		scheduleJob: connect.NewClient[v1.ScheduleJobRequest, v1.ScheduleJobResponse](
 			httpClient,
 			baseURL+DaprScheduleJobProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("ScheduleJob")),
+			connect.WithClientOptions(opts...),
 		),
 		getJobAlpha1: connect.NewClient[v1.GetJobRequest, v1.GetJobResponse](
 			httpClient,
@@ -775,7 +792,8 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 		getJob: connect.NewClient[v1.GetJobRequest, v1.GetJobResponse](
 			httpClient,
 			baseURL+DaprGetJobProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("GetJob")),
+			connect.WithClientOptions(opts...),
 		),
 		deleteJobAlpha1: connect.NewClient[v1.DeleteJobRequest, v1.DeleteJobResponse](
 			httpClient,
@@ -786,7 +804,8 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 		deleteJob: connect.NewClient[v1.DeleteJobRequest, v1.DeleteJobResponse](
 			httpClient,
 			baseURL+DaprDeleteJobProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("DeleteJob")),
+			connect.WithClientOptions(opts...),
 		),
 		deleteJobsByPrefixAlpha1: connect.NewClient[v1.DeleteJobsByPrefixRequestAlpha1, v1.DeleteJobsByPrefixResponseAlpha1](
 			httpClient,
@@ -797,7 +816,8 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 		deleteJobsByPrefix: connect.NewClient[v1.DeleteJobsByPrefixRequest, v1.DeleteJobsByPrefixResponse](
 			httpClient,
 			baseURL+DaprDeleteJobsByPrefixProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("DeleteJobsByPrefix")),
+			connect.WithClientOptions(opts...),
 		),
 		listJobsAlpha1: connect.NewClient[v1.ListJobsRequestAlpha1, v1.ListJobsResponseAlpha1](
 			httpClient,
@@ -808,7 +828,8 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 		listJobs: connect.NewClient[v1.ListJobsRequest, v1.ListJobsResponse](
 			httpClient,
 			baseURL+DaprListJobsProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("ListJobs")),
+			connect.WithClientOptions(opts...),
 		),
 		converseAlpha1: connect.NewClient[v1.ConversationRequest, v1.ConversationResponse](
 			httpClient,
@@ -852,6 +873,7 @@ type daprClient struct {
 	getActorReminder               *connect.Client[v1.GetActorReminderRequest, v1.GetActorReminderResponse]
 	executeActorStateTransaction   *connect.Client[v1.ExecuteActorStateTransactionRequest, emptypb.Empty]
 	invokeActor                    *connect.Client[v1.InvokeActorRequest, v1.InvokeActorResponse]
+	subscribeActorEventsAlpha1     *connect.Client[v1.SubscribeActorEventsRequestAlpha1, v1.SubscribeActorEventsResponseAlpha1]
 	getConfigurationAlpha1         *connect.Client[v1.GetConfigurationRequest, v1.GetConfigurationResponse]
 	getConfiguration               *connect.Client[v1.GetConfigurationRequest, v1.GetConfigurationResponse]
 	subscribeConfigurationAlpha1   *connect.Client[v1.SubscribeConfigurationRequest, v1.SubscribeConfigurationResponse]
@@ -1025,6 +1047,11 @@ func (c *daprClient) ExecuteActorStateTransaction(ctx context.Context, req *conn
 // InvokeActor calls dapr.proto.runtime.v1.Dapr.InvokeActor.
 func (c *daprClient) InvokeActor(ctx context.Context, req *connect.Request[v1.InvokeActorRequest]) (*connect.Response[v1.InvokeActorResponse], error) {
 	return c.invokeActor.CallUnary(ctx, req)
+}
+
+// SubscribeActorEventsAlpha1 calls dapr.proto.runtime.v1.Dapr.SubscribeActorEventsAlpha1.
+func (c *daprClient) SubscribeActorEventsAlpha1(ctx context.Context) *connect.BidiStreamForClient[v1.SubscribeActorEventsRequestAlpha1, v1.SubscribeActorEventsResponseAlpha1] {
+	return c.subscribeActorEventsAlpha1.CallBidiStream(ctx)
 }
 
 // GetConfigurationAlpha1 calls dapr.proto.runtime.v1.Dapr.GetConfigurationAlpha1.
@@ -1335,6 +1362,13 @@ type DaprHandler interface {
 	ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(context.Context, *connect.Request[v1.InvokeActorRequest]) (*connect.Response[v1.InvokeActorResponse], error)
+	// SubscribeActorEventsAlpha1 is the app-initiated stream over which an
+	// actor host receives invocation, reminder, timer, and deactivation
+	// callbacks from Dapr. The first message the app sends must be a
+	// SubscribeActorEventsRequestInitialAlpha1 registering the actor types
+	// it hosts. Apps using this RPC do not need to expose a server port for
+	// actor callbacks.
+	SubscribeActorEventsAlpha1(context.Context, *connect.BidiStream[v1.SubscribeActorEventsRequestAlpha1, v1.SubscribeActorEventsResponseAlpha1]) error
 	// GetConfiguration gets configuration from configuration store.
 	GetConfigurationAlpha1(context.Context, *connect.Request[v1.GetConfigurationRequest]) (*connect.Response[v1.GetConfigurationResponse], error)
 	// GetConfiguration gets configuration from configuration store.
@@ -1610,6 +1644,12 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 		connect.WithSchema(daprMethods.ByName("InvokeActor")),
 		connect.WithHandlerOptions(opts...),
 	)
+	daprSubscribeActorEventsAlpha1Handler := connect.NewBidiStreamHandler(
+		DaprSubscribeActorEventsAlpha1Procedure,
+		svc.SubscribeActorEventsAlpha1,
+		connect.WithSchema(daprMethods.ByName("SubscribeActorEventsAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
 	daprGetConfigurationAlpha1Handler := connect.NewUnaryHandler(
 		DaprGetConfigurationAlpha1Procedure,
 		svc.GetConfigurationAlpha1,
@@ -1823,7 +1863,8 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 	daprScheduleJobHandler := connect.NewUnaryHandler(
 		DaprScheduleJobProcedure,
 		svc.ScheduleJob,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("ScheduleJob")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprGetJobAlpha1Handler := connect.NewUnaryHandler(
 		DaprGetJobAlpha1Procedure,
@@ -1834,7 +1875,8 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 	daprGetJobHandler := connect.NewUnaryHandler(
 		DaprGetJobProcedure,
 		svc.GetJob,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("GetJob")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprDeleteJobAlpha1Handler := connect.NewUnaryHandler(
 		DaprDeleteJobAlpha1Procedure,
@@ -1845,7 +1887,8 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 	daprDeleteJobHandler := connect.NewUnaryHandler(
 		DaprDeleteJobProcedure,
 		svc.DeleteJob,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("DeleteJob")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprDeleteJobsByPrefixAlpha1Handler := connect.NewUnaryHandler(
 		DaprDeleteJobsByPrefixAlpha1Procedure,
@@ -1856,7 +1899,8 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 	daprDeleteJobsByPrefixHandler := connect.NewUnaryHandler(
 		DaprDeleteJobsByPrefixProcedure,
 		svc.DeleteJobsByPrefix,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("DeleteJobsByPrefix")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprListJobsAlpha1Handler := connect.NewUnaryHandler(
 		DaprListJobsAlpha1Procedure,
@@ -1867,7 +1911,8 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 	daprListJobsHandler := connect.NewUnaryHandler(
 		DaprListJobsProcedure,
 		svc.ListJobs,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("ListJobs")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprConverseAlpha1Handler := connect.NewUnaryHandler(
 		DaprConverseAlpha1Procedure,
@@ -1933,6 +1978,8 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 			daprExecuteActorStateTransactionHandler.ServeHTTP(w, r)
 		case DaprInvokeActorProcedure:
 			daprInvokeActorHandler.ServeHTTP(w, r)
+		case DaprSubscribeActorEventsAlpha1Procedure:
+			daprSubscribeActorEventsAlpha1Handler.ServeHTTP(w, r)
 		case DaprGetConfigurationAlpha1Procedure:
 			daprGetConfigurationAlpha1Handler.ServeHTTP(w, r)
 		case DaprGetConfigurationProcedure:
@@ -2132,6 +2179,10 @@ func (UnimplementedDaprHandler) ExecuteActorStateTransaction(context.Context, *c
 
 func (UnimplementedDaprHandler) InvokeActor(context.Context, *connect.Request[v1.InvokeActorRequest]) (*connect.Response[v1.InvokeActorResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.InvokeActor is not implemented"))
+}
+
+func (UnimplementedDaprHandler) SubscribeActorEventsAlpha1(context.Context, *connect.BidiStream[v1.SubscribeActorEventsRequestAlpha1, v1.SubscribeActorEventsResponseAlpha1]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.SubscribeActorEventsAlpha1 is not implemented"))
 }
 
 func (UnimplementedDaprHandler) GetConfigurationAlpha1(context.Context, *connect.Request[v1.GetConfigurationRequest]) (*connect.Response[v1.GetConfigurationResponse], error) {

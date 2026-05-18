@@ -65,6 +65,7 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 	if state == nil {
 		state = wfenginestate.NewState(wfenginestate.Options{
 			AppID:             o.appID,
+			Namespace:         o.namespace,
 			WorkflowActorType: o.actorType,
 			ActivityActorType: o.activityActorType,
 		})
@@ -72,6 +73,9 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 		o.ometa = o.ometaFromState(o.rstate, startEvent.GetExecutionStarted())
 
 		if propagatedHistory != nil {
+			if err := o.signing.VerifyAndAbsorbPropagatedHistory(propagatedHistory, state); err != nil {
+				return fmt.Errorf("workflow actor '%s': propagated history verification failed: %w", o.actorID, err)
+			}
 			state.SetIncomingHistory(propagatedHistory)
 		}
 		return o.scheduleWorkflowStart(ctx, startEvent, state)
@@ -101,6 +105,9 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 	log.Infof("Workflow actor '%s': workflow was previously completed and is being recreated", o.actorID)
 	state.Reset()
 	if propagatedHistory != nil {
+		if err := o.signing.VerifyAndAbsorbPropagatedHistory(propagatedHistory, state); err != nil {
+			return fmt.Errorf("workflow actor '%s': propagated history verification failed: %w", o.actorID, err)
+		}
 		state.SetIncomingHistory(propagatedHistory)
 	}
 	return o.scheduleWorkflowStart(ctx, startEvent, state)
@@ -116,7 +123,11 @@ func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *ba
 	// workflow execution. This is preferable to using the current thread so that we don't block the client
 	// while the workflow logic is running.
 	workflowName := startEvent.GetExecutionStarted().GetName()
-	if _, err := o.createWorkflowReminder(ctx, reminderPrefixStart, nil, start, o.appID, &workflowName); err != nil {
+	reminderName, err := randomReminderName(reminderPrefixStart)
+	if err != nil {
+		return err
+	}
+	if err := o.createWorkflowReminder(ctx, reminderName, nil, start, o.appID, &workflowName); err != nil {
 		return err
 	}
 	state.AddToInbox(startEvent)

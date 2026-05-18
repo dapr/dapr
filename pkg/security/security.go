@@ -26,6 +26,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
+	"github.com/spiffe/go-spiffe/v2/svid/jwtsvid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -63,6 +64,7 @@ type Handler interface {
 	ControlPlaneNamespace() string
 	CurrentTrustAnchors(context.Context) ([]byte, error)
 	WithSVIDContext(context.Context) context.Context
+	FetchJWT(ctx context.Context, audience string) (string, error)
 
 	MTLSEnabled() bool
 	ID() spiffeid.ID
@@ -149,6 +151,13 @@ type Options struct {
 
 	// JwtAudiences is the list of JWT audiences to be included in the certificate request.
 	JwtAudiences []string
+
+	// KeyAlgorithm selects the algorithm used for the workload's private key.
+	// When nil, defaults to Ed25519. Set to a pointer to
+	// spiffe.KeyAlgorithmRSA for components whose certificates are consumed by
+	// the Kubernetes API server (i.e. admission webhook serving), since some
+	// cloud distributions reject Ed25519 keys for that purpose.
+	KeyAlgorithm *spiffe.KeyAlgorithm
 }
 
 type provider struct {
@@ -248,6 +257,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 			RequestSVIDFn:       reqFn,
 			WriteIdentityToFile: opts.WriteIdentityToFile,
 			TrustAnchors:        trustAnchors,
+			KeyAlgorithm:        opts.KeyAlgorithm,
 		})
 	} else {
 		log.Warn("mTLS is disabled. Skipping certificate request and tls validation")
@@ -489,6 +499,21 @@ func (s *security) WithSVIDContext(ctx context.Context) context.Context {
 	}
 
 	return spiffecontext.WithSpiffe(ctx, s.spiffe)
+}
+
+func (s *security) FetchJWT(ctx context.Context, audience string) (string, error) {
+	if s.spiffe == nil {
+		return "", errors.New("SPIFFE JWT auth is configured but security is disabled")
+	}
+	jwtSource := s.spiffe.JWTSVIDSource()
+	if jwtSource == nil {
+		return "", errors.New("SPIFFE JWT source not available")
+	}
+	svid, err := jwtSource.FetchJWTSVID(ctx, jwtsvid.Params{Audience: audience})
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch SPIFFE JWT SVID: %w", err)
+	}
+	return svid.Marshal(), nil
 }
 
 func (s *security) IdentityDir() *string {

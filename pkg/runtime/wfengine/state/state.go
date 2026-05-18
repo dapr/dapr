@@ -14,7 +14,9 @@ limitations under the License.
 package state
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/json"
 	"errors"
@@ -39,17 +41,23 @@ import (
 )
 
 const (
-	inboxKeyPrefix       = "inbox"
-	historyKeyPrefix     = "history"
-	sigcertKeyPrefix     = "sigcert"
-	signatureKeyPrefix   = "signature"
-	customStatusKey      = "customStatus"
-	metadataKey          = "metadata"
+	inboxKeyPrefix      = "inbox"
+	historyKeyPrefix    = "history"
+	sigcertKeyPrefix    = "sigcert"
+	extSigCertKeyPrefix = "ext-sigcert"
+	signatureKeyPrefix  = "signature"
+	customStatusKey     = "customStatus"
+	// MetadataKey is the state-store key holding the workflow's metadata row
+	// (history/inbox/signature lengths + generation). Exported so other
+	// packages can refresh just this row to pick up the latest ETag without
+	// reloading the full workflow state.
+	MetadataKey          = "metadata"
 	propagatedHistoryKey = "propagated-history"
 
 	// maxStateEntries is the upper bound for any metadata count field
-	// (inbox, history, signatures, certificates). This prevents OOM from
-	// an attacker inflating metadata values in the state store.
+	// (inbox, history, signatures, own signing certificates, external
+	// signing certificates). This prevents OOM from an attacker inflating
+	// metadata values in the state store.
 	maxStateEntries = 1_000_000
 )
 
@@ -57,6 +65,7 @@ var wfLogger = logger.NewLogger("dapr.runtime.actor.target.workflow.state")
 
 type Options struct {
 	AppID             string
+	Namespace         string
 	WorkflowActorType string
 	ActivityActorType string
 	Signer            *signer.Signer
@@ -64,15 +73,17 @@ type Options struct {
 
 type State struct {
 	appID             string
+	namespace         string
 	workflowActorType string
 	activityActorType string
 
-	Inbox               []*backend.HistoryEvent
-	History             []*backend.HistoryEvent
-	SigningCertificates []*backend.SigningCertificate
-	Signatures          []*backend.HistorySignature
-	CustomStatus        *wrapperspb.StringValue
-	Generation          uint64
+	Inbox                       []*backend.HistoryEvent
+	History                     []*backend.HistoryEvent
+	SigningCertificates         []*backend.SigningCertificate
+	ExternalSigningCertificates []*backend.ExternalSigningCertificate
+	Signatures                  []*backend.HistorySignature
+	CustomStatus                *wrapperspb.StringValue
+	Generation                  uint64
 
 	// RawHistory holds the raw bytes of history events as loaded from the
 	// state store. These are used for signature verification to verify
@@ -95,16 +106,37 @@ type State struct {
 	// events. Set once at workflow creation, never modified.
 	IncomingHistory *protos.PropagatedHistory
 
+	// externalCertDigestIndex maps SHA-256 cert digests (raw 32-byte digest
+	// converted to a string for use as a map key, not hex-encoded) to their
+	// index in ExternalSigningCertificates. Built on load and maintained
+	// incrementally by AddExternalCert so repeated ingestion of the same foreign
+	// cert within one run is O(1) and idempotent. Not persisted. Rebuilt from
+	// ExternalSigningCertificates at load time.
+	externalCertDigestIndex map[string]uint64
+
+	// metadataETag is the state store's row-version token for the metadata
+	// key, captured at load time and refreshed after every successful save.
+	// Used as the version anchor for optimistic concurrency: every save
+	// upserts the metadata row with this ETag, so a peer host that wrote
+	// state under a stale snapshot causes our Multi to fail with an
+	// ETagMismatch instead of silently overwriting persisted events. nil
+	// means "no prior ETag known" (e.g. workflow is being created for the
+	// first time, or the cache was just invalidated). Not persisted; lives
+	// only in the in-memory cache.
+	metadataETag *string
+
 	// change tracking
-	inboxAddedCount                 int
-	inboxRemovedCount               int
-	historyAddedCount               int
-	historyRemovedCount             int
-	signingCertificatesAddedCount   int
-	signingCertificatesRemovedCount int
-	signaturesAddedCount            int
-	signaturesRemovedCount          int
-	incomingHistoryChanged          bool
+	inboxAddedCount                         int
+	inboxRemovedCount                       int
+	historyAddedCount                       int
+	historyRemovedCount                     int
+	signingCertificatesAddedCount           int
+	signingCertificatesRemovedCount         int
+	externalSigningCertificatesAddedCount   int
+	externalSigningCertificatesRemovedCount int
+	signaturesAddedCount                    int
+	signaturesRemovedCount                  int
+	incomingHistoryChanged                  bool
 }
 
 // TODO: @joshvanl: remove in v1.16
@@ -118,6 +150,7 @@ func NewState(opts Options) *State {
 	return &State{
 		Generation:        1,
 		appID:             opts.AppID,
+		namespace:         opts.Namespace,
 		workflowActorType: opts.WorkflowActorType,
 		activityActorType: opts.ActivityActorType,
 	}
@@ -134,6 +167,10 @@ func (s *State) Reset() {
 	s.signingCertificatesAddedCount = 0
 	s.signingCertificatesRemovedCount += len(s.SigningCertificates)
 	s.SigningCertificates = nil
+	s.externalSigningCertificatesAddedCount = 0
+	s.externalSigningCertificatesRemovedCount += len(s.ExternalSigningCertificates)
+	s.ExternalSigningCertificates = nil
+	s.externalCertDigestIndex = nil
 	s.signaturesAddedCount = 0
 	s.signaturesRemovedCount += len(s.Signatures)
 	s.Signatures = nil
@@ -154,6 +191,8 @@ func (s *State) ResetChangeTracking() {
 	s.historyRemovedCount = 0
 	s.signingCertificatesAddedCount = 0
 	s.signingCertificatesRemovedCount = 0
+	s.externalSigningCertificatesAddedCount = 0
+	s.externalSigningCertificatesRemovedCount = 0
 	s.signaturesAddedCount = 0
 	s.signaturesRemovedCount = 0
 	s.marshaledNewHistory = nil
@@ -167,6 +206,21 @@ func (s *State) SetIncomingHistory(ph *protos.PropagatedHistory) {
 	s.incomingHistoryChanged = true
 }
 
+// MetadataETag returns the cached metadata ETag, or nil if none is known.
+// Callers performing optimistic concurrency pass this through to the metadata
+// TransactionalUpsert via [GetSaveRequest].
+func (s *State) MetadataETag() *string {
+	return s.metadataETag
+}
+
+// SetMetadataETag updates the cached metadata ETag. Called after a successful
+// save to record the new row-version token returned by a follow-up
+// metadata-only Get, so the next save can present it as the prior ETag for
+// the optimistic-concurrency check.
+func (s *State) SetMetadataETag(etag *string) {
+	s.metadataETag = etag
+}
+
 func (s *State) ApplyRuntimeStateChanges(rs *backend.WorkflowRuntimeState) {
 	if rs.GetContinuedAsNew() {
 		s.historyRemovedCount += len(s.History)
@@ -175,6 +229,10 @@ func (s *State) ApplyRuntimeStateChanges(rs *backend.WorkflowRuntimeState) {
 		s.signingCertificatesRemovedCount += len(s.SigningCertificates)
 		s.signingCertificatesAddedCount = 0
 		s.SigningCertificates = nil
+		s.externalSigningCertificatesRemovedCount += len(s.ExternalSigningCertificates)
+		s.externalSigningCertificatesAddedCount = 0
+		s.ExternalSigningCertificates = nil
+		s.externalCertDigestIndex = nil
 		s.signaturesRemovedCount += len(s.Signatures)
 		s.signaturesAddedCount = 0
 		s.Signatures = nil
@@ -198,9 +256,106 @@ func (s *State) AddToHistory(e *backend.HistoryEvent) {
 	s.historyAddedCount++
 }
 
+// FindHistoryEventByID returns the history event whose EventId matches
+// id, or nil if no such event exists. Linear scan; small constant
+// number of TaskScheduled / ChildWorkflowInstanceCreated lookups per
+// inbound completion event.
+func (s *State) FindHistoryEventByID(id int32) *backend.HistoryEvent {
+	for _, e := range s.History {
+		if e.GetEventId() == id {
+			return e
+		}
+	}
+	return nil
+}
+
 func (s *State) AddSigningCertificate(cert *backend.SigningCertificate) {
 	s.SigningCertificates = append(s.SigningCertificates, cert)
 	s.signingCertificatesAddedCount++
+}
+
+// AddExternalCert appends a foreign signing certificate to the ext-sigcert
+// table if its digest is not already present, and returns the table index.
+// Idempotent: the same (digest, certDER) pair called twice in one run
+// produces exactly one stored entry and returns the same index both times.
+// digest must be the SHA-256 of certDER (the caller typically already has
+// this value from historysigning.CertDigest). The caller is responsible
+// for verifying that the digest matches certDER before calling - this
+// method does not re-hash on the hot path. Returns an error if digest is
+// not 32 bytes.
+func (s *State) AddExternalCert(digest []byte, certDER []byte) (uint64, error) {
+	if len(digest) != sha256.Size {
+		return 0, fmt.Errorf("AddExternalCert: digest must be %d bytes, got %d", sha256.Size, len(digest))
+	}
+	if s.externalCertDigestIndex == nil {
+		s.externalCertDigestIndex = make(map[string]uint64, len(s.ExternalSigningCertificates)+1)
+	}
+	key := string(digest)
+	if idx, ok := s.externalCertDigestIndex[key]; ok {
+		return idx, nil
+	}
+	idx := uint64(len(s.ExternalSigningCertificates))
+	// Defensive-copy both byte slices so the stored entry does not alias
+	// caller buffers. Proto getters often return references into the
+	// enclosing message's backing array, which the caller may overwrite
+	// later (e.g., when the source event is reused or its
+	// SignerCertificate companion is cleared).
+	storedDigest := make([]byte, len(digest))
+	copy(storedDigest, digest)
+	storedCert := make([]byte, len(certDER))
+	copy(storedCert, certDER)
+	s.ExternalSigningCertificates = append(s.ExternalSigningCertificates, &backend.ExternalSigningCertificate{
+		Digest:      storedDigest,
+		Certificate: storedCert,
+	})
+	s.externalSigningCertificatesAddedCount++
+	s.externalCertDigestIndex[key] = idx
+	return idx, nil
+}
+
+// LookupExternalCert returns the ExternalSigningCertificate whose digest
+// matches the given bytes, plus its table index. Returns (nil, 0, false)
+// if not found. Used by attestation verification to resolve a payload's
+// signerCertDigest to the corresponding cert.
+func (s *State) LookupExternalCert(digest []byte) (*backend.ExternalSigningCertificate, uint64, bool) {
+	if s.externalCertDigestIndex == nil {
+		return nil, 0, false
+	}
+	idx, ok := s.externalCertDigestIndex[string(digest)]
+	if !ok {
+		return nil, 0, false
+	}
+	return s.ExternalSigningCertificates[idx], idx, true
+}
+
+// setLoadedExternalCerts populates the external signing certificate table
+// and rebuilds the digest→index map from entries freshly loaded from the
+// state store. Each entry's stored digest must match sha256 of its
+// certificate bytes - otherwise the state store has been tampered with
+// (or bit-rotted) since the entry was written.
+//
+// This is the load-time counterpart to AddExternalCert: AddExternalCert
+// incrementally grows the table during a run; setLoadedExternalCerts
+// restores the full table from persisted state at the start of a run.
+// Both leave the state with a consistent ExternalSigningCertificates
+// slice + externalCertDigestIndex map; the difference is only *when* the
+// table is populated (ingestion vs. load).
+func (s *State) setLoadedExternalCerts(certs []*backend.ExternalSigningCertificate) error {
+	for i, ext := range certs {
+		if got := historysigning.CertDigest(ext.GetCertificate()); !bytes.Equal(got, ext.GetDigest()) {
+			return fmt.Errorf("external signing certificate index %d: stored digest does not match sha256 of certificate bytes", i)
+		}
+	}
+	s.ExternalSigningCertificates = certs
+	if len(certs) == 0 {
+		s.externalCertDigestIndex = nil
+		return nil
+	}
+	s.externalCertDigestIndex = make(map[string]uint64, len(certs))
+	for i, ext := range certs {
+		s.externalCertDigestIndex[string(ext.GetDigest())] = uint64(i)
+	}
+	return nil
 }
 
 func (s *State) AddSignature(sig *backend.HistorySignature, raw []byte) {
@@ -242,6 +397,7 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 	opsCapacity := s.inboxAddedCount + s.inboxRemovedCount +
 		s.historyAddedCount + s.historyRemovedCount +
 		s.signingCertificatesAddedCount + s.signingCertificatesRemovedCount +
+		s.externalSigningCertificatesAddedCount + s.externalSigningCertificatesRemovedCount +
 		s.signaturesAddedCount + s.signaturesRemovedCount +
 		2 // customStatus + metadata
 	req := &api.TransactionalRequest{
@@ -259,6 +415,10 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 	}
 
 	if err := addProtoStateOperations(req, sigcertKeyPrefix, s.SigningCertificates, s.signingCertificatesAddedCount, s.signingCertificatesRemovedCount); err != nil {
+		return nil, err
+	}
+
+	if err := addProtoStateOperations(req, extSigCertKeyPrefix, s.ExternalSigningCertificates, s.externalSigningCertificatesAddedCount, s.externalSigningCertificatesRemovedCount); err != nil {
 		return nil, err
 	}
 
@@ -307,21 +467,33 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 	}
 
 	metaProto, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
-		InboxLength:              uint64(len(s.Inbox)),
-		HistoryLength:            uint64(len(s.History)),
-		Generation:               s.Generation,
-		SignatureLength:          uint64(len(s.Signatures)),
-		SigningCertificateLength: uint64(len(s.SigningCertificates)),
+		InboxLength:                      uint64(len(s.Inbox)),
+		HistoryLength:                    uint64(len(s.History)),
+		Generation:                       s.Generation,
+		SignatureLength:                  uint64(len(s.Signatures)),
+		SigningCertificateLength:         uint64(len(s.SigningCertificates)),
+		ExternalSigningCertificateLength: uint64(len(s.ExternalSigningCertificates)),
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	// Every time we save, we also update the metadata with information about the size of the history and inbox,
-	// as well as the generation of the workflow.
+	// as well as the generation of the workflow. The metadata Upsert carries
+	// the prior ETag so the whole transaction acts as one optimistic-
+	// concurrency check: any peer host that saved underneath us since our
+	// last load has bumped the row's ETag, so our Multi will fail with
+	// ETagMismatch instead of silently overwriting their writes. A nil
+	// metadataETag means "no prior version known" (first save of a brand-new
+	// workflow, or post-invalidation reload) and falls through to a blind
+	// upsert, which is the correct semantics for those cases.
 	req.Operations = append(req.Operations, api.TransactionalOperation{
 		Operation: api.Upsert,
-		Request:   api.TransactionalUpsert{Key: metadataKey, Value: metaProto},
+		Request: api.TransactionalUpsert{
+			Key:   MetadataKey,
+			Value: metaProto,
+			ETag:  s.metadataETag,
+		},
 	})
 
 	return req, nil
@@ -487,7 +659,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	req := api.GetStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,
-		Key:       metadataKey,
+		Key:       MetadataKey,
 	}
 
 	res, err := state.Get(ctx, &req, false)
@@ -525,6 +697,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		{"history", metadata.GetHistoryLength()},
 		{"signatures", metadata.GetSignatureLength()},
 		{"signing certificates", metadata.GetSigningCertificateLength()},
+		{"external signing certificates", metadata.GetExternalSigningCertificateLength()},
 	} {
 		if entry.value > maxStateEntries {
 			return nil, wferrors.NewVerificationError(
@@ -541,18 +714,26 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	//nolint:gosec
 	signingCertLen := int(metadata.GetSigningCertificateLength())
 	//nolint:gosec
+	extSigningCertLen := int(metadata.GetExternalSigningCertificateLength())
+	//nolint:gosec
 	signatureLen := int(metadata.GetSignatureLength())
 
-	// Load inbox, history, signing certs, signatures, and custom status using a bulk request
+	// Load inbox, history, signing certs, external signing certs,
+	// signatures, and custom status using a bulk request.
 	wState := NewState(opts)
 	wState.Generation = metadata.GetGeneration()
+	// Capture the metadata ETag for optimistic-concurrency on the next save.
+	// nil here just means the store didn't return one for this row, which is
+	// also fine: the next save will fall through to a blind upsert.
+	wState.metadataETag = res.ETag
 	wState.Inbox = make([]*backend.HistoryEvent, 0, inboxLen)
 	wState.History = make([]*backend.HistoryEvent, 0, historyLen)
 	wState.RawHistory = make([][]byte, 0, historyLen)
 	wState.SigningCertificates = make([]*backend.SigningCertificate, 0, signingCertLen)
+	wState.ExternalSigningCertificates = make([]*backend.ExternalSigningCertificate, 0, extSigningCertLen)
 	wState.Signatures = make([]*backend.HistorySignature, 0, signatureLen)
 
-	totalKeys := inboxLen + historyLen + signingCertLen + signatureLen + 2
+	totalKeys := inboxLen + historyLen + signingCertLen + extSigningCertLen + signatureLen + 2
 	bulkReq := &api.GetBulkStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,
@@ -581,6 +762,11 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		n++
 	}
 
+	for i := range metadata.GetExternalSigningCertificateLength() {
+		bulkReq.Keys[n] = getMultiEntryKeyName(extSigCertKeyPrefix, i)
+		n++
+	}
+
 	for i := range metadata.GetSignatureLength() {
 		bulkReq.Keys[n] = getMultiEntryKeyName(signatureKeyPrefix, i)
 		n++
@@ -604,13 +790,13 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	var key string
 	for i := range metadata.GetInboxLength() {
 		key = getMultiEntryKeyName(inboxKeyPrefix, i)
-		if bulkRes[key] == nil {
+		if bulkRes[key].Data == nil {
 			wfLogger.Warnf("Failed to load inbox state key '%s': not found", key)
 			continue
 		}
 
 		var hist backend.HistoryEvent
-		err = proto.Unmarshal(bulkRes[key], &hist)
+		err = proto.Unmarshal(bulkRes[key].Data, &hist)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key '%s': %w", key, err)
 		}
@@ -620,24 +806,24 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 
 	for i := range metadata.GetHistoryLength() {
 		key = getMultiEntryKeyName(historyKeyPrefix, i)
-		if bulkRes[key] == nil {
+		if bulkRes[key].Data == nil {
 			wfLogger.Warnf("Failed to load history state key '%s': not found", key)
 			continue
 		}
 
 		var hist backend.HistoryEvent
-		err = proto.Unmarshal(bulkRes[key], &hist)
+		err = proto.Unmarshal(bulkRes[key].Data, &hist)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from history state key '%s': %w", key, err)
 		}
 
 		wState.History = append(wState.History, &hist)
-		wState.RawHistory = append(wState.RawHistory, bulkRes[key])
+		wState.RawHistory = append(wState.RawHistory, bulkRes[key].Data)
 	}
 
 	for i := range metadata.GetSigningCertificateLength() {
 		key = getMultiEntryKeyName(sigcertKeyPrefix, i)
-		if bulkRes[key] == nil {
+		if bulkRes[key].Data == nil {
 			if hasTamperMarker(wState) {
 				return wState, nil
 			}
@@ -647,7 +833,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 
 		var cert backend.SigningCertificate
-		err = proto.Unmarshal(bulkRes[key], &cert)
+		err = proto.Unmarshal(bulkRes[key].Data, &cert)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal signing certificate from state key '%s': %w", key, err)
 		}
@@ -655,9 +841,35 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		wState.SigningCertificates = append(wState.SigningCertificates, &cert)
 	}
 
+	loadedExtCerts := make([]*backend.ExternalSigningCertificate, 0, extSigningCertLen)
+	for i := range metadata.GetExternalSigningCertificateLength() {
+		key = getMultiEntryKeyName(extSigCertKeyPrefix, i)
+		if bulkRes[key].Data == nil {
+			if hasTamperMarker(wState) {
+				return wState, nil
+			}
+			return wState, wferrors.NewVerificationError(
+				fmt.Errorf("external signing certificate state key '%s' declared in metadata but not found in state store - possible tampering", key),
+			)
+		}
+
+		var ext backend.ExternalSigningCertificate
+		err = proto.Unmarshal(bulkRes[key].Data, &ext)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal external signing certificate from state key '%s': %w", key, err)
+		}
+		loadedExtCerts = append(loadedExtCerts, &ext)
+	}
+	if err = wState.setLoadedExternalCerts(loadedExtCerts); err != nil {
+		if hasTamperMarker(wState) {
+			return wState, nil
+		}
+		return wState, wferrors.NewVerificationError(err)
+	}
+
 	for i := range metadata.GetSignatureLength() {
 		key = getMultiEntryKeyName(signatureKeyPrefix, i)
-		if bulkRes[key] == nil {
+		if bulkRes[key].Data == nil {
 			if hasTamperMarker(wState) {
 				return wState, nil
 			}
@@ -667,26 +879,26 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 
 		var sig backend.HistorySignature
-		err = proto.Unmarshal(bulkRes[key], &sig)
+		err = proto.Unmarshal(bulkRes[key].Data, &sig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history signature from state key '%s': %w", key, err)
 		}
 
 		wState.Signatures = append(wState.Signatures, &sig)
-		raw := make([]byte, len(bulkRes[key]))
-		copy(raw, bulkRes[key])
+		raw := make([]byte, len(bulkRes[key].Data))
+		copy(raw, bulkRes[key].Data)
 		wState.RawSignatures = append(wState.RawSignatures, raw)
 	}
 
-	if len(bulkRes[customStatusKey]) > 0 {
+	if len(bulkRes[customStatusKey].Data) > 0 {
 		wState.CustomStatus = &wrapperspb.StringValue{}
 
-		err = proto.Unmarshal(bulkRes[customStatusKey], wState.CustomStatus)
+		err = proto.Unmarshal(bulkRes[customStatusKey].Data, wState.CustomStatus)
 		if err != nil {
 			// Fallback to JSON unmarshaling
 			var customStatusValue string
 			// TODO: @famarting: remove in v1.16
-			jerr := json.Unmarshal(bulkRes[customStatusKey], &customStatusValue)
+			jerr := json.Unmarshal(bulkRes[customStatusKey].Data, &customStatusValue)
 			if jerr != nil {
 				return nil, fmt.Errorf("failed to unmarshal custom status key entry: %w", err)
 			}
@@ -695,9 +907,9 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 	}
 
-	if len(bulkRes[propagatedHistoryKey]) > 0 {
+	if len(bulkRes[propagatedHistoryKey].Data) > 0 {
 		var ph protos.PropagatedHistory
-		if err = proto.Unmarshal(bulkRes[propagatedHistoryKey], &ph); err != nil {
+		if err = proto.Unmarshal(bulkRes[propagatedHistoryKey].Data, &ph); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal propagated history for '%s': %w", actorID, err)
 		}
 		wState.IncomingHistory = &ph
@@ -730,6 +942,11 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		if opts.AppID == "" {
 			return wState, wferrors.NewConfigurationError(
 				fmt.Errorf("workflow '%s' has signed history but app ID is not configured; cannot verify signer identity", actorID),
+			)
+		}
+		if opts.Namespace == "" {
+			return wState, wferrors.NewConfigurationError(
+				fmt.Errorf("workflow '%s' has signed history but namespace is not configured; cannot verify signer identity", actorID),
 			)
 		}
 		if err := verifySignatureChain(wState, opts.Signer); err != nil {
@@ -777,6 +994,22 @@ func hasTamperMarker(s *State) bool {
 	return s != nil && len(s.History) > 0 && IsTamperMarker(s.History[len(s.History)-1])
 }
 
+// IsCompleted reports whether the workflow's history ends in any
+// ExecutionCompleted event - the runtime's terminal marker. Operates on
+// stored state directly so callers that have a *State but not yet a
+// runtime state (e.g. mid-load decisions) can check terminality.
+func (s *State) IsCompleted() bool {
+	return s != nil && len(s.History) > 0 && s.History[len(s.History)-1].GetExecutionCompleted() != nil
+}
+
+// HasTamperMarker reports whether the workflow has been terminally failed by
+// tamper detection (cold-store load tamper or attestation verification
+// failure). True implies IsCompleted; the converse does not hold (a normally
+// completed workflow returns false).
+func (s *State) HasTamperMarker() bool {
+	return hasTamperMarker(s)
+}
+
 // MarkAsTamperFailed appends a single terminal ExecutionCompleted(FAILED) event to
 // the workflow's history to record that its persisted state was detected as
 // tampered. The original (untrusted) history, inbox, signatures, and certs
@@ -821,6 +1054,24 @@ func MarkAsTamperFailed(ctx context.Context, astate state.Interface, actorID str
 	}
 
 	s.ResetChangeTracking()
+
+	// Refresh the metadata ETag so a subsequent save by the caller (e.g. an
+	// addWorkflowEvent that landed on this same actor right after we
+	// tombstoned) doesn't trip optimistic-concurrency on the stale token we
+	// loaded with. The save above bumped postgres's row version; our
+	// in-memory copy is now out of date. A read failure here is non-fatal:
+	// we clear the cached ETag so the next save falls back to a blind
+	// upsert (which is fine for a tombstoned, terminal workflow).
+	metaRes, metaErr := astate.Get(ctx, &api.GetStateRequest{
+		ActorType: opts.WorkflowActorType,
+		ActorID:   actorID,
+		Key:       MetadataKey,
+	}, false)
+	if metaErr != nil || metaRes == nil {
+		s.metadataETag = nil
+	} else {
+		s.metadataETag = metaRes.ETag
+	}
 	return s, nil
 }
 
@@ -839,7 +1090,7 @@ func verifySignatureChain(s *State, sgn *signer.Signer) error {
 				coveredEvents, len(rawEvents))
 		}
 	}
-	if err := historysigning.VerifyChain(historysigning.VerifyChainOptions{
+	if _, err := historysigning.VerifyChain(historysigning.VerifyChainOptions{
 		RawSignatures: s.RawSignatures,
 		Certs:         s.SigningCertificates,
 		AllRawEvents:  rawEvents,
@@ -848,13 +1099,15 @@ func verifySignatureChain(s *State, sgn *signer.Signer) error {
 		return err
 	}
 
-	// Verify that all signing certificates belong to the expected app. This
-	// prevents cross-app signature forgery where App B signs events for App A's
-	// workflow using a valid certificate from the same trust domain. The appID
-	// is guaranteed non-empty here because LoadWorkflowState rejects signed
-	// workflows with an empty AppID.
+	// Verify that all signing certificates belong to the expected app and
+	// namespace. This prevents cross-app signature forgery where App B signs
+	// events for App A's workflow using a valid certificate from the same
+	// trust domain, and cross-namespace forgery where the same app-id in a
+	// different namespace forges signatures. AppID and Namespace are
+	// guaranteed non-empty here because LoadWorkflowState rejects signed
+	// workflows with empty values.
 	for i, cert := range s.SigningCertificates {
-		if err := verifyCertAppIdentity(cert.GetCertificate(), s.appID); err != nil {
+		if err := verifyCertAppIdentity(cert.GetCertificate(), s.appID, s.namespace); err != nil {
 			return fmt.Errorf("signing certificate %d: %w", i, err)
 		}
 	}
@@ -863,10 +1116,16 @@ func verifySignatureChain(s *State, sgn *signer.Signer) error {
 }
 
 // verifyCertAppIdentity checks that a DER-encoded signing certificate chain
-// contains a SPIFFE ID matching the expected app ID. SPIFFE IDs follow the
-// pattern: spiffe://<trust-domain>/ns/<namespace>/<app-id>
+// contains a SPIFFE ID matching the expected app ID and namespace. SPIFFE
+// IDs follow the pattern: spiffe://<trust-domain>/ns/<namespace>/<app-id>
 // The function validates the full path structure, not just the last segment.
-func verifyCertAppIdentity(certChainDER []byte, expectedAppID string) error {
+func verifyCertAppIdentity(certChainDER []byte, expectedAppID, expectedNamespace string) error {
+	if expectedAppID == "" {
+		return errors.New("expectedAppID must not be empty")
+	}
+	if expectedNamespace == "" {
+		return errors.New("expectedNamespace must not be empty")
+	}
 	if len(certChainDER) == 0 {
 		return errors.New("certificate chain is empty")
 	}
@@ -891,8 +1150,12 @@ func verifyCertAppIdentity(certChainDER []byte, expectedAppID string) error {
 	if len(segments) != 4 || segments[0] != "" || segments[1] != "ns" || segments[2] == "" || segments[3] == "" {
 		return fmt.Errorf("SPIFFE ID %q does not match expected path format /ns/<namespace>/<app-id>", spiffeID)
 	}
+	certNamespace := segments[2]
 	certAppID := segments[3]
 
+	if certNamespace != expectedNamespace {
+		return fmt.Errorf("certificate SPIFFE ID namespace %q does not match expected namespace %q", certNamespace, expectedNamespace)
+	}
 	if certAppID != expectedAppID {
 		return fmt.Errorf("certificate SPIFFE ID app %q does not match expected app %q", certAppID, expectedAppID)
 	}
@@ -905,12 +1168,13 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 		ActorType: s.workflowActorType,
 		ActorID:   actorID,
 		// Initial capacity should be enough to contain the entire inbox, history, signing data, and custom status + metadata
-		Operations: make([]api.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+len(s.SigningCertificates)+len(s.Signatures)+2),
+		Operations: make([]api.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+len(s.SigningCertificates)+len(s.ExternalSigningCertificates)+len(s.Signatures)+2),
 	}
 
 	addPurgeStateOperations(req, inboxKeyPrefix, len(s.Inbox))
 	addPurgeStateOperations(req, historyKeyPrefix, len(s.History))
 	addPurgeStateOperations(req, sigcertKeyPrefix, len(s.SigningCertificates))
+	addPurgeStateOperations(req, extSigCertKeyPrefix, len(s.ExternalSigningCertificates))
 	addPurgeStateOperations(req, signatureKeyPrefix, len(s.Signatures))
 
 	req.Operations = append(req.Operations,
@@ -920,7 +1184,7 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 		},
 		api.TransactionalOperation{
 			Operation: api.Delete,
-			Request:   api.TransactionalDelete{Key: metadataKey},
+			Request:   api.TransactionalDelete{Key: MetadataKey},
 		},
 		api.TransactionalOperation{
 			Operation: api.Delete,
