@@ -15,6 +15,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -26,13 +27,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -171,12 +170,12 @@ func (s *middlewareBeforeCallTool) Run(t *testing.T, ctx context.Context) {
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
 
-		var result wfv1.CallMCPToolResponse
-		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		assert.True(t, result.GetIsError(), "expected isError=true when gate hook denies")
-		require.NotEmpty(t, result.GetContent())
-		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "access denied by policy",
-			"expected gate error in content, got: %s", result.GetContent()[0].GetText().GetText())
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(outputJSON), &result))
+		assert.True(t, result.IsError, "expected isError=true when gate hook denies")
+		require.NotEmpty(t, result.Content)
+		assert.Contains(t, extractText(result.Content[0]), "access denied by policy",
+			"expected gate error in content, got: %s", extractText(result.Content[0]))
 	})
 
 	t.Run("pass-through hook allows tool call", func(t *testing.T) {
@@ -190,8 +189,8 @@ func (s *middlewareBeforeCallTool) Run(t *testing.T, ctx context.Context) {
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
 
-		var result wfv1.CallMCPToolResponse
-		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		assert.False(t, result.GetIsError(), "expected success when noop hook passes through")
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(outputJSON), &result))
+		assert.False(t, result.IsError, "expected success when noop hook passes through")
 	})
 }
