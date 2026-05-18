@@ -23,13 +23,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -148,12 +146,12 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
-		var result wfv1.CallMCPToolResponse
-		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.False(t, result.GetIsError())
-		require.NotEmpty(t, result.GetContent())
-		assert.NotNil(t, result.GetContent()[0].GetText())
-		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "Austin")
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+		assert.False(t, result.IsError)
+		require.NotEmpty(t, result.Content)
+		assert.NotNil(t, result.Content[0])
+		assert.Contains(t, extractText(result.Content[0]), "Austin")
 	})
 
 	t.Run("CallTool on greeter server returns greeting", func(t *testing.T) {
@@ -168,12 +166,12 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
-		var result wfv1.CallMCPToolResponse
-		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.False(t, result.GetIsError())
-		require.NotEmpty(t, result.GetContent())
-		assert.NotNil(t, result.GetContent()[0].GetText())
-		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "dapr")
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+		assert.False(t, result.IsError)
+		require.NotEmpty(t, result.Content)
+		assert.NotNil(t, result.Content[0])
+		assert.Contains(t, extractText(result.Content[0]), "dapr")
 	})
 
 	t.Run("ListTools returns different tools per server", func(t *testing.T) {
@@ -184,11 +182,11 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 			ctx, api.InstanceID(weatherID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
 
-		var weatherResult wfv1.ListMCPToolsResponse
+		var weatherResult mcp.ListToolsResult
 		require.NoError(t, json.Unmarshal([]byte(weatherMeta.GetOutput().GetValue()), &weatherResult))
-		weatherNames := make([]string, len(weatherResult.GetTools()))
-		for i, tool := range weatherResult.GetTools() {
-			weatherNames[i] = tool.GetName()
+		weatherNames := make([]string, len(weatherResult.Tools))
+		for i, tool := range weatherResult.Tools {
+			weatherNames[i] = tool.Name
 		}
 		assert.Contains(t, weatherNames, "get_weather")
 		assert.NotContains(t, weatherNames, "greet")
@@ -200,11 +198,11 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 			ctx, api.InstanceID(greeterID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
 
-		var greeterResult wfv1.ListMCPToolsResponse
+		var greeterResult mcp.ListToolsResult
 		require.NoError(t, json.Unmarshal([]byte(greeterMeta.GetOutput().GetValue()), &greeterResult))
-		greeterNames := make([]string, len(greeterResult.GetTools()))
-		for i, tool := range greeterResult.GetTools() {
-			greeterNames[i] = tool.GetName()
+		greeterNames := make([]string, len(greeterResult.Tools))
+		for i, tool := range greeterResult.Tools {
+			greeterNames[i] = tool.Name
 		}
 		assert.Contains(t, greeterNames, "greet")
 		assert.NotContains(t, greeterNames, "get_weather")
