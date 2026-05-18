@@ -14,11 +14,13 @@ limitations under the License.
 package orchestrator
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
 	"google.golang.org/protobuf/proto"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
@@ -41,12 +43,13 @@ const (
 // workflowPayloadOversize reports whether the WorkflowRequest the executor
 // will build for this run would exceed the gRPC stream's send threshold.
 // A non-positive maxRequestBodySize signals "no limit" (matching the dapr
-// HTTP server's convention) and disables the precheck.
-func (o *orchestrator) workflowPayloadOversize(state *wfenginestate.State) (protos.StalledReason, string, bool) {
+// HTTP server's convention) and disables both the stall check and the
+// size-ratio metric (the ratio is undefined without a limit).
+func (o *orchestrator) workflowPayloadOversize(ctx context.Context, state *wfenginestate.State, workflowName string) (protos.StalledReason, string, bool) {
 	if o.maxRequestBodySize <= 0 {
 		return 0, "", false
 	}
-	threshold := (o.maxRequestBodySize * payloadStallNumerator) / payloadStallDenominator
+
 	size := proto.Size(state.IncomingHistory)
 	for _, e := range state.History {
 		size += proto.Size(e)
@@ -54,6 +57,10 @@ func (o *orchestrator) workflowPayloadOversize(state *wfenginestate.State) (prot
 	for _, e := range state.Inbox {
 		size += proto.Size(e)
 	}
+
+	diag.DefaultWorkflowMonitoring.WorkflowPayloadSizeRatio(ctx, workflowName, float64(size)/float64(o.maxRequestBodySize))
+
+	threshold := (o.maxRequestBodySize * payloadStallNumerator) / payloadStallDenominator
 	if size <= threshold {
 		return 0, "", false
 	}
@@ -68,18 +75,22 @@ func (o *orchestrator) workflowPayloadOversize(state *wfenginestate.State) (prot
 // will build for this dispatch would exceed the gRPC stream's send threshold.
 // Returns nil when the payload fits, or a wrapped errPayloadSizeExceeded that
 // runWorkflow uses to stall the parent workflow. A non-positive
-// maxRequestBodySize signals "no limit" and disables the precheck.
-func (o *orchestrator) activityPayloadOversize(payload proto.Message, e *backend.HistoryEvent) error {
+// maxRequestBodySize disables both the stall check and the ratio metric.
+func (o *orchestrator) activityPayloadOversize(ctx context.Context, payload proto.Message, e *backend.HistoryEvent, workflowName string) error {
 	if o.maxRequestBodySize <= 0 {
 		return nil
 	}
-	threshold := (o.maxRequestBodySize * payloadStallNumerator) / payloadStallDenominator
+
 	size := proto.Size(payload)
+	ts := e.GetTaskScheduled()
+
+	diag.DefaultWorkflowMonitoring.ActivityPayloadSizeRatio(ctx, workflowName, ts.GetName(), float64(size)/float64(o.maxRequestBodySize))
+
+	threshold := (o.maxRequestBodySize * payloadStallNumerator) / payloadStallDenominator
 	if size <= threshold {
 		return nil
 	}
 
-	ts := e.GetTaskScheduled()
 	return fmt.Errorf("activity '%s::%d' payload %d bytes exceeds %d%% of max gRPC body size %d bytes; increase daprd --max-body-size and restart to resume: %w",
 		ts.GetName(), e.GetEventId(), size, payloadStallNumerator, o.maxRequestBodySize, errPayloadSizeExceeded)
 }
