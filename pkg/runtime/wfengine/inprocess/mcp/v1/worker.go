@@ -160,15 +160,7 @@ func DiscoverTools(ctx context.Context, holder *SessionHolder) ([]*mcp.Tool, err
 		if err != nil {
 			return nil, fmt.Errorf("ListTools failed: %w", err)
 		}
-		for _, t := range result.Tools {
-			td := &mcp.Tool{Name: t.Name, Description: t.Description}
-			if t.InputSchema != nil {
-				if schema, ok := t.InputSchema.(map[string]any); ok {
-					td.InputSchema = schema
-				}
-			}
-			tools = append(tools, td)
-		}
+		tools = append(tools, result.Tools...)
 		if result.NextCursor == "" {
 			return tools, nil
 		}
