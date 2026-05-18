@@ -33,512 +33,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ListMCPToolsResponse is the output of a ListTools workflow.
-type ListMCPToolsResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	// tools is the list of tools available on the MCPServer.
-	Tools []*MCPToolDefinition `protobuf:"bytes,1,rep,name=tools,proto3" json:"tools,omitempty"`
-}
-
-func (x *ListMCPToolsResponse) Reset() {
-	*x = ListMCPToolsResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[0]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *ListMCPToolsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListMCPToolsResponse) ProtoMessage() {}
-
-func (x *ListMCPToolsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[0]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListMCPToolsResponse.ProtoReflect.Descriptor instead.
-func (*ListMCPToolsResponse) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *ListMCPToolsResponse) GetTools() []*MCPToolDefinition {
-	if x != nil {
-		return x.Tools
-	}
-	return nil
-}
-
-// MCPToolDefinition describes a single tool advertised by an MCP server.
-type MCPToolDefinition struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	// name is the tool name.
-	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// description is a human-readable description of the tool.
-	Description *string `protobuf:"bytes,2,opt,name=description,proto3,oneof" json:"description,omitempty"`
-	// input_schema is the JSON Schema for the tool's input arguments.
-	InputSchema *structpb.Struct `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
-}
-
-func (x *MCPToolDefinition) Reset() {
-	*x = MCPToolDefinition{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[1]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *MCPToolDefinition) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MCPToolDefinition) ProtoMessage() {}
-
-func (x *MCPToolDefinition) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[1]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MCPToolDefinition.ProtoReflect.Descriptor instead.
-func (*MCPToolDefinition) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *MCPToolDefinition) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *MCPToolDefinition) GetDescription() string {
-	if x != nil && x.Description != nil {
-		return *x.Description
-	}
-	return ""
-}
-
-func (x *MCPToolDefinition) GetInputSchema() *structpb.Struct {
-	if x != nil {
-		return x.InputSchema
-	}
-	return nil
-}
-
-// CallMCPToolResponse is the output of a CallTool workflow.
-type CallMCPToolResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	// is_error is true when the tool call failed at the MCP level.
-	IsError bool `protobuf:"varint,1,opt,name=is_error,json=isError,proto3" json:"is_error,omitempty"`
-	// content holds the content blocks returned by the tool.
-	Content []*MCPContentBlock `protobuf:"bytes,2,rep,name=content,proto3" json:"content,omitempty"`
-}
-
-func (x *CallMCPToolResponse) Reset() {
-	*x = CallMCPToolResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[2]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *CallMCPToolResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CallMCPToolResponse) ProtoMessage() {}
-
-func (x *CallMCPToolResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[2]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CallMCPToolResponse.ProtoReflect.Descriptor instead.
-func (*CallMCPToolResponse) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *CallMCPToolResponse) GetIsError() bool {
-	if x != nil {
-		return x.IsError
-	}
-	return false
-}
-
-func (x *CallMCPToolResponse) GetContent() []*MCPContentBlock {
-	if x != nil {
-		return x.Content
-	}
-	return nil
-}
-
-// MCPContentBlock is a single piece of content returned by a tool call.
-// Uses oneof so consumers can switch on the content type directly.
-type MCPContentBlock struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	// Types that are assignable to Content:
-	//
-	//	*MCPContentBlock_Text
-	//	*MCPContentBlock_Image
-	//	*MCPContentBlock_Audio
-	//	*MCPContentBlock_ResourceLink
-	//	*MCPContentBlock_EmbeddedResource
-	Content isMCPContentBlock_Content `protobuf_oneof:"content"`
-}
-
-func (x *MCPContentBlock) Reset() {
-	*x = MCPContentBlock{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[3]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *MCPContentBlock) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MCPContentBlock) ProtoMessage() {}
-
-func (x *MCPContentBlock) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[3]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MCPContentBlock.ProtoReflect.Descriptor instead.
-func (*MCPContentBlock) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{3}
-}
-
-func (m *MCPContentBlock) GetContent() isMCPContentBlock_Content {
-	if m != nil {
-		return m.Content
-	}
-	return nil
-}
-
-func (x *MCPContentBlock) GetText() *MCPTextContent {
-	if x, ok := x.GetContent().(*MCPContentBlock_Text); ok {
-		return x.Text
-	}
-	return nil
-}
-
-func (x *MCPContentBlock) GetImage() *MCPBinaryContent {
-	if x, ok := x.GetContent().(*MCPContentBlock_Image); ok {
-		return x.Image
-	}
-	return nil
-}
-
-func (x *MCPContentBlock) GetAudio() *MCPBinaryContent {
-	if x, ok := x.GetContent().(*MCPContentBlock_Audio); ok {
-		return x.Audio
-	}
-	return nil
-}
-
-func (x *MCPContentBlock) GetResourceLink() *MCPResourceContent {
-	if x, ok := x.GetContent().(*MCPContentBlock_ResourceLink); ok {
-		return x.ResourceLink
-	}
-	return nil
-}
-
-func (x *MCPContentBlock) GetEmbeddedResource() *MCPResourceContent {
-	if x, ok := x.GetContent().(*MCPContentBlock_EmbeddedResource); ok {
-		return x.EmbeddedResource
-	}
-	return nil
-}
-
-type isMCPContentBlock_Content interface {
-	isMCPContentBlock_Content()
-}
-
-type MCPContentBlock_Text struct {
-	Text *MCPTextContent `protobuf:"bytes,1,opt,name=text,proto3,oneof"`
-}
-
-type MCPContentBlock_Image struct {
-	Image *MCPBinaryContent `protobuf:"bytes,2,opt,name=image,proto3,oneof"`
-}
-
-type MCPContentBlock_Audio struct {
-	Audio *MCPBinaryContent `protobuf:"bytes,3,opt,name=audio,proto3,oneof"`
-}
-
-type MCPContentBlock_ResourceLink struct {
-	ResourceLink *MCPResourceContent `protobuf:"bytes,4,opt,name=resource_link,json=resourceLink,proto3,oneof"`
-}
-
-type MCPContentBlock_EmbeddedResource struct {
-	EmbeddedResource *MCPResourceContent `protobuf:"bytes,5,opt,name=embedded_resource,json=embeddedResource,proto3,oneof"`
-}
-
-func (*MCPContentBlock_Text) isMCPContentBlock_Content() {}
-
-func (*MCPContentBlock_Image) isMCPContentBlock_Content() {}
-
-func (*MCPContentBlock_Audio) isMCPContentBlock_Content() {}
-
-func (*MCPContentBlock_ResourceLink) isMCPContentBlock_Content() {}
-
-func (*MCPContentBlock_EmbeddedResource) isMCPContentBlock_Content() {}
-
-// MCPTextContent holds text content.
-type MCPTextContent struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Text string `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
-}
-
-func (x *MCPTextContent) Reset() {
-	*x = MCPTextContent{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[4]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *MCPTextContent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MCPTextContent) ProtoMessage() {}
-
-func (x *MCPTextContent) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[4]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MCPTextContent.ProtoReflect.Descriptor instead.
-func (*MCPTextContent) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *MCPTextContent) GetText() string {
-	if x != nil {
-		return x.Text
-	}
-	return ""
-}
-
-// MCPBinaryContent holds binary content (images, audio).
-type MCPBinaryContent struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	// mime_type is the MIME type (e.g. "image/png", "audio/wav").
-	MimeType string `protobuf:"bytes,1,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
-	// data is the raw binary data.
-	Data []byte `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
-}
-
-func (x *MCPBinaryContent) Reset() {
-	*x = MCPBinaryContent{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[5]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *MCPBinaryContent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MCPBinaryContent) ProtoMessage() {}
-
-func (x *MCPBinaryContent) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[5]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MCPBinaryContent.ProtoReflect.Descriptor instead.
-func (*MCPBinaryContent) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *MCPBinaryContent) GetMimeType() string {
-	if x != nil {
-		return x.MimeType
-	}
-	return ""
-}
-
-func (x *MCPBinaryContent) GetData() []byte {
-	if x != nil {
-		return x.Data
-	}
-	return nil
-}
-
-// MCPResourceContent holds a resource as raw JSON.
-type MCPResourceContent struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	// resource is the JSON-encoded resource object.
-	Resource []byte `protobuf:"bytes,1,opt,name=resource,proto3" json:"resource,omitempty"`
-}
-
-func (x *MCPResourceContent) Reset() {
-	*x = MCPResourceContent{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[6]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *MCPResourceContent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MCPResourceContent) ProtoMessage() {}
-
-func (x *MCPResourceContent) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[6]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MCPResourceContent.ProtoReflect.Descriptor instead.
-func (*MCPResourceContent) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *MCPResourceContent) GetResource() []byte {
-	if x != nil {
-		return x.Resource
-	}
-	return nil
-}
-
-// MCPCallToolWorkflowInput is the input for a
-// dapr.internal.mcp.<server>.CallTool.<tool> workflow.
-// The tool name is encoded in the workflow name suffix; this payload only
-// carries the arguments.
-type MCPCallToolWorkflowInput struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	// arguments is the tool arguments as a JSON object.
-	Arguments *structpb.Struct `protobuf:"bytes,1,opt,name=arguments,proto3" json:"arguments,omitempty"`
-}
-
-func (x *MCPCallToolWorkflowInput) Reset() {
-	*x = MCPCallToolWorkflowInput{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[7]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *MCPCallToolWorkflowInput) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MCPCallToolWorkflowInput) ProtoMessage() {}
-
-func (x *MCPCallToolWorkflowInput) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[7]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MCPCallToolWorkflowInput.ProtoReflect.Descriptor instead.
-func (*MCPCallToolWorkflowInput) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *MCPCallToolWorkflowInput) GetArguments() *structpb.Struct {
-	if x != nil {
-		return x.Arguments
-	}
-	return nil
-}
-
 // MCPBeforeCallToolHookInput is received by beforeCallTool middleware hooks.
 // When the hook has mutate=true, its return value (same shape) replaces
 // the arguments flowing to the tool call.
@@ -558,7 +52,7 @@ type MCPBeforeCallToolHookInput struct {
 func (x *MCPBeforeCallToolHookInput) Reset() {
 	*x = MCPBeforeCallToolHookInput{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[8]
+		mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[0]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -571,7 +65,7 @@ func (x *MCPBeforeCallToolHookInput) String() string {
 func (*MCPBeforeCallToolHookInput) ProtoMessage() {}
 
 func (x *MCPBeforeCallToolHookInput) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[8]
+	mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[0]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -584,7 +78,7 @@ func (x *MCPBeforeCallToolHookInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPBeforeCallToolHookInput.ProtoReflect.Descriptor instead.
 func (*MCPBeforeCallToolHookInput) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{8}
+	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *MCPBeforeCallToolHookInput) GetName() string {
@@ -609,7 +103,7 @@ func (x *MCPBeforeCallToolHookInput) GetArguments() *structpb.Struct {
 }
 
 // MCPAfterCallToolHookInput is received by afterCallTool middleware hooks.
-// When the hook has mutate=true, its return value (CallMCPToolResponse shape)
+// When the hook has mutate=true, its return value (CallToolResult shape)
 // replaces the result returned to the caller.
 // Errors returned by after-hooks fail the workflow.
 type MCPAfterCallToolHookInput struct {
@@ -623,14 +117,15 @@ type MCPAfterCallToolHookInput struct {
 	ToolName string `protobuf:"bytes,2,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
 	// arguments is the tool arguments that were sent.
 	Arguments *structpb.Struct `protobuf:"bytes,3,opt,name=arguments,proto3" json:"arguments,omitempty"`
-	// result is the tool call result (success or error).
-	Result *CallMCPToolResponse `protobuf:"bytes,4,opt,name=result,proto3" json:"result,omitempty"`
+	// result is the JSON-encoded MCP CallToolResult.
+	// Spec: https://modelcontextprotocol.io/specification/2024-11-05/server/tools#tool-result
+	Result []byte `protobuf:"bytes,4,opt,name=result,proto3" json:"result,omitempty"`
 }
 
 func (x *MCPAfterCallToolHookInput) Reset() {
 	*x = MCPAfterCallToolHookInput{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[9]
+		mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[1]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -643,7 +138,7 @@ func (x *MCPAfterCallToolHookInput) String() string {
 func (*MCPAfterCallToolHookInput) ProtoMessage() {}
 
 func (x *MCPAfterCallToolHookInput) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[9]
+	mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[1]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -656,7 +151,7 @@ func (x *MCPAfterCallToolHookInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPAfterCallToolHookInput.ProtoReflect.Descriptor instead.
 func (*MCPAfterCallToolHookInput) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{9}
+	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *MCPAfterCallToolHookInput) GetName() string {
@@ -680,7 +175,7 @@ func (x *MCPAfterCallToolHookInput) GetArguments() *structpb.Struct {
 	return nil
 }
 
-func (x *MCPAfterCallToolHookInput) GetResult() *CallMCPToolResponse {
+func (x *MCPAfterCallToolHookInput) GetResult() []byte {
 	if x != nil {
 		return x.Result
 	}
@@ -700,7 +195,7 @@ type MCPBeforeListToolsHookInput struct {
 func (x *MCPBeforeListToolsHookInput) Reset() {
 	*x = MCPBeforeListToolsHookInput{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[10]
+		mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -713,7 +208,7 @@ func (x *MCPBeforeListToolsHookInput) String() string {
 func (*MCPBeforeListToolsHookInput) ProtoMessage() {}
 
 func (x *MCPBeforeListToolsHookInput) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[10]
+	mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -726,7 +221,7 @@ func (x *MCPBeforeListToolsHookInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPBeforeListToolsHookInput.ProtoReflect.Descriptor instead.
 func (*MCPBeforeListToolsHookInput) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{10}
+	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *MCPBeforeListToolsHookInput) GetName() string {
@@ -737,7 +232,7 @@ func (x *MCPBeforeListToolsHookInput) GetName() string {
 }
 
 // MCPAfterListToolsHookInput is received by afterListTools middleware hooks.
-// When the hook has mutate=true, its return value (ListMCPToolsResponse shape)
+// When the hook has mutate=true, its return value (ListToolsResult shape)
 // replaces the result returned to the caller.
 type MCPAfterListToolsHookInput struct {
 	state         protoimpl.MessageState
@@ -746,14 +241,15 @@ type MCPAfterListToolsHookInput struct {
 
 	// name is the name of the MCPServer resource.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// result is the list tools result.
-	Result *ListMCPToolsResponse `protobuf:"bytes,2,opt,name=result,proto3" json:"result,omitempty"`
+	// result is the JSON-encoded MCP ListToolsResult.
+	// Spec: https://modelcontextprotocol.io/specification/2024-11-05/server/tools#listing-tools
+	Result []byte `protobuf:"bytes,2,opt,name=result,proto3" json:"result,omitempty"`
 }
 
 func (x *MCPAfterListToolsHookInput) Reset() {
 	*x = MCPAfterListToolsHookInput{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[11]
+		mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -766,7 +262,7 @@ func (x *MCPAfterListToolsHookInput) String() string {
 func (*MCPAfterListToolsHookInput) ProtoMessage() {}
 
 func (x *MCPAfterListToolsHookInput) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[11]
+	mi := &file_dapr_proto_workflows_v1_mcp_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -779,7 +275,7 @@ func (x *MCPAfterListToolsHookInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPAfterListToolsHookInput.ProtoReflect.Descriptor instead.
 func (*MCPAfterListToolsHookInput) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{11}
+	return file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *MCPAfterListToolsHookInput) GetName() string {
@@ -789,7 +285,7 @@ func (x *MCPAfterListToolsHookInput) GetName() string {
 	return ""
 }
 
-func (x *MCPAfterListToolsHookInput) GetResult() *ListMCPToolsResponse {
+func (x *MCPAfterListToolsHookInput) GetResult() []byte {
 	if x != nil {
 		return x.Result
 	}
@@ -804,111 +300,42 @@ var file_dapr_proto_workflows_v1_mcp_proto_rawDesc = []byte{
 	0x6f, 0x74, 0x6f, 0x12, 0x17, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e,
 	0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0x2e, 0x76, 0x31, 0x1a, 0x1c, 0x67, 0x6f,
 	0x6f, 0x67, 0x6c, 0x65, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x73, 0x74,
-	0x72, 0x75, 0x63, 0x74, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x58, 0x0a, 0x14, 0x4c, 0x69,
-	0x73, 0x74, 0x4d, 0x43, 0x50, 0x54, 0x6f, 0x6f, 0x6c, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x12, 0x40, 0x0a, 0x05, 0x74, 0x6f, 0x6f, 0x6c, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28,
-	0x0b, 0x32, 0x2a, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x77,
-	0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x43, 0x50, 0x54,
-	0x6f, 0x6f, 0x6c, 0x44, 0x65, 0x66, 0x69, 0x6e, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x05, 0x74,
-	0x6f, 0x6f, 0x6c, 0x73, 0x22, 0x9a, 0x01, 0x0a, 0x11, 0x4d, 0x43, 0x50, 0x54, 0x6f, 0x6f, 0x6c,
-	0x44, 0x65, 0x66, 0x69, 0x6e, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61,
-	0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x25,
-	0x0a, 0x0b, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x02, 0x20,
-	0x01, 0x28, 0x09, 0x48, 0x00, 0x52, 0x0b, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69,
-	0x6f, 0x6e, 0x88, 0x01, 0x01, 0x12, 0x3a, 0x0a, 0x0c, 0x69, 0x6e, 0x70, 0x75, 0x74, 0x5f, 0x73,
-	0x63, 0x68, 0x65, 0x6d, 0x61, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x67, 0x6f,
-	0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x53, 0x74,
-	0x72, 0x75, 0x63, 0x74, 0x52, 0x0b, 0x69, 0x6e, 0x70, 0x75, 0x74, 0x53, 0x63, 0x68, 0x65, 0x6d,
-	0x61, 0x42, 0x0e, 0x0a, 0x0c, 0x5f, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f,
-	0x6e, 0x22, 0x74, 0x0a, 0x13, 0x43, 0x61, 0x6c, 0x6c, 0x4d, 0x43, 0x50, 0x54, 0x6f, 0x6f, 0x6c,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x19, 0x0a, 0x08, 0x69, 0x73, 0x5f, 0x65,
-	0x72, 0x72, 0x6f, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x69, 0x73, 0x45, 0x72,
-	0x72, 0x6f, 0x72, 0x12, 0x42, 0x0a, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x18, 0x02,
-	0x20, 0x03, 0x28, 0x0b, 0x32, 0x28, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x4d,
-	0x43, 0x50, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x52, 0x07,
-	0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x91, 0x03, 0x0a, 0x0f, 0x4d, 0x43, 0x50, 0x43,
-	0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x12, 0x3d, 0x0a, 0x04, 0x74,
-	0x65, 0x78, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x27, 0x2e, 0x64, 0x61, 0x70, 0x72,
-	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73,
-	0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x43, 0x50, 0x54, 0x65, 0x78, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65,
-	0x6e, 0x74, 0x48, 0x00, 0x52, 0x04, 0x74, 0x65, 0x78, 0x74, 0x12, 0x41, 0x0a, 0x05, 0x69, 0x6d,
-	0x61, 0x67, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x29, 0x2e, 0x64, 0x61, 0x70, 0x72,
-	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73,
-	0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x43, 0x50, 0x42, 0x69, 0x6e, 0x61, 0x72, 0x79, 0x43, 0x6f, 0x6e,
-	0x74, 0x65, 0x6e, 0x74, 0x48, 0x00, 0x52, 0x05, 0x69, 0x6d, 0x61, 0x67, 0x65, 0x12, 0x41, 0x0a,
-	0x05, 0x61, 0x75, 0x64, 0x69, 0x6f, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x29, 0x2e, 0x64,
-	0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c,
-	0x6f, 0x77, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x43, 0x50, 0x42, 0x69, 0x6e, 0x61, 0x72, 0x79,
-	0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x48, 0x00, 0x52, 0x05, 0x61, 0x75, 0x64, 0x69, 0x6f,
-	0x12, 0x52, 0x0a, 0x0d, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x5f, 0x6c, 0x69, 0x6e,
-	0x6b, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2b, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0x2e, 0x76,
-	0x31, 0x2e, 0x4d, 0x43, 0x50, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x43, 0x6f, 0x6e,
-	0x74, 0x65, 0x6e, 0x74, 0x48, 0x00, 0x52, 0x0c, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65,
-	0x4c, 0x69, 0x6e, 0x6b, 0x12, 0x5a, 0x0a, 0x11, 0x65, 0x6d, 0x62, 0x65, 0x64, 0x64, 0x65, 0x64,
-	0x5f, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x2b, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x77, 0x6f, 0x72,
-	0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x43, 0x50, 0x52, 0x65, 0x73,
-	0x6f, 0x75, 0x72, 0x63, 0x65, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x48, 0x00, 0x52, 0x10,
-	0x65, 0x6d, 0x62, 0x65, 0x64, 0x64, 0x65, 0x64, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65,
-	0x42, 0x09, 0x0a, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x24, 0x0a, 0x0e, 0x4d,
-	0x43, 0x50, 0x54, 0x65, 0x78, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x12, 0x12, 0x0a,
-	0x04, 0x74, 0x65, 0x78, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x74, 0x65, 0x78,
-	0x74, 0x22, 0x43, 0x0a, 0x10, 0x4d, 0x43, 0x50, 0x42, 0x69, 0x6e, 0x61, 0x72, 0x79, 0x43, 0x6f,
-	0x6e, 0x74, 0x65, 0x6e, 0x74, 0x12, 0x1b, 0x0a, 0x09, 0x6d, 0x69, 0x6d, 0x65, 0x5f, 0x74, 0x79,
-	0x70, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x6d, 0x69, 0x6d, 0x65, 0x54, 0x79,
-	0x70, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x61, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c,
-	0x52, 0x04, 0x64, 0x61, 0x74, 0x61, 0x22, 0x30, 0x0a, 0x12, 0x4d, 0x43, 0x50, 0x52, 0x65, 0x73,
-	0x6f, 0x75, 0x72, 0x63, 0x65, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x12, 0x1a, 0x0a, 0x08,
-	0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x08,
-	0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x22, 0x51, 0x0a, 0x18, 0x4d, 0x43, 0x50, 0x43,
-	0x61, 0x6c, 0x6c, 0x54, 0x6f, 0x6f, 0x6c, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x49,
-	0x6e, 0x70, 0x75, 0x74, 0x12, 0x35, 0x0a, 0x09, 0x61, 0x72, 0x67, 0x75, 0x6d, 0x65, 0x6e, 0x74,
-	0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
-	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x53, 0x74, 0x72, 0x75, 0x63, 0x74,
-	0x52, 0x09, 0x61, 0x72, 0x67, 0x75, 0x6d, 0x65, 0x6e, 0x74, 0x73, 0x22, 0x84, 0x01, 0x0a, 0x1a,
-	0x4d, 0x43, 0x50, 0x42, 0x65, 0x66, 0x6f, 0x72, 0x65, 0x43, 0x61, 0x6c, 0x6c, 0x54, 0x6f, 0x6f,
-	0x6c, 0x48, 0x6f, 0x6f, 0x6b, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61,
-	0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x1b,
-	0x0a, 0x09, 0x74, 0x6f, 0x6f, 0x6c, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x08, 0x74, 0x6f, 0x6f, 0x6c, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x35, 0x0a, 0x09, 0x61,
-	0x72, 0x67, 0x75, 0x6d, 0x65, 0x6e, 0x74, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17,
-	0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66,
-	0x2e, 0x53, 0x74, 0x72, 0x75, 0x63, 0x74, 0x52, 0x09, 0x61, 0x72, 0x67, 0x75, 0x6d, 0x65, 0x6e,
-	0x74, 0x73, 0x22, 0xc9, 0x01, 0x0a, 0x19, 0x4d, 0x43, 0x50, 0x41, 0x66, 0x74, 0x65, 0x72, 0x43,
-	0x61, 0x6c, 0x6c, 0x54, 0x6f, 0x6f, 0x6c, 0x48, 0x6f, 0x6f, 0x6b, 0x49, 0x6e, 0x70, 0x75, 0x74,
-	0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04,
-	0x6e, 0x61, 0x6d, 0x65, 0x12, 0x1b, 0x0a, 0x09, 0x74, 0x6f, 0x6f, 0x6c, 0x5f, 0x6e, 0x61, 0x6d,
-	0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x74, 0x6f, 0x6f, 0x6c, 0x4e, 0x61, 0x6d,
-	0x65, 0x12, 0x35, 0x0a, 0x09, 0x61, 0x72, 0x67, 0x75, 0x6d, 0x65, 0x6e, 0x74, 0x73, 0x18, 0x03,
-	0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x53, 0x74, 0x72, 0x75, 0x63, 0x74, 0x52, 0x09, 0x61,
-	0x72, 0x67, 0x75, 0x6d, 0x65, 0x6e, 0x74, 0x73, 0x12, 0x44, 0x0a, 0x06, 0x72, 0x65, 0x73, 0x75,
-	0x6c, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2c, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0x2e,
-	0x76, 0x31, 0x2e, 0x43, 0x61, 0x6c, 0x6c, 0x4d, 0x43, 0x50, 0x54, 0x6f, 0x6f, 0x6c, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x52, 0x06, 0x72, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x22, 0x31,
-	0x0a, 0x1b, 0x4d, 0x43, 0x50, 0x42, 0x65, 0x66, 0x6f, 0x72, 0x65, 0x4c, 0x69, 0x73, 0x74, 0x54,
-	0x6f, 0x6f, 0x6c, 0x73, 0x48, 0x6f, 0x6f, 0x6b, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x12, 0x12, 0x0a,
-	0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d,
-	0x65, 0x22, 0x77, 0x0a, 0x1a, 0x4d, 0x43, 0x50, 0x41, 0x66, 0x74, 0x65, 0x72, 0x4c, 0x69, 0x73,
-	0x74, 0x54, 0x6f, 0x6f, 0x6c, 0x73, 0x48, 0x6f, 0x6f, 0x6b, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x12,
+	0x72, 0x75, 0x63, 0x74, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x84, 0x01, 0x0a, 0x1a, 0x4d,
+	0x43, 0x50, 0x42, 0x65, 0x66, 0x6f, 0x72, 0x65, 0x43, 0x61, 0x6c, 0x6c, 0x54, 0x6f, 0x6f, 0x6c,
+	0x48, 0x6f, 0x6f, 0x6b, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d,
+	0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x1b, 0x0a,
+	0x09, 0x74, 0x6f, 0x6f, 0x6c, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x08, 0x74, 0x6f, 0x6f, 0x6c, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x35, 0x0a, 0x09, 0x61, 0x72,
+	0x67, 0x75, 0x6d, 0x65, 0x6e, 0x74, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e,
+	0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e,
+	0x53, 0x74, 0x72, 0x75, 0x63, 0x74, 0x52, 0x09, 0x61, 0x72, 0x67, 0x75, 0x6d, 0x65, 0x6e, 0x74,
+	0x73, 0x22, 0x9b, 0x01, 0x0a, 0x19, 0x4d, 0x43, 0x50, 0x41, 0x66, 0x74, 0x65, 0x72, 0x43, 0x61,
+	0x6c, 0x6c, 0x54, 0x6f, 0x6f, 0x6c, 0x48, 0x6f, 0x6f, 0x6b, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x12,
 	0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e,
-	0x61, 0x6d, 0x65, 0x12, 0x45, 0x0a, 0x06, 0x72, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x18, 0x02, 0x20,
-	0x01, 0x28, 0x0b, 0x32, 0x2d, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69,
-	0x73, 0x74, 0x4d, 0x43, 0x50, 0x54, 0x6f, 0x6f, 0x6c, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x52, 0x06, 0x72, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x42, 0x7f, 0x0a, 0x14, 0x69, 0x6f,
-	0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0x2e,
-	0x76, 0x31, 0x42, 0x12, 0x44, 0x61, 0x70, 0x72, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77,
-	0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x35, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63,
-	0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67,
-	0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73,
-	0x2f, 0x76, 0x31, 0x3b, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0xaa, 0x02, 0x1b,
-	0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x41, 0x75, 0x74, 0x6f,
-	0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x33,
+	0x61, 0x6d, 0x65, 0x12, 0x1b, 0x0a, 0x09, 0x74, 0x6f, 0x6f, 0x6c, 0x5f, 0x6e, 0x61, 0x6d, 0x65,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x74, 0x6f, 0x6f, 0x6c, 0x4e, 0x61, 0x6d, 0x65,
+	0x12, 0x35, 0x0a, 0x09, 0x61, 0x72, 0x67, 0x75, 0x6d, 0x65, 0x6e, 0x74, 0x73, 0x18, 0x03, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x53, 0x74, 0x72, 0x75, 0x63, 0x74, 0x52, 0x09, 0x61, 0x72,
+	0x67, 0x75, 0x6d, 0x65, 0x6e, 0x74, 0x73, 0x12, 0x16, 0x0a, 0x06, 0x72, 0x65, 0x73, 0x75, 0x6c,
+	0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x06, 0x72, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x22,
+	0x31, 0x0a, 0x1b, 0x4d, 0x43, 0x50, 0x42, 0x65, 0x66, 0x6f, 0x72, 0x65, 0x4c, 0x69, 0x73, 0x74,
+	0x54, 0x6f, 0x6f, 0x6c, 0x73, 0x48, 0x6f, 0x6f, 0x6b, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x12, 0x12,
+	0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61,
+	0x6d, 0x65, 0x22, 0x48, 0x0a, 0x1a, 0x4d, 0x43, 0x50, 0x41, 0x66, 0x74, 0x65, 0x72, 0x4c, 0x69,
+	0x73, 0x74, 0x54, 0x6f, 0x6f, 0x6c, 0x73, 0x48, 0x6f, 0x6f, 0x6b, 0x49, 0x6e, 0x70, 0x75, 0x74,
+	0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04,
+	0x6e, 0x61, 0x6d, 0x65, 0x12, 0x16, 0x0a, 0x06, 0x72, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x0c, 0x52, 0x06, 0x72, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x42, 0x7f, 0x0a, 0x14,
+	0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77,
+	0x73, 0x2e, 0x76, 0x31, 0x42, 0x12, 0x44, 0x61, 0x70, 0x72, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c,
+	0x6f, 0x77, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x35, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62,
+	0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70,
+	0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f,
+	0x77, 0x73, 0x2f, 0x76, 0x31, 0x3b, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0xaa,
+	0x02, 0x1b, 0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x41, 0x75,
+	0x74, 0x6f, 0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31, 0x62, 0x06, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -923,41 +350,22 @@ func file_dapr_proto_workflows_v1_mcp_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_workflows_v1_mcp_proto_rawDescData
 }
 
-var file_dapr_proto_workflows_v1_mcp_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_dapr_proto_workflows_v1_mcp_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_dapr_proto_workflows_v1_mcp_proto_goTypes = []interface{}{
-	(*ListMCPToolsResponse)(nil),        // 0: dapr.proto.workflows.v1.ListMCPToolsResponse
-	(*MCPToolDefinition)(nil),           // 1: dapr.proto.workflows.v1.MCPToolDefinition
-	(*CallMCPToolResponse)(nil),         // 2: dapr.proto.workflows.v1.CallMCPToolResponse
-	(*MCPContentBlock)(nil),             // 3: dapr.proto.workflows.v1.MCPContentBlock
-	(*MCPTextContent)(nil),              // 4: dapr.proto.workflows.v1.MCPTextContent
-	(*MCPBinaryContent)(nil),            // 5: dapr.proto.workflows.v1.MCPBinaryContent
-	(*MCPResourceContent)(nil),          // 6: dapr.proto.workflows.v1.MCPResourceContent
-	(*MCPCallToolWorkflowInput)(nil),    // 7: dapr.proto.workflows.v1.MCPCallToolWorkflowInput
-	(*MCPBeforeCallToolHookInput)(nil),  // 8: dapr.proto.workflows.v1.MCPBeforeCallToolHookInput
-	(*MCPAfterCallToolHookInput)(nil),   // 9: dapr.proto.workflows.v1.MCPAfterCallToolHookInput
-	(*MCPBeforeListToolsHookInput)(nil), // 10: dapr.proto.workflows.v1.MCPBeforeListToolsHookInput
-	(*MCPAfterListToolsHookInput)(nil),  // 11: dapr.proto.workflows.v1.MCPAfterListToolsHookInput
-	(*structpb.Struct)(nil),             // 12: google.protobuf.Struct
+	(*MCPBeforeCallToolHookInput)(nil),  // 0: dapr.proto.workflows.v1.MCPBeforeCallToolHookInput
+	(*MCPAfterCallToolHookInput)(nil),   // 1: dapr.proto.workflows.v1.MCPAfterCallToolHookInput
+	(*MCPBeforeListToolsHookInput)(nil), // 2: dapr.proto.workflows.v1.MCPBeforeListToolsHookInput
+	(*MCPAfterListToolsHookInput)(nil),  // 3: dapr.proto.workflows.v1.MCPAfterListToolsHookInput
+	(*structpb.Struct)(nil),             // 4: google.protobuf.Struct
 }
 var file_dapr_proto_workflows_v1_mcp_proto_depIdxs = []int32{
-	1,  // 0: dapr.proto.workflows.v1.ListMCPToolsResponse.tools:type_name -> dapr.proto.workflows.v1.MCPToolDefinition
-	12, // 1: dapr.proto.workflows.v1.MCPToolDefinition.input_schema:type_name -> google.protobuf.Struct
-	3,  // 2: dapr.proto.workflows.v1.CallMCPToolResponse.content:type_name -> dapr.proto.workflows.v1.MCPContentBlock
-	4,  // 3: dapr.proto.workflows.v1.MCPContentBlock.text:type_name -> dapr.proto.workflows.v1.MCPTextContent
-	5,  // 4: dapr.proto.workflows.v1.MCPContentBlock.image:type_name -> dapr.proto.workflows.v1.MCPBinaryContent
-	5,  // 5: dapr.proto.workflows.v1.MCPContentBlock.audio:type_name -> dapr.proto.workflows.v1.MCPBinaryContent
-	6,  // 6: dapr.proto.workflows.v1.MCPContentBlock.resource_link:type_name -> dapr.proto.workflows.v1.MCPResourceContent
-	6,  // 7: dapr.proto.workflows.v1.MCPContentBlock.embedded_resource:type_name -> dapr.proto.workflows.v1.MCPResourceContent
-	12, // 8: dapr.proto.workflows.v1.MCPCallToolWorkflowInput.arguments:type_name -> google.protobuf.Struct
-	12, // 9: dapr.proto.workflows.v1.MCPBeforeCallToolHookInput.arguments:type_name -> google.protobuf.Struct
-	12, // 10: dapr.proto.workflows.v1.MCPAfterCallToolHookInput.arguments:type_name -> google.protobuf.Struct
-	2,  // 11: dapr.proto.workflows.v1.MCPAfterCallToolHookInput.result:type_name -> dapr.proto.workflows.v1.CallMCPToolResponse
-	0,  // 12: dapr.proto.workflows.v1.MCPAfterListToolsHookInput.result:type_name -> dapr.proto.workflows.v1.ListMCPToolsResponse
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	4, // 0: dapr.proto.workflows.v1.MCPBeforeCallToolHookInput.arguments:type_name -> google.protobuf.Struct
+	4, // 1: dapr.proto.workflows.v1.MCPAfterCallToolHookInput.arguments:type_name -> google.protobuf.Struct
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_dapr_proto_workflows_v1_mcp_proto_init() }
@@ -967,102 +375,6 @@ func file_dapr_proto_workflows_v1_mcp_proto_init() {
 	}
 	if !protoimpl.UnsafeEnabled {
 		file_dapr_proto_workflows_v1_mcp_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ListMCPToolsResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_dapr_proto_workflows_v1_mcp_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MCPToolDefinition); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_dapr_proto_workflows_v1_mcp_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CallMCPToolResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_dapr_proto_workflows_v1_mcp_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MCPContentBlock); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_dapr_proto_workflows_v1_mcp_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MCPTextContent); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_dapr_proto_workflows_v1_mcp_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MCPBinaryContent); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_dapr_proto_workflows_v1_mcp_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MCPResourceContent); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_dapr_proto_workflows_v1_mcp_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MCPCallToolWorkflowInput); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_dapr_proto_workflows_v1_mcp_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*MCPBeforeCallToolHookInput); i {
 			case 0:
 				return &v.state
@@ -1074,7 +386,7 @@ func file_dapr_proto_workflows_v1_mcp_proto_init() {
 				return nil
 			}
 		}
-		file_dapr_proto_workflows_v1_mcp_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
+		file_dapr_proto_workflows_v1_mcp_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*MCPAfterCallToolHookInput); i {
 			case 0:
 				return &v.state
@@ -1086,7 +398,7 @@ func file_dapr_proto_workflows_v1_mcp_proto_init() {
 				return nil
 			}
 		}
-		file_dapr_proto_workflows_v1_mcp_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
+		file_dapr_proto_workflows_v1_mcp_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*MCPBeforeListToolsHookInput); i {
 			case 0:
 				return &v.state
@@ -1098,7 +410,7 @@ func file_dapr_proto_workflows_v1_mcp_proto_init() {
 				return nil
 			}
 		}
-		file_dapr_proto_workflows_v1_mcp_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
+		file_dapr_proto_workflows_v1_mcp_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*MCPAfterListToolsHookInput); i {
 			case 0:
 				return &v.state
@@ -1111,21 +423,13 @@ func file_dapr_proto_workflows_v1_mcp_proto_init() {
 			}
 		}
 	}
-	file_dapr_proto_workflows_v1_mcp_proto_msgTypes[1].OneofWrappers = []interface{}{}
-	file_dapr_proto_workflows_v1_mcp_proto_msgTypes[3].OneofWrappers = []interface{}{
-		(*MCPContentBlock_Text)(nil),
-		(*MCPContentBlock_Image)(nil),
-		(*MCPContentBlock_Audio)(nil),
-		(*MCPContentBlock_ResourceLink)(nil),
-		(*MCPContentBlock_EmbeddedResource)(nil),
-	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_dapr_proto_workflows_v1_mcp_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

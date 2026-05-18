@@ -14,9 +14,10 @@ limitations under the License.
 package mcp
 
 import (
+	"encoding/json"
 	"fmt"
 
-	"google.golang.org/protobuf/types/known/structpb"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/dapr/durabletask-go/task"
 
@@ -44,27 +45,36 @@ func runBeforeCallTool(
 	ctx *task.WorkflowContext,
 	server *mcpserverapi.MCPServer,
 	serverName, tool string,
-	arguments *structpb.Struct,
-) (*structpb.Struct, error) {
+	arguments map[string]any,
+) (map[string]any, error) {
 	if server.Spec.Middleware == nil {
 		return arguments, nil
 	}
+	argsStruct, err := argsAsStruct(arguments)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode arguments for tool %q on MCPServer %q: %w",
+			tool, serverName, err)
+	}
 	input := &wfv1.MCPBeforeCallToolHookInput{
-		Name: serverName, ToolName: tool, Arguments: arguments,
+		Name: serverName, ToolName: tool, Arguments: argsStruct,
 	}
 	for _, hook := range server.Spec.Middleware.BeforeCallTool {
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
 			hookChildWorkflowOpts(hook.Workflow, input)...)
 		if hook.Mutate != nil && *hook.Mutate {
 			var mutated wfv1.MCPBeforeCallToolHookInput
-			if err := t.Await(&mutated); err != nil {
+			if err = t.Await(&mutated); err != nil {
 				return nil, err
 			}
-			arguments = mutated.GetArguments()
+			arguments = structAsArgs(mutated.GetArguments())
 			// Update input for the next hook in the chain so it sees the mutated arguments.
-			input.Arguments = arguments
+			input.Arguments, err = argsAsStruct(arguments)
+			if err != nil {
+				return nil, fmt.Errorf("mutating hook %q returned unencodable arguments for tool %q on MCPServer %q: %w",
+					hook.Workflow.WorkflowName, tool, serverName, err)
+			}
 		} else {
-			if err := t.Await(nil); err != nil {
+			if err = t.Await(nil); err != nil {
 				return nil, err
 			}
 		}
@@ -76,33 +86,59 @@ func runBeforeCallTool(
 // When a hook has Mutate=true, its return value replaces the result flowing to the caller.
 // When Mutate=false (default), the hook observes but its output is discarded.
 // Hook errors fail the workflow — after-hooks may be authz gates.
+//
+// The Result field on the hook input is the JSON-encoded MCP CallToolResult
+// (matching the spec exactly). Mutating hooks return the same shape, which is
+// JSON-decoded back into mcp.CallToolResult.
 func runAfterCallTool(
 	ctx *task.WorkflowContext,
 	server *mcpserverapi.MCPServer,
 	serverName, tool string,
-	arguments *structpb.Struct,
-	result *wfv1.CallMCPToolResponse,
-) (*wfv1.CallMCPToolResponse, error) {
+	arguments map[string]any,
+	result *mcp.CallToolResult,
+) (*mcp.CallToolResult, error) {
 	if server.Spec.Middleware == nil {
 		return result, nil
 	}
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal result for hook input on tool %q on MCPServer %q: %w",
+			tool, serverName, err)
+	}
+	argsStruct, err := argsAsStruct(arguments)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode arguments for tool %q on MCPServer %q: %w",
+			tool, serverName, err)
+	}
 	input := &wfv1.MCPAfterCallToolHookInput{
-		Name: serverName, ToolName: tool, Arguments: arguments, Result: result,
+		Name: serverName, ToolName: tool, Arguments: argsStruct, Result: resultBytes,
 	}
 	for _, hook := range server.Spec.Middleware.AfterCallTool {
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
 			hookChildWorkflowOpts(hook.Workflow, input)...)
 		if hook.Mutate != nil && *hook.Mutate {
-			var mutated wfv1.CallMCPToolResponse
-			if err := t.Await(&mutated); err != nil {
-				return nil, fmt.Errorf("afterCallTool mutating hook %q failed for tool %q on MCPServer %q: %w",
+			var mutated wfv1.MCPAfterCallToolHookInput
+			if err = t.Await(&mutated); err != nil {
+				return nil, fmt.Errorf("mutating hook %q failed for tool %q on MCPServer %q: %w",
 					hook.Workflow.WorkflowName, tool, serverName, err)
 			}
-			result = &mutated
-			input.Result = result
+			var mutatedResult mcp.CallToolResult
+			if err = json.Unmarshal(mutated.GetResult(), &mutatedResult); err != nil {
+				return nil, fmt.Errorf("mutating hook %q returned malformed result for tool %q on MCPServer %q: %w",
+					hook.Workflow.WorkflowName, tool, serverName, err)
+			}
+			result = &mutatedResult
+			// Update the input for the next hook so it sees the mutated result.
+			var b []byte
+			b, err = json.Marshal(result)
+			if err != nil {
+				return nil, fmt.Errorf("mutating hook %q returned unmarshalable result for tool %q on MCPServer %q: %w",
+					hook.Workflow.WorkflowName, tool, serverName, err)
+			}
+			input.Result = b
 		} else {
-			if err := t.Await(nil); err != nil {
-				return nil, fmt.Errorf("afterCallTool hook %q failed for tool %q on MCPServer %q: %w",
+			if err = t.Await(nil); err != nil {
+				return nil, fmt.Errorf("hook %q failed for tool %q on MCPServer %q: %w",
 					hook.Workflow.WorkflowName, tool, serverName, err)
 			}
 		}
@@ -132,32 +168,49 @@ func runBeforeListTools(
 }
 
 // runAfterListTools executes the afterListTools middleware pipeline in order.
-// See runAfterCallTool for Mutate semantics.
+// See runAfterCallTool for Mutate semantics; result is carried as JSON-encoded
+// MCP ListToolsResult in the hook input.
 // Hook errors fail the workflow — after-hooks may be authz gates.
 func runAfterListTools(
 	ctx *task.WorkflowContext,
 	server *mcpserverapi.MCPServer,
 	serverName string,
-	result *wfv1.ListMCPToolsResponse,
-) (*wfv1.ListMCPToolsResponse, error) {
+	result *mcp.ListToolsResult,
+) (*mcp.ListToolsResult, error) {
 	if server.Spec.Middleware == nil {
 		return result, nil
 	}
-	input := &wfv1.MCPAfterListToolsHookInput{Name: serverName, Result: result}
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal result for hook input on MCPServer %q: %w",
+			serverName, err)
+	}
+	input := &wfv1.MCPAfterListToolsHookInput{Name: serverName, Result: resultBytes}
 	for _, hook := range server.Spec.Middleware.AfterListTools {
 		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
 			hookChildWorkflowOpts(hook.Workflow, input)...)
 		if hook.Mutate != nil && *hook.Mutate {
-			var mutated wfv1.ListMCPToolsResponse
-			if err := t.Await(&mutated); err != nil {
-				return nil, fmt.Errorf("afterListTools mutating hook %q failed for MCPServer %q: %w",
+			var mutated wfv1.MCPAfterListToolsHookInput
+			if err = t.Await(&mutated); err != nil {
+				return nil, fmt.Errorf("mutating hook %q failed for MCPServer %q: %w",
 					hook.Workflow.WorkflowName, serverName, err)
 			}
-			result = &mutated
-			input.Result = result
+			var mutatedResult mcp.ListToolsResult
+			if err = json.Unmarshal(mutated.GetResult(), &mutatedResult); err != nil {
+				return nil, fmt.Errorf("mutating hook %q returned malformed result for MCPServer %q: %w",
+					hook.Workflow.WorkflowName, serverName, err)
+			}
+			result = &mutatedResult
+			var b []byte
+			b, err = json.Marshal(result)
+			if err != nil {
+				return nil, fmt.Errorf("mutating hook %q returned unmarshalable result for MCPServer %q: %w",
+					hook.Workflow.WorkflowName, serverName, err)
+			}
+			input.Result = b
 		} else {
-			if err := t.Await(nil); err != nil {
-				return nil, fmt.Errorf("afterListTools hook %q failed for MCPServer %q: %w",
+			if err = t.Await(nil); err != nil {
+				return nil, fmt.Errorf("hook %q failed for MCPServer %q: %w",
 					hook.Workflow.WorkflowName, serverName, err)
 			}
 		}
