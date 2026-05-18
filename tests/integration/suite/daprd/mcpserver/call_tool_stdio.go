@@ -15,6 +15,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"os/exec"
@@ -23,11 +24,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/encoding/protojson"
 
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -58,7 +58,6 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func main() {
@@ -159,10 +158,10 @@ func (s *callToolStdio) Run(t *testing.T, ctx context.Context) {
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
 
-		var result wfv1.ListMCPToolsResponse
-		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		require.Len(t, result.GetTools(), 1)
-		assert.Equal(t, "stdio_echo", result.GetTools()[0].GetName())
+		var result mcp.ListToolsResult
+		require.NoError(t, json.Unmarshal([]byte(outputJSON), &result))
+		require.Len(t, result.Tools, 1)
+		assert.Equal(t, "stdio_echo", result.Tools[0].Name)
 	})
 
 	t.Run("CallTool over stdio transport", func(t *testing.T) {
@@ -176,10 +175,10 @@ func (s *callToolStdio) Run(t *testing.T, ctx context.Context) {
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
 
-		var result wfv1.CallMCPToolResponse
-		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		assert.False(t, result.GetIsError())
-		require.NotEmpty(t, result.GetContent())
-		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "stdio-pong")
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(outputJSON), &result))
+		assert.False(t, result.IsError)
+		require.NotEmpty(t, result.Content)
+		assert.Contains(t, extractText(result.Content[0]), "stdio-pong")
 	})
 }
