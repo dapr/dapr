@@ -20,19 +20,11 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"google.golang.org/protobuf/types/known/structpb"
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
+	mcptypes "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/types"
 	"github.com/dapr/durabletask-go/task"
 )
-
-// activityCallToolInput is the internal input passed from the orchestrator
-// to the CallTool activity.
-type activityCallToolInput struct {
-	ToolName  string         `json:"tool_name"`
-	Arguments map[string]any `json:"arguments,omitempty"`
-}
 
 // listToolsPage runs one paginated ListTools call with a per-call timeout and
 // a single connection-closed retry.
@@ -101,36 +93,20 @@ func callToolOnce(
 	return result, nil
 }
 
-// toolDefinitionFromMCP converts a single mcp.Tool into a wfv1.MCPToolDefinition,
-// converting the input schema and populating the schema cache. Returns an error
-// for any malformed schema; callers should fail the parent activity.
-func toolDefinitionFromMCP(t *mcp.Tool, serverName string, schemas *toolSchemaCache) (*wfv1.MCPToolDefinition, error) {
-	td := &wfv1.MCPToolDefinition{
-		Name: t.Name,
-	}
-	if t.Description != "" {
-		td.Description = &t.Description
-	}
+// cacheToolSchema marshals a tool's input schema,
+// and stores it in the schema cache for later argument validation.
+// Errors are best-effort.
+// Failure to cache a tool's schema only disables client-side argument validation,
+// and the tool itself remains callable.
+func cacheToolSchema(t *mcp.Tool, schemas *toolSchemaCache) {
 	if t.InputSchema == nil {
-		return td, nil
+		return
 	}
-	schema, ok := t.InputSchema.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("list-tools: tool %q on MCPServer %q has non-object inputSchema (type %T)", t.Name, serverName, t.InputSchema)
-	}
-	s, err := structpb.NewStruct(schema)
+	raw, err := json.Marshal(t.InputSchema)
 	if err != nil {
-		return nil, fmt.Errorf("list-tools: tool %q on MCPServer %q: failed to convert inputSchema: %w", t.Name, serverName, err)
+		return
 	}
-	td.InputSchema = s
-	raw, err := json.Marshal(schema)
-	if err != nil {
-		return nil, fmt.Errorf("list-tools: tool %q on MCPServer %q: failed to marshal inputSchema: %w", t.Name, serverName, err)
-	}
-	if err := schemas.set(t.Name, raw); err != nil {
-		return nil, fmt.Errorf("list-tools: tool %q on MCPServer %q: %w", t.Name, serverName, err)
-	}
-	return td, nil
+	_ = schemas.set(t.Name, raw)
 }
 
 // makeListToolsActivity returns a task.Activity that calls ListTools on the given MCP server.
@@ -143,14 +119,14 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *SessionHolder,
 		// Cache hit: return pre-discovered tools without upstream call.
 		if cached, ok := listCache.load(); ok {
 			workerLog.Debugf("list-tools: MCPServer %q served from cache (%d tools)", serverName, len(cached))
-			return &wfv1.ListMCPToolsResponse{Tools: cached}, nil
+			return &mcp.ListToolsResult{Tools: cached}, nil
 		}
 
 		baseCtx := ctx.Context()
 		timeout := CallTimeout(&server)
 		workerLog.Debugf("list-tools: MCPServer %q per-page timeout=%s", serverName, timeout)
 
-		var tools []*wfv1.MCPToolDefinition
+		var tools []*mcp.Tool
 		var cursor string
 		for range maxListToolsPages {
 			params := &mcp.ListToolsParams{}
@@ -159,15 +135,12 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *SessionHolder,
 			}
 			result, err := listToolsPage(baseCtx, timeout, holder, serverName, params)
 			if err != nil {
-				return &wfv1.ListMCPToolsResponse{}, err
+				return &mcp.ListToolsResult{}, err
 			}
 
 			for _, t := range result.Tools {
-				td, err := toolDefinitionFromMCP(t, serverName, schemas)
-				if err != nil {
-					return &wfv1.ListMCPToolsResponse{}, err
-				}
-				tools = append(tools, td)
+				cacheToolSchema(t, schemas)
+				tools = append(tools, t)
 			}
 
 			if result.NextCursor == "" {
@@ -176,10 +149,10 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *SessionHolder,
 			cursor = result.NextCursor
 		}
 		if cursor != "" {
-			return &wfv1.ListMCPToolsResponse{}, fmt.Errorf("list-tools: MCPServer %q returned more than %d pages of tools", serverName, maxListToolsPages)
+			return &mcp.ListToolsResult{}, fmt.Errorf("list-tools: MCPServer %q returned more than %d pages of tools", serverName, maxListToolsPages)
 		}
 
-		return &wfv1.ListMCPToolsResponse{Tools: tools}, nil
+		return &mcp.ListToolsResult{Tools: tools}, nil
 	}
 }
 
@@ -187,7 +160,7 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *SessionHolder,
 func makeCallToolActivity(server mcpserverapi.MCPServer, holder *SessionHolder, schemas *toolSchemaCache, opts Options) task.Activity {
 	serverName := server.Name
 	return func(ctx task.ActivityContext) (any, error) {
-		var input activityCallToolInput
+		var input mcptypes.CallToolActivityInput
 		if err := ctx.GetInput(&input); err != nil {
 			return errorResult("call-tool: failed to parse input: %s", err), nil
 		}
@@ -211,6 +184,6 @@ func makeCallToolActivity(server mcpserverapi.MCPServer, holder *SessionHolder, 
 			return errorResult("%s (tool %q)", err, input.ToolName), nil
 		}
 
-		return convertCallToolResult(result), nil
+		return result, nil
 	}
 }
