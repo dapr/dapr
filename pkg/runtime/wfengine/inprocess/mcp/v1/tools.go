@@ -20,8 +20,6 @@ import (
 	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 )
 
 const (
@@ -71,73 +69,19 @@ func (c *toolSchemaCache) get(toolName string) (json.RawMessage, bool) {
 // Refreshed on hot-reload (RegisterMCPServer is called again).
 type toolListCache struct {
 	mu    sync.RWMutex
-	tools []*wfv1.MCPToolDefinition
+	tools []*mcp.Tool
 }
 
-func (c *toolListCache) store(tools []*wfv1.MCPToolDefinition) {
+func (c *toolListCache) store(tools []*mcp.Tool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.tools = tools
 }
 
-func (c *toolListCache) load() ([]*wfv1.MCPToolDefinition, bool) {
+func (c *toolListCache) load() ([]*mcp.Tool, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.tools, len(c.tools) > 0
-}
-
-// convertCallToolResult converts an mcp.CallToolResult from the go-sdk into a proto CallMCPToolResponse.
-// Each MCP content type maps to the corresponding oneof variant in MCPContentBlock.
-// Unknown/future content types are JSON-marshaled into a text block as a forward-compatible fallback.
-func convertCallToolResult(r *mcp.CallToolResult) *wfv1.CallMCPToolResponse {
-	out := &wfv1.CallMCPToolResponse{IsError: r.IsError}
-	for _, c := range r.Content {
-		switch v := c.(type) {
-		case *mcp.TextContent:
-			out.Content = append(out.Content, &wfv1.MCPContentBlock{
-				Content: &wfv1.MCPContentBlock_Text{
-					Text: &wfv1.MCPTextContent{Text: v.Text},
-				},
-			})
-		case *mcp.ImageContent:
-			out.Content = append(out.Content, &wfv1.MCPContentBlock{
-				Content: &wfv1.MCPContentBlock_Image{
-					Image: &wfv1.MCPBinaryContent{MimeType: v.MIMEType, Data: v.Data},
-				},
-			})
-		case *mcp.AudioContent:
-			out.Content = append(out.Content, &wfv1.MCPContentBlock{
-				Content: &wfv1.MCPContentBlock_Audio{
-					Audio: &wfv1.MCPBinaryContent{MimeType: v.MIMEType, Data: v.Data},
-				},
-			})
-		case *mcp.ResourceLink:
-			if raw, err := json.Marshal(v); err == nil {
-				out.Content = append(out.Content, &wfv1.MCPContentBlock{
-					Content: &wfv1.MCPContentBlock_ResourceLink{
-						ResourceLink: &wfv1.MCPResourceContent{Resource: raw},
-					},
-				})
-			}
-		case *mcp.EmbeddedResource:
-			if raw, err := json.Marshal(v); err == nil {
-				out.Content = append(out.Content, &wfv1.MCPContentBlock{
-					Content: &wfv1.MCPContentBlock_EmbeddedResource{
-						EmbeddedResource: &wfv1.MCPResourceContent{Resource: raw},
-					},
-				})
-			}
-		default:
-			if b, err := json.Marshal(c); err == nil {
-				out.Content = append(out.Content, &wfv1.MCPContentBlock{
-					Content: &wfv1.MCPContentBlock_Text{
-						Text: &wfv1.MCPTextContent{Text: string(b)},
-					},
-				})
-			}
-		}
-	}
-	return out
 }
 
 // validateToolArguments performs client-side validation of tool arguments
