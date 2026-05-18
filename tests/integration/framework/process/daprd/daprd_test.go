@@ -40,6 +40,16 @@ func TestActorRuntimeHostsTypes(t *testing.T) {
 			},
 			actorTypes: []string{"workflow"},
 		},
+		"host ready but runtime not running": {
+			actorRuntime: &MetadataActorRuntime{
+				RuntimeStatus: rtv1.ActorRuntime_INITIALIZING.String(),
+				HostReady:     true,
+				ActiveActors: []*MetadataActorRuntimeActiveActor{
+					{Type: "workflow"},
+				},
+			},
+			actorTypes: []string{"workflow"},
+		},
 		"missing actor type": {
 			actorRuntime: &MetadataActorRuntime{
 				RuntimeStatus: rtv1.ActorRuntime_RUNNING.String(),
