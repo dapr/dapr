@@ -1,0 +1,212 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package mcpserver
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
+	dtclient "github.com/dapr/durabletask-go/client"
+
+	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
+	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
+	"github.com/dapr/dapr/tests/integration/framework"
+	fclient "github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/suite"
+)
+
+func init() {
+	suite.Register(new(multipleServers))
+}
+
+// multipleServers verifies that two MCPServer resources can coexist and each
+// routes to its own backend MCP server.
+type multipleServers struct {
+	daprd      *daprd.Daprd
+	place      *placement.Placement
+	sched      *scheduler.Scheduler
+	httpClient *http.Client
+}
+
+func (s *multipleServers) Setup(t *testing.T) []framework.Option {
+	// Server A: weather service
+	mcpSrvA := mcp.NewServer(&mcp.Implementation{Name: "server-a", Version: "v1"}, nil)
+	type cityInput struct {
+		City string `json:"city"`
+	}
+	mcp.AddTool(mcpSrvA, &mcp.Tool{
+		Name:        "get_weather",
+		Description: "Get weather for a city",
+	}, func(_ context.Context, _ *mcp.CallToolRequest, args cityInput) (*mcp.CallToolResult, struct{}, error) {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "sunny in " + args.City}},
+		}, struct{}{}, nil
+	})
+	mcpProcA := prochttp.New(t, prochttp.WithHandler(
+		mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpSrvA }, nil),
+	))
+
+	// Server B: greeting service
+	mcpSrvB := mcp.NewServer(&mcp.Implementation{Name: "server-b", Version: "v1"}, nil)
+	type nameInput struct {
+		Name string `json:"name"`
+	}
+	mcp.AddTool(mcpSrvB, &mcp.Tool{
+		Name:        "greet",
+		Description: "Return a greeting",
+	}, func(_ context.Context, _ *mcp.CallToolRequest, args nameInput) (*mcp.CallToolResult, struct{}, error) {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "hello " + args.Name}},
+		}, struct{}{}, nil
+	})
+	mcpProcB := prochttp.New(t, prochttp.WithHandler(
+		mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpSrvB }, nil),
+	))
+
+	appProc := app.New(t)
+
+	s.sched = scheduler.New(t)
+	s.place = placement.New(t)
+	s.daprd = daprd.New(t,
+		daprd.WithAppPort(appProc.Port()),
+		daprd.WithAppProtocol("http"),
+		daprd.WithPlacementAddresses(s.place.Address()),
+		daprd.WithSchedulerAddresses(s.sched.Address()),
+		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithResourceFiles(
+			fmt.Sprintf(`
+apiVersion: dapr.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: weather
+spec:
+  endpoint:
+    streamableHTTP:
+      url: http://localhost:%d
+`, mcpProcA.Port()),
+			fmt.Sprintf(`
+apiVersion: dapr.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: greeter
+spec:
+  endpoint:
+    streamableHTTP:
+      url: http://localhost:%d
+`, mcpProcB.Port()),
+		),
+	)
+
+	return []framework.Option{
+		framework.WithProcesses(s.place, s.sched, appProc, mcpProcA, mcpProcB, s.daprd),
+	}
+}
+
+func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
+	s.sched.WaitUntilRunning(t, ctx)
+	s.place.WaitUntilRunning(t, ctx)
+	s.daprd.WaitUntilRunning(t, ctx)
+
+	s.httpClient = fclient.HTTP(t)
+	taskhubClient := dtclient.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
+
+	t.Run("CallTool on weather server returns weather", func(t *testing.T) {
+		input := map[string]any{
+			"arguments": map[string]any{"city": "Austin"},
+		}
+		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+			mcpnames.MCPCallToolWorkflowName("weather", "get_weather"), input)
+
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(
+			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
+		require.NoError(t, err)
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
+
+		var result wfv1.CallMCPToolResponse
+		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+		assert.False(t, result.GetIsError())
+		require.NotEmpty(t, result.GetContent())
+		assert.NotNil(t, result.GetContent()[0].GetText())
+		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "Austin")
+	})
+
+	t.Run("CallTool on greeter server returns greeting", func(t *testing.T) {
+		input := map[string]any{
+			"arguments": map[string]any{"name": "dapr"},
+		}
+		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+			mcpnames.MCPCallToolWorkflowName("greeter", "greet"), input)
+
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(
+			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
+		require.NoError(t, err)
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
+
+		var result wfv1.CallMCPToolResponse
+		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+		assert.False(t, result.GetIsError())
+		require.NotEmpty(t, result.GetContent())
+		assert.NotNil(t, result.GetContent()[0].GetText())
+		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "dapr")
+	})
+
+	t.Run("ListTools returns different tools per server", func(t *testing.T) {
+		// Weather server
+		weatherID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+			mcpnames.MCPListToolsWorkflowName("weather"), map[string]any{})
+		weatherMeta, err := taskhubClient.WaitForWorkflowCompletion(
+			ctx, api.InstanceID(weatherID), api.WithFetchPayloads(true))
+		require.NoError(t, err)
+
+		var weatherResult wfv1.ListMCPToolsResponse
+		require.NoError(t, json.Unmarshal([]byte(weatherMeta.GetOutput().GetValue()), &weatherResult))
+		weatherNames := make([]string, len(weatherResult.GetTools()))
+		for i, tool := range weatherResult.GetTools() {
+			weatherNames[i] = tool.GetName()
+		}
+		assert.Contains(t, weatherNames, "get_weather")
+		assert.NotContains(t, weatherNames, "greet")
+
+		// Greeter server
+		greeterID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+			mcpnames.MCPListToolsWorkflowName("greeter"), map[string]any{})
+		greeterMeta, err := taskhubClient.WaitForWorkflowCompletion(
+			ctx, api.InstanceID(greeterID), api.WithFetchPayloads(true))
+		require.NoError(t, err)
+
+		var greeterResult wfv1.ListMCPToolsResponse
+		require.NoError(t, json.Unmarshal([]byte(greeterMeta.GetOutput().GetValue()), &greeterResult))
+		greeterNames := make([]string, len(greeterResult.GetTools()))
+		for i, tool := range greeterResult.GetTools() {
+			greeterNames[i] = tool.GetName()
+		}
+		assert.Contains(t, greeterNames, "greet")
+		assert.NotContains(t, greeterNames, "get_weather")
+	})
+}

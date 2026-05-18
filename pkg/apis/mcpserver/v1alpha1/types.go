@@ -145,6 +145,12 @@ type MCPServerSpec struct {
 	// Middleware defines optional workflow hooks invoked around each tool call.
 	//+optional
 	Middleware *MCPMiddleware `json:"middleware,omitempty"`
+
+	// IgnoreErrors, when true, allows daprd to continue running if validation
+	// or secret resolution fails for this MCPServer. When false (default),
+	// such failures cause daprd to exit gracefully.
+	//+optional
+	IgnoreErrors bool `json:"ignoreErrors,omitempty"`
 }
 
 // MCPEndpoint describes how to reach the MCP server.
@@ -260,6 +266,14 @@ type MCPOAuth2 struct {
 	Audience *string `json:"audience,omitempty"`
 	//+optional
 	Scopes []string `json:"scopes,omitempty"`
+	// ClientID is the OAuth2 client identifier sent to the token endpoint.
+	// Required by RFC 6749 for the standard client_credentials flow (form parameter
+	// or HTTP Basic username). May be left empty for non-standard flows (e.g. JWT-bearer
+	// assertions or token endpoints that key solely on the client_secret). Client IDs
+	// are typically public identifiers; use spec.headers with a secretKeyRef if your
+	// environment requires sourcing the value from a secret store.
+	//+optional
+	ClientID *string `json:"clientID,omitempty"`
 	// SecretKeyRef references the client secret in the configured secret store.
 	//+optional
 	SecretKeyRef *common.SecretKeyRef `json:"secretKeyRef,omitempty"`
@@ -286,22 +300,22 @@ type SPIFFEJWT struct {
 }
 
 // MCPMiddleware defines optional hook pipelines invoked around tool and list operations.
-// Hooks are executed in array order. For "before" hooks, any error aborts the
-// chain and the operation. For "after" hooks, errors are logged but do not
-// affect the result returned to the caller.
+// Hooks are executed in array order.
+// For "before" hooks, any error aborts the chain and the operation.
+// For "after" hooks, errors fail the workflow — they act as authorization gates.
 type MCPMiddleware struct {
 	// BeforeCallTool hooks are invoked in order before each CallTool.
 	// Receives {mcpServer, toolName, arguments} as input.
-	// If any hook returns an error, the chain stops and the error is returned
-	// as CallToolResult{isError: true}.
+	// If any hook returns an error, the chain stops and the workflow completes
+	// with CallToolResult{isError: true} so the agent/LLM can self-correct.
 	//+optional
-	BeforeCallTool []MCPMiddlewareHook `json:"beforeCallTool,omitempty"`
+	BeforeCallTool []MutatingMCPMiddlewareHook `json:"beforeCallTool,omitempty"`
 
 	// AfterCallTool hooks are invoked in order after each CallTool.
 	// Receives {mcpServer, toolName, arguments, result} as input.
-	// Errors are logged but do not affect the result.
+	// Errors fail the workflow — after-hooks act as authorization gates.
 	//+optional
-	AfterCallTool []MCPMiddlewareHook `json:"afterCallTool,omitempty"`
+	AfterCallTool []MutatingMCPMiddlewareHook `json:"afterCallTool,omitempty"`
 
 	// BeforeListTools hooks are invoked in order before each ListTools.
 	// Receives {mcpServer} as input.
@@ -313,16 +327,29 @@ type MCPMiddleware struct {
 	// Receives {mcpServer, result} as input.
 	// Errors are logged but do not affect the result.
 	//+optional
-	AfterListTools []MCPMiddlewareHook `json:"afterListTools,omitempty"`
+	AfterListTools []MutatingMCPMiddlewareHook `json:"afterListTools,omitempty"`
 }
 
-// MCPMiddlewareHook is a single middleware hook. Exactly one field must be set.
-// Currently only Workflow is supported; additional hook types (e.g. HTTP callback,
-// policy evaluation) may be added in future.
+// MCPMiddlewareHook is a single middleware hook.
 type MCPMiddlewareHook struct {
-	// Workflow invokes a Dapr workflow as the hook.
+	// Workflow is the Dapr workflow to invoke as the hook.
+	//+kubebuilder:validation:Required
+	Workflow MCPMiddlewareWorkflow `json:"workflow"`
+}
+
+// MutatingMCPMiddlewareHook extends MCPMiddlewareHook with the ability to
+// replace the data flowing through the pipeline when Mutate is true.
+type MutatingMCPMiddlewareHook struct {
+	MCPMiddlewareHook `json:",inline"`
+
+	// Mutate, when true, causes the hook's return value to replace the data
+	// flowing through the pipeline:
+	//   - beforeCallTool: replaces the arguments sent to the tool call
+	//     (e.g. redact PII, inject defaults).
+	//   - afterCallTool / afterListTools: replaces the result returned to the caller.
+	// When false (default), the hook validates/observes only — its output is discarded.
 	//+optional
-	Workflow *MCPMiddlewareWorkflow `json:"workflow,omitempty"`
+	Mutate *bool `json:"mutate,omitempty"`
 }
 
 // MCPMiddlewareWorkflow identifies a workflow to invoke as a middleware hook.

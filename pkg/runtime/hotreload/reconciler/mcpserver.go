@@ -41,11 +41,11 @@ func (m *mcpservers) update(ctx context.Context, server mcpserverapi.MCPServer) 
 	}
 
 	log.Infof("MCPServer updated via hot-reload: %s", server.LogName())
-	m.store.AddMCPServer(server)
+	m.proc.AddPendingMCPServer(ctx, server)
 }
 
 //nolint:unused
-func (m *mcpservers) delete(_ context.Context, server mcpserverapi.MCPServer) {
+func (m *mcpservers) delete(ctx context.Context, server mcpserverapi.MCPServer) {
 	log.Infof("MCPServer deleted via hot-reload: %s", server.LogName())
-	m.store.DeleteMCPServer(server.Name)
+	m.proc.DeleteMCPServer(server.Name)
 }
