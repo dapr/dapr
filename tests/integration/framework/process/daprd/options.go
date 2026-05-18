@@ -38,38 +38,39 @@ type Option func(*options)
 type options struct {
 	execOpts []exec.Option
 
-	appID                    string
-	namespace                *string
-	appPort                  *int
-	grpcPort                 int
-	httpPort                 int
-	internalGRPCPort         int
-	publicPort               int
-	metricsPort              int
-	profilePort              int
-	appProtocol              string
-	appHealthCheck           bool
-	appHealthCheckPath       string
-	appHealthProbeInterval   int
-	appHealthProbeThreshold  int
-	resourceFiles            []string
-	resourceDirs             []string
-	configs                  []string
-	placementAddresses       []string
-	logLevel                 string
-	mode                     string
-	enableMTLS               bool
-	sentryAddress            string
-	controlPlaneAddress      string
-	disableK8sSecretStore    *bool
-	gracefulShutdownSeconds  *int
-	blockShutdownDuration    *string
-	actorsDisseminateTimeout *time.Duration
-	controlPlaneTrustDomain  *string
-	schedulerAddresses       []string
-	disableInitEndpoints     []string
-	maxBodySize              *string
-	allowedOrigins           *string
+	appID                     string
+	namespace                 *string
+	appPort                   *int
+	grpcPort                  int
+	httpPort                  int
+	internalGRPCPort          int
+	publicPort                int
+	metricsPort               int
+	profilePort               int
+	appProtocol               string
+	appHealthCheck            bool
+	appHealthCheckPath        string
+	appHealthProbeInterval    int
+	appHealthProbeThreshold   int
+	resourceFiles             []string
+	resourceDirs              []string
+	configs                   []string
+	placementAddresses        []string
+	logLevel                  string
+	mode                      string
+	enableMTLS                bool
+	sentryAddress             string
+	sentryRequestJwtAudiences []string
+	controlPlaneAddress       string
+	disableK8sSecretStore     *bool
+	gracefulShutdownSeconds   *int
+	blockShutdownDuration     *string
+	actorsDisseminateTimeout  *time.Duration
+	controlPlaneTrustDomain   *string
+	schedulerAddresses        []string
+	disableInitEndpoints      []string
+	maxBodySize               *string
+	allowedOrigins            *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -244,6 +245,17 @@ func WithSchedulerAddresses(addresses ...string) Option {
 	}
 }
 
+// WithSchedulerAddressesReset replaces any previously configured scheduler
+// addresses with the supplied set. Use this when a later option layer needs
+// to redirect daprd away from a scheduler address an earlier layer already
+// added (for example pointing daprd at a scheduler proxy instead of the
+// real scheduler).
+func WithSchedulerAddressesReset(addresses ...string) Option {
+	return func(o *options) {
+		o.schedulerAddresses = append([]string(nil), addresses...)
+	}
+}
+
 func WithDisableInitEndpoints(endpoints ...string) Option {
 	return func(o *options) {
 		o.disableInitEndpoints = append(o.disableInitEndpoints, endpoints...)
@@ -271,6 +283,15 @@ func WithEnableMTLS(enable bool) Option {
 func WithSentryAddress(address string) Option {
 	return func(o *options) {
 		o.sentryAddress = address
+	}
+}
+
+// WithSentryRequestJwtAudiences pre-registers JWT audiences with sentry at startup.
+// Required when a runtime caller (e.g. an MCPServer with SPIFFE JWT auth configured)
+// needs to request a JWT for an audience that is not the trust domain default.
+func WithSentryRequestJwtAudiences(audiences ...string) Option {
+	return func(o *options) {
+		o.sentryRequestJwtAudiences = audiences
 	}
 }
 

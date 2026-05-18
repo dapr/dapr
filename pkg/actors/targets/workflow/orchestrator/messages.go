@@ -117,10 +117,7 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 
 	log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s||%s'", o.actorID, method, actorType, target)
 
-	callCtx, cancel := context.WithTimeout(ctx, dispatchTimeout)
-	defer cancel()
-
-	if _, err = o.router.Call(callCtx, internalsv1pb.
+	if _, err = o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest(method).
 		WithActor(actorType, target).
 		WithData(b).

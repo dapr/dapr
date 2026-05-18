@@ -28,17 +28,25 @@ cluster:
   etcdDataDirPath: /var/run/data/dapr-scheduler
   etcdDataDirWinPath: C:\\dapr-scheduler
   storageClassName: ""
-  storageSize: 1Gi
+  # storageSize is the default size for the scheduler PVC on a fresh install.
+  # On an existing install, the StatefulSet template will look up the existing
+  # StatefulSet and keep using the storage request from
+  # spec.volumeClaimTemplates, because StatefulSet.spec.volumeClaimTemplates is
+  # immutable in Kubernetes. Changing this value on an existing cluster would
+  # cause helm upgrade to fail. To grow an existing PVC, expand it directly on
+  # the cluster.
+  storageSize: 16Gi
   inMemoryStorage: false
 
 etcdSpaceQuota: 9.2E
-etcdCompactionMode: periodic
-etcdCompactionRetention: 10m
-etcdSnapshotCount: 10000
+etcdCompactionMode: revision
+etcdCompactionRetention: "1000000"
+etcdSnapshotCount: 100000
 etcdMaxSnapshots: 10
 etcdMaxWals: 10
-etcdBackendBatchLimit: 5000
-etcdBackendBatchInterval: 50ms
+etcdBackendBatchLimit: 10000
+etcdBackendBatchInterval: 100ms
+etcdMaxTxnOps: 10000
 etcdDefragThresholdMB: 100
 etcdInitialElectionTickAdvance: false
 etcdMetrics: "basic"

@@ -15,6 +15,7 @@ package processor
 
 import (
 	"context"
+	"fmt"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
@@ -56,25 +57,82 @@ func (p *Processor) AddPendingMCPServer(ctx context.Context, s mcpserverapi.MCPS
 	}
 }
 
-// processMCPServers reads from the pendingMCPServers channel, resolves secrets,
-// and adds each MCPServer to the component store.
+// processMCPServers resolves secrets and registers workflows for each MCPServer.
+// Failures fail the runtime by default; spec.ignoreErrors=true opts out.
 func (p *Processor) processMCPServers(ctx context.Context) error {
+	process := func(s mcpserverapi.MCPServer) error {
+		if err := validate.MCPServer(ctx, &s); err != nil {
+			err = fmt.Errorf("MCPServer %q failed validation: %w", s.Name, err)
+			if !s.Spec.IgnoreErrors {
+				log.Warnf("Error processing MCPServer, daprd will exit gracefully: %s", err)
+				return err
+			}
+			log.Errorf("Ignoring error processing MCPServer: %s", err)
+			return nil
+		}
+
+		if err := validate.MCPServerSecurity(&s, p.kubernetesMode); err != nil {
+			err = fmt.Errorf("MCPServer %q failed security validation: %w", s.Name, err)
+			if !s.Spec.IgnoreErrors {
+				log.Warnf("Error processing MCPServer, daprd will exit gracefully: %s", err)
+				return err
+			}
+			log.Errorf("Ignoring error processing MCPServer: %s", err)
+			return nil
+		}
+
+		p.processMCPServerSecrets(ctx, &s)
+
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
+		p.mcpMu.Lock()
+		defer p.mcpMu.Unlock()
+
+		p.compStore.AddMCPServer(s)
+		log.Infof("MCPServer loaded: %s", s.LogName())
+
+		registrar := p.getInProcessWorkflows()
+		if registrar == nil {
+			return nil
+		}
+
+		if err := registrar.RegisterMCPServer(ctx, s, p.compStore, p.security); err != nil {
+			err = fmt.Errorf("MCPServer %q: failed to register workflows: %w", s.Name, err)
+			if s.Spec.IgnoreErrors {
+				log.Errorf("Ignoring error processing MCPServer: %s", err)
+				return nil
+			}
+			log.Warnf("Error processing MCPServer, daprd will exit gracefully: %s", err)
+			return err
+		}
+		return nil
+	}
+
 	for s := range p.pendingMCPServers {
 		if s.Name == "" {
 			continue
 		}
-
-		if err := validate.MCPServer(ctx, &s); err != nil {
-			log.Warnf("MCPServer %q failed validation: %s", s.Name, err)
-			continue
+		if err := process(s); err != nil {
+			return err
 		}
-
-		p.processMCPServerSecrets(ctx, &s)
-		p.compStore.AddMCPServer(s)
-		log.Infof("MCPServer loaded: %s", s.LogName())
 	}
 
 	return nil
+}
+
+// DeleteMCPServer removes an MCPServer from the store and unregisters its workflows.
+func (p *Processor) DeleteMCPServer(serverName string) {
+	p.mcpMu.Lock()
+	defer p.mcpMu.Unlock()
+
+	p.compStore.DeleteMCPServer(serverName)
+	if registrar := p.getInProcessWorkflows(); registrar != nil {
+		registrar.UnregisterMCPServer(serverName)
+	}
 }
 
 // processMCPServerSecrets resolves secretKeyRef and envRef entries in the
