@@ -95,7 +95,14 @@ func (s *stream) handleSend(e *loops.StreamSend) error {
 }
 
 func (s *stream) handleShutdown(e *loops.Shutdown) {
-	log.Infof("Closing connection to placement: %s", e.Error)
+	// Demote the transient "not a leader" path to debug. It fires on every
+	// reconnect cycle during placement leader churn and otherwise drowns the
+	// log with thousands of identical lines per minute.
+	if loops.IsTransientLeaderError(e.Error) {
+		log.Debugf("Closing connection to placement: %s", e.Error)
+	} else {
+		log.Infof("Closing connection to placement: %s", e.Error)
+	}
 	s.channel.CloseSend()
 	s.wg.Wait()
 	streamCache.Put(s)

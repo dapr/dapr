@@ -42,6 +42,8 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 		dueTime = state.Inbox[0].GetTimestamp().AsTime()
 	}
 
+	workflowName := o.getExecutionStartedEvent(state).GetName()
+
 	var result dispatchResult
 	for _, e := range es {
 		// Don't redispatch activities whose resolution is already known to the
@@ -56,7 +58,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 			continue
 		}
 
-		err := o.callActivity(ctx, e, dueTime, state.Generation, outgoingHistory[e.GetEventId()])
+		err := o.callActivity(ctx, e, dueTime, state.Generation, outgoingHistory[e.GetEventId()], workflowName)
 		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
 				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
@@ -71,7 +73,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 	return result
 }
 
-func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, generation uint64, ph *protos.PropagatedHistory) error {
+func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, generation uint64, ph *protos.PropagatedHistory, workflowName string) error {
 	ts := e.GetTaskScheduled()
 	if ts == nil {
 		log.Warnf("Workflow actor '%s': unable to process task '%v'", o.actorID, e)
@@ -90,7 +92,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		}
 	}
 
-	if err := o.activityPayloadOversize(payload, e); err != nil {
+	if err := o.activityPayloadOversize(ctx, payload, e, workflowName); err != nil {
 		return err
 	}
 
@@ -109,9 +111,6 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	o.activityResultAwaited.Store(true)
 
 	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", o.actorID, activityActorType, targetActorID)
-
-	ctx, cancel := context.WithTimeout(ctx, dispatchTimeout)
-	defer cancel()
 
 	_, err = o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest(todo.ExecuteActivityMethod).
@@ -150,7 +149,11 @@ func (o *orchestrator) failActivityACL(ctx context.Context, e *backend.HistoryEv
 		EventType: events.NewTaskFailedEventType(e.GetEventId(), "WorkflowAccessPolicyDenied", "access denied by workflow access policy", false),
 	}
 
-	if _, err := o.createWorkflowReminder(ctx, common.ReminderPrefixActivityResult, failedEvent, time.Now(), o.appID, nil); err != nil {
+	reminderName, err := randomReminderName(common.ReminderPrefixActivityResult)
+	if err != nil {
+		return fmt.Errorf("failed to create activity failure reminder: %w", err)
+	}
+	if err := o.createWorkflowReminder(ctx, reminderName, failedEvent, time.Now(), o.appID, nil); err != nil {
 		return fmt.Errorf("failed to create activity failure reminder: %w", err)
 	}
 
