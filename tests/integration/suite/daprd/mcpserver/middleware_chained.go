@@ -15,6 +15,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -26,13 +27,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -182,12 +181,12 @@ func (s *middlewareChained) Run(t *testing.T, ctx context.Context) {
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
 
-		var result wfv1.CallMCPToolResponse
-		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		assert.True(t, result.GetIsError(), "expected isError=true from chain short-circuit")
-		require.NotEmpty(t, result.GetContent())
-		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "hook-b",
-			"expected hook-b error in content, got: %s", result.GetContent()[0].GetText().GetText())
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(outputJSON), &result))
+		assert.True(t, result.IsError, "expected isError=true from chain short-circuit")
+		require.NotEmpty(t, result.Content)
+		assert.Contains(t, extractText(result.Content[0]), "hook-b",
+			"expected hook-b error in content, got: %s", extractText(result.Content[0]))
 	})
 
 	t.Run("afterCallTool chain: hook A passes, hook B fails → workflow FAILS", func(t *testing.T) {
