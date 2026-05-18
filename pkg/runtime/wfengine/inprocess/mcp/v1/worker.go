@@ -23,17 +23,15 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/protobuf/types/known/structpb"
-
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/dapr/durabletask-go/task"
 	"github.com/dapr/kit/logger"
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
+	mcptypes "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/types"
 	"github.com/dapr/dapr/pkg/security"
 )
 
@@ -75,6 +73,11 @@ const (
 	mcpClientVersion = "v1alpha1"
 
 	jsonFieldRequired = "required"
+
+	// maxListToolsPages bounds the number of pages we'll fetch from an MCP server's
+	// ListTools response. Guards against a misbehaving or malicious server returning
+	// infinite cursors.
+	maxListToolsPages = 500
 )
 
 // RegisterMCPServer eagerly discovers tools on the MCP server, then registers
@@ -106,13 +109,13 @@ func RegisterMCPServer(opts RegisterOptions) ([]string, error) {
 	// orchestrator closure.
 	toolNames := make([]string, len(tools))
 	for i, tool := range tools {
-		toolNames[i] = tool.GetName()
-		wfName := mcpnames.MCPCallToolWorkflowName(opts.Server.Name, tool.GetName())
+		toolNames[i] = tool.Name
+		wfName := mcpnames.MCPCallToolWorkflowName(opts.Server.Name, tool.Name)
 		opts.Registry.UpsertVersionedWorkflowN(wfName, workflowVersion, true, orchestrator)
 		// Pre-populate the schema cache from the eager ListTools results.
-		if tool.GetInputSchema() != nil {
-			if raw, err := json.Marshal(tool.GetInputSchema().AsMap()); err == nil {
-				schemas.set(tool.GetName(), raw) //nolint:errcheck
+		if tool.InputSchema != nil {
+			if raw, err := json.Marshal(tool.InputSchema); err == nil {
+				schemas.set(tool.Name, raw) //nolint:errcheck
 			}
 		}
 	}
@@ -135,23 +138,18 @@ func UnregisterMCPServer(registry *task.TaskRegistry, serverName string) {
 	registry.RemoveActivity(mcpnames.MCPCallToolActivityName(serverName))
 }
 
-// maxListToolsPages bounds the number of pages we'll fetch from an MCP server's
-// ListTools response. Guards against a misbehaving or malicious server returning
-// infinite cursors.
-const maxListToolsPages = 500
-
 // DiscoverTools calls ListTools on the MCP server eagerly and returns the tool definitions.
 // Called during RegisterMCPServer to discover tool names for per-tool workflow registration.
 // Returns an error if the server returns more than maxListToolsPages — refusing to
 // silently truncate the tool list (callers would later get confusing "workflow not
 // registered" errors for the truncated tools).
-func DiscoverTools(ctx context.Context, holder *SessionHolder) ([]*wfv1.MCPToolDefinition, error) {
+func DiscoverTools(ctx context.Context, holder *SessionHolder) ([]*mcp.Tool, error) {
 	session, err := holder.Session(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	var tools []*wfv1.MCPToolDefinition
+	var tools []*mcp.Tool
 	var cursor string
 	for range maxListToolsPages {
 		params := &mcp.ListToolsParams{}
@@ -162,20 +160,7 @@ func DiscoverTools(ctx context.Context, holder *SessionHolder) ([]*wfv1.MCPToolD
 		if err != nil {
 			return nil, fmt.Errorf("ListTools failed: %w", err)
 		}
-		for _, t := range result.Tools {
-			td := &wfv1.MCPToolDefinition{Name: t.Name}
-			if t.Description != "" {
-				td.Description = &t.Description
-			}
-			if t.InputSchema != nil {
-				if schema, ok := t.InputSchema.(map[string]any); ok {
-					if s, err := structpb.NewStruct(schema); err == nil {
-						td.InputSchema = s
-					}
-				}
-			}
-			tools = append(tools, td)
-		}
+		tools = append(tools, result.Tools...)
 		if result.NextCursor == "" {
 			return tools, nil
 		}
@@ -215,7 +200,7 @@ func listToolsWorkflow(ctx *task.WorkflowContext, server *mcpserverapi.MCPServer
 	if err := runBeforeListTools(ctx, server, serverName); err != nil {
 		return nil, fmt.Errorf("beforeListTools failed: %w", err)
 	}
-	var result wfv1.ListMCPToolsResponse
+	var result mcp.ListToolsResult
 	t := ctx.CallActivity(mcpnames.MCPListToolsActivityName(serverName), task.WithActivityInput(nil))
 	if err := t.Await(&result); err != nil {
 		return nil, fmt.Errorf("list-tools activity failed: %w", err)
@@ -230,25 +215,20 @@ func listToolsWorkflow(ctx *task.WorkflowContext, server *mcpserverapi.MCPServer
 // callToolWorkflow: parse input -> beforeCallTool -> call-tool -> afterCallTool.
 // before/activity errors route through afterCallTool with isError=true.
 func callToolWorkflow(ctx *task.WorkflowContext, server *mcpserverapi.MCPServer, serverName, toolName string) (any, error) {
-	var input wfv1.MCPCallToolWorkflowInput
+	var input mcptypes.CallToolWorkflowInput
 	if err := ctx.GetInput(&input); err != nil {
 		return errorResult("failed to parse CallToolInput: %s", err), nil
 	}
 
-	arguments, err := runBeforeCallTool(ctx, server, serverName, toolName, input.GetArguments())
+	arguments, err := runBeforeCallTool(ctx, server, serverName, toolName, input.Arguments)
 	if err != nil {
 		return errorResult("beforeCallTool: %s", err), nil
 	}
 
-	var argMap map[string]any
-	if arguments != nil {
-		argMap = arguments.AsMap()
-	}
-
-	var result wfv1.CallMCPToolResponse
+	var result mcp.CallToolResult
 	t := ctx.CallActivity(
 		mcpnames.MCPCallToolActivityName(serverName),
-		task.WithActivityInput(activityCallToolInput{ToolName: toolName, Arguments: argMap}),
+		task.WithActivityInput(mcptypes.CallToolActivityInput{ToolName: toolName, Arguments: arguments}),
 	)
 	if err := t.Await(&result); err != nil {
 		final, hookErr := runAfterCallTool(ctx, server, serverName, toolName, arguments, errorResult("%s", err))
@@ -284,15 +264,11 @@ func makeWorkflow(server mcpserverapi.MCPServer, store *compstore.ComponentStore
 	}
 }
 
-// errorResult returns a CallMCPToolResponse with is_error=true and a single text content block.
-func errorResult(format string, args ...any) *wfv1.CallMCPToolResponse {
-	return &wfv1.CallMCPToolResponse{
+// errorResult returns a CallToolResult with isError=true and a single text content block.
+func errorResult(format string, args ...any) *mcp.CallToolResult {
+	return &mcp.CallToolResult{
 		IsError: true,
-		Content: []*wfv1.MCPContentBlock{{
-			Content: &wfv1.MCPContentBlock_Text{
-				Text: &wfv1.MCPTextContent{Text: fmt.Sprintf(format, args...)},
-			},
-		}},
+		Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf(format, args...)}},
 	}
 }
 
