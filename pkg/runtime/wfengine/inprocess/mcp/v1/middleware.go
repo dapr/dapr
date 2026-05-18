@@ -52,7 +52,7 @@ func runBeforeCallTool(
 	}
 	argsStruct, err := argsAsStruct(arguments)
 	if err != nil {
-		return nil, fmt.Errorf("beforeCallTool: failed to encode arguments for tool %q on MCPServer %q: %w",
+		return nil, fmt.Errorf("failed to encode arguments for tool %q on MCPServer %q: %w",
 			tool, serverName, err)
 	}
 	input := &wfv1.MCPBeforeCallToolHookInput{
@@ -70,7 +70,7 @@ func runBeforeCallTool(
 			// Update input for the next hook in the chain so it sees the mutated arguments.
 			input.Arguments, err = argsAsStruct(arguments)
 			if err != nil {
-				return nil, fmt.Errorf("beforeCallTool: mutating hook %q returned unencodable arguments for tool %q on MCPServer %q: %w",
+				return nil, fmt.Errorf("mutating hook %q returned unencodable arguments for tool %q on MCPServer %q: %w",
 					hook.Workflow.WorkflowName, tool, serverName, err)
 			}
 		} else {
@@ -102,12 +102,12 @@ func runAfterCallTool(
 	}
 	resultBytes, err := json.Marshal(result)
 	if err != nil {
-		return nil, fmt.Errorf("afterCallTool: failed to marshal result for hook input on tool %q on MCPServer %q: %w",
+		return nil, fmt.Errorf("failed to marshal result for hook input on tool %q on MCPServer %q: %w",
 			tool, serverName, err)
 	}
 	argsStruct, err := argsAsStruct(arguments)
 	if err != nil {
-		return nil, fmt.Errorf("afterCallTool: failed to encode arguments for tool %q on MCPServer %q: %w",
+		return nil, fmt.Errorf("failed to encode arguments for tool %q on MCPServer %q: %w",
 			tool, serverName, err)
 	}
 	input := &wfv1.MCPAfterCallToolHookInput{
@@ -119,12 +119,12 @@ func runAfterCallTool(
 		if hook.Mutate != nil && *hook.Mutate {
 			var mutated wfv1.MCPAfterCallToolHookInput
 			if err = t.Await(&mutated); err != nil {
-				return nil, fmt.Errorf("afterCallTool mutating hook %q failed for tool %q on MCPServer %q: %w",
+				return nil, fmt.Errorf("mutating hook %q failed for tool %q on MCPServer %q: %w",
 					hook.Workflow.WorkflowName, tool, serverName, err)
 			}
 			var mutatedResult mcp.CallToolResult
 			if err = json.Unmarshal(mutated.GetResult(), &mutatedResult); err != nil {
-				return nil, fmt.Errorf("afterCallTool mutating hook %q returned malformed result for tool %q on MCPServer %q: %w",
+				return nil, fmt.Errorf("mutating hook %q returned malformed result for tool %q on MCPServer %q: %w",
 					hook.Workflow.WorkflowName, tool, serverName, err)
 			}
 			result = &mutatedResult
@@ -132,13 +132,13 @@ func runAfterCallTool(
 			var b []byte
 			b, err = json.Marshal(result)
 			if err != nil {
-				return nil, fmt.Errorf("afterCallTool mutating hook %q returned unmarshalable result for tool %q on MCPServer %q: %w",
+				return nil, fmt.Errorf("mutating hook %q returned unmarshalable result for tool %q on MCPServer %q: %w",
 					hook.Workflow.WorkflowName, tool, serverName, err)
 			}
 			input.Result = b
 		} else {
 			if err = t.Await(nil); err != nil {
-				return nil, fmt.Errorf("afterCallTool hook %q failed for tool %q on MCPServer %q: %w",
+				return nil, fmt.Errorf("hook %q failed for tool %q on MCPServer %q: %w",
 					hook.Workflow.WorkflowName, tool, serverName, err)
 			}
 		}
@@ -182,7 +182,7 @@ func runAfterListTools(
 	}
 	resultBytes, err := json.Marshal(result)
 	if err != nil {
-		return nil, fmt.Errorf("afterListTools: failed to marshal result for hook input on MCPServer %q: %w",
+		return nil, fmt.Errorf("failed to marshal result for hook input on MCPServer %q: %w",
 			serverName, err)
 	}
 	input := &wfv1.MCPAfterListToolsHookInput{Name: serverName, Result: resultBytes}
@@ -192,25 +192,25 @@ func runAfterListTools(
 		if hook.Mutate != nil && *hook.Mutate {
 			var mutated wfv1.MCPAfterListToolsHookInput
 			if err = t.Await(&mutated); err != nil {
-				return nil, fmt.Errorf("afterListTools mutating hook %q failed for MCPServer %q: %w",
+				return nil, fmt.Errorf("mutating hook %q failed for MCPServer %q: %w",
 					hook.Workflow.WorkflowName, serverName, err)
 			}
 			var mutatedResult mcp.ListToolsResult
 			if err = json.Unmarshal(mutated.GetResult(), &mutatedResult); err != nil {
-				return nil, fmt.Errorf("afterListTools mutating hook %q returned malformed result for MCPServer %q: %w",
+				return nil, fmt.Errorf("mutating hook %q returned malformed result for MCPServer %q: %w",
 					hook.Workflow.WorkflowName, serverName, err)
 			}
 			result = &mutatedResult
 			var b []byte
 			b, err = json.Marshal(result)
 			if err != nil {
-				return nil, fmt.Errorf("afterListTools mutating hook %q returned unmarshalable result for MCPServer %q: %w",
+				return nil, fmt.Errorf("mutating hook %q returned unmarshalable result for MCPServer %q: %w",
 					hook.Workflow.WorkflowName, serverName, err)
 			}
 			input.Result = b
 		} else {
 			if err = t.Await(nil); err != nil {
-				return nil, fmt.Errorf("afterListTools hook %q failed for MCPServer %q: %w",
+				return nil, fmt.Errorf("hook %q failed for MCPServer %q: %w",
 					hook.Workflow.WorkflowName, serverName, err)
 			}
 		}
