@@ -47,7 +47,7 @@ func BuildAll(t *testing.T) {
 	t.Helper()
 
 	binaryNames := []string{"daprd", "placement", "sentry", "operator", "injector", "scheduler"}
-	helperBinaryNames := []string{"helmtemplate"}
+	helperBinaryNames := []string{"helmtemplate", "mcpstdioserver"}
 
 	var wg sync.WaitGroup
 	wg.Add(len(binaryNames))
