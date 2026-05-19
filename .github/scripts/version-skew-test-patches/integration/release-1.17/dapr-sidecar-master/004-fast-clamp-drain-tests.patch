@@ -108,3 +108,16 @@ index 3fc5d8a..31bb09f 100644
  		"call should be cancelled after the clamped per-entity drain timeout, not the configured 60s")
  
  	assert.False(t, c.ll.Contains("dissemination timeout after"),
+diff --git a/tests/integration/suite/actors/dissemination/drain/clamp/timeout.go b/tests/integration/suite/actors/dissemination/drain/clamp/timeout.go
+index 0315e54..a8bec64 100644
+--- a/tests/integration/suite/actors/dissemination/drain/clamp/timeout.go
++++ b/tests/integration/suite/actors/dissemination/drain/clamp/timeout.go
+@@ -60,7 +60,7 @@ func (c *timeout) Setup(t *testing.T) []framework.Option {
+ 
+ 	c.ll = logline.New(t,
+ 		logline.WithStdoutLineContains(
+-			"Timed out waiting for actor in-flight lock claims to be released",
++			"Timed out waiting for actor type 'abc' in-flight lock claims to be released",
+ 		),
+ 	)
+ 
