@@ -36,6 +36,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -138,7 +139,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{"city": "Austin"},
 		}
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+		instanceID := httpapi.Start(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("weather", "get_weather"), input)
 
 		metadata, err := taskhubClient.WaitForWorkflowCompletion(
@@ -158,7 +159,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{"name": "dapr"},
 		}
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+		instanceID := httpapi.Start(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("greeter", "greet"), input)
 
 		metadata, err := taskhubClient.WaitForWorkflowCompletion(
@@ -176,7 +177,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("ListTools returns different tools per server", func(t *testing.T) {
 		// Weather server
-		weatherID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+		weatherID := httpapi.Start(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPListToolsWorkflowName("weather"), map[string]any{})
 		weatherMeta, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(weatherID), api.WithFetchPayloads(true))
@@ -192,7 +193,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 		assert.NotContains(t, weatherNames, "greet")
 
 		// Greeter server
-		greeterID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+		greeterID := httpapi.Start(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPListToolsWorkflowName("greeter"), map[string]any{})
 		greeterMeta, err := taskhubClient.WaitForWorkflowCompletion(
 			ctx, api.InstanceID(greeterID), api.WithFetchPayloads(true))
