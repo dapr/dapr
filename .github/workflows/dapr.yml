@@ -42,7 +42,7 @@ jobs:
         target_os: ["linux"]
         target_arch: ["amd64"]
     env:
-      PROTOC_VERSION: "25.4"
+      PROTOC_VERSION: "34.1"
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
       GOPROXY: "https://proxy.golang.org"
