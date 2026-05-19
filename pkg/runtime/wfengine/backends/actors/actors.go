@@ -387,16 +387,16 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, e *backend.Histor
 
 // GetWorkflowMetadata implements backend.Backend
 func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error) {
-	state, err := abe.loadInternalState(ctx, id)
+	wstate, err := abe.loadInternalState(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	if state == nil {
+	if wstate == nil {
 		return nil, api.ErrInstanceNotFound
 	}
 
-	rstate := runtimestate.NewWorkflowRuntimeState(string(id), state.CustomStatus, state.History)
+	rstate := runtimestate.NewWorkflowRuntimeState(string(id), wstate.CustomStatus, wstate.History)
 
 	name, _ := runtimestate.Name(rstate)
 	createdAt, _ := runtimestate.CreatedTime(rstate)
@@ -405,16 +405,23 @@ func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID) (
 	output, _ := runtimestate.Output(rstate)
 	failureDetuils, _ := runtimestate.FailureDetails(rstate)
 
+	var startedAt *timestamppb.Timestamp
+	if t := runtimestate.GetStartedTime(rstate); !t.IsZero() {
+		startedAt = timestamppb.New(t)
+	}
+
 	return &backend.WorkflowMetadata{
 		InstanceId:     string(id),
 		Name:           name,
 		RuntimeStatus:  runtimestate.RuntimeStatus(rstate),
 		CreatedAt:      timestamppb.New(createdAt),
+		StartedAt:      startedAt,
 		LastUpdatedAt:  timestamppb.New(lastUpdated),
 		Input:          input,
 		Output:         output,
 		CustomStatus:   rstate.GetCustomStatus(),
 		FailureDetails: failureDetuils,
+		Version:        state.WorkflowVersion(rstate.GetOldEvents()),
 	}, nil
 }
 
