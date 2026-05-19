@@ -63,7 +63,7 @@ func (w *watchhostsrecover) Run(t *testing.T, ctx context.Context) {
 		"expected the injected WatchHosts failure to have fired at least once")
 
 	gclient := w.daprd.GRPCClient(t, ctx)
-	_, err := gclient.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err := gclient.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:     "watchhostsrecover-job",
 			Schedule: ptr.Of("@every 1s"),
@@ -72,7 +72,7 @@ func (w *watchhostsrecover) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		_, gerr := gclient.GetJobAlpha1(ctx, &rtv1.GetJobRequest{
+		_, gerr := gclient.GetJob(ctx, &rtv1.GetJobRequest{
 			Name: "watchhostsrecover-job",
 		})
 		assert.NoError(c, gerr)
