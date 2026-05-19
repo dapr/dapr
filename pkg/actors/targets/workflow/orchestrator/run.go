@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -72,15 +73,37 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		state.Inbox = append(state.Inbox, timerEvent)
 	}
 
+	if len(state.Inbox) == 0 && !runtimestate.IsCompleted(o.rstate) {
+		// The in-memory cache may be stale: during a placement cluster failure
+		// daprds will roll over the actor, so a peer host may have written a new
+		// inbox event to the store since our cache was last updated. Drop the
+		// cache and reload from the store before declaring this a no-op. Acking
+		// SUCCESS off a stale empty inbox would tell the scheduler to delete the
+		// job and strand the workflow on the durable event that's actually sitting
+		// in the store. Skip when the cached rstate is terminal: a finished
+		// workflow can't gain new inbox events, and the empty inbox below is just
+		// the retention-recovery path.
+		o.invalidateCachedState()
+		state, _, err = o.loadInternalState(ctx)
+		if err != nil {
+			return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to reload state on empty-inbox path: %w", err))
+		}
+		if state == nil {
+			log.Warnf("No workflow state found for actor '%s' after reload, terminating execution", o.actorID)
+			return todo.RunCompletedTrue, nil
+		}
+	}
+
 	if len(state.Inbox) == 0 {
-		// This can happen after multiple events are processed in batches; there may still be reminders around
-		// for some of those already processed events.
+		// This can happen after multiple events are processed in batches; there
+		// may still be reminders around for some of those already processed
+		// events.
 		// If the workflow is terminal, attempt retention reminder creation
-		// idempotently. This recovers a workflow whose completion was
-		// persisted in a prior run but whose retention reminder Create RPC
-		// was lost (e.g. scheduler pod killed mid-call). createRetentionReminder
-		// uses a deterministic name, so re-creating an already-existing
-		// retention reminder is a no-op overwrite.
+		// idempotently. This recovers a workflow whose completion was persisted in
+		// a prior run but whose retention reminder Create RPC was lost (e.g.
+		// scheduler pod killed mid-call). createRetentionReminder uses a
+		// deterministic name, so re-creating an already-existing retention
+		// reminder is a no-op overwrite.
 		if runtimestate.IsCompleted(o.rstate) {
 			if rerr := o.handleRetention(ctx, runtimestate.RuntimeStatus(o.rstate)); rerr != nil {
 				return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to (re)create retention reminder on empty-inbox completion path: %w", rerr))
@@ -226,15 +249,17 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 					state.SetIncomingHistory(wi.IncomingHistory)
 				}
 
+				if len(carryover) > 0 {
+					reminderName := events.EventReminderName(reminderPrefixNewEvent, carryover[0])
+					if err = o.createWorkflowReminder(ctx, reminderName, nil, time.Now(), o.appID, &workflowName); err != nil {
+						o.invalidateCachedState()
+						return todo.RunCompletedFalse, err
+					}
+				}
+
 				if err = o.signAndSaveState(ctx, state); err != nil {
 					o.rstate = rstateSnapshot
 					return todo.RunCompletedFalse, err
-				}
-
-				if len(carryover) > 0 {
-					if _, err = o.createWorkflowReminder(ctx, reminderPrefixNewEvent, nil, time.Now(), o.appID, &workflowName); err != nil {
-						return todo.RunCompletedFalse, err
-					}
 				}
 			} else {
 				o.rstate = rstateSnapshot

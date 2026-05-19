@@ -247,7 +247,7 @@ func (a *Universal) GetActorReminder(ctx context.Context, in *runtimev1pb.GetAct
 		period = new(resp.Period.String())
 	}
 	if !resp.ExpirationTime.IsZero() {
-		ttl = new(resp.ExpirationTime.Format(time.RFC3339))
+		ttl = new(resp.ExpirationTime.Format(time.RFC3339Nano))
 	}
 
 	return &runtimev1pb.GetActorReminderResponse{
