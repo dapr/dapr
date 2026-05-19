@@ -1,0 +1,394 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.runtime.v1;
+
+import "google/protobuf/struct.proto";
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "DaprSearchProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
+
+// =============================================================================
+// Search building block - alpha1
+//
+// The Search building block provides a portable, store-agnostic API for
+// indexing and querying documents using lexical / full-text search semantics.
+// Vector similarity is intentionally out of scope for this building block; see
+// vector.proto for the Vector building block. Hybrid search is reserved for a
+// future alpha (see SearchRequestAlpha1.reserved tags).
+//
+// Filter DSL (alpha1, portable subset):
+//   Filters are expressed as a google.protobuf.Struct using a JSON-like
+//   document shape with the following operators. Components MUST translate
+//   the portable subset to backend-native queries; backends MAY accept
+//   additional operators as extensions but portable callers SHOULD restrict
+//   themselves to the subset below.
+//
+//     Comparison: $eq, $ne, $gt, $gte, $lt, $lte
+//     Set:        $in, $nin
+//     Existence:  $exists (bool)
+//     Logical:    $and, $or, $not
+//     String:     $regex (RE2 syntax)
+//
+//   Field paths use dotted notation, e.g. "customer.region".
+//
+//   Example:
+//     {
+//       "category": { "$in": ["news", "blog"] },
+//       "created_at": { "$gte": "2026-01-01" },
+//       "$or": [
+//         { "tenant": { "$eq": "acme" } },
+//         { "public": { "$eq": true } }
+//       ]
+//     }
+//
+// Pagination:
+//   Alpha1 uses opaque continuation tokens. The token is component-defined
+//   and MUST be treated as opaque by callers. Backends that cannot provide
+//   stable cursors over mutating indexes SHOULD document the consistency
+//   guarantees they offer. Offset-style pagination is intentionally NOT
+//   exposed in alpha1 to avoid baking unsafe semantics into the API.
+//
+// Tenancy:
+//   The (store_name, index) tuple is the primary scoping mechanism for alpha1.
+//   Per-document multi-tenancy is the caller's responsibility (e.g. via a
+//   tenant_id metadata field combined with a filter clause).
+// =============================================================================
+
+// SearchDocument represents a single indexable document.
+message SearchDocument {
+  // Document identifier. Must be unique within the index. If the underlying
+  // backend assigns ids server-side, the component MAY accept an empty id and
+  // populate it in the index response.
+  string id = 1;
+
+  // Document content as a structured object. Using google.protobuf.Struct
+  // (rather than map<string,string>) is required because real-world documents
+  // contain nested objects, arrays, numbers, and booleans. Components are
+  // responsible for mapping fields onto their native schema.
+  google.protobuf.Struct content = 2;
+
+  // Free-form metadata that travels alongside the document but is not
+  // necessarily indexed for search. Component-specific behaviour applies.
+  map<string, string> metadata = 3;
+}
+
+// Snippet is a single highlighted excerpt from a matched field.
+message Snippet {
+  // The highlighted text fragment. Components MAY include backend-specific
+  // markers (e.g. <em>...</em>) around matched terms.
+  string text = 1;
+}
+
+// FieldHighlight is the set of highlighted snippets for a single field on a
+// SearchHit. Multiple snippets per field are supported because real backends
+// (Elasticsearch, OpenSearch, Solr, etc.) routinely return more than one
+// fragment per field.
+message FieldHighlight {
+  // Snippets returned for this field, in the backend's preferred order
+  // (typically by relevance).
+  repeated Snippet snippets = 1;
+}
+
+// SearchHit is a single result entry returned from a Search call.
+message SearchHit {
+  // The matching document. Field population obeys SearchRequestAlpha1's
+  // include_content / return_fields parameters.
+  SearchDocument document = 1;
+
+  // Backend-reported relevance score. Higher is more relevant. Components
+  // SHOULD pass through the backend score unmodified; if a backend does not
+  // provide a score, 0 is reported.
+  double score = 2;
+
+  // Highlights keyed by field name. Empty when no highlights were requested
+  // or matched.
+  map<string, FieldHighlight> highlights = 3;
+}
+
+// SortOrder selects the direction of a sort clause.
+enum SortOrder {
+  SORT_ORDER_UNSPECIFIED = 0;
+  SORT_ORDER_ASC = 1;
+  SORT_ORDER_DESC = 2;
+}
+
+// SortClause expresses a single sort key. Multiple clauses are applied in
+// order (primary, secondary, ...).
+message SortClause {
+  // Field path to sort on. Dotted notation, same as filter field paths.
+  string field = 1;
+
+  // Direction. SORT_ORDER_UNSPECIFIED is treated as SORT_ORDER_ASC.
+  SortOrder order = 2;
+}
+
+// IndexAck declares the durability guarantee a caller is requesting from the
+// backend for a write (Index/Delete) operation.
+//
+//   INDEX_ACK_QUEUED  - the write was accepted and will be applied
+//                       asynchronously. Callers MAY not see the change in a
+//                       subsequent Search until the backend converges.
+//   INDEX_ACK_DURABLE - the write was applied and is durable before the
+//                       response is returned. This may incur higher latency.
+//
+// If the requested level is unsupported by the backend the component MUST
+// return an error rather than silently downgrade.
+enum IndexAck {
+  INDEX_ACK_UNSPECIFIED = 0;
+  INDEX_ACK_QUEUED = 1;
+  INDEX_ACK_DURABLE = 2;
+}
+
+// OperationResult reports the outcome of a single sub-operation (e.g. one
+// document within a bulk index call). Implementations populate this so callers
+// can drive fine-grained retry / dead-lettering.
+message OperationResult {
+  // Identifier of the sub-operation target. For document writes this is the
+  // document id.
+  string id = 1;
+
+  // True when the sub-operation completed successfully. When false, error_code
+  // and error_message describe the failure.
+  bool success = 2;
+
+  // Component-defined short error code (e.g. "schema_mismatch", "rate_limited",
+  // "not_found"). Stable across releases for the same component.
+  string error_code = 3;
+
+  // Human-readable failure description. Not meant to be parsed by callers.
+  string error_message = 4;
+}
+
+// =============================================================================
+// Index lifecycle
+// =============================================================================
+
+// IndexFieldType is the portable set of field types supported when declaring
+// an index schema. Components MAY ignore types they cannot honour, but MUST
+// document such behaviour.
+enum IndexFieldType {
+  INDEX_FIELD_TYPE_UNSPECIFIED = 0;
+  INDEX_FIELD_TYPE_TEXT = 1;
+  INDEX_FIELD_TYPE_KEYWORD = 2;
+  INDEX_FIELD_TYPE_INT = 3;
+  INDEX_FIELD_TYPE_DOUBLE = 4;
+  INDEX_FIELD_TYPE_BOOL = 5;
+  INDEX_FIELD_TYPE_DATETIME = 6;
+  INDEX_FIELD_TYPE_GEO_POINT = 7;
+}
+
+// IndexFieldSchema describes a single field within an index schema.
+message IndexFieldSchema {
+  // Field name (dotted notation supported for nested fields).
+  string name = 1;
+
+  // Portable field type.
+  IndexFieldType type = 2;
+
+  // Whether the field is indexed for filtering.
+  bool filterable = 3;
+
+  // Whether the field is sortable.
+  bool sortable = 4;
+
+  // Whether the field is searchable for full-text matching. Only meaningful
+  // for INDEX_FIELD_TYPE_TEXT fields.
+  bool searchable = 5;
+}
+
+message CreateIndexRequestAlpha1 {
+  string store_name = 1;
+  string index = 2;
+
+  // Optional schema. When empty, the component creates a schemaless or
+  // dynamic-mapping index if the backend supports it. If the backend requires
+  // a schema and none is supplied, the call fails.
+  repeated IndexFieldSchema fields = 3;
+
+  // Component-specific options (e.g. shard count, analyzer). Components SHOULD
+  // document the keys they understand.
+  map<string, string> metadata = 10;
+}
+
+message CreateIndexResponseAlpha1 {
+  // Empty
+}
+
+message DropIndexRequestAlpha1 {
+  string store_name = 1;
+  string index = 2;
+  map<string, string> metadata = 10;
+}
+
+message DescribeIndexRequestAlpha1 {
+  string store_name = 1;
+  string index = 2;
+  map<string, string> metadata = 10;
+}
+
+message DescribeIndexResponseAlpha1 {
+  string index = 1;
+
+  // The schema as understood by the component. For schemaless backends this
+  // MAY be empty or partially populated.
+  repeated IndexFieldSchema fields = 2;
+
+  // Approximate document count. Components that cannot supply this cheaply
+  // MAY return 0; callers MUST NOT depend on this for correctness.
+  uint64 document_count = 3;
+
+  // Free-form backend metadata.
+  map<string, string> properties = 4;
+}
+
+message ListIndexesRequestAlpha1 {
+  string store_name = 1;
+  map<string, string> metadata = 10;
+}
+
+message ListIndexesResponseAlpha1 {
+  repeated string indexes = 1;
+}
+
+// =============================================================================
+// Document operations
+// =============================================================================
+
+message IndexDocumentsRequestAlpha1 {
+  string store_name = 1;
+  string index = 2;
+  repeated SearchDocument documents = 3;
+
+  // Requested durability level. INDEX_ACK_UNSPECIFIED leaves the choice to
+  // the component (typically QUEUED).
+  IndexAck ack = 4;
+
+  // Optional idempotency key. Components SHOULD deduplicate requests bearing
+  // the same key within a component-defined window so that client retries on
+  // network failure do not double-index. Implementations that cannot honour
+  // this MUST document the limitation.
+  string idempotency_key = 5;
+
+  map<string, string> metadata = 10;
+}
+
+message IndexDocumentsResponseAlpha1 {
+  // Per-document outcome. Order is not guaranteed to match the request order;
+  // callers MUST correlate by id.
+  repeated OperationResult results = 1;
+
+  // The actual durability level honoured by the backend.
+  IndexAck ack = 2;
+}
+
+message DeleteDocumentsRequestAlpha1 {
+  string store_name = 1;
+  string index = 2;
+  repeated string ids = 3;
+  IndexAck ack = 4;
+  map<string, string> metadata = 10;
+}
+
+message DeleteDocumentsResponseAlpha1 {
+  repeated OperationResult results = 1;
+  IndexAck ack = 2;
+}
+
+// =============================================================================
+// Search
+// =============================================================================
+
+message SearchRequestAlpha1 {
+  string store_name = 1;
+  string index = 2;
+
+  // The query specification. Exactly one MUST be set.
+  oneof query {
+    // Natural-language query string. The component passes it to the backend
+    // analyzer / tokenizer for relevance scoring.
+    string text = 3;
+
+    // Backend-native query expressed as a structured object. This is an
+    // escape hatch that gives callers access to backend-specific features at
+    // the cost of portability. Components MUST document the dialect they
+    // accept.
+    google.protobuf.Struct native = 4;
+  }
+
+  // Optional filter expression. See the filter DSL note at the top of this
+  // file for the portable operator subset.
+  google.protobuf.Struct filter = 5;
+
+  // Maximum number of hits to return per response chunk. 0 means
+  // component-defined default. Components MAY enforce upper bounds.
+  uint32 top_k = 6;
+
+  // Subset of fields to include in returned SearchDocument.content. Empty
+  // means all fields. Use include_content=false to suppress content entirely.
+  repeated string return_fields = 8;
+
+  // When false, returned SearchHits omit document.content (only id, score and
+  // metadata are populated). Useful for id-only result fetches.
+  bool include_content = 9;
+
+  map<string, string> metadata = 10;
+
+  // Subset of fields to apply text matching against. Empty means all
+  // searchable fields per the index schema.
+  repeated string search_fields = 11;
+
+  // Sort clauses applied in order. When empty, results are returned in
+  // descending score order.
+  repeated SortClause sort = 12;
+
+  // Fields for which highlights should be returned. Empty disables
+  // highlighting.
+  repeated string highlight_fields = 13;
+
+  // Opaque token returned by a previous SearchResponseAlpha1 to fetch the
+  // next page of results. When set, the rest of the request SHOULD be
+  // identical to the original; components MAY ignore other fields.
+  string continuation_token = 14;
+
+  // RESERVED for future alpha extensions:
+  //   15: VectorQueryClause vector_query - hybrid (text+vector) search
+  //   16: string ranking_profile          - custom scoring profile
+  //   17: uint32 timeout_ms               - per-request timeout override
+  reserved 15, 16, 17;
+  reserved "vector_query", "ranking_profile", "timeout_ms";
+
+  // 7 was offset (offset-based pagination). Removed in favour of
+  // continuation_token to avoid unsafe semantics over mutating indexes.
+  reserved 7;
+  reserved "offset";
+}
+
+message SearchResponseAlpha1 {
+  // Hits in the current page.
+  repeated SearchHit hits = 1;
+
+  // Total number of matching documents across all pages. Components that
+  // cannot supply this exactly MAY return an estimate; callers SHOULD treat
+  // this as advisory.
+  uint64 total_hits = 2;
+
+  // Opaque token used to request the next page. Empty when there are no more
+  // results. Tokens are component-specific and MUST be treated as opaque by
+  // callers.
+  string continuation_token = 3;
+}

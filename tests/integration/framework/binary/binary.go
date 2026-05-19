@@ -41,6 +41,8 @@ var buildTags = []string{
 	"crypto_localstorage",
 	"middleware_http_routeralias",
 	"conversation_echo",
+	"search_meilisearch",
+	"vector_meilisearch",
 }
 
 func BuildAll(t *testing.T) {

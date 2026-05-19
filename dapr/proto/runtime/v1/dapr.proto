@@ -31,6 +31,8 @@ import "dapr/proto/runtime/v1/crypto.proto";
 import "dapr/proto/runtime/v1/workflow.proto";
 import "dapr/proto/runtime/v1/jobs.proto";
 import "dapr/proto/runtime/v1/ai.proto";
+import "dapr/proto/runtime/v1/search.proto";
+import "dapr/proto/runtime/v1/vector.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprProtos";
@@ -285,6 +287,66 @@ service Dapr {
 
   // Converse with a LLM service via alpha2 api
   rpc ConverseAlpha2(ConversationRequestAlpha2) returns (ConversationResponseAlpha2) {}
+
+  // Search building block (alpha1) - lexical / full-text search.
+  // See dapr/proto/runtime/v1/search.proto for type and semantics docs.
+
+  // Create a new index in the given store.
+  rpc CreateIndexAlpha1(CreateIndexRequestAlpha1) returns (CreateIndexResponseAlpha1) {}
+
+  // Drop an existing index.
+  rpc DropIndexAlpha1(DropIndexRequestAlpha1) returns (google.protobuf.Empty) {}
+
+  // Describe an index (schema, document count, backend properties).
+  rpc DescribeIndexAlpha1(DescribeIndexRequestAlpha1) returns (DescribeIndexResponseAlpha1) {}
+
+  // List indexes in a store.
+  rpc ListIndexesAlpha1(ListIndexesRequestAlpha1) returns (ListIndexesResponseAlpha1) {}
+
+  // Index (insert or update) a batch of documents. Client streaming so callers
+  // can pipeline large bulk loads without buffering them in memory.
+  rpc IndexDocumentsAlpha1(stream IndexDocumentsRequestAlpha1) returns (IndexDocumentsResponseAlpha1) {}
+
+  // Delete documents by id.
+  rpc DeleteDocumentsAlpha1(DeleteDocumentsRequestAlpha1) returns (DeleteDocumentsResponseAlpha1) {}
+
+  // Search the index. Server streaming so large result sets can be paged
+  // back to the caller without buffering. Each response chunk carries a
+  // continuation_token for explicit pagination if the stream is broken.
+  rpc SearchAlpha1(SearchRequestAlpha1) returns (stream SearchResponseAlpha1) {}
+
+  // Vector building block (alpha1) - dense vector similarity search.
+  // See dapr/proto/runtime/v1/vector.proto for type and semantics docs.
+
+  // Create a new vector collection.
+  rpc CreateCollectionAlpha1(CreateCollectionRequestAlpha1) returns (CreateCollectionResponseAlpha1) {}
+
+  // Drop an existing vector collection.
+  rpc DropCollectionAlpha1(DropCollectionRequestAlpha1) returns (google.protobuf.Empty) {}
+
+  // Describe a collection (dimension, metric, metadata schema).
+  rpc DescribeCollectionAlpha1(DescribeCollectionRequestAlpha1) returns (DescribeCollectionResponseAlpha1) {}
+
+  // List collections in a store.
+  rpc ListCollectionsAlpha1(ListCollectionsRequestAlpha1) returns (ListCollectionsResponseAlpha1) {}
+
+  // Upsert (insert or replace) a batch of vectors. Client streaming for bulk
+  // ingest of pre-embedded vectors.
+  rpc UpsertVectorsAlpha1(stream UpsertVectorsRequestAlpha1) returns (UpsertVectorsResponseAlpha1) {}
+
+  // Fetch vectors by id.
+  rpc GetVectorsAlpha1(GetVectorsRequestAlpha1) returns (GetVectorsResponseAlpha1) {}
+
+  // Delete vectors by id list or by metadata filter.
+  rpc DeleteVectorsAlpha1(DeleteVectorsRequestAlpha1) returns (DeleteVectorsResponseAlpha1) {}
+
+  // Query the nearest neighbours of a query vector. Server streaming so
+  // top_k can be larger than a single message comfortably carries.
+  rpc QueryVectorsAlpha1(QueryVectorsRequestAlpha1) returns (stream QueryVectorsResponseAlpha1) {}
+
+  // Issue N parallel queries against the same collection, each independently
+  // succeeding or failing.
+  rpc BatchQueryVectorsAlpha1(BatchQueryVectorsRequestAlpha1) returns (BatchQueryVectorsResponseAlpha1) {}
 }
 
 // ShutdownRequest is the request for Shutdown.

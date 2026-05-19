@@ -29,4 +29,6 @@ const (
 	CategoryLock            Category = "lock"
 	CategoryNameResolution  Category = "nameresolution"
 	CategoryConversation    Category = "conversation"
+	CategorySearch          Category = "search"
+	CategoryVector          Category = "vector"
 )

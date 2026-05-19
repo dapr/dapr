@@ -25,6 +25,8 @@ const (
 	CategorySecret            Category = "secret"
 	CategoryPubsub            Category = "pubsub"
 	CategoryConversation      Category = "conversation"
+	CategorySearch            Category = "search"
+	CategoryVector            Category = "vector"
 	CategoryServiceInvocation Category = "service-invocation"
 	CategoryBinding           Category = "binding"
 	CategoryLock              Category = "lock"
@@ -138,6 +140,20 @@ var (
 	ConversationInvoke        = ErrorCode{"ERR_CONVERSATION_INVOKE", "", CategoryConversation}         // Error invoking conversation
 	ConversationMissingInputs = ErrorCode{"ERR_CONVERSATION_MISSING_INPUTS", "", CategoryConversation} // Missing inputs for conversation
 	ConversationNotFound      = ErrorCode{"ERR_CONVERSATION_NOT_FOUND", "", CategoryConversation}      // Conversation not found
+
+	// ### Search API
+	SearchStoreNotFound      = ErrorCode{"ERR_SEARCH_STORE_NOT_FOUND", "DAPR_SEARCH_STORE_NOT_FOUND", CategorySearch}           // Search store not found
+	SearchStoreNotConfigured = ErrorCode{"ERR_SEARCH_STORE_NOT_CONFIGURED", "DAPR_SEARCH_STORE_NOT_CONFIGURED", CategorySearch} // Search store not configured
+	SearchInvalidRequest     = ErrorCode{"ERR_SEARCH_INVALID_REQUEST", "DAPR_SEARCH_INVALID_REQUEST", CategorySearch}           // Invalid search request
+	SearchIndexNotFound      = ErrorCode{"ERR_SEARCH_INDEX_NOT_FOUND", "DAPR_SEARCH_INDEX_NOT_FOUND", CategorySearch}           // Search index not found
+	SearchOperationFailed    = ErrorCode{"ERR_SEARCH_OPERATION_FAILED", "DAPR_SEARCH_OPERATION_FAILED", CategorySearch}         // Search operation failed
+
+	// ### Vector API
+	VectorStoreNotFound      = ErrorCode{"ERR_VECTOR_STORE_NOT_FOUND", "DAPR_VECTOR_STORE_NOT_FOUND", CategoryVector}           // Vector store not found
+	VectorStoreNotConfigured = ErrorCode{"ERR_VECTOR_STORE_NOT_CONFIGURED", "DAPR_VECTOR_STORE_NOT_CONFIGURED", CategoryVector} // Vector store not configured
+	VectorInvalidRequest     = ErrorCode{"ERR_VECTOR_INVALID_REQUEST", "DAPR_VECTOR_INVALID_REQUEST", CategoryVector}           // Invalid vector request
+	VectorCollectionNotFound = ErrorCode{"ERR_VECTOR_COLLECTION_NOT_FOUND", "DAPR_VECTOR_COLLECTION_NOT_FOUND", CategoryVector} // Vector collection not found
+	VectorOperationFailed    = ErrorCode{"ERR_VECTOR_OPERATION_FAILED", "DAPR_VECTOR_OPERATION_FAILED", CategoryVector}         // Vector operation failed
 
 	// ### Service Invocation / Direct Messaging API
 	ServiceInvocationDirectInvoke = ErrorCode{"ERR_DIRECT_INVOKE", "", CategoryServiceInvocation} // Error invoking service
