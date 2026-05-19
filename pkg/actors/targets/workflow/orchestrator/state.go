@@ -318,6 +318,11 @@ func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, star
 			parentAppID = wrapperspb.String(se.GetParentInstance().GetAppID())
 		}
 	}
+	var startedAt *timestamppb.Timestamp
+	if t := runtimestate.GetStartedTime(rstate); !t.IsZero() {
+		startedAt = timestamppb.New(t)
+	}
+
 	return &backend.WorkflowMetadata{
 		InstanceId:       rstate.GetInstanceId(),
 		Name:             name,
@@ -332,6 +337,7 @@ func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, star
 		ParentInstanceId: parentInstanceID,
 		ParentAppId:      parentAppID,
 		Version:          wfenginestate.WorkflowVersion(rstate.GetOldEvents()),
+		StartedAt:        startedAt,
 	}
 }
 

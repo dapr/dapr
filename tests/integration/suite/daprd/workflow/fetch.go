@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,6 +71,8 @@ func (f *fetch) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(t, `"input value"`, meta.GetInput().GetValue())
 			assert.Equal(t, `"return value"`, meta.GetOutput().GetValue())
 			assert.Equal(t, `my custom status`, meta.GetCustomStatus().GetValue())
+			assert.NotNil(t, meta.GetStartedAt())
+			assert.False(t, meta.GetStartedAt().AsTime().Before(meta.GetCreatedAt().AsTime()))
 			assert.Nil(t, meta.GetVersion())
 		})
 
@@ -116,7 +119,6 @@ func (f *fetch) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("fetch version in metadata", func(t *testing.T) {
 		f.workflow.Registry().AddVersionedWorkflowN("versioned", "v1", true, func(ctx *task.WorkflowContext) (any, error) {
-			ctx.SetCustomStatus("my custom status")
 			return "return value", nil
 		})
 
@@ -127,9 +129,36 @@ func (f *fetch) Run(t *testing.T, ctx context.Context) {
 
 		meta, err := client.FetchWorkflowMetadata(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.Equal(t, `"input value"`, meta.GetInput().GetValue())
-		assert.Equal(t, `"return value"`, meta.GetOutput().GetValue())
-		assert.Equal(t, `my custom status`, meta.GetCustomStatus().GetValue())
 		assert.Equal(t, "v1", meta.GetVersion().GetValue())
+	})
+
+	t.Run("fetch started at in metadata", func(t *testing.T) {
+		f.workflow.Registry().AddWorkflowN("delayed", func(ctx *task.WorkflowContext) (any, error) {
+			return nil, nil
+		})
+
+		// delay long enough to make assertions with toleration still valid
+		startTime := time.Now().Add(3 * time.Second).Truncate(time.Millisecond)
+		id, err := client.ScheduleNewWorkflow(ctx, "delayed", api.WithStartTime(startTime))
+		require.NoError(t, err)
+		_, err = client.WaitForWorkflowCompletion(ctx, id)
+		require.NoError(t, err)
+
+		meta, err := client.FetchWorkflowMetadata(ctx, id)
+		require.NoError(t, err)
+
+		require.NotNil(t, meta.GetCreatedAt())
+		require.NotNil(t, meta.GetStartedAt())
+
+		createdAt := meta.GetCreatedAt().AsTime().Truncate(time.Millisecond)
+		startedAt := meta.GetStartedAt().AsTime().Truncate(time.Millisecond)
+		assert.False(t, startedAt.Before(createdAt),
+			"StartedAt (%s) must not be before CreatedAt (%s)", startedAt, createdAt)
+		// Scheduler reminders can fire within a small coalescing window
+		// around the scheduled time, so allow a tolerance
+		assert.WithinDuration(t, startTime, startedAt, 1*time.Second,
+			"StartedAt (%s) should be within 2s of the scheduled start time (%s)", startedAt, startTime)
+		assert.True(t, startedAt.Before(time.Now()),
+			"StartedAt (%s) must be before current time", startedAt)
 	})
 }

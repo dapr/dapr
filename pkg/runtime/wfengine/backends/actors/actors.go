@@ -405,11 +405,17 @@ func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID) (
 	output, _ := runtimestate.Output(rstate)
 	failureDetuils, _ := runtimestate.FailureDetails(rstate)
 
+	var startedAt *timestamppb.Timestamp
+	if t := runtimestate.GetStartedTime(rstate); !t.IsZero() {
+		startedAt = timestamppb.New(t)
+	}
+
 	return &backend.WorkflowMetadata{
 		InstanceId:     string(id),
 		Name:           name,
 		RuntimeStatus:  runtimestate.RuntimeStatus(rstate),
 		CreatedAt:      timestamppb.New(createdAt),
+		StartedAt:      startedAt,
 		LastUpdatedAt:  timestamppb.New(lastUpdated),
 		Input:          input,
 		Output:         output,
