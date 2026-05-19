@@ -18,6 +18,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -46,8 +49,18 @@ func (c *configurations) close() error {
 }
 
 //nolint:unused
-func (c *configurations) recv(context.Context) (*loader.Event[configapi.Configuration], error) {
+func (c *configurations) recv(ctx context.Context) (*loader.Event[configapi.Configuration], error) {
 	event, err := c.Recv()
+
+	// Ignore servers which don't implement the configuration update stream.
+	// Block until the context is cancelled to avoid a tight reconnect loop
+	// against an N-1 control plane.
+	if status, ok := status.FromError(err); ok && status.Code() == codes.Unimplemented {
+		log.Warn("Configuration HotReloading is not supported by the Dapr control plane. Configuration updates will not be Hot Reloaded.")
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+
 	if err != nil {
 		return nil, err
 	}
