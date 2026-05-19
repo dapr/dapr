@@ -40,6 +40,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -173,9 +174,9 @@ func (s *middlewareChained) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{},
 		}
-		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+		status := httpapi.Run(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("chained-before", "echo"), input, 30*time.Second)
-		require.Equal(t, statusCompleted, status.RuntimeStatus,
+		require.Equal(t, httpapi.StatusCompleted, status.RuntimeStatus,
 			"beforeCallTool error should produce isError result, not workflow failure")
 
 		outputJSON := status.Properties["dapr.workflow.output"]
@@ -193,9 +194,9 @@ func (s *middlewareChained) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{},
 		}
-		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+		status := httpapi.Run(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("chained-after", "echo"), input, 30*time.Second)
-		assert.Equal(t, statusFailed, status.RuntimeStatus,
+		assert.Equal(t, httpapi.StatusFailed, status.RuntimeStatus,
 			"afterCallTool chain error should fail the entire workflow")
 	})
 }
