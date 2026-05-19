@@ -172,6 +172,21 @@ func New(opts Options) (Interface, error) {
 		compStore:     opts.ComponentStore,
 	}
 
+	// Keep the actor refcount balanced when Executor.Run tears holders down
+	// during shutdown: each torn-down holder represents one outstanding
+	// EnsureActorsRegistered Add(+1) that would otherwise be left dangling.
+	inProcessExec.SetOnMCPTeardown(func(string) {
+		wfe.actorRegLock.Lock()
+		defer wfe.actorRegLock.Unlock()
+		if wfe.mcpRegistrationCount.Add(-1) == 0 && wfe.getWorkItemsCount.Load() == 0 && wfe.actorsRegistered {
+			err := abackend.UnRegisterActors(context.Background())
+			wfe.actorsRegistered = false
+			if err != nil {
+				log.Warnf("Failed to unregister workflow actors during shutdown: %s", err)
+			}
+		}
+	})
+
 	grpcExec, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
 		backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
 			wfe.actorRegLock.Lock()
@@ -276,12 +291,19 @@ func (wfe *engine) EnsureActorsRegistered(ctx context.Context) error {
 }
 
 // RegisterMCPServer installs workflows and ensures actors are registered.
-// Refcount bumps only on success.
+// Refcount bumps only on success. If actor registration fails after the
+// inprocess workflows were installed, the inprocess registration is torn back
+// down so a subsequent UnregisterMCPServer does not double-count: refcount and
+// holder presence must agree.
 func (wfe *engine) RegisterMCPServer(ctx context.Context, server mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) error {
 	if err := wfe.inProcessExec.RegisterMCPServer(ctx, server, store, sec); err != nil {
 		return err
 	}
-	return wfe.EnsureActorsRegistered(ctx)
+	if err := wfe.EnsureActorsRegistered(ctx); err != nil {
+		wfe.inProcessExec.UnregisterMCPServer(server.Name)
+		return err
+	}
+	return nil
 }
 
 // UnregisterMCPServer forwards to the in-process executor and decrements the
@@ -289,7 +311,9 @@ func (wfe *engine) RegisterMCPServer(ctx context.Context, server mcpserverapi.MC
 // zero AND no external SDK workers are connected.
 // Implements processor.internalWorkflowRegistrar.
 func (wfe *engine) UnregisterMCPServer(serverName string) {
-	wfe.inProcessExec.UnregisterMCPServer(serverName)
+	if !wfe.inProcessExec.UnregisterMCPServer(serverName) {
+		return
+	}
 
 	wfe.actorRegLock.Lock()
 	defer wfe.actorRegLock.Unlock()
