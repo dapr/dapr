@@ -40,6 +40,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -162,9 +163,9 @@ func (s *middlewareBeforeCallTool) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{"msg": "hello"},
 		}
-		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+		status := httpapi.Run(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("gated", "echo"), input, 30*time.Second)
-		require.Equal(t, statusCompleted, status.RuntimeStatus,
+		require.Equal(t, httpapi.StatusCompleted, status.RuntimeStatus,
 			"CallTool with gate hook should complete (not fail) — the error is in the output")
 
 		outputJSON := status.Properties["dapr.workflow.output"]
@@ -182,9 +183,9 @@ func (s *middlewareBeforeCallTool) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{"msg": "hello"},
 		}
-		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+		status := httpapi.Run(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("passthrough", "echo"), input, 30*time.Second)
-		require.Equal(t, statusCompleted, status.RuntimeStatus)
+		require.Equal(t, httpapi.StatusCompleted, status.RuntimeStatus)
 
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
