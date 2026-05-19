@@ -23,23 +23,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/durabletask-go/api/helpers"
 	"github.com/dapr/durabletask-go/api/protos"
 )
-
-// extractText returns the .Text of an MCP content block when it's a
-// TextContent variant. Returns "" for any other variant. Used by tests
-// that previously read a flat .Text field but now consume the upstream
-// SDK's interface-typed mcp.Content.
-func extractText(c mcp.Content) string {
-	if tc, ok := c.(*mcp.TextContent); ok {
-		return tc.Text
-	}
-	return ""
-}
 
 var (
 	StatusCompleted  = helpers.ToRuntimeStatusString(protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED)
