@@ -45,6 +45,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -155,7 +156,7 @@ func (s *spiffeAuth) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{},
 		}
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+		instanceID := httpapi.Start(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("spiffe-server", "echo"), input)
 
 		metadata, err := taskhubClient.WaitForWorkflowCompletion(

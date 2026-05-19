@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -120,8 +121,8 @@ func (s *hotReload) Run(t *testing.T, ctx context.Context) {
 	input := map[string]any{"arguments": map[string]any{}}
 
 	t.Run("initial call uses server A", func(t *testing.T) {
-		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(), wfName, input, 30*time.Second)
-		require.Equal(t, statusCompleted, status.RuntimeStatus)
+		status := httpapi.Run(t, ctx, s.httpClient, s.daprd.HTTPPort(), wfName, input, 30*time.Second)
+		require.Equal(t, httpapi.StatusCompleted, status.RuntimeStatus)
 
 		var result mcp.CallToolResult
 		require.NoError(t, json.Unmarshal([]byte(status.Properties["dapr.workflow.output"]), &result))
@@ -133,11 +134,11 @@ func (s *hotReload) Run(t *testing.T, ctx context.Context) {
 	t.Run("after hot-reload, call uses server B", func(t *testing.T) {
 		s.writeMCPResource(t, s.serverBPort)
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			status, err := tryRunWorkflow(ctx, s.httpClient, s.daprd.HTTPPort(), wfName, input, 5*time.Second)
+			status, err := httpapi.TryRun(ctx, s.httpClient, s.daprd.HTTPPort(), wfName, input, 5*time.Second)
 			if !assert.NoError(c, err) {
 				return
 			}
-			if !assert.Equal(c, statusCompleted, status.RuntimeStatus) {
+			if !assert.Equal(c, httpapi.StatusCompleted, status.RuntimeStatus) {
 				return
 			}
 			var result mcp.CallToolResult
