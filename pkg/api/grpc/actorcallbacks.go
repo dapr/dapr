@@ -59,7 +59,7 @@ func (a *api) SubscribeActorEventsAlpha1(stream runtimev1pb.Dapr_SubscribeActorE
 	// transitions the actor runtime out of INITIALIZING, mirroring the
 	// HTTP /dapr/config 404 path — then register the stream connection
 	// with the manager for Send/Deliver routing.
-	if err := a.Actors().RegisterHosted(hostconfig.Config{
+	if err := a.Actors().RegisterHosted(stream.Context(), hostconfig.Config{
 		EntityConfigs:           cfg.EntityConfigs,
 		DrainRebalancedActors:   cfg.DrainRebalancedActors,
 		DrainOngoingCallTimeout: cfg.DrainOngoingCallTimeout,
@@ -74,9 +74,11 @@ func (a *api) SubscribeActorEventsAlpha1(stream runtimev1pb.Dapr_SubscribeActorE
 	// Cleanup runs as one deferred block so ordering is explicit: drop the
 	// actor types from the runtime table first so daprd routes no further
 	// new traffic to this connection, then close the connection to fail
-	// any in-flight Sends with ErrDisconnected.
+	// any in-flight Sends with ErrDisconnected. stream.Context() is already
+	// cancelled by the time this defer runs, so use Background; the actor
+	// runtime is observably ready since RegisterHosted above succeeded.
 	defer func() {
-		a.Actors().UnRegisterHosted(cfg.Entities...)
+		_ = a.Actors().UnRegisterHosted(context.Background(), cfg.Entities...)
 		mgr.Close(conn, nil)
 	}()
 
