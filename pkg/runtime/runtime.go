@@ -939,7 +939,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status *apphealth.St
 			log.Warnf("failed to subscribe to outbox topics: %s", err)
 		}
 
-		err = a.actors.RegisterHosted(hostconfig.Config{
+		err = a.actors.RegisterHosted(ctx, hostconfig.Config{
 			EntityConfigs:           a.appConfig.EntityConfigs,
 			DrainRebalancedActors:   a.appConfig.DrainRebalancedActors,
 			DrainOngoingCallTimeout: a.appConfig.DrainOngoingCallTimeout,
@@ -966,7 +966,9 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status *apphealth.St
 		a.processor.Subscriber().StopAppSubscriptions()
 		a.processor.Binding().StopReadingFromBindings(false)
 
-		a.actors.UnRegisterHosted(a.appConfig.Entities...)
+		if err := a.actors.UnRegisterHosted(ctx, a.appConfig.Entities...); err != nil {
+			log.Warnf("Failed to unregister hosted actors: %s", err)
+		}
 	}
 }
 
