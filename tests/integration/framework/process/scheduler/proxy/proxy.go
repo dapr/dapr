@@ -43,6 +43,7 @@ const (
 	MethodListJobs           = "ListJobs"
 	MethodDeleteByMetadata   = "DeleteByMetadata"
 	MethodDeleteByNamePrefix = "DeleteByNamePrefix"
+	MethodWatchHosts         = "WatchHosts"
 )
 
 type Proxy struct {
@@ -292,6 +293,10 @@ func (p *Proxy) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error 
 // real scheduler on every refresh. Without this rewrite daprd would bypass
 // the proxy as soon as the first host list arrived.
 func (p *Proxy) WatchHosts(req *schedulerv1pb.WatchHostsRequest, stream schedulerv1pb.Scheduler_WatchHostsServer) error {
+	if code, ok := p.takeFailure(MethodWatchHosts); ok {
+		return injected(MethodWatchHosts, code)
+	}
+
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
 
