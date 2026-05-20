@@ -50,7 +50,7 @@ type allfields struct {
 	parentNameMatches atomic.Bool
 	parentIIDMatches  atomic.Bool
 
-	// GetWorkflowByName
+	// GetLastWorkflowByName
 	parentResultFound atomic.Bool
 	parentResultName  atomic.Value
 	parentResultAppID atomic.Value
@@ -142,8 +142,8 @@ func (a *allfields) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 
-		// GetWorkflowByName
-		parentResult, parentErr := ph.GetWorkflowByName("parent")
+		// GetLastWorkflowByName
+		parentResult, parentErr := ph.GetLastWorkflowByName("parent")
 		if parentErr == nil {
 			a.parentResultFound.Store(true)
 			a.parentResultName.Store(parentResult.Name)
@@ -157,7 +157,7 @@ func (a *allfields) Run(t *testing.T, ctx context.Context) {
 		a.eventsByInstanceIDCount.Store(int64(len(ph.GetEventsByInstanceID(expectedIID))))
 		a.eventsByWorkflowNameCount.Store(int64(len(ph.GetEventsByWorkflowName("parent"))))
 		// Success activity
-		successAct, _ := parentResult.GetActivityByName("SuccessAct")
+		successAct, _ := parentResult.GetLastActivityByName("SuccessAct")
 		if successAct.Name == "SuccessAct" && successAct.Started {
 			a.successActFound.Store(true)
 		}
@@ -178,7 +178,7 @@ func (a *allfields) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Failure activity
-		failAct, _ := parentResult.GetActivityByName("FailAct")
+		failAct, _ := parentResult.GetLastActivityByName("FailAct")
 		if failAct.Name == "FailAct" && failAct.Started {
 			a.failActFound.Store(true)
 		}
@@ -218,8 +218,8 @@ func (a *allfields) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, a.parentNameMatches.Load(), "chunk.Name should be 'parent'")
 	assert.True(t, a.parentIIDMatches.Load(), "chunk.InstanceID should match parent's actual instance ID")
 
-	// GetWorkflowByName
-	require.True(t, a.parentResultFound.Load(), "GetWorkflowByName('parent') should be Found")
+	// GetLastWorkflowByName
+	require.True(t, a.parentResultFound.Load(), "GetLastWorkflowByName('parent') should be Found")
 	assert.Equal(t, "parent", a.parentResultName.Load())
 	assert.Equal(t, parentAppID, a.parentResultAppID.Load())
 	assert.NotEmpty(t, a.parentResultIID.Load())
