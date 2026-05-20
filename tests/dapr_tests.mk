@@ -63,7 +63,7 @@ configurationapp \
 workflowsapp \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http configuration workflowsapp
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http configuration workflowsapp jobs
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps

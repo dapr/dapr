@@ -15,6 +15,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -25,9 +26,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/encoding/protojson"
 
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -35,6 +34,7 @@ import (
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -119,14 +119,14 @@ func (s *hotReloadToolChange) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("initial: alpha tool workflow works", func(t *testing.T) {
 		input := map[string]any{"arguments": map[string]any{}}
-		status, err := tryRunWorkflow(ctx, s.httpClient, s.daprd.HTTPPort(),
+		status, err := httpapi.TryRun(ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("dynamic", "alpha"), input, 30*time.Second)
 		require.NoError(t, err)
-		require.Equal(t, statusCompleted, status.RuntimeStatus)
+		require.Equal(t, httpapi.StatusCompleted, status.RuntimeStatus)
 
-		var result wfv1.CallMCPToolResponse
-		require.NoError(t, protojson.Unmarshal([]byte(status.Properties["dapr.workflow.output"]), &result))
-		assert.False(t, result.GetIsError())
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(status.Properties["dapr.workflow.output"]), &result))
+		assert.False(t, result.IsError)
 	})
 
 	// Hot-reload: switch to server B.
@@ -135,19 +135,19 @@ func (s *hotReloadToolChange) Run(t *testing.T, ctx context.Context) {
 	t.Run("after hot-reload: beta tool workflow works", func(t *testing.T) {
 		input := map[string]any{"arguments": map[string]any{}}
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			status, err := tryRunWorkflow(ctx, s.httpClient, s.daprd.HTTPPort(),
+			status, err := httpapi.TryRun(ctx, s.httpClient, s.daprd.HTTPPort(),
 				mcpnames.MCPCallToolWorkflowName("dynamic", "beta"), input, 5*time.Second)
 			if !assert.NoError(c, err) {
 				return
 			}
-			assert.Equal(c, statusCompleted, status.RuntimeStatus)
+			assert.Equal(c, httpapi.StatusCompleted, status.RuntimeStatus)
 		}, 30*time.Second, time.Second)
 	})
 
 	t.Run("after hot-reload: alpha tool workflow unregistered", func(t *testing.T) {
 		// alpha is no longer registered after hot-reload to server B. The runtime
 		// surfaces this in one of two ways depending on platform/timing:
-		//   - WaitForInstanceStart blocks → tryRunWorkflow's per-tick timeout
+		//   - WaitForInstanceStart blocks → httpapi.TryRun's per-tick timeout
 		//     returns a polling error.
 		//   - The schedule succeeds and the workflow immediately completes with
 		//     FAILED (durabletask "no handler" fallback).
@@ -155,13 +155,13 @@ func (s *hotReloadToolChange) Run(t *testing.T, ctx context.Context) {
 		// successful COMPLETED status (which would mean alpha is still wired).
 		input := map[string]any{"arguments": map[string]any{}}
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			status, err := tryRunWorkflow(ctx, s.httpClient, s.daprd.HTTPPort(),
+			status, err := httpapi.TryRun(ctx, s.httpClient, s.daprd.HTTPPort(),
 				mcpnames.MCPCallToolWorkflowName("dynamic", "alpha"), input, 3*time.Second)
 			if err != nil {
 				// Polling error (start hung) — alpha is gone. Pass.
 				return
 			}
-			assert.NotEqual(c, statusCompleted, status.RuntimeStatus,
+			assert.NotEqual(c, httpapi.StatusCompleted, status.RuntimeStatus,
 				"alpha workflow should not complete successfully after hot-reload to server B")
 		}, 30*time.Second, time.Second)
 	})

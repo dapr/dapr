@@ -15,6 +15,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -25,9 +26,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/encoding/protojson"
 
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -36,6 +35,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -121,37 +121,37 @@ func (s *hotReload) Run(t *testing.T, ctx context.Context) {
 	input := map[string]any{"arguments": map[string]any{}}
 
 	t.Run("initial call uses server A", func(t *testing.T) {
-		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(), wfName, input, 30*time.Second)
-		require.Equal(t, statusCompleted, status.RuntimeStatus)
+		status := httpapi.Run(t, ctx, s.httpClient, s.daprd.HTTPPort(), wfName, input, 30*time.Second)
+		require.Equal(t, httpapi.StatusCompleted, status.RuntimeStatus)
 
-		var result wfv1.CallMCPToolResponse
-		require.NoError(t, protojson.Unmarshal([]byte(status.Properties["dapr.workflow.output"]), &result))
-		require.False(t, result.GetIsError(), "tool call failed: %v", result.GetContent())
-		require.NotEmpty(t, result.GetContent())
-		assert.Equal(t, "response-from-A", result.GetContent()[0].GetText().GetText())
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(status.Properties["dapr.workflow.output"]), &result))
+		require.False(t, result.IsError, "tool call failed: %v", result.Content)
+		require.NotEmpty(t, result.Content)
+		assert.Equal(t, "response-from-A", extractText(result.Content[0]))
 	})
 
 	t.Run("after hot-reload, call uses server B", func(t *testing.T) {
 		s.writeMCPResource(t, s.serverBPort)
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			status, err := tryRunWorkflow(ctx, s.httpClient, s.daprd.HTTPPort(), wfName, input, 5*time.Second)
+			status, err := httpapi.TryRun(ctx, s.httpClient, s.daprd.HTTPPort(), wfName, input, 5*time.Second)
 			if !assert.NoError(c, err) {
 				return
 			}
-			if !assert.Equal(c, statusCompleted, status.RuntimeStatus) {
+			if !assert.Equal(c, httpapi.StatusCompleted, status.RuntimeStatus) {
 				return
 			}
-			var result wfv1.CallMCPToolResponse
-			if !assert.NoError(c, protojson.Unmarshal([]byte(status.Properties["dapr.workflow.output"]), &result)) {
+			var result mcp.CallToolResult
+			if !assert.NoError(c, json.Unmarshal([]byte(status.Properties["dapr.workflow.output"]), &result)) {
 				return
 			}
-			if !assert.False(c, result.GetIsError()) {
+			if !assert.False(c, result.IsError) {
 				return
 			}
-			if !assert.NotEmpty(c, result.GetContent()) {
+			if !assert.NotEmpty(c, result.Content) {
 				return
 			}
-			assert.Equal(c, "response-from-B", result.GetContent()[0].GetText().GetText())
+			assert.Equal(c, "response-from-B", extractText(result.Content[0]))
 		}, 30*time.Second, 500*time.Millisecond, "expected response from server B after hot-reload")
 	})
 }
