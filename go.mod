@@ -11,9 +11,9 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
-	github.com/dapr/components-contrib v1.16.2-0.20260506133641-7f3e09dbb8dc
-	github.com/dapr/durabletask-go v0.11.4-0.20260519200427-df9b47275282
-	github.com/dapr/kit v0.17.1-0.20260505124817-5579fd105e21
+	github.com/dapr/components-contrib v1.16.2-0.20260518172132-d9f4c0c24cd3
+	github.com/dapr/durabletask-go v0.12.0
+	github.com/dapr/kit v0.18.0
 	github.com/diagridio/go-etcd-cron v0.12.5
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.2.2
@@ -430,7 +430,7 @@ require (
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.732 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ssm v1.0.732 // indirect
 	github.com/tetratelabs/wazero v1.8.0 // indirect
-	github.com/tidwall/gjson v1.17.3 // indirect
+	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/transform v0.0.0-20201103190739-32f242e2dbde // indirect
