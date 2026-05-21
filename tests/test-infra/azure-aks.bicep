@@ -108,7 +108,9 @@ resource aks 'Microsoft.ContainerService/managedClusters@2023-05-01' = {
         {
           name: 'winpol'
           osDiskSizeGB: osDiskSizeGB
-          osDiskType: 'Ephemeral'
+          // Ephemeral OS would require a VM SKU with cache or temp disk >= 128 GiB,
+          // which is not satisfied by any Gen-1-compatible D4 SKU available in the
+          // test subscription. Default to a managed OS disk instead.
           enableAutoScaling: false
           count: 2
           vmSize: windowsVMSize
