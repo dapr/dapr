@@ -26,8 +26,8 @@ param enableWindows bool = false
 @description('VM size to use for Linux nodes (agent pool)')
 param linuxVMSize string = 'Standard_D2s_v6'
 
-@description('VM size to use for Windows nodes, if enabled')
-param windowsVMSize string = 'Standard_D4ads_v6'
+@description('VM size to use for Windows nodes, if enabled. Must be Hyper-V Gen 1-compatible because the Windows2022 osSKU AKS uses is a Gen 1 image.')
+param windowsVMSize string = 'Standard_D4s_v5'
 
 @description('VM size to use for ARM64 nodes if enabled')
 param armVMSize string = 'Standard_D2ps_v6'
