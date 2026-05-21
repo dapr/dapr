@@ -105,6 +105,22 @@ const (
 	Dapr_ListJobs_FullMethodName                       = "/dapr.proto.runtime.v1.Dapr/ListJobs"
 	Dapr_ConverseAlpha1_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha1"
 	Dapr_ConverseAlpha2_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha2"
+	Dapr_CreateIndexAlpha1_FullMethodName              = "/dapr.proto.runtime.v1.Dapr/CreateIndexAlpha1"
+	Dapr_DropIndexAlpha1_FullMethodName                = "/dapr.proto.runtime.v1.Dapr/DropIndexAlpha1"
+	Dapr_DescribeIndexAlpha1_FullMethodName            = "/dapr.proto.runtime.v1.Dapr/DescribeIndexAlpha1"
+	Dapr_ListIndexesAlpha1_FullMethodName              = "/dapr.proto.runtime.v1.Dapr/ListIndexesAlpha1"
+	Dapr_IndexDocumentsAlpha1_FullMethodName           = "/dapr.proto.runtime.v1.Dapr/IndexDocumentsAlpha1"
+	Dapr_DeleteDocumentsAlpha1_FullMethodName          = "/dapr.proto.runtime.v1.Dapr/DeleteDocumentsAlpha1"
+	Dapr_SearchAlpha1_FullMethodName                   = "/dapr.proto.runtime.v1.Dapr/SearchAlpha1"
+	Dapr_CreateCollectionAlpha1_FullMethodName         = "/dapr.proto.runtime.v1.Dapr/CreateCollectionAlpha1"
+	Dapr_DropCollectionAlpha1_FullMethodName           = "/dapr.proto.runtime.v1.Dapr/DropCollectionAlpha1"
+	Dapr_DescribeCollectionAlpha1_FullMethodName       = "/dapr.proto.runtime.v1.Dapr/DescribeCollectionAlpha1"
+	Dapr_ListCollectionsAlpha1_FullMethodName          = "/dapr.proto.runtime.v1.Dapr/ListCollectionsAlpha1"
+	Dapr_UpsertVectorsAlpha1_FullMethodName            = "/dapr.proto.runtime.v1.Dapr/UpsertVectorsAlpha1"
+	Dapr_GetVectorsAlpha1_FullMethodName               = "/dapr.proto.runtime.v1.Dapr/GetVectorsAlpha1"
+	Dapr_DeleteVectorsAlpha1_FullMethodName            = "/dapr.proto.runtime.v1.Dapr/DeleteVectorsAlpha1"
+	Dapr_QueryVectorsAlpha1_FullMethodName             = "/dapr.proto.runtime.v1.Dapr/QueryVectorsAlpha1"
+	Dapr_BatchQueryVectorsAlpha1_FullMethodName        = "/dapr.proto.runtime.v1.Dapr/BatchQueryVectorsAlpha1"
 )
 
 // DaprClient is the client API for Dapr service.
@@ -273,6 +289,44 @@ type DaprClient interface {
 	ConverseAlpha1(ctx context.Context, in *ConversationRequest, opts ...grpc.CallOption) (*ConversationResponse, error)
 	// Converse with a LLM service via alpha2 api
 	ConverseAlpha2(ctx context.Context, in *ConversationRequestAlpha2, opts ...grpc.CallOption) (*ConversationResponseAlpha2, error)
+	// Create a new index in the given store.
+	CreateIndexAlpha1(ctx context.Context, in *CreateIndexRequestAlpha1, opts ...grpc.CallOption) (*CreateIndexResponseAlpha1, error)
+	// Drop an existing index.
+	DropIndexAlpha1(ctx context.Context, in *DropIndexRequestAlpha1, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Describe an index (schema, document count, backend properties).
+	DescribeIndexAlpha1(ctx context.Context, in *DescribeIndexRequestAlpha1, opts ...grpc.CallOption) (*DescribeIndexResponseAlpha1, error)
+	// List indexes in a store.
+	ListIndexesAlpha1(ctx context.Context, in *ListIndexesRequestAlpha1, opts ...grpc.CallOption) (*ListIndexesResponseAlpha1, error)
+	// Index (insert or update) a batch of documents. Client streaming so callers
+	// can pipeline large bulk loads without buffering them in memory.
+	IndexDocumentsAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_IndexDocumentsAlpha1Client, error)
+	// Delete documents by id.
+	DeleteDocumentsAlpha1(ctx context.Context, in *DeleteDocumentsRequestAlpha1, opts ...grpc.CallOption) (*DeleteDocumentsResponseAlpha1, error)
+	// Search the index. Server streaming so large result sets can be paged
+	// back to the caller without buffering. Each response chunk carries a
+	// continuation_token for explicit pagination if the stream is broken.
+	SearchAlpha1(ctx context.Context, in *SearchRequestAlpha1, opts ...grpc.CallOption) (Dapr_SearchAlpha1Client, error)
+	// Create a new vector collection.
+	CreateCollectionAlpha1(ctx context.Context, in *CreateCollectionRequestAlpha1, opts ...grpc.CallOption) (*CreateCollectionResponseAlpha1, error)
+	// Drop an existing vector collection.
+	DropCollectionAlpha1(ctx context.Context, in *DropCollectionRequestAlpha1, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Describe a collection (dimension, metric, metadata schema).
+	DescribeCollectionAlpha1(ctx context.Context, in *DescribeCollectionRequestAlpha1, opts ...grpc.CallOption) (*DescribeCollectionResponseAlpha1, error)
+	// List collections in a store.
+	ListCollectionsAlpha1(ctx context.Context, in *ListCollectionsRequestAlpha1, opts ...grpc.CallOption) (*ListCollectionsResponseAlpha1, error)
+	// Upsert (insert or replace) a batch of vectors. Client streaming for bulk
+	// ingest of pre-embedded vectors.
+	UpsertVectorsAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_UpsertVectorsAlpha1Client, error)
+	// Fetch vectors by id.
+	GetVectorsAlpha1(ctx context.Context, in *GetVectorsRequestAlpha1, opts ...grpc.CallOption) (*GetVectorsResponseAlpha1, error)
+	// Delete vectors by id list or by metadata filter.
+	DeleteVectorsAlpha1(ctx context.Context, in *DeleteVectorsRequestAlpha1, opts ...grpc.CallOption) (*DeleteVectorsResponseAlpha1, error)
+	// Query the nearest neighbours of a query vector. Server streaming so
+	// top_k can be larger than a single message comfortably carries.
+	QueryVectorsAlpha1(ctx context.Context, in *QueryVectorsRequestAlpha1, opts ...grpc.CallOption) (Dapr_QueryVectorsAlpha1Client, error)
+	// Issue N parallel queries against the same collection, each independently
+	// succeeding or failing.
+	BatchQueryVectorsAlpha1(ctx context.Context, in *BatchQueryVectorsRequestAlpha1, opts ...grpc.CallOption) (*BatchQueryVectorsResponseAlpha1, error)
 }
 
 type daprClient struct {
@@ -1078,6 +1132,246 @@ func (c *daprClient) ConverseAlpha2(ctx context.Context, in *ConversationRequest
 	return out, nil
 }
 
+func (c *daprClient) CreateIndexAlpha1(ctx context.Context, in *CreateIndexRequestAlpha1, opts ...grpc.CallOption) (*CreateIndexResponseAlpha1, error) {
+	out := new(CreateIndexResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_CreateIndexAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) DropIndexAlpha1(ctx context.Context, in *DropIndexRequestAlpha1, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Dapr_DropIndexAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) DescribeIndexAlpha1(ctx context.Context, in *DescribeIndexRequestAlpha1, opts ...grpc.CallOption) (*DescribeIndexResponseAlpha1, error) {
+	out := new(DescribeIndexResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_DescribeIndexAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) ListIndexesAlpha1(ctx context.Context, in *ListIndexesRequestAlpha1, opts ...grpc.CallOption) (*ListIndexesResponseAlpha1, error) {
+	out := new(ListIndexesResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_ListIndexesAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) IndexDocumentsAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_IndexDocumentsAlpha1Client, error) {
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[6], Dapr_IndexDocumentsAlpha1_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &daprIndexDocumentsAlpha1Client{stream}
+	return x, nil
+}
+
+type Dapr_IndexDocumentsAlpha1Client interface {
+	Send(*IndexDocumentsRequestAlpha1) error
+	CloseAndRecv() (*IndexDocumentsResponseAlpha1, error)
+	grpc.ClientStream
+}
+
+type daprIndexDocumentsAlpha1Client struct {
+	grpc.ClientStream
+}
+
+func (x *daprIndexDocumentsAlpha1Client) Send(m *IndexDocumentsRequestAlpha1) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *daprIndexDocumentsAlpha1Client) CloseAndRecv() (*IndexDocumentsResponseAlpha1, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(IndexDocumentsResponseAlpha1)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *daprClient) DeleteDocumentsAlpha1(ctx context.Context, in *DeleteDocumentsRequestAlpha1, opts ...grpc.CallOption) (*DeleteDocumentsResponseAlpha1, error) {
+	out := new(DeleteDocumentsResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_DeleteDocumentsAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) SearchAlpha1(ctx context.Context, in *SearchRequestAlpha1, opts ...grpc.CallOption) (Dapr_SearchAlpha1Client, error) {
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[7], Dapr_SearchAlpha1_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &daprSearchAlpha1Client{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Dapr_SearchAlpha1Client interface {
+	Recv() (*SearchResponseAlpha1, error)
+	grpc.ClientStream
+}
+
+type daprSearchAlpha1Client struct {
+	grpc.ClientStream
+}
+
+func (x *daprSearchAlpha1Client) Recv() (*SearchResponseAlpha1, error) {
+	m := new(SearchResponseAlpha1)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *daprClient) CreateCollectionAlpha1(ctx context.Context, in *CreateCollectionRequestAlpha1, opts ...grpc.CallOption) (*CreateCollectionResponseAlpha1, error) {
+	out := new(CreateCollectionResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_CreateCollectionAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) DropCollectionAlpha1(ctx context.Context, in *DropCollectionRequestAlpha1, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Dapr_DropCollectionAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) DescribeCollectionAlpha1(ctx context.Context, in *DescribeCollectionRequestAlpha1, opts ...grpc.CallOption) (*DescribeCollectionResponseAlpha1, error) {
+	out := new(DescribeCollectionResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_DescribeCollectionAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) ListCollectionsAlpha1(ctx context.Context, in *ListCollectionsRequestAlpha1, opts ...grpc.CallOption) (*ListCollectionsResponseAlpha1, error) {
+	out := new(ListCollectionsResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_ListCollectionsAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) UpsertVectorsAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_UpsertVectorsAlpha1Client, error) {
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[8], Dapr_UpsertVectorsAlpha1_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &daprUpsertVectorsAlpha1Client{stream}
+	return x, nil
+}
+
+type Dapr_UpsertVectorsAlpha1Client interface {
+	Send(*UpsertVectorsRequestAlpha1) error
+	CloseAndRecv() (*UpsertVectorsResponseAlpha1, error)
+	grpc.ClientStream
+}
+
+type daprUpsertVectorsAlpha1Client struct {
+	grpc.ClientStream
+}
+
+func (x *daprUpsertVectorsAlpha1Client) Send(m *UpsertVectorsRequestAlpha1) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *daprUpsertVectorsAlpha1Client) CloseAndRecv() (*UpsertVectorsResponseAlpha1, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(UpsertVectorsResponseAlpha1)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *daprClient) GetVectorsAlpha1(ctx context.Context, in *GetVectorsRequestAlpha1, opts ...grpc.CallOption) (*GetVectorsResponseAlpha1, error) {
+	out := new(GetVectorsResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_GetVectorsAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) DeleteVectorsAlpha1(ctx context.Context, in *DeleteVectorsRequestAlpha1, opts ...grpc.CallOption) (*DeleteVectorsResponseAlpha1, error) {
+	out := new(DeleteVectorsResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_DeleteVectorsAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) QueryVectorsAlpha1(ctx context.Context, in *QueryVectorsRequestAlpha1, opts ...grpc.CallOption) (Dapr_QueryVectorsAlpha1Client, error) {
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[9], Dapr_QueryVectorsAlpha1_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &daprQueryVectorsAlpha1Client{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Dapr_QueryVectorsAlpha1Client interface {
+	Recv() (*QueryVectorsResponseAlpha1, error)
+	grpc.ClientStream
+}
+
+type daprQueryVectorsAlpha1Client struct {
+	grpc.ClientStream
+}
+
+func (x *daprQueryVectorsAlpha1Client) Recv() (*QueryVectorsResponseAlpha1, error) {
+	m := new(QueryVectorsResponseAlpha1)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *daprClient) BatchQueryVectorsAlpha1(ctx context.Context, in *BatchQueryVectorsRequestAlpha1, opts ...grpc.CallOption) (*BatchQueryVectorsResponseAlpha1, error) {
+	out := new(BatchQueryVectorsResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_BatchQueryVectorsAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaprServer is the server API for Dapr service.
 // All implementations should embed UnimplementedDaprServer
 // for forward compatibility
@@ -1244,6 +1538,44 @@ type DaprServer interface {
 	ConverseAlpha1(context.Context, *ConversationRequest) (*ConversationResponse, error)
 	// Converse with a LLM service via alpha2 api
 	ConverseAlpha2(context.Context, *ConversationRequestAlpha2) (*ConversationResponseAlpha2, error)
+	// Create a new index in the given store.
+	CreateIndexAlpha1(context.Context, *CreateIndexRequestAlpha1) (*CreateIndexResponseAlpha1, error)
+	// Drop an existing index.
+	DropIndexAlpha1(context.Context, *DropIndexRequestAlpha1) (*emptypb.Empty, error)
+	// Describe an index (schema, document count, backend properties).
+	DescribeIndexAlpha1(context.Context, *DescribeIndexRequestAlpha1) (*DescribeIndexResponseAlpha1, error)
+	// List indexes in a store.
+	ListIndexesAlpha1(context.Context, *ListIndexesRequestAlpha1) (*ListIndexesResponseAlpha1, error)
+	// Index (insert or update) a batch of documents. Client streaming so callers
+	// can pipeline large bulk loads without buffering them in memory.
+	IndexDocumentsAlpha1(Dapr_IndexDocumentsAlpha1Server) error
+	// Delete documents by id.
+	DeleteDocumentsAlpha1(context.Context, *DeleteDocumentsRequestAlpha1) (*DeleteDocumentsResponseAlpha1, error)
+	// Search the index. Server streaming so large result sets can be paged
+	// back to the caller without buffering. Each response chunk carries a
+	// continuation_token for explicit pagination if the stream is broken.
+	SearchAlpha1(*SearchRequestAlpha1, Dapr_SearchAlpha1Server) error
+	// Create a new vector collection.
+	CreateCollectionAlpha1(context.Context, *CreateCollectionRequestAlpha1) (*CreateCollectionResponseAlpha1, error)
+	// Drop an existing vector collection.
+	DropCollectionAlpha1(context.Context, *DropCollectionRequestAlpha1) (*emptypb.Empty, error)
+	// Describe a collection (dimension, metric, metadata schema).
+	DescribeCollectionAlpha1(context.Context, *DescribeCollectionRequestAlpha1) (*DescribeCollectionResponseAlpha1, error)
+	// List collections in a store.
+	ListCollectionsAlpha1(context.Context, *ListCollectionsRequestAlpha1) (*ListCollectionsResponseAlpha1, error)
+	// Upsert (insert or replace) a batch of vectors. Client streaming for bulk
+	// ingest of pre-embedded vectors.
+	UpsertVectorsAlpha1(Dapr_UpsertVectorsAlpha1Server) error
+	// Fetch vectors by id.
+	GetVectorsAlpha1(context.Context, *GetVectorsRequestAlpha1) (*GetVectorsResponseAlpha1, error)
+	// Delete vectors by id list or by metadata filter.
+	DeleteVectorsAlpha1(context.Context, *DeleteVectorsRequestAlpha1) (*DeleteVectorsResponseAlpha1, error)
+	// Query the nearest neighbours of a query vector. Server streaming so
+	// top_k can be larger than a single message comfortably carries.
+	QueryVectorsAlpha1(*QueryVectorsRequestAlpha1, Dapr_QueryVectorsAlpha1Server) error
+	// Issue N parallel queries against the same collection, each independently
+	// succeeding or failing.
+	BatchQueryVectorsAlpha1(context.Context, *BatchQueryVectorsRequestAlpha1) (*BatchQueryVectorsResponseAlpha1, error)
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -1465,6 +1797,54 @@ func (UnimplementedDaprServer) ConverseAlpha1(context.Context, *ConversationRequ
 }
 func (UnimplementedDaprServer) ConverseAlpha2(context.Context, *ConversationRequestAlpha2) (*ConversationResponseAlpha2, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConverseAlpha2 not implemented")
+}
+func (UnimplementedDaprServer) CreateIndexAlpha1(context.Context, *CreateIndexRequestAlpha1) (*CreateIndexResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateIndexAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) DropIndexAlpha1(context.Context, *DropIndexRequestAlpha1) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DropIndexAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) DescribeIndexAlpha1(context.Context, *DescribeIndexRequestAlpha1) (*DescribeIndexResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DescribeIndexAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) ListIndexesAlpha1(context.Context, *ListIndexesRequestAlpha1) (*ListIndexesResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListIndexesAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) IndexDocumentsAlpha1(Dapr_IndexDocumentsAlpha1Server) error {
+	return status.Errorf(codes.Unimplemented, "method IndexDocumentsAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) DeleteDocumentsAlpha1(context.Context, *DeleteDocumentsRequestAlpha1) (*DeleteDocumentsResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteDocumentsAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) SearchAlpha1(*SearchRequestAlpha1, Dapr_SearchAlpha1Server) error {
+	return status.Errorf(codes.Unimplemented, "method SearchAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) CreateCollectionAlpha1(context.Context, *CreateCollectionRequestAlpha1) (*CreateCollectionResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateCollectionAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) DropCollectionAlpha1(context.Context, *DropCollectionRequestAlpha1) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DropCollectionAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) DescribeCollectionAlpha1(context.Context, *DescribeCollectionRequestAlpha1) (*DescribeCollectionResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DescribeCollectionAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) ListCollectionsAlpha1(context.Context, *ListCollectionsRequestAlpha1) (*ListCollectionsResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListCollectionsAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) UpsertVectorsAlpha1(Dapr_UpsertVectorsAlpha1Server) error {
+	return status.Errorf(codes.Unimplemented, "method UpsertVectorsAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) GetVectorsAlpha1(context.Context, *GetVectorsRequestAlpha1) (*GetVectorsResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetVectorsAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) DeleteVectorsAlpha1(context.Context, *DeleteVectorsRequestAlpha1) (*DeleteVectorsResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteVectorsAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) QueryVectorsAlpha1(*QueryVectorsRequestAlpha1, Dapr_QueryVectorsAlpha1Server) error {
+	return status.Errorf(codes.Unimplemented, "method QueryVectorsAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) BatchQueryVectorsAlpha1(context.Context, *BatchQueryVectorsRequestAlpha1) (*BatchQueryVectorsResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method BatchQueryVectorsAlpha1 not implemented")
 }
 
 // UnsafeDaprServer may be embedded to opt out of forward compatibility for this service.
@@ -2812,6 +3192,316 @@ func _Dapr_ConverseAlpha2_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_CreateIndexAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateIndexRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).CreateIndexAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_CreateIndexAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).CreateIndexAlpha1(ctx, req.(*CreateIndexRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_DropIndexAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DropIndexRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DropIndexAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_DropIndexAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DropIndexAlpha1(ctx, req.(*DropIndexRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_DescribeIndexAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DescribeIndexRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DescribeIndexAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_DescribeIndexAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DescribeIndexAlpha1(ctx, req.(*DescribeIndexRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_ListIndexesAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListIndexesRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).ListIndexesAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_ListIndexesAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).ListIndexesAlpha1(ctx, req.(*ListIndexesRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_IndexDocumentsAlpha1_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaprServer).IndexDocumentsAlpha1(&daprIndexDocumentsAlpha1Server{stream})
+}
+
+type Dapr_IndexDocumentsAlpha1Server interface {
+	SendAndClose(*IndexDocumentsResponseAlpha1) error
+	Recv() (*IndexDocumentsRequestAlpha1, error)
+	grpc.ServerStream
+}
+
+type daprIndexDocumentsAlpha1Server struct {
+	grpc.ServerStream
+}
+
+func (x *daprIndexDocumentsAlpha1Server) SendAndClose(m *IndexDocumentsResponseAlpha1) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *daprIndexDocumentsAlpha1Server) Recv() (*IndexDocumentsRequestAlpha1, error) {
+	m := new(IndexDocumentsRequestAlpha1)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _Dapr_DeleteDocumentsAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteDocumentsRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DeleteDocumentsAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_DeleteDocumentsAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DeleteDocumentsAlpha1(ctx, req.(*DeleteDocumentsRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_SearchAlpha1_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SearchRequestAlpha1)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaprServer).SearchAlpha1(m, &daprSearchAlpha1Server{stream})
+}
+
+type Dapr_SearchAlpha1Server interface {
+	Send(*SearchResponseAlpha1) error
+	grpc.ServerStream
+}
+
+type daprSearchAlpha1Server struct {
+	grpc.ServerStream
+}
+
+func (x *daprSearchAlpha1Server) Send(m *SearchResponseAlpha1) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _Dapr_CreateCollectionAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateCollectionRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).CreateCollectionAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_CreateCollectionAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).CreateCollectionAlpha1(ctx, req.(*CreateCollectionRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_DropCollectionAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DropCollectionRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DropCollectionAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_DropCollectionAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DropCollectionAlpha1(ctx, req.(*DropCollectionRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_DescribeCollectionAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DescribeCollectionRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DescribeCollectionAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_DescribeCollectionAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DescribeCollectionAlpha1(ctx, req.(*DescribeCollectionRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_ListCollectionsAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListCollectionsRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).ListCollectionsAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_ListCollectionsAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).ListCollectionsAlpha1(ctx, req.(*ListCollectionsRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_UpsertVectorsAlpha1_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaprServer).UpsertVectorsAlpha1(&daprUpsertVectorsAlpha1Server{stream})
+}
+
+type Dapr_UpsertVectorsAlpha1Server interface {
+	SendAndClose(*UpsertVectorsResponseAlpha1) error
+	Recv() (*UpsertVectorsRequestAlpha1, error)
+	grpc.ServerStream
+}
+
+type daprUpsertVectorsAlpha1Server struct {
+	grpc.ServerStream
+}
+
+func (x *daprUpsertVectorsAlpha1Server) SendAndClose(m *UpsertVectorsResponseAlpha1) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *daprUpsertVectorsAlpha1Server) Recv() (*UpsertVectorsRequestAlpha1, error) {
+	m := new(UpsertVectorsRequestAlpha1)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _Dapr_GetVectorsAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetVectorsRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).GetVectorsAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_GetVectorsAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).GetVectorsAlpha1(ctx, req.(*GetVectorsRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_DeleteVectorsAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteVectorsRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DeleteVectorsAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_DeleteVectorsAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DeleteVectorsAlpha1(ctx, req.(*DeleteVectorsRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_QueryVectorsAlpha1_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(QueryVectorsRequestAlpha1)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaprServer).QueryVectorsAlpha1(m, &daprQueryVectorsAlpha1Server{stream})
+}
+
+type Dapr_QueryVectorsAlpha1Server interface {
+	Send(*QueryVectorsResponseAlpha1) error
+	grpc.ServerStream
+}
+
+type daprQueryVectorsAlpha1Server struct {
+	grpc.ServerStream
+}
+
+func (x *daprQueryVectorsAlpha1Server) Send(m *QueryVectorsResponseAlpha1) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _Dapr_BatchQueryVectorsAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BatchQueryVectorsRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).BatchQueryVectorsAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_BatchQueryVectorsAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).BatchQueryVectorsAlpha1(ctx, req.(*BatchQueryVectorsRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Dapr_ServiceDesc is the grpc.ServiceDesc for Dapr service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -3083,6 +3773,54 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "ConverseAlpha2",
 			Handler:    _Dapr_ConverseAlpha2_Handler,
 		},
+		{
+			MethodName: "CreateIndexAlpha1",
+			Handler:    _Dapr_CreateIndexAlpha1_Handler,
+		},
+		{
+			MethodName: "DropIndexAlpha1",
+			Handler:    _Dapr_DropIndexAlpha1_Handler,
+		},
+		{
+			MethodName: "DescribeIndexAlpha1",
+			Handler:    _Dapr_DescribeIndexAlpha1_Handler,
+		},
+		{
+			MethodName: "ListIndexesAlpha1",
+			Handler:    _Dapr_ListIndexesAlpha1_Handler,
+		},
+		{
+			MethodName: "DeleteDocumentsAlpha1",
+			Handler:    _Dapr_DeleteDocumentsAlpha1_Handler,
+		},
+		{
+			MethodName: "CreateCollectionAlpha1",
+			Handler:    _Dapr_CreateCollectionAlpha1_Handler,
+		},
+		{
+			MethodName: "DropCollectionAlpha1",
+			Handler:    _Dapr_DropCollectionAlpha1_Handler,
+		},
+		{
+			MethodName: "DescribeCollectionAlpha1",
+			Handler:    _Dapr_DescribeCollectionAlpha1_Handler,
+		},
+		{
+			MethodName: "ListCollectionsAlpha1",
+			Handler:    _Dapr_ListCollectionsAlpha1_Handler,
+		},
+		{
+			MethodName: "GetVectorsAlpha1",
+			Handler:    _Dapr_GetVectorsAlpha1_Handler,
+		},
+		{
+			MethodName: "DeleteVectorsAlpha1",
+			Handler:    _Dapr_DeleteVectorsAlpha1_Handler,
+		},
+		{
+			MethodName: "BatchQueryVectorsAlpha1",
+			Handler:    _Dapr_BatchQueryVectorsAlpha1_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -3118,6 +3856,26 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _Dapr_DecryptAlpha1_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "IndexDocumentsAlpha1",
+			Handler:       _Dapr_IndexDocumentsAlpha1_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "SearchAlpha1",
+			Handler:       _Dapr_SearchAlpha1_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "UpsertVectorsAlpha1",
+			Handler:       _Dapr_UpsertVectorsAlpha1_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "QueryVectorsAlpha1",
+			Handler:       _Dapr_QueryVectorsAlpha1_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "dapr/proto/runtime/v1/dapr.proto",

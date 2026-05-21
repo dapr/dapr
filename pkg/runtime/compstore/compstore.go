@@ -22,8 +22,10 @@ import (
 	"github.com/dapr/components-contrib/conversation"
 	"github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/components-contrib/lock"
+	"github.com/dapr/components-contrib/search"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/components-contrib/vector"
 	"github.com/dapr/components-contrib/workflows"
 	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
@@ -68,6 +70,8 @@ type ComponentStore struct {
 	}
 
 	conversations map[string]conversation.Conversation
+	searches      map[string]search.Search
+	vectors       map[string]vector.Vector
 
 	compPendingLock sync.Mutex
 	compPending     *compsv1alpha1.Component
@@ -96,5 +100,7 @@ func New() *ComponentStore {
 			streams:      make(map[string][]*DeclarativeSubscription),
 		},
 		conversations: make(map[string]conversation.Conversation),
+		searches:      make(map[string]search.Search),
+		vectors:       make(map[string]vector.Vector),
 	}
 }

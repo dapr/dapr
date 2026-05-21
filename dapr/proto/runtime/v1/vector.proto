@@ -1,0 +1,367 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.runtime.v1;
+
+import "google/protobuf/struct.proto";
+
+import "dapr/proto/runtime/v1/search.proto";
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "DaprVectorProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
+
+// =============================================================================
+// Vector building block - alpha1
+//
+// The Vector building block provides a portable API for storing and querying
+// dense vector embeddings. It is deliberately a separate building block from
+// Search (search.proto): vector and lexical search have different schema
+// lifecycles, query shapes, and backend ecosystems. Hybrid (text + vector)
+// search is deferred to a future alpha; until then, callers can compose Search
+// and Vector at the application layer.
+//
+// Alpha1 scope:
+//   - Dense vectors only. Sparse vectors and named multi-vectors are deferred
+//     (see reserved tags on Vector).
+//   - Pre-embedded vectors only. Server-side embedding (text -> vector) is
+//     out of scope; callers are expected to embed text via a Conversation
+//     component or external service before upsert/query.
+//   - Single vector per id. Multi-vector documents are deferred.
+//
+// Filter DSL, pagination semantics, OperationResult, IndexAck and SortClause
+// are reused from search.proto. See the filter DSL note in search.proto for
+// the portable operator subset; that subset applies identically to Vector
+// metadata filtering.
+//
+// Tenancy:
+//   The (store_name, collection, namespace) tuple is the primary scoping
+//   mechanism. namespace is a first-class field (rather than buried in
+//   metadata) because vector backends with native namespace concepts
+//   (Pinecone, Qdrant payload partitions, Milvus partitions) commonly need
+//   it for fast filtering.
+// =============================================================================
+
+// DistanceMetric is the portable similarity / distance function used both
+// when defining a collection and (advisory) when querying.
+enum DistanceMetric {
+  DISTANCE_METRIC_UNSPECIFIED = 0;
+
+  // Cosine similarity. Higher distance value = MORE similar in components
+  // that report similarity; components SHOULD document whether they return
+  // similarity or distance in QueryResult.distance.
+  DISTANCE_METRIC_COSINE = 1;
+
+  // Inner / dot product. Backends typically require unit-normalized vectors
+  // for stable behaviour.
+  DISTANCE_METRIC_DOT_PRODUCT = 2;
+
+  // L2 / Euclidean distance. Lower value = more similar.
+  DISTANCE_METRIC_EUCLIDEAN = 3;
+
+  // L1 / Manhattan distance. Lower value = more similar.
+  DISTANCE_METRIC_MANHATTAN = 4;
+
+  // Hamming distance for binary vectors. Components that do not support
+  // binary vectors MUST reject collections declaring this metric.
+  DISTANCE_METRIC_HAMMING = 5;
+}
+
+// Vector is a single dense vector record.
+message Vector {
+  // Identifier. Must be unique within (collection, namespace). If empty,
+  // components MAY generate one and populate it in the response.
+  string id = 1;
+
+  // Dense vector values. Length MUST equal the collection's declared
+  // dimension. Components MUST reject mismatched lengths with a clear error.
+  repeated float values = 2;
+
+  // Free-form structured metadata. Used for filtering at query time via the
+  // portable filter DSL (see search.proto).
+  google.protobuf.Struct metadata = 3;
+
+  // Optional logical partition within a collection. Empty means the
+  // collection's default namespace. Components that do not support
+  // namespaces MUST either reject non-empty values or document the fallback
+  // (typically: namespace becomes a metadata filter clause).
+  string namespace = 4;
+
+  // RESERVED for future alpha extensions:
+  //   5: SparseVector sparse        - sparse vector component
+  //   6: map<string,Vector> named   - multi-vector / named vectors per id
+  reserved 5, 6;
+  reserved "sparse", "named";
+}
+
+// =============================================================================
+// Collection lifecycle
+// =============================================================================
+
+message CreateCollectionRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+
+  // Vector dimensionality. Required and immutable for the lifetime of the
+  // collection.
+  uint32 dimension = 3;
+
+  // Distance metric. Required.
+  DistanceMetric metric = 4;
+
+  // Optional metadata-field schema, declared so components that store payload
+  // separately from vectors (e.g. pgvector + companion table) can build the
+  // right indexes. Reuses Search's IndexFieldSchema for portability with the
+  // Search building block.
+  repeated IndexFieldSchema metadata_schema = 5;
+
+  // Component-specific tuning options (HNSW M / ef_construction, shard count,
+  // replication factor, etc.). Components SHOULD document the keys they
+  // understand.
+  map<string, string> metadata = 10;
+}
+
+message CreateCollectionResponseAlpha1 {
+  // Empty
+}
+
+message DropCollectionRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+  map<string, string> metadata = 10;
+}
+
+message DescribeCollectionRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+  map<string, string> metadata = 10;
+}
+
+message DescribeCollectionResponseAlpha1 {
+  string collection = 1;
+  uint32 dimension = 2;
+  DistanceMetric metric = 3;
+  repeated IndexFieldSchema metadata_schema = 4;
+
+  // Approximate vector count. Components that cannot supply this cheaply
+  // MAY return 0; callers MUST NOT depend on this for correctness.
+  uint64 vector_count = 5;
+
+  // Free-form backend properties.
+  map<string, string> properties = 6;
+}
+
+message ListCollectionsRequestAlpha1 {
+  string store_name = 1;
+  map<string, string> metadata = 10;
+}
+
+message ListCollectionsResponseAlpha1 {
+  repeated string collections = 1;
+}
+
+// =============================================================================
+// Vector data operations
+// =============================================================================
+
+message UpsertVectorsRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+  repeated Vector vectors = 3;
+
+  // Requested durability level. Reuses Search's IndexAck so callers using
+  // both BBs see consistent semantics.
+  IndexAck ack = 4;
+
+  // Optional idempotency key. See search.proto IndexDocumentsRequestAlpha1
+  // for semantics.
+  string idempotency_key = 5;
+
+  map<string, string> metadata = 10;
+}
+
+message UpsertVectorsResponseAlpha1 {
+  // Per-vector outcome. Order is not guaranteed to match the request order;
+  // callers MUST correlate by id.
+  repeated OperationResult results = 1;
+  IndexAck ack = 2;
+}
+
+message GetVectorsRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+  repeated string ids = 3;
+  string namespace = 4;
+
+  // When false, returned Vectors omit values (only id, metadata, namespace
+  // are populated). Useful when callers only need metadata.
+  bool include_values = 5;
+
+  // When false, returned Vectors omit metadata.
+  bool include_metadata = 6;
+
+  map<string, string> metadata = 10;
+}
+
+message GetVectorsResponseAlpha1 {
+  // Vectors keyed by id. Vectors not found are simply omitted; callers MUST
+  // diff against their requested id list to detect misses.
+  repeated Vector vectors = 1;
+}
+
+// IdSelector selects vectors by explicit id list.
+message IdSelector {
+  repeated string ids = 1;
+}
+
+// FilterSelector selects vectors by metadata filter expression. See the
+// portable filter DSL in search.proto.
+message FilterSelector {
+  google.protobuf.Struct filter = 1;
+}
+
+message DeleteVectorsRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+  string namespace = 3;
+
+  // Selection strategy. Exactly one MUST be set. Backends that cannot honour
+  // delete-by-filter MUST reject FilterSelector with a clear error.
+  oneof selector {
+    IdSelector ids = 4;
+    FilterSelector filter = 5;
+  }
+
+  IndexAck ack = 6;
+  map<string, string> metadata = 10;
+}
+
+message DeleteVectorsResponseAlpha1 {
+  // Per-vector outcome when ids were supplied. Empty for filter-based deletes
+  // (use deleted_count instead).
+  repeated OperationResult results = 1;
+
+  // Number of vectors deleted. Best-effort; some backends report estimates.
+  uint64 deleted_count = 2;
+
+  IndexAck ack = 3;
+}
+
+// =============================================================================
+// Vector query
+// =============================================================================
+
+// VectorHit is a single match returned from a vector query.
+message VectorHit {
+  // The matched vector. Field population obeys the request's include_values /
+  // include_metadata flags.
+  Vector vector = 1;
+
+  // Backend-reported similarity or distance. Whether higher means "more
+  // similar" depends on the collection's DistanceMetric; components SHOULD
+  // document the convention they follow per metric. As a portable rule of
+  // thumb: COSINE / DOT_PRODUCT report similarity (higher = better);
+  // EUCLIDEAN / MANHATTAN / HAMMING report distance (lower = better).
+  double distance = 2;
+}
+
+message QueryVectorsRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+  string namespace = 3;
+
+  // Query specification. Exactly one MUST be set.
+  oneof query {
+    // Query by raw vector. Length MUST equal the collection's declared
+    // dimension.
+    QueryByVector vector = 4;
+
+    // Query for the nearest neighbours of a stored vector by id.
+    string by_id = 5;
+  }
+
+  // Optional metadata filter (portable DSL from search.proto).
+  google.protobuf.Struct filter = 6;
+
+  // Maximum number of hits per response. 0 means component-defined default.
+  uint32 top_k = 7;
+
+  // Optional similarity / distance threshold. Whether values above or below
+  // are returned depends on the metric (see VectorHit.distance). Components
+  // MUST document their convention.
+  optional double score_threshold = 8;
+
+  // When false, hits omit Vector.values.
+  bool include_values = 9;
+
+  // When false, hits omit Vector.metadata.
+  bool include_metadata = 10;
+
+  // Opaque continuation token for pagination. See search.proto for semantics.
+  string continuation_token = 11;
+
+  map<string, string> metadata = 20;
+
+  // RESERVED for future alpha extensions:
+  //   12: SparseVector sparse_query  - sparse query component for hybrid
+  //   13: string ranking_profile     - custom scoring profile
+  //   14: uint32 timeout_ms          - per-request timeout override
+  reserved 12, 13, 14;
+  reserved "sparse_query", "ranking_profile", "timeout_ms";
+}
+
+// QueryByVector wraps the raw query vector so that the oneof in
+// QueryVectorsRequestAlpha1 is well-formed (oneof fields cannot be repeated).
+message QueryByVector {
+  repeated float values = 1;
+}
+
+message QueryVectorsResponseAlpha1 {
+  repeated VectorHit hits = 1;
+
+  // Opaque continuation token. Empty when there are no more results. Many
+  // vector backends do not support deep pagination over ANN results; in that
+  // case this MUST always be empty.
+  string continuation_token = 2;
+}
+
+// BatchQueryVectorsRequestAlpha1 issues N parallel queries against the same
+// collection. Each query receives an independent QueryResult so that a single
+// failed query does not poison the whole batch.
+message BatchQueryVectorsRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+  repeated QueryVectorsRequestAlpha1 queries = 3;
+  map<string, string> metadata = 10;
+}
+
+message BatchQueryResult {
+  // Index into the request's queries array. Required because results MAY be
+  // returned in arbitrary order.
+  uint32 query_index = 1;
+
+  // Hits for this query. Empty on failure.
+  repeated VectorHit hits = 2;
+
+  // Populated when this query failed. The rest of the batch MAY still have
+  // succeeded.
+  string error_code = 3;
+  string error_message = 4;
+}
+
+message BatchQueryVectorsResponseAlpha1 {
+  repeated BatchQueryResult results = 1;
+}

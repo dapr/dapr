@@ -42,9 +42,11 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/lock"
 	"github.com/dapr/dapr/pkg/runtime/processor/middleware"
 	"github.com/dapr/dapr/pkg/runtime/processor/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/processor/search"
 	"github.com/dapr/dapr/pkg/runtime/processor/secret"
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
 	"github.com/dapr/dapr/pkg/runtime/processor/subscriber"
+	"github.com/dapr/dapr/pkg/runtime/processor/vector"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/wfregistrar"
@@ -264,6 +266,16 @@ func New(opts Options) *Processor {
 			components.CategoryConversation: conversation.New(conversation.Options{
 				Meta:     opts.Meta,
 				Registry: opts.Registry.Conversations(),
+				Store:    opts.ComponentStore,
+			}),
+			components.CategorySearch: search.New(search.Options{
+				Meta:     opts.Meta,
+				Registry: opts.Registry.Searches(),
+				Store:    opts.ComponentStore,
+			}),
+			components.CategoryVector: vector.New(vector.Options{
+				Meta:     opts.Meta,
+				Registry: opts.Registry.Vectors(),
 				Store:    opts.ComponentStore,
 			}),
 		},
