@@ -24,13 +24,13 @@ param enableArm bool = false
 param enableWindows bool = false
 
 @description('VM size to use for Linux nodes (agent pool)')
-param linuxVMSize string = 'Standard_D2s_v5'
+param linuxVMSize string = 'Standard_D2s_v6'
 
 @description('VM size to use for Windows nodes, if enabled')
-param windowsVMSize string = 'Standard_DS3_v2'
+param windowsVMSize string = 'Standard_D4ads_v6'
 
 @description('VM size to use for ARM64 nodes if enabled')
-param armVMSize string = 'Standard_D2ps_v5'
+param armVMSize string = 'Standard_D2ps_v6'
 
 @description('If set, sends certain diagnostic logs to Log Analytics')
 param diagLogAnalyticsWorkspaceResourceId string = ''
