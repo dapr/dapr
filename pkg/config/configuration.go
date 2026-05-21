@@ -139,6 +139,7 @@ type ConfigurationSpec struct {
 	APISpec             *APISpec            `json:"api,omitempty"             yaml:"api,omitempty"`
 	ComponentsSpec      *ComponentsSpec     `json:"components,omitempty"      yaml:"components,omitempty"`
 	LoggingSpec         *LoggingSpec        `json:"logging,omitempty"         yaml:"logging,omitempty"`
+	ObservabilitySpec   *ObservabilitySpec  `json:"observability,omitempty"   yaml:"observability,omitempty"`
 	WasmSpec            *WasmSpec           `json:"wasm,omitempty"            yaml:"wasm,omitempty"`
 	WorkflowSpec        *WorkflowSpec       `json:"workflow,omitempty"        yaml:"workflow,omitempty"`
 }
@@ -405,6 +406,61 @@ type MetricSpec struct {
 	// Latency distribution buckets. If not set, the default buckets are used.
 	LatencyDistributionBuckets *[]int        `json:"latencyDistributionBuckets,omitempty" yaml:"latencyDistributionBuckets,omitempty"`
 	Rules                      []MetricsRule `json:"rules,omitempty" yaml:"rules,omitempty"`
+	// Otel configures native OTLP push export for metrics.
+	Otel *OtelMetricSpec `json:"otel,omitempty" yaml:"otel,omitempty"`
+}
+
+// OtelMetricSpec defines the configuration for OTLP metrics export.
+type OtelMetricSpec struct {
+	// Protocol is the OTLP transport protocol. Must be "grpc" or "http".
+	Protocol string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
+	// EndpointAddress is the OTLP receiver endpoint (host:port).
+	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
+	// IsSecure indicates whether to use TLS. Defaults to true.
+	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
+	// Headers to add to the OTLP metrics export request.
+	Headers []string `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// Timeout for the OTLP metrics export request.
+	Timeout *time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	// ExportInterval is the interval between metric pushes. Defaults to 30s.
+	ExportInterval *time.Duration `json:"exportInterval,omitempty" yaml:"exportInterval,omitempty"`
+}
+
+// GetIsSecure returns true if the connection should be secured.
+func (o *OtelMetricSpec) GetIsSecure() bool {
+	return o.IsSecure == nil || *o.IsSecure
+}
+
+// UnmarshalJSON handles both the internal config format
+// and the Kubernetes CRD format sent by the operator.
+func (o *OtelMetricSpec) UnmarshalJSON(data []byte) error {
+	var crd configapi.OtelMetricSpec
+	if err := json.Unmarshal(data, &crd); err != nil {
+		return err
+	}
+
+	o.Protocol = crd.Protocol
+	o.EndpointAddress = crd.EndpointAddress
+	o.IsSecure = crd.IsSecure
+
+	if crd.Headers != nil {
+		o.Headers = make([]string, 0, len(crd.Headers))
+		for _, p := range crd.Headers {
+			o.Headers = append(o.Headers, p.Name+"="+p.Value.String())
+		}
+	}
+
+	if crd.Timeout != nil {
+		d := crd.Timeout.Duration
+		o.Timeout = &d
+	}
+
+	if crd.ExportInterval != nil {
+		d := crd.ExportInterval.Duration
+		o.ExportInterval = &d
+	}
+
+	return nil
 }
 
 // GetEnabled returns true if metrics are enabled.
@@ -583,10 +639,207 @@ func (w *WasmSpec) GetStrictSandbox() bool {
 	return w != nil && w.StrictSandbox
 }
 
+// ObservabilitySpec defines unified observability configuration.
+type ObservabilitySpec struct {
+	Otel *ObservabilityOtelSpec `json:"otel,omitempty" yaml:"otel,omitempty"`
+}
+
+// ObservabilityOtelSpec defines a unified OTLP configuration
+// with shared defaults and per-signal overrides.
+type ObservabilityOtelSpec struct {
+	EndpointAddress string            `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
+	Protocol        string            `json:"protocol,omitempty" yaml:"protocol,omitempty"`
+	IsSecure        *bool             `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
+	Headers         []string          `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Timeout         *time.Duration    `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Traces          *OtelSpec         `json:"traces,omitempty" yaml:"traces,omitempty"`
+	Metrics         *OtelMetricSpec   `json:"metrics,omitempty" yaml:"metrics,omitempty"`
+	Logs            *OtelLogSpec      `json:"logs,omitempty" yaml:"logs,omitempty"`
+}
+
+// GetIsSecure returns true if the connection should be secured.
+func (o *ObservabilityOtelSpec) GetIsSecure() bool {
+	return o.IsSecure == nil || *o.IsSecure
+}
+
+// UnmarshalJSON handles both the internal config format
+// and the Kubernetes CRD format sent by the operator.
+func (o *ObservabilityOtelSpec) UnmarshalJSON(data []byte) error {
+	var crd configapi.ObservabilityOtelSpec
+	if err := json.Unmarshal(data, &crd); err != nil {
+		return err
+	}
+
+	o.EndpointAddress = crd.EndpointAddress
+	o.Protocol = crd.Protocol
+	o.IsSecure = crd.IsSecure
+
+	if crd.Headers != nil {
+		o.Headers = make([]string, 0, len(crd.Headers))
+		for _, p := range crd.Headers {
+			o.Headers = append(o.Headers, p.Name+"="+p.Value.String())
+		}
+	}
+
+	if crd.Timeout != nil {
+		d := crd.Timeout.Duration
+		o.Timeout = &d
+	}
+
+	if crd.Traces != nil {
+		t := OtelSpec{}
+		tBytes, _ := json.Marshal(crd.Traces)
+		if err := json.Unmarshal(tBytes, &t); err == nil {
+			o.Traces = &t
+		}
+	}
+
+	if crd.Metrics != nil {
+		m := OtelMetricSpec{}
+		mBytes, _ := json.Marshal(crd.Metrics)
+		if err := json.Unmarshal(mBytes, &m); err == nil {
+			o.Metrics = &m
+		}
+	}
+
+	if crd.Logs != nil {
+		l := OtelLogSpec{}
+		lBytes, _ := json.Marshal(crd.Logs)
+		if err := json.Unmarshal(lBytes, &l); err == nil {
+			o.Logs = &l
+		}
+	}
+
+	return nil
+}
+
+// ApplyObservabilitySpec expands the unified observability config into
+// per-signal configs (tracing, metrics, logs). Per-signal overrides
+// take precedence over shared defaults. Individual signal configs
+// (spec.tracing.otel, spec.metrics.otel, spec.logging.otel) take
+// final precedence when they have a non-empty EndpointAddress.
+func ApplyObservabilitySpec(conf *Configuration) {
+	if conf.Spec.ObservabilitySpec == nil || conf.Spec.ObservabilitySpec.Otel == nil {
+		return
+	}
+
+	shared := conf.Spec.ObservabilitySpec.Otel
+	if shared.EndpointAddress == "" {
+		return // Nothing to expand
+	}
+
+	// Expand into TracingSpec.Otel (if not already set with an endpoint)
+	if conf.Spec.TracingSpec == nil {
+		conf.Spec.TracingSpec = &TracingSpec{}
+	}
+	if conf.Spec.TracingSpec.Otel == nil || conf.Spec.TracingSpec.Otel.EndpointAddress == "" {
+		if shared.Traces != nil && shared.Traces.EndpointAddress != "" {
+			// Per-signal override
+			conf.Spec.TracingSpec.Otel = shared.Traces
+		} else {
+			// Expand from shared
+			conf.Spec.TracingSpec.Otel = &OtelSpec{
+				EndpointAddress: shared.EndpointAddress,
+				Protocol:       shared.Protocol,
+				IsSecure:       shared.IsSecure,
+				Headers:        shared.Headers,
+				Timeout:        shared.Timeout,
+			}
+		}
+		if conf.Spec.TracingSpec.SamplingRate == "" {
+			conf.Spec.TracingSpec.SamplingRate = "1"
+		}
+	}
+
+	// Expand into MetricSpec.Otel (if not already set with an endpoint)
+	if conf.Spec.MetricSpec == nil {
+		conf.Spec.MetricSpec = &MetricSpec{Enabled: new(true)}
+	}
+	if conf.Spec.MetricSpec.Otel == nil || conf.Spec.MetricSpec.Otel.EndpointAddress == "" {
+		if shared.Metrics != nil && shared.Metrics.EndpointAddress != "" {
+			conf.Spec.MetricSpec.Otel = shared.Metrics
+		} else {
+			conf.Spec.MetricSpec.Otel = &OtelMetricSpec{
+				Protocol:       shared.Protocol,
+				EndpointAddress: shared.EndpointAddress,
+				IsSecure:       shared.IsSecure,
+				Headers:        shared.Headers,
+				Timeout:        shared.Timeout,
+			}
+		}
+	}
+
+	// Expand into LoggingSpec.Otel (if not already set with an endpoint)
+	if conf.Spec.LoggingSpec == nil {
+		conf.Spec.LoggingSpec = &LoggingSpec{}
+	}
+	if conf.Spec.LoggingSpec.Otel == nil || conf.Spec.LoggingSpec.Otel.EndpointAddress == "" {
+		if shared.Logs != nil && shared.Logs.EndpointAddress != "" {
+			conf.Spec.LoggingSpec.Otel = shared.Logs
+		} else {
+			conf.Spec.LoggingSpec.Otel = &OtelLogSpec{
+				Protocol:       shared.Protocol,
+				EndpointAddress: shared.EndpointAddress,
+				IsSecure:       shared.IsSecure,
+				Headers:        shared.Headers,
+				Timeout:        shared.Timeout,
+			}
+		}
+	}
+}
+
 // LoggingSpec defines the configuration for logging.
 type LoggingSpec struct {
 	// Configure API logging.
 	APILogging *APILoggingSpec `json:"apiLogging,omitempty" yaml:"apiLogging,omitempty"`
+	// Otel configures native OTLP push export for logs.
+	Otel *OtelLogSpec `json:"otel,omitempty" yaml:"otel,omitempty"`
+}
+
+// OtelLogSpec defines the configuration for OTLP log export.
+type OtelLogSpec struct {
+	// Protocol is the OTLP transport protocol. Must be "grpc" or "http".
+	Protocol string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
+	// EndpointAddress is the OTLP receiver endpoint (host:port).
+	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
+	// IsSecure indicates whether to use TLS. Defaults to true.
+	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
+	// Headers to add to the OTLP log export request.
+	Headers []string `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// Timeout for the OTLP log export request.
+	Timeout *time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+}
+
+// GetIsSecure returns true if the connection should be secured.
+func (o *OtelLogSpec) GetIsSecure() bool {
+	return o.IsSecure == nil || *o.IsSecure
+}
+
+// UnmarshalJSON handles both the internal config format
+// and the Kubernetes CRD format sent by the operator.
+func (o *OtelLogSpec) UnmarshalJSON(data []byte) error {
+	var crd configapi.OtelLogSpec
+	if err := json.Unmarshal(data, &crd); err != nil {
+		return err
+	}
+
+	o.Protocol = crd.Protocol
+	o.EndpointAddress = crd.EndpointAddress
+	o.IsSecure = crd.IsSecure
+
+	if crd.Headers != nil {
+		o.Headers = make([]string, 0, len(crd.Headers))
+		for _, p := range crd.Headers {
+			o.Headers = append(o.Headers, p.Name+"="+p.Value.String())
+		}
+	}
+
+	if crd.Timeout != nil {
+		d := crd.Timeout.Duration
+		o.Timeout = &d
+	}
+
+	return nil
 }
 
 // APILoggingSpec defines the configuration for API logging.
@@ -784,6 +1037,186 @@ func SetTracingSpecFromEnv(conf *Configuration) error {
 	return nil
 }
 
+// SetMetricsSpecFromEnv updates the metrics OTLP configuration from OTEL environment variables, if they exist.
+func SetMetricsSpecFromEnv(conf *Configuration) error {
+	metricsSpec := conf.GetMetricsSpec()
+	if metricsSpec.Otel == nil {
+		// Check if any metrics-related OTLP env var is set
+		if os.Getenv(env.OtlpExporterMetricsEndpoint) == "" && os.Getenv(env.OtlpExporterEndpoint) == "" {
+			return nil
+		}
+		metricsSpec.Otel = &OtelMetricSpec{}
+	}
+
+	// If Otel Endpoint is already set, don't override.
+	if metricsSpec.Otel.EndpointAddress != "" {
+		return nil
+	}
+
+	var endpoint string
+	if ep := os.Getenv(env.OtlpExporterMetricsEndpoint); ep != "" {
+		endpoint = ep
+	} else if ep := os.Getenv(env.OtlpExporterEndpoint); ep != "" {
+		endpoint = ep
+	}
+
+	if endpoint != "" {
+		// remove "http://" or "https://" from the endpoint
+		endpoint = strings.TrimPrefix(endpoint, "http://")
+		endpoint = strings.TrimPrefix(endpoint, "https://")
+
+		metricsSpec.Otel.EndpointAddress = endpoint
+
+		// The OTLP attribute allows 'grpc', 'http/protobuf', or 'http/json'.
+		var protocol string
+		if p := os.Getenv(env.OtlpExporterMetricsProtocol); p != "" {
+			protocol = p
+		} else if p := os.Getenv(env.OtlpExporterProtocol); p != "" {
+			protocol = p
+		}
+
+		if strings.HasPrefix(protocol, "http") {
+			metricsSpec.Otel.Protocol = "http"
+		} else {
+			metricsSpec.Otel.Protocol = "grpc"
+		}
+
+		if insecure := os.Getenv(env.OtlpExporterInsecure); insecure == "true" {
+			metricsSpec.Otel.IsSecure = new(false)
+		}
+	}
+
+	var headers string
+	if h := os.Getenv(env.OtlpExporterMetricsHeaders); h != "" {
+		headers = h
+	} else if h := os.Getenv(env.OtlpExporterHeaders); h != "" {
+		headers = h
+	}
+
+	if headers != "" {
+		headersMap, err := StringToHeader(headers)
+		if err != nil {
+			return err
+		}
+		for name, value := range headersMap {
+			metricsSpec.Otel.Headers = append(metricsSpec.Otel.Headers, name+"="+value)
+		}
+	}
+
+	var timeoutMs int
+	if t := os.Getenv(env.OtlpExporterMetricsTimeout); t != "" {
+		ti, err := strconv.Atoi(t)
+		if err != nil {
+			return err
+		}
+		timeoutMs = ti
+	} else if t := os.Getenv(env.OtlpExporterTimeout); t != "" {
+		ti, err := strconv.Atoi(t)
+		if err != nil {
+			return err
+		}
+		timeoutMs = ti
+	}
+
+	if timeoutMs > 0 {
+		timeout := time.Duration(timeoutMs) * time.Millisecond
+		metricsSpec.Otel.Timeout = &timeout
+	}
+
+	// Update the config with the modified metrics spec
+	conf.Spec.MetricSpec.Otel = metricsSpec.Otel
+	return nil
+}
+
+// SetLoggingSpecFromEnv updates the logging OTLP configuration from OTEL environment variables, if they exist.
+func SetLoggingSpecFromEnv(conf *Configuration) error {
+	loggingSpec := conf.GetLoggingSpec()
+	if loggingSpec.Otel == nil {
+		if os.Getenv(env.OtlpExporterLogsEndpoint) == "" && os.Getenv(env.OtlpExporterEndpoint) == "" {
+			return nil
+		}
+		loggingSpec.Otel = &OtelLogSpec{}
+	}
+
+	if loggingSpec.Otel.EndpointAddress != "" {
+		return nil
+	}
+
+	var endpoint string
+	if ep := os.Getenv(env.OtlpExporterLogsEndpoint); ep != "" {
+		endpoint = ep
+	} else if ep := os.Getenv(env.OtlpExporterEndpoint); ep != "" {
+		endpoint = ep
+	}
+
+	if endpoint != "" {
+		endpoint = strings.TrimPrefix(endpoint, "http://")
+		endpoint = strings.TrimPrefix(endpoint, "https://")
+		loggingSpec.Otel.EndpointAddress = endpoint
+
+		var protocol string
+		if p := os.Getenv(env.OtlpExporterLogsProtocol); p != "" {
+			protocol = p
+		} else if p := os.Getenv(env.OtlpExporterProtocol); p != "" {
+			protocol = p
+		}
+
+		if strings.HasPrefix(protocol, "http") {
+			loggingSpec.Otel.Protocol = "http"
+		} else {
+			loggingSpec.Otel.Protocol = "grpc"
+		}
+
+		if insecure := os.Getenv(env.OtlpExporterInsecure); insecure == "true" {
+			loggingSpec.Otel.IsSecure = new(false)
+		}
+	}
+
+	var headers string
+	if h := os.Getenv(env.OtlpExporterLogsHeaders); h != "" {
+		headers = h
+	} else if h := os.Getenv(env.OtlpExporterHeaders); h != "" {
+		headers = h
+	}
+
+	if headers != "" {
+		headersMap, err := StringToHeader(headers)
+		if err != nil {
+			return err
+		}
+		for name, value := range headersMap {
+			loggingSpec.Otel.Headers = append(loggingSpec.Otel.Headers, name+"="+value)
+		}
+	}
+
+	var timeoutMs int
+	if t := os.Getenv(env.OtlpExporterLogsTimeout); t != "" {
+		ti, err := strconv.Atoi(t)
+		if err != nil {
+			return err
+		}
+		timeoutMs = ti
+	} else if t := os.Getenv(env.OtlpExporterTimeout); t != "" {
+		ti, err := strconv.Atoi(t)
+		if err != nil {
+			return err
+		}
+		timeoutMs = ti
+	}
+
+	if timeoutMs > 0 {
+		timeout := time.Duration(timeoutMs) * time.Millisecond
+		loggingSpec.Otel.Timeout = &timeout
+	}
+
+	// Update the config
+	if conf.Spec.LoggingSpec == nil {
+		conf.Spec.LoggingSpec = &LoggingSpec{}
+	}
+	conf.Spec.LoggingSpec.Otel = loggingSpec.Otel
+	return nil
+}
+
 // IsSecretAllowed Check if the secret is allowed to be accessed.
 func (c SecretsScope) IsSecretAllowed(key string) bool {
 	// By default, set allow access for the secret store.
@@ -956,6 +1389,10 @@ func (c *Configuration) sortMetricsSpec() {
 
 	if c.Spec.MetricsSpec.RecordErrorCodes != nil {
 		c.Spec.MetricSpec.RecordErrorCodes = c.Spec.MetricsSpec.RecordErrorCodes
+	}
+
+	if c.Spec.MetricsSpec.Otel != nil {
+		c.Spec.MetricSpec.Otel = c.Spec.MetricsSpec.Otel
 	}
 }
 
