@@ -40,7 +40,7 @@ func init() {
 // Expected behavior under retry:
 //   - Each retry emits a separate ScheduleTask action with a new event ID
 //   - Parent's history therefore records both attempts
-//   - GetActivitiesByName returns both attempts, GetActivityByName returns the last attempt
+//   - GetActivitiesByName returns both attempts, GetLastActivityByName returns the last attempt
 type activityretry struct {
 	workflow *procworkflow.Workflow
 
@@ -48,7 +48,7 @@ type activityretry struct {
 
 	childHistoryReceived atomic.Bool
 
-	// GetWorkflowByName
+	// GetLastWorkflowByName
 	parentFound          atomic.Bool
 	nonexistentWFFound   atomic.Bool
 	parentWFName         atomic.Value
@@ -58,7 +58,7 @@ type activityretry struct {
 	parentWFsCount      atomic.Int64
 	nonexistentWFsIsNil atomic.Bool
 
-	// GetActivityByName
+	// GetLastActivityByName
 	singularStarted             atomic.Bool
 	singularCompleted           atomic.Bool
 	singularFailed              atomic.Bool
@@ -126,7 +126,7 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 		}
 		a.childHistoryReceived.Store(true)
 
-		parent, parentErr := ph.GetWorkflowByName("parentWf")
+		parent, parentErr := ph.GetLastWorkflowByName("parentWf")
 		if parentErr == nil {
 			a.parentFound.Store(true)
 			a.parentWFName.Store(parent.Name)
@@ -134,7 +134,7 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 				a.parentWFInstanceSeen.Store(true)
 			}
 		}
-		if _, err := ph.GetWorkflowByName("DoesNotExist"); err == nil {
+		if _, err := ph.GetLastWorkflowByName("DoesNotExist"); err == nil {
 			a.nonexistentWFFound.Store(true) // should stay false
 		}
 
@@ -150,7 +150,7 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 			return "no-parent", nil
 		}
 
-		singular, _ := parent.GetActivityByName("CallLLM")
+		singular, _ := parent.GetLastActivityByName("CallLLM")
 		if singular.Started {
 			a.singularStarted.Store(true)
 		}
@@ -160,7 +160,7 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 		if singular.Failed {
 			a.singularFailed.Store(true)
 		}
-		if nonexistentAct, err := parent.GetActivityByName("NotAnActivity"); err == nil && nonexistentAct.Started {
+		if nonexistentAct, err := parent.GetLastActivityByName("NotAnActivity"); err == nil && nonexistentAct.Started {
 			a.nonexistentActSeenAsStarted.Store(true) // should stay false
 		}
 
@@ -204,21 +204,21 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, int64(2), a.activityAttempts.Load(), "CallLLM should have been invoked twice (1 fail + 1 succeed)")
 	require.True(t, a.childHistoryReceived.Load(), "child should have received propagated history with lineage")
 
-	// GetWorkflowByName
-	assert.True(t, a.parentFound.Load(), "GetWorkflowByName('parentWf') should be Found")
-	assert.Equal(t, "parentWf", a.parentWFName.Load(), "GetWorkflowByName should expose the workflow name")
-	assert.True(t, a.parentWFInstanceSeen.Load(), "GetWorkflowByName should expose the workflow instance ID")
-	assert.False(t, a.nonexistentWFFound.Load(), "GetWorkflowByName('DoesNotExist') should NOT be Found")
+	// GetLastWorkflowByName
+	assert.True(t, a.parentFound.Load(), "GetLastWorkflowByName('parentWf') should be Found")
+	assert.Equal(t, "parentWf", a.parentWFName.Load(), "GetLastWorkflowByName should expose the workflow name")
+	assert.True(t, a.parentWFInstanceSeen.Load(), "GetLastWorkflowByName should expose the workflow instance ID")
+	assert.False(t, a.nonexistentWFFound.Load(), "GetLastWorkflowByName('DoesNotExist') should NOT be Found")
 
 	// GetWorkflowsByName
 	assert.Equal(t, int64(1), a.parentWFsCount.Load(), "GetWorkflowsByName('parentWf') should return one match")
 	assert.True(t, a.nonexistentWFsIsNil.Load(), "GetWorkflowsByName('DoesNotExist') should return nil")
 
-	// GetActivityByName: returns last attempt successful
-	assert.True(t, a.singularStarted.Load(), "GetActivityByName should see the last attempt as Started")
-	assert.True(t, a.singularCompleted.Load(), "GetActivityByName should return the latest attempt (Completed=true)")
-	assert.False(t, a.singularFailed.Load(), "GetActivityByName should NOT be the failed first attempt")
-	assert.False(t, a.nonexistentActSeenAsStarted.Load(), "GetActivityByName('NotAnActivity') should have Started=false")
+	// GetLastActivityByName: returns last attempt successful
+	assert.True(t, a.singularStarted.Load(), "GetLastActivityByName should see the last attempt as Started")
+	assert.True(t, a.singularCompleted.Load(), "GetLastActivityByName should return the latest attempt (Completed=true)")
+	assert.False(t, a.singularFailed.Load(), "GetLastActivityByName should NOT be the failed first attempt")
+	assert.False(t, a.nonexistentActSeenAsStarted.Load(), "GetLastActivityByName('NotAnActivity') should have Started=false")
 
 	// GetActivitiesByName: returns BOTH attempts in order
 	assert.Equal(t, int64(2), a.pluralCount.Load(), "GetActivitiesByName should return both retry attempts")
@@ -228,5 +228,5 @@ func (a *activityretry) Run(t *testing.T, ctx context.Context) {
 
 	// Cross-check: singular == plural[len-1]
 	assert.True(t, a.singularEqualsPluralLast.Load(),
-		"GetActivityByName should return the same ActivityResult as GetActivitiesByName's last entry")
+		"GetLastActivityByName should return the same ActivityResult as GetActivitiesByName's last entry")
 }
