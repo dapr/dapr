@@ -222,7 +222,7 @@ jobs:
       contents: read
       pull-requests: write
     env:
-      JDK_VER: 11
+      JDK_VER: 17
       JAVA_SPRING_BOOT_VERSION: 2.7.8
       TOXIPROXY_URL: https://github.com/Shopify/toxiproxy/releases/download/v2.5.0/toxiproxy-server-linux-amd64
     steps:
