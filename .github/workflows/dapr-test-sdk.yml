@@ -166,7 +166,7 @@ jobs:
         working-directory: python-sdk
         run: uv run pytest tests/examples/
       - name: Update PR comment for success
-        if: ${{ success() }}
+        if: ${{ success() && env.PR_NUMBER != '' }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}-python
@@ -176,7 +176,7 @@ jobs:
           message: |
             ## ✅ Python SDK tests passed
       - name: Update PR comment for failure
-        if: ${{ failure() }}
+        if: ${{ failure() && env.PR_NUMBER != '' }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}-python
@@ -188,7 +188,7 @@ jobs:
 
             Please check the logs for details on the error.
       - name: Update PR comment for cancellation
-        if: ${{ cancelled() }}
+        if: ${{ cancelled() && env.PR_NUMBER != '' }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}-python
@@ -340,7 +340,7 @@ jobs:
           name: surefire-report-sdk-tests
           path: java-sdk/sdk-tests/target/surefire-reports
       - name: Update PR comment for success
-        if: ${{ success() }}
+        if: ${{ success() && env.PR_NUMBER != '' }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}-java
@@ -350,7 +350,7 @@ jobs:
           message: |
             ## ✅ Java SDK tests passed
       - name: Update PR comment for failure
-        if: ${{ failure() }}
+        if: ${{ failure() && env.PR_NUMBER != '' }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}-java
@@ -362,7 +362,7 @@ jobs:
 
             Please check the logs for details on the error.
       - name: Update PR comment for cancellation
-        if: ${{ cancelled() }}
+        if: ${{ cancelled() && env.PR_NUMBER != '' }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}-java
@@ -495,7 +495,7 @@ jobs:
           npm install
           dapr run --app-id typescript-build npm run start
       - name: Update PR comment for success
-        if: ${{ success() }}
+        if: ${{ success() && env.PR_NUMBER != '' }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}-js
@@ -505,7 +505,7 @@ jobs:
           message: |
             ## ✅ JS SDK tests passed
       - name: Update PR comment for failure
-        if: ${{ failure() }}
+        if: ${{ failure() && env.PR_NUMBER != '' }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}-js
@@ -517,7 +517,7 @@ jobs:
 
             Please check the logs for details on the error.
       - name: Update PR comment for cancellation
-        if: ${{ cancelled() }}
+        if: ${{ cancelled() && env.PR_NUMBER != '' }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}-js
@@ -641,7 +641,7 @@ jobs:
           ./validate.sh workflow
           ./validate.sh workflow-parallel
       - name: Update PR comment for success
-        if: ${{ success() }}
+        if: ${{ success() && env.PR_NUMBER != '' }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}-go
@@ -651,7 +651,7 @@ jobs:
           message: |
             ## ✅ Go SDK tests passed
       - name: Update PR comment for failure
-        if: ${{ failure() }}
+        if: ${{ failure() && env.PR_NUMBER != '' }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}-go
@@ -663,7 +663,7 @@ jobs:
 
             Please check the logs for details on the error.
       - name: Update PR comment for cancellation
-        if: ${{ cancelled() }}
+        if: ${{ cancelled() && env.PR_NUMBER != '' }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}-go
