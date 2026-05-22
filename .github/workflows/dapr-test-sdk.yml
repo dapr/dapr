@@ -43,6 +43,12 @@ on:
           - java
           - js
           - go
+  # Run on PRs that touch this workflow so changes can be validated
+  # before merge (workflow_dispatch is only available once the workflow
+  # exists on master).
+  pull_request:
+    paths:
+      - '.github/workflows/dapr-test-sdk.yml'
 env:
   GOOS: linux
   GOARCH: amd64
@@ -60,6 +66,7 @@ jobs:
   python-sdk:
     if: |
       github.event_name == 'schedule' ||
+      github.event_name == 'pull_request' ||
       ( github.event_name == 'repository_dispatch' &&
         (
           github.event.action == 'test-sdk-all' ||
@@ -196,6 +203,7 @@ jobs:
   java-sdk:
     if: |
       github.event_name == 'schedule' ||
+      github.event_name == 'pull_request' ||
       ( github.event_name == 'repository_dispatch' &&
         (
           github.event.action == 'test-sdk-all' ||
@@ -369,6 +377,7 @@ jobs:
   js-sdk:
     if: |
       github.event_name == 'schedule' ||
+      github.event_name == 'pull_request' ||
       ( github.event_name == 'repository_dispatch' &&
         (
           github.event.action == 'test-sdk-all' ||
@@ -523,6 +532,7 @@ jobs:
   go-sdk:
     if: |
       github.event_name == 'schedule' ||
+      github.event_name == 'pull_request' ||
       ( github.event_name == 'repository_dispatch' &&
         (
           github.event.action == 'test-sdk-all' ||
