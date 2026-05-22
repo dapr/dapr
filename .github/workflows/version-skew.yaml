@@ -63,11 +63,11 @@ jobs:
     - name: Set up for Dapr lastest release
       run: |
         echo "DAPR_PREV_VERSION=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
-    - name: Set up for master
+    - name: Set up for push/dispatch
       if: github.event_name != 'repository_dispatch'
       run: |
         echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-        echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
       shell: bash
     - name: Setup test output
       shell: bash
@@ -245,11 +245,11 @@ jobs:
     - name: Set up for Dapr lastest release
       run: |
         echo "DAPR_PREV_VERSION=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
-    - name: Set up for master
+    - name: Set up for push/dispatch
       if: github.event_name != 'repository_dispatch'
       run: |
         echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-        echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
       shell: bash
     - name: Parse test payload
       if: github.event_name == 'repository_dispatch'
