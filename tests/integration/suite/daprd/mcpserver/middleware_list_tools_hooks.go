@@ -39,6 +39,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -147,16 +148,16 @@ func (s *middlewareListToolsHooks) Run(t *testing.T, ctx context.Context) {
 	defer cancelWorker()
 
 	t.Run("beforeListTools hook error blocks discovery", func(t *testing.T) {
-		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+		status := httpapi.Run(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPListToolsWorkflowName("before-list-deny"), nil, 30*time.Second)
-		assert.Equal(t, statusFailed, status.RuntimeStatus,
+		assert.Equal(t, httpapi.StatusFailed, status.RuntimeStatus,
 			"beforeListTools error should fail the workflow")
 	})
 
 	t.Run("afterListTools hook error fails workflow", func(t *testing.T) {
-		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+		status := httpapi.Run(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPListToolsWorkflowName("after-list-fail"), nil, 30*time.Second)
-		assert.Equal(t, statusFailed, status.RuntimeStatus,
+		assert.Equal(t, httpapi.StatusFailed, status.RuntimeStatus,
 			"afterListTools error should fail the workflow")
 	})
 }

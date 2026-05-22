@@ -180,7 +180,7 @@ jobs:
           # TODO: @joshvanl Upgrade to latest once dns is fixed.
           - os: macos-14
             target_os: darwin
-            target_arch: amd64
+            target_arch: arm64
     env:
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
@@ -228,7 +228,7 @@ jobs:
           # TODO: @joshvanl Upgrade to latest once dns is fixed.
           - os: macos-14
             target_os: darwin
-            target_arch: amd64
+            target_arch: arm64
     env:
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"

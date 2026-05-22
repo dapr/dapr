@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -107,7 +108,7 @@ func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{"city": "Portland"},
 		}
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+		instanceID := httpapi.Start(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("weather", "get_weather"), input)
 
 		// Poll for completion using plain HTTP GET
@@ -133,7 +134,7 @@ func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 			if !assert.NoError(c, json.NewDecoder(resp.Body).Decode(&status)) {
 				return
 			}
-			assert.Equal(c, statusCompleted, status.RuntimeStatus)
+			assert.Equal(c, httpapi.StatusCompleted, status.RuntimeStatus)
 		}, 30*time.Second, 10*time.Millisecond)
 
 		// The tool output is stored in the dapr.workflow.output property.
