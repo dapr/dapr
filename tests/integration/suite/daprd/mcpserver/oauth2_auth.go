@@ -40,6 +40,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -159,7 +160,7 @@ func (s *oauth2Auth) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{},
 		}
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+		instanceID := httpapi.Start(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("oauth2-server", "echo"), input)
 
 		metadata, err := taskhubClient.WaitForWorkflowCompletion(

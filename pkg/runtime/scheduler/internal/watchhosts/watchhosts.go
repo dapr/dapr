@@ -89,12 +89,8 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 		}
 
 		resp, err := stream.Recv()
-
-		code := status.Code(err)
-		switch code {
-		case codes.Unimplemented:
-			err = w.clients.Reload(ctx, w.allAddrs)
-			if err != nil {
+		if status.Code(err) == codes.Unimplemented {
+			if err = w.clients.Reload(ctx, w.allAddrs); err != nil {
 				return err
 			}
 
@@ -108,14 +104,20 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 			<-ctx.Done()
 
 			return nil
-
-		case codes.Canceled:
-			return nil
 		}
 
 		if err != nil {
 			closeCon()
-			return err
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			log.Warnf("Scheduler WatchHosts stream error, reconnecting: %s", err)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+				continue
+			}
 		}
 
 		gotAddrs := make([]string, 0, len(resp.GetHosts()))
