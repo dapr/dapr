@@ -65,7 +65,7 @@ require (
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/ratelimit v0.3.0
 	golang.org/x/crypto v0.52.0
-	golang.org/x/net v0.54.0
+	golang.org/x/net v0.55.0
 	golang.org/x/oauth2 v0.35.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.45.0
