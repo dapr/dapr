@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
+	"golang.org/x/net/http2/h2c" //nolint:staticcheck
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
@@ -83,7 +83,7 @@ func (h *responsebody) Setup(t *testing.T) []framework.Option {
 	})
 
 	// Wrap with h2c to support HTTP/2 cleartext.
-	h2cHandler := h2c.NewHandler(handler, &http2.Server{})
+	h2cHandler := h2c.NewHandler(handler, &http2.Server{}) //nolint:staticcheck
 	srv := prochttp.New(t, prochttp.WithHandler(h2cHandler))
 
 	h.place = placement.New(t)
