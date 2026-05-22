@@ -108,13 +108,14 @@ func (m *hostGRPCStreamRejectedOnHTTP) Run(t *testing.T, ctx context.Context) {
 	// time this Send is flushed. Per the grpc.ClientStream.SendMsg contract,
 	// a Send on an already-terminated stream returns io.EOF and the real
 	// status surfaces on Recv — so tolerate io.EOF here and assert on Recv.
-	if err := stream.Send(&rtv1.SubscribeActorEventsRequestAlpha1{
+	err = stream.Send(&rtv1.SubscribeActorEventsRequestAlpha1{
 		RequestType: &rtv1.SubscribeActorEventsRequestAlpha1_InitialRequest{
 			InitialRequest: &rtv1.SubscribeActorEventsRequestInitialAlpha1{
 				Entities: []string{"actorViaStream"},
 			},
 		},
-	}); err != nil {
+	})
+	if err != nil {
 		require.ErrorIs(t, err, io.EOF)
 	}
 
