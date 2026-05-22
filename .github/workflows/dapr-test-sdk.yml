@@ -25,10 +25,24 @@ on:
   repository_dispatch:
     types:
     - test-sdk-all
-    - test-sdk-python
     - test-sdk-java
     - test-sdk-js
     - test-sdk-go
+    - test-sdk-python
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      sdk:
+        description: "SDK to test"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - python
+          - java
+          - js
+          - go
 env:
   GOOS: linux
   GOARCH: amd64
@@ -51,18 +65,24 @@ jobs:
           github.event.action == 'test-sdk-all' ||
           github.event.action == 'test-sdk-python'
         )
+      ) ||
+      ( github.event_name == 'workflow_dispatch' &&
+        (
+          inputs.sdk == 'all' ||
+          inputs.sdk == 'python'
+        )
       )
     name: "Python SDK verification tests"
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write    
+      pull-requests: write
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
@@ -99,10 +119,12 @@ jobs:
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v4
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v6
         with:
-          python-version: "3.9"
+          python-version: "3.10"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
       - name: "Set up Go"
         id: setup-go
         uses: actions/setup-go@v6
@@ -131,14 +153,11 @@ jobs:
           docker stop dapr_placement
           ./dist/linux_amd64/release/placement --healthz-port 9091 &
       - name: Install dependencies
-        run: |
-          cd python-sdk
-          python -m pip install --upgrade pip
-          pip install setuptools wheel twine tox
+        working-directory: python-sdk
+        run: uv sync --frozen --all-packages --group tests
       - name: Check Python Examples
-        run: |
-          cd python-sdk || true
-          tox -e examples
+        working-directory: python-sdk
+        run: uv run pytest tests/examples/
       - name: Update PR comment for success
         if: ${{ success() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
@@ -182,6 +201,12 @@ jobs:
           github.event.action == 'test-sdk-all' ||
           github.event.action == 'test-sdk-java'
         )
+      ) ||
+      ( github.event_name == 'workflow_dispatch' &&
+        (
+          inputs.sdk == 'all' ||
+          inputs.sdk == 'java'
+        )
       )
     name: "Java SDK verification tests"
     runs-on: ubuntu-latest
@@ -197,7 +222,7 @@ jobs:
         if: github.event_name != 'repository_dispatch'
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
@@ -267,7 +292,7 @@ jobs:
           ./dist/linux_amd64/release/placement &
       - name: Spin local environment
         run: |
-          docker-compose -f ./java-sdk/sdk-tests/deploy/local-test.yml up -d mongo kafka
+          docker compose -f ./java-sdk/sdk-tests/deploy/local-test.yml up -d mongo kafka
           docker ps
       - name: Install local ToxiProxy to simulate connectivity issues to Dapr sidecar
         run: |
@@ -349,6 +374,12 @@ jobs:
           github.event.action == 'test-sdk-all' ||
           github.event.action == 'test-sdk-js'
         )
+      ) ||
+      ( github.event_name == 'workflow_dispatch' &&
+        (
+          inputs.sdk == 'all' ||
+          inputs.sdk == 'js'
+        )
       )
     name: "JS SDK verification tests"
     runs-on: ubuntu-latest
@@ -375,7 +406,7 @@ jobs:
         if: github.event_name != 'repository_dispatch'
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
@@ -442,6 +473,8 @@ jobs:
         run: |
           docker stop dapr_placement
           ./dist/linux_amd64/release/placement &
+      - name: Install JS SDK dependencies
+        run: cd js-sdk && npm ci
       - name: Build Package
         run: cd js-sdk && npm run build
       - name: Run E2E tests
@@ -495,6 +528,12 @@ jobs:
           github.event.action == 'test-sdk-all' ||
           github.event.action == 'test-sdk-go'
         )
+      ) ||
+      ( github.event_name == 'workflow_dispatch' &&
+        (
+          inputs.sdk == 'all' ||
+          inputs.sdk == 'go'
+        )
       )
     name: "Go SDK verification tests"
     runs-on: ubuntu-latest
@@ -506,7 +545,7 @@ jobs:
         if: github.event_name != 'repository_dispatch'
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
