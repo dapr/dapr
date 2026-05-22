@@ -34,6 +34,7 @@ import (
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -112,14 +113,14 @@ spec:
 		require.NoError(t, os.WriteFile(mcpFilePath, []byte(mcpYAML), 0o600))
 
 		// Outer Eventually retries until hot-reload registers the workflow.
-		// runWorkflow uses a short per-tick timeout so each attempt yields quickly
+		// httpapi.Run uses a short per-tick timeout so each attempt yields quickly
 		// and never spawns a goroutine that could outlive the test.
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			status, err := tryRunWorkflow(ctx, s.httpClient, s.daprd.HTTPPort(), listToolsName, map[string]any{}, 5*time.Second)
+			status, err := httpapi.TryRun(ctx, s.httpClient, s.daprd.HTTPPort(), listToolsName, map[string]any{}, 5*time.Second)
 			if !assert.NoError(c, err) {
 				return
 			}
-			if !assert.Equal(c, statusCompleted, status.RuntimeStatus) {
+			if !assert.Equal(c, httpapi.StatusCompleted, status.RuntimeStatus) {
 				return
 			}
 			var result mcp.ListToolsResult
@@ -136,19 +137,19 @@ spec:
 
 		// After delete, the workflow is unregistered. The runtime surfaces this
 		// in one of two ways depending on platform/timing:
-		//   - WaitForInstanceStart blocks → tryRunWorkflow's per-tick timeout
+		//   - WaitForInstanceStart blocks → httpapi.TryRun's per-tick timeout
 		//     returns a polling error.
 		//   - Start succeeds and the orchestrator immediately fails (durabletask
 		//     "workflow not registered" → setFailed → ORCHESTRATION_STATUS_FAILED).
 		// Either is a valid signal the workflow is gone; assert we don't see a
 		// COMPLETED status (which would mean the workflow is still wired).
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			status, err := tryRunWorkflow(ctx, s.httpClient, s.daprd.HTTPPort(), listToolsName, map[string]any{}, 3*time.Second)
+			status, err := httpapi.TryRun(ctx, s.httpClient, s.daprd.HTTPPort(), listToolsName, map[string]any{}, 3*time.Second)
 			if err != nil {
 				// Polling error (start hung) — workflow is gone. Pass.
 				return
 			}
-			assert.NotEqual(c, statusCompleted, status.RuntimeStatus,
+			assert.NotEqual(c, httpapi.StatusCompleted, status.RuntimeStatus,
 				"ListTools should not COMPLETE after MCPServer is deleted")
 		}, 60*time.Second, 2*time.Second)
 	})
