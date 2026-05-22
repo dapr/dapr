@@ -148,8 +148,14 @@ ifeq ($(DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME),)
 DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME=test_all.yaml
 endif
 
+# Only default WINDOWS_VERSION when building for Windows. When set during a
+# Linux build it leaks into `$(MAKE) docker-push` sub-makes (via
+# docker-push-retry) where docker.mk bakes `-ltsc2022-` into BUILD_TAG,
+# mismatching the tag computed by docker-deploy-k8s and breaking image pull.
+ifeq ($(TARGET_OS),windows)
 ifeq ($(WINDOWS_VERSION),)
 WINDOWS_VERSION=ltsc2022
+endif
 endif
 
 # check the required environment variables
