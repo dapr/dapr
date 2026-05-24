@@ -15,6 +15,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
@@ -22,13 +23,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -37,6 +36,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -117,7 +117,7 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{"city": "Seattle"},
 		}
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+		instanceID := httpapi.Start(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("weather", "get_weather"), input)
 
 		metadata, err := taskhubClient.WaitForWorkflowCompletion(
@@ -125,21 +125,21 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
-		var result wfv1.CallMCPToolResponse
-		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 
-		assert.False(t, result.GetIsError(), "expected success result")
-		require.NotEmpty(t, result.GetContent())
-		assert.NotNil(t, result.GetContent()[0].GetText())
-		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "Seattle",
-			"expected tool result to mention Seattle, got: %s", result.GetContent()[0].GetText().GetText())
+		assert.False(t, result.IsError, "expected success result")
+		require.NotEmpty(t, result.Content)
+		assert.NotNil(t, result.Content[0])
+		assert.Contains(t, extractText(result.Content[0]), "Seattle",
+			"expected tool result to mention Seattle, got: %s", extractText(result.Content[0]))
 	})
 
 	t.Run("CallTool unknown tool name sets isError=true", func(t *testing.T) {
 		input := map[string]any{
 			"arguments": map[string]any{},
 		}
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+		instanceID := httpapi.Start(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("weather", "get_weather"), input)
 
 		metadata, err := taskhubClient.WaitForWorkflowCompletion(
@@ -149,8 +149,8 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 
 		// The MCP server returns isError=true for unknown tools, which surfaces
 		// as a completed workflow with isError=true in the output, NOT a workflow failure.
-		var result wfv1.CallMCPToolResponse
-		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.True(t, result.GetIsError(), "expected isError=true for unknown tool")
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+		assert.True(t, result.IsError, "expected isError=true for unknown tool")
 	})
 }

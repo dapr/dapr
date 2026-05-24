@@ -41,13 +41,17 @@ import (
 )
 
 const (
-	inboxKeyPrefix       = "inbox"
-	historyKeyPrefix     = "history"
-	sigcertKeyPrefix     = "sigcert"
-	extSigCertKeyPrefix  = "ext-sigcert"
-	signatureKeyPrefix   = "signature"
-	customStatusKey      = "customStatus"
-	metadataKey          = "metadata"
+	inboxKeyPrefix      = "inbox"
+	historyKeyPrefix    = "history"
+	sigcertKeyPrefix    = "sigcert"
+	extSigCertKeyPrefix = "ext-sigcert"
+	signatureKeyPrefix  = "signature"
+	customStatusKey     = "customStatus"
+	// MetadataKey is the state-store key holding the workflow's metadata row
+	// (history/inbox/signature lengths + generation). Exported so other
+	// packages can refresh just this row to pick up the latest ETag without
+	// reloading the full workflow state.
+	MetadataKey          = "metadata"
 	propagatedHistoryKey = "propagated-history"
 
 	// maxStateEntries is the upper bound for any metadata count field
@@ -109,6 +113,17 @@ type State struct {
 	// cert within one run is O(1) and idempotent. Not persisted. Rebuilt from
 	// ExternalSigningCertificates at load time.
 	externalCertDigestIndex map[string]uint64
+
+	// metadataETag is the state store's row-version token for the metadata
+	// key, captured at load time and refreshed after every successful save.
+	// Used as the version anchor for optimistic concurrency: every save
+	// upserts the metadata row with this ETag, so a peer host that wrote
+	// state under a stale snapshot causes our Multi to fail with an
+	// ETagMismatch instead of silently overwriting persisted events. nil
+	// means "no prior ETag known" (e.g. workflow is being created for the
+	// first time, or the cache was just invalidated). Not persisted; lives
+	// only in the in-memory cache.
+	metadataETag *string
 
 	// change tracking
 	inboxAddedCount                         int
@@ -189,6 +204,21 @@ func (s *State) ResetChangeTracking() {
 func (s *State) SetIncomingHistory(ph *protos.PropagatedHistory) {
 	s.IncomingHistory = ph
 	s.incomingHistoryChanged = true
+}
+
+// MetadataETag returns the cached metadata ETag, or nil if none is known.
+// Callers performing optimistic concurrency pass this through to the metadata
+// TransactionalUpsert via [GetSaveRequest].
+func (s *State) MetadataETag() *string {
+	return s.metadataETag
+}
+
+// SetMetadataETag updates the cached metadata ETag. Called after a successful
+// save to record the new row-version token returned by a follow-up
+// metadata-only Get, so the next save can present it as the prior ETag for
+// the optimistic-concurrency check.
+func (s *State) SetMetadataETag(etag *string) {
+	s.metadataETag = etag
 }
 
 func (s *State) ApplyRuntimeStateChanges(rs *backend.WorkflowRuntimeState) {
@@ -449,10 +479,21 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 	}
 
 	// Every time we save, we also update the metadata with information about the size of the history and inbox,
-	// as well as the generation of the workflow.
+	// as well as the generation of the workflow. The metadata Upsert carries
+	// the prior ETag so the whole transaction acts as one optimistic-
+	// concurrency check: any peer host that saved underneath us since our
+	// last load has bumped the row's ETag, so our Multi will fail with
+	// ETagMismatch instead of silently overwriting their writes. A nil
+	// metadataETag means "no prior version known" (first save of a brand-new
+	// workflow, or post-invalidation reload) and falls through to a blind
+	// upsert, which is the correct semantics for those cases.
 	req.Operations = append(req.Operations, api.TransactionalOperation{
 		Operation: api.Upsert,
-		Request:   api.TransactionalUpsert{Key: metadataKey, Value: metaProto},
+		Request: api.TransactionalUpsert{
+			Key:   MetadataKey,
+			Value: metaProto,
+			ETag:  s.metadataETag,
+		},
 	})
 
 	return req, nil
@@ -618,7 +659,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	req := api.GetStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,
-		Key:       metadataKey,
+		Key:       MetadataKey,
 	}
 
 	res, err := state.Get(ctx, &req, false)
@@ -681,6 +722,10 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	// signatures, and custom status using a bulk request.
 	wState := NewState(opts)
 	wState.Generation = metadata.GetGeneration()
+	// Capture the metadata ETag for optimistic-concurrency on the next save.
+	// nil here just means the store didn't return one for this row, which is
+	// also fine: the next save will fall through to a blind upsert.
+	wState.metadataETag = res.ETag
 	wState.Inbox = make([]*backend.HistoryEvent, 0, inboxLen)
 	wState.History = make([]*backend.HistoryEvent, 0, historyLen)
 	wState.RawHistory = make([][]byte, 0, historyLen)
@@ -745,13 +790,13 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	var key string
 	for i := range metadata.GetInboxLength() {
 		key = getMultiEntryKeyName(inboxKeyPrefix, i)
-		if bulkRes[key] == nil {
+		if bulkRes[key].Data == nil {
 			wfLogger.Warnf("Failed to load inbox state key '%s': not found", key)
 			continue
 		}
 
 		var hist backend.HistoryEvent
-		err = proto.Unmarshal(bulkRes[key], &hist)
+		err = proto.Unmarshal(bulkRes[key].Data, &hist)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key '%s': %w", key, err)
 		}
@@ -761,24 +806,24 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 
 	for i := range metadata.GetHistoryLength() {
 		key = getMultiEntryKeyName(historyKeyPrefix, i)
-		if bulkRes[key] == nil {
+		if bulkRes[key].Data == nil {
 			wfLogger.Warnf("Failed to load history state key '%s': not found", key)
 			continue
 		}
 
 		var hist backend.HistoryEvent
-		err = proto.Unmarshal(bulkRes[key], &hist)
+		err = proto.Unmarshal(bulkRes[key].Data, &hist)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from history state key '%s': %w", key, err)
 		}
 
 		wState.History = append(wState.History, &hist)
-		wState.RawHistory = append(wState.RawHistory, bulkRes[key])
+		wState.RawHistory = append(wState.RawHistory, bulkRes[key].Data)
 	}
 
 	for i := range metadata.GetSigningCertificateLength() {
 		key = getMultiEntryKeyName(sigcertKeyPrefix, i)
-		if bulkRes[key] == nil {
+		if bulkRes[key].Data == nil {
 			if hasTamperMarker(wState) {
 				return wState, nil
 			}
@@ -788,7 +833,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 
 		var cert backend.SigningCertificate
-		err = proto.Unmarshal(bulkRes[key], &cert)
+		err = proto.Unmarshal(bulkRes[key].Data, &cert)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal signing certificate from state key '%s': %w", key, err)
 		}
@@ -799,7 +844,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	loadedExtCerts := make([]*backend.ExternalSigningCertificate, 0, extSigningCertLen)
 	for i := range metadata.GetExternalSigningCertificateLength() {
 		key = getMultiEntryKeyName(extSigCertKeyPrefix, i)
-		if bulkRes[key] == nil {
+		if bulkRes[key].Data == nil {
 			if hasTamperMarker(wState) {
 				return wState, nil
 			}
@@ -809,7 +854,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 
 		var ext backend.ExternalSigningCertificate
-		err = proto.Unmarshal(bulkRes[key], &ext)
+		err = proto.Unmarshal(bulkRes[key].Data, &ext)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal external signing certificate from state key '%s': %w", key, err)
 		}
@@ -824,7 +869,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 
 	for i := range metadata.GetSignatureLength() {
 		key = getMultiEntryKeyName(signatureKeyPrefix, i)
-		if bulkRes[key] == nil {
+		if bulkRes[key].Data == nil {
 			if hasTamperMarker(wState) {
 				return wState, nil
 			}
@@ -834,26 +879,26 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 
 		var sig backend.HistorySignature
-		err = proto.Unmarshal(bulkRes[key], &sig)
+		err = proto.Unmarshal(bulkRes[key].Data, &sig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history signature from state key '%s': %w", key, err)
 		}
 
 		wState.Signatures = append(wState.Signatures, &sig)
-		raw := make([]byte, len(bulkRes[key]))
-		copy(raw, bulkRes[key])
+		raw := make([]byte, len(bulkRes[key].Data))
+		copy(raw, bulkRes[key].Data)
 		wState.RawSignatures = append(wState.RawSignatures, raw)
 	}
 
-	if len(bulkRes[customStatusKey]) > 0 {
+	if len(bulkRes[customStatusKey].Data) > 0 {
 		wState.CustomStatus = &wrapperspb.StringValue{}
 
-		err = proto.Unmarshal(bulkRes[customStatusKey], wState.CustomStatus)
+		err = proto.Unmarshal(bulkRes[customStatusKey].Data, wState.CustomStatus)
 		if err != nil {
 			// Fallback to JSON unmarshaling
 			var customStatusValue string
 			// TODO: @famarting: remove in v1.16
-			jerr := json.Unmarshal(bulkRes[customStatusKey], &customStatusValue)
+			jerr := json.Unmarshal(bulkRes[customStatusKey].Data, &customStatusValue)
 			if jerr != nil {
 				return nil, fmt.Errorf("failed to unmarshal custom status key entry: %w", err)
 			}
@@ -862,9 +907,9 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 	}
 
-	if len(bulkRes[propagatedHistoryKey]) > 0 {
+	if len(bulkRes[propagatedHistoryKey].Data) > 0 {
 		var ph protos.PropagatedHistory
-		if err = proto.Unmarshal(bulkRes[propagatedHistoryKey], &ph); err != nil {
+		if err = proto.Unmarshal(bulkRes[propagatedHistoryKey].Data, &ph); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal propagated history for '%s': %w", actorID, err)
 		}
 		wState.IncomingHistory = &ph
@@ -1009,6 +1054,24 @@ func MarkAsTamperFailed(ctx context.Context, astate state.Interface, actorID str
 	}
 
 	s.ResetChangeTracking()
+
+	// Refresh the metadata ETag so a subsequent save by the caller (e.g. an
+	// addWorkflowEvent that landed on this same actor right after we
+	// tombstoned) doesn't trip optimistic-concurrency on the stale token we
+	// loaded with. The save above bumped postgres's row version; our
+	// in-memory copy is now out of date. A read failure here is non-fatal:
+	// we clear the cached ETag so the next save falls back to a blind
+	// upsert (which is fine for a tombstoned, terminal workflow).
+	metaRes, metaErr := astate.Get(ctx, &api.GetStateRequest{
+		ActorType: opts.WorkflowActorType,
+		ActorID:   actorID,
+		Key:       MetadataKey,
+	}, false)
+	if metaErr != nil || metaRes == nil {
+		s.metadataETag = nil
+	} else {
+		s.metadataETag = metaRes.ETag
+	}
 	return s, nil
 }
 
@@ -1121,7 +1184,7 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 		},
 		api.TransactionalOperation{
 			Operation: api.Delete,
-			Request:   api.TransactionalDelete{Key: metadataKey},
+			Request:   api.TransactionalDelete{Key: MetadataKey},
 		},
 		api.TransactionalOperation{
 			Operation: api.Delete,
