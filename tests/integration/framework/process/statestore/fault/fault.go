@@ -40,8 +40,20 @@ type Store struct {
 
 	failKeySubstring string
 	failRemaining    int
+	failErr          error
 	failNotifyCh     chan struct{}
 	failedCount      atomic.Int32
+
+	multiObserver func(*state.TransactionalStateRequest)
+}
+
+// SetMultiObserver registers a callback invoked synchronously on every Multi
+// before delegation. Tests use it to inspect the ETag of specific upserts.
+// nil clears any previously registered observer.
+func (s *Store) SetMultiObserver(fn func(*state.TransactionalStateRequest)) {
+	s.mu.Lock()
+	s.multiObserver = fn
+	s.mu.Unlock()
 }
 
 // New returns a Store that is functionally identical to the in-memory store
@@ -52,15 +64,30 @@ func New(t *testing.T) *Store {
 	}
 }
 
-// ArmFailures arms the store to return an injected transient error on the next
+// ArmFailures arms the store to return a synthetic transient error on the next
 // n transactional Multi requests whose operation keys contain keySubstring.
 // n=1 produces a one-shot failure, n=0 disarms. If notify is non-nil it is
 // closed the FIRST time a matching Multi is failed, so callers can synchronise
 // on the failure firing.
 func (s *Store) ArmFailures(keySubstring string, n int, notify chan struct{}) {
+	s.armWith(keySubstring, n, errors.New("fault.Store: injected transient failure"), notify)
+}
+
+// ArmETagMismatch arms the store to return a state.ETagError of kind
+// ETagMismatch on the next n matching Multi requests. Use this when a test
+// wants to exercise the orchestrator's peer-write recovery path rather than
+// a generic transient error.
+func (s *Store) ArmETagMismatch(keySubstring string, n int, notify chan struct{}) {
+	s.armWith(keySubstring, n,
+		state.NewETagError(state.ETagMismatch, errors.New("fault.Store: injected etag mismatch")),
+		notify)
+}
+
+func (s *Store) armWith(keySubstring string, n int, err error, notify chan struct{}) {
 	s.mu.Lock()
 	s.failKeySubstring = keySubstring
 	s.failRemaining = n
+	s.failErr = err
 	s.failNotifyCh = notify
 	s.mu.Unlock()
 }
@@ -71,10 +98,14 @@ func (s *Store) FailedCount() int { return int(s.failedCount.Load()) }
 
 // Multi implements state.TransactionalStore. If the store is armed and the
 // request touches a key containing the armed substring, the request is failed
-// with a synthetic transient error; otherwise the request is delegated to the
-// underlying in-memory store.
+// with the armed error; otherwise the request is delegated to the underlying
+// in-memory store.
 func (s *Store) Multi(ctx context.Context, req *state.TransactionalStateRequest) error {
 	s.mu.Lock()
+
+	if obs := s.multiObserver; obs != nil {
+		obs(req)
+	}
 
 	keys := make([]string, 0, len(req.Operations))
 	for _, op := range req.Operations {
@@ -87,10 +118,14 @@ func (s *Store) Multi(ctx context.Context, req *state.TransactionalStateRequest)
 	}
 
 	shouldFail := s.failKeySubstring != "" && s.failRemaining > 0 && anyHasSubstring(keys, s.failKeySubstring)
-	var notify chan struct{}
+	var (
+		notify chan struct{}
+		err    error
+	)
 	if shouldFail {
 		s.failRemaining--
 		s.failedCount.Add(1)
+		err = s.failErr
 		if s.failNotifyCh != nil {
 			notify = s.failNotifyCh
 			s.failNotifyCh = nil
@@ -102,7 +137,7 @@ func (s *Store) Multi(ctx context.Context, req *state.TransactionalStateRequest)
 		if notify != nil {
 			close(notify)
 		}
-		return errors.New("fault.Store: injected transient failure")
+		return err
 	}
 	return s.Wrapped.Store.(state.TransactionalStore).Multi(ctx, req)
 }
