@@ -102,11 +102,14 @@ func (s *Store) FailedCount() int { return int(s.failedCount.Load()) }
 // in-memory store.
 func (s *Store) Multi(ctx context.Context, req *state.TransactionalStateRequest) error {
 	s.mu.Lock()
+	obs := s.multiObserver
+	s.mu.Unlock()
 
-	if obs := s.multiObserver; obs != nil {
+	if obs != nil {
 		obs(req)
 	}
 
+	s.mu.Lock()
 	keys := make([]string, 0, len(req.Operations))
 	for _, op := range req.Operations {
 		switch v := op.(type) {
