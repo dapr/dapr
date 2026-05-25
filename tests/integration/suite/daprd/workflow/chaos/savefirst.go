@@ -157,8 +157,11 @@ func (s *savefirst) Run(t *testing.T, ctx context.Context) {
 		"dapr/jobs/actorreminder||%s||dapr.internal.%s.%s.workflow||%s||new-event-tc-",
 		ns, ns, appID, wfID,
 	)
-	require.Empty(t, s.sched.ListAllKeys(t, ctx, prefix),
-		"wake-up reminder must not exist while inbox save is unwritten")
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		require.Empty(c, s.sched.ListAllKeys(t, ctx, prefix),
+			"wake-up reminder must not exist while inbox save is unwritten")
+	}, 30*time.Second, 10*time.Millisecond)
 
 	assert.EventuallyWithT(t, func(co *assert.CollectT) {
 		resp, gerr := gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
