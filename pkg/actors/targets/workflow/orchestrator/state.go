@@ -21,6 +21,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	contribstate "github.com/dapr/components-contrib/state"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
@@ -310,9 +311,18 @@ func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, star
 	output, _ := runtimestate.Output(rstate)
 	failureDetails, _ := runtimestate.FailureDetails(rstate)
 	var parentInstanceID string
+	var parentAppID *wrapperspb.StringValue
 	if se != nil && se.GetParentInstance() != nil && se.GetParentInstance().GetWorkflowInstance() != nil {
 		parentInstanceID = se.GetParentInstance().GetWorkflowInstance().GetInstanceId()
+		if se.GetParentInstance().GetAppID() != "" {
+			parentAppID = wrapperspb.String(se.GetParentInstance().GetAppID())
+		}
 	}
+	var startedAt *timestamppb.Timestamp
+	if t := runtimestate.GetStartedTime(rstate); !t.IsZero() {
+		startedAt = timestamppb.New(t)
+	}
+
 	return &backend.WorkflowMetadata{
 		InstanceId:       rstate.GetInstanceId(),
 		Name:             name,
@@ -325,6 +335,9 @@ func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, star
 		CustomStatus:     rstate.GetCustomStatus(),
 		FailureDetails:   failureDetails,
 		ParentInstanceId: parentInstanceID,
+		ParentAppId:      parentAppID,
+		Version:          wfenginestate.WorkflowVersion(rstate.GetOldEvents()),
+		StartedAt:        startedAt,
 	}
 }
 
