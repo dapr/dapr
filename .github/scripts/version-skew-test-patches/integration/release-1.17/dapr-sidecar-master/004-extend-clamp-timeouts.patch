@@ -30,6 +30,15 @@
  	assert.False(t, c.ll.Contains("dissemination timeout after"),
 --- a/tests/integration/suite/actors/dissemination/drain/clamp/timeout.go
 +++ b/tests/integration/suite/actors/dissemination/drain/clamp/timeout.go
+@@ -60,7 +60,7 @@
+ 
+ 	c.ll = logline.New(t,
+ 		logline.WithStdoutLineContains(
+-			"Timed out waiting for actor in-flight lock claims to be released",
++			"in-flight lock claims to be released",
+ 		),
+ 	)
+ 
 @@ -115,13 +115,14 @@
  
  	c.app2.Run(t, ctx)
