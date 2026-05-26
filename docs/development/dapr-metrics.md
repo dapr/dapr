@@ -134,6 +134,8 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_runtime_workflow_activity_operation_latency: The total time taken to run an activity request.
 * dapr_runtime_workflow_activity_execution_count: The number of successful/failed/recoverable activity executions.
 * dapr_runtime_workflow_activity_execution_latency: The total time taken to run an activity to completion.
+* dapr_runtime_workflow_payload_size_ratio: Workflow dispatch payload size as a fraction of the configured gRPC `--max-body-size`; values >0.95 trip the graceful stall, values >1 exceed the limit. Not recorded when `--max-body-size` is non-positive.
+* dapr_runtime_workflow_activity_payload_size_ratio: Activity dispatch payload size as a fraction of the configured gRPC `--max-body-size`; values >0.95 trip the graceful stall, values >1 exceed the limit. Not recorded when `--max-body-size` is non-positive.
 
 ### gRPC monitoring metrics
 
