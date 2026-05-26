@@ -453,14 +453,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 		callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 	} else if subscriberResponse == "error" {
-		// The resiliency retry policy applied by pubsub_resiliency.yaml is
-		// maxRetries: 60, duration: 1s (constant) = ~60s retry window before
-		// retries exhaust and the message is moved to the dead-letter topic.
-		// Sleep longer than this window so that all messages are dead-lettered
-		// before we flip the subscriber back to success; otherwise messages
-		// still being retried will succeed on the next attempt and never reach
-		// the DLQ, leaving the receivedDeadLetter set empty.
-		time.Sleep(time.Second * 90)
+		time.Sleep(time.Second * 30)
 	} else {
 		// Sleep briefly to allow initial delivery attempts to fail
 		// We sleep less than the resiliency retry window (60 retries × 1s = 60s)
@@ -489,7 +482,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 			got, err := subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
 			assert.NoError(c, err, "error calling subscriber to get dead letter count")
 			assert.Equal(c, len(sentMessages.ReceivedByTopicDeadLetter), got)
-		}, 360*time.Second, 2*time.Second,
+		}, 360*time.Second, 5*time.Second,
 			"subscriber did not receive all dead letter messages within timeout")
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages, podEndpoints)
 	} else {
