@@ -13,7 +13,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/dapr/components-contrib v1.16.2-0.20260518172132-d9f4c0c24cd3
 	github.com/dapr/durabletask-go v0.12.0
-	github.com/dapr/kit v0.18.0
+	github.com/dapr/kit v0.18.1
 	github.com/diagridio/go-etcd-cron v0.12.5
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.2.2
