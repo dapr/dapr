@@ -12,7 +12,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/dapr/components-contrib v1.16.2-0.20260518172132-d9f4c0c24cd3
-	github.com/dapr/durabletask-go v0.12.0
+	github.com/dapr/durabletask-go v0.12.1
 	github.com/dapr/kit v0.18.0
 	github.com/diagridio/go-etcd-cron v0.12.5
 	github.com/evanphx/json-patch/v5 v5.9.0
@@ -31,7 +31,7 @@ require (
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hashicorp/raft v1.7.3
-	github.com/jackc/pgx/v5 v5.7.4
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/jhump/protoreflect v1.15.3
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/lestrrat-go/jwx/v2 v2.1.6
