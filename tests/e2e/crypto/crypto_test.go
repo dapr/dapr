@@ -133,7 +133,7 @@ func TestCrypto(t *testing.T) {
 
 	testFn := func(protocol, component string) func(t *testing.T) {
 		return func(t *testing.T) {
-			skipIfCryptoComponentUnavailable(t, appExternalURL, protocol, component, testFileData)
+			skipIfCryptoComponentUnavailable(t, appExternalURL, protocol, component, []byte("probe"))
 
 			var encFile []byte
 
@@ -542,10 +542,10 @@ func skipIfCryptoComponentUnavailable(t *testing.T, appExternalURL, protocol, co
 
 	u := fmt.Sprintf("http://%s/test/%s/%s/encrypt?key=rsakey&alg=RSA", appExternalURL, protocol, component)
 	res, err := httpClient.Post(utils.SanitizeHTTPURL(u), "", bytes.NewReader(probeData))
-	if err != nil {
-		t.Skipf("Skipping %s tests: probe request errored: %v", component, err)
-		return
-	}
+	// A transport / DNS error here means the cryptoapp itself is unhealthy,
+	// not that the external provider is missing credentials. Fail loudly so
+	// real regressions are not masked.
+	require.NoError(t, err, "probe request to cryptoapp failed unexpectedly")
 	defer res.Body.Close()
 	if res.StatusCode == http.StatusInternalServerError {
 		body, _ := io.ReadAll(res.Body)
