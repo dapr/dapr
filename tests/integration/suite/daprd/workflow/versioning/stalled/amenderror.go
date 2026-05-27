@@ -17,6 +17,7 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,7 +77,9 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	defer cancelClient()
 	client = d.workflow.BackendClient(t, clientCtx)
 
-	require.NoError(t, client.RaiseEvent(ctx, id, "Continue"))
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.NoError(c, client.RaiseEvent(ctx, id, "Continue"))
+	}, time.Second*20, time.Millisecond*10)
 
 	wf.WaitForRuntimeStatus(t, ctx, client, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_STALLED)
 	lastEvent := wf.GetLastHistoryEventOfType[protos.HistoryEvent_ExecutionStalled](t, ctx, client, id)
