@@ -15,6 +15,7 @@ package metadata
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -101,13 +102,22 @@ func (m *hostGRPCStreamRejectedOnHTTP) Run(t *testing.T, ctx context.Context) {
 
 	stream, err := client.SubscribeActorEventsAlpha1(ctx)
 	require.NoError(t, err, "SubscribeActorEventsAlpha1 RPC initiation must succeed (error surfaces on the first Recv)")
-	require.NoError(t, stream.Send(&rtv1.SubscribeActorEventsRequestAlpha1{
+
+	// The server-side guard returns FailedPrecondition before reading the
+	// initial message, so it may have already torn the stream down by the
+	// time this Send is flushed. Per the grpc.ClientStream.SendMsg contract,
+	// a Send on an already-terminated stream returns io.EOF and the real
+	// status surfaces on Recv — so tolerate io.EOF here and assert on Recv.
+	err = stream.Send(&rtv1.SubscribeActorEventsRequestAlpha1{
 		RequestType: &rtv1.SubscribeActorEventsRequestAlpha1_InitialRequest{
 			InitialRequest: &rtv1.SubscribeActorEventsRequestInitialAlpha1{
 				Entities: []string{"actorViaStream"},
 			},
 		},
-	}))
+	})
+	if err != nil {
+		require.ErrorIs(t, err, io.EOF)
+	}
 
 	// The server-side guard rejects the call before reading the initial
 	// message; the client surfaces it on Recv with FailedPrecondition.
