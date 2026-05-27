@@ -98,25 +98,37 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 		return api.ErrInstanceNotFound
 	}
 
-	// Create the wake-up reminder BEFORE mutating any state. If reminder
-	// creation fails we return without touching the in-memory inbox, so a
-	// retry sees clean state and dedup stays exact. If we instead saved
-	// first and then failed to create the reminder, the event would be
-	// durable but un-driven; if we mutated the in-memory inbox before save
-	// and then failed, a retry would see the orphan event in the cached
-	// inbox, dedup would drop it, and cron would auto-delete the reminder.
+	// Save the inbox event BEFORE creating the wake-up reminder. The
+	// reminder's dueTime is anchored at the workflow's start timestamp
+	// (state.History[0].Timestamp), which is in the past, so the scheduler
+	// fires it immediately on Create. Under placement rebalance the firing
+	// daprd may not be the host that ran AddWorkflowEvent: it loads the
+	// store, sees no inbox event, acks SUCCESS, and the scheduler deletes
+	// the reminder. By the time the save eventually commits the inbox row
+	// is stranded with no driver, and the activity actor's publishResult
+	// already returned nil so its retry-forever 'run-activity' reminder
+	// no longer fires. The workflow freezes in RUNNING.
+	//
+	// Saving first inverts the failure mode into something the existing
+	// recovery paths already handle: if signAndSaveState succeeds but the
+	// reminder Create then crashes / times out, the activity actor's
+	// publishResult sees the RPC error and its retry-forever reminder
+	// re-fires, the next AddWorkflowEvent hits dedup.IsDuplicateCompletion
+	// (the row is already in inbox), and the dedup branch above calls
+	// assertNewEventReminder which deterministically re-creates the
+	// reminder. The inbox is never stranded.
 	//
 	// The reminder must target the local actor (o.appID), not the router's
 	// source app. For cross-app events (e.g. ExecutionTerminated from a
 	// parent in another app), router.SourceAppID is the sender's app and
 	// would route the reminder to a non-existent remote actor.
-	if err := o.assertNewEventReminder(ctx, e, state); err != nil {
-		return err
-	}
-
 	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)
 	state.AddToInbox(e)
 	if err := o.signAndSaveState(ctx, state); err != nil {
+		return err
+	}
+
+	if err := o.assertNewEventReminder(ctx, e, state); err != nil {
 		return err
 	}
 

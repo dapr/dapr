@@ -2892,6 +2892,13 @@ func (f *fakeHTTPServer) StartServer(endpoints []endpoints.Endpoint, opts *fakeH
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return f.ln.DialContext(ctx)
 			},
+			// Each request gets a fresh connection. The service-invocation
+			// resiliency policy may time out an in-flight Invoke and abandon
+			// its goroutine, which can keep touching the connection after the
+			// handler returns. With keep-alive, that poisoned connection would
+			// be reused by the next request and cause spurious "context
+			// canceled" failures.
+			DisableKeepAlives: true,
 		},
 	}
 }
