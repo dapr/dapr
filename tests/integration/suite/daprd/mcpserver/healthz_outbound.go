@@ -46,7 +46,7 @@ func init() {
 	suite.Register(new(healthzOutboundGate))
 }
 
-// healthzOutboundGate verifies /v1.0/healthz/outbound stays 503 until flushOutstandingMCPServers drains.
+// healthzOutboundGate verifies /v1.0/healthz/outbound stays NotReady until flushOutstandingMCPServers drains.
 type healthzOutboundGate struct {
 	daprd *daprd.Daprd
 	place *placement.Placement
@@ -111,7 +111,7 @@ func (s *healthzOutboundGate) Run(t *testing.T, ctx context.Context) {
 	httpClient := fclient.HTTP(t)
 	outboundURL := fmt.Sprintf("http://%s/v1.0/healthz/outbound", s.daprd.HTTPAddress())
 
-	// Expect 503 throughout the slow-upstream window, then 204 after flush drains.
+	// Expect 500 throughout the slow-upstream window, then 204 after flush drains.
 	t.Run("/healthz/outbound stays NotReady until MCPServer load completes", func(t *testing.T) {
 		var sawNotReady bool
 		var sawReady bool
@@ -126,7 +126,7 @@ func (s *healthzOutboundGate) Run(t *testing.T, ctx context.Context) {
 				continue
 			}
 			switch resp.StatusCode {
-			case http.StatusServiceUnavailable:
+			case http.StatusInternalServerError:
 				sawNotReady = true
 			case http.StatusNoContent:
 				sawReady = true
@@ -139,7 +139,7 @@ func (s *healthzOutboundGate) Run(t *testing.T, ctx context.Context) {
 		}
 
 		assert.True(t, sawNotReady,
-			"expected 503 during MCPServer load (regression: Ready() ran before loadMCPServers)")
+			"expected 500 during MCPServer load (regression: Ready() ran before loadMCPServers)")
 		assert.True(t, sawReady, "expected 204 after MCPServer load completes")
 	})
 
