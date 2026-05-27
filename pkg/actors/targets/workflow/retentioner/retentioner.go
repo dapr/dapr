@@ -61,7 +61,16 @@ func (r *retentioner) InvokeReminder(ctx context.Context, reminder *actorapi.Rem
 	start := time.Now()
 	_, err = r.router.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
-	if err != nil && !strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
+	// ErrNotCompleted means the workflow has been re-scheduled with the same
+	// deterministic ID and is no longer in a terminal state. This retention
+	// reminder was anchored to a superseded run's completedAt; the new run
+	// will queue its own retention reminder on completion. Treat it the same
+	// as ErrInstanceNotFound (drain silently). Returning the error here
+	// would put the reminder into a tight retry loop via its
+	// MaxRetries=nil failure policy.
+	if err != nil &&
+		!strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) &&
+		!strings.HasSuffix(err.Error(), api.ErrNotCompleted.Error()) {
 		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusFailed, elapsed)
 		return err
 	}
