@@ -423,7 +423,7 @@ func Test_runWorkflow_emptyInboxTerminalCreatesRetentionReminder(t *testing.T) {
 	assert.Equal(t, "dapr.internal.default.testapp.retentioner", got.ActorType,
 		"retention reminder must target the retentioner actor type")
 	assert.Equal(t, instanceID, got.ActorID)
-	assert.Equal(t, "anyterminal", got.Name,
+	assert.Equal(t, "retention", got.Name,
 		"retention reminder name must be deterministic (no random suffix) so retries overwrite in place")
 }
 
