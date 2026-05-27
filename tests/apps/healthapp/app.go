@@ -32,7 +32,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
+	"golang.org/x/net/http2/h2c" //nolint:staticcheck
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -299,7 +299,7 @@ func startH2C() {
 	h2s := &http2.Server{}
 	srv := &http.Server{
 		Addr:              ":" + appPort,
-		Handler:           h2c.NewHandler(httpRouter(), h2s),
+		Handler:           h2c.NewHandler(httpRouter(), h2s), //nolint:staticcheck
 		ReadHeaderTimeout: 30 * time.Second,
 	}
 
