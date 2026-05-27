@@ -812,8 +812,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	log.Infof("Internal gRPC server is running on %s:%d", a.runtimeConfig.internalGRPCListenAddress, a.runtimeConfig.internalGRPCPort)
 
-	a.runtimeConfig.outboundHealthz.AddTarget("app").Ready()
-
 	if err := a.blockUntilAppIsReady(ctx); err != nil {
 		return err
 	}
@@ -829,6 +827,8 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return fmt.Errorf("failed to load mcpservers: %s", err)
 	}
 	a.flushOutstandingMCPServers(ctx)
+
+	a.runtimeConfig.outboundHealthz.AddTarget("app").Ready()
 
 	if a.runtimeConfig.appConnectionConfig.MaxConcurrency > 0 {
 		log.Infof("app max concurrency set to %v", a.runtimeConfig.appConnectionConfig.MaxConcurrency)
