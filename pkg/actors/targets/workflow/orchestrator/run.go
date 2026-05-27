@@ -431,6 +431,16 @@ func (*orchestrator) recordWorkflowSchedulingLatency(ctx context.Context, esHist
 	}
 }
 
+// retentionReminderName is the single deterministic name used for every
+// retention reminder. Keeping the name constant (rather than keying it on
+// the terminal status) ensures the scheduler's overwrite-by-name semantics
+// collapse re-scheduled runs of the same instance ID onto one retention
+// reminder even if the terminal status differs between runs (e.g. run 1
+// completed, run 2 terminated). The workflow's actual status is still
+// recoverable via FetchWorkflowMetadata; only the scheduler key is now
+// status-agnostic.
+const retentionReminderName = "retention"
+
 // handleRetention creates the retention reminder for a terminal workflow.
 // The reminder name is deterministic, so this is safe to call repeatedly:
 // the scheduler overwrites by name, leaving exactly one retention reminder
@@ -443,23 +453,18 @@ func (o *orchestrator) handleRetention(ctx context.Context, status protos.Orches
 	}
 
 	var dueTime *time.Duration
-	var name string
 	switch {
 	case o.retentionPolicy.Completed != nil &&
 		status == protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED:
 		dueTime = o.retentionPolicy.Completed
-		name = "completed"
 	case o.retentionPolicy.Terminated != nil &&
 		status == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED:
 		dueTime = o.retentionPolicy.Terminated
-		name = "terminated"
 	case o.retentionPolicy.Failed != nil &&
 		status == protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED:
 		dueTime = o.retentionPolicy.Failed
-		name = "failed"
 	case o.retentionPolicy.AnyTerminal != nil:
 		dueTime = o.retentionPolicy.AnyTerminal
-		name = "anyterminal"
 	}
 
 	if dueTime == nil {
@@ -475,6 +480,6 @@ func (o *orchestrator) handleRetention(ctx context.Context, status protos.Orches
 	}
 
 	log.Debugf("Workflow actor '%s': setting retention reminder for status '%s' with due time '%v'", o.actorID, status.String(), dueTime)
-	_, err = o.createRetentionReminder(ctx, name, completedAt.Add(*dueTime))
+	_, err = o.createRetentionReminder(ctx, retentionReminderName, completedAt.Add(*dueTime))
 	return err
 }
