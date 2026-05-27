@@ -20,7 +20,7 @@ import (
 	"time"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -33,7 +33,6 @@ var log = logger.NewLogger("dapr.runtime.actors.targets.retentioner")
 type retentioner struct {
 	*factory
 	actorID string
-	lock    *lock.Lock
 }
 
 func (r *retentioner) InvokeMethod(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
@@ -41,14 +40,6 @@ func (r *retentioner) InvokeMethod(context.Context, *internalsv1pb.InternalInvok
 }
 
 func (r *retentioner) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
-	unlock, err := r.lock.ContextLock(ctx)
-	if err != nil {
-		return err
-	}
-	defer unlock()
-
-	defer r.Deactivate(ctx)
-
 	log.Debugf("Invoking retention purge reminder for workflow instance %s", r.actorID)
 
 	req := internalsv1pb.
@@ -59,18 +50,27 @@ func (r *retentioner) InvokeReminder(ctx context.Context, reminder *actorapi.Rem
 		WithActor(r.wfActorType, r.actorID)
 
 	start := time.Now()
-	_, err = r.router.Call(ctx, req)
+	_, err := r.router.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
-	// ErrNotCompleted means the workflow has been re-scheduled with the same
-	// deterministic ID and is no longer in a terminal state. This retention
-	// reminder was anchored to a superseded run's completedAt; the new run
-	// will queue its own retention reminder on completion. Treat it the same
-	// as ErrInstanceNotFound (drain silently). Returning the error here
-	// would put the reminder into a tight retry loop via its
-	// MaxRetries=nil failure policy.
+	// The drain-silently set covers the cases where this reminder is no
+	// longer applicable to its target run:
+	//   - ErrInstanceNotFound: the run was already purged out-of-band.
+	//   - ErrNotCompleted: the run was superseded by a fresh re-schedule
+	//     of the same deterministic ID that has not yet completed; the
+	//     fresh run will queue its own retention reminder on completion.
+	//   - ErrStalled / targeterrors stalled: the run (or a superseding
+	//     re-schedule) is currently stalled. The stalled run, on its
+	//     next successful tick, will either complete and queue a fresh
+	//     retention reminder or stay stalled until operator
+	//     intervention; in either case the previous run's anchored
+	//     reminder is no longer the right driver.
+	// Returning any of these here would put the reminder into a tight
+	// retry loop via its MaxRetries=nil failure policy.
 	if err != nil &&
 		!strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) &&
-		!strings.HasSuffix(err.Error(), api.ErrNotCompleted.Error()) {
+		!strings.HasSuffix(err.Error(), api.ErrNotCompleted.Error()) &&
+		!strings.HasSuffix(err.Error(), api.ErrStalled.Error()) &&
+		!targeterrors.IsStalled(err) {
 		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusFailed, elapsed)
 		return err
 	}

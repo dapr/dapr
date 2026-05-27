@@ -13,34 +13,22 @@ limitations under the License.
 
 package errors
 
-import (
-	"errors"
-)
+import "errors"
 
 type closed struct {
 	method string
 }
 
-type stalled struct{}
-
 func NewClosed(method string) error {
 	return &closed{method: method}
-}
-
-func NewStalled() error {
-	return &stalled{}
-}
-
-var cl = new(new(closed))
-
-func IsClosed(err error) bool {
-	return errors.As(err, cl)
 }
 
 func (c *closed) Error() string {
 	return "actor is closed, cannot handle " + c.method
 }
 
-func (s *stalled) Error() string {
-	return "actor is stalled"
+var cl = new(new(closed))
+
+func IsClosed(err error) bool {
+	return errors.As(err, cl)
 }
