@@ -60,7 +60,7 @@ func (r *retentionstuck) Run(t *testing.T, ctx context.Context) {
 
 	reg := dworkflow.NewRegistry()
 	reg.AddWorkflowN("foo", func(ctx *dworkflow.WorkflowContext) (any, error) {
-		_ = ctx.WaitForExternalEvent("Continue", -1).Await(nil)
+		require.NoError(t, ctx.WaitForExternalEvent("Continue", time.Minute).Await(nil))
 		return nil, nil
 	})
 
@@ -88,12 +88,16 @@ func (r *retentionstuck) Run(t *testing.T, ctx context.Context) {
 	_, err = client.ScheduleWorkflow(ctx, "foo", dworkflow.WithInstanceID(instanceID))
 	require.NoError(t, err)
 
-	time.Sleep(4 * time.Second)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		keys := r.workflow.Scheduler().ListAllKeys(t, ctx, retentionPrefix)
+		assert.Empty(c, keys,
+			"retention reminder did not drain - retentioner is in a 1Hz retry storm against a non-completed run: %v", keys)
+	}, 30*time.Second, 10*time.Millisecond)
 
-	before := int(r.workflow.Dapr().Metrics(t, ctx).All()[failedPurgeMetric])
-	time.Sleep(3 * time.Second)
-	after := int(r.workflow.Dapr().Metrics(t, ctx).All()[failedPurgeMetric])
-	assert.Equal(t, before, after)
+	failed := int(r.workflow.Dapr().Metrics(t, ctx).All()[failedPurgeMetric])
+	assert.Zerof(t, failed,
+		"purge_workflow|failed counter is %d - retentioner recorded a hard failure on ErrNotCompleted",
+		failed)
 
 	require.NoError(t, client.RaiseEvent(ctx, instanceID, "Continue"))
 	_, err = client.WaitForWorkflowCompletion(ctx, instanceID)
