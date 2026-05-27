@@ -350,8 +350,13 @@ func (s *Server) handleDiscovery(w http.ResponseWriter, r *http.Request) {
 		discovery = s.discovery.DeepCopy()
 
 		host := r.Host
-		if forwardedHost := r.Header.Get("X-Forwarded-Host"); forwardedHost != "" {
-			host = forwardedHost
+		// Only trust X-Forwarded-Host once the allowed-hosts middleware has
+		// validated it. Without an allowlist the header is attacker-controlled
+		// and would poison the issuer / jwks_uri (CWE-346).
+		if len(s.allowedHosts) > 0 {
+			if forwardedHost := r.Header.Get("X-Forwarded-Host"); forwardedHost != "" {
+				host = forwardedHost
+			}
 		}
 
 		scheme := r.URL.Scheme
