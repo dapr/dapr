@@ -112,7 +112,7 @@ func (i *idempotent) Run(t *testing.T, ctx context.Context) {
 		if !assert.Len(c, keys, 1, "expected exactly one retention reminder, got: %v", keys) {
 			return
 		}
-		assert.Truef(c, strings.HasSuffix(keys[0], "||anyterminal"),
+		assert.Truef(c, strings.HasSuffix(keys[0], "||retention"),
 			"retention reminder name should be deterministic, got key: %s", keys[0])
 	}, time.Second*10, time.Millisecond*10)
 }

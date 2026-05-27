@@ -36,7 +36,7 @@ import (
 	chi "github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
+	"golang.org/x/net/http2/h2c" //nolint:staticcheck
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/config"
@@ -142,7 +142,7 @@ func (s *server) StartNonBlocking() error {
 	// Create a handler with support for HTTP/2 Cleartext
 	var handler http.Handler = r
 	if !kitstrings.IsTruthy(os.Getenv("DAPR_HTTP_DISABLE_H2C")) {
-		handler = h2c.NewHandler(r, &http2.Server{})
+		handler = h2c.NewHandler(r, &http2.Server{}) //nolint:staticcheck
 	}
 
 	for _, listener := range listeners {
