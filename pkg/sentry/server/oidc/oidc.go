@@ -351,9 +351,11 @@ func (s *Server) handleDiscovery(w http.ResponseWriter, r *http.Request) {
 
 		host := r.Host
 		// Only trust X-Forwarded-Host once the allowed-hosts middleware has
-		// validated it. Without an allowlist the header is attacker-controlled
-		// and would poison the issuer / jwks_uri (CWE-346).
-		if len(s.allowedHosts) > 0 {
+		// matched it against a concrete entry in the allowlist. A wildcard
+		// allowlist (`*`) lets any host through the middleware, so the header
+		// is still attacker-controlled in that case and would poison the
+		// issuer / jwks_uri (CWE-346).
+		if len(s.allowedHosts) > 0 && !slices.Contains(s.allowedHosts, "*") {
 			if forwardedHost := r.Header.Get("X-Forwarded-Host"); forwardedHost != "" {
 				host = forwardedHost
 			}

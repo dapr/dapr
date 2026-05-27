@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package oidc
+package hostinjection
 
 import (
 	"context"
@@ -30,22 +30,22 @@ import (
 )
 
 func init() {
-	suite.Register(new(hostInjection))
+	suite.Register(new(forwarded))
 }
 
-// hostInjection asserts that an attacker-controlled X-Forwarded-Host header
-// cannot poison the OIDC discovery document when Sentry is started without a
-// static --jwt-issuer and without --oidc-allowed-hosts. The discovery
-// document's issuer and jwks_uri must reflect the real request host, not the
+// forwarded asserts that an attacker-controlled X-Forwarded-Host header cannot
+// poison the OIDC discovery document when Sentry is started without a static
+// --jwt-issuer and without --oidc-allowed-hosts. The discovery document's
+// issuer and jwks_uri must reflect the real request host, not the
 // attacker-supplied header (CWE-346). This test fails against vulnerable code
 // that trusts X-Forwarded-Host unconditionally in handleDiscovery.
-type hostInjection struct {
+type forwarded struct {
 	sentry  *sentry.Sentry
 	baseURL string
 }
 
-func (h *hostInjection) Setup(t *testing.T) []framework.Option {
-	h.sentry = sentry.New(t,
+func (f *forwarded) Setup(t *testing.T) []framework.Option {
+	f.sentry = sentry.New(t,
 		sentry.WithMode("standalone"),
 		sentry.WithEnableJWT(true),
 		sentry.WithJWTTTL(2*time.Hour),
@@ -53,21 +53,21 @@ func (h *hostInjection) Setup(t *testing.T) []framework.Option {
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(h.sentry),
+		framework.WithProcesses(f.sentry),
 	}
 }
 
-func (h *hostInjection) Run(t *testing.T, ctx context.Context) {
-	h.sentry.WaitUntilRunning(t, ctx)
+func (f *forwarded) Run(t *testing.T, ctx context.Context) {
+	f.sentry.WaitUntilRunning(t, ctx)
 
-	port := h.sentry.OIDCPort(t)
-	h.baseURL = fmt.Sprintf("http://localhost:%d", port)
+	port := f.sentry.OIDCPort(t)
+	f.baseURL = fmt.Sprintf("http://localhost:%d", port)
 
 	client := &http.Client{Timeout: 10 * time.Second}
 
 	t.Run("baseline discovery has expected issuer", func(t *testing.T) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-			h.baseURL+"/.well-known/openid-configuration", nil)
+			f.baseURL+"/.well-known/openid-configuration", nil)
 		require.NoError(t, err)
 
 		resp, err := client.Do(req)
@@ -79,9 +79,9 @@ func (h *hostInjection) Run(t *testing.T, ctx context.Context) {
 		var doc map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&doc))
 
-		assert.Equal(t, h.baseURL, doc["issuer"],
+		assert.Equal(t, f.baseURL, doc["issuer"],
 			"baseline issuer should match request host")
-		assert.Equal(t, h.baseURL+"/jwks.json", doc["jwks_uri"],
+		assert.Equal(t, f.baseURL+"/jwks.json", doc["jwks_uri"],
 			"baseline jwks_uri should match request host")
 	})
 
@@ -89,7 +89,7 @@ func (h *hostInjection) Run(t *testing.T, ctx context.Context) {
 		const attacker = "attacker.example.com"
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-			h.baseURL+"/.well-known/openid-configuration", nil)
+			f.baseURL+"/.well-known/openid-configuration", nil)
 		require.NoError(t, err)
 		req.Header.Set("X-Forwarded-Host", attacker)
 
@@ -111,9 +111,9 @@ func (h *hostInjection) Run(t *testing.T, ctx context.Context) {
 			"issuer must not echo X-Forwarded-Host (CWE-346)")
 		assert.NotContains(t, fmt.Sprint(doc["jwks_uri"]), attacker,
 			"jwks_uri must not echo X-Forwarded-Host (CWE-346)")
-		assert.Equal(t, h.baseURL, doc["issuer"],
+		assert.Equal(t, f.baseURL, doc["issuer"],
 			"issuer must reflect the real request host")
-		assert.Equal(t, h.baseURL+"/jwks.json", doc["jwks_uri"],
+		assert.Equal(t, f.baseURL+"/jwks.json", doc["jwks_uri"],
 			"jwks_uri must reflect the real request host")
 	})
 }
