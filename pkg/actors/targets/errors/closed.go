@@ -27,8 +27,7 @@ func (c *closed) Error() string {
 	return "actor is closed, cannot handle " + c.method
 }
 
-var cl = new(new(closed))
-
 func IsClosed(err error) bool {
-	return errors.As(err, cl)
+	var c *closed
+	return errors.As(err, &c)
 }

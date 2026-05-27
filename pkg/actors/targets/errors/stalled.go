@@ -30,8 +30,6 @@ func (s *stalled) Error() string {
 	return stalledMessage
 }
 
-var st = new(new(stalled))
-
 // IsStalled reports whether err is, or wraps, a stalled actor error.
 // Falls back to a message-suffix match so callers that receive the error
 // flattened to a wire string (e.g. across a remote actor invocation) still
@@ -40,7 +38,8 @@ func IsStalled(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.As(err, st) {
+	var s *stalled
+	if errors.As(err, &s) {
 		return true
 	}
 	return strings.HasSuffix(err.Error(), stalledMessage)
