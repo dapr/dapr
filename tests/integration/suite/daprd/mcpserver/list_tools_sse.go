@@ -15,6 +15,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
@@ -22,13 +23,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -37,6 +36,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -107,7 +107,7 @@ func (s *listToolsSSE) Run(t *testing.T, ctx context.Context) {
 	taskhubClient := dtclient.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 
 	t.Run("ListTools via SSE transport returns expected tools", func(t *testing.T) {
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+		instanceID := httpapi.Start(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPListToolsWorkflowName("weather-sse"), map[string]any{})
 
 		metadata, err := taskhubClient.WaitForWorkflowCompletion(
@@ -115,12 +115,12 @@ func (s *listToolsSSE) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
-		var result wfv1.ListMCPToolsResponse
-		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+		var result mcp.ListToolsResult
+		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 
-		names := make([]string, len(result.GetTools()))
-		for i, tool := range result.GetTools() {
-			names[i] = tool.GetName()
+		names := make([]string, len(result.Tools))
+		for i, tool := range result.Tools {
+			names[i] = tool.Name
 		}
 		assert.Contains(t, names, "get_weather")
 	})

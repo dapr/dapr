@@ -67,6 +67,9 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/ExecuteActorStateTransaction",
 		daprRuntimePrefix + "v1.Dapr/InvokeActor",
 	},
+	"actors.v1alpha1": {
+		daprRuntimePrefix + "v1.Dapr/SubscribeActorEventsAlpha1",
+	},
 	"metadata.v1": {
 		daprRuntimePrefix + "v1.Dapr/GetMetadata",
 		daprRuntimePrefix + "v1.Dapr/SetMetadata",
