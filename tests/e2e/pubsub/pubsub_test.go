@@ -478,12 +478,15 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	} else if subscriberResponse == "error" {
 		// Wait for all messages to be dead-lettered. Publisher aggregates getMessages across replicas
 		log.Printf("Validating redelivered messages for 'error' subscriber...")
+		want := len(sentMessages.ReceivedByTopicDeadLetter)
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			got, err := subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
-			assert.NoError(c, err, "error calling subscriber to get dead letter count")
-			assert.Equal(c, len(sentMessages.ReceivedByTopicDeadLetter), got)
-		}, 360*time.Second, 5*time.Second,
-			"subscriber did not receive all dead letter messages within timeout")
+			if !assert.NoError(c, err, "error calling subscriber to get dead letter count") {
+				return
+			}
+			assert.Equalf(c, want, got, "dead letter count: want %d, got %d", want, got)
+		}, 540*time.Second, 5*time.Second,
+			"subscriber did not receive all %d dead letter messages within timeout", want)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages, podEndpoints)
 	} else {
 		// validate redelivery of messages

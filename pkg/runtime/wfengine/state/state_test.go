@@ -429,6 +429,11 @@ func TestGetPurgeRequest(t *testing.T) {
 	s.AddSigningCertificate(&backend.SigningCertificate{Certificate: []byte("cert")})
 	addSig(t, s, &backend.HistorySignature{Signature: []byte("sig1")})
 	addSig(t, s, &backend.HistorySignature{Signature: []byte("sig2")})
+	s.CustomStatus = wrapperspb.String("running")
+	s.SetIncomingHistory(&protos.PropagatedHistory{})
+	// Simulate a successful save so the persistence flags reflect that the
+	// optional keys are present in the store.
+	s.ResetChangeTracking()
 
 	req, err := s.GetPurgeRequest("actor1")
 	require.NoError(t, err)
@@ -454,6 +459,77 @@ func TestGetPurgeRequest(t *testing.T) {
 
 	// Total: 1 inbox + 2 history + 1 sigcert + 2 sig + customStatus + metadata + propagated-history = 9
 	assert.Len(t, req.Operations, 9)
+}
+
+func TestGetPurgeRequest_OmitsAbsentOptionalKeys(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	s.AddToInbox(testEvent(0))
+	s.AddToHistory(testEvent(0))
+
+	req, err := s.GetPurgeRequest("actor1")
+	require.NoError(t, err)
+
+	deleteKeys := make(map[string]bool)
+	for _, op := range req.Operations {
+		if op.Operation == api.Delete {
+			if d, ok := op.Request.(api.TransactionalDelete); ok {
+				deleteKeys[d.Key] = true
+			}
+		}
+	}
+
+	assert.True(t, deleteKeys["inbox-000000"])
+	assert.True(t, deleteKeys["history-000000"])
+	assert.True(t, deleteKeys["metadata"])
+	assert.False(t, deleteKeys["customStatus"], "customStatus delete must be omitted when not persisted")
+	assert.False(t, deleteKeys["propagated-history"], "propagated-history delete must be omitted when not persisted")
+
+	// Total: 1 inbox + 1 history + metadata = 3
+	assert.Len(t, req.Operations, 3)
+}
+
+// TestResetChangeTracking_UpdatesPersistedFlags asserts that the persistence
+// flags reflect the keys actually upserted by the save request.
+func TestResetChangeTracking_UpdatesPersistedFlags(t *testing.T) {
+	t.Parallel()
+
+	t.Run("history change upserts customStatus", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		assert.False(t, s.customStatusPersisted)
+		s.ResetChangeTracking()
+		assert.True(t, s.customStatusPersisted)
+		assert.False(t, s.propagatedHistoryPersisted)
+	})
+
+	t.Run("no history change leaves customStatus flag unchanged", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToInbox(testEvent(0))
+		s.ResetChangeTracking()
+		assert.False(t, s.customStatusPersisted)
+	})
+
+	t.Run("setting incoming history marks propagated-history persisted", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.SetIncomingHistory(&protos.PropagatedHistory{})
+		s.ResetChangeTracking()
+		assert.True(t, s.propagatedHistoryPersisted)
+	})
+
+	t.Run("clearing incoming history marks propagated-history not persisted", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.propagatedHistoryPersisted = true
+		s.SetIncomingHistory(nil)
+		s.ResetChangeTracking()
+		assert.False(t, s.propagatedHistoryPersisted)
+	})
 }
 
 func TestGetSaveRequest_MetadataIncludesSigningLengths(t *testing.T) {
