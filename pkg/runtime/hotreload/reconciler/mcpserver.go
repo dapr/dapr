@@ -19,6 +19,7 @@ import (
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 )
@@ -40,12 +41,26 @@ func (m *mcpservers) update(ctx context.Context, server mcpserverapi.MCPServer) 
 		return
 	}
 
+	// Close the existing server (compstore entry + workflow refcount) before
+	// adding the new one. Without this, an update with a bad spec under
+	// IgnoreErrors=true would leave the prior server in compstore and skip the
+	// failing add silently; a valid update would re-call
+	// wfengine.EnsureActorsRegistered, leaking per-name workflow registrations.
+	if existing, ok := m.store.GetMCPServer(server.Name); ok {
+		if differ.AreSame(existing, server) {
+			log.Debugf("MCPServer update skipped: no changes detected: %s", server.LogName())
+			return
+		}
+		log.Infof("Closing existing MCPServer to reload: %s", existing.LogName())
+		m.proc.DeleteMCPServer(existing.Name)
+	}
+
 	log.Infof("MCPServer updated via hot-reload: %s", server.LogName())
-	m.store.AddMCPServer(server)
+	m.proc.AddPendingMCPServer(ctx, server)
 }
 
 //nolint:unused
-func (m *mcpservers) delete(_ context.Context, server mcpserverapi.MCPServer) {
+func (m *mcpservers) delete(ctx context.Context, server mcpserverapi.MCPServer) {
 	log.Infof("MCPServer deleted via hot-reload: %s", server.LogName())
-	m.store.DeleteMCPServer(server.Name)
+	m.proc.DeleteMCPServer(server.Name)
 }

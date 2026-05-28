@@ -20,3 +20,6 @@ import _ "embed"
 
 //go:embed crds/mcpservers.yaml
 var MCPServerCRD []byte
+
+//go:embed crds/workflowaccesspolicy.yaml
+var WorkflowAccessPolicyCRD []byte

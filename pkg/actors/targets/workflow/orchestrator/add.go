@@ -16,8 +16,8 @@ package orchestrator
 import (
 	"context"
 
-	"google.golang.org/protobuf/proto"
-
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
+	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -28,7 +28,7 @@ const (
 	reminderPrefixTimer    = "timer-"
 )
 
-func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes []byte) error {
+func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryEvent) error {
 	state, _, err := o.loadInternalState(ctx)
 	if err != nil {
 		return err
@@ -39,10 +39,19 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 		return api.ErrInstanceNotFound
 	}
 
-	var e backend.HistoryEvent
-	err = proto.Unmarshal(historyEventBytes, &e)
-	if err != nil {
-		return err
+	// On a tombstoned workflow (cold-store load tamper or attestation
+	// verification failure - identified by the unsigned tamper marker at
+	// the end of history) reject inbound activity / child-workflow
+	// completion events with ErrInstanceNotFound. The activity actor
+	// treats ErrInstanceNotFound as terminal and stops re-delivering, so
+	// we don't loop the parent's actor lock against a workflow that will
+	// never accept the result. Other event types (RaiseEvent, terminate,
+	// etc.) still flow through.
+	isCompletion := e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil ||
+		e.GetChildWorkflowInstanceCompleted() != nil || e.GetChildWorkflowInstanceFailed() != nil
+	if isCompletion && state.HasTamperMarker() {
+		log.Debugf("Workflow actor '%s': dropping completion event for tombstoned workflow", o.actorID)
+		return api.ErrInstanceNotFound
 	}
 
 	// Only reject user events when the workflow is stalled.
@@ -50,31 +59,76 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 		return api.ErrStalled
 	}
 
+	// Drop completion events whose resolution is already in history or the
+	// inbox; otherwise an inbox redelivery (e.g. an activity actor reminder
+	// firing twice during pod migration) would pin the workflow in a replay/spin
+	// loop.
+	if dedup.IsDuplicateCompletion(e, state.History, state.Inbox) {
+		log.Debugf("Workflow actor '%s': dropping duplicate completion event already present in history/inbox; re-asserting wake-up reminder so the inbox row is not stranded", o.actorID)
+		return o.assertNewEventReminder(ctx, e, state)
+	}
+
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
 		o.activityResultAwaited.CompareAndSwap(true, false)
 	}
-	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)
-	state.AddToInbox(&e)
 
-	if err := o.saveInternalState(ctx, state); err != nil {
+	// Verify any attestation on the incoming event against the signed history
+	// and Sentry trust anchors, then absorb the signer certificate into the
+	// ext-sigcert table and strip the companion cert from the event so the
+	// stored form is cert-free. On any verification failure the workflow is
+	// tombstoned. No-op when signing is disabled.
+	if verr := o.signing.VerifyInboxAttestation(ctx, state, e); verr != nil {
+		log.Warnf("Workflow actor '%s': attestation verification failed, tombstoning workflow: %s", o.actorID, verr)
+		opts := wfenginestate.Options{
+			AppID:             o.appID,
+			Namespace:         o.namespace,
+			WorkflowActorType: o.actorType,
+			ActivityActorType: o.activityActorType,
+			Signer:            o.signer,
+		}
+		if _, _, terr := o.tombstoneTamperedState(ctx, opts, state, verr); terr != nil {
+			return terr
+		}
+		// Return ErrInstanceNotFound rather than the verification
+		// error so the activity actor on the sender side recognizes
+		// the workflow as gone and stops re-executing the activity.
+		// The reason for tombstoning is preserved in the workflow's
+		// FailureDetails (errorType=DAPR_WORKFLOW_HISTORY_TAMPERED,
+		// errorMessage=verr.Error()) for callers polling metadata.
+		return api.ErrInstanceNotFound
+	}
+
+	// Save the inbox event BEFORE creating the wake-up reminder. The
+	// reminder's dueTime is anchored at the workflow's start timestamp
+	// (state.History[0].Timestamp), which is in the past, so the scheduler
+	// fires it immediately on Create. Under placement rebalance the firing
+	// daprd may not be the host that ran AddWorkflowEvent: it loads the
+	// store, sees no inbox event, acks SUCCESS, and the scheduler deletes
+	// the reminder. By the time the save eventually commits the inbox row
+	// is stranded with no driver, and the activity actor's publishResult
+	// already returned nil so its retry-forever 'run-activity' reminder
+	// no longer fires. The workflow freezes in RUNNING.
+	//
+	// Saving first inverts the failure mode into something the existing
+	// recovery paths already handle: if signAndSaveState succeeds but the
+	// reminder Create then crashes / times out, the activity actor's
+	// publishResult sees the RPC error and its retry-forever reminder
+	// re-fires, the next AddWorkflowEvent hits dedup.IsDuplicateCompletion
+	// (the row is already in inbox), and the dedup branch above calls
+	// assertNewEventReminder which deterministically re-creates the
+	// reminder. The inbox is never stranded.
+	//
+	// The reminder must target the local actor (o.appID), not the router's
+	// source app. For cross-app events (e.g. ExecutionTerminated from a
+	// parent in another app), router.SourceAppID is the sender's app and
+	// would route the reminder to a non-existent remote actor.
+	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)
+	state.AddToInbox(e)
+	if err := o.signAndSaveState(ctx, state); err != nil {
 		return err
 	}
 
-	// For activity completion events, we want to create the reminder on the same app where this workflow actor is
-	// hosted, so use the source app from the router.
-	// For sub-orchestrator completion events we want to create the reminder on the current app.
-	sourceAppID := o.appID
-	returningToParent := e.GetChildWorkflowInstanceCompleted() != nil || e.GetChildWorkflowInstanceFailed() != nil
-	if !returningToParent && e.GetRouter() != nil {
-		sourceAppID = e.GetRouter().GetSourceAppID()
-	}
-
-	dueTime := e.Timestamp.AsTime()
-	if len(state.History) > 0 {
-		dueTime = state.History[0].Timestamp.AsTime()
-	}
-	wfName := o.getExecutionStartedEvent(state).GetName()
-	if _, err := o.createWorkflowReminder(ctx, reminderPrefixNewEvent, nil, dueTime, sourceAppID, &wfName); err != nil {
+	if err := o.assertNewEventReminder(ctx, e, state); err != nil {
 		return err
 	}
 

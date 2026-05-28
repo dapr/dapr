@@ -17,6 +17,7 @@ import (
 	"context"
 	"sync"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
@@ -24,26 +25,35 @@ import (
 	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 )
 
-var activityCache = &sync.Pool{
-	New: func() any {
-		return &activity{
-			lock: lock.New(),
-		}
-	},
+func newActivity() *activity {
+	return &activity{
+		lock: lock.New(),
+	}
 }
 
 type Options struct {
 	AppID             string
+	Namespace         string
 	ActivityActorType string
 	WorkflowActorType string
 	Scheduler         todo.ActivityScheduler
 	Actors            actors.Interface
 	ActorTypeBuilder  *common.ActorTypeBuilder
+	// Signer produces activity completion attestations so a receiving
+	// parent workflow can cryptographically verify the activity's identity,
+	// input, and output. Nil when signing is disabled for this deployment.
+	Signer *signer.Signer
+
+	// May be nil when the feature is disabled.
+	WorkflowAccessPolicies *workflowacl.Holder
 
 	WorkflowsRemoteActivityReminder bool
 }
@@ -56,16 +66,24 @@ type factory struct {
 	// TODO: @joshvanl: remove in the next version.
 	workflowsRemoteActivityReminder bool
 
-	router           router.Interface
-	state            state.Interface
-	reminders        scheduler.Interface
-	placement        placement.Interface
-	actorTypeBuilder *common.ActorTypeBuilder
+	router                 router.Interface
+	state                  state.Interface
+	reminders              scheduler.Interface
+	placement              placement.Interface
+	actorTypeBuilder       *common.ActorTypeBuilder
+	workflowAccessPolicies *workflowacl.Holder
+	signing                *signing.Signing
 
 	scheduler todo.ActivityScheduler
 
 	table sync.Map
 	lock  sync.Mutex
+
+	// inflight tracks activity executions whose WorkItem is currently in
+	// the durabletask queue or being processed by the SDK. Keyed by the
+	// composite (activity actor ID, TaskExecutionId) value produced by
+	// inflight.Key. See the inflight subpackage for semantics.
+	inflight inflight.Map
 }
 
 func New(ctx context.Context, opts Options) (targets.Factory, error) {
@@ -95,15 +113,21 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 	}
 
 	return &factory{
-		appID:             opts.AppID,
-		actorType:         opts.ActivityActorType,
-		router:            router,
-		reminders:         sreminders,
-		scheduler:         opts.Scheduler,
-		placement:         placement,
-		workflowActorType: opts.WorkflowActorType,
-		actorTypeBuilder:  opts.ActorTypeBuilder,
-		state:             state,
+		appID:                  opts.AppID,
+		actorType:              opts.ActivityActorType,
+		router:                 router,
+		reminders:              sreminders,
+		scheduler:              opts.Scheduler,
+		placement:              placement,
+		workflowActorType:      opts.WorkflowActorType,
+		actorTypeBuilder:       opts.ActorTypeBuilder,
+		workflowAccessPolicies: opts.WorkflowAccessPolicies,
+		state:                  state,
+
+		signing: &signing.Signing{
+			Signer:    opts.Signer,
+			Namespace: opts.Namespace,
+		},
 
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 	}, nil
@@ -112,24 +136,13 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
 	a, ok := f.table.Load(actorID)
 	if !ok {
-		newActivity := f.initActivity(activityCache.Get(), actorID)
-		var loaded bool
-		a, loaded = f.table.LoadOrStore(actorID, newActivity)
-		if loaded {
-			activityCache.Put(newActivity)
-		}
+		fresh := newActivity()
+		fresh.factory = f
+		fresh.actorID = actorID
+		a, _ = f.table.LoadOrStore(actorID, fresh)
 	}
 
 	return a.(*activity)
-}
-
-func (f *factory) initActivity(a any, actorID string) *activity {
-	act := a.(*activity)
-
-	act.factory = f
-	act.actorID = actorID
-
-	return act
 }
 
 func (f *factory) HaltAll(ctx context.Context) error {

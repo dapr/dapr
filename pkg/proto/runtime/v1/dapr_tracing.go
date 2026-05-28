@@ -217,6 +217,26 @@ func (*SubscribeTopicEventsRequestAlpha1_InitialRequest) AppendSpanAttributes(rp
 	// TODO
 }
 
+func (*SubscribeActorEventsRequestAlpha1_InitialRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
+func (*SubscribeActorEventsResponseAlpha1_InvokeRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
+func (*SubscribeActorEventsResponseAlpha1_ReminderRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
+func (*SubscribeActorEventsResponseAlpha1_TimerRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
+func (*SubscribeActorEventsResponseAlpha1_DeactivateRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
 func (*SubtleDecryptRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }

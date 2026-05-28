@@ -33,7 +33,14 @@ func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, event
 	actionIDs := make([]int32, len(events))
 
 	for i, msg := range events {
-		msgs[i] = &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
+		req := &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
+		if ph := msg.GetPropagatedHistory(); ph != nil {
+			if o.signer == nil {
+				log.Warnf("Workflow actor '%s': propagating unsigned workflow history to child workflow '%s' (signing is not configured; chunks cannot be cryptographically verified by the receiver)", o.actorID, msg.GetTargetInstanceId())
+			}
+			req.PropagatedHistory = ph
+		}
+		msgs[i] = req
 		historyEvents[i] = msg.GetHistoryEvent()
 		targets[i] = msg.GetTargetInstanceId()
 		if es := msg.GetHistoryEvent().GetExecutionStarted(); es != nil && es.GetParentInstance() != nil {
@@ -84,7 +91,7 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 
 	if historyEvent != nil && historyEvent.GetRouter() != nil {
 		router := historyEvent.GetRouter()
-		log.Debugf("Cross-app suborchestrator call: target appID=%s, source appID=%s", router.GetTargetAppID(), router.GetSourceAppID())
+		log.Debugf("Cross-app child workflow call: target appID=%s, source appID=%s", router.GetTargetAppID(), router.GetSourceAppID())
 
 		switch m := m.(type) {
 		case *backend.CreateWorkflowInstanceRequest:
@@ -95,7 +102,7 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 			var routeAppID string
 			if m.GetChildWorkflowInstanceCompleted() != nil || m.GetChildWorkflowInstanceFailed() != nil {
 				if router.TargetAppID == nil {
-					return errors.New("sub-orchestrator completion events should have a target appID")
+					return errors.New("child workflow completion events should have a target appID")
 				}
 				routeAppID = router.GetTargetAppID()
 			} else {
@@ -110,19 +117,29 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 
 	log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s||%s'", o.actorID, method, actorType, target)
 
-	callCtx, cancel := context.WithTimeout(ctx, dispatchTimeout)
-	defer cancel()
-
-	if _, err = o.router.Call(callCtx, internalsv1pb.
+	if _, err = o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest(method).
 		WithActor(actorType, target).
 		WithData(b).
 		WithContentType(invokev1.ProtobufContentType),
 	); err != nil {
+		// If the call was denied by a workflow access policy, fail the child
+		// orchestration immediately rather than retrying. Only do this when
+		// we can correlate the failure to a parent task via ParentInstance.
+		if isPermissionDenied(err) && historyEvent != nil {
+			if es := historyEvent.GetExecutionStarted(); es != nil && es.GetParentInstance() != nil {
+				if fErr := o.failChildWorkflowACL(ctx, es.GetParentInstance().GetTaskScheduledId(), err); fErr != nil {
+					return fmt.Errorf("failed to record child workflow failure: %w (original: %v)", fErr, err)
+				}
+				return nil
+			}
+		}
+
 		if router := historyEvent.GetRouter(); router != nil && router.TargetAppID != nil {
 			return fmt.Errorf("failed to invoke '%s' on remote app '%s' (the app may not be available): %w", method, router.GetTargetAppID(), err)
 		}
-		return fmt.Errorf("failed to invoke '%s' on actor '%s': %w", method, target, err)
+
+		return fmt.Errorf("failed to invoke method '%s' on actor '%s': %w", method, target, err)
 	}
 
 	return nil

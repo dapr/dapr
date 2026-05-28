@@ -43,7 +43,14 @@ spec:
       hostNetwork: true
       {{- end }}
       serviceAccountName: dapr-injector
+    {{- with .Values.global.initContainers.injector }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
       containers:
+    {{- with .Values.global.extraContainers.injector }}
+        {{- toYaml . | nindent 6 }}
+    {{- end }}
       - name: dapr-sidecar-injector
         livenessProbe:
           httpGet:
@@ -172,6 +179,8 @@ spec:
           value: {{ .Values.sidecarDropALLCapabilities | toString | toYaml }}
         - name: SIDECAR_READ_ONLY_ROOT_FILESYSTEM
           value: {{ .Values.sidecarReadOnlyRootFilesystem | toString | toYaml }}
+        - name: NATIVE_SIDECAR_ENABLED
+          value: {{ .Values.nativeSidecar | toString | toYaml }}
 
         - name: NAMESPACE
           valueFrom:

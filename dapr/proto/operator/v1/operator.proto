@@ -48,6 +48,10 @@ service Operator {
   rpc ConfigurationUpdate (ConfigurationUpdateRequest) returns (stream ConfigurationUpdateEvent) {}
   // Sends events to Dapr sidecars upon resiliency changes.
   rpc ResiliencyUpdate (ResiliencyUpdateRequest) returns (stream ResiliencyUpdateEvent) {}
+  // Returns a list of workflow access policies
+  rpc ListWorkflowAccessPolicy (ListWorkflowAccessPolicyRequest) returns (ListWorkflowAccessPolicyResponse) {}
+  // Sends events to Dapr sidecars upon workflow access policy changes.
+  rpc WorkflowAccessPolicyUpdate (WorkflowAccessPolicyUpdateRequest) returns (stream WorkflowAccessPolicyUpdateEvent) {}
 }
 
 // ResourceEventType is the type of event to a resource.
@@ -232,6 +236,29 @@ message ResiliencyUpdateRequest {
 // ResiliencyUpdateEvent includes the updated resiliency event.
 message ResiliencyUpdateEvent {
   bytes resiliency = 1;
+
+  // type is the type of event.
+  ResourceEventType type = 2;
+}
+
+// ListWorkflowAccessPolicyRequest is the request to get workflow access policies for a namespace.
+message ListWorkflowAccessPolicyRequest {
+  string namespace = 1;
+}
+
+// ListWorkflowAccessPolicyResponse includes the list of workflow access policies.
+message ListWorkflowAccessPolicyResponse {
+  repeated bytes policies = 1;
+}
+
+// WorkflowAccessPolicyUpdateRequest is the request to get updates about workflow access policy changes.
+message WorkflowAccessPolicyUpdateRequest {
+  string namespace = 1;
+}
+
+// WorkflowAccessPolicyUpdateEvent includes the updated workflow access policy event.
+message WorkflowAccessPolicyUpdateEvent {
+  bytes policy = 1;
 
   // type is the type of event.
   ResourceEventType type = 2;

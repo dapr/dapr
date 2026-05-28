@@ -18,6 +18,7 @@ import (
 	"errors"
 	"sync"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
@@ -27,22 +28,23 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/kit/concurrency/slice"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 )
 
-var orchestratorCache = sync.Pool{
-	New: func() any {
-		return &orchestrator{
-			lock: lock.NewStallable(),
-		}
-	},
+func newOrchestrator() *orchestrator {
+	return &orchestrator{
+		lock: lock.NewStallable(),
+	}
 }
 
 type Options struct {
 	AppID              string
+	Namespace          string
 	WorkflowActorType  string
 	ActivityActorType  string
 	RetentionActorType string
@@ -53,22 +55,38 @@ type Options struct {
 	EventSink        EventSink
 	ActorTypeBuilder *common.ActorTypeBuilder
 	RetentionPolicy  *config.WorkflowStateRetentionPolicy
+
+	// Signer provides cryptographic signing and verification. If nil, history
+	// signing is disabled.
+	Signer *signer.Signer
+
+	// MaxRequestBodySize is the gRPC server max message size in bytes. The
+	// orchestrator stalls workflows whose history payload would exceed this
+	// limit on the GetWorkItems stream.
+	MaxRequestBodySize int
+
+	// May be nil when the feature is disabled.
+	WorkflowAccessPolicies *workflowacl.Holder
 }
 
 type factory struct {
 	appID              string
+	namespace          string
 	actorType          string
 	activityActorType  string
 	retentionActorType string
 
-	resiliency       resiliency.Provider
-	router           router.Interface
-	reminders        reminders.Interface
-	actorState       state.Interface
-	placement        placement.Interface
-	eventSink        EventSink
-	actorTypeBuilder *common.ActorTypeBuilder
-	retentionPolicy  *config.WorkflowStateRetentionPolicy
+	resiliency             resiliency.Provider
+	router                 router.Interface
+	reminders              reminders.Interface
+	actorState             state.Interface
+	placement              placement.Interface
+	eventSink              EventSink
+	actorTypeBuilder       *common.ActorTypeBuilder
+	retentionPolicy        *config.WorkflowStateRetentionPolicy
+	signer                 *signer.Signer
+	maxRequestBodySize     int
+	workflowAccessPolicies *workflowacl.Holder
 
 	scheduler todo.WorkflowScheduler
 
@@ -107,32 +125,32 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 	}()
 
 	return &factory{
-		appID:              opts.AppID,
-		actorType:          opts.WorkflowActorType,
-		activityActorType:  opts.ActivityActorType,
-		retentionActorType: opts.RetentionActorType,
-		resiliency:         opts.Resiliency,
-		router:             router,
-		reminders:          reminders,
-		actorState:         astate,
-		eventSink:          opts.EventSink,
-		actorTypeBuilder:   opts.ActorTypeBuilder,
-		placement:          placement,
-		retentionPolicy:    opts.RetentionPolicy,
-		scheduler:          opts.Scheduler,
-		deactivateCh:       deactivateCh,
+		appID:                  opts.AppID,
+		namespace:              opts.Namespace,
+		actorType:              opts.WorkflowActorType,
+		activityActorType:      opts.ActivityActorType,
+		retentionActorType:     opts.RetentionActorType,
+		resiliency:             opts.Resiliency,
+		router:                 router,
+		reminders:              reminders,
+		actorState:             astate,
+		eventSink:              opts.EventSink,
+		actorTypeBuilder:       opts.ActorTypeBuilder,
+		placement:              placement,
+		retentionPolicy:        opts.RetentionPolicy,
+		signer:                 opts.Signer,
+		maxRequestBodySize:     opts.MaxRequestBodySize,
+		workflowAccessPolicies: opts.WorkflowAccessPolicies,
+		scheduler:              opts.Scheduler,
+		deactivateCh:           deactivateCh,
 	}, nil
 }
 
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
 	o, ok := f.table.Load(actorID)
 	if !ok {
-		newO := f.initOrchestrator(orchestratorCache.Get(), actorID)
-		var loaded bool
-		o, loaded = f.table.LoadOrStore(actorID, newO)
-		if loaded {
-			orchestratorCache.Put(newO)
-		}
+		fresh := f.initOrchestrator(newOrchestrator(), actorID)
+		o, _ = f.table.LoadOrStore(actorID, fresh)
 	}
 
 	return o.(*orchestrator)
@@ -148,6 +166,21 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 
 	if or.streamFns == nil {
 		or.streamFns = make(map[int64]*streamFn)
+	}
+
+	// Always allocate Signing, even when f.signer is nil. The
+	// attestation/sign methods on Signing are no-ops when Signer is
+	// nil, but Tombstone (called from tombstoneTamperedState on a
+	// load-time VerificationError) does not depend on Signer and must
+	// work for unsigned workflows that hit metadata-bounds or
+	// missing-key tampering.
+	or.signing = &signing.Signing{
+		Signer:            f.signer,
+		Namespace:         f.namespace,
+		ActorID:           actorID,
+		ActorType:         f.actorType,
+		ActivityActorType: f.activityActorType,
+		Reminders:         f.reminders,
 	}
 
 	// Reset the cache state to force a reload from the state store

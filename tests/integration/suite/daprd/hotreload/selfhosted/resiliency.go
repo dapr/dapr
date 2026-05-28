@@ -15,6 +15,7 @@ package selfhosted
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,9 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/log"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -34,33 +33,18 @@ func init() {
 	suite.Register(new(resiliency))
 }
 
-// resiliency tests that resiliency resources are hot-reloaded via file
-// watcher in selfhosted mode when HotReload feature is enabled.
+// resiliency tests that resiliency resources are hot-reloaded via file watcher
+// in selfhosted mode when HotReload feature is enabled.
 type resiliency struct {
 	daprd  *daprd.Daprd
-	logOut *log.Log
 	resDir string
 }
 
 func (r *resiliency) Setup(t *testing.T) []framework.Option {
-	r.logOut = log.New()
 	r.resDir = t.TempDir()
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true`), 0o600))
-
 	r.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(r.resDir),
-		daprd.WithExecOptions(exec.WithStdout(r.logOut), exec.WithStderr(r.logOut)),
 	)
 
 	return []framework.Option{
@@ -71,43 +55,55 @@ spec:
 func (r *resiliency) Run(t *testing.T, ctx context.Context) {
 	r.daprd.WaitUntilRunning(t, ctx)
 
-	t.Run("adding resiliency file triggers reload", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(r.resDir, "resiliency.yaml"), []byte(`
+	writeResiliency := func(t *testing.T, name string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(r.resDir, "resiliency.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Resiliency
 metadata:
-  name: myresiliency
+  name: %s
 spec:
   policies:
     timeouts:
       general: 5s
   targets: {}
-`), 0o600))
+`, name), 0o600))
+	}
+
+	resiliencyNames := func(t assert.TestingT) []string {
+		policies := r.daprd.GetMetaResiliencies(t, ctx)
+		names := make([]string, 0, len(policies))
+		for _, p := range policies {
+			names = append(names, p.GetName())
+		}
+		return names
+	}
+
+	t.Run("adding resiliency file triggers reload", func(t *testing.T) {
+		writeResiliency(t, "myresiliency")
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.True(c, r.logOut.Contains("myresiliency"),
-				"expected log to contain resiliency name after hot reload")
+			assert.ElementsMatch(c, []string{"myresiliency"}, resiliencyNames(c))
 		}, 20*time.Second, 10*time.Millisecond)
 	})
 
-	t.Run("updating resiliency file triggers reload", func(t *testing.T) {
-		r.logOut.Reset()
-
-		require.NoError(t, os.WriteFile(filepath.Join(r.resDir, "resiliency.yaml"), []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Resiliency
-metadata:
-  name: myresiliency
-spec:
-  policies:
-    timeouts:
-      general: 10s
-  targets: {}
-`), 0o600))
+	t.Run("deleting resiliency file triggers reload", func(t *testing.T) {
+		// On Windows the fsnotify watcher holds a handle on the file, so a
+		// single os.Remove may race with the watcher and return:
+		//   "The process cannot access the file because it is being used by
+		//    another process."
+		// Retry the remove briefly to absorb that transient lock.
+		resPath := filepath.Join(r.resDir, "resiliency.yaml")
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			err := os.Remove(resPath)
+			if err == nil || os.IsNotExist(err) {
+				return
+			}
+			assert.NoError(c, err)
+		}, 5*time.Second, 50*time.Millisecond)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.True(c, r.logOut.Contains("myresiliency"),
-				"expected log to contain resiliency name after update")
+			assert.Empty(c, resiliencyNames(c))
 		}, 20*time.Second, 10*time.Millisecond)
 	})
 }

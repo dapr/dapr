@@ -21,6 +21,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
@@ -57,24 +58,34 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 		return err
 	}
 
+	propagatedHistory := createWorkflowInstanceRequest.GetPropagatedHistory()
+
 	// orchestration didn't exist
 	// create a new state entry if one doesn't already exist
 	if state == nil {
 		state = wfenginestate.NewState(wfenginestate.Options{
 			AppID:             o.appID,
+			Namespace:         o.namespace,
 			WorkflowActorType: o.actorType,
 			ActivityActorType: o.activityActorType,
 		})
 		o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
 		o.ometa = o.ometaFromState(o.rstate, startEvent.GetExecutionStarted())
+
+		if propagatedHistory != nil {
+			if err := o.signing.VerifyAndAbsorbPropagatedHistory(propagatedHistory, state); err != nil {
+				return fmt.Errorf("workflow actor '%s': propagated history verification failed: %w", o.actorID, err)
+			}
+			state.SetIncomingHistory(propagatedHistory)
+		}
 		return o.scheduleWorkflowStart(ctx, startEvent, state)
 	}
 
 	// orchestration already existed: create instance only if previous one is completed
-	return o.createIfCompleted(ctx, o.rstate, state, startEvent)
+	return o.createIfCompleted(ctx, o.rstate, state, startEvent, propagatedHistory)
 }
 
-func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.WorkflowRuntimeState, state *wfenginestate.State, startEvent *backend.HistoryEvent) error {
+func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.WorkflowRuntimeState, state *wfenginestate.State, startEvent *backend.HistoryEvent, propagatedHistory *protos.PropagatedHistory) error {
 	// We block (re)creation of existing workflows unless they are in a completed state
 	// Or if they still have any pending activity result awaited.
 	if !runtimestate.IsCompleted(rs) {
@@ -93,6 +104,12 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 	}
 	log.Infof("Workflow actor '%s': workflow was previously completed and is being recreated", o.actorID)
 	state.Reset()
+	if propagatedHistory != nil {
+		if err := o.signing.VerifyAndAbsorbPropagatedHistory(propagatedHistory, state); err != nil {
+			return fmt.Errorf("workflow actor '%s': propagated history verification failed: %w", o.actorID, err)
+		}
+		state.SetIncomingHistory(propagatedHistory)
+	}
 	return o.scheduleWorkflowStart(ctx, startEvent, state)
 }
 
@@ -106,11 +123,15 @@ func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *ba
 	// workflow execution. This is preferable to using the current thread so that we don't block the client
 	// while the workflow logic is running.
 	workflowName := startEvent.GetExecutionStarted().GetName()
-	if _, err := o.createWorkflowReminder(ctx, reminderPrefixStart, nil, start, o.appID, &workflowName); err != nil {
+	reminderName, err := randomReminderName(reminderPrefixStart)
+	if err != nil {
+		return err
+	}
+	if err := o.createWorkflowReminder(ctx, reminderName, nil, start, o.appID, &workflowName); err != nil {
 		return err
 	}
 	state.AddToInbox(startEvent)
-	if err := o.saveInternalState(ctx, state); err != nil {
+	if err := o.signAndSaveState(ctx, state); err != nil {
 		return err
 	}
 

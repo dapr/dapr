@@ -71,6 +71,10 @@ type Options struct {
 	StateTTLEnabled    bool
 	MaxRequestBodySize int
 	Mode               modes.DaprMode
+
+	// DisseminationTimeout is the daprd-side timeout for a placement
+	// LOCK -> UPDATE -> UNLOCK round.
+	DisseminationTimeout time.Duration
 }
 
 type InitOptions struct {
@@ -94,8 +98,8 @@ type Interface interface {
 	Reminders(context.Context) (reminders.Interface, error)
 	Placement(context.Context) (placement.Interface, error)
 	RuntimeStatus() *runtimev1pb.ActorRuntime
-	RegisterHosted(hostconfig.Config) error
-	UnRegisterHosted(actorTypes ...string)
+	RegisterHosted(context.Context, hostconfig.Config) error
+	UnRegisterHosted(ctx context.Context, actorTypes ...string) error
 	WaitForRegisteredHosts(ctx context.Context) error
 }
 
@@ -110,8 +114,9 @@ type actors struct {
 	healthz            healthz.Healthz
 	compStore          *compstore.ComponentStore
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
-	stateTTLEnabled    bool
-	maxRequestBodySize int
+	stateTTLEnabled      bool
+	maxRequestBodySize   int
+	disseminationTimeout time.Duration
 
 	reminders       reminders.Interface
 	table           table.Interface
@@ -146,25 +151,26 @@ func New(opts Options) Interface {
 	}
 
 	return &actors{
-		appID:              opts.AppID,
-		namespace:          opts.Namespace,
-		port:               opts.Port,
-		placementAddresses: opts.PlacementAddresses,
-		healthEndpoint:     opts.HealthEndpoint,
-		resiliency:         opts.Resiliency,
-		security:           opts.Security,
-		compStore:          opts.CompStore,
-		stateTTLEnabled:    opts.StateTTLEnabled,
-		clock:              clock.RealClock{},
-		disabled:           &disabled,
-		healthz:            opts.Healthz,
-		readyCh:            make(chan struct{}),
-		closedCh:           make(chan struct{}),
-		initDoneCh:         make(chan struct{}),
-		registerDoneCh:     make(chan struct{}),
-		maxRequestBodySize: opts.MaxRequestBodySize,
-		mode:               opts.Mode,
-		reentrancyStore:    reentrancystore.New(),
+		appID:                opts.AppID,
+		namespace:            opts.Namespace,
+		port:                 opts.Port,
+		placementAddresses:   opts.PlacementAddresses,
+		healthEndpoint:       opts.HealthEndpoint,
+		resiliency:           opts.Resiliency,
+		security:             opts.Security,
+		compStore:            opts.CompStore,
+		stateTTLEnabled:      opts.StateTTLEnabled,
+		clock:                clock.RealClock{},
+		disabled:             &disabled,
+		healthz:              opts.Healthz,
+		readyCh:              make(chan struct{}),
+		closedCh:             make(chan struct{}),
+		initDoneCh:           make(chan struct{}),
+		registerDoneCh:       make(chan struct{}),
+		maxRequestBodySize:   opts.MaxRequestBodySize,
+		mode:                 opts.Mode,
+		disseminationTimeout: opts.DisseminationTimeout,
+		reentrancyStore:      reentrancystore.New(),
 	}
 }
 
@@ -196,16 +202,17 @@ func (a *actors) Init(opts InitOptions) error {
 
 	var err error
 	a.placement, err = placement.New(placement.Options{
-		AppID:     a.appID,
-		Addresses: a.placementAddresses,
-		Security:  a.security,
-		Table:     a.table,
-		Namespace: a.namespace,
-		Hostname:  opts.Hostname,
-		Port:      a.port,
-		Healthz:   a.healthz,
-		Mode:      a.mode,
-		Scheduler: opts.SchedulerReloader,
+		AppID:                a.appID,
+		Addresses:            a.placementAddresses,
+		Security:             a.security,
+		Table:                a.table,
+		Namespace:            a.namespace,
+		Hostname:             opts.Hostname,
+		Port:                 a.port,
+		Healthz:              a.healthz,
+		Mode:                 a.mode,
+		Scheduler:            opts.SchedulerReloader,
+		DisseminationTimeout: a.disseminationTimeout,
 	})
 	if err != nil {
 		return err
@@ -225,6 +232,7 @@ func (a *actors) Init(opts InitOptions) error {
 
 	a.router = router.New(router.Options{
 		Namespace:          a.namespace,
+		AppID:              a.appID,
 		Placement:          a.placement,
 		GRPC:               opts.GRPC,
 		Table:              a.table,
@@ -368,7 +376,7 @@ func (a *actors) waitForReady(ctx context.Context) error {
 	}
 }
 
-func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
+func (a *actors) RegisterHosted(ctx context.Context, cfg hostconfig.Config) error {
 	defer func() {
 		a.registerDoneLock.Lock()
 		select {
@@ -379,7 +387,19 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		a.registerDoneLock.Unlock()
 	}()
 
-	if err := a.disabled.Load(); err != nil {
+	if a.disabled.Load() != nil {
+		return nil
+	}
+
+	// Wait until Init has populated a.table. The API gRPC server starts
+	// before initActors runs (see pkg/runtime/runtime.go), so callers
+	// arriving via SubscribeActorEventsAlpha1 can otherwise race ahead of
+	// Init and dereference a nil table.
+	if err := a.waitForReady(ctx); err != nil {
+		return err
+	}
+
+	if a.disabled.Load() != nil {
 		return nil
 	}
 
@@ -389,7 +409,7 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 
 	entityConfigs := make(map[string]api.EntityConfig)
 	for _, entityConfg := range cfg.EntityConfigs {
-		config := api.TranslateEntityConfig(entityConfg)
+		config := api.TranslateEntityConfig(entityConfg, a.disseminationTimeout)
 		for _, entity := range entityConfg.Entities {
 			var found bool
 			if slices.Contains(cfg.HostedActorTypes, entity) {
@@ -410,6 +430,7 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		if err != nil {
 			return fmt.Errorf("failed to parse drain ongoing call timeout: %s", err)
 		}
+		drainOngoingCallTimeout = api.ClampDrainOngoingCallTimeout(drainOngoingCallTimeout, a.disseminationTimeout, "global config")
 	}
 
 	idleTimeout := api.DefaultIdleTimeout
@@ -462,16 +483,36 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 	// complete before being forcefully cancelled.
 	a.placement.SetDrainOngoingCallTimeout(cfg.DrainRebalancedActors, &drainOngoingCallTimeout)
 
+	var entityDrainTimeouts map[string]time.Duration
+	for actorType, c := range entityConfigs {
+		if c.DrainOngoingCallTimeout == nil {
+			continue
+		}
+		if entityDrainTimeouts == nil {
+			entityDrainTimeouts = make(map[string]time.Duration)
+		}
+		entityDrainTimeouts[actorType] = *c.DrainOngoingCallTimeout
+	}
+	a.placement.SetEntityDrainOngoingCallTimeouts(entityDrainTimeouts)
+
 	return nil
 }
 
-func (a *actors) UnRegisterHosted(actorTypes ...string) {
-	if a.disabled.Load() != nil {
-		return
+func (a *actors) UnRegisterHosted(ctx context.Context, actorTypes ...string) error {
+	if len(actorTypes) == 0 {
+		return nil
 	}
 
-	if len(actorTypes) == 0 {
-		return
+	if a.disabled.Load() != nil {
+		return nil
+	}
+
+	if err := a.waitForReady(ctx); err != nil {
+		return err
+	}
+
+	if a.disabled.Load() != nil {
+		return nil
 	}
 
 	a.table.UnRegisterActorTypes(actorTypes...)
@@ -479,6 +520,8 @@ func (a *actors) UnRegisterHosted(actorTypes ...string) {
 	a.registerDoneLock.Lock()
 	a.registerDoneCh = make(chan struct{})
 	a.registerDoneLock.Unlock()
+
+	return nil
 }
 
 func (a *actors) WaitForRegisteredHosts(ctx context.Context) error {

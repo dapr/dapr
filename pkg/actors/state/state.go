@@ -94,7 +94,7 @@ func (s *state) Get(ctx context.Context, req *api.GetStateRequest, lock bool) (*
 	if lock {
 		var cancel context.CancelCauseFunc
 		var err error
-		ctx, cancel, err = s.placement.Lock(ctx)
+		ctx, cancel, err = s.placement.Lock(ctx, req.ActorType)
 		if err != nil {
 			return nil, err
 		}
@@ -134,6 +134,7 @@ func (s *state) Get(ctx context.Context, req *api.GetStateRequest, lock bool) (*
 	return &api.StateResponse{
 		Data:     resp.Data,
 		Metadata: resp.Metadata,
+		ETag:     resp.ETag,
 	}, nil
 }
 
@@ -141,7 +142,7 @@ func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock 
 	if lock {
 		var cancel context.CancelCauseFunc
 		var err error
-		ctx, cancel, err = s.placement.Lock(ctx)
+		ctx, cancel, err = s.placement.Lock(ctx, req.ActorType)
 		if err != nil {
 			return nil, err
 		}
@@ -185,7 +186,10 @@ func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock 
 		}
 
 		// Trim the prefix from the key
-		bulkRes[strings.TrimPrefix(r.Key, baseKey)] = r.Data
+		bulkRes[strings.TrimPrefix(r.Key, baseKey)] = api.BulkStateEntry{
+			Data: r.Data,
+			ETag: r.ETag,
+		}
 	}
 
 	return bulkRes, nil
@@ -195,7 +199,7 @@ func (s *state) TransactionalStateOperation(ctx context.Context, ignoreHosted bo
 	if lock {
 		var cancel context.CancelCauseFunc
 		var err error
-		ctx, cancel, err = s.placement.Lock(ctx)
+		ctx, cancel, err = s.placement.Lock(ctx, req.ActorType)
 		if err != nil {
 			return err
 		}

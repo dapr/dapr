@@ -24,8 +24,11 @@ import (
 )
 
 var (
-	workflowNameKey = tag.MustNewKey("workflow_name")
-	activityNameKey = tag.MustNewKey("activity_name")
+	workflowNameKey      = tag.MustNewKey("workflow_name")
+	activityNameKey      = tag.MustNewKey("activity_name")
+	attestationKindKey   = tag.MustNewKey("attestation_kind")
+	attestationResultKey = tag.MustNewKey("attestation_result")
+	certCacheOutcomeKey  = tag.MustNewKey("cert_cache_outcome")
 )
 
 const (
@@ -39,6 +42,28 @@ const (
 
 	WorkflowEvent = "event"
 	Timer         = "timer"
+
+	// AttestationKindChild tags attestation events for child workflow
+	// completions (ChildCompletionAttestation).
+	AttestationKindChild = "child"
+	// AttestationKindActivity tags attestation events for activity task
+	// completions (ActivityCompletionAttestation).
+	AttestationKindActivity = "activity"
+
+	// AttestationResultOK tags an attestation that passed all verification
+	// checks at ingestion.
+	AttestationResultOK = "ok"
+	// AttestationResultReject tags an attestation that was rejected
+	// (missing, malformed, tampered, or bound to the wrong parent/task).
+	AttestationResultReject = "reject"
+
+	// CertCacheHit tags a lookup that found a cached chain-of-trust
+	// verification result within the leaf cert's validity window.
+	CertCacheHit = "hit"
+	// CertCacheMiss tags a lookup that required a full chain-of-trust
+	// verification (first use of this cert digest within the orchestrator
+	// instance, or eventTime fell outside the cached window).
+	CertCacheMiss = "miss"
 )
 
 type workflowMetrics struct {
@@ -60,10 +85,34 @@ type workflowMetrics struct {
 	workflowExecutionLatency *stats.Float64Measure
 	// workflowSchedulingLatency records time taken between workflow execution request and actual workflow execution
 	workflowSchedulingLatency *stats.Float64Measure
-	appID                     string
-	enabled                   bool
-	namespace                 string
-	meter                     stats.Recorder
+	// attestationGeneratedCount records count of completion attestations
+	// produced by this host (child workflow and activity termination paths),
+	// tagged by kind (child/activity) and status (success/failed).
+	attestationGeneratedCount *stats.Int64Measure
+	// attestationVerifiedCount records count of completion attestations
+	// verified at inbox ingestion, tagged by kind (child/activity) and
+	// result (ok/reject).
+	attestationVerifiedCount *stats.Int64Measure
+	// attestationVerifyLatency records verification latency per attestation
+	// for operators to spot runaway cert-chain verification costs.
+	attestationVerifyLatency *stats.Float64Measure
+	// attestationCertCacheCount records per-orchestrator cert chain-of-
+	// trust cache lookups, tagged by outcome (hit/miss).
+	attestationCertCacheCount *stats.Int64Measure
+	// workflowPayloadSizeRatio records the serialized size of workflow
+	// payloads sent to the SDK as a fraction of the configured gRPC max
+	// body size. Operators use this to track how close payloads are to
+	// the threshold that triggers a PAYLOAD_SIZE_EXCEEDED stall (~0.95).
+	// Only recorded when --max-body-size is configured.
+	workflowPayloadSizeRatio *stats.Float64Measure
+	// activityPayloadSizeRatio records activity payloads as a fraction of
+	// the configured gRPC max body size. Same headroom intent as
+	// workflowPayloadSizeRatio.
+	activityPayloadSizeRatio *stats.Float64Measure
+	appID                    string
+	enabled                  bool
+	namespace                string
+	meter                    stats.Recorder
 }
 
 func newWorkflowMetrics() *workflowMetrics {
@@ -104,6 +153,30 @@ func newWorkflowMetrics() *workflowMetrics {
 			"runtime/workflow/scheduling/latency",
 			"Interval between workflow execution request and workflow execution.",
 			stats.UnitMilliseconds),
+		attestationGeneratedCount: stats.Int64(
+			"runtime/workflow/attestation/generated/count",
+			"The number of completion attestations produced by this host.",
+			stats.UnitDimensionless),
+		attestationVerifiedCount: stats.Int64(
+			"runtime/workflow/attestation/verified/count",
+			"The number of completion attestations verified at inbox ingestion.",
+			stats.UnitDimensionless),
+		attestationVerifyLatency: stats.Float64(
+			"runtime/workflow/attestation/verify/latency",
+			"The time taken to verify a completion attestation at inbox ingestion.",
+			stats.UnitMilliseconds),
+		attestationCertCacheCount: stats.Int64(
+			"runtime/workflow/attestation/cert_cache/count",
+			"The number of per-orchestrator cert chain-of-trust cache lookups, by outcome.",
+			stats.UnitDimensionless),
+		workflowPayloadSizeRatio: stats.Float64(
+			"runtime/workflow/payload/size_ratio",
+			"Workflow payload size as a fraction of the configured gRPC max body size; values >=0.95 trip the stall, values >1 exceed the limit.",
+			stats.UnitDimensionless),
+		activityPayloadSizeRatio: stats.Float64(
+			"runtime/workflow/activity/payload/size_ratio",
+			"Activity payload size as a fraction of the configured gRPC max body size; values >=0.95 trip the stall, values >1 exceed the limit.",
+			stats.UnitDimensionless),
 	}
 }
 
@@ -127,7 +200,13 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 		diagUtils.NewMeasureView(w.activityExecutionCount, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.activityExecutionLatency, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey, statusKey}, latencyDistribution),
-		diagUtils.NewMeasureView(w.workflowSchedulingLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, latencyDistribution))
+		diagUtils.NewMeasureView(w.workflowSchedulingLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, latencyDistribution),
+		diagUtils.NewMeasureView(w.attestationGeneratedCount, []tag.Key{appIDKey, namespaceKey, attestationKindKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(w.attestationVerifiedCount, []tag.Key{appIDKey, namespaceKey, attestationKindKey, attestationResultKey}, view.Count()),
+		diagUtils.NewMeasureView(w.attestationVerifyLatency, []tag.Key{appIDKey, namespaceKey, attestationKindKey, attestationResultKey}, latencyDistribution),
+		diagUtils.NewMeasureView(w.attestationCertCacheCount, []tag.Key{appIDKey, namespaceKey, certCacheOutcomeKey}, view.Count()),
+		diagUtils.NewMeasureView(w.workflowPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, payloadRatioDistribution),
+		diagUtils.NewMeasureView(w.activityPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey, activityNameKey}, payloadRatioDistribution))
 }
 
 // WorkflowOperationEvent records total number of Successful/Failed workflow Operations requests. It also records latency for those requests.
@@ -197,4 +276,73 @@ func (w *workflowMetrics) ActivityOperationEvent(ctx context.Context, activityNa
 	if elapsed > 0 {
 		stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.activityOperationLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, activityNameKey, activityName, statusKey, status)...), stats.WithMeasurements(w.activityOperationLatency.M(elapsed)))
 	}
+}
+
+// AttestationGenerated records a completion attestation being produced
+// (either child workflow or activity), tagged by kind and generation
+// status. Called from the orchestrator/activity signing paths.
+func (w *workflowMetrics) AttestationGenerated(ctx context.Context, kind, status string) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.attestationGeneratedCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, attestationKindKey, kind, statusKey, status)...),
+		stats.WithMeasurements(w.attestationGeneratedCount.M(1)))
+}
+
+// AttestationVerified records an inbox-side verification result, tagged
+// by kind and outcome (ok/reject). Also records the time spent verifying.
+func (w *workflowMetrics) AttestationVerified(ctx context.Context, kind, result string, elapsed float64) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.attestationVerifiedCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, attestationKindKey, kind, attestationResultKey, result)...),
+		stats.WithMeasurements(w.attestationVerifiedCount.M(1)))
+	if elapsed > 0 {
+		stats.RecordWithOptions(ctx,
+			stats.WithRecorder(w.meter),
+			stats.WithTags(diagUtils.WithTags(w.attestationVerifyLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, attestationKindKey, kind, attestationResultKey, result)...),
+			stats.WithMeasurements(w.attestationVerifyLatency.M(elapsed)))
+	}
+}
+
+// AttestationCertCacheLookup records a per-orchestrator cert chain-of-
+// trust cache lookup with its outcome (hit/miss).
+func (w *workflowMetrics) AttestationCertCacheLookup(ctx context.Context, outcome string) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.attestationCertCacheCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, certCacheOutcomeKey, outcome)...),
+		stats.WithMeasurements(w.attestationCertCacheCount.M(1)))
+}
+
+// WorkflowPayloadSizeRatio records a workflow payload size as a fraction
+// of the configured gRPC max body size. Callers should skip recording
+// when no max body size is configured (ratio is undefined).
+func (w *workflowMetrics) WorkflowPayloadSizeRatio(ctx context.Context, workflowName string, ratio float64) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.workflowPayloadSizeRatio.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName)...),
+		stats.WithMeasurements(w.workflowPayloadSizeRatio.M(ratio)))
+}
+
+// ActivityPayloadSizeRatio records an activity payload size as a fraction
+// of the configured gRPC max body size. Callers should skip recording
+// when no max body size is configured.
+func (w *workflowMetrics) ActivityPayloadSizeRatio(ctx context.Context, workflowName, activityName string, ratio float64) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.activityPayloadSizeRatio.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName, activityNameKey, activityName)...),
+		stats.WithMeasurements(w.activityPayloadSizeRatio.M(ratio)))
 }

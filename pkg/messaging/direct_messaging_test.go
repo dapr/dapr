@@ -80,6 +80,7 @@ func TestForwardedHeaders(t *testing.T) {
 
 		dm := &directMessaging{}
 		dm.hostAddress = "1"
+		dm.hostFwdAddr = "1"
 		dm.hostName = "2"
 
 		dm.addForwardedHeadersToMetadata(req)
@@ -94,6 +95,40 @@ func TestForwardedHeaders(t *testing.T) {
 		assert.Equal(t, "for=1;by=1;host=2", md.GetValues()[0])
 	})
 
+	t.Run("forwarded headers without host name", func(t *testing.T) {
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{})
+		defer req.Close()
+
+		dm := &directMessaging{}
+		dm.hostAddress = "10.0.0.1"
+		dm.hostFwdAddr = "10.0.0.1"
+
+		dm.addForwardedHeadersToMetadata(req)
+
+		md := req.Metadata()["Forwarded"]
+		assert.Equal(t, "for=10.0.0.1;by=10.0.0.1", md.GetValues()[0])
+	})
+
+	t.Run("forwarded headers with IPv6 address", func(t *testing.T) {
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{})
+		defer req.Close()
+
+		dm := &directMessaging{}
+		dm.hostAddress = "2001:db8::1"
+		dm.hostFwdAddr = `"[2001:db8::1]"`
+		dm.hostName = "host1"
+
+		dm.addForwardedHeadersToMetadata(req)
+
+		md := req.Metadata()["X-Forwarded-For"]
+		assert.Equal(t, "2001:db8::1", md.GetValues()[0])
+
+		md = req.Metadata()["Forwarded"]
+		assert.Equal(t, `for="[2001:db8::1]";by="[2001:db8::1]";host=host1`, md.GetValues()[0])
+	})
+
 	t.Run("forwarded headers get appended", func(t *testing.T) {
 		req := invokev1.NewInvokeMethodRequest("GET").
 			WithMetadata(map[string][]string{
@@ -105,6 +140,7 @@ func TestForwardedHeaders(t *testing.T) {
 
 		dm := &directMessaging{}
 		dm.hostAddress = "1"
+		dm.hostFwdAddr = "1"
 		dm.hostName = "2"
 
 		dm.addForwardedHeadersToMetadata(req)

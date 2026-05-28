@@ -27,6 +27,7 @@ import (
 
 type Options struct {
 	AppID             string
+	Namespace         string
 	ActorType         string
 	ActivityActorType string
 	InstanceID        string
@@ -65,6 +66,7 @@ func New(opts Options) *Fork {
 		targetEventID: opts.TargetEventID,
 		newState: state.NewState(state.Options{
 			AppID:             opts.AppID,
+			Namespace:         opts.Namespace,
 			WorkflowActorType: opts.ActorType,
 			ActivityActorType: opts.ActivityActorType,
 		}),
@@ -121,6 +123,12 @@ func (f *Fork) Build() (*state.State, error) {
 	}
 
 	f.newState.AddToInbox(found)
+
+	// Preserve the propagated history received from the caller so the reran
+	// workflow can continue lineage forwarding to its own children
+	if f.oldState.IncomingHistory != nil {
+		f.newState.SetIncomingHistory(f.oldState.IncomingHistory)
+	}
 
 	return f.newState, nil
 }

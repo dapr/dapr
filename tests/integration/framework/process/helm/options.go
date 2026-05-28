@@ -30,7 +30,8 @@ type OptionFunc func(*options)
 
 // options contains the options for running helm in integration tests.
 type options struct {
-	setValues []string
+	setValues     []string
+	setJSONValues []string
 
 	// list of resources to show only
 	showOnly []string
@@ -55,6 +56,12 @@ func WithGlobalValues(values ...string) OptionFunc {
 func WithShowOnlySchedulerSTS() OptionFunc {
 	return func(o *options) {
 		o.showOnly = append(o.showOnly, "charts/dapr_scheduler/templates/dapr_scheduler_statefulset.yaml")
+	}
+}
+
+func WithShowOnlyPlacementSTS() OptionFunc {
+	return func(o *options) {
+		o.showOnly = append(o.showOnly, "charts/dapr_placement/templates/dapr_placement_statefulset.yaml")
 	}
 }
 
@@ -97,6 +104,12 @@ func WithShowOnly(chart, tplYamlFileName string) OptionFunc {
 			tplYamlFileName += ".yaml"
 		}
 		o.showOnly = append(o.showOnly, fmt.Sprintf("%s/templates/%s", chart, tplYamlFileName))
+	}
+}
+
+func WithSetJSON(values ...string) OptionFunc {
+	return func(o *options) {
+		o.setJSONValues = append(o.setJSONValues, values...)
 	}
 }
 

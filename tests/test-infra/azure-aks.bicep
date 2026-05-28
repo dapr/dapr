@@ -24,13 +24,13 @@ param enableArm bool = false
 param enableWindows bool = false
 
 @description('VM size to use for Linux nodes (agent pool)')
-param linuxVMSize string = 'Standard_D2s_v5'
+param linuxVMSize string = 'Standard_D2s_v6'
 
-@description('VM size to use for Windows nodes, if enabled')
-param windowsVMSize string = 'Standard_DS3_v2'
+@description('VM size to use for Windows nodes, if enabled. Must be Hyper-V Gen 1-compatible because the Windows2022 osSKU AKS uses is a Gen 1 image. The _v6 D-series is Gen-2-only; the _v5 line is not allowed in the test subscription, so pin to the latest _v3 SKU.')
+param windowsVMSize string = 'Standard_D4s_v3'
 
 @description('VM size to use for ARM64 nodes if enabled')
-param armVMSize string = 'Standard_D2ps_v5'
+param armVMSize string = 'Standard_D2ps_v6'
 
 @description('If set, sends certain diagnostic logs to Log Analytics')
 param diagLogAnalyticsWorkspaceResourceId string = ''
@@ -100,11 +100,6 @@ resource aks 'Microsoft.ContainerService/managedClusters@2023-05-01' = {
           type: 'VirtualMachineScaleSets'
           mode: 'System'
           maxPods: 110
-          availabilityZones: [
-            '1'
-            '2'
-            '3'
-          ]
           enableNodePublicIP: false
           vnetSubnetID: enableWindows ? aksVNet::defaultSubnet.id : null
           tags: {}
@@ -113,7 +108,9 @@ resource aks 'Microsoft.ContainerService/managedClusters@2023-05-01' = {
         {
           name: 'winpol'
           osDiskSizeGB: osDiskSizeGB
-          osDiskType: 'Ephemeral'
+          // Ephemeral OS would require a VM SKU with cache or temp disk >= 128 GiB,
+          // which is not satisfied by any Gen-1-compatible D4 SKU available in the
+          // test subscription. Default to a managed OS disk instead.
           enableAutoScaling: false
           count: 2
           vmSize: windowsVMSize
@@ -122,11 +119,6 @@ resource aks 'Microsoft.ContainerService/managedClusters@2023-05-01' = {
           type: 'VirtualMachineScaleSets'
           mode: 'User'
           maxPods: 110
-          availabilityZones: [
-            '1'
-            '2'
-            '3'
-          ]
           nodeLabels: {}
           nodeTaints: []
           enableNodePublicIP: false
@@ -144,11 +136,6 @@ resource aks 'Microsoft.ContainerService/managedClusters@2023-05-01' = {
           type: 'VirtualMachineScaleSets'
           mode: 'User'
           maxPods: 110
-          availabilityZones: [
-            '1'
-            '2'
-            '3'
-          ]
           nodeLabels: {}
           nodeTaints: []
           enableNodePublicIP: false

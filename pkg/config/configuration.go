@@ -29,7 +29,7 @@ import (
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spf13/cast"
 	"go.opencensus.io/stats/view"
-	yaml "gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
@@ -63,11 +63,11 @@ const (
 	// if using the same Dapr version on all daprds. Enabled by default.
 	WorkflowsRemoteActivityReminder Feature = "WorkflowsRemoteActivityReminder"
 
-	// Enables support for the MCPServer first-class resource,
-	// which declares connections to MCP (Model Context Protocol) servers.
-	// When enabled, daprd loads MCPServer manifests at startup,
-	// and makes them available for tool execution via workflow orchestrations.
-	MCPServerResource Feature = "MCPServerResource"
+	// WorkflowHistorySigning enables cryptographic signing of workflow
+	// history. When enabled and mTLS is active, each workflow execution's
+	// history events are signed using the app's X.509 SVID identity,
+	// creating a verifiable chain of signatures. Disabled by default.
+	WorkflowHistorySigning Feature = "WorkflowHistorySigning"
 )
 
 // end feature flags section
@@ -84,6 +84,7 @@ const (
 )
 
 var defaultFeatures = map[Feature]bool{
+	HotReload:                       true,
 	WorkflowsRemoteActivityReminder: true,
 }
 

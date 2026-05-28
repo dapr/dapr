@@ -54,13 +54,13 @@ env:
   # Enable tests on ARM64
   ENABLE_ARM: "false"
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
-  AZURE_REGIONS: "eastus"
-  AZURE_ARM_REGIONS: "eastus"
+  AZURE_REGIONS: "westus"
+  AZURE_ARM_REGIONS: "westus"
   # Container registry where to cache e2e test images
   DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
   # Name of the Azure Key Vault resource used in tests
   # The credentials defined in AZURE_CREDENTIALS must have permissions to perform operations in this vault
-  AZURE_KEY_VAULT_NAME: "dapre2ekv"
+  AZURE_KEY_VAULT_NAME: "dapre2ekeyvault"
   # Whether to collect TCP dumps
   TCP_DUMPS: "false"
   # Additional build tags for Dapr
@@ -129,7 +129,7 @@ jobs:
           ref: ${{ env.CHECKOUT_REF }}
       - name: Login to Azure
         if: env.CHECKOUT_REPO != ''
-        uses: azure/login@v1
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Build test prefix
@@ -290,7 +290,7 @@ jobs:
           go-version-file: "go.mod"
       - name: Login to Azure
         if: env.CHECKOUT_REPO != ''
-        uses: azure/login@v1
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Login to cache registry for Windows
@@ -470,7 +470,7 @@ jobs:
           version: ${{ env.HELMVER }}
       - name: Login to Azure
         if: env.CHECKOUT_REPO != ''
-        uses: azure/login@v1
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Build test prefix and set env vars
@@ -668,7 +668,7 @@ jobs:
     if: always()
     steps:
       - name: Login to Azure
-        uses: azure/login@v1
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Build test prefix
