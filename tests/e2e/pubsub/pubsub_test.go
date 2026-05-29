@@ -453,7 +453,16 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 		callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 	} else if subscriberResponse == "error" {
-		time.Sleep(time.Second * 30)
+		// Hold the subscriber in the error state until every published
+		// message has exhausted its inbound resiliency retry window
+		// (pubsubresiliency: pubsubRetry = 60 constant 1s retries = 60s)
+		// and been dead-lettered. 30s is shorter than that window, so
+		// flipping to success at 30s delivers the source messages on
+		// their primary topic instead of dead-lettering them, and the
+		// dead-letter count never reaches the expected total. 90s gives
+		// the slowest message comfortable headroom past the 60s window
+		// on both Service Bus and Redis brokers.
+		time.Sleep(time.Second * 90)
 	} else {
 		// Sleep briefly to allow initial delivery attempts to fail
 		// We sleep less than the resiliency retry window (60 retries × 1s = 60s)
