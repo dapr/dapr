@@ -23,4 +23,3 @@ import (
 func init() {
 	nrLoader.DefaultRegistry.RegisterComponent(nameformat.NewResolver, "nameformat")
 }
-
