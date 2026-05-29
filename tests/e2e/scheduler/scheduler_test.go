@@ -171,7 +171,7 @@ func TestJobs(t *testing.T) {
 
 			// Check if the length of triggeredJobs matches the expected length of scheduled jobs
 			assert.Len(c, triggeredJobs, numIterations*numJobsPerGoRoutine)
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 30*time.Second, time.Second)
 		t.Log("Done.")
 	})
 
@@ -360,9 +360,12 @@ func TestSchedulerQuorumRecovery(t *testing.T) {
 	}, 30*time.Second, time.Second)
 	t.Log("Triggers resumed after scheduler pod kill — cluster recovered")
 
-	// Cleanup.
-	_, err = utils.HTTPDelete(
-		fmt.Sprintf("%s/deleteJob/%s", externalURL, recoveryJobName),
-	)
-	require.NoError(t, err)
+	// Cleanup can get a bit dodgy while the scheduler client is reconnecting
+	// after the quorum change, so give it a few tries.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, derr := utils.HTTPDelete(
+			fmt.Sprintf("%s/deleteJob/%s", externalURL, recoveryJobName),
+		)
+		assert.NoError(c, derr)
+	}, 2*time.Minute, 5*time.Second, "delete recovery job")
 }

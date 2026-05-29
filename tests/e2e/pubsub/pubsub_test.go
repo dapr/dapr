@@ -446,25 +446,17 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
-	if subscriberResponse == "empty-json" {
+	switch subscriberResponse {
+	case "empty-json":
 		// on empty-json response case immediately validate the received messages
 		time.Sleep(10 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages, podEndpoints)
 
 		callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
-	} else if subscriberResponse == "error" {
-		time.Sleep(time.Second * 30)
-	} else {
-		// Sleep briefly to allow initial delivery attempts to fail
-		// We sleep less than the resiliency retry window (60 retries × 1s = 60s)
-		// so that when we flip to success, messages are still being retried
-		time.Sleep(2 * time.Second)
-	}
 
-	// set to respond with success
-	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
+		// set to respond with success
+		setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
-	if subscriberResponse == "empty-json" {
 		log.Printf("Validating no redelivered messages for 'empty-json' subscriber...")
 		time.Sleep(30 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, receivedMessagesResponse{
@@ -475,17 +467,27 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 			ReceivedByTopicRaw:  []string{},
 			ReceivedByTopicDead: []string{},
 		}, podEndpoints)
-	} else if subscriberResponse == "error" {
-		// Wait for all messages to be dead-lettered. Publisher aggregates getMessages across replicas
-		log.Printf("Validating redelivered messages for 'error' subscriber...")
+	case "error":
+		// Dead-lettering only kicks in once the resiliency retries are knackered
+		// (~60s), so keep chucking errors until then; flipping to success too
+		// early just delivers the messages instead of binning them off to the DLQ.
+		log.Printf("Validating dead-lettered messages for 'error' subscriber...")
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			got, err := subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
 			assert.NoError(c, err, "error calling subscriber to get dead letter count")
 			assert.Equal(c, len(sentMessages.ReceivedByTopicDeadLetter), got)
 		}, 360*time.Second, 5*time.Second,
 			"subscriber did not receive all dead letter messages within timeout")
+
+		// Stop erroring — topics without a DLQ should now get redelivered fine.
+		setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages, podEndpoints)
-	} else {
+	default:
+		// Quick sleep, but less than the retry window, so the messages are
+		// still mid-retry when we flip to success.
+		time.Sleep(2 * time.Second)
+		setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
+
 		// validate redelivery of messages
 		log.Printf("Validating redelivered messages...")
 		time.Sleep(30 * time.Second)
