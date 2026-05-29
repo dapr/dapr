@@ -566,7 +566,7 @@ func cleanPath(p string) string {
 	}
 	hasTrailing := p[len(p)-1] == '/'
 	cleaned := path.Clean(p)
-	if hasTrailing && cleaned != "/" {
+	if hasTrailing && cleaned != "/" && cleaned != "." && cleaned != ".." {
 		cleaned += "/"
 	}
 	return cleaned

@@ -48,7 +48,7 @@ func cleanPath(p string) string {
 	}
 	hasTrailing := p[len(p)-1] == '/'
 	cleaned := path.Clean(p)
-	if hasTrailing && cleaned != "/" {
+	if hasTrailing && cleaned != "/" && cleaned != "." && cleaned != ".." {
 		cleaned += "/"
 	}
 	return cleaned
@@ -74,6 +74,10 @@ func NormalizeMethod(method string) (string, error) {
 	// Resolve path traversal sequences, preserving a single trailing slash
 	// so that invocation targets like "foo/bar/" are forwarded correctly.
 	cleaned := cleanPath(method)
+	// A method of "/" is not a valid invocation target; normalize to empty string.
+	if cleaned == "/" {
+		cleaned = ""
+	}
 
 	// path.Clean on rootless paths can leave leading "../" — strip them.
 	for strings.HasPrefix(cleaned, "../") {
