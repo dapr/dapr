@@ -278,10 +278,6 @@ helm install dapr dapr/dapr --namespace dapr-system --create-namespace --set-str
 ## Example of installing dapr on Minikube
 Configure a values file with these options:
 ```yaml
-dapr_dashboard:
-  runAsNonRoot: false
-  logLevel: DEBUG
-  serviceType: NodePort  # Allows retrieving the dashboard url by running the command "minikube service list"
 dapr_placement:
   runAsNonRoot: false
   logLevel: DEBUG
