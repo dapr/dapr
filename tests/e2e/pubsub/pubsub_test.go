@@ -453,16 +453,34 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 		callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 	} else if subscriberResponse == "error" {
-		// Hold the subscriber in the error state until every published
-		// message has exhausted its inbound resiliency retry window
-		// (pubsubresiliency: pubsubRetry = 60 constant 1s retries = 60s)
-		// and been dead-lettered. 30s is shorter than that window, so
-		// flipping to success at 30s delivers the source messages on
-		// their primary topic instead of dead-lettering them, and the
-		// dead-letter count never reaches the expected total. 90s gives
-		// the slowest message comfortable headroom past the 60s window
-		// on both Service Bus and Redis brokers.
-		time.Sleep(time.Second * 90)
+		// Keep the subscriber in the error state and wait for every message
+		// on the dead-letter-configured topic to be dead-lettered BEFORE
+		// flipping back to success. While the app keeps erroring, a
+		// dead-letter-configured message can only ever end up on the
+		// dead-letter topic (the subscriber app always records and accepts
+		// the dead-letter sink), so the count converges deterministically.
+		//
+		// Flipping to success first (as the retry/invalid cases below do)
+		// races the broker: on Azure Service Bus a message whose lock is
+		// lost mid-retry is redelivered, and if the subscriber has by then
+		// flipped to success the redelivered copy is delivered on its
+		// primary topic instead of being dead-lettered, permanently
+		// stranding part of the expected dead-letter set (observed as the
+		// count landing at 0/20/30 of 40 across runs).
+		log.Printf("Validating dead-lettered messages for 'error' subscriber...")
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			got, err := subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
+			assert.NoError(c, err, "error calling subscriber to get dead letter count")
+			assert.Equal(c, len(sentMessages.ReceivedByTopicDeadLetter), got)
+		}, 360*time.Second, 5*time.Second,
+			"subscriber did not receive all dead letter messages within timeout")
+
+		// Now flip to success so the non-dead-letter topics (a/b/c/raw)
+		// drain their outstanding retries and get recorded, then validate
+		// the full received set including the dead-letter topic.
+		setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages, podEndpoints)
+		return subscriberExternalURL
 	} else {
 		// Sleep briefly to allow initial delivery attempts to fail
 		// We sleep less than the resiliency retry window (60 retries × 1s = 60s)
@@ -484,18 +502,8 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 			ReceivedByTopicRaw:  []string{},
 			ReceivedByTopicDead: []string{},
 		}, podEndpoints)
-	} else if subscriberResponse == "error" {
-		// Wait for all messages to be dead-lettered. Publisher aggregates getMessages across replicas
-		log.Printf("Validating redelivered messages for 'error' subscriber...")
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			got, err := subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
-			assert.NoError(c, err, "error calling subscriber to get dead letter count")
-			assert.Equal(c, len(sentMessages.ReceivedByTopicDeadLetter), got)
-		}, 360*time.Second, 5*time.Second,
-			"subscriber did not receive all dead letter messages within timeout")
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages, podEndpoints)
 	} else {
-		// validate redelivery of messages
+		// validate redelivery of messages (retry / invalid-status cases)
 		log.Printf("Validating redelivered messages...")
 		time.Sleep(30 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages, podEndpoints)
