@@ -340,7 +340,13 @@ func (s *Subscription) sendBulkToDeadLetter(ctx context.Context,
 		Metadata:   msg.Metadata,
 	}
 
-	_, err := s.adapter.BulkPublish(ctx, req)
+	// Detach the parent deadline before publishing; see the matching
+	// helper in pkg/runtime/subscription/subscription.go for why an
+	// inherited inbound-handler context cannot be used here.
+	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deadLetterPublishTimeout)
+	defer cancel()
+
+	_, err := s.adapter.BulkPublish(pubCtx, req)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 	}
