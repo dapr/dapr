@@ -373,6 +373,11 @@ func (a *Universal) validateWorkflowComponent(component string) error {
 	if component == "" {
 		return messages.ErrNoOrMissingWorkflowComponent
 	}
+	// A non-empty component name is supplied but the workflow engine has not
+	// been initialised (e.g. no workflow component is configured at runtime).
+	if a.workflowEngine == nil {
+		return messages.ErrWorkflowComponentDoesNotExist.WithFormat(component)
+	}
 	return nil
 }
 
