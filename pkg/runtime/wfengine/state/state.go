@@ -69,6 +69,18 @@ type State struct {
 	// only in the in-memory cache.
 	metadataETag *string
 
+	// customStatusPersisted is observed at load time from the state
+	// store's ETag for the customStatus key. It is the source of truth
+	// for "does this optional key currently exist in the store" at purge
+	// time, independent of whether the in-memory CustomStatus value is
+	// populated (the runtime upserts customStatus with an empty proto on
+	// every history delta, which loads as a nil CustomStatus).
+	// Including a delete for a key that does not exist in a transactional
+	// batch causes Azure Cosmos DB to abort the entire batch on the 404,
+	// which leaves workflow state unpurged and the retention reminder
+	// retrying forever.
+	customStatusPersisted bool
+
 	// change tracking
 	inboxAddedCount     int
 	inboxRemovedCount   int
@@ -105,6 +117,12 @@ func (s *State) Reset() {
 
 // ResetChangeTracking resets the change tracking counters. This should be called after a save request.
 func (s *State) ResetChangeTracking() {
+	// A save with any history delta upserts the customStatus key (see
+	// GetSaveRequest), so after a successful save it is now persisted.
+	if s.historyAddedCount > 0 || s.historyRemovedCount > 0 {
+		s.customStatusPersisted = true
+	}
+
 	s.inboxAddedCount = 0
 	s.inboxRemovedCount = 0
 	s.historyAddedCount = 0
@@ -396,6 +414,9 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		wState.History = append(wState.History, &hist)
 	}
 
+	if bulkRes[customStatusKey].ETag != nil {
+		wState.customStatusPersisted = true
+	}
 	if len(bulkRes[customStatusKey].Data) > 0 {
 		wState.CustomStatus = &wrapperspb.StringValue{}
 		err = proto.Unmarshal(bulkRes[customStatusKey].Data, wState.CustomStatus)
@@ -432,16 +453,27 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 		return nil, err
 	}
 
-	req.Operations = append(req.Operations,
-		api.TransactionalOperation{
+	// Only emit a delete for customStatus when we know the row exists. In
+	// an Azure Cosmos DB transactional batch a 404 on any delete aborts
+	// the whole batch (the etag-less delete tolerance in the state
+	// component only applies outside transactions), which would leave
+	// the workflow state in place and the retention reminder retrying
+	// forever. customStatus is upserted whenever history changes
+	// (possibly with an empty proto), so the in-memory CustomStatus
+	// pointer cannot disambiguate "persisted as empty" from "never
+	// persisted"; the persistence flag captured at load and save time
+	// is the source of truth.
+	if s.customStatusPersisted {
+		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Delete,
 			Request:   api.TransactionalDelete{Key: customStatusKey},
-		},
-		api.TransactionalOperation{
-			Operation: api.Delete,
-			Request:   api.TransactionalDelete{Key: MetadataKey},
-		},
-	)
+		})
+	}
+
+	req.Operations = append(req.Operations, api.TransactionalOperation{
+		Operation: api.Delete,
+		Request:   api.TransactionalDelete{Key: MetadataKey},
+	})
 
 	return req, nil
 }
