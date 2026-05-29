@@ -453,16 +453,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 		callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 	} else if subscriberResponse == "error" {
-		// Hold the subscriber in the error state long enough for the
-		// resiliency policy to exhaust (pubsubresiliency:
-		// pubsubRetry=60 constant 1s retries = 60s) plus a buffer, so
-		// every published message reaches the app-level dead-letter
-		// topic before we flip the subscriber back to success. 30s is
-		// not enough: half of the retries are still in flight when
-		// success is set and messages get delivered instead of dead
-		// lettered, so subscriberReceivedDeadLetterCount stays at 0
-		// and the EventuallyWithT below times out.
-		time.Sleep(time.Second * 90)
+		time.Sleep(time.Second * 30)
 	} else {
 		// Sleep briefly to allow initial delivery attempts to fail
 		// We sleep less than the resiliency retry window (60 retries × 1s = 60s)
@@ -487,15 +478,12 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	} else if subscriberResponse == "error" {
 		// Wait for all messages to be dead-lettered. Publisher aggregates getMessages across replicas
 		log.Printf("Validating redelivered messages for 'error' subscriber...")
-		want := len(sentMessages.ReceivedByTopicDeadLetter)
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			got, err := subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
-			if !assert.NoError(c, err, "error calling subscriber to get dead letter count") {
-				return
-			}
-			assert.Equalf(c, want, got, "dead letter count: want %d, got %d", want, got)
+			assert.NoError(c, err, "error calling subscriber to get dead letter count")
+			assert.Equal(c, len(sentMessages.ReceivedByTopicDeadLetter), got)
 		}, 360*time.Second, 5*time.Second,
-			"subscriber did not receive all %d dead letter messages within timeout", want)
+			"subscriber did not receive all dead letter messages within timeout")
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages, podEndpoints)
 	} else {
 		// validate redelivery of messages
