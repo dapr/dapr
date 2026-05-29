@@ -24,7 +24,6 @@ from github import Github
 
 releaseIssueRegex = "^v(.*) Release Planning$"
 releaseNoteRegex = "^RELEASE NOTE:(.*)$"
-dashboardReleaseVersionRegex = "v([0-9\.]+)-?.*"
 majorReleaseRegex = "^([0-9]+\.[0-9]+)\.[0-9]+.*$"
 milestoneRegex = "https://github.com/dapr/(.+)/milestone/([0-9]+)"
 
@@ -34,7 +33,6 @@ top_repos=[
     'dapr',
     'cli',
     'components-contrib',
-    'dashboard',
     'dotnet-sdk',
     'go-sdk',
     'java-sdk',
@@ -51,7 +49,6 @@ top_repos=[
 subtitles={
     "dapr": "Dapr Runtime",
     "cli": "Dapr CLI",
-    "dashboard": "Dashboard",
     "components-contrib": "Components",
     "java-sdk": "Java SDK",
     "dotnet-sdk": ".NET SDK",
@@ -114,11 +111,6 @@ if os.getenv("GITHUB_ENV"):
         githubEnv.write("REL_VERSION={}\n".format(releaseVersion))
         githubEnv.write("REL_BRANCH=release-{}\n".format(
             re.search(majorReleaseRegex, releaseVersion).group(1)))
-
-# get dashboard release version
-releases = sorted([r for r in g.get_repo("dapr/dashboard").get_releases()], key=lambda r: r.created_at, reverse=True)
-dashboardReleaseVersion = re.search(dashboardReleaseVersionRegex, releases[0].tag_name).group(1)
-print("Detected Dapr Dashboard version {}".format(dashboardReleaseVersion))
 
 releaseNotePath="docs/release_notes/v{}.md".format(releaseVersion)
 
@@ -248,7 +240,6 @@ if len(warnings) > 0:
 with open(releaseNotePath, 'w') as file:
     file.write(Template(template).safe_substitute(
         dapr_version=releaseVersion,
-        dapr_dashboard_version=dashboardReleaseVersion,
         dapr_changes=changesText,
         dapr_breaking_changes=breakingChangesText,
         dapr_deprecation_notices=deprecationNoticesText,
