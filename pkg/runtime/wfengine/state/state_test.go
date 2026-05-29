@@ -30,6 +30,7 @@ import (
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/ptr"
 )
 
 func sha256Sum(b []byte) []byte {
@@ -530,6 +531,142 @@ func TestResetChangeTracking_UpdatesPersistedFlags(t *testing.T) {
 		s.ResetChangeTracking()
 		assert.False(t, s.propagatedHistoryPersisted)
 	})
+}
+
+// TestLoadWorkflowState_SetsPersistedFlagsFromETag asserts that the
+// load-time observation path captures whether customStatus and
+// propagated-history exist in the store independently of any save: their
+// persistence flags are derived solely from the bulk-get ETag, which is the
+// authoritative signal that lets a freshly loaded State emit the correct
+// purge batch even when the keys hold empty data (customStatus is upserted
+// with an empty proto whenever history changes, so an absent Data slice is
+// not sufficient evidence of absence in the store).
+func TestLoadWorkflowState_SetsPersistedFlagsFromETag(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                        string
+		customStatusETag            *string
+		propagatedHistoryETag       *string
+		wantCustomStatusPersisted   bool
+		wantPropagatedHistPersisted bool
+		wantCustomStatusInPurge     bool
+		wantPropagatedHistInPurge   bool
+	}{
+		{
+			name:                        "both keys absent",
+			customStatusETag:            nil,
+			propagatedHistoryETag:       nil,
+			wantCustomStatusPersisted:   false,
+			wantPropagatedHistPersisted: false,
+			wantCustomStatusInPurge:     false,
+			wantPropagatedHistInPurge:   false,
+		},
+		{
+			name:                        "customStatus persisted with empty proto",
+			customStatusETag:            ptr.Of("etag-cs"),
+			propagatedHistoryETag:       nil,
+			wantCustomStatusPersisted:   true,
+			wantPropagatedHistPersisted: false,
+			wantCustomStatusInPurge:     true,
+			wantPropagatedHistInPurge:   false,
+		},
+		{
+			name:                        "propagated-history persisted",
+			customStatusETag:            nil,
+			propagatedHistoryETag:       ptr.Of("etag-ph"),
+			wantCustomStatusPersisted:   false,
+			wantPropagatedHistPersisted: true,
+			wantCustomStatusInPurge:     false,
+			wantPropagatedHistInPurge:   true,
+		},
+		{
+			name:                        "both keys persisted",
+			customStatusETag:            ptr.Of("etag-cs"),
+			propagatedHistoryETag:       ptr.Of("etag-ph"),
+			wantCustomStatusPersisted:   true,
+			wantPropagatedHistPersisted: true,
+			wantCustomStatusInPurge:     true,
+			wantPropagatedHistInPurge:   true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			const actorID = "wf-load-flags"
+
+			metaBytes, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
+				HistoryLength: 1,
+				Generation:    1,
+			})
+			require.NoError(t, err)
+			histBytes, err := proto.Marshal(testEvent(0))
+			require.NoError(t, err)
+
+			// Empty Data is the realistic case for customStatus: when the
+			// runtime upserts an empty StringValue the marshalled bytes are
+			// zero length, so the ETag is the only signal that the row
+			// exists in the store.
+			bulk := map[string]api.BulkStateEntry{
+				"history-000000": {Data: histBytes},
+				customStatusKey: {
+					Data: nil,
+					ETag: tc.customStatusETag,
+				},
+				propagatedHistoryKey: {
+					Data: nil,
+					ETag: tc.propagatedHistoryETag,
+				},
+			}
+
+			store := statefake.New().
+				WithGetFn(func(_ context.Context, req *api.GetStateRequest, _ bool) (*api.StateResponse, error) {
+					if req.Key == MetadataKey {
+						return &api.StateResponse{Data: metaBytes}, nil
+					}
+					return &api.StateResponse{}, nil
+				}).
+				WithGetBulkFn(func(_ context.Context, req *api.GetBulkStateRequest, _ bool) (api.BulkStateResponse, error) {
+					out := api.BulkStateResponse{}
+					for _, k := range req.Keys {
+						out[k] = bulk[k]
+					}
+					return out, nil
+				})
+
+			got, err := LoadWorkflowState(t.Context(), store, actorID, Options{
+				WorkflowActorType: "workflow",
+				ActivityActorType: "activity",
+			})
+			require.NoError(t, err)
+			require.NotNil(t, got)
+
+			assert.Equal(t, tc.wantCustomStatusPersisted, got.customStatusPersisted,
+				"customStatusPersisted")
+			assert.Equal(t, tc.wantPropagatedHistPersisted, got.propagatedHistoryPersisted,
+				"propagatedHistoryPersisted")
+
+			req, err := got.GetPurgeRequest(actorID)
+			require.NoError(t, err)
+
+			deleteKeys := make(map[string]bool)
+			for _, op := range req.Operations {
+				if op.Operation == api.Delete {
+					if d, ok := op.Request.(api.TransactionalDelete); ok {
+						deleteKeys[d.Key] = true
+					}
+				}
+			}
+
+			assert.Equal(t, tc.wantCustomStatusInPurge, deleteKeys[customStatusKey],
+				"customStatus delete in purge")
+			assert.Equal(t, tc.wantPropagatedHistInPurge, deleteKeys[propagatedHistoryKey],
+				"propagated-history delete in purge")
+			assert.True(t, deleteKeys[MetadataKey], "metadata delete must always be in purge")
+		})
+	}
 }
 
 func TestGetSaveRequest_MetadataIncludesSigningLengths(t *testing.T) {

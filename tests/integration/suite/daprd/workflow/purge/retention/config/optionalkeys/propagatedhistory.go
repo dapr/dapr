@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package config
+package optionalkeys
 
 import (
 	"context"
@@ -34,20 +34,23 @@ import (
 )
 
 func init() {
-	suite.Register(new(purgeoptionalkeys))
+	suite.Register(new(propagatedhistory))
 }
 
-// purgeoptionalkeys verifies that the retention purge succeeds for a workflow
-// that never persisted the optional customStatus or propagated-history keys,
-// against a state store that rejects any transactional batch containing a
-// delete for a missing key.
-type purgeoptionalkeys struct {
+// propagatedhistory verifies that the retention purge succeeds for a workflow
+// that never persisted the optional propagated-history key, against a state
+// store that rejects any transactional batch containing a delete for a
+// missing key. The runtime save path only writes the propagated-history row
+// when incomingHistoryChanged fires, so a normal scheduled workflow with no
+// SetIncomingHistory call leaves the key absent and exercises the save-time
+// half of the persistence-flag plumbing end-to-end.
+type propagatedhistory struct {
 	workflow *workflow.Workflow
 	ss       *statestore.StateStore
 	store    *cosmosbatch.Store
 }
 
-func (p *purgeoptionalkeys) Setup(t *testing.T) []framework.Option {
+func (p *propagatedhistory) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
 	p.store = cosmosbatch.New(t)
@@ -91,7 +94,7 @@ spec:
 	}
 }
 
-func (p *purgeoptionalkeys) Run(t *testing.T, ctx context.Context) {
+func (p *propagatedhistory) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
 	reg := dworkflow.NewRegistry()
@@ -102,7 +105,7 @@ func (p *purgeoptionalkeys) Run(t *testing.T, ctx context.Context) {
 	client := dworkflow.NewClient(p.workflow.Dapr().GRPCConn(t, ctx))
 	require.NoError(t, client.StartWorker(ctx, reg))
 
-	const instanceID = "purgeoptionalkeys-instance"
+	const instanceID = "propagatedhistory-instance"
 	appID := p.workflow.Dapr().AppID()
 	retentionPrefix := fmt.Sprintf(
 		"dapr/jobs/actorreminder||default||dapr.internal.default.%s.retentioner||%s||",
@@ -120,19 +123,19 @@ func (p *purgeoptionalkeys) Run(t *testing.T, ctx context.Context) {
 
 	// The retention reminder is queued on completion; wait for it to fire and
 	// for the purge batch to drain. With the fix in place, the batch only
-	// contains deletes for keys actually persisted (no
-	// customStatus/propagated-history), so the cosmos-batch wrapper accepts it
-	// and the reminder is removed from the scheduler.
+	// contains deletes for keys actually persisted (no propagated-history,
+	// since SetIncomingHistory was never called), so the cosmos-batch wrapper
+	// accepts it and the reminder is removed from the scheduler.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		keys := p.workflow.Scheduler().ListAllKeys(t, ctx, retentionPrefix)
 		assert.Empty(c, keys, "retention reminder did not drain after purge")
 	}, 30*time.Second, 10*time.Millisecond)
 
 	// The purge should have succeeded on its first attempt: the batch never
-	// contained a delete for a missing optional key, so the cosmos-batch wrapper
-	// never rejected it.
+	// contained a delete for a missing optional key, so the cosmos-batch
+	// wrapper never rejected it.
 	assert.Zero(t, p.store.RejectedCount(),
-		"state store rejected a purge batch, meaning GetPurgeRequest emitted a delete for a non-persisted optional key")
+		"state store rejected a purge batch, meaning GetPurgeRequest emitted a delete for a non-persisted propagated-history")
 
 	failed := int(p.workflow.Dapr().Metrics(t, ctx).All()[failedPurgeMetric])
 	assert.Zero(t, failed, "purge_workflow:failed metric must not have incremented")
