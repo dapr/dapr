@@ -143,7 +143,7 @@ func (p *pki) Run(t *testing.T, ctx context.Context) {
 	p.daprd.WaitUntilRunning(t, ctx)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, p.daprd.GetMetaHTTPEndpoints(t, ctx), 1)
+		assert.Len(c, p.daprd.GetMetaHTTPEndpoints(c, ctx), 1)
 	}, time.Second*5, time.Millisecond*10)
 
 	client := client.HTTP(t)
