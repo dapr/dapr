@@ -474,12 +474,20 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		// primary topic instead of being dead-lettered, permanently
 		// stranding part of the expected dead-letter set (observed as the
 		// count landing at 0/20/30 of 40 across runs).
+		// The dead-letter budget must clear the slowest broker. On Redis
+		// (KinD) a message is not dead-lettered until its inbound
+		// resiliency policy exhausts, and the policy advances roughly one
+		// retry per broker redelivery cycle (~6s), so 60 retries land the
+		// dead-letter burst at ~6 minutes. A 360s budget expires right as
+		// the burst arrives; 600s gives it comfortable headroom while
+		// still returning as soon as all messages are dead-lettered on
+		// faster brokers (Azure Service Bus).
 		log.Printf("Validating dead-lettered messages for 'error' subscriber...")
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			got, err := subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
 			assert.NoError(c, err, "error calling subscriber to get dead letter count")
 			assert.Equal(c, len(sentMessages.ReceivedByTopicDeadLetter), got)
-		}, 360*time.Second, 5*time.Second,
+		}, 600*time.Second, 5*time.Second,
 			"subscriber did not receive all dead letter messages within timeout")
 
 		// Now flip to success so the non-dead-letter topics (a/b/c/raw)
