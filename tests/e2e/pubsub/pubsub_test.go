@@ -438,6 +438,13 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	err := utils.HealthCheckApps(publisherExternalURL)
 	require.NoError(t, err, "Health check failed for publisher")
 
+	// Flush any redelivery backlog left by the previous scenario before we
+	// reset the received sets, otherwise leaked in-flight messages inflate
+	// this scenario's counts (observed as the retry scenario seeing 80/40
+	// after the error scenario built up a backlog).
+	log.Println("Draining backlog from previous scenario ...")
+	drainSubscriberBacklog(t, publisherExternalURL, subscriberAppName, protocol, podEndpoints)
+
 	log.Println("Initialize the sets for this scenario ...")
 	callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 
@@ -559,6 +566,64 @@ func subscriberReceivedDeadLetterCount(publisherURL, subscriberApp, protocol str
 	}
 
 	return len(appResp.ReceivedByTopicDeadLetter), nil
+}
+
+// subscriberReceivedTotal returns the total number of messages the subscriber
+// app has recorded across every topic. Used to detect when a broker
+// redelivery backlog has drained.
+func subscriberReceivedTotal(publisherURL, subscriberApp, protocol string, podEndpoints []string) (int, error) {
+	req := callSubscriberMethodRequest{
+		ReqID:        "c-" + uuid.New().String(),
+		RemoteApp:    subscriberApp,
+		Protocol:     protocol,
+		Method:       "getMessages",
+		PodEndpoints: podEndpoints,
+	}
+	rawReq, _ := json.Marshal(req)
+	resp, err := utils.HTTPPost(fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherURL), rawReq)
+	if err != nil {
+		return 0, err
+	}
+	var r receivedMessagesResponse
+	if err := json.Unmarshal(resp, &r); err != nil {
+		return 0, err
+	}
+	return len(r.ReceivedByTopicA) + len(r.ReceivedByTopicB) + len(r.ReceivedByTopicC) +
+		len(r.ReceivedByTopicRaw) + len(r.ReceivedByTopicDead) + len(r.ReceivedByTopicDeadLetter) +
+		len(r.ReceivedByTopicBulk) + len(r.ReceivedByTopicRawBulk) +
+		len(r.ReceivedByTopicCEBulk) + len(r.ReceivedByTopicDefBulk), nil
+}
+
+// drainSubscriberBacklog flushes any messages still being redelivered from a
+// previous scenario before the next one starts. A scenario that holds the
+// subscriber in a failing state (notably the "error" scenario) builds up a
+// broker redelivery backlog; if those messages arrive after the next
+// scenario has reset its received sets they inflate that scenario's counts
+// (observed as 80/40 on the retry scenario). The subscriber is placed in
+// success mode so the broker drains, and we wait until the recorded total
+// stops growing, i.e. the backlog is empty. The caller is expected to
+// re-initialize (reset) the subscriber sets afterwards so the drained
+// messages are discarded.
+func drainSubscriberBacklog(t *testing.T, publisherExternalURL, subscriberAppName, protocol string, podEndpoints []string) {
+	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
+
+	var last int
+	stable := 0
+	require.Eventually(t, func() bool {
+		got, err := subscriberReceivedTotal(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
+		if err != nil {
+			return false
+		}
+		if got == last {
+			stable++
+		} else {
+			stable = 0
+			last = got
+		}
+		// Three consecutive quiet polls (~15s) with no new arrivals means
+		// the broker has no more in-flight redeliveries to hand us.
+		return stable >= 3
+	}, 180*time.Second, 5*time.Second, "subscriber backlog did not drain before scenario start")
 }
 
 func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse, podEndpoints []string) {
