@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -13,34 +13,21 @@ limitations under the License.
 
 package errors
 
-import (
-	"errors"
-)
+import "errors"
 
 type closed struct {
 	method string
 }
 
-type stalled struct{}
-
 func NewClosed(method string) error {
 	return &closed{method: method}
-}
-
-func NewStalled() error {
-	return &stalled{}
-}
-
-var cl = new(new(closed))
-
-func IsClosed(err error) bool {
-	return errors.As(err, cl)
 }
 
 func (c *closed) Error() string {
 	return "actor is closed, cannot handle " + c.method
 }
 
-func (s *stalled) Error() string {
-	return "actor is stalled"
+func IsClosed(err error) bool {
+	var c *closed
+	return errors.As(err, &c)
 }
