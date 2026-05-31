@@ -20,14 +20,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/actors/targets"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 )
-
-func newRetentioner() *retentioner {
-	return &retentioner{
-		lock: lock.New(),
-	}
-}
 
 type Options struct {
 	Actors            actors.Interface
@@ -56,10 +49,10 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 }
 
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
-	r := newRetentioner()
-	r.factory = f
-	r.actorID = actorID
-	return r
+	return &retentioner{
+		factory: f,
+		actorID: actorID,
+	}
 }
 
 func (f *factory) HaltAll(context.Context) error {
