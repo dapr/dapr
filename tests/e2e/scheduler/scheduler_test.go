@@ -163,15 +163,20 @@ func TestJobs(t *testing.T) {
 			log.Println("Checking the count of stored triggered jobs equals the scheduled count of jobs")
 			// Call the app endpoint to get triggered jobs
 			resp, err := utils.HTTPGet(fmt.Sprintf(getTriggeredJobsURLFormat, externalURL))
-
-			require.NoError(t, err)
+			if !assert.NoError(c, err) {
+				return
+			}
 			var triggeredJobs []triggeredJob
-			err = json.Unmarshal([]byte(resp), &triggeredJobs)
-			require.NoError(t, err)
+			if !assert.NoError(c, json.Unmarshal([]byte(resp), &triggeredJobs)) {
+				return
+			}
 
-			// Check if the length of triggeredJobs matches the expected length of scheduled jobs
+			// Check if the length of triggeredJobs matches the expected length of scheduled jobs.
+			// 60s rather than 10s to absorb Windows AKS pod / kube-proxy latency,
+			// which has been observed to take more than 10s to deliver all 40
+			// triggered jobs to the app endpoint.
 			assert.Len(c, triggeredJobs, numIterations*numJobsPerGoRoutine)
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 60*time.Second, 500*time.Millisecond)
 		t.Log("Done.")
 	})
 
@@ -358,11 +363,18 @@ func TestSchedulerQuorumRecovery(t *testing.T) {
 		assert.Greater(c, len(jobs), baselineCount,
 			"trigger count should increase after scheduler recovery")
 	}, 30*time.Second, time.Second)
-	t.Log("Triggers resumed after scheduler pod kill — cluster recovered")
+	t.Log("Triggers resumed after scheduler pod kill, cluster recovered")
 
-	// Cleanup.
-	_, err = utils.HTTPDelete(
-		fmt.Sprintf("%s/deleteJob/%s", externalURL, recoveryJobName),
-	)
-	require.NoError(t, err)
+	// Cleanup. Retry the delete: immediately after the scheduler pod was
+	// killed and replaced, the shared HTTP client occasionally hits the
+	// default request timeout while the app is still serving stale TCP
+	// connections, which surfaces as a 'context deadline exceeded' on
+	// the first attempt. Use EventuallyWithT so a transient single-shot
+	// timeout does not fail an otherwise-passing test.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, derr := utils.HTTPDelete(
+			fmt.Sprintf("%s/deleteJob/%s", externalURL, recoveryJobName),
+		)
+		assert.NoError(c, derr)
+	}, 30*time.Second, time.Second)
 }
