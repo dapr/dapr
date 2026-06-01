@@ -347,8 +347,11 @@ func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExte
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 	_ = sentMessages
 
-	// After exhaustion, messages should be ACK'd and dropped
-	log.Printf("Waiting 65 seconds for resiliency policy to exhaust retries (maxRetries=60)...")
+	// After exhaustion, messages should be ACK'd and dropped. The wait is
+	// comfortably longer than the pubsubRetry budget (maxRetries=5); this
+	// assertion only requires that the messages are not delivered to the
+	// app, which holds whether they are still retrying or already dropped.
+	log.Printf("Waiting for resiliency policy to exhaust retries...")
 	time.Sleep(65 * time.Second)
 
 	log.Printf("Validating messages were dropped after retry exhaustion...")
@@ -474,20 +477,19 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		// primary topic instead of being dead-lettered, permanently
 		// stranding part of the expected dead-letter set (observed as the
 		// count landing at 0/20/30 of 40 across runs).
-		// The dead-letter budget must clear the slowest broker. On Redis
-		// (KinD) a message is not dead-lettered until its inbound
-		// resiliency policy exhausts, and the policy advances roughly one
-		// retry per broker redelivery cycle (~6s), so 60 retries land the
-		// dead-letter burst at ~6 minutes. A 360s budget expires right as
-		// the burst arrives; 600s gives it comfortable headroom while
-		// still returning as soon as all messages are dead-lettered on
-		// faster brokers (Azure Service Bus).
+		// A message is dead-lettered once its inbound resiliency policy
+		// (pubsubRetry, maxRetries=5) exhausts. With the small retry
+		// budget this is fast and bounded on every broker, including
+		// Redis on KinD where each retry maps to a multi-second
+		// redelivery cycle. EventuallyWithT returns as soon as all
+		// messages are dead-lettered; the cap is generous headroom for
+		// the slowest broker.
 		log.Printf("Validating dead-lettered messages for 'error' subscriber...")
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			got, err := subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
 			assert.NoError(c, err, "error calling subscriber to get dead letter count")
 			assert.Equal(c, len(sentMessages.ReceivedByTopicDeadLetter), got)
-		}, 600*time.Second, 5*time.Second,
+		}, 300*time.Second, 5*time.Second,
 			"subscriber did not receive all dead letter messages within timeout")
 
 		// Now flip to success so the non-dead-letter topics (a/b/c/raw)
