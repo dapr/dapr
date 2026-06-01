@@ -125,6 +125,15 @@ type State struct {
 	// only in the in-memory cache.
 	metadataETag *string
 
+	// customStatusPersisted and propagatedHistoryPersisted are observed at load
+	// time from the state store's ETag for those keys. They are the source of
+	// truth for "does this optional key currently exist in the store" at purge
+	// time, independent of whether the in-memory value is populated (a key can
+	// be persisted with an empty proto, which would load as a nil CustomStatus /
+	// IncomingHistory).
+	customStatusPersisted      bool
+	propagatedHistoryPersisted bool
+
 	// change tracking
 	inboxAddedCount                         int
 	inboxRemovedCount                       int
@@ -185,6 +194,17 @@ func (s *State) Reset() {
 
 // ResetChangeTracking resets the change tracking counters. This should be called after a save request.
 func (s *State) ResetChangeTracking() {
+	// A save with any history delta upserts the customStatus key (see
+	// GetSaveRequest), so after a successful save it is now persisted.
+	if s.historyAddedCount > 0 || s.historyRemovedCount > 0 {
+		s.customStatusPersisted = true
+	}
+	// A save with incomingHistoryChanged either upserts or deletes the
+	// propagated-history key; track the resulting persistence state.
+	if s.incomingHistoryChanged {
+		s.propagatedHistoryPersisted = s.IncomingHistory != nil
+	}
+
 	s.inboxAddedCount = 0
 	s.inboxRemovedCount = 0
 	s.historyAddedCount = 0
@@ -890,6 +910,9 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		wState.RawSignatures = append(wState.RawSignatures, raw)
 	}
 
+	if bulkRes[customStatusKey].ETag != nil {
+		wState.customStatusPersisted = true
+	}
 	if len(bulkRes[customStatusKey].Data) > 0 {
 		wState.CustomStatus = &wrapperspb.StringValue{}
 
@@ -907,6 +930,9 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 	}
 
+	if bulkRes[propagatedHistoryKey].ETag != nil {
+		wState.propagatedHistoryPersisted = true
+	}
 	if len(bulkRes[propagatedHistoryKey].Data) > 0 {
 		var ph protos.PropagatedHistory
 		if err = proto.Unmarshal(bulkRes[propagatedHistoryKey].Data, &ph); err != nil {
@@ -1168,7 +1194,7 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 		ActorType: s.workflowActorType,
 		ActorID:   actorID,
 		// Initial capacity should be enough to contain the entire inbox, history, signing data, and custom status + metadata
-		Operations: make([]api.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+len(s.SigningCertificates)+len(s.ExternalSigningCertificates)+len(s.Signatures)+2),
+		Operations: make([]api.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+len(s.SigningCertificates)+len(s.ExternalSigningCertificates)+len(s.Signatures)+3),
 	}
 
 	addPurgeStateOperations(req, inboxKeyPrefix, len(s.Inbox))
@@ -1177,20 +1203,24 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 	addPurgeStateOperations(req, extSigCertKeyPrefix, len(s.ExternalSigningCertificates))
 	addPurgeStateOperations(req, signatureKeyPrefix, len(s.Signatures))
 
-	req.Operations = append(req.Operations,
-		api.TransactionalOperation{
+	// Only emit deletes for optional keys that we know are persisted.
+	if s.customStatusPersisted {
+		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Delete,
 			Request:   api.TransactionalDelete{Key: customStatusKey},
-		},
-		api.TransactionalOperation{
-			Operation: api.Delete,
-			Request:   api.TransactionalDelete{Key: MetadataKey},
-		},
-		api.TransactionalOperation{
+		})
+	}
+	if s.propagatedHistoryPersisted {
+		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Delete,
 			Request:   api.TransactionalDelete{Key: propagatedHistoryKey},
-		},
-	)
+		})
+	}
+
+	req.Operations = append(req.Operations, api.TransactionalOperation{
+		Operation: api.Delete,
+		Request:   api.TransactionalDelete{Key: MetadataKey},
+	})
 
 	return req, nil
 }
