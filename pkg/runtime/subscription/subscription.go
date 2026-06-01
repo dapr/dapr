@@ -531,6 +531,14 @@ func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *c
 		ContentType: msg.ContentType,
 	}
 
+	// If the parent context was explicitly canceled (e.g. shutdown), skip
+	// the DLQ publish: detaching the deadline below would otherwise let this
+	// block for up to deadLetterPublishTimeout while the runtime is trying
+	// to shut down. Only a deadline-exhausted parent should be detached.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return ctx.Err()
+	}
+
 	// Detach from the parent context's deadline before publishing. The
 	// inbound message handler ctx is bounded by component-level handler timeouts
 	// (e.g. handlerTimeoutInSec on Azure Service Bus) and may have been fully
@@ -538,9 +546,8 @@ func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *c
 	// reach this path. Publishing on that ctx then fails immediately with
 	// "context deadline exceeded" without ever reaching the broker, the message
 	// is NACK'd back to the broker, redelivered, retried again, DLQ fails again,
-	// and the message never escapes the loop. Parent cancellation (e.g.
-	// shutdown) is still honored: the caller already short-circuits the DLQ path
-	// when ctx is canceled, and the timeout below caps the publish on its own.
+	// and the message never escapes the loop. The timeout below caps the
+	// detached publish so it cannot block indefinitely.
 	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deadLetterPublishTimeout)
 	defer cancel()
 	err := s.adapter.Publish(pubCtx, req)

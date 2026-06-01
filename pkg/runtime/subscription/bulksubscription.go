@@ -340,9 +340,14 @@ func (s *Subscription) sendBulkToDeadLetter(ctx context.Context,
 		Metadata:   msg.Metadata,
 	}
 
-	// Detach the parent deadline before publishing; see the matching
-	// helper in pkg/runtime/subscription/subscription.go for why an
-	// inherited inbound-handler context cannot be used here.
+	// Skip the DLQ publish if the parent was explicitly canceled (e.g.
+	// shutdown), otherwise detaching the deadline below could block for up
+	// to deadLetterPublishTimeout during shutdown. See the matching helper
+	// in pkg/runtime/subscription/subscription.go for why an inherited
+	// inbound-handler deadline cannot be used for the publish itself.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return ctx.Err()
+	}
 	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deadLetterPublishTimeout)
 	defer cancel()
 

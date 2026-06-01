@@ -336,7 +336,11 @@ func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternal
 	return subscriberExternalURL
 }
 
-// testResiliencyExhaustion: Wait for resiliency policy to exhaust (60 retries @ 1s = 60s + buffer)
+// testResiliencyExhaustion verifies that messages are not delivered to the
+// app while the subscriber keeps erroring: they are retried per the
+// pubsubRetry policy (maxRetries=5) and then dropped. The wait below only
+// needs to outlast the point at which the app would have received a message,
+// not the full exhaustion, so it is robust to broker redelivery timing.
 func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string, podEndpoints []string) string {
 	log.Printf("Test resiliency exhaustion - messages should be dropped after retries exhausted")
 	err := utils.HealthCheckApps(publisherExternalURL)
@@ -499,9 +503,10 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages, podEndpoints)
 		return subscriberExternalURL
 	} else {
-		// Sleep briefly to allow initial delivery attempts to fail
-		// We sleep less than the resiliency retry window (60 retries × 1s = 60s)
-		// so that when we flip to success, messages are still being retried
+		// Sleep briefly to allow initial delivery attempts to fail. We sleep
+		// well under the resiliency retry window (pubsubRetry, maxRetries=5
+		// @ 1s) so that when we flip to success the messages are still being
+		// retried and are then delivered rather than dropped.
 		time.Sleep(2 * time.Second)
 	}
 
