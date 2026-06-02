@@ -94,7 +94,7 @@ func (r *remotestream) Run(t *testing.T, ctx context.Context) {
 			case <-time.After(20 * time.Millisecond):
 			}
 		}
-		return "done", nil
+		return activityResultDone, nil
 	}
 	workflowFn := func(octx *task.WorkflowContext) (any, error) {
 		var out string
