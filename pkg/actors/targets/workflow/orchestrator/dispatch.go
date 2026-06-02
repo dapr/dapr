@@ -15,8 +15,6 @@ package orchestrator
 
 import (
 	"errors"
-
-	"github.com/dapr/durabletask-go/backend"
 )
 
 type dispatchResult struct {
@@ -30,26 +28,4 @@ func (r *dispatchResult) recordFailure(eventID int32, err error) {
 	}
 	r.failedEventIDs[eventID] = struct{}{}
 	r.err = errors.Join(r.err, err)
-}
-
-func hasRemoteTasks(es []*backend.HistoryEvent) bool {
-	for _, e := range es {
-		if router := e.GetRouter(); router != nil && router.TargetAppID != nil {
-			return true
-		}
-	}
-	return false
-}
-
-func hasRemoteMessages(msgs []*backend.WorkflowRuntimeStateMessage) bool {
-	for _, msg := range msgs {
-		if router := msg.GetHistoryEvent().GetRouter(); router != nil && router.TargetAppID != nil {
-			return true
-		}
-	}
-	return false
-}
-
-func isDispatchableEvent(e *backend.HistoryEvent) bool {
-	return e.GetTaskScheduled() != nil || e.GetChildWorkflowInstanceCreated() != nil
 }

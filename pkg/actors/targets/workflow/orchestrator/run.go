@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"strings"
 	"time"
 
@@ -375,7 +374,70 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 
-	// Dispatch activities and messages, collecting failures.
+	// SAVE-BEFORE-DISPATCH.
+	//
+	// We must persist the workflow's runtime-state (TaskScheduled events for
+	// pending activities, TimerCreated, outbound messages etc.) BEFORE
+	// triggering any side effect (dispatch to activity actors, child
+	// workflows, AddEvent on remote workflow actors).
+	//
+	// Why: dispatch creates durable reminders in the scheduler / activity
+	// actor (the activity actor's "run-activity" reminder, the child
+	// workflow's start reminder, the AddEvent inbox row on the recipient).
+	// These reminders OUTLIVE the workflow's local state and will fire
+	// regardless of whether the workflow's own save eventually commits.
+	//
+	// Under chaos (placement rebalance, state-store latency, peer ETag race),
+	// the legacy order (dispatch -> save) produces an "orphan-completion"
+	// failure:
+	//
+	//   1. Dispatch succeeds -> activity actor enqueues its "run-activity"
+	//      reminder durably in the scheduler.
+	//   2. Workflow's own state save fails (ETag mismatch, network drop).
+	//   3. Activity reminder fires anyway. Activity executes and posts
+	//      TaskCompleted back to the workflow via the activity-result
+	//      reminder, which writes the event into the workflow's inbox.
+	//   4. Workflow retries: loads state, history has NO TaskScheduled
+	//      because step 2 was rolled back, but inbox now has an unsolicited
+	//      TaskCompleted.
+	//   5. Workflow code replays, re-emits ScheduleTask with the same
+	//      EventId, and the dispatcher's IsTaskAlreadyResolved check
+	//      silently skips dispatch because TaskCompleted is already in
+	//      NewEvents (from the inbox).
+	//   6. ApplyRuntimeStateChanges appends the unconsumed TaskCompleted
+	//      to history as an "orphan" with no preceding TaskScheduled.
+	//      Workflow waits forever for an activity that will never be
+	//      re-dispatched.
+	//
+	// With save-before-dispatch, if step 2 fails the side effects in
+	// step 1 never happen, so no orphan can form. The retry sees the
+	// pre-chaos state and re-runs cleanly.
+	//
+	// Trade-off / known limitation:
+	//   * If the save succeeds and the dispatch fails (e.g. router.Call
+	//     rejects the activity actor invocation), the persisted
+	//     TaskScheduled is durable but no activity actor is running it.
+	//     The workflow's replay matches the TaskScheduled in OldEvents to
+	//     the CallActivity.Await(), but pendingTasks on subsequent runs
+	//     is empty (durabletask only populates it from actions emitted
+	//     by THIS execution). The workflow stalls.
+	//   * Dispatch is idempotent (activity actor's "run-activity" reminder
+	//     uses a fixed name + upsert-create semantics, inflight.Acquire
+	//     coalesces concurrent invocations), so the FIX is to detect
+	//     unfulfilled TaskScheduled events in history on workflow load and
+	//     re-dispatch them. That is the subject of a follow-up.
+
+	state.ApplyRuntimeStateChanges(rs)
+	state.ClearInbox()
+
+	if err = o.signAndSaveState(ctx, state); err != nil {
+		return todo.RunCompletedFalse, err
+	}
+
+	// Dispatch activities and messages now that state is durable. Any
+	// failure here leaves the persisted TaskScheduled in place and surfaces
+	// as a recoverable error so the workflow retries; re-dispatch is safe
+	// because of the idempotency guarantees described above.
 	activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory)
 	addResult := o.callAddEventStateMessage(ctx, addWorkflows)
 	createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows)
@@ -386,52 +448,8 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs,
 				protos.StalledReason_PAYLOAD_SIZE_EXCEEDED, dispatchErr.Error())
 		}
-		if len(state.History) == 0 && (hasRemoteTasks(pendingTasks) || hasRemoteMessages(createWorkflows)) {
-			// Save state without the events that failed to dispatch so the
-			// workflow transitions to RUNNING. Successfully dispatched items
-			// keep their events in history so they are not re-dispatched on
-			// retry. The inbox is preserved so the existing reminder retries
-			// the full execution.
-			allFailed := make(map[int32]struct{}, len(activityResult.failedEventIDs)+len(createResult.failedEventIDs)+len(addResult.failedEventIDs))
-			maps.Copy(allFailed, activityResult.failedEventIDs)
-			maps.Copy(allFailed, createResult.failedEventIDs)
-			maps.Copy(allFailed, addResult.failedEventIDs)
-
-			// Temporarily replace rs.NewEvents with a filtered copy that excludes
-			// failed dispatch events, then restore the original after
-			// ApplyRuntimeStateChanges. This works because ApplyRuntimeStateChanges
-			// reads rs.NewEvents by reference (via GetNewEvents()) and appends
-			// directly to state.History. It does not copy or retain the slice.
-			origNewEvents := rs.NewEvents
-			filtered := origNewEvents[:0:0]
-			for _, e := range origNewEvents {
-				if isDispatchableEvent(e) {
-					if _, failed := allFailed[e.GetEventId()]; failed {
-						continue
-					}
-				}
-				filtered = append(filtered, e)
-			}
-			rs.NewEvents = filtered
-			state.ApplyRuntimeStateChanges(rs)
-			rs.NewEvents = origNewEvents
-			if saveErr := o.signAndSaveState(ctx, state); saveErr != nil {
-				return todo.RunCompletedFalse, saveErr
-			}
-			executionStatus = diag.StatusRecoverable
-			return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
-		}
-
 		executionStatus = diag.StatusRecoverable
 		return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
-	}
-
-	state.ApplyRuntimeStateChanges(rs)
-	state.ClearInbox()
-
-	err = o.signAndSaveState(ctx, state)
-	if err != nil {
-		return todo.RunCompletedFalse, err
 	}
 
 	rstatus := runtimestate.RuntimeStatus(rs)
