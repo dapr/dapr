@@ -40,7 +40,16 @@ import (
 func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Reminder) (todo.RunCompleted, error) {
 	state, _, err := o.loadInternalState(ctx)
 	if err != nil {
-		return todo.RunCompletedTrue, fmt.Errorf("error loading internal state: %w", err)
+		// Treat load failures as recoverable so the reminder is retried.
+		// LoadWorkflowState already separates VerificationError (tombstoned
+		// inside loadInternalState) from transient store failures. Anything
+		// reaching here is a store-read or unmarshal failure — under
+		// transient state-store pressure (latency, partial bulk response)
+		// the same load will succeed on retry. Returning RunCompletedTrue
+		// here would let the reminder system delete the wake-up handle and
+		// strand the workflow.
+		log.Warnf("Workflow actor '%s': failed to load state — will retry: %v", o.actorID, err)
+		return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("error loading internal state: %w", err))
 	}
 	if state == nil {
 		// The assumption is that someone manually deleted the workflow state. This is non-recoverable.
