@@ -104,7 +104,7 @@ func (d *defaultnoreset) Run(t *testing.T, ctx context.Context) {
 	// timeout, daprd would have HaltAll'd by now and the invocation would
 	// hit a transient error.
 	httpClient := fclient.HTTP(t)
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/actors/myactor/test1/method/foo", d.actors.Daprd().HTTPPort())
+	reqURL := fmt.Sprintf("http://%s/v1.0/actors/myactor/test1/method/foo", d.actors.Daprd().HTTPAddress())
 	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(rctx, http.MethodPost, reqURL, nil)
