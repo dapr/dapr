@@ -377,9 +377,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	// Dispatch-vs-save ordering:
 	//
-	//   * Default path (no cross-app targets in this batch) uses
+	//   * Default path (activities-only batch with local targets) uses
 	//     SAVE-BEFORE-DISPATCH. The workflow's full runtime-state
-	//     (TaskScheduled events, outbound messages, etc.) is persisted
+	//     (TaskScheduled events, etc.) is persisted
 	//     BEFORE any side effect. This eliminates the "orphan-completion"
 	//     stall, where (under chaos) a successful dispatch's TaskCompleted
 	//     comes back to a workflow whose state save was rolled back:
@@ -397,15 +397,24 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	//     reminder fires on a backoff and re-attempts the dispatch
 	//     idempotently until it succeeds.
 	//
-	//   * Cross-app path (preserved from PR #9738): when any pending task
-	//     or outbound message targets a remote app, the legacy
-	//     "dispatch first, save framing only on first execution, no-save
-	//     on subsequent failed retries" path is taken. This keeps a
-	//     workflow whose remote app is offline from growing its history
-	//     on every retry cycle. Unifying this path with save-before-
-	//     dispatch + a cross-app-aware dispatch-retry reminder is
-	//     deferred to a follow-up (see PR description).
-	if hasRemoteTasks(pendingTasks) || hasRemoteMessages(createWorkflows) {
+	//   * Legacy path (preserved from PR #9738): when the batch carries
+	//     any outbound state message (child-workflow creation or child
+	//     completion/failure delivery, local or remote) or any pending
+	//     task targets a remote app, the legacy "dispatch first, save
+	//     framing only on first execution, no-save on subsequent failed
+	//     retries" path is taken. The dispatch-retry safety reminder
+	//     only knows how to re-dispatch local TaskScheduled events, so
+	//     save-before-dispatch is restricted to activities-only local
+	//     batches: persisting a state message's events (and clearing the
+	//     inbox) before delivery would otherwise strand the counterpart
+	//     workflow if the dispatch fails, with nothing left to retry it.
+	//     The legacy path instead keeps the inbox intact on failure so
+	//     the calling reminder re-executes and regenerates the messages.
+	//     It also keeps a workflow whose remote app is offline from
+	//     growing its history on every retry cycle. Unifying this path
+	//     with save-before-dispatch + a message-aware dispatch-retry
+	//     reminder is deferred to a follow-up (see PR description).
+	if len(addWorkflows) > 0 || len(createWorkflows) > 0 || hasRemoteTasks(pendingTasks) {
 		// PR #9738 cross-app path: dispatch first, then save selectively.
 		activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory)
 		addResult := o.callAddEventStateMessage(ctx, addWorkflows)
@@ -465,7 +474,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			return todo.RunCompletedFalse, err
 		}
 	} else {
-		// Default path: save-before-dispatch.
+		// Default path: save-before-dispatch. The batch carries no
+		// outbound state messages (gating above), so activities are the
+		// only side effect to dispatch — and the only kind the
+		// dispatch-retry safety reminder knows how to recover.
 		state.ApplyRuntimeStateChanges(rs)
 		state.ClearInbox()
 
@@ -473,11 +485,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			return todo.RunCompletedFalse, err
 		}
 
-		activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory)
-		addResult := o.callAddEventStateMessage(ctx, addWorkflows)
-		createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows)
-
-		dispatchErr := errors.Join(activityResult.err, addResult.err, createResult.err)
+		dispatchErr := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory).err
 		if dispatchErr != nil {
 			if errors.Is(dispatchErr, errPayloadSizeExceeded) {
 				return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs,

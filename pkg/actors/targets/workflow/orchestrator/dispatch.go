@@ -54,17 +54,6 @@ func hasRemoteTasks(es []*backend.HistoryEvent) bool {
 	return false
 }
 
-// hasRemoteMessages reports whether any of the given outbound workflow
-// state messages targets a remote application.
-func hasRemoteMessages(msgs []*backend.WorkflowRuntimeStateMessage) bool {
-	for _, msg := range msgs {
-		if router := msg.GetHistoryEvent().GetRouter(); router != nil && router.TargetAppID != nil {
-			return true
-		}
-	}
-	return false
-}
-
 // isDispatchableEvent returns true for events that, when present in
 // rs.NewEvents on first execution, must be filtered out of the saved
 // history when their dispatch failed against an unreachable remote app
