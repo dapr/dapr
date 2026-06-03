@@ -16,7 +16,8 @@ limitations under the License.
 package utils
 
 import (
-	"crypto/ed25519"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -46,7 +47,13 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 	// *********************
 	// Generate private key
 	// *********************
-	_, tlsKey, err := ed25519.GenerateKey(rand.Reader)
+	// ECDSA P-256 is used deliberately: this self-signed cert ends up in
+	// the Windows root store via setup-certificates.cmd and is then
+	// validated by daprd's Go TLS client. On Windows, Go delegates chain
+	// validation to CertVerifyCertificateChainPolicy, whose Ed25519
+	// support is missing on the nanoserver base image used by Dapr's
+	// Windows containers.
+	tlsKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return err
 	}
