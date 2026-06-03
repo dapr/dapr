@@ -15,7 +15,18 @@ package orchestrator
 
 import (
 	"errors"
+
+	"github.com/dapr/durabletask-go/backend"
 )
+
+// reminderNameDispatchRetry is the deterministic per-workflow safety
+// reminder created when an activity dispatch fails AFTER the workflow's
+// state was already persisted with the TaskScheduled event. The reminder
+// fires on a backoff, scans state for any TaskScheduled whose result is
+// not yet in history or inbox, and re-attempts dispatch. Idempotent by
+// design: the activity actor's run-activity reminder is upserted under a
+// fixed name, so re-dispatching an in-flight activity is a no-op.
+const reminderNameDispatchRetry = "dispatch-retry"
 
 type dispatchResult struct {
 	failedEventIDs map[int32]struct{}
@@ -28,4 +39,36 @@ func (r *dispatchResult) recordFailure(eventID int32, err error) {
 	}
 	r.failedEventIDs[eventID] = struct{}{}
 	r.err = errors.Join(r.err, err)
+}
+
+// hasRemoteTasks reports whether any of the given TaskScheduled events
+// targets a remote application. Used to detect when the legacy
+// "framing-only first-execution save" path (PR #9738) must be preserved
+// instead of save-before-dispatch.
+func hasRemoteTasks(es []*backend.HistoryEvent) bool {
+	for _, e := range es {
+		if router := e.GetRouter(); router != nil && router.TargetAppID != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// hasRemoteMessages reports whether any of the given outbound workflow
+// state messages targets a remote application.
+func hasRemoteMessages(msgs []*backend.WorkflowRuntimeStateMessage) bool {
+	for _, msg := range msgs {
+		if router := msg.GetHistoryEvent().GetRouter(); router != nil && router.TargetAppID != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// isDispatchableEvent returns true for events that, when present in
+// rs.NewEvents on first execution, must be filtered out of the saved
+// history when their dispatch failed against an unreachable remote app
+// (so the next reminder fire re-emits and re-attempts them).
+func isDispatchableEvent(e *backend.HistoryEvent) bool {
+	return e.GetTaskScheduled() != nil || e.GetChildWorkflowInstanceCreated() != nil
 }
