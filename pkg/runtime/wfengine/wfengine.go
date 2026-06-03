@@ -208,21 +208,23 @@ func New(opts Options) (Interface, error) {
 			wfe.actorRegLock.Lock()
 			defer wfe.actorRegLock.Unlock()
 
-			if ctx.Err() != nil {
-				ctx = context.Background()
-			}
+			wfe.getWorkItemsCount.Add(-1)
 
-			if wfe.getWorkItemsCount.Add(-1) == 0 && wfe.mcpRegistrationCount.Load() == 0 && wfe.actorsRegistered {
-				log.Debug("Unregistering workflow actors")
-				// Reset unconditionally: UnRegisterActors removes types from the
-				// table before HaltAll, so an error here still means they're gone.
-				err := abackend.UnRegisterActors(ctx)
-				wfe.actorsRegistered = false
-				if err != nil {
-					return err
-				}
-			}
-
+			// Intentionally do NOT call UnRegisterActors here. The SDK's
+			// work-item gRPC stream churns under transient infrastructure
+			// pressure (network latency, gRPC keepalive timeout, app
+			// container restart) and reconnects within milliseconds.
+			// Eagerly unregistering workflow/activity/retentioner actor
+			// types on every disconnect produces a window where the
+			// placement table still reports this daprd as hosting those
+			// types — peer daprds keep routing dispatch calls here — but
+			// the local actor table has dropped the factories. Every such
+			// dispatch fails locally with "actor type ... not registered",
+			// the orchestrator's recoverable retries hit the same wall,
+			// and affected workflows strand indefinitely. Actor types now
+			// persist for the daprd's lifetime once registered;
+			// UnRegisterActors is still invoked from the MCP teardown
+			// path and on daprd shutdown.
 			return nil
 		}),
 		backend.WithStreamSendTimeout(time.Second*10),
