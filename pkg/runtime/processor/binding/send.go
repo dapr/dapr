@@ -313,12 +313,11 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 		}
 
 		ctx = b.grpc.AddAppTokenToContext(ctx)
-
-		conn, err := b.grpc.GetAppClient()
+		conn, teardown, err := b.grpc.GetAppClient()
 		if err != nil {
 			return nil, fmt.Errorf("error while getting app client: %w", err)
 		}
-
+		defer teardown(false)
 		client := runtimev1pb.NewAppCallbackClient(conn)
 		req := &runtimev1pb.BindingEventRequest{
 			Name:     bindingName,
@@ -456,11 +455,11 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 }
 
 func (b *binding) getSubscribedBindingsGRPC(ctx context.Context) ([]string, error) {
-	conn, err := b.grpc.GetAppClient()
+	conn, teardown, err := b.grpc.GetAppClient()
 	if err != nil {
 		return nil, fmt.Errorf("error while getting app client: %w", err)
 	}
-
+	defer teardown(false)
 	client := runtimev1pb.NewAppCallbackClient(conn)
 	resp, err := client.ListInputBindings(ctx, &emptypb.Empty{})
 	bindings := []string{}

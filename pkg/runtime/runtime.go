@@ -479,7 +479,7 @@ func newDaprRuntime(ctx context.Context,
 				}(comp)
 			}
 
-			errs := make([]error, len(comps)+1)
+			errs := make([]error, len(comps)+2)
 			for i := range comps {
 				errs[i] = <-errCh
 			}
@@ -488,11 +488,13 @@ func newDaprRuntime(ctx context.Context,
 			log.Info("Dapr runtime stopped")
 
 			errs[len(comps)] = rt.cleanSockets()
-
+			// Close gRPC manager after all components are shut down so that
+			// in-flight app gRPC connections are not destroyed while
+			// subscriptions are still draining.
+			errs[len(comps)+1] = rt.grpc.Close()
 			return errors.Join(errs...)
 		},
 		rt.stopTrace,
-		rt.grpc,
 	); err != nil {
 		return nil, err
 	}
@@ -812,14 +814,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	log.Infof("Internal gRPC server is running on %s:%d", a.runtimeConfig.internalGRPCListenAddress, a.runtimeConfig.internalGRPCPort)
 
-	a.runtimeConfig.outboundHealthz.AddTarget("app").Ready()
-
-	if err := a.blockUntilAppIsReady(ctx); err != nil {
-		return err
-	}
-
-	a.initDirectMessaging(a.nameResolver)
-
 	if err := a.initActors(ctx); err != nil {
 		return fmt.Errorf("failed to initialize actors: %w", err)
 	}
@@ -829,6 +823,14 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return fmt.Errorf("failed to load mcpservers: %s", err)
 	}
 	a.flushOutstandingMCPServers(ctx)
+
+	a.runtimeConfig.outboundHealthz.AddTarget("app").Ready()
+
+	if err := a.blockUntilAppIsReady(ctx); err != nil {
+		return err
+	}
+
+	a.initDirectMessaging(a.nameResolver)
 
 	if a.runtimeConfig.appConnectionConfig.MaxConcurrency > 0 {
 		log.Infof("app max concurrency set to %v", a.runtimeConfig.appConnectionConfig.MaxConcurrency)
