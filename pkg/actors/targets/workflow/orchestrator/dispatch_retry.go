@@ -24,6 +24,7 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
+	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
@@ -37,9 +38,12 @@ const dispatchRetryBackoff = time.Second
 // createDispatchRetryReminder schedules the per-workflow safety reminder
 // that re-attempts dispatch for any TaskScheduled whose result has not yet
 // arrived. The reminder name is deterministic so concurrent failures from
-// the same workflow collapse onto a single scheduler entry.
-func (o *orchestrator) createDispatchRetryReminder(ctx context.Context) error {
-	return o.createWorkflowReminder(ctx, reminderNameDispatchRetry, nil, time.Now().Add(dispatchRetryBackoff), o.appID, nil)
+// the same workflow collapse onto a single scheduler entry. The workflow
+// name is passed as the scheduler ConcurrencyKey so the reminder is
+// serialized against the workflow's other execution reminders
+// (start/new-event/timer), like every other workflow-execution reminder.
+func (o *orchestrator) createDispatchRetryReminder(ctx context.Context, workflowName string) error {
+	return o.createWorkflowReminder(ctx, reminderNameDispatchRetry, nil, time.Now().Add(dispatchRetryBackoff), o.appID, &workflowName)
 }
 
 // deleteDispatchRetryReminder removes the safety reminder. NotFound is
@@ -79,32 +83,7 @@ func (o *orchestrator) redispatchStranded(ctx context.Context, _ *actorapi.Remin
 		return o.deleteDispatchRetryReminder(ctx)
 	}
 
-	// Build the set of resolved TaskScheduled IDs from history and inbox.
-	// An ID is resolved if there is a TaskCompleted or TaskFailed event
-	// for it anywhere in either slice.
-	resolved := make(map[int32]struct{})
-	collectResolved(resolved, state.History)
-	collectResolved(resolved, state.Inbox)
-
-	// Collect unresolved TaskScheduled events in history order.
-	var unresolved []*backend.HistoryEvent
-	for _, e := range state.History {
-		ts := e.GetTaskScheduled()
-		if ts == nil {
-			continue
-		}
-		// Cross-app TaskScheduled retry is intentionally not handled here
-		// in this PR; see PR description for the rationale. Skip them so
-		// the safety reminder doesn't accidentally re-dispatch cross-app
-		// activities without propagated history.
-		if router := e.GetRouter(); router != nil && router.TargetAppID != nil {
-			continue
-		}
-		if _, ok := resolved[e.GetEventId()]; ok {
-			continue
-		}
-		unresolved = append(unresolved, e)
-	}
+	unresolved := unresolvedLocalTasks(state)
 
 	if len(unresolved) == 0 {
 		// Everything has been resolved (or the workflow is past these
@@ -145,6 +124,36 @@ func (o *orchestrator) redispatchStranded(ctx context.Context, _ *actorapi.Remin
 	// from this side is done; the activity actors' own run-activity
 	// reminders will deliver results back to the workflow inbox.
 	return o.deleteDispatchRetryReminder(ctx)
+}
+
+// unresolvedLocalTasks returns the local-target TaskScheduled events in
+// state.History whose completion (TaskCompleted/TaskFailed) is not yet
+// present in either history or inbox, in history order. Cross-app
+// TaskScheduled are excluded: their retry is intentionally not handled by
+// the dispatch-retry reminder in this PR (see PR description), as
+// re-dispatching them would lack propagated history.
+func unresolvedLocalTasks(state *wfenginestate.State) []*backend.HistoryEvent {
+	// Build the set of resolved TaskScheduled IDs from history and inbox.
+	// An ID is resolved if there is a TaskCompleted or TaskFailed event
+	// for it anywhere in either slice.
+	resolved := make(map[int32]struct{})
+	collectResolved(resolved, state.History)
+	collectResolved(resolved, state.Inbox)
+
+	var unresolved []*backend.HistoryEvent
+	for _, e := range state.History {
+		if e.GetTaskScheduled() == nil {
+			continue
+		}
+		if router := e.GetRouter(); router != nil && router.TargetAppID != nil {
+			continue
+		}
+		if _, ok := resolved[e.GetEventId()]; ok {
+			continue
+		}
+		unresolved = append(unresolved, e)
+	}
+	return unresolved
 }
 
 // collectResolved scans events for TaskCompleted/TaskFailed and records

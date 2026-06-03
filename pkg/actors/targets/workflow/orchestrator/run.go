@@ -116,6 +116,22 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			if rerr := o.handleRetention(ctx, runtimestate.RuntimeStatus(o.rstate)); rerr != nil {
 				return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to (re)create retention reminder on empty-inbox completion path: %w", rerr))
 			}
+		} else if unresolved := unresolvedLocalTasks(state); len(unresolved) > 0 {
+			// The workflow is running, the inbox is empty, but history
+			// holds local TaskScheduled events with no completion in
+			// sight. This recovers the dispatch-retry safety reminder
+			// when its Create was lost after a pre-save dispatch failure
+			// (e.g. scheduler unreachable, or the process died before the
+			// Create RPC). Without it the workflow has no wake-up left:
+			// the pre-save already cleared the inbox, so re-running this
+			// path is otherwise a no-op. Idempotent: the reminder name is
+			// deterministic, and if the tasks are merely in flight the
+			// fired reminder re-dispatches into ErrDuplicateInvocation
+			// and deletes itself.
+			wfName := o.getExecutionStartedEvent(state).GetName()
+			if rerr := o.createDispatchRetryReminder(ctx, wfName); rerr != nil {
+				return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to (re)create dispatch-retry reminder on empty-inbox path: %w", rerr))
+			}
 		}
 		log.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", o.actorID, reminder.Name)
 		return todo.RunCompletedTrue, nil
@@ -498,8 +514,15 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			// happens to fire later. The reminder is idempotent and
 			// deterministic in name, so repeated creates collapse onto
 			// one scheduler entry.
-			if rerr := o.createDispatchRetryReminder(ctx); rerr != nil {
-				log.Errorf("Workflow actor '%s': failed to create dispatch-retry reminder: %v", o.actorID, rerr)
+			//
+			// A creation failure is joined into the returned recoverable
+			// error so the calling reminder is not acked and gets
+			// redelivered; the empty-inbox path in this function then
+			// re-attempts creating the safety reminder for the stranded
+			// TaskScheduled (the inbox was already cleared by the
+			// pre-save, so re-execution alone would be a no-op).
+			if rerr := o.createDispatchRetryReminder(ctx, workflowName); rerr != nil {
+				dispatchErr = errors.Join(dispatchErr, fmt.Errorf("failed to create dispatch-retry reminder: %w", rerr))
 			}
 
 			executionStatus = diag.StatusRecoverable
