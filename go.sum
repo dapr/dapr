@@ -434,6 +434,8 @@ github.com/chebyrash/promise v0.0.0-20230709133807-42ec49ba1459/go.mod h1:CQthfP
 github.com/chzyer/logex v1.2.1/go.mod h1:JLbx6lG2kDbNRFnfkgvh4eRJRPX1QCoOIWomwysCBrQ=
 github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5PlCu98SY8svDHJxuZscDgtXS6KTTbou5AhLI=
 github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
+github.com/cicoyle/components-contrib v0.0.0-20260604215136-6a0f7bfce8e7 h1:2Y1zXl+mQVb2Dg8eYEGAQ339EZgCHmjIU3dDK3XvPMM=
+github.com/cicoyle/components-contrib v0.0.0-20260604215136-6a0f7bfce8e7/go.mod h1:wrp0r7umtl4x11pMuRRzcD+CbZaLLrgvzJKZPft53+8=
 github.com/cinience/go_rocketmq v0.0.2 h1:HZkcQ2wfwZeigkpUs71Gojp/WRiBzkz2uezrOFquh08=
 github.com/cinience/go_rocketmq v0.0.2/go.mod h1:2YNY7emT546dcFpMEWLesmAEi4ndW7+tX5VfNf1Zsgs=
 github.com/circonus-labs/circonus-gometrics v2.3.1+incompatible/go.mod h1:nmEj6Dob7S7YxXgwXpfOuvO54S+tGdZdw9fuRZt25Ag=
@@ -509,8 +511,6 @@ github.com/cyphar/filepath-securejoin v0.6.1 h1:5CeZ1jPXEiYt3+Z6zqprSAgSWiggmpVy
 github.com/cyphar/filepath-securejoin v0.6.1/go.mod h1:A8hd4EnAeyujCJRrICiOWqjS1AX0a9kM5XL+NwKoYSc=
 github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjmUv0qGF43aKCIKVE9A=
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
-github.com/dapr/components-contrib v1.18.0-rc.1 h1:KA4SG3jZXidTavwm5PrGYYihH0KCb9bX8EyJBoitXUM=
-github.com/dapr/components-contrib v1.18.0-rc.1/go.mod h1:wrp0r7umtl4x11pMuRRzcD+CbZaLLrgvzJKZPft53+8=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf h1:vRT6BytcXSseSg+VZthVm93niltGVOFbhLeRXbwyWKI=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf/go.mod h1:NawmfMN065wKn8Jk39E1iwwgWe3kti/MfHBy1jQmSZs=
 github.com/dapr/durabletask-go v0.12.1 h1:CIqG2HJGnU7kRtHICuRSSSO9RdHax99HdvHEaxRGE04=
