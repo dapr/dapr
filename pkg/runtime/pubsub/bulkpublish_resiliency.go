@@ -17,6 +17,8 @@ import (
 	"context"
 	"sync/atomic"
 
+	"google.golang.org/grpc/status"
+
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/utils"
@@ -55,7 +57,14 @@ func ApplyBulkPublishResiliency(ctx context.Context, req *contribPubsub.BulkPubl
 			Metadata:   req.Metadata,
 		}
 
-		return bulkPublisher.BulkPublish(ctx, newReq)
+		res, err := bulkPublisher.BulkPublish(ctx, newReq)
+		if err != nil {
+			if st, ok := status.FromError(err); ok {
+				//nolint:gosec
+				return res, resiliency.NewCodeError(int32(st.Code()), err)
+			}
+		}
+		return res, err
 	})
 	// If final error is timeout, CB open or CB too many requests, return the current request entries as failed
 	if err != nil &&
