@@ -11,7 +11,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
-	github.com/dapr/components-contrib v1.18.0-rc.1
+	github.com/dapr/components-contrib v1.18.0-rc.2
 	github.com/dapr/durabletask-go v0.12.1
 	github.com/dapr/kit v0.18.1
 	github.com/diagridio/go-etcd-cron v0.12.5
@@ -533,5 +533,3 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
-
-replace github.com/dapr/components-contrib => github.com/cicoyle/components-contrib v0.0.0-20260604215136-6a0f7bfce8e7
