@@ -61,11 +61,14 @@ func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 	initCtx, cancel := context.WithTimeout(ctx, timeout)
 
 	// Intercept the Result so we can flush dependents on a successful secret
-	// store init.
+	// store init. The timeout is propagated so the instance loop bounds the
+	// actual component init with the same deadline the finalizer waits on,
+	// rather than letting a timed-out init keep running and commit late.
 	intercept := make(chan error, 1)
 	catLoop.Enqueue(&loops.Init{
 		Component: comp,
 		Result:    intercept,
+		Timeout:   timeout,
 	})
 
 	if !ev.Internal {
