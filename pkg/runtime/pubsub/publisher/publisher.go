@@ -16,6 +16,8 @@ package publisher
 import (
 	"context"
 
+	"google.golang.org/grpc/status"
+
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/resiliency"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -70,7 +72,14 @@ func (p *publisher) Publish(ctx context.Context, req *contribpubsub.PublishReque
 		p.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub),
 	)
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, pubsub.Component.Publish(ctx, req)
+		err := pubsub.Component.Publish(ctx, req)
+		if err != nil {
+			if st, ok := status.FromError(err); ok {
+				//nolint:gosec
+				return nil, resiliency.NewCodeError(int32(st.Code()), err)
+			}
+		}
+		return nil, err
 	})
 
 	return err
