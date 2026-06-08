@@ -122,7 +122,13 @@ func (i *Instance) Handle(ctx context.Context, e loops.EventInstance) error {
 
 func (i *Instance) handleInit(ctx context.Context, ev *loops.Init) {
 	comp := ev.Component
-	initerr := i.runInit(ctx, comp)
+	initCtx := ctx
+	if ev.Timeout > 0 {
+		var cancel context.CancelFunc
+		initCtx, cancel = context.WithTimeout(ctx, ev.Timeout)
+		defer cancel()
+	}
+	initerr := i.runInit(initCtx, comp)
 	if initerr == nil {
 		i.lastComp = &comp
 		if i.alsoStartInput {

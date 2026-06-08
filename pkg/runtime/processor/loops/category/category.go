@@ -15,7 +15,6 @@ package category
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/dapr/kit/events/loop"
@@ -146,7 +145,6 @@ func (c *Category) handleShutdown(ev *loops.Shutdown) {
 		inst.Close(&shutdown)
 		delete(c.instances, name)
 	}
-	_ = fmt.Sprintf("category %s: shutdown complete", c.name)
 }
 
 // EnqueueWithFanout enqueues the same event to every existing instance loop.

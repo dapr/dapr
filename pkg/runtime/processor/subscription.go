@@ -23,7 +23,7 @@ import (
 // AddPendingSubscription enqueues one or more declarative subscriptions.
 // Returns a chan that emits one error per submitted subscription, in order.
 func (p *Processor) AddPendingSubscription(ctx context.Context, subscriptions ...subapi.Subscription) <-chan error {
-	if p.closed.Load() {
+	if p.closed.Load() || len(subscriptions) == 0 {
 		return nil
 	}
 	res := make(chan error, len(subscriptions))

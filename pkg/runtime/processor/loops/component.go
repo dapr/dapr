@@ -14,6 +14,8 @@ limitations under the License.
 package loops
 
 import (
+	"time"
+
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 )
 
@@ -21,6 +23,8 @@ import (
 // error and is buffered cap 1. Internal is set when the root loop
 // re-enqueues a dependent component after its parent secret store comes
 // online; it suppresses double counting in the root's in-flight counter.
+// Timeout bounds the actual component init on the instance loop; when zero the
+// instance applies no deadline.
 type Init struct {
 	*rootbase
 	*catbase
@@ -28,6 +32,7 @@ type Init struct {
 	Component compapi.Component
 	Result    chan<- error
 	Internal  bool
+	Timeout   time.Duration
 }
 
 // Close asks the named instance to close a component. Result receives one
