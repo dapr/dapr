@@ -14,6 +14,8 @@ limitations under the License.
 package dedup
 
 import (
+	"google.golang.org/protobuf/proto"
+
 	"github.com/dapr/durabletask-go/backend"
 	dtdedup "github.com/dapr/durabletask-go/backend/runtimestate/dedup"
 )
@@ -29,6 +31,30 @@ func IsDuplicateCompletion(e *backend.HistoryEvent, history, inbox []*backend.Hi
 		return false
 	}
 	return dtdedup.IsPresent(history, kind, id) || dtdedup.IsPresent(inbox, kind, id)
+}
+
+// IsDuplicateExternalEvent reports whether e is an EventRaised that is
+// quivalent to one already recorded in history or pending in the inbox, i.e. a
+// redelivery of the same event rather than a distinct one.
+func IsDuplicateExternalEvent(e *backend.HistoryEvent, history, inbox []*backend.HistoryEvent) bool {
+	er := e.GetEventRaised()
+	if er == nil {
+		return false
+	}
+	match := func(events []*backend.HistoryEvent) bool {
+		for _, x := range events {
+			xer := x.GetEventRaised()
+			if xer == nil {
+				continue
+			}
+			if xer.GetName() == er.GetName() &&
+				proto.Equal(x.GetTimestamp(), e.GetTimestamp()) {
+				return true
+			}
+		}
+		return false
+	}
+	return match(history) || match(inbox)
 }
 
 // IsTaskAlreadyResolved reports whether a TaskScheduled event has a matching
