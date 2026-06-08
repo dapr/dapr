@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/apps/resiliencyapp
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/dapr/dapr v0.0.0

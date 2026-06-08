@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.26.3
+go 1.26.4
 
 require (
 	connectrpc.com/connect v1.19.1
@@ -11,7 +11,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
-	github.com/dapr/components-contrib v1.17.6
+	github.com/dapr/components-contrib v1.17.7
 	github.com/dapr/durabletask-go v0.11.5
 	github.com/dapr/kit v0.17.1
 	github.com/diagridio/go-etcd-cron v0.12.5
