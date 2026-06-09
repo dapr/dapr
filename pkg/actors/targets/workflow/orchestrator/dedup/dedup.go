@@ -33,8 +33,7 @@ func IsDuplicateCompletion(e *backend.HistoryEvent, history, inbox []*backend.Hi
 	return dtdedup.IsPresent(history, kind, id) || dtdedup.IsPresent(inbox, kind, id)
 }
 
-// IsDuplicateExternalEvent reports whether e is an EventRaised that is
-// quivalent to one already recorded in history or pending in the inbox, i.e. a
+// IsDuplicateExternalEvent reports whether e is an EventRaised that matches one already recorded in history or pending in the inbox (same event name and ingestion timestamp), i.e. a
 // redelivery of the same event rather than a distinct one.
 func IsDuplicateExternalEvent(e *backend.HistoryEvent, history, inbox []*backend.HistoryEvent) bool {
 	er := e.GetEventRaised()

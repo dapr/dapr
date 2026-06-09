@@ -70,8 +70,8 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 
 	// Drop redelivered external events the same way: a RaiseEvent re-sent to
 	// this actor (e.g. an AddWorkflowEvent invocation retried under placement
-	// churn) carries an identical ingestion timestamp, so it is byte-equivalent
-	// to a copy already in history or the inbox. Appending it again would
+	// churn) keeps the same ingestion timestamp, so it matches an EventRaised
+	// already in history or the inbox by (event name, ingestion timestamp).
 	// duplicate the event in history; instead re-assert the wake-up reminder so
 	// a still-pending inbox row that lost its reminder gets re-driven. Distinct
 	// RaiseEvents carry distinct timestamps and fall through to be appended

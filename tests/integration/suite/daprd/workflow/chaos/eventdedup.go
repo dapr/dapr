@@ -103,12 +103,13 @@ func (e *eventdedup) Run(t *testing.T, ctx context.Context) {
 
 	// Redeliver the byte-identical event. With the dedup it is dropped (and the
 	// wake-up reminder re-asserted); the second wait stays unsatisfied.
-	_, _ = gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+	_, err = gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 		ActorType: actorType,
 		ActorId:   wfID,
 		Method:    "AddWorkflowEvent",
 		Data:      dupBytes,
 	})
+	require.NoError(t, err)
 
 	// The redelivery must NOT complete the workflow: it is the same single
 	// event, so only the first wait is satisfied.

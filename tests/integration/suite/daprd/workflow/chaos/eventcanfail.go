@@ -109,7 +109,7 @@ func (e *eventcanfail) Run(t *testing.T, ctx context.Context) {
 	// new-event reminder, whose ScheduleJob the proxy fails. The error
 	// propagates back here; the inbox row is durable regardless.
 	rerr := cl.RaiseEvent(ctx, api.InstanceID(wfID), "proceed")
-	_ = rerr
+	require.Error(t, rerr)
 
 	select {
 	case <-failedCh:
