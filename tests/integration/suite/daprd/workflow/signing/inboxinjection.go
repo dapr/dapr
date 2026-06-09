@@ -165,7 +165,12 @@ func (i *inboxInjection) Run(tt *testing.T, ctx context.Context) {
 	require.EventuallyWithT(tt, func(c *assert.CollectT) {
 		meta, err := client.FetchWorkflowMetadata(ctx, id)
 		assert.NoError(c, err)
-		if !assert.Equal(c, dworkflow.StatusFailed, meta.RuntimeStatus) {
+
+		if !assert.NotNil(c, meta) {
+			return
+		}
+
+		if !assert.Equal(c, dworkflow.StatusFailed, meta) {
 			return
 		}
 		if !assert.NotNil(c, meta.FailureDetails) {
