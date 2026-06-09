@@ -376,7 +376,8 @@ func (h *http) sendBulkToDeadLetter(ctx context.Context,
 		Metadata:   msg.Metadata,
 	}
 
-	_, err := h.adapter.BulkPublish(ctx, req)
+	// Internal dead-letter republish (not an HTTP/gRPC publish API call), so match broker errors on native gRPC status codes.
+	_, err := h.adapter.BulkPublish(ctx, req, pubsub.TransportModeGRPC)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
 	}
@@ -393,7 +394,8 @@ func (h *http) sendToDeadLetter(ctx context.Context, name string, msg *contribpu
 		ContentType: msg.ContentType,
 	}
 
-	if err := h.adapter.Publish(ctx, req); err != nil {
+	// Internal dead-letter republish (not an HTTP/gRPC publish API call), so match broker errors on native gRPC status codes.
+	if err := h.adapter.Publish(ctx, req, pubsub.TransportModeGRPC); err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
 		return err
 	}

@@ -190,7 +190,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		// expecting no final error, the events will pass in the second try
@@ -222,7 +222,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		// Expect final error from the bulk publisher
@@ -256,7 +256,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		// expecting no final error, all the events will pass in the second try
@@ -288,7 +288,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		// expecting no final error, all the events will pass in a single try
@@ -324,7 +324,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -355,7 +355,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		// Act
 
 		// Make the request twice to make sure circuitBreaker is exhausted
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -378,7 +378,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Act
 		// Here the circuitBreaker is open and it will short the request, so the bulkPublisher will not be called
-		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -412,7 +412,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Act
 		// Make the request twice to make sure circuitBreaker is exhausted
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -435,7 +435,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Act
 		// Here the circuitBreaker is open and it will short the request, so the bulkPublisher will not be called
-		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -469,7 +469,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Act
 		// Make the request twice to make sure circuitBreaker is exhausted
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.NoError(t, err)
@@ -512,7 +512,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Act
 		// Make the request twice to make sure circuitBreaker is exhausted
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -539,7 +539,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		// Act
 		// mock bulk publisher will fail the request only twice,
 		// the circuitBreaker will be half-open now and then after request served will be closed
-		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.NoError(t, err)
@@ -584,7 +584,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Act
 		// Make the request twice to make sure circuitBreaker is exhausted
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -595,7 +595,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Act
 		// Here the circuitBreaker is open and it will short the request, so the bulkPublisher will not be called
-		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -633,7 +633,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Act
 		// Make the request twice to make sure circuitBreaker is exhausted
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -644,7 +644,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Act
 		// Here the circuitBreaker is open and it will short the request, so the bulkPublisher will not be called
-		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -693,7 +693,7 @@ func TestBulkPublishMatching(t *testing.T) {
 			return status.Error(codes.InvalidArgument, "bad request")
 		}}
 
-		_, err := ApplyBulkPublishResiliency(ctx, req, policyDefFor(5), bp)
+		_, err := ApplyBulkPublishResiliency(ctx, req, policyDefFor(5), bp, TransportModeGRPC)
 
 		require.Error(t, err)
 		assert.Equal(t, int32(1), bp.calls.Load())
@@ -707,7 +707,7 @@ func TestBulkPublishMatching(t *testing.T) {
 			return nil
 		}}
 
-		_, err := ApplyBulkPublishResiliency(ctx, req, policyDefFor(5), bp)
+		_, err := ApplyBulkPublishResiliency(ctx, req, policyDefFor(5), bp, TransportModeGRPC)
 
 		require.NoError(t, err)
 		// 2 failures then success = 3 calls
@@ -719,7 +719,7 @@ func TestBulkPublishMatching(t *testing.T) {
 			return errors.New("boom")
 		}}
 
-		_, err := ApplyBulkPublishResiliency(ctx, req, policyDefFor(3), bp)
+		_, err := ApplyBulkPublishResiliency(ctx, req, policyDefFor(3), bp, TransportModeGRPC)
 
 		require.Error(t, err)
 		// No gRPC status = retried up to maxRetries (initial + 3)

@@ -27,6 +27,7 @@ import (
 func ApplyBulkPublishResiliency(ctx context.Context, req *contribPubsub.BulkPublishRequest,
 	policyDef *resiliency.PolicyDefinition,
 	bulkPublisher contribPubsub.BulkPublisher,
+	mode TransportMode,
 ) (contribPubsub.BulkPublishResponse, error) {
 	// Contains the latest request entries to be sent to the component
 	var requestEntries atomic.Pointer[[]contribPubsub.BulkMessageEntry]
@@ -59,8 +60,7 @@ func ApplyBulkPublishResiliency(ctx context.Context, req *contribPubsub.BulkPubl
 		res, err := bulkPublisher.BulkPublish(ctx, newReq)
 		if err != nil {
 			if st, ok := status.FromError(err); ok {
-				//nolint:gosec
-				return res, resiliency.NewCodeError(int32(st.Code()), err)
+				return res, NewPublishResiliencyError(mode, st.Code(), err)
 			}
 		}
 		return res, err

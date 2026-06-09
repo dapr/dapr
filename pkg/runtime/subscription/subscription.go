@@ -489,7 +489,7 @@ func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *c
 		ContentType: msg.ContentType,
 	}
 
-	if err := s.adapter.Publish(ctx, req); err != nil {
+	if err := s.adapter.Publish(ctx, req, rtpubsub.TransportModeGRPC); err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
 		return err
 	}
