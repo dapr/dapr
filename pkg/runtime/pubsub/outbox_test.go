@@ -209,6 +209,50 @@ func TestAddOrUpdateOutbox(t *testing.T) {
 		assert.Equal(t, "a", c.outboxPubsub)
 		assert.Equal(t, "a", c.publishPubSub)
 		assert.Equal(t, "1", c.publishTopic)
+		assert.Equal(t, "", c.internalTopic)
+	})
+
+	t.Run("config with internal topic", func(t *testing.T) {
+		o := newTestOutbox(nil).(*outboxImpl)
+		o.AddOrUpdateOutbox(v1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: v1alpha1.ComponentSpec{
+				Metadata: []common.NameValuePair{
+					{
+						Name: outboxPublishPubsubKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("a"),
+							},
+						},
+					},
+					{
+						Name: outboxPublishTopicKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("1"),
+							},
+						},
+					},
+					{
+						Name: outboxInternalTopicKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("my-custom-outbox-topic"),
+							},
+						},
+					},
+				},
+			},
+		})
+
+		c := o.outboxStores["test"]
+		assert.Equal(t, "a", c.outboxPubsub)
+		assert.Equal(t, "a", c.publishPubSub)
+		assert.Equal(t, "1", c.publishTopic)
+		assert.Equal(t, "my-custom-outbox-topic", c.internalTopic)
 	})
 }
 
@@ -679,6 +723,57 @@ func TestPublishInternal(t *testing.T) {
 
 		require.Error(t, err)
 	})
+
+	t.Run("valid operation with custom internal topic", func(t *testing.T) {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+			assert.Equal(t, "my-custom-outbox-topic", pr.Topic)
+			assert.Equal(t, "a", pr.PubsubName)
+			return nil
+		}).(*outboxImpl)
+
+		o.AddOrUpdateOutbox(v1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: v1alpha1.ComponentSpec{
+				Metadata: []common.NameValuePair{
+					{
+						Name: outboxPublishPubsubKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("a"),
+							},
+						},
+					},
+					{
+						Name: outboxPublishTopicKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("1"),
+							},
+						},
+					},
+					{
+						Name: outboxInternalTopicKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("my-custom-outbox-topic"),
+							},
+						},
+					},
+				},
+			},
+		})
+
+		_, err := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
+			state.SetRequest{
+				Key:   "key",
+				Value: "test",
+			},
+		}, "testapp", "", "")
+
+		require.NoError(t, err)
+	})
 }
 
 func TestSubscribeToInternalTopics(t *testing.T) {
@@ -1127,6 +1222,140 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		// Publishing should not have errored
 		require.NoError(t, <-errCh)
 	})
+
+	t.Run("custom internal topic subscription", func(t *testing.T) {
+		const customInternalTopic = "my-custom-outbox-topic"
+
+		psMock := &outboxPubsubMock{
+			expectedOutboxTopic: customInternalTopic,
+			t:                   t,
+		}
+		stateMock := &outboxStateMock{
+			receivedKey: make(chan string, 1),
+		}
+
+		internalCalledCh := make(chan struct{})
+		externalCalledCh := make(chan struct{})
+		var closed bool
+
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+			switch pr.Topic {
+			case customInternalTopic:
+				close(internalCalledCh)
+			case "1":
+				if !closed {
+					close(externalCalledCh)
+					closed = true
+				}
+			}
+
+			return psMock.Publish(ctx, pr)
+		}).(*outboxImpl)
+		o.cloudEventExtractorFn = extractCloudEventProperty
+
+		o.getPubsubFn = func(s string) (contribPubsub.PubSub, bool) {
+			return psMock, true
+		}
+		o.getStateFn = func(s string) (state.Store, bool) {
+			return stateMock, true
+		}
+
+		o.AddOrUpdateOutbox(v1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: v1alpha1.ComponentSpec{
+				Metadata: []common.NameValuePair{
+					{
+						Name: outboxPublishPubsubKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("a"),
+							},
+						},
+					},
+					{
+						Name: outboxPublishTopicKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("1"),
+							},
+						},
+					},
+					{
+						Name: outboxInternalTopicKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte(customInternalTopic),
+							},
+						},
+					},
+				},
+			},
+		})
+
+		const appID = "test"
+
+		err := o.SubscribeToInternalTopics(t.Context(), appID)
+		require.NoError(t, err)
+
+		errCh := make(chan error, 1)
+
+		go func() {
+			trs, pErr := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
+				state.SetRequest{
+					Key:   "1",
+					Value: "hello",
+				},
+			}, appID, "", "")
+
+			trs = append(trs[:0], trs[0+1:]...)
+
+			if pErr != nil {
+				errCh <- pErr
+				return
+			}
+
+			if len(trs) != 1 {
+				errCh <- fmt.Errorf("expected trs to have len(1), but got: %d", len(trs))
+				return
+			}
+
+			errCh <- nil
+
+			stateMock.expectedKey.Store(new(trs[0].GetKey()))
+		}()
+
+		doneCh := make(chan error, 2)
+		timeout := time.After(5 * time.Second)
+
+		go func() {
+			select {
+			case <-internalCalledCh:
+				doneCh <- nil
+			case <-timeout:
+				doneCh <- errors.New("timeout waiting for internalCalledCh")
+			}
+		}()
+		go func() {
+			select {
+			case <-externalCalledCh:
+				doneCh <- nil
+			case <-timeout:
+				doneCh <- errors.New("timeout waiting for externalCalledCh")
+			}
+		}()
+
+		for range 2 {
+			require.NoError(t, <-doneCh)
+		}
+
+		require.NoError(t, <-errCh)
+
+		expected := stateMock.expectedKey.Load()
+		require.NotNil(t, expected)
+		assert.Equal(t, *expected, <-stateMock.receivedKey)
+	})
 }
 
 type outboxPubsubMock struct {
@@ -1215,7 +1444,7 @@ func (o *outboxStateMock) Get(ctx context.Context, req *state.GetRequest) (*stat
 func TestOutboxTopic(t *testing.T) {
 	t.Run("not namespaced", func(t *testing.T) {
 		o := newTestOutbox(nil).(*outboxImpl)
-		topic := outboxTopic("a", "b", o.namespace)
+		topic := outboxTopic("a", "b", o.namespace, "")
 
 		assert.Equal(t, "aboutbox", topic)
 	})
@@ -1224,9 +1453,19 @@ func TestOutboxTopic(t *testing.T) {
 		o := newTestOutbox(nil).(*outboxImpl)
 		o.namespace = "default"
 
-		topic := outboxTopic("a", "b", o.namespace)
+		topic := outboxTopic("a", "b", o.namespace, "")
 
 		assert.Equal(t, "defaultaboutbox", topic)
+	})
+
+	t.Run("custom internal topic", func(t *testing.T) {
+		topic := outboxTopic("a", "b", "default", "my-custom-outbox-topic")
+		assert.Equal(t, "my-custom-outbox-topic", topic)
+	})
+
+	t.Run("empty internal topic falls back to auto-generated", func(t *testing.T) {
+		topic := outboxTopic("app", "topic", "ns", "")
+		assert.Equal(t, "nsapptopicoutbox", topic)
 	})
 }
 
