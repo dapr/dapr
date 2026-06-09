@@ -1178,7 +1178,7 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 	}
 
 	start := time.Now()
-	err := a.pubsubAdapter.Publish(r.Context(), &req)
+	err := a.pubsubAdapter.Publish(r.Context(), &req, runtimePubsub.TransportModeHTTP)
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
@@ -1343,7 +1343,7 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 	}
 
 	start := time.Now()
-	res, err := a.pubsubAdapter.BulkPublish(r.Context(), &req)
+	res, err := a.pubsubAdapter.BulkPublish(r.Context(), &req, runtimePubsub.TransportModeHTTP)
 	elapsed := diag.ElapsedSince(start)
 
 	// BulkPublishResponse contains all failed entries from the request.
