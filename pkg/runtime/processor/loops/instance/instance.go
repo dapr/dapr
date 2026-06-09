@@ -129,6 +129,12 @@ func (i *Instance) handleInit(ctx context.Context, ev *loops.Init) {
 		defer cancel()
 	}
 	initerr := i.runInit(initCtx, comp)
+	// A timed-out init whose manager returned nil must still surface as an
+	// error, matching the legacy synchronous Init and the inline path. Checked
+	// against the init context the manager actually used.
+	if errors.Is(initCtx.Err(), context.DeadlineExceeded) && initerr == nil {
+		initerr = fmt.Errorf("init timeout for component %s", comp.LogName())
+	}
 	if initerr == nil {
 		i.lastComp = &comp
 		if i.alsoStartInput {

@@ -15,7 +15,6 @@ package root
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -58,12 +57,11 @@ func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 	if err != nil || timeout <= 0 {
 		timeout = defaultComponentInitTimeout
 	}
-	initCtx, cancel := context.WithTimeout(ctx, timeout)
 
 	// Intercept the Result so we can flush dependents on a successful secret
 	// store init. The timeout is propagated so the instance loop bounds the
-	// actual component init with the same deadline the finalizer waits on,
-	// rather than letting a timed-out init keep running and commit late.
+	// actual component init with that deadline and synthesises a timeout error
+	// (including when a timed-out init returns nil) before replying here.
 	intercept := make(chan error, 1)
 	catLoop.Enqueue(&loops.Init{
 		Component: comp,
@@ -75,22 +73,21 @@ func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 		r.inFlight++
 	}
 	r.finalizers.Go(func() {
-		defer cancel()
-		var innerErr error
-		select {
-		case <-initCtx.Done():
-			innerErr = fmt.Errorf("init timeout for component %s", comp.LogName())
-		case e := <-intercept:
-			innerErr = e
-		}
-		if errors.Is(initCtx.Err(), context.DeadlineExceeded) && innerErr == nil {
-			innerErr = fmt.Errorf("init timeout for component %s", comp.LogName())
-		}
-		// Forward the result to the caller immediately so callers do not
-		// block on a pending event if the root loop is shutting down.
+		// Wait for the actual init result. Like the legacy synchronous Init,
+		// callers stay blocked until the component's Init returns, even when it
+		// overruns its deadline.
+		innerErr := <-intercept
 		if innerErr != nil {
 			log.Errorf("Failed to init component %s: %s", comp.LogName(), innerErr)
-			sendResult(ev.Result, rterrors.NewInit(rterrors.InitComponentFailure, comp.LogName(), innerErr))
+			wrapped := rterrors.NewInit(rterrors.InitComponentFailure, comp.LogName(), innerErr)
+			sendResult(ev.Result, wrapped)
+			// A non-ignored init failure is fatal to the runtime. Record it so
+			// Run surfaces it on a path the runtime's init-context cancellation
+			// cannot mask (the legacy processComponents runner did this), so a
+			// failure that races with shutdown still propagates out of Run.
+			if !comp.Spec.IgnoreErrors {
+				r.recordFatalInitError(fmt.Errorf("process component %s error: %w", comp.Name, wrapped))
+			}
 		} else {
 			log.Infof("Component loaded: %s", comp.LogName())
 			sendResult(ev.Result, nil)

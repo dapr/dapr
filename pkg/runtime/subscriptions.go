@@ -52,7 +52,26 @@ func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
 		log.Infof("Found Subscription: %s", s.Name)
 	}
 
-	a.processor.AddPendingSubscription(ctx, subs...)
+	// Wait for every declarative subscription to be committed to the component
+	// store before returning. Declarative subscriptions are deduplicated per
+	// topic with first-declared priority when the subscriber starts, so they
+	// must all be present (and in manifest order) before StartAppSubscriptions
+	// runs later in init. Returning early would let app subscriptions start
+	// against a partial set and race in late additions out of order.
+	ch := a.processor.AddPendingSubscription(ctx, subs...)
+	if ch == nil {
+		return nil
+	}
+	for range subs {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-ch:
+			if err != nil {
+				return err
+			}
+		}
+	}
 
 	return nil
 }
