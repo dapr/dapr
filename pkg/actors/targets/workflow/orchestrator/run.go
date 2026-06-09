@@ -48,7 +48,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// the same load will succeed on retry. Returning RunCompletedTrue
 		// here would let the reminder system delete the wake-up handle and
 		// strand the workflow.
-		log.Warnf("Workflow actor '%s': failed to load state — will retry: %v", o.actorID, err)
 		return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("error loading internal state: %w", err))
 	}
 	if state == nil {
