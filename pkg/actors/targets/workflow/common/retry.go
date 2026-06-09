@@ -79,3 +79,47 @@ func isTransientCreateError(err error) bool {
 		return false
 	}
 }
+
+// CreateReminderWithRetryForever calls reminders.Create and retries on every
+// error except a context error or a clearly-permanent request error (see
+// isPermanentCreateError), with no overall time bound: it stops only when ctx
+// is cancelled (i.e. the actor is torn down).
+func CreateReminderWithRetryForever(ctx context.Context, r reminderCreator, req *actorapi.CreateReminderRequest) error {
+	bo := backoff.NewExponentialBackOff()
+	bo.InitialInterval = 100 * time.Millisecond
+	bo.MaxInterval = 5 * time.Second
+	bo.MaxElapsedTime = 0 // retry until ctx is cancelled.
+
+	return backoff.Retry(func() error {
+		if err := ctx.Err(); err != nil {
+			return backoff.Permanent(err)
+		}
+		err := r.Create(ctx, req)
+		if err != nil && isPermanentCreateError(err) {
+			return backoff.Permanent(err)
+		}
+		return err
+	}, backoff.WithContext(bo, ctx))
+}
+
+// isPermanentCreateError reports whether a reminder Create error is a
+// client-side mistake that retrying can never fix (malformed request, missing
+// auth, unimplemented method). Everything else: Unavailable, DeadlineExceeded,
+// Internal, Aborted, Unknown, ResourceExhausted (transient etcd pressure),
+// etc. is treated as retryable by CreateReminderWithRetryForever, because the
+// scheduler may recover and the create is an idempotent overwrite-by-name.
+func isPermanentCreateError(err error) bool {
+	s, ok := status.FromError(err)
+	if !ok {
+		// Not a gRPC status (e.g. a local marshalling error): retrying forever
+		// will not help.
+		return true
+	}
+	switch s.Code() {
+	case codes.InvalidArgument, codes.PermissionDenied, codes.Unauthenticated,
+		codes.FailedPrecondition, codes.Unimplemented, codes.NotFound:
+		return true
+	default:
+		return false
+	}
+}
