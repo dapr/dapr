@@ -43,9 +43,10 @@ const (
 // `httpStatusCodes`); otherwise the gRPC code is used (matched against
 // `gRPCStatusCodes`).
 func NewPublishResiliencyError(mode TransportMode, code codes.Code, err error) resiliency.CodeError {
-	//nolint:gosec
+	//nolint:gosec // gRPC status codes (0-16) fit in int32.
 	statusCode := int32(code)
 	if mode == TransportModeHTTP {
+		//nolint:gosec // HTTP status codes (100-599) fit in int32.
 		statusCode = int32(invokev1.HTTPStatusFromCode(code))
 	}
 	return resiliency.NewCodeError(statusCode, err)
