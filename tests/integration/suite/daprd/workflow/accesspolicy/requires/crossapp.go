@@ -77,16 +77,16 @@ func (r *crossapp) Setup(t *testing.T) []framework.Option {
 	targetID := "target-" + uuid.NewString()
 	ns := uuid.NewString()
 
-	r.processPayment = "process-payment-" + uuid.NewString()
-	r.processPaymentAppGated = "process-payment-app-gated-" + uuid.NewString()
-	r.processPaymentAppMismatch = "process-payment-app-mismatch-" + uuid.NewString()
-	r.logReceipt = "log-receipt-" + uuid.NewString()
-	r.wfFullHistory = "wf-full-" + uuid.NewString()
-	r.wfPartialHistory = "wf-partial-" + uuid.NewString()
-	r.wfNoPropagation = "wf-no-prop-" + uuid.NewString()
-	r.wfAppIDMatch = "wf-appid-match-" + uuid.NewString()
-	r.wfAppIDMismatch = "wf-appid-mismatch-" + uuid.NewString()
-	r.wfLogReceipt = "wf-log-receipt-" + uuid.NewString()
+	r.processPayment = "process-payment"
+	r.processPaymentAppGated = "process-payment-app-gated"
+	r.processPaymentAppMismatch = "process-payment-app-mismatch"
+	r.logReceipt = "log-receipt"
+	r.wfFullHistory = "wf-full"
+	r.wfPartialHistory = "wf-partial"
+	r.wfNoPropagation = "wf-no-prop"
+	r.wfAppIDMatch = "wf-appid-match"
+	r.wfAppIDMismatch = "wf-appid-mismatch"
+	r.wfLogReceipt = "wf-log-receipt"
 
 	policy := fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1

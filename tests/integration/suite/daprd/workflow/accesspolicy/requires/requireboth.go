@@ -73,11 +73,11 @@ func (r *requireboth) Setup(t *testing.T) []framework.Option {
 	targetID := "target-" + uuid.NewString()
 	ns := uuid.NewString()
 
-	r.sensitiveChildWF = "sensitive-" + uuid.NewString()
-	r.wfBoth = "wf-both-" + uuid.NewString()
-	r.wfOnlyFraud = "wf-only-fraud-" + uuid.NewString()
-	r.wfOnlyApproval = "wf-only-approval-" + uuid.NewString()
-	r.wfNeither = "wf-neither-" + uuid.NewString()
+	r.sensitiveChildWF = "sensitive-child"
+	r.wfBoth = "wf-both"
+	r.wfOnlyFraud = "wf-only-fraud"
+	r.wfOnlyApproval = "wf-only-approval"
+	r.wfNeither = "wf-neither"
 
 	// Single schedule entry, two requires items. Both must be present in
 	// propagated history for the rule to apply.

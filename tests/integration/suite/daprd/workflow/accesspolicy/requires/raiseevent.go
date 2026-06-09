@@ -70,9 +70,9 @@ func (r *raiseevent) Setup(t *testing.T) []framework.Option {
 	targetID := "target-" + uuid.NewString()
 	ns := uuid.NewString()
 
-	r.gatedActivity = "gated-" + uuid.NewString()
-	r.wfAfterSignal = "wf-after-signal-" + uuid.NewString()
-	r.wfNoSignal = "wf-no-signal-" + uuid.NewString()
+	r.gatedActivity = "gated-activity"
+	r.wfAfterSignal = "wf-after-signal"
+	r.wfNoSignal = "wf-no-signal"
 
 	policy := fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1

@@ -70,9 +70,9 @@ func (r *activity) Setup(t *testing.T) []framework.Option {
 	targetID := "target-" + uuid.NewString()
 	ns := uuid.NewString()
 
-	r.gatedActivity = "gated-" + uuid.NewString()
-	r.wfWithPreflight = "wf-with-preflight-" + uuid.NewString()
-	r.wfNoPreflight = "wf-no-preflight-" + uuid.NewString()
+	r.gatedActivity = "gated-activity"
+	r.wfWithPreflight = "wf-with-preflight"
+	r.wfNoPreflight = "wf-no-preflight"
 
 	policy := fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1

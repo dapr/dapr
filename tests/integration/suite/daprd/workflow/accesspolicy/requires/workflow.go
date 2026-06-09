@@ -69,9 +69,9 @@ func (r *workflow) Setup(t *testing.T) []framework.Option {
 	targetID := "target-" + uuid.NewString()
 	ns := uuid.NewString()
 
-	r.requiredWFName = "required-" + uuid.NewString()
-	r.otherWFName = "other-" + uuid.NewString()
-	r.activityName = "gated-" + uuid.NewString()
+	r.requiredWFName = "required-wf"
+	r.otherWFName = "other-wf"
+	r.activityName = "gated-activity"
 
 	policy := fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1

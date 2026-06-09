@@ -74,11 +74,11 @@ func (r *requireeither) Setup(t *testing.T) []framework.Option {
 	targetID := "target-" + uuid.NewString()
 	ns := uuid.NewString()
 
-	r.sensitiveChildWF = "sensitive-" + uuid.NewString()
-	r.wfPathA = "wf-path-a-" + uuid.NewString()
-	r.wfPathB = "wf-path-b-" + uuid.NewString()
-	r.wfBoth = "wf-both-" + uuid.NewString()
-	r.wfNeither = "wf-neither-" + uuid.NewString()
+	r.sensitiveChildWF = "sensitive-child"
+	r.wfPathA = "wf-path-a"
+	r.wfPathB = "wf-path-b"
+	r.wfBoth = "wf-both"
+	r.wfNeither = "wf-neither"
 
 	// Two schedule entries for the same target workflow, gated on different
 	// prerequisite activities. Either path's completion is sufficient.

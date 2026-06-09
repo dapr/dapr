@@ -74,12 +74,12 @@ func (r *child) Setup(t *testing.T) []framework.Option {
 	targetID := "target-" + uuid.NewString()
 	ns := uuid.NewString()
 
-	r.sensitiveChildWF = "sensitive-" + uuid.NewString()
-	r.publicChildWF = "public-" + uuid.NewString()
-	r.wfFullHistory = "wf-full-history-" + uuid.NewString()
-	r.wfNoHistory = "wf-no-history-" + uuid.NewString()
-	r.wfNoPropagation = "wf-no-propagation-" + uuid.NewString()
-	r.wfPublic = "wf-public-" + uuid.NewString()
+	r.sensitiveChildWF = "sensitive-child"
+	r.publicChildWF = "public-child"
+	r.wfFullHistory = "wf-full-history"
+	r.wfNoHistory = "wf-no-history"
+	r.wfNoPropagation = "wf-no-propagation"
+	r.wfPublic = "wf-public"
 
 	policy := fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
