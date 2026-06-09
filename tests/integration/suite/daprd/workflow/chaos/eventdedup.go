@@ -39,7 +39,8 @@ func init() {
 // eventdedup verifies that a *redelivered* external event (the same already-
 // persisted EventRaised re-sent to the workflow actor, e.g. an AddWorkflowEvent
 // invocation retried under placement churn) is not applied twice, while two
-// genuinely distinct RaiseEvents of the same name are both delivered.
+// genuinely distinct RaiseEvents with the same name AND the same payload are
+// both delivered.
 type eventdedup struct {
 	workflow *workflow.Workflow
 }
@@ -122,13 +123,16 @@ func (e *eventdedup) Run(t *testing.T, ctx context.Context) {
 	}, 3*time.Second, 200*time.Millisecond,
 		"redelivered external event was applied twice and wrongly completed the workflow")
 
-	// A genuinely distinct RaiseEvent (new ingestion timestamp) is NOT deduped
-	// and satisfies the second wait, so the workflow completes.
-	require.NoError(t, bc.RaiseEvent(ctx, api.InstanceID(wfID), "go", api.WithEventPayload("v2")))
+	// A genuinely distinct RaiseEvent with the SAME name and SAME payload as the
+	// first must NOT be deduped: it carries a fresh ingestion timestamp, so it
+	// is a separate event and satisfies the second wait, completing the
+	// workflow. This guards against the dedup over-collapsing on (name, payload)
+	// alone.
+	require.NoError(t, bc.RaiseEvent(ctx, api.InstanceID(wfID), "go", api.WithEventPayload("v1")))
 
 	meta, err := bc.WaitForWorkflowCompletion(ctx, api.InstanceID(wfID))
 	require.NoError(t, err)
 	assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus())
-	assert.Equal(t, `"v1v2"`, meta.GetOutput().GetValue(),
-		"distinct events must both be delivered (first wait=v1, second wait=v2)")
+	assert.Equal(t, `"v1v1"`, meta.GetOutput().GetValue(),
+		"two separately-raised events with identical name+payload must both be delivered (v1 then v1)")
 }
