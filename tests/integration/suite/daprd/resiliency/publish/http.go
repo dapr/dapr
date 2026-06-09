@@ -42,8 +42,10 @@ func init() {
 	suite.Register(new(http))
 }
 
-// http is the HTTP-API equivalent of grpc: the same `matching` checks, but publishing via
-// the /v1.0/publish HTTP endpoint instead of the gRPC API.
+// http verifies retry `matching` on the HTTP publish API. Broker gRPC codes are mapped to
+// their HTTP equivalents (Unavailable->503, ResourceExhausted->429, FailedPrecondition->400)
+// and matched against `httpStatusCodes: "429,500-599"`, exercising a range match (503), a
+// single-code match (429), and a non-match (400) that is dropped.
 type http struct {
 	daprd    *daprd.Daprd
 	counters sync.Map
@@ -59,8 +61,13 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 		c.(*atomic.Int32).Add(1)
 		switch {
 		case req.Topic == "retriable":
+			// Unavailable -> HTTP 503, matched by the "500-599" range.
 			return status.Error(codes.Unavailable, "broker unavailable")
+		case req.Topic == "toomany":
+			// ResourceExhausted -> HTTP 429, matched by the "429" single code.
+			return status.Error(codes.ResourceExhausted, "slow down")
 		case strings.HasPrefix(req.Topic, "terminal"):
+			// FailedPrecondition -> HTTP 400, not in "429,500-599" -> not retried.
 			return status.Error(codes.FailedPrecondition, "invalid topic")
 		default:
 			return nil
@@ -90,7 +97,7 @@ spec:
         duration: 10ms
         maxRetries: 3
         matching:
-          gRPCStatusCodes: "14"
+          httpStatusCodes: "429,500-599"
       noMatchRetry:
         policy: constant
         duration: 10ms
@@ -153,12 +160,17 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 
 	httpClient := client.HTTP(t)
 
-	t.Run("matching: retriable code is retried up to maxRetries", func(t *testing.T) {
+	t.Run("matching: code in range (503) is retried up to maxRetries", func(t *testing.T) {
 		h.publish(t, ctx, httpClient, "pubsub-match", "retriable")
 		assert.Equal(t, 4, h.count("retriable"))
 	})
 
-	t.Run("matching: non-retriable code is not retried", func(t *testing.T) {
+	t.Run("matching: comma-separated single code (429) is retried up to maxRetries", func(t *testing.T) {
+		h.publish(t, ctx, httpClient, "pubsub-match", "toomany")
+		assert.Equal(t, 4, h.count("toomany"))
+	})
+
+	t.Run("matching: code outside range (400) is not retried", func(t *testing.T) {
 		h.publish(t, ctx, httpClient, "pubsub-match", "terminal")
 		assert.Equal(t, 1, h.count("terminal"))
 	})
