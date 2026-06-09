@@ -18,6 +18,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
@@ -79,6 +80,12 @@ type Root struct {
 	kubernetesMode      bool
 	registerMCPServer   func(ctx context.Context, s mcpserverapi.MCPServer) error
 	unregisterMCPServer func(name string)
+
+	// fatalErr retains the first non-ignored component init failure seen by a
+	// finalizer. Run returns it after the finalizers drain, so a failure that
+	// races with shutdown still propagates out (the runtime's init path masks
+	// cancelled-context errors, so it cannot be relied on for this).
+	fatalErr atomic.Pointer[error]
 
 	// mcpServers holds one loop per MCPServer name. Entries are created
 	// lazily on first event and persist for the life of the root loop so the
@@ -148,11 +155,26 @@ func (r *Root) Loop() loop.Interface[loops.EventRoot] { return r.loop }
 func (r *Root) Run(ctx context.Context) error {
 	r.runCtx = ctx
 	err := r.loop.Run(ctx)
+	// Wait for in-flight init finalizers before reading fatalErr: a component
+	// whose init overruns the shutdown still records its failure here.
 	r.finalizers.Wait()
 	r.mcpServersWG.Wait()
 	r.httpEndpointsWG.Wait()
 	loops.RootFactory.CacheLoop(r.loop)
+	// A non-ignored component init failure is fatal to the runtime. Surface it
+	// over a clean loop shutdown so it propagates out of the processor's
+	// Process runner and, in turn, the runtime's Run.
+	if err == nil || errors.Is(err, context.Canceled) {
+		if fatal := r.fatalErr.Load(); fatal != nil {
+			return *fatal
+		}
+	}
 	return err
+}
+
+// recordFatalInitError stores the first non-ignored component init failure.
+func (r *Root) recordFatalInitError(err error) {
+	r.fatalErr.CompareAndSwap(nil, &err)
 }
 
 // Handle dispatches every event the root loop receives. The bodies of the
