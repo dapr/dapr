@@ -550,7 +550,7 @@ func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *c
 	// detached publish so it cannot block indefinitely.
 	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deadLetterPublishTimeout)
 	defer cancel()
-	err := s.adapter.Publish(pubCtx, req)
+	err := s.adapter.Publish(pubCtx, req, rtpubsub.TransportModeGRPC)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 		return err
