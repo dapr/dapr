@@ -15,6 +15,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -26,13 +27,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -41,6 +40,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -155,10 +155,10 @@ func (s *middlewareAfterCallTool) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{},
 		}
-		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+		status := httpapi.Run(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("after-error", "ping"), input, 30*time.Second)
 		// afterCallTool errors fail the workflow itself — not just isError in output.
-		assert.Equal(t, statusFailed, status.RuntimeStatus,
+		assert.Equal(t, httpapi.StatusFailed, status.RuntimeStatus,
 			"afterCallTool hook error should cause workflow FAILURE")
 	})
 
@@ -166,17 +166,17 @@ func (s *middlewareAfterCallTool) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{},
 		}
-		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+		status := httpapi.Run(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("after-ok", "ping"), input, 30*time.Second)
-		require.Equal(t, statusCompleted, status.RuntimeStatus)
+		require.Equal(t, httpapi.StatusCompleted, status.RuntimeStatus)
 
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
 
-		var result wfv1.CallMCPToolResponse
-		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		assert.False(t, result.GetIsError())
-		require.NotEmpty(t, result.GetContent())
-		assert.Equal(t, "pong", result.GetContent()[0].GetText().GetText())
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(outputJSON), &result))
+		assert.False(t, result.IsError)
+		require.NotEmpty(t, result.Content)
+		assert.Equal(t, "pong", extractText(result.Content[0]))
 	})
 }

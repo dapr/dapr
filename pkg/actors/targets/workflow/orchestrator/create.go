@@ -123,7 +123,11 @@ func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *ba
 	// workflow execution. This is preferable to using the current thread so that we don't block the client
 	// while the workflow logic is running.
 	workflowName := startEvent.GetExecutionStarted().GetName()
-	if _, err := o.createWorkflowReminder(ctx, reminderPrefixStart, nil, start, o.appID, &workflowName); err != nil {
+	reminderName, err := randomReminderName(reminderPrefixStart)
+	if err != nil {
+		return err
+	}
+	if err := o.createWorkflowReminder(ctx, reminderName, nil, start, o.appID, &workflowName); err != nil {
 		return err
 	}
 	state.AddToInbox(startEvent)

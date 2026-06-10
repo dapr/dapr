@@ -81,6 +81,14 @@ var log = logger.NewLogger("dapr.runtime.processor.subscription")
 // var rather than const so tests can shorten it.
 var drainMaxDuration = 30 * time.Second
 
+// deadLetterPublishTimeout caps the publish to the dead-letter topic when the
+// inbound message context has already been consumed by the resiliency policy's
+// retry budget. Picked to be generous enough to cover a healthy broker
+// round-trip plus the component's internal publish retries, but short enough
+// that a wedged broker does not block the inbound subscriber loop
+// indefinitely.
+const deadLetterPublishTimeout = 30 * time.Second
+
 const (
 	BinaryCloudEventHeaderPrefix = "ce_"
 	DefaultCloudEventContentType = "application/json"
@@ -523,7 +531,26 @@ func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *c
 		ContentType: msg.ContentType,
 	}
 
-	err := s.adapter.Publish(ctx, req)
+	// If the parent context was explicitly canceled (e.g. shutdown), skip
+	// the DLQ publish: detaching the deadline below would otherwise let this
+	// block for up to deadLetterPublishTimeout while the runtime is trying
+	// to shut down. Only a deadline-exhausted parent should be detached.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return ctx.Err()
+	}
+
+	// Detach from the parent context's deadline before publishing. The
+	// inbound message handler ctx is bounded by component-level handler timeouts
+	// (e.g. handlerTimeoutInSec on Azure Service Bus) and may have been fully
+	// consumed by an inbound resiliency policy's retry budget by the time we
+	// reach this path. Publishing on that ctx then fails immediately with
+	// "context deadline exceeded" without ever reaching the broker, the message
+	// is NACK'd back to the broker, redelivered, retried again, DLQ fails again,
+	// and the message never escapes the loop. The timeout below caps the
+	// detached publish so it cannot block indefinitely.
+	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deadLetterPublishTimeout)
+	defer cancel()
+	err := s.adapter.Publish(pubCtx, req, rtpubsub.TransportModeGRPC)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 		return err

@@ -124,30 +124,52 @@ func (r *mcpRegistry) register(ctx context.Context, server mcpserverapi.MCPServe
 	return nil
 }
 
-// closeAll closes every holder.
-func (r *mcpRegistry) closeAll() {
+// closeAll closes every holder. Acquires each entry's mutex so it cannot race
+// with a concurrent register/unregister for the same name; shutdown runs from
+// Executor.Run's ctx.Done goroutine, which is distinct from the goroutine that
+// drives normal register/unregister. The optional onClose callback is invoked
+// once per torn-down entry so subsystems (the workflow engine) can keep their
+// own bookkeeping in step with the holder lifecycle.
+func (r *mcpRegistry) closeAll(onClose func(name string)) {
 	r.entriesMu.Lock()
-	entries := make([]*mcpEntry, 0, len(r.entries))
-	for _, e := range r.entries {
-		entries = append(entries, e)
+	type closing struct {
+		name  string
+		entry *mcpEntry
+	}
+	items := make([]closing, 0, len(r.entries))
+	for name, e := range r.entries {
+		items = append(items, closing{name: name, entry: e})
 	}
 	r.entriesMu.Unlock()
 
-	for _, entry := range entries {
-		if h := entry.holder; h != nil {
-			h.Close()
+	for _, c := range items {
+		c.entry.mu.Lock()
+		wasRegistered := c.entry.holder != nil
+		if c.entry.holder != nil {
+			c.entry.holder.Close()
+			c.entry.holder = nil
+		}
+		c.entry.mu.Unlock()
+		if wasRegistered && onClose != nil {
+			onClose(c.name)
 		}
 	}
 }
 
-// unregister removes workflows for a deleted MCPServer.
+// unregister removes workflows for a deleted MCPServer. Returns true iff the
+// entry actually had a registered holder when called, so callers can avoid
+// decrementing a refcount for a server that never finished registering (e.g.
+// IgnoreErrors=true bootstrap path) or that already had its refcount decremented
+// by a failed EnsureActorsRegistered.
+//
 // Serializes against concurrent register/unregister for the same server name
 // via the per-server entry mutex, but does not block other servers.
-func (r *mcpRegistry) unregister(serverName string) {
+func (r *mcpRegistry) unregister(serverName string) bool {
 	entry := r.entry(serverName)
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 
+	wasRegistered := entry.holder != nil
 	if entry.holder != nil {
 		entry.holder.Close()
 		entry.holder = nil
@@ -159,4 +181,5 @@ func (r *mcpRegistry) unregister(serverName string) {
 
 	// Remove ListTools + activities.
 	mcp.UnregisterMCPServer(r.registry, serverName)
+	return wasRegistered
 }

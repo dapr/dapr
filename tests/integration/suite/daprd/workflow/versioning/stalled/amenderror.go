@@ -17,6 +17,7 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,7 +77,9 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	defer cancelClient()
 	client = d.workflow.BackendClient(t, clientCtx)
 
-	require.NoError(t, client.RaiseEvent(ctx, id, "Continue"))
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.NoError(c, client.RaiseEvent(ctx, id, "Continue"))
+	}, time.Second*20, time.Millisecond*10)
 
 	wf.WaitForRuntimeStatus(t, ctx, client, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_STALLED)
 	lastEvent := wf.GetLastHistoryEventOfType[protos.HistoryEvent_ExecutionStalled](t, ctx, client, id)
@@ -86,6 +89,7 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	assert.False(t, runv2.Load(), "v2 must not have executed against a v1 workflow instance")
 
 	cancelClient()
+	d.workflow.WaitForNoConnectedWorkers(t, ctx)
 	d.workflow.ResetRegistry(t)
 	require.NoError(t, d.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, makeWF(&runv1)))
 	clientCtx, cancelClient = context.WithCancel(ctx)
