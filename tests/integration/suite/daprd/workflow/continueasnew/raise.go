@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	fos "github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -45,6 +46,7 @@ func (r *raise) Setup(t *testing.T) []framework.Option {
 }
 
 func (r *raise) Run(t *testing.T, ctx context.Context) {
+	fos.SkipMacOS(t)
 	r.workflow.WaitUntilRunning(t, ctx)
 
 	r.workflow.Registry().AddWorkflowN("raise", func(ctx *task.WorkflowContext) (any, error) {

@@ -24,7 +24,6 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -141,18 +140,27 @@ func (r *rootcakube) Run(t *testing.T, ctx context.Context) {
 
 	client := client.HTTP(t)
 
-	req, err := http.NewRequestWithContext(ctx,
-		http.MethodGet,
-		fmt.Sprintf("http://%s/v1.0/invoke/foobar/method/hello", r.daprd.HTTPAddress()),
-		nil,
-	)
-	require.NoError(t, err)
-
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	body, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.NoError(t, resp.Body.Close())
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "Hello, World!", string(body))
+	// Retry the invoke to handle a transient daprd restart that can happen
+	// when a Kubernetes watch reconnect triggers a spurious UPDATED event for
+	// the HTTPEndpoint before the operator's secret cache has fully synced.
+	// In that case the SIGHUP reconciler briefly takes the HTTP server offline.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+			fmt.Sprintf("http://%s/v1.0/invoke/foobar/method/hello", r.daprd.HTTPAddress()),
+			nil)
+		if !assert.NoError(c, err) {
+			return
+		}
+		resp, err := client.Do(req)
+		if !assert.NoError(c, err) {
+			return
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Equal(c, http.StatusOK, resp.StatusCode)
+		assert.Equal(c, "Hello, World!", string(body))
+	}, time.Second*30, time.Millisecond*100)
 }
