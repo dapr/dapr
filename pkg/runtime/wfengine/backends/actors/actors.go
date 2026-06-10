@@ -129,6 +129,13 @@ type Actors struct {
 	orchestrationWorkItemChan chan *backend.WorkflowWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
 
+	// lastEventNano is the highest external-event ingestion timestamp (unix
+	// nanoseconds) this backend has issued. It is used to hand out strictly
+	// monotonic, process-unique timestamps to external events so that the
+	// inbox dedup (dedup.IsDuplicateExternalEvent, keyed on event name and
+	// timestamp) can tell two distinct concurrent RaiseEvent calls apart.
+	lastEventNano atomic.Int64
+
 	stopped atomic.Bool
 }
 
@@ -454,6 +461,18 @@ func (*Actors) AbandonWorkflowWorkItem(ctx context.Context, wi *backend.Workflow
 
 // AddNewWorkflowEvent implements backend.Backend and sends the event e to the workflow actor identified by id.
 func (abe *Actors) AddNewWorkflowEvent(ctx context.Context, id api.InstanceID, e *backend.HistoryEvent) error {
+	// External events (RaiseEvent) are stamped with a wall-clock timestamp by
+	// the caller and deduped downstream by (event name, timestamp). Two
+	// RaiseEvent calls racing on the same wall-clock nanosecond would then be
+	// indistinguishable and one would be wrongly dropped as a redelivery. Give
+	// each external event a strictly monotonic, process-unique ingestion
+	// timestamp here, at the single point where it enters the actor backend, so
+	// distinct events never collide while a genuine redelivery (the same
+	// already-marshalled bytes resent on actor-call retry) keeps its timestamp.
+	if e.GetEventRaised() != nil {
+		e.Timestamp = abe.uniqueEventTimestamp()
+	}
+
 	data, err := proto.Marshal(e)
 	if err != nil {
 		return err
@@ -496,6 +515,25 @@ func (abe *Actors) AddNewWorkflowEvent(ctx context.Context, id api.InstanceID, e
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.AddEvent, diag.StatusSuccess, elapsed)
 
 	return nil
+}
+
+// uniqueEventTimestamp returns a timestamp that is strictly greater than any
+// previously returned by this backend, so that concurrently ingested external
+// events are never assigned the same value. It clamps to wall-clock time when
+// the clock has advanced and otherwise increments the last issued value by a
+// nanosecond, keeping drift negligible under contention.
+func (abe *Actors) uniqueEventTimestamp() *timestamppb.Timestamp {
+	now := time.Now().UnixNano()
+	for {
+		prev := abe.lastEventNano.Load()
+		next := now
+		if next <= prev {
+			next = prev + 1
+		}
+		if abe.lastEventNano.CompareAndSwap(prev, next) {
+			return timestamppb.New(time.Unix(0, next))
+		}
+	}
 }
 
 // CompleteActivityWorkItem implements backend.Backend
