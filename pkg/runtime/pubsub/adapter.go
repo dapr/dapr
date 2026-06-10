@@ -39,8 +39,8 @@ type ConnectionID uint64
 
 // Adapter is the interface for message buses.
 type Adapter interface {
-	Publish(context.Context, *contribPubsub.PublishRequest) error
-	BulkPublish(context.Context, *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error)
+	Publish(context.Context, *contribPubsub.PublishRequest, TransportMode) error
+	BulkPublish(context.Context, *contribPubsub.BulkPublishRequest, TransportMode) (contribPubsub.BulkPublishResponse, error)
 }
 
 type AdapterStreamer interface {

@@ -16,6 +16,8 @@ package publisher
 import (
 	"context"
 
+	"google.golang.org/grpc/status"
+
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/resiliency"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -51,8 +53,9 @@ func New(opts Options) rtpubsub.Adapter {
 
 // Publish is an adapter method for the runtime to pre-validate publish requests
 // And then forward them to the Pub/Sub component.
-// This method is used by the HTTP and gRPC APIs.
-func (p *publisher) Publish(ctx context.Context, req *contribpubsub.PublishRequest) error {
+// This method is used by the HTTP and gRPC APIs. mode selects which retry
+// `matching` list a broker error is evaluated against (http vs gRPC status codes).
+func (p *publisher) Publish(ctx context.Context, req *contribpubsub.PublishRequest, mode rtpubsub.TransportMode) error {
 	pubsub, ok := p.getpubsubFn(req.PubsubName)
 	if !ok {
 		return rtpubsub.NotFoundError{PubsubName: req.PubsubName}
@@ -70,12 +73,18 @@ func (p *publisher) Publish(ctx context.Context, req *contribpubsub.PublishReque
 		p.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub),
 	)
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, pubsub.Component.Publish(ctx, req)
+		err := pubsub.Component.Publish(ctx, req)
+		if err != nil {
+			if st, ok := status.FromError(err); ok {
+				return nil, rtpubsub.NewPublishResiliencyError(mode, st.Code(), err)
+			}
+		}
+		return nil, err
 	})
 	return err
 }
 
-func (p *publisher) BulkPublish(ctx context.Context, req *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error) {
+func (p *publisher) BulkPublish(ctx context.Context, req *contribpubsub.BulkPublishRequest, mode rtpubsub.TransportMode) (contribpubsub.BulkPublishResponse, error) {
 	pubsub, ok := p.getpubsubFn(req.PubsubName)
 	if !ok {
 		return contribpubsub.BulkPublishResponse{}, rtpubsub.NotFoundError{PubsubName: req.PubsubName}
@@ -92,11 +101,11 @@ func (p *publisher) BulkPublish(ctx context.Context, req *contribpubsub.BulkPubl
 	policyDef := p.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub)
 
 	if contribpubsub.FeatureBulkPublish.IsPresent(pubsub.Component.Features()) {
-		return rtpubsub.ApplyBulkPublishResiliency(ctx, req, policyDef, pubsub.Component.(contribpubsub.BulkPublisher))
+		return rtpubsub.ApplyBulkPublishResiliency(ctx, req, policyDef, pubsub.Component.(contribpubsub.BulkPublisher), mode)
 	}
 
 	log.Debugf("pubsub %s does not implement the BulkPublish API; falling back to publishing messages individually", req.PubsubName)
 	defaultBulkPublisher := rtpubsub.NewDefaultBulkPublisher(pubsub.Component)
 
-	return rtpubsub.ApplyBulkPublishResiliency(ctx, req, policyDef, defaultBulkPublisher)
+	return rtpubsub.ApplyBulkPublishResiliency(ctx, req, policyDef, defaultBulkPublisher, mode)
 }

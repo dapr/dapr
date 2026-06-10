@@ -230,7 +230,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	}
 
 	start := time.Now()
-	err := a.pubsubAdapter.Publish(ctx, &req)
+	err := a.pubsubAdapter.Publish(ctx, &req, runtimePubsub.TransportModeGRPC)
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
@@ -461,7 +461,7 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 	start := time.Now()
 	// err is only nil if all entries are successfully published.
 	// For partial success, err is not nil and res contains the failed entries.
-	res, err := a.pubsubAdapter.BulkPublish(ctx, &req)
+	res, err := a.pubsubAdapter.BulkPublish(ctx, &req, runtimePubsub.TransportModeGRPC)
 
 	elapsed := diag.ElapsedSince(start)
 	eventsPublished := int64(len(req.Entries))

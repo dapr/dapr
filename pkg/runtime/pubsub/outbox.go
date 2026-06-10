@@ -231,7 +231,7 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 				PubsubName: c.outboxPubsub,
 				Data:       data,
 				Topic:      outboxTopic(source, c.publishTopic, o.namespace),
-			})
+			}, TransportModeGRPC)
 			if err != nil {
 				return nil, err
 			}
@@ -326,7 +326,7 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 				Data:        b,
 				Topic:       c.publishTopic,
 				ContentType: &contentType,
-			})
+			}, TransportModeGRPC)
 			if err != nil {
 				return err
 			}
