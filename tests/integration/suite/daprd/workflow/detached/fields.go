@@ -33,11 +33,13 @@ func init() {
 	suite.Register(new(fields))
 }
 
-// fields asserts that all optional scheduling fields (executionID, tags,
-// scheduledStartTime) flow from the action through the applier into the
-// spawned StartEvent verbatim, and that no ParentInstance linkage is set on
-// the spawn — the spawned workflow must look like a freshly client-scheduled
-// top-level workflow.
+// fields asserts that the optional scheduling field exposed on
+// ScheduleNewWorkflow (scheduledStartTime) flows from the action through
+// the applier into the spawned StartEvent verbatim, and that no
+// ParentInstance linkage is set on the spawn — the spawned workflow must
+// look like a freshly client-scheduled top-level workflow. The spawned
+// instance also receives a minted (non-empty) executionId from the runtime
+// since the caller does not supply one.
 type fields struct {
 	workflow *workflow.Workflow
 }
@@ -53,14 +55,11 @@ func (f *fields) Run(t *testing.T, ctx context.Context) {
 	f.workflow.WaitUntilRunning(t, ctx)
 
 	const spawnedInstanceID = "spawned-fields"
-	const explicitExecID = "exec-fixed-fields"
 	scheduledStart := time.Now().Add(2 * time.Second).UTC()
 
 	f.workflow.Registry().AddWorkflowN("Caller", func(ctx *task.WorkflowContext) (any, error) {
 		_, err := ctx.ScheduleNewWorkflow("Spawned",
 			task.WithDetachedWorkflowInstanceID(spawnedInstanceID),
-			task.WithDetachedWorkflowExecutionID(explicitExecID),
-			task.WithDetachedWorkflowTags(map[string]string{"k1": "v1", "k2": "v2"}),
 			task.WithDetachedWorkflowStartTime(scheduledStart),
 		)
 		return nil, err
@@ -94,8 +93,8 @@ func (f *fields) Run(t *testing.T, ctx context.Context) {
 	assert.Nil(t, startEvent.GetParentInstance(),
 		"detached spawn's StartEvent must carry no ParentInstance — it must look like a freshly client-scheduled top-level workflow")
 	assert.Equal(t, spawnedInstanceID, startEvent.GetWorkflowInstance().GetInstanceId())
-	assert.Equal(t, explicitExecID, startEvent.GetWorkflowInstance().GetExecutionId().GetValue())
-	assert.Equal(t, map[string]string{"k1": "v1", "k2": "v2"}, startEvent.GetTags())
+	assert.NotEmpty(t, startEvent.GetWorkflowInstance().GetExecutionId().GetValue(),
+		"runtime must mint a non-empty executionId when the caller does not supply one")
 	require.NotNil(t, startEvent.GetScheduledStartTimestamp())
 	assert.WithinDuration(t, scheduledStart, startEvent.GetScheduledStartTimestamp().AsTime(), time.Second,
 		"ScheduledStartTimestamp must be propagated through to the spawned StartEvent")

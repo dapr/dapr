@@ -58,7 +58,6 @@ func (s *single) Run(t *testing.T, ctx context.Context) {
 		id, err := ctx.ScheduleNewWorkflow("Spawned",
 			task.WithDetachedWorkflowInstanceID(spawnedInstanceID),
 			task.WithDetachedWorkflowInput("payload"),
-			task.WithDetachedWorkflowTags(map[string]string{"team": "growth"}),
 		)
 		if err != nil {
 			return nil, err
