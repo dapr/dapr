@@ -24,9 +24,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/encoding/protojson"
 
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -35,6 +33,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -109,7 +108,7 @@ func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{"city": "Portland"},
 		}
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+		instanceID := httpapi.Start(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("weather", "get_weather"), input)
 
 		// Poll for completion using plain HTTP GET
@@ -135,20 +134,20 @@ func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 			if !assert.NoError(c, json.NewDecoder(resp.Body).Decode(&status)) {
 				return
 			}
-			assert.Equal(c, statusCompleted, status.RuntimeStatus)
+			assert.Equal(c, httpapi.StatusCompleted, status.RuntimeStatus)
 		}, 30*time.Second, 10*time.Millisecond)
 
 		// The tool output is stored in the dapr.workflow.output property.
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON, "expected dapr.workflow.output to be populated")
 
-		var result wfv1.CallMCPToolResponse
-		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(outputJSON), &result))
 
-		assert.False(t, result.GetIsError(), "expected success result")
-		require.NotEmpty(t, result.GetContent())
-		assert.NotNil(t, result.GetContent()[0].GetText())
-		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "Portland",
-			"expected tool result to mention Portland, got: %s", result.GetContent()[0].GetText().GetText())
+		assert.False(t, result.IsError, "expected success result")
+		require.NotEmpty(t, result.Content)
+		assert.NotNil(t, result.Content[0])
+		assert.Contains(t, extractText(result.Content[0]), "Portland",
+			"expected tool result to mention Portland, got: %s", extractText(result.Content[0]))
 	})
 }

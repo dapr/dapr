@@ -61,11 +61,25 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 
 	// Drop completion events whose resolution is already in history or the
 	// inbox; otherwise an inbox redelivery (e.g. an activity actor reminder
-	// firing twice during pod migration) would pin the workflow in a
-	// replay/spin loop.
+	// firing twice during pod migration) would pin the workflow in a replay/spin
+	// loop.
 	if dedup.IsDuplicateCompletion(e, state.History, state.Inbox) {
-		log.Debugf("Workflow actor '%s': dropping duplicate completion event already present in history/inbox", o.actorID)
-		return nil
+		log.Debugf("Workflow actor '%s': dropping duplicate completion event already present in history/inbox; re-asserting wake-up reminder so the inbox row is not stranded", o.actorID)
+		return o.assertNewEventReminder(ctx, e, state)
+	}
+
+	// Drop redelivered external events the same way: a RaiseEvent re-sent to
+	// this actor (e.g. an AddWorkflowEvent invocation retried under placement
+	// churn) keeps the same ingestion timestamp, so it matches an EventRaised
+	// already in history or the inbox by (event name, ingestion timestamp).
+	// duplicate the event in history; instead re-assert the wake-up reminder so
+	// a still-pending inbox row that lost its reminder gets re-driven. Distinct
+	// RaiseEvents are guaranteed distinct timestamps by the backend at ingestion
+	// (Actors.uniqueEventTimestamp), so they fall through to be appended
+	// normally even when raced onto the same wall-clock nanosecond.
+	if dedup.IsDuplicateExternalEvent(e, state.History, state.Inbox) {
+		log.Debugf("Workflow actor '%s': dropping duplicate external event already present in history/inbox; re-asserting wake-up reminder so the inbox row is not stranded", o.actorID)
+		return o.assertNewEventReminder(ctx, e, state)
 	}
 
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
@@ -98,28 +112,37 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 		return api.ErrInstanceNotFound
 	}
 
+	// Save the inbox event BEFORE creating the wake-up reminder. The
+	// reminder's dueTime is anchored at the workflow's start timestamp
+	// (state.History[0].Timestamp), which is in the past, so the scheduler
+	// fires it immediately on Create. Under placement rebalance the firing
+	// daprd may not be the host that ran AddWorkflowEvent: it loads the
+	// store, sees no inbox event, acks SUCCESS, and the scheduler deletes
+	// the reminder. By the time the save eventually commits the inbox row
+	// is stranded with no driver, and the activity actor's publishResult
+	// already returned nil so its retry-forever 'run-activity' reminder
+	// no longer fires. The workflow freezes in RUNNING.
+	//
+	// Saving first inverts the failure mode into something the existing
+	// recovery paths already handle: if signAndSaveState succeeds but the
+	// reminder Create then crashes / times out, the activity actor's
+	// publishResult sees the RPC error and its retry-forever reminder
+	// re-fires, the next AddWorkflowEvent hits dedup.IsDuplicateCompletion
+	// (the row is already in inbox), and the dedup branch above calls
+	// assertNewEventReminder which deterministically re-creates the
+	// reminder. The inbox is never stranded.
+	//
+	// The reminder must target the local actor (o.appID), not the router's
+	// source app. For cross-app events (e.g. ExecutionTerminated from a
+	// parent in another app), router.SourceAppID is the sender's app and
+	// would route the reminder to a non-existent remote actor.
 	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)
 	state.AddToInbox(e)
-
 	if err := o.signAndSaveState(ctx, state); err != nil {
 		return err
 	}
 
-	// The reminder must always fire on the actor that holds the state — i.e.
-	// the local one we just appended to. For activity completion events the
-	// router's source app is the workflow's app (so equal to o.appID anyway),
-	// but for cross-app events flowing INTO this actor (e.g. a recursive
-	// ExecutionTerminated from a parent in another app), router.SourceAppID is
-	// the *sender's* app, which would route the reminder to a non-existent
-	// remote actor and retry forever.
-	sourceAppID := o.appID
-
-	dueTime := e.Timestamp.AsTime()
-	if len(state.History) > 0 {
-		dueTime = state.History[0].Timestamp.AsTime()
-	}
-	wfName := o.getExecutionStartedEvent(state).GetName()
-	if _, err := o.createWorkflowReminder(ctx, reminderPrefixNewEvent, nil, dueTime, sourceAppID, &wfName); err != nil {
+	if err := o.assertNewEventReminder(ctx, e, state); err != nil {
 		return err
 	}
 

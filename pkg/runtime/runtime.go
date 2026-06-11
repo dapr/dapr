@@ -44,6 +44,7 @@ import (
 
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/callbackstream"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/api/grpc"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
@@ -217,6 +218,8 @@ func newDaprRuntime(ctx context.Context,
 	httpMiddleware := middlewarehttp.New()
 	httpMiddlewareApp := httpMiddleware.BuildPipelineFromSpec("app", globalConfig.Spec.AppHTTPPipelineSpec)
 
+	actorCallbackStream := callbackstream.NewManager()
+
 	channels := channels.New(channels.Options{
 		Registry:            runtimeConfig.registry,
 		ComponentStore:      compStore,
@@ -228,6 +231,7 @@ func newDaprRuntime(ctx context.Context,
 		GRPC:                grpc,
 		AppMiddleware:       httpMiddlewareApp,
 		AppAPIToken:         appAPIToken,
+		ActorCallbackStream: actorCallbackStream,
 	})
 
 	pubsubAdapter := publisher.New(publisher.Options{
@@ -411,6 +415,7 @@ func newDaprRuntime(ctx context.Context,
 		rt.actors.Run,
 		rt.wfengine.Run,
 		rt.jobsManager.Run,
+		actorCallbackStream.Run,
 		func(ctx context.Context) error {
 			start := time.Now()
 
@@ -474,7 +479,7 @@ func newDaprRuntime(ctx context.Context,
 				}(comp)
 			}
 
-			errs := make([]error, len(comps)+1)
+			errs := make([]error, len(comps)+2)
 			for i := range comps {
 				errs[i] = <-errCh
 			}
@@ -483,11 +488,13 @@ func newDaprRuntime(ctx context.Context,
 			log.Info("Dapr runtime stopped")
 
 			errs[len(comps)] = rt.cleanSockets()
-
+			// Close gRPC manager after all components are shut down so that
+			// in-flight app gRPC connections are not destroyed while
+			// subscriptions are still draining.
+			errs[len(comps)+1] = rt.grpc.Close()
 			return errors.Join(errs...)
 		},
 		rt.stopTrace,
-		rt.grpc,
 	); err != nil {
 		return nil, err
 	}
@@ -807,14 +814,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	log.Infof("Internal gRPC server is running on %s:%d", a.runtimeConfig.internalGRPCListenAddress, a.runtimeConfig.internalGRPCPort)
 
-	a.runtimeConfig.outboundHealthz.AddTarget("app").Ready()
-
-	if err := a.blockUntilAppIsReady(ctx); err != nil {
-		return err
-	}
-
-	a.initDirectMessaging(a.nameResolver)
-
 	if err := a.initActors(ctx); err != nil {
 		return fmt.Errorf("failed to initialize actors: %w", err)
 	}
@@ -824,6 +823,14 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return fmt.Errorf("failed to load mcpservers: %s", err)
 	}
 	a.flushOutstandingMCPServers(ctx)
+
+	a.runtimeConfig.outboundHealthz.AddTarget("app").Ready()
+
+	if err := a.blockUntilAppIsReady(ctx); err != nil {
+		return err
+	}
+
+	a.initDirectMessaging(a.nameResolver)
 
 	if a.runtimeConfig.appConnectionConfig.MaxConcurrency > 0 {
 		log.Infof("app max concurrency set to %v", a.runtimeConfig.appConnectionConfig.MaxConcurrency)
@@ -934,7 +941,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status *apphealth.St
 			log.Warnf("failed to subscribe to outbox topics: %s", err)
 		}
 
-		err = a.actors.RegisterHosted(hostconfig.Config{
+		err = a.actors.RegisterHosted(ctx, hostconfig.Config{
 			EntityConfigs:           a.appConfig.EntityConfigs,
 			DrainRebalancedActors:   a.appConfig.DrainRebalancedActors,
 			DrainOngoingCallTimeout: a.appConfig.DrainOngoingCallTimeout,
@@ -961,7 +968,9 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status *apphealth.St
 		a.processor.Subscriber().StopAppSubscriptions()
 		a.processor.Binding().StopReadingFromBindings(false)
 
-		a.actors.UnRegisterHosted(a.appConfig.Entities...)
+		if err := a.actors.UnRegisterHosted(ctx, a.appConfig.Entities...); err != nil {
+			log.Warnf("Failed to unregister hosted actors: %s", err)
+		}
 	}
 }
 

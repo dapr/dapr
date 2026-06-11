@@ -15,6 +15,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
@@ -23,9 +24,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/encoding/protojson"
 
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -33,6 +32,7 @@ import (
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -102,34 +102,34 @@ func (s *noSDKWorker) Run(t *testing.T, ctx context.Context) {
 	s.httpClient = fclient.HTTP(t)
 
 	t.Run("ListTools works without gRPC SDK worker", func(t *testing.T) {
-		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+		status := httpapi.Run(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPListToolsWorkflowName("echo-server"), nil, 30*time.Second)
-		require.Equal(t, statusCompleted, status.RuntimeStatus)
+		require.Equal(t, httpapi.StatusCompleted, status.RuntimeStatus)
 
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
 
-		var result wfv1.ListMCPToolsResponse
-		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		require.Len(t, result.GetTools(), 1)
-		assert.Equal(t, "echo", result.GetTools()[0].GetName())
+		var result mcp.ListToolsResult
+		require.NoError(t, json.Unmarshal([]byte(outputJSON), &result))
+		require.Len(t, result.Tools, 1)
+		assert.Equal(t, "echo", result.Tools[0].Name)
 	})
 
 	t.Run("CallTool works without gRPC SDK worker", func(t *testing.T) {
 		input := map[string]any{
 			"arguments": map[string]any{"message": "hello-no-sdk"},
 		}
-		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+		status := httpapi.Run(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("echo-server", "echo"), input, 30*time.Second)
-		require.Equal(t, statusCompleted, status.RuntimeStatus)
+		require.Equal(t, httpapi.StatusCompleted, status.RuntimeStatus)
 
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
 
-		var result wfv1.CallMCPToolResponse
-		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		assert.False(t, result.GetIsError())
-		require.NotEmpty(t, result.GetContent())
-		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "hello-no-sdk")
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(outputJSON), &result))
+		assert.False(t, result.IsError)
+		require.NotEmpty(t, result.Content)
+		assert.Contains(t, extractText(result.Content[0]), "hello-no-sdk")
 	})
 }

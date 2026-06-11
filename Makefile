@@ -46,8 +46,8 @@ PROTOC ?=protoc
 
 # Version of "protoc" to use
 # We must also specify a protobuf "suite" version from https://github.com/protocolbuffers/protobuf/releases
-PROTOC_VERSION = 25.4
-PROTOBUF_SUITE_VERSION = 25.4
+PROTOC_VERSION = 34.1
+PROTOBUF_SUITE_VERSION = 34.1
 
 # name of protoc-gen-go when protoc-gen-go --version is run.
 PROTOC_GEN_GO_NAME = "protoc-gen-go"
@@ -96,7 +96,7 @@ PROTOC_GEN_GO_NAME+= $(PROTOC_GEN_GO_VERSION)
 
 PROTOC_GEN_GO_GRPC_VERSION = 1.3.0
 
-PROTOC_GEN_CONNECT_GO_VERSION = 1.9.1
+PROTOC_GEN_CONNECT_GO_VERSION = 1.18.1
 
 ifeq ($(TARGET_OS_LOCAL),windows)
 	BUILD_TOOLS_BIN ?= build-tools.exe
@@ -435,7 +435,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.26.3; cd -
+	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.26.4; cd -
 endef
 
 # Generate modtidy target action for each go.mod file

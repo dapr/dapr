@@ -225,6 +225,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sentry.deploymentAnnotations` | Custom annotations for Dapr Sentry Deployment                                                                                                           | `{}`    |
 | `dapr_sentry.service.annotations`   | Custom annotations for "dapr-sentry" Service resource | `{}` |
 | `dapr_sentry.service.type`          | Type for "dapr-sentry" Service resource (e.g. `ClusterIP`, `LoadBalancer`, etc) | `ClusterIP` |
+| `dapr_sentry.extraArgs`             | List of additional command-line args appended to the sentry container (for flags not exposed as dedicated values) | `[]` |
 | `dapr_placement.extraEnvVars`       | Map of (name, value) tuples to use as extra environment variables (e.g. `my-env-var: "my-val"`, etc)                                                     | `{}`        |
 
 ### Dapr Sidecar Injector options:
@@ -278,10 +279,6 @@ helm install dapr dapr/dapr --namespace dapr-system --create-namespace --set-str
 ## Example of installing dapr on Minikube
 Configure a values file with these options:
 ```yaml
-dapr_dashboard:
-  runAsNonRoot: false
-  logLevel: DEBUG
-  serviceType: NodePort  # Allows retrieving the dashboard url by running the command "minikube service list"
 dapr_placement:
   runAsNonRoot: false
   logLevel: DEBUG
