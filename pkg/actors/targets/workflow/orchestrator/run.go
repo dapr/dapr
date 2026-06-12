@@ -614,7 +614,7 @@ func (o *orchestrator) stripUnmatchedResolutions(state *wfenginestate.State, rs 
 		filtered := make([]*backend.HistoryEvent, 0, len(events)-1)
 		for _, ev := range events {
 			if !matched(ev) {
-				log.Warnf("Workflow actor '%s': discarding resolution event %T that matches no operation scheduled in history (stale event from a previous generation?)", o.actorID, ev.GetEventType())
+				log.Warnf("Workflow actor '%s': discarding resolution event %T that matches no operation scheduled in persisted history or in this execution (stale event from a previous generation?)", o.actorID, ev.GetEventType())
 				continue
 			}
 			filtered = append(filtered, ev)
