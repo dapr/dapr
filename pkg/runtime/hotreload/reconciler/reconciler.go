@@ -15,15 +15,13 @@ package reconciler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"k8s.io/utils/clock"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
-	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/healthz"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
@@ -60,55 +58,8 @@ type Reconciler[T differ.Resource] struct {
 
 type manager[T differ.Resource] interface {
 	loader.Loader[T]
-	update(context.Context, T)
-	delete(context.Context, T)
-}
-
-func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Component] {
-	r := &Reconciler[compapi.Component]{
-		kind:    compapi.Kind,
-		htarget: opts.Healthz.AddTarget("component-reconciler"),
-		clock:   clock.RealClock{},
-		manager: &components{
-			Loader: opts.Loader.Components(),
-			store:  opts.CompStore,
-			proc:   opts.Processor,
-			auth:   opts.Authorizer,
-		},
-	}
-	r.loop = loopFactory.NewLoop(r)
-	return r
-}
-
-func NewMCPServers(opts Options[mcpserverapi.MCPServer]) *Reconciler[mcpserverapi.MCPServer] {
-	r := &Reconciler[mcpserverapi.MCPServer]{
-		kind:    mcpserverapi.Kind,
-		htarget: opts.Healthz.AddTarget("mcpserver-reconciler"),
-		clock:   clock.RealClock{},
-		manager: &mcpservers{
-			Loader: opts.Loader.MCPServers(),
-			store:  opts.CompStore,
-			proc:   opts.Processor,
-			auth:   opts.Authorizer,
-		},
-	}
-	r.loop = loopFactory.NewLoop(r)
-	return r
-}
-
-func NewSubscriptions(opts Options[subapi.Subscription]) *Reconciler[subapi.Subscription] {
-	r := &Reconciler[subapi.Subscription]{
-		kind:    subapi.Kind,
-		htarget: opts.Healthz.AddTarget("subscription-reconciler"),
-		clock:   clock.RealClock{},
-		manager: &subscriptions{
-			Loader: opts.Loader.Subscriptions(),
-			store:  opts.CompStore,
-			proc:   opts.Processor,
-		},
-	}
-	r.loop = loopFactory.NewLoop(r)
-	return r
+	update(context.Context, T) error
+	delete(context.Context, T) error
 }
 
 func (r *Reconciler[T]) Run(ctx context.Context) error {
@@ -166,11 +117,11 @@ func (r *Reconciler[T]) watchConn(ctx context.Context, conn *loader.StreamConn[T
 func (r *Reconciler[T]) Handle(ctx context.Context, event Event) error {
 	switch e := event.(type) {
 	case *tick:
-		r.handleTick(ctx)
+		return r.handleTick(ctx)
 	case *reconcile:
-		r.handleReconcile(ctx)
+		return r.handleReconcile(ctx)
 	case *resourceEvent[T]:
-		r.handleResourceEvent(ctx, e.Event)
+		return r.handleResourceEvent(ctx, e.Event)
 	case *shutdown:
 		r.handleShutdown(e)
 	default:
@@ -180,52 +131,57 @@ func (r *Reconciler[T]) Handle(ctx context.Context, event Event) error {
 	return nil
 }
 
-func (r *Reconciler[T]) handleTick(ctx context.Context) {
+func (r *Reconciler[T]) handleTick(ctx context.Context) error {
 	log.Debugf("Running scheduled %s reconcile", r.kind)
-	r.doReconcile(ctx)
+	return r.doReconcile(ctx)
 }
 
-func (r *Reconciler[T]) handleReconcile(ctx context.Context) {
+func (r *Reconciler[T]) handleReconcile(ctx context.Context) error {
 	log.Debugf("Reconciling all %s", r.kind)
-	r.doReconcile(ctx)
+	return r.doReconcile(ctx)
 }
 
-func (r *Reconciler[T]) doReconcile(ctx context.Context) {
+func (r *Reconciler[T]) doReconcile(ctx context.Context) error {
 	resources, err := r.manager.List(ctx)
 	if err != nil {
 		log.Errorf("Error listing %s: %s", r.kind, err)
-		return
+		return nil
 	}
 
-	r.reconcile(ctx, differ.Diff(resources))
+	return r.reconcile(ctx, differ.Diff(resources))
 }
 
-func (r *Reconciler[T]) handleResourceEvent(ctx context.Context, event *loader.Event[T]) {
+func (r *Reconciler[T]) handleResourceEvent(ctx context.Context, event *loader.Event[T]) error {
 	log.Debugf("Received %s event %s: %s", event.Resource.Kind(), event.Type, event.Resource.LogName())
 
 	switch event.Type {
 	case operatorpb.ResourceEventType_CREATED:
 		log.Debugf("Received %s creation: %s", r.kind, event.Resource.LogName())
-		r.manager.update(ctx, event.Resource)
+		return r.manager.update(ctx, event.Resource)
 	case operatorpb.ResourceEventType_UPDATED:
 		log.Debugf("Received %s update: %s", r.kind, event.Resource.LogName())
-		r.manager.update(ctx, event.Resource)
+		return r.manager.update(ctx, event.Resource)
 	case operatorpb.ResourceEventType_DELETED:
 		log.Debugf("Received %s deletion, closing: %s", r.kind, event.Resource.LogName())
-		r.manager.delete(ctx, event.Resource)
+		return r.manager.delete(ctx, event.Resource)
 	}
+	return nil
 }
 
 func (r *Reconciler[T]) handleShutdown(e *shutdown) {
 	log.Debugf("reconciler loop shutdown: %v", e.Error)
 }
 
-func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T]) {
+func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T]) error {
 	if result == nil {
-		return
+		return nil
 	}
 
-	var wg sync.WaitGroup
+	var (
+		wg      sync.WaitGroup
+		errLock sync.Mutex
+		errs    []error
+	)
 	for _, group := range []struct {
 		resources []T
 		eventType operatorpb.ResourceEventType
@@ -234,18 +190,20 @@ func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T])
 		{result.Updated, operatorpb.ResourceEventType_UPDATED},
 		{result.Created, operatorpb.ResourceEventType_CREATED},
 	} {
-		wg.Add(len(group.resources))
-
 		for _, resource := range group.resources {
-			go func(resource T, eventType operatorpb.ResourceEventType) {
-				defer wg.Done()
-				r.handleResourceEvent(ctx, &loader.Event[T]{
-					Type:     eventType,
+			wg.Go(func() {
+				if err := r.handleResourceEvent(ctx, &loader.Event[T]{
+					Type:     group.eventType,
 					Resource: resource,
-				})
-			}(resource, group.eventType)
+				}); err != nil {
+					errLock.Lock()
+					errs = append(errs, err)
+					errLock.Unlock()
+				}
+			})
 		}
 
 		wg.Wait()
 	}
+	return errors.Join(errs...)
 }

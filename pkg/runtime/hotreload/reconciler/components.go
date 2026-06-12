@@ -15,7 +15,10 @@ package reconciler
 
 import (
 	"context"
+	"fmt"
 	"strings"
+
+	"k8s.io/utils/clock"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
@@ -33,13 +36,29 @@ type components struct {
 	loader.Loader[compapi.Component]
 }
 
+func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Component] {
+	r := &Reconciler[compapi.Component]{
+		kind:    compapi.Kind,
+		htarget: opts.Healthz.AddTarget("component-reconciler"),
+		clock:   clock.RealClock{},
+		manager: &components{
+			Loader: opts.Loader.Components(),
+			store:  opts.CompStore,
+			proc:   opts.Processor,
+			auth:   opts.Authorizer,
+		},
+	}
+	r.loop = loopFactory.NewLoop(r)
+	return r
+}
+
 // The go linter does not yet understand that these functions are being used by
 // the generic reconciler.
 //
 //nolint:unused
-func (c *components) update(ctx context.Context, comp compapi.Component) {
+func (c *components) update(ctx context.Context, comp compapi.Component) error {
 	if !c.verify(comp) {
-		return
+		return nil
 	}
 
 	oldComp, exists := c.store.GetComponent(comp.Name)
@@ -48,41 +67,68 @@ func (c *components) update(ctx context.Context, comp compapi.Component) {
 	if exists {
 		if differ.AreSame(oldComp, comp) {
 			log.Debugf("Component update skipped: no changes detected: %s", comp.LogName())
-			return
+			return nil
+		}
+
+		// Reject events that carry a lower Generation than what is installed.
+		// In Kubernetes, Generation is monotonically increased by the API
+		// server on each spec change; in self-hosted mode the disk loader
+		// stamps a process-wide monotonic counter. Lower generation reliably
+		// means an older event arrived out of order; skip rather than
+		// downgrade the installed version.
+		if comp.GetGeneration() > 0 && comp.GetGeneration() < oldComp.GetGeneration() {
+			log.Warnf("Ignoring stale Component event for %s (generation %d < installed %d)",
+				comp.LogName(), comp.GetGeneration(), oldComp.GetGeneration())
+			return nil
 		}
 
 		log.Infof("Closing existing Component to reload: %s", oldComp.LogName())
 		// TODO: change close to accept pointer
-		err := c.proc.Close(oldComp)
-		if err != nil {
+		if err := c.proc.Close(oldComp); err != nil {
 			log.Errorf("error closing old component: %s", err)
-			return
+			return nil
 		}
 	}
 
 	if !c.auth.IsObjectAuthorized(comp) {
 		log.Warnf("Received unauthorized component update, ignored: %s", comp.LogName())
-		return
+		return nil
 	}
 
 	log.Infof("Adding Component for processing: %s", comp.LogName())
 
-	if c.proc.AddPendingComponent(ctx, comp) {
-		log.Infof("Component updated: %s", comp.LogName())
-		c.proc.WaitForEmptyComponentQueue()
+	res := c.proc.AddPendingComponent(ctx, comp)
+	if res == nil {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return nil
+	case err := <-res:
+		if err == nil {
+			log.Infof("Component updated: %s", comp.LogName())
+			return nil
+		}
+		err = fmt.Errorf("process component %s error: %s", comp.Name, err)
+		if comp.Spec.IgnoreErrors {
+			log.Errorf("Ignoring error processing component: %s", err)
+			return nil
+		}
+		log.Warnf("Error processing component, daprd will exit gracefully: %s", err)
+		return err
 	}
 }
 
 //nolint:unused
-func (c *components) delete(_ context.Context, comp compapi.Component) {
+func (c *components) delete(_ context.Context, comp compapi.Component) error {
 	if !c.verify(comp) {
-		return
+		return nil
 	}
 
-	err := c.proc.Close(comp)
-	if err != nil {
+	if err := c.proc.Close(comp); err != nil {
 		log.Errorf("error closing deleted component: %s", err)
 	}
+	return nil
 }
 
 //nolint:unused
