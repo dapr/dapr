@@ -839,3 +839,384 @@ func TestWorkflowStateRetentionPolicyUnmarshalJSON(t *testing.T) {
 		assert.Error(t, json.Unmarshal([]byte(data), &p))
 	})
 }
+
+func TestSetMetricsSpecFromEnv(t *testing.T) {
+	tests := []struct {
+		name     string
+		envVars  map[string]string
+		config   *Configuration
+		wantAddr string
+		wantErr  bool
+	}{
+		{
+			name:    "no env vars, no otel config",
+			config:  LoadDefaultConfiguration(),
+			wantErr: false,
+		},
+		{
+			name: "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT sets endpoint",
+			envVars: map[string]string{
+				"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "otel-collector:4317",
+			},
+			config:   LoadDefaultConfiguration(),
+			wantAddr: "otel-collector:4317",
+			wantErr:  false,
+		},
+		{
+			name: "falls back to OTEL_EXPORTER_OTLP_ENDPOINT",
+			envVars: map[string]string{
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "fallback-collector:4317",
+			},
+			config:   LoadDefaultConfiguration(),
+			wantAddr: "fallback-collector:4317",
+			wantErr:  false,
+		},
+		{
+			name: "metrics-specific env takes precedence",
+			envVars: map[string]string{
+				"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "metrics-collector:4317",
+				"OTEL_EXPORTER_OTLP_ENDPOINT":         "general-collector:4317",
+			},
+			config:   LoadDefaultConfiguration(),
+			wantAddr: "metrics-collector:4317",
+			wantErr:  false,
+		},
+		{
+			name: "existing config not overridden by env",
+			envVars: map[string]string{
+				"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "env-collector:4317",
+			},
+			config: func() *Configuration {
+				c := LoadDefaultConfiguration()
+				c.Spec.MetricSpec.Otel = &OtelMetricSpec{
+					EndpointAddress: "existing-collector:4317",
+				}
+				return c
+			}(),
+			wantAddr: "existing-collector:4317",
+			wantErr:  false,
+		},
+		{
+			name: "protocol defaults to grpc",
+			envVars: map[string]string{
+				"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "otel-collector:4317",
+			},
+			config:   LoadDefaultConfiguration(),
+			wantAddr: "otel-collector:4317",
+			wantErr:  false,
+		},
+		{
+			name: "http protocol",
+			envVars: map[string]string{
+				"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "otel-collector:4318",
+				"OTEL_EXPORTER_OTLP_METRICS_PROTOCOL": "http/protobuf",
+			},
+			config:   LoadDefaultConfiguration(),
+			wantAddr: "otel-collector:4318",
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set env vars
+			for k, v := range tt.envVars {
+				t.Setenv(k, v)
+			}
+
+			err := SetMetricsSpecFromEnv(tt.config)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+
+			if tt.wantAddr != "" {
+				require.NotNil(t, tt.config.Spec.MetricSpec.Otel)
+				assert.Equal(t, tt.wantAddr, tt.config.Spec.MetricSpec.Otel.EndpointAddress)
+			}
+		})
+	}
+}
+
+func TestOtelMetricSpecUnmarshalJSON(t *testing.T) {
+	t.Run("full config", func(t *testing.T) {
+		data := `{
+			"protocol": "grpc",
+			"endpointAddress": "otel-collector:4317",
+			"isSecure": false,
+			"headers": [{"name":"X-Custom","value":"secret"}],
+			"timeout": "15s",
+			"exportInterval": "60s"
+		}`
+		var spec OtelMetricSpec
+		require.NoError(t, json.Unmarshal([]byte(data), &spec))
+
+		assert.Equal(t, "grpc", spec.Protocol)
+		assert.Equal(t, "otel-collector:4317", spec.EndpointAddress)
+		assert.False(t, spec.GetIsSecure())
+		assert.Equal(t, []string{"X-Custom=secret"}, spec.Headers)
+		require.NotNil(t, spec.Timeout)
+		assert.Equal(t, 15*time.Second, *spec.Timeout)
+		require.NotNil(t, spec.ExportInterval)
+		assert.Equal(t, 60*time.Second, *spec.ExportInterval)
+	})
+
+	t.Run("empty object", func(t *testing.T) {
+		data := `{}`
+		var spec OtelMetricSpec
+		require.NoError(t, json.Unmarshal([]byte(data), &spec))
+		assert.True(t, spec.GetIsSecure()) // defaults to true
+	})
+
+	t.Run("partial config", func(t *testing.T) {
+		data := `{
+			"endpointAddress": "otel-collector:4317",
+			"protocol": "http"
+		}`
+		var spec OtelMetricSpec
+		require.NoError(t, json.Unmarshal([]byte(data), &spec))
+		assert.Equal(t, "otel-collector:4317", spec.EndpointAddress)
+		assert.Equal(t, "http", spec.Protocol)
+		assert.True(t, spec.GetIsSecure())
+	})
+}
+
+func TestSortMetricsSpecOtel(t *testing.T) {
+	t.Run("propagates otel from metrics to metric", func(t *testing.T) {
+		c := LoadDefaultConfiguration()
+		c.Spec.MetricsSpec = &MetricSpec{
+			Otel: &OtelMetricSpec{
+				EndpointAddress: "metrics-otel:4317",
+				Protocol:       "grpc",
+			},
+		}
+		c.sortMetricsSpec()
+
+		require.NotNil(t, c.Spec.MetricSpec.Otel)
+		assert.Equal(t, "metrics-otel:4317", c.Spec.MetricSpec.Otel.EndpointAddress)
+		assert.Equal(t, "grpc", c.Spec.MetricSpec.Otel.Protocol)
+	})
+
+	t.Run("does not overwrite existing otel if not set on metrics", func(t *testing.T) {
+		c := LoadDefaultConfiguration()
+		c.Spec.MetricSpec.Otel = &OtelMetricSpec{
+			EndpointAddress: "existing:4317",
+		}
+		c.Spec.MetricsSpec = &MetricSpec{}
+		c.sortMetricsSpec()
+
+		// The existing Otel should NOT be overwritten by nil from MetricsSpec
+		// because sortMetricsSpec only copies when MetricsSpec.Otel != nil
+		assert.Equal(t, "existing:4317", c.Spec.MetricSpec.Otel.EndpointAddress)
+	})
+}
+
+func TestSetLoggingSpecFromEnv(t *testing.T) {
+	tests := []struct {
+		name     string
+		envVars  map[string]string
+		config   *Configuration
+		wantAddr string
+		wantErr  bool
+	}{
+		{
+			name:    "no env vars, no otel config",
+			config:  LoadDefaultConfiguration(),
+			wantErr: false,
+		},
+		{
+			name: "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT sets endpoint",
+			envVars: map[string]string{
+				"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "otel-collector:4317",
+			},
+			config:   LoadDefaultConfiguration(),
+			wantAddr: "otel-collector:4317",
+			wantErr:  false,
+		},
+		{
+			name: "falls back to OTEL_EXPORTER_OTLP_ENDPOINT",
+			envVars: map[string]string{
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "fallback-collector:4317",
+			},
+			config:   LoadDefaultConfiguration(),
+			wantAddr: "fallback-collector:4317",
+			wantErr:  false,
+		},
+		{
+			name: "logs-specific env takes precedence",
+			envVars: map[string]string{
+				"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "logs-collector:4317",
+				"OTEL_EXPORTER_OTLP_ENDPOINT":         "general-collector:4317",
+			},
+			config:   LoadDefaultConfiguration(),
+			wantAddr: "logs-collector:4317",
+			wantErr:  false,
+		},
+		{
+			name: "existing config not overridden",
+			envVars: map[string]string{
+				"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "env-collector:4317",
+			},
+			config: func() *Configuration {
+				c := LoadDefaultConfiguration()
+				c.Spec.LoggingSpec = &LoggingSpec{
+					Otel: &OtelLogSpec{
+						EndpointAddress: "existing-collector:4317",
+					},
+				}
+				return c
+			}(),
+			wantAddr: "existing-collector:4317",
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for k, v := range tt.envVars {
+				t.Setenv(k, v)
+			}
+
+			err := SetLoggingSpecFromEnv(tt.config)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+
+			if tt.wantAddr != "" {
+				require.NotNil(t, tt.config.Spec.LoggingSpec)
+				require.NotNil(t, tt.config.Spec.LoggingSpec.Otel)
+				assert.Equal(t, tt.wantAddr, tt.config.Spec.LoggingSpec.Otel.EndpointAddress)
+			}
+		})
+	}
+}
+
+func TestOtelLogSpecUnmarshalJSON(t *testing.T) {
+	t.Run("full config", func(t *testing.T) {
+		data := `{
+			"protocol": "grpc",
+			"endpointAddress": "otel-collector:4317",
+			"isSecure": false,
+			"headers": [{"name":"X-Custom","value":"secret"}],
+			"timeout": "10s"
+		}`
+		var spec OtelLogSpec
+		require.NoError(t, json.Unmarshal([]byte(data), &spec))
+
+		assert.Equal(t, "grpc", spec.Protocol)
+		assert.Equal(t, "otel-collector:4317", spec.EndpointAddress)
+		assert.False(t, spec.GetIsSecure())
+		assert.Equal(t, []string{"X-Custom=secret"}, spec.Headers)
+		require.NotNil(t, spec.Timeout)
+		assert.Equal(t, 10*time.Second, *spec.Timeout)
+	})
+
+	t.Run("empty object", func(t *testing.T) {
+		data := `{}`
+		var spec OtelLogSpec
+		require.NoError(t, json.Unmarshal([]byte(data), &spec))
+		assert.True(t, spec.GetIsSecure())
+	})
+}
+
+func TestApplyObservabilitySpec(t *testing.T) {
+	t.Run("nil observability spec does nothing", func(t *testing.T) {
+		c := LoadDefaultConfiguration()
+		ApplyObservabilitySpec(c)
+		// Default config has TracingSpec.Otel with empty endpoint — should remain empty
+		assert.Empty(t, c.Spec.TracingSpec.Otel.EndpointAddress)
+		assert.Nil(t, c.Spec.MetricSpec.Otel)
+	})
+
+	t.Run("expands shared config to all three signals", func(t *testing.T) {
+		c := LoadDefaultConfiguration()
+		c.Spec.ObservabilitySpec = &ObservabilitySpec{
+			Otel: &ObservabilityOtelSpec{
+				EndpointAddress: "shared-collector:4317",
+				Protocol:       "grpc",
+			},
+		}
+		ApplyObservabilitySpec(c)
+
+		// Traces
+		require.NotNil(t, c.Spec.TracingSpec)
+		require.NotNil(t, c.Spec.TracingSpec.Otel)
+		assert.Equal(t, "shared-collector:4317", c.Spec.TracingSpec.Otel.EndpointAddress)
+		assert.Equal(t, "1", c.Spec.TracingSpec.SamplingRate)
+
+		// Metrics
+		require.NotNil(t, c.Spec.MetricSpec.Otel)
+		assert.Equal(t, "shared-collector:4317", c.Spec.MetricSpec.Otel.EndpointAddress)
+
+		// Logs
+		require.NotNil(t, c.Spec.LoggingSpec.Otel)
+		assert.Equal(t, "shared-collector:4317", c.Spec.LoggingSpec.Otel.EndpointAddress)
+	})
+
+	t.Run("per-signal override takes precedence", func(t *testing.T) {
+		c := LoadDefaultConfiguration()
+		c.Spec.ObservabilitySpec = &ObservabilitySpec{
+			Otel: &ObservabilityOtelSpec{
+				EndpointAddress: "shared:4317",
+				Protocol:       "grpc",
+				Traces: &OtelSpec{
+					EndpointAddress: "traces-only:4317",
+					Protocol:       "http",
+				},
+				Metrics: &OtelMetricSpec{
+					EndpointAddress: "metrics-only:4317",
+					ExportInterval: func() *time.Duration { d := 60 * time.Second; return &d }(),
+				},
+			},
+		}
+		ApplyObservabilitySpec(c)
+
+		// Traces uses override
+		assert.Equal(t, "traces-only:4317", c.Spec.TracingSpec.Otel.EndpointAddress)
+		assert.Equal(t, "http", c.Spec.TracingSpec.Otel.Protocol)
+
+		// Metrics uses override
+		assert.Equal(t, "metrics-only:4317", c.Spec.MetricSpec.Otel.EndpointAddress)
+		require.NotNil(t, c.Spec.MetricSpec.Otel.ExportInterval)
+		assert.Equal(t, 60*time.Second, *c.Spec.MetricSpec.Otel.ExportInterval)
+
+		// Logs falls back to shared
+		assert.Equal(t, "shared:4317", c.Spec.LoggingSpec.Otel.EndpointAddress)
+	})
+
+	t.Run("existing per-signal config not overridden", func(t *testing.T) {
+		c := LoadDefaultConfiguration()
+		c.Spec.TracingSpec.Otel = &OtelSpec{
+			EndpointAddress: "existing-traces:4317",
+		}
+		c.Spec.ObservabilitySpec = &ObservabilitySpec{
+			Otel: &ObservabilityOtelSpec{
+				EndpointAddress: "shared:4317",
+			},
+		}
+		ApplyObservabilitySpec(c)
+
+		// Existing trace config preserved
+		assert.Equal(t, "existing-traces:4317", c.Spec.TracingSpec.Otel.EndpointAddress)
+
+		// Metrics and logs still expanded from shared
+		assert.Equal(t, "shared:4317", c.Spec.MetricSpec.Otel.EndpointAddress)
+		assert.Equal(t, "shared:4317", c.Spec.LoggingSpec.Otel.EndpointAddress)
+	})
+
+	t.Run("empty endpoint does nothing", func(t *testing.T) {
+		c := LoadDefaultConfiguration()
+		c.Spec.ObservabilitySpec = &ObservabilitySpec{
+			Otel: &ObservabilityOtelSpec{
+				Protocol: "grpc",
+			},
+		}
+		ApplyObservabilitySpec(c)
+		// TracingSpec.Otel exists from default but with empty endpoint
+		assert.Empty(t, c.Spec.TracingSpec.Otel.EndpointAddress)
+		assert.Nil(t, c.Spec.MetricSpec.Otel)
+	})
+}

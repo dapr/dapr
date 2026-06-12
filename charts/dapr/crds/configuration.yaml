@@ -247,6 +247,61 @@ spec:
                           This option has no effect if API logging is disabled.
                         type: boolean
                     type: object
+                  otel:
+                    description: |-
+                      Otel configures native OTLP push export for logs.
+                      When set, Dapr sidecar logs are pushed via OTLP in addition to stdout.
+                    properties:
+                      endpointAddress:
+                        description: EndpointAddress is the OTLP receiver endpoint
+                          (host:port).
+                        type: string
+                      headers:
+                        description: |-
+                          Headers to add to the OTLP log export request.
+                          Each header can contain plaintext values, reference secrets, or reference environment variables.
+                        items:
+                          description: NameValuePair is a name/value pair.
+                          properties:
+                            envRef:
+                              description: EnvRef is the name of an environmental
+                                variable to read the value from.
+                              type: string
+                            name:
+                              description: Name of the property.
+                              type: string
+                            secretKeyRef:
+                              description: SecretKeyRef is the reference of a value
+                                in a secret store component.
+                              properties:
+                                key:
+                                  description: Field in the secret.
+                                  type: string
+                                name:
+                                  description: Secret name.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            value:
+                              description: Value of the property, in plaintext.
+                              x-kubernetes-preserve-unknown-fields: true
+                          required:
+                          - name
+                          type: object
+                        type: array
+                      isSecure:
+                        description: IsSecure indicates whether to use TLS. Defaults
+                          to true.
+                        type: boolean
+                      protocol:
+                        description: Protocol is the OTLP transport protocol. Must
+                          be "grpc" or "http".
+                        type: string
+                      timeout:
+                        description: Timeout for the OTLP log export request.
+                        type: string
+                    type: object
                 type: object
               metric:
                 default:
@@ -282,6 +337,65 @@ spec:
                     items:
                       type: integer
                     type: array
+                  otel:
+                    description: |-
+                      Otel configures native OTLP push export for metrics alongside the existing Prometheus endpoint.
+                      When set, Dapr pushes metrics to the configured OTLP endpoint using the OpenCensus-to-OpenTelemetry bridge.
+                    properties:
+                      endpointAddress:
+                        description: EndpointAddress is the OTLP receiver endpoint
+                          (host:port).
+                        type: string
+                      exportInterval:
+                        description: ExportInterval is the interval between metric
+                          pushes. Defaults to 30s.
+                        type: string
+                      headers:
+                        description: |-
+                          Headers to add to the OTLP metrics export request.
+                          Each header can contain plaintext values, reference secrets, or reference environment variables.
+                        items:
+                          description: NameValuePair is a name/value pair.
+                          properties:
+                            envRef:
+                              description: EnvRef is the name of an environmental
+                                variable to read the value from.
+                              type: string
+                            name:
+                              description: Name of the property.
+                              type: string
+                            secretKeyRef:
+                              description: SecretKeyRef is the reference of a value
+                                in a secret store component.
+                              properties:
+                                key:
+                                  description: Field in the secret.
+                                  type: string
+                                name:
+                                  description: Secret name.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            value:
+                              description: Value of the property, in plaintext.
+                              x-kubernetes-preserve-unknown-fields: true
+                          required:
+                          - name
+                          type: object
+                        type: array
+                      isSecure:
+                        description: IsSecure indicates whether to use TLS. Defaults
+                          to true.
+                        type: boolean
+                      protocol:
+                        description: Protocol is the OTLP transport protocol. Must
+                          be "grpc" or "http".
+                        type: string
+                      timeout:
+                        description: Timeout for the OTLP metrics export request.
+                        type: string
+                    type: object
                   recordErrorCodes:
                     type: boolean
                   rules:
@@ -349,6 +463,65 @@ spec:
                     items:
                       type: integer
                     type: array
+                  otel:
+                    description: |-
+                      Otel configures native OTLP push export for metrics alongside the existing Prometheus endpoint.
+                      When set, Dapr pushes metrics to the configured OTLP endpoint using the OpenCensus-to-OpenTelemetry bridge.
+                    properties:
+                      endpointAddress:
+                        description: EndpointAddress is the OTLP receiver endpoint
+                          (host:port).
+                        type: string
+                      exportInterval:
+                        description: ExportInterval is the interval between metric
+                          pushes. Defaults to 30s.
+                        type: string
+                      headers:
+                        description: |-
+                          Headers to add to the OTLP metrics export request.
+                          Each header can contain plaintext values, reference secrets, or reference environment variables.
+                        items:
+                          description: NameValuePair is a name/value pair.
+                          properties:
+                            envRef:
+                              description: EnvRef is the name of an environmental
+                                variable to read the value from.
+                              type: string
+                            name:
+                              description: Name of the property.
+                              type: string
+                            secretKeyRef:
+                              description: SecretKeyRef is the reference of a value
+                                in a secret store component.
+                              properties:
+                                key:
+                                  description: Field in the secret.
+                                  type: string
+                                name:
+                                  description: Secret name.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            value:
+                              description: Value of the property, in plaintext.
+                              x-kubernetes-preserve-unknown-fields: true
+                          required:
+                          - name
+                          type: object
+                        type: array
+                      isSecure:
+                        description: IsSecure indicates whether to use TLS. Defaults
+                          to true.
+                        type: boolean
+                      protocol:
+                        description: Protocol is the OTLP transport protocol. Must
+                          be "grpc" or "http".
+                        type: string
+                      timeout:
+                        description: Timeout for the OTLP metrics export request.
+                        type: string
+                    type: object
                   recordErrorCodes:
                     type: boolean
                   rules:
@@ -438,6 +611,174 @@ spec:
                 - component
                 - configuration
                 - version
+                type: object
+              observability:
+                description: ObservabilitySpec defines unified observability configuration.
+                properties:
+                  otel:
+                    description: Otel configures a shared OTLP endpoint for all signals.
+                    properties:
+                      endpointAddress:
+                        description: Shared default endpoint address (host:port)
+                          for all signals.
+                        type: string
+                      headers:
+                        description: Shared default headers.
+                        items:
+                          description: NameValuePair is a name/value pair.
+                          properties:
+                            envRef:
+                              description: EnvRef is the name of an environmental
+                                variable to read the value from.
+                              type: string
+                            name:
+                              description: Name of the property.
+                              type: string
+                            secretKeyRef:
+                              description: SecretKeyRef is the reference of a value
+                                in a secret store component.
+                              properties:
+                                key:
+                                  description: Field in the secret.
+                                  type: string
+                                name:
+                                  description: Secret name.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            value:
+                              description: Value of the property, in plaintext.
+                              x-kubernetes-preserve-unknown-fields: true
+                          required:
+                          - name
+                          type: object
+                        type: array
+                      isSecure:
+                        description: Shared default TLS setting. Defaults to true.
+                        type: boolean
+                      logs:
+                        description: Per-signal override for logs.
+                        properties:
+                          endpointAddress:
+                            type: string
+                          headers:
+                            items:
+                              description: NameValuePair is a name/value pair.
+                              properties:
+                                envRef:
+                                  type: string
+                                name:
+                                  type: string
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                                value:
+                                  x-kubernetes-preserve-unknown-fields: true
+                              required:
+                              - name
+                              type: object
+                            type: array
+                          isSecure:
+                            type: boolean
+                          protocol:
+                            type: string
+                          timeout:
+                            type: string
+                        type: object
+                      metrics:
+                        description: Per-signal override for metrics.
+                        properties:
+                          endpointAddress:
+                            type: string
+                          exportInterval:
+                            description: ExportInterval is the interval between
+                              metric pushes. Defaults to 30s.
+                            type: string
+                          headers:
+                            items:
+                              description: NameValuePair is a name/value pair.
+                              properties:
+                                envRef:
+                                  type: string
+                                name:
+                                  type: string
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                                value:
+                                  x-kubernetes-preserve-unknown-fields: true
+                              required:
+                              - name
+                              type: object
+                            type: array
+                          isSecure:
+                            type: boolean
+                          protocol:
+                            type: string
+                          timeout:
+                            type: string
+                        type: object
+                      protocol:
+                        description: Shared default protocol. Must be "grpc" or "http".
+                        type: string
+                      timeout:
+                        description: Shared default timeout.
+                        type: string
+                      traces:
+                        description: Per-signal override for traces.
+                        properties:
+                          endpointAddress:
+                            type: string
+                          headers:
+                            items:
+                              description: NameValuePair is a name/value pair.
+                              properties:
+                                envRef:
+                                  type: string
+                                name:
+                                  type: string
+                                otherKey:
+                                  type: string
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                                value:
+                                  x-kubernetes-preserve-unknown-fields: true
+                              required:
+                              - name
+                              type: object
+                            type: array
+                          isSecure:
+                            type: boolean
+                          protocol:
+                            type: string
+                          timeout:
+                            type: string
+                        required:
+                        - endpointAddress
+                        - isSecure
+                        - protocol
+                        type: object
+                    type: object
                 type: object
               secrets:
                 description: SecretsSpec is the spec for secrets configuration.
