@@ -73,8 +73,7 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 
 	// Parent is gone.
 	_, err = client.FetchWorkflowMetadata(ctx, parentID)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, api.ErrInstanceNotFound)
+	require.ErrorIs(t, err, api.ErrInstanceNotFound)
 
 	// Spawned still reachable with its terminal state.
 	spawnedMeta, err := client.FetchWorkflowMetadata(ctx, api.InstanceID(spawnedInstanceID),

@@ -388,7 +388,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// violation. Fail the parent terminally with the denial details so
 		// the operator sees a FAILED status instead of a phantom COMPLETED
 		// caller whose spawn never landed.
-		var denyErr *orcherrors.DetachedSpawnDenied
+		var denyErr *orcherrors.DetachedSpawnDeniedError
 		if errors.As(dispatchErr, &denyErr) {
 			executionStatus = diag.StatusFailed
 			return todo.RunCompletedTrue, o.failParentDetachedWorkflowACL(ctx, state, rs, denyErr)

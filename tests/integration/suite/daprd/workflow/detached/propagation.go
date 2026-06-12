@@ -110,7 +110,6 @@ func (p *propagation) Run(t *testing.T, ctx context.Context) {
 	var count int
 	require.NoError(t,
 		db.QueryRowContext(ctx,
-			//nolint:gosec
 			"SELECT COUNT(*) FROM "+tableName+" WHERE key LIKE ? AND key LIKE '%propagated-history'",
 			"%"+strings.ToLower(spawnedInstanceID)+"%",
 		).Scan(&count))

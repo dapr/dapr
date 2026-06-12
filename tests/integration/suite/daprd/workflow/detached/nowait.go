@@ -106,6 +106,6 @@ func (n *nowait) Run(t *testing.T, ctx context.Context) {
 	// failure flowed back, this count would have grown.
 	histAfter, err := client.GetInstanceHistory(ctx, parentID)
 	require.NoError(t, err)
-	assert.Equal(t, beforeCount, len(histAfter.GetEvents()),
+	assert.Len(t, histAfter.GetEvents(), beforeCount,
 		"detached completion must not append events to the caller's history")
 }

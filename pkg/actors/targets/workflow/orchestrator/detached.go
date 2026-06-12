@@ -34,7 +34,7 @@ import (
 // reflects the fact that the orchestration could not fulfill its
 // scheduling intent. Returns nil so the caller can mark the reminder as
 // completed and stop retrying — the denial is permanent.
-func (o *orchestrator) failParentDetachedWorkflowACL(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, denyErr *orcherrors.DetachedSpawnDenied) error {
+func (o *orchestrator) failParentDetachedWorkflowACL(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, denyErr *orcherrors.DetachedSpawnDeniedError) error {
 	completed := events.NewExecutionCompletedFailedEvent("WorkflowAccessPolicyDenied", denyErr.Error())
 	rs.CompletedEvent = completed
 	rs.CompletedTime = timestamppb.Now()

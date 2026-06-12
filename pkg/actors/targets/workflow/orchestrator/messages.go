@@ -176,7 +176,7 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 				if r := historyEvent.GetRouter(); r != nil && r.GetTargetAppID() != "" {
 					targetAppID = r.GetTargetAppID()
 				}
-				return &orcherrors.DetachedSpawnDenied{
+				return &orcherrors.DetachedSpawnDeniedError{
 					InstanceID:  target,
 					TargetAppID: targetAppID,
 					Cause:       err,
