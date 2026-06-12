@@ -14,11 +14,16 @@ limitations under the License.
 package ca
 
 import (
+	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
+	encpem "encoding/pem"
+	"math/big"
 	"os"
 	"path/filepath"
 	"testing"
@@ -348,12 +353,11 @@ func TestSignIdentity(t *testing.T) {
 		require.NoError(t, err)
 
 		clientCert, err := ca.SignIdentity(t.Context(), &SignRequest{
-			PublicKey:          clientPK.Public(),
-			SignatureAlgorithm: x509.ECDSAWithSHA256,
-			TrustDomain:        "example.test.dapr.io",
-			Namespace:          "my-test-namespace",
-			AppID:              "my-app-id",
-			DNS:                []string{"my-app-id.my-test-namespace.svc.cluster.local", "example.com"},
+			PublicKey:   clientPK.Public(),
+			TrustDomain: "example.test.dapr.io",
+			Namespace:   "my-test-namespace",
+			AppID:       "my-app-id",
+			DNS:         []string{"my-app-id.my-test-namespace.svc.cluster.local", "example.com"},
 		})
 		require.NoError(t, err)
 
@@ -369,4 +373,87 @@ func TestSignIdentity(t *testing.T) {
 
 		require.NoError(t, clientCert[0].CheckSignatureFrom(int2Crt))
 	})
+
+	t.Run("signing an ECDSA-keyed identity with an Ed25519 issuer key should succeed", func(t *testing.T) {
+		dir := t.TempDir()
+		rootCertPath := filepath.Join(dir, "root.cert")
+		issuerCertPath := filepath.Join(dir, "issuer.cert")
+		issuerKeyPath := filepath.Join(dir, "issuer.key")
+		config := config.Config{
+			RootCertPath:   rootCertPath,
+			IssuerCertPath: issuerCertPath,
+			IssuerKeyPath:  issuerKeyPath,
+		}
+
+		rootPEM, rootCrt, _, rootPK := genCrtEd25519(t, "root", nil, nil)
+		issuerPEM, issuerCrt, issuerPKPEM, _ := genCrtEd25519(t, "issuer", rootCrt, rootPK)
+
+		require.NoError(t, os.WriteFile(rootCertPath, rootPEM, 0o600))
+		require.NoError(t, os.WriteFile(issuerCertPath, issuerPEM, 0o600))
+		require.NoError(t, os.WriteFile(issuerKeyPath, issuerPKPEM, 0o600))
+
+		ca, err := New(t.Context(), config)
+		require.NoError(t, err)
+
+		clientPK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+
+		clientCert, err := ca.SignIdentity(t.Context(), &SignRequest{
+			PublicKey:   clientPK.Public(),
+			TrustDomain: "example.test.dapr.io",
+			Namespace:   "my-test-namespace",
+			AppID:       "my-app-id",
+		})
+		require.NoError(t, err)
+
+		require.NotEmpty(t, clientCert)
+		assert.Equal(t, x509.PureEd25519, clientCert[0].SignatureAlgorithm)
+		require.NoError(t, clientCert[0].CheckSignatureFrom(issuerCrt))
+	})
+}
+
+func genCrtEd25519(t *testing.T,
+	name string,
+	signCrt *x509.Certificate,
+	signKey crypto.Signer,
+) ([]byte, *x509.Certificate, []byte, crypto.Signer) {
+	t.Helper()
+
+	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	require.NoError(t, err)
+
+	tmpl := x509.Certificate{
+		Subject:               pkix.Name{Organization: []string{name}},
+		SerialNumber:          serialNumber,
+		IsCA:                  true,
+		KeyUsage:              x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(time.Hour),
+	}
+
+	pub, pk, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	if signCrt == nil {
+		signCrt = &tmpl
+	}
+	if signKey == nil {
+		signKey = pk
+	}
+
+	crtDER, err := x509.CreateCertificate(rand.Reader, &tmpl, signCrt, pub, signKey)
+	require.NoError(t, err)
+
+	crt, err := x509.ParseCertificate(crtDER)
+	require.NoError(t, err)
+	crtPEM := encpem.EncodeToMemory(&encpem.Block{Type: "CERTIFICATE", Bytes: crtDER})
+
+	pkDER, err := x509.MarshalPKCS8PrivateKey(pk)
+	require.NoError(t, err)
+	pkPEM := encpem.EncodeToMemory(&encpem.Block{
+		Type: "PRIVATE KEY", Bytes: pkDER,
+	})
+
+	return crtPEM, crt, pkPEM, pk
 }
