@@ -700,7 +700,9 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.initPluggableComponents(ctx)
 
-	a.appendBuiltinSecretStore(ctx)
+	if err = a.appendBuiltinSecretStore(ctx); err != nil {
+		return fmt.Errorf("failed to init built-in secret store: %s", err)
+	}
 
 	err = a.loadComponents(ctx)
 	if err != nil {

@@ -38,18 +38,31 @@ func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 		// where AddPendingComponent returns true even when a component is
 		// queued behind an unready secret store).
 		sendResult(ev.Result, nil)
+		// An Internal re-enqueue was pre-counted in inFlight. The component is
+		// parked again behind another store, so release its slot now; it will
+		// be pre-counted again when that store completes. Without this the
+		// counter never returns to zero and barriers hang.
+		if ev.Internal {
+			r.decInFlight()
+		}
 		return
 	}
 
 	cat := r.category(comp)
 	if cat == "" {
 		sendResult(ev.Result, fmt.Errorf("incorrect type %s", comp.Spec.Type))
+		if ev.Internal {
+			r.decInFlight()
+		}
 		return
 	}
 
 	catLoop, ok := r.categories[cat]
 	if !ok {
 		sendResult(ev.Result, fmt.Errorf("unknown component category: %q", cat))
+		if ev.Internal {
+			r.decInFlight()
+		}
 		return
 	}
 
@@ -142,6 +155,12 @@ func (r *Root) handleInstanceInitDone(ev *loops.InstanceInitDone) {
 	}
 
 	// Decrement for this completion. Release barriers if we reach zero.
+	r.decInFlight()
+}
+
+// decInFlight decrements the in-flight counter and releases pending barriers
+// once it reaches zero.
+func (r *Root) decInFlight() {
 	if r.inFlight > 0 {
 		r.inFlight--
 	}
