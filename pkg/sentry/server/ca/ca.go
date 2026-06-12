@@ -80,7 +80,17 @@ type Signer interface {
 // store is the interface for the trust bundle backend store.
 type store interface {
 	store(context.Context, bundle.Bundle) error
-	get(context.Context) (bundle.Bundle, error)
+	// get returns the bundle and a boolean indicating whether the store is out
+	// of sync and the bundle needs to be re-persisted (e.g. ConfigMap diverged
+	// from Secret in Kubernetes mode).
+	get(context.Context) (bundle.Bundle, bool, error)
+}
+
+// configMapSyncer is an optional interface that a store can implement to
+// re-sync only the ConfigMap without rewriting the Secret. This avoids
+// unnecessary Secret updates when the certificates are already correct.
+type configMapSyncer interface {
+	syncConfigMap(context.Context, bundle.Bundle) error
 }
 
 // ca is the implementation of the CA Signer.
@@ -110,12 +120,13 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		castore = &selfhosted{config: conf}
 	}
 
-	bndle, err := castore.get(ctx)
+	bndle, needsSync, err := castore.get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CA bundle: %w", err)
 	}
 
 	var needsWrite bool
+
 	if bndle.X509 == nil {
 		needsWrite = true
 
@@ -162,6 +173,22 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 
 		bndle.JWT = jwt
 		log.Info("Generating JWT signing key and persisting to store")
+	}
+
+	// When the ConfigMap is out of sync but no new certs were generated,
+	// only re-sync the ConfigMap to avoid an unnecessary Secret write.
+	if needsSync && !needsWrite {
+		if syncer, ok := castore.(configMapSyncer); ok {
+			log.Info("Trust bundle ConfigMap is out of sync; re-syncing ConfigMap only")
+			if err := syncer.syncConfigMap(ctx, bndle); err != nil {
+				return nil, fmt.Errorf("failed to sync trust bundle configmap: %w", err)
+			}
+			log.Info("Trust bundle ConfigMap re-synced successfully")
+		} else {
+			// Fallback for stores that don't support partial sync.
+			needsWrite = true
+			log.Info("Trust bundle store is out of sync; will re-persist bundle")
+		}
 	}
 
 	if needsWrite {

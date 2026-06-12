@@ -57,21 +57,22 @@ func (s *selfhosted) store(_ context.Context, bundle bundle.Bundle) error {
 }
 
 // get retrieves the existing certificate bundle from the filesystem.
-func (s *selfhosted) get(_ context.Context) (bundle.Bundle, error) {
+// The selfhosted store never needs a re-sync, so needsSync is always false.
+func (s *selfhosted) get(_ context.Context) (bundle.Bundle, bool, error) {
 	x509, err := s.loadAndValidateX509Bundle()
 	if err != nil {
-		return bundle.Bundle{}, err
+		return bundle.Bundle{}, false, err
 	}
 
 	jwt, err := s.loadAndValidateJWTBundle()
 	if err != nil {
-		return bundle.Bundle{}, err
+		return bundle.Bundle{}, false, err
 	}
 
 	return bundle.Bundle{
 		X509: x509,
 		JWT:  jwt,
-	}, nil
+	}, false, nil
 }
 
 // loadAndValidateX509Bundle loads the X.509 certificates and keys from disk, verifies them, and updates the bundle. Returns whether any are missing.

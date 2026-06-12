@@ -320,8 +320,9 @@ func TestSelfhosted_get(t *testing.T) {
 				require.NoError(t, os.WriteFile(jwksFile, *test.jwksData, writePerm))
 			}
 
-			bundle, err := s.get(t.Context())
+			bundle, needsSync, err := s.get(t.Context())
 			assert.Equal(t, test.expErr, err != nil, "expected error: %v, but got %v", test.expErr, err)
+			assert.False(t, needsSync, "selfhosted store should never need sync")
 			bundlesEqual(t, test.expBundle, bundle)
 		})
 	}
