@@ -193,5 +193,15 @@ Flags:
 - `-input`: path to the report, `.gz` is decompressed transparently
   (default `./test_report_perf.json`)
 - `-version`: output subdirectory under `charts/` (default `master`)
+- `-infra`: description of the infrastructure the run executed on, shown at
+  the top of generated READMEs. CI passes the AKS node pool description from
+  `tests/test-infra/azure-aks.bicep`; set it to your own cluster spec for
+  local runs so results stay comparable.
+
+Each generated per-API README starts with a "Throughput per resource" table:
+iterations/sec for each scenario alongside the app and sidecar CPU/memory it
+consumed, plus derived iterations/sec per CPU core and per GB of memory
+(app + sidecar combined). This is the headline efficiency metric for
+comparing scenarios and versions on the same infrastructure.
 
 Set `CHARTS_DEBUG=1` for verbose output on how tests are classified.

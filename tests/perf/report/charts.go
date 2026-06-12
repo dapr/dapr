@@ -107,6 +107,7 @@ type goTestEvent struct {
 var (
 	inputPath = flag.String("input", "./test_report_perf.json", "path to the gotestsum JSON report from a perf run (plain or .gz)")
 	version   = flag.String("version", "master", "Dapr version the report belongs to, used as the charts output subdirectory")
+	infra     = flag.String("infra", "", "description of the infrastructure the perf run executed on, included in generated READMEs")
 )
 
 // Variant comparison aggregation for pubsub tests & can be expanded on in the
@@ -413,6 +414,7 @@ func main() {
 			if ru != nil {
 				makeResourceCPUChart(*ru, prefix, result.outDir)
 				makeResourceMemChart(*ru, prefix, result.outDir)
+				recordEfficiency(result.outDir, result.name, agg, ru)
 			}
 		}
 	}

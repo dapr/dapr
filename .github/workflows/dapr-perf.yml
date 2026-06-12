@@ -490,7 +490,10 @@ jobs:
         if: always() && env.TEST_PREFIX != ''
         continue-on-error: true
         working-directory: ./tests/perf/report
-        run: go run . -input ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf.json -version ${{ github.ref_name }}
+        # Keep the -infra description in sync with the linux node pool in tests/test-infra/azure-aks.bicep
+        run: |
+          go run . -input ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf.json -version ${{ github.ref_name }} \
+            -infra "Azure AKS, 3x Standard_D2s_v6 (2 vCPU, 8 GiB) Linux nodes"
       - name: Upload perf charts
         if: always() && env.TEST_PREFIX != ''
         continue-on-error: true

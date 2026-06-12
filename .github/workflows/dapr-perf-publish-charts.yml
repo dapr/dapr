@@ -62,7 +62,10 @@ jobs:
             --dir /tmp/perf-report
       - name: Generate charts
         working-directory: ./tests/perf/report
-        run: go run . -input /tmp/perf-report/test_report_perf.json -version "$VERSION"
+        # Keep the -infra description in sync with the linux node pool in tests/test-infra/azure-aks.bicep
+        run: |
+          go run . -input /tmp/perf-report/test_report_perf.json -version "$VERSION" \
+            -infra "Azure AKS, 3x Standard_D2s_v6 (2 vCPU, 8 GiB) Linux nodes"
       - name: Package charts and report
         working-directory: ./tests/perf/report
         run: |
