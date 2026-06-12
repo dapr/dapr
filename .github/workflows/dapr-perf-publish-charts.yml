@@ -35,7 +35,19 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ inputs.run_id }}
+      VERSION: ${{ inputs.version }}
     steps:
+      - name: Validate inputs
+        run: |
+          if ! [[ "$RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "run_id must be numeric, got: $RUN_ID" >&2
+            exit 1
+          fi
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
+            echo "version must be a release tag like v1.18.0 or v1.18.0-rc.1, got: $VERSION" >&2
+            exit 1
+          fi
       - name: Check out code
         uses: actions/checkout@v4
       - name: Set up Go
@@ -44,24 +56,24 @@ jobs:
           go-version-file: 'go.mod'
       - name: Download perf test report
         run: |
-          gh run download ${{ inputs.run_id }} \
-            --repo ${{ github.repository }} \
+          gh run download "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
             --name test_perf.json \
             --dir /tmp/perf-report
       - name: Generate charts
         working-directory: ./tests/perf/report
-        run: go run . -input /tmp/perf-report/test_report_perf.json -version ${{ inputs.version }}
+        run: go run . -input /tmp/perf-report/test_report_perf.json -version "$VERSION"
       - name: Package charts and report
         working-directory: ./tests/perf/report
         run: |
-          zip -r /tmp/perf-charts-${{ inputs.version }}.zip charts/${{ inputs.version }}
-          gzip -9 -c /tmp/perf-report/test_report_perf.json > /tmp/test-report-perf-${{ inputs.version }}.json.gz
+          zip -r "/tmp/perf-charts-$VERSION.zip" "charts/$VERSION"
+          gzip -9 -c /tmp/perf-report/test_report_perf.json > "/tmp/test-report-perf-$VERSION.json.gz"
       - name: Upload charts and report to release
         run: |
-          gh release upload ${{ inputs.version }} \
-            /tmp/perf-charts-${{ inputs.version }}.zip \
-            /tmp/test-report-perf-${{ inputs.version }}.json.gz \
-            --repo ${{ github.repository }} \
+          gh release upload "$VERSION" \
+            "/tmp/perf-charts-$VERSION.zip" \
+            "/tmp/test-report-perf-$VERSION.json.gz" \
+            --repo "$GITHUB_REPOSITORY" \
             --clobber
       - name: Upload charts as workflow artifact
         uses: actions/upload-artifact@v4
