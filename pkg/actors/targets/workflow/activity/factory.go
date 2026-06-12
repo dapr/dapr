@@ -84,6 +84,10 @@ type factory struct {
 	// composite (activity actor ID, TaskExecutionId) value produced by
 	// inflight.Key. See the inflight subpackage for semantics.
 	inflight inflight.Map
+
+	// selfCallerWarnOnce ensures the "policy lists own appID" warning is
+	// only emitted once per factory lifetime instead of on every self-call.
+	selfCallerWarnOnce sync.Once
 }
 
 func New(ctx context.Context, opts Options) (targets.Factory, error) {

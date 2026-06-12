@@ -128,7 +128,8 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 		// we can correlate the failure to a parent task via ParentInstance.
 		if isPermissionDenied(err) && historyEvent != nil {
 			if es := historyEvent.GetExecutionStarted(); es != nil && es.GetParentInstance() != nil {
-				if fErr := o.failChildWorkflowACL(ctx, es.GetParentInstance().GetTaskScheduledId(), err); fErr != nil {
+				log.Warnf("Workflow actor '%s': child workflow start denied by access policy on '%s': %v", o.actorID, method, err)
+				if fErr := o.failChildWorkflowACL(ctx, es.GetParentInstance().GetTaskScheduledId()); fErr != nil {
 					return fmt.Errorf("failed to record child workflow failure: %w (original: %v)", fErr, err)
 				}
 				return nil

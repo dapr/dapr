@@ -91,7 +91,8 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 			// If the call was denied by a workflow access policy, fail the
 			// child orchestration immediately rather than retrying.
 			if isPermissionDenied(err) {
-				return o.failChildWorkflowACL(ctx, e.GetEventId(), err)
+				log.Warnf("Workflow actor '%s': child workflow '%s' denied by access policy: %v", o.actorID, id, err)
+				return o.failChildWorkflowACL(ctx, e.GetEventId())
 			}
 			return fmt.Errorf("failed to call child workflow '%s': %w", id, err)
 		}
@@ -125,6 +126,11 @@ func isPermissionDenied(err error) bool {
 	return false
 }
 
+func aclFailureType() (string, string) {
+	return "WorkflowAccessPolicyDenied",
+		"access denied by workflow access policy"
+}
+
 // failChildWorkflowACL creates a ChildWorkflowInstanceFailed event on the
 // parent orchestrator when the child workflow call is rejected by a
 // WorkflowAccessPolicy. It uses a reminder-based approach to deliver the
@@ -132,14 +138,13 @@ func isPermissionDenied(err error) bool {
 // run loop's ClearInbox/saveInternalState calls.
 // taskScheduledID is the correlation ID that the parent orchestrator engine
 // uses to match this failure with the original sub-orchestration request.
-func (o *orchestrator) failChildWorkflowACL(ctx context.Context, taskScheduledID int32, callErr error) error {
+func (o *orchestrator) failChildWorkflowACL(ctx context.Context, taskScheduledID int32) error {
+	errType, errMsg := aclFailureType()
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
-		EventType: events.NewChildWorkflowFailedEventType(taskScheduledID, "WorkflowAccessPolicyDenied", "access denied by workflow access policy", false),
+		EventType: events.NewChildWorkflowFailedEventType(taskScheduledID, errType, errMsg, false),
 	}
-
-	log.Warnf("Workflow actor '%s': child workflow denied by access policy: %v", o.actorID, callErr)
 
 	// Create a reminder that carries the failure event. When this
 	// reminder fires (in a fresh execution cycle after the current run

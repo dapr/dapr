@@ -11,16 +11,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package accesspolicy
+package requires
 
 import (
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -38,65 +40,72 @@ import (
 )
 
 func init() {
-	suite.Register(new(remoteenforce))
+	suite.Register(new(workflow))
 }
 
-// remoteenforce specifically tests that the callee-side enforcement path
-// works: the target's CallActor gRPC handler checks the caller's SPIFFE
-// identity and denies unauthorized callers.
-//
-// Setup: the policy is scoped only to the target ("remote-target"). The
-// caller ("remote-caller") has no policies loaded. The caller's local router
-// ACL check always passes (nil = allow all). Any denial must come from the
-// remote CallActor handler on the target, proving the SPIFFE-based mTLS
-// enforcement.
-type remoteenforce struct {
+type workflow struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
 	sched  *scheduler.Scheduler
 	db     *sqlite.SQLite
 	caller *daprd.Daprd
 	target *daprd.Daprd
+
+	targetActivityRuns atomic.Int64
+
+	requiredWFName string
+	otherWFName    string
+	activityName   string
 }
 
-func (r *remoteenforce) Setup(t *testing.T) []framework.Option {
+func (r *workflow) Setup(t *testing.T) []framework.Option {
 	r.sentry = sentry.New(t)
 
 	r.place = placement.New(t, placement.WithSentry(t, r.sentry))
 	r.sched = scheduler.New(t, scheduler.WithSentry(r.sentry), scheduler.WithID("dapr-scheduler-server-0"))
 	r.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
 
-	policy := []byte(`
+	callerID := "caller-" + uuid.NewString()
+	targetID := "target-" + uuid.NewString()
+	ns := uuid.NewString()
+
+	r.requiredWFName = "required-wf"
+	r.otherWFName = "other-wf"
+	r.activityName = "gated-activity"
+
+	policy := fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
-  name: remote-test
+  name: workflow-requires-test
 scopes:
-- remote-target
+- %s
 spec:
   rules:
   - callers:
-    - appID: allowed-caller
-    workflows:
-    - name: "*"
-      operations:
-      - name: schedule
-`)
+    - appID: %s
+    activities:
+    - name: %s
+      requires:
+      - eventType: workflow
+        status: Started
+        name: %s
+`, targetID, callerID, r.activityName, r.requiredWFName)
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))
 
 	r.caller = daprd.New(t,
-		daprd.WithAppID("remote-caller"),
-		daprd.WithNamespace("default"),
+		daprd.WithAppID(callerID),
+		daprd.WithNamespace(ns),
 		daprd.WithResourceFiles(r.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithSchedulerAddresses(r.sched.Address()),
 		daprd.WithSentry(t, r.sentry),
 	)
 	r.target = daprd.New(t,
-		daprd.WithAppID("remote-target"),
-		daprd.WithNamespace("default"),
+		daprd.WithAppID(targetID),
+		daprd.WithNamespace(ns),
 		daprd.WithResourcesDir(targetResDir),
 		daprd.WithResourceFiles(r.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(r.place.Address()),
@@ -109,7 +118,7 @@ spec:
 	}
 }
 
-func (r *remoteenforce) Run(t *testing.T, ctx context.Context) {
+func (r *workflow) Run(t *testing.T, ctx context.Context) {
 	r.place.WaitUntilRunning(t, ctx)
 	r.sched.WaitUntilRunning(t, ctx)
 	r.caller.WaitUntilRunning(t, ctx)
@@ -117,17 +126,36 @@ func (r *remoteenforce) Run(t *testing.T, ctx context.Context) {
 
 	callerReg := task.NewTaskRegistry()
 	targetReg := task.NewTaskRegistry()
+	targetAppID := r.target.AppID()
+	activityName := r.activityName
 
-	require.NoError(t, callerReg.AddWorkflowN("CrossAppCall", func(ctx *task.WorkflowContext) (any, error) {
-		var output string
-		err := ctx.CallChildWorkflow("TargetWF", task.WithChildWorkflowAppID(r.target.AppID())).Await(&output)
-		if err != nil {
-			return nil, fmt.Errorf("cross-app call failed: %w", err)
+	// Caller WF whose name matches requires.name = its own ExecutionStarted
+	// satisfies the requires entry.
+	require.NoError(t, callerReg.AddWorkflowN(r.requiredWFName, func(ctx *task.WorkflowContext) (any, error) {
+		var out string
+		if err := ctx.CallActivity(activityName,
+			task.WithActivityAppID(targetAppID),
+			task.WithHistoryPropagation(api.PropagateOwnHistory()),
+		).Await(&out); err != nil {
+			return nil, fmt.Errorf("%s failed: %w", activityName, err)
 		}
-		return output, nil
+		return out, nil
 	}))
-	require.NoError(t, targetReg.AddWorkflowN("TargetWF", func(ctx *task.WorkflowContext) (any, error) {
-		return nil, nil
+
+	require.NoError(t, callerReg.AddWorkflowN(r.otherWFName, func(ctx *task.WorkflowContext) (any, error) {
+		var out string
+		if err := ctx.CallActivity(activityName,
+			task.WithActivityAppID(targetAppID),
+			task.WithHistoryPropagation(api.PropagateOwnHistory()),
+		).Await(&out); err != nil {
+			return nil, fmt.Errorf("%s failed: %w", activityName, err)
+		}
+		return out, nil
+	}))
+
+	require.NoError(t, targetReg.AddActivityN(activityName, func(ctx task.ActivityContext) (any, error) {
+		r.targetActivityRuns.Add(1)
+		return "gated-ok", nil
 	}))
 
 	callerClient := client.NewTaskHubGrpcClient(r.caller.GRPCConn(t, ctx), logger.New(t))
@@ -138,14 +166,30 @@ func (r *remoteenforce) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, len(r.caller.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 		assert.GreaterOrEqual(c, len(r.target.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
-	}, time.Second*20, time.Millisecond*10)
+	}, 20*time.Second, 10*time.Millisecond)
 
-	id, err := callerClient.ScheduleNewWorkflow(ctx, "CrossAppCall")
-	require.NoError(t, err)
+	t.Run("allowed when caller's ExecutionStarted matches required workflow name", func(t *testing.T) {
+		before := r.targetActivityRuns.Load()
+		id, err := callerClient.ScheduleNewWorkflow(ctx, r.requiredWFName)
+		require.NoError(t, err)
+		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
+		require.NoError(t, err)
+		require.True(t, api.WorkflowMetadataIsComplete(metadata))
+		assert.Nil(t, metadata.GetFailureDetails(),
+			"caller workflow should succeed when its own ExecutionStarted name matches the requires entry: %v", metadata.GetFailureDetails())
+		assert.Equal(t, `"gated-ok"`, metadata.GetOutput().GetValue())
+		assert.Equal(t, before+1, r.targetActivityRuns.Load())
+	})
 
-	metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
-	require.NoError(t, err)
-	require.NotNil(t, metadata.GetFailureDetails(),
-		"target should deny remote-caller because it's not in the policy's callers list")
-	assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(), "denied by workflow access policy")
+	t.Run("denied when caller's ExecutionStarted name does not match", func(t *testing.T) {
+		before := r.targetActivityRuns.Load()
+		id, err := callerClient.ScheduleNewWorkflow(ctx, r.otherWFName)
+		require.NoError(t, err)
+		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
+		require.NoError(t, err)
+		require.NotNil(t, metadata.GetFailureDetails())
+		assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(),
+			"access denied by workflow access policy")
+		assert.Equal(t, before, r.targetActivityRuns.Load())
+	})
 }

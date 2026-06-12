@@ -94,6 +94,10 @@ type factory struct {
 
 	table sync.Map
 	lock  sync.Mutex
+
+	// selfCallerWarnOnce ensures the "policy lists own appID" warning is
+	// only emitted once per factory lifetime instead of on every self-call.
+	selfCallerWarnOnce sync.Once
 }
 
 func New(ctx context.Context, opts Options) (targets.Factory, error) {

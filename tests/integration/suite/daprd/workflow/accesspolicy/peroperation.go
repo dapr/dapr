@@ -124,7 +124,15 @@ spec:
     - appID: ` + peropCallerAppID + `
     workflows:
     - name: "*"
-      operations: [schedule, terminate, raise, pause, resume, purge, get, rerun]
+      operations:
+      - name: schedule
+      - name: terminate
+      - name: raise
+      - name: pause
+      - name: resume
+      - name: purge
+      - name: get
+      - name: rerun
 `)
 }
 
@@ -142,7 +150,8 @@ spec:
     - appID: ` + callerAppID + `
     workflows:
     - name: "PerOpWF"
-      operations: [` + op + `]
+      operations:
+      - name: ` + op + `
 `)
 }
 

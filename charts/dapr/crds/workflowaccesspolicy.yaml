@@ -71,6 +71,50 @@ spec:
                               the activity.
                             minLength: 1
                             type: string
+                          requires:
+                            description: |-
+                              Requires is a list of history events that must all be present in the
+                              caller's propagated workflow history for this rule to apply. Entries
+                              are evaluated as a set — order is not significant.
+                            items:
+                              description: |-
+                                RequiredEvent describes a history event that must be present in
+                                the caller's propagated workflow history. eventType=event must be
+                                paired with status=Raised; eventType=activity|workflow forbids
+                                status=Raised.
+                              x-kubernetes-validations:
+                              - rule: "self.eventType == 'event' ? self.status == 'Raised' : self.status != 'Raised'"
+                                message: "eventType=event requires status=Raised; eventType=activity|workflow forbids status=Raised"
+                              properties:
+                                appID:
+                                  description: AppID restricts the match to events produced by the named app.
+                                  type: string
+                                eventType:
+                                  description: EventType is the category of history event to match.
+                                  enum:
+                                  - activity
+                                  - workflow
+                                  - event
+                                  type: string
+                                name:
+                                  description: |-
+                                    Name is the activity/workflow name (eventType=activity|workflow)
+                                    or the external event name (eventType=event).
+                                  minLength: 1
+                                  type: string
+                                status:
+                                  description: Status is the lifecycle phase the matched event must have.
+                                  enum:
+                                  - Started
+                                  - Completed
+                                  - Raised
+                                  type: string
+                              required:
+                              - eventType
+                              - name
+                              - status
+                              type: object
+                            type: array
                         required:
                         - name
                         type: object
@@ -106,21 +150,77 @@ spec:
                             description: Operations is the set of operations this
                               rule applies to.
                             items:
-                              description: WorkflowOperation is the specific workflow
-                                operation being controlled.
-                              enum:
-                              - schedule
-                              - terminate
-                              - raise
-                              - pause
-                              - resume
-                              - purge
-                              - get
-                              - rerun
-                              type: string
+                              description: |-
+                                WorkflowRuleOperation is a single allowed operation on a workflow, with
+                                an optional `requires` gate. `requires` is only meaningful — and only
+                                accepted — when Name is `schedule`, since schedule is the only operation
+                                that carries propagated workflow history to check against.
+                              x-kubernetes-validations:
+                              - rule: "!has(self.requires) || size(self.requires) == 0 || self.name == 'schedule'"
+                                message: "requires is only valid when name is 'schedule'"
+                              properties:
+                                name:
+                                  description: Name is the operation this entry applies to.
+                                  enum:
+                                  - schedule
+                                  - terminate
+                                  - raise
+                                  - pause
+                                  - resume
+                                  - purge
+                                  - get
+                                  - rerun
+                                  type: string
+                                requires:
+                                  description: |-
+                                    Requires is a list of history events that must all be present in the
+                                    caller's propagated workflow history for this entry to apply. Entries
+                                    are evaluated as a set — order is not significant. Only valid when
+                                    Name is `schedule`.
+                                  items:
+                                    description: |-
+                                      RequiredEvent describes a history event that must be present in
+                                      the caller's propagated workflow history. eventType=event must be
+                                      paired with status=Raised; eventType=activity|workflow forbids
+                                      status=Raised.
+                                    x-kubernetes-validations:
+                                    - rule: "self.eventType == 'event' ? self.status == 'Raised' : self.status != 'Raised'"
+                                      message: "eventType=event requires status=Raised; eventType=activity|workflow forbids status=Raised"
+                                    properties:
+                                      appID:
+                                        description: AppID restricts the match to events produced by the named app.
+                                        type: string
+                                      eventType:
+                                        description: EventType is the category of history event to match.
+                                        enum:
+                                        - activity
+                                        - workflow
+                                        - event
+                                        type: string
+                                      name:
+                                        description: |-
+                                          Name is the activity/workflow name (eventType=activity|workflow)
+                                          or the external event name (eventType=event).
+                                        minLength: 1
+                                        type: string
+                                      status:
+                                        description: Status is the lifecycle phase the matched event must have.
+                                        enum:
+                                        - Started
+                                        - Completed
+                                        - Raised
+                                        type: string
+                                    required:
+                                    - eventType
+                                    - name
+                                    - status
+                                    type: object
+                                  type: array
+                              required:
+                              - name
+                              type: object
                             minItems: 1
                             type: array
-                            x-kubernetes-list-type: set
                         required:
                         - name
                         - operations

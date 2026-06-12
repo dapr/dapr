@@ -114,7 +114,9 @@ type WorkflowAccessPolicySpec struct {
 //
 // +kubebuilder:validation:XValidation:rule="(has(self.workflows) && size(self.workflows) > 0) || (has(self.activities) && size(self.activities) > 0)",message="at least one of workflows or activities must contain a rule"
 type WorkflowAccessPolicyRule struct {
-	// Callers that this rule applies to.
+	// Callers that this rule applies to. The policy is a cross-app gate;
+	// listing the target app's own appID here has no effect because
+	// same-app calls are always exempt from enforcement.
 	// +kubebuilder:validation:MinItems=1
 	Callers []WorkflowCaller `json:"callers"`
 
@@ -155,11 +157,32 @@ type WorkflowRule struct {
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
-	// Operations is the set of operations this rule applies to.
+	// Operations are the operation entries this rule applies to. Multiple
+	// entries with the same operation name are permitted (and only useful
+	// for `schedule`, since it's the only operation that can carry a
+	// `requires` gate): they compose as OR — access is allowed if any
+	// matching entry's `requires` is satisfied.
 	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:items:Enum=schedule;terminate;raise;pause;resume;purge;get;rerun
-	// +listType=set
-	Operations []WorkflowOperation `json:"operations"`
+	Operations []WorkflowRuleOperation `json:"operations"`
+}
+
+// WorkflowRuleOperation is a single allowed operation on a workflow, with an
+// optional `requires` gate. `requires` is only meaningful — and only
+// accepted — when Name is `schedule`, since schedule is the only operation
+// that carries propagated workflow history to check against.
+//
+// +kubebuilder:validation:XValidation:rule="!has(self.requires) || size(self.requires) == 0 || self.name == 'schedule'",message="requires is only valid when name is 'schedule'"
+type WorkflowRuleOperation struct {
+	// Name is the operation this entry applies to.
+	// +kubebuilder:validation:Enum=schedule;terminate;raise;pause;resume;purge;get;rerun
+	Name WorkflowOperation `json:"name"`
+
+	// Requires is a list of history events that must all be present in the
+	// caller's propagated workflow history for this entry to apply. Entries
+	// are evaluated as a set — order is not significant. Only valid when
+	// Name is `schedule`.
+	// +optional
+	Requires []RequiredEvent `json:"requires,omitempty"`
 }
 
 // ActivityRule grants the matched callers access to schedule the activity
@@ -169,6 +192,57 @@ type ActivityRule struct {
 	// Name is the exact name or glob pattern for the activity.
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
+
+	// Requires is a list of history events that must all be present in the
+	// caller's propagated workflow history for this rule to apply. Entries
+	// are evaluated as a set — order is not significant.
+	// +optional
+	Requires []RequiredEvent `json:"requires,omitempty"`
+}
+
+// RequiredEventType is the category of history event a RequiredEvent matches.
+type RequiredEventType string
+
+const (
+	RequiredEventTypeActivity RequiredEventType = "activity"
+	RequiredEventTypeWorkflow RequiredEventType = "workflow"
+	RequiredEventTypeEvent    RequiredEventType = "event"
+)
+
+// RequiredStatus is the lifecycle phase of a history event referenced by a
+// RequiredEvent. Started/Completed apply to eventType=activity and
+// eventType=workflow; Raised is the only valid status for eventType=event.
+type RequiredStatus string
+
+const (
+	RequiredStatusStarted   RequiredStatus = "Started"
+	RequiredStatusCompleted RequiredStatus = "Completed"
+	RequiredStatusRaised    RequiredStatus = "Raised"
+)
+
+// RequiredEvent is a single entry in a rule's Requires list. It matches when
+// the caller's propagated history contains an event of the given EventType
+// and Status with the given Name. eventType=event must be paired with
+// status=Raised; eventType=activity/workflow forbids status=Raised.
+//
+// +kubebuilder:validation:XValidation:rule="self.eventType == 'event' ? self.status == 'Raised' : self.status != 'Raised'",message="eventType=event requires status=Raised; eventType=activity|workflow forbids status=Raised"
+type RequiredEvent struct {
+	// EventType is the category of history event to match.
+	// +kubebuilder:validation:Enum=activity;workflow;event
+	EventType RequiredEventType `json:"eventType"`
+
+	// Status is the lifecycle phase the matched event must have.
+	// +kubebuilder:validation:Enum=Started;Completed;Raised
+	Status RequiredStatus `json:"status"`
+
+	// Name is the activity/workflow name (eventType=activity|workflow) or
+	// the external event name (eventType=event).
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// AppID restricts the match to events produced by the named app.
+	// +optional
+	AppID *string `json:"appID,omitempty"`
 }
 
 // +kubebuilder:object:root=true
