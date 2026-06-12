@@ -178,6 +178,78 @@ func mapLen(ff *factory) int {
 	return i
 }
 
+func Test_ActiveCount(t *testing.T) {
+	fact := New(Options{
+		Reentrancy:  reentrancystore.New(),
+		IdleTimeout: time.Second * 10,
+		AppChannel: fake.New().WithInvokeMethod(func(context.Context, *invokev1.InvokeMethodRequest, string) (*invokev1.InvokeMethodResponse, error) {
+			return invokev1.NewInvokeMethodResponse(http.StatusOK, "", nil), nil
+		}),
+	})
+	ff := fact.(*factory)
+
+	t.Run("increments on new actors", func(t *testing.T) {
+		assert.Equal(t, int64(0), ff.activeCount.Load())
+
+		fact.GetOrCreate("a1")
+		assert.Equal(t, int64(1), ff.activeCount.Load())
+
+		fact.GetOrCreate("a2")
+		assert.Equal(t, int64(2), ff.activeCount.Load())
+
+		fact.GetOrCreate("a3")
+		assert.Equal(t, int64(3), ff.activeCount.Load())
+	})
+
+	t.Run("does not increment for existing actors", func(t *testing.T) {
+		fact.GetOrCreate("a1")
+		fact.GetOrCreate("a2")
+		fact.GetOrCreate("a3")
+		assert.Equal(t, int64(3), ff.activeCount.Load())
+	})
+
+	t.Run("decrements on deactivate", func(t *testing.T) {
+		act := fact.GetOrCreate("a1")
+		require.NoError(t, act.Deactivate(t.Context()))
+		assert.Equal(t, int64(2), ff.activeCount.Load())
+
+		act = fact.GetOrCreate("a2")
+		require.NoError(t, act.Deactivate(t.Context()))
+		assert.Equal(t, int64(1), ff.activeCount.Load())
+
+		act = fact.GetOrCreate("a3")
+		require.NoError(t, act.Deactivate(t.Context()))
+		assert.Equal(t, int64(0), ff.activeCount.Load())
+	})
+}
+
+func Test_ActiveCountConcurrentGetOrCreate(t *testing.T) {
+	fact := New(Options{
+		Reentrancy:  reentrancystore.New(),
+		IdleTimeout: time.Second * 10,
+		AppChannel: fake.New().WithInvokeMethod(func(context.Context, *invokev1.InvokeMethodRequest, string) (*invokev1.InvokeMethodResponse, error) {
+			return invokev1.NewInvokeMethodResponse(http.StatusOK, "", nil), nil
+		}),
+	})
+	ff := fact.(*factory)
+
+	// Many goroutines racing to GetOrCreate the same actor ID.
+	// activeCount must equal 1 when they all finish, not N.
+	const goroutines = 100
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			fact.GetOrCreate("race-actor")
+		}()
+	}
+	wg.Wait()
+
+	assert.Equal(t, 1, mapLen(ff))
+	assert.Equal(t, int64(1), ff.activeCount.Load())
+}
+
 func Test_DeleteCacheRace(t *testing.T) {
 	fact := New(Options{
 		Reentrancy:  reentrancystore.New(),
