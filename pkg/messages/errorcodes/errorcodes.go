@@ -100,11 +100,11 @@ var (
 	StateMalformedRequest              = ErrorCode{"ERR_MALFORMED_REQUEST", "DAPR_STATE_ILLEGAL_KEY", CategoryState}                           // Invalid key
 
 	// ### Configuration API
-	ConfigurationGet                = ErrorCode{"ERR_CONFIGURATION_GET", "", CategoryConfiguration}                  // Error getting configuration
-	ConfigurationStoreNotConfigured = ErrorCode{"ERR_CONFIGURATION_STORE_NOT_CONFIGURED", "", CategoryConfiguration} // Configuration store not configured
-	ConfigurationStoreNotFound      = ErrorCode{"ERR_CONFIGURATION_STORE_NOT_FOUND", "", CategoryConfiguration}      // Configuration store not found
-	ConfigurationSubscribe          = ErrorCode{"ERR_CONFIGURATION_SUBSCRIBE", "", CategoryConfiguration}            // Error subscribing to configuration
-	ConfigurationUnsubscribe        = ErrorCode{"ERR_CONFIGURATION_UNSUBSCRIBE", "", CategoryConfiguration}          // Error unsubscribing from configuration
+	ConfigurationGet                = ErrorCode{"ERR_CONFIGURATION_GET", "DAPR_CONFIGURATION_GET", CategoryConfiguration}                  // Error getting configuration
+	ConfigurationStoreNotConfigured = ErrorCode{"ERR_CONFIGURATION_STORE_NOT_CONFIGURED", "DAPR_CONFIGURATION_STORE_NOT_CONFIGURED", CategoryConfiguration} // Configuration store not configured
+	ConfigurationStoreNotFound      = ErrorCode{"ERR_CONFIGURATION_STORE_NOT_FOUND", "DAPR_CONFIGURATION_STORE_NOT_FOUND", CategoryConfiguration}      // Configuration store not found
+	ConfigurationSubscribe          = ErrorCode{"ERR_CONFIGURATION_SUBSCRIBE", "DAPR_CONFIGURATION_SUBSCRIBE", CategoryConfiguration}            // Error subscribing to configuration
+	ConfigurationUnsubscribe        = ErrorCode{"ERR_CONFIGURATION_UNSUBSCRIBE", "DAPR_CONFIGURATION_UNSUBSCRIBE", CategoryConfiguration}          // Error unsubscribing from configuration
 
 	// ### Crypto API
 	Crypto                       = ErrorCode{"ERR_CRYPTO", "", CategoryCrypto}                          // Error in crypto operation
