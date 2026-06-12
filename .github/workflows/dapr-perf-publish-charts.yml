@@ -1,0 +1,70 @@
+#
+# Copyright 2026 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: dapr-perf-publish-charts
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "ID of the dapr-perf workflow run to take the test report from"
+        required: true
+        type: string
+      version:
+        description: "Release tag the charts belong to, e.g. v1.18.0. Used as the release to upload to and the charts output folder."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    name: Generate and publish perf charts
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+      - name: Download perf test report
+        run: |
+          gh run download ${{ inputs.run_id }} \
+            --repo ${{ github.repository }} \
+            --name test_perf.json \
+            --dir /tmp/perf-report
+      - name: Generate charts
+        working-directory: ./tests/perf/report
+        run: go run . -input /tmp/perf-report/test_report_perf.json -version ${{ inputs.version }}
+      - name: Package charts and report
+        working-directory: ./tests/perf/report
+        run: |
+          zip -r /tmp/perf-charts-${{ inputs.version }}.zip charts/${{ inputs.version }}
+          gzip -9 -c /tmp/perf-report/test_report_perf.json > /tmp/test-report-perf-${{ inputs.version }}.json.gz
+      - name: Upload charts and report to release
+        run: |
+          gh release upload ${{ inputs.version }} \
+            /tmp/perf-charts-${{ inputs.version }}.zip \
+            /tmp/test-report-perf-${{ inputs.version }}.json.gz \
+            --repo ${{ github.repository }} \
+            --clobber
+      - name: Upload charts as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf_charts_${{ inputs.version }}
+          path: /tmp/perf-charts-${{ inputs.version }}.zip

@@ -151,16 +151,47 @@ This chart focuses on core latency p50 (median) and tail latency (p95).
 
 This will be extended to other APIs in the future.
 
+### Where the data and charts live
+
+The source of truth for perf results is the `gotestsum` JSON report produced
+by a perf CI run, not the rendered PNGs. Per released version:
+
+- The compressed report is committed to this repo under
+  `tests/perf/report/data/<version>/test_report_perf.json.gz` (a few hundred KB).
+- The rendered charts are published as assets on the matching GitHub release
+  (`perf-charts-<version>.zip`), via the `dapr-perf-publish-charts` workflow.
+
+Full chart sets should not be committed for new versions: a full set is
+several MB of immutable binary per release, and PNGs cannot be regenerated or
+corrected later, whereas the JSON report can re-render charts at any time with
+current chart code. The chart folders already in this directory predate this
+policy and are kept for reference.
+
+### How charts are generated in CI
+
+- Every `dapr-perf` run generates charts from its own report and uploads them
+  as the `perf_charts` workflow artifact (90 day retention).
+- For a release, trigger the `dapr-perf-publish-charts` workflow with the
+  `dapr-perf` run ID and the release tag. It downloads the run's report,
+  renders the charts, and uploads both the charts zip and the compressed
+  report to the GitHub release. Then commit the compressed report under
+  `data/<version>/` in a PR.
+
 ### How to run locally
 
-Charts are produced by:
-
-- Program (from `tests/perf/report/`): `charts.go`
-- Json input: `./test_report_perf.json` (`gotestsum` JSON from perf CI)
-- Output: `charts/v1.16.3/workflows/*.png`
+Charts are produced by `charts.go` (from `tests/perf/report/`). It reads a
+`gotestsum` JSON report (plain or gzipped) and writes PNGs to
+`charts/<version>/<api>/`:
 
 ```bash
 cd tests/perf/report
-rm -rf charts/v1.16.3/workflows/*
-go run .
+go run . -input data/v1.18.0/test_report_perf.json.gz -version v1.18.0
 ```
+
+Flags:
+
+- `-input`: path to the report, `.gz` is decompressed transparently
+  (default `./test_report_perf.json`)
+- `-version`: output subdirectory under `charts/` (default `master`)
+
+Set `CHARTS_DEBUG=1` for verbose output on how tests are classified.
