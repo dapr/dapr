@@ -122,15 +122,17 @@ func (a *DaprRuntime) flushOutstandingComponents(ctx context.Context) error {
 }
 
 // appendBuiltinSecretStore preloads the Kubernetes built-in secret store
-// when running in Kubernetes mode unless explicitly disabled.
-func (a *DaprRuntime) appendBuiltinSecretStore(ctx context.Context) {
+// when running in Kubernetes mode unless explicitly disabled. Init failures
+// are surfaced so the runtime exits, matching the legacy processComponents
+// behavior for non-ignored components.
+func (a *DaprRuntime) appendBuiltinSecretStore(ctx context.Context) error {
 	if a.runtimeConfig.disableBuiltinK8sSecretStore {
-		return
+		return nil
 	}
 
 	switch a.runtimeConfig.mode {
 	case modes.KubernetesMode:
-		a.processor.AddPendingComponent(ctx, compapi.Component{
+		return a.initComponentBlocking(ctx, compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: secretstoresLoader.BuiltinKubernetesSecretStore,
 			},
@@ -140,4 +142,5 @@ func (a *DaprRuntime) appendBuiltinSecretStore(ctx context.Context) {
 			},
 		})
 	}
+	return nil
 }

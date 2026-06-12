@@ -348,12 +348,18 @@ func parseGVK(t *testing.T, urlPath string) (schema.GroupVersionKind, bool) {
 		gvk = schema.GroupVersionKind{Group: split[0], Version: split[1]}
 		split = split[2:]
 	}
+	if !assert.NotEmpty(t, split, "invalid path: %s", path) {
+		return schema.GroupVersionKind{}, false
+	}
 	if split[0] == "namespaces" {
-		if len(split) > 1 {
-			split = split[2:]
-			gvk.Kind = split[0]
-		} else {
+		switch {
+		case len(split) == 1:
 			gvk.Kind = "namespaces"
+		case len(split) >= 3:
+			gvk.Kind = split[2]
+		default:
+			assert.Fail(t, "invalid path: missing kind", path)
+			return schema.GroupVersionKind{}, false
 		}
 	} else {
 		gvk.Kind = split[0]
