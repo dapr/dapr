@@ -183,7 +183,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		WithCustomHTTPMetadata(testPubSubMessage.Metadata)
 	defer fakeReq.Close()
 
-	t.Run("succeeded to publish message to user app with empty response", func(t *testing.T) {
+	t.Run("retry to publish message to user app with empty response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		h := New(Options{
 			Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
@@ -201,7 +201,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
-		require.NoError(t, h.Deliver(t.Context(), testPubSubMessage))
+		require.Error(t, h.Deliver(t.Context(), testPubSubMessage))
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
