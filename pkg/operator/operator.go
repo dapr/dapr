@@ -82,6 +82,11 @@ type Options struct {
 	WebhookServerPort                   int
 	WebhookServerListenAddress          string
 	Healthz                             healthz.Healthz
+
+	// CacheSyncPeriod optionally overrides the controller-runtime informer
+	// resync period (default 10h). Zero leaves the default in place. Primarily
+	// used by integration tests to exercise resync behaviour deterministically.
+	CacheSyncPeriod time.Duration
 }
 
 type operator struct {
@@ -130,6 +135,11 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 
 	watchdogPodSelector := getSideCarInjectedNotExistsSelector()
 
+	var cacheSyncPeriod *time.Duration
+	if opts.CacheSyncPeriod > 0 {
+		cacheSyncPeriod = &opts.CacheSyncPeriod
+	}
+
 	scheme, err := buildScheme(opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build operator scheme: %w", err)
@@ -159,7 +169,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		},
 		LeaderElection:                opts.LeaderElection,
 		LeaderElectionID:              "operator.dapr.io",
-		NewCache:                      operatorcache.GetFilteredCache(opts.WatchNamespace, watchdogPodSelector),
+		NewCache:                      operatorcache.GetFilteredCache(opts.WatchNamespace, watchdogPodSelector, cacheSyncPeriod),
 		LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
