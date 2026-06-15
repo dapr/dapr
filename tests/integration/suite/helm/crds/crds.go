@@ -46,20 +46,25 @@ func (u *uptodate) Run(t *testing.T, ctx context.Context) {
 	rootDir := binary.RootDir(t)
 	chartDir := filepath.Join(rootDir, "charts", "dapr", "crds")
 
-	genDir := t.TempDir()
+	// Generate the CRDs from the API types, mirroring the `make code-generate`
+	// invocation in tools/codegen.mk. Output goes to stdout rather than a
+	// directory on purpose: controller-gen parses its arguments as markers and
+	// splits on ':', so an absolute output path on Windows (e.g. C:\...) is
+	// misinterpreted as marker syntax and fails to parse.
 	args := []string{
 		"crd:crdVersions=v1",
 		"paths=./pkg/apis/...",
-		"output:crd:artifacts:config=" + genDir,
+		"output:stdout",
 	}
 	//nolint:gosec
 	cmd := exec.CommandContext(ctx, binary.EnvValue("controllergen"), args...)
 	cmd.Dir = rootDir
-	var stderr bytes.Buffer
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	require.NoErrorf(t, cmd.Run(), "controller-gen failed: %s", stderr.String())
 
-	want := loadCRDs(t, genDir)
+	want := parseCRDs(t, stdout.Bytes(), "controller-gen output")
 	got := loadCRDs(t, chartDir)
 
 	assert.ElementsMatch(t, keys(want), keys(got),
@@ -106,13 +111,15 @@ func assertSubscriptionConversion(t *testing.T, got map[string]apiextv1.CustomRe
 	assert.ElementsMatch(t, []string{"v1", "v2alpha1"}, conv.Webhook.ConversionReviewVersions)
 }
 
+// loadCRDs reads every YAML file in dir and returns the CustomResourceDefinitions
+// they contain, keyed by metadata.name.
 func loadCRDs(t *testing.T, dir string) map[string]apiextv1.CustomResourceDefinition {
 	t.Helper()
 
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
 
-	crds := make(map[string]apiextv1.CustomResourceDefinition)
+	var buf bytes.Buffer
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -123,21 +130,34 @@ func loadCRDs(t *testing.T, dir string) map[string]apiextv1.CustomResourceDefini
 
 		b, err := os.ReadFile(filepath.Join(dir, entry.Name()))
 		require.NoError(t, err)
+		buf.Write(b)
+		buf.WriteString("\n---\n")
+	}
 
-		for doc := range bytes.SplitSeq(b, []byte("\n---")) {
-			if len(bytes.TrimSpace(doc)) == 0 {
-				continue
-			}
-			var crd apiextv1.CustomResourceDefinition
-			require.NoError(t, yaml.Unmarshal(doc, &crd))
-			if crd.Kind != "CustomResourceDefinition" {
-				continue
-			}
-			require.NotEmptyf(t, crd.Name, "CRD in %s has no metadata.name", entry.Name())
-			_, dup := crds[crd.Name]
-			require.Falsef(t, dup, "duplicate CRD %q found in %s", crd.Name, dir)
-			crds[crd.Name] = crd
+	return parseCRDs(t, buf.Bytes(), dir)
+}
+
+// parseCRDs splits a (possibly multi-document) YAML stream into the
+// CustomResourceDefinitions it contains, keyed by metadata.name. It fails if the
+// same name appears more than once so that "exactly one CRD per resource" is
+// actually enforced. source is used only for error messages.
+func parseCRDs(t *testing.T, data []byte, source string) map[string]apiextv1.CustomResourceDefinition {
+	t.Helper()
+
+	crds := make(map[string]apiextv1.CustomResourceDefinition)
+	for doc := range bytes.SplitSeq(data, []byte("\n---")) {
+		if len(bytes.TrimSpace(doc)) == 0 {
+			continue
 		}
+		var crd apiextv1.CustomResourceDefinition
+		require.NoError(t, yaml.Unmarshal(doc, &crd))
+		if crd.Kind != "CustomResourceDefinition" {
+			continue
+		}
+		require.NotEmptyf(t, crd.Name, "CRD in %s has no metadata.name", source)
+		_, dup := crds[crd.Name]
+		require.Falsef(t, dup, "duplicate CRD %q found in %s", crd.Name, source)
+		crds[crd.Name] = crd
 	}
 
 	return crds
