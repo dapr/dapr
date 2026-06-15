@@ -146,6 +146,75 @@ func Test_WatchUpdates(t *testing.T) {
 	})
 }
 
+func Test_handleEvent_resyncDedup(t *testing.T) {
+	appID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/app1")
+	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
+	pki := test.GenPKI(t, test.PKIOptions{LeafID: serverID, ClientID: appID})
+
+	comp := func(rv string, typ string) *compapi.Component {
+		return &compapi.Component{
+			ObjectMeta: metav1.ObjectMeta{Name: "comp1", Namespace: "ns1", ResourceVersion: rv},
+			Spec:       compapi.ComponentSpec{Type: typ},
+		}
+	}
+
+	tests := map[string]struct {
+		old       *compapi.Component
+		new       *compapi.Component
+		eventType operator.ResourceEventType
+		expFwd    bool
+	}{
+		"UPDATED with equal non-empty resourceVersion is dropped (resync replay)": {
+			old:       comp("100", "bindings.redis"),
+			new:       comp("100", "bindings.redis"),
+			eventType: operator.ResourceEventType_UPDATED,
+			expFwd:    false,
+		},
+		"UPDATED with changed resourceVersion is forwarded": {
+			old:       comp("100", "bindings.redis"),
+			new:       comp("101", "bindings.kafka"),
+			eventType: operator.ResourceEventType_UPDATED,
+			expFwd:    true,
+		},
+		"UPDATED with empty resourceVersions is forwarded (back-compat)": {
+			old:       comp("", "bindings.redis"),
+			new:       comp("", "bindings.redis"),
+			eventType: operator.ResourceEventType_UPDATED,
+			expFwd:    true,
+		},
+		"CREATED with equal resourceVersion is forwarded (only UPDATED is deduped)": {
+			old:       nil,
+			new:       comp("100", "bindings.redis"),
+			eventType: operator.ResourceEventType_CREATED,
+			expFwd:    true,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			i := New[compapi.Component](Options{}).(*informer[compapi.Component])
+
+			appCh, cancel, err := i.WatchUpdates(pki.ClientGRPCCtx(t), "ns1")
+			require.NoError(t, err)
+			t.Cleanup(cancel)
+
+			var oldObj any
+			if test.old != nil {
+				oldObj = test.old
+			}
+			i.handleEvent(t.Context(), oldObj, test.new, test.eventType)
+
+			select {
+			case event := <-appCh:
+				assert.True(t, test.expFwd, "event was forwarded but expected it to be dropped")
+				assert.Equal(t, test.new.Spec.Type, event.Manifest.Spec.Type)
+			case <-time.After(500 * time.Millisecond):
+				assert.False(t, test.expFwd, "event was dropped but expected it to be forwarded")
+			}
+		})
+	}
+}
+
 func Test_Run(t *testing.T) {
 	t.Run("NoKindMatchError should not return error", func(t *testing.T) {
 		i := New[compapi.Component](Options{
