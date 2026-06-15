@@ -46,14 +46,9 @@ func (u *uptodate) Run(t *testing.T, ctx context.Context) {
 	rootDir := binary.RootDir(t)
 	chartDir := filepath.Join(rootDir, "charts", "dapr", "crds")
 
-	// Generate the CRDs from the API types, mirroring the `make code-generate`
-	// invocation in tools/codegen.mk. Output goes to stdout rather than a
-	// directory on purpose: controller-gen parses its arguments as markers and
-	// splits on ':', so an absolute output path on Windows (e.g. C:\...) is
-	// misinterpreted as marker syntax and fails to parse.
 	args := []string{
 		"crd:crdVersions=v1",
-		"paths=./pkg/apis/...",
+		"paths=github.com/dapr/dapr/pkg/apis/...",
 		"output:stdout",
 	}
 	//nolint:gosec
