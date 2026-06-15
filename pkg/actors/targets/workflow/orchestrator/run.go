@@ -25,7 +25,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
-	orcherrors "github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -383,16 +382,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	dispatchErr := errors.Join(activityResult.err, addResult.err, createResult.err)
 	if dispatchErr != nil {
-		// A detached spawn rejected by access policy is permanent: retrying
-		// would loop forever and silently dropping it would hide the
-		// violation. Fail the parent terminally with the denial details so
-		// the operator sees a FAILED status instead of a phantom COMPLETED
-		// caller whose spawn never landed.
-		var denyErr *orcherrors.DetachedSpawnDeniedError
-		if errors.As(dispatchErr, &denyErr) {
-			executionStatus = diag.StatusFailed
-			return todo.RunCompletedTrue, o.failParentDetachedWorkflowACL(ctx, state, rs, denyErr)
-		}
 		if errors.Is(dispatchErr, errPayloadSizeExceeded) {
 			return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs,
 				protos.StalledReason_PAYLOAD_SIZE_EXCEEDED, dispatchErr.Error())

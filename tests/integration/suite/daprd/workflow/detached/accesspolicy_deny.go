@@ -42,11 +42,10 @@ func init() {
 }
 
 // accesspolicyDeny asserts that when a target's WorkflowAccessPolicy denies
-// the caller's app, the cross-app detached spawn is rejected and the parent
-// is failed terminally with the denial as its FailureDetails. Detached
-// spawns are fire-and-forget, so the caller's only surface for observing
-// the denial is the parent's terminal status — silently dropping it would
-// hide the policy violation, and retrying it would loop forever.
+// the caller's app, the cross-app detached spawn is dropped and the caller
+// is unaffected. Detached workflows are fire-and-forget by design: a denied
+// spawn must not propagate any failure back to the parent — the policy
+// merely prevents the spawn from materializing on the target.
 type accesspolicyDeny struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
@@ -139,17 +138,31 @@ func (d *accesspolicyDeny) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	parentMeta, err := callerClient.WaitForWorkflowCompletion(ctx, parentID, api.WithFetchPayloads(true))
 	require.NoError(t, err)
-	require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, parentMeta.GetRuntimeStatus(),
-		"parent must fail terminally so the policy denial is observable on the caller's status")
-	require.NotNil(t, parentMeta.GetFailureDetails(),
-		"failed parent must carry FailureDetails describing the denial")
-	assert.Equal(t, "WorkflowAccessPolicyDenied", parentMeta.GetFailureDetails().GetErrorType())
-	assert.Contains(t, parentMeta.GetFailureDetails().GetErrorMessage(), spawnedInstanceID)
-	assert.Contains(t, parentMeta.GetFailureDetails().GetErrorMessage(), d.target.AppID())
-	assert.Contains(t, parentMeta.GetFailureDetails().GetErrorMessage(), "denied by access policy")
 
-	// Spawn must NOT have been created on the target — the dispatch was
-	// rejected before the target's actor could materialize.
+	// Parent must complete successfully — detached spawns are
+	// fire-and-forget, so a policy denial on the target cannot surface as
+	// a parent failure.
+	require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, parentMeta.GetRuntimeStatus(),
+		"parent must complete COMPLETED — the denial is fire-and-forget and must not affect the caller")
+	require.Nil(t, parentMeta.GetFailureDetails(),
+		"parent must carry no FailureDetails: detached denials do not flow back")
+	assert.Equal(t, `"caller-completed"`, parentMeta.GetOutput().GetValue(),
+		"parent must surface its own return value, not anything from the denied spawn")
+
+	// Caller history still records the audit event for the attempted
+	// spawn — the action was emitted, it just didn't land on the target.
+	hist, err := callerClient.GetInstanceHistory(ctx, parentID)
+	require.NoError(t, err)
+	var detachedCount int
+	for _, e := range hist.GetEvents() {
+		if dw := e.GetDetachedWorkflowInstanceCreated(); dw != nil && dw.GetInstanceId() == spawnedInstanceID {
+			detachedCount++
+		}
+	}
+	assert.Equal(t, 1, detachedCount,
+		"caller history must record the attempted detached spawn even though it was denied on the target")
+
+	// The spawn was rejected before the target actor could materialize.
 	_, fetchErr := targetClient.FetchWorkflowMetadata(ctx, api.InstanceID(spawnedInstanceID))
 	require.Error(t, fetchErr, "spawn must NOT have been created on the deny-target app")
 }

@@ -20,7 +20,6 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	orcherrors "github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/errors"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -160,27 +159,19 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 					}
 					return nil
 				}
-				// Detached spawn: the caller has already returned the
-				// instance ID synchronously from ScheduleNewWorkflow, so
-				// there is no awaitable Task to fail. Surface the denial
-				// via a typed error so run.go can fail the parent
-				// terminally — the spawn never happened, and silently
-				// dropping it would hide the policy violation.
-				//
-				// In practice the router has a target app ID here (a
-				// permission-denied error only comes back from a cross-app
-				// invocation), but extract it defensively so the diagnostic
-				// stays accurate if a future caller reaches this branch
-				// without one.
-				targetAppID := o.appID
-				if r := historyEvent.GetRouter(); r != nil && r.GetTargetAppID() != "" {
+				// Detached spawn: fire-and-forget by design. There is no
+				// awaitable Task on the caller to fail, and propagating
+				// the denial back would defeat the decoupling the feature
+				// is built on. Log so the policy violation is visible in
+				// operator output and drop the dispatch attempt — the
+				// caller's history records DetachedWorkflowInstanceCreated
+				// as audit, the spawn just never lands on the target.
+				targetAppID := ""
+				if r := historyEvent.GetRouter(); r != nil {
 					targetAppID = r.GetTargetAppID()
 				}
-				return &orcherrors.DetachedSpawnDeniedError{
-					InstanceID:  target,
-					TargetAppID: targetAppID,
-					Cause:       err,
-				}
+				log.Warnf("Workflow actor '%s': detached workflow spawn '%s' rejected by access policy on target app '%s': %v", o.actorID, target, targetAppID, err)
+				return nil
 			}
 		}
 
