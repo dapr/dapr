@@ -110,6 +110,8 @@ func loadCRDs(t *testing.T, dir string) map[string]apiextv1.CustomResourceDefini
 				continue
 			}
 			require.NotEmptyf(t, crd.Name, "CRD in %s has no metadata.name", entry.Name())
+			_, dup := crds[crd.Name]
+			require.Falsef(t, dup, "duplicate CRD %q found in %s", crd.Name, dir)
 			crds[crd.Name] = crd
 		}
 	}
