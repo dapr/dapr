@@ -120,6 +120,11 @@ type engine struct {
 	inProcessExec *inprocess.Executor
 	compStore     *compstore.ComponentStore
 
+	// streamShutdownCh is closed during shutdown to tell all connected
+	// GetWorkItems streams to terminate, so the gRPC API server's GracefulStop
+	// can complete promptly instead of blocking on long-lived worker streams.
+	streamShutdownCh chan any
+
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 }
 
@@ -164,12 +169,13 @@ func New(opts Options) (Interface, error) {
 	}
 
 	wfe := &engine{
-		appID:         opts.AppID,
-		namespace:     opts.Namespace,
-		actors:        opts.Actors,
-		backend:       abackend,
-		inProcessExec: inProcessExec,
-		compStore:     opts.ComponentStore,
+		appID:            opts.AppID,
+		namespace:        opts.Namespace,
+		actors:           opts.Actors,
+		backend:          abackend,
+		inProcessExec:    inProcessExec,
+		compStore:        opts.ComponentStore,
+		streamShutdownCh: make(chan any),
 	}
 
 	// Keep the actor refcount balanced when Executor.Run tears holders down
@@ -226,6 +232,7 @@ func New(opts Options) (Interface, error) {
 			return nil
 		}),
 		backend.WithStreamSendTimeout(time.Second*10),
+		backend.WithStreamShutdownChannel(wfe.streamShutdownCh),
 	)
 
 	var topts []backend.NewTaskWorkerOptions
@@ -350,6 +357,11 @@ func (wfe *engine) Run(ctx context.Context) error {
 
 	log.Info("Workflow engine started")
 	<-ctx.Done()
+
+	// Signal all connected GetWorkItems streams to terminate before draining the
+	// worker, so the gRPC API server's GracefulStop does not block on them during
+	// shutdown or a SIGHUP reload.
+	close(wfe.streamShutdownCh)
 
 	if err := wfe.worker.Shutdown(context.Background()); err != nil {
 		return fmt.Errorf("failed to shutdown the workflow worker: %w", err)
