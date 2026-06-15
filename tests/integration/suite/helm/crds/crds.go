@@ -80,6 +80,30 @@ func (u *uptodate) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, wantSpec, gotSpec,
 			"chart CRD %q is out of date with pkg/apis; run `make code-generate` and copy config/crd/bases/* into charts/dapr/crds", name)
 	}
+
+	// The conversion webhook is excluded from the spec comparison above because
+	// controller-gen does not emit it; it is maintained by hand in the chart.
+	// Assert it explicitly so accidental removal or drift of the subscriptions
+	// v1alpha1 <-> v2alpha1 conversion webhook is still caught.
+	assertSubscriptionConversion(t, got)
+}
+
+func assertSubscriptionConversion(t *testing.T, got map[string]apiextv1.CustomResourceDefinition) {
+	t.Helper()
+
+	sub, ok := got["subscriptions.dapr.io"]
+	require.True(t, ok, "subscriptions.dapr.io CRD missing from chart")
+
+	conv := sub.Spec.Conversion
+	require.NotNil(t, conv, "subscriptions.dapr.io must declare a conversion webhook")
+	assert.Equal(t, apiextv1.WebhookConverter, conv.Strategy)
+	require.NotNil(t, conv.Webhook)
+	require.NotNil(t, conv.Webhook.ClientConfig)
+	require.NotNil(t, conv.Webhook.ClientConfig.Service)
+	assert.Equal(t, "dapr-webhook", conv.Webhook.ClientConfig.Service.Name)
+	require.NotNil(t, conv.Webhook.ClientConfig.Service.Path)
+	assert.Equal(t, "/convert", *conv.Webhook.ClientConfig.Service.Path)
+	assert.ElementsMatch(t, []string{"v1", "v2alpha1"}, conv.Webhook.ConversionReviewVersions)
 }
 
 func loadCRDs(t *testing.T, dir string) map[string]apiextv1.CustomResourceDefinition {
