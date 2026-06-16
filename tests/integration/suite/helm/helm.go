@@ -15,5 +15,6 @@ package helm
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/helm/containers"
+	_ "github.com/dapr/dapr/tests/integration/suite/helm/crds"
 	_ "github.com/dapr/dapr/tests/integration/suite/helm/service"
 )
