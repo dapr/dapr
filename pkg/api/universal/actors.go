@@ -28,7 +28,7 @@ import (
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/reminders"
-	"github.com/dapr/dapr/pkg/messages"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/messaging/method"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -41,7 +41,7 @@ func (a *Universal) RejectInternalActorType(actorType string) error {
 	if !workflowacl.IsInternalActorType(actorType) {
 		return nil
 	}
-	return messages.ErrActorTypeReserved.WithFormat(actorType)
+	return apierrors.ActorTypeReserved(actorType)
 }
 
 func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error) {
@@ -57,21 +57,21 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 	if b := in.GetData(); b != nil {
 		b, err = json.Marshal(b)
 		if err != nil {
-			err = messages.ErrMalformedRequest.WithFormat(err)
+			err = apierrors.ActorMalformedRequest(err)
 			a.logger.Debug(err)
 			return nil, err
 		}
 
 		data, err = anypb.New(wrapperspb.Bytes(b))
 		if err != nil {
-			err = messages.ErrMalformedRequest.WithFormat(err)
+			err = apierrors.ActorMalformedRequest(err)
 			a.logger.Debug(err)
 			return nil, err
 		}
 	}
 
 	if vErr := method.ValidateName(in.GetName()); vErr != nil {
-		vErr = messages.ErrBadRequest.WithFormat(vErr)
+		vErr = apierrors.ActorBadRequest(vErr)
 		a.logger.Debug(vErr)
 		return nil, vErr
 	}
@@ -89,7 +89,7 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 
 	err = timers.Create(ctx, req)
 	if err != nil {
-		err = messages.ErrActorTimerCreate.WithFormat(err)
+		err = apierrors.ActorTimerCreate(err)
 		a.logger.Debug(err)
 		return nil, err
 	}
@@ -128,21 +128,21 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 	if b := in.GetData(); b != nil {
 		b, err = json.Marshal(b)
 		if err != nil {
-			err = messages.ErrMalformedRequest.WithFormat(err)
+			err = apierrors.ActorMalformedRequest(err)
 			a.logger.Debug(err)
 			return nil, err
 		}
 
 		data, err = anypb.New(wrapperspb.Bytes(b))
 		if err != nil {
-			err = messages.ErrMalformedRequest.WithFormat(err)
+			err = apierrors.ActorMalformedRequest(err)
 			a.logger.Debug(err)
 			return nil, err
 		}
 	}
 
 	if vErr := method.ValidateName(in.GetName()); vErr != nil {
-		vErr = messages.ErrBadRequest.WithFormat(vErr)
+		vErr = apierrors.ActorBadRequest(vErr)
 		a.logger.Debug(vErr)
 		return nil, vErr
 	}
@@ -166,15 +166,15 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 		a.logger.Debug(err)
 
 		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
-			return nil, messages.ErrActorReminderOpActorNotHosted
+			return nil, apierrors.ActorReminderNonHosted()
 		}
 
 		status, ok := status.FromError(err)
 		if ok && status.Code() == codes.AlreadyExists {
-			return nil, messages.ErrActorReminderAlreadyExists.WithFormat(in.GetName())
+			return nil, apierrors.ActorReminderAlreadyExists(in.GetName())
 		}
 
-		err = messages.ErrActorReminderCreate.WithFormat(err)
+		err = apierrors.ActorReminderCreate(err)
 		return nil, err
 	}
 	return nil, err
@@ -198,11 +198,12 @@ func (a *Universal) UnregisterActorReminder(ctx context.Context, in *runtimev1pb
 	err = r.Delete(ctx, req)
 	if err != nil {
 		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
-			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
-			return nil, messages.ErrActorReminderOpActorNotHosted
+			nonHostedErr := apierrors.ActorReminderNonHosted()
+			a.logger.Debug(nonHostedErr)
+			return nil, nonHostedErr
 		}
 
-		err = messages.ErrActorReminderDelete.WithFormat(err)
+		err = apierrors.ActorReminderDelete(err)
 		a.logger.Debug(err)
 		return nil, err
 	}
@@ -227,14 +228,14 @@ func (a *Universal) GetActorReminder(ctx context.Context, in *runtimev1pb.GetAct
 		a.logger.Debug(err)
 
 		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
-			return nil, messages.ErrActorReminderOpActorNotHosted
+			return nil, apierrors.ActorReminderNonHosted()
 		}
 
-		return nil, messages.ErrActorReminderGet.WithFormat(err)
+		return nil, apierrors.ActorReminderGet(err)
 	}
 
 	if resp == nil {
-		return nil, messages.ErrActorReminderNotFound.WithFormat(in.GetName())
+		return nil, apierrors.ActorReminderNotFound(in.GetName())
 	}
 
 	var dueTime *string
@@ -281,11 +282,12 @@ func (a *Universal) UnregisterActorRemindersByType(ctx context.Context, in *runt
 	err = r.DeleteByActorID(ctx, req)
 	if err != nil {
 		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
-			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
-			return nil, messages.ErrActorReminderOpActorNotHosted
+			nonHostedErr := apierrors.ActorReminderNonHosted()
+			a.logger.Debug(nonHostedErr)
+			return nil, nonHostedErr
 		}
 
-		err = messages.ErrActorReminderDelete.WithFormat(err)
+		err = apierrors.ActorReminderDelete(err)
 		a.logger.Debug(err)
 		return nil, err
 	}
@@ -308,8 +310,9 @@ func (a *Universal) ListActorReminders(ctx context.Context, req *runtimev1pb.Lis
 	})
 	if err != nil {
 		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
-			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
-			return nil, messages.ErrActorReminderOpActorNotHosted
+			nonHostedErr := apierrors.ActorReminderNonHosted()
+			a.logger.Debug(nonHostedErr)
+			return nil, nonHostedErr
 		}
 
 		a.logger.Debug(err)
