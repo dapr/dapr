@@ -351,7 +351,7 @@ func (s *Subscription) sendBulkToDeadLetter(ctx context.Context,
 	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deadLetterPublishTimeout)
 	defer cancel()
 
-	_, err := s.adapter.BulkPublish(pubCtx, req)
+	_, err := s.adapter.BulkPublish(pubCtx, req, rtpubsub.TransportModeGRPC)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 	}
