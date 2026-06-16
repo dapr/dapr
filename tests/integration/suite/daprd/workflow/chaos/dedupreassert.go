@@ -69,7 +69,7 @@ func (d *dedupreassert) Run(t *testing.T, ctx context.Context) {
 
 	r := d.workflow.Registry()
 	require.NoError(t, r.AddActivityN("act", func(actx task.ActivityContext) (any, error) {
-		return "done", nil
+		return nil, nil
 	}))
 	require.NoError(t, r.AddWorkflowN("wf", func(octx *task.WorkflowContext) (any, error) {
 		var out string
