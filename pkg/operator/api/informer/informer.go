@@ -159,6 +159,18 @@ func (i *informer[T]) WatchUpdates(ctx context.Context, ns string) (<-chan *Even
 }
 
 func (i *informer[T]) handleEvent(ctx context.Context, oldObj, newObj any, eventType operatorv1.ResourceEventType) {
+	if eventType == operatorv1.ResourceEventType_UPDATED && oldObj != nil {
+		oldMeta, oerr := apimeta.Accessor(oldObj)
+		newMeta, nerr := apimeta.Accessor(newObj)
+		if oerr == nil && nerr == nil &&
+			oldMeta.GetResourceVersion() != "" &&
+			oldMeta.GetResourceVersion() == newMeta.GetResourceVersion() {
+			i.log.Debugf("Ignoring resync event for %s/%s: resourceVersion %s unchanged",
+				newMeta.GetNamespace(), newMeta.GetName(), newMeta.GetResourceVersion())
+			return
+		}
+	}
+
 	newT, ok := i.anyToT(newObj)
 	if !ok {
 		return

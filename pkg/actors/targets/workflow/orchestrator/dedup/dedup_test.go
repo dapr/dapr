@@ -15,9 +15,11 @@ package dedup_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -138,6 +140,49 @@ func TestIsTaskAlreadyResolved(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tt.want, dedup.IsTaskAlreadyResolved(tt.scheduled, tt.history, tt.inbox))
+		})
+	}
+}
+
+func eventRaisedAt(name, input string, ts time.Time) *backend.HistoryEvent {
+	return &backend.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.New(ts),
+		EventType: &protos.HistoryEvent_EventRaised{
+			EventRaised: &protos.EventRaisedEvent{
+				Name:  name,
+				Input: wrapperspb.String(input),
+			},
+		},
+	}
+}
+
+func TestIsDuplicateExternalEvent(t *testing.T) {
+	t.Parallel()
+
+	t0 := time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)
+	t1 := t0.Add(time.Millisecond)
+
+	tests := []struct {
+		name    string
+		event   *backend.HistoryEvent
+		history []*backend.HistoryEvent
+		inbox   []*backend.HistoryEvent
+		want    bool
+	}{
+		{name: "nothing recorded", event: eventRaisedAt("go", "x", t0), want: false},
+		{name: "identical copy in history is a redelivery", event: eventRaisedAt("go", "x", t0), history: []*backend.HistoryEvent{eventRaisedAt("go", "x", t0)}, want: true},
+		{name: "identical copy in inbox is a redelivery", event: eventRaisedAt("go", "x", t0), inbox: []*backend.HistoryEvent{eventRaisedAt("go", "x", t0)}, want: true},
+		{name: "same name+payload but different timestamp is a distinct event", event: eventRaisedAt("go", "x", t1), history: []*backend.HistoryEvent{eventRaisedAt("go", "x", t0)}, want: false},
+		{name: "different name is distinct", event: eventRaisedAt("stop", "x", t0), history: []*backend.HistoryEvent{eventRaisedAt("go", "x", t0)}, want: false},
+		{name: "non-EventRaised event returns false", event: taskCompleted(1), history: []*backend.HistoryEvent{taskCompleted(1)}, want: false},
+		{name: "completion in history does not match an external event", event: eventRaisedAt("go", "x", t0), history: []*backend.HistoryEvent{taskCompleted(1)}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, dedup.IsDuplicateExternalEvent(tt.event, tt.history, tt.inbox))
 		})
 	}
 }

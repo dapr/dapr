@@ -68,6 +68,20 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 		return o.assertNewEventReminder(ctx, e, state)
 	}
 
+	// Drop redelivered external events the same way: a RaiseEvent re-sent to
+	// this actor (e.g. an AddWorkflowEvent invocation retried under placement
+	// churn) keeps the same ingestion timestamp, so it matches an EventRaised
+	// already in history or the inbox by (event name, ingestion timestamp).
+	// duplicate the event in history; instead re-assert the wake-up reminder so
+	// a still-pending inbox row that lost its reminder gets re-driven. Distinct
+	// RaiseEvents are guaranteed distinct timestamps by the backend at ingestion
+	// (Actors.uniqueEventTimestamp), so they fall through to be appended
+	// normally even when raced onto the same wall-clock nanosecond.
+	if dedup.IsDuplicateExternalEvent(e, state.History, state.Inbox) {
+		log.Debugf("Workflow actor '%s': dropping duplicate external event already present in history/inbox; re-asserting wake-up reminder so the inbox row is not stranded", o.actorID)
+		return o.assertNewEventReminder(ctx, e, state)
+	}
+
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
 		o.activityResultAwaited.CompareAndSwap(true, false)
 	}
