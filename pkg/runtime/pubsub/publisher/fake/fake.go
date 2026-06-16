@@ -17,6 +17,7 @@ import (
 	"context"
 
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/pubsub/transport"
 )
 
 // Fake is a fake publisher
@@ -46,10 +47,10 @@ func (f *Fake) WithBulkPublishFn(fn func(context.Context, *contribPubsub.BulkPub
 	return f
 }
 
-func (f *Fake) Publish(ctx context.Context, req *contribPubsub.PublishRequest) error {
+func (f *Fake) Publish(ctx context.Context, req *contribPubsub.PublishRequest, _ transport.Mode) error {
 	return f.publishFn(ctx, req)
 }
 
-func (f *Fake) BulkPublish(ctx context.Context, req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
+func (f *Fake) BulkPublish(ctx context.Context, req *contribPubsub.BulkPublishRequest, _ transport.Mode) (contribPubsub.BulkPublishResponse, error) {
 	return f.bulkPublishFn(ctx, req)
 }
