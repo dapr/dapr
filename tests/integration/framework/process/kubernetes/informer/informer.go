@@ -93,14 +93,22 @@ type Informer struct {
 
 	// informed is test-side observation channels (DeleteWait & co.).
 	// Fired when an event is actually delivered to a watcher.
-	informed map[uint64]chan *metav1.WatchEvent
+	informed map[uint64]*informedSub
+}
+
+// informedSub is a single test-side observer. done is closed when the observer
+// stops reading ch, so senders select on it rather than risk sending on a
+// channel the observer has abandoned.
+type informedSub struct {
+	ch   chan *metav1.WatchEvent
+	done chan struct{}
 }
 
 func New() *Informer {
 	return &Informer{
 		backlog:  make(map[string][][]byte),
 		streams:  make(map[string][]loop.Interface[streamEvent]),
-		informed: make(map[uint64]chan *metav1.WatchEvent),
+		informed: make(map[uint64]*informedSub),
 	}
 }
 
@@ -229,7 +237,7 @@ func (h *streamHandler) Handle(_ context.Context, ev streamEvent) error {
 	// Snapshot informed subscribers under the lock, then notify outside
 	// the lock so a slow subscriber cannot wedge inform() callers.
 	h.informer.lock.Lock()
-	subs := make([]chan *metav1.WatchEvent, 0, len(h.informer.informed))
+	subs := make([]*informedSub, 0, len(h.informer.informed))
 	for _, c := range h.informer.informed {
 		subs = append(subs, c)
 	}
@@ -237,7 +245,8 @@ func (h *streamHandler) Handle(_ context.Context, ev streamEvent) error {
 
 	for _, c := range subs {
 		select {
-		case c <- &event:
+		case c.ch <- &event:
+		case <-c.done:
 		case <-time.After(informedSendTimeout):
 			h.t.Errorf("failed to send informed event to subscriber")
 		}
@@ -266,15 +275,18 @@ func (i *Informer) DeleteWait(t *testing.T, ctx context.Context, obj runtime.Obj
 	i.lock.Lock()
 	//nolint:gosec
 	ui := rand.Uint64()
-	ch := make(chan *metav1.WatchEvent)
-	i.informed[ui] = ch
+	sub := &informedSub{
+		ch:   make(chan *metav1.WatchEvent),
+		done: make(chan struct{}),
+	}
+	i.informed[ui] = sub
 	i.lock.Unlock()
 
 	defer func() {
 		i.lock.Lock()
-		close(ch)
 		delete(i.informed, ui)
 		i.lock.Unlock()
+		close(sub.done)
 	}()
 
 	i.Delete(t, obj)
@@ -287,7 +299,7 @@ func (i *Informer) DeleteWait(t *testing.T, ctx context.Context, obj runtime.Obj
 		case <-ctx.Done():
 			assert.Fail(t, "failed to wait for delete event to occur")
 			return
-		case e := <-ch:
+		case e := <-sub.ch:
 			if e.Type != string(watch.Deleted) {
 				continue
 			}
