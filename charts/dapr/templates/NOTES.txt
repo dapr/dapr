@@ -16,3 +16,11 @@ https://dapr.io
 >
 > For more information, see https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-persisting-scheduler
 {{- end }}
+{{- if and (eq .Values.global.scheduler.enabled true) (not .Values.dapr_scheduler.cluster.inMemoryStorage) (eq .Values.dapr_scheduler.securityContext.fsGroup nil) }}
+
+> Upgrade note: The Scheduler's default fsGroup (previously 65532) has been removed.
+> If your etcd persistent volume required group ownership for writes, you must now set
+> fsGroup explicitly to preserve that behavior:
+>
+> --set dapr_scheduler.securityContext.fsGroup=65532
+{{- end }}
