@@ -33,7 +33,7 @@
 [x-badge]:https://img.shields.io/twitter/follow/daprdev?logo=x&style=flat
 [x-link]:https://twitter.com/daprdev
 
-Dapr is a set of integrated APIs with built-in best practices and patterns to build distributed applications. Dapr increases your developer productivity by 20-40% with out-of-the-box features such as workflow, pub/sub, state management, secret stores, external configuration, bindings, actors, distributed lock, and cryptography. You benefit from the built-in security, reliability, and observability capabilities, so you don't need to write boilerplate code to achieve production-ready applications.
+Dapr is a set of integrated APIs with built-in best practices and patterns to build distributed applications. At its core is a **durable execution engine** — Dapr Workflow — that lets you write long-running, stateful, crash-resilient business logic as ordinary code in any language: orchestrations survive process restarts, node failures, and redeployments, and resume exactly where they left off. Around that engine, Dapr gives you the building blocks your workflows orchestrate — pub/sub, state management, service invocation, actors, secret stores, external configuration, bindings, jobs, distributed lock, and cryptography — increasing developer productivity by 20-40% without boilerplate. You benefit from the built-in security, reliability, and observability capabilities, so you don't need to write boilerplate code to achieve production-ready applications.
 
 With Dapr, a graduated CNCF project, platform teams can configure complex setups while exposing simple interfaces to application development teams, making it easier for them to build highly scalable distributed applications. Many platform teams have adopted Dapr to provide governance and golden paths for API-based infrastructure interaction.
 
@@ -64,6 +64,8 @@ Dapr runs natively on Kubernetes, as a self hosted binary on your machine, on an
 
 Dapr uses pluggable component state stores and message buses such as Redis as well as gRPC to offer a wide range of communication methods, including direct dapr-to-dapr using gRPC and async Pub-Sub with guaranteed delivery and at-least-once semantics.
 
+Dapr also runs a durable workflow engine in the sidecar: orchestration code you write is checkpointed automatically and resumes after failures, so long-running business processes survive crashes and restarts without custom recovery logic.
+
 
 ## Why Dapr?
 
@@ -71,8 +73,30 @@ Writing highly performant, scalable and reliable distributed application is hard
 
 Dapr is flexible in threading and state consistency models. You can leverage multi-threading if you choose to, and you can choose among different consistency models. This flexibility enables you to implement advanced scenarios without artificial constraints. Dapr is unique because you can transition seamlessly between platforms and underlying implementations without rewriting your code.
 
+## Dapr Workflow — durable execution as code
+
+Dapr Workflow is a **durable execution engine**: you write orchestration logic as plain code, and Dapr guarantees it runs to completion exactly once, even across crashes, restarts, and rescheduling. State and progress are persisted automatically — there are no queues, sagas, or state machines to hand-build.
+
+Workflows compose the rest of Dapr: an activity can invoke a service, publish an event, read or write state, call an actor, or schedule a job — all with Dapr's built-in reliability, security, and observability. Common [workflow patterns](https://docs.dapr.io/developing-applications/building-blocks/workflow/workflow-patterns/) include task chaining, fan-out/fan-in, monitors, external-event / human-in-the-loop approval gates, and child workflows — including **multi-application workflows** that orchestrate activities and child workflows across different services.
+
+Workflow authoring is **stable** in the .NET, Java, Python, Go, and JavaScript SDKs.
+
+▶ [Workflow overview](https://docs.dapr.io/developing-applications/building-blocks/workflow/workflow-overview/) · [Quickstart](https://docs.dapr.io/getting-started/quickstarts/workflow-quickstart/) · [Patterns](https://docs.dapr.io/developing-applications/building-blocks/workflow/workflow-patterns/)
+
+### Recent workflow milestones
+
+| Release | Workflow highlights |
+|:--|:--|
+| **1.15** | Workflow API declared **stable**; the workflow engine was rewritten for performance and scale, with dynamic scaling from 0 to many replicas while staying durable. Actor runtime rewritten (workflows run on actors). Scheduler service stable. |
+| **1.16** | **Multi-application workflows** — a workflow can call activities and start child workflows in other applications, durably. Major throughput and stability improvements for high-concurrency workloads. Compensation (saga) pattern in the Java SDK. |
+| **1.17** | **Workflow versioning** (named versions and patching) to safely evolve long-running workflows without breaking in-flight instances. History retention policies, end-to-end tracing, and `dapr workflow` CLI management commands (list / history / suspend / resume / terminate / rerun / raise-event / purge). |
+| **1.18** | Security and scale: `WorkflowAccessPolicy` (control which apps may invoke which workflows and activities), cryptographic workflow-history tamper detection with cross-app attestation, workflow-history context propagation to children, scheduler-level concurrency limits, external-event timers for human-in-the-loop gates, and the new `MCPServer` resource that exposes MCP tool calls as durable workflows. |
+
+See the [release notes](https://github.com/dapr/dapr/releases) for full details.
+
 ## Features
 
+* **Durable workflow engine** — author long-running, fault-tolerant orchestrations as code (stable since v1.15): task chaining, fan-out/fan-in, child workflows, human-in-the-loop / external events, workflow versioning, and multi-application workflows that span services
 * Event-driven Pub-Sub system with pluggable providers and at-least-once semantics
 * Input and output bindings with pluggable providers
 * State management with pluggable data stores
