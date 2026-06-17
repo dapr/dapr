@@ -35,7 +35,7 @@
 
 Dapr is an open-source runtime for building distributed applications, workflows, and AI agents. It provides **durable execution**, secure service-to-service communication, state management, event-driven messaging, and a consistent set of APIs that run anywhere — on Kubernetes, in the cloud, at the edge, or on your laptop.
 
-Whether you're building AI agents, business-critical workflows, microservices, or event-driven systems, Dapr lets you focus on business logic instead of plumbing. Dapr runs as a sidecar, so every capability is available from *any* language or framework over standard HTTP and gRPC — with no framework lock-in and no boilerplate to reach production-ready reliability, security, and observability.
+Whether you're building AI agents, business-critical workflows, microservices, or event-driven systems, Dapr lets you focus on business logic instead of plumbing. Dapr runs as a sidecar, so every capability is available from *any* language over standard HTTP and gRPC, with native SDKs for **.NET, Java, Python, Go, JavaScript/TypeScript, and Rust** — no framework lock-in and no boilerplate to reach production-ready reliability, security, and observability.
 
 ![Dapr overview](./img/overview.png)
 
@@ -57,18 +57,7 @@ Applications fail. Infrastructure restarts. Networks partition. Your workflows a
 - Rolling deployments
 - Infrastructure interruptions
 
-Instead of restarting from the beginning, execution picks up exactly where it left off — with no extra database or state-machine code to write.
-
-```python
-@wfr.workflow
-def process_order(ctx, order):
-    payment   = yield ctx.call_activity(process_payment, input=order)
-    inventory = yield ctx.call_activity(reserve_inventory, input=order)
-    shipment  = yield ctx.call_activity(create_shipment, input=order)
-    return shipment
-```
-
-If the application crashes midway through this workflow, Dapr recovers automatically and resumes from the next unfinished activity.
+Instead of restarting from the beginning, execution picks up exactly where it left off — with no extra database or state-machine code to write. You author workflows as ordinary code in your language of choice; if the application crashes midway through, Dapr recovers automatically and resumes from the next unfinished step.
 
 **Common use cases:** AI agents, customer onboarding, order processing, human-approval flows, document processing, and other multi-step business processes.
 
