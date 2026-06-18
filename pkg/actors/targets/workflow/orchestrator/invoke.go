@@ -137,6 +137,9 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 		}
 		return o.addWorkflowEvent(ctx, &ev)
 
+	case reminder.Name == reminderNameDispatchRetry:
+		return o.redispatchStranded(ctx, reminder)
+
 	default:
 		return fmt.Errorf("unable to handle reminder '%s' for workflow actor '%s': unknown reminder type", reminder.Name, o.actorID)
 	}

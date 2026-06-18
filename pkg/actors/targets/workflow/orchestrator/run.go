@@ -116,6 +116,22 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			if rerr := o.handleRetention(ctx, runtimestate.RuntimeStatus(o.rstate)); rerr != nil {
 				return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to (re)create retention reminder on empty-inbox completion path: %w", rerr))
 			}
+		} else if unresolved := unresolvedLocalTasks(state); len(unresolved) > 0 {
+			// The workflow is running, the inbox is empty, but history
+			// holds local TaskScheduled events with no completion in
+			// sight. This recovers the dispatch-retry safety reminder
+			// when its Create was lost after a pre-save dispatch failure
+			// (e.g. scheduler unreachable, or the process died before the
+			// Create RPC). Without it the workflow has no wake-up left:
+			// the pre-save already cleared the inbox, so re-running this
+			// path is otherwise a no-op. Idempotent: the reminder name is
+			// deterministic, and if the tasks are merely in flight the
+			// fired reminder re-dispatches into ErrDuplicateInvocation
+			// and deletes itself.
+			wfName := o.getExecutionStartedEvent(state).GetName()
+			if rerr := o.createDispatchRetryReminder(ctx, wfName); rerr != nil {
+				return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to (re)create dispatch-retry reminder on empty-inbox path: %w", rerr))
+			}
 		}
 		log.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", o.actorID, reminder.Name)
 		return todo.RunCompletedTrue, nil
@@ -376,63 +392,143 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 
-	// Dispatch activities and messages, collecting failures.
-	activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory)
-	addResult := o.callAddEventStateMessage(ctx, addWorkflows)
-	createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows)
+	// Dispatch-vs-save ordering:
+	//
+	//   * Default path (activities-only batch with local targets) uses
+	//     SAVE-BEFORE-DISPATCH. The workflow's full runtime-state
+	//     (TaskScheduled events, etc.) is persisted
+	//     BEFORE any side effect. This eliminates the "orphan-completion"
+	//     stall, where (under chaos) a successful dispatch's TaskCompleted
+	//     comes back to a workflow whose state save was rolled back:
+	//     history has no TaskScheduled to match the completion to, replay
+	//     re-emits ScheduleTask, the dispatcher's dedup check skips
+	//     dispatch, and the unconsumed TaskCompleted gets appended as an
+	//     orphan. With save-before-dispatch, if the save fails no side
+	//     effect happens, and the retry sees clean state.
+	//
+	//     Cost: if the save succeeds and the dispatch fails (e.g. activity
+	//     actor type not registered during a placement rebalance), the
+	//     TaskScheduled is durable but no activity actor is running it.
+	//     We close that gap below by creating a safety reminder
+	//     ([[reminderNameDispatchRetry]]) on dispatch failure; the
+	//     reminder fires on a backoff and re-attempts the dispatch
+	//     idempotently until it succeeds.
+	//
+	//   * Legacy path (preserved from PR #9738): when the batch carries
+	//     any outbound state message (child-workflow creation or child
+	//     completion/failure delivery, local or remote) or any pending
+	//     task targets a remote app, the legacy "dispatch first, save
+	//     framing only on first execution, no-save on subsequent failed
+	//     retries" path is taken. The dispatch-retry safety reminder
+	//     only knows how to re-dispatch local TaskScheduled events, so
+	//     save-before-dispatch is restricted to activities-only local
+	//     batches: persisting a state message's events (and clearing the
+	//     inbox) before delivery would otherwise strand the counterpart
+	//     workflow if the dispatch fails, with nothing left to retry it.
+	//     The legacy path instead keeps the inbox intact on failure so
+	//     the calling reminder re-executes and regenerates the messages.
+	//     It also keeps a workflow whose remote app is offline from
+	//     growing its history on every retry cycle. Unifying this path
+	//     with save-before-dispatch + a message-aware dispatch-retry
+	//     reminder is deferred to a follow-up (see PR description).
+	if len(addWorkflows) > 0 || len(createWorkflows) > 0 || hasRemoteTasks(pendingTasks) {
+		// PR #9738 cross-app path: dispatch first, then save selectively.
+		activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory)
+		addResult := o.callAddEventStateMessage(ctx, addWorkflows)
+		createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows)
 
-	dispatchErr := errors.Join(activityResult.err, addResult.err, createResult.err)
-	if dispatchErr != nil {
-		if errors.Is(dispatchErr, errPayloadSizeExceeded) {
-			return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs,
-				protos.StalledReason_PAYLOAD_SIZE_EXCEEDED, dispatchErr.Error())
-		}
-		if len(state.History) == 0 && (hasRemoteTasks(pendingTasks) || hasRemoteMessages(createWorkflows)) {
-			// Save state without the events that failed to dispatch so the
-			// workflow transitions to RUNNING. Successfully dispatched items
-			// keep their events in history so they are not re-dispatched on
-			// retry. The inbox is preserved so the existing reminder retries
-			// the full execution.
-			allFailed := make(map[int32]struct{}, len(activityResult.failedEventIDs)+len(createResult.failedEventIDs)+len(addResult.failedEventIDs))
-			maps.Copy(allFailed, activityResult.failedEventIDs)
-			maps.Copy(allFailed, createResult.failedEventIDs)
-			maps.Copy(allFailed, addResult.failedEventIDs)
+		dispatchErr := errors.Join(activityResult.err, addResult.err, createResult.err)
+		if dispatchErr != nil {
+			if errors.Is(dispatchErr, errPayloadSizeExceeded) {
+				return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs,
+					protos.StalledReason_PAYLOAD_SIZE_EXCEEDED, dispatchErr.Error())
+			}
 
-			// Temporarily replace rs.NewEvents with a filtered copy that excludes
-			// failed dispatch events, then restore the original after
-			// ApplyRuntimeStateChanges. This works because ApplyRuntimeStateChanges
-			// reads rs.NewEvents by reference (via GetNewEvents()) and appends
-			// directly to state.History. It does not copy or retain the slice.
-			origNewEvents := rs.NewEvents
-			filtered := origNewEvents[:0:0]
-			for _, e := range origNewEvents {
-				if isDispatchableEvent(e) {
-					if _, failed := allFailed[e.GetEventId()]; failed {
-						continue
+			if len(state.History) == 0 {
+				// First-execution-with-cross-app: save state without the
+				// events that failed to dispatch so the workflow
+				// transitions to RUNNING. Successfully dispatched items
+				// keep their events in history so they are not
+				// re-dispatched on retry. The inbox is preserved so the
+				// existing reminder retries the full execution.
+				allFailed := make(map[int32]struct{}, len(activityResult.failedEventIDs)+len(createResult.failedEventIDs)+len(addResult.failedEventIDs))
+				maps.Copy(allFailed, activityResult.failedEventIDs)
+				maps.Copy(allFailed, createResult.failedEventIDs)
+				maps.Copy(allFailed, addResult.failedEventIDs)
+
+				// Temporarily replace rs.NewEvents with a filtered copy that
+				// excludes failed dispatch events, then restore the original
+				// after ApplyRuntimeStateChanges. ApplyRuntimeStateChanges
+				// reads rs.NewEvents by reference (via GetNewEvents()) and
+				// appends directly to state.History; it does not copy or
+				// retain the slice.
+				origNewEvents := rs.NewEvents
+				filtered := origNewEvents[:0:0]
+				for _, e := range origNewEvents {
+					if isDispatchableEvent(e) {
+						if _, failed := allFailed[e.GetEventId()]; failed {
+							continue
+						}
 					}
+					filtered = append(filtered, e)
 				}
-				filtered = append(filtered, e)
+				rs.NewEvents = filtered
+				state.ApplyRuntimeStateChanges(rs)
+				rs.NewEvents = origNewEvents
+				if err = o.signAndSaveState(ctx, state); err != nil {
+					return todo.RunCompletedFalse, err
+				}
 			}
-			rs.NewEvents = filtered
-			state.ApplyRuntimeStateChanges(rs)
-			rs.NewEvents = origNewEvents
-			if saveErr := o.signAndSaveState(ctx, state); saveErr != nil {
-				return todo.RunCompletedFalse, saveErr
-			}
+
 			executionStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
 		}
 
-		executionStatus = diag.StatusRecoverable
-		return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
-	}
+		state.ApplyRuntimeStateChanges(rs)
+		state.ClearInbox()
 
-	state.ApplyRuntimeStateChanges(rs)
-	state.ClearInbox()
+		if err = o.signAndSaveState(ctx, state); err != nil {
+			return todo.RunCompletedFalse, err
+		}
+	} else {
+		// Default path: save-before-dispatch. The batch carries no
+		// outbound state messages (gating above), so activities are the
+		// only side effect to dispatch — and the only kind the
+		// dispatch-retry safety reminder knows how to recover.
+		state.ApplyRuntimeStateChanges(rs)
+		state.ClearInbox()
 
-	err = o.signAndSaveState(ctx, state)
-	if err != nil {
-		return todo.RunCompletedFalse, err
+		if err = o.signAndSaveState(ctx, state); err != nil {
+			return todo.RunCompletedFalse, err
+		}
+
+		dispatchErr := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory).err
+		if dispatchErr != nil {
+			if errors.Is(dispatchErr, errPayloadSizeExceeded) {
+				return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs,
+					protos.StalledReason_PAYLOAD_SIZE_EXCEEDED, dispatchErr.Error())
+			}
+
+			// State is durable; the TaskScheduled rows are committed but
+			// at least one dispatch failed. Schedule the safety reminder
+			// so the workflow doesn't strand when no other reminder
+			// happens to fire later. The reminder is idempotent and
+			// deterministic in name, so repeated creates collapse onto
+			// one scheduler entry.
+			//
+			// A creation failure is joined into the returned recoverable
+			// error so the calling reminder is not acked and gets
+			// redelivered; the empty-inbox path in this function then
+			// re-attempts creating the safety reminder for the stranded
+			// TaskScheduled (the inbox was already cleared by the
+			// pre-save, so re-execution alone would be a no-op).
+			if rerr := o.createDispatchRetryReminder(ctx, workflowName); rerr != nil {
+				dispatchErr = errors.Join(dispatchErr, fmt.Errorf("failed to create dispatch-retry reminder: %w", rerr))
+			}
+
+			executionStatus = diag.StatusRecoverable
+			return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
+		}
 	}
 
 	rstatus := runtimestate.RuntimeStatus(rs)
