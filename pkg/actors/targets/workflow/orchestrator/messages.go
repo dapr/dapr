@@ -26,11 +26,29 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, events []*backend.WorkflowRuntimeStateMessage) dispatchResult {
+func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, events []*backend.WorkflowRuntimeStateMessage, newEvents []*backend.HistoryEvent) dispatchResult {
 	msgs := make([]proto.Message, len(events))
 	historyEvents := make([]*backend.HistoryEvent, len(events))
 	targets := make([]string, len(events))
 	actionIDs := make([]int32, len(events))
+
+	// Detached spawns dispatch a fresh ExecutionStartedEvent (EventId=-1, no
+	// ParentInstance) but the caller-side action is recorded as a
+	// DetachedWorkflowInstanceCreatedEvent whose EventId is the originating
+	// action.Id and whose payload InstanceId equals the spawn target. The
+	// applier emits the pair atomically inside the same NewEvents batch, so
+	// we can recover the action.Id by indexing the batch by InstanceId. This
+	// is what failed-dispatch recovery in run.go uses to drop just-failed
+	// events from history before the partial save.
+	var detachedActionByInstance map[string]int32
+	for _, e := range newEvents {
+		if dw := e.GetDetachedWorkflowInstanceCreated(); dw != nil {
+			if detachedActionByInstance == nil {
+				detachedActionByInstance = make(map[string]int32, 1)
+			}
+			detachedActionByInstance[dw.GetInstanceId()] = e.GetEventId()
+		}
+	}
 
 	for i, msg := range events {
 		req := &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
@@ -43,9 +61,16 @@ func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, event
 		msgs[i] = req
 		historyEvents[i] = msg.GetHistoryEvent()
 		targets[i] = msg.GetTargetInstanceId()
-		if es := msg.GetHistoryEvent().GetExecutionStarted(); es != nil && es.GetParentInstance() != nil {
-			actionIDs[i] = es.GetParentInstance().GetTaskScheduledId()
-		} else {
+		switch {
+		case msg.GetHistoryEvent().GetExecutionStarted().GetParentInstance() != nil:
+			actionIDs[i] = msg.GetHistoryEvent().GetExecutionStarted().GetParentInstance().GetTaskScheduledId()
+		case detachedActionByInstance != nil:
+			if id, ok := detachedActionByInstance[msg.GetTargetInstanceId()]; ok {
+				actionIDs[i] = id
+			} else {
+				actionIDs[i] = msg.GetHistoryEvent().GetEventId()
+			}
+		default:
 			actionIDs[i] = msg.GetHistoryEvent().GetEventId()
 		}
 	}
@@ -127,10 +152,25 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 		// orchestration immediately rather than retrying. Only do this when
 		// we can correlate the failure to a parent task via ParentInstance.
 		if isPermissionDenied(err) && historyEvent != nil {
-			if es := historyEvent.GetExecutionStarted(); es != nil && es.GetParentInstance() != nil {
-				if fErr := o.failChildWorkflowACL(ctx, es.GetParentInstance().GetTaskScheduledId(), err); fErr != nil {
-					return fmt.Errorf("failed to record child workflow failure: %w (original: %v)", fErr, err)
+			if es := historyEvent.GetExecutionStarted(); es != nil {
+				if es.GetParentInstance() != nil {
+					if fErr := o.failChildWorkflowACL(ctx, es.GetParentInstance().GetTaskScheduledId(), err); fErr != nil {
+						return fmt.Errorf("failed to record child workflow failure: %w (original: %v)", fErr, err)
+					}
+					return nil
 				}
+				// Detached spawn: fire-and-forget by design. There is no
+				// awaitable Task on the caller to fail, and propagating
+				// the denial back would defeat the decoupling the feature
+				// is built on. Log so the policy violation is visible in
+				// operator output and drop the dispatch attempt — the
+				// caller's history records DetachedWorkflowInstanceCreated
+				// as audit, the spawn just never lands on the target.
+				targetAppID := ""
+				if r := historyEvent.GetRouter(); r != nil {
+					targetAppID = r.GetTargetAppID()
+				}
+				log.Warnf("Workflow actor '%s': detached workflow spawn '%s' rejected by access policy on target app '%s': %v", o.actorID, target, targetAppID, err)
 				return nil
 			}
 		}
