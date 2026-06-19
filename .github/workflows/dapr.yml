@@ -617,7 +617,7 @@ jobs:
           DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
         run: |
           # Publish the `-windows-amd64` manifest.
-          # Note, the "latest" tag from the previous step already contains 
+          # Note, the "latest" tag from the previous step already contains
           # the windows images, so we don't need to publish the "latest-windows-amd64" tag.
           DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
           DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
@@ -645,7 +645,7 @@ jobs:
           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
         run: |
           # Publish the `-windows-amd64` manifest.
-          # Note, the "latest" tag from the previous step already contains 
+          # Note, the "latest" tag from the previous step already contains
           # the windows images, so we don't need to publish the "latest-windows-amd64" tag.
           DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
           DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
