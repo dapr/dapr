@@ -282,6 +282,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		return todo.RunCompletedFalse, err
 	}
 	compactPatches(rs)
+	o.stripUnmatchedResolutions(state, rs)
 
 	runtimeStatus := runtimestate.RuntimeStatus(rs)
 	log.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", o.actorID, runtimeStatus.String(), wi.InstanceID)
@@ -378,7 +379,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// Dispatch activities and messages, collecting failures.
 	activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory)
 	addResult := o.callAddEventStateMessage(ctx, addWorkflows)
-	createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows)
+	createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows, rs.GetNewEvents())
 
 	dispatchErr := errors.Join(activityResult.err, addResult.err, createResult.err)
 	if dispatchErr != nil {
@@ -556,6 +557,73 @@ func (o *orchestrator) handleRetention(ctx context.Context, status protos.Orches
 	return err
 }
 
+// stripUnmatchedResolutions removes from rs.NewEvents any task or child
+// workflow resolution event that resolves nothing: no matching TaskScheduled
+// or ChildWorkflowInstanceCreated with the same event ID exists in persisted
+// history or among this execution's new events. The app-side SDK silently
+// ignores such events, so without this they would be persisted into history
+// with no effect, where they poison dedup.IsDuplicateCompletion for a later
+// operation that legitimately reuses the same event ID (the ID sequence resets
+// on ContinueAsNew, so a straggler completion from an abandoned
+// previous-generation child collides with the current generation's
+// operations). Timer events are not stripped: stale timer firings are already
+// rejected by the generation check on the timer reminder path.
+func (o *orchestrator) stripUnmatchedResolutions(state *wfenginestate.State, rs *backend.WorkflowRuntimeState) {
+	scheduledTaskIDs := make(map[int32]struct{})
+	createdChildIDs := make(map[int32]struct{})
+	index := func(events []*backend.HistoryEvent) {
+		for _, e := range events {
+			switch {
+			case e.GetTaskScheduled() != nil:
+				scheduledTaskIDs[e.GetEventId()] = struct{}{}
+			case e.GetChildWorkflowInstanceCreated() != nil:
+				createdChildIDs[e.GetEventId()] = struct{}{}
+			}
+		}
+	}
+	index(state.History)
+	index(rs.GetNewEvents())
+
+	matched := func(e *backend.HistoryEvent) bool {
+		switch {
+		case e.GetTaskCompleted() != nil:
+			_, ok := scheduledTaskIDs[e.GetTaskCompleted().GetTaskScheduledId()]
+			return ok
+		case e.GetTaskFailed() != nil:
+			_, ok := scheduledTaskIDs[e.GetTaskFailed().GetTaskScheduledId()]
+			return ok
+		case e.GetChildWorkflowInstanceCompleted() != nil:
+			_, ok := createdChildIDs[e.GetChildWorkflowInstanceCompleted().GetTaskScheduledId()]
+			return ok
+		case e.GetChildWorkflowInstanceFailed() != nil:
+			_, ok := createdChildIDs[e.GetChildWorkflowInstanceFailed().GetTaskScheduledId()]
+			return ok
+		default:
+			return true
+		}
+	}
+
+	events := rs.GetNewEvents()
+	for _, e := range events {
+		if matched(e) {
+			continue
+		}
+
+		// At least one orphan: rebuild into a fresh backing array so callers
+		// holding the original slice are unaffected.
+		filtered := make([]*backend.HistoryEvent, 0, len(events)-1)
+		for _, ev := range events {
+			if !matched(ev) {
+				log.Warnf("Workflow actor '%s': discarding resolution event %T that matches no operation scheduled in persisted history or in this execution (stale event from a previous generation?)", o.actorID, ev.GetEventType())
+				continue
+			}
+			filtered = append(filtered, ev)
+		}
+		rs.NewEvents = filtered
+		return
+	}
+}
+
 // filterValidInboxEvents returns inbox events that pass validation. Result
 // events (TaskCompleted/TaskFailed, ChildWorkflowInstanceCompleted/Failed)
 // must match operations that were scheduled in signed history. Invalid events
@@ -611,6 +679,11 @@ func filterValidInboxEvents(state *wfenginestate.State) []*backend.HistoryEvent 
 			// Legitimate inbox event types that do not correspond to a previously
 			// scheduled operation.
 		default:
+			// DetachedWorkflowInstanceCreated is intentionally NOT in the
+			// allow-list above: it is only ever produced by the caller's own
+			// applier and persisted into the caller's history directly, so it
+			// should never appear in an inbox. If it does, treat it as
+			// injected and drop it.
 			log.Warnf("Dropping injected inbox event: unknown event type %T", et)
 			continue
 		}

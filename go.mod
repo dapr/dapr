@@ -12,7 +12,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/dapr/components-contrib v1.18.0
-	github.com/dapr/durabletask-go v0.12.1
+	github.com/dapr/durabletask-go v0.12.2-0.20260611114644-8a3fcf497ae0
 	github.com/dapr/kit v0.18.1
 	github.com/diagridio/go-etcd-cron v0.12.5
 	github.com/evanphx/json-patch/v5 v5.9.0
@@ -106,7 +106,7 @@ require (
 	codeberg.org/go-latex/latex v0.1.0 // indirect
 	codeberg.org/go-pdf/fpdf v0.10.0 // indirect
 	dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20230118042253-4f159a2b38f3 // indirect
-	filippo.io/edwards25519 v1.1.0 // indirect
+	filippo.io/edwards25519 v1.1.1 // indirect
 	git.sr.ht/~sbinet/gg v0.6.0 // indirect
 	github.com/AthenZ/athenz v1.12.13 // indirect
 	github.com/Azure/azure-sdk-for-go v68.0.0+incompatible // indirect
@@ -466,7 +466,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
-	golang.org/x/image v0.39.0 // indirect
+	golang.org/x/image v0.41.0 // indirect
 	golang.org/x/mod v0.35.0 // indirect
 	golang.org/x/term v0.43.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
