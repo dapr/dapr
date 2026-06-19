@@ -138,11 +138,11 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 // an unexpected input — guards against silent regressions in generation
 // dispatch.
 func assertNeverInput(got string) error {
-	return assertNeverErr{got: got}
+	return assertNeverInputError{got: got}
 }
 
-type assertNeverErr struct{ got string }
+type assertNeverInputError struct{ got string }
 
-func (e assertNeverErr) Error() string {
+func (e assertNeverInputError) Error() string {
 	return "Caller received unexpected input: " + e.got
 }
