@@ -86,8 +86,12 @@ func (s *subscriptions) update(ctx context.Context, sub subapi.Subscription) err
 		return nil
 	case err := <-res:
 		if err != nil {
-			log.Errorf("error adding subscription %s: %s", sub.Name, err)
-			return nil
+			// Subscriptions have no IgnoreErrors, so a materialisation failure
+			// must propagate and stop daprd rather than leave the compstore and
+			// subscriber partially updated. This matches the components
+			// reconciler, which propagates its AddPendingComponent error.
+			log.Warnf("Error adding subscription %s, daprd will exit gracefully: %s", sub.Name, err)
+			return err
 		}
 		log.Infof("Subscription updated: %s", sub.Name)
 		return nil
