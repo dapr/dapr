@@ -126,7 +126,13 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run govulncheck
-        run: GOMEMLIMIT=12GiB govulncheck -C '.' -format text --tags=unit,allcomponents,integration ./...
+        # TODO: drop `-scan package` once golang.org/x/tools ships the fix
+        # for the generic-method MethodSet panic (commit 09a1b9b382, fixing
+        # golang/go#79901 and #79600) and govulncheck@latest picks it up.
+        # Until then, symbol-level SSA scanning panics on Go 1.26's stdlib
+        # behavior change in types.MethodSet.Methods, so we fall back to
+        # package-level scanning (less precise, but doesn't traverse SSA).
+        run: GOMEMLIMIT=12GiB govulncheck -C '.' -format text -scan package --tags=unit,allcomponents,integration ./...
         shell: bash
 
   lint-slow:
