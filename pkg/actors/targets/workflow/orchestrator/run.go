@@ -379,7 +379,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// Dispatch activities and messages, collecting failures.
 	activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory)
 	addResult := o.callAddEventStateMessage(ctx, addWorkflows)
-	createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows)
+	createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows, rs.GetNewEvents())
 
 	dispatchErr := errors.Join(activityResult.err, addResult.err, createResult.err)
 	if dispatchErr != nil {
@@ -679,6 +679,11 @@ func filterValidInboxEvents(state *wfenginestate.State) []*backend.HistoryEvent 
 			// Legitimate inbox event types that do not correspond to a previously
 			// scheduled operation.
 		default:
+			// DetachedWorkflowInstanceCreated is intentionally NOT in the
+			// allow-list above: it is only ever produced by the caller's own
+			// applier and persisted into the caller's history directly, so it
+			// should never appear in an inbox. If it does, treat it as
+			// injected and drop it.
 			log.Warnf("Dropping injected inbox event: unknown event type %T", et)
 			continue
 		}
