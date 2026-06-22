@@ -531,5 +531,10 @@ replace (
 // replace github.com/dapr/kit => ../kit
 // replace github.com/dapr/durabletask-go => ../durabletask-go
 //
+// Temporary local replace for testing the relaxed job name validator.
+// Remove and bump to a released go-etcd-cron version before merging.
+replace github.com/diagridio/go-etcd-cron => github.com/joshvanl/go-etcd-cron v0.0.0-20260622170753-d3925e25788a
+
+//
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
