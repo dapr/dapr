@@ -46,9 +46,10 @@ func init() {
 // operator and diffs them against the copy daprd holds in compstore. Using the
 // --hot-reload-reconcile-interval flag the interval is shortened to 1s (the
 // default is 60s) so the reconcile is exercised deterministically, mirroring the
-// operator's --cache-sync-period test pattern. With the churn fix the stored
-// copy keeps the operator (encoded) form, so each reconcile is a no-op; without
-// it the reconcile reloads the server on every tick.
+// operator's --cache-sync-period test pattern. daprd decodes the operator's
+// secret value to plaintext on load; the fix resolves the incoming spec the same
+// way before diffing, so each reconcile of an unchanged server is a no-op.
+// Without it the reconcile reloads the server on every tick.
 type mcpserverreconcile struct {
 	daprd    *daprd.Daprd
 	operator *operator.Operator
@@ -130,7 +131,8 @@ func (m *mcpserverreconcile) Run(t *testing.T, ctx context.Context) {
 	}, 10*time.Second, 10*time.Millisecond, "backup reconcile did not run")
 
 	// Over several reconcile cycles the secret-backed server must never be
-	// reloaded: the stored operator-form copy equals what ListMCPServers returns.
+	// reloaded: resolving the incoming spec before diffing makes it equal to the
+	// stored resolved copy.
 	assert.Never(t, func() bool {
 		return m.daprdLog.Contains("Closing existing MCPServer to reload")
 	}, 10*time.Second, 100*time.Millisecond,

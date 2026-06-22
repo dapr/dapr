@@ -140,8 +140,9 @@ func (p *Processor) DeleteMCPServer(serverName string) {
 // and spec.endpoint.stdio.env using the configured secret store.
 // Unlike components, MCPServer resources load after all secret store components are initialized,
 // so secrets are available immediately.
-// ProcessResource logs errors internally and resolves what it can; it does not
-// return an error. Unresolvable secretKeyRef values remain as empty strings.
+// The underlying p.secret.ProcessResource (the secret manager) logs errors
+// internally and resolves what it can; it does not return an error. Unresolvable
+// secretKeyRef values remain as empty strings.
 //
 // The hot-reload reconciler also calls this on a copy of an incoming spec before
 // comparing it against the already-resolved stored copy, so an unchanged

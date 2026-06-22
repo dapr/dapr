@@ -43,13 +43,12 @@ func init() {
 
 // mcpserverchurn is a regression test for the 60s hot-reload churn of
 // secret-backed MCPServers. The operator resolves a secretKeyRef header into a
-// base64+JSON value; daprd decodes it to plaintext to use the connection. The
-// copy daprd keeps in compstore must remain the operator (encoded) form,
-// otherwise every reconcile diffs the locally decoded value against the
-// operator's encoded value and reloads the server. This test drives the same
-// differ.AreSame(stored, operatorForm) comparison the 60s reconcile uses by
-// re-sending an identical UPDATE event: with the fix daprd reports the update as
-// a no-op; without it daprd closes and reloads the server.
+// base64+JSON value; daprd decodes it to plaintext when loading, so the copy in
+// compstore holds the resolved value. The fix resolves the incoming spec the
+// same way before diffing, so an unchanged secret-backed server compares equal
+// instead of stored-plaintext vs incoming-encoded. This test drives that
+// comparison by re-sending an identical UPDATE event: with the fix daprd reports
+// the update as a no-op; without it daprd closes and reloads the server.
 type mcpserverchurn struct {
 	daprd    *daprd.Daprd
 	operator *operator.Operator
@@ -127,7 +126,7 @@ func (m *mcpserverchurn) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, servers, 1)
 	}, 10*time.Second, 10*time.Millisecond)
 
-	// Re-send the identical (operator-form) resource. This is the same
+	// Re-send the identical resource. This is the same
 	// comparison the periodic reconcile performs. With the fix the stored copy
 	// equals this resource and the update is a no-op.
 	m.operator.MCPServerUpdateEvent(t, ctx, &operator.MCPServerUpdateEvent{
