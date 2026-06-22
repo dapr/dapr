@@ -35,6 +35,12 @@ type (
 
 	// Runner represents a function to invoke `oper` with resiliency policies applied.
 	Runner[T any] func(oper Operation[T]) (T, error)
+
+	// ComponentContextFn decorates a context immediately before a component
+	// operation runs. Dapr uses it to attach the workload's SPIFFE identity
+	// (the X.509 and JWT SVID sources) to the context, so components can extract
+	// a credential to authenticate to their backing infrastructure service.
+	ComponentContextFn = func(context.Context) context.Context
 )
 
 type doneCh[T any] struct {
@@ -54,6 +60,23 @@ type PolicyDefinition struct {
 	addTimeoutActivatedMetric func()
 	addRetryActivatedMetric   func()
 	addCBStateChangedMetric   func()
+
+	// componentCtxFn decorates the operation context for component policies
+	// only. It is nil for all other policy kinds (service, actor, built-in).
+	componentCtxFn ComponentContextFn
+}
+
+// ComponentContext decorates ctx for this policy. For component policies (those
+// created by Resiliency.ComponentOutboundPolicy and ComponentInboundPolicy) it
+// attaches the workload's SPIFFE identity so the component can authenticate to
+// its backing infrastructure; it is a no-op for every other policy. The Runner
+// applies this automatically, so call it directly only for component operations
+// that bypass the Runner (e.g. long-lived Subscribe/Read calls).
+func (p *PolicyDefinition) ComponentContext(ctx context.Context) context.Context {
+	if p == nil || p.componentCtxFn == nil {
+		return ctx
+	}
+	return p.componentCtxFn(ctx)
 }
 
 // NewPolicyDefinition returns a PolicyDefinition object with the given parameters.
@@ -98,6 +121,11 @@ func NewRunner[T any](ctx context.Context, def *PolicyDefinition) Runner[T] {
 
 // NewRunnerWithOptions is like NewRunner but allows setting additional options
 func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opts RunnerOpts[T]) Runner[T] {
+	// For component policies this attaches the workload's SPIFFE identity to the
+	// context that every attempt (and the operation itself) derives from. It is
+	// a no-op for nil and non-component policies.
+	ctx = def.ComponentContext(ctx)
+
 	if def == nil {
 		return func(oper Operation[T]) (T, error) {
 			rRes, rErr := oper(ctx)
