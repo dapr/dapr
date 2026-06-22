@@ -144,6 +144,10 @@ func (p *Processor) DeleteMCPServer(serverName string) {
 // internally and resolves what it can; it does not return an error. Unresolvable
 // secretKeyRef values remain as empty strings.
 //
+// This does NOT resolve auth.oauth2.secretKeyRef: the OAuth2 client secret is
+// fetched at connection time by the MCP worker (see pkg/runtime/mcp/auth) and is
+// never written into the spec, so it does not take part in the hot-reload diff.
+//
 // The hot-reload reconciler also calls this on a copy of an incoming spec before
 // comparing it against the already-resolved stored copy, so an unchanged
 // secret-ref server is not needlessly reloaded while a rotated secret value
