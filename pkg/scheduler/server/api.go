@@ -169,6 +169,9 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 		}
 
 		composed := job.GetName()[strings.LastIndex(job.GetName(), "/")+1:]
+		if !strings.HasPrefix(composed, prefix) {
+			return nil, fmt.Errorf("job key %q does not match expected prefix %q from its metadata", job.GetName(), prefix)
+		}
 
 		j := job.GetJob()
 		jobs = append(jobs, &schedulerv1pb.NamedJob{
