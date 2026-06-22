@@ -81,7 +81,7 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 			return nil
 		}
 
-		p.processMCPServerSecrets(ctx, &s)
+		p.ProcessMCPServerSecrets(ctx, &s)
 
 		select {
 		case <-ctx.Done():
@@ -135,14 +135,19 @@ func (p *Processor) DeleteMCPServer(serverName string) {
 	}
 }
 
-// processMCPServerSecrets resolves secretKeyRef and envRef entries in the
+// ProcessMCPServerSecrets resolves secretKeyRef and envRef entries in the
 // transport headers (spec.endpoint.streamableHTTP.headers or spec.endpoint.sse.headers)
 // and spec.endpoint.stdio.env using the configured secret store.
 // Unlike components, MCPServer resources load after all secret store components are initialized,
 // so secrets are available immediately.
 // ProcessResource logs errors internally and resolves what it can; it does not
 // return an error. Unresolvable secretKeyRef values remain as empty strings.
-func (p *Processor) processMCPServerSecrets(ctx context.Context, s *mcpserverapi.MCPServer) {
+//
+// The hot-reload reconciler also calls this on a copy of an incoming spec before
+// comparing it against the already-resolved stored copy, so an unchanged
+// secret-ref server is not needlessly reloaded while a rotated secret value
+// still triggers a reload.
+func (p *Processor) ProcessMCPServerSecrets(ctx context.Context, s *mcpserverapi.MCPServer) {
 	// Resolve transport headers (envRef + secretKeyRef).
 	p.secret.ProcessResource(ctx, s)
 

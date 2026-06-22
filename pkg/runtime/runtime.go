@@ -302,23 +302,25 @@ func newDaprRuntime(ctx context.Context,
 	switch runtimeConfig.mode {
 	case modes.KubernetesMode:
 		reloader = hotreload.NewOperator(hotreload.OptionsReloaderOperator{
-			Namespace:      namespace,
-			Client:         operatorClient,
-			Config:         globalConfig,
-			ComponentStore: compStore,
-			Authorizer:     authz,
-			Processor:      processor,
-			Healthz:        runtimeConfig.healthz,
+			Namespace:         namespace,
+			Client:            operatorClient,
+			Config:            globalConfig,
+			ComponentStore:    compStore,
+			Authorizer:        authz,
+			Processor:         processor,
+			Healthz:           runtimeConfig.healthz,
+			ReconcileInterval: runtimeConfig.hotReloadReconcileInterval,
 		})
 	case modes.StandaloneMode:
 		reloader, err = hotreload.NewDisk(hotreload.OptionsReloaderDisk{
-			Config:         globalConfig,
-			Dirs:           runtimeConfig.standalone.ResourcesPath,
-			ComponentStore: compStore,
-			Authorizer:     authz,
-			Processor:      processor,
-			AppID:          runtimeConfig.id,
-			Healthz:        runtimeConfig.healthz,
+			Config:            globalConfig,
+			Dirs:              runtimeConfig.standalone.ResourcesPath,
+			ComponentStore:    compStore,
+			Authorizer:        authz,
+			Processor:         processor,
+			AppID:             runtimeConfig.id,
+			Healthz:           runtimeConfig.healthz,
+			ReconcileInterval: runtimeConfig.hotReloadReconcileInterval,
 		})
 		if err != nil {
 			return nil, err
