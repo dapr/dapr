@@ -100,6 +100,11 @@ type (
 		ComponentOutboundPolicy(name string, componentType ComponentType) *PolicyDefinition
 		// ComponentInboundPolicy returns the inbound policy for a component.
 		ComponentInboundPolicy(name string, componentType ComponentType) *PolicyDefinition
+		// ComponentContextDecorator returns the function that decorates the
+		// context of component operations (e.g. attaching the workload's SPIFFE
+		// identity), or nil if none is configured. Use it for component calls
+		// that bypass the policy Runner (e.g. long-lived Subscribe/Read calls).
+		ComponentContextDecorator() ComponentContextFn
 		// BuiltInPolicy are used to replace existing retries in Dapr which may not bind specifically to one of the above categories.
 		BuiltInPolicy(name BuiltInPolicyName) *PolicyDefinition
 		// PolicyDefined returns true if there's policy that applies to the target.
@@ -128,6 +133,11 @@ type (
 		apps       map[string]PolicyNames
 		actors     map[string]ActorPolicies
 		components map[string]ComponentPolicyNames
+
+		// componentCtxFn decorates the context of every component operation
+		// (outbound and inbound). Dapr wires this to attach the workload's
+		// SPIFFE identity. Nil leaves component contexts untouched.
+		componentCtxFn ComponentContextFn
 	}
 
 	// circuitBreakerInstances stores circuit breaker state for components
@@ -320,6 +330,24 @@ func New(log logger.Logger) *Resiliency {
 		actors:     make(map[string]ActorPolicies),
 		components: make(map[string]ComponentPolicyNames),
 	}
+}
+
+// SetComponentContextDecorator sets the function used to decorate the context
+// of component operations (both outbound and inbound). Dapr wires this to
+// attach the workload's SPIFFE identity so components can authenticate to their
+// backing infrastructure. It should be called once during startup, before the
+// provider is used to create runners.
+func (r *Resiliency) SetComponentContextDecorator(fn ComponentContextFn) {
+	r.componentCtxFn = fn
+}
+
+// ComponentContextDecorator returns the configured component context decorator,
+// or nil if none is set.
+func (r *Resiliency) ComponentContextDecorator() ComponentContextFn {
+	if r == nil {
+		return nil
+	}
+	return r.componentCtxFn
 }
 
 // DecodeConfiguration reads in a single resiliency configuration.
@@ -808,8 +836,9 @@ func (r *Resiliency) ActorPostLockPolicy(actorType string, id string) *PolicyDef
 // ComponentOutboundPolicy returns the outbound policy for a component.
 func (r *Resiliency) ComponentOutboundPolicy(name string, componentType ComponentType) *PolicyDefinition {
 	policyDef := &PolicyDefinition{
-		log:  r.log,
-		name: "component[" + name + "] output",
+		log:            r.log,
+		name:           "component[" + name + "] output",
+		componentCtxFn: r.componentCtxFn,
 	}
 	componentPolicies, ok := r.components[name]
 	if ok {
@@ -847,8 +876,9 @@ func (r *Resiliency) ComponentOutboundPolicy(name string, componentType Componen
 // ComponentInboundPolicy returns the inbound policy for a component.
 func (r *Resiliency) ComponentInboundPolicy(name string, componentType ComponentType) *PolicyDefinition {
 	policyDef := &PolicyDefinition{
-		log:  r.log,
-		name: "component[" + name + "] input",
+		log:            r.log,
+		name:           "component[" + name + "] input",
+		componentCtxFn: r.componentCtxFn,
 	}
 	componentPolicies, ok := r.components[name]
 	if ok {
