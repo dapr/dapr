@@ -127,6 +127,24 @@ func (j *Job) Metadata() *anypb.Any {
 	return j.meta
 }
 
+// PrefixFromMetadata returns the job key prefix (including the trailing "||"
+// delimiter) for a single stored job's metadata, without performing
+// authorization. The full job key equals this prefix concatenated with the
+// reminder/job name, so trimming this prefix from a key recovers that name.
+// This is robust even when the actor type or id themselves contain "||",
+// unlike re-splitting the key.
+func PrefixFromMetadata(meta *schedulerv1pb.JobMetadata) (string, error) {
+	switch t := meta.GetTarget(); t.GetType().(type) {
+	case *schedulerv1pb.JobTargetMetadata_Actor:
+		actor := t.GetActor()
+		return joinStrings("actorreminder", meta.GetNamespace(), actor.GetType(), actor.GetId()) + "||", nil
+	case *schedulerv1pb.JobTargetMetadata_Job:
+		return joinStrings("app", meta.GetNamespace(), meta.GetAppId()) + "||", nil
+	default:
+		return "", fmt.Errorf("unknown job type: %v", t)
+	}
+}
+
 func buildJobName(req Request) (string, error) {
 	name := req.GetName()
 	meta := req.GetMetadata()
