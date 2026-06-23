@@ -383,7 +383,7 @@ func (d *Daprd) ProfilePort() int {
 
 // Metrics Returns a subset of metrics scraped from the metrics endpoint
 func (d *Daprd) Metrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
-	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()))
+	return metrics.New(t, ctx, d.httpClient, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()))
 }
 
 func (d *Daprd) MetricResidentMemoryMi(t *testing.T, ctx context.Context) float64 {
