@@ -35,6 +35,14 @@ type options struct {
 	tags     []string
 }
 
+var buildTags = []string{
+	"allcomponents",
+	// state_spiffeprobe compiles in an integration-test-only state store that
+	// reports whether the SPIFFE identity reached the component operation
+	// context. Never set for released daprd flavors.
+	"state_spiffeprobe",
+}
+
 func BuildAll(t *testing.T) {
 	t.Helper()
 
