@@ -578,7 +578,12 @@ func (r *Resiliency) addMetricsToPolicy(policyDef *PolicyDefinition, target stri
 	if policyDef.cb != nil {
 		diag.DefaultResiliencyMonitoring.PolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, string(policyDef.cb.State()))
 		policyDef.addCBStateChangedMetric = func() {
-			diag.DefaultResiliencyMonitoring.PolicyWithStatusActivated(r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, string(policyDef.cb.State()))
+			state := string(policyDef.cb.State())
+			diag.DefaultResiliencyMonitoring.PolicyWithStatusActivated(r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, state)
+			// Update the cb_state gauge so it reflects the new state immediately,
+			// instead of staying stuck at the state snapshotted when the policy
+			// was instantiated (see issue #10113).
+			diag.DefaultResiliencyMonitoring.RecordCircuitBreakerState(r.name, r.namespace, direction, target, state)
 		}
 	}
 }
