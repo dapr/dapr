@@ -31,10 +31,6 @@ type mcpservers struct {
 	loader.Loader[mcpserverapi.MCPServer]
 }
 
-// The go linter does not yet understand that these functions are being used by
-// the generic reconciler.
-//
-//nolint:unused
 func (m *mcpservers) update(ctx context.Context, server mcpserverapi.MCPServer) {
 	if !m.auth.IsObjectAuthorized(server) {
 		log.Warnf("Received unauthorized MCPServer update, ignored: %s", server.LogName())
@@ -47,7 +43,21 @@ func (m *mcpservers) update(ctx context.Context, server mcpserverapi.MCPServer) 
 	// failing add silently; a valid update would re-call
 	// wfengine.EnsureActorsRegistered, leaking per-name workflow registrations.
 	if existing, ok := m.store.GetMCPServer(server.Name); ok {
-		if differ.AreSame(existing, server) {
+		// Resolve the incoming spec's secretKeyRef/envRef values before
+		// comparing. The stored copy was resolved when it was loaded
+		// (ProcessMCPServerSecrets), so comparing it against the raw incoming
+		// spec would always differ for a secret-ref header and reload on every
+		// reconcile tick. Comparing resolved-vs-resolved skips a genuine no-op
+		// while still reloading on a real secret rotation (same secretKeyRef, new
+		// value). Mirrors the Component reconciler (see components.go).
+		//
+		// Resolve a copy, not server itself: the raw spec must reach
+		// AddPendingMCPServer below so the processor resolves it exactly once on
+		// reload (resolving in place would have the processor decode an
+		// already-decoded value).
+		resolved := server.DeepCopy()
+		m.proc.ProcessMCPServerSecrets(ctx, resolved)
+		if differ.AreSame(existing, *resolved) {
 			log.Debugf("MCPServer update skipped: no changes detected: %s", server.LogName())
 			return
 		}
@@ -59,6 +69,9 @@ func (m *mcpservers) update(ctx context.Context, server mcpserverapi.MCPServer) 
 	m.proc.AddPendingMCPServer(ctx, server)
 }
 
+// The go linter does not understand that delete is used by the generic
+// reconciler via the manager interface.
+//
 //nolint:unused
 func (m *mcpservers) delete(ctx context.Context, server mcpserverapi.MCPServer) {
 	log.Infof("MCPServer deleted via hot-reload: %s", server.LogName())

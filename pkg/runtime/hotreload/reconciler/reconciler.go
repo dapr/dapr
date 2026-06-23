@@ -41,21 +41,36 @@ var (
 	loopFactory = loop.New[Event](16)
 )
 
+// defaultReconcileInterval is the period of the backup reconcile that lists all
+// resources and diffs them against the loaded set, catching anything the
+// event-driven watch missed. Configurable via Options.ReconcileInterval, mainly
+// so integration tests can exercise the reconcile deterministically.
+const defaultReconcileInterval = time.Second * 60
+
 type Options[T differ.Resource] struct {
-	Loader     loader.Interface
-	CompStore  *compstore.ComponentStore
-	Processor  *processor.Processor
-	Authorizer *authorizer.Authorizer
-	Healthz    healthz.Healthz
+	Loader            loader.Interface
+	CompStore         *compstore.ComponentStore
+	Processor         *processor.Processor
+	Authorizer        *authorizer.Authorizer
+	Healthz           healthz.Healthz
+	ReconcileInterval time.Duration
 }
 
 type Reconciler[T differ.Resource] struct {
-	kind    string
-	manager manager[T]
-	htarget healthz.Target
+	kind     string
+	manager  manager[T]
+	htarget  healthz.Target
+	interval time.Duration
 
 	clock clock.WithTicker
 	loop  loop.Interface[Event]
+}
+
+func reconcileIntervalOrDefault(d time.Duration) time.Duration {
+	if d <= 0 {
+		return defaultReconcileInterval
+	}
+	return d
 }
 
 type manager[T differ.Resource] interface {
@@ -66,9 +81,10 @@ type manager[T differ.Resource] interface {
 
 func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Component] {
 	r := &Reconciler[compapi.Component]{
-		kind:    compapi.Kind,
-		htarget: opts.Healthz.AddTarget("component-reconciler"),
-		clock:   clock.RealClock{},
+		kind:     compapi.Kind,
+		htarget:  opts.Healthz.AddTarget("component-reconciler"),
+		interval: opts.ReconcileInterval,
+		clock:    clock.RealClock{},
 		manager: &components{
 			Loader: opts.Loader.Components(),
 			store:  opts.CompStore,
@@ -82,9 +98,10 @@ func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Componen
 
 func NewMCPServers(opts Options[mcpserverapi.MCPServer]) *Reconciler[mcpserverapi.MCPServer] {
 	r := &Reconciler[mcpserverapi.MCPServer]{
-		kind:    mcpserverapi.Kind,
-		htarget: opts.Healthz.AddTarget("mcpserver-reconciler"),
-		clock:   clock.RealClock{},
+		kind:     mcpserverapi.Kind,
+		htarget:  opts.Healthz.AddTarget("mcpserver-reconciler"),
+		interval: opts.ReconcileInterval,
+		clock:    clock.RealClock{},
 		manager: &mcpservers{
 			Loader: opts.Loader.MCPServers(),
 			store:  opts.CompStore,
@@ -98,9 +115,10 @@ func NewMCPServers(opts Options[mcpserverapi.MCPServer]) *Reconciler[mcpserverap
 
 func NewSubscriptions(opts Options[subapi.Subscription]) *Reconciler[subapi.Subscription] {
 	r := &Reconciler[subapi.Subscription]{
-		kind:    subapi.Kind,
-		htarget: opts.Healthz.AddTarget("subscription-reconciler"),
-		clock:   clock.RealClock{},
+		kind:     subapi.Kind,
+		htarget:  opts.Healthz.AddTarget("subscription-reconciler"),
+		interval: opts.ReconcileInterval,
+		clock:    clock.RealClock{},
 		manager: &subscriptions{
 			Loader: opts.Loader.Subscriptions(),
 			store:  opts.CompStore,
@@ -136,7 +154,7 @@ func (r *Reconciler[T]) Run(ctx context.Context) error {
 }
 
 func (r *Reconciler[T]) watchTicker(ctx context.Context) error {
-	ticker := r.clock.NewTicker(time.Second * 60)
+	ticker := r.clock.NewTicker(reconcileIntervalOrDefault(r.interval))
 	defer ticker.Stop()
 
 	for {
