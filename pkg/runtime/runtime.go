@@ -243,12 +243,16 @@ func newDaprRuntime(ctx context.Context,
 	pubsubAdapterStreamer := streamer.New(ctx, streamer.Options{
 		TracingSpec: globalConfig.Spec.TracingSpec,
 	})
+	// The outbox subscribes to its internal topic and performs state operations
+	// outside the resiliency Runner, so give it the SPIFFE identity decorator
+	// directly. Mirrors what the Runner does for other component operations.
 	outbox := pubsub.NewOutbox(pubsub.OptionsOutbox{
 		Publisher:             pubsubAdapter,
 		GetPubsubFn:           compStore.GetPubSubComponent,
 		GetStateFn:            compStore.GetStateStore,
 		CloudEventExtractorFn: pubsub.ExtractCloudEventProperty,
 		Namespace:             namespace,
+		ComponentContextFn:    resiliencyProvider.ComponentContextDecorator(),
 	})
 
 	actors := actors.New(actors.Options{
