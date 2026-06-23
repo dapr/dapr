@@ -21,8 +21,6 @@ import (
 
 	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/dapr/dapr/tests/integration/framework/client"
 )
 
 type Metric struct {
@@ -34,11 +32,10 @@ type Metrics struct {
 	metrics map[string]float64
 }
 
-func New(t assert.TestingT, ctx context.Context, url string) *Metrics {
+func New(t assert.TestingT, ctx context.Context, httpclient *http.Client, url string) *Metrics {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	assert.NoError(t, err) //nolint:testifylint
 
-	httpclient := client.HTTP(t)
 	resp, err := httpclient.Do(req)
 	if !assert.NoError(t, err) { //nolint:testifylint
 		return nil
