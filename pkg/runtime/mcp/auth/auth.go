@@ -67,6 +67,16 @@ func BuildHTTPClient(
 	secrets *compstore.ComponentStore,
 	jwt security.Handler,
 ) (*http.Client, error) {
+	// Attach the workload's SPIFFE identity to the setup context so the one-shot
+	// secret-store fetch below authenticates like every other component
+	// operation (the resiliency Runner does the same for request-path calls).
+	// This is distinct from the jwtRoundTripper SPIFFE handling below: that
+	// injects a JWT into requests *to the MCP server* (transport auth), whereas
+	// this lets the secret-store component authenticate to *its own* backend.
+	if jwt != nil {
+		setupCtx = jwt.WithSVIDContext(setupCtx)
+	}
+
 	transportHeaders, authCfg := HTTPTransportConfig(server)
 
 	// Build the resolved-header map (processor has already resolved secretKeyRef/envRef).
