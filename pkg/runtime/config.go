@@ -136,6 +136,9 @@ type Config struct {
 	Healthz                       healthz.Healthz
 	WorkflowEventSink             orchestrator.EventSink
 	DisableInitEndpoints          []string
+	// HotReloadReconcileInterval overrides the hot-reload backup reconcile
+	// period. Zero uses the reconciler default (60s).
+	HotReloadReconcileInterval time.Duration
 }
 
 type internalConfig struct {
@@ -175,6 +178,7 @@ type internalConfig struct {
 	outboundHealthz              healthz.Healthz
 	workflowEventSink            orchestrator.EventSink
 	disableInitEndpoints         []string
+	hotReloadReconcileInterval   time.Duration
 }
 
 func (i internalConfig) SchedulerEnabled() bool {
@@ -373,6 +377,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		blockShutdownDuration:      c.DaprBlockShutdownDuration,
 		actorsService:              c.ActorsService,
 		actorsDisseminationTimeout: c.ActorsDisseminationTimeout,
+		hotReloadReconcileInterval: c.HotReloadReconcileInterval,
 		remindersService:           c.RemindersService,
 		schedulerAddress:           c.SchedulerAddress,
 		schedulerStreams:           c.SchedulerStreams,
