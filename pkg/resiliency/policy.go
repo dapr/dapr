@@ -72,8 +72,8 @@ type PolicyDefinition struct {
 // its backing infrastructure; it is a no-op for every other policy. The Runner
 // applies this automatically, so call it directly only for component operations
 // that bypass the Runner (e.g. long-lived Subscribe/Read calls).
-func (p *PolicyDefinition) ComponentContext(ctx context.Context) context.Context {
-	if p == nil || p.componentCtxFn == nil {
+func (p PolicyDefinition) ComponentContext(ctx context.Context) context.Context {
+	if p.componentCtxFn == nil {
 		return ctx
 	}
 	return p.componentCtxFn(ctx)
@@ -121,11 +121,6 @@ func NewRunner[T any](ctx context.Context, def *PolicyDefinition) Runner[T] {
 
 // NewRunnerWithOptions is like NewRunner but allows setting additional options
 func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opts RunnerOpts[T]) Runner[T] {
-	// For component policies this attaches the workload's SPIFFE identity to the
-	// context that every attempt (and the operation itself) derives from. It is
-	// a no-op for nil and non-component policies.
-	ctx = def.ComponentContext(ctx)
-
 	if def == nil {
 		return func(oper Operation[T]) (T, error) {
 			rRes, rErr := oper(ctx)
@@ -135,6 +130,11 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 			return rRes, rErr
 		}
 	}
+
+	// For component policies this attaches the workload's SPIFFE identity to the
+	// context that every attempt (and the operation itself) derives from. It is
+	// a no-op for non-component policies.
+	ctx = def.ComponentContext(ctx)
 
 	var zero T
 	timeoutMetricsActivated := atomic.Bool{}

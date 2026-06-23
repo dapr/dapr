@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type svidCtxKey struct{}
@@ -48,7 +49,7 @@ func TestComponentContextDecorator_AppliedForComponentPolicies(t *testing.T) {
 			seen, err := runner(func(ctx context.Context) (bool, error) {
 				return hasSVID(ctx), nil
 			})
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.True(t, seen, "component operation context should carry the SVID source")
 
 			// ComponentContext is the same decoration used directly at non-runner
@@ -76,7 +77,7 @@ func TestComponentContextDecorator_NotAppliedForNonComponentPolicies(t *testing.
 			seen, err := runner(func(ctx context.Context) (bool, error) {
 				return hasSVID(ctx), nil
 			})
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.False(t, seen, "non-component operation context must not carry the SVID source")
 			assert.False(t, hasSVID(def.ComponentContext(context.Background())))
 		})
@@ -93,11 +94,9 @@ func TestComponentContextDecorator_NoOpWhenUnset(t *testing.T) {
 	seen, err := runner(func(ctx context.Context) (bool, error) {
 		return hasSVID(ctx), nil
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, seen)
 
-	// Nil receiver and nil fn are both safe.
+	// A nil decorator fn is safe: ComponentContext returns the context unchanged.
 	assert.NotNil(t, def.ComponentContext(context.Background()))
-	var nilDef *PolicyDefinition
-	assert.NotNil(t, nilDef.ComponentContext(context.Background()))
 }
