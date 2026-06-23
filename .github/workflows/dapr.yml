@@ -255,6 +255,17 @@ jobs:
         if: matrix.target_os == 'darwin'
         run: |
           echo "DAPR_HOST_IP=127.0.0.1" >>${GITHUB_ENV}
+      # The integration suite opens a very large number of short-lived
+      # localhost connections. macOS has a small default ephemeral port range
+      # and a long TIME_WAIT, so the outbound pool is exhausted under the
+      # parallel run (surfaces as "can't assign requested address"). Widen the
+      # range and shorten TIME_WAIT as a backstop to the framework-level fixes.
+      - name: Widen ephemeral port range for MacOS
+        if: matrix.target_os == 'darwin'
+        run: |
+          sudo sysctl -w net.inet.ip.portrange.first=16384
+          sudo sysctl -w net.inet.ip.portrange.hifirst=16384
+          sudo sysctl -w net.inet.tcp.msl=1000
       - name: Run make test-integration-parallel
         run: make test-integration-parallel
   build:
