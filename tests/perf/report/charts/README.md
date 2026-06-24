@@ -195,8 +195,9 @@ Flags:
 - `-version`: output subdirectory under `charts/` (default `master`)
 - `-infra`: description of the infrastructure the run executed on, shown at
   the top of generated READMEs. CI passes the AKS node pool description from
-  `tests/test-infra/azure-aks.bicep`; set it to your own cluster spec for
-  local runs so results stay comparable.
+  `tests/test-infra/perf-infra-description.txt` (kept in sync with the node
+  pool in `tests/test-infra/azure-aks.bicep`); set it to your own cluster spec
+  for local runs so results stay comparable.
 
 Each generated per-API README starts with a "Throughput per resource" table:
 iterations/sec for each scenario alongside the app and sidecar CPU/memory it
