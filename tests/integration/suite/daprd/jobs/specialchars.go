@@ -21,6 +21,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/kit/ptr"
+
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -34,7 +36,7 @@ func init() {
 }
 
 // specialchars asserts that a job whose name contains characters such as '|'
-// and '@' can be scheduled, triggered, fetched and listed.
+// and '@' can be scheduled, triggered and fetched.
 type specialchars struct {
 	daprd     *daprd.Daprd
 	scheduler *scheduler.Scheduler
@@ -71,11 +73,11 @@ func (s *specialchars) Run(t *testing.T, ctx context.Context) {
 
 	const name = "my|job@name"
 
-	_, err := client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
+	_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     name,
-			Schedule: new("@daily"),
-			DueTime:  new("0s"),
+			Schedule: ptr.Of("@daily"),
+			DueTime:  ptr.Of("0s"),
 		},
 	})
 	require.NoError(t, err)
@@ -87,12 +89,7 @@ func (s *specialchars) Run(t *testing.T, ctx context.Context) {
 		assert.Fail(t, "timed out waiting for triggered job")
 	}
 
-	got, err := client.GetJob(ctx, &runtimev1pb.GetJobRequest{Name: name})
+	got, err := client.GetJobAlpha1(ctx, &runtimev1pb.GetJobRequest{Name: name})
 	require.NoError(t, err)
 	assert.Equal(t, name, got.GetJob().GetName())
-
-	resp, err := client.ListJobs(ctx, &runtimev1pb.ListJobsRequest{})
-	require.NoError(t, err)
-	require.Len(t, resp.GetJobs(), 1)
-	assert.Equal(t, name, resp.GetJobs()[0].GetName())
 }

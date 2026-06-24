@@ -77,7 +77,7 @@ func (s *specialchars) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 
 	r := task.NewTaskRegistry()
-	r.AddWorkflowN("SpecialChars", func(ctx *task.WorkflowContext) (any, error) {
+	r.AddOrchestratorN("SpecialChars", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, err
@@ -108,14 +108,14 @@ func (s *specialchars) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
 	t.Cleanup(cancelTaskhub)
 
-	id, err := backendClient.ScheduleNewWorkflow(ctx, "SpecialChars",
+	id, err := backendClient.ScheduleNewOrchestration(ctx, "SpecialChars",
 		api.WithInstanceID("nexus-fire-safety-api||Nexus|6671cfbe@device"),
 		api.WithInput("Dapr"),
 	)
 	require.NoError(t, err)
 
-	metadata, err := backendClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
+	metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
-	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
+	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 	assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 }

@@ -20,6 +20,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/kit/ptr"
+
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -72,10 +74,10 @@ func (i *invalidnames) Run(t *testing.T, ctx context.Context) {
 
 	for name, jobName := range badNames {
 		t.Run(name, func(t *testing.T) {
-			_, err := client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
+			_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 				Job: &runtimev1pb.Job{
 					Name:     jobName,
-					Schedule: new("@daily"),
+					Schedule: ptr.Of("@daily"),
 				},
 			})
 			require.Error(t, err)
