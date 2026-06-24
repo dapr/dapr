@@ -72,7 +72,7 @@ func (i *invalidnames) Run(t *testing.T, ctx context.Context) {
 
 	for name, jobName := range badNames {
 		t.Run(name, func(t *testing.T) {
-			_, err := client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
+			_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 				Job: &runtimev1pb.Job{
 					Name:     jobName,
 					Schedule: new("@daily"),

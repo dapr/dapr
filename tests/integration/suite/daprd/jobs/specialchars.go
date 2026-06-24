@@ -71,7 +71,7 @@ func (s *specialchars) Run(t *testing.T, ctx context.Context) {
 
 	const name = "my|job@name"
 
-	_, err := client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
+	_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     name,
 			Schedule: new("@daily"),
@@ -87,11 +87,11 @@ func (s *specialchars) Run(t *testing.T, ctx context.Context) {
 		assert.Fail(t, "timed out waiting for triggered job")
 	}
 
-	got, err := client.GetJob(ctx, &runtimev1pb.GetJobRequest{Name: name})
+	got, err := client.GetJobAlpha1(ctx, &runtimev1pb.GetJobRequest{Name: name})
 	require.NoError(t, err)
 	assert.Equal(t, name, got.GetJob().GetName())
 
-	resp, err := client.ListJobs(ctx, &runtimev1pb.ListJobsRequest{})
+	resp, err := client.ListJobsAlpha1(ctx, &runtimev1pb.ListJobsRequestAlpha1{})
 	require.NoError(t, err)
 	require.Len(t, resp.GetJobs(), 1)
 	assert.Equal(t, name, resp.GetJobs()[0].GetName())
