@@ -53,8 +53,6 @@ func NewMCPServers(opts Options[mcpserverapi.MCPServer]) *Reconciler[mcpserverap
 
 // The go linter does not yet understand that these functions are being used by
 // the generic reconciler.
-//
-//nolint:unused
 func (m *mcpservers) update(ctx context.Context, server mcpserverapi.MCPServer) error {
 	if !m.auth.IsObjectAuthorized(server) {
 		log.Warnf("Received unauthorized MCPServer update, ignored: %s", server.LogName())
