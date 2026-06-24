@@ -38,39 +38,40 @@ type Option func(*options)
 type options struct {
 	execOpts []exec.Option
 
-	appID                     string
-	namespace                 *string
-	appPort                   *int
-	grpcPort                  int
-	httpPort                  int
-	internalGRPCPort          int
-	publicPort                int
-	metricsPort               int
-	profilePort               int
-	appProtocol               string
-	appHealthCheck            bool
-	appHealthCheckPath        string
-	appHealthProbeInterval    int
-	appHealthProbeThreshold   int
-	resourceFiles             []string
-	resourceDirs              []string
-	configs                   []string
-	placementAddresses        []string
-	logLevel                  string
-	mode                      string
-	enableMTLS                bool
-	sentryAddress             string
-	sentryRequestJwtAudiences []string
-	controlPlaneAddress       string
-	disableK8sSecretStore     *bool
-	gracefulShutdownSeconds   *int
-	blockShutdownDuration     *string
-	actorsDisseminateTimeout  *time.Duration
-	controlPlaneTrustDomain   *string
-	schedulerAddresses        []string
-	disableInitEndpoints      []string
-	maxBodySize               *string
-	allowedOrigins            *string
+	appID                      string
+	namespace                  *string
+	appPort                    *int
+	grpcPort                   int
+	httpPort                   int
+	internalGRPCPort           int
+	publicPort                 int
+	metricsPort                int
+	profilePort                int
+	appProtocol                string
+	appHealthCheck             bool
+	appHealthCheckPath         string
+	appHealthProbeInterval     int
+	appHealthProbeThreshold    int
+	resourceFiles              []string
+	resourceDirs               []string
+	configs                    []string
+	placementAddresses         []string
+	logLevel                   string
+	mode                       string
+	enableMTLS                 bool
+	sentryAddress              string
+	sentryRequestJwtAudiences  []string
+	controlPlaneAddress        string
+	disableK8sSecretStore      *bool
+	gracefulShutdownSeconds    *int
+	blockShutdownDuration      *string
+	actorsDisseminateTimeout   *time.Duration
+	hotReloadReconcileInterval *time.Duration
+	controlPlaneTrustDomain    *string
+	schedulerAddresses         []string
+	disableInitEndpoints       []string
+	maxBodySize                *string
+	allowedOrigins             *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -322,6 +323,12 @@ func WithDaprBlockShutdownDuration(duration string) Option {
 func WithActorsDisseminateTimeout(timeout time.Duration) Option {
 	return func(o *options) {
 		o.actorsDisseminateTimeout = &timeout
+	}
+}
+
+func WithHotReloadReconcileInterval(interval time.Duration) Option {
+	return func(o *options) {
+		o.hotReloadReconcileInterval = &interval
 	}
 }
 
