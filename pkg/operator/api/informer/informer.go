@@ -100,8 +100,17 @@ func (i *informer[T]) Run(ctx context.Context) error {
 		return fmt.Errorf("unable to get setup %s informer: %w", zero.Kind(), err)
 	}
 
-	_, err = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj any) {
+	_, err = informer.AddEventHandler(cache.ResourceEventHandlerDetailedFuncs{
+		AddFunc: func(obj any, isInInitialList bool) {
+			// Adds emitted while the informer cache is doing its initial sync
+			// represent resources that already exist. A sidecar that connects
+			// during this window loads that state itself via its own List, so
+			// forwarding these as CREATED events is redundant and, for
+			// SIGHUP-reload resources (e.g. a foreign Configuration), causes a
+			// spurious restart. Only forward genuine post-sync creates.
+			if isInInitialList {
+				return
+			}
 			i.handleEvent(ctx, nil, obj, operatorv1.ResourceEventType_CREATED)
 		},
 		UpdateFunc: func(oldObj, newObj any) {
