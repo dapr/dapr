@@ -15,8 +15,11 @@ package main
 
 import (
 	"bufio"
+	"compress/gzip"
 	"encoding/json"
+	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -101,8 +104,10 @@ type goTestEvent struct {
 	Output  string `json:"Output,omitempty"`
 }
 
-const (
-	inputPath = "./test_report_perf.json"
+var (
+	inputPath = flag.String("input", "./test_report_perf.json", "path to the gotestsum JSON report from a perf run (plain or .gz)")
+	version   = flag.String("version", "master", "Dapr version the report belongs to, used as the charts output subdirectory")
+	infra     = flag.String("infra", "", "description of the infrastructure the perf run executed on, included in generated READMEs")
 )
 
 // Variant comparison aggregation for pubsub tests & can be expanded on in the
@@ -118,22 +123,33 @@ var pubsubComparisons = make(map[string]variantComparison)
 
 // create charts based on perf json output
 func main() {
-	// TODO: cassie update inputPath once automated & running in CI
-	f, err := os.Open(inputPath)
+	flag.Parse()
+
+	f, err := os.Open(*inputPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error opening %s: %v\n", inputPath, err)
+		fmt.Fprintf(os.Stderr, "error opening %s: %v\n", *inputPath, err)
 		os.Exit(1)
 	}
 	defer f.Close()
 
+	var input io.Reader = f
+	if strings.HasSuffix(*inputPath, ".gz") {
+		gz, gerr := gzip.NewReader(f)
+		if gerr != nil {
+			fmt.Fprintf(os.Stderr, "error reading gzip %s: %v\n", *inputPath, gerr)
+			os.Exit(1)
+		}
+		defer gz.Close()
+		input = gz
+	}
+
 	// used for local debugging of charts
 	debugEnabled = strings.TrimSpace(os.Getenv("CHARTS_DEBUG")) != ""
 	if debugEnabled {
-		debugf("reading %s", inputPath)
+		debugf("reading %s", *inputPath)
 	}
 
-	// TODO: cassie update this once automated based on release version
-	baseOutputDir := filepath.Join("charts", "v1.17.0")
+	baseOutputDir := filepath.Join("charts", *version)
 	if err = os.MkdirAll(baseOutputDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "error creating charts directory %s: %v\n", baseOutputDir, err)
 		os.Exit(1)
@@ -144,7 +160,7 @@ func main() {
 	if debugEnabled {
 		debugf("test modes: %v", testModes)
 	}
-	scanner := bufio.NewScanner(f)
+	scanner := bufio.NewScanner(input)
 	var (
 		currentTest     string
 		currentPkg      string
@@ -158,7 +174,7 @@ func main() {
 	for scanner.Scan() {
 		var ev goTestEvent
 		if err = json.Unmarshal(scanner.Bytes(), &ev); err != nil {
-			// bad line in the json — just skip it...
+			// bad line in the json, just skip it...
 			continue
 		}
 
@@ -398,6 +414,7 @@ func main() {
 			if ru != nil {
 				makeResourceCPUChart(*ru, prefix, result.outDir)
 				makeResourceMemChart(*ru, prefix, result.outDir)
+				recordEfficiency(result.outDir, result.name, agg, ru)
 			}
 		}
 	}
