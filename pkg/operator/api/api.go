@@ -86,9 +86,16 @@ type apiServer struct {
 
 // NewAPIServer returns a new API server.
 func NewAPIServer(opts Options) Server {
+	// Fall back to the (cached) client when no dedicated pod reader is provided,
+	// so the server is safe to construct without the metadata-only optimization.
+	podReader := opts.PodReader
+	if podReader == nil {
+		podReader = opts.Client
+	}
+
 	return &apiServer{
 		Client:    opts.Client,
-		podReader: opts.PodReader,
+		podReader: podReader,
 		compInformer: informer.New[componentsapi.Component](informer.Options{
 			Cache: opts.Cache,
 		}),
