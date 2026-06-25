@@ -473,7 +473,7 @@ func newDaprRuntime(ctx context.Context,
 				go func(comp compapi.Component) {
 					log.Infof("Shutting down component %s", comp.LogName())
 
-					errCh <- rt.processor.Close(comp)
+					errCh <- rt.processor.Close(context.Background(), comp)
 				}(comp)
 			}
 

@@ -29,15 +29,7 @@ func (r *Root) handleHTTPEndpoint(ev *loops.AddHTTPEndpoint) {
 }
 
 func (r *Root) handleHTTPEndpointAdded() {
-	if r.inFlight > 0 {
-		r.inFlight--
-	}
-	if r.inFlight == 0 {
-		for _, done := range r.pendingBarriers {
-			close(done)
-		}
-		r.pendingBarriers = nil
-	}
+	r.decInFlight()
 }
 
 // httpEndpointLoop returns (lazily creating) the per-name HTTPEndpoint loop.

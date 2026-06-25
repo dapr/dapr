@@ -83,7 +83,7 @@ func (p *Processor) getInProcessWorkflows() wfregistrar.Registrar {
 
 // AddPendingMCPServer enqueues an MCP server and returns a result chan.
 func (p *Processor) AddPendingMCPServer(ctx context.Context, s mcpserverapi.MCPServer) <-chan error {
-	if p.closed.Load() {
+	if p.closed.Load() || ctx.Err() != nil {
 		return nil
 	}
 	res := make(chan error, 1)

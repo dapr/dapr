@@ -586,7 +586,7 @@ func TestReporter(t *testing.T) {
 				t.Error("Timed out waiting for reporter result")
 			}
 
-			err = proc.Close(pubsubComponent)
+			err = proc.Close(t.Context(), pubsubComponent)
 			require.NoError(t, err)
 		})
 
@@ -624,7 +624,7 @@ func TestReporter(t *testing.T) {
 				t.Error("Timed out waiting for reporter result")
 			}
 
-			err = proc.Close(pubsubComponent)
+			err = proc.Close(t.Context(), pubsubComponent)
 			require.NoError(t, err)
 		})
 
@@ -656,7 +656,7 @@ func TestReporter(t *testing.T) {
 			// consume the init message
 			<-resultChan
 
-			err = proc.Close(pubsubComponent)
+			err = proc.Close(t.Context(), pubsubComponent)
 			require.NoError(t, err)
 
 			select {
@@ -698,7 +698,7 @@ func TestReporter(t *testing.T) {
 			// consume the init message
 			<-resultChan
 
-			err = proc.Close(pubsubComponent)
+			err = proc.Close(t.Context(), pubsubComponent)
 			require.Error(t, err)
 
 			select {

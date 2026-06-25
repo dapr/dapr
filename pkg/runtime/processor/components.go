@@ -24,13 +24,14 @@ import (
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/processor/loops"
+	"github.com/dapr/dapr/pkg/runtime/processor/loops/root"
 )
 
 // AddPendingComponent enqueues a component init and returns a buffered chan
 // that receives exactly one error (nil on success). Returns nil if the
 // processor is shut down.
 func (p *Processor) AddPendingComponent(ctx context.Context, comp compapi.Component) <-chan error {
-	if p.closed.Load() {
+	if p.closed.Load() || ctx.Err() != nil {
 		return nil
 	}
 	res := make(chan error, 1)
@@ -48,6 +49,9 @@ func (p *Processor) Init(ctx context.Context, comp compapi.Component) error {
 	}
 	res := p.AddPendingComponent(ctx, comp)
 	if res == nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return errors.New("processor is shut down")
 	}
 	select {
@@ -59,8 +63,10 @@ func (p *Processor) Init(ctx context.Context, comp compapi.Component) error {
 }
 
 // Close synchronously closes a component. If Process is running, the close is
-// routed through the loop; otherwise it runs inline.
-func (p *Processor) Close(comp compapi.Component) error {
+// routed through the loop; otherwise it runs inline. When routed through the
+// loop the wait honours ctx so a caller is not blocked indefinitely if the
+// loop is being torn down.
+func (p *Processor) Close(ctx context.Context, comp compapi.Component) error {
 	if !p.running.Load() {
 		return p.closeInline(comp)
 	}
@@ -69,7 +75,12 @@ func (p *Processor) Close(comp compapi.Component) error {
 	}
 	res := make(chan error, 1)
 	p.rootLoop.Loop().Enqueue(&loops.Close{Component: comp, Result: res})
-	return <-res
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-res:
+		return err
+	}
 }
 
 // initInline is the synchronous, non-loop path used by tests that drive the
@@ -90,7 +101,7 @@ func (p *Processor) initInline(ctx context.Context, comp compapi.Component) erro
 	}
 	timeout, err := time.ParseDuration(comp.Spec.InitTimeout)
 	if err != nil || timeout <= 0 {
-		timeout = 5 * time.Second
+		timeout = root.DefaultComponentInitTimeout
 	}
 	initCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

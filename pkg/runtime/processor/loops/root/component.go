@@ -24,7 +24,10 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/loops"
 )
 
-const defaultComponentInitTimeout = time.Second * 5
+// DefaultComponentInitTimeout is the init deadline applied to a component
+// whose spec does not set a valid InitTimeout. It is exported so the
+// processor's inline (test) init path applies the same default.
+const DefaultComponentInitTimeout = time.Second * 5
 
 func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 	comp := ev.Component
@@ -68,7 +71,7 @@ func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 
 	timeout, err := time.ParseDuration(comp.Spec.InitTimeout)
 	if err != nil || timeout <= 0 {
-		timeout = defaultComponentInitTimeout
+		timeout = DefaultComponentInitTimeout
 	}
 
 	// Intercept the Result so we can flush dependents on a successful secret

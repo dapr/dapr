@@ -22,7 +22,7 @@ import (
 
 // AddPendingEndpoint enqueues an HTTP endpoint and returns a result chan.
 func (p *Processor) AddPendingEndpoint(ctx context.Context, endpoint httpendpointsapi.HTTPEndpoint) <-chan error {
-	if p.closed.Load() {
+	if p.closed.Load() || ctx.Err() != nil {
 		return nil
 	}
 	res := make(chan error, 1)

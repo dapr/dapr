@@ -53,10 +53,6 @@ func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Componen
 	return r
 }
 
-// The go linter does not yet understand that these functions are being used by
-// the generic reconciler.
-//
-//nolint:unused
 func (c *components) update(ctx context.Context, comp compapi.Component) error {
 	if !c.verify(comp) {
 		return nil
@@ -85,7 +81,7 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 
 		log.Infof("Closing existing Component to reload: %s", oldComp.LogName())
 		// TODO: change close to accept pointer
-		if err := c.proc.Close(oldComp); err != nil {
+		if err := c.proc.Close(ctx, oldComp); err != nil {
 			log.Errorf("error closing old component: %s", err)
 			return nil
 		}
@@ -120,19 +116,17 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 	}
 }
 
-//nolint:unused
-func (c *components) delete(_ context.Context, comp compapi.Component) error {
+func (c *components) delete(ctx context.Context, comp compapi.Component) error {
 	if !c.verify(comp) {
 		return nil
 	}
 
-	if err := c.proc.Close(comp); err != nil {
+	if err := c.proc.Close(ctx, comp); err != nil {
 		log.Errorf("error closing deleted component: %s", err)
 	}
 	return nil
 }
 
-//nolint:unused
 func (c *components) verify(vcomp compapi.Component) bool {
 	toverify := []compapi.Component{vcomp}
 	if comp, ok := c.store.GetComponent(vcomp.Name); ok {

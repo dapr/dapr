@@ -29,15 +29,7 @@ func (r *Root) handleMCPServer(ev *loops.AddMCPServer) {
 }
 
 func (r *Root) handleMCPServerRegistered() {
-	if r.inFlight > 0 {
-		r.inFlight--
-	}
-	if r.inFlight == 0 {
-		for _, done := range r.pendingBarriers {
-			close(done)
-		}
-		r.pendingBarriers = nil
-	}
+	r.decInFlight()
 }
 
 func (r *Root) handleDeleteMCPServer(ev *loops.DeleteMCPServer) {
