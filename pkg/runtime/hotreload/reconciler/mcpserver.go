@@ -15,6 +15,9 @@ package reconciler
 
 import (
 	"context"
+	"fmt"
+
+	"k8s.io/utils/clock"
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
@@ -31,17 +34,31 @@ type mcpservers struct {
 	loader.Loader[mcpserverapi.MCPServer]
 }
 
-func (m *mcpservers) update(ctx context.Context, server mcpserverapi.MCPServer) {
+func NewMCPServers(opts Options[mcpserverapi.MCPServer]) *Reconciler[mcpserverapi.MCPServer] {
+	r := &Reconciler[mcpserverapi.MCPServer]{
+		kind:     mcpserverapi.Kind,
+		htarget:  opts.Healthz.AddTarget("mcpserver-reconciler"),
+		interval: opts.ReconcileInterval,
+		clock:    clock.RealClock{},
+		manager: &mcpservers{
+			Loader: opts.Loader.MCPServers(),
+			store:  opts.CompStore,
+			proc:   opts.Processor,
+			auth:   opts.Authorizer,
+		},
+	}
+	r.loop = loopFactory.NewLoop(r)
+	return r
+}
+
+// The go linter does not yet understand that these functions are being used by
+// the generic reconciler.
+func (m *mcpservers) update(ctx context.Context, server mcpserverapi.MCPServer) error {
 	if !m.auth.IsObjectAuthorized(server) {
 		log.Warnf("Received unauthorized MCPServer update, ignored: %s", server.LogName())
-		return
+		return nil
 	}
 
-	// Close the existing server (compstore entry + workflow refcount) before
-	// adding the new one. Without this, an update with a bad spec under
-	// IgnoreErrors=true would leave the prior server in compstore and skip the
-	// failing add silently; a valid update would re-call
-	// wfengine.EnsureActorsRegistered, leaking per-name workflow registrations.
 	if existing, ok := m.store.GetMCPServer(server.Name); ok {
 		// Resolve the incoming spec's secretKeyRef/envRef values before
 		// comparing. The stored copy was resolved when it was loaded
@@ -59,21 +76,53 @@ func (m *mcpservers) update(ctx context.Context, server mcpserverapi.MCPServer) 
 		m.proc.ProcessMCPServerSecrets(ctx, resolved)
 		if differ.AreSame(existing, *resolved) {
 			log.Debugf("MCPServer update skipped: no changes detected: %s", server.LogName())
-			return
+			return nil
 		}
+
+		// See components.update for the rationale on this guard.
+		if server.GetGeneration() > 0 && server.GetGeneration() < existing.GetGeneration() {
+			log.Warnf("Ignoring stale MCPServer event for %s (generation %d < installed %d)",
+				server.LogName(), server.GetGeneration(), existing.GetGeneration())
+			return nil
+		}
+
+		// Close the existing server (compstore entry + workflow refcount) before
+		// adding the new one. Without this, every update would re-call
+		// wfengine.EnsureActorsRegistered (bumping the refcount) and leak
+		// per-name workflow registrations.
 		log.Infof("Closing existing MCPServer to reload: %s", existing.LogName())
-		m.proc.DeleteMCPServer(existing.Name)
+		m.proc.DeleteMCPServer(ctx, existing.Name)
 	}
 
-	log.Infof("MCPServer updated via hot-reload: %s", server.LogName())
-	m.proc.AddPendingMCPServer(ctx, server)
+	log.Infof("Adding MCPServer for processing: %s", server.LogName())
+
+	res := m.proc.AddPendingMCPServer(ctx, server)
+	if res == nil {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return nil
+	case err := <-res:
+		if err == nil {
+			return nil
+		}
+		err = fmt.Errorf("process MCPServer %s error: %s", server.Name, err)
+		if server.Spec.IgnoreErrors {
+			log.Errorf("Ignoring error processing MCPServer: %s", err)
+			return nil
+		}
+		log.Warnf("Error processing MCPServer, daprd will exit gracefully: %s", err)
+		return err
+	}
 }
 
 // The go linter does not understand that delete is used by the generic
 // reconciler via the manager interface.
 //
 //nolint:unused
-func (m *mcpservers) delete(ctx context.Context, server mcpserverapi.MCPServer) {
+func (m *mcpservers) delete(ctx context.Context, server mcpserverapi.MCPServer) error {
 	log.Infof("MCPServer deleted via hot-reload: %s", server.LogName())
-	m.proc.DeleteMCPServer(server.Name)
+	m.proc.DeleteMCPServer(ctx, server.Name)
+	return nil
 }
