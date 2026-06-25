@@ -23,6 +23,8 @@ ports:
   targetPort: 50001
 
 tls:
+  # Whether to create a secret (and accompanying configmap) containing the TLS certificate and key for Sentry
+  generateBundleSecret: true
   issuer:
     certPEM: ""
     keyPEM: ""
