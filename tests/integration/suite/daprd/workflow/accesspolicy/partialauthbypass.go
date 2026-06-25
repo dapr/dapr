@@ -73,8 +73,7 @@ spec:
     - appID: partialauth-caller
     workflows:
     - name: AllowedWF
-      operations:
-      - name: schedule
+      operations: [schedule]
 `)
 
 	targetResDir := t.TempDir()

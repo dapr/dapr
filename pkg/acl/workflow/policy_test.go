@@ -54,11 +54,7 @@ func wfRule(name string, ops ...wfaclapi.WorkflowOperation) wfaclapi.WorkflowRul
 	if len(ops) == 0 {
 		ops = []wfaclapi.WorkflowOperation{opSchedule}
 	}
-	entries := make([]wfaclapi.WorkflowRuleOperation, len(ops))
-	for i, op := range ops {
-		entries[i] = wfaclapi.WorkflowRuleOperation{Name: op}
-	}
-	return wfaclapi.WorkflowRule{Name: name, Operations: entries}
+	return wfaclapi.WorkflowRule{Name: name, Operations: ops}
 }
 
 func actRule(name string) wfaclapi.ActivityRule {

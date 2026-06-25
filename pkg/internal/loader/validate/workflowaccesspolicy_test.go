@@ -34,10 +34,8 @@ func validPolicy() *wfaclapi.WorkflowAccessPolicy {
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "caller-app"}},
 					Workflows: []wfaclapi.WorkflowRule{
 						{
-							Name: "ProcessOrder",
-							Operations: []wfaclapi.WorkflowRuleOperation{
-								{Name: wfaclapi.WorkflowOperationSchedule},
-							},
+							Name:       "ProcessOrder",
+							Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule},
 						},
 					},
 				},
@@ -67,15 +65,15 @@ func TestWorkflowAccessPolicy_ValidActivityRule(t *testing.T) {
 
 func TestWorkflowAccessPolicy_AllNewWorkflowOperations(t *testing.T) {
 	p := validPolicy()
-	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowRuleOperation{
-		{Name: wfaclapi.WorkflowOperationSchedule},
-		{Name: wfaclapi.WorkflowOperationTerminate},
-		{Name: wfaclapi.WorkflowOperationRaise},
-		{Name: wfaclapi.WorkflowOperationPause},
-		{Name: wfaclapi.WorkflowOperationResume},
-		{Name: wfaclapi.WorkflowOperationPurge},
-		{Name: wfaclapi.WorkflowOperationGet},
-		{Name: wfaclapi.WorkflowOperationRerun},
+	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowOperation{
+		wfaclapi.WorkflowOperationSchedule,
+		wfaclapi.WorkflowOperationTerminate,
+		wfaclapi.WorkflowOperationRaise,
+		wfaclapi.WorkflowOperationPause,
+		wfaclapi.WorkflowOperationResume,
+		wfaclapi.WorkflowOperationPurge,
+		wfaclapi.WorkflowOperationGet,
+		wfaclapi.WorkflowOperationRerun,
 	}
 	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
 }
@@ -90,8 +88,8 @@ func TestWorkflowAccessPolicy_BothWorkflowsAndActivities(t *testing.T) {
 
 func TestWorkflowAccessPolicy_InvalidOperation(t *testing.T) {
 	p := validPolicy()
-	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowRuleOperation{
-		{Name: wfaclapi.WorkflowOperation("bogus")},
+	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowOperation{
+		wfaclapi.WorkflowOperation("bogus"),
 	}
 	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
@@ -120,7 +118,7 @@ func TestWorkflowAccessPolicy_EmptyCallers(t *testing.T) {
 
 func TestWorkflowAccessPolicy_EmptyOperations(t *testing.T) {
 	p := validPolicy()
-	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowRuleOperation{}
+	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowOperation{}
 	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }
@@ -147,8 +145,8 @@ func TestWorkflowAccessPolicy_MultipleRulesOneInvalid(t *testing.T) {
 	p.Spec.Rules = append(p.Spec.Rules, wfaclapi.WorkflowAccessPolicyRule{
 		Callers: []wfaclapi.WorkflowCaller{{AppID: "other"}},
 		Workflows: []wfaclapi.WorkflowRule{
-			{Name: "wf", Operations: []wfaclapi.WorkflowRuleOperation{
-				{Name: wfaclapi.WorkflowOperation("bad")},
+			{Name: "wf", Operations: []wfaclapi.WorkflowOperation{
+				wfaclapi.WorkflowOperation("bad"),
 			}},
 		},
 	})
@@ -230,31 +228,33 @@ func TestWorkflowAccessPolicy_RequiredEvent_EmptyName(t *testing.T) {
 	require.Error(t, err)
 }
 
-// requires on a non-schedule operation entry is rejected (the new shape's CEL guard).
+// workflow-rule requires is rejected when the rule lists any non-schedule
+// operation
 func TestWorkflowAccessPolicy_RequiresOnlyValidOnSchedule(t *testing.T) {
 	p := validPolicy()
-	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowRuleOperation{
-		{Name: wfaclapi.WorkflowOperationTerminate, Requires: []wfaclapi.RequiredEvent{{
-			EventType: wfaclapi.RequiredEventTypeActivity,
-			Status:    wfaclapi.RequiredStatusCompleted,
-			Name:      "FraudCheck",
-		}}},
+	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowOperation{
+		wfaclapi.WorkflowOperationSchedule,
+		wfaclapi.WorkflowOperationTerminate,
 	}
+	p.Spec.Rules[0].Workflows[0].Requires = []wfaclapi.RequiredEvent{{
+		EventType: wfaclapi.RequiredEventTypeActivity,
+		Status:    wfaclapi.RequiredStatusCompleted,
+		Name:      "FraudCheck",
+	}}
 	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }
 
-// requires on schedule entries is accepted; requires on non-schedule entries
-// must be absent for the policy to load.
+// workflow-rule requires is accepted when the rule's only operation is schedule.
 func TestWorkflowAccessPolicy_RequiresOnScheduleEntryAccepted(t *testing.T) {
 	p := validPolicy()
-	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowRuleOperation{
-		{Name: wfaclapi.WorkflowOperationSchedule, Requires: []wfaclapi.RequiredEvent{{
-			EventType: wfaclapi.RequiredEventTypeActivity,
-			Status:    wfaclapi.RequiredStatusCompleted,
-			Name:      "FraudCheck",
-		}}},
-		{Name: wfaclapi.WorkflowOperationTerminate},
+	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowOperation{
+		wfaclapi.WorkflowOperationSchedule,
 	}
+	p.Spec.Rules[0].Workflows[0].Requires = []wfaclapi.RequiredEvent{{
+		EventType: wfaclapi.RequiredEventTypeActivity,
+		Status:    wfaclapi.RequiredStatusCompleted,
+		Name:      "FraudCheck",
+	}}
 	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
 }

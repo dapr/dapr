@@ -148,7 +148,7 @@ spec:
 		assertNoneLoaded(t)
 	})
 
-	t.Run("requires on non-schedule operation is rejected", func(t *testing.T) {
+	t.Run("requires on a rule with a non-schedule operation is rejected", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "requires-on-terminate.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
@@ -161,11 +161,12 @@ spec:
     workflows:
     - name: TargetWF
       operations:
-      - name: terminate
-        requires:
-        - eventType: activity
-          status: Completed
-          name: X
+      - schedule
+      - terminate
+      requires:
+      - eventType: activity
+        status: Completed
+        name: X
 `), 0o600))
 		v.logs.EventuallyContains(t, `\"requires-on-terminate\" failed validation`, time.Second*20, time.Millisecond*10)
 		assertNoneLoaded(t)

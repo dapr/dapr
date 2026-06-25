@@ -190,8 +190,8 @@ func (w *workflowaccesspolicies) Run(t *testing.T, ctx context.Context) {
 				Rules: []wfaclapi.WorkflowAccessPolicyRule{{
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "some-other-app"}},
 					Workflows: []wfaclapi.WorkflowRule{
-						{Name: "*", Operations: []wfaclapi.WorkflowRuleOperation{
-							{Name: wfaclapi.WorkflowOperationSchedule},
+						{Name: "*", Operations: []wfaclapi.WorkflowOperation{
+							wfaclapi.WorkflowOperationSchedule,
 						}},
 					},
 				}},
@@ -223,8 +223,8 @@ func (w *workflowaccesspolicies) Run(t *testing.T, ctx context.Context) {
 				Rules: []wfaclapi.WorkflowAccessPolicyRule{{
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "wfacl-reload-caller"}},
 					Workflows: []wfaclapi.WorkflowRule{
-						{Name: "*", Operations: []wfaclapi.WorkflowRuleOperation{
-							{Name: wfaclapi.WorkflowOperationSchedule},
+						{Name: "*", Operations: []wfaclapi.WorkflowOperation{
+							wfaclapi.WorkflowOperationSchedule,
 						}},
 					},
 				}},

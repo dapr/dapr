@@ -71,8 +71,7 @@ spec:
     - appID: some-other-app
     workflows:
     - name: "*"
-      operations:
-      - name: schedule
+      operations: [schedule]
 `)
 
 	resDir := t.TempDir()

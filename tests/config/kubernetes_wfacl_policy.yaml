@@ -10,7 +10,6 @@ spec:
         - appID: "wfacl-caller"
       workflows:
         - name: "AllowedWorkflow"
-          operations:
-            - name: schedule
+          operations: [schedule]
       activities:
         - name: "*"

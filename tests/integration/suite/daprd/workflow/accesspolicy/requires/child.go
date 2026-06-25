@@ -95,14 +95,14 @@ spec:
     workflows:
     - name: %s
       operations:
-      - name: schedule
-        requires:
-        - eventType: workflow
-          status: Completed
-          name: preflight-wf
+      - schedule
+      requires:
+      - eventType: workflow
+        status: Completed
+        name: preflight-wf
     - name: %s
       operations:
-      - name: schedule
+      - schedule
 `, targetID, callerID, r.sensitiveChildWF, r.publicChildWF)
 
 	targetResDir := t.TempDir()

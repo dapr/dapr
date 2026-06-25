@@ -445,23 +445,28 @@ func TestEvaluate_SkipsDecodeWhenMatchingRuleHasNoRequires(t *testing.T) {
 	assert.Equal(t, DenialReasonNone, reason)
 }
 
-// Multiple schedule entries with different requires compose as OR: access
-// is allowed if any matching entry's requires is satisfied.
+// Multiple schedule rules with the same workflow name but different requires
+// compose as OR: access is allowed if any matching rule's requires is satisfied.
 func TestEvaluate_MultipleScheduleEntriesOR(t *testing.T) {
 	cp := Compile([]wfaclapi.WorkflowAccessPolicy{{Spec: wfaclapi.WorkflowAccessPolicySpec{
 		Rules: []wfaclapi.WorkflowAccessPolicyRule{{
 			Callers: []wfaclapi.WorkflowCaller{{AppID: "caller-app"}},
-			Workflows: []wfaclapi.WorkflowRule{{
-				Name: "GatedWF",
-				Operations: []wfaclapi.WorkflowRuleOperation{
-					{Name: wfaclapi.WorkflowOperationSchedule, Requires: []wfaclapi.RequiredEvent{
+			Workflows: []wfaclapi.WorkflowRule{
+				{
+					Name:       "GatedWF",
+					Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule},
+					Requires: []wfaclapi.RequiredEvent{
 						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "PathA"),
-					}},
-					{Name: wfaclapi.WorkflowOperationSchedule, Requires: []wfaclapi.RequiredEvent{
-						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "PathB"),
-					}},
+					},
 				},
-			}},
+				{
+					Name:       "GatedWF",
+					Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule},
+					Requires: []wfaclapi.RequiredEvent{
+						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "PathB"),
+					},
+				},
+			},
 		}},
 	}}})
 
@@ -484,6 +489,72 @@ func TestEvaluate_MultipleScheduleEntriesOR(t *testing.T) {
 	})
 
 	t.Run("denied when neither entry's requires is satisfied", func(t *testing.T) {
+		history := historyFromChunks(chunkFromEvents(t, "caller-app",
+			taskScheduled(1, "Unrelated"), taskCompleted(2, 1),
+		))
+		allowed, reason := cp.Evaluate("caller-app", OperationTypeWorkflow, wfaclapi.WorkflowOperationSchedule, "GatedWF", history)
+		assert.False(t, allowed)
+		assert.Equal(t, DenialReasonRequiresUnmet, reason)
+	})
+}
+
+// AND nested within OR: two rules for the same workflow compose as OR, and the
+// first rule's multi-event requires list composes as AND. Access is granted by
+// "(FraudCheck AND HumanApproval) OR VipVerified". The AND branch must be
+// fully satisfied — partially satisfying it must not grant access.
+func TestEvaluate_AndWithinOr(t *testing.T) {
+	cp := Compile([]wfaclapi.WorkflowAccessPolicy{{Spec: wfaclapi.WorkflowAccessPolicySpec{
+		Rules: []wfaclapi.WorkflowAccessPolicyRule{{
+			Callers: []wfaclapi.WorkflowCaller{{AppID: "caller-app"}},
+			Workflows: []wfaclapi.WorkflowRule{
+				{
+					Name:       "GatedWF",
+					Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule},
+					Requires: []wfaclapi.RequiredEvent{
+						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck"),
+						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "HumanApproval"),
+					},
+				},
+				{
+					Name:       "GatedWF",
+					Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule},
+					Requires: []wfaclapi.RequiredEvent{
+						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "VipVerified"),
+					},
+				},
+			},
+		}},
+	}}})
+
+	t.Run("allowed when the AND branch is fully satisfied", func(t *testing.T) {
+		history := historyFromChunks(chunkFromEvents(t, "caller-app",
+			taskScheduled(1, "FraudCheck"), taskCompleted(2, 1),
+			taskScheduled(3, "HumanApproval"), taskCompleted(4, 3),
+		))
+		allowed, reason := cp.Evaluate("caller-app", OperationTypeWorkflow, wfaclapi.WorkflowOperationSchedule, "GatedWF", history)
+		assert.True(t, allowed)
+		assert.Equal(t, DenialReasonNone, reason)
+	})
+
+	t.Run("allowed when the OR alternative is satisfied", func(t *testing.T) {
+		history := historyFromChunks(chunkFromEvents(t, "caller-app",
+			taskScheduled(1, "VipVerified"), taskCompleted(2, 1),
+		))
+		allowed, reason := cp.Evaluate("caller-app", OperationTypeWorkflow, wfaclapi.WorkflowOperationSchedule, "GatedWF", history)
+		assert.True(t, allowed)
+		assert.Equal(t, DenialReasonNone, reason)
+	})
+
+	t.Run("denied when the AND branch is only partially satisfied", func(t *testing.T) {
+		history := historyFromChunks(chunkFromEvents(t, "caller-app",
+			taskScheduled(1, "FraudCheck"), taskCompleted(2, 1),
+		))
+		allowed, reason := cp.Evaluate("caller-app", OperationTypeWorkflow, wfaclapi.WorkflowOperationSchedule, "GatedWF", history)
+		assert.False(t, allowed)
+		assert.Equal(t, DenialReasonRequiresUnmet, reason)
+	})
+
+	t.Run("denied when no branch is satisfied", func(t *testing.T) {
 		history := historyFromChunks(chunkFromEvents(t, "caller-app",
 			taskScheduled(1, "Unrelated"), taskCompleted(2, 1),
 		))

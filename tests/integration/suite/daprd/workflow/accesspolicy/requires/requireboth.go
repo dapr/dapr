@@ -95,14 +95,14 @@ spec:
     workflows:
     - name: %s
       operations:
-      - name: schedule
-        requires:
-        - eventType: activity
-          status: Completed
-          name: fraud-check
-        - eventType: activity
-          status: Completed
-          name: human-approval
+      - schedule
+      requires:
+      - eventType: activity
+        status: Completed
+        name: fraud-check
+      - eventType: activity
+        status: Completed
+        name: human-approval
 `, targetID, callerID, r.sensitiveChildWF)
 
 	targetResDir := t.TempDir()

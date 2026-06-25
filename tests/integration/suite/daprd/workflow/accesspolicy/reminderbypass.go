@@ -74,8 +74,7 @@ spec:
     - appID: legit-caller
     workflows:
     - name: "*"
-      operations:
-      - name: schedule
+      operations: [schedule]
     activities:
     - name: "*"
 `)

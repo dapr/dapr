@@ -102,8 +102,7 @@ spec:
     - appID: ""
     workflows:
     - name: "WF"
-      operations:
-      - name: schedule
+      operations: [schedule]
 `), 0o600))
 
 		v.validationLog.EventuallyContains(t, `\"empty-appid\" failed validation`, time.Second*20, time.Millisecond*10)
@@ -160,8 +159,7 @@ spec:
     - appID: "other-app"
     workflows:
     - name: "*"
-      operations:
-      - name: schedule
+      operations: [schedule]
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {

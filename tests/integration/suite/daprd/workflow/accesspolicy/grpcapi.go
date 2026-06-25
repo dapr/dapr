@@ -75,8 +75,7 @@ spec:
     - appID: grpcapi-caller
     workflows:
     - name: AllowedWF
-      operations:
-      - name: schedule
+      operations: [schedule]
 `)
 
 	resDir := t.TempDir()

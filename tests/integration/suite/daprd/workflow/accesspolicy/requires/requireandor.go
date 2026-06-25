@@ -40,13 +40,15 @@ import (
 )
 
 func init() {
-	suite.Register(new(requireeither))
+	suite.Register(new(requireandor))
 }
 
-// Two workflow rules with the same name but different `requires` blocks
-// compose as OR across rules: completing either path's prerequisites is
-// sufficient. Within each rule's `requires` list, the items still compose as AND.
-type requireeither struct {
+// requireandor exercises AND nested within OR: two workflow rules for the same
+// target workflow compose as OR, and the first rule's multi-event `requires`
+// list composes as AND. Access is granted by "(fraud-check AND human-approval)
+// OR vip-verified". A branch is satisfied only when ALL its events are present;
+// partially satisfying the AND branch must not grant access.
+type requireandor struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
 	sched  *scheduler.Scheduler
@@ -57,13 +59,13 @@ type requireeither struct {
 	targetWorkflowRuns atomic.Int64
 
 	sensitiveChildWF string
-	wfPathA          string
-	wfPathB          string
-	wfBoth           string
+	wfAndSatisfied   string
+	wfAndPartial     string
+	wfOrSatisfied    string
 	wfNeither        string
 }
 
-func (r *requireeither) Setup(t *testing.T) []framework.Option {
+func (r *requireandor) Setup(t *testing.T) []framework.Option {
 	r.sentry = sentry.New(t)
 
 	r.place = placement.New(t, placement.WithSentry(t, r.sentry))
@@ -75,18 +77,18 @@ func (r *requireeither) Setup(t *testing.T) []framework.Option {
 	ns := uuid.NewString()
 
 	r.sensitiveChildWF = "sensitive-child"
-	r.wfPathA = "wf-path-a"
-	r.wfPathB = "wf-path-b"
-	r.wfBoth = "wf-both"
+	r.wfAndSatisfied = "wf-and-satisfied"
+	r.wfAndPartial = "wf-and-partial"
+	r.wfOrSatisfied = "wf-or-satisfied"
 	r.wfNeither = "wf-neither"
 
-	// Two schedule rules for the same target workflow, gated on different
-	// prerequisite activities. Either path's completion is sufficient.
+	// "(fraud-check AND human-approval) OR vip-verified": the first rule's
+	// requires list is an AND-set; the second rule is an OR alternative.
 	policy := fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
-  name: requireeither-test
+  name: requireandor-test
 scopes:
 - %s
 spec:
@@ -101,6 +103,9 @@ spec:
       - eventType: activity
         status: Completed
         name: fraud-check
+      - eventType: activity
+        status: Completed
+        name: human-approval
     - name: %s
       operations:
       - schedule
@@ -136,7 +141,7 @@ spec:
 	}
 }
 
-func (r *requireeither) Run(t *testing.T, ctx context.Context) {
+func (r *requireandor) Run(t *testing.T, ctx context.Context) {
 	r.place.WaitUntilRunning(t, ctx)
 	r.sched.WaitUntilRunning(t, ctx)
 	r.caller.WaitUntilRunning(t, ctx)
@@ -149,70 +154,55 @@ func (r *requireeither) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, callerReg.AddActivityN("fraud-check", func(ctx task.ActivityContext) (any, error) {
 		return "fraud-ok", nil
 	}))
+	require.NoError(t, callerReg.AddActivityN("human-approval", func(ctx task.ActivityContext) (any, error) {
+		return "approved", nil
+	}))
 	require.NoError(t, callerReg.AddActivityN("vip-verified", func(ctx task.ActivityContext) (any, error) {
 		return "vip-ok", nil
 	}))
 
-	// Path A: only fraud-check completed, schedules the sensitive child WF.
-	require.NoError(t, callerReg.AddWorkflowN(r.wfPathA, func(ctx *task.WorkflowContext) (any, error) {
+	callChild := func(ctx *task.WorkflowContext) (any, error) {
+		var out string
+		if err := ctx.CallChildWorkflow(r.sensitiveChildWF,
+			task.WithChildWorkflowAppID(targetAppID),
+			task.WithHistoryPropagation(api.PropagateOwnHistory()),
+		).Await(&out); err != nil {
+			return nil, fmt.Errorf("%s failed: %w", r.sensitiveChildWF, err)
+		}
+		return out, nil
+	}
+
+	// AND branch fully satisfied: both fraud-check and human-approval completed.
+	require.NoError(t, callerReg.AddWorkflowN(r.wfAndSatisfied, func(ctx *task.WorkflowContext) (any, error) {
 		if err := ctx.CallActivity("fraud-check").Await(nil); err != nil {
 			return nil, fmt.Errorf("fraud-check failed: %w", err)
 		}
-		var out string
-		if err := ctx.CallChildWorkflow(r.sensitiveChildWF,
-			task.WithChildWorkflowAppID(targetAppID),
-			task.WithHistoryPropagation(api.PropagateOwnHistory()),
-		).Await(&out); err != nil {
-			return nil, fmt.Errorf("%s failed: %w", r.sensitiveChildWF, err)
+		if err := ctx.CallActivity("human-approval").Await(nil); err != nil {
+			return nil, fmt.Errorf("human-approval failed: %w", err)
 		}
-		return out, nil
+		return callChild(ctx)
 	}))
 
-	// Path B: only vip-verified completed.
-	require.NoError(t, callerReg.AddWorkflowN(r.wfPathB, func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.CallActivity("vip-verified").Await(nil); err != nil {
-			return nil, fmt.Errorf("vip-verified failed: %w", err)
-		}
-		var out string
-		if err := ctx.CallChildWorkflow(r.sensitiveChildWF,
-			task.WithChildWorkflowAppID(targetAppID),
-			task.WithHistoryPropagation(api.PropagateOwnHistory()),
-		).Await(&out); err != nil {
-			return nil, fmt.Errorf("%s failed: %w", r.sensitiveChildWF, err)
-		}
-		return out, nil
-	}))
-
-	// Both prereqs completed. Evaluator should short-circuit on the first
-	// matching entry; the target workflow must run exactly once.
-	require.NoError(t, callerReg.AddWorkflowN(r.wfBoth, func(ctx *task.WorkflowContext) (any, error) {
+	// AND branch only partially satisfied: fraud-check completed but not
+	// human-approval, and the OR alternative (vip-verified) is also absent.
+	require.NoError(t, callerReg.AddWorkflowN(r.wfAndPartial, func(ctx *task.WorkflowContext) (any, error) {
 		if err := ctx.CallActivity("fraud-check").Await(nil); err != nil {
 			return nil, fmt.Errorf("fraud-check failed: %w", err)
 		}
+		return callChild(ctx)
+	}))
+
+	// OR alternative satisfied: only vip-verified completed.
+	require.NoError(t, callerReg.AddWorkflowN(r.wfOrSatisfied, func(ctx *task.WorkflowContext) (any, error) {
 		if err := ctx.CallActivity("vip-verified").Await(nil); err != nil {
 			return nil, fmt.Errorf("vip-verified failed: %w", err)
 		}
-		var out string
-		if err := ctx.CallChildWorkflow(r.sensitiveChildWF,
-			task.WithChildWorkflowAppID(targetAppID),
-			task.WithHistoryPropagation(api.PropagateOwnHistory()),
-		).Await(&out); err != nil {
-			return nil, fmt.Errorf("%s failed: %w", r.sensitiveChildWF, err)
-		}
-		return out, nil
+		return callChild(ctx)
 	}))
 
-	// Neither prerequisite completed, propagated history doesn't satisfy
-	// either entry's requires.
+	// Neither branch satisfied: no prerequisite activities completed.
 	require.NoError(t, callerReg.AddWorkflowN(r.wfNeither, func(ctx *task.WorkflowContext) (any, error) {
-		var out string
-		if err := ctx.CallChildWorkflow(r.sensitiveChildWF,
-			task.WithChildWorkflowAppID(targetAppID),
-			task.WithHistoryPropagation(api.PropagateOwnHistory()),
-		).Await(&out); err != nil {
-			return nil, fmt.Errorf("%s failed: %w", r.sensitiveChildWF, err)
-		}
-		return out, nil
+		return callChild(ctx)
 	}))
 
 	require.NoError(t, targetReg.AddWorkflowN(r.sensitiveChildWF, func(ctx *task.WorkflowContext) (any, error) {
@@ -230,54 +220,55 @@ func (r *requireeither) Run(t *testing.T, ctx context.Context) {
 		assert.GreaterOrEqual(c, len(r.target.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 	}, 20*time.Second, 10*time.Millisecond)
 
-	t.Run("allowed when only path A's requires is satisfied (fraud-check completed)", func(t *testing.T) {
+	t.Run("allowed when the AND branch is fully satisfied (fraud-check + human-approval)", func(t *testing.T) {
 		before := r.targetWorkflowRuns.Load()
-		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfPathA)
+		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfAndSatisfied)
 		require.NoError(t, err)
 		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		require.True(t, api.WorkflowMetadataIsComplete(metadata))
 		assert.Nil(t, metadata.GetFailureDetails(),
-			"path A should succeed when its requires is satisfied: %v", metadata.GetFailureDetails())
+			"should succeed when both AND events are satisfied: %v", metadata.GetFailureDetails())
 		assert.Equal(t, before+1, r.targetWorkflowRuns.Load())
 	})
 
-	t.Run("allowed when only path B's requires is satisfied (vip-verified completed)", func(t *testing.T) {
+	t.Run("allowed when the OR alternative is satisfied (vip-verified)", func(t *testing.T) {
 		before := r.targetWorkflowRuns.Load()
-		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfPathB)
+		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfOrSatisfied)
 		require.NoError(t, err)
 		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		require.True(t, api.WorkflowMetadataIsComplete(metadata))
 		assert.Nil(t, metadata.GetFailureDetails(),
-			"path B should succeed when its requires is satisfied: %v", metadata.GetFailureDetails())
+			"should succeed when the OR alternative is satisfied: %v", metadata.GetFailureDetails())
 		assert.Equal(t, before+1, r.targetWorkflowRuns.Load())
 	})
 
-	t.Run("allowed when both paths' requires are satisfied; first matching entry wins", func(t *testing.T) {
+	t.Run("denied when the AND branch is only partially satisfied (fraud-check only)", func(t *testing.T) {
 		before := r.targetWorkflowRuns.Load()
-		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfBoth)
+		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfAndPartial)
 		require.NoError(t, err)
 		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		require.True(t, api.WorkflowMetadataIsComplete(metadata))
-		assert.Nil(t, metadata.GetFailureDetails(),
-			"caller should succeed when both paths' requires are satisfied: %v", metadata.GetFailureDetails())
-		assert.Equal(t, before+1, r.targetWorkflowRuns.Load(),
-			"target should run exactly once even when multiple entries match (evaluator short-circuits on first match)")
+		require.NotNil(t, metadata.GetFailureDetails(),
+			"workflow should fail when the AND branch is only partially satisfied")
+		assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(),
+			"access denied by workflow access policy")
+		assert.Equal(t, before, r.targetWorkflowRuns.Load(),
+			"sensitive child WF must NOT execute when the AND branch is incomplete")
 	})
 
-	t.Run("denied when neither path's requires is satisfied", func(t *testing.T) {
+	t.Run("denied when neither branch is satisfied", func(t *testing.T) {
 		before := r.targetWorkflowRuns.Load()
 		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfNeither)
 		require.NoError(t, err)
 		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		require.NotNil(t, metadata.GetFailureDetails(),
-			"workflow should fail when neither path's requires is satisfied")
+			"workflow should fail when neither branch is satisfied")
 		assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(),
 			"access denied by workflow access policy")
 		assert.Equal(t, before, r.targetWorkflowRuns.Load(),
-			"sensitive child WF must NOT execute on target when neither path qualifies")
+			"sensitive child WF must NOT execute when no branch qualifies")
 	})
 }

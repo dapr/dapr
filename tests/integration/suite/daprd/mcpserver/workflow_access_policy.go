@@ -118,11 +118,9 @@ spec:
     - appID: mcp-caller
     workflows:
     - name: "dapr.internal.mcp.allowed-server.*"
-      operations:
-      - name: schedule
+      operations: [schedule]
     - name: "dapr.internal.mcp.crossapp-hook-server.*"
-      operations:
-      - name: schedule
+      operations: [schedule]
 `), 0o600))
 
 	// MCPServer without middleware — deny test.
@@ -191,8 +189,7 @@ spec:
     - appID: never-matched
     workflows:
     - name: "*"
-      operations:
-      - name: schedule
+      operations: [schedule]
 `), 0o600))
 
 	w.caller = daprd.New(t,
