@@ -104,6 +104,7 @@ func (w WorkflowAccessPolicy) EmptyMetaDeepCopy() metav1.Object {
 type WorkflowAccessPolicySpec struct {
 	// Rules defines the allow-list of which callers can perform which operations.
 	// +optional
+	// +kubebuilder:validation:MaxItems=100
 	Rules []WorkflowAccessPolicyRule `json:"rules,omitempty"`
 }
 
@@ -118,14 +119,17 @@ type WorkflowAccessPolicyRule struct {
 	// listing the target app's own appID here has no effect because
 	// same-app calls are always exempt from enforcement.
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=100
 	Callers []WorkflowCaller `json:"callers"`
 
 	// Workflows are the workflow rules that the matched callers are allowed.
 	// +optional
+	// +kubebuilder:validation:MaxItems=100
 	Workflows []WorkflowRule `json:"workflows,omitempty"`
 
 	// Activities are the activity rules that the matched callers are allowed.
 	// +optional
+	// +kubebuilder:validation:MaxItems=100
 	Activities []ActivityRule `json:"activities,omitempty"`
 }
 
@@ -133,6 +137,7 @@ type WorkflowAccessPolicyRule struct {
 type WorkflowCaller struct {
 	// AppID is the Dapr app ID of the caller.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
 	AppID string `json:"appID"`
 }
 
@@ -158,14 +163,16 @@ const (
 // listing multiple workflow rules with the same Name, each with its own
 // `requires`; access is granted if any matching rule is satisfied.
 //
-// +kubebuilder:validation:XValidation:rule="!has(self.requires) || size(self.requires) == 0 || self.operations.all(o, o == 'schedule')",message="requires is only valid when the rule's only operation is 'schedule'"
+// +kubebuilder:validation:XValidation:rule="!has(self.requires) || size(self.requires) == 0 || (size(self.operations) == 1 && self.operations[0] == 'schedule')",message="requires is only valid when the rule's only operation is 'schedule'"
 type WorkflowRule struct {
 	// Name is the exact name or glob pattern for the workflow.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
 	Name string `json:"name"`
 
 	// Operations is the set of operations this rule applies to.
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
 	// +kubebuilder:validation:items:Enum=schedule;terminate;raise;pause;resume;purge;get;rerun
 	// +listType=set
 	Operations []WorkflowOperation `json:"operations"`
@@ -175,6 +182,7 @@ type WorkflowRule struct {
 	// are evaluated as a set — order is not significant. Only valid when the
 	// rule's only operation is `schedule`.
 	// +optional
+	// +kubebuilder:validation:MaxItems=20
 	Requires []RequiredEvent `json:"requires,omitempty"`
 }
 
@@ -184,12 +192,14 @@ type WorkflowRule struct {
 type ActivityRule struct {
 	// Name is the exact name or glob pattern for the activity.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
 	Name string `json:"name"`
 
 	// Requires is a list of history events that must all be present in the
 	// caller's propagated workflow history for this rule to apply. Entries
 	// are evaluated as a set — order is not significant.
 	// +optional
+	// +kubebuilder:validation:MaxItems=20
 	Requires []RequiredEvent `json:"requires,omitempty"`
 }
 
@@ -231,10 +241,12 @@ type RequiredEvent struct {
 	// Name is the activity/workflow name (eventType=activity|workflow) or
 	// the external event name (eventType=event).
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
 	Name string `json:"name"`
 
 	// AppID restricts the match to events produced by the named app.
 	// +optional
+	// +kubebuilder:validation:MaxLength=256
 	AppID *string `json:"appID,omitempty"`
 }
 

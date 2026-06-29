@@ -69,6 +69,7 @@ spec:
                           name:
                             description: Name is the exact name or glob pattern for
                               the activity.
+                            maxLength: 256
                             minLength: 1
                             type: string
                           requires:
@@ -78,19 +79,19 @@ spec:
                               are evaluated as a set — order is not significant.
                             items:
                               description: |-
-                                RequiredEvent describes a history event that must be present in
-                                the caller's propagated workflow history. eventType=event must be
-                                paired with status=Raised; eventType=activity|workflow forbids
-                                status=Raised.
-                              x-kubernetes-validations:
-                              - rule: "self.eventType == 'event' ? self.status == 'Raised' : self.status != 'Raised'"
-                                message: "eventType=event requires status=Raised; eventType=activity|workflow forbids status=Raised"
+                                RequiredEvent is a single entry in a rule's Requires list. It matches when
+                                the caller's propagated history contains an event of the given EventType
+                                and Status with the given Name. eventType=event must be paired with
+                                status=Raised; eventType=activity/workflow forbids status=Raised.
                               properties:
                                 appID:
-                                  description: AppID restricts the match to events produced by the named app.
+                                  description: AppID restricts the match to events
+                                    produced by the named app.
+                                  maxLength: 256
                                   type: string
                                 eventType:
-                                  description: EventType is the category of history event to match.
+                                  description: EventType is the category of history
+                                    event to match.
                                   enum:
                                   - activity
                                   - workflow
@@ -98,12 +99,14 @@ spec:
                                   type: string
                                 name:
                                   description: |-
-                                    Name is the activity/workflow name (eventType=activity|workflow)
-                                    or the external event name (eventType=event).
+                                    Name is the activity/workflow name (eventType=activity|workflow) or
+                                    the external event name (eventType=event).
+                                  maxLength: 256
                                   minLength: 1
                                   type: string
                                 status:
-                                  description: Status is the lifecycle phase the matched event must have.
+                                  description: Status is the lifecycle phase the matched
+                                    event must have.
                                   enum:
                                   - Started
                                   - Completed
@@ -114,23 +117,35 @@ spec:
                               - name
                               - status
                               type: object
+                              x-kubernetes-validations:
+                              - message: eventType=event requires status=Raised; eventType=activity|workflow
+                                  forbids status=Raised
+                                rule: 'self.eventType == ''event'' ? self.status ==
+                                  ''Raised'' : self.status != ''Raised'''
+                            maxItems: 20
                             type: array
                         required:
                         - name
                         type: object
+                      maxItems: 100
                       type: array
                     callers:
-                      description: Callers that this rule applies to.
+                      description: |-
+                        Callers that this rule applies to. The policy is a cross-app gate;
+                        listing the target app's own appID here has no effect because
+                        same-app calls are always exempt from enforcement.
                       items:
                         description: WorkflowCaller identifies a calling application.
                         properties:
                           appID:
                             description: AppID is the Dapr app ID of the caller.
+                            maxLength: 256
                             minLength: 1
                             type: string
                         required:
                         - appID
                         type: object
+                      maxItems: 100
                       minItems: 1
                       type: array
                     workflows:
@@ -149,6 +164,7 @@ spec:
                           name:
                             description: Name is the exact name or glob pattern for
                               the workflow.
+                            maxLength: 256
                             minLength: 1
                             type: string
                           operations:
@@ -167,6 +183,7 @@ spec:
                               - get
                               - rerun
                               type: string
+                            maxItems: 8
                             minItems: 1
                             type: array
                             x-kubernetes-list-type: set
@@ -178,19 +195,19 @@ spec:
                               rule's only operation is `schedule`.
                             items:
                               description: |-
-                                RequiredEvent describes a history event that must be present in
-                                the caller's propagated workflow history. eventType=event must be
-                                paired with status=Raised; eventType=activity|workflow forbids
-                                status=Raised.
-                              x-kubernetes-validations:
-                              - rule: "self.eventType == 'event' ? self.status == 'Raised' : self.status != 'Raised'"
-                                message: "eventType=event requires status=Raised; eventType=activity|workflow forbids status=Raised"
+                                RequiredEvent is a single entry in a rule's Requires list. It matches when
+                                the caller's propagated history contains an event of the given EventType
+                                and Status with the given Name. eventType=event must be paired with
+                                status=Raised; eventType=activity/workflow forbids status=Raised.
                               properties:
                                 appID:
-                                  description: AppID restricts the match to events produced by the named app.
+                                  description: AppID restricts the match to events
+                                    produced by the named app.
+                                  maxLength: 256
                                   type: string
                                 eventType:
-                                  description: EventType is the category of history event to match.
+                                  description: EventType is the category of history
+                                    event to match.
                                   enum:
                                   - activity
                                   - workflow
@@ -198,12 +215,14 @@ spec:
                                   type: string
                                 name:
                                   description: |-
-                                    Name is the activity/workflow name (eventType=activity|workflow)
-                                    or the external event name (eventType=event).
+                                    Name is the activity/workflow name (eventType=activity|workflow) or
+                                    the external event name (eventType=event).
+                                  maxLength: 256
                                   minLength: 1
                                   type: string
                                 status:
-                                  description: Status is the lifecycle phase the matched event must have.
+                                  description: Status is the lifecycle phase the matched
+                                    event must have.
                                   enum:
                                   - Started
                                   - Completed
@@ -214,6 +233,12 @@ spec:
                               - name
                               - status
                               type: object
+                              x-kubernetes-validations:
+                              - message: eventType=event requires status=Raised; eventType=activity|workflow
+                                  forbids status=Raised
+                                rule: 'self.eventType == ''event'' ? self.status ==
+                                  ''Raised'' : self.status != ''Raised'''
+                            maxItems: 20
                             type: array
                         required:
                         - name
@@ -222,8 +247,9 @@ spec:
                         x-kubernetes-validations:
                         - message: requires is only valid when the rule's only operation
                             is 'schedule'
-                          rule: "!has(self.requires) || size(self.requires) == 0 || self.operations.all(o,
-                            o == 'schedule')"
+                          rule: '!has(self.requires) || size(self.requires) == 0 ||
+                            (size(self.operations) == 1 && self.operations[0] == ''schedule'')'
+                      maxItems: 100
                       type: array
                   required:
                   - callers
@@ -233,6 +259,7 @@ spec:
                       a rule
                     rule: (has(self.workflows) && size(self.workflows) > 0) || (has(self.activities)
                       && size(self.activities) > 0)
+                maxItems: 100
                 type: array
             type: object
         type: object
