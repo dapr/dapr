@@ -151,10 +151,14 @@ func (f *foreignconfig) Run(t *testing.T, ctx context.Context) {
 		f.store.Add(other)
 		f.kubeapi.Informer().Add(t, other)
 
+		// The sidecar's reconciler must not even decide to reload for a
+		// configuration it does not use. Asserting on the reconciler's decision log
+		// (rather than the OS signal) keeps this meaningful across platforms, since
+		// the reload signal differs (SIGHUP on posix, a named pipe on Windows).
 		assert.Never(t, func() bool {
-			return f.logOut.Contains("Received signal 'hangup'")
+			return f.logOut.Contains("triggering SIGHUP reload")
 		}, 5*time.Second, 100*time.Millisecond,
-			"daprd SIGHUP-reloaded for a configuration belonging to another app")
+			"daprd reloaded for a configuration belonging to another app")
 	})
 
 	t.Run("the app's own configuration triggers SIGHUP", func(t *testing.T) {
@@ -166,8 +170,8 @@ func (f *foreignconfig) Run(t *testing.T, ctx context.Context) {
 		f.kubeapi.Informer().Modify(t, updated)
 
 		assert.EventuallyWithT(t, func(ct *assert.CollectT) {
-			assert.True(ct, f.logOut.Contains("Received signal 'hangup'"),
-				"daprd did not SIGHUP-reload for a change to its own configuration")
+			assert.True(ct, f.logOut.Contains("triggering SIGHUP reload"),
+				"daprd did not reload for a change to its own configuration")
 		}, 15*time.Second, 10*time.Millisecond)
 	})
 }
