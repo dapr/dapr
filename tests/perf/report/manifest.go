@@ -150,14 +150,15 @@ func generateManifest(baseOutputDir string) {
 		}
 	}
 
+	// -manifest is only set by the publish workflow, so a failure here means CI
+	// would otherwise push a missing or partial manifest while the step stays
+	// green. Fail fast instead.
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
-		log.Printf("warning: could not marshal perf manifest: %v", err)
-		return
+		log.Fatalf("could not marshal perf manifest: %v", err)
 	}
 	if err := os.WriteFile(*manifestOut, append(data, '\n'), 0o600); err != nil {
-		log.Printf("warning: could not write perf manifest %s: %v", *manifestOut, err)
-		return
+		log.Fatalf("could not write perf manifest %s: %v", *manifestOut, err)
 	}
 	log.Printf("Generated perf manifest for %s at %s\n", *version, *manifestOut)
 }
