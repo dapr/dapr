@@ -48,6 +48,27 @@ func HTTPTransportConfig(server *mcpserverapi.MCPServer) ([]commonapi.NameValueP
 	}
 }
 
+// buildOptions holds the optional knobs for BuildHTTPClient.
+type buildOptions struct {
+	// baseTransport, when non-nil, is cloned as the base transport the auth
+	// round-trippers wrap, in place of http.DefaultTransport. It lets callers
+	// supply custom dial/TLS settings (e.g. a tunnel dialer) while reusing the
+	// auth wrapping below.
+	baseTransport *http.Transport
+}
+
+// Option customizes BuildHTTPClient.
+type Option func(*buildOptions)
+
+// WithBaseTransport sets the base *http.Transport the auth round-trippers wrap.
+// A clone is taken, so the caller's transport is not mutated. When unset,
+// BuildHTTPClient clones http.DefaultTransport.
+func WithBaseTransport(t *http.Transport) Option {
+	return func(o *buildOptions) {
+		o.baseTransport = t
+	}
+}
+
 // BuildHTTPClient returns an http.Client configured with:
 //  1. Static header injection from transport headers.
 //  2. OAuth2 client credentials token injection (if auth.oauth2 is set; errors if secrets is nil).
@@ -60,13 +81,22 @@ func HTTPTransportConfig(server *mcpserverapi.MCPServer) ([]commonapi.NameValueP
 // lifecycleCtx controls background work that must outlive the connection setup,
 // specifically the OAuth2 token refresher,
 // which is invoked on every token expiry for the lifetime of the returned client.
+//
+// opts may customize the dial/TLS settings of the base transport the auth
+// round-trippers wrap (see WithBaseTransport); the default clones
+// http.DefaultTransport.
 func BuildHTTPClient(
 	setupCtx context.Context,
 	lifecycleCtx context.Context,
 	server *mcpserverapi.MCPServer,
 	secrets *compstore.ComponentStore,
 	jwt security.Handler,
+	opts ...Option,
 ) (*http.Client, error) {
+	o := buildOptions{}
+	for _, opt := range opts {
+		opt(&o)
+	}
 	// Attach the workload's SPIFFE identity to the setup context so the one-shot
 	// secret-store fetch below authenticates like every other component
 	// operation (the resiliency Runner does the same for request-path calls).
@@ -87,12 +117,18 @@ func BuildHTTPClient(
 		}
 	}
 
-	// Clone the default transport so each MCP connection gets its own dial
+	// Clone the base transport so each MCP connection gets its own dial
 	// settings and doesn't share state with other HTTP clients. The returned
 	// http.Clients set Timeout as an overall request bound; per-call contexts
 	// still control cancellation/deadlines, and the DialContext timeout on the
-	// cloned transport ensures stuck TCP connections fail fast.
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	// cloned transport ensures stuck TCP connections fail fast. The base is the
+	// caller-supplied transport (WithBaseTransport) when set — e.g. a tunnel
+	// dialer — otherwise http.DefaultTransport.
+	baseTransport := o.baseTransport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport.(*http.Transport)
+	}
+	transport := baseTransport.Clone()
 	// Bound time-to-first-byte so an unresponsive MCP server
 	// (accepts the TCP connection but never replies) can't wedge a request indefinitely.
 	// Safe for SSE: servers send response headers promptly; only the body streams long.
