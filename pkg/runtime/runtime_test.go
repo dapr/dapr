@@ -320,7 +320,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Version: "v1",
 			},
 		})
-		rt.flushOutstandingComponents(t.Context())
+		require.NoError(t, rt.flushOutstandingComponents(t.Context()))
 		assert.True(t, wasCalled)
 
 		// Make sure that the goroutine was restarted and can flush a second time
@@ -342,7 +342,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Version: "v1",
 			},
 		})
-		rt.flushOutstandingComponents(t.Context())
+		require.NoError(t, rt.flushOutstandingComponents(t.Context()))
 		assert.True(t, wasCalled)
 	})
 	t.Run("flushOutstandingComponents blocks for components with outstanding dependanices", func(t *testing.T) {
@@ -448,7 +448,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Version: "v1",
 			},
 		})
-		rt.flushOutstandingComponents(t.Context())
+		require.NoError(t, rt.flushOutstandingComponents(t.Context()))
 		assert.True(t, wasCalled)
 		assert.True(t, wasCalledChild)
 		assert.True(t, wasCalledGrandChild)
@@ -1257,6 +1257,7 @@ func TestCloseWithErrors(t *testing.T) {
 	rt.processor.AddPendingComponent(t.Context(), mockPubSubComponent)
 	rt.processor.AddPendingComponent(t.Context(), mockStateComponent)
 	rt.processor.AddPendingComponent(t.Context(), mockSecretsComponent)
+	require.NoError(t, rt.processor.Flush(t.Context()))
 
 	err = rt.runnerCloser.Close()
 	require.Error(t, err)
