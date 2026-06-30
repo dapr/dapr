@@ -51,7 +51,6 @@ type Proxy struct {
 
 	sched *scheduler.Scheduler
 
-	ports    *ports.Ports
 	port     int
 	listener net.Listener
 	grpcSrv  *grpc.Server
@@ -81,11 +80,15 @@ type armConfig struct {
 // the scheduler directly.
 func New(t *testing.T, sched *scheduler.Scheduler) *Proxy {
 	t.Helper()
-	fp := ports.Reserve(t, 1)
+	// Take the reserved listener and serve gRPC on it directly. Freeing the
+	// reserved port and re-binding it leaves a window in which another
+	// concurrently-starting process can claim the port, which caused flaky
+	// "address already in use" failures.
+	lis := ports.Reserve(t, 1).Listener(t)
 	return &Proxy{
 		sched:    sched,
-		ports:    fp,
-		port:     fp.Port(t),
+		listener: lis,
+		port:     lis.Addr().(*net.TCPAddr).Port,
 		armed:    make(map[string]armConfig),
 		done:     make(chan struct{}),
 		serveErr: make(chan error, 1),
@@ -106,16 +109,11 @@ func (p *Proxy) Run(t *testing.T, ctx context.Context) {
 		p.upstream = conn
 		p.client = schedulerv1pb.NewSchedulerClient(conn)
 
-		p.ports.Free(t)
-		lis, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(p.port))
-		require.NoError(t, err)
-		p.listener = lis
-
 		p.grpcSrv = grpc.NewServer()
 		schedulerv1pb.RegisterSchedulerServer(p.grpcSrv, p)
 
 		go func() {
-			p.serveErr <- p.grpcSrv.Serve(lis)
+			p.serveErr <- p.grpcSrv.Serve(p.listener)
 			close(p.done)
 		}()
 	})
@@ -128,15 +126,11 @@ func (p *Proxy) Cleanup(t *testing.T) {
 		if err := <-p.serveErr; err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			require.NoError(t, err)
 		}
-	} else if p.ports != nil {
-		// Run never executed (setup-time failure): the reservation made in
-		// New was never released by Run, so release it here to avoid
-		// leaking the port for the rest of the test process lifetime.
-		p.ports.Free(t)
 	}
 	if p.listener != nil {
-		// GracefulStop closes the listener, but close it again explicitly
-		// for symmetry in case the server never started serving.
+		// GracefulStop closes the listener; close it explicitly too in case the
+		// server never started serving. ports.Reserve also frees this listener
+		// on test cleanup, and that close tolerates an already-closed listener.
 		_ = p.listener.Close()
 	}
 	if p.upstream != nil {
