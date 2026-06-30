@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/tools/cache"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
@@ -53,6 +55,11 @@ type informer[T meta.Resource] struct {
 
 	idx      uint64
 	watchers map[uint64]*watcher[T]
+	// closed is set once Run is shutting down. After this point WatchUpdates
+	// refuses to register new watchers, so no watcher can be added after Run has
+	// closed the existing ones (which would leak a never-closed channel and hang
+	// the stream handler, and therefore the server's graceful shutdown).
+	closed bool
 
 	log logger.Logger
 }
@@ -78,6 +85,11 @@ func New[T meta.Resource](opts Options) Interface[T] {
 }
 
 func (i *informer[T]) Run(ctx context.Context) error {
+	// Mark shutting down and close all watchers on every exit path, so a
+	// concurrent WatchUpdates can never register a watcher that outlives Run
+	// (which would leak a never-closed channel and hang the stream handler).
+	defer i.shutdown()
+
 	var zero T
 	informer, err := i.cache.GetInformer(ctx, zero.ClientObject())
 	if err != nil {
@@ -120,14 +132,19 @@ func (i *informer[T]) Run(ctx context.Context) error {
 
 	<-ctx.Done()
 
+	return nil
+}
+
+// shutdown marks the informer as closed and closes every registered watcher's
+// channel. After this, WatchUpdates refuses to register new watchers.
+func (i *informer[T]) shutdown() {
 	i.lock.Lock()
 	defer i.lock.Unlock()
+	i.closed = true
 	for idx, w := range i.watchers {
 		delete(i.watchers, idx)
 		close(w.ch)
 	}
-
-	return nil
 }
 
 func (i *informer[T]) WatchUpdates(ctx context.Context, ns string) (<-chan *Event[T], context.CancelFunc, error) {
@@ -137,10 +154,16 @@ func (i *informer[T]) WatchUpdates(ctx context.Context, ns string) (<-chan *Even
 	}
 
 	ch := make(chan *Event[T], 10)
-	idx := i.idx
-	i.idx++
 
 	i.lock.Lock()
+	// Refuse new watchers once Run is shutting down: Run has already closed the
+	// existing watchers and will not close any registered after this point.
+	if i.closed {
+		i.lock.Unlock()
+		return nil, nil, status.New(codes.Unavailable, "operator is shutting down").Err()
+	}
+	idx := i.idx
+	i.idx++
 	i.watchers[idx] = &watcher[T]{
 		id:  id,
 		ch:  ch,
