@@ -224,6 +224,9 @@ type decodedChunk struct {
 
 // Fails closed: unmarshal failure means a tampered/corrupted chunk.
 func decodeHistoryChunks(history *protos.PropagatedHistory) ([]decodedChunk, bool) {
+	if history == nil {
+		return nil, true
+	}
 	chunks := make([]decodedChunk, 0, len(history.GetChunks()))
 	for _, chunk := range history.GetChunks() {
 		if chunk == nil {
