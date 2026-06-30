@@ -14,6 +14,7 @@ limitations under the License.
 package cache
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -66,7 +67,7 @@ func NewPodMetadataCache(podOpts PodMetadataCacheOptions) (ctrlcache.Cache, erro
 
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to add corev1 to scheme: %w", err)
 	}
 
 	opts := ctrlcache.Options{

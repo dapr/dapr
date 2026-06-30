@@ -162,20 +162,18 @@ func (f *foreignconfig) Run(t *testing.T, ctx context.Context) {
 		f.store.Add(mine)
 		f.kubeapi.Informer().Add(t, mine)
 
-		timeout := time.After(10 * time.Second)
-		for {
-			select {
-			case r := <-events:
-				require.NoError(t, r.err)
-				var got configapi.Configuration
-				require.NoError(t, json.Unmarshal(r.event.GetConfiguration(), &got))
-				if got.GetName() == "myconfig" {
-					return
-				}
-			case <-timeout:
-				assert.Fail(t, "timed out waiting for an update for the app's assigned configuration")
-				return
-			}
+		// myconfig is the only configuration assigned to the app, so it must be the
+		// only one ever streamed. Fail on any other configuration rather than
+		// skipping it, so a foreign update arriving in this window is still caught.
+		select {
+		case r := <-events:
+			require.NoError(t, r.err)
+			var got configapi.Configuration
+			require.NoError(t, json.Unmarshal(r.event.GetConfiguration(), &got))
+			assert.Equal(t, "myconfig", got.GetName(),
+				"operator streamed a configuration that is not assigned to the app")
+		case <-time.After(10 * time.Second):
+			assert.Fail(t, "timed out waiting for an update for the app's assigned configuration")
 		}
 	})
 }

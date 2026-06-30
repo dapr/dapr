@@ -346,6 +346,18 @@ func (o *operator) Start(ctx context.Context) error {
 				}
 				return errors.New("cache failed to sync")
 			}
+			// Gate readiness on the pod metadata cache too, so the operator is not
+			// reported ready (and so, in Kubernetes, not added to the Service
+			// endpoints sidecars connect through) until it can resolve a connecting
+			// sidecar's assigned configuration. This avoids a startup window where
+			// appAssignedConfiguration lists an unsynced, empty pod cache and
+			// resolves "", silently streaming no configuration updates.
+			if !o.podMetaCache.WaitForCacheSync(ctx) {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return errors.New("pod metadata cache failed to sync")
+			}
 			o.cacheHealthz.Ready()
 			<-ctx.Done()
 			return nil

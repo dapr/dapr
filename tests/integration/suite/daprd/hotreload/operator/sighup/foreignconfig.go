@@ -173,5 +173,9 @@ func (f *foreignconfig) Run(t *testing.T, ctx context.Context) {
 			assert.True(ct, f.logOut.Contains("triggering SIGHUP reload"),
 				"daprd did not reload for a change to its own configuration")
 		}, 15*time.Second, 10*time.Millisecond)
+
+		// Let the SIGHUP reload settle so teardown does not interrupt daprd
+		// mid-restart, which would fail the process's clean-exit check.
+		f.daprd.WaitUntilRunning(t, ctx)
 	})
 }

@@ -119,7 +119,7 @@ func (a *apiServer) ConfigurationUpdate(in *operatorv1pb.ConfigurationUpdateRequ
 	// Verify authorization and resolve the connecting app's identity.
 	id, err := authz.Request(ctx, in.GetNamespace())
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to authorize configuration update request: %w", err)
 	}
 
 	// Determine, server side, which configuration is assigned to the connecting
@@ -130,7 +130,7 @@ func (a *apiServer) ConfigurationUpdate(in *operatorv1pb.ConfigurationUpdateRequ
 	// cache lookup cannot back up the watcher's event channel.
 	assigned, err := a.appAssignedConfiguration(ctx, in.GetNamespace(), id.AppID())
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to resolve assigned configuration for app %s in namespace %s: %w", id.AppID(), in.GetNamespace(), err)
 	}
 	if assigned == "" {
 		log.Debugf("app %s in namespace %s has no assigned configuration; no configuration updates will be streamed", id.AppID(), in.GetNamespace())
@@ -181,16 +181,20 @@ func (a *apiServer) appAssignedConfiguration(ctx context.Context, namespace, app
 	var pods metav1.PartialObjectMetadataList
 	pods.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PodList"))
 	if err := a.podReader.List(ctx, &pods, client.InNamespace(namespace)); err != nil {
-		return "", fmt.Errorf("error listing pods to resolve configuration for app %s: %w", appID, err)
+		return "", fmt.Errorf("error listing pods: %w", err)
 	}
 
+	// Return the configuration of the first pod for this app that actually has one
+	// assigned. During a rollout multiple pods can share the app ID, and some may
+	// not (yet) carry a config annotation; skipping those avoids resolving to ""
+	// and disabling streaming when another pod does have a config assigned.
 	for i := range pods.Items {
 		pod := &pods.Items[i]
-		if !operatormeta.IsAnnotatedForDapr(pod.GetAnnotations()) {
+		if !operatormeta.IsAnnotatedForDapr(pod.GetAnnotations()) || podAppID(pod) != appID {
 			continue
 		}
-		if podAppID(pod) == appID {
-			return pod.GetAnnotations()[annotations.KeyConfig], nil
+		if config := pod.GetAnnotations()[annotations.KeyConfig]; config != "" {
+			return config, nil
 		}
 	}
 
