@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"go.opencensus.io/stats/view"
 
 	"github.com/dapr/dapr/pkg/acl"
@@ -34,6 +35,7 @@ import (
 	"github.com/dapr/dapr/pkg/config/protocol"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/logs"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
@@ -263,9 +265,26 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		globalConfig = config.LoadDefaultConfiguration()
 	}
 
+	// Expand unified observability config into per-signal configs.
+	// Must happen before per-signal env var loading so that env vars
+	// can still override the unified defaults.
+	config.ApplyObservabilitySpec(globalConfig)
+
 	err = config.SetTracingSpecFromEnv(globalConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error setting tracing spec from env: %s", err)
+	}
+
+	// Update metrics spec from OTLP environment variables
+	err = config.SetMetricsSpecFromEnv(globalConfig)
+	if err != nil {
+		return nil, fmt.Errorf("error setting metrics spec from env: %s", err)
+	}
+
+	// Update logging spec from OTLP environment variables
+	err = config.SetLoggingSpecFromEnv(globalConfig)
+	if err != nil {
+		return nil, fmt.Errorf("error setting logging spec from env: %s", err)
 	}
 
 	globalConfig.SetDefaultFeatures()
@@ -299,6 +318,75 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		err = diag.InitMetrics(meter, intc.id, namespace, metricsSpec)
 		if err != nil {
 			log.Error(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
+		}
+
+		// Initialize OTLP metrics bridge if configured
+		if metricsSpec.Otel != nil && metricsSpec.Otel.EndpointAddress != "" {
+			otlpOpts := &metrics.OTLPOptions{
+				Protocol:       metricsSpec.Otel.Protocol,
+				EndpointAddress: metricsSpec.Otel.EndpointAddress,
+				IsSecure:       metricsSpec.Otel.GetIsSecure(),
+			}
+
+			if metricsSpec.Otel.Headers != nil {
+				otlpOpts.Headers = make(map[string]string, len(metricsSpec.Otel.Headers))
+				for _, h := range metricsSpec.Otel.Headers {
+					k, v, found := strings.Cut(h, "=")
+					if found {
+						otlpOpts.Headers[k] = v
+					}
+				}
+			}
+
+			if metricsSpec.Otel.Timeout != nil {
+				otlpOpts.Timeout = *metricsSpec.Otel.Timeout
+			}
+
+			if metricsSpec.Otel.ExportInterval != nil {
+				otlpOpts.ExportInterval = *metricsSpec.Otel.ExportInterval
+			}
+
+			// Recreate the metrics exporter with OTLP options.
+			// The exporter creates the OTLP bridge during Start() from Options.OTLP.
+			cfg.Metrics.OTLP = otlpOpts
+			cfg.Metrics.AppID = intc.id
+			intc.metricsExporter = metrics.New(cfg.Metrics)
+		}
+	}
+
+	// Initialize OTLP log bridge if configured.
+	loggingSpec := globalConfig.GetLoggingSpec()
+	if loggingSpec.Otel != nil && loggingSpec.Otel.EndpointAddress != "" {
+		logOTLPOpts := &logs.OTLPOptions{
+			Protocol:       loggingSpec.Otel.Protocol,
+			EndpointAddress: loggingSpec.Otel.EndpointAddress,
+			IsSecure:       loggingSpec.Otel.GetIsSecure(),
+		}
+
+		if loggingSpec.Otel.Headers != nil {
+			logOTLPOpts.Headers = make(map[string]string, len(loggingSpec.Otel.Headers))
+			for _, h := range loggingSpec.Otel.Headers {
+				k, v, found := strings.Cut(h, "=")
+				if found {
+					logOTLPOpts.Headers[k] = v
+				}
+			}
+		}
+
+		if loggingSpec.Otel.Timeout != nil {
+			logOTLPOpts.Timeout = *loggingSpec.Otel.Timeout
+		}
+
+		logBridge, logBridgeErr := logs.NewBridge(ctx, *logOTLPOpts, intc.id)
+		if logBridgeErr != nil {
+			log.Warnf("Failed to initialize OTLP log bridge: %v", logBridgeErr)
+		} else {
+			// Install the hook on the global logrus standard logger.
+			// Dapr's dapr/kit/logger creates logrus.Logger instances that
+			// write to os.Stdout. Adding the hook as a global logrus hook
+			// means it fires for all logrus loggers in the process.
+			logrus.AddHook(logBridge.Hook())
+			log.Infof("OTLP log bridge installed: endpoint=%s", loggingSpec.Otel.EndpointAddress)
 		}
 	}
 

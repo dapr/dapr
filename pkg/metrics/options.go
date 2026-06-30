@@ -14,6 +14,8 @@ limitations under the License.
 package metrics
 
 import (
+	"time"
+
 	"go.opencensus.io/stats/view"
 
 	"github.com/dapr/dapr/pkg/healthz"
@@ -42,6 +44,28 @@ type Options struct {
 	Healthz healthz.Healthz
 	// Meter is the OpenCensus meter used to register views.
 	Meter view.Meter
+	// AppID is the application ID used for OTLP resource attributes.
+	AppID string
+	// OTLP contains options for the OTLP metrics exporter.
+	// When set, metrics are pushed via OTLP in addition to the Prometheus endpoint.
+	// The bridge is initialized during Start().
+	OTLP *OTLPOptions
+}
+
+// OTLPOptions contains options for the OTLP metrics exporter.
+type OTLPOptions struct {
+	// Protocol is the OTLP transport protocol ("grpc" or "http").
+	Protocol string
+	// EndpointAddress is the OTLP receiver endpoint (host:port).
+	EndpointAddress string
+	// IsSecure indicates whether to use TLS.
+	IsSecure bool
+	// Headers to add to the OTLP metrics export request.
+	Headers map[string]string
+	// Timeout for the OTLP metrics export request.
+	Timeout time.Duration
+	// ExportInterval is the interval between metric pushes.
+	ExportInterval time.Duration
 }
 
 type FlagOptions struct {

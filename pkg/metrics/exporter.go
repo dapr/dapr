@@ -38,7 +38,7 @@ const (
 
 // Exporter is the interface for metrics exporters.
 type Exporter interface {
-	// Start initializes metrics exporter
+	// Start initializes metrics exporter.
 	Start(context.Context) error
 }
 
@@ -50,11 +50,13 @@ type exporter struct {
 	listenAddress string
 	logger        logger.Logger
 	htarget       healthz.Target
+	otlpOpts      *OTLPOptions
+	otlpBridge    *otlpBridge
+	appID         string
 }
 
 // New creates new metrics Exporter instance with given options.
 func New(opts Options) Exporter {
-	// TODO: support multiple exporters
 	return &exporter{
 		htarget:       opts.Healthz.AddTarget("metrics-exporter"),
 		namespace:     opts.Namespace,
@@ -62,16 +64,32 @@ func New(opts Options) Exporter {
 		enabled:       opts.Enabled,
 		port:          opts.Port,
 		listenAddress: opts.ListenAddress,
+		appID:         opts.AppID,
+		otlpOpts:      opts.OTLP,
 	}
 }
 
-// Start initializes and runs the opencensus exporter.
+// Start initializes and runs the opencensus exporter (Prometheus endpoint)
+// and, if configured, the OTLP metrics bridge.
 func (e *exporter) Start(ctx context.Context) error {
 	if !e.enabled {
 		e.htarget.Ready()
 		// Block until context is cancelled.
 		<-ctx.Done()
 		return nil
+	}
+
+	// Initialize the OTLP bridge if configured.
+	// The bridge is created during Start() so it runs in the exporter's
+	// lifecycle context. OTLP options are set at construction time via Options.OTLP.
+	if e.otlpOpts != nil && e.appID != "" {
+		bridge, bridgeErr := newOTLPBridge(ctx, *e.otlpOpts, e.appID)
+		if bridgeErr != nil {
+			e.logger.Warnf("Failed to initialize OTLP metrics bridge: %v", bridgeErr)
+		} else {
+			e.otlpBridge = bridge
+			e.logger.Info("OTLP metrics bridge started")
+		}
 	}
 
 	port, err := strconv.Atoi(e.port)
@@ -121,6 +139,16 @@ func (e *exporter) Start(ctx context.Context) error {
 	case <-ctx.Done():
 	case err = <-errCh:
 		close(errCh)
+	}
+
+	// Shut down the OTLP metrics bridge before the Prometheus server.
+	// This ensures pending metrics are flushed.
+	if e.otlpBridge != nil {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if shutdownErr := e.otlpBridge.Shutdown(shutdownCtx); shutdownErr != nil {
+			e.logger.Errorf("Error shutting down OTLP metrics bridge: %v", shutdownErr)
+		}
+		shutdownCancel()
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)

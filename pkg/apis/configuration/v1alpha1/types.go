@@ -130,6 +130,8 @@ type ConfigurationSpec struct {
 	// +optional
 	LoggingSpec *LoggingSpec `json:"logging,omitempty"`
 	// +optional
+	ObservabilitySpec *ObservabilitySpec `json:"observability,omitempty"`
+	// +optional
 	WasmSpec *WasmSpec `json:"wasm,omitempty"`
 	// +optional
 	WorkflowSpec *WorkflowSpec `json:"workflow,omitempty"`
@@ -232,6 +234,44 @@ type WasmSpec struct {
 	// When this is enabled, WASM components always run in strict mode regardless of their configuration.
 	// Strict mode enhances security of the WASM sandbox by limiting access to certain capabilities such as real-time clocks and random number generators.
 	StrictSandbox bool `json:"strictSandbox,omitempty"`
+}
+
+// ObservabilitySpec defines unified observability configuration.
+// It provides a single OTLP endpoint that applies to all three signals
+// (traces, metrics, logs) with per-signal overrides.
+type ObservabilitySpec struct {
+	// Otel configures a shared OTLP endpoint for all signals.
+	// +optional
+	Otel *ObservabilityOtelSpec `json:"otel,omitempty"`
+}
+
+// ObservabilityOtelSpec defines a unified OTLP configuration
+// with a shared default and per-signal overrides.
+type ObservabilityOtelSpec struct {
+	// Shared default endpoint address (host:port) for all signals.
+	// +optional
+	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
+	// Shared default protocol. Must be "grpc" or "http".
+	// +optional
+	Protocol string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
+	// Shared default TLS setting. Defaults to true.
+	// +optional
+	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
+	// Shared default headers.
+	// +optional
+	Headers []common.NameValuePair `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// Shared default timeout.
+	// +optional
+	Timeout *metav1.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	// Per-signal override for traces.
+	// +optional
+	Traces *OtelSpec `json:"traces,omitempty" yaml:"traces,omitempty"`
+	// Per-signal override for metrics.
+	// +optional
+	Metrics *OtelMetricSpec `json:"metrics,omitempty" yaml:"metrics,omitempty"`
+	// Per-signal override for logs.
+	// +optional
+	Logs *OtelLogSpec `json:"logs,omitempty" yaml:"logs,omitempty"`
 }
 
 // APIAccessRule describes an access rule for allowing or denying a Dapr API.
@@ -365,6 +405,38 @@ type MetricSpec struct {
 	//    1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1,000, 2,000, 5,000, 10,000, 20,000, 50,000, 100,000.
 	// +optional
 	LatencyDistributionBuckets *[]int `json:"latencyDistributionBuckets,omitempty"`
+	// Otel configures native OTLP push export for metrics alongside the existing Prometheus endpoint.
+	// When set, Dapr pushes metrics to the configured OTLP endpoint using the OpenCensus-to-OpenTelemetry bridge.
+	// +optional
+	Otel *OtelMetricSpec `json:"otel,omitempty" yaml:"otel,omitempty"`
+}
+
+// OtelMetricSpec defines the configuration for OTLP metrics export.
+type OtelMetricSpec struct {
+	// Protocol is the OTLP transport protocol. Must be "grpc" or "http".
+	// +optional
+	Protocol string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
+	// EndpointAddress is the OTLP receiver endpoint (host:port).
+	// +optional
+	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
+	// IsSecure indicates whether to use TLS. Defaults to true.
+	// +optional
+	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
+	// Headers to add to the OTLP metrics export request.
+	// Each header can contain plaintext values, reference secrets, or reference environment variables.
+	// +optional
+	Headers []common.NameValuePair `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// Timeout for the OTLP metrics export request.
+	// +optional
+	Timeout *metav1.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	// ExportInterval is the interval between metric pushes. Defaults to 30s.
+	// +optional
+	ExportInterval *metav1.Duration `json:"exportInterval,omitempty" yaml:"exportInterval,omitempty"`
+}
+
+// GetIsSecure returns true if the connection should be secured.
+func (o *OtelMetricSpec) GetIsSecure() bool {
+	return o.IsSecure == nil || *o.IsSecure
 }
 
 // MetricHTTP defines configuration for metrics for the HTTP server
@@ -442,6 +514,35 @@ type LoggingSpec struct {
 	// Configure API logging.
 	// +optional
 	APILogging *APILoggingSpec `json:"apiLogging,omitempty" yaml:"apiLogging,omitempty"`
+	// Otel configures native OTLP push export for logs.
+	// When set, Dapr sidecar logs are pushed via OTLP in addition to stdout.
+	// +optional
+	Otel *OtelLogSpec `json:"otel,omitempty" yaml:"otel,omitempty"`
+}
+
+// OtelLogSpec defines the configuration for OTLP log export.
+type OtelLogSpec struct {
+	// Protocol is the OTLP transport protocol. Must be "grpc" or "http".
+	// +optional
+	Protocol string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
+	// EndpointAddress is the OTLP receiver endpoint (host:port).
+	// +optional
+	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
+	// IsSecure indicates whether to use TLS. Defaults to true.
+	// +optional
+	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
+	// Headers to add to the OTLP log export request.
+	// Each header can contain plaintext values, reference secrets, or reference environment variables.
+	// +optional
+	Headers []common.NameValuePair `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// Timeout for the OTLP log export request.
+	// +optional
+	Timeout *metav1.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+}
+
+// GetIsSecure returns true if the connection should be secured.
+func (o *OtelLogSpec) GetIsSecure() bool {
+	return o.IsSecure == nil || *o.IsSecure
 }
 
 // APILoggingSpec defines the configuration for API logging.

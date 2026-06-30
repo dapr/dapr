@@ -35,4 +35,22 @@ const (
 	OtlpExporterTimeout string = "OTEL_EXPORTER_OTLP_TIMEOUT"
 	// OpenTelemetry timeout for the traces request
 	OtlpExporterTracesTimeout string = "OTEL_EXPORTER_OTLP_TRACES_TIMEOUT"
+
+	// OpenTelemetry target URL for OTLP metrics exporter
+	OtlpExporterMetricsEndpoint string = "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"
+	// OpenTelemetry transport protocol for metrics (grpc, http/protobuf)
+	OtlpExporterMetricsProtocol string = "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL"
+	// OpenTelemetry headers to add to the metrics request
+	OtlpExporterMetricsHeaders string = "OTEL_EXPORTER_OTLP_METRICS_HEADERS"
+	// OpenTelemetry timeout for the metrics request
+	OtlpExporterMetricsTimeout string = "OTEL_EXPORTER_OTLP_METRICS_TIMEOUT"
+
+	// OpenTelemetry target URL for OTLP logs exporter
+	OtlpExporterLogsEndpoint string = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"
+	// OpenTelemetry transport protocol for logs (grpc, http/protobuf)
+	OtlpExporterLogsProtocol string = "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"
+	// OpenTelemetry headers to add to the logs request
+	OtlpExporterLogsHeaders string = "OTEL_EXPORTER_OTLP_LOGS_HEADERS"
+	// OpenTelemetry timeout for the logs request
+	OtlpExporterLogsTimeout string = "OTEL_EXPORTER_OTLP_LOGS_TIMEOUT"
 )
