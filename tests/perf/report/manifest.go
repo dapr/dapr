@@ -124,7 +124,11 @@ func generateManifest(baseOutputDir string) {
 		Infra:   *infra,
 	}
 
-	for _, api := range topLevelAPIs(baseOutputDir) {
+	apis, err := topLevelAPIs(baseOutputDir)
+	if err != nil {
+		log.Fatalf("could not list perf chart APIs in %s: %v", baseOutputDir, err)
+	}
+	for _, api := range apis {
 		title, _ := apiMeta(api)
 		pa := perfAPI{Key: api, Title: title}
 		apiDir := filepath.Join(baseOutputDir, api)
@@ -160,7 +164,7 @@ func generateManifest(baseOutputDir string) {
 	if err := os.WriteFile(*manifestOut, append(data, '\n'), 0o600); err != nil {
 		log.Fatalf("could not write perf manifest %s: %v", *manifestOut, err)
 	}
-	log.Printf("Generated perf manifest for %s at %s\n", *version, *manifestOut)
+	log.Printf("Generated perf manifest for %s at %s", *version, *manifestOut)
 }
 
 // buildSection assembles the efficiency rows and scenarios for one chart folder.
@@ -215,14 +219,21 @@ func toPerfEff(r efficiencyRow) perfEff {
 
 // topLevelAPIs returns API folders under charts/<version> that contain charts,
 // sorted by their docs weight.
-func topLevelAPIs(baseOutputDir string) []string {
+func topLevelAPIs(baseOutputDir string) ([]string, error) {
 	entries, err := os.ReadDir(baseOutputDir)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	var apis []string
 	for _, e := range entries {
-		if e.IsDir() && dirHasCharts(filepath.Join(baseOutputDir, e.Name())) {
+		if !e.IsDir() {
+			continue
+		}
+		hasCharts, err := dirHasCharts(filepath.Join(baseOutputDir, e.Name()))
+		if err != nil {
+			return nil, err
+		}
+		if hasCharts {
 			apis = append(apis, e.Name())
 		}
 	}
@@ -234,17 +245,20 @@ func topLevelAPIs(baseOutputDir string) []string {
 		}
 		return apis[i] < apis[j]
 	})
-	return apis
+	return apis, nil
 }
 
-func dirHasCharts(dir string) bool {
+func dirHasCharts(dir string) (bool, error) {
 	found := false
-	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err == nil && !d.IsDir() && strings.HasSuffix(strings.ToLower(d.Name()), ".png") {
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.HasSuffix(strings.ToLower(d.Name()), ".png") {
 			found = true
 			return filepath.SkipAll
 		}
 		return nil
 	})
-	return found
+	return found, err
 }
