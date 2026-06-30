@@ -91,7 +91,8 @@ spec:
       - eventType: event
         status: Raised
         name: approval-signal
-`, targetID, callerID, r.gatedActivity)
+        appID: %s
+`, targetID, callerID, r.gatedActivity, callerID)
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))

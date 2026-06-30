@@ -105,9 +105,11 @@ spec:
       - eventType: activity
         status: Completed
         name: fraud-check
+        appID: %s
       - eventType: activity
         status: Completed
         name: human-approval
+        appID: %s
     - name: %s
       requires:
       - eventType: activity
@@ -122,7 +124,7 @@ spec:
         appID: nonexistent-app
     - name: %s
 `, targetID, callerID,
-		r.processPayment,
+		r.processPayment, callerID, callerID,
 		r.processPaymentAppGated, callerID,
 		r.processPaymentAppMismatch,
 		r.logReceipt)

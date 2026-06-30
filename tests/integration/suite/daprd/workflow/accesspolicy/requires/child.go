@@ -100,10 +100,11 @@ spec:
       - eventType: workflow
         status: Completed
         name: preflight-wf
+        appID: %s
     - name: %s
       operations:
       - schedule
-`, targetID, callerID, r.sensitiveChildWF, r.publicChildWF)
+`, targetID, callerID, r.sensitiveChildWF, callerID, r.publicChildWF)
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))

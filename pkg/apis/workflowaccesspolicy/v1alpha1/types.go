@@ -178,9 +178,10 @@ type WorkflowRule struct {
 	Operations []WorkflowOperation `json:"operations"`
 
 	// Requires is a list of history events that must all be present in the
-	// caller's propagated workflow history for this rule to apply. Entries
-	// are evaluated as a set — order is not significant. Only valid when the
-	// rule's only operation is `schedule`.
+	// caller's propagated workflow history for this rule to apply. The order of
+	// entries is not significant, and the events are not required to have
+	// occurred in any particular order. Only valid when the rule's only
+	// operation is `schedule`.
 	// +optional
 	// +kubebuilder:validation:MaxItems=20
 	Requires []RequiredEvent `json:"requires,omitempty"`
@@ -196,8 +197,9 @@ type ActivityRule struct {
 	Name string `json:"name"`
 
 	// Requires is a list of history events that must all be present in the
-	// caller's propagated workflow history for this rule to apply. Entries
-	// are evaluated as a set — order is not significant.
+	// caller's propagated workflow history for this rule to apply. The order of
+	// entries is not significant, and the events are not required to have
+	// occurred in any particular order.
 	// +optional
 	// +kubebuilder:validation:MaxItems=20
 	Requires []RequiredEvent `json:"requires,omitempty"`
@@ -244,10 +246,11 @@ type RequiredEvent struct {
 	// +kubebuilder:validation:MaxLength=256
 	Name string `json:"name"`
 
-	// AppID restricts the match to events produced by the named app.
-	// +optional
+	// AppID is the app ID that must have produced the matched event. An event
+	// only matches when it came from this app's propagated history.
+	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
-	AppID *string `json:"appID,omitempty"`
+	AppID string `json:"appID"`
 }
 
 // +kubebuilder:object:root=true

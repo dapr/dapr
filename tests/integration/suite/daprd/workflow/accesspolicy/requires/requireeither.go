@@ -101,6 +101,7 @@ spec:
       - eventType: activity
         status: Completed
         name: fraud-check
+        appID: %s
     - name: %s
       operations:
       - schedule
@@ -108,7 +109,8 @@ spec:
       - eventType: activity
         status: Completed
         name: vip-verified
-`, targetID, callerID, r.sensitiveChildWF, r.sensitiveChildWF)
+        appID: %s
+`, targetID, callerID, r.sensitiveChildWF, callerID, r.sensitiveChildWF, callerID)
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))

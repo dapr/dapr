@@ -113,7 +113,8 @@ spec:
 			policyYAML("event-with-started",
 				`      - eventType: event
         status: Started
-        name: X`), 0o600))
+        name: X
+        appID: caller`), 0o600))
 		v.logs.EventuallyContains(t, `\"event-with-started\" failed validation`, time.Second*20, time.Millisecond*10)
 		assertNoneLoaded(t)
 	})
@@ -123,7 +124,8 @@ spec:
 			policyYAML("event-with-completed",
 				`      - eventType: event
         status: Completed
-        name: X`), 0o600))
+        name: X
+        appID: caller`), 0o600))
 		v.logs.EventuallyContains(t, `\"event-with-completed\" failed validation`, time.Second*20, time.Millisecond*10)
 		assertNoneLoaded(t)
 	})
@@ -133,7 +135,8 @@ spec:
 			policyYAML("activity-with-raised",
 				`      - eventType: activity
         status: Raised
-        name: X`), 0o600))
+        name: X
+        appID: caller`), 0o600))
 		v.logs.EventuallyContains(t, `\"activity-with-raised\" failed validation`, time.Second*20, time.Millisecond*10)
 		assertNoneLoaded(t)
 	})
@@ -143,7 +146,8 @@ spec:
 			policyYAML("workflow-with-raised",
 				`      - eventType: workflow
         status: Raised
-        name: X`), 0o600))
+        name: X
+        appID: caller`), 0o600))
 		v.logs.EventuallyContains(t, `\"workflow-with-raised\" failed validation`, time.Second*20, time.Millisecond*10)
 		assertNoneLoaded(t)
 	})
@@ -167,6 +171,7 @@ spec:
       - eventType: activity
         status: Completed
         name: X
+        appID: caller
 `), 0o600))
 		v.logs.EventuallyContains(t, `\"requires-on-terminate\" failed validation`, time.Second*20, time.Millisecond*10)
 		assertNoneLoaded(t)
@@ -181,12 +186,15 @@ spec:
 				`      - eventType: activity
         status: Completed
         name: X
+        appID: caller
       - eventType: workflow
         status: Started
         name: Y
+        appID: caller
       - eventType: event
         status: Raised
-        name: Z`), 0o600))
+        name: Z
+        appID: caller`), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			policies := v.daprd.GetMetadata(t, ctx).WorkflowAccessPolicies

@@ -22,7 +22,6 @@ import (
 
 	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/durabletask-go/api/protos"
-	"github.com/dapr/kit/ptr"
 )
 
 func marshalEvent(t *testing.T, e *protos.HistoryEvent) []byte {
@@ -106,14 +105,8 @@ func eventRaised(eventID int32, name string) *protos.HistoryEvent {
 	}
 }
 
-func req(eventType wfaclapi.RequiredEventType, status wfaclapi.RequiredStatus, name string) wfaclapi.RequiredEvent {
-	return wfaclapi.RequiredEvent{EventType: eventType, Status: status, Name: name}
-}
-
-func reqWithAppID(eventType wfaclapi.RequiredEventType, status wfaclapi.RequiredStatus, name, appID string) wfaclapi.RequiredEvent {
-	r := req(eventType, status, name)
-	r.AppID = ptr.Of(appID)
-	return r
+func req(eventType wfaclapi.RequiredEventType, status wfaclapi.RequiredStatus, name, appID string) wfaclapi.RequiredEvent {
+	return wfaclapi.RequiredEvent{EventType: eventType, Status: status, Name: name, AppID: appID}
 }
 
 func TestRequiresMatchChunks_EmptyRequiresAlwaysTrue(t *testing.T) {
@@ -123,7 +116,7 @@ func TestRequiresMatchChunks_EmptyRequiresAlwaysTrue(t *testing.T) {
 
 func TestRequiresMatchChunks_NoChunksDenies(t *testing.T) {
 	requires := []wfaclapi.RequiredEvent{
-		req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "A"),
+		req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "A", "app-a"),
 	}
 	assert.False(t, requiresMatchChunks(requires, nil))
 	assert.False(t, requiresMatchChunks(requires, []decodedChunk{}))
@@ -136,14 +129,14 @@ func TestRequiresMatchChunks_ActivityStarted(t *testing.T) {
 
 	t.Run("matches when scheduled", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusStarted, "FraudCheck"),
+			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusStarted, "FraudCheck", "app-a"),
 		}
 		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
 
 	t.Run("denies when name differs", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusStarted, "OtherActivity"),
+			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusStarted, "OtherActivity", "app-a"),
 		}
 		assert.False(t, requiresMatchChunks(requires, chunks))
 	})
@@ -159,7 +152,7 @@ func TestRequiresMatchChunks_ActivityCompleted(t *testing.T) {
 
 	t.Run("matches when scheduled+completed paired", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck"),
+			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck", "app-a"),
 		}
 		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
@@ -169,14 +162,14 @@ func TestRequiresMatchChunks_ActivityCompleted(t *testing.T) {
 			chunkFromEvents(t, "app-a", taskScheduled(5, "FraudCheck")),
 		))
 		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck"),
+			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck", "app-a"),
 		}
 		assert.False(t, requiresMatchChunks(requires, onlyScheduled))
 	})
 
 	t.Run("denies when completion's TaskScheduledId resolves to a different name", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "Other"),
+			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "Other", "app-a"),
 		}
 		assert.False(t, requiresMatchChunks(requires, chunks))
 	})
@@ -188,7 +181,7 @@ func TestRequiresMatchChunks_WorkflowStarted(t *testing.T) {
 			chunkFromEvents(t, "app-a", executionStarted(0, "OrderWF")),
 		))
 		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusStarted, "OrderWF"),
+			req(wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusStarted, "OrderWF", "app-a"),
 		}
 		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
@@ -198,7 +191,7 @@ func TestRequiresMatchChunks_WorkflowStarted(t *testing.T) {
 			chunkFromEvents(t, "app-a", childCreated(2, "SubOrderWF")),
 		))
 		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusStarted, "SubOrderWF"),
+			req(wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusStarted, "SubOrderWF", "app-a"),
 		}
 		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
@@ -208,7 +201,7 @@ func TestRequiresMatchChunks_WorkflowStarted(t *testing.T) {
 			chunkFromEvents(t, "app-a", executionStarted(0, "OrderWF")),
 		))
 		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusStarted, "OtherWF"),
+			req(wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusStarted, "OtherWF", "app-a"),
 		}
 		assert.False(t, requiresMatchChunks(requires, chunks))
 	})
@@ -223,7 +216,7 @@ func TestRequiresMatchChunks_WorkflowCompleted(t *testing.T) {
 			),
 		))
 		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusCompleted, "SubOrderWF"),
+			req(wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusCompleted, "SubOrderWF", "app-a"),
 		}
 		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
@@ -233,7 +226,7 @@ func TestRequiresMatchChunks_WorkflowCompleted(t *testing.T) {
 			chunkFromEvents(t, "app-a", childCreated(2, "SubOrderWF")),
 		))
 		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusCompleted, "SubOrderWF"),
+			req(wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusCompleted, "SubOrderWF", "app-a"),
 		}
 		assert.False(t, requiresMatchChunks(requires, chunks))
 	})
@@ -246,14 +239,14 @@ func TestRequiresMatchChunks_EventRaised(t *testing.T) {
 
 	t.Run("matches when raised by name", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeEvent, wfaclapi.RequiredStatusRaised, "ApprovalSignal"),
+			req(wfaclapi.RequiredEventTypeEvent, wfaclapi.RequiredStatusRaised, "ApprovalSignal", "app-a"),
 		}
 		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
 
 	t.Run("denies when name differs", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeEvent, wfaclapi.RequiredStatusRaised, "OtherSignal"),
+			req(wfaclapi.RequiredEventTypeEvent, wfaclapi.RequiredStatusRaised, "OtherSignal", "app-a"),
 		}
 		assert.False(t, requiresMatchChunks(requires, chunks))
 	})
@@ -267,23 +260,16 @@ func TestRequiresMatchChunks_AppIDFilter(t *testing.T) {
 
 	t.Run("matches when chunk appID matches filter", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
-			reqWithAppID(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusStarted, "FraudCheck", "app-b"),
+			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusStarted, "FraudCheck", "app-b"),
 		}
 		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
 
 	t.Run("denies when no chunk's appID matches filter", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
-			reqWithAppID(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusStarted, "FraudCheck", "app-c"),
+			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusStarted, "FraudCheck", "app-c"),
 		}
 		assert.False(t, requiresMatchChunks(requires, chunks))
-	})
-
-	t.Run("nil AppID matches any chunk", func(t *testing.T) {
-		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusStarted, "FraudCheck"),
-		}
-		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
 }
 
@@ -297,8 +283,8 @@ func TestRequiresMatchChunks_MultipleRequiresAllMustMatch(t *testing.T) {
 
 	t.Run("denies when any single requires entry is unmet", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck"),
-			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "HumanApprovalReceived"),
+			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck", "app-a"),
+			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "HumanApprovalReceived", "app-a"),
 		}
 		assert.False(t, requiresMatchChunks(requires, chunks))
 	})
@@ -313,8 +299,8 @@ func TestRequiresMatchChunks_MultipleRequiresAllMustMatch(t *testing.T) {
 			),
 		))
 		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck"),
-			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "HumanApprovalReceived"),
+			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck", "app-a"),
+			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "HumanApprovalReceived", "app-a"),
 		}
 		assert.True(t, requiresMatchChunks(requires, fullChunks))
 	})
@@ -334,14 +320,14 @@ func TestRequiresMatchChunks_NoCollisionAcrossChunks(t *testing.T) {
 
 	t.Run("completion in chunk B resolves to chunk B's scheduled name", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck"),
+			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck", "app-b"),
 		}
 		assert.True(t, requiresMatchChunks(requires, chunks))
 	})
 
 	t.Run("chunk A is not falsely credited with the completion from chunk B", func(t *testing.T) {
 		requires := []wfaclapi.RequiredEvent{
-			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "OtherActivity"),
+			req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "OtherActivity", "app-a"),
 		}
 		assert.False(t, requiresMatchChunks(requires, chunks))
 	})
@@ -374,7 +360,7 @@ func TestEvaluate_RequiresIntegratesWithRuleMatching(t *testing.T) {
 		Activities: []wfaclapi.ActivityRule{{
 			Name: "ProcessPayment",
 			Requires: []wfaclapi.RequiredEvent{
-				req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck"),
+				req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck", "caller-app"),
 			},
 		}},
 	}
@@ -429,7 +415,7 @@ func TestEvaluate_SkipsDecodeWhenMatchingRuleHasNoRequires(t *testing.T) {
 			Callers: []wfaclapi.WorkflowCaller{{AppID: "caller-app"}},
 			Activities: []wfaclapi.ActivityRule{
 				{Name: "SensitiveAct", Requires: []wfaclapi.RequiredEvent{
-					req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck"),
+					req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck", "caller-app"),
 				}},
 				{Name: "PlainAct"},
 			},
@@ -456,14 +442,14 @@ func TestEvaluate_MultipleScheduleEntriesOR(t *testing.T) {
 					Name:       "GatedWF",
 					Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule},
 					Requires: []wfaclapi.RequiredEvent{
-						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "PathA"),
+						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "PathA", "caller-app"),
 					},
 				},
 				{
 					Name:       "GatedWF",
 					Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule},
 					Requires: []wfaclapi.RequiredEvent{
-						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "PathB"),
+						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "PathB", "caller-app"),
 					},
 				},
 			},
@@ -511,15 +497,15 @@ func TestEvaluate_AndWithinOr(t *testing.T) {
 					Name:       "GatedWF",
 					Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule},
 					Requires: []wfaclapi.RequiredEvent{
-						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck"),
-						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "HumanApproval"),
+						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "FraudCheck", "caller-app"),
+						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "HumanApproval", "caller-app"),
 					},
 				},
 				{
 					Name:       "GatedWF",
 					Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule},
 					Requires: []wfaclapi.RequiredEvent{
-						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "VipVerified"),
+						req(wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, "VipVerified", "caller-app"),
 					},
 				},
 			},

@@ -100,10 +100,12 @@ spec:
       - eventType: activity
         status: Completed
         name: fraud-check
+        appID: %s
       - eventType: activity
         status: Completed
         name: human-approval
-`, targetID, callerID, r.sensitiveChildWF)
+        appID: %s
+`, targetID, callerID, r.sensitiveChildWF, callerID, callerID)
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))

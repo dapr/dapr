@@ -268,7 +268,7 @@ func requiresMatchChunks(requires []wfaclapi.RequiredEvent, chunks []decodedChun
 func findMatchingEvent(req *wfaclapi.RequiredEvent, chunks []decodedChunk) bool {
 	for _, dc := range chunks {
 		// TODO: gate on chunk namespace once durabletask-go's chunk carries it.
-		if req.AppID != nil && dc.chunk.GetAppId() != *req.AppID {
+		if dc.chunk.GetAppId() != req.AppID {
 			continue
 		}
 		for _, e := range dc.events {

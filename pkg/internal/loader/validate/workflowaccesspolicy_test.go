@@ -157,6 +157,11 @@ func TestWorkflowAccessPolicy_MultipleRulesOneInvalid(t *testing.T) {
 func withRequires(reqs ...wfaclapi.RequiredEvent) *wfaclapi.WorkflowAccessPolicy {
 	p := validPolicy()
 	p.Spec.Rules[0].Workflows = nil
+	for i := range reqs {
+		if reqs[i].AppID == "" {
+			reqs[i].AppID = "producer-app"
+		}
+	}
 	p.Spec.Rules[0].Activities = []wfaclapi.ActivityRule{{
 		Name:     "ProcessPayment",
 		Requires: reqs,
@@ -228,6 +233,21 @@ func TestWorkflowAccessPolicy_RequiredEvent_EmptyName(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestWorkflowAccessPolicy_RequiredEvent_EmptyAppID(t *testing.T) {
+	p := validPolicy()
+	p.Spec.Rules[0].Workflows = nil
+	p.Spec.Rules[0].Activities = []wfaclapi.ActivityRule{{
+		Name: "ProcessPayment",
+		Requires: []wfaclapi.RequiredEvent{{
+			EventType: wfaclapi.RequiredEventTypeActivity,
+			Status:    wfaclapi.RequiredStatusCompleted,
+			Name:      "FraudCheck",
+		}},
+	}}
+	err := WorkflowAccessPolicy(t.Context(), p)
+	require.Error(t, err)
+}
+
 // workflow-rule requires is rejected when the rule lists any non-schedule
 // operation
 func TestWorkflowAccessPolicy_RequiresOnlyValidOnSchedule(t *testing.T) {
@@ -240,6 +260,7 @@ func TestWorkflowAccessPolicy_RequiresOnlyValidOnSchedule(t *testing.T) {
 		EventType: wfaclapi.RequiredEventTypeActivity,
 		Status:    wfaclapi.RequiredStatusCompleted,
 		Name:      "FraudCheck",
+		AppID:     "producer-app",
 	}}
 	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
@@ -255,6 +276,7 @@ func TestWorkflowAccessPolicy_RequiresOnScheduleEntryAccepted(t *testing.T) {
 		EventType: wfaclapi.RequiredEventTypeActivity,
 		Status:    wfaclapi.RequiredStatusCompleted,
 		Name:      "FraudCheck",
+		AppID:     "producer-app",
 	}}
 	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
 }

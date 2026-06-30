@@ -90,7 +90,8 @@ spec:
       - eventType: workflow
         status: Started
         name: %s
-`, targetID, callerID, r.activityName, r.requiredWFName)
+        appID: %s
+`, targetID, callerID, r.activityName, r.requiredWFName, callerID)
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))

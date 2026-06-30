@@ -75,8 +75,9 @@ spec:
                           requires:
                             description: |-
                               Requires is a list of history events that must all be present in the
-                              caller's propagated workflow history for this rule to apply. Entries
-                              are evaluated as a set — order is not significant.
+                              caller's propagated workflow history for this rule to apply. The order of
+                              entries is not significant, and the events are not required to have
+                              occurred in any particular order.
                             items:
                               description: |-
                                 RequiredEvent is a single entry in a rule's Requires list. It matches when
@@ -85,9 +86,11 @@ spec:
                                 status=Raised; eventType=activity/workflow forbids status=Raised.
                               properties:
                                 appID:
-                                  description: AppID restricts the match to events
-                                    produced by the named app.
+                                  description: |-
+                                    AppID is the app ID that must have produced the matched event. An event
+                                    only matches when it came from this app's propagated history.
                                   maxLength: 256
+                                  minLength: 1
                                   type: string
                                 eventType:
                                   description: EventType is the category of history
@@ -113,6 +116,7 @@ spec:
                                   - Raised
                                   type: string
                               required:
+                              - appID
                               - eventType
                               - name
                               - status
@@ -190,9 +194,10 @@ spec:
                           requires:
                             description: |-
                               Requires is a list of history events that must all be present in the
-                              caller's propagated workflow history for this rule to apply. Entries
-                              are evaluated as a set — order is not significant. Only valid when the
-                              rule's only operation is `schedule`.
+                              caller's propagated workflow history for this rule to apply. The order of
+                              entries is not significant, and the events are not required to have
+                              occurred in any particular order. Only valid when the rule's only
+                              operation is `schedule`.
                             items:
                               description: |-
                                 RequiredEvent is a single entry in a rule's Requires list. It matches when
@@ -201,9 +206,11 @@ spec:
                                 status=Raised; eventType=activity/workflow forbids status=Raised.
                               properties:
                                 appID:
-                                  description: AppID restricts the match to events
-                                    produced by the named app.
+                                  description: |-
+                                    AppID is the app ID that must have produced the matched event. An event
+                                    only matches when it came from this app's propagated history.
                                   maxLength: 256
+                                  minLength: 1
                                   type: string
                                 eventType:
                                   description: EventType is the category of history
@@ -229,6 +236,7 @@ spec:
                                   - Raised
                                   type: string
                               required:
+                              - appID
                               - eventType
                               - name
                               - status
