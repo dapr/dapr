@@ -136,6 +136,9 @@ type Config struct {
 	Healthz                       healthz.Healthz
 	WorkflowEventSink             orchestrator.EventSink
 	DisableInitEndpoints          []string
+	// HotReloadReconcileInterval overrides the hot-reload backup reconcile
+	// period. Zero uses the reconciler default (60s).
+	HotReloadReconcileInterval time.Duration
 }
 
 type internalConfig struct {
@@ -175,6 +178,7 @@ type internalConfig struct {
 	outboundHealthz              healthz.Healthz
 	workflowEventSink            orchestrator.EventSink
 	disableInitEndpoints         []string
+	hotReloadReconcileInterval   time.Duration
 }
 
 func (i internalConfig) SchedulerEnabled() bool {
@@ -316,6 +320,17 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		}
 	}
 
+	// Attach the workload's SPIFFE identity to the context of every component
+	// operation. The resiliency runner is the common chokepoint for component
+	// outbound/inbound calls, so injecting here reaches each building-block
+	// component (state, pubsub, bindings, secrets, etc.) regardless of whether
+	// the call originated from an API request or a background loop. Components
+	// extract the X.509/JWT SVID source from the context to authenticate to
+	// their backing infrastructure service.
+	if resiliencyProvider != nil && cfg.Security != nil {
+		resiliencyProvider.SetComponentContextDecorator(cfg.Security.WithSVIDContext)
+	}
+
 	accessControlList, err := acl.ParseAccessControlSpec(
 		globalConfig.Spec.AccessControlSpec,
 		intc.appConnectionConfig.Protocol.IsHTTP(),
@@ -362,6 +377,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		blockShutdownDuration:      c.DaprBlockShutdownDuration,
 		actorsService:              c.ActorsService,
 		actorsDisseminationTimeout: c.ActorsDisseminationTimeout,
+		hotReloadReconcileInterval: c.HotReloadReconcileInterval,
 		remindersService:           c.RemindersService,
 		schedulerAddress:           c.SchedulerAddress,
 		schedulerStreams:           c.SchedulerStreams,

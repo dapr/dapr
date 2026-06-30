@@ -16,7 +16,6 @@ package universal
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -71,7 +70,7 @@ func (a *Universal) scheduleJob(ctx context.Context, jobRequest *runtimev1pb.Sch
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Job", errMetadata, errorcodes.SchedulerEmpty)
 	}
 
-	if job.GetName() == "" || strings.Contains(job.GetName(), "|") {
+	if job.GetName() == "" {
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Name", errMetadata, errorcodes.SchedulerJobNameEmpty)
 	}
 
