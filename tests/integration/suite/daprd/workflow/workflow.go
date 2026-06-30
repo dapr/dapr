@@ -48,6 +48,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/security"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/signing"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/starttime"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/statefulhistory"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/taskexecutionid"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/terminate"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/timer"
