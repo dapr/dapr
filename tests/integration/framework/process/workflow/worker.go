@@ -131,7 +131,11 @@ func (o *WorkItemObserver) observeUnary(method string) {
 func (o *WorkItemObserver) unaryInterceptor() grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		err := invoker(ctx, method, req, reply, cc, opts...)
-		o.observeUnary(method)
+		// Count only successful calls, so a transient failure is not mistaken
+		// for a completed cache-miss recovery.
+		if err == nil {
+			o.observeUnary(method)
+		}
 		return err
 	}
 }
