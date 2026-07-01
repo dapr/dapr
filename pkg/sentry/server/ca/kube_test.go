@@ -52,10 +52,11 @@ func TestKube_get(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := map[string]struct {
-		sec       *corev1.Secret
-		cm        *corev1.ConfigMap
-		expBundle ca_bundle.Bundle
-		expErr    bool
+		sec          *corev1.Secret
+		cm           *corev1.ConfigMap
+		expBundle    ca_bundle.Bundle
+		expNeedsSync bool
+		expErr       bool
 	}{
 		"if secret doesn't exist, expect error": {
 			sec: nil,
@@ -148,7 +149,7 @@ func TestKube_get(t *testing.T) {
 			expBundle: ca_bundle.Bundle{},
 			expErr:    false,
 		},
-		"if configmap doesn't include ca.crt, expect to generate x509": {
+		"if configmap doesn't include ca.crt, expect valid bundle with needsSync": {
 			sec: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "dapr-trust-bundle",
@@ -167,10 +168,19 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{},
 			},
-			expBundle: ca_bundle.Bundle{},
-			expErr:    false,
+			expBundle: ca_bundle.Bundle{
+				X509: &ca_bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
+			},
+			expNeedsSync: true,
+			expErr:       false,
 		},
-		"if trust anchors do not match, expect not to generate x509": {
+		"if trust anchors do not match, expect valid bundle with needsSync": {
 			sec: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "dapr-trust-bundle",
@@ -189,8 +199,17 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM) + "\n" + string(rootPEM2)},
 			},
-			expBundle: ca_bundle.Bundle{},
-			expErr:    false,
+			expBundle: ca_bundle.Bundle{
+				X509: &ca_bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
+			},
+			expNeedsSync: true,
+			expErr:       false,
 		},
 		"if bundle fails to verify x509, expect error": {
 			sec: &corev1.Secret{
@@ -526,8 +545,9 @@ func TestKube_get(t *testing.T) {
 				namespace: "dapr-system-test",
 			}
 
-			bundle, err := k.get(t.Context())
+			bundle, needsSync, err := k.get(t.Context())
 			assert.Equal(t, test.expErr, err != nil, "expected error: %v, but got %v", test.expErr, err)
+			assert.Equal(t, test.expNeedsSync, needsSync, "expected needsSync: %v, but got %v", test.expNeedsSync, needsSync)
 			bundlesEqual(t, test.expBundle, bundle)
 		})
 	}
