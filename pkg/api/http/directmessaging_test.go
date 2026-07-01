@@ -1062,7 +1062,9 @@ func TestFindTargetIDAndMethod(t *testing.T) {
 		wantMethod   string
 	}{
 		{name: "dapr-app-id header", path: "/foo/bar", headers: http.Header{"Dapr-App-Id": []string{"myapp"}}, wantTargetID: "myapp", wantMethod: "foo/bar"},
+		{name: "dapr-app-id header preserves trailing slash", path: "/foo/bar/", headers: http.Header{"Dapr-App-Id": []string{"myapp"}}, wantTargetID: "myapp", wantMethod: "foo/bar/"},
 		{name: "basic auth", path: "/foo/bar", headers: http.Header{"Authorization": []string{"Basic ZGFwci1hcHAtaWQ6YXV0aA=="}}, wantTargetID: "auth", wantMethod: "foo/bar"},
+		{name: "basic auth preserves trailing slash", path: "/foo/bar/", headers: http.Header{"Authorization": []string{"Basic ZGFwci1hcHAtaWQ6YXV0aA=="}}, wantTargetID: "auth", wantMethod: "foo/bar/"},
 		{name: "dapr-app-id header has priority over basic auth", path: "/foo/bar", headers: http.Header{"Dapr-App-Id": []string{"myapp"}, "Authorization": []string{"Basic ZGFwci1hcHAtaWQ6YXV0aA=="}}, wantTargetID: "myapp", wantMethod: "foo/bar"},
 		{name: "path with internal target", path: "/v1.0/invoke/myapp/method/foo", wantTargetID: "myapp", wantMethod: "foo"},
 		{name: "basic auth has priority over path", path: "/v1.0/invoke/myapp/method/foo", headers: http.Header{"Authorization": []string{"Basic ZGFwci1hcHAtaWQ6YXV0aA=="}}, wantTargetID: "auth", wantMethod: "v1.0/invoke/myapp/method/foo"},
@@ -1074,6 +1076,7 @@ func TestFindTargetIDAndMethod(t *testing.T) {
 		{name: "path with https target escaped", path: "/v1.0/invoke/https%3A%2F%2Fexample.com/method/foo", wantTargetID: "https://example.com", wantMethod: "foo"},
 		{name: "path with https target partly escaped", path: "/v1.0/invoke/https%3A/%2Fexample.com/method/foo", wantTargetID: "https://example.com", wantMethod: "foo"},
 		{name: "extra slashes are removed", path: "///foo//bar", headers: http.Header{"Dapr-App-Id": []string{"myapp"}}, wantTargetID: "myapp", wantMethod: "foo/bar"},
+		{name: "extra slashes are removed while preserving trailing slash", path: "///foo//bar/", headers: http.Header{"Dapr-App-Id": []string{"myapp"}}, wantTargetID: "myapp", wantMethod: "foo/bar/"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
