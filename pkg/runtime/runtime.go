@@ -690,15 +690,20 @@ func createOtelResource(ctx context.Context, defaultServiceName string) *resourc
 func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	var err error
 
-	// Reserve the internal gRPC port before initializing components (or
-	// anything else that dials out). Otherwise a component's outbound
-	// connection can be assigned this port as an ephemeral source port,
-	// causing the internal gRPC server to later fail to bind. See issue #6023.
-	if err = a.reserveInternalGRPCServerPort(ctx); err != nil {
-		return fmt.Errorf("failed to reserve internal gRPC server port: %w", err)
+	// Reserve the internal gRPC port before initializing components so that a
+	// component's outbound connection cannot be assigned this port as an
+	// ephemeral source port (see issue #6023). This is best-effort: the
+	// internal gRPC server still binds the port itself in
+	// startGRPCInternalServer (which retries), so failing to reserve here must
+	// not be fatal. In particular, during a SIGHUP restart the port can be
+	// momentarily held by the previous runtime's teardown; falling through to
+	// the later bind lets it succeed once the port frees, as it did before the
+	// reservation was introduced.
+	if rerr := a.reserveInternalGRPCServerPort(ctx); rerr != nil {
+		log.Warnf("could not reserve internal gRPC port before component initialization; it will be bound when the internal gRPC server starts: %v", rerr)
 	}
-	// Release the reserved port if init returns before the internal gRPC
-	// server is started to take ownership of the listener.
+	// If the port was reserved but init returns before the internal gRPC
+	// server takes ownership of the listener, release it.
 	defer func() {
 		if cerr := a.closeUnstartedInternalGRPCListener(); cerr != nil {
 			log.Warnf("failed to close reserved internal gRPC listener: %v", cerr)

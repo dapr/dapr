@@ -1015,6 +1015,32 @@ func TestCloseUnstartedInternalGRPCListenerNoopWhenStarted(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestStartGRPCInternalServerBindsWithoutReservation verifies the fallback
+// path used when the internal gRPC port was not reserved ahead of time (for
+// example, reserving it failed during a SIGHUP restart): startGRPCInternalServer
+// binds the port itself rather than requiring a pre-bound listener.
+func TestStartGRPCInternalServerBindsWithoutReservation(t *testing.T) {
+	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+	require.NoError(t, err)
+
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+	rt.runtimeConfig.internalGRPCListenAddress = "127.0.0.1"
+	rt.runtimeConfig.internalGRPCPort = port
+
+	// No reservation was made, so the server must bind the port itself.
+	require.Nil(t, rt.grpcInternalServerListener)
+	require.NoError(t, rt.startGRPCInternalServer(t.Context(), nil))
+	require.NotNil(t, rt.grpcInternalServer)
+	t.Cleanup(func() {
+		require.NoError(t, rt.grpcInternalServer.Close())
+	})
+
+	// The port is held by the running server.
+	_, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	require.Error(t, err)
+}
+
 func TestGracefulShutdown(t *testing.T) {
 	r, err := NewTestDaprRuntime(t, modes.StandaloneMode)
 	require.NoError(t, err)
