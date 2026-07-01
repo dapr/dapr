@@ -109,7 +109,7 @@ func (e *childworkflowparallelmixed) Run(t *testing.T, ctx context.Context) {
 	chains := fworkflow.ChildWorkflowRetryChains(hist.GetEvents())
 	require.Len(t, chains, 2)
 
-	var lengths []int
+	lengths := make([]int, 0, len(chains))
 	for _, chain := range chains {
 		lengths = append(lengths, len(chain))
 		for _, cc := range chain {
