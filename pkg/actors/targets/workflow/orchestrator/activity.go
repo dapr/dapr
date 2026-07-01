@@ -143,10 +143,11 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 // the activity call is rejected by a WorkflowAccessPolicy. Uses a reminder to
 // deliver the event in a fresh execution cycle.
 func (o *orchestrator) failActivityACL(ctx context.Context, e *backend.HistoryEvent) error {
+	errType, errMsg := aclFailureType()
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
-		EventType: events.NewTaskFailedEventType(e.GetEventId(), "WorkflowAccessPolicyDenied", "access denied by workflow access policy", false),
+		EventType: events.NewTaskFailedEventType(e.GetEventId(), errType, errMsg, false),
 	}
 
 	reminderName, err := randomReminderName(common.ReminderPrefixActivityResult)

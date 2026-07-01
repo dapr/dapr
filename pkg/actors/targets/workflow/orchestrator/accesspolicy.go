@@ -23,10 +23,9 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
-
-const workflowACLDeniedMsg = "access denied by workflow access policy"
 
 // preLoadedMeta lets callers that have already loaded the actor's metadata
 // (e.g. handleStream which needs ometa for the response anyway) skip the
@@ -43,6 +42,11 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 	// Self-calls are exempt: the policy is a cross-app gate.
 	callerAppID := workflowacl.CallerAppID(md)
 	if callerAppID == o.appID {
+		if policies.ListsCaller(o.appID) {
+			o.selfCallerWarnOnce.Do(func() {
+				log.Warnf("WorkflowAccessPolicy lists this app's own appID '%s' in a rule's Callers — that listing has no effect because same-app calls are always exempt; the policy is a cross-app gate", o.appID)
+			})
+		}
 		return nil
 	}
 
@@ -50,53 +54,65 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 	if err != nil {
 		log.Warnf("Workflow actor '%s': workflow access policy denied call '%s': could not derive operation from request: %v", o.actorID, method, err)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), method)
-		return status.Errorf(codes.PermissionDenied, "%s: malformed request for method '%s'", workflowACLDeniedMsg, method)
+		return status.Errorf(codes.PermissionDenied, "%s: malformed request for method '%s'", workflowacl.DeniedMessageBase, method)
 	}
 	if operation == "" {
 		// Non-subject methods (reminders, internal protocol) are only valid
 		// from the local daprd. Cross-app callers cannot invoke them.
 		log.Warnf("Workflow actor '%s': workflow access policy denied cross-app call to non-subject method '%s' from app '%s'", o.actorID, method, callerAppID)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), method)
-		return status.Errorf(codes.PermissionDenied, "%s: app '%s' cannot invoke method '%s'", workflowACLDeniedMsg, callerAppID, method)
+		return status.Errorf(codes.PermissionDenied, "%s: app '%s' cannot invoke method '%s'", workflowacl.DeniedMessageBase, callerAppID, method)
 	}
 
 	if callerAppID == "" {
 		log.Warnf("Workflow actor '%s': workflow access policy denied call '%s' with missing caller identity", o.actorID, method)
 		diag.DefaultMonitoring.WorkflowACLActionDenied("", string(workflowacl.OperationTypeWorkflow), string(operation))
-		return status.Errorf(codes.PermissionDenied, "%s: caller identity missing on workflow '%s' operation", workflowACLDeniedMsg, operation)
+		return status.Errorf(codes.PermissionDenied, "%s: caller identity missing on workflow '%s' operation", workflowacl.DeniedMessageBase, operation)
 	}
 
-	name, err := o.workflowNameForOperation(ctx, method, data, preLoadedMeta)
+	name, history, err := o.workflowNameForOperation(ctx, method, data, preLoadedMeta)
 	if err != nil {
 		log.Errorf("Workflow actor '%s': failed to resolve workflow name for policy check on '%s': %v", o.actorID, method, err)
 		return status.Error(codes.Internal, "failed to evaluate workflow access policy")
 	}
 
-	if !policies.Evaluate(callerAppID, workflowacl.OperationTypeWorkflow, operation, name) {
-		log.Warnf("Workflow actor '%s': workflow access policy denied app '%s' operation '%s' on '%s'", o.actorID, callerAppID, operation, name)
+	if err := o.signing.VerifyPropagatedHistoryStateless(history); err != nil {
+		log.Warnf("Workflow actor '%s': workflow access policy denied app '%s' operation '%s' on '%s': propagated history verification failed: %v", o.actorID, callerAppID, operation, name, err)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), string(operation))
-		return status.Errorf(codes.PermissionDenied, "%s: app '%s' operation '%s' on workflow '%s' (instance '%s')", workflowACLDeniedMsg, callerAppID, operation, name, o.actorID)
+		return status.Errorf(codes.PermissionDenied, "%s: app '%s' operation '%s' on workflow '%s' (instance '%s')", workflowacl.DeniedMessageBase, callerAppID, operation, name, o.actorID)
+	}
+
+	allowed, reason := policies.Evaluate(callerAppID, workflowacl.OperationTypeWorkflow, operation, name, history)
+	if !allowed {
+		log.Warnf("Workflow actor '%s': workflow access policy denied app '%s' operation '%s' on '%s' (reason=%s)", o.actorID, callerAppID, operation, name, reason)
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), string(operation))
+		return status.Errorf(codes.PermissionDenied, "%s: app '%s' operation '%s' on workflow '%s' (instance '%s')", workflowacl.DeniedMessageBase, callerAppID, operation, name, o.actorID)
 	}
 
 	diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, string(workflowacl.OperationTypeWorkflow), string(operation))
 	return nil
 }
 
-func (o *orchestrator) workflowNameForOperation(ctx context.Context, method string, data []byte, preLoadedMeta *backend.WorkflowMetadata) (string, error) {
+// workflowNameForOperation returns the workflow name for the policy check
+// and (when available) the propagated history that should gate `requires`.
+// Only schedule (CreateWorkflowInstance) carries propagated history; for all
+// other operations history is nil and any rule with a `requires` block will
+// fail-closed.
+func (o *orchestrator) workflowNameForOperation(ctx context.Context, method string, data []byte, preLoadedMeta *backend.WorkflowMetadata) (string, *protos.PropagatedHistory, error) {
 	if method == todo.CreateWorkflowInstanceMethod {
 		return workflowacl.WorkflowNameFromCreateRequest(data)
 	}
 
 	if preLoadedMeta != nil {
-		return preLoadedMeta.GetName(), nil
+		return preLoadedMeta.GetName(), nil, nil
 	}
 
 	_, ometa, err := o.loadInternalState(ctx)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if ometa == nil {
-		return "", nil
+		return "", nil, nil
 	}
-	return ometa.GetName(), nil
+	return ometa.GetName(), nil, nil
 }

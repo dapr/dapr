@@ -104,6 +104,7 @@ func (w WorkflowAccessPolicy) EmptyMetaDeepCopy() metav1.Object {
 type WorkflowAccessPolicySpec struct {
 	// Rules defines the allow-list of which callers can perform which operations.
 	// +optional
+	// +kubebuilder:validation:MaxItems=100
 	Rules []WorkflowAccessPolicyRule `json:"rules,omitempty"`
 }
 
@@ -114,16 +115,21 @@ type WorkflowAccessPolicySpec struct {
 //
 // +kubebuilder:validation:XValidation:rule="(has(self.workflows) && size(self.workflows) > 0) || (has(self.activities) && size(self.activities) > 0)",message="at least one of workflows or activities must contain a rule"
 type WorkflowAccessPolicyRule struct {
-	// Callers that this rule applies to.
+	// Callers that this rule applies to. The policy is a cross-app gate;
+	// listing the target app's own appID here has no effect because
+	// same-app calls are always exempt from enforcement.
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=100
 	Callers []WorkflowCaller `json:"callers"`
 
 	// Workflows are the workflow rules that the matched callers are allowed.
 	// +optional
+	// +kubebuilder:validation:MaxItems=100
 	Workflows []WorkflowRule `json:"workflows,omitempty"`
 
 	// Activities are the activity rules that the matched callers are allowed.
 	// +optional
+	// +kubebuilder:validation:MaxItems=100
 	Activities []ActivityRule `json:"activities,omitempty"`
 }
 
@@ -131,6 +137,7 @@ type WorkflowAccessPolicyRule struct {
 type WorkflowCaller struct {
 	// AppID is the Dapr app ID of the caller.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
 	AppID string `json:"appID"`
 }
 
@@ -149,17 +156,35 @@ const (
 )
 
 // WorkflowRule grants the matched callers access to the listed operations on
-// workflows whose name matches Name (exact or glob).
+// workflows whose name matches Name (exact or glob). An optional `requires`
+// gate may be attached, but only when the rule's sole operation is
+// `schedule` — schedule is the only operation that carries propagated
+// workflow history to check against. Express OR across prerequisite sets by
+// listing multiple workflow rules with the same Name, each with its own
+// `requires`; access is granted if any matching rule is satisfied.
+//
+// +kubebuilder:validation:XValidation:rule="!has(self.requires) || size(self.requires) == 0 || (size(self.operations) == 1 && self.operations[0] == 'schedule')",message="requires is only valid when the rule's only operation is 'schedule'"
 type WorkflowRule struct {
 	// Name is the exact name or glob pattern for the workflow.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
 	Name string `json:"name"`
 
 	// Operations is the set of operations this rule applies to.
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
 	// +kubebuilder:validation:items:Enum=schedule;terminate;raise;pause;resume;purge;get;rerun
 	// +listType=set
 	Operations []WorkflowOperation `json:"operations"`
+
+	// Requires is a list of history events that must all be present in the
+	// caller's propagated workflow history for this rule to apply. The order of
+	// entries is not significant, and the events are not required to have
+	// occurred in any particular order. Only valid when the rule's only
+	// operation is `schedule`.
+	// +optional
+	// +kubebuilder:validation:MaxItems=20
+	Requires []RequiredEvent `json:"requires,omitempty"`
 }
 
 // ActivityRule grants the matched callers access to schedule the activity
@@ -168,7 +193,64 @@ type WorkflowRule struct {
 type ActivityRule struct {
 	// Name is the exact name or glob pattern for the activity.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
 	Name string `json:"name"`
+
+	// Requires is a list of history events that must all be present in the
+	// caller's propagated workflow history for this rule to apply. The order of
+	// entries is not significant, and the events are not required to have
+	// occurred in any particular order.
+	// +optional
+	// +kubebuilder:validation:MaxItems=20
+	Requires []RequiredEvent `json:"requires,omitempty"`
+}
+
+// RequiredEventType is the category of history event a RequiredEvent matches.
+type RequiredEventType string
+
+const (
+	RequiredEventTypeActivity RequiredEventType = "activity"
+	RequiredEventTypeWorkflow RequiredEventType = "workflow"
+	RequiredEventTypeEvent    RequiredEventType = "event"
+)
+
+// RequiredStatus is the lifecycle phase of a history event referenced by a
+// RequiredEvent. Started/Completed apply to eventType=activity and
+// eventType=workflow; Raised is the only valid status for eventType=event.
+type RequiredStatus string
+
+const (
+	RequiredStatusStarted   RequiredStatus = "Started"
+	RequiredStatusCompleted RequiredStatus = "Completed"
+	RequiredStatusRaised    RequiredStatus = "Raised"
+)
+
+// RequiredEvent is a single entry in a rule's Requires list. It matches when
+// the caller's propagated history contains an event of the given EventType
+// and Status with the given Name. eventType=event must be paired with
+// status=Raised; eventType=activity/workflow forbids status=Raised.
+//
+// +kubebuilder:validation:XValidation:rule="self.eventType == 'event' ? self.status == 'Raised' : self.status != 'Raised'",message="eventType=event requires status=Raised; eventType=activity|workflow forbids status=Raised"
+type RequiredEvent struct {
+	// EventType is the category of history event to match.
+	// +kubebuilder:validation:Enum=activity;workflow;event
+	EventType RequiredEventType `json:"eventType"`
+
+	// Status is the lifecycle phase the matched event must have.
+	// +kubebuilder:validation:Enum=Started;Completed;Raised
+	Status RequiredStatus `json:"status"`
+
+	// Name is the activity/workflow name (eventType=activity|workflow) or
+	// the external event name (eventType=event).
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+	Name string `json:"name"`
+
+	// AppID is the app ID that must have produced the matched event. An event
+	// only matches when it came from this app's propagated history.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+	AppID string `json:"appID"`
 }
 
 // +kubebuilder:object:root=true
