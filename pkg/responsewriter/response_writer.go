@@ -147,6 +147,9 @@ func (rw *responseWriter) callBefore() {
 
 func (rw *responseWriter) Flush() {
 	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		if !rw.Written() {
+			rw.WriteHeader(http.StatusOK)
+		}
 		f.Flush()
 	}
 }
