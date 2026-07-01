@@ -876,7 +876,7 @@ func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol str
 			Protocol:       protocol.Protocol(appProtocol),
 			Port:           appPort,
 			MaxConcurrency: -1,
-			ChannelAddress: "127.0.0.1",
+			ChannelAddress: DefaultChannelAddress,
 		},
 		mode:                         mode,
 		httpPort:                     DefaultDaprHTTPPort,
@@ -925,7 +925,7 @@ func TestReserveInternalGRPCServerPort(t *testing.T) {
 
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
-	rt.runtimeConfig.internalGRPCListenAddress = "127.0.0.1"
+	rt.runtimeConfig.internalGRPCListenAddress = DefaultChannelAddress
 	rt.runtimeConfig.internalGRPCPort = port
 
 	require.NoError(t, rt.reserveInternalGRPCServerPort(t.Context()))
@@ -939,7 +939,7 @@ func TestReserveInternalGRPCServerPort(t *testing.T) {
 
 	// The port is now held: nothing else (including an ephemeral source port
 	// picked by a component's outbound connection) can claim it.
-	_, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	_, err = net.Listen("tcp", fmt.Sprintf("%s:%d", DefaultChannelAddress, port))
 	require.Error(t, err)
 }
 
@@ -953,7 +953,7 @@ func TestStartGRPCInternalServerReusesReservedListener(t *testing.T) {
 
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
-	rt.runtimeConfig.internalGRPCListenAddress = "127.0.0.1"
+	rt.runtimeConfig.internalGRPCListenAddress = DefaultChannelAddress
 	rt.runtimeConfig.internalGRPCPort = port
 
 	require.NoError(t, rt.reserveInternalGRPCServerPort(t.Context()))
@@ -976,7 +976,7 @@ func TestCloseUnstartedInternalGRPCListenerReleasesPort(t *testing.T) {
 
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
-	rt.runtimeConfig.internalGRPCListenAddress = "127.0.0.1"
+	rt.runtimeConfig.internalGRPCListenAddress = DefaultChannelAddress
 	rt.runtimeConfig.internalGRPCPort = port
 
 	require.NoError(t, rt.reserveInternalGRPCServerPort(t.Context()))
@@ -985,7 +985,7 @@ func TestCloseUnstartedInternalGRPCListenerReleasesPort(t *testing.T) {
 	// reserved port.
 	require.NoError(t, rt.closeUnstartedInternalGRPCListener())
 
-	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", DefaultChannelAddress, port))
 	require.NoError(t, err)
 	require.NoError(t, ln.Close())
 }
@@ -999,7 +999,7 @@ func TestCloseUnstartedInternalGRPCListenerNoopWhenStarted(t *testing.T) {
 
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
-	rt.runtimeConfig.internalGRPCListenAddress = "127.0.0.1"
+	rt.runtimeConfig.internalGRPCListenAddress = DefaultChannelAddress
 	rt.runtimeConfig.internalGRPCPort = port
 
 	require.NoError(t, rt.reserveInternalGRPCServerPort(t.Context()))
@@ -1011,7 +1011,7 @@ func TestCloseUnstartedInternalGRPCListenerNoopWhenStarted(t *testing.T) {
 	require.NoError(t, rt.closeUnstartedInternalGRPCListener())
 
 	// The running server still holds the port.
-	_, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	_, err = net.Listen("tcp", fmt.Sprintf("%s:%d", DefaultChannelAddress, port))
 	require.Error(t, err)
 }
 
@@ -1025,7 +1025,7 @@ func TestStartGRPCInternalServerBindsWithoutReservation(t *testing.T) {
 
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
-	rt.runtimeConfig.internalGRPCListenAddress = "127.0.0.1"
+	rt.runtimeConfig.internalGRPCListenAddress = DefaultChannelAddress
 	rt.runtimeConfig.internalGRPCPort = port
 
 	// No reservation was made, so the server must bind the port itself.
@@ -1037,7 +1037,7 @@ func TestStartGRPCInternalServerBindsWithoutReservation(t *testing.T) {
 	})
 
 	// The port is held by the running server.
-	_, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	_, err = net.Listen("tcp", fmt.Sprintf("%s:%d", DefaultChannelAddress, port))
 	require.Error(t, err)
 }
 
@@ -2007,7 +2007,7 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 }
 
 func runGRPCApp(port int) (func(), error) {
-	serverListener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	serverListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", DefaultChannelAddress, port))
 	if err != nil {
 		return func() {}, err
 	}
