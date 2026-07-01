@@ -117,6 +117,8 @@ func (a *app) Deactivate(ctx context.Context) error {
 
 	a.lock.Close(ctx)
 	a.table.Delete(a.actorID)
+	count := a.activeCount.Add(-1)
+	diag.DefaultMonitoring.ActorActiveCount(a.actorType, count)
 
 	if err := a.transport.Deactivate(context.Background(), a.actorType, a.actorID); err != nil {
 		return err

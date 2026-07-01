@@ -115,6 +115,7 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_runtime_actor_reminders: The number of actor reminders requests.
 * dapr_runtime_actor_reminders_fired_total: The number of actor reminders fired requests.
 * dapr_runtime_actor_timers_fired_total: The number of actor timers fired requests.
+* dapr_runtime_actor_active_count: The number of currently active actors per actor type.
 
 #### Resiliency
 

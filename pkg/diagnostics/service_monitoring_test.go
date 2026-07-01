@@ -88,6 +88,18 @@ func TestServiceInvocation(t *testing.T) {
 	})
 }
 
+func TestActorActiveCount(t *testing.T) {
+	s, meter := servicesMetrics()
+	t.Cleanup(func() { meter.Stop() })
+
+	s.ActorActiveCount("testActorType", 5)
+
+	viewData, _ := meter.RetrieveData("runtime/actor/active_count")
+	v := meter.Find("runtime/actor/active_count")
+
+	allTagsPresent(t, v, viewData[0].Tags)
+}
+
 func TestSerivceMonitoringInit(t *testing.T) {
 	c, meter := servicesMetrics()
 	t.Cleanup(func() {
