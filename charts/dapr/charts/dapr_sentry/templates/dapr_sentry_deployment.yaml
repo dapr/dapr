@@ -1,3 +1,4 @@
+{{ if .Values.tls.generateBundleSecret }}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -27,8 +28,9 @@ metadata:
     {{- end }}
 {{ if .Values.tls.root.certPEM }}
 data:
-  ca.crt: {{- .Values.tls.root.certPEM | toYaml | indent 1}}
-{{end}}
+  ca.crt: {{- .Values.tls.root.certPEM | toYaml | indent 1 }}
+{{ end }}
+{{ end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
