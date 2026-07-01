@@ -391,20 +391,25 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 		iTraceID = cloudEvent[contribpubsub.TraceIDField]
 	}
 
+	var sc trace.SpanContext
 	if iTraceID != nil {
 		if traceID, ok := iTraceID.(string); ok {
-			sc, _ := diag.SpanContextFromW3CString(traceID)
-			spanName := "pubsub/" + msg.Topic
-
-			// no ops if trace is off
-			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, tracingSpec)
-			// span is nil if tracing is disabled (sampling rate is 0)
-			if span != nil {
-				ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+			var parsed bool
+			sc, parsed = diag.SpanContextFromW3CString(traceID)
+			if !parsed {
+				log.Warnf("failed to parse traceparent for pubsub topic %s, starting new root span", msg.Topic)
 			}
 		} else {
 			log.Warnf("ignored non-string traceid value: %v", iTraceID)
 		}
+	}
+
+	spanName := "pubsub/" + msg.Topic
+	// no ops if trace is off; empty sc produces a new root span
+	ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, tracingSpec)
+	// span is nil if tracing is disabled (sampling rate is 0)
+	if span != nil {
+		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 	}
 
 	extensions, extensionsErr := ExtractCloudEventExtensions(cloudEvent)
