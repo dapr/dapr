@@ -806,7 +806,7 @@ jobs:
     permissions:
       issues: write
       actions: read
-    uses: dapr/.github/.github/workflows/open-issue-on-failure.yml@master
+    uses: dapr/.github/.github/workflows/open-issue-on-failure.yml@main
     with:
       title: "Release publish failed: ${{ github.workflow }} (${{ github.ref_name }})"
       labels: "release,ci/publish-failure"
