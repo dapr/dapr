@@ -24,6 +24,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -43,6 +44,8 @@ type testCommandRequest struct {
 }
 
 const numHealthChecks = 60 // Number of times to check for endpoint health per app.
+
+const metricsWaitInterval = time.Second
 
 var tr *runner.TestRunner
 
@@ -95,7 +98,7 @@ type testCase struct {
 	protocol      string
 	action        func(t *testing.T, app string, n, port int)
 	actionInvokes int
-	evaluate      func(t *testing.T, app string, res *http.Response)
+	evaluate      func(t *testing.T, app string, metricsPort int)
 }
 
 var metricsTests = []testCase{
@@ -147,17 +150,8 @@ func TestMetrics(t *testing.T) {
 			// Perform an action n times using the Dapr API
 			tt.action(t, tt.app, tt.actionInvokes, daprPort)
 
-			// Get the metrics from the metrics endpoint
-			res, err := utils.HTTPGetRawNTimes(fmt.Sprintf("http://localhost:%v", metricsPort), numHealthChecks)
-			require.NoError(t, err)
-			defer func() {
-				// Drain before closing
-				_, _ = io.Copy(io.Discard, res.Body)
-				res.Body.Close()
-			}()
-
 			// Evaluate the metrics are as expected
-			tt.evaluate(t, tt.app, res)
+			tt.evaluate(t, tt.app, metricsPort)
 		})
 	}
 }
@@ -174,80 +168,78 @@ func invokeDaprHTTP(t *testing.T, app string, n, daprPort int) {
 	}
 }
 
-func testHTTPMetrics(t *testing.T, app string, res *http.Response) {
-	require.NotNil(t, res)
-
-	foundMetric := findHTTPMetricFromPrometheus(t, app, res)
-
-	// Check metric was found
-	require.True(t, foundMetric)
+func testHTTPMetrics(t *testing.T, app string, metricsPort int) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		metrics, err := findHTTPMetricFromPrometheus(app, metricsPort)
+		assert.NoError(c, err)
+		assert.True(c, metrics.foundMetric)
+		assert.True(c, metrics.foundGet)
+		assert.True(c, metrics.foundPost)
+	}, numHealthChecks*metricsWaitInterval, metricsWaitInterval)
 }
 
-func testMetricDisabled(t *testing.T, app string, res *http.Response) {
-	require.NotNil(t, res)
-
-	foundMetric := findHTTPMetricFromPrometheus(t, app, res)
-
-	// Check metric was found
-	require.False(t, foundMetric)
+func testMetricDisabled(t *testing.T, app string, metricsPort int) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		metrics, err := findHTTPMetricFromPrometheus(app, metricsPort)
+		assert.NoError(c, err)
+		assert.False(c, metrics.foundMetric)
+	}, numHealthChecks*metricsWaitInterval, metricsWaitInterval)
 }
 
-func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response) (foundMetric bool) {
-	rfmt := expfmt.ResponseFormat(res.Header)
-	require.NotEqual(t, rfmt.FormatType(), expfmt.TypeUnknown)
+type httpMetricStatus struct {
+	foundMetric bool
+	foundGet    bool
+	foundPost   bool
+}
 
-	decoder := expfmt.NewDecoder(res.Body, rfmt)
+func findHTTPMetricFromPrometheus(app string, metricsPort int) (httpMetricStatus, error) {
+	status := httpMetricStatus{}
 
-	// This test will loop through each of the metrics and look for a specifc
-	// metric `dapr_http_server_request_count`.
-	var foundGet, foundPost bool
-	for {
-		mf := &io_prometheus_client.MetricFamily{}
-		err := decoder.Decode(mf)
-		if err == io.EOF {
-			break
+	mf, err := getMetricFamilyFromPrometheus(metricsPort, "dapr_http_server_request_count")
+	if err != nil || mf == nil {
+		return status, err
+	}
+
+	status.foundMetric = true
+
+	for _, m := range mf.GetMetric() {
+		if m == nil {
+			continue
 		}
-		require.NoError(t, err)
 
-		if strings.ToLower(mf.GetName()) == "dapr_http_server_request_count" {
-			foundMetric = true
+		count := m.GetCounter()
+		if count == nil || count.GetValue() == 0 {
+			continue
+		}
 
-			for _, m := range mf.GetMetric() {
-				if m == nil {
-					continue
-				}
-				count := m.GetCounter()
+		var metricApp string
+		var method string
+		for _, l := range m.GetLabel() {
+			if l == nil {
+				continue
+			}
 
-				// check metrics with expected method exists
-				for _, l := range m.GetLabel() {
-					if l == nil {
-						continue
-					}
-					val := l.GetValue()
-					switch strings.ToLower(l.GetName()) {
-					case "app_id":
-						assert.Equal(t, "httpmetrics", val)
-					case "method":
-						if count.GetValue() > 0 {
-							switch val {
-							case "GET":
-								foundGet = true
-							case "POST":
-								foundPost = true
-							}
-						}
-					}
-				}
+			switch {
+			case strings.EqualFold(l.GetName(), "app_id"):
+				metricApp = l.GetValue()
+			case strings.EqualFold(l.GetName(), "method"):
+				method = l.GetValue()
 			}
 		}
+
+		if !strings.EqualFold(metricApp, app) {
+			continue
+		}
+
+		switch method {
+		case http.MethodGet:
+			status.foundGet = true
+		case http.MethodPost:
+			status.foundPost = true
+		}
 	}
 
-	if foundMetric {
-		require.True(t, foundGet)
-		require.True(t, foundPost)
-	}
-
-	return foundMetric
+	return status, nil
 }
 
 func invokeDaprGRPC(t *testing.T, app string, n, daprPort int) {
@@ -272,56 +264,96 @@ func invokeDaprGRPC(t *testing.T, app string, n, daprPort int) {
 	}
 }
 
-func testGRPCMetrics(t *testing.T, app string, res *http.Response) {
-	require.NotNil(t, res)
+type grpcMetricStatus struct {
+	foundMetric bool
+	foundMethod bool
+	count       int
+}
+
+func testGRPCMetrics(t *testing.T, app string, metricsPort int) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		metrics, err := findGRPCMetricFromPrometheus(app, metricsPort)
+		assert.NoError(c, err)
+		assert.True(c, metrics.foundMetric)
+		assert.True(c, metrics.foundMethod)
+		assert.Equal(c, 10, metrics.count)
+	}, numHealthChecks*metricsWaitInterval, metricsWaitInterval)
+}
+
+func findGRPCMetricFromPrometheus(app string, metricsPort int) (grpcMetricStatus, error) {
+	status := grpcMetricStatus{}
+
+	mf, err := getMetricFamilyFromPrometheus(metricsPort, "dapr_grpc_io_server_completed_rpcs")
+	if err != nil || mf == nil {
+		return status, err
+	}
+
+	status.foundMetric = true
+
+	for _, m := range mf.GetMetric() {
+		if m == nil {
+			continue
+		}
+
+		var metricApp string
+		var method string
+		for _, l := range m.GetLabel() {
+			if l == nil {
+				continue
+			}
+
+			switch {
+			case strings.EqualFold(l.GetName(), "app_id"):
+				metricApp = l.GetValue()
+			case strings.EqualFold(l.GetName(), "grpc_server_method"):
+				method = l.GetValue()
+			}
+		}
+
+		if !strings.EqualFold(metricApp, app) {
+			continue
+		}
+
+		if strings.EqualFold(method, "/dapr.proto.runtime.v1.Dapr/SaveState") {
+			status.foundMethod = true
+			status.count = int(m.GetCounter().GetValue())
+			break
+		}
+	}
+
+	return status, nil
+}
+
+func getMetricFamilyFromPrometheus(metricsPort int, metricName string) (*io_prometheus_client.MetricFamily, error) {
+	res, err := utils.HTTPGetRaw(fmt.Sprintf("http://localhost:%v", metricsPort))
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		// Drain before closing so the shared client can keep reusing the connection.
+		_, _ = io.Copy(io.Discard, res.Body)
+		_ = res.Body.Close()
+	}()
 
 	rfmt := expfmt.ResponseFormat(res.Header)
-	require.NotEqual(t, rfmt.FormatType(), expfmt.TypeUnknown)
+	if rfmt.FormatType() == expfmt.TypeUnknown {
+		return nil, fmt.Errorf("unknown metrics response format")
+	}
 
 	decoder := expfmt.NewDecoder(res.Body, rfmt)
 
-	// This test will loop through each of the metrics and look for a specifc
-	// metric `dapr_grpc_io_server_completed_rpcs`. This metric will exist for
-	// multiple `grpc_server_method` labels, therefore, we loop through the labels
-	// to find the instance that has `grpc_server_method="SaveState". Once we
-	// find the desired metric entry, we check the metric's value is as expected.`
-	var foundMetric bool
-	var foundMethod bool
 	for {
 		mf := &io_prometheus_client.MetricFamily{}
-		err := decoder.Decode(mf)
+		err = decoder.Decode(mf)
 		if err == io.EOF {
-			break
+			return nil, nil
 		}
-		require.NoError(t, err)
+		if err != nil {
+			return nil, err
+		}
 
-		if strings.EqualFold(mf.GetName(), "dapr_grpc_io_server_completed_rpcs") {
-			foundMetric = true
-			for _, m := range mf.GetMetric() {
-				if m == nil {
-					continue
-				}
-				// Check path label is as expected
-				for _, l := range m.GetLabel() {
-					if l == nil {
-						continue
-					}
-
-					if strings.EqualFold(l.GetName(), "grpc_server_method") {
-						if strings.EqualFold(l.GetValue(), "/dapr.proto.runtime.v1.Dapr/SaveState") {
-							foundMethod = true
-
-							// Check value is as expected
-							require.Equal(t, 10, int(m.GetCounter().GetValue()))
-							break
-						}
-					}
-				}
-			}
+		if strings.EqualFold(mf.GetName(), metricName) {
+			return mf, nil
 		}
 	}
-	// Check metric was found
-	require.True(t, foundMetric)
-	// Check path label was found
-	require.True(t, foundMethod)
 }
