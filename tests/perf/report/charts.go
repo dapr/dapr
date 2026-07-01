@@ -433,6 +433,13 @@ func main() {
 	writeReadmes(baseOutputDir)
 	log.Printf("Generated READMEs for charts in %s\n", baseOutputDir)
 
+	// Optionally emit the perf-results manifest consumed by the docs site. The
+	// docs render tables and charts from this at build time, keyed by version,
+	// so no per-version docs pages are committed.
+	if *manifestOut != "" {
+		generateManifest(baseOutputDir)
+	}
+
 	log.Printf("Generated charts for performance tests in %s\n", baseOutputDir)
 }
 
