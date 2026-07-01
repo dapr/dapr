@@ -876,7 +876,7 @@ func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol str
 			Protocol:       protocol.Protocol(appProtocol),
 			Port:           appPort,
 			MaxConcurrency: -1,
-			ChannelAddress: "127.0.0.1",
+			ChannelAddress: DefaultChannelAddress,
 		},
 		mode:                         mode,
 		httpPort:                     DefaultDaprHTTPPort,
@@ -912,6 +912,133 @@ func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol str
 			WithConfigurations(configurationLoader.NewRegistry()).
 			WithLocks(lockLoader.NewRegistry())),
 	}
+}
+
+// TestReserveInternalGRPCServerPort verifies that the internal gRPC port is
+// reserved before components are initialized. Otherwise a component's
+// outbound connection (e.g. to Redis) can be assigned this port as an
+// ephemeral source port, causing the internal gRPC server to later fail to
+// bind with "address already in use" (see issue #6023).
+func TestReserveInternalGRPCServerPort(t *testing.T) {
+	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+	require.NoError(t, err)
+
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+	rt.runtimeConfig.internalGRPCListenAddress = DefaultChannelAddress
+	rt.runtimeConfig.internalGRPCPort = port
+
+	require.NoError(t, rt.reserveInternalGRPCServerPort(t.Context()))
+	require.NotNil(t, rt.grpcInternalServerListener)
+	t.Cleanup(func() {
+		require.NoError(t, rt.grpcInternalServerListener.Close())
+	})
+
+	// The reserved listener is bound to the configured port.
+	assert.Equal(t, port, rt.grpcInternalServerListener.Addr().(*net.TCPAddr).Port)
+
+	// The port is now held: nothing else (including an ephemeral source port
+	// picked by a component's outbound connection) can claim it.
+	_, err = net.Listen("tcp", fmt.Sprintf("%s:%d", DefaultChannelAddress, port))
+	require.Error(t, err)
+}
+
+// TestStartGRPCInternalServerReusesReservedListener verifies that the internal
+// gRPC server binds to the listener reserved by reserveInternalGRPCServerPort,
+// rather than trying to bind the port a second time. Binding again would fail
+// because the reserved listener already holds the port (see issue #6023).
+func TestStartGRPCInternalServerReusesReservedListener(t *testing.T) {
+	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+	require.NoError(t, err)
+
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+	rt.runtimeConfig.internalGRPCListenAddress = DefaultChannelAddress
+	rt.runtimeConfig.internalGRPCPort = port
+
+	require.NoError(t, rt.reserveInternalGRPCServerPort(t.Context()))
+
+	require.NoError(t, rt.startGRPCInternalServer(t.Context(), nil))
+	require.NotNil(t, rt.grpcInternalServer)
+	t.Cleanup(func() {
+		require.NoError(t, rt.grpcInternalServer.Close())
+	})
+}
+
+// TestCloseUnstartedInternalGRPCListenerReleasesPort verifies that the port
+// reserved by reserveInternalGRPCServerPort is released when the internal gRPC
+// server is never started (e.g. initRuntime fails before
+// startGRPCInternalServer). Otherwise the reserved port would stay held after
+// init returns (see issue #6023).
+func TestCloseUnstartedInternalGRPCListenerReleasesPort(t *testing.T) {
+	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+	require.NoError(t, err)
+
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+	rt.runtimeConfig.internalGRPCListenAddress = DefaultChannelAddress
+	rt.runtimeConfig.internalGRPCPort = port
+
+	require.NoError(t, rt.reserveInternalGRPCServerPort(t.Context()))
+
+	// The internal gRPC server was never started, so releasing must free the
+	// reserved port.
+	require.NoError(t, rt.closeUnstartedInternalGRPCListener())
+
+	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", DefaultChannelAddress, port))
+	require.NoError(t, err)
+	require.NoError(t, ln.Close())
+}
+
+// TestCloseUnstartedInternalGRPCListenerNoopWhenStarted verifies that once the
+// internal gRPC server has started and owns the listener, releasing the
+// unstarted listener is a no-op that does not disturb the running server.
+func TestCloseUnstartedInternalGRPCListenerNoopWhenStarted(t *testing.T) {
+	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+	require.NoError(t, err)
+
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+	rt.runtimeConfig.internalGRPCListenAddress = DefaultChannelAddress
+	rt.runtimeConfig.internalGRPCPort = port
+
+	require.NoError(t, rt.reserveInternalGRPCServerPort(t.Context()))
+	require.NoError(t, rt.startGRPCInternalServer(t.Context(), nil))
+	t.Cleanup(func() {
+		require.NoError(t, rt.grpcInternalServer.Close())
+	})
+
+	require.NoError(t, rt.closeUnstartedInternalGRPCListener())
+
+	// The running server still holds the port.
+	_, err = net.Listen("tcp", fmt.Sprintf("%s:%d", DefaultChannelAddress, port))
+	require.Error(t, err)
+}
+
+// TestStartGRPCInternalServerBindsWithoutReservation verifies the fallback
+// path used when the internal gRPC port was not reserved ahead of time (for
+// example, reserving it failed during a SIGHUP restart): startGRPCInternalServer
+// binds the port itself rather than requiring a pre-bound listener.
+func TestStartGRPCInternalServerBindsWithoutReservation(t *testing.T) {
+	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+	require.NoError(t, err)
+
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+	rt.runtimeConfig.internalGRPCListenAddress = DefaultChannelAddress
+	rt.runtimeConfig.internalGRPCPort = port
+
+	// No reservation was made, so the server must bind the port itself.
+	require.Nil(t, rt.grpcInternalServerListener)
+	require.NoError(t, rt.startGRPCInternalServer(t.Context(), nil))
+	require.NotNil(t, rt.grpcInternalServer)
+	t.Cleanup(func() {
+		require.NoError(t, rt.grpcInternalServer.Close())
+	})
+
+	// The port is held by the running server.
+	_, err = net.Listen("tcp", fmt.Sprintf("%s:%d", DefaultChannelAddress, port))
+	require.Error(t, err)
 }
 
 func TestGracefulShutdown(t *testing.T) {
@@ -1879,7 +2006,7 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 }
 
 func runGRPCApp(port int) (func(), error) {
-	serverListener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	serverListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", DefaultChannelAddress, port))
 	if err != nil {
 		return func() {}, err
 	}

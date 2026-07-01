@@ -50,6 +50,7 @@ import (
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	"github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/api/http"
+	"github.com/dapr/dapr/pkg/api/listen"
 	"github.com/dapr/dapr/pkg/api/universal"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
@@ -138,6 +139,10 @@ type DaprRuntime struct {
 
 	grpcAPIServer      grpc.Server
 	grpcInternalServer grpc.Server
+	// grpcInternalServerListener is bound early (before components are
+	// initialized) to reserve the internal gRPC port, then handed to the
+	// internal gRPC server. See reserveInternalGRPCServerPort and issue #6023.
+	grpcInternalServerListener net.Listener
 
 	// Used for testing.
 	initComplete chan struct{}
@@ -453,6 +458,10 @@ func newDaprRuntime(ctx context.Context,
 			<-ctx.Done()
 
 			if server := rt.grpcInternalServer; server != nil {
+				// Closing the server also closes the reserved listener it was
+				// handed. If the server was never started, initRuntime's defer
+				// (closeUnstartedInternalGRPCListener) releases the reserved
+				// listener instead.
 				return server.Close()
 			}
 
@@ -688,6 +697,27 @@ func createOtelResource(ctx context.Context, defaultServiceName string) *resourc
 
 func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	var err error
+
+	// Reserve the internal gRPC port before initializing components so that a
+	// component's outbound connection cannot be assigned this port as an
+	// ephemeral source port (see issue #6023). This is best-effort: the
+	// internal gRPC server still binds the port itself in
+	// startGRPCInternalServer (which retries), so failing to reserve here must
+	// not be fatal. In particular, during a SIGHUP restart the port can be
+	// momentarily held by the previous runtime's teardown; falling through to
+	// the later bind lets it succeed once the port frees, as it did before the
+	// reservation was introduced.
+	if rerr := a.reserveInternalGRPCServerPort(ctx); rerr != nil {
+		log.Warnf("could not reserve internal gRPC port before component initialization; it will be bound when the internal gRPC server starts: %v", rerr)
+	}
+	// If the port was reserved but init returns before the internal gRPC
+	// server takes ownership of the listener, release it.
+	defer func() {
+		if cerr := a.closeUnstartedInternalGRPCListener(); cerr != nil {
+			log.Warnf("failed to close reserved internal gRPC listener: %v", cerr)
+		}
+	}()
+
 	if a.hostAddress, err = utils.GetHostAddress(); err != nil {
 		return fmt.Errorf("failed to determine host address: %w", err)
 	}
@@ -1076,10 +1106,42 @@ func (a *DaprRuntime) startHTTPServer(ctx context.Context) error {
 	return nil
 }
 
+// reserveInternalGRPCServerPort binds the internal gRPC listener early, before
+// components are initialized, to reserve the port. Otherwise a component's
+// outbound connection (e.g. to Redis) can be assigned this port as an
+// ephemeral source port, causing the internal gRPC server to later fail to
+// bind with "address already in use" (see issue #6023). The listener is then
+// handed to the internal gRPC server in startGRPCInternalServer.
+func (a *DaprRuntime) reserveInternalGRPCServerPort(ctx context.Context) error {
+	addr := a.runtimeConfig.internalGRPCListenAddress + ":" + strconv.Itoa(a.runtimeConfig.internalGRPCPort)
+	ln, err := listen.TCP(ctx, addr)
+	if err != nil {
+		return err
+	}
+	a.grpcInternalServerListener = ln
+	// If the configured port was 0 (dynamic), record the port the OS assigned
+	// so that name resolution and actors advertise the real port.
+	a.runtimeConfig.internalGRPCPort = ln.Addr().(*net.TCPAddr).Port
+	return nil
+}
+
+// closeUnstartedInternalGRPCListener releases the reserved internal gRPC
+// listener when the internal gRPC server was never started (e.g. init failed
+// before startGRPCInternalServer). Once the server has started it owns the
+// listener and closes it on shutdown, so this is a no-op. Called from
+// initRuntime's defer, on the same goroutine that starts the server, so it
+// cannot race startGRPCInternalServer.
+func (a *DaprRuntime) closeUnstartedInternalGRPCListener() error {
+	if a.grpcInternalServer != nil || a.grpcInternalServerListener == nil {
+		return nil
+	}
+	return a.grpcInternalServerListener.Close()
+}
+
 func (a *DaprRuntime) startGRPCInternalServer(ctx context.Context, api grpc.API) error {
 	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
 	serverConf := a.getNewServerConfig([]string{a.runtimeConfig.internalGRPCListenAddress}, a.runtimeConfig.internalGRPCPort)
-	a.grpcInternalServer = grpc.NewInternalServer(grpc.OptionsInternal{
+	server := grpc.NewInternalServer(grpc.OptionsInternal{
 		API:         api,
 		Config:      serverConf,
 		TracingSpec: a.globalConfig.GetTracingSpec(),
@@ -1087,12 +1149,18 @@ func (a *DaprRuntime) startGRPCInternalServer(ctx context.Context, api grpc.API)
 		Security:    a.sec,
 		Proxy:       a.proxy,
 		Healthz:     a.runtimeConfig.healthz,
+		// Serve the listener reserved before component initialization rather
+		// than binding the port again here. See reserveInternalGRPCServerPort.
+		Listener: a.grpcInternalServerListener,
 	})
 
-	err := a.grpcInternalServer.StartNonBlocking(ctx)
-	if err != nil {
+	if err := server.StartNonBlocking(ctx); err != nil {
 		return err
 	}
+
+	// Only record the server (and hence take ownership of the reserved
+	// listener) once it has successfully started serving.
+	a.grpcInternalServer = server
 
 	return nil
 }
