@@ -189,6 +189,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			log.Errorf("failed to ensure dapr service present, err: %v", err)
 			return ctrl.Result{Requeue: true}, err
 		}
+	} else {
+		err := r.cleanupOwnedDaprServices(ctx, req.Namespace, req.Name, wrapper.GetObject())
+		if err != nil {
+			log.Errorf("failed to cleanup dapr services, err: %v", err)
+			return ctrl.Result{Requeue: true}, err
+		}
 	}
 
 	return ctrl.Result{}, nil
@@ -260,6 +266,45 @@ func (h *DaprHandler) createDaprService(ctx context.Context, expectedService typ
 	}
 	log.Debugf("created service: %s", expectedService)
 	monitoring.RecordServiceCreatedCount(appID)
+	return nil
+}
+
+func (h *DaprHandler) cleanupOwnedDaprServices(ctx context.Context, namespace, ownerName string, ownerObj client.Object) error {
+	ownerKind := ownerKindForObject(ownerObj)
+	if ownerKind == "" {
+		return nil
+	}
+
+	var services corev1.ServiceList
+	err := h.List(ctx, &services, client.InNamespace(namespace))
+	if err != nil {
+		return err
+	}
+
+	for i := range services.Items {
+		service := &services.Items[i]
+		if !strings.IsTruthy(service.Labels[annotations.KeyEnabled]) {
+			continue
+		}
+
+		owner := metaV1.GetControllerOf(service)
+		if owner == nil || owner.Name != ownerName || owner.Kind != ownerKind || !h.isReconciled(owner) {
+			continue
+		}
+
+		err = h.Delete(ctx, service)
+		if err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+
+		appID := service.Annotations[annotations.KeyAppID]
+		if appID == "" {
+			appID = ownerName
+		}
+		log.Debugf("deleted service: %s/%s", service.Namespace, service.Name)
+		monitoring.RecordServiceDeletedCount(appID)
+	}
+
 	return nil
 }
 
@@ -381,4 +426,17 @@ func (h *DaprHandler) isReconciled(owner *metaV1.OwnerReference) bool {
 	}
 
 	return false
+}
+
+func ownerKindForObject(obj client.Object) string {
+	switch obj.(type) {
+	case *appsv1.Deployment:
+		return "Deployment"
+	case *appsv1.StatefulSet:
+		return "StatefulSet"
+	case *argov1alpha1.Rollout:
+		return rollouts.RolloutKind
+	default:
+		return ""
+	}
 }
