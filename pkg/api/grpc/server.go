@@ -79,6 +79,11 @@ type OptionsInternal struct {
 	Security    security.Handler
 	Proxy       messaging.Proxy
 	Healthz     healthz.Healthz
+	// Listener, when set, is served directly instead of binding Config.Port.
+	// It lets the runtime reserve the internal gRPC port early (before
+	// components are initialized) and hand the already-bound listener to the
+	// server, avoiding an ephemeral-source-port collision.
+	Listener net.Listener
 }
 
 type server struct {
@@ -98,6 +103,9 @@ type server struct {
 	sec            security.Handler
 	wg             sync.WaitGroup
 	htarget        healthz.Target
+	// listener, when set, is served directly instead of binding config.Port.
+	// See OptionsInternal.Listener and issue #6023.
+	listener net.Listener
 }
 
 var (
@@ -190,6 +198,7 @@ func NewInternalServer(opts OptionsInternal) Server {
 		proxy:          opts.Proxy,
 		sec:            opts.Security,
 		htarget:        opts.Healthz.AddTarget("grpc-internal-server"),
+		listener:       opts.Listener,
 	}
 }
 
@@ -204,6 +213,10 @@ func (s *server) StartNonBlocking(ctx context.Context) error {
 		}
 		s.logger.Infof("gRPC server listening on UNIX socket: %s", socket)
 		listeners = append(listeners, l)
+	} else if s.listener != nil {
+		// The port was reserved earlier and the bound listener handed to us.
+		s.logger.Infof("gRPC server listening on pre-bound TCP address: %s", s.listener.Addr())
+		listeners = append(listeners, s.listener)
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
