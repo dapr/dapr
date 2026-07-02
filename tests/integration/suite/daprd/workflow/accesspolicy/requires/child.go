@@ -97,8 +97,7 @@ spec:
       operations:
       - schedule
       requires:
-      - eventType: workflow
-        status: Completed
+      - eventType: workflow.completed
         name: preflight-wf
         appID: %s
     - name: %s

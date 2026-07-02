@@ -43,6 +43,9 @@ const (
 // are loaded, in which case all calls are allowed.
 type CompiledPolicies struct {
 	rules []compiledRule
+	// AppIDs named by any requires entry. Chunks from other apps are
+	// skipped without decoding.
+	requiresAppIDs map[string]struct{}
 }
 
 type compiledRule struct {
@@ -63,6 +66,7 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 	}
 
 	var rules []compiledRule
+	requiresAppIDs := make(map[string]struct{})
 	for _, policy := range policies {
 		for _, rule := range policy.Spec.Rules {
 			// Defense-in-depth: skip rules with empty callers. The CRD
@@ -92,13 +96,14 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 				for _, op := range wf.Operations {
 					var requires []wfaclapi.RequiredEvent
 					if len(wf.Requires) > 0 {
-						// requires is only valid when the rule's sole
-						// operation is schedule
 						if op != wfaclapi.WorkflowOperationSchedule {
 							log.Warnf("WorkflowAccessPolicy '%s': requires is only valid when the rule's only operation is schedule, skipping operation '%s' on workflow '%s'", policy.Name, op, wf.Name)
 							continue
 						}
 						requires = wf.Requires
+					}
+					for k := range requires {
+						requiresAppIDs[requires[k].AppID] = struct{}{}
 					}
 					cr.operations = append(cr.operations, compiledOp{
 						opType:    OperationTypeWorkflow,
@@ -115,6 +120,9 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 					continue
 				}
 
+				for k := range act.Requires {
+					requiresAppIDs[act.Requires[k].AppID] = struct{}{}
+				}
 				cr.operations = append(cr.operations, compiledOp{
 					opType:    OperationTypeActivity,
 					operation: wfaclapi.WorkflowOperationSchedule,
@@ -129,24 +137,21 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 		}
 	}
 
-	return &CompiledPolicies{rules: rules}
+	return &CompiledPolicies{rules: rules, requiresAppIDs: requiresAppIDs}
 }
 
 // Evaluate returns whether any rule grants the caller access to perform the
-// operation on opName. Pass nil for history when the call carries no
-// propagated history (operations other than schedule). On deny it also
-// returns a DenialReason: RequiresUnmet when a rule matched on caller +
-// name + operation but its Requires block wasn't satisfied; otherwise
-// NotAllowed. A nil *CompiledPolicies means no policies are loaded and
-// all calls are allowed.
-func (cp *CompiledPolicies) Evaluate(callerAppID string, opType OperationType, operation wfaclapi.WorkflowOperation, opName string, history *protos.PropagatedHistory) (bool, DenialReason) {
+// operation on opName. history is the caller's propagated history (nil for
+// operations other than schedule). A `requires` block can never grant access
+// while signingEnabled is false, since the history is then unverifiable. On
+// deny it returns RequiresUnmet when a rule matched on caller+name+operation
+// but its Requires wasn't satisfied, else NotAllowed. A nil *CompiledPolicies
+// allows all calls.
+func (cp *CompiledPolicies) Evaluate(callerAppID string, opType OperationType, operation wfaclapi.WorkflowOperation, opName string, history *protos.PropagatedHistory, signingEnabled bool) (bool, DenialReason) {
 	if cp == nil {
 		return true, DenialReasonNone
 	}
 
-	// decode propagated history on the first matching rule that
-	// actually carries a requires block. Subsequent rules reuse the cached
-	// result. Skipped entirely if no matching rule has requires.
 	var (
 		chunks        []decodedChunk
 		chunksDecoded bool
@@ -174,9 +179,13 @@ func (cp *CompiledPolicies) Evaluate(callerAppID string, opType OperationType, o
 			}
 
 			if len(op.requires) > 0 {
+				if !signingEnabled {
+					requiresNotMet = true
+					continue
+				}
 				if !chunksDecoded {
 					if history != nil && len(history.GetChunks()) > 0 {
-						chunks, chunksOK = decodeHistoryChunks(history)
+						chunks, chunksOK = decodeHistoryChunks(history, cp.requiresAppIDs)
 					} else {
 						chunksOK = true
 					}
@@ -214,16 +223,37 @@ func (cp *CompiledPolicies) ListsCaller(appID string) bool {
 	return false
 }
 
-// Lookups are scoped per-chunk: event IDs only unique within their producer.
+// Lookups are scoped per-chunk: event IDs are only unique within their producer.
 type decodedChunk struct {
-	chunk             *protos.PropagatedHistoryChunk
-	events            []*protos.HistoryEvent
+	chunk  *protos.PropagatedHistoryChunk
+	events []*protos.HistoryEvent
+
+	// Built on the first Completed lookup; nil until then. Started/Raised
+	// requirements never consult these, so a requires list with no Completed
+	// entry never allocates them.
 	taskScheduledByID map[int32]*protos.TaskScheduledEvent
 	childCreatedByID  map[int32]*protos.ChildWorkflowInstanceCreatedEvent
 }
 
+// indexByID populates the per-chunk ID maps on first use. Cheap no-op once built.
+func (dc *decodedChunk) indexByID() {
+	if dc.taskScheduledByID != nil {
+		return
+	}
+	dc.taskScheduledByID = make(map[int32]*protos.TaskScheduledEvent)
+	dc.childCreatedByID = make(map[int32]*protos.ChildWorkflowInstanceCreatedEvent)
+	for _, e := range dc.events {
+		if ts := e.GetTaskScheduled(); ts != nil {
+			dc.taskScheduledByID[e.GetEventId()] = ts
+		}
+		if cc := e.GetChildWorkflowInstanceCreated(); cc != nil {
+			dc.childCreatedByID[e.GetEventId()] = cc
+		}
+	}
+}
+
 // Fails closed: unmarshal failure means a tampered/corrupted chunk.
-func decodeHistoryChunks(history *protos.PropagatedHistory) ([]decodedChunk, bool) {
+func decodeHistoryChunks(history *protos.PropagatedHistory, appIDs map[string]struct{}) ([]decodedChunk, bool) {
 	if history == nil {
 		return nil, true
 	}
@@ -232,11 +262,12 @@ func decodeHistoryChunks(history *protos.PropagatedHistory) ([]decodedChunk, boo
 		if chunk == nil {
 			continue
 		}
-		dc := decodedChunk{
-			chunk:             chunk,
-			taskScheduledByID: make(map[int32]*protos.TaskScheduledEvent),
-			childCreatedByID:  make(map[int32]*protos.ChildWorkflowInstanceCreatedEvent),
+		// Skip decoding a chunk if the app ID is not in the requires.
+		// TODO: gate on chunk namespace once durabletask-go's chunk carries it.
+		if _, ok := appIDs[chunk.GetAppId()]; !ok {
+			continue
 		}
+		dc := decodedChunk{chunk: chunk}
 		for _, raw := range chunk.GetRawEvents() {
 			e := &protos.HistoryEvent{}
 			if err := proto.Unmarshal(raw, e); err != nil {
@@ -244,90 +275,67 @@ func decodeHistoryChunks(history *protos.PropagatedHistory) ([]decodedChunk, boo
 				return nil, false
 			}
 			dc.events = append(dc.events, e)
-			if ts := e.GetTaskScheduled(); ts != nil {
-				dc.taskScheduledByID[e.GetEventId()] = ts
-			}
-			if cc := e.GetChildWorkflowInstanceCreated(); cc != nil {
-				dc.childCreatedByID[e.GetEventId()] = cc
-			}
 		}
 		chunks = append(chunks, dc)
 	}
 	return chunks, true
 }
 
+// requiresMatchChunks reports whether the history satisfies the requires list
+// in order: each entry must match an event at or after the one that satisfied
+// the previous entry, over the flattened event stream (chunk order, then event
+// order). Iterate by index so the indexByID() build persists on the cached chunk.
 func requiresMatchChunks(requires []wfaclapi.RequiredEvent, chunks []decodedChunk) bool {
-	for i := range requires {
-		if !findMatchingEvent(&requires[i], chunks) {
-			return false
-		}
-	}
-	return true
-}
-
-func findMatchingEvent(req *wfaclapi.RequiredEvent, chunks []decodedChunk) bool {
-	for _, dc := range chunks {
-		// TODO: gate on chunk namespace once durabletask-go's chunk carries it.
-		if dc.chunk.GetAppId() != req.AppID {
-			continue
-		}
+	ri := 0
+	for ci := range chunks {
+		dc := &chunks[ci]
 		for _, e := range dc.events {
-			if eventStatusMatches(req, e, dc.taskScheduledByID, dc.childCreatedByID) {
+			if ri >= len(requires) {
 				return true
+			}
+			req := &requires[ri]
+			if dc.chunk.GetAppId() != req.AppID {
+				continue
+			}
+			if eventStatusMatches(req, e, dc) {
+				ri++
 			}
 		}
 	}
-	return false
+	return ri >= len(requires)
 }
 
 // eventStatusMatches reports whether e is the kind of history event described by req.
-func eventStatusMatches(
-	req *wfaclapi.RequiredEvent,
-	e *protos.HistoryEvent,
-	taskScheduledByID map[int32]*protos.TaskScheduledEvent,
-	childCreatedByID map[int32]*protos.ChildWorkflowInstanceCreatedEvent,
-) bool {
+func eventStatusMatches(req *wfaclapi.RequiredEvent, e *protos.HistoryEvent, dc *decodedChunk) bool {
 	switch req.EventType {
-	case wfaclapi.RequiredEventTypeActivity:
-		switch req.Status {
-		case wfaclapi.RequiredStatusStarted:
-			ts := e.GetTaskScheduled()
-			return ts != nil && ts.GetName() == req.Name
-		case wfaclapi.RequiredStatusCompleted:
-			tc := e.GetTaskCompleted()
-			if tc == nil {
-				return false
-			}
-			ts, ok := taskScheduledByID[tc.GetTaskScheduledId()]
-			return ok && ts.GetName() == req.Name
-		}
+	case wfaclapi.RequiredEventTypeActivityStarted:
+		ts := e.GetTaskScheduled()
+		return ts != nil && ts.GetName() == req.Name
 
-	case wfaclapi.RequiredEventTypeWorkflow:
-		switch req.Status {
-		case wfaclapi.RequiredStatusStarted:
-			// "workflow" started covers either the workflow's own
-			// ExecutionStarted or a child-workflow creation.
-			if es := e.GetExecutionStarted(); es != nil && es.GetName() == req.Name {
-				return true
-			}
-			if cwc := e.GetChildWorkflowInstanceCreated(); cwc != nil && cwc.GetName() == req.Name {
-				return true
-			}
-			return false
-		case wfaclapi.RequiredStatusCompleted:
-			// ExecutionCompleted carries no name on the event itself, so a
-			// name filter only matches a child-workflow completion.
-			if cwc := e.GetChildWorkflowInstanceCompleted(); cwc != nil {
-				cc, ok := childCreatedByID[cwc.GetTaskScheduledId()]
-				return ok && cc.GetName() == req.Name
-			}
+	case wfaclapi.RequiredEventTypeActivityCompleted:
+		tc := e.GetTaskCompleted()
+		if tc == nil {
 			return false
 		}
+		dc.indexByID()
+		ts, ok := dc.taskScheduledByID[tc.GetTaskScheduledId()]
+		return ok && ts.GetName() == req.Name
 
-	case wfaclapi.RequiredEventTypeEvent:
-		if req.Status != wfaclapi.RequiredStatusRaised {
+	case wfaclapi.RequiredEventTypeWorkflowStarted:
+		// A child-workflow creation, not the caller's own ExecutionStarted.
+		cwc := e.GetChildWorkflowInstanceCreated()
+		return cwc != nil && cwc.GetName() == req.Name
+
+	case wfaclapi.RequiredEventTypeWorkflowCompleted:
+		cwc := e.GetChildWorkflowInstanceCompleted()
+		if cwc == nil {
 			return false
 		}
+		dc.indexByID()
+		cc, ok := dc.childCreatedByID[cwc.GetTaskScheduledId()]
+		return ok && cc.GetName() == req.Name
+
+	case wfaclapi.RequiredEventTypeEventRaised:
 		er := e.GetEventRaised()
 		return er != nil && er.GetName() == req.Name
 	}

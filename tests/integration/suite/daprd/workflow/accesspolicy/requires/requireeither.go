@@ -98,16 +98,14 @@ spec:
       operations:
       - schedule
       requires:
-      - eventType: activity
-        status: Completed
+      - eventType: activity.completed
         name: fraud-check
         appID: %s
     - name: %s
       operations:
       - schedule
       requires:
-      - eventType: activity
-        status: Completed
+      - eventType: activity.completed
         name: vip-verified
         appID: %s
 `, targetID, callerID, r.sensitiveChildWF, callerID, r.sensitiveChildWF, callerID)

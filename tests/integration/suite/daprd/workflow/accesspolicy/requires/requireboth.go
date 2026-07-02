@@ -43,8 +43,9 @@ func init() {
 	suite.Register(new(requireboth))
 }
 
-// Multiple items inside a single `requires` list compose as AND: every
-// listed event must be present in propagated history.
+// Multiple items inside a single `requires` list compose as AND and must
+// appear in the listed order: every listed event must be present in propagated
+// history, in the order the entries are written.
 type requireboth struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
@@ -57,6 +58,7 @@ type requireboth struct {
 
 	sensitiveChildWF string
 	wfBoth           string
+	wfReversed       string
 	wfOnlyFraud      string
 	wfOnlyApproval   string
 	wfNeither        string
@@ -75,6 +77,7 @@ func (r *requireboth) Setup(t *testing.T) []framework.Option {
 
 	r.sensitiveChildWF = "sensitive-child"
 	r.wfBoth = "wf-both"
+	r.wfReversed = "wf-reversed"
 	r.wfOnlyFraud = "wf-only-fraud"
 	r.wfOnlyApproval = "wf-only-approval"
 	r.wfNeither = "wf-neither"
@@ -97,12 +100,10 @@ spec:
       operations:
       - schedule
       requires:
-      - eventType: activity
-        status: Completed
+      - eventType: activity.completed
         name: fraud-check
         appID: %s
-      - eventType: activity
-        status: Completed
+      - eventType: activity.completed
         name: human-approval
         appID: %s
 `, targetID, callerID, r.sensitiveChildWF, callerID, callerID)
@@ -156,6 +157,25 @@ func (r *requireboth) Run(t *testing.T, ctx context.Context) {
 		}
 		if err := ctx.CallActivity("human-approval").Await(nil); err != nil {
 			return nil, fmt.Errorf("human-approval failed: %w", err)
+		}
+		var out string
+		if err := ctx.CallChildWorkflow(r.sensitiveChildWF,
+			task.WithChildWorkflowAppID(targetAppID),
+			task.WithHistoryPropagation(api.PropagateOwnHistory()),
+		).Await(&out); err != nil {
+			return nil, fmt.Errorf("%s failed: %w", r.sensitiveChildWF, err)
+		}
+		return out, nil
+	}))
+
+	// Completes both prerequisites but in the reverse of the policy's order
+	// (human-approval before fraud-check), so the ordered match must deny.
+	require.NoError(t, callerReg.AddWorkflowN(r.wfReversed, func(ctx *task.WorkflowContext) (any, error) {
+		if err := ctx.CallActivity("human-approval").Await(nil); err != nil {
+			return nil, fmt.Errorf("human-approval failed: %w", err)
+		}
+		if err := ctx.CallActivity("fraud-check").Await(nil); err != nil {
+			return nil, fmt.Errorf("fraud-check failed: %w", err)
 		}
 		var out string
 		if err := ctx.CallChildWorkflow(r.sensitiveChildWF,
@@ -231,6 +251,20 @@ func (r *requireboth) Run(t *testing.T, ctx context.Context) {
 		assert.Nil(t, metadata.GetFailureDetails(),
 			"caller should succeed when both requires items are satisfied: %v", metadata.GetFailureDetails())
 		assert.Equal(t, before+1, r.targetWorkflowRuns.Load())
+	})
+
+	t.Run("denied when both present but completed out of order", func(t *testing.T) {
+		before := r.targetWorkflowRuns.Load()
+		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfReversed)
+		require.NoError(t, err)
+		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
+		require.NoError(t, err)
+		require.NotNil(t, metadata.GetFailureDetails(),
+			"workflow should fail when the required activities complete in the wrong order")
+		assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(),
+			"access denied by workflow access policy")
+		assert.Equal(t, before, r.targetWorkflowRuns.Load(),
+			"sensitive child WF must NOT execute when requires are satisfied out of order")
 	})
 
 	t.Run("denied when only fraud-check is present", func(t *testing.T) {

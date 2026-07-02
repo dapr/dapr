@@ -158,6 +158,7 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 					if fErr := o.failChildWorkflowACL(ctx, es.GetParentInstance().GetTaskScheduledId()); fErr != nil {
 						return fmt.Errorf("failed to record child workflow failure: %w (original: %v)", fErr, err)
 					}
+					return nil
 				}
 				// Detached spawn: fire-and-forget by design. There is no
 				// awaitable Task on the caller to fail, and propagating

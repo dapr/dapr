@@ -88,8 +88,7 @@ spec:
     activities:
     - name: %s
       requires:
-      - eventType: event
-        status: Raised
+      - eventType: event.raised
         name: approval-signal
         appID: %s
 `, targetID, callerID, r.gatedActivity, callerID)

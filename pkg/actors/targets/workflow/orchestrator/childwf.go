@@ -126,11 +126,6 @@ func isPermissionDenied(err error) bool {
 	return false
 }
 
-func aclFailureType() (string, string) {
-	return "WorkflowAccessPolicyDenied",
-		"access denied by workflow access policy"
-}
-
 // failChildWorkflowACL creates a ChildWorkflowInstanceFailed event on the
 // parent orchestrator when the child workflow call is rejected by a
 // WorkflowAccessPolicy. It uses a reminder-based approach to deliver the

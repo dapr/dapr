@@ -169,36 +169,18 @@ func withRequires(reqs ...wfaclapi.RequiredEvent) *wfaclapi.WorkflowAccessPolicy
 	return p
 }
 
-func TestWorkflowAccessPolicy_RequiredEvent_StatusMatrix(t *testing.T) {
-	cases := []struct {
-		name      string
-		eventType wfaclapi.RequiredEventType
-		status    wfaclapi.RequiredStatus
-		wantErr   bool
-	}{
-		{"activity+Started is valid", wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusStarted, false},
-		{"activity+Completed is valid", wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusCompleted, false},
-		{"activity+Raised is rejected", wfaclapi.RequiredEventTypeActivity, wfaclapi.RequiredStatusRaised, true},
-		{"workflow+Started is valid", wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusStarted, false},
-		{"workflow+Completed is valid", wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusCompleted, false},
-		{"workflow+Raised is rejected", wfaclapi.RequiredEventTypeWorkflow, wfaclapi.RequiredStatusRaised, true},
-		{"event+Raised is valid", wfaclapi.RequiredEventTypeEvent, wfaclapi.RequiredStatusRaised, false},
-		{"event+Started is rejected", wfaclapi.RequiredEventTypeEvent, wfaclapi.RequiredStatusStarted, true},
-		{"event+Completed is rejected", wfaclapi.RequiredEventTypeEvent, wfaclapi.RequiredStatusCompleted, true},
+func TestWorkflowAccessPolicy_RequiredEvent_EventTypeEnum(t *testing.T) {
+	valid := []wfaclapi.RequiredEventType{
+		wfaclapi.RequiredEventTypeActivityStarted,
+		wfaclapi.RequiredEventTypeActivityCompleted,
+		wfaclapi.RequiredEventTypeWorkflowStarted,
+		wfaclapi.RequiredEventTypeWorkflowCompleted,
+		wfaclapi.RequiredEventTypeEventRaised,
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			p := withRequires(wfaclapi.RequiredEvent{
-				EventType: tc.eventType,
-				Status:    tc.status,
-				Name:      "FraudCheck",
-			})
-			err := WorkflowAccessPolicy(t.Context(), p)
-			if tc.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
+	for _, et := range valid {
+		t.Run(string(et)+" is valid", func(t *testing.T) {
+			p := withRequires(wfaclapi.RequiredEvent{EventType: et, Name: "FraudCheck"})
+			require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
 		})
 	}
 }
@@ -206,17 +188,6 @@ func TestWorkflowAccessPolicy_RequiredEvent_StatusMatrix(t *testing.T) {
 func TestWorkflowAccessPolicy_RequiredEvent_InvalidEventTypeEnum(t *testing.T) {
 	p := withRequires(wfaclapi.RequiredEvent{
 		EventType: wfaclapi.RequiredEventType("bogus"),
-		Status:    wfaclapi.RequiredStatusCompleted,
-		Name:      "FraudCheck",
-	})
-	err := WorkflowAccessPolicy(t.Context(), p)
-	require.Error(t, err)
-}
-
-func TestWorkflowAccessPolicy_RequiredEvent_InvalidStatusEnum(t *testing.T) {
-	p := withRequires(wfaclapi.RequiredEvent{
-		EventType: wfaclapi.RequiredEventTypeActivity,
-		Status:    wfaclapi.RequiredStatus("bogus"),
 		Name:      "FraudCheck",
 	})
 	err := WorkflowAccessPolicy(t.Context(), p)
@@ -225,8 +196,7 @@ func TestWorkflowAccessPolicy_RequiredEvent_InvalidStatusEnum(t *testing.T) {
 
 func TestWorkflowAccessPolicy_RequiredEvent_EmptyName(t *testing.T) {
 	p := withRequires(wfaclapi.RequiredEvent{
-		EventType: wfaclapi.RequiredEventTypeActivity,
-		Status:    wfaclapi.RequiredStatusCompleted,
+		EventType: wfaclapi.RequiredEventTypeActivityCompleted,
 		Name:      "",
 	})
 	err := WorkflowAccessPolicy(t.Context(), p)
@@ -239,8 +209,7 @@ func TestWorkflowAccessPolicy_RequiredEvent_EmptyAppID(t *testing.T) {
 	p.Spec.Rules[0].Activities = []wfaclapi.ActivityRule{{
 		Name: "ProcessPayment",
 		Requires: []wfaclapi.RequiredEvent{{
-			EventType: wfaclapi.RequiredEventTypeActivity,
-			Status:    wfaclapi.RequiredStatusCompleted,
+			EventType: wfaclapi.RequiredEventTypeActivityCompleted,
 			Name:      "FraudCheck",
 		}},
 	}}
@@ -257,8 +226,7 @@ func TestWorkflowAccessPolicy_RequiresOnlyValidOnSchedule(t *testing.T) {
 		wfaclapi.WorkflowOperationTerminate,
 	}
 	p.Spec.Rules[0].Workflows[0].Requires = []wfaclapi.RequiredEvent{{
-		EventType: wfaclapi.RequiredEventTypeActivity,
-		Status:    wfaclapi.RequiredStatusCompleted,
+		EventType: wfaclapi.RequiredEventTypeActivityCompleted,
 		Name:      "FraudCheck",
 		AppID:     "producer-app",
 	}}
@@ -273,8 +241,7 @@ func TestWorkflowAccessPolicy_RequiresOnScheduleEntryAccepted(t *testing.T) {
 		wfaclapi.WorkflowOperationSchedule,
 	}
 	p.Spec.Rules[0].Workflows[0].Requires = []wfaclapi.RequiredEvent{{
-		EventType: wfaclapi.RequiredEventTypeActivity,
-		Status:    wfaclapi.RequiredStatusCompleted,
+		EventType: wfaclapi.RequiredEventTypeActivityCompleted,
 		Name:      "FraudCheck",
 		AppID:     "producer-app",
 	}}

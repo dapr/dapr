@@ -22,7 +22,7 @@ import (
 )
 
 func evalAllowed(cp *CompiledPolicies, callerAppID string, opType OperationType, operation wfaclapi.WorkflowOperation, opName string) bool {
-	allowed, _ := cp.Evaluate(callerAppID, opType, operation, opName, nil)
+	allowed, _ := cp.Evaluate(callerAppID, opType, operation, opName, nil, true)
 	return allowed
 }
 

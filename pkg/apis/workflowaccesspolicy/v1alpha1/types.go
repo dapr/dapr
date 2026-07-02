@@ -177,11 +177,11 @@ type WorkflowRule struct {
 	// +listType=set
 	Operations []WorkflowOperation `json:"operations"`
 
-	// Requires is a list of history events that must all be present in the
-	// caller's propagated workflow history for this rule to apply. The order of
-	// entries is not significant, and the events are not required to have
-	// occurred in any particular order. Only valid when the rule's only
-	// operation is `schedule`.
+	// Requires is an ordered list of history events that must all be present in
+	// the caller's propagated workflow history for this rule to apply. The
+	// entries must be satisfied in the order they are listed: each successive
+	// entry matches an event at or after the event matched by the previous one.
+	// Only valid when the rule's only operation is `schedule`.
 	// +optional
 	// +kubebuilder:validation:MaxItems=20
 	Requires []RequiredEvent `json:"requires,omitempty"`
@@ -196,52 +196,40 @@ type ActivityRule struct {
 	// +kubebuilder:validation:MaxLength=256
 	Name string `json:"name"`
 
-	// Requires is a list of history events that must all be present in the
-	// caller's propagated workflow history for this rule to apply. The order of
-	// entries is not significant, and the events are not required to have
-	// occurred in any particular order.
+	// Requires is an ordered list of history events that must all be present in
+	// the caller's propagated workflow history for this rule to apply. The
+	// entries must be satisfied in the order they are listed: each successive
+	// entry matches an event at or after the event matched by the previous one.
 	// +optional
 	// +kubebuilder:validation:MaxItems=20
 	Requires []RequiredEvent `json:"requires,omitempty"`
 }
 
-// RequiredEventType is the category of history event a RequiredEvent matches.
+// RequiredEventType is the history event a RequiredEvent matches. It combines
+// the event category with its lifecycle phase. workflow.started matches a
+// child-workflow creation (a workflow scheduled by the caller), not the
+// caller's own execution.
 type RequiredEventType string
 
 const (
-	RequiredEventTypeActivity RequiredEventType = "activity"
-	RequiredEventTypeWorkflow RequiredEventType = "workflow"
-	RequiredEventTypeEvent    RequiredEventType = "event"
-)
-
-// RequiredStatus is the lifecycle phase of a history event referenced by a
-// RequiredEvent. Started/Completed apply to eventType=activity and
-// eventType=workflow; Raised is the only valid status for eventType=event.
-type RequiredStatus string
-
-const (
-	RequiredStatusStarted   RequiredStatus = "Started"
-	RequiredStatusCompleted RequiredStatus = "Completed"
-	RequiredStatusRaised    RequiredStatus = "Raised"
+	RequiredEventTypeActivityStarted   RequiredEventType = "activity.started"
+	RequiredEventTypeActivityCompleted RequiredEventType = "activity.completed"
+	RequiredEventTypeWorkflowStarted   RequiredEventType = "workflow.started"
+	RequiredEventTypeWorkflowCompleted RequiredEventType = "workflow.completed"
+	RequiredEventTypeEventRaised       RequiredEventType = "event.raised"
 )
 
 // RequiredEvent is a single entry in a rule's Requires list. It matches when
-// the caller's propagated history contains an event of the given EventType
-// and Status with the given Name. eventType=event must be paired with
-// status=Raised; eventType=activity/workflow forbids status=Raised.
-//
-// +kubebuilder:validation:XValidation:rule="self.eventType == 'event' ? self.status == 'Raised' : self.status != 'Raised'",message="eventType=event requires status=Raised; eventType=activity|workflow forbids status=Raised"
+// the caller's propagated history contains an event of the given EventType,
+// produced by AppID, with the given Name.
 type RequiredEvent struct {
-	// EventType is the category of history event to match.
-	// +kubebuilder:validation:Enum=activity;workflow;event
+	// EventType is the history event that must be present.
+	// +kubebuilder:validation:Enum=activity.started;activity.completed;workflow.started;workflow.completed;event.raised
 	EventType RequiredEventType `json:"eventType"`
 
-	// Status is the lifecycle phase the matched event must have.
-	// +kubebuilder:validation:Enum=Started;Completed;Raised
-	Status RequiredStatus `json:"status"`
-
-	// Name is the activity/workflow name (eventType=activity|workflow) or
-	// the external event name (eventType=event).
+	// Name is the activity name (activity.started|activity.completed), the
+	// child-workflow name (workflow.started|workflow.completed), or the
+	// external event name (event.raised).
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
 	Name string `json:"name"`

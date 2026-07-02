@@ -88,8 +88,7 @@ spec:
     activities:
     - name: %s
       requires:
-      - eventType: activity
-        status: Completed
+      - eventType: activity.completed
         name: preflight
         appID: %s
 `, targetID, callerID, r.gatedActivity, callerID)

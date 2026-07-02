@@ -74,16 +74,15 @@ spec:
                             type: string
                           requires:
                             description: |-
-                              Requires is a list of history events that must all be present in the
-                              caller's propagated workflow history for this rule to apply. The order of
-                              entries is not significant, and the events are not required to have
-                              occurred in any particular order.
+                              Requires is an ordered list of history events that must all be present in
+                              the caller's propagated workflow history for this rule to apply. The
+                              entries must be satisfied in the order they are listed: each successive
+                              entry matches an event at or after the event matched by the previous one.
                             items:
                               description: |-
                                 RequiredEvent is a single entry in a rule's Requires list. It matches when
-                                the caller's propagated history contains an event of the given EventType
-                                and Status with the given Name. eventType=event must be paired with
-                                status=Raised; eventType=activity/workflow forbids status=Raised.
+                                the caller's propagated history contains an event of the given EventType,
+                                produced by AppID, with the given Name.
                               properties:
                                 appID:
                                   description: |-
@@ -93,39 +92,28 @@ spec:
                                   minLength: 1
                                   type: string
                                 eventType:
-                                  description: EventType is the category of history
-                                    event to match.
+                                  description: EventType is the history event that
+                                    must be present.
                                   enum:
-                                  - activity
-                                  - workflow
-                                  - event
+                                  - activity.started
+                                  - activity.completed
+                                  - workflow.started
+                                  - workflow.completed
+                                  - event.raised
                                   type: string
                                 name:
                                   description: |-
-                                    Name is the activity/workflow name (eventType=activity|workflow) or
-                                    the external event name (eventType=event).
+                                    Name is the activity name (activity.started|activity.completed), the
+                                    child-workflow name (workflow.started|workflow.completed), or the
+                                    external event name (event.raised).
                                   maxLength: 256
                                   minLength: 1
-                                  type: string
-                                status:
-                                  description: Status is the lifecycle phase the matched
-                                    event must have.
-                                  enum:
-                                  - Started
-                                  - Completed
-                                  - Raised
                                   type: string
                               required:
                               - appID
                               - eventType
                               - name
-                              - status
                               type: object
-                              x-kubernetes-validations:
-                              - message: eventType=event requires status=Raised; eventType=activity|workflow
-                                  forbids status=Raised
-                                rule: 'self.eventType == ''event'' ? self.status ==
-                                  ''Raised'' : self.status != ''Raised'''
                             maxItems: 20
                             type: array
                         required:
@@ -193,17 +181,16 @@ spec:
                             x-kubernetes-list-type: set
                           requires:
                             description: |-
-                              Requires is a list of history events that must all be present in the
-                              caller's propagated workflow history for this rule to apply. The order of
-                              entries is not significant, and the events are not required to have
-                              occurred in any particular order. Only valid when the rule's only
-                              operation is `schedule`.
+                              Requires is an ordered list of history events that must all be present in
+                              the caller's propagated workflow history for this rule to apply. The
+                              entries must be satisfied in the order they are listed: each successive
+                              entry matches an event at or after the event matched by the previous one.
+                              Only valid when the rule's only operation is `schedule`.
                             items:
                               description: |-
                                 RequiredEvent is a single entry in a rule's Requires list. It matches when
-                                the caller's propagated history contains an event of the given EventType
-                                and Status with the given Name. eventType=event must be paired with
-                                status=Raised; eventType=activity/workflow forbids status=Raised.
+                                the caller's propagated history contains an event of the given EventType,
+                                produced by AppID, with the given Name.
                               properties:
                                 appID:
                                   description: |-
@@ -213,39 +200,28 @@ spec:
                                   minLength: 1
                                   type: string
                                 eventType:
-                                  description: EventType is the category of history
-                                    event to match.
+                                  description: EventType is the history event that
+                                    must be present.
                                   enum:
-                                  - activity
-                                  - workflow
-                                  - event
+                                  - activity.started
+                                  - activity.completed
+                                  - workflow.started
+                                  - workflow.completed
+                                  - event.raised
                                   type: string
                                 name:
                                   description: |-
-                                    Name is the activity/workflow name (eventType=activity|workflow) or
-                                    the external event name (eventType=event).
+                                    Name is the activity name (activity.started|activity.completed), the
+                                    child-workflow name (workflow.started|workflow.completed), or the
+                                    external event name (event.raised).
                                   maxLength: 256
                                   minLength: 1
-                                  type: string
-                                status:
-                                  description: Status is the lifecycle phase the matched
-                                    event must have.
-                                  enum:
-                                  - Started
-                                  - Completed
-                                  - Raised
                                   type: string
                               required:
                               - appID
                               - eventType
                               - name
-                              - status
                               type: object
-                              x-kubernetes-validations:
-                              - message: eventType=event requires status=Raised; eventType=activity|workflow
-                                  forbids status=Raised
-                                rule: 'self.eventType == ''event'' ? self.status ==
-                                  ''Raised'' : self.status != ''Raised'''
                             maxItems: 20
                             type: array
                         required:

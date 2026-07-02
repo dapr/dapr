@@ -53,9 +53,10 @@ type workflow struct {
 
 	targetActivityRuns atomic.Int64
 
-	requiredWFName string
-	otherWFName    string
-	activityName   string
+	childWFName  string
+	wfWithChild  string
+	wfNoChild    string
+	activityName string
 }
 
 func (r *workflow) Setup(t *testing.T) []framework.Option {
@@ -69,8 +70,9 @@ func (r *workflow) Setup(t *testing.T) []framework.Option {
 	targetID := "target-" + uuid.NewString()
 	ns := uuid.NewString()
 
-	r.requiredWFName = "required-wf"
-	r.otherWFName = "other-wf"
+	r.childWFName = "required-child-wf"
+	r.wfWithChild = "wf-with-child"
+	r.wfNoChild = "wf-no-child"
 	r.activityName = "gated-activity"
 
 	policy := fmt.Appendf(nil, `
@@ -87,11 +89,10 @@ spec:
     activities:
     - name: %s
       requires:
-      - eventType: workflow
-        status: Started
+      - eventType: workflow.started
         name: %s
         appID: %s
-`, targetID, callerID, r.activityName, r.requiredWFName, callerID)
+`, targetID, callerID, r.activityName, r.childWFName, callerID)
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))
@@ -129,10 +130,17 @@ func (r *workflow) Run(t *testing.T, ctx context.Context) {
 	targetReg := task.NewTaskRegistry()
 	targetAppID := r.target.AppID()
 	activityName := r.activityName
+	childWFName := r.childWFName
 
-	// Caller WF whose name matches requires.name = its own ExecutionStarted
-	// satisfies the requires entry.
-	require.NoError(t, callerReg.AddWorkflowN(r.requiredWFName, func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, callerReg.AddWorkflowN(childWFName, func(ctx *task.WorkflowContext) (any, error) {
+		return "child-ok", nil
+	}))
+
+	// Creates the required child workflow before calling the gated activity.
+	require.NoError(t, callerReg.AddWorkflowN(r.wfWithChild, func(ctx *task.WorkflowContext) (any, error) {
+		if err := ctx.CallChildWorkflow(childWFName).Await(nil); err != nil {
+			return nil, fmt.Errorf("%s failed: %w", childWFName, err)
+		}
 		var out string
 		if err := ctx.CallActivity(activityName,
 			task.WithActivityAppID(targetAppID),
@@ -143,7 +151,7 @@ func (r *workflow) Run(t *testing.T, ctx context.Context) {
 		return out, nil
 	}))
 
-	require.NoError(t, callerReg.AddWorkflowN(r.otherWFName, func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, callerReg.AddWorkflowN(r.wfNoChild, func(ctx *task.WorkflowContext) (any, error) {
 		var out string
 		if err := ctx.CallActivity(activityName,
 			task.WithActivityAppID(targetAppID),
@@ -169,22 +177,22 @@ func (r *workflow) Run(t *testing.T, ctx context.Context) {
 		assert.GreaterOrEqual(c, len(r.target.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 	}, 20*time.Second, 10*time.Millisecond)
 
-	t.Run("allowed when caller's ExecutionStarted matches required workflow name", func(t *testing.T) {
+	t.Run("allowed when caller created the required child workflow", func(t *testing.T) {
 		before := r.targetActivityRuns.Load()
-		id, err := callerClient.ScheduleNewWorkflow(ctx, r.requiredWFName)
+		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfWithChild)
 		require.NoError(t, err)
 		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		require.True(t, api.WorkflowMetadataIsComplete(metadata))
 		assert.Nil(t, metadata.GetFailureDetails(),
-			"caller workflow should succeed when its own ExecutionStarted name matches the requires entry: %v", metadata.GetFailureDetails())
+			"caller should succeed when it created the required child workflow: %v", metadata.GetFailureDetails())
 		assert.Equal(t, `"gated-ok"`, metadata.GetOutput().GetValue())
 		assert.Equal(t, before+1, r.targetActivityRuns.Load())
 	})
 
-	t.Run("denied when caller's ExecutionStarted name does not match", func(t *testing.T) {
+	t.Run("denied when caller did not create the required child workflow", func(t *testing.T) {
 		before := r.targetActivityRuns.Load()
-		id, err := callerClient.ScheduleNewWorkflow(ctx, r.otherWFName)
+		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfNoChild)
 		require.NoError(t, err)
 		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)

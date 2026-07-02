@@ -27,6 +27,12 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
+// aclFailureType is the (errorType, errorMessage) recorded on the failure
+// event (child workflow or activity) when a call is denied by a policy.
+func aclFailureType() (string, string) {
+	return "WorkflowAccessPolicyDenied", workflowacl.DeniedMessageBase
+}
+
 // preLoadedMeta lets callers that have already loaded the actor's metadata
 // (e.g. handleStream which needs ometa for the response anyway) skip the
 // state load inside the access check. Pass nil to load on demand.
@@ -82,7 +88,7 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 		return status.Errorf(codes.PermissionDenied, "%s: app '%s' operation '%s' on workflow '%s' (instance '%s')", workflowacl.DeniedMessageBase, callerAppID, operation, name, o.actorID)
 	}
 
-	allowed, reason := policies.Evaluate(callerAppID, workflowacl.OperationTypeWorkflow, operation, name, history)
+	allowed, reason := policies.Evaluate(callerAppID, workflowacl.OperationTypeWorkflow, operation, name, history, o.signing.Enabled())
 	if !allowed {
 		log.Warnf("Workflow actor '%s': workflow access policy denied app '%s' operation '%s' on '%s' (reason=%s)", o.actorID, callerAppID, operation, name, reason)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), string(operation))

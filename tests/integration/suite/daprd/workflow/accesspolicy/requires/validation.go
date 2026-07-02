@@ -108,47 +108,33 @@ spec:
 		}, time.Second*20, time.Millisecond*10)
 	}
 
-	t.Run("eventType=event with status=Started is rejected", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "event-started.yaml"),
-			policyYAML("event-with-started",
-				`      - eventType: event
-        status: Started
+	t.Run("invalid eventType activity.raised is rejected", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "invalid-eventtype-activity-raised.yaml"),
+			policyYAML("invalid-eventtype-activity-raised",
+				`      - eventType: activity.raised
         name: X
         appID: caller`), 0o600))
-		v.logs.EventuallyContains(t, `\"event-with-started\" failed validation`, time.Second*20, time.Millisecond*10)
+		v.logs.EventuallyContains(t, `\"invalid-eventtype-activity-raised\" failed validation`, time.Second*20, time.Millisecond*10)
 		assertNoneLoaded(t)
 	})
 
-	t.Run("eventType=event with status=Completed is rejected", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "event-completed.yaml"),
-			policyYAML("event-with-completed",
-				`      - eventType: event
-        status: Completed
+	t.Run("invalid eventType workflow.raised is rejected", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "invalid-eventtype-workflow-raised.yaml"),
+			policyYAML("invalid-eventtype-workflow-raised",
+				`      - eventType: workflow.raised
         name: X
         appID: caller`), 0o600))
-		v.logs.EventuallyContains(t, `\"event-with-completed\" failed validation`, time.Second*20, time.Millisecond*10)
+		v.logs.EventuallyContains(t, `\"invalid-eventtype-workflow-raised\" failed validation`, time.Second*20, time.Millisecond*10)
 		assertNoneLoaded(t)
 	})
 
-	t.Run("eventType=activity with status=Raised is rejected", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "activity-raised.yaml"),
-			policyYAML("activity-with-raised",
-				`      - eventType: activity
-        status: Raised
+	t.Run("invalid eventType event.started is rejected", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "invalid-eventtype-event-started.yaml"),
+			policyYAML("invalid-eventtype-event-started",
+				`      - eventType: event.started
         name: X
         appID: caller`), 0o600))
-		v.logs.EventuallyContains(t, `\"activity-with-raised\" failed validation`, time.Second*20, time.Millisecond*10)
-		assertNoneLoaded(t)
-	})
-
-	t.Run("eventType=workflow with status=Raised is rejected", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "workflow-raised.yaml"),
-			policyYAML("workflow-with-raised",
-				`      - eventType: workflow
-        status: Raised
-        name: X
-        appID: caller`), 0o600))
-		v.logs.EventuallyContains(t, `\"workflow-with-raised\" failed validation`, time.Second*20, time.Millisecond*10)
+		v.logs.EventuallyContains(t, `\"invalid-eventtype-event-started\" failed validation`, time.Second*20, time.Millisecond*10)
 		assertNoneLoaded(t)
 	})
 
@@ -168,8 +154,7 @@ spec:
       - schedule
       - terminate
       requires:
-      - eventType: activity
-        status: Completed
+      - eventType: activity.completed
         name: X
         appID: caller
 `), 0o600))
@@ -178,21 +163,18 @@ spec:
 	})
 
 	t.Run("valid combinations load successfully", func(t *testing.T) {
-		for _, f := range []string{"event-started.yaml", "event-completed.yaml", "activity-raised.yaml", "workflow-raised.yaml", "requires-on-terminate.yaml"} {
+		for _, f := range []string{"invalid-eventtype-activity-raised.yaml", "invalid-eventtype-workflow-raised.yaml", "invalid-eventtype-event-started.yaml", "requires-on-terminate.yaml"} {
 			os.Remove(filepath.Join(v.resDir, f))
 		}
 		require.NoError(t, os.WriteFile(filepath.Join(v.resDir, "valid.yaml"),
 			policyYAML("valid-requires",
-				`      - eventType: activity
-        status: Completed
+				`      - eventType: activity.completed
         name: X
         appID: caller
-      - eventType: workflow
-        status: Started
+      - eventType: workflow.started
         name: Y
         appID: caller
-      - eventType: event
-        status: Raised
+      - eventType: event.raised
         name: Z
         appID: caller`), 0o600))
 

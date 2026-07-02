@@ -102,24 +102,20 @@ spec:
     activities:
     - name: %s
       requires:
-      - eventType: activity
-        status: Completed
+      - eventType: activity.completed
         name: fraud-check
         appID: %s
-      - eventType: activity
-        status: Completed
+      - eventType: activity.completed
         name: human-approval
         appID: %s
     - name: %s
       requires:
-      - eventType: activity
-        status: Completed
+      - eventType: activity.completed
         name: fraud-check
         appID: %s
     - name: %s
       requires:
-      - eventType: activity
-        status: Completed
+      - eventType: activity.completed
         name: fraud-check
         appID: nonexistent-app
     - name: %s
