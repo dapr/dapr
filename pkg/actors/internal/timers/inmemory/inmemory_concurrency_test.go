@@ -15,6 +15,7 @@ package inmemory
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -88,75 +89,101 @@ func TestTimerCallbacksDoNotBlockAcrossActors(t *testing.T) {
 	}
 }
 
-// TestTimerConcurrencyIsBounded asserts no more than MaxConcurrency callbacks
-// run at once, so a backlog of slow callbacks cannot grow goroutines without
-// bound.
-func TestTimerConcurrencyIsBounded(t *testing.T) {
-	const max = 2
-	started := make(chan string, 16)
+// TestManyActorsRunConcurrently asserts that timer callbacks for many different
+// actors all execute simultaneously: concurrency is unbounded (one loop per
+// actor), so N slow callbacks are all in flight at once. A bounded executor
+// would cap in-flight callbacks below N and this would time out.
+func TestManyActorsRunConcurrently(t *testing.T) {
+	const n = 50
+	var inFlight atomic.Int32
 	release := make(chan struct{})
-	var inFlight, maxSeen atomic.Int32
+	var releaseOnce sync.Once
+	releaseAll := func() { releaseOnce.Do(func() { close(release) }) }
 
 	router := routerfake.New().WithCallReminderFn(
 		func(ctx context.Context, r *api.Reminder) error {
-			n := inFlight.Add(1)
-			for {
-				m := maxSeen.Load()
-				if n <= m || maxSeen.CompareAndSwap(m, n) {
-					break
-				}
-			}
-			started <- r.ActorID
+			inFlight.Add(1)
 			<-release
-			inFlight.Add(-1)
 			return nil
 		},
 	)
 
-	store := New(Options{Router: router, MaxConcurrency: max})
-	var releaseOnce sync.Once
-	releaseAll := func() { releaseOnce.Do(func() { close(release) }) }
+	store := New(Options{Router: router})
 	t.Cleanup(func() {
 		releaseAll()
 		require.NoError(t, store.Close())
 	})
 
-	ids := []string{"a", "b", "c", "d"}
 	now := clock.RealClock{}.Now()
 	ctx := context.Background()
-	for _, id := range ids {
-		require.NoError(t, store.Create(ctx, newTimer(t, id, "", now)))
+	for k := range n {
+		require.NoError(t, store.Create(ctx, newTimer(t, fmt.Sprintf("actor-%d", k), "", now)))
 	}
 
-	seen := map[string]bool{}
-	// Exactly `max` callbacks should start; the rest are parked on the semaphore.
-	for k := 0; k < max; k++ {
-		select {
-		case id := <-started:
-			seen[id] = true
-		case <-time.After(2 * time.Second):
-			t.Fatalf("expected %d concurrent callbacks, only %d started", max, k)
-		}
-	}
-	select {
-	case id := <-started:
-		t.Fatalf("a %dth concurrent callback (%s) ran: concurrency cap not enforced", max+1, id)
-	case <-time.After(300 * time.Millisecond):
-	}
-	assert.LessOrEqual(t, maxSeen.Load(), int32(max))
-
-	// Releasing the in-flight callbacks must let the parked timers run. If a
-	// semaphore slot were leaked, the parked timers would never start and this
-	// would time out — the cap assertions above pass either way.
+	require.Eventually(t, func() bool { return inFlight.Load() == int32(n) },
+		10*time.Second, 10*time.Millisecond, "all %d actor callbacks should run concurrently", n)
 	releaseAll()
-	for len(seen) < len(ids) {
-		select {
-		case id := <-started:
-			seen[id] = true
-		case <-time.After(2 * time.Second):
-			t.Fatalf("parked timers never ran after release; saw %d/%d: %v", len(seen), len(ids), seen)
+}
+
+// TestSameActorTimersRunSeriallyInOrder asserts that multiple timers on the SAME
+// actor execute one at a time, in scheduled order, on that actor's loop — the
+// intra-actor ordering guarantee. The fake router has no per-actor lock, so the
+// serialization observed here comes solely from the per-actor loop.
+func TestSameActorTimersRunSeriallyInOrder(t *testing.T) {
+	var mu sync.Mutex
+	var order []string
+	var t1Running, overlap atomic.Bool
+	fired := make(chan struct{}, 2)
+
+	router := routerfake.New().WithCallReminderFn(
+		func(ctx context.Context, r *api.Reminder) error {
+			mu.Lock()
+			order = append(order, r.Name)
+			mu.Unlock()
+			switch r.Name {
+			case "t1":
+				t1Running.Store(true)
+				time.Sleep(40 * time.Millisecond)
+				t1Running.Store(false)
+			case "t2":
+				if t1Running.Load() {
+					overlap.Store(true) // t2 ran while t1 was still in flight
+				}
+			}
+			fired <- struct{}{}
+			return nil
+		},
+	)
+
+	store := New(Options{Router: router})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+
+	now := clock.RealClock{}.Now()
+	ctx := context.Background()
+	mk := func(name string, at time.Time) *api.Reminder {
+		return &api.Reminder{
+			ActorType:      "abc",
+			ActorID:        "x", // same actor => same loop
+			Name:           name,
+			Period:         api.NewEmptyReminderPeriod(),
+			RegisteredTime: at,
 		}
 	}
+	require.NoError(t, store.Create(ctx, mk("t1", now)))
+	require.NoError(t, store.Create(ctx, mk("t2", now.Add(5*time.Millisecond))))
+
+	for range 2 {
+		select {
+		case <-fired:
+		case <-time.After(5 * time.Second):
+			t.Fatal("same-actor timers did not both fire")
+		}
+	}
+
+	assert.False(t, overlap.Load(), "same-actor timer callbacks overlapped")
+	mu.Lock()
+	assert.Equal(t, []string{"t1", "t2"}, order, "same-actor timers fired out of scheduled order")
+	mu.Unlock()
 }
 
 // TestRepeatingTimerDoesNotOverlapItself asserts a single repeating timer never
@@ -293,7 +320,7 @@ func TestConcurrentCreateDeleteDoesNotResurrect(t *testing.T) {
 		wg.Add(1)
 		go func(id string) {
 			defer wg.Done()
-			for n := 0; n < 100; n++ {
+			for range 100 {
 				_ = store.Create(ctx, mk(id)) // fresh pointer each time
 				store.Delete(ctx, mk(id).Key())
 			}

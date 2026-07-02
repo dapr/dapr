@@ -24,23 +24,35 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/router"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/events/queue"
 	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.actors.timers.inmemory")
 
-// defaultMaxConcurrency bounds concurrent timer callbacks when
-// Options.MaxConcurrency is unset, capping goroutine growth under a backlog of
-// slow callbacks. Matches defaultBulkPublishMaxConcurrency.
-const defaultMaxConcurrency = 100
+// loopFactory builds the per-actor execution loops. A single queue.Processor
+// (a min-heap keyed by fire time) schedules all timers; when one is due it is
+// routed to its actor's loop, which runs that actor's callbacks serially and in
+// scheduled order. Callbacks for different actors run on their own loops
+// concurrently, so a slow callback never blocks another actor's timers.
+var loopFactory = loop.New[timerEvent](8)
+
+// timerEvent is the sealed set of events handled by an actor's timer loop.
+type timerEvent interface{ isTimerEvent() }
+
+// eventFire executes a due timer callback.
+type eventFire struct{ reminder *api.Reminder }
+
+func (*eventFire) isTimerEvent() {}
+
+// eventStop drains and stops an actor loop; enqueued by Close.
+type eventStop struct{}
+
+func (*eventStop) isTimerEvent() {}
 
 type Options struct {
 	Router router.Interface
-
-	// MaxConcurrency is the maximum number of timer callbacks that may execute
-	// concurrently. Values <= 0 use defaultMaxConcurrency.
-	MaxConcurrency int
 }
 
 type inmemory struct {
@@ -57,26 +69,27 @@ type inmemory struct {
 	// interleave.
 	queueLock sync.Mutex
 
-	sem    chan struct{}   // bounds concurrent callbacks
-	wg     sync.WaitGroup  // tracks in-flight callbacks so Close can drain them
+	// actorLoops holds one serial execution loop per actor, created lazily when
+	// an actor's first timer fires. Loops are not torn down while idle; they are
+	// closed together on Close.
+	actorLoops     map[string]loop.Interface[timerEvent]
+	actorLoopsLock sync.Mutex
+	closed         bool
+
+	wg     sync.WaitGroup  // tracks actor-loop goroutines so Close can drain them
 	ctx    context.Context // cancelled by Close to abort in-flight callbacks
 	cancel context.CancelFunc
 }
 
 // New returns a TimerProvider.
 func New(opts Options) timers.Storage {
-	maxConcurrency := opts.MaxConcurrency
-	if maxConcurrency <= 0 {
-		maxConcurrency = defaultMaxConcurrency
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	i := &inmemory{
 		router:            opts.Router,
 		clock:             clock.RealClock{},
 		activeTimers:      &sync.Map{},
 		activeTimersCount: make(map[string]*int64),
-		sem:               make(chan struct{}, maxConcurrency),
+		actorLoops:        make(map[string]loop.Interface[timerEvent]),
 		ctx:               ctx,
 		cancel:            cancel,
 	}
@@ -87,47 +100,74 @@ func New(opts Options) timers.Storage {
 }
 
 func (i *inmemory) Close() error {
-	// Cancel in-flight callbacks first. This both aborts running callbacks and
-	// unblocks any processorExecuteFn parked on the concurrency semaphore;
-	// otherwise processor.Close() (which waits for the processing loop to exit)
-	// could deadlock when the pool is full at shutdown.
+	// Abort in-flight callbacks (the context each loop passes to CallReminder).
 	i.cancel()
+	// Stop the scheduler before the loops: no further fires must be routed once
+	// we start closing loops, otherwise Enqueue could send on a closed loop.
 	i.processor.Close()
-	// Drain any callback goroutines that are still finishing.
+
+	i.actorLoopsLock.Lock()
+	i.closed = true
+	loops := i.actorLoops
+	i.actorLoops = nil
+	i.actorLoopsLock.Unlock()
+
+	for _, l := range loops {
+		l.Close(&eventStop{})
+	}
 	i.wg.Wait()
 	return nil
 }
 
-// processorExecuteFn is invoked by the queue processor when a timer is due. It
-// dispatches the callback to a bounded pool so callbacks for different actors
-// run concurrently. Per-actor serialization is still enforced downstream by the
-// per-actor lock (pkg/actors/targets/app/lock); that lock provides mutual
-// exclusion, not ordering, so an actor's timers may now fire in any order.
+// processorExecuteFn is invoked by the scheduler when a timer is due. It routes
+// the fire to the actor's serial loop, so an actor's callbacks run in scheduled
+// order while different actors run concurrently. Enqueue is non-blocking, so a
+// slow callback never stalls the scheduler or other actors.
 func (i *inmemory) processorExecuteFn(reminder *api.Reminder) {
-	// A full pool parks the processing loop: backpressure plus a bound on
-	// goroutine growth.
-	select {
-	case i.sem <- struct{}{}:
-	case <-i.ctx.Done():
-		return
+	if l := i.actorLoop(reminder.ActorKey()); l != nil {
+		l.Enqueue(&eventFire{reminder: reminder})
+	}
+}
+
+// actorLoop returns the actor's execution loop, creating and starting it on
+// first use. It returns nil once the store is closed.
+func (i *inmemory) actorLoop(actorKey string) loop.Interface[timerEvent] {
+	i.actorLoopsLock.Lock()
+	defer i.actorLoopsLock.Unlock()
+
+	if i.closed {
+		return nil
+	}
+	if l, ok := i.actorLoops[actorKey]; ok {
+		return l
 	}
 
-	i.wg.Add(1)
-	go func() {
-		defer func() {
-			<-i.sem
-			i.wg.Done()
-		}()
-		i.executeAndReschedule(reminder)
-	}()
+	l := loopFactory.NewLoop(i)
+	i.actorLoops[actorKey] = l
+	i.wg.Go(func() {
+		defer loopFactory.CacheLoop(l)
+		if err := l.Run(i.ctx); err != nil {
+			log.Errorf("Actor timer loop for %s stopped with error: %s", actorKey, err)
+		}
+	})
+	return l
+}
+
+// Handle runs on an actor's loop goroutine, executing that actor's timer
+// callbacks one at a time in submission (scheduled) order.
+func (i *inmemory) Handle(ctx context.Context, ev timerEvent) error {
+	if fire, ok := ev.(*eventFire); ok {
+		i.executeAndReschedule(ctx, fire.reminder)
+	}
+	return nil
 }
 
 // executeAndReschedule invokes a single timer callback and, if the timer
-// repeats, re-enqueues its next tick. It runs on a pool goroutine. Because the
-// next tick is only enqueued after the callback returns, a repeating timer never
-// overlaps its own next firing (dapr/dapr#1026).
-func (i *inmemory) executeAndReschedule(reminder *api.Reminder) {
-	err := i.router.CallReminder(i.ctx, reminder)
+// repeats, re-enqueues its next tick with the scheduler. The next tick is
+// enqueued only after the callback returns, so a repeating timer never overlaps
+// its own next firing (dapr/dapr#1026).
+func (i *inmemory) executeAndReschedule(ctx context.Context, reminder *api.Reminder) {
+	err := i.router.CallReminder(ctx, reminder)
 	diag.DefaultMonitoring.ActorTimerFired(reminder.ActorType, err == nil)
 	if err != nil {
 		// Successful and non-successful executions are treated as the same in
@@ -135,8 +175,8 @@ func (i *inmemory) executeAndReschedule(reminder *api.Reminder) {
 		log.Errorf("Error executing timer: %s", err)
 	}
 
-	// Advance the schedule on a copy: the processor reads ScheduledTime()
-	// (RegisteredTime) as its heap key from another goroutine, so mutating the
+	// Advance the schedule on a copy: the scheduler reads ScheduledTime()
+	// (RegisteredTime) as its heap key on its own goroutine, so mutating the
 	// reminder in place would race those reads. Publish the copy instead.
 	next := *reminder
 	done := next.TickExecuted()
