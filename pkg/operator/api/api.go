@@ -20,6 +20,7 @@ import (
 	"net"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	"google.golang.org/grpc"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -50,6 +51,7 @@ var log = logger.NewLogger("dapr.operator.api")
 type Options struct {
 	Client        client.Client
 	Cache         cache.Cache
+	PodReader     client.Reader
 	Security      security.Provider
 	Port          int
 	ListenAddress string
@@ -64,6 +66,7 @@ type Server interface {
 type apiServer struct {
 	operatorv1pb.UnimplementedOperatorServer
 	Client        client.Client
+	podReader     client.Reader
 	sec           security.Provider
 	port          string
 	listenAddress string
@@ -83,8 +86,16 @@ type apiServer struct {
 
 // NewAPIServer returns a new API server.
 func NewAPIServer(opts Options) Server {
+	// Fall back to the (cached) client when no dedicated pod reader is provided,
+	// so the server is safe to construct without the metadata-only optimization.
+	podReader := opts.PodReader
+	if podReader == nil {
+		podReader = opts.Client
+	}
+
 	return &apiServer{
-		Client: opts.Client,
+		Client:    opts.Client,
+		podReader: podReader,
 		compInformer: informer.New[componentsapi.Component](informer.Options{
 			Cache: opts.Cache,
 		}),
@@ -153,7 +164,19 @@ func (a *apiServer) Run(ctx context.Context) error {
 			// Block until context is done
 			<-ctx.Done()
 			a.closed.Store(true)
-			s.GracefulStop()
+			// Stop gracefully, but fall back to a forceful stop if a streaming
+			// handler does not return promptly, so shutdown cannot hang.
+			done := make(chan struct{})
+			go func() {
+				s.GracefulStop()
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				s.Stop()
+				<-done
+			}
 			return nil
 		},
 	).Run(ctx)
