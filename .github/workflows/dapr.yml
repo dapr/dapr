@@ -796,3 +796,20 @@ jobs:
         run: |
           gh api repos/dapr/test-infra/actions/workflows/version-update.yml/dispatches \
             -X POST -f ref="master" -f 'inputs[rel_version]=${{ env.REL_VERSION }}'
+
+  # Opens (or comments on) a tracking issue when a tagged release fails
+  # anywhere in the build/publish/docker/helm chain (binaries, container
+  # images, Helm chart, and GitHub release assets).
+  notify-on-failure:
+    needs: [build, publish, docker-publish, helm, helmpublish]
+    if: failure() && startswith(github.ref, 'refs/tags/v') && github.repository_owner == 'dapr'
+    permissions:
+      issues: write
+      actions: read
+    uses: dapr/.github/.github/workflows/open-issue-on-failure.yml@main
+    with:
+      title: "Release publish failed: ${{ github.workflow }} (${{ github.ref_name }})"
+      labels: "release,ci/publish-failure"
+      mention: "@dapr/maintainers-dapr @dapr/approvers-dapr"
+    secrets:
+      dapr_bot_token: ${{ secrets.DAPR_BOT_TOKEN }}
