@@ -1,0 +1,1750 @@
+{
+  "version": "v1.18.0",
+  "minor": "v1.18",
+  "infra": "Azure AKS, 3x Standard_D2s_v6 (2 vCPU, 8 GiB) Linux nodes",
+  "apis": [
+    {
+      "key": "service_invocation",
+      "title": "Service invocation",
+      "sections": [
+        {
+          "label": "HTTP",
+          "path": "service_invocation/http",
+          "efficiency": [
+            {
+              "test": "TestServiceInvocationHTTPPerformance",
+              "itPerSec": 999.9656929770122,
+              "appCPUm": 43,
+              "appMemMB": 13.631488,
+              "sidecarCPUm": 17,
+              "sidecarMemMB": 48.492543999999995,
+              "iterPerCore": "16666.1",
+              "iterPerGB": "16482.6"
+            }
+          ],
+          "scenarios": [
+            {
+              "name": "TestServiceInvocationHTTPPerformance",
+              "charts": [
+                {
+                  "name": "TestServiceInvocationHTTPPerformance_connection_stats.png",
+                  "file": "TestServiceInvocationHTTPPerformance_connection_stats.png"
+                },
+                {
+                  "name": "TestServiceInvocationHTTPPerformance_data_volume.png",
+                  "file": "TestServiceInvocationHTTPPerformance_data_volume.png"
+                },
+                {
+                  "name": "TestServiceInvocationHTTPPerformance_duration_breakdown.png",
+                  "file": "TestServiceInvocationHTTPPerformance_duration_breakdown.png"
+                },
+                {
+                  "name": "TestServiceInvocationHTTPPerformance_duration_requested_vs_actual.png",
+                  "file": "TestServiceInvocationHTTPPerformance_duration_requested_vs_actual.png"
+                },
+                {
+                  "name": "TestServiceInvocationHTTPPerformance_header_size.png",
+                  "file": "TestServiceInvocationHTTPPerformance_header_size.png"
+                },
+                {
+                  "name": "TestServiceInvocationHTTPPerformance_histogram_count.png",
+                  "file": "TestServiceInvocationHTTPPerformance_histogram_count.png"
+                },
+                {
+                  "name": "TestServiceInvocationHTTPPerformance_histogram_percent.png",
+                  "file": "TestServiceInvocationHTTPPerformance_histogram_percent.png"
+                },
+                {
+                  "name": "TestServiceInvocationHTTPPerformance_payload_size.png",
+                  "file": "TestServiceInvocationHTTPPerformance_payload_size.png"
+                },
+                {
+                  "name": "TestServiceInvocationHTTPPerformance_qps.png",
+                  "file": "TestServiceInvocationHTTPPerformance_qps.png"
+                },
+                {
+                  "name": "TestServiceInvocationHTTPPerformance_resource_cpu.png",
+                  "file": "TestServiceInvocationHTTPPerformance_resource_cpu.png"
+                },
+                {
+                  "name": "TestServiceInvocationHTTPPerformance_resource_memory.png",
+                  "file": "TestServiceInvocationHTTPPerformance_resource_memory.png"
+                },
+                {
+                  "name": "TestServiceInvocationHTTPPerformance_summary.png",
+                  "file": "TestServiceInvocationHTTPPerformance_summary.png"
+                },
+                {
+                  "name": "TestServiceInvocationHTTPPerformance_tail_latency.png",
+                  "file": "TestServiceInvocationHTTPPerformance_tail_latency.png"
+                },
+                {
+                  "name": "TestServiceInvocationHTTPPerformance_throughput.png",
+                  "file": "TestServiceInvocationHTTPPerformance_throughput.png"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "gRPC",
+          "path": "service_invocation/grpc",
+          "efficiency": [
+            {
+              "test": "TestServiceInvocationGrpcPerformance",
+              "itPerSec": 999.961704549931,
+              "appCPUm": 91,
+              "appMemMB": 14.31552,
+              "sidecarCPUm": 51,
+              "sidecarMemMB": 49.381375999999996,
+              "iterPerCore": "7042.0",
+              "iterPerGB": "16075.5"
+            }
+          ],
+          "scenarios": [
+            {
+              "name": "TestServiceInvocationGrpcPerformance",
+              "charts": [
+                {
+                  "name": "TestServiceInvocationGrpcPerformance_duration_breakdown.png",
+                  "file": "TestServiceInvocationGrpcPerformance_duration_breakdown.png"
+                },
+                {
+                  "name": "TestServiceInvocationGrpcPerformance_duration_requested_vs_actual.png",
+                  "file": "TestServiceInvocationGrpcPerformance_duration_requested_vs_actual.png"
+                },
+                {
+                  "name": "TestServiceInvocationGrpcPerformance_histogram_count.png",
+                  "file": "TestServiceInvocationGrpcPerformance_histogram_count.png"
+                },
+                {
+                  "name": "TestServiceInvocationGrpcPerformance_histogram_percent.png",
+                  "file": "TestServiceInvocationGrpcPerformance_histogram_percent.png"
+                },
+                {
+                  "name": "TestServiceInvocationGrpcPerformance_qps.png",
+                  "file": "TestServiceInvocationGrpcPerformance_qps.png"
+                },
+                {
+                  "name": "TestServiceInvocationGrpcPerformance_resource_cpu.png",
+                  "file": "TestServiceInvocationGrpcPerformance_resource_cpu.png"
+                },
+                {
+                  "name": "TestServiceInvocationGrpcPerformance_resource_memory.png",
+                  "file": "TestServiceInvocationGrpcPerformance_resource_memory.png"
+                },
+                {
+                  "name": "TestServiceInvocationGrpcPerformance_summary.png",
+                  "file": "TestServiceInvocationGrpcPerformance_summary.png"
+                },
+                {
+                  "name": "TestServiceInvocationGrpcPerformance_tail_latency.png",
+                  "file": "TestServiceInvocationGrpcPerformance_tail_latency.png"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "state",
+      "title": "State management",
+      "sections": [
+        {
+          "label": "HTTP",
+          "path": "state/http",
+          "efficiency": [
+            {
+              "test": "TestStateGetHTTPPerformance",
+              "itPerSec": 999.9716487704817,
+              "appCPUm": 87,
+              "appMemMB": 29.581311999999997,
+              "sidecarCPUm": 94,
+              "sidecarMemMB": 49.037312,
+              "iterPerCore": "5524.7",
+              "iterPerGB": "13024.5"
+            }
+          ],
+          "scenarios": [
+            {
+              "name": "TestStateGetHTTPPerformance",
+              "charts": [
+                {
+                  "name": "TestStateGetHTTPPerformance_connection_stats.png",
+                  "file": "TestStateGetHTTPPerformance_connection_stats.png"
+                },
+                {
+                  "name": "TestStateGetHTTPPerformance_data_volume.png",
+                  "file": "TestStateGetHTTPPerformance_data_volume.png"
+                },
+                {
+                  "name": "TestStateGetHTTPPerformance_duration_breakdown.png",
+                  "file": "TestStateGetHTTPPerformance_duration_breakdown.png"
+                },
+                {
+                  "name": "TestStateGetHTTPPerformance_duration_requested_vs_actual.png",
+                  "file": "TestStateGetHTTPPerformance_duration_requested_vs_actual.png"
+                },
+                {
+                  "name": "TestStateGetHTTPPerformance_header_size.png",
+                  "file": "TestStateGetHTTPPerformance_header_size.png"
+                },
+                {
+                  "name": "TestStateGetHTTPPerformance_histogram_count.png",
+                  "file": "TestStateGetHTTPPerformance_histogram_count.png"
+                },
+                {
+                  "name": "TestStateGetHTTPPerformance_histogram_percent.png",
+                  "file": "TestStateGetHTTPPerformance_histogram_percent.png"
+                },
+                {
+                  "name": "TestStateGetHTTPPerformance_payload_size.png",
+                  "file": "TestStateGetHTTPPerformance_payload_size.png"
+                },
+                {
+                  "name": "TestStateGetHTTPPerformance_qps.png",
+                  "file": "TestStateGetHTTPPerformance_qps.png"
+                },
+                {
+                  "name": "TestStateGetHTTPPerformance_resource_cpu.png",
+                  "file": "TestStateGetHTTPPerformance_resource_cpu.png"
+                },
+                {
+                  "name": "TestStateGetHTTPPerformance_resource_memory.png",
+                  "file": "TestStateGetHTTPPerformance_resource_memory.png"
+                },
+                {
+                  "name": "TestStateGetHTTPPerformance_summary.png",
+                  "file": "TestStateGetHTTPPerformance_summary.png"
+                },
+                {
+                  "name": "TestStateGetHTTPPerformance_tail_latency.png",
+                  "file": "TestStateGetHTTPPerformance_tail_latency.png"
+                },
+                {
+                  "name": "TestStateGetHTTPPerformance_throughput.png",
+                  "file": "TestStateGetHTTPPerformance_throughput.png"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "gRPC",
+          "path": "state/grpc",
+          "efficiency": [
+            {
+              "test": "TestStateGetGrpcPerformance",
+              "itPerSec": 999.9838214117509,
+              "appCPUm": 15,
+              "appMemMB": 30.16704,
+              "sidecarCPUm": 4,
+              "sidecarMemMB": 43.905024,
+              "iterPerCore": "52630.7",
+              "iterPerGB": "13824.2"
+            }
+          ],
+          "scenarios": [
+            {
+              "name": "TestStateGetGrpcPerformance",
+              "charts": [
+                {
+                  "name": "TestStateGetGrpcPerformance_duration_breakdown.png",
+                  "file": "TestStateGetGrpcPerformance_duration_breakdown.png"
+                },
+                {
+                  "name": "TestStateGetGrpcPerformance_duration_requested_vs_actual.png",
+                  "file": "TestStateGetGrpcPerformance_duration_requested_vs_actual.png"
+                },
+                {
+                  "name": "TestStateGetGrpcPerformance_histogram_count.png",
+                  "file": "TestStateGetGrpcPerformance_histogram_count.png"
+                },
+                {
+                  "name": "TestStateGetGrpcPerformance_histogram_percent.png",
+                  "file": "TestStateGetGrpcPerformance_histogram_percent.png"
+                },
+                {
+                  "name": "TestStateGetGrpcPerformance_qps.png",
+                  "file": "TestStateGetGrpcPerformance_qps.png"
+                },
+                {
+                  "name": "TestStateGetGrpcPerformance_resource_cpu.png",
+                  "file": "TestStateGetGrpcPerformance_resource_cpu.png"
+                },
+                {
+                  "name": "TestStateGetGrpcPerformance_resource_memory.png",
+                  "file": "TestStateGetGrpcPerformance_resource_memory.png"
+                },
+                {
+                  "name": "TestStateGetGrpcPerformance_summary.png",
+                  "file": "TestStateGetGrpcPerformance_summary.png"
+                },
+                {
+                  "name": "TestStateGetGrpcPerformance_tail_latency.png",
+                  "file": "TestStateGetGrpcPerformance_tail_latency.png"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "pubsub",
+      "title": "Publish and subscribe",
+      "sections": [
+        {
+          "label": "HTTP",
+          "path": "pubsub/http",
+          "scenarios": [
+            {
+              "name": "TestPubsubPublishHttpPerformance",
+              "charts": [
+                {
+                  "name": "TestPubsubPublishHttpPerformance_data_volume.png",
+                  "file": "TestPubsubPublishHttpPerformance_data_volume.png"
+                },
+                {
+                  "name": "TestPubsubPublishHttpPerformance_duration_breakdown.png",
+                  "file": "TestPubsubPublishHttpPerformance_duration_breakdown.png"
+                },
+                {
+                  "name": "TestPubsubPublishHttpPerformance_duration_low.png",
+                  "file": "TestPubsubPublishHttpPerformance_duration_low.png"
+                },
+                {
+                  "name": "TestPubsubPublishHttpPerformance_summary.png",
+                  "file": "TestPubsubPublishHttpPerformance_summary.png"
+                },
+                {
+                  "name": "TestPubsubPublishHttpPerformance_tail_latency.png",
+                  "file": "TestPubsubPublishHttpPerformance_tail_latency.png"
+                },
+                {
+                  "name": "TestPubsubPublishHttpPerformance_throughput.png",
+                  "file": "TestPubsubPublishHttpPerformance_throughput.png"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "gRPC",
+          "path": "pubsub/grpc",
+          "efficiency": [
+            {
+              "test": "TestPubsubPublishGrpcPerformance",
+              "itPerSec": 999.984912710963,
+              "appCPUm": 86,
+              "appMemMB": 33.112064,
+              "sidecarCPUm": 106,
+              "sidecarMemMB": 51.421184,
+              "iterPerCore": "5208.3",
+              "iterPerGB": "12113.4"
+            }
+          ],
+          "scenarios": [
+            {
+              "name": "TestPubsubPublishGrpcPerformance",
+              "charts": [
+                {
+                  "name": "TestPubsubPublishGrpcPerformance_duration_breakdown.png",
+                  "file": "TestPubsubPublishGrpcPerformance_duration_breakdown.png"
+                },
+                {
+                  "name": "TestPubsubPublishGrpcPerformance_duration_requested_vs_actual.png",
+                  "file": "TestPubsubPublishGrpcPerformance_duration_requested_vs_actual.png"
+                },
+                {
+                  "name": "TestPubsubPublishGrpcPerformance_histogram_count.png",
+                  "file": "TestPubsubPublishGrpcPerformance_histogram_count.png"
+                },
+                {
+                  "name": "TestPubsubPublishGrpcPerformance_histogram_percent.png",
+                  "file": "TestPubsubPublishGrpcPerformance_histogram_percent.png"
+                },
+                {
+                  "name": "TestPubsubPublishGrpcPerformance_qps.png",
+                  "file": "TestPubsubPublishGrpcPerformance_qps.png"
+                },
+                {
+                  "name": "TestPubsubPublishGrpcPerformance_resource_cpu.png",
+                  "file": "TestPubsubPublishGrpcPerformance_resource_cpu.png"
+                },
+                {
+                  "name": "TestPubsubPublishGrpcPerformance_resource_memory.png",
+                  "file": "TestPubsubPublishGrpcPerformance_resource_memory.png"
+                },
+                {
+                  "name": "TestPubsubPublishGrpcPerformance_summary.png",
+                  "file": "TestPubsubPublishGrpcPerformance_summary.png"
+                },
+                {
+                  "name": "TestPubsubPublishGrpcPerformance_tail_latency.png",
+                  "file": "TestPubsubPublishGrpcPerformance_tail_latency.png"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Bulk / HTTP",
+          "path": "pubsub/bulk/http",
+          "efficiency": [
+            {
+              "test": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus",
+              "itPerSec": 67.55403913319209,
+              "appCPUm": 24,
+              "appMemMB": 18.788352,
+              "sidecarCPUm": 2,
+              "sidecarMemMB": 37.433344,
+              "iterPerCore": "2598.2",
+              "iterPerGB": "1230.4"
+            }
+          ],
+          "scenarios": [
+            {
+              "name": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus",
+              "charts": [
+                {
+                  "name": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_data_volume.png",
+                  "file": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_data_volume.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_duration_breakdown.png",
+                  "file": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_duration_breakdown.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_duration_low.png",
+                  "file": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_duration_low.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_resource_cpu.png",
+                  "file": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_resource_cpu.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_resource_memory.png",
+                  "file": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_resource_memory.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_summary.png",
+                  "file": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_summary.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_tail_latency.png",
+                  "file": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_tail_latency.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_throughput.png",
+                  "file": "TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_throughput.png"
+                }
+              ]
+            },
+            {
+              "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk",
+              "charts": [
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_data_volume.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_data_volume.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_duration_breakdown.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_duration_breakdown.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_duration_low.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_duration_low.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_summary.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_summary.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_tail_latency.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_tail_latency.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_throughput.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_throughput.png"
+                }
+              ]
+            },
+            {
+              "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal",
+              "charts": [
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_data_volume.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_data_volume.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_duration_breakdown.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_duration_breakdown.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_duration_low.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_duration_low.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_summary.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_summary.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_tail_latency.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_tail_latency.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_throughput.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_throughput.png"
+                }
+              ]
+            },
+            {
+              "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk",
+              "charts": [
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_data_volume.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_data_volume.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_duration_breakdown.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_duration_breakdown.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_duration_low.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_duration_low.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_summary.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_summary.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_tail_latency.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_tail_latency.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_throughput.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_throughput.png"
+                }
+              ]
+            },
+            {
+              "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal",
+              "charts": [
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_data_volume.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_data_volume.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_duration_breakdown.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_duration_breakdown.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_duration_low.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_duration_low.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_summary.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_summary.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_tail_latency.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_tail_latency.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_throughput.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_throughput.png"
+                }
+              ]
+            },
+            {
+              "name": "TestPubsubBulkPublishHttpPerformance_variants_duration",
+              "charts": [
+                {
+                  "name": "TestPubsubBulkPublishHttpPerformance_variants_duration.png",
+                  "file": "TestPubsubBulkPublishHttpPerformance_variants_duration.png"
+                }
+              ]
+            },
+            {
+              "name": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus",
+              "charts": [
+                {
+                  "name": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_data_volume.png",
+                  "file": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_data_volume.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_duration_breakdown.png",
+                  "file": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_duration_breakdown.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_duration_low.png",
+                  "file": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_duration_low.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_resource_cpu.png",
+                  "file": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_resource_cpu.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_resource_memory.png",
+                  "file": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_resource_memory.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_summary.png",
+                  "file": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_summary.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_tail_latency.png",
+                  "file": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_tail_latency.png"
+                },
+                {
+                  "name": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_throughput.png",
+                  "file": "TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_throughput.png"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Bulk / gRPC",
+          "path": "pubsub/bulk/grpc",
+          "efficiency": [
+            {
+              "test": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event",
+              "itPerSec": 199.942439714035,
+              "appCPUm": 476,
+              "appMemMB": 41.127936,
+              "sidecarCPUm": 1126,
+              "sidecarMemMB": 77.484032,
+              "iterPerCore": "124.8",
+              "iterPerGB": "1726.1"
+            },
+            {
+              "test": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)",
+              "itPerSec": 199.95213383525768,
+              "appCPUm": 372,
+              "appMemMB": 44.015616,
+              "sidecarCPUm": 1000,
+              "sidecarMemMB": 76.29619199999999,
+              "iterPerCore": "145.7",
+              "iterPerGB": "1701.8"
+            },
+            {
+              "test": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event",
+              "itPerSec": 199.9411671249617,
+              "appCPUm": 564,
+              "appMemMB": 42.205183999999996,
+              "sidecarCPUm": 1676,
+              "sidecarMemMB": 94.49472,
+              "iterPerCore": "89.3",
+              "iterPerGB": "1497.7"
+            },
+            {
+              "test": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)",
+              "itPerSec": 199.93869627982536,
+              "appCPUm": 758,
+              "appMemMB": 43.057151999999995,
+              "sidecarCPUm": 1545,
+              "sidecarMemMB": 94.06464,
+              "iterPerCore": "86.8",
+              "iterPerGB": "1493.1"
+            }
+          ],
+          "scenarios": [
+            {
+              "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event",
+              "charts": [
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_duration_breakdown.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_duration_breakdown.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_duration_requested_vs_actual.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_duration_requested_vs_actual.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_histogram_count.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_histogram_count.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_histogram_percent.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_histogram_percent.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_qps.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_qps.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_resource_cpu.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_resource_cpu.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_resource_memory.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_resource_memory.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_summary.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_summary.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_tail_latency.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_tail_latency.png"
+                }
+              ]
+            },
+            {
+              "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)",
+              "charts": [
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_duration_breakdown.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_%28raw_payload%29_duration_breakdown.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_duration_requested_vs_actual.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_%28raw_payload%29_duration_requested_vs_actual.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_histogram_count.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_%28raw_payload%29_histogram_count.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_histogram_percent.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_%28raw_payload%29_histogram_percent.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_qps.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_%28raw_payload%29_qps.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_resource_cpu.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_%28raw_payload%29_resource_cpu.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_resource_memory.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_%28raw_payload%29_resource_memory.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_summary.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_%28raw_payload%29_summary.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_tail_latency.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_%28raw_payload%29_tail_latency.png"
+                }
+              ]
+            },
+            {
+              "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event",
+              "charts": [
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_duration_breakdown.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_duration_breakdown.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_duration_requested_vs_actual.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_duration_requested_vs_actual.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_histogram_count.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_histogram_count.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_histogram_percent.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_histogram_percent.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_qps.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_qps.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_resource_cpu.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_resource_cpu.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_resource_memory.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_resource_memory.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_summary.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_summary.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_tail_latency.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_tail_latency.png"
+                }
+              ]
+            },
+            {
+              "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)",
+              "charts": [
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_duration_breakdown.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_%28raw_payload%29_duration_breakdown.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_duration_requested_vs_actual.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_%28raw_payload%29_duration_requested_vs_actual.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_histogram_count.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_%28raw_payload%29_histogram_count.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_histogram_percent.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_%28raw_payload%29_histogram_percent.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_qps.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_%28raw_payload%29_qps.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_resource_cpu.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_%28raw_payload%29_resource_cpu.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_resource_memory.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_%28raw_payload%29_resource_memory.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_summary.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_%28raw_payload%29_summary.png"
+                },
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_tail_latency.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_%28raw_payload%29_tail_latency.png"
+                }
+              ]
+            },
+            {
+              "name": "TestBulkPubsubPublishGrpcPerformance_variants_duration",
+              "charts": [
+                {
+                  "name": "TestBulkPubsubPublishGrpcPerformance_variants_duration.png",
+                  "file": "TestBulkPubsubPublishGrpcPerformance_variants_duration.png"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "actors",
+      "title": "Actors",
+      "sections": [
+        {
+          "path": "actors",
+          "efficiency": [
+            {
+              "test": "TestActorActivate",
+              "itPerSec": 499.9806454325609,
+              "appCPUm": 662,
+              "appMemMB": 891.2650239999999,
+              "sidecarCPUm": 106,
+              "sidecarMemMB": 64.671744,
+              "iterPerCore": "651.0",
+              "iterPerGB": "535.6"
+            },
+            {
+              "test": "TestActorDoubleActivation",
+              "itPerSec": 770.8735020175127,
+              "appCPUm": 206,
+              "appMemMB": 14.323711999999999,
+              "sidecarCPUm": 419,
+              "sidecarMemMB": 204.046336,
+              "iterPerCore": "1233.4",
+              "iterPerGB": "3614.8"
+            },
+            {
+              "test": "TestActorIdStress",
+              "itPerSec": 13497.434599026765,
+              "appCPUm": 101,
+              "appMemMB": 35.434495999999996,
+              "sidecarCPUm": 413,
+              "sidecarMemMB": 241.34860799999998,
+              "iterPerCore": "26259.6",
+              "iterPerGB": "49935.8"
+            },
+            {
+              "test": "TestActorReminderRegistrationPerformance",
+              "itPerSec": 1415.094708163006,
+              "appCPUm": 1,
+              "appMemMB": 7.733248,
+              "sidecarCPUm": 29,
+              "sidecarMemMB": 55.836672,
+              "iterPerCore": "47169.8",
+              "iterPerGB": "22794.7"
+            },
+            {
+              "test": "TestActorTimerWithStatePerformance",
+              "itPerSec": 219.97996154867928,
+              "appCPUm": 138,
+              "appMemMB": 1191.8786559999999,
+              "sidecarCPUm": 155,
+              "sidecarMemMB": 64.864256,
+              "iterPerCore": "750.8",
+              "iterPerGB": "179.2"
+            }
+          ],
+          "scenarios": [
+            {
+              "name": "TestActorActivate",
+              "charts": [
+                {
+                  "name": "TestActorActivate_data_volume.png",
+                  "file": "TestActorActivate_data_volume.png"
+                },
+                {
+                  "name": "TestActorActivate_duration_breakdown.png",
+                  "file": "TestActorActivate_duration_breakdown.png"
+                },
+                {
+                  "name": "TestActorActivate_duration_requested_vs_actual.png",
+                  "file": "TestActorActivate_duration_requested_vs_actual.png"
+                },
+                {
+                  "name": "TestActorActivate_header_size.png",
+                  "file": "TestActorActivate_header_size.png"
+                },
+                {
+                  "name": "TestActorActivate_histogram_count.png",
+                  "file": "TestActorActivate_histogram_count.png"
+                },
+                {
+                  "name": "TestActorActivate_histogram_percent.png",
+                  "file": "TestActorActivate_histogram_percent.png"
+                },
+                {
+                  "name": "TestActorActivate_payload_size.png",
+                  "file": "TestActorActivate_payload_size.png"
+                },
+                {
+                  "name": "TestActorActivate_qps.png",
+                  "file": "TestActorActivate_qps.png"
+                },
+                {
+                  "name": "TestActorActivate_resource_cpu.png",
+                  "file": "TestActorActivate_resource_cpu.png"
+                },
+                {
+                  "name": "TestActorActivate_resource_memory.png",
+                  "file": "TestActorActivate_resource_memory.png"
+                },
+                {
+                  "name": "TestActorActivate_summary.png",
+                  "file": "TestActorActivate_summary.png"
+                },
+                {
+                  "name": "TestActorActivate_tail_latency.png",
+                  "file": "TestActorActivate_tail_latency.png"
+                },
+                {
+                  "name": "TestActorActivate_throughput.png",
+                  "file": "TestActorActivate_throughput.png"
+                }
+              ]
+            },
+            {
+              "name": "TestActorDoubleActivation",
+              "charts": [
+                {
+                  "name": "TestActorDoubleActivation_data_volume.png",
+                  "file": "TestActorDoubleActivation_data_volume.png"
+                },
+                {
+                  "name": "TestActorDoubleActivation_duration_breakdown.png",
+                  "file": "TestActorDoubleActivation_duration_breakdown.png"
+                },
+                {
+                  "name": "TestActorDoubleActivation_duration_low.png",
+                  "file": "TestActorDoubleActivation_duration_low.png"
+                },
+                {
+                  "name": "TestActorDoubleActivation_resource_cpu.png",
+                  "file": "TestActorDoubleActivation_resource_cpu.png"
+                },
+                {
+                  "name": "TestActorDoubleActivation_resource_memory.png",
+                  "file": "TestActorDoubleActivation_resource_memory.png"
+                },
+                {
+                  "name": "TestActorDoubleActivation_summary.png",
+                  "file": "TestActorDoubleActivation_summary.png"
+                },
+                {
+                  "name": "TestActorDoubleActivation_tail_latency.png",
+                  "file": "TestActorDoubleActivation_tail_latency.png"
+                },
+                {
+                  "name": "TestActorDoubleActivation_throughput.png",
+                  "file": "TestActorDoubleActivation_throughput.png"
+                }
+              ]
+            },
+            {
+              "name": "TestActorIdStress",
+              "charts": [
+                {
+                  "name": "TestActorIdStress_data_volume.png",
+                  "file": "TestActorIdStress_data_volume.png"
+                },
+                {
+                  "name": "TestActorIdStress_duration_breakdown.png",
+                  "file": "TestActorIdStress_duration_breakdown.png"
+                },
+                {
+                  "name": "TestActorIdStress_duration_low.png",
+                  "file": "TestActorIdStress_duration_low.png"
+                },
+                {
+                  "name": "TestActorIdStress_resource_cpu.png",
+                  "file": "TestActorIdStress_resource_cpu.png"
+                },
+                {
+                  "name": "TestActorIdStress_resource_memory.png",
+                  "file": "TestActorIdStress_resource_memory.png"
+                },
+                {
+                  "name": "TestActorIdStress_summary.png",
+                  "file": "TestActorIdStress_summary.png"
+                },
+                {
+                  "name": "TestActorIdStress_tail_latency.png",
+                  "file": "TestActorIdStress_tail_latency.png"
+                },
+                {
+                  "name": "TestActorIdStress_throughput.png",
+                  "file": "TestActorIdStress_throughput.png"
+                }
+              ]
+            },
+            {
+              "name": "TestActorReminderRegistrationPerformance",
+              "charts": [
+                {
+                  "name": "TestActorReminderRegistrationPerformance_connection_stats.png",
+                  "file": "TestActorReminderRegistrationPerformance_connection_stats.png"
+                },
+                {
+                  "name": "TestActorReminderRegistrationPerformance_data_volume.png",
+                  "file": "TestActorReminderRegistrationPerformance_data_volume.png"
+                },
+                {
+                  "name": "TestActorReminderRegistrationPerformance_duration_breakdown.png",
+                  "file": "TestActorReminderRegistrationPerformance_duration_breakdown.png"
+                },
+                {
+                  "name": "TestActorReminderRegistrationPerformance_duration_requested_vs_actual.png",
+                  "file": "TestActorReminderRegistrationPerformance_duration_requested_vs_actual.png"
+                },
+                {
+                  "name": "TestActorReminderRegistrationPerformance_header_size.png",
+                  "file": "TestActorReminderRegistrationPerformance_header_size.png"
+                },
+                {
+                  "name": "TestActorReminderRegistrationPerformance_histogram_count.png",
+                  "file": "TestActorReminderRegistrationPerformance_histogram_count.png"
+                },
+                {
+                  "name": "TestActorReminderRegistrationPerformance_histogram_percent.png",
+                  "file": "TestActorReminderRegistrationPerformance_histogram_percent.png"
+                },
+                {
+                  "name": "TestActorReminderRegistrationPerformance_payload_size.png",
+                  "file": "TestActorReminderRegistrationPerformance_payload_size.png"
+                },
+                {
+                  "name": "TestActorReminderRegistrationPerformance_qps.png",
+                  "file": "TestActorReminderRegistrationPerformance_qps.png"
+                },
+                {
+                  "name": "TestActorReminderRegistrationPerformance_resource_cpu.png",
+                  "file": "TestActorReminderRegistrationPerformance_resource_cpu.png"
+                },
+                {
+                  "name": "TestActorReminderRegistrationPerformance_resource_memory.png",
+                  "file": "TestActorReminderRegistrationPerformance_resource_memory.png"
+                },
+                {
+                  "name": "TestActorReminderRegistrationPerformance_summary.png",
+                  "file": "TestActorReminderRegistrationPerformance_summary.png"
+                },
+                {
+                  "name": "TestActorReminderRegistrationPerformance_tail_latency.png",
+                  "file": "TestActorReminderRegistrationPerformance_tail_latency.png"
+                },
+                {
+                  "name": "TestActorReminderRegistrationPerformance_throughput.png",
+                  "file": "TestActorReminderRegistrationPerformance_throughput.png"
+                }
+              ]
+            },
+            {
+              "name": "TestActorTimerWithStatePerformance",
+              "charts": [
+                {
+                  "name": "TestActorTimerWithStatePerformance_connection_stats.png",
+                  "file": "TestActorTimerWithStatePerformance_connection_stats.png"
+                },
+                {
+                  "name": "TestActorTimerWithStatePerformance_data_volume.png",
+                  "file": "TestActorTimerWithStatePerformance_data_volume.png"
+                },
+                {
+                  "name": "TestActorTimerWithStatePerformance_duration_breakdown.png",
+                  "file": "TestActorTimerWithStatePerformance_duration_breakdown.png"
+                },
+                {
+                  "name": "TestActorTimerWithStatePerformance_duration_requested_vs_actual.png",
+                  "file": "TestActorTimerWithStatePerformance_duration_requested_vs_actual.png"
+                },
+                {
+                  "name": "TestActorTimerWithStatePerformance_header_size.png",
+                  "file": "TestActorTimerWithStatePerformance_header_size.png"
+                },
+                {
+                  "name": "TestActorTimerWithStatePerformance_histogram_count.png",
+                  "file": "TestActorTimerWithStatePerformance_histogram_count.png"
+                },
+                {
+                  "name": "TestActorTimerWithStatePerformance_histogram_percent.png",
+                  "file": "TestActorTimerWithStatePerformance_histogram_percent.png"
+                },
+                {
+                  "name": "TestActorTimerWithStatePerformance_payload_size.png",
+                  "file": "TestActorTimerWithStatePerformance_payload_size.png"
+                },
+                {
+                  "name": "TestActorTimerWithStatePerformance_qps.png",
+                  "file": "TestActorTimerWithStatePerformance_qps.png"
+                },
+                {
+                  "name": "TestActorTimerWithStatePerformance_resource_cpu.png",
+                  "file": "TestActorTimerWithStatePerformance_resource_cpu.png"
+                },
+                {
+                  "name": "TestActorTimerWithStatePerformance_resource_memory.png",
+                  "file": "TestActorTimerWithStatePerformance_resource_memory.png"
+                },
+                {
+                  "name": "TestActorTimerWithStatePerformance_summary.png",
+                  "file": "TestActorTimerWithStatePerformance_summary.png"
+                },
+                {
+                  "name": "TestActorTimerWithStatePerformance_tail_latency.png",
+                  "file": "TestActorTimerWithStatePerformance_tail_latency.png"
+                },
+                {
+                  "name": "TestActorTimerWithStatePerformance_throughput.png",
+                  "file": "TestActorTimerWithStatePerformance_throughput.png"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "workflows",
+      "title": "Workflows",
+      "sections": [
+        {
+          "path": "workflows",
+          "efficiency": [
+            {
+              "test": "TestDelayWorkflowsAtScale",
+              "itPerSec": 35.576482117195965,
+              "appCPUm": 402,
+              "appMemMB": 938.6639359999999,
+              "sidecarCPUm": 162,
+              "sidecarMemMB": 101.216256,
+              "iterPerCore": "63.1",
+              "iterPerGB": "35.0"
+            },
+            {
+              "test": "TestParallelWorkflowWithMaxVUs",
+              "itPerSec": 110.23967185008993,
+              "appCPUm": 14,
+              "appMemMB": 608.29696,
+              "sidecarCPUm": 2,
+              "sidecarMemMB": 35.59424,
+              "iterPerCore": "6890.0",
+              "iterPerGB": "175.3"
+            },
+            {
+              "test": "TestSeriesWorkflowWithMaxVUs",
+              "itPerSec": 92.96599704332311,
+              "appCPUm": 13,
+              "appMemMB": 610.193408,
+              "sidecarCPUm": 2,
+              "sidecarMemMB": 38.903808,
+              "iterPerCore": "6197.7",
+              "iterPerGB": "146.7"
+            },
+            {
+              "test": "TestWorkflowWithConstantIterations",
+              "itPerSec": 62.623762933705905,
+              "appCPUm": 14.333333333333334,
+              "appMemMB": 607.6552533333332,
+              "sidecarCPUm": 2,
+              "sidecarMemMB": 36.85034666666666,
+              "iterPerCore": "3834.1",
+              "iterPerGB": "99.5"
+            },
+            {
+              "test": "TestWorkflowWithConstantVUs",
+              "itPerSec": 53.408748170673334,
+              "appCPUm": 57.666666666666664,
+              "appMemMB": 626.454528,
+              "sidecarCPUm": 3.3333333333333335,
+              "sidecarMemMB": 48.899413333333335,
+              "iterPerCore": "875.6",
+              "iterPerGB": "81.0"
+            },
+            {
+              "test": "TestWorkflowWithDifferentPayloads",
+              "itPerSec": 9.29451702011014,
+              "appCPUm": 19,
+              "appMemMB": 616.1872213333332,
+              "sidecarCPUm": 2,
+              "sidecarMemMB": 35.463167999999996,
+              "iterPerCore": "442.6",
+              "iterPerGB": "14.6"
+            }
+          ],
+          "scenarios": [
+            {
+              "name": "TestDelayWorkflowsAtScale",
+              "charts": [
+                {
+                  "name": "TestDelayWorkflowsAtScale_data_volume.png",
+                  "file": "TestDelayWorkflowsAtScale_data_volume.png"
+                },
+                {
+                  "name": "TestDelayWorkflowsAtScale_duration_breakdown.png",
+                  "file": "TestDelayWorkflowsAtScale_duration_breakdown.png"
+                },
+                {
+                  "name": "TestDelayWorkflowsAtScale_duration_low.png",
+                  "file": "TestDelayWorkflowsAtScale_duration_low.png"
+                },
+                {
+                  "name": "TestDelayWorkflowsAtScale_resource_cpu.png",
+                  "file": "TestDelayWorkflowsAtScale_resource_cpu.png"
+                },
+                {
+                  "name": "TestDelayWorkflowsAtScale_resource_memory.png",
+                  "file": "TestDelayWorkflowsAtScale_resource_memory.png"
+                },
+                {
+                  "name": "TestDelayWorkflowsAtScale_summary.png",
+                  "file": "TestDelayWorkflowsAtScale_summary.png"
+                },
+                {
+                  "name": "TestDelayWorkflowsAtScale_tail_latency.png",
+                  "file": "TestDelayWorkflowsAtScale_tail_latency.png"
+                },
+                {
+                  "name": "TestDelayWorkflowsAtScale_throughput.png",
+                  "file": "TestDelayWorkflowsAtScale_throughput.png"
+                }
+              ]
+            },
+            {
+              "name": "TestParallelWorkflowWithMaxVUs",
+              "charts": [
+                {
+                  "name": "TestParallelWorkflowWithMaxVUs_data_volume.png",
+                  "file": "TestParallelWorkflowWithMaxVUs_data_volume.png"
+                },
+                {
+                  "name": "TestParallelWorkflowWithMaxVUs_duration_breakdown.png",
+                  "file": "TestParallelWorkflowWithMaxVUs_duration_breakdown.png"
+                },
+                {
+                  "name": "TestParallelWorkflowWithMaxVUs_duration_low.png",
+                  "file": "TestParallelWorkflowWithMaxVUs_duration_low.png"
+                },
+                {
+                  "name": "TestParallelWorkflowWithMaxVUs_resource_cpu.png",
+                  "file": "TestParallelWorkflowWithMaxVUs_resource_cpu.png"
+                },
+                {
+                  "name": "TestParallelWorkflowWithMaxVUs_resource_memory.png",
+                  "file": "TestParallelWorkflowWithMaxVUs_resource_memory.png"
+                },
+                {
+                  "name": "TestParallelWorkflowWithMaxVUs_summary.png",
+                  "file": "TestParallelWorkflowWithMaxVUs_summary.png"
+                },
+                {
+                  "name": "TestParallelWorkflowWithMaxVUs_tail_latency.png",
+                  "file": "TestParallelWorkflowWithMaxVUs_tail_latency.png"
+                },
+                {
+                  "name": "TestParallelWorkflowWithMaxVUs_throughput.png",
+                  "file": "TestParallelWorkflowWithMaxVUs_throughput.png"
+                }
+              ]
+            },
+            {
+              "name": "TestSeriesWorkflowWithMaxVUs",
+              "charts": [
+                {
+                  "name": "TestSeriesWorkflowWithMaxVUs_data_volume.png",
+                  "file": "TestSeriesWorkflowWithMaxVUs_data_volume.png"
+                },
+                {
+                  "name": "TestSeriesWorkflowWithMaxVUs_duration_breakdown.png",
+                  "file": "TestSeriesWorkflowWithMaxVUs_duration_breakdown.png"
+                },
+                {
+                  "name": "TestSeriesWorkflowWithMaxVUs_duration_low.png",
+                  "file": "TestSeriesWorkflowWithMaxVUs_duration_low.png"
+                },
+                {
+                  "name": "TestSeriesWorkflowWithMaxVUs_resource_cpu.png",
+                  "file": "TestSeriesWorkflowWithMaxVUs_resource_cpu.png"
+                },
+                {
+                  "name": "TestSeriesWorkflowWithMaxVUs_resource_memory.png",
+                  "file": "TestSeriesWorkflowWithMaxVUs_resource_memory.png"
+                },
+                {
+                  "name": "TestSeriesWorkflowWithMaxVUs_summary.png",
+                  "file": "TestSeriesWorkflowWithMaxVUs_summary.png"
+                },
+                {
+                  "name": "TestSeriesWorkflowWithMaxVUs_tail_latency.png",
+                  "file": "TestSeriesWorkflowWithMaxVUs_tail_latency.png"
+                },
+                {
+                  "name": "TestSeriesWorkflowWithMaxVUs_throughput.png",
+                  "file": "TestSeriesWorkflowWithMaxVUs_throughput.png"
+                }
+              ]
+            },
+            {
+              "name": "TestWorkflowWithConstantIterations",
+              "charts": [
+                {
+                  "name": "TestWorkflowWithConstantIterations_avg_data_volume.png",
+                  "file": "TestWorkflowWithConstantIterations_avg_data_volume.png"
+                },
+                {
+                  "name": "TestWorkflowWithConstantIterations_avg_duration_breakdown.png",
+                  "file": "TestWorkflowWithConstantIterations_avg_duration_breakdown.png"
+                },
+                {
+                  "name": "TestWorkflowWithConstantIterations_avg_duration_comparison.png",
+                  "file": "TestWorkflowWithConstantIterations_avg_duration_comparison.png"
+                },
+                {
+                  "name": "TestWorkflowWithConstantIterations_avg_duration_low.png",
+                  "file": "TestWorkflowWithConstantIterations_avg_duration_low.png"
+                },
+                {
+                  "name": "TestWorkflowWithConstantIterations_avg_resource_cpu.png",
+                  "file": "TestWorkflowWithConstantIterations_avg_resource_cpu.png"
+                },
+                {
+                  "name": "TestWorkflowWithConstantIterations_avg_resource_memory.png",
+                  "file": "TestWorkflowWithConstantIterations_avg_resource_memory.png"
+                },
+                {
+                  "name": "TestWorkflowWithConstantIterations_avg_summary.png",
+                  "file": "TestWorkflowWithConstantIterations_avg_summary.png"
+                },
+                {
+                  "name": "TestWorkflowWithConstantIterations_avg_tail_latency.png",
+                  "file": "TestWorkflowWithConstantIterations_avg_tail_latency.png"
+                },
+                {
+                  "name": "TestWorkflowWithConstantIterations_avg_throughput.png",
+                  "file": "TestWorkflowWithConstantIterations_avg_throughput.png"
+                }
+              ]
+            },
+            {
+              "name": "TestWorkflowWithConstantVUs",
+              "charts": [
+                {
+                  "name": "TestWorkflowWithConstantVUs_avg_data_volume.png",
+                  "file": "TestWorkflowWithConstantVUs_avg_data_volume.png"
+                },
+                {
+                  "name": "TestWorkflowWithConstantVUs_avg_duration_breakdown.png",
+                  "file": "TestWorkflowWithConstantVUs_avg_duration_breakdown.png"
+                },
+                {
+                  "name": "TestWorkflowWithConstantVUs_avg_duration_comparison.png",
+                  "file": "TestWorkflowWithConstantVUs_avg_duration_comparison.png"
+                },
+                {
+                  "name": "TestWorkflowWithConstantVUs_avg_duration_low.png",
+                  "file": "TestWorkflowWithConstantVUs_avg_duration_low.png"
+                },
+                {
+                  "name": "TestWorkflowWithConstantVUs_avg_resource_cpu.png",
+                  "file": "TestWorkflowWithConstantVUs_avg_resource_cpu.png"
+                },
+                {
+                  "name": "TestWorkflowWithConstantVUs_avg_resource_memory.png",
+                  "file": "TestWorkflowWithConstantVUs_avg_resource_memory.png"
+                },
+                {
+                  "name": "TestWorkflowWithConstantVUs_avg_summary.png",
+                  "file": "TestWorkflowWithConstantVUs_avg_summary.png"
+                },
+                {
+                  "name": "TestWorkflowWithConstantVUs_avg_tail_latency.png",
+                  "file": "TestWorkflowWithConstantVUs_avg_tail_latency.png"
+                },
+                {
+                  "name": "TestWorkflowWithConstantVUs_avg_throughput.png",
+                  "file": "TestWorkflowWithConstantVUs_avg_throughput.png"
+                }
+              ]
+            },
+            {
+              "name": "TestWorkflowWithDifferentPayloads",
+              "charts": [
+                {
+                  "name": "TestWorkflowWithDifferentPayloads_avg_data_volume.png",
+                  "file": "TestWorkflowWithDifferentPayloads_avg_data_volume.png"
+                },
+                {
+                  "name": "TestWorkflowWithDifferentPayloads_avg_duration_breakdown.png",
+                  "file": "TestWorkflowWithDifferentPayloads_avg_duration_breakdown.png"
+                },
+                {
+                  "name": "TestWorkflowWithDifferentPayloads_avg_duration_comparison.png",
+                  "file": "TestWorkflowWithDifferentPayloads_avg_duration_comparison.png"
+                },
+                {
+                  "name": "TestWorkflowWithDifferentPayloads_avg_duration_low.png",
+                  "file": "TestWorkflowWithDifferentPayloads_avg_duration_low.png"
+                },
+                {
+                  "name": "TestWorkflowWithDifferentPayloads_avg_resource_cpu.png",
+                  "file": "TestWorkflowWithDifferentPayloads_avg_resource_cpu.png"
+                },
+                {
+                  "name": "TestWorkflowWithDifferentPayloads_avg_resource_memory.png",
+                  "file": "TestWorkflowWithDifferentPayloads_avg_resource_memory.png"
+                },
+                {
+                  "name": "TestWorkflowWithDifferentPayloads_avg_summary.png",
+                  "file": "TestWorkflowWithDifferentPayloads_avg_summary.png"
+                },
+                {
+                  "name": "TestWorkflowWithDifferentPayloads_avg_tail_latency.png",
+                  "file": "TestWorkflowWithDifferentPayloads_avg_tail_latency.png"
+                },
+                {
+                  "name": "TestWorkflowWithDifferentPayloads_avg_throughput.png",
+                  "file": "TestWorkflowWithDifferentPayloads_avg_throughput.png"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "jobs",
+      "title": "Jobs",
+      "sections": [
+        {
+          "path": "jobs",
+          "efficiency": [
+            {
+              "test": "TestJobSchedulingPerformance",
+              "itPerSec": 870.7855158752787,
+              "appCPUm": 62,
+              "appMemMB": 27.230207999999998,
+              "sidecarCPUm": 102,
+              "sidecarMemMB": 79.62624,
+              "iterPerCore": "5309.7",
+              "iterPerGB": "8344.7"
+            }
+          ],
+          "scenarios": [
+            {
+              "name": "TestJobSchedulingPerformance",
+              "charts": [
+                {
+                  "name": "TestJobSchedulingPerformance_connection_stats.png",
+                  "file": "TestJobSchedulingPerformance_connection_stats.png"
+                },
+                {
+                  "name": "TestJobSchedulingPerformance_data_volume.png",
+                  "file": "TestJobSchedulingPerformance_data_volume.png"
+                },
+                {
+                  "name": "TestJobSchedulingPerformance_duration_breakdown.png",
+                  "file": "TestJobSchedulingPerformance_duration_breakdown.png"
+                },
+                {
+                  "name": "TestJobSchedulingPerformance_duration_requested_vs_actual.png",
+                  "file": "TestJobSchedulingPerformance_duration_requested_vs_actual.png"
+                },
+                {
+                  "name": "TestJobSchedulingPerformance_header_size.png",
+                  "file": "TestJobSchedulingPerformance_header_size.png"
+                },
+                {
+                  "name": "TestJobSchedulingPerformance_histogram_count.png",
+                  "file": "TestJobSchedulingPerformance_histogram_count.png"
+                },
+                {
+                  "name": "TestJobSchedulingPerformance_histogram_percent.png",
+                  "file": "TestJobSchedulingPerformance_histogram_percent.png"
+                },
+                {
+                  "name": "TestJobSchedulingPerformance_payload_size.png",
+                  "file": "TestJobSchedulingPerformance_payload_size.png"
+                },
+                {
+                  "name": "TestJobSchedulingPerformance_qps.png",
+                  "file": "TestJobSchedulingPerformance_qps.png"
+                },
+                {
+                  "name": "TestJobSchedulingPerformance_resource_cpu.png",
+                  "file": "TestJobSchedulingPerformance_resource_cpu.png"
+                },
+                {
+                  "name": "TestJobSchedulingPerformance_resource_memory.png",
+                  "file": "TestJobSchedulingPerformance_resource_memory.png"
+                },
+                {
+                  "name": "TestJobSchedulingPerformance_summary.png",
+                  "file": "TestJobSchedulingPerformance_summary.png"
+                },
+                {
+                  "name": "TestJobSchedulingPerformance_tail_latency.png",
+                  "file": "TestJobSchedulingPerformance_tail_latency.png"
+                },
+                {
+                  "name": "TestJobSchedulingPerformance_throughput.png",
+                  "file": "TestJobSchedulingPerformance_throughput.png"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "configuration",
+      "title": "Configuration",
+      "sections": [
+        {
+          "label": "HTTP",
+          "path": "configuration/http",
+          "efficiency": [
+            {
+              "test": "TestConfigurationGetHTTPPerformance",
+              "itPerSec": 9697.993137473484,
+              "appCPUm": 1,
+              "appMemMB": 39.489536,
+              "sidecarCPUm": 2,
+              "sidecarMemMB": 35.47136,
+              "iterPerCore": "3232664.4",
+              "iterPerGB": "132479.0"
+            },
+            {
+              "test": "TestConfigurationSubscribeHTTPPerformance",
+              "itPerSec": 2074.5186544133603,
+              "appCPUm": 1,
+              "appMemMB": 72.76544,
+              "sidecarCPUm": 57,
+              "sidecarMemMB": 86.86796799999999,
+              "iterPerCore": "35767.6",
+              "iterPerGB": "13307.4"
+            }
+          ],
+          "scenarios": [
+            {
+              "name": "TestConfigurationGetHTTPPerformance",
+              "charts": [
+                {
+                  "name": "TestConfigurationGetHTTPPerformance_data_volume.png",
+                  "file": "TestConfigurationGetHTTPPerformance_data_volume.png"
+                },
+                {
+                  "name": "TestConfigurationGetHTTPPerformance_duration_breakdown.png",
+                  "file": "TestConfigurationGetHTTPPerformance_duration_breakdown.png"
+                },
+                {
+                  "name": "TestConfigurationGetHTTPPerformance_duration_low.png",
+                  "file": "TestConfigurationGetHTTPPerformance_duration_low.png"
+                },
+                {
+                  "name": "TestConfigurationGetHTTPPerformance_resource_cpu.png",
+                  "file": "TestConfigurationGetHTTPPerformance_resource_cpu.png"
+                },
+                {
+                  "name": "TestConfigurationGetHTTPPerformance_resource_memory.png",
+                  "file": "TestConfigurationGetHTTPPerformance_resource_memory.png"
+                },
+                {
+                  "name": "TestConfigurationGetHTTPPerformance_summary.png",
+                  "file": "TestConfigurationGetHTTPPerformance_summary.png"
+                },
+                {
+                  "name": "TestConfigurationGetHTTPPerformance_tail_latency.png",
+                  "file": "TestConfigurationGetHTTPPerformance_tail_latency.png"
+                },
+                {
+                  "name": "TestConfigurationGetHTTPPerformance_throughput.png",
+                  "file": "TestConfigurationGetHTTPPerformance_throughput.png"
+                }
+              ]
+            },
+            {
+              "name": "TestConfigurationSubscribeHTTPPerformance",
+              "charts": [
+                {
+                  "name": "TestConfigurationSubscribeHTTPPerformance_data_volume.png",
+                  "file": "TestConfigurationSubscribeHTTPPerformance_data_volume.png"
+                },
+                {
+                  "name": "TestConfigurationSubscribeHTTPPerformance_duration_breakdown.png",
+                  "file": "TestConfigurationSubscribeHTTPPerformance_duration_breakdown.png"
+                },
+                {
+                  "name": "TestConfigurationSubscribeHTTPPerformance_duration_low.png",
+                  "file": "TestConfigurationSubscribeHTTPPerformance_duration_low.png"
+                },
+                {
+                  "name": "TestConfigurationSubscribeHTTPPerformance_resource_cpu.png",
+                  "file": "TestConfigurationSubscribeHTTPPerformance_resource_cpu.png"
+                },
+                {
+                  "name": "TestConfigurationSubscribeHTTPPerformance_resource_memory.png",
+                  "file": "TestConfigurationSubscribeHTTPPerformance_resource_memory.png"
+                },
+                {
+                  "name": "TestConfigurationSubscribeHTTPPerformance_summary.png",
+                  "file": "TestConfigurationSubscribeHTTPPerformance_summary.png"
+                },
+                {
+                  "name": "TestConfigurationSubscribeHTTPPerformance_tail_latency.png",
+                  "file": "TestConfigurationSubscribeHTTPPerformance_tail_latency.png"
+                },
+                {
+                  "name": "TestConfigurationSubscribeHTTPPerformance_throughput.png",
+                  "file": "TestConfigurationSubscribeHTTPPerformance_throughput.png"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "gRPC",
+          "path": "configuration/grpc",
+          "efficiency": [
+            {
+              "test": "TestConfigurationGetGRPCPerformance",
+              "itPerSec": 14369.913807702218,
+              "appCPUm": 1,
+              "appMemMB": 72.941568,
+              "sidecarCPUm": 1,
+              "sidecarMemMB": 75.65721599999999,
+              "iterPerCore": "7184956.9",
+              "iterPerGB": "99023.6"
+            },
+            {
+              "test": "TestConfigurationSubscribeGRPCPerformance",
+              "itPerSec": 4038.773209012206,
+              "appCPUm": 1,
+              "appMemMB": 82.538496,
+              "sidecarCPUm": 2,
+              "sidecarMemMB": 74.90355199999999,
+              "iterPerCore": "1346257.7",
+              "iterPerGB": "26268.1"
+            }
+          ],
+          "scenarios": [
+            {
+              "name": "TestConfigurationGetGRPCPerformance",
+              "charts": [
+                {
+                  "name": "TestConfigurationGetGRPCPerformance_data_volume.png",
+                  "file": "TestConfigurationGetGRPCPerformance_data_volume.png"
+                },
+                {
+                  "name": "TestConfigurationGetGRPCPerformance_duration_breakdown.png",
+                  "file": "TestConfigurationGetGRPCPerformance_duration_breakdown.png"
+                },
+                {
+                  "name": "TestConfigurationGetGRPCPerformance_duration_low.png",
+                  "file": "TestConfigurationGetGRPCPerformance_duration_low.png"
+                },
+                {
+                  "name": "TestConfigurationGetGRPCPerformance_resource_cpu.png",
+                  "file": "TestConfigurationGetGRPCPerformance_resource_cpu.png"
+                },
+                {
+                  "name": "TestConfigurationGetGRPCPerformance_resource_memory.png",
+                  "file": "TestConfigurationGetGRPCPerformance_resource_memory.png"
+                },
+                {
+                  "name": "TestConfigurationGetGRPCPerformance_summary.png",
+                  "file": "TestConfigurationGetGRPCPerformance_summary.png"
+                },
+                {
+                  "name": "TestConfigurationGetGRPCPerformance_tail_latency.png",
+                  "file": "TestConfigurationGetGRPCPerformance_tail_latency.png"
+                },
+                {
+                  "name": "TestConfigurationGetGRPCPerformance_throughput.png",
+                  "file": "TestConfigurationGetGRPCPerformance_throughput.png"
+                }
+              ]
+            },
+            {
+              "name": "TestConfigurationSubscribeGRPCPerformance",
+              "charts": [
+                {
+                  "name": "TestConfigurationSubscribeGRPCPerformance_data_volume.png",
+                  "file": "TestConfigurationSubscribeGRPCPerformance_data_volume.png"
+                },
+                {
+                  "name": "TestConfigurationSubscribeGRPCPerformance_duration_breakdown.png",
+                  "file": "TestConfigurationSubscribeGRPCPerformance_duration_breakdown.png"
+                },
+                {
+                  "name": "TestConfigurationSubscribeGRPCPerformance_duration_low.png",
+                  "file": "TestConfigurationSubscribeGRPCPerformance_duration_low.png"
+                },
+                {
+                  "name": "TestConfigurationSubscribeGRPCPerformance_resource_cpu.png",
+                  "file": "TestConfigurationSubscribeGRPCPerformance_resource_cpu.png"
+                },
+                {
+                  "name": "TestConfigurationSubscribeGRPCPerformance_resource_memory.png",
+                  "file": "TestConfigurationSubscribeGRPCPerformance_resource_memory.png"
+                },
+                {
+                  "name": "TestConfigurationSubscribeGRPCPerformance_summary.png",
+                  "file": "TestConfigurationSubscribeGRPCPerformance_summary.png"
+                },
+                {
+                  "name": "TestConfigurationSubscribeGRPCPerformance_tail_latency.png",
+                  "file": "TestConfigurationSubscribeGRPCPerformance_tail_latency.png"
+                },
+                {
+                  "name": "TestConfigurationSubscribeGRPCPerformance_throughput.png",
+                  "file": "TestConfigurationSubscribeGRPCPerformance_throughput.png"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
