@@ -348,6 +348,20 @@ func TestDecodeHistoryChunks_MalformedRawEventFailsClosed(t *testing.T) {
 	assert.False(t, ok)
 }
 
+// A chunk whose producer is not named by a requires entry is skipped without
+// decoding — even a malformed one, which therefore does not fail closed.
+func TestDecodeHistoryChunks_SkipsChunkNotInRequires(t *testing.T) {
+	history := &protos.PropagatedHistory{
+		Chunks: []*protos.PropagatedHistoryChunk{{
+			AppId:     "unrelated-app",
+			RawEvents: [][]byte{{0xFF, 0xFE, 0xFD}},
+		}},
+	}
+	chunks, ok := decodeHistoryChunks(history, map[string]struct{}{"app-a": {}})
+	assert.True(t, ok)
+	assert.Empty(t, chunks)
+}
+
 func TestDecodeHistoryChunks_NilAndEmpty(t *testing.T) {
 	chunks, ok := decodeHistoryChunks(nil, nil)
 	assert.True(t, ok)
