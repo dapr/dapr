@@ -31,16 +31,37 @@ import (
 
 func newTimer(t *testing.T, id, period string, at time.Time) *api.Reminder {
 	t.Helper()
+	return newNamedTimer(t, id, "tick", period, at)
+}
+
+// newNamedTimer is newTimer with an explicit timer name, for tests that need
+// several timers on the same actor.
+func newNamedTimer(t *testing.T, id, name, period string, at time.Time) *api.Reminder {
+	t.Helper()
 	p, err := api.NewReminderPeriod(period) // "" => one-shot
 	require.NoError(t, err)
 	return &api.Reminder{
 		ActorType:      "EligibilityShardActor",
 		ActorID:        id,
-		Name:           "tick",
+		Name:           name,
 		Callback:       "OnTick",
 		Period:         p,
 		RegisteredTime: at,
 	}
+}
+
+// stateSnapshot is a white-box probe: it returns how many actor states are
+// live, and for actorKey its outstanding routed-fire count and whether it
+// exists. States are reaped once an actor has no timers and no outstanding
+// fires, so "no states" is the store's quiescence signal.
+func stateSnapshot(s *inmemory, actorKey string) (states, pending int, exists bool) {
+	s.actorStatesLock.Lock()
+	defer s.actorStatesLock.Unlock()
+	st, ok := s.actorStates[actorKey]
+	if ok {
+		pending = st.pending
+	}
+	return len(s.actorStates), pending, ok
 }
 
 // TestTimerCallbacksDoNotBlockAcrossActors is the regression test for the
@@ -328,12 +349,167 @@ func TestConcurrentCreateDeleteDoesNotResurrect(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Everything deleted; after settling, no resurrected timer should keep firing.
+	// Everything deleted. Wait for true quiescence — every routed fire drained
+	// and every actor state reaped — instead of a fixed settle sleep, which
+	// could undershoot a starved parked fire on a loaded CI runner.
 	for _, id := range keys {
 		store.Delete(ctx, mk(id).Key())
 	}
-	time.Sleep(50 * time.Millisecond)
+	im := store.(*inmemory)
+	require.Eventually(t, func() bool {
+		states, _, _ := stateSnapshot(im, "")
+		return states == 0
+	}, 10*time.Second, 5*time.Millisecond, "actor states did not drain after all timers were deleted")
+
 	before := fires.Load()
 	time.Sleep(150 * time.Millisecond)
 	assert.Equal(t, before, fires.Load(), "a deleted timer was resurrected and kept firing")
+}
+
+// TestDeletedParkedFireDoesNotExecute asserts that deleting a timer whose fire
+// was already routed to the actor loop — parked behind a slow same-actor
+// callback, where the scheduler's Dequeue can no longer reach it — prevents the
+// callback from executing. Without the pre-execution activeTimers check, the
+// parked fire would run arbitrarily long after Delete returned.
+func TestDeletedParkedFireDoesNotExecute(t *testing.T) {
+	slowStarted := make(chan struct{})
+	release := make(chan struct{})
+	var victimFired atomic.Bool
+
+	router := routerfake.New().WithCallReminderFn(
+		func(ctx context.Context, r *api.Reminder) error {
+			switch r.Name {
+			case "slow":
+				close(slowStarted)
+				<-release // hold this callback "in flight"
+			case "victim":
+				victimFired.Store(true)
+			}
+			return nil
+		},
+	)
+
+	store := New(Options{Router: router})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	im := store.(*inmemory)
+
+	now := clock.RealClock{}.Now()
+	ctx := context.Background()
+	require.NoError(t, store.Create(ctx, newNamedTimer(t, "x", "slow", "", now)))
+	<-slowStarted
+
+	victim := newNamedTimer(t, "x", "victim", "", now)
+	require.NoError(t, store.Create(ctx, victim))
+
+	// Wait until the victim's fire is parked on the actor loop behind the held
+	// slow callback: two routed fires outstanding for the actor.
+	require.Eventually(t, func() bool {
+		_, pending, _ := stateSnapshot(im, victim.ActorKey())
+		return pending == 2
+	}, 5*time.Second, time.Millisecond, "victim fire was never routed to the actor loop")
+
+	store.Delete(ctx, victim.Key()) // delete while its fire is parked
+	close(release)
+
+	// Both fires drain and the actor state is reaped; the victim must not run.
+	require.Eventually(t, func() bool {
+		_, _, exists := stateSnapshot(im, victim.ActorKey())
+		return !exists
+	}, 5*time.Second, time.Millisecond)
+	assert.False(t, victimFired.Load(), "a deleted parked fire executed its callback")
+}
+
+// TestIdleActorLoopsAreReaped asserts per-actor loops do not outlive their
+// work: once an actor has no registered timers and no outstanding fires, its
+// loop, goroutine, and map entry are released rather than pinned until Close —
+// otherwise a sidecar churning through high-cardinality actor IDs would grow
+// its goroutine count without bound.
+func TestIdleActorLoopsAreReaped(t *testing.T) {
+	const n = 20
+	var fires atomic.Int32
+	store := New(Options{Router: routerfake.New().WithCallReminderFn(
+		func(context.Context, *api.Reminder) error { fires.Add(1); return nil },
+	)})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	im := store.(*inmemory)
+
+	now := clock.RealClock{}.Now()
+	ctx := context.Background()
+	for k := range n {
+		require.NoError(t, store.Create(ctx, newTimer(t, fmt.Sprintf("actor-%d", k), "", now)))
+	}
+
+	require.Eventually(t, func() bool { return fires.Load() == n }, 5*time.Second, 5*time.Millisecond)
+	require.Eventually(t, func() bool {
+		states, _, _ := stateSnapshot(im, "")
+		return states == 0
+	}, 5*time.Second, 5*time.Millisecond, "idle actor loops were not reaped after their one-shot timers completed")
+}
+
+// TestRepeatingTimerKeepsLoopUntilDeleted asserts the reaper does not tear down
+// the loop of an actor that still has a registered timer (no create/teardown
+// churn between ticks), and does tear it down once the timer is deleted.
+func TestRepeatingTimerKeepsLoopUntilDeleted(t *testing.T) {
+	var fires atomic.Int32
+	store := New(Options{Router: routerfake.New().WithCallReminderFn(
+		func(context.Context, *api.Reminder) error { fires.Add(1); return nil },
+	)})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	im := store.(*inmemory)
+
+	now := clock.RealClock{}.Now()
+	ctx := context.Background()
+	tmr := newTimer(t, "x", "5ms", now)
+	require.NoError(t, store.Create(ctx, tmr))
+
+	require.Eventually(t, func() bool { return fires.Load() >= 3 }, 5*time.Second, time.Millisecond)
+	_, _, exists := stateSnapshot(im, tmr.ActorKey())
+	assert.True(t, exists, "an actor with a registered repeating timer lost its state between ticks")
+
+	store.Delete(ctx, tmr.Key())
+	require.Eventually(t, func() bool {
+		_, _, exists := stateSnapshot(im, tmr.ActorKey())
+		return !exists
+	}, 5*time.Second, time.Millisecond, "actor state was not reaped after its last timer was deleted")
+}
+
+// TestCloseDropsParkedFires asserts that Close does not execute fires still
+// parked behind an in-flight callback: draining them through CallReminder with
+// the already-cancelled store context would fail every call, spamming error
+// logs and failure metrics on every shutdown.
+func TestCloseDropsParkedFires(t *testing.T) {
+	slowStarted := make(chan struct{})
+	var parkedExecuted atomic.Bool
+
+	router := routerfake.New().WithCallReminderFn(
+		func(ctx context.Context, r *api.Reminder) error {
+			switch r.Name {
+			case "slow":
+				close(slowStarted)
+				<-ctx.Done() // in flight until Close cancels the store context
+			case "parked":
+				parkedExecuted.Store(true)
+			}
+			return ctx.Err()
+		},
+	)
+
+	store := New(Options{Router: router})
+	im := store.(*inmemory)
+
+	now := clock.RealClock{}.Now()
+	ctx := context.Background()
+	require.NoError(t, store.Create(ctx, newNamedTimer(t, "x", "slow", "", now)))
+	<-slowStarted
+
+	parked := newNamedTimer(t, "x", "parked", "", now)
+	require.NoError(t, store.Create(ctx, parked))
+
+	require.Eventually(t, func() bool {
+		_, pending, _ := stateSnapshot(im, parked.ActorKey())
+		return pending == 2
+	}, 5*time.Second, time.Millisecond, "parked fire was never routed to the actor loop")
+
+	require.NoError(t, store.Close())
+	assert.False(t, parkedExecuted.Load(), "Close executed a parked fire instead of dropping it")
 }
