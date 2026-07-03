@@ -116,7 +116,9 @@ func (c *terminatecascade) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(co, int64(numChildren), blocked.Load())
 	}, time.Second*30, time.Millisecond*10)
 
-	require.NoError(t, cl.TerminateWorkflow(ctx, id))
+	termCtx, termCancel := context.WithTimeout(ctx, time.Second*20)
+	t.Cleanup(termCancel)
+	require.NoError(t, cl.TerminateWorkflow(termCtx, id))
 
 	failedCh := make(chan struct{}, numChildren)
 	c.proxy.ArmFailures(proxy.MethodScheduleJob, numChildren, codes.Internal, failedCh)

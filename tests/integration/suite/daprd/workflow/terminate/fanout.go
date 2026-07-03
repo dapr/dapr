@@ -116,14 +116,9 @@ func (f *fanout) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, int64(numChildren), blocked.Load())
 	}, time.Second*60, time.Millisecond*10)
 
-	termErr := make(chan error, 1)
-	go func() { termErr <- cl.TerminateWorkflow(ctx, id) }()
-	select {
-	case err = <-termErr:
-		require.NoError(t, err)
-	case <-time.After(time.Second * 20):
-		require.Fail(t, "TerminateWorkflow hung and never returned")
-	}
+	termCtx, termCancel := context.WithTimeout(ctx, time.Second*20)
+	t.Cleanup(termCancel)
+	require.NoError(t, cl.TerminateWorkflow(termCtx, id))
 
 	// Children stay blocked through the terminate so each must end up
 	// TERMINATED, never COMPLETED. holdCh is closed in the t.Cleanup above.
@@ -145,12 +140,8 @@ func (f *fanout) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.Equal(t, api.RUNTIME_STATUS_TERMINATED.String(), gotMeta.GetRuntimeStatus().String())
 
-	termErr2 := make(chan error, 1)
-	go func() { termErr2 <- cl.TerminateWorkflow(ctx, id) }()
-	select {
-	case err = <-termErr2:
-		require.NoError(t, err)
-	case <-time.After(time.Second * 20):
-		require.Fail(t, "repeated TerminateWorkflow on a terminated workflow hung")
-	}
+	// A repeated terminate on a terminated workflow is an idempotent no-op.
+	retermCtx, retermCancel := context.WithTimeout(ctx, time.Second*20)
+	t.Cleanup(retermCancel)
+	require.NoError(t, cl.TerminateWorkflow(retermCtx, id))
 }

@@ -80,7 +80,9 @@ func (z *zombiechilddown) Run(t *testing.T, ctx context.Context) {
 	// cannot be delivered.
 	z.workflow.DaprN(1).Kill(t)
 
-	require.NoError(t, parent.TerminateWorkflow(ctx, parentID))
+	termCtx, termCancel := context.WithTimeout(ctx, time.Second*20)
+	t.Cleanup(termCancel)
+	require.NoError(t, parent.TerminateWorkflow(termCtx, parentID))
 
 	// The parent must still durably finalize as TERMINATED.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
