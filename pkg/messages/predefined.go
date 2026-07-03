@@ -125,7 +125,7 @@ var (
 	ErrWorkflowGetResponse           = APIError{"error while getting workflow info on instance '%s': %s", errorcodes.WorkflowGet, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrWorkflowNameMissing           = APIError{"workflow name is not configured", errorcodes.WorkflowNameMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrInstanceIDTooLong             = APIError{"workflow instance ID exceeds the max length of %d characters", errorcodes.WorkflowInstanceIDTooLong, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrInvalidInstanceID             = APIError{"workflow instance ID '%s' is invalid: only alphanumeric and underscore characters are allowed", errorcodes.WorkflowInstanceIDInvalid, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrInvalidInstanceID             = APIError{"workflow instance ID '%s' is invalid: only alphanumeric, dash, and underscore characters are allowed", errorcodes.WorkflowInstanceIDInvalid, http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrWorkflowComponentDoesNotExist = APIError{"workflow component '%s' does not exist", errorcodes.WorkflowComponentNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrMissingOrEmptyInstance        = APIError{"no instance ID was provided", errorcodes.WorkflowInstanceIDProvidedMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrWorkflowInstanceNotFound      = APIError{"unable to find workflow with the provided instance ID: %s", errorcodes.WorkflowInstanceIDNotFound, http.StatusNotFound, grpcCodes.NotFound}
