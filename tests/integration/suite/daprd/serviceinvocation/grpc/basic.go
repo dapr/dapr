@@ -105,6 +105,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 	b.daprd2 = procdaprd.New(t,
 		procdaprd.WithAppProtocol("grpc"),
 		procdaprd.WithAppPort(srv2.Port(t)),
+		procdaprd.WithAppMaxConcurrency(1),
 	)
 
 	return []framework.Option{

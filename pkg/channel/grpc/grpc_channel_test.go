@@ -138,6 +138,64 @@ func TestInvokeMethod(t *testing.T) {
 	})
 }
 
+func TestInvokeMethodMaxConcurrency(t *testing.T) {
+	// Regression test: with app-max-concurrency set, g.ch is used as a
+	// buffered-channel semaphore. invokeMethodV1 must acquire one token and
+	// release exactly one; a double release underflows the buffer and blocks
+	// the deferred receive forever, hanging service invocation.
+	conn := createConnection(t)
+	defer closeConnection(t, conn)
+
+	// Ensure a successful (non-error) invoke path; TestHealthProbe may have
+	// left mockServer.Error set depending on test ordering.
+	prevErr := mockServer.Error
+	mockServer.Error = nil
+	t.Cleanup(func() { mockServer.Error = prevErr })
+
+	c := Channel{
+		baseAddress: "localhost:9998",
+		connFn: func() (*grpc.ClientConn, func(bool), error) {
+			return conn, func(bool) {}, nil
+		},
+		appMetadataToken:   "token1",
+		maxRequestBodySize: 4 << 20,
+		ch:                 make(chan struct{}, 1),
+	}
+	ctx := t.Context()
+
+	invoke := func() error {
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "")
+		defer req.Close()
+		response, err := c.InvokeMethod(ctx, req, "")
+		if response != nil {
+			response.Close()
+		}
+		return err
+	}
+
+	// Call twice sequentially: the first release leaves the semaphore empty,
+	// so a double release both hangs the first call and (if it returned) would
+	// break the second by stealing a token that was never acquired.
+	for i := range 2 {
+		done := make(chan error, 1)
+		go func() {
+			done <- invoke()
+		}()
+
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("InvokeMethod did not return within timeout on call %d; the concurrency semaphore was released more than once", i+1)
+		}
+	}
+
+	// The token acquired for each call must have been released exactly once,
+	// leaving the semaphore empty and ready for the next request.
+	assert.Empty(t, c.ch, "concurrency semaphore should be drained after invocation")
+}
+
 func TestHealthProbe(t *testing.T) {
 	conn := createConnection(t)
 	c := Channel{
