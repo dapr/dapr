@@ -119,8 +119,8 @@ func (d *timerinbox) Run(t *testing.T, ctx context.Context) {
 	_, metaRaw := d.workflow.DB().ReadStateValue(t, ctx, string(id), "metadata")
 	var metadata backend.BackendWorkflowStateMetadata
 	require.NoError(t, proto.Unmarshal(metaRaw, &metadata))
-	inboxKeys := len(d.workflow.DB().ReadStateValues(t, ctx, string(id), "inbox"))
-	assert.Equal(t, inboxKeys, int(metadata.GetInboxLength()), //nolint:gosec
+	inboxKeys := d.workflow.DB().ReadStateValues(t, ctx, string(id), "inbox")
+	assert.Equal(t, uint64(len(inboxKeys)), metadata.GetInboxLength(),
 		"metadata inboxLength must match the number of persisted inbox-* keys")
 
 	// A stalled workflow must still answer status queries.
