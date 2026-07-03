@@ -59,6 +59,12 @@ func TestStartWorkflowAPI(t *testing.T) {
 			expectedError:     messages.ErrInvalidInstanceID.WithFormat("invalid#12"),
 		},
 		{
+			testName:          "Instance ID with dashes is allowed in start request",
+			workflowComponent: fakeComponentName,
+			workflowName:      fakeWorkflowName,
+			instanceID:        "my-workflow-1",
+		},
+		{
 			testName:          "Too long instance ID provided in start request",
 			workflowComponent: fakeComponentName,
 			workflowName:      fakeWorkflowName,
