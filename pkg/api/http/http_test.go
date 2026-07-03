@@ -2686,6 +2686,80 @@ func TestV1Workflow(t *testing.T) {
 		// assert
 		assert.Nil(t, resp.ErrorBody)
 	})
+
+	/////////////////////////////////
+	// INSTANCE ID WHITESPACE TESTS //
+	/////////////////////////////////
+
+	// A trailing newline or space is easily pasted onto an instance ID by
+	// accident. Without trimming it is passed through verbatim and silently
+	// resolves to a non-existent instance. See issue #8971. These tests build
+	// the server with parameter unescaping enabled, mirroring how production
+	// registers routes that contain path parameters.
+
+	fakeServerUnescaped := func(t *testing.T) *fakeHTTPServer {
+		f := newFakeHTTPServer()
+		t.Cleanup(f.Shutdown)
+		f.StartServer(testAPI.constructWorkflowEndpoints(), &fakeHTTPServerOptions{unescapeParameters: true})
+		return f
+	}
+
+	t.Run("Start trims surrounding whitespace from instance ID", func(t *testing.T) {
+		var gotInstanceID string
+		wf.WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithStart(func(ctx context.Context, req *workflows.StartRequest) (*workflows.StartResponse, error) {
+				require.NotNil(t, req.InstanceID)
+				gotInstanceID = *req.InstanceID
+				return &workflows.StartResponse{InstanceID: *req.InstanceID}, nil
+			})
+		})
+
+		// instanceID=myInstanceID%0A (trailing newline).
+		apiPath := "v1.0/workflows/dapr/workflowName/start?instanceID=myInstanceID%0A"
+		resp := fakeServerUnescaped(t).DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+		assert.Nil(t, resp.ErrorBody)
+		assert.Equal(t, "myInstanceID", gotInstanceID)
+	})
+
+	t.Run("Get trims surrounding whitespace from instance ID", func(t *testing.T) {
+		var gotInstanceID string
+		wf.WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
+				gotInstanceID = req.InstanceID
+				return &workflows.StateResponse{
+					Workflow: &workflows.WorkflowState{
+						InstanceID: req.InstanceID,
+						Properties: map[string]string{},
+					},
+				}, nil
+			})
+		})
+
+		// Trailing space (%20) encoded in the path segment.
+		apiPath := "v1.0/workflows/dapr/myInstanceID%20"
+		resp := fakeServerUnescaped(t).DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Nil(t, resp.ErrorBody)
+		assert.Equal(t, "myInstanceID", gotInstanceID)
+	})
+
+	t.Run("Purge trims trailing whitespace from instance ID", func(t *testing.T) {
+		var gotInstanceID string
+		wf.WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithPurge(func(ctx context.Context, req *workflows.PurgeRequest) error {
+				gotInstanceID = req.InstanceID
+				return nil
+			})
+		})
+
+		// Trailing newline (%0A) encoded in the path segment.
+		apiPath := "v1.0/workflows/dapr/myInstanceID%0A/purge"
+		resp := fakeServerUnescaped(t).DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+		assert.Nil(t, resp.ErrorBody)
+		assert.Equal(t, "myInstanceID", gotInstanceID)
+	})
 }
 
 func buildHTTPPipeline(spec config.PipelineSpec) middleware.HTTP {
@@ -2862,6 +2936,10 @@ type fakeHTTPServerOptions struct {
 	spec     *config.TracingSpec
 	pipeline middleware.HTTP
 	apiAuth  bool
+	// unescapeParameters mirrors production, where routes containing path
+	// parameters are wrapped so chi URL params are URL-unescaped before the
+	// handler runs. Defaults to false to preserve existing test behavior.
+	unescapeParameters bool
 }
 
 func (f *fakeHTTPServer) StartServer(endpoints []endpoints.Endpoint, opts *fakeHTTPServerOptions) {
@@ -2871,7 +2949,7 @@ func (f *fakeHTTPServer) StartServer(endpoints []endpoints.Endpoint, opts *fakeH
 
 	f.ln = bufconn.Listen(bufconnBufSize)
 
-	r := f.getRouter(endpoints, opts.apiAuth)
+	r := f.getRouter(endpoints, opts.apiAuth, opts.unescapeParameters)
 	go func() {
 		var handler nethttp.Handler = r
 		if opts.pipeline != nil {
@@ -2903,7 +2981,7 @@ func (f *fakeHTTPServer) StartServer(endpoints []endpoints.Endpoint, opts *fakeH
 	}
 }
 
-func (f *fakeHTTPServer) getRouter(endpoints []endpoints.Endpoint, apiAuth bool) chi.Router {
+func (f *fakeHTTPServer) getRouter(endpoints []endpoints.Endpoint, apiAuth bool, unescapeParameters bool) chi.Router {
 	srv := &server{}
 
 	r := srv.getRouter()
@@ -2915,7 +2993,7 @@ func (f *fakeHTTPServer) getRouter(endpoints []endpoints.Endpoint, apiAuth bool)
 	for _, e := range endpoints {
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 
-		srv.handle(e, path, r, false)
+		srv.handle(e, path, r, unescapeParameters)
 	}
 	return r
 }
