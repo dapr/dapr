@@ -62,8 +62,8 @@ func (d *timerinbox) Run(t *testing.T, ctx context.Context) {
 	d.workflow.WaitUntilRunning(t, ctx)
 
 	d.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.CreateTimer(time.Second * 4).Await(nil); err != nil {
-			return nil, err
+		if timerErr := ctx.CreateTimer(time.Second * 4).Await(nil); timerErr != nil {
+			return nil, timerErr
 		}
 		return nil, nil
 	})
@@ -88,8 +88,8 @@ func (d *timerinbox) Run(t *testing.T, ctx context.Context) {
 	d.workflow.WaitForNoConnectedWorkers(t, ctx)
 
 	d.workflow.Registry().AddVersionedWorkflowN("workflow", "v2", true, func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.CreateTimer(time.Second * 4).Await(nil); err != nil {
-			return nil, err
+		if timerErr := ctx.CreateTimer(time.Second * 4).Await(nil); timerErr != nil {
+			return nil, timerErr
 		}
 		return nil, nil
 	})
