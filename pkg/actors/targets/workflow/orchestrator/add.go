@@ -26,6 +26,9 @@ const (
 	reminderPrefixStart    = "start"
 	reminderPrefixNewEvent = "new-event"
 	reminderPrefixTimer    = "timer-"
+	// Created on each child workflow actor by a recursively-terminated
+	// parent, carrying the ExecutionTerminated event as reminder data.
+	reminderPrefixCascadeTerminate = "cascade-terminate"
 )
 
 func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryEvent) error {
