@@ -33,8 +33,11 @@ func init() {
 	suite.Register(new(specialchars))
 }
 
-// specialchars asserts that a job whose name contains characters such as '|'
-// and '@' can be scheduled, triggered, fetched and listed.
+// specialchars asserts that a job whose name contains characters such as '|',
+// the '||' delimiter and '@' can be scheduled, triggered, fetched and listed.
+// The '||' sequence is the scheduler's reserved internal key delimiter, so a
+// name containing it must survive the round trip to the triggered app callback
+// rather than being truncated on the last '||'.
 type specialchars struct {
 	daprd     *daprd.Daprd
 	scheduler *scheduler.Scheduler
@@ -69,7 +72,7 @@ func (s *specialchars) Run(t *testing.T, ctx context.Context) {
 
 	client := s.daprd.GRPCClient(t, ctx)
 
-	const name = "my|job@name"
+	const name = "my||job@name"
 
 	_, err := client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
