@@ -1,0 +1,10 @@
+[codespell]
+# Generated code, vendored deps, checksums and frozen release notes are not
+# hand-authored, so exclude them from spell checking. Directory skips use a
+# trailing glob so they also apply when codespell is passed an explicit file
+# list, as the CI step does for the files changed in a pull request.
+skip = .git,*.pb.go,*.pb.json,go.mod,go.sum,*.sum,vendor/*,node_modules/*,docs/release_notes/*,*.svg
+# Words codespell flags that are correct here: Azure product names (AKS, ACI),
+# the HTTP "TE" header, the Kubernetes "NotIn" selector operator and the Grafana
+# "showIn" schema key.
+ignore-words-list = aks,aci,te,notin,showin

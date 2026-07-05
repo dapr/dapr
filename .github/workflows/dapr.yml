@@ -80,6 +80,14 @@ jobs:
             echo >&2
             exit 1
           fi
+      - name: Check spelling with codespell
+        if: github.event_name == 'pull_request'
+        run: |
+          # Only spell check files changed in the PR so the existing history is
+          # not gated retroactively; codespell reads config from .codespellrc.
+          git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+          git diff --name-only --diff-filter=ACMR FETCH_HEAD HEAD \
+            | xargs --no-run-if-empty pipx run codespell --
       - name: Check for disallowed changes in go.mod
         run: node ./.github/scripts/check_go_mod.mjs
       - name: Run go mod tidy check diff
