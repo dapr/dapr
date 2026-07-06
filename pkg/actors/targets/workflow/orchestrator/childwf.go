@@ -138,6 +138,7 @@ func (o *orchestrator) failChildWorkflowACL(ctx context.Context, taskScheduledID
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
+		Router:    &protos.TaskRouter{SourceAppID: o.appID},
 		EventType: events.NewChildWorkflowFailedEventType(taskScheduledID, errType, errMsg, false),
 	}
 

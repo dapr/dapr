@@ -147,6 +147,7 @@ func (o *orchestrator) failActivityACL(ctx context.Context, e *backend.HistoryEv
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
+		Router:    &protos.TaskRouter{SourceAppID: o.appID},
 		EventType: events.NewTaskFailedEventType(e.GetEventId(), errType, errMsg, false),
 	}
 

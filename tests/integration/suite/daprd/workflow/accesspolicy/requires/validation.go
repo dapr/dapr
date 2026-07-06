@@ -57,10 +57,9 @@ func (v *validation) Setup(t *testing.T) []framework.Option {
 
 	v.logs = logline.New(t,
 		logline.WithStdoutLineContains(
-			`\"event-with-started\" failed validation`,
-			`\"event-with-completed\" failed validation`,
-			`\"activity-with-raised\" failed validation`,
-			`\"workflow-with-raised\" failed validation`,
+			`\"invalid-eventtype-activity-raised\" failed validation`,
+			`\"invalid-eventtype-workflow-raised\" failed validation`,
+			`\"invalid-eventtype-event-started\" failed validation`,
 			`\"requires-on-terminate\" failed validation`,
 		),
 	)
