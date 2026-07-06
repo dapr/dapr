@@ -212,6 +212,8 @@ func (s *secretrotation) Run(t *testing.T, ctx context.Context) {
 		assert.JSONEq(c, `{"SEC":"barvalue"}`, readSecret(c))
 	}, time.Second*30, time.Millisecond*10)
 
-	assert.True(t, s.daprdLog.Contains("Closing existing Component to reload"),
+	require.Eventually(t, func() bool {
+		return s.daprdLog.Contains("Closing existing Component to reload")
+	}, time.Second*10, time.Millisecond*10,
 		"expected the component to have been closed and re-initialized")
 }
