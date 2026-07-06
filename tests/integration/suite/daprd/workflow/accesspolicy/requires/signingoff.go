@@ -20,7 +20,6 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -35,11 +34,12 @@ import (
 )
 
 func init() {
-	suite.Register(new(raiseevent))
+	suite.Register(new(signingoff))
 }
 
-// requires matching on eventType=event (EventRaised entries in history).
-type raiseevent struct {
+// With WorkflowHistorySigning off the propagated history is unverifiable, so a
+// requires rule fails closed even when the required event is present.
+type signingoff struct {
 	workflow *workflow.Workflow
 
 	callerID string
@@ -47,24 +47,21 @@ type raiseevent struct {
 
 	targetActivityRuns atomic.Int64
 
-	gatedActivity string
-	wfAfterSignal string
-	wfNoSignal    string
+	gatedActivity   string
+	wfWithPreflight string
 }
 
-func (r *raiseevent) Setup(t *testing.T) []framework.Option {
+func (r *signingoff) Setup(t *testing.T) []framework.Option {
 	r.callerID = "caller-" + uuid.NewString()
 	r.targetID = "target-" + uuid.NewString()
-
 	r.gatedActivity = "gated-activity"
-	r.wfAfterSignal = "wf-after-signal"
-	r.wfNoSignal = "wf-no-signal"
+	r.wfWithPreflight = "wf-with-preflight"
 
 	policy := fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
-  name: raiseevent-requires-test
+  name: signingoff-requires-test
 scopes:
 - %s
 spec:
@@ -74,17 +71,21 @@ spec:
     activities:
     - name: %s
       requires:
-      - eventType: event.raised
-        name: approval-signal
+      - eventType: activity.completed
+        name: preflight
         appID: %s
 `, r.targetID, r.callerID, r.gatedActivity, r.callerID)
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))
 
+	// mTLS is up but WorkflowHistorySigning is disabled on both apps, so the
+	// propagated history is unsigned/unverifiable.
 	r.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
 		workflow.WithMTLS(t),
+		workflow.WithSigningDisabledN(0),
+		workflow.WithSigningDisabledN(1),
 		workflow.WithDaprdOptions(0, daprd.WithAppID(r.callerID)),
 		workflow.WithDaprdOptions(1, daprd.WithAppID(r.targetID), daprd.WithResourcesDir(targetResDir)),
 	)
@@ -94,27 +95,20 @@ spec:
 	}
 }
 
-func (r *raiseevent) Run(t *testing.T, ctx context.Context) {
+func (r *signingoff) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
 	caller := r.workflow.RegistryN(0)
 	target := r.workflow.RegistryN(1)
 
-	require.NoError(t, caller.AddWorkflowN(r.wfAfterSignal, func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.WaitForSingleEvent("approval-signal", time.Minute).Await(nil); err != nil {
-			return nil, fmt.Errorf("WaitForSingleEvent failed: %w", err)
-		}
-		var out string
-		if err := ctx.CallActivity(r.gatedActivity,
-			task.WithActivityAppID(r.targetID),
-			task.WithHistoryPropagation(api.PropagateOwnHistory()),
-		).Await(&out); err != nil {
-			return nil, fmt.Errorf("%s failed: %w", r.gatedActivity, err)
-		}
-		return out, nil
+	require.NoError(t, caller.AddActivityN("preflight", func(ctx task.ActivityContext) (any, error) {
+		return "preflight-ok", nil
 	}))
 
-	require.NoError(t, caller.AddWorkflowN(r.wfNoSignal, func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, caller.AddWorkflowN(r.wfWithPreflight, func(ctx *task.WorkflowContext) (any, error) {
+		if err := ctx.CallActivity("preflight").Await(nil); err != nil {
+			return nil, fmt.Errorf("preflight failed: %w", err)
+		}
 		var out string
 		if err := ctx.CallActivity(r.gatedActivity,
 			task.WithActivityAppID(r.targetID),
@@ -133,36 +127,17 @@ func (r *raiseevent) Run(t *testing.T, ctx context.Context) {
 	callerClient := r.workflow.BackendClientN(t, ctx, 0)
 	r.workflow.BackendClientN(t, ctx, 1)
 
-	t.Run("allowed when EventRaised exists in propagated history", func(t *testing.T) {
+	t.Run("denied when signing is off even though the required activity completed", func(t *testing.T) {
 		before := r.targetActivityRuns.Load()
-
-		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfAfterSignal)
+		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfWithPreflight)
 		require.NoError(t, err)
-		require.NoError(t, callerClient.RaiseEvent(ctx, id, "approval-signal"))
-
-		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
-		require.NoError(t, err)
-		require.True(t, api.WorkflowMetadataIsComplete(metadata))
-		assert.Nil(t, metadata.GetFailureDetails(),
-			"caller should succeed when the required event is raised: %v", metadata.GetFailureDetails())
-		assert.Equal(t, `"gated-ok"`, metadata.GetOutput().GetValue())
-		assert.Equal(t, before+1, r.targetActivityRuns.Load(),
-			"gated activity should have run exactly once on target")
-	})
-
-	t.Run("denied when EventRaised is missing from propagated history", func(t *testing.T) {
-		before := r.targetActivityRuns.Load()
-
-		id, err := callerClient.ScheduleNewWorkflow(ctx, r.wfNoSignal)
-		require.NoError(t, err)
-
 		metadata, err := callerClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		require.NotNil(t, metadata.GetFailureDetails(),
-			"workflow should fail when the required EventRaised is absent")
+			"requires must fail closed when history signing is disabled")
 		assert.Contains(t, metadata.GetFailureDetails().GetErrorMessage(),
 			"access denied by workflow access policy")
 		assert.Equal(t, before, r.targetActivityRuns.Load(),
-			"gated activity must NOT execute on target when access is denied")
+			"gated activity must NOT execute on the target when signing is off")
 	})
 }

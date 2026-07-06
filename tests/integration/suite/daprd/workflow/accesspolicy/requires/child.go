@@ -20,22 +20,16 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -46,12 +40,10 @@ func init() {
 // requires gating cross-app child workflow scheduling on a prior
 // ChildWorkflowInstanceCompleted in the caller's propagated history.
 type child struct {
-	sentry *sentry.Sentry
-	place  *placement.Placement
-	sched  *scheduler.Scheduler
-	db     *sqlite.SQLite
-	caller *daprd.Daprd
-	target *daprd.Daprd
+	workflow *workflow.Workflow
+
+	callerID string
+	targetID string
 
 	targetWorkflowRuns atomic.Int64
 
@@ -64,15 +56,8 @@ type child struct {
 }
 
 func (r *child) Setup(t *testing.T) []framework.Option {
-	r.sentry = sentry.New(t)
-
-	r.place = placement.New(t, placement.WithSentry(t, r.sentry))
-	r.sched = scheduler.New(t, scheduler.WithSentry(r.sentry), scheduler.WithID("dapr-scheduler-server-0"))
-	r.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
-
-	callerID := "caller-" + uuid.NewString()
-	targetID := "target-" + uuid.NewString()
-	ns := uuid.NewString()
+	r.callerID = "caller-" + uuid.NewString()
+	r.targetID = "target-" + uuid.NewString()
 
 	r.sensitiveChildWF = "sensitive-child"
 	r.publicChildWF = "public-child"
@@ -103,55 +88,40 @@ spec:
     - name: %s
       operations:
       - schedule
-`, targetID, callerID, r.sensitiveChildWF, callerID, r.publicChildWF)
+`, r.targetID, r.callerID, r.sensitiveChildWF, r.callerID, r.publicChildWF)
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))
 
-	r.caller = daprd.New(t,
-		daprd.WithAppID(callerID),
-		daprd.WithNamespace(ns),
-		daprd.WithResourceFiles(r.db.GetComponent(t)),
-		daprd.WithPlacementAddresses(r.place.Address()),
-		daprd.WithSchedulerAddresses(r.sched.Address()),
-		daprd.WithSentry(t, r.sentry),
-	)
-	r.target = daprd.New(t,
-		daprd.WithAppID(targetID),
-		daprd.WithNamespace(ns),
-		daprd.WithResourcesDir(targetResDir),
-		daprd.WithResourceFiles(r.db.GetComponent(t)),
-		daprd.WithPlacementAddresses(r.place.Address()),
-		daprd.WithSchedulerAddresses(r.sched.Address()),
-		daprd.WithSentry(t, r.sentry),
+	r.workflow = workflow.New(t,
+		workflow.WithDaprds(2),
+		workflow.WithMTLS(t),
+		workflow.WithDaprdOptions(0, daprd.WithAppID(r.callerID)),
+		workflow.WithDaprdOptions(1, daprd.WithAppID(r.targetID), daprd.WithResourcesDir(targetResDir)),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(r.sentry, r.place, r.sched, r.db, r.caller, r.target),
+		framework.WithProcesses(r.workflow),
 	}
 }
 
 func (r *child) Run(t *testing.T, ctx context.Context) {
-	r.place.WaitUntilRunning(t, ctx)
-	r.sched.WaitUntilRunning(t, ctx)
-	r.caller.WaitUntilRunning(t, ctx)
-	r.target.WaitUntilRunning(t, ctx)
+	r.workflow.WaitUntilRunning(t, ctx)
 
-	callerReg := task.NewTaskRegistry()
-	targetReg := task.NewTaskRegistry()
-	targetAppID := r.target.AppID()
+	caller := r.workflow.RegistryN(0)
+	target := r.workflow.RegistryN(1)
 
-	require.NoError(t, callerReg.AddWorkflowN("preflight-wf", func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, caller.AddWorkflowN("preflight-wf", func(ctx *task.WorkflowContext) (any, error) {
 		return "preflight-ok", nil
 	}))
 
-	require.NoError(t, callerReg.AddWorkflowN(r.wfFullHistory, func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, caller.AddWorkflowN(r.wfFullHistory, func(ctx *task.WorkflowContext) (any, error) {
 		if err := ctx.CallChildWorkflow("preflight-wf").Await(nil); err != nil {
 			return nil, fmt.Errorf("preflight-wf failed: %w", err)
 		}
 		var out string
 		if err := ctx.CallChildWorkflow(r.sensitiveChildWF,
-			task.WithChildWorkflowAppID(targetAppID),
+			task.WithChildWorkflowAppID(r.targetID),
 			task.WithHistoryPropagation(api.PropagateOwnHistory()),
 		).Await(&out); err != nil {
 			return nil, fmt.Errorf("%s failed: %w", r.sensitiveChildWF, err)
@@ -159,10 +129,10 @@ func (r *child) Run(t *testing.T, ctx context.Context) {
 		return out, nil
 	}))
 
-	require.NoError(t, callerReg.AddWorkflowN(r.wfNoHistory, func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, caller.AddWorkflowN(r.wfNoHistory, func(ctx *task.WorkflowContext) (any, error) {
 		var out string
 		if err := ctx.CallChildWorkflow(r.sensitiveChildWF,
-			task.WithChildWorkflowAppID(targetAppID),
+			task.WithChildWorkflowAppID(r.targetID),
 			task.WithHistoryPropagation(api.PropagateOwnHistory()),
 		).Await(&out); err != nil {
 			return nil, fmt.Errorf("%s failed: %w", r.sensitiveChildWF, err)
@@ -170,46 +140,39 @@ func (r *child) Run(t *testing.T, ctx context.Context) {
 		return out, nil
 	}))
 
-	require.NoError(t, callerReg.AddWorkflowN(r.wfNoPropagation, func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, caller.AddWorkflowN(r.wfNoPropagation, func(ctx *task.WorkflowContext) (any, error) {
 		if err := ctx.CallChildWorkflow("preflight-wf").Await(nil); err != nil {
 			return nil, fmt.Errorf("preflight-wf failed: %w", err)
 		}
 		var out string
 		if err := ctx.CallChildWorkflow(r.sensitiveChildWF,
-			task.WithChildWorkflowAppID(targetAppID),
+			task.WithChildWorkflowAppID(r.targetID),
 		).Await(&out); err != nil {
 			return nil, fmt.Errorf("%s failed: %w", r.sensitiveChildWF, err)
 		}
 		return out, nil
 	}))
 
-	require.NoError(t, callerReg.AddWorkflowN(r.wfPublic, func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, caller.AddWorkflowN(r.wfPublic, func(ctx *task.WorkflowContext) (any, error) {
 		var out string
 		if err := ctx.CallChildWorkflow(r.publicChildWF,
-			task.WithChildWorkflowAppID(targetAppID),
+			task.WithChildWorkflowAppID(r.targetID),
 		).Await(&out); err != nil {
 			return nil, fmt.Errorf("%s failed: %w", r.publicChildWF, err)
 		}
 		return out, nil
 	}))
 
-	require.NoError(t, targetReg.AddWorkflowN(r.sensitiveChildWF, func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, target.AddWorkflowN(r.sensitiveChildWF, func(ctx *task.WorkflowContext) (any, error) {
 		r.targetWorkflowRuns.Add(1)
 		return "sensitive-child-completed", nil
 	}))
-	require.NoError(t, targetReg.AddWorkflowN(r.publicChildWF, func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, target.AddWorkflowN(r.publicChildWF, func(ctx *task.WorkflowContext) (any, error) {
 		return "public-child-completed", nil
 	}))
 
-	callerClient := client.NewTaskHubGrpcClient(r.caller.GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, callerClient.StartWorkItemListener(ctx, callerReg))
-	targetClient := client.NewTaskHubGrpcClient(r.target.GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, targetClient.StartWorkItemListener(ctx, targetReg))
-
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, len(r.caller.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
-		assert.GreaterOrEqual(c, len(r.target.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
-	}, 20*time.Second, 10*time.Millisecond)
+	callerClient := r.workflow.BackendClientN(t, ctx, 0)
+	r.workflow.BackendClientN(t, ctx, 1)
 
 	t.Run("child workflow allowed when ChildWorkflowInstanceCompleted in propagated history", func(t *testing.T) {
 		before := r.targetWorkflowRuns.Load()

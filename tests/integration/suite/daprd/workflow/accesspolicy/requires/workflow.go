@@ -20,36 +20,30 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
 
 func init() {
-	suite.Register(new(workflow))
+	suite.Register(new(workflowstarted))
 }
 
-type workflow struct {
-	sentry *sentry.Sentry
-	place  *placement.Placement
-	sched  *scheduler.Scheduler
-	db     *sqlite.SQLite
-	caller *daprd.Daprd
-	target *daprd.Daprd
+// requires matching on eventType=workflow.started (a child-workflow creation
+// in the caller's propagated history).
+type workflowstarted struct {
+	workflow *workflow.Workflow
+
+	callerID string
+	targetID string
 
 	targetActivityRuns atomic.Int64
 
@@ -59,16 +53,9 @@ type workflow struct {
 	activityName string
 }
 
-func (r *workflow) Setup(t *testing.T) []framework.Option {
-	r.sentry = sentry.New(t)
-
-	r.place = placement.New(t, placement.WithSentry(t, r.sentry))
-	r.sched = scheduler.New(t, scheduler.WithSentry(r.sentry), scheduler.WithID("dapr-scheduler-server-0"))
-	r.db = sqlite.New(t, sqlite.WithActorStateStore(true), sqlite.WithCreateStateTables())
-
-	callerID := "caller-" + uuid.NewString()
-	targetID := "target-" + uuid.NewString()
-	ns := uuid.NewString()
+func (r *workflowstarted) Setup(t *testing.T) []framework.Option {
+	r.callerID = "caller-" + uuid.NewString()
+	r.targetID = "target-" + uuid.NewString()
 
 	r.childWFName = "required-child-wf"
 	r.wfWithChild = "wf-with-child"
@@ -92,58 +79,43 @@ spec:
       - eventType: workflow.started
         name: %s
         appID: %s
-`, targetID, callerID, r.activityName, r.childWFName, callerID)
+`, r.targetID, r.callerID, r.activityName, r.childWFName, r.callerID)
 
 	targetResDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetResDir, "policy.yaml"), policy, 0o600))
 
-	r.caller = daprd.New(t,
-		daprd.WithAppID(callerID),
-		daprd.WithNamespace(ns),
-		daprd.WithResourceFiles(r.db.GetComponent(t)),
-		daprd.WithPlacementAddresses(r.place.Address()),
-		daprd.WithSchedulerAddresses(r.sched.Address()),
-		daprd.WithSentry(t, r.sentry),
-	)
-	r.target = daprd.New(t,
-		daprd.WithAppID(targetID),
-		daprd.WithNamespace(ns),
-		daprd.WithResourcesDir(targetResDir),
-		daprd.WithResourceFiles(r.db.GetComponent(t)),
-		daprd.WithPlacementAddresses(r.place.Address()),
-		daprd.WithSchedulerAddresses(r.sched.Address()),
-		daprd.WithSentry(t, r.sentry),
+	r.workflow = workflow.New(t,
+		workflow.WithDaprds(2),
+		workflow.WithMTLS(t),
+		workflow.WithDaprdOptions(0, daprd.WithAppID(r.callerID)),
+		workflow.WithDaprdOptions(1, daprd.WithAppID(r.targetID), daprd.WithResourcesDir(targetResDir)),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(r.sentry, r.place, r.sched, r.db, r.caller, r.target),
+		framework.WithProcesses(r.workflow),
 	}
 }
 
-func (r *workflow) Run(t *testing.T, ctx context.Context) {
-	r.place.WaitUntilRunning(t, ctx)
-	r.sched.WaitUntilRunning(t, ctx)
-	r.caller.WaitUntilRunning(t, ctx)
-	r.target.WaitUntilRunning(t, ctx)
+func (r *workflowstarted) Run(t *testing.T, ctx context.Context) {
+	r.workflow.WaitUntilRunning(t, ctx)
 
-	callerReg := task.NewTaskRegistry()
-	targetReg := task.NewTaskRegistry()
-	targetAppID := r.target.AppID()
+	caller := r.workflow.RegistryN(0)
+	target := r.workflow.RegistryN(1)
 	activityName := r.activityName
 	childWFName := r.childWFName
 
-	require.NoError(t, callerReg.AddWorkflowN(childWFName, func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, caller.AddWorkflowN(childWFName, func(ctx *task.WorkflowContext) (any, error) {
 		return "child-ok", nil
 	}))
 
 	// Creates the required child workflow before calling the gated activity.
-	require.NoError(t, callerReg.AddWorkflowN(r.wfWithChild, func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, caller.AddWorkflowN(r.wfWithChild, func(ctx *task.WorkflowContext) (any, error) {
 		if err := ctx.CallChildWorkflow(childWFName).Await(nil); err != nil {
 			return nil, fmt.Errorf("%s failed: %w", childWFName, err)
 		}
 		var out string
 		if err := ctx.CallActivity(activityName,
-			task.WithActivityAppID(targetAppID),
+			task.WithActivityAppID(r.targetID),
 			task.WithHistoryPropagation(api.PropagateOwnHistory()),
 		).Await(&out); err != nil {
 			return nil, fmt.Errorf("%s failed: %w", activityName, err)
@@ -151,10 +123,10 @@ func (r *workflow) Run(t *testing.T, ctx context.Context) {
 		return out, nil
 	}))
 
-	require.NoError(t, callerReg.AddWorkflowN(r.wfNoChild, func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, caller.AddWorkflowN(r.wfNoChild, func(ctx *task.WorkflowContext) (any, error) {
 		var out string
 		if err := ctx.CallActivity(activityName,
-			task.WithActivityAppID(targetAppID),
+			task.WithActivityAppID(r.targetID),
 			task.WithHistoryPropagation(api.PropagateOwnHistory()),
 		).Await(&out); err != nil {
 			return nil, fmt.Errorf("%s failed: %w", activityName, err)
@@ -162,20 +134,13 @@ func (r *workflow) Run(t *testing.T, ctx context.Context) {
 		return out, nil
 	}))
 
-	require.NoError(t, targetReg.AddActivityN(activityName, func(ctx task.ActivityContext) (any, error) {
+	require.NoError(t, target.AddActivityN(activityName, func(ctx task.ActivityContext) (any, error) {
 		r.targetActivityRuns.Add(1)
 		return "gated-ok", nil
 	}))
 
-	callerClient := client.NewTaskHubGrpcClient(r.caller.GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, callerClient.StartWorkItemListener(ctx, callerReg))
-	targetClient := client.NewTaskHubGrpcClient(r.target.GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, targetClient.StartWorkItemListener(ctx, targetReg))
-
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, len(r.caller.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
-		assert.GreaterOrEqual(c, len(r.target.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
-	}, 20*time.Second, 10*time.Millisecond)
+	callerClient := r.workflow.BackendClientN(t, ctx, 0)
+	r.workflow.BackendClientN(t, ctx, 1)
 
 	t.Run("allowed when caller created the required child workflow", func(t *testing.T) {
 		before := r.targetActivityRuns.Load()
