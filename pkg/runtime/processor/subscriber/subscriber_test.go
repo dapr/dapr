@@ -535,6 +535,81 @@ func TestReloadPubSub(t *testing.T) {
 	}, time.Second*10, time.Millisecond*10)
 }
 
+func TestReloadPubSubStartsAllListedSubscriptions(t *testing.T) {
+	mockPubSub := new(daprt.InMemoryPubsub)
+
+	mockPubSub.On("Init", mock.Anything).Return(nil)
+	require.NoError(t, mockPubSub.Init(t.Context(), contribpubsub.Metadata{}))
+
+	var subscribedTopics []string
+	mockPubSub.
+		On("Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler")).
+		Return(nil).
+		Run(func(args mock.Arguments) {
+			req := args.Get(0).(contribpubsub.SubscribeRequest)
+			subscribedTopics = append(subscribedTopics, req.Topic)
+		})
+	mockPubSub.On("unsubscribed", mock.Anything).Return(nil)
+
+	compStore := compstore.New()
+	addAppSub := func(name, topic string) {
+		compStore.AddDeclarativeSubscription(&subapi.Subscription{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Spec: subapi.SubscriptionSpec{
+				Pubsubname: TestPubsubName,
+				Topic:      topic,
+				Routes:     subapi.Routes{Default: "/"},
+			},
+		}, rtpubsub.Subscription{
+			PubsubName: TestPubsubName,
+			Topic:      topic,
+			Rules:      []*rtpubsub.Rule{{Path: "/"}},
+		})
+	}
+	addStreamSub := func(name, topic string, connectionID rtpubsub.ConnectionID) {
+		require.NoError(t, compStore.AddStreamSubscription(&subapi.Subscription{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Spec: subapi.SubscriptionSpec{
+				Pubsubname: TestPubsubName,
+				Topic:      topic,
+				Routes:     subapi.Routes{Default: "/"},
+			},
+		}, connectionID))
+	}
+
+	addAppSub("app-sub-1", "app-topic-1")
+	addAppSub("app-sub-2", "app-topic-2")
+	addStreamSub("stream-sub-1", "stream-topic-1", rtpubsub.ConnectionID(1))
+	addStreamSub("stream-sub-2", "stream-topic-2", rtpubsub.ConnectionID(2))
+
+	subs := New(Options{
+		CompStore:  compStore,
+		IsHTTP:     true,
+		Resiliency: resiliency.New(logger.NewLogger("test")),
+		Namespace:  "ns1",
+		AppID:      TestRuntimeConfigID,
+		Channels:   new(channels.Channels).WithAppChannel(new(channelt.MockAppChannel)),
+	})
+	subs.appSubActive = true
+	subs.hasInitProg = true
+
+	pubsubItem := &rtpubsub.PubsubItem{Component: mockPubSub}
+	require.NoError(t, subs.reloadPubSubApp(TestPubsubName, pubsubItem))
+	require.NoError(t, subs.reloadPubSubStream(TestPubsubName, pubsubItem))
+
+	require.Len(t, subs.appSubs[TestPubsubName], 2)
+	require.Len(t, subs.streamSubs[TestPubsubName], 2)
+	assert.ElementsMatch(t, []string{
+		"app-topic-1",
+		"app-topic-2",
+		"stream-topic-1",
+		"stream-topic-2",
+	}, subscribedTopics)
+	mockPubSub.AssertNumberOfCalls(t, "Subscribe", 4)
+
+	subs.StopAllSubscriptionsForever()
+}
+
 func TestSubscriptionRetryMechanisms(t *testing.T) {
 	createMockSetup := func() (*daprt.InMemoryPubsub, *compstore.ComponentStore) {
 		mockPubSub := new(daprt.InMemoryPubsub)
