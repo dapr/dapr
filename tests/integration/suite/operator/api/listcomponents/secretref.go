@@ -121,14 +121,11 @@ func (s *secretref) Run(t *testing.T, ctx context.Context) {
 
 	listPassword := func(c *assert.CollectT) []byte {
 		resp, err := client.ListComponents(ctx, &operatorv1.ListComponentsRequest{Namespace: "default"})
-		if !assert.NoError(c, err) || !assert.Len(c, resp.GetComponents(), 1) {
-			return nil
-		}
+		require.NoError(c, err)
+		require.Len(c, resp.GetComponents(), 1)
 		var comp compapi.Component
-		if !assert.NoError(c, json.Unmarshal(resp.GetComponents()[0], &comp)) ||
-			!assert.Len(c, comp.Spec.Metadata, 1) {
-			return nil
-		}
+		require.NoError(c, json.Unmarshal(resp.GetComponents()[0], &comp))
+		require.Len(c, comp.Spec.Metadata, 1)
 		assert.Equal(c, "redis-secret", comp.Spec.Metadata[0].SecretKeyRef.Name)
 		return comp.Spec.Metadata[0].Value.Raw
 	}

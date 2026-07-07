@@ -164,19 +164,13 @@ func (s *secretrotation) Run(t *testing.T, ctx context.Context) {
 	readSecret := func(c *assert.CollectT) string {
 		getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/envstore/SEC", s.daprd.HTTPPort())
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
-		if !assert.NoError(c, err) {
-			return ""
-		}
+		require.NoError(c, err)
 		resp, err := httpClient.Do(req)
-		if !assert.NoError(c, err) {
-			return ""
-		}
+		require.NoError(c, err)
 		body, err := io.ReadAll(resp.Body)
-		assert.NoError(c, err)
-		assert.NoError(c, resp.Body.Close())
-		if !assert.Equal(c, http.StatusOK, resp.StatusCode) {
-			return ""
-		}
+		require.NoError(c, err)
+		require.NoError(c, resp.Body.Close())
+		require.Equal(c, http.StatusOK, resp.StatusCode)
 		return string(body)
 	}
 
