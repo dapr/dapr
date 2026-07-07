@@ -450,6 +450,105 @@ func (s *proxyTestSuite) TestMaxRequestBodySize() {
 	})
 }
 
+func TestProxyRunnerRunReturnsForwardServerToClientSendMsgError(t *testing.T) {
+	sendErr := status.Error(codes.ResourceExhausted, "message too large")
+	clientCtx, clientCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer clientCancel()
+
+	r := proxyRunner{
+		serverStream: &proxyRunnerTestStream{
+			ctx: clientCtx,
+			recvMsgFn: func(any) error {
+				return nil
+			},
+		},
+		clientStream: &proxyRunnerTestStream{
+			ctx: clientCtx,
+			recvMsgFn: func(any) error {
+				<-clientCtx.Done()
+				return clientCtx.Err()
+			},
+			sendMsgFn: func(any) error {
+				return sendErr
+			},
+		},
+		headersSent:  &atomic.Bool{},
+		clientCtx:    clientCtx,
+		clientCancel: clientCancel,
+		teardown:     func(bool) {},
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- r.run()
+	}()
+
+	select {
+	case err := <-errCh:
+		require.Equal(t, codes.ResourceExhausted, status.Code(err))
+		require.ErrorContains(t, err, "message too large")
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for proxy runner to return")
+	}
+}
+
+func TestProxyRunnerForwardClientToServerReturnsSendErrors(t *testing.T) {
+	for name, setup := range map[string]struct {
+		headerErr  error
+		sendErr    error
+		headerSent bool
+	}{
+		"client stream header": {
+			headerErr: status.Error(codes.ResourceExhausted, "header too large"),
+		},
+		"server stream send header": {
+			headerErr: status.Error(codes.ResourceExhausted, "header too large"),
+		},
+		"server stream send msg": {
+			sendErr:    status.Error(codes.ResourceExhausted, "message too large"),
+			headerSent: true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			headersSent := &atomic.Bool{}
+			headersSent.Store(setup.headerSent)
+
+			r := proxyRunner{
+				serverStream: &proxyRunnerTestStream{
+					ctx: context.Background(),
+					sendHeaderFn: func(metadata.MD) error {
+						return setup.headerErr
+					},
+					sendMsgFn: func(any) error {
+						return setup.sendErr
+					},
+				},
+				clientStream: &proxyRunnerTestStream{
+					ctx: context.Background(),
+					headerFn: func() (metadata.MD, error) {
+						if name == "client stream header" {
+							return nil, setup.headerErr
+						}
+						return metadata.MD{}, nil
+					},
+					recvMsgFn: func(any) error {
+						return nil
+					},
+				},
+				headersSent: headersSent,
+			}
+
+			errCh := r.forwardClientToServer()
+			select {
+			case err := <-errCh:
+				require.Equal(t, codes.ResourceExhausted, status.Code(err))
+			case <-time.After(time.Second):
+				t.Fatal("timed out waiting for forwarding error")
+			}
+		})
+	}
+}
+
 func (s *proxyTestSuite) setupResiliency() {
 	timeout := 500 * time.Millisecond
 	rc := &retry.Config{
@@ -1036,6 +1135,72 @@ func (t testingLog) Fatalf(format string, args ...any) {
 // V reports whether verbosity level l is at least the requested verbose level.
 func (t testingLog) V(l int) bool {
 	return true
+}
+
+type proxyRunnerTestStream struct {
+	ctx context.Context
+
+	headerFn     func() (metadata.MD, error)
+	sendHeaderFn func(metadata.MD) error
+	sendMsgFn    func(any) error
+	recvMsgFn    func(any) error
+	closeSendFn  func() error
+
+	trailer metadata.MD
+}
+
+func (s *proxyRunnerTestStream) Header() (metadata.MD, error) {
+	if s.headerFn != nil {
+		return s.headerFn()
+	}
+	return metadata.MD{}, nil
+}
+
+func (s *proxyRunnerTestStream) Trailer() metadata.MD {
+	return s.trailer
+}
+
+func (s *proxyRunnerTestStream) CloseSend() error {
+	if s.closeSendFn != nil {
+		return s.closeSendFn()
+	}
+	return nil
+}
+
+func (s *proxyRunnerTestStream) Context() context.Context {
+	if s.ctx != nil {
+		return s.ctx
+	}
+	return context.Background()
+}
+
+func (s *proxyRunnerTestStream) SetHeader(metadata.MD) error {
+	return nil
+}
+
+func (s *proxyRunnerTestStream) SendHeader(md metadata.MD) error {
+	if s.sendHeaderFn != nil {
+		return s.sendHeaderFn(md)
+	}
+	return nil
+}
+
+func (s *proxyRunnerTestStream) SetTrailer(md metadata.MD) {
+	s.trailer = md
+}
+
+func (s *proxyRunnerTestStream) SendMsg(msg any) error {
+	if s.sendMsgFn != nil {
+		return s.sendMsgFn(msg)
+	}
+	return nil
+}
+
+func (s *proxyRunnerTestStream) RecvMsg(msg any) error {
+	if s.recvMsgFn != nil {
+		return s.recvMsgFn(msg)
+	}
+	return io.EOF
 }
 
 // createGrpcStreamingChaosInterceptor creates a gRPC interceptor that will return the given error code

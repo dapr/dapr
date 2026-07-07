@@ -390,16 +390,19 @@ func (r proxyRunner) forwardClientToServer() chan error {
 				var md metadata.MD
 				md, err = r.clientStream.Header()
 				if err != nil {
-					break
+					ret <- err
+					return
 				}
 				err = r.serverStream.SendHeader(md)
 				if err != nil {
-					break
+					ret <- err
+					return
 				}
 			}
 			err = r.serverStream.SendMsg(f)
 			if err != nil {
-				break
+				ret <- err
+				return
 			}
 		}
 	}()
@@ -450,7 +453,8 @@ func (r proxyRunner) forwardServerToClient() chan error {
 			}
 			err = r.clientStream.SendMsg(f)
 			if err != nil {
-				break
+				ret <- err
+				return
 			}
 		}
 	}()
