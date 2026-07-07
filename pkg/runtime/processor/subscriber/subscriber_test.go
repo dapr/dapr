@@ -130,6 +130,7 @@ func TestSubscriptionLifecycle(t *testing.T) {
 		Channels:                        new(channels.Channels).WithAppChannel(new(channelt.MockAppChannel)),
 		ProgrammaticSubscriptionEnabled: true,
 	})
+	t.Cleanup(subs.StopAllSubscriptionsForever)
 	subs.hasInitProg = true
 
 	gotTopics := make([][]string, 3)
@@ -590,6 +591,7 @@ func TestReloadPubSubStartsAllListedSubscriptions(t *testing.T) {
 		AppID:      TestRuntimeConfigID,
 		Channels:   new(channels.Channels).WithAppChannel(new(channelt.MockAppChannel)),
 	})
+	t.Cleanup(subs.StopAllSubscriptionsForever)
 	subs.appSubActive = true
 	subs.hasInitProg = true
 
@@ -658,6 +660,7 @@ func TestSubscriptionRetryMechanisms(t *testing.T) {
 			AppID:      TestRuntimeConfigID,
 			Channels:   new(channels.Channels).WithAppChannel(new(channelt.MockAppChannel)),
 		})
+		t.Cleanup(subs.StopAllSubscriptionsForever)
 		subs.hasInitProg = true
 
 		err := subs.StartAppSubscriptions()
@@ -714,6 +717,7 @@ func TestSubscriptionRetryMechanisms(t *testing.T) {
 			AppID:      TestRuntimeConfigID,
 			Channels:   new(channels.Channels).WithAppChannel(new(channelt.MockAppChannel)),
 		})
+		t.Cleanup(subs.StopAllSubscriptionsForever)
 		subs.appSubActive = true
 
 		err := subs.ReloadDeclaredAppSubscription("sub1", "mockPubSub")
@@ -760,6 +764,7 @@ func TestSubscriptionRetryMechanisms(t *testing.T) {
 			AppID:      TestRuntimeConfigID,
 			Channels:   new(channels.Channels).WithAppChannel(new(channelt.MockAppChannel)),
 		})
+		t.Cleanup(subs.StopAllSubscriptionsForever)
 		subs.hasInitProg = true
 
 		err := subs.StartAppSubscriptions()
