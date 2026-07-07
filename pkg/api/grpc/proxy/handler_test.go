@@ -24,6 +24,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -64,6 +65,9 @@ const (
 	countListResponses = 20
 
 	testAppID = "test"
+
+	// Use a small 4 KiB limit
+	testMaxMessageBodySize = 4 << 10
 )
 
 const (
@@ -403,6 +407,47 @@ func (s *proxyTestSuite) TestPingSimulateFailure() {
 	_, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: "Ciao mamma guarda come mi diverto"})
 	s.Require().Error(err, "Ping should return a simulated failure")
 	s.Require().ErrorContains(err, "Simulated failure")
+}
+
+func (s *proxyTestSuite) TestMaxRequestBodySize() {
+	oversizedValue := strings.Repeat("a", testMaxMessageBodySize+1)
+
+	s.T().Run("oversized request via transparent handler is rejected", func(t *testing.T) {
+		ctx, cancel := s.ctx()
+		defer cancel()
+		stream, err := s.testClient.PingList(ctx, &pb.PingRequest{Value: oversizedValue})
+		require.NoError(t, err, "creating the stream should not fail")
+		_, err = stream.Recv()
+		require.Error(t, err, "proxying an oversized request should fail")
+		st, ok := status.FromError(err)
+		require.True(t, ok, "must get status from error")
+		require.Equal(t, codes.ResourceExhausted, st.Code())
+	})
+
+	s.T().Run("request within limit via transparent handler succeeds", func(t *testing.T) {
+		ctx, cancel := s.ctx()
+		defer cancel()
+		stream, err := s.testClient.PingList(ctx, &pb.PingRequest{Value: "small"})
+		require.NoError(t, err, "creating the stream should not fail")
+		count := 0
+		for {
+			_, err = stream.Recv()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			require.NoError(t, err, "reading the stream should not fail")
+			count++
+		}
+		require.Equal(t, countListResponses, count)
+	})
+
+	s.T().Run("oversized request via registered service has no limit", func(t *testing.T) {
+		ctx, cancel := s.ctx()
+		defer cancel()
+		out, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: oversizedValue})
+		require.NoError(t, err, "Ping should succeed without errors")
+		require.Equal(t, oversizedValue, out.GetValue())
+	})
 }
 
 func (s *proxyTestSuite) setupResiliency() {
@@ -828,7 +873,7 @@ func (s *proxyTestSuite) SetupSuite() {
 		func(ctx context.Context, address, id, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error) {
 			return s.getServerClientConn()
 		},
-		4<<10,
+		testMaxMessageBodySize,
 	)
 	s.proxy = grpc.NewServer(
 		grpc.UnknownServiceHandler(th),
@@ -878,6 +923,49 @@ func (s *proxyTestSuite) TearDownSuite() {
 func TestProxySuite(t *testing.T) {
 	codec.Register()
 	suite.Run(t, &proxyTestSuite{})
+}
+
+func TestClientStreamOptions(t *testing.T) {
+	contentSubtype := grpc.CallContentSubtype((&codec.Proxy{}).Name())
+
+	tests := []struct {
+		name               string
+		maxRequestBodySize int
+		expected           []grpc.CallOption
+	}{
+		{
+			name:               "zero max request body size returns only the proxy content subtype option",
+			maxRequestBodySize: 0,
+			expected: []grpc.CallOption{
+				contentSubtype,
+			},
+		},
+		{
+			name:               "negative max request body size returns only the proxy content subtype option",
+			maxRequestBodySize: -1,
+			expected: []grpc.CallOption{
+				contentSubtype,
+			},
+		},
+		{
+			name:               "positive max request body size adds message size options",
+			maxRequestBodySize: testMaxMessageBodySize,
+			expected: []grpc.CallOption{
+				contentSubtype,
+				grpc.MaxCallRecvMsgSize(testMaxMessageBodySize),
+				grpc.MaxCallSendMsgSize(testMaxMessageBodySize),
+				grpc.MaxRetryRPCBufferSize(testMaxMessageBodySize),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := clientStreamOptions(tt.maxRequestBodySize)
+			require.Len(t, got, len(tt.expected))
+			require.Equal(t, tt.expected, got)
+		})
+	}
 }
 
 // Abstraction that allows us to pass the *testing.T as a grpclogger.
