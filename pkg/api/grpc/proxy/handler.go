@@ -44,8 +44,9 @@ type getPolicyFn func(ctx context.Context, appID, methodName string) *resiliency
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
 func RegisterService(server *grpc.Server, director StreamDirector, getPolicyFn getPolicyFn, serviceName string, methodNames ...string) {
 	streamer := &handler{
-		director:    director,
-		getPolicyFn: getPolicyFn,
+		director:         director,
+		getPolicyFn:      getPolicyFn,
+		clientStreamOpts: clientStreamOptions(0),
 	}
 	fakeDesc := &grpc.ServiceDesc{
 		ServiceName: serviceName,
@@ -70,19 +71,33 @@ func RegisterService(server *grpc.Server, director StreamDirector, getPolicyFn g
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
 func TransparentHandler(director StreamDirector, getPolicyFn getPolicyFn, connFactory DirectorConnectionFactory, maxMessageBodySize int) grpc.StreamHandler {
 	streamer := &handler{
-		director:           director,
-		getPolicyFn:        getPolicyFn,
-		connFactory:        connFactory,
-		maxRequestBodySize: maxMessageBodySize,
+		director:         director,
+		getPolicyFn:      getPolicyFn,
+		connFactory:      connFactory,
+		clientStreamOpts: clientStreamOptions(maxMessageBodySize),
 	}
 	return streamer.handler
 }
 
+func clientStreamOptions(maxRequestBodySize int) []grpc.CallOption {
+	opts := []grpc.CallOption{
+		grpc.CallContentSubtype((&codec.Proxy{}).Name()),
+	}
+	if maxRequestBodySize > 0 {
+		opts = append(opts,
+			grpc.MaxCallRecvMsgSize(maxRequestBodySize),
+			grpc.MaxCallSendMsgSize(maxRequestBodySize),
+			grpc.MaxRetryRPCBufferSize(maxRequestBodySize),
+		)
+	}
+	return opts
+}
+
 type handler struct {
-	director           StreamDirector
-	getPolicyFn        getPolicyFn
-	connFactory        DirectorConnectionFactory
-	maxRequestBodySize int
+	director         StreamDirector
+	getPolicyFn      getPolicyFn
+	connFactory      DirectorConnectionFactory
+	clientStreamOpts []grpc.CallOption
 }
 
 // handler is where the real magic of proxying happens.
@@ -124,17 +139,6 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 	var replayBuffer replayBufferCh
 	if !isStream && policyDef != nil && policyDef.HasRetries() {
 		replayBuffer = make(replayBufferCh, 1)
-	}
-
-	clientStreamOptSubtype := make([]grpc.CallOption, 0, 4)
-	clientStreamOptSubtype = append(clientStreamOptSubtype, grpc.CallContentSubtype((&codec.Proxy{}).Name()))
-
-	if s.maxRequestBodySize > 0 {
-		clientStreamOptSubtype = append(clientStreamOptSubtype,
-			grpc.MaxCallRecvMsgSize(s.maxRequestBodySize),
-			grpc.MaxCallSendMsgSize(s.maxRequestBodySize),
-			grpc.MaxRetryRPCBufferSize(s.maxRequestBodySize),
-		)
 	}
 
 	headersSent := &atomic.Bool{}
@@ -187,7 +191,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 			clientStreamDescForProxying,
 			backendConn,
 			fullMethodName,
-			clientStreamOptSubtype...,
+			s.clientStreamOpts...,
 		)
 		if err != nil {
 			var reconnectionSucceeded bool
@@ -228,7 +232,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 					return nil, err
 				}
 
-				clientStream, err = grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, clientStreamOptSubtype...)
+				clientStream, err = grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, s.clientStreamOpts...)
 				if err != nil {
 					code = status.Code(err)
 					teardown(false)
