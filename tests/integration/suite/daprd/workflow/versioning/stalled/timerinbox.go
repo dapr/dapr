@@ -122,6 +122,11 @@ func (d *timerinbox) Run(t *testing.T, ctx context.Context) {
 	inboxKeys := d.workflow.DB().ReadStateValues(t, ctx, string(id), "inbox")
 	assert.Equal(t, uint64(len(inboxKeys)), metadata.GetInboxLength(),
 		"metadata inboxLength must match the number of persisted inbox-* keys")
+	for _, raw := range inboxKeys {
+		var event protos.HistoryEvent
+		require.NoError(t, proto.Unmarshal(raw, &event))
+		assert.Nil(t, event.GetTimerFired(), "TimerFired events must never be persisted as inbox-* keys")
+	}
 
 	// A stalled workflow must still answer status queries.
 	md, err := client.FetchWorkflowMetadata(ctx, id)
