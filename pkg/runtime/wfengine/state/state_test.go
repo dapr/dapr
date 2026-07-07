@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -318,6 +319,53 @@ func TestGetSaveRequest_HistoryWithoutMarshaledBytes(t *testing.T) {
 
 	require.NotNil(t, historyOp, "expected history-000000 upsert")
 	assert.Equal(t, expected, historyOp.Value)
+}
+
+func TestGetSaveRequest_InboxExcludesUnpersistedTimerEvents(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	s.AddToInbox(testEvent(0))
+
+	// A timer wake appends TimerFired directly to the in-memory inbox
+	// without going through AddToInbox (orchestrator run path); it is never
+	// persisted as an inbox key. A save taken while it is still in the inbox
+	// (workflow stall, abandoned continue-as-new) must not count it.
+	s.Inbox = append(s.Inbox, &backend.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_TimerFired{
+			TimerFired: &protos.TimerFiredEvent{TimerId: 1},
+		},
+	})
+
+	req, err := s.GetSaveRequest("actor1")
+	require.NoError(t, err)
+
+	var inboxKeys []string
+	var metadata *backend.BackendWorkflowStateMetadata
+	for _, op := range req.Operations {
+		if op.Operation != api.Upsert {
+			continue
+		}
+		u, ok := op.Request.(api.TransactionalUpsert)
+		if !ok {
+			continue
+		}
+		switch {
+		case u.Key == MetadataKey:
+			metadata = new(backend.BackendWorkflowStateMetadata)
+			require.NoError(t, proto.Unmarshal(u.Value.([]byte), metadata))
+		case strings.HasPrefix(u.Key, inboxKeyPrefix):
+			inboxKeys = append(inboxKeys, u.Key)
+		}
+	}
+
+	require.NotNil(t, metadata, "expected a metadata upsert")
+	assert.Equal(t, []string{"inbox-000000"}, inboxKeys, "only the non-timer event should be persisted")
+	assert.Equal(t, uint64(1), metadata.GetInboxLength(),
+		"metadata must declare exactly the inbox keys that exist in the store, or the next load will fail on a phantom key")
 }
 
 func TestGetSaveRequest_SigningDataOperations(t *testing.T) {
