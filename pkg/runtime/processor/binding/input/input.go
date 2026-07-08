@@ -31,6 +31,12 @@ type Options struct {
 	Name    string
 	Binding bindings.InputBinding
 	Handler func(context.Context, string, []byte, map[string]string) ([]byte, error)
+
+	// DecorateContext, when set, decorates the long-lived read-loop context
+	// before Read is invoked on the binding. Dapr uses it to attach the
+	// workload's SPIFFE identity so the binding can authenticate to its backing
+	// infrastructure service.
+	DecorateContext func(context.Context) context.Context
 }
 
 type Input struct {
@@ -46,6 +52,10 @@ type Input struct {
 
 func Run(opts Options) (*Input, error) {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	if opts.DecorateContext != nil {
+		ctx = opts.DecorateContext(ctx)
+	}
 
 	i := &Input{
 		name:    opts.Name,
