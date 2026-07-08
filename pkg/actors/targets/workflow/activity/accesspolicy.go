@@ -63,12 +63,6 @@ func (a *activity) checkAccessPolicy(method string, data []byte, md map[string]*
 		return status.Errorf(codes.PermissionDenied, "%s: caller identity missing on activity '%s' schedule", workflowacl.DeniedMessageBase, name)
 	}
 
-	if err := a.signing.VerifyPropagatedHistoryStateless(history); err != nil {
-		log.Warnf("Activity actor '%s': workflow access policy denied app '%s' on activity '%s': propagated history verification failed: %v", a.actorID, callerAppID, name, err)
-		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeActivity), string(wfaclapi.WorkflowOperationSchedule))
-		return status.Errorf(codes.PermissionDenied, "%s: app '%s' schedule on activity '%s'", workflowacl.DeniedMessageBase, callerAppID, name)
-	}
-
 	allowed, reason := policies.Evaluate(callerAppID, workflowacl.OperationTypeActivity, wfaclapi.WorkflowOperationSchedule, name, history, a.signing.Enabled())
 	if !allowed {
 		log.Warnf("Activity actor '%s': workflow access policy denied app '%s' on activity '%s' (reason=%s)", a.actorID, callerAppID, name, reason)

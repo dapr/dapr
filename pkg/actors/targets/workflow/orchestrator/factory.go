@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
@@ -95,9 +96,9 @@ type factory struct {
 	table sync.Map
 	lock  sync.Mutex
 
-	// selfCallerWarnOnce ensures the "policy lists own appID" warning is
-	// only emitted once per factory lifetime instead of on every self-call.
-	selfCallerWarnOnce sync.Once
+	// selfCallerWarned ensures the "policy lists own appID" warning is only
+	// emitted once per factory lifetime instead of on every self-call.
+	selfCallerWarned atomic.Bool
 }
 
 func New(ctx context.Context, opts Options) (targets.Factory, error) {

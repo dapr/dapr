@@ -64,10 +64,8 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 	// Self-calls are exempt: the policy is a cross-app gate.
 	callerAppID := workflowacl.CallerAppID(md)
 	if callerAppID == o.appID {
-		if policies.ListsCaller(o.appID) {
-			o.selfCallerWarnOnce.Do(func() {
-				log.Warnf("WorkflowAccessPolicy lists this app's own appID '%s' in a rule's Callers — that listing has no effect because same-app calls are always exempt; the policy is a cross-app gate", o.appID)
-			})
+		if !o.selfCallerWarned.Load() && policies.ListsCaller(o.appID) && o.selfCallerWarned.CompareAndSwap(false, true) {
+			log.Warnf("WorkflowAccessPolicy lists this app's own appID '%s' in a rule's Callers — that listing has no effect because same-app calls are always exempt; the policy is a cross-app gate", o.appID)
 		}
 		return nil
 	}
@@ -96,12 +94,6 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 	if err != nil {
 		log.Errorf("Workflow actor '%s': failed to resolve workflow name for policy check on '%s': %v", o.actorID, method, err)
 		return status.Error(codes.Internal, "failed to evaluate workflow access policy")
-	}
-
-	if err := o.signing.VerifyPropagatedHistoryStateless(history); err != nil {
-		log.Warnf("Workflow actor '%s': workflow access policy denied app '%s' operation '%s' on '%s': propagated history verification failed: %v", o.actorID, callerAppID, operation, name, err)
-		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), string(operation))
-		return status.Errorf(codes.PermissionDenied, "%s: app '%s' operation '%s' on workflow '%s' (instance '%s')", workflowacl.DeniedMessageBase, callerAppID, operation, name, o.actorID)
 	}
 
 	allowed, reason := policies.Evaluate(callerAppID, workflowacl.OperationTypeWorkflow, operation, name, history, o.signing.Enabled())
