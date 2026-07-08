@@ -15,6 +15,7 @@ package workflow
 
 import (
 	"path"
+	"sync/atomic"
 
 	"google.golang.org/protobuf/proto"
 
@@ -205,6 +206,21 @@ func (cp *CompiledPolicies) Evaluate(callerAppID string, opType OperationType, o
 		return false, DenialReasonRequiresUnmet
 	}
 	return false, DenialReasonNotAllowed
+}
+
+// SelfCallExempt reports whether callerAppID is the target app's own ID, in
+// which case the call is exempt from the cross-app policy gate. When the policy
+// misconfigures by listing the local appID in a rule's Callers, a one-time
+// warning is emitted (guarded by warned) — that listing has no effect because
+// same-app calls are always exempt.
+func (cp *CompiledPolicies) SelfCallExempt(appID, callerAppID string, warned *atomic.Bool) bool {
+	if callerAppID != appID {
+		return false
+	}
+	if !warned.Load() && cp.ListsCaller(appID) && warned.CompareAndSwap(false, true) {
+		log.Warnf("WorkflowAccessPolicy lists this app's own appID '%s' in a rule's Callers — that listing has no effect because same-app calls are always exempt; the policy is a cross-app gate", appID)
+	}
+	return true
 }
 
 // ListsCaller reports whether any compiled rule names appID in its Callers

@@ -61,12 +61,8 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 		return nil
 	}
 
-	// Self-calls are exempt: the policy is a cross-app gate.
 	callerAppID := workflowacl.CallerAppID(md)
-	if callerAppID == o.appID {
-		if !o.selfCallerWarned.Load() && policies.ListsCaller(o.appID) && o.selfCallerWarned.CompareAndSwap(false, true) {
-			log.Warnf("WorkflowAccessPolicy lists this app's own appID '%s' in a rule's Callers — that listing has no effect because same-app calls are always exempt; the policy is a cross-app gate", o.appID)
-		}
+	if policies.SelfCallExempt(o.appID, callerAppID, &o.selfCallerWarned) {
 		return nil
 	}
 

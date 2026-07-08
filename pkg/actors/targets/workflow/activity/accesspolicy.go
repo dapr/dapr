@@ -32,14 +32,8 @@ func (a *activity) checkAccessPolicy(method string, data []byte, md map[string]*
 		return nil
 	}
 
-	// Self-calls are exempt: the policy is a cross-app gate.
 	callerAppID := workflowacl.CallerAppID(md)
-	if callerAppID == a.appID {
-		if policies.ListsCaller(a.appID) {
-			a.selfCallerWarnOnce.Do(func() {
-				log.Warnf("WorkflowAccessPolicy lists this app's own appID '%s' in a rule's Callers — that listing has no effect because same-app calls are always exempt; the policy is a cross-app gate", a.appID)
-			})
-		}
+	if policies.SelfCallExempt(a.appID, callerAppID, &a.selfCallerWarned) {
 		return nil
 	}
 
