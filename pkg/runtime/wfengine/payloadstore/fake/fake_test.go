@@ -84,6 +84,25 @@ func TestGetUnknownReference(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestGetReturnsDefensiveCopy(t *testing.T) {
+	t.Parallel()
+
+	f := New()
+	ref, err := f.Put(t.Context(), "instance-1", []byte("original data"))
+	require.NoError(t, err)
+
+	got, err := f.Get(t.Context(), ref)
+	require.NoError(t, err)
+	for i := range got {
+		got[i] = 'X'
+	}
+
+	// Mutating the returned slice must not corrupt the stored payload.
+	again, err := f.Get(t.Context(), ref)
+	require.NoError(t, err)
+	assert.Equal(t, "original data", string(again))
+}
+
 func TestGetDetectsTamperedData(t *testing.T) {
 	t.Parallel()
 

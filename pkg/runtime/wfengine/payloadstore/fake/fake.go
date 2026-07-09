@@ -125,5 +125,9 @@ func (f *Fake) defaultGet(_ context.Context, ref payloadstore.Reference) ([]byte
 		return nil, fmt.Errorf("payload checksum mismatch for key '%s': stored data does not match reference checksum", ref.Key)
 	}
 
-	return data, nil
+	// Defensive copy: callers own the returned slice and must not be able
+	// to mutate the stored payload through it.
+	out := make([]byte, len(data))
+	copy(out, data)
+	return out, nil
 }
