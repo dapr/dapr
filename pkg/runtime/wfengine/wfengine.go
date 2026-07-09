@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/wfregistrar"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/durabletask-go/backend"
@@ -97,6 +98,13 @@ type Options struct {
 
 	// May be nil when the WorkflowAccessPolicy feature is disabled.
 	WorkflowAccessPolicies *workflowacl.Holder
+
+	// PayloadStore, when non-nil, receives the event payloads it elects to
+	// offload (Store.ShouldOffload) before they are persisted; workflow
+	// history then carries small references instead of the payloads. It is
+	// nil (offloading disabled) unless an embedder injects a store
+	// programmatically.
+	PayloadStore payloadstore.Store
 }
 
 type engine struct {
@@ -156,6 +164,7 @@ func New(opts Options) (Interface, error) {
 		Signer:                 s,
 		MaxRequestBodySize:     opts.MaxRequestBodySize,
 		WorkflowAccessPolicies: opts.WorkflowAccessPolicies,
+		PayloadStore:           opts.PayloadStore,
 
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,

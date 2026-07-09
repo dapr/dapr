@@ -1,4 +1,4 @@
-/*t *testing.T
+/*
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -408,6 +409,18 @@ func WithMaxBodySize(size string) Option {
 func WithSkipStateStoreReminderMigration(t *testing.T) Option {
 	return WithExecOptions(exec.WithEnvVars(t,
 		"DAPR_SKIP_REMINDER_MIGRATION", "true",
+	))
+}
+
+// WithWorkflowPayloadStoreThreshold enables the integration-test-only
+// in-memory workflow payload store with the given offload threshold in
+// bytes. Only effective in daprd binaries built with the
+// wfpayloadstore_inmemory tag, which the integration harness sets; the
+// environment variable must stay in sync with the constant of the same
+// name in cmd/daprd/app/wfpayloadstore_inmemory.go.
+func WithWorkflowPayloadStoreThreshold(t *testing.T, thresholdBytes int) Option {
+	return WithExecOptions(exec.WithEnvVars(t,
+		"DAPR_TEST_WORKFLOW_PAYLOAD_STORE_THRESHOLD", strconv.Itoa(thresholdBytes),
 	))
 }
 

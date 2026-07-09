@@ -48,6 +48,7 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state/list"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -103,6 +104,12 @@ type Options struct {
 
 	// May be nil when the WorkflowAccessPolicy feature is disabled.
 	WorkflowAccessPolicies *workflowacl.Holder
+
+	// PayloadStore, when non-nil, receives the event payloads it elects to
+	// offload (Store.ShouldOffload) before they are persisted; workflow
+	// history then carries small references instead of the payloads. Nil
+	// (the default) disables offloading entirely.
+	PayloadStore payloadstore.Store
 }
 
 type Actors struct {
@@ -122,6 +129,7 @@ type Actors struct {
 	signer                 *signer.Signer
 	maxRequestBodySize     int
 	workflowAccessPolicies *workflowacl.Holder
+	payloadStore           payloadstore.Store
 
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
@@ -168,6 +176,7 @@ func New(opts Options) *Actors {
 		signer:                    opts.Signer,
 		maxRequestBodySize:        opts.MaxRequestBodySize,
 		workflowAccessPolicies:    opts.WorkflowAccessPolicies,
+		payloadStore:              opts.PayloadStore,
 
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
@@ -193,6 +202,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		Signer:                 abe.signer,
 		MaxRequestBodySize:     abe.maxRequestBodySize,
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
+		PayloadStore:           abe.payloadStore,
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 

@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/kit/concurrency/slice"
 	"github.com/dapr/kit/crypto/spiffe/signer"
@@ -67,6 +68,12 @@ type Options struct {
 
 	// May be nil when the feature is disabled.
 	WorkflowAccessPolicies *workflowacl.Holder
+
+	// PayloadStore, when non-nil, receives the event payloads it elects to
+	// offload (Store.ShouldOffload) before they are persisted; workflow
+	// history then carries small references instead of the payloads. Nil
+	// (the default) disables offloading entirely.
+	PayloadStore payloadstore.Store
 }
 
 type factory struct {
@@ -87,6 +94,7 @@ type factory struct {
 	signer                 *signer.Signer
 	maxRequestBodySize     int
 	workflowAccessPolicies *workflowacl.Holder
+	payloadStore           payloadstore.Store
 
 	scheduler todo.WorkflowScheduler
 
@@ -141,6 +149,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		signer:                 opts.Signer,
 		maxRequestBodySize:     opts.MaxRequestBodySize,
 		workflowAccessPolicies: opts.WorkflowAccessPolicies,
+		payloadStore:           opts.PayloadStore,
 		scheduler:              opts.Scheduler,
 		deactivateCh:           deactivateCh,
 	}, nil

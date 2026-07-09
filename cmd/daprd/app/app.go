@@ -223,6 +223,11 @@ func runWithContext(ctx context.Context, opts *options.Options) error {
 				Registry:       reg,
 				Security:       sec,
 				Healthz:        healthz,
+
+				// The store getter only returns a store in integration-test
+				// builds (see wfpayloadstore_release.go); released daprd
+				// flavors cannot enable workflow payload offloading.
+				WorkflowPayloadStore: workflowPayloadStore(),
 			})
 			if rerr != nil {
 				return rerr

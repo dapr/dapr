@@ -42,6 +42,7 @@ import (
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
@@ -139,6 +140,12 @@ type Config struct {
 	// HotReloadReconcileInterval overrides the hot-reload backup reconcile
 	// period. Zero uses the reconciler default (60s).
 	HotReloadReconcileInterval time.Duration
+	// WorkflowPayloadStore, when non-nil, receives the workflow event
+	// payloads it elects to offload (Store.ShouldOffload) before they are
+	// persisted, so workflow history carries small references instead of
+	// the payloads. Like WorkflowEventSink, it stays nil (offloading
+	// disabled) unless an embedder injects a store programmatically.
+	WorkflowPayloadStore payloadstore.Store
 }
 
 type internalConfig struct {
@@ -179,6 +186,7 @@ type internalConfig struct {
 	workflowEventSink            orchestrator.EventSink
 	disableInitEndpoints         []string
 	hotReloadReconcileInterval   time.Duration
+	workflowPayloadStore         payloadstore.Store
 }
 
 func (i internalConfig) SchedulerEnabled() bool {
@@ -386,6 +394,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		healthz:                    c.Healthz,
 		outboundHealthz:            healthz.New(),
 		workflowEventSink:          c.WorkflowEventSink,
+		workflowPayloadStore:       c.WorkflowPayloadStore,
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
