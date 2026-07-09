@@ -93,6 +93,9 @@ func TestDecodeReferenceCorruptBody(t *testing.T) {
 		"short checksum":      magic + `{"k":"a","c":"abcd","s":1}`,
 		"truncated body":      encoded[:len(encoded)-2],
 		"trailing bytes":      encoded + "x",
+		"trailing whitespace": encoded + " ",
+		"trailing newline":    encoded + "\n",
+		"trailing json value": encoded + `{"k":"b"}`,
 		"checksum wrong type": magic + `{"k":"a","c":42,"s":1}`,
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -89,13 +89,17 @@ func DecodeReference(s string) (Reference, error) {
 		return Reference{}, ErrNotReference
 	}
 
+	raw := s[len(refMagic):]
 	var body refJSON
-	dec := json.NewDecoder(strings.NewReader(s[len(refMagic):]))
+	dec := json.NewDecoder(strings.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&body); err != nil {
 		return Reference{}, fmt.Errorf("malformed payload-store reference body: %w", err)
 	}
-	if dec.More() {
+	// The body must be exactly one JSON value with nothing after it, not
+	// even whitespace (which EncodeReference never emits): the decode must
+	// have consumed every byte.
+	if dec.InputOffset() != int64(len(raw)) {
 		return Reference{}, errors.New("malformed payload-store reference body: trailing data")
 	}
 
