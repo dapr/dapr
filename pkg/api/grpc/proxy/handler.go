@@ -80,9 +80,13 @@ func TransparentHandler(director StreamDirector, getPolicyFn getPolicyFn, connFa
 }
 
 func clientStreamOptions(maxRequestBodySize int) []grpc.CallOption {
-	opts := []grpc.CallOption{
-		grpc.CallContentSubtype((&codec.Proxy{}).Name()),
+	optsCapacity := 1
+	if maxRequestBodySize > 0 {
+		optsCapacity = 4
 	}
+
+	opts := make([]grpc.CallOption, 0, optsCapacity)
+	opts = append(opts, grpc.CallContentSubtype((&codec.Proxy{}).Name()))
 	if maxRequestBodySize > 0 {
 		opts = append(opts,
 			grpc.MaxCallRecvMsgSize(maxRequestBodySize),
