@@ -394,11 +394,13 @@ func (r proxyRunner) forwardClientToServer() chan error {
 				var md metadata.MD
 				md, err = r.clientStream.Header()
 				if err != nil {
+					r.headersSent.Store(false)
 					ret <- err
 					return
 				}
 				err = r.serverStream.SendHeader(md)
 				if err != nil {
+					r.headersSent.Store(false)
 					ret <- err
 					return
 				}

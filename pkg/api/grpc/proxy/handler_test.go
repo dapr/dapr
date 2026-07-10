@@ -494,9 +494,10 @@ func TestProxyRunnerRunReturnsForwardServerToClientSendMsgError(t *testing.T) {
 
 func TestProxyRunnerForwardClientToServerReturnsSendErrors(t *testing.T) {
 	for name, setup := range map[string]struct {
-		headerErr  error
-		sendErr    error
-		headerSent bool
+		headerErr          error
+		sendErr            error
+		headerSent         bool
+		expectedHeaderSent bool
 	}{
 		"client stream header": {
 			headerErr: status.Error(codes.ResourceExhausted, "header too large"),
@@ -505,8 +506,9 @@ func TestProxyRunnerForwardClientToServerReturnsSendErrors(t *testing.T) {
 			headerErr: status.Error(codes.ResourceExhausted, "header too large"),
 		},
 		"server stream send msg": {
-			sendErr:    status.Error(codes.ResourceExhausted, "message too large"),
-			headerSent: true,
+			sendErr:            status.Error(codes.ResourceExhausted, "message too large"),
+			headerSent:         true,
+			expectedHeaderSent: true,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -542,6 +544,7 @@ func TestProxyRunnerForwardClientToServerReturnsSendErrors(t *testing.T) {
 			select {
 			case err := <-errCh:
 				require.Equal(t, codes.ResourceExhausted, status.Code(err))
+				require.Equal(t, setup.expectedHeaderSent, headersSent.Load())
 			case <-time.After(time.Second):
 				t.Fatal("timed out waiting for forwarding error")
 			}
