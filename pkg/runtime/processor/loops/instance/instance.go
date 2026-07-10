@@ -133,7 +133,7 @@ func (i *Instance) handleInit(ctx context.Context, ev *loops.Init) {
 	// error, matching the legacy synchronous Init and the inline path. Checked
 	// against the init context the manager actually used.
 	if errors.Is(initCtx.Err(), context.DeadlineExceeded) && initerr == nil {
-		initerr = fmt.Errorf("init timeout for component %s", comp.LogName())
+		initerr = fmt.Errorf("init timeout for component %s after %s", comp.LogName(), ev.Timeout)
 	}
 	if initerr == nil {
 		i.lastComp = &comp

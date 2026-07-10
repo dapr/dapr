@@ -108,7 +108,7 @@ func (p *Processor) initInline(ctx context.Context, comp compapi.Component) erro
 
 	initErr := p.runInlineInit(initCtx, comp, mgr)
 	if errors.Is(initCtx.Err(), context.DeadlineExceeded) && initErr == nil {
-		initErr = fmt.Errorf("init timeout for component %s", comp.LogName())
+		initErr = fmt.Errorf("init timeout for component %s after %s", comp.LogName(), timeout)
 	}
 	p.reportInline(ctx, comp, operatorv1.EventType_EVENT_INIT, initErr)
 	// Match legacy proc.Init: return the sub-processor's wrapped error
