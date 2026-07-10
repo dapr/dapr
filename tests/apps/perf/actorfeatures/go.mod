@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	github.com/dapr/dapr v1.13.4
-	github.com/go-chi/chi/v5 v5.0.11
+	github.com/go-chi/chi/v5 v5.2.4
 )
 
 require (
