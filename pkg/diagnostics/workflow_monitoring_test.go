@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -13,7 +14,10 @@ func initWorkflowMetrics() (*workflowMetrics, view.Meter) {
 	w := newWorkflowMetrics()
 	meter := view.NewMeter()
 	meter.Start()
-	_ = w.Init(meter, "test", "default", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log))
+	metricSpec := config.LoadDefaultConfiguration().GetMetricsSpec()
+	latencyDistribution := metricSpec.GetLatencyDistribution(log)
+	workflowLatencyDistribution := metricSpec.GetWorkflowLatencyDistribution(log, latencyDistribution)
+	_ = w.Init(meter, "test", "default", latencyDistribution, workflowLatencyDistribution)
 
 	return w, meter
 }
@@ -361,4 +365,51 @@ func TestExecution(t *testing.T) {
 			assert.InEpsilon(t, float64(10), viewData[0].Data.(*view.DistributionData).Min, 0)
 		})
 	})
+}
+
+// TestLatencyDistributionRouting verifies which histogram each latency view is
+// registered with when a workflow-specific bucket override is configured: only
+// the workflow and activity *execution* latency views follow the workflow
+// distribution; operation, scheduling, and attestation-verify latencies stay on
+// the shared distribution.
+func TestLatencyDistributionRouting(t *testing.T) {
+	// Buckets distinct from the default/shared latency buckets so each view's
+	// registered aggregation unambiguously identifies which distribution it used.
+	workflowBuckets := []int{7, 42, 999}
+	metricSpec := config.MetricSpec{
+		WorkflowLatencyDistributionBuckets: &workflowBuckets,
+	}
+	sharedDistribution := metricSpec.GetLatencyDistribution(log)
+	workflowDistribution := metricSpec.GetWorkflowLatencyDistribution(log, sharedDistribution)
+
+	w := newWorkflowMetrics()
+	meter := view.NewMeter()
+	meter.Start()
+	t.Cleanup(func() { meter.Stop() })
+	require.NoError(t, w.Init(meter, "test", "default", sharedDistribution, workflowDistribution))
+
+	// Unit defaults to milliseconds, so the buckets are used verbatim (no scaling).
+	wantWorkflow := []float64{7, 42, 999}
+
+	usesWorkflowDistribution := []string{
+		"runtime/workflow/execution/latency",
+		"runtime/workflow/activity/execution/latency",
+	}
+	usesSharedDistribution := []string{
+		"runtime/workflow/operation/latency",
+		"runtime/workflow/activity/operation/latency",
+		"runtime/workflow/scheduling/latency",
+		"runtime/workflow/attestation/verify/latency",
+	}
+
+	for _, name := range usesWorkflowDistribution {
+		v := meter.Find(name)
+		require.NotNilf(t, v, "view %q not registered", name)
+		assert.Equalf(t, wantWorkflow, v.Aggregation.Buckets, "view %q should use the workflow distribution", name)
+	}
+	for _, name := range usesSharedDistribution {
+		v := meter.Find(name)
+		require.NotNilf(t, v, "view %q not registered", name)
+		assert.Equalf(t, sharedDistribution.Buckets, v.Aggregation.Buckets, "view %q should use the shared distribution", name)
+	}
 }
