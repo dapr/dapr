@@ -312,6 +312,22 @@ spec:
                       - name
                       type: object
                     type: array
+                  workflowLatencyDistributionBuckets:
+                    description: |-
+                      The WorkflowLatencyDistributionBuckets variable specifies the latency distribution buckets (in milliseconds)
+                      used for workflow and activity latency histograms. If this variable is not set or left empty, workflow latency
+                      histograms fall back to the shared LatencyDistributionBuckets. It is an optional override for tuning workflow
+                      latency buckets independently of the shared latency histogram.
+                    items:
+                      type: integer
+                    type: array
+                  workflowLatencyDistributionUnits:
+                    description: |-
+                      WorkflowLatencyDistributionUnits is the unit the WorkflowLatencyDistributionBuckets
+                      values are expressed in (for example "1ms" or "1s"). If not set, the buckets are
+                      interpreted as milliseconds. It scales the configured buckets into the milliseconds
+                      the histograms are recorded in.
+                    type: string
                 required:
                 - enabled
                 type: object
@@ -379,6 +395,22 @@ spec:
                       - name
                       type: object
                     type: array
+                  workflowLatencyDistributionBuckets:
+                    description: |-
+                      The WorkflowLatencyDistributionBuckets variable specifies the latency distribution buckets (in milliseconds)
+                      used for workflow and activity latency histograms. If this variable is not set or left empty, workflow latency
+                      histograms fall back to the shared LatencyDistributionBuckets. It is an optional override for tuning workflow
+                      latency buckets independently of the shared latency histogram.
+                    items:
+                      type: integer
+                    type: array
+                  workflowLatencyDistributionUnits:
+                    description: |-
+                      WorkflowLatencyDistributionUnits is the unit the WorkflowLatencyDistributionBuckets
+                      values are expressed in (for example "1ms" or "1s"). If not set, the buckets are
+                      interpreted as milliseconds. It scales the configured buckets into the milliseconds
+                      the histograms are recorded in.
+                    type: string
                 required:
                 - enabled
                 type: object
