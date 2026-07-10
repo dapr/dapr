@@ -397,6 +397,8 @@ func (o *OtelSpec) UnmarshalJSON(data []byte) error {
 }
 
 // MetricSpec configuration for metrics.
+//
+//nolint:recvcheck // allow pointer receiver for UnmarshalJSON
 type MetricSpec struct {
 	// Defaults to true
 	Enabled          *bool       `json:"enabled,omitempty" yaml:"enabled,omitempty"`
