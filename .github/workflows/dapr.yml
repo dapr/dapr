@@ -255,6 +255,17 @@ jobs:
         if: matrix.target_os == 'darwin'
         run: |
           echo "DAPR_HOST_IP=127.0.0.1" >>${GITHUB_ENV}
+      # The integration suite opens a very large number of short-lived
+      # localhost connections. macOS has a small default ephemeral port range
+      # and a long TIME_WAIT, so the outbound pool is exhausted under the
+      # parallel run (surfaces as "can't assign requested address"). Widen the
+      # range and shorten TIME_WAIT as a backstop to the framework-level fixes.
+      - name: Widen ephemeral port range for MacOS
+        if: matrix.target_os == 'darwin'
+        run: |
+          sudo sysctl -w net.inet.ip.portrange.first=16384
+          sudo sysctl -w net.inet.ip.portrange.hifirst=16384
+          sudo sysctl -w net.inet.tcp.msl=1000
       - name: Run make test-integration-parallel
         run: make test-integration-parallel
   build:
@@ -785,3 +796,19 @@ jobs:
         run: |
           gh api repos/dapr/test-infra/actions/workflows/version-update.yml/dispatches \
             -X POST -f ref="master" -f 'inputs[rel_version]=${{ env.REL_VERSION }}'
+
+  # Opens (or comments on) a tracking issue only when a publish job itself fails:
+  # publish (release binaries/assets), docker-publish (images), or helmpublish
+  # (Helm chart). Upstream build failures skip these jobs, whose result is then
+  # 'skipped' (not 'failure'), so CI flakes never open issues.
+  notify-on-failure:
+    needs: [publish, docker-publish, helmpublish]
+    if: always() && startsWith(github.ref, 'refs/tags/v') && github.repository_owner == 'dapr' && (needs.publish.result == 'failure' || needs['docker-publish'].result == 'failure' || needs.helmpublish.result == 'failure')
+    permissions:
+      issues: write
+      actions: read
+    uses: dapr/.github/.github/workflows/open-issue-on-failure.yml@main
+    with:
+      title: "Release workflow failed: ${{ github.workflow }} (${{ github.ref_name }})"
+      labels: "release,ci/release-failure"
+      mention: "@dapr/maintainers-dapr @dapr/approvers-dapr"

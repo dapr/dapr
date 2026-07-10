@@ -34,7 +34,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/clock"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
@@ -50,24 +49,18 @@ import (
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	"github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/api/http"
+	"github.com/dapr/dapr/pkg/api/listen"
 	"github.com/dapr/dapr/pkg/api/universal"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	endpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
-	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
-	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/config/protocol"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/internal/loader"
-	"github.com/dapr/dapr/pkg/internal/loader/disk"
-	"github.com/dapr/dapr/pkg/internal/loader/kubernetes"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	middlewarehttp "github.com/dapr/dapr/pkg/middleware/http"
@@ -138,6 +131,10 @@ type DaprRuntime struct {
 
 	grpcAPIServer      grpc.Server
 	grpcInternalServer grpc.Server
+	// grpcInternalServerListener is bound early (before components are
+	// initialized) to reserve the internal gRPC port, then handed to the
+	// internal gRPC server. See reserveInternalGRPCServerPort and issue #6023.
+	grpcInternalServerListener net.Listener
 
 	// Used for testing.
 	initComplete chan struct{}
@@ -302,23 +299,25 @@ func newDaprRuntime(ctx context.Context,
 	switch runtimeConfig.mode {
 	case modes.KubernetesMode:
 		reloader = hotreload.NewOperator(hotreload.OptionsReloaderOperator{
-			Namespace:      namespace,
-			Client:         operatorClient,
-			Config:         globalConfig,
-			ComponentStore: compStore,
-			Authorizer:     authz,
-			Processor:      processor,
-			Healthz:        runtimeConfig.healthz,
+			Namespace:         namespace,
+			Client:            operatorClient,
+			Config:            globalConfig,
+			ComponentStore:    compStore,
+			Authorizer:        authz,
+			Processor:         processor,
+			Healthz:           runtimeConfig.healthz,
+			ReconcileInterval: runtimeConfig.hotReloadReconcileInterval,
 		})
 	case modes.StandaloneMode:
 		reloader, err = hotreload.NewDisk(hotreload.OptionsReloaderDisk{
-			Config:         globalConfig,
-			Dirs:           runtimeConfig.standalone.ResourcesPath,
-			ComponentStore: compStore,
-			Authorizer:     authz,
-			Processor:      processor,
-			AppID:          runtimeConfig.id,
-			Healthz:        runtimeConfig.healthz,
+			Config:            globalConfig,
+			Dirs:              runtimeConfig.standalone.ResourcesPath,
+			ComponentStore:    compStore,
+			Authorizer:        authz,
+			Processor:         processor,
+			AppID:             runtimeConfig.id,
+			Healthz:           runtimeConfig.healthz,
+			ReconcileInterval: runtimeConfig.hotReloadReconcileInterval,
 		})
 		if err != nil {
 			return nil, err
@@ -451,6 +450,10 @@ func newDaprRuntime(ctx context.Context,
 			<-ctx.Done()
 
 			if server := rt.grpcInternalServer; server != nil {
+				// Closing the server also closes the reserved listener it was
+				// handed. If the server was never started, initRuntime's defer
+				// (closeUnstartedInternalGRPCListener) releases the reserved
+				// listener instead.
 				return server.Close()
 			}
 
@@ -479,7 +482,7 @@ func newDaprRuntime(ctx context.Context,
 				go func(comp compapi.Component) {
 					log.Infof("Shutting down component %s", comp.LogName())
 
-					errCh <- rt.processor.Close(comp)
+					errCh <- rt.processor.Close(context.Background(), comp)
 				}(comp)
 			}
 
@@ -686,6 +689,27 @@ func createOtelResource(ctx context.Context, defaultServiceName string) *resourc
 
 func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	var err error
+
+	// Reserve the internal gRPC port before initializing components so that a
+	// component's outbound connection cannot be assigned this port as an
+	// ephemeral source port (see issue #6023). This is best-effort: the
+	// internal gRPC server still binds the port itself in
+	// startGRPCInternalServer (which retries), so failing to reserve here must
+	// not be fatal. In particular, during a SIGHUP restart the port can be
+	// momentarily held by the previous runtime's teardown; falling through to
+	// the later bind lets it succeed once the port frees, as it did before the
+	// reservation was introduced.
+	if rerr := a.reserveInternalGRPCServerPort(ctx); rerr != nil {
+		log.Warnf("could not reserve internal gRPC port before component initialization; it will be bound when the internal gRPC server starts: %v", rerr)
+	}
+	// If the port was reserved but init returns before the internal gRPC
+	// server takes ownership of the listener, release it.
+	defer func() {
+		if cerr := a.closeUnstartedInternalGRPCListener(); cerr != nil {
+			log.Warnf("failed to close reserved internal gRPC listener: %v", cerr)
+		}
+	}()
+
 	if a.hostAddress, err = utils.GetHostAddress(); err != nil {
 		return fmt.Errorf("failed to determine host address: %w", err)
 	}
@@ -706,21 +730,27 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.initPluggableComponents(ctx)
 
-	a.appendBuiltinSecretStore(ctx)
+	if err = a.appendBuiltinSecretStore(ctx); err != nil {
+		return fmt.Errorf("failed to init built-in secret store: %s", err)
+	}
 
 	err = a.loadComponents(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load components: %s", err)
 	}
 
-	a.flushOutstandingComponents(ctx)
+	if err = a.flushOutstandingComponents(ctx); err != nil {
+		return err
+	}
 
 	err = a.loadHTTPEndpoints(ctx)
 	if err != nil {
 		log.Warnf("failed to load HTTP endpoints: %s", err)
 	}
 
-	a.flushOutstandingHTTPEndpoints(ctx)
+	if err = a.flushOutstandingHTTPEndpoints(ctx); err != nil {
+		return err
+	}
 
 	err = a.loadDeclarativeSubscriptions(ctx)
 	if err != nil {
@@ -826,7 +856,9 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	if err := a.loadMCPServers(ctx); err != nil {
 		return fmt.Errorf("failed to load mcpservers: %s", err)
 	}
-	a.flushOutstandingMCPServers(ctx)
+	if err := a.flushOutstandingMCPServers(ctx); err != nil {
+		return err
+	}
 
 	a.runtimeConfig.outboundHealthz.AddTarget("app").Ready()
 
@@ -1074,10 +1106,42 @@ func (a *DaprRuntime) startHTTPServer(ctx context.Context) error {
 	return nil
 }
 
+// reserveInternalGRPCServerPort binds the internal gRPC listener early, before
+// components are initialized, to reserve the port. Otherwise a component's
+// outbound connection (e.g. to Redis) can be assigned this port as an
+// ephemeral source port, causing the internal gRPC server to later fail to
+// bind with "address already in use" (see issue #6023). The listener is then
+// handed to the internal gRPC server in startGRPCInternalServer.
+func (a *DaprRuntime) reserveInternalGRPCServerPort(ctx context.Context) error {
+	addr := a.runtimeConfig.internalGRPCListenAddress + ":" + strconv.Itoa(a.runtimeConfig.internalGRPCPort)
+	ln, err := listen.TCP(ctx, addr)
+	if err != nil {
+		return err
+	}
+	a.grpcInternalServerListener = ln
+	// If the configured port was 0 (dynamic), record the port the OS assigned
+	// so that name resolution and actors advertise the real port.
+	a.runtimeConfig.internalGRPCPort = ln.Addr().(*net.TCPAddr).Port
+	return nil
+}
+
+// closeUnstartedInternalGRPCListener releases the reserved internal gRPC
+// listener when the internal gRPC server was never started (e.g. init failed
+// before startGRPCInternalServer). Once the server has started it owns the
+// listener and closes it on shutdown, so this is a no-op. Called from
+// initRuntime's defer, on the same goroutine that starts the server, so it
+// cannot race startGRPCInternalServer.
+func (a *DaprRuntime) closeUnstartedInternalGRPCListener() error {
+	if a.grpcInternalServer != nil || a.grpcInternalServerListener == nil {
+		return nil
+	}
+	return a.grpcInternalServerListener.Close()
+}
+
 func (a *DaprRuntime) startGRPCInternalServer(ctx context.Context, api grpc.API) error {
 	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
 	serverConf := a.getNewServerConfig([]string{a.runtimeConfig.internalGRPCListenAddress}, a.runtimeConfig.internalGRPCPort)
-	a.grpcInternalServer = grpc.NewInternalServer(grpc.OptionsInternal{
+	server := grpc.NewInternalServer(grpc.OptionsInternal{
 		API:         api,
 		Config:      serverConf,
 		TracingSpec: a.globalConfig.GetTracingSpec(),
@@ -1085,12 +1149,18 @@ func (a *DaprRuntime) startGRPCInternalServer(ctx context.Context, api grpc.API)
 		Security:    a.sec,
 		Proxy:       a.proxy,
 		Healthz:     a.runtimeConfig.healthz,
+		// Serve the listener reserved before component initialization rather
+		// than binding the port again here. See reserveInternalGRPCServerPort.
+		Listener: a.grpcInternalServerListener,
 	})
 
-	err := a.grpcInternalServer.StartNonBlocking(ctx)
-	if err != nil {
+	if err := server.StartNonBlocking(ctx); err != nil {
 		return err
 	}
+
+	// Only record the server (and hence take ownership of the reserved
+	// listener) once it has successfully started serving.
+	a.grpcInternalServer = server
 
 	return nil
 }
@@ -1244,197 +1314,6 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 	return nil
 }
 
-func (a *DaprRuntime) loadComponents(ctx context.Context) error {
-	var loader loader.Loader[compapi.Component]
-
-	switch a.runtimeConfig.mode {
-	case modes.KubernetesMode:
-		loader = kubernetes.NewComponents(kubernetes.Options{
-			Config:    a.runtimeConfig.kubernetes,
-			Client:    a.operatorClient,
-			Namespace: a.namespace,
-		})
-	case modes.StandaloneMode:
-		loader = disk.NewComponents(disk.Options{
-			AppID: a.runtimeConfig.id,
-			Paths: a.runtimeConfig.standalone.ResourcesPath,
-		})
-	default:
-		return nil
-	}
-
-	log.Info("Loading components…")
-
-	comps, err := loader.Load(ctx)
-	if err != nil {
-		return err
-	}
-
-	authorizedComps := a.authz.GetAuthorizedObjects(comps, a.authz.IsObjectAuthorized).([]compapi.Component)
-
-	// Iterate through the list twice
-	// First, we look for secret stores and load those, then all other components
-	// Sure, we could sort the list of authorizedComps... but this is simpler and most certainly faster
-	for _, comp := range authorizedComps {
-		if strings.HasPrefix(comp.Spec.Type, string(components.CategorySecretStore)+".") {
-			log.Debug("Found component: " + comp.LogName())
-
-			if !a.processor.AddPendingComponent(ctx, comp) {
-				return nil
-			}
-		}
-	}
-
-	for _, comp := range authorizedComps {
-		if !strings.HasPrefix(comp.Spec.Type, string(components.CategorySecretStore)+".") {
-			log.Debug("Found component: " + comp.LogName())
-
-			if !a.processor.AddPendingComponent(ctx, comp) {
-				return nil
-			}
-		}
-	}
-
-	return nil
-}
-
-func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
-	var loader loader.Loader[subapi.Subscription]
-
-	switch a.runtimeConfig.mode {
-	case modes.KubernetesMode:
-		loader = kubernetes.NewSubscriptions(kubernetes.Options{
-			Client:    a.operatorClient,
-			Namespace: a.namespace,
-		})
-	case modes.StandaloneMode:
-		loader = disk.NewSubscriptions(disk.Options{
-			AppID: a.runtimeConfig.id,
-			Paths: a.runtimeConfig.standalone.ResourcesPath,
-		})
-	default:
-		return nil
-	}
-
-	log.Info("Loading Declarative Subscriptions…")
-
-	subs, err := loader.Load(ctx)
-	if err != nil {
-		return err
-	}
-
-	for _, s := range subs {
-		log.Infof("Found Subscription: %s", s.Name)
-	}
-
-	a.processor.AddPendingSubscription(ctx, subs...)
-
-	return nil
-}
-
-func (a *DaprRuntime) flushOutstandingHTTPEndpoints(ctx context.Context) {
-	log.Info("Waiting for all outstanding http endpoints to be processed…")
-	// We flush by sending a no-op http endpoint. Since the processHTTPEndpoints goroutine only reads one http endpoint at a time,
-	// We know that once the no-op http endpoint is read from the channel, all previous http endpoints will have been fully processed.
-	a.processor.AddPendingEndpoint(ctx, endpointapi.HTTPEndpoint{})
-	log.Info("All outstanding http endpoints processed")
-}
-
-func (a *DaprRuntime) flushOutstandingMCPServers(ctx context.Context) {
-	log.Info("Waiting for all outstanding MCP servers to be processed…")
-	// Send a no-op sentinel so that processMCPServers drains all previously enqueued items first.
-	a.processor.AddPendingMCPServer(ctx, mcpserverapi.MCPServer{})
-	log.Info("All outstanding MCP servers processed")
-}
-
-func (a *DaprRuntime) loadMCPServers(ctx context.Context) error {
-	var l loader.Loader[mcpserverapi.MCPServer]
-
-	switch a.runtimeConfig.mode {
-	case modes.KubernetesMode:
-		l = kubernetes.NewMCPServers(kubernetes.Options{
-			Config:    a.runtimeConfig.kubernetes,
-			Client:    a.operatorClient,
-			Namespace: a.namespace,
-		})
-	case modes.StandaloneMode:
-		l = disk.NewMCPServers(disk.Options{
-			AppID: a.runtimeConfig.id,
-			Paths: a.runtimeConfig.standalone.ResourcesPath,
-		})
-	default:
-		return nil
-	}
-
-	log.Info("Loading MCP servers…")
-
-	servers, err := l.Load(ctx)
-	if err != nil {
-		return err
-	}
-
-	authorizedServers, ok := a.authz.GetAuthorizedObjects(servers, a.authz.IsObjectAuthorized).([]mcpserverapi.MCPServer)
-	if !ok {
-		return errors.New("unexpected type from GetAuthorizedObjects for MCPServers")
-	}
-
-	for _, s := range authorizedServers {
-		log.Infof("Found MCP server: %s", s.Name)
-		if !a.processor.AddPendingMCPServer(ctx, s) {
-			return nil
-		}
-	}
-
-	return nil
-}
-
-func (a *DaprRuntime) flushOutstandingComponents(ctx context.Context) {
-	log.Info("Waiting for all outstanding components to be processed…")
-	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
-	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
-	a.processor.AddPendingComponent(ctx, compapi.Component{})
-	log.Info("All outstanding components processed")
-}
-
-func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
-	var loader loader.Loader[endpointapi.HTTPEndpoint]
-
-	switch a.runtimeConfig.mode {
-	case modes.KubernetesMode:
-		loader = kubernetes.NewHTTPEndpoints(kubernetes.Options{
-			Config:    a.runtimeConfig.kubernetes,
-			Client:    a.operatorClient,
-			Namespace: a.namespace,
-		})
-	case modes.StandaloneMode:
-		loader = disk.NewHTTPEndpoints(disk.Options{
-			AppID: a.runtimeConfig.id,
-			Paths: a.runtimeConfig.standalone.ResourcesPath,
-		})
-	default:
-		return nil
-	}
-
-	log.Info("Loading endpoints…")
-
-	endpoints, err := loader.Load(ctx)
-	if err != nil {
-		return err
-	}
-
-	authorizedHTTPEndpoints := a.authz.GetAuthorizedObjects(endpoints, a.authz.IsObjectAuthorized).([]endpointapi.HTTPEndpoint)
-
-	for _, e := range authorizedHTTPEndpoints {
-		log.Infof("Found http endpoint: %s", e.Name)
-
-		if !a.processor.AddPendingEndpoint(ctx, e) {
-			return nil
-		}
-	}
-
-	return nil
-}
-
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations.
 func (a *DaprRuntime) ShutdownWithWait() {
 	a.runnerCloser.Close()
@@ -1544,26 +1423,6 @@ func (a *DaprRuntime) loadAppConfiguration(ctx context.Context) {
 				log.Warnf("remindersStoragePartitions is deprecated and will be removed in future versions (entity: %v)", e.Entities)
 			}
 		}
-	}
-}
-
-func (a *DaprRuntime) appendBuiltinSecretStore(ctx context.Context) {
-	if a.runtimeConfig.disableBuiltinK8sSecretStore {
-		return
-	}
-
-	switch a.runtimeConfig.mode {
-	case modes.KubernetesMode:
-		// Preload Kubernetes secretstore
-		a.processor.AddPendingComponent(ctx, compapi.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: secretstoresLoader.BuiltinKubernetesSecretStore,
-			},
-			Spec: compapi.ComponentSpec{
-				Type:    "secretstores.kubernetes",
-				Version: components.FirstStableVersion,
-			},
-		})
 	}
 }
 
