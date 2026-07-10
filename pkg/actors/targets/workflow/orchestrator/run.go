@@ -40,7 +40,15 @@ import (
 func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Reminder) (todo.RunCompleted, error) {
 	state, _, err := o.loadInternalState(ctx)
 	if err != nil {
-		return todo.RunCompletedTrue, fmt.Errorf("error loading internal state: %w", err)
+		// Treat load failures as recoverable so the reminder is retried.
+		// LoadWorkflowState already separates VerificationError (tombstoned
+		// inside loadInternalState) from transient store failures. Anything
+		// reaching here is a store-read or unmarshal failure — under
+		// transient state-store pressure (latency, partial bulk response)
+		// the same load will succeed on retry. Returning RunCompletedTrue
+		// here would let the reminder system delete the wake-up handle and
+		// strand the workflow.
+		return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("error loading internal state: %w", err))
 	}
 	if state == nil {
 		// The assumption is that someone manually deleted the workflow state. This is non-recoverable.
@@ -73,15 +81,37 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		state.Inbox = append(state.Inbox, timerEvent)
 	}
 
+	if len(state.Inbox) == 0 && !runtimestate.IsCompleted(o.rstate) {
+		// The in-memory cache may be stale: during a placement cluster failure
+		// daprds will roll over the actor, so a peer host may have written a new
+		// inbox event to the store since our cache was last updated. Drop the
+		// cache and reload from the store before declaring this a no-op. Acking
+		// SUCCESS off a stale empty inbox would tell the scheduler to delete the
+		// job and strand the workflow on the durable event that's actually sitting
+		// in the store. Skip when the cached rstate is terminal: a finished
+		// workflow can't gain new inbox events, and the empty inbox below is just
+		// the retention-recovery path.
+		o.invalidateCachedState()
+		state, _, err = o.loadInternalState(ctx)
+		if err != nil {
+			return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to reload state on empty-inbox path: %w", err))
+		}
+		if state == nil {
+			log.Warnf("No workflow state found for actor '%s' after reload, terminating execution", o.actorID)
+			return todo.RunCompletedTrue, nil
+		}
+	}
+
 	if len(state.Inbox) == 0 {
-		// This can happen after multiple events are processed in batches; there may still be reminders around
-		// for some of those already processed events.
+		// This can happen after multiple events are processed in batches; there
+		// may still be reminders around for some of those already processed
+		// events.
 		// If the workflow is terminal, attempt retention reminder creation
-		// idempotently. This recovers a workflow whose completion was
-		// persisted in a prior run but whose retention reminder Create RPC
-		// was lost (e.g. scheduler pod killed mid-call). createRetentionReminder
-		// uses a deterministic name, so re-creating an already-existing
-		// retention reminder is a no-op overwrite.
+		// idempotently. This recovers a workflow whose completion was persisted in
+		// a prior run but whose retention reminder Create RPC was lost (e.g.
+		// scheduler pod killed mid-call). createRetentionReminder uses a
+		// deterministic name, so re-creating an already-existing retention
+		// reminder is a no-op overwrite.
 		if runtimestate.IsCompleted(o.rstate) {
 			if rerr := o.handleRetention(ctx, runtimestate.RuntimeStatus(o.rstate)); rerr != nil {
 				return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to (re)create retention reminder on empty-inbox completion path: %w", rerr))
@@ -252,6 +282,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		return todo.RunCompletedFalse, err
 	}
 	compactPatches(rs)
+	o.stripUnmatchedResolutions(state, rs)
 
 	runtimeStatus := runtimestate.RuntimeStatus(rs)
 	log.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", o.actorID, runtimeStatus.String(), wi.InstanceID)
@@ -348,7 +379,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// Dispatch activities and messages, collecting failures.
 	activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory)
 	addResult := o.callAddEventStateMessage(ctx, addWorkflows)
-	createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows)
+	createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows, rs.GetNewEvents())
 
 	dispatchErr := errors.Join(activityResult.err, addResult.err, createResult.err)
 	if dispatchErr != nil {
@@ -473,6 +504,16 @@ func (*orchestrator) recordWorkflowSchedulingLatency(ctx context.Context, esHist
 	}
 }
 
+// retentionReminderName is the single deterministic name used for every
+// retention reminder. Keeping the name constant (rather than keying it on
+// the terminal status) ensures the scheduler's overwrite-by-name semantics
+// collapse re-scheduled runs of the same instance ID onto one retention
+// reminder even if the terminal status differs between runs (e.g. run 1
+// completed, run 2 terminated). The workflow's actual status is still
+// recoverable via FetchWorkflowMetadata; only the scheduler key is now
+// status-agnostic.
+const retentionReminderName = "retention"
+
 // handleRetention creates the retention reminder for a terminal workflow.
 // The reminder name is deterministic, so this is safe to call repeatedly:
 // the scheduler overwrites by name, leaving exactly one retention reminder
@@ -485,23 +526,18 @@ func (o *orchestrator) handleRetention(ctx context.Context, status protos.Orches
 	}
 
 	var dueTime *time.Duration
-	var name string
 	switch {
 	case o.retentionPolicy.Completed != nil &&
 		status == protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED:
 		dueTime = o.retentionPolicy.Completed
-		name = "completed"
 	case o.retentionPolicy.Terminated != nil &&
 		status == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED:
 		dueTime = o.retentionPolicy.Terminated
-		name = "terminated"
 	case o.retentionPolicy.Failed != nil &&
 		status == protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED:
 		dueTime = o.retentionPolicy.Failed
-		name = "failed"
 	case o.retentionPolicy.AnyTerminal != nil:
 		dueTime = o.retentionPolicy.AnyTerminal
-		name = "anyterminal"
 	}
 
 	if dueTime == nil {
@@ -517,8 +553,75 @@ func (o *orchestrator) handleRetention(ctx context.Context, status protos.Orches
 	}
 
 	log.Debugf("Workflow actor '%s': setting retention reminder for status '%s' with due time '%v'", o.actorID, status.String(), dueTime)
-	_, err = o.createRetentionReminder(ctx, name, completedAt.Add(*dueTime))
+	_, err = o.createRetentionReminder(ctx, retentionReminderName, completedAt.Add(*dueTime))
 	return err
+}
+
+// stripUnmatchedResolutions removes from rs.NewEvents any task or child
+// workflow resolution event that resolves nothing: no matching TaskScheduled
+// or ChildWorkflowInstanceCreated with the same event ID exists in persisted
+// history or among this execution's new events. The app-side SDK silently
+// ignores such events, so without this they would be persisted into history
+// with no effect, where they poison dedup.IsDuplicateCompletion for a later
+// operation that legitimately reuses the same event ID (the ID sequence resets
+// on ContinueAsNew, so a straggler completion from an abandoned
+// previous-generation child collides with the current generation's
+// operations). Timer events are not stripped: stale timer firings are already
+// rejected by the generation check on the timer reminder path.
+func (o *orchestrator) stripUnmatchedResolutions(state *wfenginestate.State, rs *backend.WorkflowRuntimeState) {
+	scheduledTaskIDs := make(map[int32]struct{})
+	createdChildIDs := make(map[int32]struct{})
+	index := func(events []*backend.HistoryEvent) {
+		for _, e := range events {
+			switch {
+			case e.GetTaskScheduled() != nil:
+				scheduledTaskIDs[e.GetEventId()] = struct{}{}
+			case e.GetChildWorkflowInstanceCreated() != nil:
+				createdChildIDs[e.GetEventId()] = struct{}{}
+			}
+		}
+	}
+	index(state.History)
+	index(rs.GetNewEvents())
+
+	matched := func(e *backend.HistoryEvent) bool {
+		switch {
+		case e.GetTaskCompleted() != nil:
+			_, ok := scheduledTaskIDs[e.GetTaskCompleted().GetTaskScheduledId()]
+			return ok
+		case e.GetTaskFailed() != nil:
+			_, ok := scheduledTaskIDs[e.GetTaskFailed().GetTaskScheduledId()]
+			return ok
+		case e.GetChildWorkflowInstanceCompleted() != nil:
+			_, ok := createdChildIDs[e.GetChildWorkflowInstanceCompleted().GetTaskScheduledId()]
+			return ok
+		case e.GetChildWorkflowInstanceFailed() != nil:
+			_, ok := createdChildIDs[e.GetChildWorkflowInstanceFailed().GetTaskScheduledId()]
+			return ok
+		default:
+			return true
+		}
+	}
+
+	events := rs.GetNewEvents()
+	for _, e := range events {
+		if matched(e) {
+			continue
+		}
+
+		// At least one orphan: rebuild into a fresh backing array so callers
+		// holding the original slice are unaffected.
+		filtered := make([]*backend.HistoryEvent, 0, len(events)-1)
+		for _, ev := range events {
+			if !matched(ev) {
+				log.Warnf("Workflow actor '%s': discarding resolution event %T that matches no operation scheduled in persisted history or in this execution (stale event from a previous generation?)", o.actorID, ev.GetEventType())
+				continue
+			}
+			filtered = append(filtered, ev)
+		}
+		rs.NewEvents = filtered
+		return
+	}
 }
 
 // filterValidInboxEvents returns inbox events that pass validation. Result
@@ -576,6 +679,11 @@ func filterValidInboxEvents(state *wfenginestate.State) []*backend.HistoryEvent 
 			// Legitimate inbox event types that do not correspond to a previously
 			// scheduled operation.
 		default:
+			// DetachedWorkflowInstanceCreated is intentionally NOT in the
+			// allow-list above: it is only ever produced by the caller's own
+			// applier and persisted into the caller's history directly, so it
+			// should never appear in an inbox. If it does, treat it as
+			// injected and drop it.
 			log.Warnf("Dropping injected inbox event: unknown event type %T", et)
 			continue
 		}

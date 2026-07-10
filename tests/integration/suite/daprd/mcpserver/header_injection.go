@@ -15,6 +15,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync/atomic"
@@ -23,13 +24,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
@@ -38,6 +37,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -120,7 +120,7 @@ func (s *headerInjection) Run(t *testing.T, ctx context.Context) {
 		input := map[string]any{
 			"arguments": map[string]any{},
 		}
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+		instanceID := httpapi.Start(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("authed-server", "echo"), input)
 
 		metadata, err := taskhubClient.WaitForWorkflowCompletion(
@@ -128,12 +128,12 @@ func (s *headerInjection) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
-		var result wfv1.CallMCPToolResponse
-		require.NoError(t, protojson.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.False(t, result.GetIsError(), "expected success result")
-		require.NotEmpty(t, result.GetContent())
-		assert.NotNil(t, result.GetContent()[0].GetText())
-		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "ok")
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+		assert.False(t, result.IsError, "expected success result")
+		require.NotEmpty(t, result.Content)
+		assert.NotNil(t, result.Content[0])
+		assert.Contains(t, extractText(result.Content[0]), "ok")
 
 		// Verify the MCP server actually received the injected header.
 		capturedKey, ok := s.capturedAPIKey.Load().(string)

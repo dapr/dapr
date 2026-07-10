@@ -155,6 +155,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.actorsDisseminateTimeout != nil {
 		args = append(args, "--actors-disseminate-timeout="+opts.actorsDisseminateTimeout.String())
 	}
+	if opts.hotReloadReconcileInterval != nil {
+		args = append(args, "--hot-reload-reconcile-interval="+opts.hotReloadReconcileInterval.String())
+	}
 	if len(opts.schedulerAddresses) > 0 {
 		args = append(args, "--scheduler-host-address="+strings.Join(opts.schedulerAddresses, ","))
 	}
@@ -220,6 +223,30 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 		net.Close()
 		return true
 	}, 20*time.Second, 10*time.Millisecond)
+}
+
+// WaitUntilExit waits for daprd to exit on its own (e.g. via the shutdown
+// API) and asserts the expected exit code via the framework. The HTTP port
+// is polled; once dialing fails, the process has exited. Unlike Cleanup,
+// no signal is sent to the process, which avoids racing with self-exit
+// paths where signaling an already-reaped PID would fail.
+func (d *Daprd) WaitUntilExit(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	addr := d.HTTPAddress()
+	assert.Eventuallyf(t, func() bool {
+		conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+		if err != nil {
+			return true
+		}
+		conn.Close()
+		return false
+	}, timeout, 10*time.Millisecond, "daprd HTTP port %s remained open; process did not exit", addr)
+	d.cleanupOnce.Do(func() {
+		if d.httpClient != nil {
+			d.httpClient.CloseIdleConnections()
+		}
+		d.exec.AwaitExit(t)
+	})
 }
 
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
@@ -359,7 +386,7 @@ func (d *Daprd) ProfilePort() int {
 
 // Metrics Returns a subset of metrics scraped from the metrics endpoint
 func (d *Daprd) Metrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
-	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()))
+	return metrics.New(t, ctx, d.httpClient, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()))
 }
 
 func (d *Daprd) MetricResidentMemoryMi(t *testing.T, ctx context.Context) float64 {

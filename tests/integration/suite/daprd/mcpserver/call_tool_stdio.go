@@ -15,25 +15,23 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/encoding/protojson"
 
-	wfv1 "github.com/dapr/dapr/pkg/proto/workflows/v1"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/binary"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/httpapi"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -42,7 +40,7 @@ func init() {
 }
 
 // callToolStdio verifies that MCP tool calls work over the stdio transport.
-// A small Go program is compiled and used as the stdio MCP server subprocess.
+// The mcpstdioserver helper binary is used as the stdio MCP server subprocess.
 type callToolStdio struct {
 	daprd      *daprd.Daprd
 	place      *placement.Placement
@@ -50,76 +48,9 @@ type callToolStdio struct {
 	httpClient *http.Client
 }
 
-// stdioServerSource is a minimal Go MCP server that communicates over stdin/stdout.
-const stdioServerSource = `package main
-
-import (
-	"context"
-	"os"
-	"os/signal"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-)
-
-func main() {
-	srv := mcp.NewServer(&mcp.Implementation{Name: "stdio-test", Version: "v1"}, nil)
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "stdio_echo",
-		Description: "Echoes a message via stdio",
-	}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, struct{}, error) {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: "stdio-pong"}},
-		}, struct{}{}, nil
-	})
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-
-	if err := srv.Run(ctx, &mcp.StdioTransport{}); err != nil && ctx.Err() == nil {
-		os.Exit(1)
-	}
-}
-`
-
 func (s *callToolStdio) Setup(t *testing.T) []framework.Option {
-	// Write and compile a tiny stdio MCP server binary.
-	tmpDir := t.TempDir()
-	serverDir := filepath.Join(tmpDir, "stdiosrv")
-	require.NoError(t, os.MkdirAll(serverDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(serverDir, "main.go"), []byte(stdioServerSource), 0o600))
-
-	// Initialize a go module so `go build` works.
-	require.NoError(t, os.WriteFile(filepath.Join(serverDir, "go.mod"), []byte(`module stdiosrv
-
-go 1.24
-
-require github.com/modelcontextprotocol/go-sdk v1.6.0
-`), 0o600))
-
-	// Build the server binary. This requires the MCP SDK to be available
-	// in the module cache (it is, since the main dapr module depends on it).
-	binName := "stdiosrv-bin"
-	if runtime.GOOS == "windows" {
-		binName += ".exe"
-	}
-	binPath := filepath.Join(tmpDir, binName)
-	t.Logf("Building stdio MCP server binary at %s", binPath)
-
-	// Populate go.sum from the module cache. The temp module has no go.sum,
-	// and `go build` refuses to run without it. `go mod tidy` resolves deps
-	// (already cached by the main dapr module) and writes go.sum into serverDir.
-	tidy := exec.Command("go", "mod", "tidy")
-	tidy.Dir = serverDir
-	if out, err := tidy.CombinedOutput(); err != nil {
-		t.Skipf("skipping stdio test: failed to tidy stdio server module: %s\n%s", err, out)
-	}
-
-	// This test is skipped if the build fails (e.g. in CI without module cache).
-	cmd := exec.Command("go", "build", "-o", binPath, ".")
-	cmd.Dir = serverDir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Skipf("skipping stdio test: failed to build stdio server: %s\n%s", err, out)
-	}
+	binPath := binary.EnvValue("mcpstdioserver")
+	require.NotEmpty(t, binPath, "mcpstdioserver helper binary path is not set")
 
 	s.sched = scheduler.New(t)
 	s.place = placement.New(t)
@@ -152,34 +83,34 @@ func (s *callToolStdio) Run(t *testing.T, ctx context.Context) {
 	s.httpClient = fclient.HTTP(t)
 
 	t.Run("ListTools over stdio transport", func(t *testing.T) {
-		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+		status := httpapi.Run(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPListToolsWorkflowName("stdio-server"), nil, 30*time.Second)
-		require.Equal(t, statusCompleted, status.RuntimeStatus)
+		require.Equal(t, httpapi.StatusCompleted, status.RuntimeStatus)
 
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
 
-		var result wfv1.ListMCPToolsResponse
-		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		require.Len(t, result.GetTools(), 1)
-		assert.Equal(t, "stdio_echo", result.GetTools()[0].GetName())
+		var result mcp.ListToolsResult
+		require.NoError(t, json.Unmarshal([]byte(outputJSON), &result))
+		require.Len(t, result.Tools, 1)
+		assert.Equal(t, "stdio_echo", result.Tools[0].Name)
 	})
 
 	t.Run("CallTool over stdio transport", func(t *testing.T) {
 		input := map[string]any{
 			"arguments": map[string]any{},
 		}
-		status := runWorkflow(t, ctx, s.httpClient, s.daprd.HTTPPort(),
+		status := httpapi.Run(t, ctx, s.httpClient, s.daprd.HTTPPort(),
 			mcpnames.MCPCallToolWorkflowName("stdio-server", "stdio_echo"), input, 30*time.Second)
-		require.Equal(t, statusCompleted, status.RuntimeStatus)
+		require.Equal(t, httpapi.StatusCompleted, status.RuntimeStatus)
 
 		outputJSON := status.Properties["dapr.workflow.output"]
 		require.NotEmpty(t, outputJSON)
 
-		var result wfv1.CallMCPToolResponse
-		require.NoError(t, protojson.Unmarshal([]byte(outputJSON), &result))
-		assert.False(t, result.GetIsError())
-		require.NotEmpty(t, result.GetContent())
-		assert.Contains(t, result.GetContent()[0].GetText().GetText(), "stdio-pong")
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(outputJSON), &result))
+		assert.False(t, result.IsError)
+		require.NotEmpty(t, result.Content)
+		assert.Contains(t, extractText(result.Content[0]), "stdio-pong")
 	})
 }

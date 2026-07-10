@@ -43,6 +43,7 @@ const (
 	MethodListJobs           = "ListJobs"
 	MethodDeleteByMetadata   = "DeleteByMetadata"
 	MethodDeleteByNamePrefix = "DeleteByNamePrefix"
+	MethodWatchHosts         = "WatchHosts"
 )
 
 type Proxy struct {
@@ -127,6 +128,16 @@ func (p *Proxy) Cleanup(t *testing.T) {
 		if err := <-p.serveErr; err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			require.NoError(t, err)
 		}
+	} else if p.ports != nil {
+		// Run never executed (setup-time failure): the reservation made in
+		// New was never released by Run, so release it here to avoid
+		// leaking the port for the rest of the test process lifetime.
+		p.ports.Free(t)
+	}
+	if p.listener != nil {
+		// GracefulStop closes the listener, but close it again explicitly
+		// for symmetry in case the server never started serving.
+		_ = p.listener.Close()
 	}
 	if p.upstream != nil {
 		require.NoError(t, p.upstream.Close())
@@ -282,6 +293,10 @@ func (p *Proxy) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error 
 // real scheduler on every refresh. Without this rewrite daprd would bypass
 // the proxy as soon as the first host list arrived.
 func (p *Proxy) WatchHosts(req *schedulerv1pb.WatchHostsRequest, stream schedulerv1pb.Scheduler_WatchHostsServer) error {
+	if code, ok := p.takeFailure(MethodWatchHosts); ok {
+		return injected(MethodWatchHosts, code)
+	}
+
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
 

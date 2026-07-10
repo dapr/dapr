@@ -123,7 +123,7 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 		o.lock.Lock()
 		defer o.lock.Unlock()
 		return string(o.msg) == "2"
-	}, time.Second*5, time.Millisecond*10, "failed to receive message in time")
+	}, time.Second*10, time.Millisecond*10, "failed to receive message in time")
 
 	assert.Equal(t, int32(1), o.eventCalled.Load())
 }

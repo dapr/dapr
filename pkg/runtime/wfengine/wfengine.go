@@ -105,13 +105,11 @@ type engine struct {
 	actors               actors.Interface
 	getWorkItemsCount    atomic.Int32
 	mcpRegistrationCount atomic.Int32
-	// actorRegLock guards the registration counters and actorsRegistered.
-	// Held by the GetWorkItems connect/disconnect callbacks, EnsureActorsRegistered,
-	// and UnregisterMCPServer so all paths can read and write the registration
-	// state without racing.
-	actorRegLock sync.Mutex
-	// actorsRegistered tracks whether workflow actor types are currently
-	// registered with placement. Guarded by actorRegLock.
+	// actorRegLock makes the "increment+check+RegisterActors" and
+	// "decrement+check+UnRegisterActors" sequences atomic, so concurrent
+	// connects/disconnects and MCP register/unregister cannot double-register
+	// or unregister while another path believes actors are still live.
+	actorRegLock     sync.Mutex
 	actorsRegistered bool
 
 	worker        backend.TaskHubWorker
@@ -119,6 +117,11 @@ type engine struct {
 	client        workflows.Workflow
 	inProcessExec *inprocess.Executor
 	compStore     *compstore.ComponentStore
+
+	// streamShutdownCh is closed during shutdown to tell all connected
+	// GetWorkItems streams to terminate, so the gRPC API server's GracefulStop
+	// can complete promptly instead of blocking on long-lived worker streams.
+	streamShutdownCh chan any
 
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 }
@@ -164,13 +167,29 @@ func New(opts Options) (Interface, error) {
 	}
 
 	wfe := &engine{
-		appID:         opts.AppID,
-		namespace:     opts.Namespace,
-		actors:        opts.Actors,
-		backend:       abackend,
-		inProcessExec: inProcessExec,
-		compStore:     opts.ComponentStore,
+		appID:            opts.AppID,
+		namespace:        opts.Namespace,
+		actors:           opts.Actors,
+		backend:          abackend,
+		inProcessExec:    inProcessExec,
+		compStore:        opts.ComponentStore,
+		streamShutdownCh: make(chan any),
 	}
+
+	// Keep the actor refcount balanced when Executor.Run tears holders down
+	// during shutdown: each torn-down holder represents one outstanding
+	// EnsureActorsRegistered Add(+1) that would otherwise be left dangling.
+	inProcessExec.SetOnMCPTeardown(func(string) {
+		wfe.actorRegLock.Lock()
+		defer wfe.actorRegLock.Unlock()
+		if wfe.mcpRegistrationCount.Add(-1) == 0 && wfe.getWorkItemsCount.Load() == 0 && wfe.actorsRegistered {
+			err := abackend.UnRegisterActors(context.Background())
+			wfe.actorsRegistered = false
+			if err != nil {
+				log.Warnf("Failed to unregister workflow actors during shutdown: %s", err)
+			}
+		}
+	})
 
 	grpcExec, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
 		backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
@@ -211,6 +230,7 @@ func New(opts Options) (Interface, error) {
 			return nil
 		}),
 		backend.WithStreamSendTimeout(time.Second*10),
+		backend.WithStreamShutdownChannel(wfe.streamShutdownCh),
 	)
 
 	var topts []backend.NewTaskWorkerOptions
@@ -276,12 +296,19 @@ func (wfe *engine) EnsureActorsRegistered(ctx context.Context) error {
 }
 
 // RegisterMCPServer installs workflows and ensures actors are registered.
-// Refcount bumps only on success.
+// Refcount bumps only on success. If actor registration fails after the
+// inprocess workflows were installed, the inprocess registration is torn back
+// down so a subsequent UnregisterMCPServer does not double-count: refcount and
+// holder presence must agree.
 func (wfe *engine) RegisterMCPServer(ctx context.Context, server mcpserverapi.MCPServer, store *compstore.ComponentStore, sec security.Handler) error {
 	if err := wfe.inProcessExec.RegisterMCPServer(ctx, server, store, sec); err != nil {
 		return err
 	}
-	return wfe.EnsureActorsRegistered(ctx)
+	if err := wfe.EnsureActorsRegistered(ctx); err != nil {
+		wfe.inProcessExec.UnregisterMCPServer(server.Name)
+		return err
+	}
+	return nil
 }
 
 // UnregisterMCPServer forwards to the in-process executor and decrements the
@@ -289,7 +316,9 @@ func (wfe *engine) RegisterMCPServer(ctx context.Context, server mcpserverapi.MC
 // zero AND no external SDK workers are connected.
 // Implements processor.internalWorkflowRegistrar.
 func (wfe *engine) UnregisterMCPServer(serverName string) {
-	wfe.inProcessExec.UnregisterMCPServer(serverName)
+	if !wfe.inProcessExec.UnregisterMCPServer(serverName) {
+		return
+	}
 
 	wfe.actorRegLock.Lock()
 	defer wfe.actorRegLock.Unlock()
@@ -326,6 +355,11 @@ func (wfe *engine) Run(ctx context.Context) error {
 
 	log.Info("Workflow engine started")
 	<-ctx.Done()
+
+	// Signal all connected GetWorkItems streams to terminate before draining the
+	// worker, so the gRPC API server's GracefulStop does not block on them during
+	// shutdown or a SIGHUP reload.
+	close(wfe.streamShutdownCh)
 
 	if err := wfe.worker.Shutdown(context.Background()); err != nil {
 		return fmt.Errorf("failed to shutdown the workflow worker: %w", err)

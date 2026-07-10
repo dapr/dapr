@@ -98,8 +98,8 @@ type Interface interface {
 	Reminders(context.Context) (reminders.Interface, error)
 	Placement(context.Context) (placement.Interface, error)
 	RuntimeStatus() *runtimev1pb.ActorRuntime
-	RegisterHosted(hostconfig.Config) error
-	UnRegisterHosted(actorTypes ...string)
+	RegisterHosted(context.Context, hostconfig.Config) error
+	UnRegisterHosted(ctx context.Context, actorTypes ...string) error
 	WaitForRegisteredHosts(ctx context.Context) error
 }
 
@@ -376,7 +376,7 @@ func (a *actors) waitForReady(ctx context.Context) error {
 	}
 }
 
-func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
+func (a *actors) RegisterHosted(ctx context.Context, cfg hostconfig.Config) error {
 	defer func() {
 		a.registerDoneLock.Lock()
 		select {
@@ -387,7 +387,19 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		a.registerDoneLock.Unlock()
 	}()
 
-	if err := a.disabled.Load(); err != nil {
+	if a.disabled.Load() != nil {
+		return nil
+	}
+
+	// Wait until Init has populated a.table. The API gRPC server starts
+	// before initActors runs (see pkg/runtime/runtime.go), so callers
+	// arriving via SubscribeActorEventsAlpha1 can otherwise race ahead of
+	// Init and dereference a nil table.
+	if err := a.waitForReady(ctx); err != nil {
+		return err
+	}
+
+	if a.disabled.Load() != nil {
 		return nil
 	}
 
@@ -486,13 +498,21 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 	return nil
 }
 
-func (a *actors) UnRegisterHosted(actorTypes ...string) {
-	if a.disabled.Load() != nil {
-		return
+func (a *actors) UnRegisterHosted(ctx context.Context, actorTypes ...string) error {
+	if len(actorTypes) == 0 {
+		return nil
 	}
 
-	if len(actorTypes) == 0 {
-		return
+	if a.disabled.Load() != nil {
+		return nil
+	}
+
+	if err := a.waitForReady(ctx); err != nil {
+		return err
+	}
+
+	if a.disabled.Load() != nil {
+		return nil
 	}
 
 	a.table.UnRegisterActorTypes(actorTypes...)
@@ -500,6 +520,8 @@ func (a *actors) UnRegisterHosted(actorTypes ...string) {
 	a.registerDoneLock.Lock()
 	a.registerDoneCh = make(chan struct{})
 	a.registerDoneLock.Unlock()
+
+	return nil
 }
 
 func (a *actors) WaitForRegisteredHosts(ctx context.Context) error {
