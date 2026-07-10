@@ -60,7 +60,7 @@ func (c *conversation) Init(ctx context.Context, comp compapi.Component) error {
 	}
 
 	if conversate == nil {
-		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, fmt.Errorf("conversation component type %s not found", comp.Spec.Type))
+		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, fmt.Errorf("conversation component %s returned a nil instance", comp.Spec.Type))
 	}
 
 	// initialization
