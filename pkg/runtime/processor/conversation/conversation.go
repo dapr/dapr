@@ -17,6 +17,7 @@ package conversation
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	contribconversation "github.com/dapr/components-contrib/conversation"
@@ -59,7 +60,7 @@ func (c *conversation) Init(ctx context.Context, comp compapi.Component) error {
 	}
 
 	if conversate == nil {
-		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, fmt.Errorf("conversation component type %s not found", comp.Spec.Type))
 	}
 
 	// initialization
