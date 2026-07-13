@@ -34,7 +34,7 @@ type Fake struct {
 	threshold int
 
 	putFn func(ctx context.Context, instanceID string, data []byte) (payloadstore.Reference, error)
-	getFn func(ctx context.Context, ref payloadstore.Reference) ([]byte, error)
+	getFn func(ctx context.Context, instanceID string, ref payloadstore.Reference) ([]byte, error)
 }
 
 func New() *Fake {
@@ -59,7 +59,7 @@ func (f *Fake) WithPutFn(fn func(ctx context.Context, instanceID string, data []
 	return f
 }
 
-func (f *Fake) WithGetFn(fn func(ctx context.Context, ref payloadstore.Reference) ([]byte, error)) *Fake {
+func (f *Fake) WithGetFn(fn func(ctx context.Context, instanceID string, ref payloadstore.Reference) ([]byte, error)) *Fake {
 	f.getFn = fn
 	return f
 }
@@ -75,8 +75,8 @@ func (f *Fake) Put(ctx context.Context, instanceID string, data []byte) (payload
 	return f.putFn(ctx, instanceID, data)
 }
 
-func (f *Fake) Get(ctx context.Context, ref payloadstore.Reference) ([]byte, error) {
-	return f.getFn(ctx, ref)
+func (f *Fake) Get(ctx context.Context, instanceID string, ref payloadstore.Reference) ([]byte, error) {
+	return f.getFn(ctx, instanceID, ref)
 }
 
 // PutCalls returns how many times Put has been invoked, including calls
@@ -113,7 +113,7 @@ func (f *Fake) defaultPut(_ context.Context, _ string, data []byte) (payloadstor
 	}, nil
 }
 
-func (f *Fake) defaultGet(_ context.Context, ref payloadstore.Reference) ([]byte, error) {
+func (f *Fake) defaultGet(_ context.Context, _ string, ref payloadstore.Reference) ([]byte, error) {
 	f.lock.Lock()
 	data, ok := f.data[ref.Key]
 	f.lock.Unlock()

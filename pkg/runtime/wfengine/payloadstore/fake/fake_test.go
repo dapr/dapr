@@ -56,7 +56,7 @@ func TestPutGetRoundTrip(t *testing.T) {
 	assert.Equal(t, uint64(len(data)), ref.Size)
 	assert.NotEmpty(t, ref.Key)
 
-	got, err := f.Get(t.Context(), ref)
+	got, err := f.Get(t.Context(), "instance-1", ref)
 	require.NoError(t, err)
 	assert.Equal(t, data, got)
 }
@@ -80,7 +80,7 @@ func TestGetUnknownReference(t *testing.T) {
 	t.Parallel()
 
 	f := New()
-	_, err := f.Get(t.Context(), payloadstore.Reference{Key: "no-such-key"})
+	_, err := f.Get(t.Context(), "instance-1", payloadstore.Reference{Key: "no-such-key"})
 	require.Error(t, err)
 }
 
@@ -91,14 +91,14 @@ func TestGetReturnsDefensiveCopy(t *testing.T) {
 	ref, err := f.Put(t.Context(), "instance-1", []byte("original data"))
 	require.NoError(t, err)
 
-	got, err := f.Get(t.Context(), ref)
+	got, err := f.Get(t.Context(), "instance-1", ref)
 	require.NoError(t, err)
 	for i := range got {
 		got[i] = 'X'
 	}
 
 	// Mutating the returned slice must not corrupt the stored payload.
-	again, err := f.Get(t.Context(), ref)
+	again, err := f.Get(t.Context(), "instance-1", ref)
 	require.NoError(t, err)
 	assert.Equal(t, "original data", string(again))
 }
@@ -112,7 +112,7 @@ func TestGetDetectsTamperedData(t *testing.T) {
 
 	f.Tamper(ref.Key, []byte("tampered data"))
 
-	_, err = f.Get(t.Context(), ref)
+	_, err = f.Get(t.Context(), "instance-1", ref)
 	require.ErrorContains(t, err, "checksum")
 }
 
@@ -126,13 +126,13 @@ func TestErrorInjection(t *testing.T) {
 		WithPutFn(func(context.Context, string, []byte) (payloadstore.Reference, error) {
 			return payloadstore.Reference{}, errPut
 		}).
-		WithGetFn(func(context.Context, payloadstore.Reference) ([]byte, error) {
+		WithGetFn(func(context.Context, string, payloadstore.Reference) ([]byte, error) {
 			return nil, errGet
 		})
 
 	_, err := f.Put(t.Context(), "instance-1", []byte("x"))
 	require.ErrorIs(t, err, errPut)
 
-	_, err = f.Get(t.Context(), payloadstore.Reference{})
+	_, err = f.Get(t.Context(), "instance-1", payloadstore.Reference{})
 	require.ErrorIs(t, err, errGet)
 }

@@ -17,9 +17,16 @@ import (
 	"context"
 	"fmt"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore"
 	"github.com/dapr/durabletask-go/backend"
 )
+
+// maxConcurrentPuts bounds the store writes issued in parallel for one
+// offload pass. Turns rarely add more than a handful of offloadable
+// events; the bound only guards pathological fan-out turns.
+const maxConcurrentPuts = 8
 
 // OffloadNewPayloads replaces the user payload of every newly added inbox
 // and history event the store elects to offload (Store.ShouldOffload)
@@ -55,6 +62,13 @@ func (s *State) OffloadNewPayloads(ctx context.Context, store payloadstore.Store
 }
 
 func offloadEvents(ctx context.Context, store payloadstore.Store, instanceID string, events []*backend.HistoryEvent) error {
+	// Select the events to offload sequentially - the checks are cheap -
+	// then fan out the store writes, which may be remote I/O. Each
+	// goroutine owns exactly one event's payload field, and Store
+	// implementations are required to be safe for concurrent use.
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(maxConcurrentPuts)
+
 	for _, e := range events {
 		p := payloadstore.Payload(e)
 		if p == nil || !store.ShouldOffload(len(p.GetValue())) {
@@ -70,13 +84,17 @@ func offloadEvents(ctx context.Context, store payloadstore.Store, instanceID str
 			continue
 		}
 
-		ref, err := store.Put(ctx, instanceID, []byte(p.GetValue()))
-		if err != nil {
-			return fmt.Errorf("failed to store payload of event %d: %w", e.GetEventId(), err)
-		}
+		eventID := e.GetEventId()
+		eg.Go(func() error {
+			ref, err := store.Put(egCtx, instanceID, []byte(p.GetValue()))
+			if err != nil {
+				return fmt.Errorf("failed to store payload of event %d: %w", eventID, err)
+			}
 
-		p.Value = payloadstore.EncodeReference(ref)
+			p.Value = payloadstore.EncodeReference(ref)
+			return nil
+		})
 	}
 
-	return nil
+	return eg.Wait()
 }

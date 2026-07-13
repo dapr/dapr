@@ -86,17 +86,17 @@ func TestDecodeReferenceCorruptBody(t *testing.T) {
 	require.NotEmpty(t, magic)
 
 	for name, payload := range map[string]string{
-		"magic only":          magic,
-		"magic plus garbage":  magic + "not json",
-		"magic empty json":    magic + "{}",
-		"bad checksum hex":    magic + `{"k":"a","c":"zz","s":1}`,
-		"short checksum":      magic + `{"k":"a","c":"abcd","s":1}`,
-		"truncated body":      encoded[:len(encoded)-2],
-		"trailing bytes":      encoded + "x",
-		"trailing whitespace": encoded + " ",
-		"trailing newline":    encoded + "\n",
-		"trailing json value": encoded + `{"k":"b"}`,
-		"checksum wrong type": magic + `{"k":"a","c":42,"s":1}`,
+		"magic only":                magic,
+		"magic plus garbage":        magic + "not json",
+		"magic empty json":          magic + "{}",
+		"invalid checksum encoding": magic + `{"k":"a","c":"!!!","s":1}`,
+		"short checksum":            magic + `{"k":"a","c":"zz","s":1}`,
+		"truncated body":            encoded[:len(encoded)-2],
+		"trailing bytes":            encoded + "x",
+		"trailing whitespace":       encoded + " ",
+		"trailing newline":          encoded + "\n",
+		"trailing json value":       encoded + `{"k":"b"}`,
+		"checksum wrong type":       magic + `{"k":"a","c":42,"s":1}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

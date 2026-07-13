@@ -62,9 +62,12 @@ type Store interface {
 	// forged into one instance's history cannot address another's data.
 	Put(ctx context.Context, instanceID string, data []byte) (Reference, error)
 
-	// Get returns the payload identified by ref. Implementations MUST
-	// verify that the SHA-256 of the returned bytes equals ref.Checksum
-	// and fail on mismatch, so a tampered or corrupted store surfaces as
-	// an error rather than as silently wrong payload data.
-	Get(ctx context.Context, ref Reference) ([]byte, error)
+	// Get returns the payload identified by ref. instanceID is the
+	// workflow instance whose history carried the reference; stores that
+	// partition payloads by instance use it to refuse resolving a
+	// reference forged into another instance's history. Implementations
+	// MUST verify that the SHA-256 of the returned bytes equals
+	// ref.Checksum and fail on mismatch, so a tampered or corrupted store
+	// surfaces as an error rather than as silently wrong payload data.
+	Get(ctx context.Context, instanceID string, ref Reference) ([]byte, error)
 }

@@ -16,6 +16,7 @@ package state
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -69,7 +70,7 @@ func requireOffloaded(t *testing.T, e *backend.HistoryEvent, store payloadstore.
 	require.NoError(t, err)
 	assert.Equal(t, uint64(len(original)), ref.Size)
 
-	data, err := store.Get(t.Context(), ref)
+	data, err := store.Get(t.Context(), "wf1", ref)
 	require.NoError(t, err)
 	assert.Equal(t, original, string(data))
 }
@@ -161,6 +162,27 @@ func TestOffloadNewPayloads_Idempotent(t *testing.T) {
 
 	assert.Equal(t, encodedOnce, eventPayloadValue(t, s.History[0]), "re-running offload must not double-encode")
 	assert.Equal(t, putsAfterFirst, store.PutCalls(), "re-running offload must not Put again")
+}
+
+// TestOffloadNewPayloads_ManyEvents drives the concurrent Put fan-out
+// (run with -race to catch unsynchronized event mutation).
+func TestOffloadNewPayloads_ManyEvents(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+	payloads := make([]string, 24)
+	for i := range payloads {
+		payloads[i] = fmt.Sprintf("payload-%02d-", i) + strings.Repeat("p", 64)
+		s.AddToHistory(resultEvent(int32(i), payloads[i]))
+	}
+
+	store := payloadstorefake.New().WithThreshold(8)
+	require.NoError(t, s.OffloadNewPayloads(t.Context(), store, "wf1"))
+
+	for i := range payloads {
+		requireOffloaded(t, s.History[i], store, payloads[i])
+	}
+	assert.Equal(t, len(payloads), store.PutCalls())
 }
 
 func TestOffloadNewPayloads_PutFailureFailsWholePass(t *testing.T) {

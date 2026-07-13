@@ -125,7 +125,7 @@ func Test_signAndSaveState_offloadsLargePayloads(t *testing.T) {
 
 	ref, err := payloadstore.DecodeReference(v)
 	require.NoError(t, err)
-	data, err := store.Get(t.Context(), ref)
+	data, err := store.Get(t.Context(), "offload-test-wf", ref)
 	require.NoError(t, err)
 	assert.Equal(t, payload, string(data))
 }

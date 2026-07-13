@@ -14,7 +14,7 @@ limitations under the License.
 package payloadstore
 
 import (
-	"encoding/hex"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -50,7 +50,7 @@ const refMagic = "\x00\x01dapr.workflow.payload.reference.v1\x01\x00"
 var ErrNotReference = errors.New("payload is not an encoded payload-store reference")
 
 // refJSON is the wire form of a Reference following the magic prefix. The
-// checksum is hex-encoded to keep the whole encoding valid UTF-8.
+// checksum is base64-encoded to keep the whole encoding valid UTF-8.
 type refJSON struct {
 	Key      string `json:"k"`
 	Checksum string `json:"c"`
@@ -63,7 +63,7 @@ type refJSON struct {
 func EncodeReference(ref Reference) string {
 	body, err := json.Marshal(refJSON{
 		Key:      ref.Key,
-		Checksum: hex.EncodeToString(ref.Checksum[:]),
+		Checksum: base64.RawStdEncoding.EncodeToString(ref.Checksum[:]),
 		Size:     ref.Size,
 	})
 	if err != nil {
@@ -103,7 +103,7 @@ func DecodeReference(s string) (Reference, error) {
 		return Reference{}, errors.New("malformed payload-store reference body: trailing data")
 	}
 
-	checksum, err := hex.DecodeString(body.Checksum)
+	checksum, err := base64.RawStdEncoding.DecodeString(body.Checksum)
 	if err != nil {
 		return Reference{}, fmt.Errorf("malformed payload-store reference checksum: %w", err)
 	}
