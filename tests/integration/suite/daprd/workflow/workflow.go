@@ -44,6 +44,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/records"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/retries"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/reuseid"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/security"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/signing"
