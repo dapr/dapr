@@ -88,7 +88,7 @@ func (o *orchestrator) createCascadeTerminateReminder(ctx context.Context, child
 	return common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
 		ActorType: o.actorType,
 		ActorID:   child.instanceID,
-		Name:      reminderPrefixCascadeTerminate,
+		Name:      reminderCascadeTerminate,
 		Data:      data,
 		DueTime:   time.Now().UTC().Format(time.RFC3339Nano),
 		// One shot, retry forever, every second.

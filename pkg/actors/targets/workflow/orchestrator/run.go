@@ -85,7 +85,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// carrying the ExecutionTerminated event as data (see terminateChildren).
 	// Feed it into the inbox like a fired timer; if the workflow is already
 	// terminal the redelivery is skipped and the reminder deleted.
-	if reminder.Name == reminderPrefixCascadeTerminate && !runtimestate.IsCompleted(o.rstate) {
+	if reminder.Name == reminderCascadeTerminate && !runtimestate.IsCompleted(o.rstate) {
 		var cascadeEvent backend.HistoryEvent
 		if err = reminder.Data.UnmarshalTo(&cascadeEvent); err != nil {
 			return todo.RunCompletedTrue, err

@@ -128,7 +128,7 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 	case strings.HasPrefix(reminder.Name, reminderPrefixStart),
 		strings.HasPrefix(reminder.Name, reminderPrefixNewEvent),
 		strings.HasPrefix(reminder.Name, reminderPrefixTimer),
-		reminder.Name == reminderPrefixCascadeTerminate:
+		reminder.Name == reminderCascadeTerminate:
 		return o.runWorkflowFromReminder(ctx, reminder)
 
 	case strings.HasPrefix(reminder.Name, common.ReminderPrefixActivityResult):
