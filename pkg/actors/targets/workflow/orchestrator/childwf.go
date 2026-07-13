@@ -91,7 +91,14 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 			// If the call was denied by a workflow access policy, fail the
 			// child orchestration immediately rather than retrying.
 			if isPermissionDenied(err) {
-				return o.failChildWorkflowACL(ctx, e.GetEventId(), err)
+				log.Warnf("Workflow actor '%s': child workflow denied by access policy: %v", o.actorID, err)
+				return o.failChildWorkflowTask(ctx, e.GetEventId(), errorTypeAccessPolicyDenied, errorMessageAccessPolicyDenied)
+			}
+			// The target instance ID is occupied by another workflow. Fail the
+			// awaited child task rather than retrying forever.
+			if isAlreadyExists(err) {
+				log.Warnf("Workflow actor '%s': child workflow instance ID '%s' already exists: %v", o.actorID, id, err)
+				return o.failChildWorkflowTask(ctx, e.GetEventId(), errorTypeAlreadyExists, status.Convert(err).Message())
 			}
 			return fmt.Errorf("failed to call child workflow '%s': %w", id, err)
 		}
@@ -100,16 +107,29 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 	return nil
 }
 
-// isPermissionDenied checks whether the error (possibly wrapped) contains a
-// gRPC PermissionDenied status code. Walks both single-error and multi-error
-// chains.
+const (
+	errorTypeAccessPolicyDenied    = "WorkflowAccessPolicyDenied"
+	errorMessageAccessPolicyDenied = "access denied by workflow access policy"
+	errorTypeAlreadyExists         = "WorkflowInstanceAlreadyExists"
+)
+
 func isPermissionDenied(err error) bool {
+	return hasGRPCStatusCode(err, codes.PermissionDenied)
+}
+
+func isAlreadyExists(err error) bool {
+	return hasGRPCStatusCode(err, codes.AlreadyExists)
+}
+
+// hasGRPCStatusCode checks whether the error (possibly wrapped) contains the
+// given gRPC status code. Walks both single-error and multi-error chains.
+func hasGRPCStatusCode(err error, code codes.Code) bool {
 	if err == nil {
 		return false
 	}
 
 	// Try direct gRPC status extraction.
-	if st, ok := status.FromError(err); ok && st.Code() == codes.PermissionDenied {
+	if st, ok := status.FromError(err); ok && st.Code() == code {
 		return true
 	}
 
@@ -117,7 +137,7 @@ func isPermissionDenied(err error) bool {
 	// and Unwrap() []error chains (multi-error wrappers like errors.Join).
 	var wrapped interface{ GRPCStatus() *status.Status }
 	if errors.As(err, &wrapped) {
-		if wrapped.GRPCStatus().Code() == codes.PermissionDenied {
+		if wrapped.GRPCStatus().Code() == code {
 			return true
 		}
 	}
@@ -125,21 +145,20 @@ func isPermissionDenied(err error) bool {
 	return false
 }
 
-// failChildWorkflowACL creates a ChildWorkflowInstanceFailed event on the
-// parent orchestrator when the child workflow call is rejected by a
-// WorkflowAccessPolicy. It uses a reminder-based approach to deliver the
+// failChildWorkflowTask creates a ChildWorkflowInstanceFailed event on the
+// parent orchestrator when the child workflow creation cannot succeed (e.g.
+// rejected by a WorkflowAccessPolicy, or the target instance ID is already
+// taken by another workflow). It uses a reminder-based approach to deliver the
 // failure event in a fresh execution cycle, avoiding conflicts with the current
 // run loop's ClearInbox/saveInternalState calls.
 // taskScheduledID is the correlation ID that the parent orchestrator engine
 // uses to match this failure with the original sub-orchestration request.
-func (o *orchestrator) failChildWorkflowACL(ctx context.Context, taskScheduledID int32, callErr error) error {
+func (o *orchestrator) failChildWorkflowTask(ctx context.Context, taskScheduledID int32, errorType, errorMessage string) error {
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
-		EventType: events.NewChildWorkflowFailedEventType(taskScheduledID, "WorkflowAccessPolicyDenied", "access denied by workflow access policy", false),
+		EventType: events.NewChildWorkflowFailedEventType(taskScheduledID, errorType, errorMessage, false),
 	}
-
-	log.Warnf("Workflow actor '%s': child workflow denied by access policy: %v", o.actorID, callErr)
 
 	// Create a reminder that carries the failure event. When this
 	// reminder fires (in a fresh execution cycle after the current run

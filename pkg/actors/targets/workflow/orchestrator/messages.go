@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -148,29 +149,39 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 		WithData(b).
 		WithContentType(invokev1.ProtobufContentType),
 	); err != nil {
-		// If the call was denied by a workflow access policy, fail the child
+		// If the call was denied by a workflow access policy or the target
+		// instance ID is already taken by another workflow, fail the child
 		// orchestration immediately rather than retrying. Only do this when
 		// we can correlate the failure to a parent task via ParentInstance.
-		if isPermissionDenied(err) && historyEvent != nil {
+		permissionDenied := isPermissionDenied(err)
+		if (permissionDenied || isAlreadyExists(err)) && historyEvent != nil {
 			if es := historyEvent.GetExecutionStarted(); es != nil {
+				errorType := errorTypeAlreadyExists
+				errorMessage := status.Convert(err).Message()
+				if permissionDenied {
+					errorType = errorTypeAccessPolicyDenied
+					errorMessage = errorMessageAccessPolicyDenied
+				}
+
 				if es.GetParentInstance() != nil {
-					if fErr := o.failChildWorkflowACL(ctx, es.GetParentInstance().GetTaskScheduledId(), err); fErr != nil {
+					log.Warnf("Workflow actor '%s': failing child workflow task for '%s': %v", o.actorID, target, err)
+					if fErr := o.failChildWorkflowTask(ctx, es.GetParentInstance().GetTaskScheduledId(), errorType, errorMessage); fErr != nil {
 						return fmt.Errorf("failed to record child workflow failure: %w (original: %v)", fErr, err)
 					}
 					return nil
 				}
 				// Detached spawn: fire-and-forget by design. There is no
 				// awaitable Task on the caller to fail, and propagating
-				// the denial back would defeat the decoupling the feature
-				// is built on. Log so the policy violation is visible in
-				// operator output and drop the dispatch attempt — the
+				// the failure back would defeat the decoupling the feature
+				// is built on. Log so the rejection is visible in
+				// operator output and drop the dispatch attempt: the
 				// caller's history records DetachedWorkflowInstanceCreated
 				// as audit, the spawn just never lands on the target.
 				targetAppID := ""
 				if r := historyEvent.GetRouter(); r != nil {
 					targetAppID = r.GetTargetAppID()
 				}
-				log.Warnf("Workflow actor '%s': detached workflow spawn '%s' rejected by access policy on target app '%s': %v", o.actorID, target, targetAppID, err)
+				log.Warnf("Workflow actor '%s': detached workflow spawn '%s' rejected on target app '%s': %v", o.actorID, target, targetAppID, err)
 				return nil
 			}
 		}
