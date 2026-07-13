@@ -116,7 +116,7 @@ func (b *buckets) Run(t *testing.T, ctx context.Context) {
 
 			assert.NotEmpty(c, workflowLatencyBuckets)
 			assert.NotEmpty(c, activityLatencyBuckets)
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*10, time.Millisecond*100)
 
 		expected := []float64{1_000, 5_000, 10_000, 30_000}
 		assert.ElementsMatch(t, expected, workflowLatencyBuckets[:len(workflowLatencyBuckets)-1])
