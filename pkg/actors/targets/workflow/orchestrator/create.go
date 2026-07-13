@@ -101,17 +101,29 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		}
 		return status.Errorf(codes.AlreadyExists, "an active workflow with ID '%s' already exists", o.actorID)
 	}
+
 	if o.activityResultAwaited.Load() {
 		return fmt.Errorf("a terminated workflow with ID '%s' is already awaiting an activity result", o.actorID)
 	}
+
+	// An ID is reusable only once the previous execution's entire child
+	// workflow tree is terminal: a still-running descendant could deliver
+	// events from the old execution into the new one.
+	if err := o.childrenTerminalCheck(ctx, state); err != nil {
+		return status.Errorf(codes.AlreadyExists, "cannot recreate workflow with ID '%s': %s", o.actorID, err.Error())
+	}
+
 	log.Infof("Workflow actor '%s': workflow was previously completed and is being recreated", o.actorID)
+
 	state.Reset()
+
 	if propagatedHistory != nil {
 		if err := o.signing.VerifyAndAbsorbPropagatedHistory(propagatedHistory, state); err != nil {
 			return fmt.Errorf("workflow actor '%s': propagated history verification failed: %w", o.actorID, err)
 		}
 		state.SetIncomingHistory(propagatedHistory)
 	}
+
 	return o.scheduleWorkflowStart(ctx, startEvent, state)
 }
 
