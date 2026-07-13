@@ -467,11 +467,12 @@ func (s *Subscriber) reloadPubSubStream(name string, pubsub *rtpubsub.PubsubItem
 		return nil
 	}
 
-	subs := make(map[rtpubsub.ConnectionID]*namedSubscription, len(s.compStore.ListSubscriptionsStreamByPubSub(name)))
+	streamSubs := s.compStore.ListSubscriptionsStreamByPubSub(name)
+	subs := make(map[rtpubsub.ConnectionID]*namedSubscription, len(streamSubs))
 
 	var errs []error
 
-	for _, sub := range s.compStore.ListSubscriptionsStreamByPubSub(name) {
+	for _, sub := range streamSubs {
 		ss, err := s.startSubscription(pubsub, sub, true)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to create subscription for %s: %s", name, err))
@@ -517,9 +518,10 @@ func (s *Subscriber) reloadPubSubApp(name string, pubsub *rtpubsub.PubsubItem) e
 
 	var errs []error
 
-	subs := make([]*namedSubscription, 0, len(s.compStore.ListSubscriptionsAppByPubSub(name)))
+	appSubs := s.compStore.ListSubscriptionsAppByPubSub(name)
+	subs := make([]*namedSubscription, 0, len(appSubs))
 
-	for _, sub := range s.compStore.ListSubscriptionsAppByPubSub(name) {
+	for _, sub := range appSubs {
 		ss, err := s.startSubscription(pubsub, sub, false)
 		if err != nil {
 			log.Errorf("Failed to reload subscription for pubsub %s, topic %s: %s", name, sub.Topic, err)
