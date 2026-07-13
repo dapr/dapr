@@ -60,7 +60,7 @@ func InitMetrics(meter view.Meter, appID, namespace string, metricSpec config.Me
 
 	latencyDistribution := metricSpec.GetLatencyDistribution(log)
 	// Workflow latency views default to the shared latencyDistribution unless
-	// spec.metrics.workflowLatencyDistributionBuckets provides an override.
+	// spec.metrics.workflow.latencyDistributionBuckets provides an override.
 	workflowLatencyDistribution := metricSpec.GetWorkflowLatencyDistribution(log, latencyDistribution)
 	if err := DefaultMonitoring.Init(meter, appID, latencyDistribution); err != nil {
 		return err
