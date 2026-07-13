@@ -365,15 +365,24 @@ type MetricSpec struct {
 	//    1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1,000, 2,000, 5,000, 10,000, 20,000, 50,000, 100,000.
 	// +optional
 	LatencyDistributionBuckets *[]int `json:"latencyDistributionBuckets,omitempty"`
-	// The WorkflowLatencyDistributionBuckets variable specifies the latency distribution buckets used for workflow and activity latency histograms.
-	// Units are defined by WorkflowLatencyDistributionUnits (defaults to milliseconds)
-	// If this variable is not set or left empty, workflow latency histograms fall back to the shared LatencyDistributionBuckets.
+	// Workflow holds metrics options specific to workflow and activity metrics.
 	// +optional
-	WorkflowLatencyDistributionBuckets *[]int `json:"workflowLatencyDistributionBuckets,omitempty"`
-	// WorkflowLatencyDistributionUnits is the unit the WorkflowLatencyDistributionBuckets
-	// values. It scales the configured buckets into the milliseconds the histograms are recorded in.
+	Workflow *WorkflowMetrics `json:"workflow,omitempty"`
+}
+
+// WorkflowMetrics configures metrics options specific to workflows and activities.
+type WorkflowMetrics struct {
+	// LatencyDistributionBuckets specifies the latency distribution buckets used for the
+	// workflow and activity execution latency histograms. Units are defined by
+	// LatencyDistributionUnits (defaults to milliseconds). If not set or left empty,
+	// those histograms fall back to the shared MetricSpec.LatencyDistributionBuckets.
 	// +optional
-	WorkflowLatencyDistributionUnits *metav1.Duration `json:"workflowLatencyDistributionUnits,omitempty"`
+	LatencyDistributionBuckets *[]int `json:"latencyDistributionBuckets,omitempty"`
+	// LatencyDistributionUnits is the unit the LatencyDistributionBuckets values are
+	// expressed in (for example "1ms" or "1s"). It scales the configured buckets into
+	// the milliseconds the histograms are recorded in.
+	// +optional
+	LatencyDistributionUnits *metav1.Duration `json:"latencyDistributionUnits,omitempty"`
 }
 
 // MetricHTTP defines configuration for metrics for the HTTP server

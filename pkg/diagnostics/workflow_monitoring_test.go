@@ -377,7 +377,9 @@ func TestLatencyDistributionRouting(t *testing.T) {
 	// registered aggregation unambiguously identifies which distribution it used.
 	workflowBuckets := []int{7, 42, 999}
 	metricSpec := config.MetricSpec{
-		WorkflowLatencyDistributionBuckets: &workflowBuckets,
+		Workflow: &config.WorkflowMetrics{
+			LatencyDistributionBuckets: &workflowBuckets,
+		},
 	}
 	sharedDistribution := metricSpec.GetLatencyDistribution(log)
 	workflowDistribution := metricSpec.GetWorkflowLatencyDistribution(log, sharedDistribution)

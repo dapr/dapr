@@ -657,19 +657,22 @@ func TestSortMetrics(t *testing.T) {
 		assert.Equal(t, "rule", config.Spec.MetricSpec.Rules[0].Name)
 	})
 
-	t.Run("metrics overrides metric - workflow latency distribution buckets", func(t *testing.T) {
+	t.Run("metrics overrides metric - workflow", func(t *testing.T) {
 		config := &Configuration{
 			Spec: ConfigurationSpec{
 				MetricSpec: &MetricSpec{},
 				MetricsSpec: &MetricSpec{
-					WorkflowLatencyDistributionBuckets: new([]int{10, 20, 30}),
+					Workflow: &WorkflowMetrics{
+						LatencyDistributionBuckets: new([]int{10, 20, 30}),
+					},
 				},
 			},
 		}
 
 		config.sortMetricsSpec()
-		require.NotNil(t, config.Spec.MetricSpec.WorkflowLatencyDistributionBuckets)
-		assert.Equal(t, []int{10, 20, 30}, *config.Spec.MetricSpec.WorkflowLatencyDistributionBuckets)
+		require.NotNil(t, config.Spec.MetricSpec.Workflow)
+		require.NotNil(t, config.Spec.MetricSpec.Workflow.LatencyDistributionBuckets)
+		assert.Equal(t, []int{10, 20, 30}, *config.Spec.MetricSpec.Workflow.LatencyDistributionBuckets)
 	})
 }
 
@@ -748,23 +751,30 @@ func TestMetricsGetWorkflowLatencyDistribution(t *testing.T) {
 
 	sharedDistribution := view.Distribution([]float64{1, 2, 3, 4, 5}...)
 
+	t.Run("nil workflow spec falls back to the shared distribution", func(t *testing.T) {
+		m := MetricSpec{
+			Workflow: nil,
+		}
+		assert.Same(t, sharedDistribution, m.GetWorkflowLatencyDistribution(log, sharedDistribution))
+	})
+
 	t.Run("nil buckets fall back to the shared distribution", func(t *testing.T) {
 		m := MetricSpec{
-			WorkflowLatencyDistributionBuckets: nil,
+			Workflow: &WorkflowMetrics{LatencyDistributionBuckets: nil},
 		}
 		assert.Same(t, sharedDistribution, m.GetWorkflowLatencyDistribution(log, sharedDistribution))
 	})
 
 	t.Run("empty buckets fall back to the shared distribution", func(t *testing.T) {
 		m := MetricSpec{
-			WorkflowLatencyDistributionBuckets: new([]int{}),
+			Workflow: &WorkflowMetrics{LatencyDistributionBuckets: new([]int{})},
 		}
 		assert.Same(t, sharedDistribution, m.GetWorkflowLatencyDistribution(log, sharedDistribution))
 	})
 
 	t.Run("set buckets override the shared distribution", func(t *testing.T) {
 		m := MetricSpec{
-			WorkflowLatencyDistributionBuckets: new([]int{10, 20, 30}),
+			Workflow: &WorkflowMetrics{LatencyDistributionBuckets: new([]int{10, 20, 30})},
 		}
 		got := m.GetWorkflowLatencyDistribution(log, sharedDistribution)
 		assert.Equal(t, view.Distribution([]float64{10, 20, 30}...).Buckets, got.Buckets)
@@ -773,8 +783,10 @@ func TestMetricsGetWorkflowLatencyDistribution(t *testing.T) {
 
 	t.Run("nil unit defaults to milliseconds (no scaling)", func(t *testing.T) {
 		m := MetricSpec{
-			WorkflowLatencyDistributionBuckets: new([]int{1, 2, 3}),
-			WorkflowLatencyDistributionUnits:   nil,
+			Workflow: &WorkflowMetrics{
+				LatencyDistributionBuckets: new([]int{1, 2, 3}),
+				LatencyDistributionUnits:   nil,
+			},
 		}
 		got := m.GetWorkflowLatencyDistribution(log, sharedDistribution)
 		assert.Equal(t, view.Distribution([]float64{1, 2, 3}...).Buckets, got.Buckets)
@@ -783,8 +795,10 @@ func TestMetricsGetWorkflowLatencyDistribution(t *testing.T) {
 	t.Run("second unit scales buckets into milliseconds", func(t *testing.T) {
 		unit := time.Second
 		m := MetricSpec{
-			WorkflowLatencyDistributionBuckets: new([]int{1, 2, 5}),
-			WorkflowLatencyDistributionUnits:   &unit,
+			Workflow: &WorkflowMetrics{
+				LatencyDistributionBuckets: new([]int{1, 2, 5}),
+				LatencyDistributionUnits:   &unit,
+			},
 		}
 		got := m.GetWorkflowLatencyDistribution(log, sharedDistribution)
 		assert.Equal(t, view.Distribution([]float64{1000, 2000, 5000}...).Buckets, got.Buckets)
@@ -793,29 +807,31 @@ func TestMetricsGetWorkflowLatencyDistribution(t *testing.T) {
 	t.Run("unit is ignored when no buckets are set", func(t *testing.T) {
 		unit := time.Second
 		m := MetricSpec{
-			WorkflowLatencyDistributionUnits: &unit,
+			Workflow: &WorkflowMetrics{LatencyDistributionUnits: &unit},
 		}
 		assert.Same(t, sharedDistribution, m.GetWorkflowLatencyDistribution(log, sharedDistribution))
 	})
 }
 
-func TestMetricSpecUnmarshalWorkflowLatencyDistributionUnits(t *testing.T) {
+func TestWorkflowMetricsUnmarshalLatencyDistributionUnits(t *testing.T) {
 	t.Run("operator JSON encodes the unit as a metav1.Duration string", func(t *testing.T) {
 		var m MetricSpec
-		err := json.Unmarshal([]byte(`{"workflowLatencyDistributionBuckets":[1,2,3],"workflowLatencyDistributionUnits":"1s"}`), &m)
+		err := json.Unmarshal([]byte(`{"workflow":{"latencyDistributionBuckets":[1,2,3],"latencyDistributionUnits":"1s"}}`), &m)
 		require.NoError(t, err)
-		require.NotNil(t, m.WorkflowLatencyDistributionUnits)
-		assert.Equal(t, time.Second, *m.WorkflowLatencyDistributionUnits)
-		require.NotNil(t, m.WorkflowLatencyDistributionBuckets)
-		assert.Equal(t, []int{1, 2, 3}, *m.WorkflowLatencyDistributionBuckets)
+		require.NotNil(t, m.Workflow)
+		require.NotNil(t, m.Workflow.LatencyDistributionUnits)
+		assert.Equal(t, time.Second, *m.Workflow.LatencyDistributionUnits)
+		require.NotNil(t, m.Workflow.LatencyDistributionBuckets)
+		assert.Equal(t, []int{1, 2, 3}, *m.Workflow.LatencyDistributionBuckets)
 	})
 
 	t.Run("standalone YAML decodes Go duration strings natively", func(t *testing.T) {
 		var m MetricSpec
-		err := yaml.Unmarshal([]byte("workflowLatencyDistributionBuckets: [1, 2, 3]\nworkflowLatencyDistributionUnits: 1s\n"), &m)
+		err := yaml.Unmarshal([]byte("workflow:\n  latencyDistributionBuckets: [1, 2, 3]\n  latencyDistributionUnits: 1s\n"), &m)
 		require.NoError(t, err)
-		require.NotNil(t, m.WorkflowLatencyDistributionUnits)
-		assert.Equal(t, time.Second, *m.WorkflowLatencyDistributionUnits)
+		require.NotNil(t, m.Workflow)
+		require.NotNil(t, m.Workflow.LatencyDistributionUnits)
+		assert.Equal(t, time.Second, *m.Workflow.LatencyDistributionUnits)
 	})
 }
 
