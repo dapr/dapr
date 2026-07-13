@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/dapr/tests/integration/suite/daprd/metrics/util"
 )
 
 func init() {
@@ -82,7 +83,7 @@ func (l *low) Run(t *testing.T, ctx context.Context) {
 			httpServerLatencyBuckets = nil
 			for k := range l.daprd.Metrics(c, ctx).All() {
 				if strings.HasPrefix(k, "dapr_http_server_latency_bucket") && strings.Contains(k, "app_id:myapp") && strings.Contains(k, "status:200") {
-					bucket := getBucketFromKey(t, k)
+					bucket := util.GetBucketFromKey(t, k)
 					httpServerLatencyBuckets = append(httpServerLatencyBuckets, bucket)
 				}
 			}

@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package distributionbuckets
+package util
 
 import (
 	"strconv"
@@ -21,9 +21,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getBucketFromKey(t *testing.T, k string) float64 {
+// GetBucketFromKey returns a bucket given a key
+// k = "a:b|le:5000"
+func GetBucketFromKey(t *testing.T, k string) float64 {
 	t.Helper()
-	// k = "a:b|le:5000"
 	keyParts := strings.SplitSeq(k, "|")
 	for k := range keyParts {
 		if v, ok := strings.CutPrefix(k, "le:"); ok {
