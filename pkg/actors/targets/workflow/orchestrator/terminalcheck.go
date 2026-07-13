@@ -53,7 +53,10 @@ func (o *orchestrator) childrenTerminalCheck(ctx context.Context, state *wfengin
 		case errors.Is(err, api.ErrInstanceNotFound):
 			continue
 		case strings.HasSuffix(err.Error(), api.ErrNotCompleted.Error()):
-			return fmt.Errorf("child workflow '%s': %w", child.instanceID, api.ErrNotCompleted)
+			// Wrap rather than replace so a deep descendant's report keeps the
+			// full path, and the message keeps ending in api.ErrNotCompleted
+			// for suffix matching at the next level up.
+			return fmt.Errorf("child workflow '%s': %w", child.instanceID, err)
 		default:
 			return fmt.Errorf("failed to verify child workflow '%s' is in a terminal state: %w", child.instanceID, err)
 		}
