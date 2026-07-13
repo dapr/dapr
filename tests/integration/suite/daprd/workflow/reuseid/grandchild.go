@@ -102,6 +102,7 @@ func (g *grandchild) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, codes.AlreadyExists, status.Code(err), err)
 	assert.Contains(t, err.Error(), "cannot recreate workflow with ID '"+parentID+"'")
 	assert.Contains(t, err.Error(), "child workflow '"+childID+"'")
+	assert.Contains(t, err.Error(), "child workflow '"+grandchildID+"'")
 
 	close(releaseCh)
 	_, err = client.WaitForWorkflowCompletion(ctx, grandchildID)
