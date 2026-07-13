@@ -365,16 +365,13 @@ type MetricSpec struct {
 	//    1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1,000, 2,000, 5,000, 10,000, 20,000, 50,000, 100,000.
 	// +optional
 	LatencyDistributionBuckets *[]int `json:"latencyDistributionBuckets,omitempty"`
-	// The WorkflowLatencyDistributionBuckets variable specifies the latency distribution buckets (in milliseconds)
-	// used for workflow and activity latency histograms. If this variable is not set or left empty, workflow latency
-	// histograms fall back to the shared LatencyDistributionBuckets. It is an optional override for tuning workflow
-	// latency buckets independently of the shared latency histogram.
+	// The WorkflowLatencyDistributionBuckets variable specifies the latency distribution buckets used for workflow and activity latency histograms. 
+	// Units are defined by WorkflowLatencyDistributionUnits (defaults to milliseconds)
+	// If this variable is not set or left empty, workflow latency histograms fall back to the shared LatencyDistributionBuckets.
 	// +optional
 	WorkflowLatencyDistributionBuckets *[]int `json:"workflowLatencyDistributionBuckets,omitempty"`
 	// WorkflowLatencyDistributionUnits is the unit the WorkflowLatencyDistributionBuckets
-	// values are expressed in (for example "1ms" or "1s"). If not set, the buckets are
-	// interpreted as milliseconds. It scales the configured buckets into the milliseconds
-	// the histograms are recorded in.
+	// values. It scales the configured buckets into the milliseconds the histograms are recorded in.
 	// +optional
 	WorkflowLatencyDistributionUnits *metav1.Duration `json:"workflowLatencyDistributionUnits,omitempty"`
 }
