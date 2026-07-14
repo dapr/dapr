@@ -419,6 +419,7 @@ func WithSkipStateStoreReminderMigration(t *testing.T) Option {
 // environment variable must stay in sync with the constant of the same
 // name in cmd/daprd/app/wfpayloadstore_inmemory.go.
 func WithWorkflowPayloadStoreThreshold(t *testing.T, thresholdBytes int) Option {
+	require.Greater(t, thresholdBytes, 0, "thresholdBytes must be > 0")
 	return WithExecOptions(exec.WithEnvVars(t,
 		"DAPR_TEST_WORKFLOW_PAYLOAD_STORE_THRESHOLD", strconv.Itoa(thresholdBytes),
 	))
