@@ -26,9 +26,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/durabletask-go/api/protos"
+	"github.com/dapr/durabletask-go/backend/payloadstore"
 )
 
 // Payload field selectors for FindPayload, one per user-facing payload

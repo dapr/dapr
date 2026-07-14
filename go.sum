@@ -181,6 +181,8 @@ github.com/Workiva/go-datastructures v1.0.53 h1:J6Y/52yX10Xc5JjXmGtWoSSxs3mZnGSa
 github.com/Workiva/go-datastructures v1.0.53/go.mod h1:1yZL+zfsztete+ePzZz/Zb1/t5BnDuE2Ya2MMGhzP6A=
 github.com/aavaz-ai/pii-scrubber v0.0.0-20220812094047-3fa450ab6973 h1:oMQQEYwu9V0O+IcRs7ButCPjsbOS0eEtMOImkvaeWLA=
 github.com/aavaz-ai/pii-scrubber v0.0.0-20220812094047-3fa450ab6973/go.mod h1:Y5HcXSyXAlR6rvJ5kqvPEtQlRLhekJFI/w/9CRZkpHs=
+github.com/acroca/dapr-durabletask-go v0.0.0-20260714113146-eb7d07ec3c1e h1:KL0z6J10Holn33Allx6tWRfZv7Yn1cX7ynx30pM5R+Q=
+github.com/acroca/dapr-durabletask-go v0.0.0-20260714113146-eb7d07ec3c1e/go.mod h1:bNbJ4Svz9h6EcIYZOZ5YYRKogzsR5IKWNh0W0su8KCI=
 github.com/aerospike/aerospike-client-go/v6 v6.12.0 h1:4RKpcUlfINyIsjyOK8DBKn6NaBUl5UaHrWVY07/R99Q=
 github.com/aerospike/aerospike-client-go/v6 v6.12.0/go.mod h1:sBqeA3mli2vT5JInbp+XGFbajxEFg4kANUHsOl3meUk=
 github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5 h1:rFw4nCn9iMW+Vajsk51NtYIcwSTkXr+JGrMd36kTDJw=
@@ -511,8 +513,6 @@ github.com/dapr/components-contrib v1.18.1 h1:GgPuh60eBkVltg0Q+rsstHyzHvmk7XxUC/
 github.com/dapr/components-contrib v1.18.1/go.mod h1:QRNh9OQcdDN2hzDNzlImLI4pnWfqTIIg1vX9yRsLHV8=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf h1:vRT6BytcXSseSg+VZthVm93niltGVOFbhLeRXbwyWKI=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf/go.mod h1:NawmfMN065wKn8Jk39E1iwwgWe3kti/MfHBy1jQmSZs=
-github.com/dapr/durabletask-go v0.12.2-0.20260630111707-26034a1c0eef h1:a1SNnZiFlD+RXfo8s2L6b/W+UIVxnmKx/nI8jtwPiYA=
-github.com/dapr/durabletask-go v0.12.2-0.20260630111707-26034a1c0eef/go.mod h1:+8ABEQn9JvRPRvPr1QNVxdkdLPgJgpJwcpie5ZDt7nk=
 github.com/dapr/kit v0.18.2 h1:nOhtpNz5U171Pl8R1hf+KKDNmkNkMUVYcb1x1mWIL1Q=
 github.com/dapr/kit v0.18.2/go.mod h1:2v02LZdXzPmOadxoT6EMEt0bsEYe6h1fn2ndYWmylCg=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=

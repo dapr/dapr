@@ -532,3 +532,8 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
+
+// TODO: remove before merge in favor of a regular version bump once
+// dapr/durabletask-go#115 merges. Points at that PR's head so CI can run
+// against the payloadstore package it introduces.
+replace github.com/dapr/durabletask-go => github.com/acroca/dapr-durabletask-go v0.0.0-20260714113146-eb7d07ec3c1e

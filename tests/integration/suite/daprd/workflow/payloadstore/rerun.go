@@ -54,8 +54,6 @@ func (r *rerun) Run(t *testing.T, ctx context.Context) {
 	rerunInput := "rerun-input-marker-" + strings.Repeat("f", 4096)
 
 	r.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
-		// The rerun input is offloaded before it reaches this code, so it
-		// must not be unmarshaled here.
 		return nil, ctx.CallActivity("bar").Await(nil)
 	})
 	r.workflow.Registry().AddActivityN("bar", func(task.ActivityContext) (any, error) {

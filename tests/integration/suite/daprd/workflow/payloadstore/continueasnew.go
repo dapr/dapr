@@ -53,9 +53,9 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 
 	canInput := "can-input-marker-" + strings.Repeat("c", 4096)
 
-	// The second generation's input is offloaded before it reaches the
-	// workflow code, so generations are told apart host-side instead of
-	// via GetInput.
+	// Generations are told apart host-side so the workflow code does not
+	// depend on its (offloaded) input; this case asserts the persistence
+	// side, the endtoend case covers reading payloads back.
 	var continued atomic.Bool
 	c.workflow.Registry().AddWorkflowN("can", func(ctx *task.WorkflowContext) (any, error) {
 		if continued.CompareAndSwap(false, true) {

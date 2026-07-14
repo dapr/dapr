@@ -42,10 +42,10 @@ func init() {
 // row, the checksums embedded in those references match the original
 // payloads, and the original payload bytes never reach the state store.
 //
-// The dereference hook that resolves references back to payloads at the
-// SDK boundary lives in durabletask-go and is not part of this repo, so
-// the workflow code here never reads offloaded values (no GetInput, and
-// Await(nil) for the activity result); only persisted state is asserted.
+// The workflow code here deliberately does not read the offloaded values
+// (no GetInput, and Await(nil) for the activity result) so the assertions
+// stay purely persistence-side; the endtoend case covers reading them
+// back through the dereference hook.
 type offload struct {
 	workflow *workflow.Workflow
 }
@@ -68,8 +68,6 @@ func (o *offload) Run(t *testing.T, ctx context.Context) {
 	const smallActivityInput = "small-activity-input"
 
 	o.workflow.Registry().AddWorkflowN("payloads", func(ctx *task.WorkflowContext) (any, error) {
-		// The activity result is offloaded before it reaches this code, so
-		// it must not be unmarshaled here.
 		if err := ctx.CallActivity("produce", task.WithActivityInput(activityInput)).Await(nil); err != nil {
 			return nil, err
 		}

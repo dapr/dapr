@@ -31,8 +31,8 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/backend/payloadstore"
 	"github.com/dapr/kit/concurrency/slice"
 	"github.com/dapr/kit/crypto/spiffe/signer"
 )

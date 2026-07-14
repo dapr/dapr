@@ -29,10 +29,10 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
-	"github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore"
-	payloadstorefake "github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore/fake"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/payloadstore"
+	payloadstorefake "github.com/dapr/durabletask-go/backend/payloadstore/fake"
 )
 
 // resultEvent returns a TaskCompleted history event carrying result as its

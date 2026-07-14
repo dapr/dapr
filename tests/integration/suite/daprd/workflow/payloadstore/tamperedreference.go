@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	wfpayloadstore "github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -33,6 +32,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
+	wfpayloadstore "github.com/dapr/durabletask-go/backend/payloadstore"
 	"github.com/dapr/durabletask-go/task"
 )
 

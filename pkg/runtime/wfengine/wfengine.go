@@ -37,10 +37,10 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess"
-	"github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/wfregistrar"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/payloadstore"
 	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/logger"
 )
@@ -240,6 +240,7 @@ func New(opts Options) (Interface, error) {
 		}),
 		backend.WithStreamSendTimeout(time.Second*10),
 		backend.WithStreamShutdownChannel(wfe.streamShutdownCh),
+		backend.WithExecutorPayloadStore(opts.PayloadStore),
 	)
 
 	var topts []backend.NewTaskWorkerOptions
@@ -256,6 +257,7 @@ func New(opts Options) (Interface, error) {
 		InProcessNamePrefix: ReservedWorkflowNamePrefix,
 		Logger:              wfBackendLogger,
 		AppID:               opts.AppID,
+		PayloadStore:        opts.PayloadStore,
 	}, topts...)
 
 	topts = nil
@@ -265,21 +267,21 @@ func New(opts Options) (Interface, error) {
 		}
 	}
 
-	aworker := backend.NewActivityTaskWorkerWithInProcess(
-		abackend,
-		grpcExec,
-		inProcessExec.Backend(),
-		ReservedWorkflowNamePrefix,
-		wfBackendLogger,
-		topts...,
-	)
+	aworker := backend.NewActivityWorker(backend.ActivityWorkerOptions{
+		Backend:             abackend,
+		Executor:            grpcExec,
+		InProcessExecutor:   inProcessExec.Backend(),
+		InProcessNamePrefix: ReservedWorkflowNamePrefix,
+		Logger:              wfBackendLogger,
+		PayloadStore:        opts.PayloadStore,
+	}, topts...)
 	worker := backend.NewTaskHubWorker(abackend, oworker, aworker, wfBackendLogger)
 
 	wfe.worker = worker
 	wfe.registerGrpcServerFn = registerGrpcServerFn
 	wfe.client = &client{
 		logger: wfBackendLogger,
-		client: backend.NewTaskHubClient(abackend),
+		client: backend.NewTaskHubClient(abackend, backend.WithClientPayloadStore(opts.PayloadStore, wfBackendLogger)),
 	}
 	return wfe, nil
 }

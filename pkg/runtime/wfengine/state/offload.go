@@ -19,8 +19,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/payloadstore"
 )
 
 // maxConcurrentPuts bounds the store writes issued in parallel for one

@@ -58,8 +58,6 @@ func (c *childworkflow) Run(t *testing.T, ctx context.Context) {
 	const childID = "child-instance"
 
 	c.workflow.Registry().AddWorkflowN("parent", func(ctx *task.WorkflowContext) (any, error) {
-		// The child result is offloaded before it reaches this code, so
-		// it must not be unmarshaled here.
 		if err := ctx.CallChildWorkflow("child",
 			task.WithChildWorkflowInput(childInput),
 			task.WithChildWorkflowInstanceID(childID),
@@ -69,8 +67,6 @@ func (c *childworkflow) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 	c.workflow.Registry().AddWorkflowN("child", func(*task.WorkflowContext) (any, error) {
-		// The input is offloaded and must not be unmarshaled here; the
-		// result is produced in-workflow.
 		return childResult, nil
 	})
 

@@ -19,8 +19,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore"
-	payloadstorefake "github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore/fake"
+	"github.com/dapr/durabletask-go/backend/payloadstore"
+	payloadstorefake "github.com/dapr/durabletask-go/backend/payloadstore/fake"
 )
 
 // wfPayloadStoreThresholdEnvVar enables the integration-test-only

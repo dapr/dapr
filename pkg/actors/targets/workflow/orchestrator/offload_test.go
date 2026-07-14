@@ -30,11 +30,11 @@ import (
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	wfbackenderrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
-	"github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore"
-	payloadstorefake "github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore/fake"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/payloadstore"
+	payloadstorefake "github.com/dapr/durabletask-go/backend/payloadstore/fake"
 )
 
 // newOffloadTestOrchestrator builds an orchestrator whose actor state

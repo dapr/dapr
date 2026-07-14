@@ -21,12 +21,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	wfpayloadstore "github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
+	wfpayloadstore "github.com/dapr/durabletask-go/backend/payloadstore"
 	"github.com/dapr/durabletask-go/task"
 )
 

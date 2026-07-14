@@ -15,7 +15,7 @@ limitations under the License.
 
 package app
 
-import "github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore"
+import "github.com/dapr/durabletask-go/backend/payloadstore"
 
 // workflowPayloadStore returns nil in every released daprd flavor:
 // without the wfpayloadstore_inmemory build tag there is no way to enable

@@ -55,8 +55,6 @@ func (e *externalevent) Run(t *testing.T, ctx context.Context) {
 	eventPayload := "event-payload-marker-" + strings.Repeat("e", 4096)
 
 	e.workflow.Registry().AddWorkflowN("waiter", func(ctx *task.WorkflowContext) (any, error) {
-		// The event payload is offloaded before it reaches this code, so
-		// it must not be unmarshaled here.
 		if err := ctx.WaitForSingleEvent("bigdata", time.Minute).Await(nil); err != nil {
 			return nil, err
 		}

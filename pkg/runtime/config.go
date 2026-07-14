@@ -42,10 +42,10 @@ import (
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/registry"
-	"github.com/dapr/dapr/pkg/runtime/wfengine/payloadstore"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/durabletask-go/backend/payloadstore"
 )
 
 const (
