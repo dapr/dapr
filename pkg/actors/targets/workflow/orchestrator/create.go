@@ -83,6 +83,13 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 		return o.scheduleWorkflowStart(ctx, startEvent, state)
 	}
 
+	// orchestration already existed: the caller opted into idempotent creation,
+	// so leave the existing instance untouched regardless of its runtime status
+	if createWorkflowInstanceRequest.GetScheduleIfNotExists() {
+		log.Debugf("Workflow actor '%s': workflow instance already exists, ignoring create request with scheduleIfNotExists", o.actorID)
+		return nil
+	}
+
 	// orchestration already existed: create instance only if previous one is completed
 	return o.createIfCompleted(ctx, o.rstate, state, startEvent, propagatedHistory)
 }
