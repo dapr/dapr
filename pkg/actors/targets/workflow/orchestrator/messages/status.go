@@ -58,9 +58,9 @@ func HasGRPCStatusCode(err error, code codes.Code) bool {
 	return false
 }
 
-// GRPCStatusMessage returns the message of the innermost gRPC status in the
-// error chain, so surfaced failure messages are stable regardless of how many
-// layers wrapped the original status error.
+// GRPCStatusMessage returns the message of the first gRPC status found in the
+// error chain (including wrapped or joined errors), so surfaced failure
+// messages are stable even when the original status error is wrapped.
 func GRPCStatusMessage(err error) string {
 	var gs interface{ GRPCStatus() *status.Status }
 	if errors.As(err, &gs) {
