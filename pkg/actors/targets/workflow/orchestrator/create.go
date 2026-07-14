@@ -85,6 +85,12 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 		return o.scheduleWorkflowStart(ctx, startEvent, state)
 	}
 
+	// orchestration already existed: the caller requires a unique instance ID,
+	// so reject the create regardless of the existing instance's runtime status
+	if createWorkflowInstanceRequest.GetEnforceUniqueInstanceId() {
+		return status.Errorf(codes.AlreadyExists, "a workflow with ID '%s' already exists", o.actorID)
+	}
+
 	// orchestration already existed: create instance only if previous one is completed
 	return o.createIfCompleted(ctx, o.rstate, state, startEvent, propagatedHistory)
 }
