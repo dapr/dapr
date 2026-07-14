@@ -14,6 +14,7 @@ limitations under the License.
 package util
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -35,4 +36,20 @@ func GetBucketFromKey(t *testing.T, k string) float64 {
 	}
 	t.Error("did not find any bucket ('le') in key")
 	return 0
+}
+
+func CollectBuckets(t *testing.T, metrics map[string]float64, metric, name, status string) []float64 {
+	t.Helper()
+
+	var buckets []float64
+	for m := range metrics {
+		if strings.HasPrefix(m, metric) && strings.Contains(m, name) && strings.Contains(m, status) {
+			bucket := GetBucketFromKey(t, m)
+			buckets = append(buckets, bucket)
+		}
+	}
+
+	slices.Sort(buckets)
+
+	return buckets
 }
