@@ -866,8 +866,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return err
 	}
 
-	a.initDirectMessaging(a.nameResolver)
-
 	if a.runtimeConfig.appConnectionConfig.MaxConcurrency > 0 {
 		log.Infof("app max concurrency set to %v", a.runtimeConfig.appConnectionConfig.MaxConcurrency)
 	}
