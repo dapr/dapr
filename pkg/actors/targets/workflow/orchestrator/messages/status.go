@@ -27,16 +27,16 @@ const (
 )
 
 func IsPermissionDenied(err error) bool {
-	return HasGRPCStatusCode(err, codes.PermissionDenied)
+	return hasGRPCStatusCode(err, codes.PermissionDenied)
 }
 
 func IsAlreadyExists(err error) bool {
-	return HasGRPCStatusCode(err, codes.AlreadyExists)
+	return hasGRPCStatusCode(err, codes.AlreadyExists)
 }
 
-// HasGRPCStatusCode checks whether the error (possibly wrapped) contains the
+// hasGRPCStatusCode checks whether the error (possibly wrapped) contains the
 // given gRPC status code. Walks both single-error and multi-error chains.
-func HasGRPCStatusCode(err error, code codes.Code) bool {
+func hasGRPCStatusCode(err error, code codes.Code) bool {
 	if err == nil {
 		return false
 	}
