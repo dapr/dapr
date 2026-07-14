@@ -15,19 +15,17 @@ package orchestrator
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -90,59 +88,21 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 		if err != nil {
 			// If the call was denied by a workflow access policy, fail the
 			// child orchestration immediately rather than retrying.
-			if isPermissionDenied(err) {
+			if messages.IsPermissionDenied(err) {
 				log.Warnf("Workflow actor '%s': child workflow denied by access policy: %v", o.actorID, err)
-				return o.failChildWorkflowTask(ctx, e.GetEventId(), errorTypeAccessPolicyDenied, errorMessageAccessPolicyDenied)
+				return o.failChildWorkflowTask(ctx, e.GetEventId(), messages.ErrorTypeAccessPolicyDenied, messages.ErrorMessageAccessPolicyDenied)
 			}
 			// The target instance ID is occupied by another workflow. Fail the
 			// awaited child task rather than retrying forever.
-			if isAlreadyExists(err) {
+			if messages.IsAlreadyExists(err) {
 				log.Warnf("Workflow actor '%s': child workflow instance ID '%s' already exists: %v", o.actorID, id, err)
-				return o.failChildWorkflowTask(ctx, e.GetEventId(), errorTypeAlreadyExists, status.Convert(err).Message())
+				return o.failChildWorkflowTask(ctx, e.GetEventId(), messages.ErrorTypeAlreadyExists, messages.GRPCStatusMessage(err))
 			}
 			return fmt.Errorf("failed to call child workflow '%s': %w", id, err)
 		}
 	}
 
 	return nil
-}
-
-const (
-	errorTypeAccessPolicyDenied    = "WorkflowAccessPolicyDenied"
-	errorMessageAccessPolicyDenied = "access denied by workflow access policy"
-	errorTypeAlreadyExists         = "WorkflowInstanceAlreadyExists"
-)
-
-func isPermissionDenied(err error) bool {
-	return hasGRPCStatusCode(err, codes.PermissionDenied)
-}
-
-func isAlreadyExists(err error) bool {
-	return hasGRPCStatusCode(err, codes.AlreadyExists)
-}
-
-// hasGRPCStatusCode checks whether the error (possibly wrapped) contains the
-// given gRPC status code. Walks both single-error and multi-error chains.
-func hasGRPCStatusCode(err error, code codes.Code) bool {
-	if err == nil {
-		return false
-	}
-
-	// Try direct gRPC status extraction.
-	if st, ok := status.FromError(err); ok && st.Code() == code {
-		return true
-	}
-
-	// Walk the full error chain. errors.As traverses both Unwrap() error
-	// and Unwrap() []error chains (multi-error wrappers like errors.Join).
-	var wrapped interface{ GRPCStatus() *status.Status }
-	if errors.As(err, &wrapped) {
-		if wrapped.GRPCStatus().Code() == code {
-			return true
-		}
-	}
-
-	return false
 }
 
 // failChildWorkflowTask creates a ChildWorkflowInstanceFailed event on the

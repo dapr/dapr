@@ -50,7 +50,7 @@ func (s *subtree) Run(t *testing.T, ctx context.Context) {
 
 	const parentID = "occupied-subtree"
 	const occupantID = parentID + "-taken"
-	const grandchildID = occupantID + ":0000"
+	const grandchildID = occupantID + "-grandchild"
 
 	var inActivity atomic.Bool
 	releaseCh := make(chan struct{})
@@ -65,7 +65,9 @@ func (s *subtree) Run(t *testing.T, ctx context.Context) {
 	reg := s.workflow.Registry()
 
 	reg.AddWorkflowN("occupant", func(ctx *task.WorkflowContext) (any, error) {
-		ctx.CallChildWorkflow("occupantchild")
+		ctx.CallChildWorkflow("occupantchild",
+			task.WithChildWorkflowInstanceID(grandchildID),
+		)
 		return nil, nil
 	})
 	reg.AddWorkflowN("occupantchild", func(ctx *task.WorkflowContext) (any, error) {

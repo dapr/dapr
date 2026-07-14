@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,23 +11,44 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package orchestrator
+package messages
 
 import (
 	"context"
 	"errors"
 	"fmt"
 
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/dapr/dapr/pkg/actors/router"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/crypto/spiffe/signer"
+	"github.com/dapr/kit/logger"
 )
 
-func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, events []*backend.WorkflowRuntimeStateMessage, newEvents []*backend.HistoryEvent) dispatchResult {
+var log = logger.NewLogger("dapr.runtime.actors.targets.orchestrator.messages")
+
+// Messages dispatches outbound workflow runtime state messages (child
+// workflow creations and child workflow completion events) to their target
+// workflow actors.
+type Messages struct {
+	AppID            string
+	ActorID          string
+	ActorType        string
+	Router           router.Interface
+	ActorTypeBuilder *common.ActorTypeBuilder
+	Signer           *signer.Signer
+
+	// FailChildWorkflowTask records a ChildWorkflowInstanceFailed event on
+	// the parent orchestrator when a child workflow creation cannot succeed.
+	FailChildWorkflowTask func(ctx context.Context, taskScheduledID int32, errorType, errorMessage string) error
+}
+
+func (m *Messages) CallCreateWorkflowStateMessage(ctx context.Context, events []*backend.WorkflowRuntimeStateMessage, newEvents []*backend.HistoryEvent) DispatchResult {
 	msgs := make([]proto.Message, len(events))
 	historyEvents := make([]*backend.HistoryEvent, len(events))
 	targets := make([]string, len(events))
@@ -54,8 +75,8 @@ func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, event
 	for i, msg := range events {
 		req := &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
 		if ph := msg.GetPropagatedHistory(); ph != nil {
-			if o.signer == nil {
-				log.Warnf("Workflow actor '%s': propagating unsigned workflow history to child workflow '%s' (signing is not configured; chunks cannot be cryptographically verified by the receiver)", o.actorID, msg.GetTargetInstanceId())
+			if m.Signer == nil {
+				log.Warnf("Workflow actor '%s': propagating unsigned workflow history to child workflow '%s' (signing is not configured; chunks cannot be cryptographically verified by the receiver)", m.ActorID, msg.GetTargetInstanceId())
 			}
 			req.PropagatedHistory = ph
 		}
@@ -76,10 +97,10 @@ func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, event
 		}
 	}
 
-	return o.callStateMessages(ctx, msgs, historyEvents, targets, actionIDs, todo.CreateWorkflowInstanceMethod)
+	return m.callStateMessages(ctx, msgs, historyEvents, targets, actionIDs, todo.CreateWorkflowInstanceMethod)
 }
 
-func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*backend.WorkflowRuntimeStateMessage) dispatchResult {
+func (m *Messages) CallAddEventStateMessage(ctx context.Context, events []*backend.WorkflowRuntimeStateMessage) DispatchResult {
 	msgs := make([]proto.Message, len(events))
 	historyEvents := make([]*backend.HistoryEvent, len(events))
 	targets := make([]string, len(events))
@@ -90,43 +111,43 @@ func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*b
 		targets[i] = msg.GetTargetInstanceId()
 	}
 
-	return o.callStateMessages(ctx, msgs, historyEvents, targets, nil, todo.AddWorkflowEventMethod)
+	return m.callStateMessages(ctx, msgs, historyEvents, targets, nil, todo.AddWorkflowEventMethod)
 }
 
-func (o *orchestrator) callStateMessages(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, actionIDs []int32, method string) dispatchResult {
-	var result dispatchResult
+func (m *Messages) callStateMessages(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, actionIDs []int32, method string) DispatchResult {
+	var result DispatchResult
 	for i, msg := range msgs {
-		if err := o.callStateMessage(ctx, msg, historyEvents[i], targets[i], method); err != nil {
+		if err := m.callStateMessage(ctx, msg, historyEvents[i], targets[i], method); err != nil {
 			eventID := historyEvents[i].GetEventId()
 			if actionIDs != nil {
 				eventID = actionIDs[i]
 			}
-			result.recordFailure(eventID, err)
+			result.RecordFailure(eventID, err)
 			continue
 		}
 	}
 	return result
 }
 
-func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, historyEvent *backend.HistoryEvent, target string, method string) error {
-	b, err := proto.Marshal(m)
+func (m *Messages) callStateMessage(ctx context.Context, msg proto.Message, historyEvent *backend.HistoryEvent, target string, method string) error {
+	b, err := proto.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	actorType := o.actorType
+	actorType := m.ActorType
 
 	if historyEvent != nil && historyEvent.GetRouter() != nil {
 		router := historyEvent.GetRouter()
 		log.Debugf("Cross-app child workflow call: target appID=%s, source appID=%s", router.GetTargetAppID(), router.GetSourceAppID())
 
-		switch m := m.(type) {
+		switch msg := msg.(type) {
 		case *backend.CreateWorkflowInstanceRequest:
 			if router.TargetAppID != nil {
-				actorType = o.actorTypeBuilder.Workflow(router.GetTargetAppID())
+				actorType = m.ActorTypeBuilder.Workflow(router.GetTargetAppID())
 			}
 		case *backend.HistoryEvent:
 			var routeAppID string
-			if m.GetChildWorkflowInstanceCompleted() != nil || m.GetChildWorkflowInstanceFailed() != nil {
+			if msg.GetChildWorkflowInstanceCompleted() != nil || msg.GetChildWorkflowInstanceFailed() != nil {
 				if router.TargetAppID == nil {
 					return errors.New("child workflow completion events should have a target appID")
 				}
@@ -135,15 +156,15 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 				routeAppID = router.GetSourceAppID()
 			}
 
-			if routeAppID != "" && routeAppID != o.appID {
-				actorType = o.actorTypeBuilder.Workflow(routeAppID)
+			if routeAppID != "" && routeAppID != m.AppID {
+				actorType = m.ActorTypeBuilder.Workflow(routeAppID)
 			}
 		}
 	}
 
-	log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s||%s'", o.actorID, method, actorType, target)
+	log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s||%s'", m.ActorID, method, actorType, target)
 
-	if _, err = o.router.Call(ctx, internalsv1pb.
+	if _, err = m.Router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest(method).
 		WithActor(actorType, target).
 		WithData(b).
@@ -153,19 +174,19 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 		// instance ID is already taken by another workflow, fail the child
 		// orchestration immediately rather than retrying. Only do this when
 		// we can correlate the failure to a parent task via ParentInstance.
-		permissionDenied := isPermissionDenied(err)
-		if (permissionDenied || isAlreadyExists(err)) && historyEvent != nil {
+		permissionDenied := IsPermissionDenied(err)
+		if (permissionDenied || IsAlreadyExists(err)) && historyEvent != nil {
 			if es := historyEvent.GetExecutionStarted(); es != nil {
-				errorType := errorTypeAlreadyExists
-				errorMessage := status.Convert(err).Message()
+				errorType := ErrorTypeAlreadyExists
+				errorMessage := GRPCStatusMessage(err)
 				if permissionDenied {
-					errorType = errorTypeAccessPolicyDenied
-					errorMessage = errorMessageAccessPolicyDenied
+					errorType = ErrorTypeAccessPolicyDenied
+					errorMessage = ErrorMessageAccessPolicyDenied
 				}
 
 				if es.GetParentInstance() != nil {
-					log.Warnf("Workflow actor '%s': failing child workflow task for '%s': %v", o.actorID, target, err)
-					if fErr := o.failChildWorkflowTask(ctx, es.GetParentInstance().GetTaskScheduledId(), errorType, errorMessage); fErr != nil {
+					log.Warnf("Workflow actor '%s': failing child workflow task for '%s': %v", m.ActorID, target, err)
+					if fErr := m.FailChildWorkflowTask(ctx, es.GetParentInstance().GetTaskScheduledId(), errorType, errorMessage); fErr != nil {
 						return fmt.Errorf("failed to record child workflow failure: %w (original: %v)", fErr, err)
 					}
 					return nil
@@ -181,7 +202,7 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 				if r := historyEvent.GetRouter(); r != nil {
 					targetAppID = r.GetTargetAppID()
 				}
-				log.Warnf("Workflow actor '%s': detached workflow spawn '%s' rejected on target app '%s': %v", o.actorID, target, targetAppID, err)
+				log.Warnf("Workflow actor '%s': detached workflow spawn '%s' rejected on target app '%s': %v", m.ActorID, target, targetAppID, err)
 				return nil
 			}
 		}
