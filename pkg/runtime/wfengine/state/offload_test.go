@@ -59,8 +59,9 @@ func eventPayloadValue(t *testing.T, e *backend.HistoryEvent) string {
 }
 
 // requireOffloaded asserts the event's payload was replaced by a
-// reference resolving to original through store.
-func requireOffloaded(t *testing.T, e *backend.HistoryEvent, store payloadstore.Store, original string) {
+// reference resolving to original through store, under the same instance
+// ID the offload pass used for Put.
+func requireOffloaded(t *testing.T, e *backend.HistoryEvent, store payloadstore.Store, instanceID, original string) {
 	t.Helper()
 
 	v := eventPayloadValue(t, e)
@@ -70,7 +71,7 @@ func requireOffloaded(t *testing.T, e *backend.HistoryEvent, store payloadstore.
 	require.NoError(t, err)
 	assert.Equal(t, uint64(len(original)), ref.Size)
 
-	data, err := store.Get(t.Context(), "wf1", ref)
+	data, err := store.Get(t.Context(), instanceID, ref)
 	require.NoError(t, err)
 	assert.Equal(t, original, string(data))
 }
@@ -92,8 +93,8 @@ func TestOffloadNewPayloads_ThresholdBoundary(t *testing.T) {
 	require.NoError(t, s.OffloadNewPayloads(t.Context(), store, "wf1"))
 
 	assert.Equal(t, below, eventPayloadValue(t, s.History[0]), "below-threshold payload must stay inline")
-	requireOffloaded(t, s.History[1], store, at)
-	requireOffloaded(t, s.History[2], store, above)
+	requireOffloaded(t, s.History[1], store, "wf1", at)
+	requireOffloaded(t, s.History[2], store, "wf1", above)
 }
 
 func TestOffloadNewPayloads_CoversInboxAndHistory(t *testing.T) {
@@ -116,8 +117,8 @@ func TestOffloadNewPayloads_CoversInboxAndHistory(t *testing.T) {
 	store := payloadstorefake.New().WithThreshold(8)
 	require.NoError(t, s.OffloadNewPayloads(t.Context(), store, "wf1"))
 
-	requireOffloaded(t, s.Inbox[0], store, payload)
-	requireOffloaded(t, s.History[0], store, payload)
+	requireOffloaded(t, s.Inbox[0], store, "wf1", payload)
+	requireOffloaded(t, s.History[0], store, "wf1", payload)
 }
 
 func TestOffloadNewPayloads_TouchesOnlyNewEvents(t *testing.T) {
@@ -139,7 +140,7 @@ func TestOffloadNewPayloads_TouchesOnlyNewEvents(t *testing.T) {
 	require.NoError(t, s.OffloadNewPayloads(t.Context(), store, "wf1"))
 
 	assert.Equal(t, oldPayload, eventPayloadValue(t, s.History[0]), "persisted event must not be touched")
-	requireOffloaded(t, s.History[1], store, newPayload)
+	requireOffloaded(t, s.History[1], store, "wf1", newPayload)
 }
 
 func TestOffloadNewPayloads_Idempotent(t *testing.T) {
@@ -180,7 +181,7 @@ func TestOffloadNewPayloads_ManyEvents(t *testing.T) {
 	require.NoError(t, s.OffloadNewPayloads(t.Context(), store, "wf1"))
 
 	for i := range payloads {
-		requireOffloaded(t, s.History[i], store, payloads[i])
+		requireOffloaded(t, s.History[i], store, "wf1", payloads[i])
 	}
 	assert.Equal(t, len(payloads), store.PutCalls())
 }
@@ -241,7 +242,7 @@ func TestOffloadNewPayloads_UserDataCraftedAsReference(t *testing.T) {
 	require.NoError(t, s.OffloadNewPayloads(t.Context(), store, "wf1"))
 
 	assert.Equal(t, crafted, eventPayloadValue(t, s.History[0]), "well-formed crafted reference must be skipped verbatim")
-	requireOffloaded(t, s.History[1], store, corrupt)
+	requireOffloaded(t, s.History[1], store, "wf1", corrupt)
 	assert.Equal(t, 1, store.PutCalls())
 }
 
@@ -342,6 +343,6 @@ func TestOffloadNewPayloads_PersistLoadRoundTrip(t *testing.T) {
 	require.Len(t, loaded.Inbox, 1)
 	require.Len(t, loaded.History, 1)
 
-	requireOffloaded(t, loaded.Inbox[0], store, payload)
-	requireOffloaded(t, loaded.History[0], store, payload)
+	requireOffloaded(t, loaded.Inbox[0], store, actorID, payload)
+	requireOffloaded(t, loaded.History[0], store, actorID, payload)
 }
