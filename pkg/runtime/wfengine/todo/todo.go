@@ -36,6 +36,10 @@ const (
 	MetadataActivityReminderDueTime = "dueTime"
 	MetadataPurgeRetentionCall      = "PurgeRetentionCall"
 	MetadataPurgeForce              = "PurgeForce"
+	// Set on a WaitForRuntimeStatus call to request that a terminal workflow
+	// also verify all of its child workflows, recursively, are terminal
+	// before replying. Ignored by daprds that predate the flag.
+	MetadataCheckSubtreeTerminal = "CheckSubtreeTerminal"
 
 	ActorTypePrefix = "dapr.internal."
 )
