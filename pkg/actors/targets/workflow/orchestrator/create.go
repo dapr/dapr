@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
