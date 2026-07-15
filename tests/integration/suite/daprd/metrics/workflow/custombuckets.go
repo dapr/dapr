@@ -71,6 +71,11 @@ func (b *customBuckets) Run(t *testing.T, ctx context.Context) {
 	// Register workflow
 	r := task.NewTaskRegistry()
 	r.AddActivityN("activity", func(ctx task.ActivityContext) (any, error) {
+		// Sleep so the activity execution latency is reliably >= 1ms.
+		// diag.ElapsedSince truncates to whole milliseconds, so a sub-millisecond
+		// activity records elapsed==0 and the latency histogram (and its buckets)
+		// is skipped, making the metric assertion flaky.
+		time.Sleep(10 * time.Millisecond)
 		return "success", nil
 	})
 	r.AddWorkflowN("workflow", func(ctx *task.WorkflowContext) (any, error) {
