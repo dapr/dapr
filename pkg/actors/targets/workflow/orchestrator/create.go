@@ -101,7 +101,7 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 				o.actorID, startEvent.GetExecutionStarted().GetParentInstance().GetWorkflowInstance().GetInstanceId())
 			return nil
 		}
-		return fmt.Errorf("an active workflow with ID '%s' already exists", o.actorID)
+		return status.Errorf(codes.AlreadyExists, "an active workflow with ID '%s' already exists", o.actorID)
 	}
 
 	if o.activityResultAwaited.Load() {
