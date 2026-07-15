@@ -15,6 +15,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -36,6 +37,7 @@ import (
 func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName string, es []*protos.HistoryEvent, outgoingHistory map[int32]*protos.PropagatedHistory) error {
 	log.Debugf("Workflow actor '%s': calling %d child workflows", o.actorID, len(es))
 
+	var errs []error
 	for _, e := range es {
 		createSO := e.GetChildWorkflowInstanceCreated()
 
@@ -75,7 +77,8 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 
 		reqP, err := proto.Marshal(createReq)
 		if err != nil {
-			return fmt.Errorf("failed to marshal child workflow request: %w", err)
+			errs = append(errs, fmt.Errorf("failed to marshal child workflow request: %w", err))
+			continue
 		}
 
 		id := e.GetChildWorkflowInstanceCreated().GetInstanceId()
@@ -90,19 +93,26 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 			// child orchestration immediately rather than retrying.
 			if messages.IsPermissionDenied(err) {
 				log.Warnf("Workflow actor '%s': child workflow denied by access policy: %v", o.actorID, err)
-				return o.failChildWorkflowTask(ctx, e.GetEventId(), messages.ErrorTypeAccessPolicyDenied, messages.ErrorMessageAccessPolicyDenied)
+				if ferr := o.failChildWorkflowTask(ctx, e.GetEventId(), messages.ErrorTypeAccessPolicyDenied, messages.ErrorMessageAccessPolicyDenied); ferr != nil {
+					errs = append(errs, ferr)
+				}
+				continue
 			}
 			// The target instance ID is occupied by another workflow. Fail the
 			// awaited child task rather than retrying forever.
 			if messages.IsAlreadyExists(err) {
 				log.Warnf("Workflow actor '%s': child workflow instance ID '%s' already exists: %v", o.actorID, id, err)
-				return o.failChildWorkflowTask(ctx, e.GetEventId(), messages.ErrorTypeAlreadyExists, messages.GRPCStatusMessage(err))
+				if ferr := o.failChildWorkflowTask(ctx, e.GetEventId(), messages.ErrorTypeAlreadyExists, messages.GRPCStatusMessage(err)); ferr != nil {
+					errs = append(errs, ferr)
+				}
+				continue
 			}
-			return fmt.Errorf("failed to call child workflow '%s': %w", id, err)
+			errs = append(errs, fmt.Errorf("failed to call child workflow '%s': %w", id, err))
+			continue
 		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 // failChildWorkflowTask creates a ChildWorkflowInstanceFailed event on the
