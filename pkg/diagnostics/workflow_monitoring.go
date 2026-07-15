@@ -72,7 +72,7 @@ type workflowMetrics struct {
 	workflowOperationCount *stats.Int64Measure
 	// workflowOperationLatency records latency of response for workflow operation requests.
 	workflowOperationLatency *stats.Float64Measure
-	// workflowExecutionCount records count of Successful/Failed/Recoverable workflow executions.
+	// workflowExecutionCount records count of Successful/Failed/Terminated/Recoverable workflow executions.
 	workflowExecutionCount *stats.Int64Measure
 	// activityOperationCount records count of Successful/Failed requests to create activities.
 	activityOperationCount *stats.Int64Measure
@@ -136,7 +136,7 @@ func newWorkflowMetrics() *workflowMetrics {
 			stats.UnitMilliseconds),
 		workflowExecutionCount: stats.Int64(
 			"runtime/workflow/execution/count",
-			"The number of successful/failed/recoverable workflow executions.",
+			"The number of successful/failed/terminated/recoverable workflow executions.",
 			stats.UnitDimensionless),
 		activityExecutionCount: stats.Int64(
 			"runtime/workflow/activity/execution/count",
@@ -223,7 +223,7 @@ func (w *workflowMetrics) WorkflowOperationEvent(ctx context.Context, operation,
 	}
 }
 
-// WorkflowExecutionEvent records total number of Successful/Failed/Recoverable workflow executions.
+// WorkflowExecutionEvent records total number of Successful/Failed/Terminated/Recoverable workflow executions.
 // Execution latency for workflow is not supported yet.
 func (w *workflowMetrics) WorkflowExecutionEvent(ctx context.Context, workflowName, status string) {
 	if !w.IsEnabled() {
