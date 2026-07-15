@@ -441,12 +441,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// which will skip recording metrics for this execution.
 		executionStatus = ""
 		if runtimestate.IsCompleted(rs) {
-			if rstatus == api.RUNTIME_STATUS_COMPLETED {
-				executionStatus = diag.StatusSuccess
-			} else {
-				// Setting executionStatus to failed if workflow has failed/terminated/cancelled
-				executionStatus = diag.StatusFailed
-			}
+			executionStatus = executionStatusForRuntimeStatus(rstatus)
 			wfExecutionElapsedTime = o.calculateWorkflowExecutionLatency(state)
 		}
 	}
@@ -469,6 +464,25 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 
 	return todo.RunCompletedFalse, nil
+}
+
+// executionStatusForRuntimeStatus maps a terminal workflow runtime status to
+// the status label recorded on the workflow execution metrics. It is only
+// meaningful for completed workflows. Completed maps to success and terminated
+// to its own label; every other terminal status (in practice
+// RUNTIME_STATUS_FAILED) is recorded as failed. The engine never assigns
+// RUNTIME_STATUS_CANCELED to a top-level orchestration, so cancelled is
+// unreachable; the default arm keeps any unexpected future terminal status
+// accounted for rather than silently dropped.
+func executionStatusForRuntimeStatus(status api.OrchestrationStatus) string {
+	switch status {
+	case api.RUNTIME_STATUS_COMPLETED:
+		return diag.StatusSuccess
+	case api.RUNTIME_STATUS_TERMINATED:
+		return diag.StatusTerminated
+	default:
+		return diag.StatusFailed
+	}
 }
 
 func (*orchestrator) calculateWorkflowExecutionLatency(state *wfenginestate.State) (wExecutionElapsedTime float64) {

@@ -91,6 +91,11 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		}
 		return nil, nil
 	})
+	// waiter blocks on an external event that is never raised, keeping the
+	// workflow running so the test can terminate it.
+	r.AddWorkflowN("waiter", func(ctx *task.WorkflowContext) (any, error) {
+		return nil, ctx.WaitForSingleEvent("never", time.Hour).Await(nil)
+	})
 	taskhubClient := client.NewTaskHubGrpcClient(w.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 	taskhubClient.StartWorkItemListener(ctx, r)
 
@@ -125,6 +130,24 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(c, 2, int(metrics["dapr_runtime_workflow_operation_count|app_id:myapp|namespace:|operation:create_workflow|status:success"]))
 			assert.Equal(c, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:failed|workflow_name:workflow"]))
 			assert.Equal(c, 1, int(metrics["dapr_runtime_workflow_activity_execution_count|activity_name:activity_failure|app_id:myapp|namespace:|status:failed"]))
+		}, time.Second*5, time.Millisecond*10)
+	})
+	t.Run("terminated workflow execution", func(t *testing.T) {
+		id, err := taskhubClient.ScheduleNewWorkflow(ctx, "waiter")
+		require.NoError(t, err)
+		_, err = taskhubClient.WaitForWorkflowStart(ctx, id)
+		require.NoError(t, err)
+
+		require.NoError(t, taskhubClient.TerminateWorkflow(ctx, id))
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
+		require.NoError(t, err)
+		assert.Equal(t, api.RUNTIME_STATUS_TERMINATED, metadata.GetRuntimeStatus())
+
+		// Verify metrics: a terminated workflow is recorded with its own
+		// status label rather than being bucketed as failed.
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := w.daprd.Metrics(c, ctx).All()
+			assert.Equal(c, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:terminated|workflow_name:waiter"]))
 		}, time.Second*5, time.Millisecond*10)
 	})
 }
