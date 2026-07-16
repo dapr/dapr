@@ -103,7 +103,7 @@ func (b *binding) startInputBinding(comp componentsV1alpha1.Component, binding b
 	if isBindingOfExplicitDirection(ComponentTypeInput, m) {
 		isSubscribed = true
 	} else {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+		ctx, cancel := context.WithTimeout(context.Background(), b.bindingOptionsTimeout)
 		defer cancel()
 
 		isSubscribed, err = b.isAppSubscribedToBinding(ctx, comp.Name)

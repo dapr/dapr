@@ -31,6 +31,7 @@ import (
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/healthz"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
@@ -173,6 +174,54 @@ func TestStartReadingFromBindings(t *testing.T) {
 		err := b.StartReadingFromBindings(t.Context())
 		require.NoError(t, err)
 		assert.True(t, mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
+	})
+}
+
+func TestBindingOptionsTimeout(t *testing.T) {
+	t.Run("zero value falls back to default timeout", func(t *testing.T) {
+		b := New(Options{
+			IsHTTP:                true,
+			Resiliency:            resiliency.New(log),
+			ComponentStore:        compstore.New(),
+			Meta:                  meta.New(meta.Options{}),
+			BindingOptionsTimeout: 0, // should use config.DefaultBindingOptionsTimeout
+		})
+		assert.Equal(t, config.DefaultBindingOptionsTimeout, b.bindingOptionsTimeout)
+	})
+
+	t.Run("custom timeout is stored and respected", func(t *testing.T) {
+		customTimeout := 10 * time.Second
+		b := New(Options{
+			IsHTTP:                true,
+			Resiliency:            resiliency.New(log),
+			ComponentStore:        compstore.New(),
+			Meta:                  meta.New(meta.Options{}),
+			BindingOptionsTimeout: customTimeout,
+		})
+		assert.Equal(t, customTimeout, b.bindingOptionsTimeout)
+	})
+
+	t.Run("very short timeout causes OPTIONS probe to fail with deadline exceeded", func(t *testing.T) {
+		// Set up a mock channel whose InvokeMethod returns a deadline exceeded error,
+		// simulating a slow-starting app that exceeds the probe timeout.
+		mockAppChannel := new(channelt.MockAppChannel)
+		b := New(Options{
+			IsHTTP:                true,
+			Resiliency:            resiliency.New(log),
+			ComponentStore:        compstore.New(),
+			Meta:                  meta.New(meta.Options{}),
+			BindingOptionsTimeout: time.Millisecond, // extremely short so it reliably times out
+		})
+		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+
+		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).
+			Return(nil, context.DeadlineExceeded)
+
+		m := &rtmock.Binding{}
+		b.compStore.AddInputBinding("slow-app", m)
+
+		err := b.StartReadingFromBindings(t.Context())
+		require.Error(t, err, "expected OPTIONS probe to fail when app is slow to respond")
 	})
 }
 

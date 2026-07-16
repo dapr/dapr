@@ -139,6 +139,10 @@ type Config struct {
 	// HotReloadReconcileInterval overrides the hot-reload backup reconcile
 	// period. Zero uses the reconciler default (60s).
 	HotReloadReconcileInterval time.Duration
+	// BindingOptionsTimeout overrides the default timeout for the OPTIONS
+	// discovery request sent to HTTP apps for input bindings.
+	// Zero uses DefaultBindingOptionsTimeout (3s).
+	BindingOptionsTimeout time.Duration
 }
 
 type internalConfig struct {
@@ -179,6 +183,7 @@ type internalConfig struct {
 	workflowEventSink            orchestrator.EventSink
 	disableInitEndpoints         []string
 	hotReloadReconcileInterval   time.Duration
+	bindingOptionsTimeout        time.Duration
 }
 
 func (i internalConfig) SchedulerEnabled() bool {
@@ -378,6 +383,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		actorsService:              c.ActorsService,
 		actorsDisseminationTimeout: c.ActorsDisseminationTimeout,
 		hotReloadReconcileInterval: c.HotReloadReconcileInterval,
+		bindingOptionsTimeout:      c.BindingOptionsTimeout,
 		remindersService:           c.RemindersService,
 		schedulerAddress:           c.SchedulerAddress,
 		schedulerStreams:           c.SchedulerStreams,
