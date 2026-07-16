@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -27,18 +28,12 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-const aclDeniedErrorType = "WorkflowAccessPolicyDenied"
-
-// aclFailureType is the (errorType, errorMessage) recorded on the failure
-// event (child workflow or activity) when a call is denied by a policy.
-func aclFailureType() (string, string) {
-	return aclDeniedErrorType, workflowacl.DeniedMessageBase
-}
-
-// isLocalACLDenialFailure reports whether e is a policy-denial failure this app
-// authored itself. Such events carry no attestation, so they must not be checked
-// against one. A remote completion carries the sender's appID and is unaffected.
-func (o *orchestrator) isLocalACLDenialFailure(e *backend.HistoryEvent) bool {
+// isLocalSyntheticFailure reports whether e is a failure event this app authored
+// itself — a WorkflowAccessPolicy denial or an occupied-instance-ID rejection —
+// rather than a completion received over the wire. Such events carry no
+// attestation by design, so they must not be checked against one. A remote
+// completion carries the sender's appID and is unaffected.
+func (o *orchestrator) isLocalSyntheticFailure(e *backend.HistoryEvent) bool {
 	if e.GetRouter().GetSourceAppID() != o.appID {
 		return false
 	}
@@ -46,7 +41,8 @@ func (o *orchestrator) isLocalACLDenialFailure(e *backend.HistoryEvent) bool {
 	if fd == nil {
 		fd = e.GetTaskFailed().GetFailureDetails()
 	}
-	return fd.GetErrorType() == aclDeniedErrorType
+	et := fd.GetErrorType()
+	return et == messages.ErrorTypeAccessPolicyDenied || et == messages.ErrorTypeAlreadyExists
 }
 
 // preLoadedMeta lets callers that have already loaded the actor's metadata

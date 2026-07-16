@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package orchestrator
+package messages
 
 import (
 	"errors"
@@ -24,26 +24,36 @@ import (
 
 func TestIsPermissionDenied(t *testing.T) {
 	t.Run("nil error", func(t *testing.T) {
-		assert.False(t, isPermissionDenied(nil))
+		assert.False(t, IsPermissionDenied(nil))
 	})
 
 	t.Run("PermissionDenied gRPC error", func(t *testing.T) {
 		err := status.Error(codes.PermissionDenied, "access denied by workflow access policy")
-		assert.True(t, isPermissionDenied(err))
+		assert.True(t, IsPermissionDenied(err))
 	})
 
 	t.Run("non-PermissionDenied gRPC error", func(t *testing.T) {
 		err := status.Error(codes.NotFound, "not found")
-		assert.False(t, isPermissionDenied(err))
+		assert.False(t, IsPermissionDenied(err))
 	})
 
 	t.Run("plain error is not denied", func(t *testing.T) {
-		assert.False(t, isPermissionDenied(errors.New("some other error")))
+		assert.False(t, IsPermissionDenied(errors.New("some other error")))
 	})
 }
 
-func TestACLFailureType_Uniform(t *testing.T) {
-	errType, errMsg := aclFailureType()
-	assert.Equal(t, "WorkflowAccessPolicyDenied", errType)
-	assert.Equal(t, "access denied by workflow access policy", errMsg)
+func TestIsAlreadyExists(t *testing.T) {
+	t.Run("nil error", func(t *testing.T) {
+		assert.False(t, IsAlreadyExists(nil))
+	})
+
+	t.Run("AlreadyExists gRPC error", func(t *testing.T) {
+		err := status.Error(codes.AlreadyExists, "an active workflow with ID 'x' already exists")
+		assert.True(t, IsAlreadyExists(err))
+	})
+
+	t.Run("non-AlreadyExists gRPC error", func(t *testing.T) {
+		err := status.Error(codes.PermissionDenied, "denied")
+		assert.False(t, IsAlreadyExists(err))
+	})
 }

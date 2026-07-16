@@ -90,9 +90,10 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// and Sentry trust anchors, then absorb the signer certificate into the
 	// ext-sigcert table and strip the companion cert from the event so the
 	// stored form is cert-free. On any verification failure the workflow is
-	// tombstoned. No-op when signing is disabled. Locally-authored denials are
-	// exempt, they have no attestation.
-	if !o.isLocalACLDenialFailure(e) {
+	// tombstoned. No-op when signing is disabled. Locally-authored synthetic
+	// failures (policy denials, occupied-ID rejections) are exempt: they have
+	// no attestation by design.
+	if !o.isLocalSyntheticFailure(e) {
 		if verr := o.signing.VerifyInboxAttestation(ctx, state, e); verr != nil {
 			log.Warnf("Workflow actor '%s': attestation verification failed, tombstoning workflow: %s", o.actorID, verr)
 			opts := wfenginestate.Options{
