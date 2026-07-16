@@ -378,6 +378,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	// Dispatch activities and messages, collecting failures.
 	activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory)
+	if o.messages == nil {
+		return todo.RunCompletedFalse, errors.New("messages dispatcher is not initialized")
+	}
 	addResult := o.messages.CallAddEventStateMessage(ctx, addWorkflows)
 	createResult := o.messages.CallCreateWorkflowStateMessage(ctx, createWorkflows)
 
