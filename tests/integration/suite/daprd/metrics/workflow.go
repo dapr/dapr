@@ -52,7 +52,8 @@ func (w *workflow) Setup(t *testing.T) []framework.Option {
 
 	app := app.New(t)
 
-	w.daprd = daprd.New(t,
+	w.daprd = daprd.New(
+		t,
 		daprd.WithAppPort(app.Port()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppID("myapp"),
@@ -148,6 +149,8 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			metrics := w.daprd.Metrics(c, ctx).All()
 			assert.Equal(c, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:terminated|workflow_name:waiter"]))
+			assert.Equal(c, 0, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:failed|workflow_name:waiter"]))
+			assert.Equal(c, 0, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:success|workflow_name:waiter"]))
 		}, time.Second*5, time.Millisecond*10)
 	})
 }
