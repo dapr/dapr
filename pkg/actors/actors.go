@@ -16,6 +16,7 @@ package actors
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,26 +26,21 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/events/queue"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
-	"github.com/dapr/dapr/pkg/actors/internal/locker"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
-	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
-	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage/scheduler"
-	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage/statestore"
+	"github.com/dapr/dapr/pkg/actors/internal/scheduler"
 	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/internal/timers/inmemory"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/router"
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/table"
-	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/app"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
@@ -66,7 +62,6 @@ type Options struct {
 	Namespace          string
 	Port               int
 	PlacementAddresses []string
-	SchedulerReminders bool
 	HealthEndpoint     string
 	Resiliency         resiliency.Provider
 	Security           security.Handler
@@ -76,6 +71,10 @@ type Options struct {
 	StateTTLEnabled    bool
 	MaxRequestBodySize int
 	Mode               modes.DaprMode
+
+	// DisseminationTimeout is the daprd-side timeout for a placement
+	// LOCK -> UPDATE -> UNLOCK round.
+	DisseminationTimeout time.Duration
 }
 
 type InitOptions struct {
@@ -97,9 +96,10 @@ type Interface interface {
 	State(context.Context) (actorstate.Interface, error)
 	Timers(context.Context) (timers.Interface, error)
 	Reminders(context.Context) (reminders.Interface, error)
+	Placement(context.Context) (placement.Interface, error)
 	RuntimeStatus() *runtimev1pb.ActorRuntime
-	RegisterHosted(hostconfig.Config) error
-	UnRegisterHosted(actorTypes ...string)
+	RegisterHosted(context.Context, hostconfig.Config) error
+	UnRegisterHosted(ctx context.Context, actorTypes ...string) error
 	WaitForRegisteredHosts(ctx context.Context) error
 }
 
@@ -108,26 +108,25 @@ type actors struct {
 	namespace          string
 	port               int
 	placementAddresses []string
-	schedulerReminders bool
 	healthEndpoint     string
 	resiliency         resiliency.Provider
 	security           security.Handler
 	healthz            healthz.Healthz
 	compStore          *compstore.ComponentStore
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
-	stateTTLEnabled    bool
-	maxRequestBodySize int
+	stateTTLEnabled      bool
+	maxRequestBodySize   int
+	disseminationTimeout time.Duration
 
-	reminders      reminders.Interface
-	table          table.Interface
-	placement      placement.Interface
-	router         router.Interface
-	timerStorage   internaltimers.Storage
-	timers         timers.Interface
-	idlerQueue     *queue.Processor[string, targets.Idlable]
-	stateReminders *statestore.Statestore
-	reminderStore  storage.Interface
-	state          actorstate.Interface
+	reminders       reminders.Interface
+	table           table.Interface
+	placement       placement.Interface
+	router          router.Interface
+	timerStorage    internaltimers.Storage
+	timers          timers.Interface
+	scheduler       scheduler.Interface
+	state           actorstate.Interface
+	reentrancyStore *reentrancystore.Store
 
 	disabled   *atomic.Pointer[error]
 	readyCh    chan struct{}
@@ -152,25 +151,26 @@ func New(opts Options) Interface {
 	}
 
 	return &actors{
-		appID:              opts.AppID,
-		namespace:          opts.Namespace,
-		port:               opts.Port,
-		placementAddresses: opts.PlacementAddresses,
-		schedulerReminders: opts.SchedulerReminders,
-		healthEndpoint:     opts.HealthEndpoint,
-		resiliency:         opts.Resiliency,
-		security:           opts.Security,
-		compStore:          opts.CompStore,
-		stateTTLEnabled:    opts.StateTTLEnabled,
-		clock:              clock.RealClock{},
-		disabled:           &disabled,
-		healthz:            opts.Healthz,
-		readyCh:            make(chan struct{}),
-		closedCh:           make(chan struct{}),
-		initDoneCh:         make(chan struct{}),
-		registerDoneCh:     make(chan struct{}),
-		maxRequestBodySize: opts.MaxRequestBodySize,
-		mode:               opts.Mode,
+		appID:                opts.AppID,
+		namespace:            opts.Namespace,
+		port:                 opts.Port,
+		placementAddresses:   opts.PlacementAddresses,
+		healthEndpoint:       opts.HealthEndpoint,
+		resiliency:           opts.Resiliency,
+		security:             opts.Security,
+		compStore:            opts.CompStore,
+		stateTTLEnabled:      opts.StateTTLEnabled,
+		clock:                clock.RealClock{},
+		disabled:             &disabled,
+		healthz:              opts.Healthz,
+		readyCh:              make(chan struct{}),
+		closedCh:             make(chan struct{}),
+		initDoneCh:           make(chan struct{}),
+		registerDoneCh:       make(chan struct{}),
+		maxRequestBodySize:   opts.MaxRequestBodySize,
+		mode:                 opts.Mode,
+		disseminationTimeout: opts.DisseminationTimeout,
+		reentrancyStore:      reentrancystore.New(),
 	}
 }
 
@@ -181,45 +181,38 @@ func (a *actors) Init(opts InitOptions) error {
 		return nil
 	}
 
-	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](queue.Options[string, targets.Idlable]{
-		ExecuteFn: a.handleIdleActor,
-	})
-
-	rStore := reentrancystore.New()
-
-	locker := locker.New(locker.Options{
-		ConfigStore: rStore,
-	})
-
 	a.table = table.New(table.Options{
-		IdlerQueue:      a.idlerQueue,
-		Locker:          locker,
-		ReentrancyStore: rStore,
+		ReentrancyStore: a.reentrancyStore,
 	})
 
 	apiLevel := apilevel.New()
 
 	storeEnabled := a.buildStateStore(opts, apiLevel)
 
+	a.scheduler = scheduler.New(scheduler.Options{
+		Namespace: a.namespace,
+		AppID:     a.appID,
+		Client:    opts.SchedulerClient,
+		Table:     a.table,
+	})
 	a.reminders = reminders.New(reminders.Options{
-		Storage: a.reminderStore,
-		Table:   a.table,
+		Scheduler: a.scheduler,
+		Table:     a.table,
 	})
 
 	var err error
 	a.placement, err = placement.New(placement.Options{
-		AppID:     a.appID,
-		Addresses: a.placementAddresses,
-		Security:  a.security,
-		Table:     a.table,
-		Namespace: a.namespace,
-		Hostname:  opts.Hostname,
-		Port:      a.port,
-		Reminders: a.reminderStore,
-		APILevel:  apiLevel,
-		Healthz:   a.healthz,
-		Mode:      a.mode,
-		Scheduler: opts.SchedulerReloader,
+		AppID:                a.appID,
+		Addresses:            a.placementAddresses,
+		Security:             a.security,
+		Table:                a.table,
+		Namespace:            a.namespace,
+		Hostname:             opts.Hostname,
+		Port:                 a.port,
+		Healthz:              a.healthz,
+		Mode:                 a.mode,
+		Scheduler:            opts.SchedulerReloader,
+		DisseminationTimeout: a.disseminationTimeout,
 	})
 	if err != nil {
 		return err
@@ -239,14 +232,12 @@ func (a *actors) Init(opts InitOptions) error {
 
 	a.router = router.New(router.Options{
 		Namespace:          a.namespace,
-		SchedulerReminders: a.schedulerReminders,
+		AppID:              a.appID,
 		Placement:          a.placement,
 		GRPC:               opts.GRPC,
 		Table:              a.table,
 		Resiliency:         a.resiliency,
-		IdlerQueue:         a.idlerQueue,
 		Reminders:          a.reminders,
-		Locker:             locker,
 		MaxRequestBodySize: a.maxRequestBodySize,
 	})
 
@@ -257,10 +248,6 @@ func (a *actors) Init(opts InitOptions) error {
 		Storage: a.timerStorage,
 		Table:   a.table,
 	})
-
-	if a.stateReminders != nil {
-		a.stateReminders.SetRouter(a.router)
-	}
 
 	return nil
 }
@@ -287,6 +274,7 @@ func (a *actors) Run(ctx context.Context) error {
 	log.Info("Actor runtime started")
 
 	mngr := concurrency.NewRunnerCloserManager(log, nil,
+		a.router.Run,
 		func(ctx context.Context) error {
 			// Only wait for host registration before starting the placement client,
 			// since registering Actor host types is dependent on the Actor state
@@ -310,18 +298,8 @@ func (a *actors) Run(ctx context.Context) error {
 	if err := mngr.AddCloser(
 		a.table,
 		a.timerStorage,
-		a.idlerQueue,
 	); err != nil {
 		return err
-	}
-
-	if a.stateReminders != nil {
-		if err := mngr.AddCloser(
-			a.stateReminders,
-			a.reminderStore,
-		); err != nil {
-			return err
-		}
 	}
 
 	defer log.Info("Actor runtime stopped")
@@ -350,6 +328,14 @@ func (a *actors) State(ctx context.Context) (actorstate.Interface, error) {
 	}
 
 	return a.state, nil
+}
+
+func (a *actors) Placement(ctx context.Context) (placement.Interface, error) {
+	if err := a.waitForReady(ctx); err != nil {
+		return nil, err
+	}
+
+	return a.placement, nil
 }
 
 func (a *actors) Timers(ctx context.Context) (timers.Interface, error) {
@@ -390,7 +376,7 @@ func (a *actors) waitForReady(ctx context.Context) error {
 	}
 }
 
-func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
+func (a *actors) RegisterHosted(ctx context.Context, cfg hostconfig.Config) error {
 	defer func() {
 		a.registerDoneLock.Lock()
 		select {
@@ -401,21 +387,34 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		a.registerDoneLock.Unlock()
 	}()
 
-	if err := a.disabled.Load(); err != nil {
+	if a.disabled.Load() != nil {
+		return nil
+	}
+
+	// Wait until Init has populated a.table. The API gRPC server starts
+	// before initActors runs (see pkg/runtime/runtime.go), so callers
+	// arriving via SubscribeActorEventsAlpha1 can otherwise race ahead of
+	// Init and dereference a nil table.
+	if err := a.waitForReady(ctx); err != nil {
+		return err
+	}
+
+	if a.disabled.Load() != nil {
+		return nil
+	}
+
+	if len(cfg.HostedActorTypes) == 0 {
 		return nil
 	}
 
 	entityConfigs := make(map[string]api.EntityConfig)
 	for _, entityConfg := range cfg.EntityConfigs {
-		config := api.TranslateEntityConfig(entityConfg)
+		config := api.TranslateEntityConfig(entityConfg, a.disseminationTimeout)
 		for _, entity := range entityConfg.Entities {
 			var found bool
-			for _, hostedType := range cfg.HostedActorTypes {
-				if hostedType == entity {
-					entityConfigs[entity] = config
-					found = true
-					break
-				}
+			if slices.Contains(cfg.HostedActorTypes, entity) {
+				entityConfigs[entity] = config
+				found = true
 			}
 
 			if !found {
@@ -431,6 +430,7 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		if err != nil {
 			return fmt.Errorf("failed to parse drain ongoing call timeout: %s", err)
 		}
+		drainOngoingCallTimeout = api.ClampDrainOngoingCallTimeout(drainOngoingCallTimeout, a.disseminationTimeout, "global config")
 	}
 
 	idleTimeout := api.DefaultIdleTimeout
@@ -459,39 +459,61 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		factories = append(factories, table.ActorTypeFactory{
 			Type:       actorType,
 			Reentrancy: reentrancy,
-			Factory: app.Factory(app.Options{
-				ActorType:   actorType,
-				AppChannel:  cfg.AppChannel,
-				Resiliency:  a.resiliency,
-				IdleQueue:   a.idlerQueue,
-				IdleTimeout: idleTimeout,
+			Factory: app.New(app.Options{
+				ActorType:      actorType,
+				AppChannel:     cfg.AppChannel,
+				CallbackStream: cfg.CallbackStream,
+				Resiliency:     a.resiliency,
+				IdleTimeout:    idleTimeout,
+				Reentrancy:     a.reentrancyStore,
+				Placement:      a.placement,
 			}),
 		})
-	}
-
-	if a.stateReminders != nil {
-		a.stateReminders.SetEntityConfigsRemindersStoragePartitions(
-			entityConfigs,
-			cfg.RemindersStoragePartitions,
-		)
 	}
 
 	log.Infof("Registering hosted actors: %v", cfg.HostedActorTypes)
 	a.table.RegisterActorTypes(table.RegisterActorTypeOptions{
 		Factories: factories,
 		HostOptions: &table.ActorHostOptions{
-			EntityConfigs:           entityConfigs,
-			DrainRebalancedActors:   true,
-			DrainOngoingCallTimeout: drainOngoingCallTimeout,
+			EntityConfigs: entityConfigs,
 		},
 	})
+
+	// Update the placement service with the drain settings so that during
+	// dissemination, in-flight actor calls are given the configured time to
+	// complete before being forcefully cancelled.
+	a.placement.SetDrainOngoingCallTimeout(cfg.DrainRebalancedActors, &drainOngoingCallTimeout)
+
+	var entityDrainTimeouts map[string]time.Duration
+	for actorType, c := range entityConfigs {
+		if c.DrainOngoingCallTimeout == nil {
+			continue
+		}
+		if entityDrainTimeouts == nil {
+			entityDrainTimeouts = make(map[string]time.Duration)
+		}
+		entityDrainTimeouts[actorType] = *c.DrainOngoingCallTimeout
+	}
+	a.placement.SetEntityDrainOngoingCallTimeouts(entityDrainTimeouts)
 
 	return nil
 }
 
-func (a *actors) UnRegisterHosted(actorTypes ...string) {
+func (a *actors) UnRegisterHosted(ctx context.Context, actorTypes ...string) error {
+	if len(actorTypes) == 0 {
+		return nil
+	}
+
 	if a.disabled.Load() != nil {
-		return
+		return nil
+	}
+
+	if err := a.waitForReady(ctx); err != nil {
+		return err
+	}
+
+	if a.disabled.Load() != nil {
+		return nil
 	}
 
 	a.table.UnRegisterActorTypes(actorTypes...)
@@ -499,6 +521,8 @@ func (a *actors) UnRegisterHosted(actorTypes ...string) {
 	a.registerDoneLock.Lock()
 	a.registerDoneCh = make(chan struct{})
 	a.registerDoneLock.Unlock()
+
+	return nil
 }
 
 func (a *actors) WaitForRegisteredHosts(ctx context.Context) error {
@@ -515,24 +539,6 @@ func (a *actors) WaitForRegisteredHosts(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	}
-}
-
-func (a *actors) handleIdleActor(target targets.Idlable) {
-	// We don't use the placement context here as we are already deactivating the
-	// actor.
-	_, cancel, err := a.placement.Lock(context.Background())
-	if err != nil {
-		log.Errorf("Failed to lock placement for idle actor deactivation: %s", err)
-		return
-	}
-	defer cancel()
-
-	log.Debugf("Actor %s is idle, deactivating", target.Key())
-
-	if err := a.table.HaltIdlable(context.Background(), target); err != nil {
-		log.Errorf("Failed to halt actor %s: %s", target.Key(), err)
-		return
 	}
 }
 
@@ -606,26 +612,6 @@ func (a *actors) buildStateStore(opts InitOptions, apiLevel *apilevel.APILevel) 
 	if !state.FeatureETag.IsPresent(store.Features()) || !state.FeatureTransactional.IsPresent(store.Features()) {
 		log.Warnf("Actor state store %s does not support required features: %s, %s", opts.StateStoreName, state.FeatureETag, state.FeatureTransactional)
 		return false
-	}
-
-	a.stateReminders = statestore.New(statestore.Options{
-		Resiliency: a.resiliency,
-		StateStore: store,
-		Table:      a.table,
-		StoreName:  opts.StateStoreName,
-		APILevel:   apiLevel,
-	})
-
-	a.reminderStore = a.stateReminders
-	if a.schedulerReminders {
-		a.reminderStore = scheduler.New(scheduler.Options{
-			Namespace:     a.namespace,
-			AppID:         a.appID,
-			Client:        opts.SchedulerClient,
-			StateReminder: a.stateReminders,
-			Table:         a.table,
-			Healthz:       a.healthz,
-		})
 	}
 
 	return true

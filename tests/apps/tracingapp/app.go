@@ -29,7 +29,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/zipkin"
+	"go.opentelemetry.io/otel/exporters/zipkin" //nolint:staticcheck // SA1019: zipkin exporter is deprecated but still needed
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdk_trace "go.opentelemetry.io/otel/sdk/trace"
@@ -187,7 +187,7 @@ func doValidate(w http.ResponseWriter, r *http.Request) error {
 
 	defer resp.Body.Close()
 
-	v := interface{}(nil)
+	v := any(nil)
 
 	json.NewDecoder(resp.Body).Decode(&v)
 
@@ -231,13 +231,13 @@ func doValidate(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func findUniqueValueFromJSONPath(jsonPath string, v interface{}) (string, error) {
+func findUniqueValueFromJSONPath(jsonPath string, v any) (string, error) {
 	values, err := jsonpath.Get(jsonPath, v)
 	if err != nil {
 		return "", err
 	}
 
-	arrValues := values.([]interface{})
+	arrValues := values.([]any)
 	log.Printf("%v", arrValues)
 
 	if len(arrValues) == 0 {

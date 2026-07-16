@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -63,6 +64,7 @@ func (a *allowedtopics) Setup(t *testing.T) []framework.Option {
 	)
 
 	var subYaml string
+	var subYamlSb66 strings.Builder
 	for i, sub := range []struct {
 		pubsub string
 		topic  string
@@ -78,7 +80,7 @@ func (a *allowedtopics) Setup(t *testing.T) []framework.Option {
 		{"topic789-publishing-subscribing", "topic8"},
 		{"topic789-publishing-subscribing", "topic9"},
 	} {
-		subYaml += fmt.Sprintf(`
+		fmt.Fprintf(&subYamlSb66, `
 ---
 apiVersion: dapr.io/v1alpha1
 kind: Subscription
@@ -90,10 +92,11 @@ spec:
  route: /a
 `, i+1, sub.pubsub, sub.topic)
 	}
+	subYaml += subYamlSb66.String()
 	require.NoError(t, os.WriteFile(filepath.Join(resDir, "sub.yaml"), []byte(subYaml), 0o600))
 
 	require.NoError(t, os.WriteFile(filepath.Join(resDir, "pubsub.yaml"),
-		[]byte(fmt.Sprintf(`
+		fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -145,7 +148,7 @@ spec:
    value: "%[1]s=topic7,topic9;%[2]s=topic8,topic9"
  - name: publishingScopes
    value: "%[1]s=topic8,topic9;%[2]s=topic7,topic9"
-`, a.daprd1.AppID(), a.daprd2.AppID())), 0o600))
+`, a.daprd1.AppID(), a.daprd2.AppID()), 0o600))
 
 	return []framework.Option{
 		framework.WithProcesses(a.sub, a.daprd1, a.daprd2, a.daprd3),

@@ -137,7 +137,7 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		daprd.WithNamespace("default"),
 		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
 		daprd.WithExecOptions(exec.WithEnvVars(t,
-			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors),
 		)),
 	}
 	g.daprd1 = daprd.New(t, append(daprdOpts, daprd.WithAppID(appid1))...)

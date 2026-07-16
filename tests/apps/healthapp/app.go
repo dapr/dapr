@@ -32,7 +32,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
+	"golang.org/x/net/http2/h2c" //nolint:staticcheck
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -40,7 +40,6 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/apps/utils"
-	"github.com/dapr/kit/ptr"
 )
 
 var (
@@ -171,7 +170,7 @@ func (c *countAndLast) MarshalJSON() ([]byte, error) {
 		Count: c.count,
 	}
 	if c.lastTime.Unix() > 0 {
-		obj.Last = ptr.Of(time.Now().Sub(c.lastTime).Milliseconds())
+		obj.Last = new(time.Since(c.lastTime).Milliseconds())
 	}
 	return json.Marshal(obj)
 }
@@ -299,7 +298,7 @@ func startH2C() {
 	h2s := &http2.Server{}
 	srv := &http.Server{
 		Addr:              ":" + appPort,
-		Handler:           h2c.NewHandler(httpRouter(), h2s),
+		Handler:           h2c.NewHandler(httpRouter(), h2s), //nolint:staticcheck
 		ReadHeaderTimeout: 30 * time.Second,
 	}
 
@@ -443,6 +442,14 @@ func (s *grpcServer) OnTopicEvent(_ context.Context, in *runtimev1pb.TopicEventR
 	}
 
 	return nil, errors.New("unexpected topic event: " + in.GetTopic())
+}
+
+func (s *grpcServer) OnBulkTopicEvent(_ context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
+	return &runtimev1pb.TopicEventBulkResponse{}, nil
+}
+
+func (s *grpcServer) OnJobEvent(_ context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+	return &runtimev1pb.JobEventResponse{}, nil
 }
 
 func (s *grpcServer) ListInputBindings(_ context.Context, in *emptypb.Empty) (*runtimev1pb.ListInputBindingsResponse, error) {

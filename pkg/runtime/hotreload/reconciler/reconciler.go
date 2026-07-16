@@ -15,14 +15,13 @@ package reconciler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"k8s.io/utils/clock"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/healthz"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
@@ -30,114 +29,174 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/processor"
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.hotreload.reconciler")
+var (
+	log         = logger.NewLogger("dapr.runtime.hotreload.reconciler")
+	loopFactory = loop.New[Event](16)
+)
+
+// defaultReconcileInterval is the period of the backup reconcile that lists all
+// resources and diffs them against the loaded set, catching anything the
+// event-driven watch missed. Configurable via Options.ReconcileInterval, mainly
+// so integration tests can exercise the reconcile deterministically.
+const defaultReconcileInterval = time.Second * 60
 
 type Options[T differ.Resource] struct {
-	Loader     loader.Interface
-	CompStore  *compstore.ComponentStore
-	Processor  *processor.Processor
-	Authorizer *authorizer.Authorizer
-	Healthz    healthz.Healthz
+	Loader            loader.Interface
+	CompStore         *compstore.ComponentStore
+	Processor         *processor.Processor
+	Authorizer        *authorizer.Authorizer
+	Healthz           healthz.Healthz
+	ReconcileInterval time.Duration
 }
 
 type Reconciler[T differ.Resource] struct {
-	kind    string
-	manager manager[T]
-	htarget healthz.Target
+	kind     string
+	manager  manager[T]
+	htarget  healthz.Target
+	interval time.Duration
 
 	clock clock.WithTicker
+	loop  loop.Interface[Event]
+}
+
+func reconcileIntervalOrDefault(d time.Duration) time.Duration {
+	if d <= 0 {
+		return defaultReconcileInterval
+	}
+	return d
 }
 
 type manager[T differ.Resource] interface {
 	loader.Loader[T]
-	update(context.Context, T)
-	delete(context.Context, T)
-}
-
-func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Component] {
-	return &Reconciler[compapi.Component]{
-		clock:   clock.RealClock{},
-		kind:    compapi.Kind,
-		htarget: opts.Healthz.AddTarget("component-reconciler"),
-		manager: &components{
-			Loader: opts.Loader.Components(),
-			store:  opts.CompStore,
-			proc:   opts.Processor,
-			auth:   opts.Authorizer,
-		},
-	}
-}
-
-func NewSubscriptions(opts Options[subapi.Subscription]) *Reconciler[subapi.Subscription] {
-	return &Reconciler[subapi.Subscription]{
-		clock:   clock.RealClock{},
-		kind:    subapi.Kind,
-		htarget: opts.Healthz.AddTarget("subscription-reconciler"),
-		manager: &subscriptions{
-			Loader: opts.Loader.Subscriptions(),
-			store:  opts.CompStore,
-			proc:   opts.Processor,
-		},
-	}
+	update(context.Context, T) error
+	delete(context.Context, T) error
 }
 
 func (r *Reconciler[T]) Run(ctx context.Context) error {
 	conn, err := r.manager.Stream(ctx)
 	if err != nil {
-		return fmt.Errorf("error running component stream: %w", err)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("error running %s stream: %w", r.kind, err)
 	}
 
 	r.htarget.Ready()
 
-	return r.watchForEvents(ctx, conn)
-}
-
-func (r *Reconciler[T]) watchForEvents(ctx context.Context, conn *loader.StreamConn[T]) error {
 	log.Infof("Starting to watch %s updates", r.kind)
 
-	ticker := r.clock.NewTicker(time.Second * 60)
-	defer ticker.Stop()
+	defer loopFactory.CacheLoop(r.loop)
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	return concurrency.NewRunnerManager(
+		r.loop.Run,
+		r.watchTicker,
+		func(ctx context.Context) error {
+			return r.watchConn(ctx, conn)
+		},
+	).Run(ctx)
+}
+
+func (r *Reconciler[T]) watchTicker(ctx context.Context) error {
+	ticker := r.clock.NewTicker(reconcileIntervalOrDefault(r.interval))
+	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
+			r.loop.Close(&shutdown{Error: ctx.Err()})
 			return nil
 		case <-ticker.C():
-			log.Debugf("Running scheduled %s reconcile", r.kind)
-			resources, err := r.manager.List(ctx)
-			if err != nil {
-				log.Errorf("Error listing %s: %s", r.kind, err)
-				continue
-			}
-
-			r.reconcile(ctx, differ.Diff(resources))
-		case <-conn.ReconcileCh:
-			log.Debugf("Reconciling all %s", r.kind)
-			resources, err := r.manager.List(ctx)
-			if err != nil {
-				log.Errorf("Error listing %s: %s", r.kind, err)
-				continue
-			}
-
-			r.reconcile(ctx, differ.Diff(resources))
-		case event := <-conn.EventCh:
-			r.handleEvent(ctx, event)
+			r.loop.Enqueue(new(tick))
 		}
 	}
 }
 
-func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T]) {
-	if result == nil {
-		return
+func (r *Reconciler[T]) watchConn(ctx context.Context, conn *loader.StreamConn[T]) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-conn.ReconcileCh:
+			r.loop.Enqueue(new(reconcile))
+		case event := <-conn.EventCh:
+			r.loop.Enqueue(&resourceEvent[T]{Event: event})
+		}
+	}
+}
+
+func (r *Reconciler[T]) Handle(ctx context.Context, event Event) error {
+	switch e := event.(type) {
+	case *tick:
+		return r.handleTick(ctx)
+	case *reconcile:
+		return r.handleReconcile(ctx)
+	case *resourceEvent[T]:
+		return r.handleResourceEvent(ctx, e.Event)
+	case *shutdown:
+		r.handleShutdown(e)
+	default:
+		panic(fmt.Sprintf("unknown reconciler event type: %T", e))
 	}
 
-	var wg sync.WaitGroup
+	return nil
+}
+
+func (r *Reconciler[T]) handleTick(ctx context.Context) error {
+	log.Debugf("Running scheduled %s reconcile", r.kind)
+	return r.doReconcile(ctx)
+}
+
+func (r *Reconciler[T]) handleReconcile(ctx context.Context) error {
+	log.Debugf("Reconciling all %s", r.kind)
+	return r.doReconcile(ctx)
+}
+
+func (r *Reconciler[T]) doReconcile(ctx context.Context) error {
+	resources, err := r.manager.List(ctx)
+	if err != nil {
+		log.Errorf("Error listing %s: %s", r.kind, err)
+		return nil
+	}
+
+	return r.reconcile(ctx, differ.Diff(resources))
+}
+
+func (r *Reconciler[T]) handleResourceEvent(ctx context.Context, event *loader.Event[T]) error {
+	log.Debugf("Received %s event %s: %s", event.Resource.Kind(), event.Type, event.Resource.LogName())
+
+	switch event.Type {
+	case operatorpb.ResourceEventType_CREATED:
+		log.Debugf("Received %s creation: %s", r.kind, event.Resource.LogName())
+		return r.manager.update(ctx, event.Resource)
+	case operatorpb.ResourceEventType_UPDATED:
+		log.Debugf("Received %s update: %s", r.kind, event.Resource.LogName())
+		return r.manager.update(ctx, event.Resource)
+	case operatorpb.ResourceEventType_DELETED:
+		log.Debugf("Received %s deletion, closing: %s", r.kind, event.Resource.LogName())
+		return r.manager.delete(ctx, event.Resource)
+	}
+	return nil
+}
+
+func (r *Reconciler[T]) handleShutdown(e *shutdown) {
+	log.Debugf("reconciler loop shutdown: %v", e.Error)
+}
+
+func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T]) error {
+	if result == nil {
+		return nil
+	}
+
+	var (
+		wg      sync.WaitGroup
+		errLock sync.Mutex
+		errs    []error
+	)
 	for _, group := range []struct {
 		resources []T
 		eventType operatorpb.ResourceEventType
@@ -146,33 +205,20 @@ func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T])
 		{result.Updated, operatorpb.ResourceEventType_UPDATED},
 		{result.Created, operatorpb.ResourceEventType_CREATED},
 	} {
-		wg.Add(len(group.resources))
 		for _, resource := range group.resources {
-			go func(resource T, eventType operatorpb.ResourceEventType) {
-				defer wg.Done()
-				r.handleEvent(ctx, &loader.Event[T]{
-					Type:     eventType,
+			wg.Go(func() {
+				if err := r.handleResourceEvent(ctx, &loader.Event[T]{
+					Type:     group.eventType,
 					Resource: resource,
-				})
-			}(resource, group.eventType)
+				}); err != nil {
+					errLock.Lock()
+					errs = append(errs, err)
+					errLock.Unlock()
+				}
+			})
 		}
 
 		wg.Wait()
 	}
-}
-
-func (r *Reconciler[T]) handleEvent(ctx context.Context, event *loader.Event[T]) {
-	log.Debugf("Received %s event %s: %s", event.Resource.Kind(), event.Type, event.Resource.LogName())
-
-	switch event.Type {
-	case operatorpb.ResourceEventType_CREATED:
-		log.Infof("Received %s creation: %s", r.kind, event.Resource.LogName())
-		r.manager.update(ctx, event.Resource)
-	case operatorpb.ResourceEventType_UPDATED:
-		log.Infof("Received %s update: %s", r.kind, event.Resource.LogName())
-		r.manager.update(ctx, event.Resource)
-	case operatorpb.ResourceEventType_DELETED:
-		log.Infof("Received %s deletion, closing: %s", r.kind, event.Resource.LogName())
-		r.manager.delete(ctx, event.Resource)
-	}
+	return errors.Join(errs...)
 }

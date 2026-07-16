@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -74,19 +74,19 @@ func (f *fuzzhttp) Setup(t *testing.T) []framework.Option {
 
 	var (
 		alphaNumeric     = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-		pathChars        = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~:/#[]@!$'()+,=")
+		pathChars        = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~:/[]@!$'()+,=")
 		headerNameChars  = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
 		headerValueChars = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789a_ :;.,\\/\"'?!(){}[]@<>=-+*#$&`|~^%")
 		queryChars       = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~:/#[]@!$&'()*+,=")
 	)
 
 	methodFuzz := func(s *string, c fuzz.Continue) {
-		n := c.Rand.Intn(100)
+		n := c.Intn(100)
 		var sb strings.Builder
 		sb.Grow(n)
 		firstSegment := true
 		for i := 0; i < n; i++ {
-			c := pathChars[c.Rand.Intn(len(pathChars))]
+			c := pathChars[c.Intn(len(pathChars))]
 			// Prevent the first character being a non alpha-numeric character.
 			if (i == 0 || sb.String()[i-1] == '/') && !strings.ContainsRune(alphaNumeric, c) {
 				i--
@@ -110,27 +110,27 @@ func (f *fuzzhttp) Setup(t *testing.T) []framework.Option {
 		*s = sb.String()
 	}
 	headerFuzz := func(s *header, c fuzz.Continue) {
-		n := c.Rand.Intn(100) + 1
+		n := c.Intn(100) + 1
 		var sb strings.Builder
 		sb.Grow(n)
 		for range n {
-			sb.WriteRune(headerNameChars[c.Rand.Intn(len(headerNameChars))])
+			sb.WriteRune(headerNameChars[c.Intn(len(headerNameChars))])
 		}
 		s.name = sb.String()
 		sb.Reset()
 		sb.Grow(n)
 		for range n {
-			sb.WriteRune(headerValueChars[c.Rand.Intn(len(headerValueChars))])
+			sb.WriteRune(headerValueChars[c.Intn(len(headerValueChars))])
 		}
 		s.value = sb.String()
 	}
 	queryFuzz := func(m map[string]string, c fuzz.Continue) {
-		n := c.Rand.Intn(4) + 1
+		n := c.Intn(4) + 1
 		for range n {
 			var sb strings.Builder
 			sb.Grow(n)
 			for range n {
-				sb.WriteRune(queryChars[c.Rand.Intn(len(queryChars))])
+				sb.WriteRune(queryChars[c.Intn(len(queryChars))])
 			}
 			m[sb.String()] = sb.String()
 		}

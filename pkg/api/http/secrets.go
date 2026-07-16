@@ -99,8 +99,7 @@ func (a *api) onBulkGetSecretHandler() http.HandlerFunc {
 					return nil, nil
 				}
 
-				var secrets map[string]map[string]string
-				secrets = make(map[string]map[string]string, len(out.GetData()))
+				secrets := make(map[string]map[string]string, len(out.GetData()))
 				// Return just the secrets as map
 				for secretKey, secret := range out.GetData() {
 					secrets[secretKey] = secret.GetSecrets()

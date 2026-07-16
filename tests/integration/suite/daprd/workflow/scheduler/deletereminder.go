@@ -16,8 +16,6 @@ package scheduler
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -48,17 +46,6 @@ type deletereminder struct {
 }
 
 func (d *deletereminder) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: schedulerreminders
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: true`), 0o600))
-
 	app := app.New(t)
 	d.place = placement.New(t)
 	d.scheduler = procscheduler.New(t)
@@ -67,7 +54,6 @@ spec:
 		daprd.WithPlacementAddresses(d.place.Address()),
 		daprd.WithInMemoryActorStateStore("statestore"),
 		daprd.WithSchedulerAddresses(d.scheduler.Address()),
-		daprd.WithConfigs(configFile),
 	)
 
 	return []framework.Option{
@@ -88,7 +74,7 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, 10*time.Millisecond)
 
 	r := task.NewTaskRegistry()
-	require.NoError(t, r.AddOrchestratorN("SingleActivity", func(c *task.OrchestrationContext) (any, error) {
+	require.NoError(t, r.AddWorkflowN("SingleActivity", func(c *task.WorkflowContext) (any, error) {
 		var input string
 		if err := c.GetInput(&input); err != nil {
 			return nil, err
@@ -116,9 +102,9 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID(resp.GetInstanceId()))
+	metadata, err := backendClient.WaitForWorkflowCompletion(ctx, api.InstanceID(resp.GetInstanceId()))
 	require.NoError(t, err)
-	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {

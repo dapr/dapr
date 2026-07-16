@@ -47,6 +47,12 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 	// *********************
 	// Generate private key
 	// *********************
+	// ECDSA P-256 is used deliberately: this self-signed cert ends up in
+	// the Windows root store via setup-certificates.cmd and is then
+	// validated by daprd's Go TLS client. On Windows, Go delegates chain
+	// validation to CertVerifyCertificateChainPolicy, whose Ed25519
+	// support is missing on the nanoserver base image used by Dapr's
+	// Windows containers.
 	tlsKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return err
@@ -54,7 +60,7 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 
 	b, err := x509.MarshalPKCS8PrivateKey(tlsKey)
 	if err != nil {
-		log.Printf("Unable to marshal ECDSA private key: %v", err)
+		log.Printf("Unable to marshal private key: %v", err)
 		return err
 	}
 
@@ -85,8 +91,8 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 		IsCA:                  true,
 	}
 
-	hosts := strings.Split(host, ",")
-	for _, h := range hosts {
+	hosts := strings.SplitSeq(host, ",")
+	for h := range hosts {
 		if ip := net.ParseIP(h); ip != nil {
 			certTemplate.IPAddresses = append(certTemplate.IPAddresses, ip)
 		} else {
@@ -94,7 +100,7 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 		}
 	}
 
-	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &tlsKey.PublicKey, tlsKey)
+	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, tlsKey.Public(), tlsKey)
 	if err != nil {
 		log.Printf("Unable to create certificate: %v", err)
 		return err

@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
-	"github.com/dapr/kit/ptr"
 )
 
 func TestParseEnvString(t *testing.T) {
@@ -81,6 +80,126 @@ func TestParseEnvString(t *testing.T) {
 				},
 			},
 		},
+		{
+			testName: "OTEL_RESOURCE_ATTRIBUTES with equals in value",
+			envStr:   "OTEL_SERVICE_NAME=todo-service-daprd,OTEL_RESOURCE_ATTRIBUTES=service.namespace=testing-fix",
+			expLen:   2,
+			expKeys:  []string{"OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name:  "OTEL_SERVICE_NAME",
+					Value: "todo-service-daprd",
+				},
+				{
+					Name:  "OTEL_RESOURCE_ATTRIBUTES",
+					Value: "service.namespace=testing-fix",
+				},
+			},
+		},
+		{
+			testName: "OTEL_RESOURCE_ATTRIBUTES in middle with other env vars",
+			envStr:   "ENV_BEFORE=value1,OTEL_RESOURCE_ATTRIBUTES=service.namespace=prod,service.version=1.0.0,ENV_AFTER=value2",
+			expLen:   3,
+			expKeys:  []string{"ENV_BEFORE", "OTEL_RESOURCE_ATTRIBUTES", "ENV_AFTER"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name:  "ENV_BEFORE",
+					Value: "value1",
+				},
+				{
+					Name:  "OTEL_RESOURCE_ATTRIBUTES",
+					Value: "service.namespace=prod,service.version=1.0.0",
+				},
+				{
+					Name:  "ENV_AFTER",
+					Value: "value2",
+				},
+			},
+		},
+		{
+			testName: "Multiple env vars with OTEL_RESOURCE_ATTRIBUTES containing multiple attributes",
+			envStr:   "OTEL_SERVICE_NAME=my-sidecar,OTEL_RESOURCE_ATTRIBUTES=service.namespace=prod,k8s.pod.name=my-pod,k8s.deployment.name=my-app,DEBUG=true,LOG_LEVEL=info",
+			expLen:   4,
+			expKeys:  []string{"OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES", "DEBUG", "LOG_LEVEL"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name:  "OTEL_SERVICE_NAME",
+					Value: "my-sidecar",
+				},
+				{
+					Name:  "OTEL_RESOURCE_ATTRIBUTES",
+					Value: "service.namespace=prod,k8s.pod.name=my-pod,k8s.deployment.name=my-app",
+				},
+				{
+					Name:  "DEBUG",
+					Value: "true",
+				},
+				{
+					Name:  "LOG_LEVEL",
+					Value: "info",
+				},
+			},
+		},
+		{
+			testName: "Complex scenario with spaces and multiple equals",
+			envStr:   "APP_NAME=test-app , OTEL_RESOURCE_ATTRIBUTES=service.namespace=staging,deployment.environment.name=test,service.instance.id=abc-123 , DB_CONNECTION=host=localhost;port=5432;user=admin , ENABLE_METRICS=true",
+			expLen:   4,
+			expKeys:  []string{"APP_NAME", "OTEL_RESOURCE_ATTRIBUTES", "DB_CONNECTION", "ENABLE_METRICS"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name:  "APP_NAME",
+					Value: "test-app",
+				},
+				{
+					Name:  "OTEL_RESOURCE_ATTRIBUTES",
+					Value: "service.namespace=staging,deployment.environment.name=test,service.instance.id=abc-123",
+				},
+				{
+					Name:  "DB_CONNECTION",
+					Value: "host=localhost;port=5432;user=admin",
+				},
+				{
+					Name:  "ENABLE_METRICS",
+					Value: "true",
+				},
+			},
+		},
+		{
+			testName: "Multiple equals signs in values",
+			envStr:   "KEY1=value=with=equals,KEY2=normal,KEY3=another=complex=value",
+			expLen:   3,
+			expKeys:  []string{"KEY1", "KEY2", "KEY3"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name:  "KEY1",
+					Value: "value=with=equals",
+				},
+				{
+					Name:  "KEY2",
+					Value: "normal",
+				},
+				{
+					Name:  "KEY3",
+					Value: "another=complex=value",
+				},
+			},
+		},
+		{
+			testName: "OTEL_RESOURCE_ATTRIBUTES with complex values containing equals",
+			envStr:   "OTEL_SERVICE_NAME=my-service,OTEL_RESOURCE_ATTRIBUTES=service.name=my-service,service.version=1.0.0,deployment.environment=production,k8s.pod.name=my-pod-123",
+			expLen:   2,
+			expKeys:  []string{"OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name:  "OTEL_SERVICE_NAME",
+					Value: "my-service",
+				},
+				{
+					Name:  "OTEL_RESOURCE_ATTRIBUTES",
+					Value: "service.name=my-service,service.version=1.0.0,deployment.environment=production,k8s.pod.name=my-pod-123",
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -129,7 +248,7 @@ func TestParseEnvFromSecret(t *testing.T) {
 				},
 			},
 		},
-		{
+		{ //nolint:gosec
 			testName:     "multi key name secret",
 			envSecretStr: "KEY1=NAME1:SECRETKEY1",
 			expLen:       1,
@@ -148,7 +267,7 @@ func TestParseEnvFromSecret(t *testing.T) {
 				},
 			},
 		},
-		{
+		{ //nolint:gosec
 			testName:     "multi key name value secret",
 			envSecretStr: "KEY1=NAME1:SECRETKEY1,KEY2=NAME2:SECRETKEY2",
 			expLen:       2,
@@ -178,7 +297,7 @@ func TestParseEnvFromSecret(t *testing.T) {
 				},
 			},
 		},
-		{
+		{ //nolint:gosec
 			testName:     "multi key name value secret with spaces",
 			envSecretStr: "KEY1= NAME1 : SECRETKEY1, KEY2= NAME2 : SECRETKEY2",
 			expLen:       2,
@@ -353,7 +472,7 @@ func TestGetReadinessProbeHandler(t *testing.T) {
 		},
 	}
 
-	assert.EqualValues(t, expectedHandler, getReadinessProbeHandler(3500, pathElements...))
+	assert.Equal(t, expectedHandler, getReadinessProbeHandler(3500, pathElements...))
 }
 
 func TestGetLivenessProbeHandler(t *testing.T) {
@@ -363,7 +482,7 @@ func TestGetLivenessProbeHandler(t *testing.T) {
 		},
 	}
 
-	assert.EqualValues(t, expectedHandler, getLivenessProbeHandler(3500))
+	assert.Equal(t, expectedHandler, getLivenessProbeHandler(3500))
 }
 
 func TestFormatProbePath(t *testing.T) {
@@ -500,7 +619,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
-		assert.EqualValues(t, expectedArgs, container.Args)
+		assert.Equal(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
 
@@ -563,7 +682,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
-		assert.EqualValues(t, expectedArgs, container.Args)
+		assert.Equal(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
 
@@ -635,7 +754,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_HOST_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
-		assert.EqualValues(t, expectedArgs, container.Args)
+		assert.Equal(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
 
@@ -757,6 +876,27 @@ func TestGetSidecarContainer(t *testing.T) {
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				args := strings.Join(container.Args, " ")
 				assert.Contains(t, args, "--dapr-block-shutdown-duration 3s")
+			},
+		},
+	}))
+
+	t.Run("actors disseminate timeout", testSuiteGenerator([]testCase{
+		{
+			name:        "default to empty",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--actors-disseminate-timeout")
+			},
+		},
+		{
+			name: "add an actors disseminate timeout",
+			annotations: map[string]string{
+				annotations.KeyActorsDisseminateTimeout: "45s",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--actors-disseminate-timeout 45s")
 			},
 		},
 	}))
@@ -1116,7 +1256,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.NotNil(t, container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should not be nil")
-				assert.Equal(t, ptr.Of(true), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be true")
+				assert.Equal(t, new(true), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be true")
 			},
 		},
 		{
@@ -1126,17 +1266,17 @@ func TestGetSidecarContainer(t *testing.T) {
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.NotNil(t, container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should not be nil")
-				assert.Equal(t, ptr.Of(false), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be false")
+				assert.Equal(t, new(false), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be false")
 			},
 		},
 		{
 			name: "set run as user 1000",
 			sidecarConfigModifierFn: func(c *SidecarConfig) {
-				c.RunAsUser = ptr.Of(int64(1000))
+				c.RunAsUser = new(int64(1000))
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.NotNil(t, container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should not be nil")
-				assert.Equal(t, ptr.Of(int64(1000)), container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should be 1000")
+				assert.Equal(t, new(int64(1000)), container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should be 1000")
 			},
 		},
 		{
@@ -1148,11 +1288,11 @@ func TestGetSidecarContainer(t *testing.T) {
 		{
 			name: "set run as group 3000",
 			sidecarConfigModifierFn: func(c *SidecarConfig) {
-				c.RunAsGroup = ptr.Of(int64(3000))
+				c.RunAsGroup = new(int64(3000))
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.NotNil(t, container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should not be nil")
-				assert.Equal(t, ptr.Of(int64(3000)), container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should be 3000")
+				assert.Equal(t, new(int64(3000)), container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should be 3000")
 			},
 		},
 		{
@@ -1443,6 +1583,114 @@ func TestGetSidecarContainer(t *testing.T) {
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				args := strings.Join(container.Args, " ")
 				assert.Contains(t, args, "--control-plane-address somewhere:4000")
+			},
+		},
+	}))
+
+	t.Run("native sidecar", testSuiteGenerator([]testCase{
+		{
+			name:        "restart policy not set by default",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Nil(t, container.RestartPolicy)
+			},
+		},
+		{
+			name: "restart policy set to Always when native sidecar enabled via config",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.EnableNativeSidecar = true
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				require.NotNil(t, container.RestartPolicy)
+				assert.Equal(t, corev1.ContainerRestartPolicyAlways, *container.RestartPolicy)
+			},
+		},
+		{
+			name: "restart policy set to Always when native sidecar enabled via annotation",
+			annotations: map[string]string{
+				annotations.KeyEnableNativeSidecar: "true",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				require.NotNil(t, container.RestartPolicy)
+				assert.Equal(t, corev1.ContainerRestartPolicyAlways, *container.RestartPolicy)
+			},
+		},
+		{
+			name: "restart policy not set when native sidecar disabled via annotation",
+			annotations: map[string]string{
+				annotations.KeyEnableNativeSidecar: "false",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Nil(t, container.RestartPolicy)
+			},
+		},
+		{
+			name: "native sidecar preserves graceful shutdown args",
+			annotations: map[string]string{
+				annotations.KeyGracefulShutdownSeconds: "15",
+			},
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.EnableNativeSidecar = true
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				require.NotNil(t, container.RestartPolicy)
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--dapr-graceful-shutdown-seconds 15")
+			},
+		},
+		{
+			name: "native sidecar preserves block shutdown duration",
+			annotations: map[string]string{
+				annotations.KeyBlockShutdownDuration: "5s",
+			},
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.EnableNativeSidecar = true
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				require.NotNil(t, container.RestartPolicy)
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--dapr-block-shutdown-duration 5s")
+			},
+		},
+	}))
+
+	t.Run("jwt audiences", testSuiteGenerator([]testCase{
+		{
+			name:        "omitted when not set",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--sentry-request-jwt-audiences")
+			},
+		},
+		{
+			name: "present when set with single audience",
+			annotations: map[string]string{
+				annotations.KeySentryRequestJwtAudiences: "api.example.com",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--sentry-request-jwt-audiences api.example.com")
+			},
+		},
+		{
+			name: "present when set with multiple audiences",
+			annotations: map[string]string{
+				annotations.KeySentryRequestJwtAudiences: "api.example.com,auth.example.com,payments.example.com",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--sentry-request-jwt-audiences api.example.com,auth.example.com,payments.example.com")
+			},
+		},
+		{
+			name: "omitted when annotation is empty",
+			annotations: map[string]string{
+				annotations.KeySentryRequestJwtAudiences: "",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--sentry-request-jwt-audiences")
 			},
 		},
 	}))

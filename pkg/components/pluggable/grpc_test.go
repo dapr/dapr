@@ -47,7 +47,7 @@ type fakeSvc struct {
 	onHandlerCalled func(context.Context)
 }
 
-func (f *fakeSvc) handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func (f *fakeSvc) handler(srv any, ctx context.Context, dec func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
 	f.onHandlerCalled(ctx)
 	return structpb.NewNullValue(), nil
 }
@@ -94,7 +94,7 @@ func TestGRPCConnector(t *testing.T) {
 		s := grpc.NewServer()
 		fakeDesc := &grpc.ServiceDesc{
 			ServiceName: fakeSvcName,
-			HandlerType: (*interface{})(nil),
+			HandlerType: (*any)(nil),
 			Methods: []grpc.MethodDesc{{
 				MethodName: fakeMethodName,
 				Handler:    fakeSvc.handler,

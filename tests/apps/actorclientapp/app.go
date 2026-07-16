@@ -77,7 +77,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(response.Data)
 }
 
-func httpCall(method string, url string, requestBody interface{}, expectedHTTPStatusCode int) ([]byte, error) {
+func httpCall(method string, url string, requestBody any, expectedHTTPStatusCode int) ([]byte, error) {
 	var body []byte
 	var err error
 
@@ -101,7 +101,7 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 	defer res.Body.Close()
 
 	if res.StatusCode != expectedHTTPStatusCode {
-		t := fmt.Errorf("Expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode) //nolint:stylecheck
+		t := fmt.Errorf("expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode)
 		return nil, t
 	}
 

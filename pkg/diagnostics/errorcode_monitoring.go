@@ -32,6 +32,8 @@ type errorCodeMetrics struct {
 
 	appID   string
 	enabled bool
+
+	meter stats.Recorder
 }
 
 func newErrorCodeMetrics() *errorCodeMetrics {
@@ -46,11 +48,12 @@ func newErrorCodeMetrics() *errorCodeMetrics {
 }
 
 // Init registers the errorcode metrics view.
-func (m *errorCodeMetrics) Init(id string) error {
+func (m *errorCodeMetrics) Init(meter view.Meter, id string) error {
 	m.enabled = true
 	m.appID = id
+	m.meter = meter
 
-	return view.Register(
+	return meter.Register(
 		diagUtils.NewMeasureView(m.errorCodeTotal, []tag.Key{appIDKey, errorCodeKey, categoryKey}, view.Count()),
 	)
 }
@@ -61,10 +64,11 @@ func (m *errorCodeMetrics) RecordErrorCode(ec errorcodes.ErrorCode) {
 			log.Warnf("ErrorCode is malformed: Code = %s, Category = %s", ec.Code, ec.Category)
 			return
 		}
-		_ = stats.RecordWithTags(
+		_ = stats.RecordWithOptions(
 			context.TODO(),
-			diagUtils.WithTags(m.errorCodeTotal.Name(), appIDKey, m.appID, errorCodeKey, ec.Code, categoryKey, string(ec.Category)),
-			m.errorCodeTotal.M(1),
+			stats.WithRecorder(m.meter),
+			stats.WithTags(diagUtils.WithTags(m.errorCodeTotal.Name(), appIDKey, m.appID, errorCodeKey, ec.Code, categoryKey, string(ec.Category))...),
+			stats.WithMeasurements(m.errorCodeTotal.M(1)),
 		)
 	}
 }

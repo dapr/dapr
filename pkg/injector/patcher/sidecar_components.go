@@ -15,6 +15,7 @@ package patcher
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
@@ -117,11 +118,8 @@ func Injectable(appID string, components []componentsapi.Component) []corev1.Con
 		}
 
 		appScopped := len(component.Scopes) == 0
-		for _, scoppedApp := range component.Scopes {
-			if scoppedApp == appID {
-				appScopped = true
-				break
-			}
+		if slices.Contains(component.Scopes, appID) {
+			appScopped = true
 		}
 
 		if appScopped {

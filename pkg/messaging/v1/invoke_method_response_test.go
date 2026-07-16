@@ -120,8 +120,8 @@ func TestResponseData(t *testing.T) {
 		contentType := resp.ContentType()
 		bData, err := io.ReadAll(resp.RawData())
 		require.NoError(t, err)
-		assert.Equal(t, "", resp.r.GetMessage().GetContentType())
-		assert.Equal(t, "", contentType)
+		assert.Empty(t, resp.r.GetMessage().GetContentType())
+		assert.Empty(t, contentType)
 		assert.Equal(t, "test", string(bData))
 	})
 

@@ -66,5 +66,6 @@ type EndpointGroupVersion string
 const (
 	EndpointGroupVersion1       EndpointGroupVersion = "v1"       // Alias: v1.0
 	EndpointGroupVersion1alpha1 EndpointGroupVersion = "v1alpha1" // Alias: v1.0-alpha1
+	EndpointGroupVersion1alpha2 EndpointGroupVersion = "v1alpha2" // Alias: v1.0-alpha2
 	EndpointGroupVersion1beta1  EndpointGroupVersion = "v1beta1"  // Alias: v1.0-beta1
 )

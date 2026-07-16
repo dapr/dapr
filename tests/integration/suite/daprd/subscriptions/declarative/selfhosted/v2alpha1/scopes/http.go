@@ -59,7 +59,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 	)
 
 	require.NoError(t, os.WriteFile(filepath.Join(resDir, "sub.yaml"),
-		[]byte(fmt.Sprintf(`
+		fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -125,7 +125,7 @@ spec:
 scopes:
 - %[1]s
 - %[2]s
-`, h.daprd1.AppID(), h.daprd2.AppID())), 0o600))
+`, h.daprd1.AppID(), h.daprd2.AppID()), 0o600))
 
 	return []framework.Option{
 		framework.WithProcesses(h.sub, h.daprd1, h.daprd2),

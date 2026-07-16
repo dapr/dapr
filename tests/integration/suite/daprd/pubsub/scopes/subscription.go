@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -63,6 +64,7 @@ func (s *subscription) Setup(t *testing.T) []framework.Option {
 	)
 
 	var subYaml string
+	var subYamlSb66 strings.Builder
 	for i, sub := range []struct {
 		pubsub string
 		topic  string
@@ -78,7 +80,7 @@ func (s *subscription) Setup(t *testing.T) []framework.Option {
 		{"app1-nil-app2-topic910", "topic9"},
 		{"app1-nil-app2-topic910", "topic10"},
 	} {
-		subYaml += fmt.Sprintf(`
+		fmt.Fprintf(&subYamlSb66, `
 ---
 apiVersion: dapr.io/v1alpha1
 kind: Subscription
@@ -90,10 +92,11 @@ spec:
  route: /a
 `, i+1, sub.pubsub, sub.topic)
 	}
+	subYaml += subYamlSb66.String()
 	require.NoError(t, os.WriteFile(filepath.Join(resDir, "sub.yaml"), []byte(subYaml), 0o600))
 
 	require.NoError(t, os.WriteFile(filepath.Join(resDir, "pubsub.yaml"),
-		[]byte(fmt.Sprintf(`
+		fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -156,7 +159,7 @@ spec:
  metadata:
  - name: subscriptionScopes
    value: "%[1]s=;%[2]s=topic9,topic10"
-`, s.daprd1.AppID(), s.daprd2.AppID())), 0o600))
+`, s.daprd1.AppID(), s.daprd2.AppID()), 0o600))
 
 	return []framework.Option{
 		framework.WithProcesses(s.sub, s.daprd1, s.daprd2, s.daprd3),
@@ -213,4 +216,16 @@ func (s *subscription) Run(t *testing.T, ctx context.Context) {
 	s.sub.ExpectPublishNoReceive(t, ctx, s.daprd1, req)
 	s.sub.ExpectPublishReceive(t, ctx, s.daprd2, req)
 	s.sub.ExpectPublishReceive(t, ctx, s.daprd3, req)
+
+	binaryReq := newReq("all", "topic1")
+	binaryReq.Data = []byte{0xde, 0xad, 0xbe, 0xef}
+	binaryReq.DataContentType = "application/octet-stream"
+	binaryReq.Metadata = map[string]string{
+		"ce_id":          "aquadag-543",
+		"ce_source":      "tests/scopes",
+		"ce_type":        "tests.binary",
+		"ce_specversion": "1.0",
+	}
+
+	s.sub.ExpectPublishReceive(t, ctx, s.daprd1, binaryReq)
 }

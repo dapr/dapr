@@ -22,8 +22,12 @@ import (
 	"strings"
 	"time"
 
+	"go.opencensus.io/stats/view"
+
 	"github.com/dapr/dapr/pkg/acl"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
@@ -41,7 +45,6 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -65,11 +68,25 @@ const (
 	DefaultReadBufferSize = 4 << 10
 	// DefaultGracefulShutdownDuration is the default option for the duration of the graceful shutdown.
 	DefaultGracefulShutdownDuration = time.Second * 5
+	// DefaultActorsDisseminationTimeout is the default daprd-side timeout
+	// for a placement LOCK -> UPDATE -> UNLOCK round. Must be larger than
+	// the placement service --disseminate-timeout (8s default) so that
+	// daprd does not reset the stream before placement can finish a
+	// legitimately slow round.
+	DefaultActorsDisseminationTimeout = time.Second * 30
 	// DefaultAppHealthCheckPath is the default path for HTTP health checks.
 	DefaultAppHealthCheckPath = "/healthz"
 	// DefaultChannelAddress is the default local network address that user application listen on.
 	DefaultChannelAddress = "127.0.0.1"
+
+	// DisableSubscribeInitEndpoint is the config value to disable subscribe endpoint.
+	DisableSubscribeInitEndpoint = "subscribe"
+	// DisableConfigInitEndpoint is the config value to disable config endpoint.
+	DisableConfigInitEndpoint = "config"
 )
+
+// AllowedDisableInitEndpoints is the list of allowed init endpoints to disable.
+var AllowedDisableInitEndpoints = []string{DisableSubscribeInitEndpoint, DisableConfigInitEndpoint}
 
 // Config holds the Dapr Runtime configuration.
 type Config struct {
@@ -97,8 +114,10 @@ type Config struct {
 	DaprGracefulShutdownSeconds   int
 	DaprBlockShutdownDuration     *time.Duration
 	ActorsService                 string
+	ActorsDisseminationTimeout    time.Duration
 	RemindersService              string
 	SchedulerAddress              []string
+	SchedulerStreams              uint
 	DaprAPIListenAddresses        string
 	AppHealthProbeInterval        int
 	AppHealthProbeTimeout         int
@@ -115,7 +134,11 @@ type Config struct {
 	Registry                      *registry.Options
 	Security                      security.Handler
 	Healthz                       healthz.Healthz
-	WorkflowEventSink             workflow.EventSink
+	WorkflowEventSink             orchestrator.EventSink
+	DisableInitEndpoints          []string
+	// HotReloadReconcileInterval overrides the hot-reload backup reconcile
+	// period. Zero uses the reconciler default (60s).
+	HotReloadReconcileInterval time.Duration
 }
 
 type internalConfig struct {
@@ -132,8 +155,10 @@ type internalConfig struct {
 	appConnectionConfig          config.AppConnectionConfig
 	mode                         modes.DaprMode
 	actorsService                string
+	actorsDisseminationTimeout   time.Duration
 	remindersService             string
 	schedulerAddress             []string
+	schedulerStreams             uint
 	allowedOrigins               string
 	standalone                   configmodes.StandaloneConfig
 	kubernetes                   configmodes.KubernetesConfig
@@ -151,7 +176,9 @@ type internalConfig struct {
 	metricsExporter              metrics.Exporter
 	healthz                      healthz.Healthz
 	outboundHealthz              healthz.Healthz
-	workflowEventSink            workflow.EventSink
+	workflowEventSink            orchestrator.EventSink
+	disableInitEndpoints         []string
+	hotReloadReconcileInterval   time.Duration
 }
 
 func (i internalConfig) SchedulerEnabled() bool {
@@ -189,22 +216,25 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 
 	// Config and resiliency need the operator client
 	var operatorClient operatorV1.OperatorClient
+
 	if intc.mode == modes.KubernetesMode {
 		log.Info("Initializing the operator client")
+
 		client, conn, clientErr := client.GetOperatorClient(ctx, cfg.ControlPlaneAddress, cfg.Security)
 		if clientErr != nil {
 			return nil, clientErr
 		}
 		defer conn.Close()
+
 		operatorClient = client
 	}
 
 	namespace := os.Getenv("NAMESPACE")
-	podName := os.Getenv("POD_NAME")
 
 	var (
-		globalConfig *config.Configuration
-		configErr    error
+		globalConfig      *config.Configuration
+		configAPIResource *configapi.Configuration
+		configErr         error
 	)
 
 	if len(intc.config) > 0 {
@@ -214,8 +244,9 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 				// We are not returning an error here because in Kubernetes mode, the injector itself doesn't allow multiple configuration flags to be added, so this should never happen in normal environments
 				log.Warnf("Multiple configurations are not supported in Kubernetes mode; only the first one will be loaded")
 			}
+
 			log.Debug("Loading Kubernetes config resource: " + intc.config[0])
-			globalConfig, configErr = config.LoadKubernetesConfiguration(intc.config[0], namespace, podName, operatorClient)
+			globalConfig, configAPIResource, configErr = config.LoadKubernetesConfiguration(intc.config[0], namespace, operatorClient)
 		case modes.StandaloneMode:
 			log.Debug("Loading config from file(s): " + strings.Join(intc.config, ", "))
 			globalConfig, configErr = config.LoadStandaloneConfiguration(intc.config...)
@@ -225,10 +256,13 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	if configErr != nil {
 		return nil, fmt.Errorf("error loading configuration: %s", configErr)
 	}
+
 	if globalConfig == nil {
 		log.Info("loading default configuration")
+
 		globalConfig = config.LoadDefaultConfiguration()
 	}
+
 	err = config.SetTracingSpecFromEnv(globalConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error setting tracing spec from env: %s", err)
@@ -237,6 +271,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	globalConfig.SetDefaultFeatures()
 
 	globalConfig.LoadFeatures()
+
 	if enabledFeatures := globalConfig.EnabledFeatures(); len(enabledFeatures) > 0 {
 		log.Info("Enabled features: " + strings.Join(enabledFeatures, " "))
 	}
@@ -244,27 +279,56 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	// Initialize metrics only if MetricSpec is enabled.
 	metricsSpec := globalConfig.GetMetricsSpec()
 	if metricsSpec.GetEnabled() {
-		err = diag.InitMetrics(intc.id, namespace, metricsSpec)
+		// We create or use a provided meter to avoid
+		// using the default meter which relies on
+		// global state which can be problematic in tests
+		// or when decoupling the runtimes lifecycle from
+		// the proccesses lifecycle.
+		var meter view.Meter
+
+		if cfg.Metrics.Meter == nil {
+			log.Debug("Creating a new meter for metrics")
+
+			meter = view.NewMeter() // Create a new meter if not provided
+		} else {
+			log.Debug("Using provided meter for metrics")
+
+			meter = cfg.Metrics.Meter
+		}
+
+		err = diag.InitMetrics(meter, intc.id, namespace, metricsSpec)
 		if err != nil {
-			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
+			log.Error(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
 		}
 	}
 
 	// Load Resiliency
 	var resiliencyProvider *resiliencyConfig.Resiliency
+	var resiliencyConfigs []*resiliencyapi.Resiliency
 	switch intc.mode {
 	case modes.KubernetesMode:
-		resiliencyConfigs := resiliencyConfig.LoadKubernetesResiliency(log, intc.id, namespace, operatorClient)
+		resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, intc.id, namespace, operatorClient)
 		log.Debugf("Found %d resiliency configurations from Kubernetes", len(resiliencyConfigs))
 		resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
 	case modes.StandaloneMode:
 		if len(intc.standalone.ResourcesPath) > 0 {
-			resiliencyConfigs := resiliencyConfig.LoadLocalResiliency(log, intc.id, intc.standalone.ResourcesPath...)
+			resiliencyConfigs = resiliencyConfig.LoadLocalResiliency(log, intc.id, intc.standalone.ResourcesPath...)
 			log.Debugf("Found %d resiliency configurations in resources path", len(resiliencyConfigs))
 			resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
 		} else {
 			resiliencyProvider = resiliencyConfig.FromConfigurations(log)
 		}
+	}
+
+	// Attach the workload's SPIFFE identity to the context of every component
+	// operation. The resiliency runner is the common chokepoint for component
+	// outbound/inbound calls, so injecting here reaches each building-block
+	// component (state, pubsub, bindings, secrets, etc.) regardless of whether
+	// the call originated from an API request or a background loop. Components
+	// extract the X.509/JWT SVID source from the context to authenticate to
+	// their backing infrastructure service.
+	if resiliencyProvider != nil && cfg.Security != nil {
+		resiliencyProvider.SetComponentContextDecorator(cfg.Security.WithSVIDContext)
 	}
 
 	accessControlList, err := acl.ParseAccessControlSpec(
@@ -277,10 +341,10 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 
 	// API logging can be enabled for this app or for every app, globally in the config
 	if intc.enableAPILogging == nil {
-		intc.enableAPILogging = ptr.Of(globalConfig.GetAPILoggingSpec().Enabled)
+		intc.enableAPILogging = new(globalConfig.GetAPILoggingSpec().Enabled)
 	}
 
-	return newDaprRuntime(ctx, cfg.Security, intc, globalConfig, accessControlList, resiliencyProvider)
+	return newDaprRuntime(ctx, cfg.Security, intc, globalConfig, accessControlList, resiliencyProvider, configAPIResource, resiliencyConfigs)
 }
 
 func (c *Config) toInternal() (*internalConfig, error) {
@@ -308,17 +372,20 @@ func (c *Config) toInternal() (*internalConfig, error) {
 			HealthCheckHTTPPath: c.AppHealthCheckPath,
 			MaxConcurrency:      c.AppMaxConcurrency,
 		},
-		registry:                  registry.New(c.Registry),
-		metricsExporter:           metrics.New(c.Metrics),
-		blockShutdownDuration:     c.DaprBlockShutdownDuration,
-		actorsService:             c.ActorsService,
-		remindersService:          c.RemindersService,
-		schedulerAddress:          c.SchedulerAddress,
-		publicListenAddress:       c.DaprPublicListenAddress,
-		internalGRPCListenAddress: c.DaprInternalGRPCListenAddress,
-		healthz:                   c.Healthz,
-		outboundHealthz:           healthz.New(),
-		workflowEventSink:         c.WorkflowEventSink,
+		registry:                   registry.New(c.Registry),
+		metricsExporter:            metrics.New(c.Metrics),
+		blockShutdownDuration:      c.DaprBlockShutdownDuration,
+		actorsService:              c.ActorsService,
+		actorsDisseminationTimeout: c.ActorsDisseminationTimeout,
+		hotReloadReconcileInterval: c.HotReloadReconcileInterval,
+		remindersService:           c.RemindersService,
+		schedulerAddress:           c.SchedulerAddress,
+		schedulerStreams:           c.SchedulerStreams,
+		publicListenAddress:        c.DaprPublicListenAddress,
+		internalGRPCListenAddress:  c.DaprInternalGRPCListenAddress,
+		healthz:                    c.Healthz,
+		outboundHealthz:            healthz.New(),
+		workflowEventSink:          c.WorkflowEventSink,
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
@@ -326,12 +393,14 @@ func (c *Config) toInternal() (*internalConfig, error) {
 	}
 
 	if intc.mode == modes.StandaloneMode {
-		if err := validation.ValidateSelfHostedAppID(intc.id); err != nil {
+		err := validation.ValidateSelfHostedAppID(intc.id)
+		if err != nil {
 			return nil, err
 		}
 	}
 
 	var err error
+
 	intc.httpPort, err = strconv.Atoi(c.DaprHTTPPort)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing dapr-http-port flag: %w", err)
@@ -365,10 +434,12 @@ func (c *Config) toInternal() (*internalConfig, error) {
 
 	if c.DaprPublicPort != "" {
 		var port int
+
 		port, err = strconv.Atoi(c.DaprPublicPort)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing dapr-public-port: %w", err)
 		}
+
 		intc.publicPort = &port
 	}
 
@@ -401,6 +472,10 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		intc.gracefulShutdownDuration = time.Duration(c.DaprGracefulShutdownSeconds) * time.Second
 	}
 
+	if intc.actorsDisseminationTimeout <= 0 {
+		intc.actorsDisseminationTimeout = DefaultActorsDisseminationTimeout
+	}
+
 	if intc.appConnectionConfig.MaxConcurrency == -1 {
 		intc.appConnectionConfig.MaxConcurrency = 0
 	}
@@ -417,6 +492,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		// TODO: Remove in a future Dapr version
 		if c.AppSSL {
 			log.Warn("The 'app-ssl' flag is deprecated; use 'app-protocol=https' instead")
+
 			intc.appConnectionConfig.Protocol = protocol.HTTPSProtocol
 		} else {
 			intc.appConnectionConfig.Protocol = protocol.HTTPProtocol
@@ -426,6 +502,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		// TODO: Remove in a future Dapr version
 		if c.AppSSL {
 			log.Warn("The 'app-ssl' flag is deprecated; use 'app-protocol=grpcs' instead")
+
 			intc.appConnectionConfig.Protocol = protocol.GRPCSProtocol
 		} else {
 			intc.appConnectionConfig.Protocol = protocol.GRPCProtocol
@@ -435,6 +512,23 @@ func (c *Config) toInternal() (*internalConfig, error) {
 	default:
 		return nil, fmt.Errorf("invalid value for 'app-protocol': %v", c.AppProtocol)
 	}
+
+	filtered := make([]string, 0, len(c.DisableInitEndpoints))
+
+	for _, e := range c.DisableInitEndpoints {
+		e = strings.ToLower(strings.TrimSpace(e))
+		if e == "" {
+			continue
+		}
+
+		if ok := utils.Contains(AllowedDisableInitEndpoints, e); !ok {
+			return nil, fmt.Errorf("invalid value for 'disable-init-endpoints': %v", e)
+		}
+
+		filtered = append(filtered, e)
+	}
+
+	intc.disableInitEndpoints = filtered
 
 	intc.apiListenAddresses = strings.Split(c.DaprAPIListenAddresses, ",")
 	if len(intc.apiListenAddresses) == 0 {

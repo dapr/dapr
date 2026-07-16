@@ -31,6 +31,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/manifest"
+	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
@@ -39,7 +40,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
+	"github.com/dapr/dapr/utils"
 )
 
 func init() {
@@ -54,7 +55,15 @@ type namespace struct {
 }
 
 func (n *namespace) Setup(t *testing.T) []framework.Option {
-	sentry := sentry.New(t)
+	// Skip windows as test requires a resolvconf lookup.
+	os.SkipWindows(t)
+
+	tld, err := utils.GetKubeClusterDomain()
+	require.NoError(t, err)
+
+	sentry := sentry.New(t,
+		sentry.WithTrustDomain(tld),
+	)
 
 	app := app.New(t,
 		app.WithConfig(`{"entities": ["myactortype"]}`),
@@ -62,14 +71,9 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
 	)
 
 	n.kubeapi = kubernetes.New(t,
-		kubernetes.WithBaseOperatorAPI(t, spiffeid.RequireTrustDomainFromString("localhost"), "default", sentry.Port()),
+		kubernetes.WithBaseOperatorAPI(t, spiffeid.RequireTrustDomainFromString(tld), "default", sentry.Port()),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
-			Items: []configapi.Configuration{{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "schedulerreminders"},
-				Spec: configapi.ConfigurationSpec{
-					Features: []configapi.FeatureSpec{{Name: "SchedulerReminders", Enabled: ptr.Of(true)}},
-				},
-			}},
+			Items: []configapi.Configuration{},
 		}),
 		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
 			Items: []compapi.Component{manifest.ActorInMemoryStateComponent("default", "foo")},
@@ -106,7 +110,7 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithControlPlaneAddress(operator.Address()),
 		daprd.WithPlacementAddresses(n.placement.Address()),
-		daprd.WithConfigs("schedulerreminders"),
+		daprd.WithControlPlaneTrustDomain(tld),
 	)
 
 	return []framework.Option{
@@ -120,8 +124,8 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 	n.placement.WaitUntilRunning(t, ctx)
 
 	client := n.daprd.GRPCClient(t, ctx)
-	_, err := client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
-		Job: &rtv1.Job{Name: "test", Schedule: ptr.Of("@daily")},
+	_, err := client.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
+		Job: &rtv1.Job{Name: "test", Schedule: new("@daily")},
 	})
 	require.NoError(t, err)
 
@@ -147,7 +151,8 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := etcdClient.Get(ctx, "dapr/jobs/", clientv3.WithPrefix())
-		assert.NoError(c, err)
-		assert.Empty(c, resp.Kvs)
+		if assert.NoError(c, err) {
+			assert.Empty(c, resp.Kvs)
+		}
 	}, time.Second*10, 10*time.Millisecond)
 }

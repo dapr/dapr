@@ -78,19 +78,11 @@ func (r *reconnect3) Setup(t *testing.T) []framework.Option {
 
 	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(r.daprd),
+		framework.WithProcesses(r.daprd, r.scheduler1, r.scheduler2, r.scheduler3),
 	}
 }
 
 func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
-	r.scheduler1.Run(t, ctx)
-	r.scheduler2.Run(t, ctx)
-	r.scheduler3.Run(t, ctx)
-	t.Cleanup(func() {
-		r.scheduler1.Cleanup(t)
-		r.scheduler2.Cleanup(t)
-		r.scheduler3.Cleanup(t)
-	})
 	r.scheduler1.WaitUntilRunning(t, ctx)
 	r.scheduler2.WaitUntilRunning(t, ctx)
 	r.scheduler3.WaitUntilRunning(t, ctx)
@@ -107,7 +99,7 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 		}, resp.GetScheduler().GetConnectedAddresses())
 	}, time.Second*10, time.Millisecond*10)
 
-	r.scheduler2.Cleanup(t)
+	r.scheduler2.Kill(t)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := r.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
@@ -116,11 +108,9 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 			r.scheduler1.Address(),
 			r.scheduler3.Address(),
 		}, resp.GetScheduler().GetConnectedAddresses())
-	}, time.Second*20, time.Millisecond*10)
+	}, time.Second*30, time.Millisecond*10)
 
 	r.scheduler4.Run(t, ctx)
-	r.scheduler4.WaitUntilRunning(t, ctx)
-	r.scheduler4.WaitUntilLeadership(t, ctx, 3)
 	t.Cleanup(func() { r.scheduler4.Cleanup(t) })
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -131,5 +121,5 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 			r.scheduler3.Address(),
 			r.scheduler4.Address(),
 		}, resp.GetScheduler().GetConnectedAddresses())
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*30, time.Millisecond*10)
 }

@@ -25,12 +25,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	prockube "github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 )
 
 type KubeAPIOptions struct {
-	Bundle         ca.Bundle
+	Bundle         bundle.Bundle
 	Namespace      string
 	ServiceAccount string
 	AppID          string
@@ -52,15 +52,15 @@ func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
 			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
 			Data: map[string][]byte{
-				"ca.crt":     opts.Bundle.TrustAnchors,
-				"issuer.crt": opts.Bundle.IssChainPEM,
-				"issuer.key": opts.Bundle.IssKeyPEM,
+				"ca.crt":     opts.Bundle.X509.TrustAnchors,
+				"issuer.crt": opts.Bundle.X509.IssChainPEM,
+				"issuer.key": opts.Bundle.X509.IssKeyPEM,
 			},
 		}),
 		prockube.WithConfigMapGet(t, &corev1.ConfigMap{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
 			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
-			Data:       map[string]string{"ca.crt": string(opts.Bundle.TrustAnchors)},
+			Data:       map[string]string{"ca.crt": string(opts.Bundle.X509.TrustAnchors)},
 		}),
 		prockube.WithClusterPodList(t, &corev1.PodList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},

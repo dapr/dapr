@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -69,6 +69,18 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 
 	client := g.app2.GRPCClient(t, ctx)
 
+	_, err := client.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
+		ActorType: "abc",
+		ActorId:   "xx",
+		Name:      "reminder",
+		DueTime:   "0s",
+	})
+	require.NoError(t, err)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, int64(1), g.called.Load())
+	}, time.Second*10, time.Millisecond*10)
+
 	startGoRoutines1 := g.app1.Metrics(t, ctx)["go_goroutines"]
 	startGoRoutines2 := g.app2.Metrics(t, ctx)["go_goroutines"]
 
@@ -84,11 +96,11 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(n*2), g.called.Load())
+		assert.Equal(c, int64(n*2)+2, g.called.Load())
 	}, time.Second*10, time.Millisecond*10)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.InDelta(c, startGoRoutines1, g.app1.Metrics(t, ctx)["go_goroutines"], 30)
 		assert.InDelta(c, startGoRoutines2, g.app2.Metrics(t, ctx)["go_goroutines"], 30)
-	}, time.Second*20, time.Second)
+	}, time.Second*30, time.Second)
 }

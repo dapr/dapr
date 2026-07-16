@@ -41,6 +41,7 @@ func TestTracingOnNewPublishedMessage(t *testing.T) {
 		}
 
 		respB, _ := json.Marshal(resp)
+
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 			WithRawDataBytes(respB).
 			WithContentType("application/json")
@@ -69,7 +70,9 @@ func TestTracingOnNewPublishedMessage(t *testing.T) {
 				},
 			})
 			require.NoError(t, err)
-			t.Cleanup(ps.Stop)
+			t.Cleanup(func() {
+				ps.Stop()
+			})
 
 			traceparent := "00-0af7651916cd43dd8448eb211c80319c-b9c7c989f97918e1-01"
 			traceid := "00-80e1afed08e019fc1110464cfa66635c-7a085853722dc6d2-01"
@@ -81,11 +84,13 @@ func TestTracingOnNewPublishedMessage(t *testing.T) {
 				Metadata:   map[string]string{contribpubsub.TraceParentField: traceparent, contribpubsub.TraceIDField: traceid, contribpubsub.TraceStateField: tracestate},
 			})
 			require.NoError(t, err)
+
 			reqs := mockAppChannel.GetInvokedRequest()
 			reqMetadata := mockAppChannel.GetInvokedRequestMetadata()
 			mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 			assert.Contains(t, reqMetadata["orders"][contribpubsub.TraceParentField], traceparent)
 			assert.Contains(t, reqMetadata["orders"][contribpubsub.TraceStateField], tracestate)
+
 			if rawPayload {
 				assert.Contains(t, string(reqs["orders"]), `{"data_base64":"eyJvcmRlcklkIjoiMSJ9"`)
 				// traceparent also included as part of a CloudEvent

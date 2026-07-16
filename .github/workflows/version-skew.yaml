@@ -18,6 +18,8 @@ on:
   push:
     branches:
       - master
+      - release-*
+  workflow_dispatch:
   # Dispatch on external events
   repository_dispatch:
     types:
@@ -106,12 +108,12 @@ jobs:
 
           Commit ref: ${{ env.CHECKOUT_REF }}
     - name: Check out code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v6
       with:
         repository: ${{ env.CHECKOUT_REPO }}
         ref: ${{ env.CHECKOUT_REF }}
     - name: Checkout last release repo
-      uses: actions/checkout@v3
+      uses: actions/checkout@v6
       with:
         repository: dapr/dapr
         path: latest-release
@@ -128,7 +130,7 @@ jobs:
         fi
     - name: Set up Go
       id: setup-go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v6
       with:
         go-version-file: 'go.mod'
 
@@ -142,11 +144,13 @@ jobs:
         curl -so placement_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/placement_linux_amd64.tar.gz
         curl -so injector_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/injector_linux_amd64.tar.gz
         curl -so operator_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/operator_linux_amd64.tar.gz
+        curl -so scheduler_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/scheduler_linux_amd64.tar.gz
         tar xvf daprd_linux_amd64.tar.gz
         tar xvf sentry_linux_amd64.tar.gz
         tar xvf placement_linux_amd64.tar.gz
         tar xvf injector_linux_amd64.tar.gz
         tar xvf operator_linux_amd64.tar.gz
+        tar xvf scheduler_linux_amd64.tar.gz
 
     - name: Setup DAPR_INTEGRATION_X_PATH - control-plane master
       if: matrix.mode == 'control-plane-master'
@@ -156,6 +160,7 @@ jobs:
         echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/dist/linux_amd64/release/operator" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_SENTRY_PATH=$(pwd)/dist/linux_amd64/release/sentry" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_INJECTOR_PATH=$(pwd)/dist/linux_amd64/release/injector" >> $GITHUB_ENV
+        echo "DAPR_INTEGRATION_SCHEDULER_PATH=$(pwd)/dist/linux_amd64/release/scheduler" >> $GITHUB_ENV
 
     - name: Setup DAPR_INTEGRATION_X_PATH - dapr-sidecar master
       if: matrix.mode == 'dapr-sidecar-master'
@@ -165,9 +170,10 @@ jobs:
         echo "DAPR_INTEGRATION_SENTRY_PATH=$(pwd)/downloads/sentry" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/downloads/operator" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_INJECTOR_PATH=$(pwd)/downloads/injector" >> $GITHUB_ENV
+        echo "DAPR_INTEGRATION_SCHEDULER_PATH=$(pwd)/downloads/scheduler" >> $GITHUB_ENV
 
     - name: Run make test-integration
-      run: cd latest-release && make test-integration
+      run: cd latest-release && make test-integration ARGS="-timeout=45m"
 
     - name: Upload test results
       if: always()
@@ -279,12 +285,12 @@ jobs:
 
           Commit ref: ${{ env.CHECKOUT_REF }}
     - name: Check out code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         repository: ${{ env.CHECKOUT_REPO }}
         ref: ${{ env.CHECKOUT_REF }}
     - name: Checkout last release repo
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         repository: dapr/dapr
         path: latest-release
@@ -302,7 +308,7 @@ jobs:
         fi
     - name: Set up Go
       id: setup-go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
         go-version-file: 'go.mod'
     - name: Configure KinD
@@ -370,7 +376,7 @@ jobs:
       run: |
         make build-linux
         make docker-build
-        make docker-push
+        make docker-push-retry
 
     - name: Build and push test apps
       run: |
@@ -385,14 +391,18 @@ jobs:
         export HA_MODE=true
         make docker-deploy-k8s
 
+    - name: Set up Dapr CLI
+      if: matrix.mode == 'dapr-sidecar-master'
+      uses: dapr/.github/.github/actions/setup-dapr-cli@main
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Setup Dapr - control-plane previous release
       if: matrix.mode == 'dapr-sidecar-master'
       run: |
         make setup-helm-init
         make create-test-namespace
-        export DAPR_CLI_LATEST_VERSION=$(curl -s https://api.github.com/repos/dapr/cli/releases/latest | jq -r '.tag_name' | cut -c 2-)
-        wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s $DAPR_CLI_LATEST_VERSION
-        dapr uninstall --all
+        dapr uninstall --all 2>/dev/null || true
         dapr init -k --runtime-version ${{ env.DAPR_PREV_VERSION }} \
           --set dapr_operator.logLevel=debug,dapr_sidecar_injector.image.name=localhost:5000/dapr/daprd:dev-linux-amd64 \
           -n dapr-tests --enable-ha

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -79,7 +80,9 @@ const (
 	ActorCircuitBreakerScopeID
 	// ActorCircuitBreakerScopeBoth indicates both type and type+id are used for scope.
 	ActorCircuitBreakerScopeBoth // Usage is TODO.
+)
 
+const (
 	resiliencyKind = "Resiliency"
 )
 
@@ -97,6 +100,11 @@ type (
 		ComponentOutboundPolicy(name string, componentType ComponentType) *PolicyDefinition
 		// ComponentInboundPolicy returns the inbound policy for a component.
 		ComponentInboundPolicy(name string, componentType ComponentType) *PolicyDefinition
+		// ComponentContextDecorator returns the function that decorates the
+		// context of component operations (e.g. attaching the workload's SPIFFE
+		// identity), or nil if none is configured. Use it for component calls
+		// that bypass the policy Runner (e.g. long-lived Subscribe/Read calls).
+		ComponentContextDecorator() ComponentContextFn
 		// BuiltInPolicy are used to replace existing retries in Dapr which may not bind specifically to one of the above categories.
 		BuiltInPolicy(name BuiltInPolicyName) *PolicyDefinition
 		// PolicyDefined returns true if there's policy that applies to the target.
@@ -125,6 +133,11 @@ type (
 		apps       map[string]PolicyNames
 		actors     map[string]ActorPolicies
 		components map[string]ComponentPolicyNames
+
+		// componentCtxFn decorates the context of every component operation
+		// (outbound and inbound). Dapr wires this to attach the workload's
+		// SPIFFE identity. Nil leaves component contexts untouched.
+		componentCtxFn ComponentContextFn
 	}
 
 	// circuitBreakerInstances stores circuit breaker state for components
@@ -293,7 +306,7 @@ func FromConfigurations(log logger.Logger, c ...*resiliencyV1alpha.Resiliency) *
 		log.Infof("Loading Resiliency configuration: %s", config.Name)
 		log.Debugf("Resiliency configuration (%s): %+v", config.Name, config)
 		if err := r.DecodeConfiguration(config); err != nil {
-			log.Errorf("Could not read resiliency policy %s: %v", config.ObjectMeta.Name, err)
+			log.Errorf("Could not read resiliency policy %s: %v", config.Name, err)
 			continue
 		}
 		diag.DefaultResiliencyMonitoring.PolicyLoaded(config.Name, config.Namespace)
@@ -317,6 +330,24 @@ func New(log logger.Logger) *Resiliency {
 		actors:     make(map[string]ActorPolicies),
 		components: make(map[string]ComponentPolicyNames),
 	}
+}
+
+// SetComponentContextDecorator sets the function used to decorate the context
+// of component operations (both outbound and inbound). Dapr wires this to
+// attach the workload's SPIFFE identity so components can authenticate to their
+// backing infrastructure. It should be called once during startup, before the
+// provider is used to create runners.
+func (r *Resiliency) SetComponentContextDecorator(fn ComponentContextFn) {
+	r.componentCtxFn = fn
+}
+
+// ComponentContextDecorator returns the configured component context decorator,
+// or nil if none is set.
+func (r *Resiliency) ComponentContextDecorator() ComponentContextFn {
+	if r == nil {
+		return nil
+	}
+	return r.componentCtxFn
 }
 
 // DecodeConfiguration reads in a single resiliency configuration.
@@ -575,7 +606,12 @@ func (r *Resiliency) addMetricsToPolicy(policyDef *PolicyDefinition, target stri
 	if policyDef.cb != nil {
 		diag.DefaultResiliencyMonitoring.PolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, string(policyDef.cb.State()))
 		policyDef.addCBStateChangedMetric = func() {
-			diag.DefaultResiliencyMonitoring.PolicyWithStatusActivated(r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, string(policyDef.cb.State()))
+			state := string(policyDef.cb.State())
+			diag.DefaultResiliencyMonitoring.PolicyWithStatusActivated(r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, state)
+			// Update the cb_state gauge so it reflects the new state immediately,
+			// instead of staying stuck at the state snapshotted when the policy
+			// was instantiated (see issue #10113).
+			diag.DefaultResiliencyMonitoring.RecordCircuitBreakerState(r.name, r.namespace, direction, target, state)
 		}
 	}
 }
@@ -800,8 +836,9 @@ func (r *Resiliency) ActorPostLockPolicy(actorType string, id string) *PolicyDef
 // ComponentOutboundPolicy returns the outbound policy for a component.
 func (r *Resiliency) ComponentOutboundPolicy(name string, componentType ComponentType) *PolicyDefinition {
 	policyDef := &PolicyDefinition{
-		log:  r.log,
-		name: "component[" + name + "] output",
+		log:            r.log,
+		name:           "component[" + name + "] output",
+		componentCtxFn: r.componentCtxFn,
 	}
 	componentPolicies, ok := r.components[name]
 	if ok {
@@ -839,8 +876,9 @@ func (r *Resiliency) ComponentOutboundPolicy(name string, componentType Componen
 // ComponentInboundPolicy returns the inbound policy for a component.
 func (r *Resiliency) ComponentInboundPolicy(name string, componentType ComponentType) *PolicyDefinition {
 	policyDef := &PolicyDefinition{
-		log:  r.log,
-		name: "component[" + name + "] input",
+		log:            r.log,
+		name:           "component[" + name + "] input",
+		componentCtxFn: r.componentCtxFn,
 	}
 	componentPolicies, ok := r.components[name]
 	if ok {
@@ -993,12 +1031,12 @@ func (e *circuitBreakerInstances) Remove(name string) {
 	e.Unlock()
 }
 
-func toMap(val interface{}) (interface{}, error) {
+func toMap(val any) (any, error) {
 	jsonBytes, err := json.Marshal(val)
 	if err != nil {
 		return nil, err
 	}
-	var v interface{}
+	var v any
 	err = json.Unmarshal(jsonBytes, &v)
 
 	return v, err
@@ -1043,11 +1081,8 @@ func filterResiliencyConfigs(resiliences []*resiliencyV1alpha.Resiliency, runtim
 			continue
 		}
 
-		for _, scope := range resiliency.Scopes {
-			if scope == runtimeID {
-				filteredResiliencies = append(filteredResiliencies, resiliency)
-				break
-			}
+		if slices.Contains(resiliency.Scopes, runtimeID) {
+			filteredResiliencies = append(filteredResiliencies, resiliency)
 		}
 	}
 

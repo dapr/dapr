@@ -22,7 +22,7 @@ Fortio is a QPS(Query per Second) type of testing which generally is used to cre
 
 From Fortio README:
 
-"Fortio runs at a specified query per second (qps) and records an histogram of execution time and calculates percentiles (e.g. p99 ie the response time such as 99% of the requests take less than that number (in seconds, SI unit)). It can run for a set duration, for a fixed number of calls, or until interrupted (at a constant target QPS, or max speed/load per connection/thread)."
+"Fortio runs at a specified query per second (qps) and records a histogram of execution time and calculates percentiles (e.g. p99 ie the response time such as 99% of the requests take less than that number (in seconds, SI unit)). It can run for a set duration, for a fixed number of calls, or until interrupted (at a constant target QPS, or max speed/load per connection/thread)."
 
 On dapr we have our fortio patched version which is built together with the performance test apps. The fortio app is called `perf-tester` and you'll probably see this name when deploying the test infrastructure.
 
@@ -132,7 +132,7 @@ var daprResult perf.TestResult
 err = json.Unmarshal(daprResp, &daprResult)
 ```
 
-Then you can do any assertion based on the actual QPS, latency percetiles and others metrics that is collected during the test.
+Then you can do any assertion based on the actual QPS, latency percentiles and others metrics that is collected during the test.
 
 ### K6
 

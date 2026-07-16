@@ -57,7 +57,12 @@ func (c *callee) Setup(t *testing.T) []framework.Option {
 			}
 			return nil, nil
 		}),
-		app.WithOnInvokeFn(func(context.Context, *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
+		app.WithOnInvokeFn(func(_ context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
+			// "ping" confirms cross-daprd name resolution is ready before the
+			// real invocation
+			if in.GetMethod() == "ping" {
+				return new(commonv1.InvokeResponse), nil
+			}
 			c.inInvoke.Store(true)
 			<-c.closeInvoke
 			return nil, nil
@@ -82,6 +87,7 @@ func (c *callee) Setup(t *testing.T) []framework.Option {
 }
 
 func (c *callee) Run(t *testing.T, ctx context.Context) {
+	c.daprd1.WaitUntilRunning(t, ctx)
 	c.daprd2.Run(t, ctx)
 	c.daprd2.WaitUntilRunning(t, ctx)
 	t.Cleanup(func() {
@@ -90,6 +96,17 @@ func (c *callee) Run(t *testing.T, ctx context.Context) {
 	})
 
 	client := c.daprd1.GRPCClient(t, ctx)
+
+	require.EventuallyWithT(t, func(ct *assert.CollectT) {
+		_, err := client.InvokeService(ctx, &rtv1.InvokeServiceRequest{
+			Id: c.daprd2.AppID(),
+			Message: &commonv1.InvokeRequest{
+				Method:        "ping",
+				HttpExtension: &commonv1.HTTPExtension{Verb: commonv1.HTTPExtension_POST},
+			},
+		})
+		assert.NoError(ct, err)
+	}, time.Second*30, time.Millisecond*100)
 
 	errCh := make(chan error)
 	go func() {
@@ -104,7 +121,7 @@ func (c *callee) Run(t *testing.T, ctx context.Context) {
 		errCh <- err
 	}()
 
-	require.Eventually(t, c.inInvoke.Load, time.Second*10, time.Millisecond*10)
+	require.Eventually(t, c.inInvoke.Load, time.Second*20, time.Millisecond*10)
 
 	go c.daprd2.Cleanup(t)
 
@@ -119,7 +136,7 @@ func (c *callee) Run(t *testing.T, ctx context.Context) {
 	select {
 	case err := <-errCh:
 		require.NoError(t, err)
-	case <-time.After(time.Second * 10):
+	case <-time.After(time.Second * 20):
 		assert.Fail(t, "timeout")
 	}
 }

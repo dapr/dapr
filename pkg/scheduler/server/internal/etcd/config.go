@@ -14,6 +14,7 @@ limitations under the License.
 package etcd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -31,27 +32,38 @@ import (
 
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/crypto/pem"
 )
 
-func config(opts Options) (*embed.Config, error) {
+func config(ctx context.Context, opts Options) (*embed.Config, error) {
 	config := embed.NewConfig()
 
 	config.Name = opts.Name
 	config.InitialCluster = strings.Join(opts.InitialCluster, ",")
 	config.MaxRequestBytes = math.MaxInt32
-	config.WarningApplyDuration = time.Second * 5
-	config.WarningUnaryRequestDuration = time.Second * 5
+	config.ExperimentalWarningApplyDuration = time.Second * 5
 
 	if opts.Security.MTLSEnabled() {
+		tld := opts.Security.ControlPlaneTrustDomain().String()
+		if opts.Mode == modes.KubernetesMode {
+			var err error
+			tldd, err := utils.GetKubeClusterDomainFromDNS(ctx)
+			if err != nil {
+				log.Errorf("Failed to get cluster domain, falling back to %q: %v", tld, err)
+			} else {
+				tld = tldd
+			}
+		}
+
 		info := transport.TLSInfo{
 			ClientCertAuth:      true,
 			InsecureSkipVerify:  false,
 			SkipClientSANVerify: false,
 			AllowedHostnames: []string{
-				fmt.Sprintf("dapr-scheduler-server-0.dapr-scheduler-server.%s.svc", opts.Security.ControlPlaneNamespace()),
-				fmt.Sprintf("dapr-scheduler-server-1.dapr-scheduler-server.%s.svc", opts.Security.ControlPlaneNamespace()),
-				fmt.Sprintf("dapr-scheduler-server-2.dapr-scheduler-server.%s.svc", opts.Security.ControlPlaneNamespace()),
+				fmt.Sprintf("dapr-scheduler-server-0.dapr-scheduler-server.%s.svc.%s", opts.Security.ControlPlaneNamespace(), tld),
+				fmt.Sprintf("dapr-scheduler-server-1.dapr-scheduler-server.%s.svc.%s", opts.Security.ControlPlaneNamespace(), tld),
+				fmt.Sprintf("dapr-scheduler-server-2.dapr-scheduler-server.%s.svc.%s", opts.Security.ControlPlaneNamespace(), tld),
 			},
 			EmptyCN:        true,
 			CertFile:       filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
@@ -59,7 +71,7 @@ func config(opts Options) (*embed.Config, error) {
 			ClientCertFile: filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
 			ClientKeyFile:  filepath.Join(*opts.Security.IdentityDir(), "key.pem"),
 			TrustedCAFile:  filepath.Join(*opts.Security.IdentityDir(), "ca.pem"),
-			ServerName:     fmt.Sprintf("%s.dapr-scheduler-server.%s.svc", opts.Name, opts.Security.ControlPlaneNamespace()),
+			ServerName:     fmt.Sprintf("%s.dapr-scheduler-server.%s.svc.%s", opts.Name, opts.Security.ControlPlaneNamespace(), tld),
 		}
 
 		b, err := os.ReadFile(filepath.Join(*opts.Security.IdentityDir(), "cert.pem"))
@@ -73,7 +85,9 @@ func config(opts Options) (*embed.Config, error) {
 		}
 
 		if !slices.Contains(certs[0].DNSNames, info.ServerName) {
-			return nil, fmt.Errorf("peer certificate does not contain the expected DNS name %s", info.ServerName)
+			return nil, fmt.Errorf("peer certificate does not contain the expected DNS name %s got %v",
+				info.ServerName, certs[0].DNSNames,
+			)
 		}
 
 		config.ClientTLSInfo = info
@@ -94,7 +108,7 @@ func config(opts Options) (*embed.Config, error) {
 	config.AdvertisePeerUrls = []url.URL{etcdURL}
 	config.ListenClientUrls = []url.URL{{
 		Scheme: "http",
-		Host:   "127.0.0.1:" + strconv.FormatUint(opts.ClientPort, 10),
+		Host:   opts.ClientListenAddress + ":" + strconv.FormatUint(opts.ClientPort, 10),
 	}}
 
 	switch opts.Mode {
@@ -135,12 +149,13 @@ func config(opts Options) (*embed.Config, error) {
 	config.SnapshotCount = opts.SnapshotCount
 	config.BackendBatchLimit = opts.BackendBatchLimit
 	config.BackendBatchInterval = backendBatchInterval
+	config.MaxTxnOps = opts.MaxTxnOps
 	config.ExperimentalBootstrapDefragThresholdMegabytes = opts.DefragThresholdMB
 
 	// Must be set to false to prevent aggressive election ticks where leader changes can happen
 	// before the state is fully synced. This is especially important with higher WAL/snapshot counts
 	// as new leaders might not see previous job triggers, leading to duplicate job executions.
-	config.InitialElectionTickAdvance = false
+	config.InitialElectionTickAdvance = opts.InitialElectionTickAdvance
 
 	config.Metrics = opts.Metrics
 

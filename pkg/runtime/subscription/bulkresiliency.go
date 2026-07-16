@@ -28,7 +28,7 @@ import (
 // out the messages that have been successfully processed and only retries the ones that have failed
 func (s *Subscription) applyBulkSubscribeResiliency(ctx context.Context, bulkSubCallData *todo.BulkSubscribeCallData,
 	psm todo.BulkSubscribedMessage, deadLetterTopic string, path string, policyDef *resiliency.PolicyDefinition,
-	rawPayload bool, envelope map[string]interface{},
+	rawPayload bool, envelope map[string]any,
 ) (*[]contribpubsub.BulkSubscribeResponseEntry, error) {
 	bscData := *bulkSubCallData
 	policyRunner := resiliency.NewRunnerWithOptions(
@@ -41,10 +41,12 @@ func (s *Subscription) applyBulkSubscribeResiliency(ctx context.Context, bulkSub
 						(*bscData.BulkResponses)[index].Error = v.Error
 					}
 				}
+
 				filteredPubSubMsgs := utils.Filter(psm.PubSubMessages, func(ps todo.Message) bool {
 					if index, ok := (*bscData.EntryIdIndexMap)[ps.Entry.EntryId]; ok {
 						return (*bscData.BulkResponses)[index].Error != nil
 					}
+
 					return false
 				})
 				psm.PubSubMessages = filteredPubSubMsgs
@@ -64,6 +66,7 @@ func (s *Subscription) applyBulkSubscribeResiliency(ctx context.Context, bulkSub
 			RawPayload:           rawPayload,
 			DeadLetterTopic:      deadLetterTopic,
 		})
+
 		return bsrr, err
 	})
 	// setting error if any entry has not been yet touched - only use case that seems possible is of timeout
@@ -73,5 +76,6 @@ func (s *Subscription) applyBulkSubscribeResiliency(ctx context.Context, bulkSub
 			(*bscData.BulkResponses)[ind].Error = err
 		}
 	}
+
 	return bscData.BulkResponses, err
 }

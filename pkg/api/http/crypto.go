@@ -23,7 +23,6 @@ import (
 	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
-	"github.com/dapr/kit/ptr"
 	encv1 "github.com/dapr/kit/schemes/enc/v1"
 	kitstrings "github.com/dapr/kit/strings"
 )
@@ -117,7 +116,7 @@ func (a *api) onCryptoEncrypt(w http.ResponseWriter, r *http.Request) {
 	// Set the cipher if present
 	cipher := r.Header.Get(cryptoHeaderDataEncryptionCipher)
 	if cipher != "" {
-		encOpts.Cipher = ptr.Of(encv1.Cipher(strings.ToUpper(cipher)))
+		encOpts.Cipher = new(encv1.Cipher(strings.ToUpper(cipher)))
 	}
 
 	// Perform the encryption on the body of the request

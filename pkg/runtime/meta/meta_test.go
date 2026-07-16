@@ -191,6 +191,7 @@ func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 	t.Run("auto set strict sandbox to wasm components", func(t *testing.T) {
 		// register test wasm component
 		components.RegisterWasmComponentType(components.CategoryMiddleware, "test")
+
 		meta := New(Options{Mode: modes.StandaloneMode, StrictSandbox: true})
 		// component with WasmStrictSandbox set to false
 		items := []common.NameValuePair{
@@ -218,9 +219,10 @@ func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 
 		wasm, err := meta.ToBaseMetadata(com)
 		noneWasm, err2 := meta.ToBaseMetadata(noneWasmComp)
+
 		require.NoError(t, err)
 		require.NoError(t, err2)
 		assert.Equal(t, "true", wasm.Properties[WasmStrictSandboxMetadataKey])
-		assert.Equal(t, "", noneWasm.Properties[WasmStrictSandboxMetadataKey])
+		assert.Empty(t, noneWasm.Properties[WasmStrictSandboxMetadataKey])
 	})
 }

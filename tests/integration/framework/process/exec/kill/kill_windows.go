@@ -1,5 +1,4 @@
 //go:build windows
-// +build windows
 
 /*
 Copyright 2023 The Dapr Authors
@@ -21,11 +20,23 @@ import (
 	"os/exec"
 	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/kit/signals"
 )
 
 func interrupt(_ *testing.T, cmd *exec.Cmd) {
+	kill(nil, cmd)
+}
+
+func kill(_ *testing.T, cmd *exec.Cmd) {
 	kill := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid))
 	kill.Stdout = os.Stdout
 	kill.Stderr = os.Stderr
 	kill.Run()
+}
+
+func signalHUP(t *testing.T, cmd *exec.Cmd) {
+	require.NoError(t, signals.SignalReload(cmd.Process.Pid))
 }

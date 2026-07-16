@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -51,6 +50,7 @@ func (s *staging) Setup(t *testing.T) []framework.Option {
 		actors.WithDB(s.actors1.DB()),
 		actors.WithPlacement(s.actors1.Placement()),
 		actors.WithScheduler(s.actors1.Scheduler()),
+		actors.WithSharedControlPlane(),
 		actors.WithActorTypes("bar"),
 		actors.WithActorTypeHandler("bar", func(_ http.ResponseWriter, req *http.Request) {
 			if req.Method == http.MethodDelete {
@@ -70,7 +70,7 @@ func (s *staging) Run(t *testing.T, ctx context.Context) {
 
 	_, err := s.actors1.Scheduler().Client(t, ctx).ScheduleJob(ctx, &schedulerv1.ScheduleJobRequest{
 		Name: "helloworld",
-		Job:  &schedulerv1.Job{DueTime: ptr.Of(time.Now().Format(time.RFC3339))},
+		Job:  &schedulerv1.Job{DueTime: new(time.Now().Format(time.RFC3339))},
 		Metadata: &schedulerv1.JobMetadata{
 			Namespace: "default", AppId: s.actors1.AppID(),
 			Target: &schedulerv1.JobTargetMetadata{

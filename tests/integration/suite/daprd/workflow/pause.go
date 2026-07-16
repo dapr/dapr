@@ -47,30 +47,30 @@ func (p *pause) Setup(t *testing.T) []framework.Option {
 func (p *pause) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
-	p.workflow.Registry().AddOrchestratorN("pauser", func(ctx *task.OrchestrationContext) (any, error) {
+	p.workflow.Registry().AddWorkflowN("pauser", func(ctx *task.WorkflowContext) (any, error) {
 		ctx.WaitForSingleEvent("abc", time.Minute).Await(nil)
 		return nil, nil
 	})
 
 	client := p.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "pauser", api.WithInstanceID("pauser"))
+	id, err := client.ScheduleNewWorkflow(ctx, "pauser", api.WithInstanceID("pauser"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationStart(ctx, id)
+	_, err = client.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
 
-	require.NoError(t, client.SuspendOrchestration(ctx, id, "myreason"))
-	meta, err := client.FetchOrchestrationMetadata(ctx, id)
+	require.NoError(t, client.SuspendWorkflow(ctx, id, "myreason"))
+	meta, err := client.FetchWorkflowMetadata(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, "ORCHESTRATION_STATUS_SUSPENDED", meta.GetRuntimeStatus().String())
 
-	require.NoError(t, client.ResumeOrchestration(ctx, id, "anothermyreason"))
-	meta, err = client.FetchOrchestrationMetadata(ctx, id)
+	require.NoError(t, client.ResumeWorkflow(ctx, id, "anothermyreason"))
+	meta, err = client.FetchWorkflowMetadata(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, "ORCHESTRATION_STATUS_RUNNING", meta.GetRuntimeStatus().String())
 
 	require.NoError(t, client.RaiseEvent(ctx, id, "abc"))
 
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 }

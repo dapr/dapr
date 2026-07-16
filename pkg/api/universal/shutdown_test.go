@@ -14,35 +14,97 @@ limitations under the License.
 package universal
 
 import (
-	"context"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	grpcMetadata "google.golang.org/grpc/metadata"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-func TestShutdownEndpoint(t *testing.T) {
-	shutdownCh := make(chan struct{})
+func TestShutdown(t *testing.T) {
+	const negativeWait = 200 * time.Millisecond
 
-	fakeAPI := &Universal{
-		logger: testLogger,
-		shutdownFn: func() {
-			close(shutdownCh)
+	tests := map[string]struct {
+		metadata  map[string]string
+		wantGrace bool
+		wantExit  bool
+		wantCode  int
+	}{
+		"no metadata triggers graceful shutdown": {
+			wantGrace: true,
+		},
+		"dapr-force-shutdown=true triggers force exit": {
+			metadata: map[string]string{ForceShutdownMetadataKey: "true"},
+			wantExit: true,
+			wantCode: 1,
+		},
+		"dapr-force-shutdown=TRUE is case-insensitive": {
+			metadata: map[string]string{ForceShutdownMetadataKey: "TRUE"},
+			wantExit: true,
+			wantCode: 1,
+		},
+		"dapr-force-shutdown=false falls back to graceful": {
+			metadata:  map[string]string{ForceShutdownMetadataKey: "false"},
+			wantGrace: true,
+		},
+		"unrelated metadata falls back to graceful": {
+			metadata:  map[string]string{"x-some-header": "true"},
+			wantGrace: true,
 		},
 	}
 
-	t.Run("Shutdown successfully", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(t.Context())
-		_, err := fakeAPI.Shutdown(ctx, &runtimev1pb.ShutdownRequest{})
-		cancel()
-		require.NoError(t, err, "Expected no error")
-		select {
-		case <-time.After(time.Second):
-			t.Fatal("Did not shut down within 1 second")
-		case <-shutdownCh:
-			// All good
-		}
-	})
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			shutdownCh := make(chan struct{}, 1)
+			exitCh := make(chan int, 1)
+			fakeAPI := New(Options{
+				Logger: testLogger,
+				ShutdownFn: func() {
+					shutdownCh <- struct{}{}
+				},
+				ExitFn: func(code int) {
+					exitCh <- code
+				},
+			})
+
+			ctx := t.Context()
+			if len(tc.metadata) > 0 {
+				ctx = grpcMetadata.NewIncomingContext(ctx, grpcMetadata.New(tc.metadata))
+			}
+
+			_, err := fakeAPI.Shutdown(ctx, &runtimev1pb.ShutdownRequest{})
+			require.NoError(t, err)
+
+			if tc.wantGrace {
+				select {
+				case <-shutdownCh:
+				case <-time.After(time.Second):
+					t.Fatal("graceful shutdownFn not invoked within 1 second")
+				}
+				// Ensure exitFn is never invoked on the graceful path.
+				select {
+				case code := <-exitCh:
+					t.Fatalf("exitFn unexpectedly invoked with code %d on graceful path", code)
+				case <-time.After(negativeWait):
+				}
+			}
+			if tc.wantExit {
+				select {
+				case code := <-exitCh:
+					assert.Equal(t, tc.wantCode, code)
+				case <-time.After(time.Second):
+					t.Fatal("exitFn not invoked within 1 second")
+				}
+				// Ensure shutdownFn is never invoked on the force path.
+				select {
+				case <-shutdownCh:
+					t.Fatal("graceful shutdownFn unexpectedly invoked on force path")
+				case <-time.After(negativeWait):
+				}
+			}
+		})
+	}
 }

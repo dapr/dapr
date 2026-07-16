@@ -48,7 +48,7 @@ func TestCorsHandler(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	t.Run("with default cors, middleware not enabled", func(t *testing.T) {
+	t.Run("with default cors, middleware disabled", func(t *testing.T) {
 		srv := newServer()
 		srv.config.AllowedOrigins = cors.DefaultAllowedOrigins
 
@@ -58,9 +58,74 @@ func TestCorsHandler(t *testing.T) {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodOptions, "/", nil)
 		r.Header.Set("Origin", "*")
+		r.Header.Set("Access-Control-Request-Method", "GET")
 		h.ServeHTTP(w, r)
 
 		assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"))
+	})
+
+	t.Run("with allow all origins, middleware allow all", func(t *testing.T) {
+		srv := newServer()
+		srv.config.AllowedOrigins = cors.AllowAllOrigins
+
+		h := chi.NewRouter()
+		srv.useCors(h)
+		h.Get("/", hf)
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodOptions, "/", nil)
+		r.Header.Set("Origin", "*")
+		r.Header.Set("Access-Control-Request-Method", "GET")
+		h.ServeHTTP(w, r)
+
+		assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
+	})
+
+	t.Run("with allow all origins, api token auth not required", func(t *testing.T) {
+		srv := newServer()
+		srv.config.AllowedOrigins = cors.AllowAllOrigins
+
+		h := chi.NewRouter()
+		srv.useCors(h)
+		// register API authentication middleware after CORS middleware
+		h.Use(APITokenAuthMiddleware("test"))
+		h.Get("/", hf)
+
+		t.Run("OPTIONS request, without api token", func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodOptions, "/", nil)
+			r.Header.Set("Origin", "*")
+			r.Header.Set("Access-Control-Request-Method", "GET")
+			// OPTIONS request does not usually include the API token
+			h.ServeHTTP(w, r)
+			assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
+			assert.Equal(t, http.StatusOK, w.Result().StatusCode)
+		})
+
+		t.Run("OPTIONS request, with api token", func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodOptions, "/", nil)
+			r.Header.Set("Origin", "*")
+			r.Header.Set("Access-Control-Request-Method", "GET")
+			r.Header.Set("dapr-api-token", "test")
+			h.ServeHTTP(w, r)
+			assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
+			assert.Equal(t, http.StatusOK, w.Result().StatusCode)
+		})
+
+		t.Run("GET request, without api token", func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			h.ServeHTTP(w, r)
+			assert.Equal(t, http.StatusUnauthorized, w.Result().StatusCode)
+		})
+
+		t.Run("GET request, with api token", func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r.Header.Set("dapr-api-token", "test")
+			h.ServeHTTP(w, r)
+			assert.Equal(t, http.StatusOK, w.Result().StatusCode)
+		})
 	})
 
 	t.Run("with custom cors, middleware enabled", func(t *testing.T) {
@@ -73,6 +138,7 @@ func TestCorsHandler(t *testing.T) {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodOptions, "/", nil)
 		r.Header.Set("Origin", "http://test.com")
+		r.Header.Set("Access-Control-Request-Method", "GET")
 		h.ServeHTTP(w, r)
 
 		assert.NotEmpty(t, w.Header().Get("Access-Control-Allow-Origin"))
@@ -450,7 +516,7 @@ func TestClose(t *testing.T) {
 			Middleware:  func(n http.Handler) http.Handler { return n },
 			APISpec:     config.APISpec{},
 		})
-		require.NoError(t, server.StartNonBlocking())
+		require.NoError(t, server.StartNonBlocking(t.Context()))
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		require.NoError(t, server.Close())
 	})
@@ -476,7 +542,7 @@ func TestClose(t *testing.T) {
 			Middleware:  func(n http.Handler) http.Handler { return n },
 			APISpec:     config.APISpec{},
 		})
-		require.NoError(t, server.StartNonBlocking())
+		require.NoError(t, server.StartNonBlocking(t.Context()))
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		require.NoError(t, server.Close())
 	})

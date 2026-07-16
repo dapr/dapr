@@ -16,7 +16,6 @@ package universal
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -34,7 +33,11 @@ const (
 )
 
 func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobResponse, error) {
-	return a.scheduleJob(ctx, inReq.GetJob())
+	return a.scheduleJob(ctx, inReq)
+}
+
+func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobResponse, error) {
+	return a.scheduleJob(ctx, inReq)
 }
 
 func (a *Universal) ScheduleJobAlpha1HTTP(ctx context.Context, job *internalsv1pb.JobHTTPRequest) (*runtimev1pb.ScheduleJobResponse, error) {
@@ -43,30 +46,31 @@ func (a *Universal) ScheduleJobAlpha1HTTP(ctx context.Context, job *internalsv1p
 		return &runtimev1pb.ScheduleJobResponse{}, fmt.Errorf("error creating storable job data from job: %w", err)
 	}
 
-	//nolint:protogetter
-	return a.scheduleJob(ctx, &runtimev1pb.Job{
-		Name:          job.GetName(),
-		Schedule:      job.Schedule,
-		Repeats:       job.Repeats,
-		DueTime:       job.DueTime,
-		Ttl:           job.Ttl,
-		Data:          data,
-		Overwrite:     job.GetOverwrite(),
-		FailurePolicy: job.GetFailurePolicy(),
+	return a.scheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
+		Job: &runtimev1pb.Job{
+			Name:          job.GetName(),
+			Schedule:      job.Schedule,
+			Repeats:       job.Repeats,
+			DueTime:       job.DueTime,
+			Ttl:           job.Ttl,
+			Data:          data,
+			FailurePolicy: job.GetFailurePolicy(),
+		},
+		Overwrite: job.GetOverwrite(),
 	})
 }
 
-func (a *Universal) scheduleJob(ctx context.Context, job *runtimev1pb.Job) (*runtimev1pb.ScheduleJobResponse, error) {
+func (a *Universal) scheduleJob(ctx context.Context, jobRequest *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
 	}
-
+	job := jobRequest.GetJob()
 	if job == nil {
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Job", errMetadata, errorcodes.SchedulerEmpty)
 	}
 
-	if job.GetName() == "" || strings.Contains(job.GetName(), "|") {
+	if job.GetName() == "" {
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Name", errMetadata, errorcodes.SchedulerJobNameEmpty)
 	}
 
@@ -85,14 +89,14 @@ func (a *Universal) scheduleJob(ctx context.Context, job *runtimev1pb.Job) (*run
 				},
 			},
 		},
-		//nolint:protogetter
+		Overwrite: jobRequest.GetOverwrite(),
+
 		Job: &schedulerv1pb.Job{
 			Schedule:      job.Schedule,
 			Data:          job.GetData(),
 			Repeats:       job.Repeats,
 			DueTime:       job.DueTime,
 			Ttl:           job.Ttl,
-			Overwrite:     job.GetOverwrite(),
 			FailurePolicy: job.GetFailurePolicy(),
 		},
 	}
@@ -109,7 +113,15 @@ func (a *Universal) scheduleJob(ctx context.Context, job *runtimev1pb.Job) (*run
 	return &runtimev1pb.ScheduleJobResponse{}, nil
 }
 
+func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobRequest) (*runtimev1pb.DeleteJobResponse, error) {
+	return a.deleteJob(ctx, inReq)
+}
+
 func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.DeleteJobRequest) (*runtimev1pb.DeleteJobResponse, error) {
+	return a.deleteJob(ctx, inReq)
+}
+
+func (a *Universal) deleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobRequest) (*runtimev1pb.DeleteJobResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
@@ -145,7 +157,15 @@ func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.Dele
 	return &runtimev1pb.DeleteJobResponse{}, nil
 }
 
+func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
+	return a.getJob(ctx, inReq)
+}
+
 func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
+	return a.getJob(ctx, inReq)
+}
+
+func (a *Universal) getJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
@@ -181,12 +201,112 @@ func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobR
 	return &runtimev1pb.GetJobResponse{
 		Job: &runtimev1pb.Job{
 			Name:          inReq.GetName(),
-			Schedule:      resp.GetJob().Schedule, //nolint:protogetter
+			Schedule:      resp.GetJob().Schedule,
 			Data:          resp.GetJob().GetData(),
-			Repeats:       resp.GetJob().Repeats, //nolint:protogetter
-			DueTime:       resp.GetJob().DueTime, //nolint:protogetter
-			Ttl:           resp.GetJob().Ttl,     //nolint:protogetter
+			Repeats:       resp.GetJob().Repeats,
+			DueTime:       resp.GetJob().DueTime,
+			Ttl:           resp.GetJob().Ttl,
 			FailurePolicy: resp.GetJob().GetFailurePolicy(),
 		},
+	}, nil
+}
+
+func (a *Universal) DeleteJobsByPrefix(ctx context.Context, req *runtimev1pb.DeleteJobsByPrefixRequest) (*runtimev1pb.DeleteJobsByPrefixResponse, error) {
+	return a.deleteJobsByPrefix(ctx, req)
+}
+
+func (a *Universal) DeleteJobsByPrefixAlpha1(ctx context.Context, req *runtimev1pb.DeleteJobsByPrefixRequestAlpha1) (*runtimev1pb.DeleteJobsByPrefixResponseAlpha1, error) {
+	_, err := a.deleteJobsByPrefix(ctx, &runtimev1pb.DeleteJobsByPrefixRequest{
+		NamePrefix: req.NamePrefix,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &runtimev1pb.DeleteJobsByPrefixResponseAlpha1{}, nil
+}
+
+func (a *Universal) deleteJobsByPrefix(ctx context.Context, req *runtimev1pb.DeleteJobsByPrefixRequest) (*runtimev1pb.DeleteJobsByPrefixResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	_, err := a.scheduler.DeleteByNamePrefix(ctx, &schedulerv1pb.DeleteByNamePrefixRequest{
+		NamePrefix: req.GetNamePrefix(),
+		Metadata: &schedulerv1pb.JobMetadata{
+			AppId:     a.appID,
+			Namespace: a.Namespace(),
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Job{
+					Job: new(schedulerv1pb.TargetJob),
+				},
+			},
+		},
+	})
+	if err != nil {
+		a.logger.Errorf("Error deleting jobs by prefix due to: %s", err)
+		return nil, apierrors.SchedulerDeleteJob(map[string]string{
+			"appID":     a.AppID(),
+			"namespace": a.Namespace(),
+		}, err)
+	}
+
+	return &runtimev1pb.DeleteJobsByPrefixResponse{}, nil
+}
+
+func (a *Universal) ListJobs(ctx context.Context, req *runtimev1pb.ListJobsRequest) (*runtimev1pb.ListJobsResponse, error) {
+	return a.listJobs(ctx, req)
+}
+
+func (a *Universal) ListJobsAlpha1(ctx context.Context, _ *runtimev1pb.ListJobsRequestAlpha1) (*runtimev1pb.ListJobsResponseAlpha1, error) {
+	resp, err := a.listJobs(ctx, new(runtimev1pb.ListJobsRequest))
+	if err != nil {
+		return nil, err
+	}
+	return &runtimev1pb.ListJobsResponseAlpha1{
+		Jobs: resp.GetJobs(),
+	}, nil
+}
+
+func (a *Universal) listJobs(ctx context.Context, req *runtimev1pb.ListJobsRequest) (*runtimev1pb.ListJobsResponse, error) {
+	errMetadata := map[string]string{
+		"appID":     a.AppID(),
+		"namespace": a.Namespace(),
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := a.scheduler.ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
+		Metadata: &schedulerv1pb.JobMetadata{
+			AppId:     a.appID,
+			Namespace: a.Namespace(),
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Job{
+					Job: new(schedulerv1pb.TargetJob),
+				},
+			},
+		},
+	})
+	if err != nil {
+		a.logger.Errorf("Error listing jobs due to: %s", err)
+		return nil, apierrors.SchedulerListJobs(errMetadata, err)
+	}
+
+	jobs := make([]*runtimev1pb.Job, 0, len(resp.GetJobs()))
+	for _, namedJob := range resp.GetJobs() {
+		job := namedJob.GetJob()
+		//nolint:protogetter
+		jobs = append(jobs, &runtimev1pb.Job{
+			Name:          namedJob.GetName(),
+			Schedule:      job.Schedule,
+			Repeats:       job.Repeats,
+			DueTime:       job.DueTime,
+			Ttl:           job.Ttl,
+			Data:          job.Data,
+			FailurePolicy: job.FailurePolicy,
+		})
+	}
+
+	return &runtimev1pb.ListJobsResponse{
+		Jobs: jobs,
 	}, nil
 }

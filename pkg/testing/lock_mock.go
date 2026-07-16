@@ -42,7 +42,7 @@ func (m *MockStore) InitLockStore(ctx context.Context, metadata lock.Metadata) e
 }
 
 // InitLockStore indicates an expected call of InitLockStore.
-func (mr *MockStoreMockRecorder) InitLockStore(ctx context.Context, metadata interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) InitLockStore(ctx context.Context, metadata any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitLockStore", reflect.TypeOf((*MockStore)(nil).InitLockStore), metadata)
 }
@@ -57,7 +57,7 @@ func (m *MockStore) TryLock(ctx context.Context, req *lock.TryLockRequest) (*loc
 }
 
 // TryLock indicates an expected call of TryLock.
-func (mr *MockStoreMockRecorder) TryLock(ctx context.Context, req interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) TryLock(ctx context.Context, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TryLock", reflect.TypeOf((*MockStore)(nil).TryLock), ctx, req)
 }
@@ -72,7 +72,7 @@ func (m *MockStore) Unlock(ctx context.Context, req *lock.UnlockRequest) (*lock.
 }
 
 // Unlock indicates an expected call of Unlock.
-func (mr *MockStoreMockRecorder) Unlock(ctx context.Context, req interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) Unlock(ctx context.Context, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unlock", reflect.TypeOf((*MockStore)(nil).Unlock), ctx, req)
 }

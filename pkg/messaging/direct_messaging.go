@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -32,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -66,6 +68,7 @@ type directMessaging struct {
 	resolver            nr.Resolver
 	resolverMulti       nr.ResolverMulti
 	hostAddress         string
+	hostFwdAddr         string
 	hostName            string
 	maxRequestBodySize  int
 	proxy               Proxy
@@ -105,6 +108,12 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) invokev1.DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
 
+	// RFC 7239: IPv6 addresses must be quoted and bracketed in the Forwarded header.
+	hFwdAddr := hAddr
+	if ip := net.ParseIP(hAddr); ip != nil && ip.To4() == nil {
+		hFwdAddr = `"[` + hAddr + `]"`
+	}
+
 	dm := &directMessaging{
 		appID:               opts.AppID,
 		namespace:           opts.Namespace,
@@ -118,6 +127,7 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) invokev1.DirectMessaging {
 		readBufferSize:      opts.ReadBufferSize,
 		resiliency:          opts.Resiliency,
 		hostAddress:         hAddr,
+		hostFwdAddr:         hFwdAddr,
 		hostName:            hName,
 		compStore:           opts.CompStore,
 	}
@@ -151,7 +161,18 @@ func (d *directMessaging) Close() error {
 
 // Invoke takes a message requests and invokes an app, either local or remote.
 func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	app, err := d.getRemoteApp(targetAppID)
+	// Normalize the method at the service invocation edge: reject forbidden
+	// characters and resolve path traversal. The normalized form is used for
+	// both ACL evaluation and dispatch to the target app.
+	if msg := req.Message(); msg != nil {
+		normalized, normErr := method.NormalizeMethod(msg.GetMethod())
+		if normErr != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid method: %v", normErr)
+		}
+		msg.Method = normalized
+	}
+
+	app, err := d.getRemoteApp(ctx, targetAppID)
 	if err != nil {
 		return nil, err
 	}
@@ -211,8 +232,8 @@ func (d *directMessaging) invokeWithRetry(
 	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error),
 	req *invokev1.InvokeMethodRequest,
 ) (*invokev1.InvokeMethodResponse, error) {
-	if !d.resiliency.PolicyDefined(app.id, resiliency.EndpointPolicy{}) {
-		// This policy has built-in retries so enable replay in the request
+	if !d.resiliency.PolicyDefined(app.id, resiliency.EndpointPolicy{}) && !req.IsStreamingRequest() {
+		// Enable body buffering so the request can be replayed on retry.
 		req.WithReplay(true)
 
 		policyRunner := resiliency.NewRunnerWithOptions(ctx,
@@ -255,6 +276,21 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 	if appChannel == nil {
 		return nil, errors.New("cannot invoke local endpoint: app channel not initialized")
 	}
+
+	// A self-invocation bypasses invokeRemote, so stamp the caller/callee
+	// identity headers here too. caller == callee == this app. Any
+	// caller-supplied identity headers are stripped first and re-stamped
+	// unconditionally, mirroring invokeRemote, so an app cannot spoof its own
+	// identity headers on the local leg. The strip is case-insensitive because
+	// HTTP-origin metadata retains the request's original header casing.
+	md := req.Metadata()
+	for k := range md {
+		switch strings.ToLower(k) {
+		case invokev1.CallerIDHeader, invokev1.CallerNamespaceHeader, invokev1.CalleeIDHeader:
+			delete(md, k)
+		}
+	}
+	d.addCallerAndCalleeAppIDHeaderToMetadata(d.namespace, d.appID, d.appID, req)
 
 	return appChannel.InvokeMethod(ctx, req, "")
 }
@@ -300,7 +336,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 
 	d.addForwardedHeadersToMetadata(req)
 	d.addDestinationAppIDHeaderToMetadata(appID, req)
-	d.addCallerAndCalleeAppIDHeaderToMetadata(d.appID, appID, req)
+	d.addCallerAndCalleeAppIDHeaderToMetadata(d.namespace, d.appID, appID, req)
 
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 
@@ -535,7 +571,10 @@ func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req 
 	}
 }
 
-func (d *directMessaging) addCallerAndCalleeAppIDHeaderToMetadata(callerAppID, calleeAppID string, req *invokev1.InvokeMethodRequest) {
+func (d *directMessaging) addCallerAndCalleeAppIDHeaderToMetadata(callerNamespace, callerAppID, calleeAppID string, req *invokev1.InvokeMethodRequest) {
+	req.Metadata()[invokev1.CallerNamespaceHeader] = &internalv1pb.ListStringValue{
+		Values: []string{callerNamespace},
+	}
 	req.Metadata()[invokev1.CallerIDHeader] = &internalv1pb.ListStringValue{
 		Values: []string{callerAppID},
 	}
@@ -563,13 +602,16 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 		// Add X-Forwarded-For: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For
 		addOrCreate("X-Forwarded-For", d.hostAddress)
 
-		forwardedHeaderValue += "for=" + d.hostAddress + ";by=" + d.hostAddress + ";"
+		forwardedHeaderValue += "for=" + d.hostFwdAddr + ";by=" + d.hostFwdAddr
 	}
 
 	if d.hostName != "" {
 		// Add X-Forwarded-Host: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
 		addOrCreate("X-Forwarded-Host", d.hostName)
 
+		if forwardedHeaderValue != "" {
+			forwardedHeaderValue += ";"
+		}
 		forwardedHeaderValue += "host=" + d.hostName
 	}
 
@@ -577,7 +619,7 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 	addOrCreate("Forwarded", forwardedHeaderValue)
 }
 
-func (d *directMessaging) getRemoteApp(appID string) (res remoteApp, err error) {
+func (d *directMessaging) getRemoteApp(ctx context.Context, appID string) (res remoteApp, err error) {
 	res.id, res.namespace, err = d.requestAppIDAndNamespace(appID)
 	if err != nil {
 		return res, err
@@ -618,7 +660,7 @@ func (d *directMessaging) getRemoteApp(appID string) (res remoteApp, err error) 
 			// If there was nothing in the cache (including the case of the cache disabled)
 			if res.address == "" {
 				// Resolve
-				addresses, err = d.resolverMulti.ResolveIDMulti(context.TODO(), request)
+				addresses, err = d.resolverMulti.ResolveIDMulti(ctx, request)
 				if err != nil {
 					return res, err
 				}
@@ -632,7 +674,22 @@ func (d *directMessaging) getRemoteApp(appID string) (res remoteApp, err error) 
 				}
 			}
 		} else {
-			res.address, err = d.resolver.ResolveID(context.TODO(), request)
+			err = backoff.Retry(func() error {
+				var rerr error
+				res.address, rerr = d.resolver.ResolveID(ctx, request)
+				if rerr != nil {
+					return backoff.Permanent(rerr)
+				}
+				if len(res.address) == 0 {
+					return fmt.Errorf("resolver returned empty address for app id %s/%s", request.Namespace, request.ID)
+				}
+				return nil
+			}, backoff.WithMaxRetries(
+				backoff.WithContext(
+					backoff.NewConstantBackOff(100*time.Millisecond),
+					ctx),
+				5),
+			)
 			if err != nil {
 				return res, err
 			}

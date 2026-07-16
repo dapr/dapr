@@ -179,7 +179,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 			t.Helper()
 
 			body := strings.NewReader(fmt.Sprintf(`{"dueTime":"0s","data":%s}`, test.data))
-			g.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/"+name, body)
+			g.daprd.HTTPPost2xx(t, ctx, "/v1.0/jobs/"+name, body)
 			select {
 			case job := <-g.jobChan:
 				//nolint:protogetter

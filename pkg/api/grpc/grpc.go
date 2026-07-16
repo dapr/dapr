@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -41,6 +42,7 @@ import (
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
@@ -54,6 +56,7 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
+	"github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/outbox"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -87,17 +90,18 @@ type API interface {
 
 type api struct {
 	*universal.Universal
-	logger                logger.Logger
-	directMessaging       invokev1.DirectMessaging
-	channels              *channels.Channels
-	pubsubAdapter         runtimePubsub.Adapter
-	pubsubAdapterStreamer runtimePubsub.AdapterStreamer
-	outbox                outbox.Outbox
-	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	tracingSpec           config.TracingSpec
-	accessControlList     *config.AccessControlList
-	processor             *processor.Processor
-	wg                    sync.WaitGroup
+	logger                 logger.Logger
+	directMessaging        invokev1.DirectMessaging
+	channels               *channels.Channels
+	pubsubAdapter          runtimePubsub.Adapter
+	pubsubAdapterStreamer  runtimePubsub.AdapterStreamer
+	outbox                 outbox.Outbox
+	sendToOutputBindingFn  func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	tracingSpec            config.TracingSpec
+	accessControlList      *config.AccessControlList
+	workflowAccessPolicies *workflowacl.Holder
+	processor              *processor.Processor
+	wg                     sync.WaitGroup
 
 	closeCh chan struct{}
 	closed  atomic.Bool
@@ -105,34 +109,36 @@ type api struct {
 
 // APIOpts contains options for NewAPI.
 type APIOpts struct {
-	Universal             *universal.Universal
-	Logger                logger.Logger
-	Channels              *channels.Channels
-	PubSubAdapter         runtimePubsub.Adapter
-	PubSubAdapterStreamer runtimePubsub.AdapterStreamer
-	Outbox                outbox.Outbox
-	DirectMessaging       invokev1.DirectMessaging
-	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	TracingSpec           config.TracingSpec
-	AccessControlList     *config.AccessControlList
-	Processor             *processor.Processor
+	Universal              *universal.Universal
+	Logger                 logger.Logger
+	Channels               *channels.Channels
+	PubSubAdapter          runtimePubsub.Adapter
+	PubSubAdapterStreamer  runtimePubsub.AdapterStreamer
+	Outbox                 outbox.Outbox
+	DirectMessaging        invokev1.DirectMessaging
+	SendToOutputBindingFn  func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	TracingSpec            config.TracingSpec
+	AccessControlList      *config.AccessControlList
+	Processor              *processor.Processor
+	WorkflowAccessPolicies *workflowacl.Holder
 }
 
 // NewAPI returns a new gRPC API.
 func NewAPI(opts APIOpts) API {
 	return &api{
-		Universal:             opts.Universal,
-		logger:                opts.Logger,
-		directMessaging:       opts.DirectMessaging,
-		channels:              opts.Channels,
-		pubsubAdapter:         opts.PubSubAdapter,
-		pubsubAdapterStreamer: opts.PubSubAdapterStreamer,
-		outbox:                opts.Outbox,
-		sendToOutputBindingFn: opts.SendToOutputBindingFn,
-		tracingSpec:           opts.TracingSpec,
-		accessControlList:     opts.AccessControlList,
-		processor:             opts.Processor,
-		closeCh:               make(chan struct{}),
+		Universal:              opts.Universal,
+		logger:                 opts.Logger,
+		directMessaging:        opts.DirectMessaging,
+		channels:               opts.Channels,
+		pubsubAdapter:          opts.PubSubAdapter,
+		pubsubAdapterStreamer:  opts.PubSubAdapterStreamer,
+		outbox:                 opts.Outbox,
+		sendToOutputBindingFn:  opts.SendToOutputBindingFn,
+		tracingSpec:            opts.TracingSpec,
+		accessControlList:      opts.AccessControlList,
+		processor:              opts.Processor,
+		workflowAccessPolicies: opts.WorkflowAccessPolicies,
+		closeCh:                make(chan struct{}),
 	}
 }
 
@@ -183,13 +189,12 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	}
 
 	data := body
-
+	span := diagUtils.SpanFromContext(ctx)
+	traceID, traceState := diag.TraceIDAndStateFromSpan(span)
+	md := maps.Clone(in.GetMetadata())
 	if !rawPayload {
-		span := diagUtils.SpanFromContext(ctx)
-		traceID, traceState := diag.TraceIDAndStateFromSpan(span)
-
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-			Source:          a.Universal.AppID(),
+			Source:          a.AppID(),
 			Topic:           in.GetTopic(),
 			DataContentType: in.GetDataContentType(),
 			Data:            body,
@@ -206,7 +211,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		}
 
 		features := thepubsub.Features()
-		pubsub.ApplyMetadata(envelope, features, in.GetMetadata())
+		pubsub.ApplyMetadata(envelope, features, md)
 
 		data, err = json.Marshal(envelope)
 		if err != nil {
@@ -216,17 +221,20 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
+	} else {
+		md[pubsub.TraceIDField] = traceID
+		md[pubsub.TraceStateField] = traceState
 	}
 
 	req := pubsub.PublishRequest{
 		PubsubName: pubsubName,
 		Topic:      topic,
 		Data:       data,
-		Metadata:   in.GetMetadata(),
+		Metadata:   md,
 	}
 
 	start := time.Now()
-	err := a.pubsubAdapter.Publish(ctx, &req)
+	err := a.pubsubAdapter.Publish(ctx, &req, runtimePubsub.TransportModeGRPC)
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
@@ -355,7 +363,16 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 	return message, err
 }
 
+// Deprecated: use BulkPublishEvent() instead of the alpha version
 func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error) {
+	return a.bulkPublishEvent(ctx, in, "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1/")
+}
+
+func (a *api) BulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error) {
+	return a.bulkPublishEvent(ctx, in, "/dapr.proto.runtime.v1.Dapr/BulkPublishEvent/")
+}
+
+func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishRequest, spanName string) (*runtimev1pb.BulkPublishResponse, error) {
 	thepubsub, pubsubName, topic, rawPayload, validationErr := a.validateAndGetPubsubAndTopic(in.GetPubsubName(), in.GetTopic(), in.GetMetadata())
 
 	if validationErr != nil {
@@ -399,7 +416,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 		if !rawPayload {
 			// Extract trace context from context.
-			_, childSpan := diag.StartGRPCProducerSpanChildFromParent(ctx, span, "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1/")
+			_, childSpan := diag.StartGRPCProducerSpanChildFromParent(ctx, span, spanName)
 			traceID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
 
 			// For multiple events in a single bulk call traceParent is different for each event.
@@ -407,7 +424,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 			spanMap[i] = childSpan
 
 			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-				Source:          a.Universal.AppID(),
+				Source:          a.AppID(),
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
 				Data:            entries[i].Event,
@@ -448,7 +465,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	start := time.Now()
 	// err is only nil if all entries are successfully published.
 	// For partial success, err is not nil and res contains the failed entries.
-	res, err := a.pubsubAdapter.BulkPublish(ctx, &req)
+	res, err := a.pubsubAdapter.BulkPublish(ctx, &req, runtimePubsub.TransportModeGRPC)
 
 	elapsed := diag.ElapsedSince(start)
 	eventsPublished := int64(len(req.Entries))
@@ -499,9 +516,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 		Operation: bindings.OperationKind(in.GetOperation()),
 		Data:      in.GetData(),
 	}
-	for key, val := range in.GetMetadata() {
-		req.Metadata[key] = val
-	}
+	maps.Copy(req.Metadata, in.GetMetadata())
 
 	// this is for the http binding, so dont need grpc-trace-bin
 	span := diagUtils.SpanFromContext(ctx)
@@ -570,7 +585,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 
 func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error) {
 	bulkResp := &runtimev1pb.GetBulkStateResponse{}
-	store, err := a.Universal.GetStateStore(in.GetStoreName())
+	store, err := a.GetStateStore(in.GetStoreName())
 	if err != nil {
 		// Error has already been logged
 		return bulkResp, err
@@ -583,7 +598,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	var key string
 	reqs := make([]state.GetRequest, len(in.GetKeys()))
 	for i, k := range in.GetKeys() {
-		key, err = stateLoader.GetModifiedStateKey(k, in.GetStoreName(), a.Universal.AppID())
+		key, err = stateLoader.GetModifiedStateKey(k, in.GetStoreName(), a.AppID())
 		if err != nil {
 			return &runtimev1pb.GetBulkStateResponse{}, err
 		}
@@ -645,12 +660,12 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 }
 
 func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
-	store, err := a.Universal.GetStateStore(in.GetStoreName())
+	store, err := a.GetStateStore(in.GetStoreName())
 	if err != nil {
 		// Error has already been logged
 		return &runtimev1pb.GetStateResponse{}, err
 	}
-	key, err := stateLoader.GetModifiedStateKey(in.GetKey(), in.GetStoreName(), a.Universal.AppID())
+	key, err := stateLoader.GetModifiedStateKey(in.GetKey(), in.GetStoreName(), a.AppID())
 	if err != nil {
 		return &runtimev1pb.GetStateResponse{}, err
 	}
@@ -711,7 +726,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error) {
 	empty := &emptypb.Empty{}
 
-	store, err := a.Universal.GetStateStore(in.GetStoreName())
+	store, err := a.GetStateStore(in.GetStoreName())
 	if err != nil {
 		// Error has already been logged
 		return empty, err
@@ -729,7 +744,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		}
 
 		var key string
-		key, err = stateLoader.GetModifiedStateKey(s.GetKey(), in.GetStoreName(), a.Universal.AppID())
+		key, err = stateLoader.GetModifiedStateKey(s.GetKey(), in.GetStoreName(), a.AppID())
 		if err != nil {
 			return empty, err
 		}
@@ -810,13 +825,13 @@ func (a *api) getStateErrorCode(err error) codes.Code {
 func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error) {
 	empty := &emptypb.Empty{}
 
-	store, err := a.Universal.GetStateStore(in.GetStoreName())
+	store, err := a.GetStateStore(in.GetStoreName())
 	if err != nil {
 		// Error has already been logged
 		return empty, err
 	}
 
-	key, err := stateLoader.GetModifiedStateKey(in.GetKey(), in.GetStoreName(), a.Universal.AppID())
+	key, err := stateLoader.GetModifiedStateKey(in.GetKey(), in.GetStoreName(), a.AppID())
 	if err != nil {
 		return empty, err
 	}
@@ -860,7 +875,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*emptypb.Empty, error) {
 	empty := &emptypb.Empty{}
 
-	store, err := a.Universal.GetStateStore(in.GetStoreName())
+	store, err := a.GetStateStore(in.GetStoreName())
 	if err != nil {
 		// Error has already been logged
 		return empty, err
@@ -868,7 +883,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 
 	reqs := make([]state.DeleteRequest, len(in.GetStates()))
 	for i, item := range in.GetStates() {
-		key, err1 := stateLoader.GetModifiedStateKey(item.GetKey(), in.GetStoreName(), a.Universal.AppID())
+		key, err1 := stateLoader.GetModifiedStateKey(item.GetKey(), in.GetStoreName(), a.AppID())
 		if err1 != nil {
 			return empty, err1
 		}
@@ -920,7 +935,7 @@ func extractEtag(req *commonv1pb.StateItem) (bool, string) {
 }
 
 func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*emptypb.Empty, error) {
-	store, storeErr := a.Universal.GetStateStore(in.GetStoreName())
+	store, storeErr := a.GetStateStore(in.GetStoreName())
 	if storeErr != nil {
 		// Error has already been logged
 		return &emptypb.Empty{}, storeErr
@@ -938,7 +953,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		req := inputReq.GetRequest()
 
 		hasEtag, etag := extractEtag(req)
-		key, err := stateLoader.GetModifiedStateKey(req.GetKey(), in.GetStoreName(), a.Universal.AppID())
+		key, err := stateLoader.GetModifiedStateKey(req.GetKey(), in.GetStoreName(), a.AppID())
 		if err != nil {
 			return &emptypb.Empty{}, err
 		}
@@ -1003,7 +1018,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		for i, op := range operations {
 			switch req := op.(type) {
 			case state.SetRequest:
-				data := []byte(fmt.Sprintf("%v", req.Value))
+				data := fmt.Appendf(nil, "%v", req.Value)
 				val, err := encryption.TryEncryptValue(in.GetStoreName(), data)
 				if err != nil {
 					err = apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.StateTransaction, fmt.Sprintf(messages.ErrStateTransaction, err.Error()))
@@ -1021,7 +1036,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	if outboxEnabled {
 		span := diagUtils.SpanFromContext(ctx)
 		traceID, traceState := diag.TraceIDAndStateFromSpan(span)
-		ops, err := a.outbox.PublishInternal(ctx, in.GetStoreName(), operations, a.Universal.AppID(), traceID, traceState)
+		ops, err := a.outbox.PublishInternal(ctx, in.GetStoreName(), operations, a.AppID(), traceID, traceState)
 		if err != nil {
 			nerr := apierrors.PubSubOutbox(a.AppID(), err)
 			apiServerLogger.Debug(nerr)
@@ -1055,6 +1070,10 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 }
 
 func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error) {
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
+	}
+
 	astate, err := a.ActorState(ctx)
 	if err != nil {
 		apiServerLogger.Debug(err)
@@ -1090,6 +1109,10 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 }
 
 func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
+	}
+
 	astate, err := a.ActorState(ctx)
 	if err != nil {
 		apiServerLogger.Debug(err)
@@ -1118,7 +1141,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 				Request:   setReq,
 			}
 		case string(state.OperationDelete):
-			delReq := map[string]interface{}{
+			delReq := map[string]any{
 				"key": op.GetKey(),
 				// Actor state do not user other attributes from state request.
 			}
@@ -1171,7 +1194,27 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	}
 	in.Metadata["Dapr-API-Call"] = "true"
 
+	for _, param := range []struct{ name, val string }{
+		{"actorType", in.GetActorType()}, {"actorId", in.GetActorId()},
+	} {
+		if vErr := method.ValidateName(param.val); vErr != nil {
+			apiServerLogger.Debug(vErr)
+			return nil, status.Errorf(codes.InvalidArgument, "invalid %s: %v", param.name, vErr)
+		}
+	}
+
+	normalized, err := method.NormalizeMethod(in.GetMethod())
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return nil, status.Errorf(codes.InvalidArgument, "invalid actor method: %v", err)
+	}
+	in.Method = normalized
+
 	req := in.ToInternalInvokeRequest()
+
+	// Drop caller-identity headers that the client may have set; the
+	// router stamps the trusted local sidecar identity itself.
+	workflowacl.StripUntrustedCallerIdentity(req.GetMetadata())
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.

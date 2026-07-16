@@ -59,6 +59,12 @@ type outboxImpl struct {
 	outboxStores          map[string]outboxConfig
 	lock                  sync.RWMutex
 	namespace             string
+
+	// componentCtxFn decorates the context used for the internal outbox
+	// subscription and its state operations. Dapr wires this to attach the
+	// workload's SPIFFE identity so the pubsub and state components can
+	// authenticate to their backing infrastructure service.
+	componentCtxFn func(context.Context) context.Context
 }
 
 type OptionsOutbox struct {
@@ -67,6 +73,7 @@ type OptionsOutbox struct {
 	GetStateFn            func(string) (state.Store, bool)
 	CloudEventExtractorFn func(map[string]any, string) string
 	Namespace             string
+	ComponentContextFn    func(context.Context) context.Context
 }
 
 // NewOutbox returns an instance of an Outbox.
@@ -78,13 +85,25 @@ func NewOutbox(opts OptionsOutbox) outbox.Outbox {
 		publisher:             opts.Publisher,
 		outboxStores:          make(map[string]outboxConfig),
 		namespace:             opts.Namespace,
+		componentCtxFn:        opts.ComponentContextFn,
 	}
+}
+
+// componentContext decorates ctx with the workload's SPIFFE identity for
+// component operations. It is a no-op when no decorator is configured.
+func (o *outboxImpl) componentContext(ctx context.Context) context.Context {
+	if o.componentCtxFn == nil {
+		return ctx
+	}
+	return o.componentCtxFn(ctx)
 }
 
 // AddOrUpdateOutbox examines a statestore for outbox properties and saves it for later usage in outbox operations.
 func (o *outboxImpl) AddOrUpdateOutbox(stateStore v1alpha1.Component) {
-	var publishPubSub, publishTopicKey, outboxPubsub string
-	var outboxDiscardWhenMissingState bool
+	var (
+		publishPubSub, publishTopicKey, outboxPubsub string
+		outboxDiscardWhenMissingState                bool
+	)
 
 	for _, v := range stateStore.Spec.Metadata {
 		switch v.Name {
@@ -122,6 +141,7 @@ func (o *outboxImpl) Enabled(stateStore string) bool {
 	defer o.lock.RUnlock()
 
 	_, ok := o.outboxStores[stateStore]
+
 	return ok
 }
 
@@ -156,6 +176,7 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 			for k, v := range sr.Metadata {
 				if k == "outbox.projection" && kitstrings.IsTruthy(v) {
 					projections[sr.Key] = sr
+
 					operations = append(operations[:i], operations[i+1:]...)
 				}
 			}
@@ -170,8 +191,10 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 				return nil, err
 			}
 
-			var payload any
-			var contentType string
+			var (
+				payload     any
+				contentType string
+			)
 
 			if proj, ok := projections[sr.Key]; ok {
 				payload = proj.Value
@@ -192,6 +215,7 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 			}
 
 			var ceData []byte
+
 			bt, ok := payload.([]byte)
 			if ok {
 				ceData = bt
@@ -203,7 +227,7 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 
 				ceData = b
 			} else {
-				ceData = []byte(fmt.Sprintf("%v", payload))
+				ceData = fmt.Appendf(nil, "%v", payload)
 			}
 
 			var dataContentType string
@@ -231,7 +255,7 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 				PubsubName: c.outboxPubsub,
 				Data:       data,
 				Topic:      outboxTopic(source, c.publishTopic, o.namespace),
-			})
+			}, TransportModeGRPC)
 			if err != nil {
 				return nil, err
 			}
@@ -258,10 +282,15 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 			continue
 		}
 
-		outboxPubsub.Subscribe(ctx, contribPubsub.SubscribeRequest{
+		outboxPubsub.Subscribe(o.componentContext(ctx), contribPubsub.SubscribeRequest{
 			Topic: outboxTopic(appID, c.publishTopic, o.namespace),
 		}, func(ctx context.Context, msg *contribPubsub.NewMessage) error {
-			var cloudEvent map[string]interface{}
+			// The per-message context originates from the pubsub component, so
+			// re-attach the workload's SPIFFE identity for the state operations
+			// (Get/Delete) this handler performs directly.
+			ctx = o.componentContext(ctx)
+
+			var cloudEvent map[string]any
 
 			err := json.Unmarshal(msg.Data, &cloudEvent)
 			if err != nil {
@@ -308,6 +337,7 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 				}
 
 				outboxLogger.Errorf("failed to publish outbox topic to pubsub %s: %s, rejecting for later processing", c.publishPubSub, err)
+
 				return err
 			}
 
@@ -326,7 +356,7 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 				Data:        b,
 				Topic:       c.publishTopic,
 				ContentType: &contentType,
-			})
+			}, TransportModeGRPC)
 			if err != nil {
 				return err
 			}
@@ -341,6 +371,7 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 
 				return nil
 			}, bo)
+
 			return err
 		})
 	}

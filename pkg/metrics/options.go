@@ -14,6 +14,8 @@ limitations under the License.
 package metrics
 
 import (
+	"go.opencensus.io/stats/view"
+
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/kit/logger"
 )
@@ -38,6 +40,8 @@ type Options struct {
 	ListenAddress string
 	// Healthz is used to signal the health of the metrics server.
 	Healthz healthz.Healthz
+	// Meter is the OpenCensus meter used to register views.
+	Meter view.Meter
 }
 
 type FlagOptions struct {

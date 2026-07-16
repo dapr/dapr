@@ -83,7 +83,6 @@ func TestMain(m *testing.M) {
 				DaprEnabled:         true,
 				DebugLoggingEnabled: true,
 				ImageName:           "e2e-actorreentrancy",
-				Config:              "featureactorreminderscheduler",
 				Replicas:            1,
 				IngressEnabled:      true,
 				MetricsEnabled:      true,
@@ -108,7 +107,7 @@ func getAppEndpoint(t *testing.T) string {
 	}
 
 	u := tr.Platform.AcquireAppExternalURL(appName)
-	require.NotEmpty(t, u, "external URL for for app must not be empty")
+	require.NotEmpty(t, u, "external URL for app must not be empty")
 	return u
 }
 

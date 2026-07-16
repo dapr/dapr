@@ -1,4 +1,4 @@
-//go:build allcomponents
+//go:build allcomponents || state_etcd
 
 /*
 Copyright 2023 The Dapr Authors

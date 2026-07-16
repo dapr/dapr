@@ -156,8 +156,8 @@ func parsePatterns(patterns string, validRange codeRange) ([]codeRange, error) {
 	}
 
 	parsedPatterns := make([]codeRange, 0, len(patterns))
-	splitted := strings.Split(patterns, ",")
-	for _, p := range splitted {
+	splitted := strings.SplitSeq(patterns, ",")
+	for p := range splitted {
 		// make sure empty patterns are ignored
 		if len(p) == 0 {
 			continue

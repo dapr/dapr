@@ -1,20 +1,21 @@
 module github.com/dapr/dapr/tests/apps/resiliencyapp_grpc
 
-go 1.24.4
+go 1.26.5
 
 require (
 	github.com/dapr/dapr v1.7.4
-	google.golang.org/grpc v1.72.1
-	google.golang.org/grpc/examples v0.0.0-20230224211313-3775f633ce20
-	google.golang.org/protobuf v1.36.6
+	google.golang.org/grpc v1.81.0
+	google.golang.org/grpc/examples v0.0.0-20250407062114-b368379ef8f6
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
-	go.opentelemetry.io/otel v1.35.0 // indirect
-	golang.org/x/net v0.40.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
-	golang.org/x/text v0.25.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250512202823-5a2f75b736a9 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	go.opentelemetry.io/otel v1.43.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260504160031-60b97b32f348 // indirect
 )
 
 replace github.com/dapr/dapr => ../../../

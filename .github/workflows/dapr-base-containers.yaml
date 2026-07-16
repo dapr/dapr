@@ -62,7 +62,7 @@ jobs:
             }
       - name: Check out dapr
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}

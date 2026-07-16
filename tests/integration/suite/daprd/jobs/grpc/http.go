@@ -33,7 +33,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -151,10 +150,10 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	client := h.daprd.GRPCClient(t, ctx)
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+			_, err := client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 				Job: &runtimev1pb.Job{
 					Name:    name,
-					DueTime: ptr.Of("0s"),
+					DueTime: new("0s"),
 					Data:    test.data(t),
 				},
 			})

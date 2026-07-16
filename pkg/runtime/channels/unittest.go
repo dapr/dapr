@@ -1,5 +1,4 @@
 //go:build unit
-// +build unit
 
 /*
 Copyright 2023 The Dapr Authors
@@ -22,7 +21,9 @@ import "github.com/dapr/dapr/pkg/channel"
 func (c *Channels) WithAppChannel(appChannel channel.AppChannel) *Channels {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	c.appChannel = appChannel
+
 	return c
 }
 
@@ -31,6 +32,8 @@ func (c *Channels) WithAppChannel(appChannel channel.AppChannel) *Channels {
 func (c *Channels) WithEndpointChannels(endpChannels map[string]channel.HTTPEndpointAppChannel) *Channels {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	c.endpChannels = endpChannels
+
 	return c
 }

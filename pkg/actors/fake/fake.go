@@ -18,6 +18,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
+	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	remindersfake "github.com/dapr/dapr/pkg/actors/reminders/fake"
 	"github.com/dapr/dapr/pkg/actors/router"
@@ -38,9 +39,10 @@ type Fake struct {
 	fnState                  func(context.Context) (state.Interface, error)
 	fnTimers                 func(context.Context) (timers.Interface, error)
 	fnReminders              func(context.Context) (reminders.Interface, error)
+	fnPlacement              func(context.Context) (placement.Interface, error)
 	fnRuntimeStatus          func() *runtimev1pb.ActorRuntime
-	fnRegisterHosted         func(hostconfig.Config) error
-	fnUnRegisterHosted       func(actorTypes ...string)
+	fnRegisterHosted         func(context.Context, hostconfig.Config) error
+	fnUnRegisterHosted       func(ctx context.Context, actorTypes ...string) error
 	fnWaitForRegisteredHosts func(ctx context.Context) error
 }
 
@@ -67,13 +69,18 @@ func New() *Fake {
 		fnReminders: func(context.Context) (reminders.Interface, error) {
 			return remindersfake.New(), nil
 		},
+		fnPlacement: func(context.Context) (placement.Interface, error) {
+			return nil, nil
+		},
 		fnRuntimeStatus: func() *runtimev1pb.ActorRuntime {
 			return nil
 		},
-		fnRegisterHosted: func(hostconfig.Config) error {
+		fnRegisterHosted: func(context.Context, hostconfig.Config) error {
 			return nil
 		},
-		fnUnRegisterHosted: func(...string) {},
+		fnUnRegisterHosted: func(context.Context, ...string) error {
+			return nil
+		},
 		fnWaitForRegisteredHosts: func(context.Context) error {
 			return nil
 		},
@@ -115,17 +122,22 @@ func (f *Fake) WithReminders(fn func(context.Context) (reminders.Interface, erro
 	return f
 }
 
+func (f *Fake) WithPlacement(fn func(context.Context) (placement.Interface, error)) *Fake {
+	f.fnPlacement = fn
+	return f
+}
+
 func (f *Fake) WithRuntimeStatus(fn func() *runtimev1pb.ActorRuntime) *Fake {
 	f.fnRuntimeStatus = fn
 	return f
 }
 
-func (f *Fake) WithRegisterHosted(fn func(hostconfig.Config) error) *Fake {
+func (f *Fake) WithRegisterHosted(fn func(context.Context, hostconfig.Config) error) *Fake {
 	f.fnRegisterHosted = fn
 	return f
 }
 
-func (f *Fake) WithUnRegisterHosted(fn func(...string)) *Fake {
+func (f *Fake) WithUnRegisterHosted(fn func(context.Context, ...string) error) *Fake {
 	f.fnUnRegisterHosted = fn
 	return f
 }
@@ -163,18 +175,22 @@ func (f *Fake) Reminders(ctx context.Context) (reminders.Interface, error) {
 	return f.fnReminders(ctx)
 }
 
+func (f *Fake) Placement(ctx context.Context) (placement.Interface, error) {
+	return f.fnPlacement(ctx)
+}
+
 func (f *Fake) RuntimeStatus() *runtimev1pb.ActorRuntime {
 	return f.fnRuntimeStatus()
 }
 
-func (f *Fake) RegisterHosted(cfg hostconfig.Config) error {
-	return f.fnRegisterHosted(cfg)
+func (f *Fake) RegisterHosted(ctx context.Context, cfg hostconfig.Config) error {
+	return f.fnRegisterHosted(ctx, cfg)
 }
 
 func (f *Fake) WaitForRegisteredHosts(ctx context.Context) error {
 	return f.fnWaitForRegisteredHosts(ctx)
 }
 
-func (f *Fake) UnRegisterHosted(ids ...string) {
-	f.fnUnRegisterHosted(ids...)
+func (f *Fake) UnRegisterHosted(ctx context.Context, ids ...string) error {
+	return f.fnUnRegisterHosted(ctx, ids...)
 }

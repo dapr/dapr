@@ -13,15 +13,15 @@ func (NullLogSink) Enabled(_ int) bool {
 	return false
 }
 
-func (NullLogSink) Info(_ int, _ string, _ ...interface{}) {
+func (NullLogSink) Info(_ int, _ string, _ ...any) {
 	// Do nothing.
 }
 
-func (NullLogSink) Error(_ error, _ string, _ ...interface{}) {
+func (NullLogSink) Error(_ error, _ string, _ ...any) {
 	// Do nothing.
 }
 
-func (log NullLogSink) WithValues(_ ...interface{}) logr.LogSink {
+func (log NullLogSink) WithValues(_ ...any) logr.LogSink {
 	return log
 }
 

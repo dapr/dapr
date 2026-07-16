@@ -49,9 +49,10 @@ func New(opts Options) *lock {
 func (l *lock) Init(ctx context.Context, comp compapi.Component) error {
 	// create the component
 	fName := comp.LogName()
+
 	store, err := l.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.Name)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
@@ -62,23 +63,27 @@ func (l *lock) Init(ctx context.Context, comp compapi.Component) error {
 	// initialization
 	meta, err := l.meta.ToBaseMetadata(comp)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
+
 	props := meta.Properties
 
 	err = store.InitLockStore(ctx, contriblock.Metadata{Base: meta})
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
 	// save lock related configuration
-	l.compStore.AddLock(comp.ObjectMeta.Name, store)
-	err = complock.SaveLockConfiguration(comp.ObjectMeta.Name, props)
+	l.compStore.AddLock(comp.Name, store)
+
+	err = complock.SaveLockConfiguration(comp.Name, props)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
+
 		wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err)
+
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, wrapError)
 	}
 
@@ -88,14 +93,15 @@ func (l *lock) Init(ctx context.Context, comp compapi.Component) error {
 }
 
 func (l *lock) Close(comp compapi.Component) error {
-	lock, ok := l.compStore.GetLock(comp.ObjectMeta.Name)
+	lock, ok := l.compStore.GetLock(comp.Name)
 	if !ok {
 		return nil
 	}
 
-	defer l.compStore.DeleteLock(comp.ObjectMeta.Name)
+	defer l.compStore.DeleteLock(comp.Name)
 
-	if err := lock.Close(); err != nil {
+	err := lock.Close()
+	if err != nil {
 		return err
 	}
 

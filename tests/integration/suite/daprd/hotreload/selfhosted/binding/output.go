@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -47,22 +47,10 @@ type output struct {
 }
 
 func (o *output) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true`), 0o600))
-
 	o.resDir = t.TempDir()
 	o.bindingDir1, o.bindingDir2, o.bindingDir3 = t.TempDir(), t.TempDir(), t.TempDir()
 
 	o.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(o.resDir),
 	)
 
@@ -80,8 +68,8 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("adding a component should become available", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "1.yaml"), []byte(
-			fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "1.yaml"),
+			fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -92,7 +80,7 @@ spec:
  metadata:
  - name: rootPath
    value: '%s'
-`, o.bindingDir1)), 0o600))
+`, o.bindingDir1), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, o.daprd.GetMetaRegisteredComponents(t, ctx), 1)
 		}, time.Second*5, time.Millisecond*10)
@@ -103,8 +91,8 @@ spec:
 	})
 
 	t.Run("adding another component should become available", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "1.yaml"), []byte(
-			fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "1.yaml"),
+			fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -126,7 +114,7 @@ spec:
  metadata:
  - name: rootPath
    value: '%s'
-`, o.bindingDir1, o.bindingDir2)), 0o600))
+`, o.bindingDir1, o.bindingDir2), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, o.daprd.GetMetaRegisteredComponents(t, ctx), 2)
 		}, time.Second*5, time.Millisecond*10)
@@ -138,8 +126,8 @@ spec:
 	})
 
 	t.Run("adding 3rd component should become available", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "2.yaml"), []byte(
-			fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "2.yaml"),
+			fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -150,7 +138,7 @@ spec:
  metadata:
  - name: rootPath
    value: '%s'
-`, o.bindingDir3)), 0o600))
+`, o.bindingDir3), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, o.daprd.GetMetaRegisteredComponents(t, ctx), 3)
 		}, time.Second*5, time.Millisecond*10)
@@ -163,8 +151,8 @@ spec:
 	})
 
 	t.Run("deleting component makes it no longer available", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "1.yaml"), []byte(
-			fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "1.yaml"),
+			fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -175,7 +163,7 @@ spec:
  metadata:
  - name: rootPath
    value: '%s'
-`, o.bindingDir2)), 0o600))
+`, o.bindingDir2), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, o.daprd.GetMetaRegisteredComponents(t, ctx), 2)
 		}, time.Second*5, time.Millisecond*10)
@@ -199,8 +187,8 @@ spec:
 	})
 
 	t.Run("recreating binding component should make it available again", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "2.yaml"), []byte(
-			fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "2.yaml"),
+			fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -211,7 +199,7 @@ spec:
  metadata:
  - name: rootPath
    value: '%s'
-`, o.bindingDir2)), 0o600))
+`, o.bindingDir2), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, o.daprd.GetMetaRegisteredComponents(t, ctx), 1)
 		}, time.Second*5, time.Millisecond*10)

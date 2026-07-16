@@ -79,7 +79,7 @@ const metadataInstanceID = "x-component-instance"
 // instanceIDStreamInterceptor returns a grpc client unary interceptor that adds the instanceID on outgoing metadata.
 // instanceID is used for multiplexing connection if the component supports it.
 func instanceIDUnaryInterceptor(instanceID string) grpc.UnaryClientInterceptor {
-	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		return invoker(metadata.AppendToOutgoingContext(ctx, metadataInstanceID, instanceID), method, req, reply, cc, opts...)
 	}
 }

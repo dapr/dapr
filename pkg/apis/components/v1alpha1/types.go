@@ -66,12 +66,12 @@ func (c Component) GetNamespace() string {
 
 // LogName returns the name of the component that can be used in logging.
 func (c Component) LogName() string {
-	return utils.ComponentLogName(c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+	return utils.ComponentLogName(c.Name, c.Spec.Type, c.Spec.Version)
 }
 
 // GetSecretStore returns the name of the secret store.
 func (c Component) GetSecretStore() string {
-	return c.Auth.SecretStore
+	return c.SecretStore
 }
 
 // NameValuePairs returns the component's metadata as name/value pairs

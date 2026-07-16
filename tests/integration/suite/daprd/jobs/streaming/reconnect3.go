@@ -32,7 +32,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -97,19 +96,11 @@ func (r *reconnect3) Setup(t *testing.T) []framework.Option {
 
 	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(srv, r.daprd),
+		framework.WithProcesses(srv, r.scheduler1, r.scheduler2, r.scheduler3, r.daprd),
 	}
 }
 
 func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
-	r.scheduler1.Run(t, ctx)
-	r.scheduler2.Run(t, ctx)
-	r.scheduler3.Run(t, ctx)
-	t.Cleanup(func() {
-		r.scheduler1.Cleanup(t)
-		r.scheduler2.Cleanup(t)
-		r.scheduler3.Cleanup(t)
-	})
 	r.scheduler1.WaitUntilRunning(t, ctx)
 	r.scheduler2.WaitUntilRunning(t, ctx)
 	r.scheduler3.WaitUntilRunning(t, ctx)
@@ -119,11 +110,11 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, r.daprd.GetMetaScheduler(c, ctx).GetConnectedAddresses(), 3)
 	}, time.Second*10, time.Millisecond*10)
 
-	for i := range 100 {
-		_, err := r.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+	for i := range 5 {
+		_, err := r.daprd.GRPCClient(t, ctx).ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
 				Name:     strconv.Itoa(i),
-				Schedule: ptr.Of("@every 1s"),
+				Schedule: new("@every 100ms"),
 			},
 		})
 		require.NoError(t, err)
@@ -131,11 +122,11 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		r.lock.Lock()
-		assert.Len(c, r.jobCalledMap, 100)
+		assert.Len(c, r.jobCalledMap, 5)
 		r.lock.Unlock()
-	}, time.Second*5, time.Millisecond*10)
+	}, time.Second*10, time.Millisecond*10)
 
-	r.scheduler2.Cleanup(t)
+	r.scheduler2.Kill(t)
 
 	time.Sleep(time.Second * 5)
 
@@ -146,11 +137,17 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 	r.scheduler4.Run(t, ctx)
 	r.scheduler4.WaitUntilRunning(t, ctx)
 	r.scheduler4.WaitUntilLeadership(t, ctx, 3)
-	t.Cleanup(func() { r.scheduler4.Cleanup(t) })
+	t.Cleanup(func() { r.scheduler4.Kill(t) })
+
+	// Wait for daprd to reconnect to all 3 schedulers before expecting
+	// jobs to resume firing.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, r.daprd.GetMetaScheduler(c, ctx).GetConnectedAddresses(), 3)
+	}, time.Second*40, time.Millisecond*10)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		r.lock.Lock()
-		assert.Len(c, r.jobCalledMap, 100)
+		assert.Len(c, r.jobCalledMap, 5)
 		r.lock.Unlock()
-	}, time.Second*20, time.Millisecond*10)
+	}, time.Second*40, time.Millisecond*10)
 }

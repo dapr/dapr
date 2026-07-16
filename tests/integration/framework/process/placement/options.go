@@ -15,10 +15,10 @@ package placement
 
 import (
 	"testing"
+	"time"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/kit/ptr"
 )
 
 // Option is a function that configures the process.
@@ -28,22 +28,24 @@ type Option func(*options)
 type options struct {
 	execOpts []exec.Option
 
-	id                  string
-	logLevel            string
-	port                int
-	healthzPort         int
-	metricsPort         int
-	initialCluster      string
-	initialClusterPorts []int
-	tlsEnabled          bool
-	sentryAddress       *string
-	trustDomain         *string
-	trustAnchorsFile    *string
-	maxAPILevel         *int
-	minAPILevel         *int
-	metadataEnabled     bool
-	mode                *string
-	namespace           string
+	id                        string
+	logLevel                  string
+	port                      int
+	healthzPort               int
+	metricsPort               int
+	initialCluster            string
+	initialClusterPorts       []int
+	tlsEnabled                bool
+	sentryAddress             *string
+	trustDomain               *string
+	trustAnchorsFile          *string
+	maxAPILevel               *int
+	minAPILevel               *int
+	metadataEnabled           bool
+	mode                      *string
+	namespace                 string
+	disseminateTimeout        *time.Duration
+	disseminateCoalesceWindow *time.Duration
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -103,9 +105,9 @@ func WithSentryAddress(sentryAddress string) Option {
 func WithSentry(t *testing.T, sentry *sentry.Sentry) Option {
 	return func(o *options) {
 		o.tlsEnabled = true
-		o.sentryAddress = ptr.Of(sentry.Address())
-		o.trustAnchorsFile = ptr.Of(sentry.TrustAnchorsFile(t))
-		o.trustDomain = ptr.Of(sentry.TrustDomain(t))
+		o.sentryAddress = new(sentry.Address())
+		o.trustAnchorsFile = new(sentry.TrustAnchorsFile(t))
+		o.trustDomain = new(sentry.TrustDomain(t))
 	}
 }
 
@@ -148,5 +150,17 @@ func WithMode(mode string) Option {
 func WithNamespace(namespace string) Option {
 	return func(o *options) {
 		o.namespace = namespace
+	}
+}
+
+func WithDisseminateTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		o.disseminateTimeout = &timeout
+	}
+}
+
+func WithDisseminateCoalesceWindow(window time.Duration) Option {
+	return func(o *options) {
+		o.disseminateCoalesceWindow = &window
 	}
 }

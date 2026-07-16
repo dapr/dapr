@@ -85,8 +85,10 @@ func (s *opentelemetryTracerProviderStore) RegisterTracerProvider() *sdktrace.Tr
 		tp := sdktrace.NewTracerProvider(tracerOptions...)
 
 		otel.SetTracerProvider(tp)
+
 		return tp
 	}
+
 	return nil
 }
 

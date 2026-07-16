@@ -30,46 +30,44 @@ type Fake struct {
 	fnInvokeMethod   func(context.Context, *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 	fnInvokeReminder func(context.Context, *api.Reminder) error
 	fnInvokeTimer    func(context.Context, *api.Reminder) error
-	fnInvokeStream   func(context.Context, *internalv1pb.InternalInvokeRequest, chan<- *internalv1pb.InternalInvokeResponse) error
-	fnDeactivate     func() error
+	fnInvokeStream   func(context.Context, *internalv1pb.InternalInvokeRequest, func(*internalv1pb.InternalInvokeResponse) (bool, error)) error
+	fnDeactivate     func(context.Context) error
 }
 
-type Hook func(*Fake)
+type FakeFactory struct {
+	getOrCreateFn   func(string) targets.Interface
+	existsFn        func(string) bool
+	haltAllFn       func(context.Context) error
+	haltNonHostedFn func(context.Context, func(*api.LookupActorRequest) bool) error
+	lenFn           func() int
+}
 
-func New(actorType string, hooks ...func(*Fake)) targets.Factory {
-	return func(actorID string) targets.Interface {
-		f := &Fake{
-			fnKey: func() string {
-				return key.ConstructComposite(actorType, actorID)
-			},
-			fnType: func() string {
-				return actorType
-			},
-			fnID: func() string {
-				return actorID
-			},
-			fnInvokeMethod: func(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-				return nil, nil
-			},
-			fnInvokeReminder: func(ctx context.Context, reminder *api.Reminder) error {
-				return nil
-			},
-			fnInvokeTimer: func(ctx context.Context, reminder *api.Reminder) error {
-				return nil
-			},
-			fnInvokeStream: func(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
-				return nil
-			},
-			fnDeactivate: func() error {
-				return nil
-			},
-		}
-
-		for _, hook := range hooks {
-			hook(f)
-		}
-
-		return f
+func New(actorType string) targets.Interface {
+	return &Fake{
+		fnKey: func() string {
+			return key.ConstructComposite(actorType, "my-actor-id")
+		},
+		fnType: func() string {
+			return actorType
+		},
+		fnID: func() string {
+			return "my-actor-id"
+		},
+		fnInvokeMethod: func(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+			return nil, nil
+		},
+		fnInvokeReminder: func(ctx context.Context, reminder *api.Reminder) error {
+			return nil
+		},
+		fnInvokeTimer: func(ctx context.Context, reminder *api.Reminder) error {
+			return nil
+		},
+		fnInvokeStream: func(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream func(*internalv1pb.InternalInvokeResponse) (bool, error)) error {
+			return nil
+		},
+		fnDeactivate: func(context.Context) error {
+			return nil
+		},
 	}
 }
 
@@ -93,12 +91,12 @@ func (f *Fake) WithInvokeTimer(fn func(context.Context, *api.Reminder) error) *F
 	return f
 }
 
-func (f *Fake) WithInvokeStream(fn func(context.Context, *internalv1pb.InternalInvokeRequest, chan<- *internalv1pb.InternalInvokeResponse) error) *Fake {
+func (f *Fake) WithInvokeStream(fn func(context.Context, *internalv1pb.InternalInvokeRequest, func(*internalv1pb.InternalInvokeResponse) (bool, error)) error) *Fake {
 	f.fnInvokeStream = fn
 	return f
 }
 
-func (f *Fake) WithDeactivate(fn func() error) *Fake {
+func (f *Fake) WithDeactivate(fn func(context.Context) error) *Fake {
 	f.fnDeactivate = fn
 	return f
 }
@@ -127,10 +125,75 @@ func (f *Fake) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 	return f.fnInvokeTimer(ctx, reminder)
 }
 
-func (f *Fake) InvokeStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
+func (f *Fake) InvokeStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream func(*internalv1pb.InternalInvokeResponse) (bool, error)) error {
 	return f.fnInvokeStream(ctx, req, stream)
 }
 
-func (f *Fake) Deactivate() error {
-	return f.fnDeactivate()
+func (f *Fake) Deactivate(ctx context.Context) error {
+	return f.fnDeactivate(ctx)
+}
+
+func NewFactory() *FakeFactory {
+	return &FakeFactory{
+		getOrCreateFn: func(string) targets.Interface {
+			return nil
+		},
+		existsFn: func(string) bool {
+			return false
+		},
+		haltAllFn: func(context.Context) error {
+			return nil
+		},
+		haltNonHostedFn: func(context.Context, func(*api.LookupActorRequest) bool) error {
+			return nil
+		},
+		lenFn: func() int {
+			return 0
+		},
+	}
+}
+
+func (f *FakeFactory) WithGetOrCreate(fn func(string) targets.Interface) *FakeFactory {
+	f.getOrCreateFn = fn
+	return f
+}
+
+func (f *FakeFactory) WithExists(fn func(string) bool) *FakeFactory {
+	f.existsFn = fn
+	return f
+}
+
+func (f *FakeFactory) WithHaltAll(fn func(context.Context) error) *FakeFactory {
+	f.haltAllFn = fn
+	return f
+}
+
+func (f *FakeFactory) WithHaltNonHosted(fn func(context.Context, func(*api.LookupActorRequest) bool) error) *FakeFactory {
+	f.haltNonHostedFn = fn
+	return f
+}
+
+func (f *FakeFactory) WithLen(fn func() int) *FakeFactory {
+	f.lenFn = fn
+	return f
+}
+
+func (f *FakeFactory) GetOrCreate(actorID string) targets.Interface {
+	return f.getOrCreateFn(actorID)
+}
+
+func (f *FakeFactory) Exists(actorID string) bool {
+	return f.existsFn(actorID)
+}
+
+func (f *FakeFactory) HaltAll(ctx context.Context) error {
+	return f.haltAllFn(ctx)
+}
+
+func (f *FakeFactory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {
+	return f.haltNonHostedFn(ctx, fn)
+}
+
+func (f *FakeFactory) Len() int {
+	return f.lenFn()
 }

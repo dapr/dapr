@@ -116,7 +116,7 @@ func ExampleNewRunnerWithOptions_disposer() {
 	res, err := policy(fn)
 
 	// The disposer should be 3 times called with values 1, 2, 3
-	disposed := []int32{}
+	disposed := make([]int32, 0, 3)
 	for range 3 {
 		disposed = append(disposed, <-disposerCalled)
 	}
@@ -418,7 +418,7 @@ func TestPolicyDisposer(t *testing.T) {
 	assert.Equal(t, int32(4), res)
 
 	// The disposer should be 3 times called with values 1, 2, 3
-	disposed := []int32{}
+	disposed := make([]int32, 0, 3)
 	for range 3 {
 		disposed = append(disposed, <-disposerCalled)
 	}

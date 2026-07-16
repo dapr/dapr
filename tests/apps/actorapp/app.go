@@ -42,7 +42,7 @@ const (
 type daprActor struct {
 	actorType string
 	id        string
-	value     interface{}
+	value     any
 }
 
 // represents a response for the APIs in this app.

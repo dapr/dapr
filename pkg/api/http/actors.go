@@ -17,20 +17,26 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/messages"
+	methodutil "github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -47,7 +53,7 @@ var endpointGroupActorV1State = &endpoints.EndpointGroup{
 var endpointGroupActorV1Misc = &endpoints.EndpointGroup{
 	Name:                 endpoints.EndpointGroupActors,
 	Version:              endpoints.EndpointGroupVersion1,
-	AppendSpanAttributes: nil, // TODO
+	AppendSpanAttributes: appendActorReminderTimerSpanAttributesFn,
 }
 
 func appendActorStateSpanAttributesFn(r *http.Request, m map[string]string) {
@@ -65,6 +71,19 @@ func appendActorInvocationSpanAttributesFn(r *http.Request, m map[string]string)
 	m[diagConsts.GrpcServiceSpanAttributeKey] = "ServiceInvocation"
 	m[diagConsts.NetPeerNameSpanAttributeKey] = actorTypeID
 	m[diagConsts.DaprAPISpanNameInternal] = "CallActor/" + actorType + "/" + chi.URLParam(r, "method")
+}
+
+// appendActorReminderTimerSpanAttributesFn sets a bounded span name for the
+// reminder and timer endpoints. The raw request path embeds the unbounded
+// actorId and reminder/timer name, so it must not be used as the span name
+// (it causes a tracing cardinality explosion, see issue #4703). The bounded
+// endpoint name and actorType are used instead, dropping actorId and name.
+func appendActorReminderTimerSpanAttributesFn(r *http.Request, m map[string]string) {
+	actorType := chi.URLParam(r, actorTypeParam)
+	m[diagConsts.DaprAPIActorTypeID] = actorType + "." + chi.URLParam(r, actorIDParam)
+
+	endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+	m[diagConsts.DaprAPISpanNameInternal] = endpointData.GetEndpointName() + "/" + actorType
 }
 
 func actorInvocationMethodNameWithIDFn(r *http.Request) string {
@@ -161,7 +180,7 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
 			Version: apiVersionV1,
 			Group:   endpointGroupActorV1Misc,
-			Handler: a.onGetActorReminder,
+			Handler: a.onGetActorReminder(),
 			Settings: endpoints.EndpointSettings{
 				Name: "GetActorReminder",
 			},
@@ -172,6 +191,12 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
+	if err := a.universal.RejectInternalActorType(actorType); err != nil {
+		respondWithError(w, err)
+		return
+	}
+
 	var req actorapi.CreateReminderRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -181,8 +206,15 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.Name = chi.URLParamFromCtx(ctx, nameParam)
-	req.ActorType = chi.URLParamFromCtx(ctx, actorTypeParam)
+	name := chi.URLParamFromCtx(ctx, nameParam)
+	if vErr := methodutil.ValidateName(name); vErr != nil {
+		msg := messages.ErrBadRequest.WithFormat(vErr)
+		respondWithError(w, msg)
+		log.Debug(msg)
+		return
+	}
+	req.Name = name
+	req.ActorType = actorType
 	req.ActorID = chi.URLParamFromCtx(ctx, actorIDParam)
 
 	rem, err := a.universal.ActorReminders(ctx)
@@ -200,6 +232,14 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		status, ok := status.FromError(err)
+		if ok && status.Code() == codes.AlreadyExists {
+			msg := messages.ErrActorReminderAlreadyExists.WithFormat(req.Name)
+			respondWithError(w, msg)
+			log.Debug(msg)
+			return
+		}
+
 		msg := messages.ErrActorReminderCreate.WithFormat(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
@@ -212,6 +252,12 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
+	if err := a.universal.RejectInternalActorType(actorType); err != nil {
+		respondWithError(w, err)
+		return
+	}
+
 	var req actorapi.CreateTimerRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -221,8 +267,15 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.Name = chi.URLParamFromCtx(ctx, nameParam)
-	req.ActorType = chi.URLParamFromCtx(ctx, actorTypeParam)
+	name := chi.URLParamFromCtx(ctx, nameParam)
+	if vErr := methodutil.ValidateName(name); vErr != nil {
+		msg := messages.ErrBadRequest.WithFormat(vErr)
+		respondWithError(w, msg)
+		log.Debug(msg)
+		return
+	}
+	req.Name = name
+	req.ActorType = actorType
 	req.ActorID = chi.URLParamFromCtx(ctx, actorIDParam)
 
 	timers, err := a.universal.ActorTimers(ctx)
@@ -260,6 +313,10 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
+	if err := a.universal.RejectInternalActorType(actorType); err != nil {
+		respondWithError(w, err)
+		return
+	}
 	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
 
 	var ops []actorapi.TransactionalOperation
@@ -301,36 +358,56 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	respondWithEmpty(w)
 }
 
-func (a *api) onGetActorReminder(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (a *api) onGetActorReminder() http.HandlerFunc {
+	return UniversalHTTPHandler(
+		a.universal.GetActorReminder,
+		UniversalHTTPHandlerOpts[*runtimev1pb.GetActorReminderRequest, *runtimev1pb.GetActorReminderResponse]{
+			SkipInputBody: true,
+			OutModifier: func(out *runtimev1pb.GetActorReminderResponse) (any, error) {
+				//nolint:protogetter
+				m := struct {
+					ActorID   string          `json:"actorID,omitempty"`
+					ActorType string          `json:"actorType,omitempty"`
+					Data      json.RawMessage `json:"data,omitempty"`
+					DueTime   *string         `json:"dueTime,omitempty"`
+					Period    *string         `json:"period,omitempty"`
+					TTL       *string         `json:"ttl,omitempty"`
+				}{
+					ActorID:   out.ActorId,
+					ActorType: out.ActorType,
+					DueTime:   out.DueTime,
+					Period:    out.Period,
+					TTL:       out.Ttl,
+				}
 
-	rem, err := a.universal.ActorReminders(ctx)
-	if err != nil {
-		respondWithError(w, err)
-		log.Debug(err)
-		return
-	}
+				//nolint:protogetter
+				if out.Data != nil {
+					msg, err := out.Data.UnmarshalNew()
+					if err != nil {
+						return nil, err
+					}
+					switch mm := msg.(type) {
+					case *wrapperspb.BytesValue:
+						m.Data = mm.GetValue()
+					default:
+						d, err := protojson.Marshal(mm)
+						if err != nil {
+							return nil, err
+						}
+						m.Data = json.RawMessage(d)
+					}
+				}
 
-	resp, err := rem.Get(ctx, &actorapi.GetReminderRequest{
-		ActorType: chi.URLParamFromCtx(ctx, actorTypeParam),
-		ActorID:   chi.URLParamFromCtx(ctx, actorIDParam),
-		Name:      chi.URLParamFromCtx(ctx, nameParam),
-	})
-	if err != nil {
-		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
-			msg := messages.ErrActorReminderOpActorNotHosted
-			respondWithError(w, msg)
-			log.Debug(msg)
-			return
-		}
-
-		msg := messages.ErrActorReminderGet.WithFormat(err)
-		respondWithError(w, msg)
-		log.Debug(msg)
-		return
-	}
-
-	respondWithJSON(w, http.StatusOK, resp)
+				return m, nil
+			},
+			InModifier: func(r *http.Request, in *runtimev1pb.GetActorReminderRequest) (*runtimev1pb.GetActorReminderRequest, error) {
+				in.ActorType = chi.URLParam(r, actorTypeParam)
+				in.ActorId = chi.URLParam(r, actorIDParam)
+				in.Name = chi.URLParam(r, nameParam)
+				return in, nil
+			},
+		},
+	)
 }
 
 func (a *api) onDeleteActorTimer() http.HandlerFunc {
@@ -358,8 +435,24 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 
 	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
 	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
+	for _, param := range []struct{ name, val string }{
+		{"actorType", actorType}, {"actorId", actorID},
+	} {
+		if vErr := methodutil.ValidateName(param.val); vErr != nil {
+			msg := messages.ErrBadRequest.WithFormat(fmt.Sprintf("invalid %s: %v", param.name, vErr))
+			respondWithError(w, msg)
+			log.Debug(msg)
+			return
+		}
+	}
 	verb := strings.ToUpper(r.Method)
-	method := chi.URLParamFromCtx(ctx, methodParam)
+	method, err := methodutil.NormalizeMethod(chi.URLParamFromCtx(ctx, methodParam))
+	if err != nil {
+		msg := messages.ErrBadRequest.WithFormat(err)
+		respondWithError(w, msg)
+		log.Debug(msg)
+		return
+	}
 
 	// Actor invocation doesn't support streaming, so we need to read the entire reqBody
 	reqBody, err := io.ReadAll(r.Body)
@@ -379,7 +472,11 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 		// Save headers to internal metadata
 		WithHTTPHeaders(r.Header)
 
-		// Unlike other actor calls, resiliency is handled here for invocation.
+	// Drop caller-identity headers that the client may have sent; the
+	// router stamps the trusted local sidecar identity itself.
+	workflowacl.StripUntrustedCallerIdentity(req.GetMetadata())
+
+	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
 	policyDef := a.universal.Resiliency().ActorPreLockPolicy(actorType, actorID)
 	policyRunner := resiliency.NewRunner[*internalsv1pb.InternalInvokeResponse](ctx, policyDef)
@@ -435,13 +532,18 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
+	if err := a.universal.RejectInternalActorType(actorType); err != nil {
+		respondWithError(w, err)
+		return
+	}
+
 	astate, err := a.universal.ActorState(ctx)
 	if err != nil {
 		respondWithError(w, err)
 		return
 	}
 
-	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
 	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
 	key := chi.URLParamFromCtx(ctx, stateKeyParam)
 

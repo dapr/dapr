@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync/atomic"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -37,11 +38,23 @@ var log = logger.NewLogger("dapr.scheduler.server.controller")
 
 type Options struct {
 	KubeConfig *string
-	Cron       cron.Interface
 	Healthz    healthz.Healthz
 }
 
-func New(opts Options) (concurrency.Runner, error) {
+// Controller wraps a long-lived controller-runtime manager. It must only be
+// created once per process because controller-runtime registers controller
+// names globally in the metrics registry.
+type Controller struct {
+	cron atomic.Value
+	run  func(ctx context.Context) error
+}
+
+// SetCron updates the cron interface used by the namespace reconciler.
+func (c *Controller) SetCron(cr cron.Interface) {
+	c.cron.Store(cr)
+}
+
+func New(opts Options) (*Controller, error) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
 		return nil, err
@@ -79,19 +92,21 @@ func New(opts Options) (concurrency.Runner, error) {
 		return nil, fmt.Errorf("unable to start manager: %w", err)
 	}
 
+	c := new(Controller)
+
 	if err := ctrl.NewControllerManagedBy(mgr).
 		Named("namespaces").
 		For(new(corev1.Namespace)).
 		Complete(&namespace{
 			nsReader: mgr.GetCache(),
-			cron:     opts.Cron,
+			ctrl:     c,
 		}); err != nil {
 		return nil, fmt.Errorf("unable to complete controller: %w", err)
 	}
 
 	hzTarget := opts.Healthz.AddTarget("scheduler-controller")
 
-	return concurrency.NewRunnerManager(
+	c.run = concurrency.NewRunnerManager(
 		mgr.Start,
 		func(ctx context.Context) error {
 			_, err := mgr.GetCache().GetInformer(ctx, new(corev1.Namespace))
@@ -106,5 +121,11 @@ func New(opts Options) (concurrency.Runner, error) {
 			<-ctx.Done()
 			return nil
 		},
-	).Run, nil
+	).Run
+
+	return c, nil
+}
+
+func (c *Controller) Run(ctx context.Context) error {
+	return c.run(ctx)
 }

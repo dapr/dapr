@@ -37,7 +37,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/kit/ptr"
 )
 
 type Operator struct {
@@ -47,6 +46,7 @@ type Operator struct {
 	port        int
 	metricsPort int
 	healthzPort int
+	webhookPort int
 	namespace   string
 
 	runOnce     sync.Once
@@ -73,6 +73,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 	require.NotNil(t, opts.kubeconfigPath, "kubeconfigPath is required")
 	require.NotNil(t, opts.namespace, "namespace is required")
 
+	webhookPort := fp.Port(t)
 	args := []string{
 		"-log-level=" + opts.logLevel,
 		"-port=" + strconv.Itoa(opts.port),
@@ -84,12 +85,16 @@ func New(t *testing.T, fopts ...Option) *Operator {
 		"-trust-anchors-file=" + *opts.trustAnchorsFile,
 		"-disable-leader-election=" + strconv.FormatBool(opts.disableLeaderElection),
 		"-kubeconfig=" + *opts.kubeconfigPath,
-		"-webhook-server-port=" + strconv.Itoa(fp.Port(t)),
+		"-webhook-server-port=" + strconv.Itoa(webhookPort),
 		"-webhook-server-listen-address=127.0.0.1",
 	}
 
 	if opts.configPath != nil {
 		args = append(args, "-config-path="+*opts.configPath)
+	}
+
+	if opts.cacheSyncPeriod != nil {
+		args = append(args, "-cache-sync-period="+opts.cacheSyncPeriod.String())
 	}
 
 	return &Operator{
@@ -107,6 +112,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 		port:        opts.port,
 		metricsPort: opts.metricsPort,
 		healthzPort: opts.healthzPort,
+		webhookPort: webhookPort,
 		namespace:   *opts.namespace,
 	}
 }
@@ -137,7 +143,7 @@ func (o *Operator) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		}
 		defer resp.Body.Close()
 		return http.StatusOK == resp.StatusCode
-	}, time.Second*10, 10*time.Millisecond)
+	}, time.Second*30, 10*time.Millisecond)
 }
 
 func (o *Operator) Port() int {
@@ -156,12 +162,19 @@ func (o *Operator) HealthzPort() int {
 	return o.healthzPort
 }
 
+// WebhookPort returns the port that the operator's webhook server is
+// listening on. This is the TLS port that the Kubernetes API server would
+// connect to for CRD conversion / validating / mutating webhooks.
+func (o *Operator) WebhookPort() int {
+	return o.webhookPort
+}
+
 func (o *Operator) Dial(t *testing.T, ctx context.Context, sentry *sentry.Sentry, appID string) operatorv1pb.OperatorClient {
 	sec, err := security.New(ctx, security.Options{
 		SentryAddress:           "localhost:" + strconv.Itoa(sentry.Port()),
 		ControlPlaneTrustDomain: "integration.test.dapr.io",
 		ControlPlaneNamespace:   o.namespace,
-		TrustAnchorsFile:        ptr.Of(sentry.TrustAnchorsFile(t)),
+		TrustAnchorsFile:        new(sentry.TrustAnchorsFile(t)),
 		AppID:                   appID,
 		Mode:                    modes.StandaloneMode,
 		MTLSEnabled:             true,

@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -59,7 +59,7 @@ func (r *routeralias) Setup(t *testing.T) []framework.Option {
 		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
 			return &operatorv1.GetConfigurationResponse{
 				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"nameResolution": {"component": "mdns"}, "features":[{"name":"HotReload","enabled":true}],
+					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"middleware"},"spec":{"nameResolution": {"component": "mdns"},
 					"httpPipeline":{"handlers":[{"name":"routeralias1","type":"middleware.http.routeralias"},{"name":"routeralias2","type":"middleware.http.routeralias"},{"name":"routeralias3","type":"middleware.http.routeralias"}]}}}`,
 				),
 			}, nil
@@ -78,8 +78,8 @@ func (r *routeralias) Setup(t *testing.T) []framework.Option {
 
 	r.daprd1 = daprd.New(t,
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
-		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
+		daprd.WithConfigs("middleware"),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(r.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
@@ -88,8 +88,8 @@ func (r *routeralias) Setup(t *testing.T) []framework.Option {
 	)
 	r.daprd2 = daprd.New(t,
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
-		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
+		daprd.WithConfigs("middleware"),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(r.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
@@ -106,9 +106,9 @@ func (r *routeralias) Setup(t *testing.T) []framework.Option {
 			Type:    "middleware.http.routeralias",
 			Version: "v1",
 			Metadata: []common.NameValuePair{{Name: "routes", Value: common.DynamicValue{
-				JSON: apiextv1.JSON{Raw: []byte(fmt.Sprintf(
+				JSON: apiextv1.JSON{Raw: fmt.Appendf(nil,
 					`{"/helloworld":"/v1.0/invoke/%[1]s/method/foobar"}`,
-					r.daprd1.AppID()))},
+					r.daprd1.AppID())},
 			}}},
 		},
 	}, compapi.Component{
@@ -120,12 +120,12 @@ func (r *routeralias) Setup(t *testing.T) []framework.Option {
 			Type:    "middleware.http.routeralias",
 			Version: "v1",
 			Metadata: []common.NameValuePair{{Name: "routes", Value: common.DynamicValue{
-				JSON: apiextv1.JSON{Raw: []byte(fmt.Sprintf(
+				JSON: apiextv1.JSON{Raw: fmt.Appendf(nil,
 					`{
 						"/helloworld":"/v1.0/invoke/%[1]s/method/barfoo",
 						"/v1.0/invoke/%[1]s/method/foobar": "/v1.0/invoke/%[1]s/method/abc"
 					}`,
-					r.daprd1.AppID()))},
+					r.daprd1.AppID())},
 			}}},
 		},
 	})
@@ -152,10 +152,9 @@ func (r *routeralias) Run(t *testing.T, ctx context.Context) {
 			Version: "v1",
 			Metadata: []common.NameValuePair{
 				{Name: "routes", Value: common.DynamicValue{
-					JSON: apiextv1.JSON{Raw: []byte(fmt.Sprintf(`{
+					JSON: apiextv1.JSON{Raw: fmt.Appendf(nil, `{
 							"/v1.0/invoke/%[1]s/method/barfoo": "/v1.0/invoke/%[1]s/method/aaa"
-						}`, r.daprd1.AppID()),
-					)},
+						}`, r.daprd1.AppID())},
 				}},
 			},
 		},
@@ -169,11 +168,10 @@ func (r *routeralias) Run(t *testing.T, ctx context.Context) {
 			Type:    "middleware.http.routeralias",
 			Version: "v1",
 			Metadata: []common.NameValuePair{{Name: "routes", Value: common.DynamicValue{
-				JSON: apiextv1.JSON{Raw: []byte(fmt.Sprintf(`{
+				JSON: apiextv1.JSON{Raw: fmt.Appendf(nil, `{
 	          "/helloworld": "/v1.0/invoke/%[1]s/method/barfoo",
 		        "/v1.0/invoke/%[1]s/method/abc": "/v1.0/invoke/%[1]s/method/aaa"
-						}`, r.daprd1.AppID()),
-				)},
+						}`, r.daprd1.AppID())},
 			}}},
 		},
 	}
@@ -187,10 +185,9 @@ func (r *routeralias) Run(t *testing.T, ctx context.Context) {
 			Version: "v1",
 			Metadata: []common.NameValuePair{
 				{Name: "routes", Value: common.DynamicValue{
-					JSON: apiextv1.JSON{Raw: []byte(fmt.Sprintf(`{
+					JSON: apiextv1.JSON{Raw: fmt.Appendf(nil, `{
 		         "/v1.0/invoke/%[1]s/method/barfoo": "/v1.0/invoke/%[1]s/method/xyz"
-						}`, r.daprd1.AppID()),
-					)},
+						}`, r.daprd1.AppID())},
 				}},
 			},
 		},

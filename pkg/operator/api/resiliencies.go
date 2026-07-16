@@ -16,13 +16,16 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	kubeclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/operator/api/authz"
+	loopsclient "github.com/dapr/dapr/pkg/operator/api/loops/client"
+	"github.com/dapr/dapr/pkg/operator/api/loops/sender"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
@@ -57,7 +60,7 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 	}
 
 	var resiliencies resiliencyapi.ResiliencyList
-	if err := a.Client.List(ctx, &resiliencies, &client.ListOptions{
+	if err := a.Client.List(ctx, &resiliencies, &kubeclient.ListOptions{
 		Namespace: in.GetNamespace(),
 	}); err != nil {
 		return nil, fmt.Errorf("error listing resiliencies: %w", err)
@@ -73,4 +76,44 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 	}
 
 	return resp, nil
+}
+
+// ResiliencyUpdate handles resiliency update streaming for a connected client.
+// Each client connection gets its own client loop that watches the informer
+// and sends updates over the gRPC stream.
+func (a *apiServer) ResiliencyUpdate(in *operatorv1pb.ResiliencyUpdateRequest, srv operatorv1pb.Operator_ResiliencyUpdateServer) error { //nolint:nosnakecase
+	if a.closed.Load() {
+		return errors.New("server is closed")
+	}
+
+	log.Info("sidecar connected for resiliency updates")
+
+	ctx := srv.Context()
+
+	// Verify authorization via informer's WatchUpdates, which checks SPIFFE ID
+	ch, cancel, err := a.resiliencyInformer.WatchUpdates(ctx, in.GetNamespace())
+	if err != nil {
+		return err
+	}
+
+	stream, err := sender.New(srv)
+	if err != nil {
+		return err
+	}
+
+	// Create a client for this connection
+	client := loopsclient.New(loopsclient.Options[resiliencyapi.Resiliency]{
+		EventCh:     ch,
+		CancelWatch: cancel,
+		Stream:      stream,
+		Namespace:   in.GetNamespace(),
+	})
+	defer client.CacheLoop()
+
+	// Run the client - this will block until context is done or event channel closes
+	if err := client.Run(ctx); err != nil {
+		log.Warnf("resiliency client loop ended with error: %s", err)
+	}
+
+	return nil
 }

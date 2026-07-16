@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://wwa.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -68,33 +68,12 @@ func (a *actorstate) Setup(t *testing.T) []framework.Option {
 
 	a.operatorCreate = operator.New(t,
 		operator.WithSentry(sentry),
-		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
-			return &operatorv1.GetConfigurationResponse{
-				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"features":[{"name":"HotReload","enabled":true}]}}`,
-				),
-			}, nil
-		}),
 	)
 	a.operatorUpdate = operator.New(t,
 		operator.WithSentry(sentry),
-		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
-			return &operatorv1.GetConfigurationResponse{
-				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"features":[{"name":"HotReload","enabled":true}]}}`,
-				),
-			}, nil
-		}),
 	)
 	a.operatorDelete = operator.New(t,
 		operator.WithSentry(sentry),
-		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
-			return &operatorv1.GetConfigurationResponse{
-				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"features":[{"name":"HotReload","enabled":true}]}}`,
-				),
-			}, nil
-		}),
 	)
 
 	inmemStore := compapi.Component{
@@ -112,9 +91,8 @@ func (a *actorstate) Setup(t *testing.T) []framework.Option {
 
 	a.daprdCreate = daprd.New(t,
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
-			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)),
+			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors)),
 			exec.WithStdout(a.loglineCreate.Stdout()),
 		),
 		daprd.WithSentryAddress(sentry.Address()),
@@ -123,9 +101,8 @@ func (a *actorstate) Setup(t *testing.T) []framework.Option {
 	)
 	a.daprdUpdate = daprd.New(t,
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
-			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)),
+			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors)),
 			exec.WithStdout(a.loglineUpdate.Stdout()),
 		),
 		daprd.WithSentryAddress(sentry.Address()),
@@ -134,9 +111,8 @@ func (a *actorstate) Setup(t *testing.T) []framework.Option {
 	)
 	a.daprdDelete = daprd.New(t,
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
-			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)),
+			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors)),
 			exec.WithStdout(a.loglineDelete.Stdout()),
 		),
 		daprd.WithSentryAddress(sentry.Address()),
@@ -176,7 +152,7 @@ func (a *actorstate) Run(t *testing.T, ctx context.Context) {
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{
 			Name: "mystore", Type: "state.in-memory", Version: "v1",
-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 		},
 	}, comps)
 	inmemStore.Spec.Metadata = []common.NameValuePair{}
@@ -188,7 +164,7 @@ func (a *actorstate) Run(t *testing.T, ctx context.Context) {
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{
 			Name: "mystore", Type: "state.in-memory", Version: "v1",
-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 		},
 	}, comps)
 	a.operatorDelete.SetComponents()

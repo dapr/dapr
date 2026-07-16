@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -39,13 +40,12 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/metrics"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
 type Daprd struct {
-	exec       process.Interface
+	exec       *exec.Exec
 	ports      *ports.Ports
 	httpClient *http.Client
 
@@ -112,6 +112,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--app-health-threshold=" + strconv.Itoa(opts.appHealthProbeThreshold),
 		"--mode=" + opts.mode,
 		"--enable-mtls=" + strconv.FormatBool(opts.enableMTLS),
+		"--enable-api-logging=true",
 		"--enable-profiling",
 	}
 
@@ -136,6 +137,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if len(opts.sentryAddress) > 0 {
 		args = append(args, "--sentry-address="+opts.sentryAddress)
 	}
+	if len(opts.sentryRequestJwtAudiences) > 0 {
+		args = append(args, "--sentry-request-jwt-audiences="+strings.Join(opts.sentryRequestJwtAudiences, ","))
+	}
 	if len(opts.controlPlaneAddress) > 0 {
 		args = append(args, "--control-plane-address="+opts.controlPlaneAddress)
 	}
@@ -148,6 +152,12 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.blockShutdownDuration != nil {
 		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
 	}
+	if opts.actorsDisseminateTimeout != nil {
+		args = append(args, "--actors-disseminate-timeout="+opts.actorsDisseminateTimeout.String())
+	}
+	if opts.hotReloadReconcileInterval != nil {
+		args = append(args, "--hot-reload-reconcile-interval="+opts.hotReloadReconcileInterval.String())
+	}
 	if len(opts.schedulerAddresses) > 0 {
 		args = append(args, "--scheduler-host-address="+strings.Join(opts.schedulerAddresses, ","))
 	}
@@ -156,6 +166,12 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	}
 	if opts.maxBodySize != nil {
 		args = append(args, "--max-body-size="+*opts.maxBodySize)
+	}
+	if opts.allowedOrigins != nil {
+		args = append(args, "--allowed-origins="+*opts.allowedOrigins)
+	}
+	if len(opts.disableInitEndpoints) > 0 {
+		args = append(args, "--disable-init-endpoints="+strings.Join(opts.disableInitEndpoints, ","))
 	}
 
 	ns := "default"
@@ -209,19 +225,45 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 	}, 20*time.Second, 10*time.Millisecond)
 }
 
+// WaitUntilExit waits for daprd to exit on its own (e.g. via the shutdown
+// API) and asserts the expected exit code via the framework. The HTTP port
+// is polled; once dialing fails, the process has exited. Unlike Cleanup,
+// no signal is sent to the process, which avoids racing with self-exit
+// paths where signaling an already-reaped PID would fail.
+func (d *Daprd) WaitUntilExit(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	addr := d.HTTPAddress()
+	assert.Eventuallyf(t, func() bool {
+		conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+		if err != nil {
+			return true
+		}
+		conn.Close()
+		return false
+	}, timeout, 10*time.Millisecond, "daprd HTTP port %s remained open; process did not exit", addr)
+	d.cleanupOnce.Do(func() {
+		if d.httpClient != nil {
+			d.httpClient.CloseIdleConnections()
+		}
+		d.exec.AwaitExit(t)
+	})
+}
+
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	t.Helper()
 
 	client := client.HTTP(t)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
-	require.NoError(t, err)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		cctx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		req, err := http.NewRequestWithContext(cctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
+		require.NoError(t, err)
 		resp, err := client.Do(req)
 		if assert.NoError(c, err) {
 			defer resp.Body.Close()
 			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
 		}
-	}, 20*time.Second, 10*time.Millisecond)
+	}, 30*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
@@ -265,6 +307,10 @@ func (d *Daprd) GRPCConn(t *testing.T, ctx context.Context) *grpc.ClientConn {
 	conn, err := grpc.DialContext(ctx, d.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(math.MaxInt32),
+			grpc.MaxCallSendMsgSize(math.MaxInt32),
+		),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
@@ -340,7 +386,7 @@ func (d *Daprd) ProfilePort() int {
 
 // Metrics Returns a subset of metrics scraped from the metrics endpoint
 func (d *Daprd) Metrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
-	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()))
+	return metrics.New(t, ctx, d.httpClient, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()))
 }
 
 func (d *Daprd) MetricResidentMemoryMi(t *testing.T, ctx context.Context) float64 {
@@ -414,6 +460,10 @@ func (d *Daprd) GetMetaHTTPEndpoints(t assert.TestingT, ctx context.Context) []*
 	return d.meta(t, ctx).HTTPEndpoints
 }
 
+func (d *Daprd) GetMetaMCPServers(t assert.TestingT, ctx context.Context) []*rtv1.MetadataMCPServer {
+	return d.meta(t, ctx).MCPServers
+}
+
 func (d *Daprd) GetMetaScheduler(t assert.TestingT, ctx context.Context) *rtv1.MetadataScheduler {
 	return d.meta(t, ctx).Scheduler
 }
@@ -422,13 +472,29 @@ func (d *Daprd) GetMetaActorRuntime(t assert.TestingT, ctx context.Context) *Met
 	return d.meta(t, ctx).ActorRuntime
 }
 
-// metaResponse is a subset of metadataResponse defined in pkg/api/http/metadata.go:160
-type metaResponse struct {
-	RegisteredComponents []*rtv1.RegisteredComponents         `json:"components,omitempty"`
-	Subscriptions        []MetadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
-	HTTPEndpoints        []*rtv1.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
-	Scheduler            *rtv1.MetadataScheduler              `json:"scheduler,omitempty"`
-	ActorRuntime         *MetadataActorRuntime                `json:"actorRuntime,omitempty"`
+func (d *Daprd) GetMetaResiliencies(t assert.TestingT, ctx context.Context) []*rtv1.MetadataResiliency {
+	return d.meta(t, ctx).Resiliencies
+}
+
+func (d *Daprd) GetMetaWorkflowAccessPolicies(t assert.TestingT, ctx context.Context) []*rtv1.MetadataWorkflowAccessPolicy {
+	return d.meta(t, ctx).WorkflowAccessPolicies
+}
+
+func (d *Daprd) GetMetadata(t assert.TestingT, ctx context.Context) *Metadata {
+	return d.meta(t, ctx)
+}
+
+// Metadata is a subset of metadataResponse defined in pkg/api/http/metadata.go:160
+type Metadata struct {
+	RegisteredComponents   []*rtv1.RegisteredComponents         `json:"components,omitempty"`
+	Subscriptions          []MetadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
+	HTTPEndpoints          []*rtv1.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
+	MCPServers             []*rtv1.MetadataMCPServer            `json:"mcpServers,omitempty"`
+	Scheduler              *rtv1.MetadataScheduler              `json:"scheduler,omitempty"`
+	ActorRuntime           *MetadataActorRuntime                `json:"actorRuntime,omitempty"`
+	Workflows              *MetadataWorkflows                   `json:"workflows"`
+	WorkflowAccessPolicies []*rtv1.MetadataWorkflowAccessPolicy `json:"workflowAccessPolicies,omitempty"`
+	Resiliencies           []*rtv1.MetadataResiliency           `json:"resiliencies,omitempty"`
 }
 
 // MetadataResponsePubsubSubscription copied from pkg/api/http/metadata.go:172 to be able to use in integration tests until we move to Proto format
@@ -453,27 +519,31 @@ type MetadataActorRuntime struct {
 	ActiveActors  []*MetadataActorRuntimeActiveActor `json:"activeActors"`
 }
 
+type MetadataWorkflows struct {
+	ConnectedWorkers int `json:"connectedWorkers,omitempty"`
+}
+
 type MetadataActorRuntimeActiveActor struct {
 	Type  string `json:"type"`
 	Count int    `json:"count"`
 }
 
-func (d *Daprd) meta(t assert.TestingT, ctx context.Context) metaResponse {
+func (d *Daprd) meta(t assert.TestingT, ctx context.Context) *Metadata {
 	url := fmt.Sprintf("http://%s/v1.0/metadata", d.HTTPAddress())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	//nolint:testifylint
 	if !assert.NoError(t, err) {
-		return metaResponse{}
+		return nil
 	}
 
-	var meta metaResponse
+	var meta Metadata
 	resp, err := d.httpClient.Do(req)
 	if assert.NoError(t, err) {
 		defer resp.Body.Close()
 		assert.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))
 	}
 
-	return meta
+	return &meta
 }
 
 func (d *Daprd) ActorInvokeURL(actorType, actorID, method string) string {
@@ -482,4 +552,30 @@ func (d *Daprd) ActorInvokeURL(actorType, actorID, method string) string {
 
 func (d *Daprd) ActorReminderURL(actorType, actorID, method string) string {
 	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/reminders/%s", d.HTTPAddress(), actorType, actorID, method)
+}
+
+func (d *Daprd) Kill(t *testing.T) {
+	t.Helper()
+	d.exec.Kill(t)
+}
+
+func (d *Daprd) Restart(t *testing.T, ctx context.Context) {
+	t.Helper()
+	clone := d.exec.Clone(t)
+	d.exec.Kill(t)
+	d.exec = clone
+	d.exec.Run(t, ctx)
+}
+
+// ReplaceArg sets `--<flag>=<value>` on the daprd command line for the next
+// Run/Restart, replacing any existing occurrence of that flag. Existing args
+// remain in place, so this is safe to call between Kill and Restart.
+func (d *Daprd) ReplaceArg(t *testing.T, flag, value string) {
+	t.Helper()
+	d.exec.ReplaceArg(t, flag, value)
+}
+
+func (d *Daprd) SignalHUP(t *testing.T) {
+	t.Helper()
+	d.exec.SignalHUP(t)
 }

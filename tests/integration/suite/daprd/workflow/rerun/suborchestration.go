@@ -50,18 +50,18 @@ func (s *suborchestration) Run(t *testing.T, ctx context.Context) {
 	s.workflow.WaitUntilRunning(t, ctx)
 
 	var act atomic.Int64
-	s.workflow.Registry().AddOrchestratorN("foo1", func(ctx *task.OrchestrationContext) (any, error) {
+	s.workflow.Registry().AddWorkflowN("foo1", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
-		require.NoError(t, ctx.CallSubOrchestrator("foo2").Await(nil))
-		require.NoError(t, ctx.CallSubOrchestrator("foo3").Await(nil))
+		require.NoError(t, ctx.CallChildWorkflow("foo2").Await(nil))
+		require.NoError(t, ctx.CallChildWorkflow("foo3").Await(nil))
 		return nil, nil
 	})
-	s.workflow.Registry().AddOrchestratorN("foo2", func(ctx *task.OrchestrationContext) (any, error) {
+	s.workflow.Registry().AddWorkflowN("foo2", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
-		require.NoError(t, ctx.CallSubOrchestrator("foo3").Await(nil))
+		require.NoError(t, ctx.CallChildWorkflow("foo3").Await(nil))
 		return nil, nil
 	})
-	s.workflow.Registry().AddOrchestratorN("foo3", func(ctx *task.OrchestrationContext) (any, error) {
+	s.workflow.Registry().AddWorkflowN("foo3", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
 	})
@@ -71,52 +71,50 @@ func (s *suborchestration) Run(t *testing.T, ctx context.Context) {
 	})
 	client := s.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "foo1", api.WithInstanceID("abc"))
+	id, err := client.ScheduleNewWorkflow(ctx, "foo1", api.WithInstanceID("abc"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, int64(4), act.Load())
 
 	act.Store(0)
 	newID, err := client.RerunWorkflowFromEvent(ctx, id, 0)
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(4), act.Load())
 
-	// TODO: @joshvanl: support rerunning from a sub-orchestration creation
-	// event.
 	_, err = client.RerunWorkflowFromEvent(ctx, id, 1)
-	assert.Equal(t, status.Error(codes.NotFound, "'abc' target event ID '1' is not a TaskScheduled event"), err)
+	require.NoError(t, err)
 	_, err = client.RerunWorkflowFromEvent(ctx, id, 2)
-	assert.Equal(t, status.Error(codes.NotFound, "'abc' target event ID '2' is not a TaskScheduled event"), err)
+	require.NoError(t, err)
 	_, err = client.RerunWorkflowFromEvent(ctx, id, 3)
-	assert.Equal(t, status.Error(codes.NotFound, "'abc' target event ID '3' is not a TaskScheduled event"), err)
+	assert.Equal(t, status.Error(codes.NotFound, "target event '*protos.HistoryEvent_ExecutionCompleted' with ID '3' is not an event that can be rerun"), err)
 
 	// We can't rerun an event _inside_ a sub-orchestration because it is a new
 	// workflow instance!
 	_, err = client.RerunWorkflowFromEvent(ctx, id, 4)
-	assert.Equal(t, status.Error(codes.NotFound, "'abc' does not have history event with ID '4'"), err)
+	assert.Equal(t, status.Error(codes.NotFound, "does not have history event with ID '4'"), err)
 
 	// Target the sub-orchestration instance IDs.
-	act.Store(0)
-	newID, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc:0001"), 0)
-	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
-	require.NoError(t, err)
-	assert.Equal(t, int64(2), act.Load())
+	_, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc:0001"), 0)
+	require.Error(t, err)
+	serr, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.InvalidArgument.String(), serr.Code().String())
+	assert.Equal(t, "'abc:0001': cannot rerun from child-workflows", serr.Message())
 
-	act.Store(0)
-	newID, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc:0002"), 0)
-	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
-	require.NoError(t, err)
-	assert.Equal(t, int64(1), act.Load())
+	_, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc:0002"), 0)
+	require.Error(t, err)
+	serr, ok = status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.InvalidArgument.String(), serr.Code().String())
+	assert.Equal(t, "'abc:0002': cannot rerun from child-workflows", serr.Message())
 
-	act.Store(0)
-	newID, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc:0001:0001"), 0)
-	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
-	require.NoError(t, err)
-	assert.Equal(t, int64(1), act.Load())
+	_, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc:0001:0001"), 0)
+	require.Error(t, err)
+	serr, ok = status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.InvalidArgument.String(), serr.Code().String())
+	assert.Equal(t, "'abc:0001:0001': cannot rerun from child-workflows", serr.Message())
 }

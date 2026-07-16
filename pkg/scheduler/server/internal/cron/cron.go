@@ -26,7 +26,6 @@ import (
 	etcdcron "github.com/diagridio/go-etcd-cron/cron"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/dapr/dapr/pkg/healthz"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
@@ -34,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/broadcaster"
+	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
 )
 
@@ -42,8 +42,8 @@ var log = logger.NewLogger("dapr.scheduler.server.cron")
 type Options struct {
 	ID      string
 	Host    *schedulerv1pb.Host
-	Healthz healthz.Healthz
 	Etcd    etcd.Interface
+	Workers uint32
 }
 
 // Interface manages the cron framework, exposing a client to schedule jobs.
@@ -72,6 +72,7 @@ type cron struct {
 	lock            sync.RWMutex
 	currHosts       []*schedulerv1pb.Host
 	etcd            etcd.Interface
+	workers         uint32
 
 	readyCh chan struct{}
 	closeCh chan struct{}
@@ -82,6 +83,7 @@ func New(opts Options) Interface {
 		id:              opts.ID,
 		host:            opts.Host,
 		hostBroadcaster: broadcaster.New[[]*schedulerv1pb.Host](),
+		workers:         opts.Workers,
 		readyCh:         make(chan struct{}),
 		closeCh:         make(chan struct{}),
 		etcd:            opts.Etcd,
@@ -110,6 +112,7 @@ func (c *cron) Run(ctx context.Context) error {
 		TriggerFn:       c.triggerHandler,
 		ReplicaData:     hostAny,
 		WatchLeadership: watchLeadershipCh,
+		Workers:         new(c.workers),
 	})
 	if err != nil {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)
@@ -119,13 +122,30 @@ func (c *cron) Run(ctx context.Context) error {
 		Cron: c.etcdcron,
 	})
 
+	// Use a loop to process leadership updates. The loop's Enqueue is
+	// non-blocking, which prevents the go-etcd-cron wleaderCh send from
+	// blocking when the consumer is busy broadcasting to WatchHosts
+	// subscribers. Without this, a blocked send can race with elected context
+	// cancellation during quorum changes, causing the cron module to exit
+	// silently.
+	leaderLoop := loop.New[[]*anypb.Any](64).NewLoop(&leadership{
+		hostBroadcaster: c.hostBroadcaster,
+		lock:            &c.lock,
+		currHosts:       &c.currHosts,
+		readyCh:         c.readyCh,
+		ownAddress:      c.host.GetAddress(),
+		pool:            c.connectionPool,
+	})
+
 	return concurrency.NewRunnerManager(
 		c.connectionPool.Run,
 		c.etcdcron.Run,
+		leaderLoop.Run,
 		func(ctx context.Context) error {
 			defer log.Info("Cron shut down")
 			defer close(c.closeCh)
 			defer c.hostBroadcaster.Close()
+			defer leaderLoop.Close(nil)
 
 			for {
 				select {
@@ -135,28 +155,7 @@ func (c *cron) Run(ctx context.Context) error {
 					if !ok {
 						return nil
 					}
-
-					hosts := make([]*schedulerv1pb.Host, len(anyhosts))
-					for i, anyhost := range anyhosts {
-						var host schedulerv1pb.Host
-						if err := anyhost.UnmarshalTo(&host); err != nil {
-							return err
-						}
-						hosts[i] = &host
-					}
-
-					c.lock.Lock()
-					c.currHosts = hosts
-
-					select {
-					case <-c.readyCh:
-					default:
-						close(c.readyCh)
-						log.Info("Cron is ready")
-					}
-
-					c.hostBroadcaster.Broadcast(hosts)
-					c.lock.Unlock()
+					leaderLoop.Enqueue(anyhosts)
 				}
 			}
 		},
@@ -226,38 +225,52 @@ func (c *cron) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error
 	}
 }
 
-func (c *cron) triggerHandler(ctx context.Context, req *api.TriggerRequest) *api.TriggerResponse {
+func (c *cron) triggerHandler(req *api.TriggerRequest, fn func(*api.TriggerResponse)) {
 	log.Debugf("Triggering job: %s", req.GetName())
 
-	start := time.Now()
-	resp := c.triggerJob(ctx, req)
-	monitoring.RecordTriggerDuration(start)
-
-	log.Debugf("Triggered job %s in %s (%s)", req.GetName(), time.Since(start), resp.GetResult())
-
-	return resp
-}
-
-func (c *cron) triggerJob(ctx context.Context, req *api.TriggerRequest) *api.TriggerResponse {
 	var meta schedulerv1pb.JobMetadata
 	if err := req.GetMetadata().UnmarshalTo(&meta); err != nil {
 		log.Errorf("Error unmarshalling metadata: %s", err)
-		return &api.TriggerResponse{Result: api.TriggerResponseResult_UNDELIVERABLE}
+		fn(&api.TriggerResponse{Result: api.TriggerResponseResult_UNDELIVERABLE})
+		return
 	}
 
 	idx := strings.LastIndex(req.GetName(), "||")
 	if idx == -1 || len(req.GetName()) <= idx+2 {
 		log.Errorf("Job name is malformed: %s", req.GetName())
-		return &api.TriggerResponse{Result: api.TriggerResponseResult_UNDELIVERABLE}
+		fn(&api.TriggerResponse{Result: api.TriggerResponseResult_UNDELIVERABLE})
+		return
 	}
 
-	defer monitoring.RecordJobsTriggeredCount(&meta)
-	return &api.TriggerResponse{
-		Result: c.connectionPool.Trigger(ctx, &internalsv1pb.JobEvent{
-			Key:      req.GetName(),
-			Name:     req.GetName()[idx+2:],
-			Data:     req.GetPayload(),
-			Metadata: &meta,
-		}),
+	c.connectionPool.Trigger(&internalsv1pb.JobEvent{
+		Key:      req.GetName(),
+		Name:     req.GetName()[idx+2:],
+		Data:     req.GetPayload(),
+		Metadata: &meta,
+	}, c.respHandler(req.GetName(), &meta, fn))
+}
+
+func (c *cron) respHandler(name string, meta *schedulerv1pb.JobMetadata, fn func(*api.TriggerResponse)) func(api.TriggerResponseResult) {
+	start := time.Now()
+	return func(result api.TriggerResponseResult) {
+		duration := time.Since(start)
+
+		switch result {
+		case api.TriggerResponseResult_SUCCESS:
+			monitoring.RecordJobsTriggeredCount(meta)
+			monitoring.RecordTriggerDuration(meta, duration)
+		case api.TriggerResponseResult_FAILED:
+			monitoring.RecordJobsFailedCount(meta)
+			monitoring.RecordTriggerDuration(meta, duration)
+		case api.TriggerResponseResult_UNDELIVERABLE:
+			monitoring.RecordJobsUndeliveredCount(meta)
+		default:
+			log.Warnf("Unknown trigger result: %s", result)
+			monitoring.RecordJobsUndeliveredCount(meta)
+		}
+
+		log.Debugf("Triggered job %s in %s (%s)", name, duration, result)
+
+		fn(&api.TriggerResponse{Result: result})
 	}
 }

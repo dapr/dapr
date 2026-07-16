@@ -29,7 +29,6 @@ import (
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/ptr"
 )
 
 type getSidecarContainerOpts struct {
@@ -119,6 +118,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--reminders-service", c.RemindersService)
 	}
 
+	if c.SentryRequestJwtAudiences != "" {
+		args = append(args, "--sentry-request-jwt-audiences", c.SentryRequestJwtAudiences)
+	}
+
 	// --enable-api-logging is set if and only if there's an explicit value (true or false) for that
 	// This is set explicitly even if "false"
 	// This is because if this CLI flag is missing, the default specified in the Config CRD is used
@@ -188,6 +191,23 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--dapr-block-shutdown-duration", *c.BlockShutdownDuration)
 	}
 
+	if c.ActorsDisseminateTimeout != nil {
+		args = append(args, "--actors-disseminate-timeout", *c.ActorsDisseminateTimeout)
+	}
+
+	if c.SchedulerAddress != nil {
+		args = append(args, "--scheduler-host-address", *c.SchedulerAddress)
+	} else if c.SchedulerEnabled {
+		args = append(args,
+			"--scheduler-host-address",
+			fmt.Sprintf("dapr-scheduler-server-a.%s.svc.%s:443", c.ControlPlaneNamespace, c.KubeClusterDomain),
+		)
+	}
+
+	if c.DisableInitEndpoint != nil {
+		args = append(args, "--disable-init-endpoints", *c.DisableInitEndpoint)
+	}
+
 	// When debugging is enabled, we need to override the command and the flags
 	if c.EnableDebug {
 		ports = append(ports, corev1.ContainerPort{
@@ -211,11 +231,11 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 
 	// Security context
 	securityContext := &corev1.SecurityContext{
-		AllowPrivilegeEscalation: ptr.Of(false),
-		RunAsNonRoot:             ptr.Of(c.RunAsNonRoot),
+		AllowPrivilegeEscalation: new(false),
+		RunAsNonRoot:             new(c.RunAsNonRoot),
 		RunAsUser:                c.RunAsUser,
 		RunAsGroup:               c.RunAsGroup,
-		ReadOnlyRootFilesystem:   ptr.Of(c.ReadOnlyRootFilesystem),
+		ReadOnlyRootFilesystem:   new(c.ReadOnlyRootFilesystem),
 	}
 	if c.SidecarSeccompProfileType != "" {
 		securityContext.SeccompProfile = &corev1.SeccompProfile{
@@ -271,22 +291,6 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		)
 	}
 
-	// Scheduler address could be empty if scheduler service is disabled
-	// TODO: remove in v1.16 when daprd no longer needs all scheduler pod
-	// addresses for serving.
-	if strings.TrimSpace(c.SchedulerAddress) != "" {
-		env = append(env,
-			corev1.EnvVar{
-				Name:  injectorConsts.SchedulerHostAddressEnvVar,
-				Value: c.SchedulerAddress,
-			},
-			corev1.EnvVar{
-				Name:  injectorConsts.SchedulerHostAddressDNSAEnvVar,
-				Value: c.SchedulerAddressDNSA,
-			},
-		)
-	}
-
 	container := &corev1.Container{
 		Name:            injectorConsts.SidecarContainerName,
 		Image:           c.SidecarImage,
@@ -310,6 +314,13 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 			PeriodSeconds:       c.SidecarLivenessProbePeriodSeconds,
 			FailureThreshold:    c.SidecarLivenessProbeThreshold,
 		},
+	}
+
+	// Native sidecar: set RestartPolicy to Always so Kubernetes treats
+	// this init container as a long-running sidecar (KEP-753).
+	if c.EnableNativeSidecar {
+		policy := corev1.ContainerRestartPolicyAlways
+		container.RestartPolicy = &policy
 	}
 
 	// If the pod contains any of the tolerations specified by the configuration,
@@ -349,15 +360,15 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	for _, env := range container.Env {
 		if env.Name == "SSL_CERT_DIR" {
 			container.SecurityContext.WindowsOptions = &corev1.WindowsSecurityContextOptions{
-				RunAsUserName: ptr.Of("ContainerAdministrator"),
+				RunAsUserName: new("ContainerAdministrator"),
 			}
 
 			// We also need to set RunAsNonRoot and ReadOnlyRootFilesystem to false, which would impact Linux too.
 			// The injector has no way to know if the pod is going to be deployed on Windows or Linux, so we need to err on the side of most compatibility.
 			// On Linux, our containers run with a non-root user, so the net effect shouldn't change: daprd is running as non-root and has no permission to write on the root FS.
 			// However certain security scanner may complain about this.
-			container.SecurityContext.RunAsNonRoot = ptr.Of(false)
-			container.SecurityContext.ReadOnlyRootFilesystem = ptr.Of(false)
+			container.SecurityContext.RunAsNonRoot = new(false)
+			container.SecurityContext.ReadOnlyRootFilesystem = new(false)
 
 			// Set RunAsUser and RunAsGroup to default nil to avoid the error when specific user or group is set previously via helm chart.
 			container.SecurityContext.RunAsUser = nil
@@ -492,26 +503,24 @@ func parseEnvVars(envString string, fromSecret bool) (envKeys []string, envVars 
 	envVars = make([]corev1.EnvVar, 0, len(parts))
 
 	for _, s := range parts {
-		pairs := strings.Split(strings.TrimSpace(s), "=")
-		if len(pairs) != 2 {
+		k, v, found := strings.Cut(strings.TrimSpace(s), "=")
+		if !found {
 			continue
 		}
-		envKey := pairs[0]
-		envValue := pairs[1]
-		envKeys = append(envKeys, envKey)
+		envKeys = append(envKeys, k)
 
 		if fromSecret {
-			secretSource := createSecretSource(envValue)
+			secretSource := createSecretSource(v)
 			if secretSource != nil {
 				envVars = append(envVars, corev1.EnvVar{
-					Name:      envKey,
+					Name:      k,
 					ValueFrom: secretSource,
 				})
 			}
 		} else {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  envKey,
-				Value: envValue,
+				Name:  k,
+				Value: v,
 			})
 		}
 	}

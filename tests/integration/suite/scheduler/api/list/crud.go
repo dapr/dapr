@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -90,7 +89,7 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 	client := c.scheduler.Client(t, ctx)
 	_, err := client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name:     "test",
-		Job:      &schedulerv1pb.Job{Schedule: ptr.Of("@every 20s")},
+		Job:      &schedulerv1pb.Job{Schedule: new("@every 20s")},
 		Metadata: jobMetadata("default", "test"),
 	})
 	require.NoError(t, err)
@@ -103,7 +102,7 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 	for i := range 10 {
 		_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 			Name:     strconv.Itoa(i),
-			Job:      &schedulerv1pb.Job{Schedule: ptr.Of("@every 20s")},
+			Job:      &schedulerv1pb.Job{Schedule: new("@every 20s")},
 			Metadata: jobMetadata("default", "test"),
 		})
 		require.NoError(t, err)
@@ -114,7 +113,7 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 
 	_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name: "test",
-		Job:  &schedulerv1pb.Job{Schedule: ptr.Of("@every 20s")},
+		Job:  &schedulerv1pb.Job{Schedule: new("@every 20s")},
 		Metadata: &schedulerv1pb.JobMetadata{
 			Namespace: "not-default",
 			AppId:     "test",
@@ -130,7 +129,7 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 
 	_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name:     "test",
-		Job:      &schedulerv1pb.Job{Schedule: ptr.Of("@every 20s")},
+		Job:      &schedulerv1pb.Job{Schedule: new("@every 20s")},
 		Metadata: jobMetadata("default", "not-test"),
 	})
 	require.NoError(t, err)
@@ -142,7 +141,7 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 
 	_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name:     "test",
-		Job:      &schedulerv1pb.Job{Schedule: ptr.Of("@every 20s")},
+		Job:      &schedulerv1pb.Job{Schedule: new("@every 20s")},
 		Metadata: actorMetadata("default", "test", "myactortype", "myactorid"),
 	})
 	require.NoError(t, err)
@@ -159,7 +158,7 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 
 	_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name:     "test",
-		Job:      &schedulerv1pb.Job{Schedule: ptr.Of("@every 20s")},
+		Job:      &schedulerv1pb.Job{Schedule: new("@every 20s")},
 		Metadata: actorMetadata("default", "test", "not-myactortype", "myactorid"),
 	})
 	require.NoError(t, err)
@@ -176,7 +175,7 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 
 	_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name:     "test",
-		Job:      &schedulerv1pb.Job{Schedule: ptr.Of("@every 20s")},
+		Job:      &schedulerv1pb.Job{Schedule: new("@every 20s")},
 		Metadata: actorMetadata("default", "test", "myactortype", "not-myactorid"),
 	})
 	require.NoError(t, err)
@@ -193,7 +192,7 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 
 	_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name:     "test2",
-		Job:      &schedulerv1pb.Job{Schedule: ptr.Of("@every 20s")},
+		Job:      &schedulerv1pb.Job{Schedule: new("@every 20s")},
 		Metadata: actorMetadata("default", "test", "myactortype", "not-myactorid"),
 	})
 	require.NoError(t, err)
@@ -244,7 +243,7 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 
 	_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name:     "test123",
-		Job:      &schedulerv1pb.Job{DueTime: ptr.Of(time.Now().Add(time.Second * 2).Format(time.RFC3339))},
+		Job:      &schedulerv1pb.Job{DueTime: new(time.Now().Add(time.Second * 2).Format(time.RFC3339))},
 		Metadata: jobMetadata("default", c.actors.AppID()),
 	})
 	require.NoError(t, err)

@@ -78,7 +78,7 @@ def state_delete_act(ctx:WorkflowActivityContext,input):
                        key= key)
         sleep(1)
 
-# sum_series_wf calculates sum of numbers {1..input} by dividing the workload among 5 activties running in series
+# sum_series_wf calculates sum of numbers {1..input} by dividing the workload among 5 activities running in series
 def sum_series_wf(ctx:DaprWorkflowContext, input):
     print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{ctx.instance_id}] Invoked sum_series_wf")
 
@@ -94,7 +94,7 @@ def sum_series_wf(ctx:DaprWorkflowContext, input):
     expected_sum = (num*(num+1))/2
     assert expected_sum == total_sum
 
-# sum_parallel_wf calculates sum of numbers {1..input} by dividing the workload among 5 activties running in parallel
+# sum_parallel_wf calculates sum of numbers {1..input} by dividing the workload among 5 activities running in parallel
 def sum_parallel_wf(ctx:DaprWorkflowContext, input):
     print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{ctx.instance_id}] Invoked sum_parallel_wf")
 
@@ -120,23 +120,44 @@ def sum_activity(ctx:WorkflowActivityContext,input):
         sum += i
     return sum
 
-# start_workflow_runtime starts the workflow runtime and registers the declared workflows and activities
-@api.route('/start-workflow-runtime', methods=['GET'])
-def start_workflow_runtime():
-    global workflowRuntime, workflowClient
+# delay_wf waits for a specified delay (milliseconds) using an activity, then completes
+def delay_wf(ctx:DaprWorkflowContext, input):
+    print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{ctx.instance_id}] Invoked delay_wf")
+    delay_ms = int(input)
+    yield ctx.call_activity(delay_activity, input=delay_ms)
+
+# delay_activity sleeps for the specified milliseconds
+def delay_activity(ctx:WorkflowActivityContext, input):
+    delay_ms = int(input)
+    sleep(delay_ms / 1000.0)
+
+workflow_runtime_started = False
+
+def init_workflow_runtime():
+    global workflowRuntime, workflowClient, workflow_runtime_started
+    if workflow_runtime_started:
+        return
     host = settings.DAPR_RUNTIME_HOST
     port = settings.DAPR_GRPC_PORT
     workflowRuntime = WorkflowRuntime(host, port)
     workflowRuntime.register_workflow(sum_series_wf)
     workflowRuntime.register_workflow(sum_parallel_wf)
     workflowRuntime.register_workflow(state_wf)
+    workflowRuntime.register_workflow(delay_wf)
     workflowRuntime.register_activity(sum_activity)
     workflowRuntime.register_activity(state_save_act)
     workflowRuntime.register_activity(state_get_act)
     workflowRuntime.register_activity(state_delete_act)
+    workflowRuntime.register_activity(delay_activity)
     workflowRuntime.start()
     workflowClient = DaprWorkflowClient(host=host,port=port)
+    workflow_runtime_started = True
     print("Workflow Runtime Started")
+
+# start_workflow_runtime starts the workflow runtime and registers the declared workflows and activities
+@api.route('/start-workflow-runtime', methods=['GET'])
+def start_workflow_runtime():
+    init_workflow_runtime()
     return "Workflow Runtime Started"
 
 # shutdown_workflow_runtime stops the workflow runtime
@@ -173,8 +194,7 @@ def run_workflow(run_id):
 
         sleep(0.5)
 
-        workflow_state = workflowClient.wait_for_workflow_completion(
-                instance_id=instance_id, timeout_in_seconds=250)
+        workflow_state = workflowClient.wait_for_workflow_completion(instance_id=instance_id)
         assert workflow_state.runtime_status == WorkflowStatus.COMPLETED
 
         try:
@@ -183,20 +203,11 @@ def run_workflow(run_id):
         except DaprInternalError as e:
             print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] error getting workflow status: {e.message}")
 
-        try:
-            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] terminating workflow")
-            terminate_resp = d.terminate_workflow(instance_id=instance_id, workflow_component=workflowComponent)
-        except DaprInternalError as e:
-            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] error terminating workflow: {e.message}")
-
-        try:
-            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] purging workflow")
-            d.purge_workflow(instance_id=instance_id, workflow_component=workflowComponent)
-        except DaprInternalError as e:
-            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] error purging workflow: {e.message}")
-
         print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] workflow run complete")
         return "Workflow Run completed"
+
+# Initialize workflow runtime at startup
+init_workflow_runtime()
 
 if __name__ == '__main__':
     api.run(host="0.0.0.0",port=appPort)

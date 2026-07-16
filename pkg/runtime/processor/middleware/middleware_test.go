@@ -71,6 +71,7 @@ func TestInit(t *testing.T) {
 			return func(meta contribmiddleware.Metadata) (daprmiddleware.HTTP, error) {
 				assert.Equal(t, "test", meta.Name)
 				assert.Equal(t, map[string]string{"routes": `{"/foo":"/v1.0/invoke/nowhere/method/bar"}`}, meta.Properties)
+
 				return nil, nil
 			}
 		}, "mock")
@@ -169,11 +170,13 @@ func TestInit(t *testing.T) {
 		})
 
 		var rootCalled int
+
 		handler := pipeline(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) {
 			rootCalled++
 		}))
 
 		var middlewareCalled int
+
 		reg.RegisterComponent(func(logger.Logger) compmiddlehttp.FactoryMethod {
 			return func(meta contribmiddleware.Metadata) (daprmiddleware.HTTP, error) {
 				return func(next nethttp.Handler) nethttp.Handler {
@@ -224,16 +227,19 @@ func TestInit(t *testing.T) {
 		})
 
 		var rootCalled int
+
 		handler := pipeline(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) {
 			rootCalled++
 		}))
 
 		var middlewareCalled int
+
 		reg.RegisterComponent(func(logger.Logger) compmiddlehttp.FactoryMethod {
 			return func(meta contribmiddleware.Metadata) (daprmiddleware.HTTP, error) {
 				return func(next nethttp.Handler) nethttp.Handler {
 					return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
 						middlewareCalled++
+
 						next.ServeHTTP(w, r)
 					})
 				}, nil

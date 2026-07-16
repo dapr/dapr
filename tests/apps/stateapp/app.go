@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -347,19 +348,19 @@ func deleteAll(states []daprState, statestore string, meta map[string]string) er
 }
 
 func executeTransaction(states []daprState, statestore string) error {
-	transactionalOperations := make([]map[string]interface{}, len(states))
+	transactionalOperations := make([]map[string]any, len(states))
 	stateTransactionURL := fmt.Sprintf(stateTransactionURLTemplate, daprHTTPPort, statestore)
 	for i, s := range states {
-		transactionalOperations[i] = map[string]interface{}{
+		transactionalOperations[i] = map[string]any{
 			"operation": s.OperationType,
-			"request": map[string]interface{}{
+			"request": map[string]any{
 				"key":   s.Key,
 				"value": s.Value,
 			},
 		}
 	}
 
-	jsonValue, err := json.Marshal(map[string]interface{}{
+	jsonValue, err := json.Marshal(map[string]any{
 		"operations": transactionalOperations,
 		"metadata":   map[string]string{metadataPartitionKey: partitionKey},
 	})
@@ -711,9 +712,7 @@ func deleteAllGRPC(states []daprState, statestore string, meta map[string]string
 	if len(states) == 1 {
 		log.Print("deleting sate for key", states[0].Key)
 		m := map[string]string{metadataPartitionKey: partitionKey}
-		for k, v := range meta {
-			m[k] = v
-		}
+		maps.Copy(m, meta)
 		_, err = grpcClient.DeleteState(context.Background(), &runtimev1pb.DeleteStateRequest{
 			StoreName: statestore,
 			Key:       states[0].Key,
@@ -736,9 +735,7 @@ func deleteAllGRPC(states []daprState, statestore string, meta map[string]string
 
 func getAllGRPC(states []daprState, statestore string, meta map[string]string) ([]daprState, error) {
 	m := map[string]string{metadataPartitionKey: partitionKey}
-	for k, v := range meta {
-		m[k] = v
-	}
+	maps.Copy(m, meta)
 	responses := make([]daprState, len(states))
 	for i, state := range states {
 		log.Printf("getting state for key %s\n", state.Key)
@@ -771,9 +768,7 @@ func setErrorMessage(method, errorString string) (int, string) {
 
 func daprState2StateItems(daprStates []daprState, meta map[string]string) []*commonv1pb.StateItem {
 	m := map[string]string{metadataPartitionKey: partitionKey}
-	for k, v := range meta {
-		m[k] = v
-	}
+	maps.Copy(m, meta)
 	stateItems := make([]*commonv1pb.StateItem, len(daprStates))
 	for i, daprState := range daprStates {
 		val, _ := json.Marshal(daprState.Value)
@@ -818,9 +813,7 @@ func createStateURL(key, statestore string, meta map[string]string) (string, err
 	url.Path = path.Join(url.Path, key)
 
 	m := map[string]string{metadataPartitionKey: partitionKey}
-	for k, v := range meta {
-		m[k] = v
-	}
+	maps.Copy(m, meta)
 	url.RawQuery = metadata2RawQuery(m)
 
 	return url.String(), nil

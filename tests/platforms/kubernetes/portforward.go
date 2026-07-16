@@ -133,7 +133,7 @@ func startPortForwarding(req PortForwardRequest) error {
 
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: roundTripper}, http.MethodPost, serverURL)
 
-	var ports []string //nolint: prealloc
+	var ports []string
 	for i, p := range req.podPorts {
 		ports = append(ports, fmt.Sprintf("%d:%d", req.localPorts[i], p))
 	}

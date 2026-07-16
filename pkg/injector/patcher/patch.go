@@ -26,6 +26,8 @@ import (
 const (
 	// Path for patching containers.
 	PatchPathContainers = "/spec/containers"
+	// Path for patching init containers (used for native sidecars).
+	PatchPathInitContainers = "/spec/initContainers"
 	// Path for patching volumes.
 	PatchPathVolumes = "/spec/volumes"
 	// Path for patching labels.
@@ -36,8 +38,8 @@ const (
 // This patch represents a discrete change to be applied to a Kubernetes resource.
 func NewPatchOperation(op string, path string, value any) jsonpatch.Operation {
 	patchOp := jsonpatch.Operation{
-		"op":   ptr.Of(json.RawMessage(`"` + op + `"`)),
-		"path": ptr.Of(json.RawMessage(`"` + path + `"`)),
+		"op":   new(json.RawMessage(`"` + op + `"`)),
+		"path": new(json.RawMessage(`"` + path + `"`)),
 	}
 
 	if value != nil {

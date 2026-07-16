@@ -15,6 +15,8 @@ package common
 
 // +kubebuilder:object:generate=true
 
+import "slices"
+
 // Scoped is a base struct for components and other resources that can be scoped to apps.
 type Scoped struct {
 	//+optional
@@ -28,11 +30,5 @@ func (s *Scoped) IsAppScoped(appID string) bool {
 		return true
 	}
 
-	for _, s := range s.Scopes {
-		if s == appID {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(s.Scopes, appID)
 }

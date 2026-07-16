@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"net/url"
 	"os"
 	"sort"
@@ -30,16 +29,16 @@ import (
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spf13/cast"
 	"go.opencensus.io/stats/view"
-	yaml "gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 // Feature Flags section
@@ -53,9 +52,22 @@ const (
 	// Enables support for hot reloading of Daprd Components.
 	HotReload Feature = "HotReload"
 
-	// Enables support for using the Scheduler control plane service
-	// for Actor Reminders.
-	SchedulerReminders Feature = "SchedulerReminders"
+	// Enables feature to support workflows in a clustered deployment.
+	WorkflowsClusteredDeployment Feature = "WorkflowsClusteredDeployment"
+
+	// Enables a feature to make activities send their results to workflow when
+	// the workflow is running on a different application. Useful when using
+	// cross app workflows. Ensures that activities are not retried forever if
+	// the workflow app is not available, and instead queues the result for when
+	// the workflow app is back online. Strongly recommended to always be enabled
+	// if using the same Dapr version on all daprds. Enabled by default.
+	WorkflowsRemoteActivityReminder Feature = "WorkflowsRemoteActivityReminder"
+
+	// WorkflowHistorySigning enables cryptographic signing of workflow
+	// history. When enabled and mTLS is active, each workflow execution's
+	// history events are signed using the app's X.509 SVID identity,
+	// creating a verifiable chain of signatures. Disabled by default.
+	WorkflowHistorySigning Feature = "WorkflowHistorySigning"
 )
 
 // end feature flags section
@@ -69,13 +81,11 @@ const (
 	DefaultNamespace    = "default"
 	ActionPolicyApp     = "app"
 	ActionPolicyGlobal  = "global"
-
-	defaultMaxWorkflowConcurrentInvocations = math.MaxInt32
-	defaultMaxActivityConcurrentInvocations = math.MaxInt32
 )
 
 var defaultFeatures = map[Feature]bool{
-	SchedulerReminders: true,
+	HotReload:                       true,
+	WorkflowsRemoteActivityReminder: true,
 }
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
@@ -84,7 +94,7 @@ var defaultFeatures = map[Feature]bool{
 type Configuration struct {
 	metav1.TypeMeta `json:",inline" yaml:",inline"`
 	// See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#metadata
-	metav1.ObjectMeta `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	metav1.ObjectMeta `json:"metadata,omitzero" yaml:"metadata,omitempty"`
 	// See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	Spec ConfigurationSpec `json:"spec" yaml:"spec"`
 
@@ -137,26 +147,119 @@ type ConfigurationSpec struct {
 type WorkflowSpec struct {
 	// maxConcurrentWorkflowInvocations is the maximum number of concurrent workflow invocations that can be scheduled by a single Dapr instance.
 	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
-	// If omitted, the default value of 100 will be used.
+	// If omitted, no maximum will be enforced.
 	MaxConcurrentWorkflowInvocations int32 `json:"maxConcurrentWorkflowInvocations,omitempty" yaml:"maxConcurrentWorkflowInvocations,omitempty"`
 	// maxConcurrentActivityInvocations is the maximum number of concurrent activities that can be processed by a single Dapr instance.
 	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
-	// If omitted, the default value of 100 will be used.
+	// If omitted, no maximum will be enforced.
 	MaxConcurrentActivityInvocations int32 `json:"maxConcurrentActivityInvocations,omitempty" yaml:"maxConcurrentActivityInvocations,omitempty"`
+
+	// globalMaxConcurrentWorkflowInvocations is the maximum number of concurrent
+	// workflow invocations across all replicas, enforced by the scheduler.
+	// If omitted, no global maximum will be enforced.
+	GlobalMaxConcurrentWorkflowInvocations *int32 `json:"globalMaxConcurrentWorkflowInvocations,omitempty" yaml:"globalMaxConcurrentWorkflowInvocations,omitempty"`
+	// globalMaxConcurrentActivityInvocations is the maximum number of concurrent
+	// activity invocations across all replicas, enforced by the scheduler.
+	// If omitted, no global maximum will be enforced.
+	GlobalMaxConcurrentActivityInvocations *int32 `json:"globalMaxConcurrentActivityInvocations,omitempty" yaml:"globalMaxConcurrentActivityInvocations,omitempty"`
+
+	// Per-workflow-name concurrency limits enforced globally by the scheduler.
+	WorkflowConcurrencyLimits []NamedConcurrencyLimit `json:"workflowConcurrencyLimits,omitempty" yaml:"workflowConcurrencyLimits,omitempty"`
+	// Per-activity-name concurrency limits enforced globally by the scheduler.
+	ActivityConcurrencyLimits []NamedConcurrencyLimit `json:"activityConcurrencyLimits,omitempty" yaml:"activityConcurrencyLimits,omitempty"`
+
+	// StateRetentionPolicy defines the retention configuration for workflow
+	// state once a workflow reaches a terminal state. If not set, workflow
+	// instances will not be automatically purged.
+	StateRetentionPolicy *WorkflowStateRetentionPolicy `json:"stateRetentionPolicy,omitempty" yaml:"stateRetentionPolicy,omitempty"`
 }
 
-func (w *WorkflowSpec) GetMaxConcurrentWorkflowInvocations() int32 {
+// NamedConcurrencyLimit defines a per-name concurrency limit.
+type NamedConcurrencyLimit struct {
+	Name          *string `json:"name"          yaml:"name"`
+	MaxConcurrent *int32  `json:"maxConcurrent" yaml:"maxConcurrent"`
+}
+
+// WorkflowStateRetentionPolicy defines the retention policy of workflow state
+// for workflow instances once they reaches a specific or any terminal state.
+// If not set, workflow instances will not be automatically purged. If a
+// specific and any terminal state are both set, the specific terminal state
+// takes precedence. Accepts duration strings, e.g. "72h" or "30m", including
+// immediate values "0s".
+type WorkflowStateRetentionPolicy struct {
+	// AnyTerminal is the TTL for purging workflow instances that reach any
+	// terminal state.
+	AnyTerminal *time.Duration `json:"anyTerminal,omitempty" yaml:"anyTerminal,omitempty"`
+
+	// Completed is the TTL for purging workflow instances that reach the
+	// Completed terminal state.
+	Completed *time.Duration `json:"completed,omitempty" yaml:"completed,omitempty"`
+
+	// Failed is the TTL for purging workflow instances that reach the Failed
+	// terminal state.
+	Failed *time.Duration `json:"failed,omitempty" yaml:"failed,omitempty"`
+
+	// Terminated is the TTL for purging workflow instances that reach the
+	// Terminated terminal state.
+	Terminated *time.Duration `json:"terminated,omitempty" yaml:"terminated,omitempty"`
+}
+
+// UnmarshalJSON handles the Kubernetes CRD JSON format sent by the operator,
+// where durations are encoded as metav1.Duration strings (for example, "1s" or
+// "168h"). Standalone configuration files parsed via YAML use the YAML
+// unmarshaling path instead, which handles Go duration strings natively.
+func (p *WorkflowStateRetentionPolicy) UnmarshalJSON(data []byte) error {
+	var crd configapi.WorkflowStateRetentionPolicy
+	if err := json.Unmarshal(data, &crd); err != nil {
+		return err
+	}
+
+	if crd.AnyTerminal != nil {
+		d := crd.AnyTerminal.Duration
+		p.AnyTerminal = &d
+	}
+	if crd.Completed != nil {
+		d := crd.Completed.Duration
+		p.Completed = &d
+	}
+	if crd.Failed != nil {
+		d := crd.Failed.Duration
+		p.Failed = &d
+	}
+	if crd.Terminated != nil {
+		d := crd.Terminated.Duration
+		p.Terminated = &d
+	}
+
+	return nil
+}
+
+func (w *WorkflowSpec) GetMaxConcurrentWorkflowInvocations() *int32 {
 	if w == nil || w.MaxConcurrentWorkflowInvocations <= 0 {
-		return defaultMaxWorkflowConcurrentInvocations
+		return nil
 	}
-	return w.MaxConcurrentWorkflowInvocations
+	return new(w.MaxConcurrentWorkflowInvocations)
 }
 
-func (w *WorkflowSpec) GetMaxConcurrentActivityInvocations() int32 {
+func (w *WorkflowSpec) GetMaxConcurrentActivityInvocations() *int32 {
 	if w == nil || w.MaxConcurrentActivityInvocations <= 0 {
-		return defaultMaxActivityConcurrentInvocations
+		return nil
 	}
-	return w.MaxConcurrentActivityInvocations
+	return new(w.MaxConcurrentActivityInvocations)
+}
+
+func (w *WorkflowSpec) GetGlobalMaxConcurrentWorkflowInvocations() *int32 {
+	if w == nil || w.GlobalMaxConcurrentWorkflowInvocations == nil || *w.GlobalMaxConcurrentWorkflowInvocations <= 0 {
+		return nil
+	}
+	return w.GlobalMaxConcurrentWorkflowInvocations
+}
+
+func (w *WorkflowSpec) GetGlobalMaxConcurrentActivityInvocations() *int32 {
+	if w == nil || w.GlobalMaxConcurrentActivityInvocations == nil || *w.GlobalMaxConcurrentActivityInvocations <= 0 {
+		return nil
+	}
+	return w.GlobalMaxConcurrentActivityInvocations
 }
 
 type SecretsSpec struct {
@@ -219,7 +322,7 @@ type HandlerSpec struct {
 	Name         string       `json:"name,omitempty"     yaml:"name,omitempty"`
 	Type         string       `json:"type,omitempty"     yaml:"type,omitempty"`
 	Version      string       `json:"version,omitempty"  yaml:"version,omitempty"`
-	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
+	SelectorSpec SelectorSpec `json:"selector,omitzero" yaml:"selector,omitempty"`
 }
 
 // LogName returns the name of the handler that can be used in logging.
@@ -254,16 +357,43 @@ type OtelSpec struct {
 	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
 	// Defaults to true
 	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
-	// Headers to add to the request
-	Headers string `json:"headers,omitempty" yaml:"headers,omitempty"`
-	// Timeout for the request in milliseconds
-	Timeout int `json:"timeout,omitempty" yaml:"timeout,omitempty"` // Defaults to 10000
+	// Headers to add to the OTLP trace exporter request
+	Headers []string `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// Timeout for the OTLP trace exporter request
+	Timeout *time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 // GetIsSecure returns true if the connection should be secured.
-func (o OtelSpec) GetIsSecure() bool {
+func (o *OtelSpec) GetIsSecure() bool {
 	// Defaults to true if nil
 	return o.IsSecure == nil || *o.IsSecure
+}
+
+// UnmarshalJSON handles both the internal config format
+// and the Kubernetes CRD format sent by the operator.
+func (o *OtelSpec) UnmarshalJSON(data []byte) error {
+	var crd configapi.OtelSpec
+	if err := json.Unmarshal(data, &crd); err != nil {
+		return err
+	}
+
+	o.Protocol = crd.Protocol
+	o.EndpointAddress = crd.EndpointAddress
+	o.IsSecure = crd.IsSecure
+
+	if crd.Headers != nil {
+		o.Headers = make([]string, 0, len(crd.Headers))
+		for _, p := range crd.Headers {
+			o.Headers = append(o.Headers, p.Name+"="+p.Value.String())
+		}
+	}
+
+	if crd.Timeout != nil {
+		d := crd.Timeout.Duration
+		o.Timeout = &d
+	}
+
+	return nil
 }
 
 // MetricSpec configuration for metrics.
@@ -479,19 +609,15 @@ func LoadDefaultConfiguration() *Configuration {
 		Spec: ConfigurationSpec{
 			TracingSpec: &TracingSpec{
 				Otel: &OtelSpec{
-					IsSecure: ptr.Of(true),
+					IsSecure: new(true),
 				},
 			},
 			MetricSpec: &MetricSpec{
-				Enabled: ptr.Of(true),
+				Enabled: new(true),
 			},
 			AccessControlSpec: &AccessControlSpec{
 				DefaultAction: AllowAccess,
 				TrustDomain:   "public",
-			},
-			WorkflowSpec: &WorkflowSpec{
-				MaxConcurrentWorkflowInvocations: defaultMaxWorkflowConcurrentInvocations,
-				MaxConcurrentActivityInvocations: defaultMaxActivityConcurrentInvocations,
 			},
 		},
 	}
@@ -533,37 +659,49 @@ func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 }
 
 // LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name.
-func LoadKubernetesConfiguration(config string, namespace string, podName string, operatorClient operatorv1pb.OperatorClient) (*Configuration, error) {
+// Returns the processed Configuration and the raw configapi.Configuration resource.
+func LoadKubernetesConfiguration(config string, namespace string, operatorClient operatorv1pb.OperatorClient) (*Configuration, *configapi.Configuration, error) {
 	resp, err := operatorClient.GetConfiguration(context.Background(), &operatorv1pb.GetConfigurationRequest{
 		Name:      config,
 		Namespace: namespace,
-		PodName:   podName,
 	}, grpcRetry.WithMax(operatorMaxRetries), grpcRetry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	b := resp.GetConfiguration()
 	if len(b) == 0 {
-		return nil, fmt.Errorf("configuration %s not found", config)
+		return nil, nil, fmt.Errorf("configuration %s not found", config)
 	}
 	conf := LoadDefaultConfiguration()
-	err = json.Unmarshal(b, conf)
-	if err != nil {
-		return nil, err
+	if err = json.Unmarshal(b, conf); err != nil {
+		return nil, nil, err
+	}
+
+	// Also parse the raw API resource for use by the SIGHUP reconciler.
+	var configResource configapi.Configuration
+	if err = json.Unmarshal(b, &configResource); err != nil {
+		return nil, nil, err
 	}
 
 	err = conf.sortAndValidateSecretsConfiguration()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	conf.sortMetricsSpec()
 	conf.SetDefaultFeatures()
-	return conf, nil
+	return conf, &configResource, nil
 }
 
 // Update configuration from Otlp Environment Variables, if they exist.
 func SetTracingSpecFromEnv(conf *Configuration) error {
+	if conf.Spec.TracingSpec == nil {
+		conf.Spec.TracingSpec = &TracingSpec{}
+	}
+	if conf.Spec.TracingSpec.Otel == nil {
+		conf.Spec.TracingSpec.Otel = &OtelSpec{}
+	}
+
 	// If Otel Endpoint is already set, then don't override.
 	if conf.Spec.TracingSpec.Otel.EndpointAddress != "" {
 		return nil
@@ -603,7 +741,7 @@ func SetTracingSpecFromEnv(conf *Configuration) error {
 		}
 
 		if insecure := os.Getenv(env.OtlpExporterInsecure); insecure == "true" {
-			conf.Spec.TracingSpec.Otel.IsSecure = ptr.Of(false)
+			conf.Spec.TracingSpec.Otel.IsSecure = new(false)
 		}
 	}
 
@@ -615,7 +753,13 @@ func SetTracingSpecFromEnv(conf *Configuration) error {
 	}
 
 	if headers != "" {
-		conf.Spec.TracingSpec.Otel.Headers = headers
+		headersMap, err := StringToHeader(headers)
+		if err != nil {
+			return err
+		}
+		for name, value := range headersMap {
+			conf.Spec.TracingSpec.Otel.Headers = append(conf.Spec.TracingSpec.Otel.Headers, name+"="+value)
+		}
 	}
 
 	var timeoutMs int
@@ -634,7 +778,8 @@ func SetTracingSpecFromEnv(conf *Configuration) error {
 	}
 
 	if timeoutMs > 0 {
-		conf.Spec.TracingSpec.Otel.Timeout = timeoutMs
+		timeout := time.Duration(timeoutMs) * time.Millisecond
+		conf.Spec.TracingSpec.Otel.Timeout = &timeout
 	}
 	return nil
 }
@@ -767,18 +912,6 @@ func (c Configuration) GetAPILoggingSpec() APILoggingSpec {
 		return APILoggingSpec{}
 	}
 	return *c.Spec.LoggingSpec.APILogging
-}
-
-// GetWorkflowSpec returns the Workflow spec.
-// It's a short-hand that includes nil-checks for safety.
-func (c *Configuration) GetWorkflowSpec() WorkflowSpec {
-	if c == nil || c.Spec.WorkflowSpec == nil {
-		return WorkflowSpec{
-			MaxConcurrentWorkflowInvocations: defaultMaxWorkflowConcurrentInvocations,
-			MaxConcurrentActivityInvocations: defaultMaxActivityConcurrentInvocations,
-		}
-	}
-	return *c.Spec.WorkflowSpec
 }
 
 // ToYAML returns the Configuration represented as YAML.

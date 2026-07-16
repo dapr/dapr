@@ -53,17 +53,20 @@ func (p *defaultBulkPublisher) BulkPublish(ctx context.Context, req *contribPubs
 
 	for i := range req.Entries {
 		entry := req.Entries[i]
+
 		eg.Go(func() error {
 			failedEntry := p.bulkPublishSingleEntry(ctx, req.PubsubName, req.Topic, entry)
 			if failedEntry != nil {
 				faileEntryChan <- *failedEntry
 				return failedEntry.Error
 			}
+
 			return nil
 		})
 	}
 
 	err := eg.Wait()
+
 	close(faileEntryChan)
 
 	for entry := range faileEntryChan {
@@ -83,7 +86,8 @@ func (p *defaultBulkPublisher) bulkPublishSingleEntry(ctx context.Context, pubsu
 		ContentType: &entry.ContentType,
 	}
 
-	if err := p.p.Publish(ctx, &pr); err != nil {
+	err := p.p.Publish(ctx, &pr)
+	if err != nil {
 		return &contribPubsub.BulkPublishResponseFailedEntry{
 			EntryId: entry.EntryId,
 			Error:   err,

@@ -68,7 +68,7 @@ func (h HTTPEndpoint) GetNamespace() string {
 
 // GetSecretStore returns the name of the secret store.
 func (h HTTPEndpoint) GetSecretStore() string {
-	return h.Auth.SecretStore
+	return h.SecretStore
 }
 
 // LogName returns the name of the component that can be used in logging.

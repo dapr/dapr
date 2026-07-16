@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -50,11 +50,8 @@ func (r *routeralias) Setup(t *testing.T) []framework.Option {
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: hotreloading
+  name: middleware
 spec:
-  features:
-  - name: HotReload
-    enabled: true
   httpPipeline:
     handlers:
     - name: routeralias1
@@ -86,8 +83,8 @@ spec:
 		daprd.WithAppPort(srv2.Port()),
 	)
 
-	require.NoError(t, os.WriteFile(filepath.Join(r.resDir, "res.yaml"), []byte(
-		fmt.Sprintf(`
+	require.NoError(t, os.WriteFile(filepath.Join(r.resDir, "res.yaml"),
+		fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -112,8 +109,7 @@ spec:
 	  "/helloworld": "/v1.0/invoke/%[1]s/method/barfoo",
 		"/v1.0/invoke/%[1]s/method/foobar": "/v1.0/invoke/%[1]s/method/abc"
 	}'
-`, r.daprd1.AppID()),
-	), 0o600))
+`, r.daprd1.AppID()), 0o600))
 
 	return []framework.Option{
 		framework.WithProcesses(srv1, srv2, r.daprd1, r.daprd2),
@@ -127,8 +123,8 @@ func (r *routeralias) Run(t *testing.T, ctx context.Context) {
 	client := client.HTTP(t)
 	r.doReq(t, ctx, client, "helloworld", "daprd1:/abc")
 
-	require.NoError(t, os.WriteFile(filepath.Join(r.resDir, "res.yaml"), []byte(
-		fmt.Sprintf(`
+	require.NoError(t, os.WriteFile(filepath.Join(r.resDir, "res.yaml"),
+		fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -168,8 +164,7 @@ spec:
    value: '{
 		"/v1.0/invoke/%[1]s/method/barfoo": "/v1.0/invoke/%[1]s/method/xyz"
 	}'
-`, r.daprd1.AppID()),
-	), 0o600))
+`, r.daprd1.AppID()), 0o600))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		r.doReq(c, ctx, client, "helloworld", "daprd1:/xyz")

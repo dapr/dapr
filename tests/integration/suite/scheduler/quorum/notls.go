@@ -25,16 +25,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/ports"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler/cluster"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -43,52 +39,26 @@ func init() {
 
 // notls tests scheduler can find quorum with tls disabled.
 type notls struct {
-	schedulers []*scheduler.Scheduler
+	cluster *cluster.Cluster
 }
 
 func (n *notls) Setup(t *testing.T) []framework.Option {
-	fp := ports.Reserve(t, 6)
-	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
-	port4, port5, port6 := fp.Port(t), fp.Port(t), fp.Port(t)
+	n.cluster = cluster.New(t,
+		cluster.WithCount(3),
+	)
 
-	opts := []scheduler.Option{
-		scheduler.WithInitialCluster(fmt.Sprintf(
-			"scheduler-0=http://127.0.0.1:%d,scheduler-1=http://127.0.0.1:%d,scheduler-2=http://127.0.0.1:%d",
-			port1, port2, port3),
-		),
-	}
-
-	n.schedulers = []*scheduler.Scheduler{
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPort(port4))...),
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPort(port5))...),
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPort(port6))...),
-	}
-
-	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(fp, n.schedulers[0], n.schedulers[1], n.schedulers[2]),
+		framework.WithProcesses(n.cluster),
 	}
 }
 
 func (n *notls) Run(t *testing.T, ctx context.Context) {
-	n.schedulers[0].WaitUntilRunning(t, ctx)
-	n.schedulers[1].WaitUntilRunning(t, ctx)
-	n.schedulers[2].WaitUntilRunning(t, ctx)
+	n.cluster.WaitUntilRunning(t, ctx)
 
 	// Schedule job to random scheduler instance
 	//nolint:gosec // there is no need for a crypto secure rand.
-	chosenScheduler := n.schedulers[rand.Intn(3)]
-
-	host := chosenScheduler.Address()
-	//nolint:staticcheck
-	conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), grpc.WithReturnConnectionError(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	require.NoError(t, err)
-
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-
-	client := schedulerv1pb.NewSchedulerClient(conn)
+	chosenScheduler := rand.Intn(3)
+	client := n.cluster.ClientN(t, ctx, chosenScheduler)
 
 	req := &schedulerv1pb.ScheduleJobRequest{
 		Name: "testJob",
@@ -96,12 +66,12 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			// Set to 90 so the job doesn't get cleaned up before I check for it in etcd
 			// also so the job doesn't reach daprd to be sent to an app bc there is not app
 			// for this test
-			Schedule: ptr.Of("@every 90s"),
-			Repeats:  ptr.Of(uint32(1)),
+			Schedule: new("@every 90s"),
+			Repeats:  new(uint32(1)),
 			Data: &anypb.Any{
 				TypeUrl: "type.googleapis.com/google.type.Expr",
 			},
-			Ttl: ptr.Of("90s"),
+			Ttl: new("90s"),
 		},
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     "appid",
@@ -114,28 +84,14 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 
-	_, err = client.ScheduleJob(ctx, req)
+	_, err := client.ScheduleJob(ctx, req)
 	require.NoError(t, err)
 
-	chosenSchedulerPort := chosenScheduler.EtcdClientPort()
-	require.NotEmptyf(t, chosenSchedulerPort, "chosenSchedulerPort should not be empty")
-
-	// Check if the job's key exists in the etcd database
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		chosenSchedulerEtcdKeys := getEtcdKeys(t, chosenSchedulerPort)
-		n.checkKeysForJobName(t, "testJob", chosenSchedulerEtcdKeys)
-	}, time.Second*40, time.Millisecond*10, "failed to find job's key in etcd")
-
-	// ensure data exists on ALL schedulers
-	for i := range n.schedulers {
-		diffScheduler := n.schedulers[i]
-
-		diffSchedulerPort := diffScheduler.EtcdClientPort()
-		require.NotEmptyf(t, diffSchedulerPort, "diffSchedulerPort should not be empty")
-
+	// ensure data exists on all schedulers
+	for i := range 3 {
+		schedulerPort := n.cluster.EtcdClientPortN(t, i)
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			diffSchedulerEtcdKeys := getEtcdKeys(t, diffSchedulerPort)
-			n.checkKeysForJobName(t, "testJob", diffSchedulerEtcdKeys)
+			n.checkKeysForJobName(t, "testJob", getEtcdKeys(t, ctx, schedulerPort))
 		}, time.Second*40, time.Millisecond*10, "failed to find job's key in etcd")
 	}
 }
@@ -155,16 +111,13 @@ func (n *notls) checkKeysForJobName(t *testing.T, jobName string, keys []*mvccpb
 	require.True(t, found, "job's key not found: '%s'", jobName)
 }
 
-func getEtcdKeys(t *testing.T, port int) []*mvccpb.KeyValue {
+func getEtcdKeys(t *testing.T, ctx context.Context, port int) []*mvccpb.KeyValue {
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(port)},
 		DialTimeout: 40 * time.Second,
 	})
 	require.NoError(t, err)
 	defer client.Close()
-
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
 
 	// Get keys with prefix
 	resp, err := client.Get(ctx, "", clientv3.WithPrefix())

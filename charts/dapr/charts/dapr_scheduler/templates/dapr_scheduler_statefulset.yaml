@@ -10,11 +10,7 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 spec:
-  {{- $replicas := include "dapr_scheduler.get-replicas" . }}
-  {{- if and .Values.cluster.inMemoryStorage (gt (int $replicas) 1) }}
-  {{- fail "`inMemoryStorage` can only be enabled when running in non-HA mode)" }}
-  {{- end }}
-  replicas: {{ $replicas }}
+  replicas: 3
   serviceName: dapr-scheduler-server
   podManagementPolicy: Parallel
   selector:
@@ -33,7 +29,7 @@ spec:
       {{- end }}
       resources:
         requests:
-          storage: {{ .Values.cluster.storageSize }}
+          storage: {{ include "dapr_scheduler.storageSize" . }}
   {{- end }}
   template:
     metadata:
@@ -56,9 +52,18 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
     spec:
+      {{- if ne .Values.securityContext.fsGroup nil }}
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
+      {{- end }}
+    {{- with .Values.global.initContainers.scheduler }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
       containers:
+    {{- with .Values.global.extraContainers.scheduler }}
+        {{- toYaml . | nindent 6 }}
+    {{- end }}
       - name: dapr-scheduler-server
         livenessProbe:
           httpGet:
@@ -141,7 +146,20 @@ spec:
         - "--id"
         - "$(SCHEDULER_ID)"
         - "--etcd-initial-cluster"
-        - "dapr-scheduler-server-0=https://dapr-scheduler-server-0.dapr-scheduler-server.{{ .Release.Namespace }}.svc:2380,dapr-scheduler-server-1=https://dapr-scheduler-server-1.dapr-scheduler-server.{{ .Release.Namespace }}.svc:2380,dapr-scheduler-server-2=https://dapr-scheduler-server-2.dapr-scheduler-server.{{ .Release.Namespace }}.svc:2380"
+        - "dapr-scheduler-server-0=https://dapr-scheduler-server-0.dapr-scheduler-server.{{ .Release.Namespace }}.svc{{ .Values.global.dnsSuffix }}:2380,dapr-scheduler-server-1=https://dapr-scheduler-server-1.dapr-scheduler-server.{{ .Release.Namespace }}.svc{{ .Values.global.dnsSuffix }}:2380,dapr-scheduler-server-2=https://dapr-scheduler-server-2.dapr-scheduler-server.{{ .Release.Namespace }}.svc{{ .Values.global.dnsSuffix }}:2380"
+        - "--etcd-embed={{ .Values.etcdEmbed }}"
+{{- if gt (len .Values.etcdClientEndpoints) 0 }}
+        - "--etcd-client-endpoints"
+        - "{{ join "," .Values.etcdClientEndpoints }}"
+{{- end }}
+{{- if  .Values.etcdClientUsername}}
+        - "--etcd-client-username"
+        - "{{ .Values.etcdClientUsername }}"
+{{- end }}
+{{- if  .Values.etcdClientPassword}}
+        - "--etcd-client-password"
+        - "{{ .Values.etcdClientPassword }}"
+{{- end }}
         - "--log-level"
         - {{ .Values.logLevel }}
 {{- if eq .Values.global.logAsJson true }}
@@ -165,13 +183,19 @@ spec:
         - "--etcd-max-wals={{ .Values.etcdMaxWals }}"
         - "--etcd-backend-batch-limit={{ .Values.etcdBackendBatchLimit }}"
         - "--etcd-backend-batch-interval={{ .Values.etcdBackendBatchInterval }}"
+        - "--etcd-max-txn-ops={{ .Values.etcdMaxTxnOps }}"
         - "--etcd-experimental-bootstrap-defrag-threshold-megabytes={{ .Values.etcdDefragThresholdMB }}"
+        - "--etcd-initial-election-tick-advance={{ .Values.etcdInitialElectionTickAdvance }}"
         - "--etcd-metrics={{ .Values.etcdMetrics }}"
         - "--tls-enabled"
         - "--trust-domain={{ .Values.global.mtls.controlPlaneTrustDomain }}"
         - "--trust-anchors-file=/var/run/secrets/dapr.io/tls/ca.crt"
         - "--sentry-address={{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443{{ end }}"
         - "--mode=kubernetes"
+        - "--workers={{ .Values.workers }}"
+{{- if .Values.overrideBroadcastHostPort }}
+        - "--override-broadcast-host-port={{ .Values.overrideBroadcastHostPort }}"
+{{- end }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
           runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
@@ -245,7 +269,18 @@ spec:
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
 {{- end }}
+{{- include "dapr.validatePodAntiAffinityPolicy" . }}
         podAntiAffinity:
+{{- if eq .Values.global.ha.podAntiAffinityPolicy "requiredDuringSchedulingIgnoredDuringExecution" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - dapr-scheduler-server
+            topologyKey: {{ .Values.global.ha.topologyKey }}
+{{- else }}
           preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100
             podAffinityTerm:
@@ -255,7 +290,8 @@ spec:
                   operator: In
                   values:
                   - dapr-scheduler-server
-              topologyKey: topology.kubernetes.io/zone
+              topologyKey: {{ .Values.global.ha.topologyKey }}
+{{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 -}}

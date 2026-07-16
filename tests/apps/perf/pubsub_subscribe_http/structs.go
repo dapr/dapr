@@ -22,7 +22,7 @@ type subscription struct {
 	Topic         string            `json:"topic"`
 	Route         string            `json:"route"`
 	Metadata      map[string]string `json:"metadata,omitempty"`
-	BulkSubscribe bulkSubscribe     `json:"bulkSubscribe,omitempty"`
+	BulkSubscribe bulkSubscribe     `json:"bulkSubscribe,omitzero"`
 }
 
 type bulkSubscribe struct {

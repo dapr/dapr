@@ -25,7 +25,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -50,7 +49,7 @@ func (m *multiple) Run(t *testing.T, ctx context.Context) {
 
 	_, err := client.ScheduleJob(ctx, &schedulerv1.ScheduleJobRequest{
 		Name: "test1",
-		Job:  &schedulerv1.Job{DueTime: ptr.Of(time.Now().Format(time.RFC3339))},
+		Job:  &schedulerv1.Job{DueTime: new(time.Now().Format(time.RFC3339))},
 		Metadata: &schedulerv1.JobMetadata{
 			AppId: "appid1", Namespace: "namespace",
 			Target: &schedulerv1.JobTargetMetadata{
@@ -62,7 +61,7 @@ func (m *multiple) Run(t *testing.T, ctx context.Context) {
 
 	_, err = client.ScheduleJob(ctx, &schedulerv1.ScheduleJobRequest{
 		Name: "test2",
-		Job:  &schedulerv1.Job{DueTime: ptr.Of(time.Now().Format(time.RFC3339))},
+		Job:  &schedulerv1.Job{DueTime: new(time.Now().Format(time.RFC3339))},
 		Metadata: &schedulerv1.JobMetadata{
 			AppId: "appid2", Namespace: "namespace",
 			Target: &schedulerv1.JobTargetMetadata{

@@ -74,6 +74,7 @@ func TestIsOperationAllowed(t *testing.T) {
 		pubsub := &PubsubItem{AllowedTopics: []string{"A", "B"}, ScopedPublishings: []string{"A"}}
 		a := IsOperationAllowed("A", pubsub, []string{"A"})
 		assert.True(t, a)
+
 		b := IsOperationAllowed("B", pubsub, []string{"A"})
 		assert.False(t, b)
 	})
@@ -82,6 +83,7 @@ func TestIsOperationAllowed(t *testing.T) {
 		pubSub := &PubsubItem{ProtectedTopics: []string{"A", "B"}, ScopedPublishings: []string{"A"}}
 		a := IsOperationAllowed("A", pubSub, []string{"A"})
 		assert.True(t, a)
+
 		b := IsOperationAllowed("B", pubSub, []string{"A"})
 		assert.False(t, b)
 	})

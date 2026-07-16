@@ -13,5 +13,8 @@ limitations under the License.
 
 package cors
 
-// DefaultAllowedOrigins is the default origins allowed for the Dapr HTTP servers.
-const DefaultAllowedOrigins = "*"
+const (
+	// DefaultAllowedOrigins is the default origins allowed for the Dapr HTTP servers.
+	DefaultAllowedOrigins = ""
+	AllowAllOrigins       = "*"
+)

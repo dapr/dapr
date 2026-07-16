@@ -15,7 +15,6 @@ package targets
 
 import (
 	"context"
-	"time"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -29,13 +28,14 @@ type Interface interface {
 	InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 	InvokeReminder(ctx context.Context, reminder *api.Reminder) error
 	InvokeTimer(ctx context.Context, reminder *api.Reminder) error
-	InvokeStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error
-	Deactivate() error
+	InvokeStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream func(*internalv1pb.InternalInvokeResponse) (bool, error)) error
+	Deactivate(context.Context) error
 }
 
-type Idlable interface {
-	Interface
-	ScheduledTime() time.Time
+type Factory interface {
+	GetOrCreate(string) Interface
+	Exists(string) bool
+	HaltAll(context.Context) error
+	HaltNonHosted(context.Context, func(*api.LookupActorRequest) bool) error
+	Len() int
 }
-
-type Factory = func(actorID string) Interface

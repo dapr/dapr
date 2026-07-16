@@ -42,7 +42,6 @@ scopes:
 - actorfeatures
 - reentrantactor
 - actorreminder
-- actorreminderpartition
 - actorinvocationapp
 - actormetadata-a
 - actormetadata-b
@@ -56,7 +55,6 @@ scopes:
 - perf-actor-activation-service
 - perf-actor-activation-client
 - perf-actor-reminder-service
-- perf-actor-reminder-scheduler-service
 - perf-actor-reminder-client
 - perf-actor-timer-service
 - perf-actor-timer-client
@@ -66,3 +64,6 @@ scopes:
 - perf-actor-type
 - workflowsapp
 - workflowsapp-actors
+- workflowsapp-retention
+- wfacl-caller
+- wfacl-target

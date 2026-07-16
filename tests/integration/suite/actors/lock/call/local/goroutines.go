@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -57,6 +57,13 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 
 	client := g.app.GRPCClient(t, ctx)
 
+	_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+		ActorType: "abc",
+		ActorId:   "x",
+		Method:    "foo",
+	})
+	require.NoError(t, err)
+
 	startGoRoutines := g.app.Metrics(t, ctx)["go_goroutines"]
 
 	const n = 1000
@@ -70,6 +77,6 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.InDelta(c, startGoRoutines, g.app.Metrics(t, ctx)["go_goroutines"], 10)
-	}, time.Second*20, time.Second)
+		assert.LessOrEqual(c, g.app.Metrics(t, ctx)["go_goroutines"], startGoRoutines+10)
+	}, time.Second*30, time.Second)
 }

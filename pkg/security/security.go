@@ -26,6 +26,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
+	"github.com/spiffe/go-spiffe/v2/svid/jwtsvid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -35,6 +36,7 @@ import (
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/crypto/spiffe"
 	spiffecontext "github.com/dapr/kit/crypto/spiffe/context"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/crypto/spiffe/trustanchors"
 	"github.com/dapr/kit/crypto/spiffe/trustanchors/file"
 	"github.com/dapr/kit/crypto/spiffe/trustanchors/static"
@@ -62,11 +64,16 @@ type Handler interface {
 	ControlPlaneNamespace() string
 	CurrentTrustAnchors(context.Context) ([]byte, error)
 	WithSVIDContext(context.Context) context.Context
+	FetchJWT(ctx context.Context, audience string) (string, error)
 
 	MTLSEnabled() bool
 	ID() spiffeid.ID
 	WatchTrustAnchors(context.Context, chan<- []byte)
 	IdentityDir() *string
+
+	// Signer returns a Signer for signing and verifying using the workload's
+	// identity and trust anchors. Returns nil if mTLS is not enabled.
+	Signer() *signer.Signer
 }
 
 // Provider is the security provider.
@@ -108,6 +115,10 @@ type Options struct {
 	// from. Default to an implementation requesting from Sentry.
 	OverrideCertRequestFn spiffe.RequestSVIDFn
 
+	// OverrideRequestNamespace is used to override the namespace used when
+	// requesting certificates.
+	OverrideRequestNamespace *string
+
 	// OverrideTrustAnchors is used to override where trust anchors are requested
 	// from.
 	OverrideTrustAnchors trustanchors.Interface
@@ -128,6 +139,25 @@ type Options struct {
 	// written to the `tls.cert` and `tls.key` files respectively in the given
 	// directory.
 	WriteIdentityToFile *string
+
+	// JSONWebKeySet is the JSON Web Key Set for this Dapr installation. Cannot be
+	// used with JSONWebKeySetFile or TrustAnchorsFile.
+	JSONWebKeySet []byte
+
+	// JSONWebKeySetFile is the path to the JSON Web Key Set for this Dapr
+	// installation. Prefer this over JSONWebKeySet so changes to the file are
+	// automatically picked up. Cannot be used with JSONWebKeySet or TrustAnchors.
+	JSONWebKeySetFile *string
+
+	// JwtAudiences is the list of JWT audiences to be included in the certificate request.
+	JwtAudiences []string
+
+	// KeyAlgorithm selects the algorithm used for the workload's private key.
+	// When nil, defaults to Ed25519. Set to a pointer to
+	// spiffe.KeyAlgorithmRSA for components whose certificates are consumed by
+	// the Kubernetes API server (i.e. admission webhook serving), since some
+	// cloud distributions reject Ed25519 keys for that purpose.
+	KeyAlgorithm *spiffe.KeyAlgorithm
 }
 
 type provider struct {
@@ -152,6 +182,10 @@ type security struct {
 }
 
 func New(ctx context.Context, opts Options) (Provider, error) {
+	if err := checkUserIDGroupID(opts.Mode); err != nil {
+		return nil, err
+	}
+
 	if len(opts.ControlPlaneTrustDomain) == 0 {
 		return nil, errors.New("control plane trust domain is required")
 	}
@@ -179,18 +213,32 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 				return nil, errors.New("trust anchors are required")
 			}
 
+			if len(opts.JSONWebKeySet) > 0 && opts.JSONWebKeySetFile != nil {
+				return nil, errors.New("json web key set cannot be specified in both JSONWebKeySet and JSONWebKeySetFile")
+			}
+
+			if len(opts.TrustAnchors) > 0 && opts.JSONWebKeySetFile != nil {
+				return nil, errors.New("json web key set file cannot be used with trust anchors")
+			}
+
+			if len(opts.JSONWebKeySet) > 0 && opts.TrustAnchorsFile != nil {
+				return nil, errors.New("trust anchors file cannot be used with json web key set")
+			}
+
 			switch {
 			case len(opts.TrustAnchors) > 0:
 				trustAnchors, err = static.From(static.Options{
 					Anchors: opts.TrustAnchors,
+					Jwks:    opts.JSONWebKeySet,
 				})
 				if err != nil {
 					return nil, err
 				}
 			case opts.TrustAnchorsFile != nil:
 				trustAnchors = file.From(file.Options{
-					Log:    log,
-					CAPath: *opts.TrustAnchorsFile,
+					Log:      log,
+					CAPath:   *opts.TrustAnchorsFile,
+					JwksPath: opts.JSONWebKeySetFile,
 				})
 			}
 		}
@@ -209,6 +257,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 			RequestSVIDFn:       reqFn,
 			WriteIdentityToFile: opts.WriteIdentityToFile,
 			TrustAnchors:        trustAnchors,
+			KeyAlgorithm:        opts.KeyAlgorithm,
 		})
 	} else {
 		log.Warn("mTLS is disabled. Skipping certificate request and tls validation")
@@ -452,8 +501,30 @@ func (s *security) WithSVIDContext(ctx context.Context) context.Context {
 	return spiffecontext.WithSpiffe(ctx, s.spiffe)
 }
 
+func (s *security) FetchJWT(ctx context.Context, audience string) (string, error) {
+	if s.spiffe == nil {
+		return "", errors.New("SPIFFE JWT auth is configured but security is disabled")
+	}
+	jwtSource := s.spiffe.JWTSVIDSource()
+	if jwtSource == nil {
+		return "", errors.New("SPIFFE JWT source not available")
+	}
+	svid, err := jwtSource.FetchJWTSVID(ctx, jwtsvid.Params{Audience: audience})
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch SPIFFE JWT SVID: %w", err)
+	}
+	return svid.Marshal(), nil
+}
+
 func (s *security) IdentityDir() *string {
 	return s.identityDir
+}
+
+func (s *security) Signer() *signer.Signer {
+	if s.spiffe == nil {
+		return nil
+	}
+	return signer.New(s.spiffe.X509SVIDSource(), s.trustAnchors)
 }
 
 func (s *security) ID() spiffeid.ID {

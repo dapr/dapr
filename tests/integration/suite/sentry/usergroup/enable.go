@@ -1,0 +1,97 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package usergroup
+
+import (
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/rsa"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
+	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/os"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
+	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/dapr/tests/integration/suite/sentry/utils"
+)
+
+func init() {
+	suite.Register(new(enable))
+}
+
+type enable struct {
+	sentry *sentry.Sentry
+}
+
+func (e *enable) Setup(t *testing.T) []framework.Option {
+	os.SkipWindows(t)
+
+	_, rootKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	x509bundle, err := bundle.GenerateX509(bundle.OptionsX509{
+		X509RootKey:      rootKey,
+		TrustDomain:      "integration.test.dapr.io",
+		AllowedClockSkew: time.Second * 20,
+		OverrideCATTL:    nil,
+	})
+	require.NoError(t, err)
+	jwtbundle, err := bundle.GenerateJWT(bundle.OptionsJWT{
+		JWTRootKey:  jwtKey,
+		TrustDomain: "integration.test.dapr.io",
+	})
+	require.NoError(t, err)
+	bundle := bundle.Bundle{
+		X509: x509bundle,
+		JWT:  jwtbundle,
+	}
+
+	kubeAPI := utils.KubeAPI(t, utils.KubeAPIOptions{
+		Bundle:         bundle,
+		Namespace:      "mynamespace",
+		ServiceAccount: "myserviceaccount",
+		AppID:          "myappid",
+	})
+
+	e.sentry = sentry.New(t,
+		sentry.WithWriteConfig(false),
+		sentry.WithKubeconfig(kubeAPI.KubeconfigPath(t)),
+		sentry.WithNamespace("sentrynamespace"),
+		sentry.WithMode(string(modes.KubernetesMode)),
+		sentry.WithExecOptions(
+			exec.WithEnvVars(t,
+				"KUBERNETES_SERVICE_HOST", "anything",
+				"DAPR_UNSAFE_SKIP_CONTAINER_UID_GID_CHECK", "true",
+			),
+		),
+		sentry.WithCABundle(bundle),
+		sentry.WithTrustDomain("integration.test.dapr.io"),
+	)
+
+	return []framework.Option{
+		framework.WithProcesses(e.sentry, kubeAPI),
+	}
+}
+
+func (e *enable) Run(t *testing.T, ctx context.Context) {
+	e.sentry.WaitUntilRunning(t, ctx)
+}

@@ -15,8 +15,6 @@ package actors
 
 import (
 	"time"
-
-	"github.com/dapr/kit/ptr"
 )
 
 type reentrancyEntitiyConfig struct {
@@ -41,13 +39,13 @@ func WithEntityConfigEntities(entities ...string) EntityConfig {
 
 func WithEntityConfigActorIdleTimeout(timeout time.Duration) EntityConfig {
 	return func(e *entityConfig) {
-		e.ActorIdleTimeout = ptr.Of(timeout.String())
+		e.ActorIdleTimeout = new(timeout.String())
 	}
 }
 
 func WithEntityConfigDrainOngoingCallTimeout(timeout time.Duration) EntityConfig {
 	return func(e *entityConfig) {
-		e.DrainOngoingCallTimeout = ptr.Of(timeout.String())
+		e.DrainOngoingCallTimeout = new(timeout.String())
 	}
 }
 

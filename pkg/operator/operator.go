@@ -32,26 +32,29 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/api"
 	operatorcache "github.com/dapr/dapr/pkg/operator/cache"
 	"github.com/dapr/dapr/pkg/operator/handlers"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/crypto/spiffe"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.operator")
@@ -80,20 +83,25 @@ type Options struct {
 	WebhookServerPort                   int
 	WebhookServerListenAddress          string
 	Healthz                             healthz.Healthz
+
+	// CacheSyncPeriod optionally overrides the controller-runtime informer
+	// resync period (default 10h). Zero leaves the default in place. Primarily
+	// used by integration tests to exercise resync behaviour deterministically.
+	CacheSyncPeriod time.Duration
 }
 
 type operator struct {
 	apiServer api.Server
 
-	config      *Config
-	mgr         ctrl.Manager
-	secProvider security.Provider
+	config       *Config
+	mgr          ctrl.Manager
+	podMetaCache ctrlcache.Cache
+	secProvider  security.Provider
 
-	secHealthz                  healthz.Target
-	apiServerHealthz            healthz.Target
-	webhookHealthz              healthz.Target
-	httpEndpointInformerHealthz healthz.Target
-	subInformerHealthz          healthz.Target
+	secHealthz       healthz.Target
+	apiServerHealthz healthz.Target
+	webhookHealthz   healthz.Target
+	cacheHealthz     healthz.Target
 }
 
 // NewOperator returns a new Dapr Operator.
@@ -118,12 +126,21 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		MTLSEnabled: true,
 		Mode:        modes.KubernetesMode,
 		Healthz:     opts.Healthz,
+		// The operator serves CRD conversion / validating / mutating webhooks
+		// to the Kubernetes API server, which on some cloud distributions
+		// rejects Ed25519 serving certs.
+		KeyAlgorithm: ptr.Of(spiffe.KeyAlgorithmRSA),
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	watchdogPodSelector := getSideCarInjectedNotExistsSelector()
+
+	var cacheSyncPeriod *time.Duration
+	if opts.CacheSyncPeriod > 0 {
+		cacheSyncPeriod = &opts.CacheSyncPeriod
+	}
 
 	scheme, err := buildScheme(opts)
 	if err != nil {
@@ -154,13 +171,29 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		},
 		LeaderElection:                opts.LeaderElection,
 		LeaderElectionID:              "operator.dapr.io",
-		NewCache:                      operatorcache.GetFilteredCache(opts.WatchNamespace, watchdogPodSelector),
+		NewCache:                      operatorcache.GetFilteredCache(opts.WatchNamespace, watchdogPodSelector, cacheSyncPeriod),
 		LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to start manager: %w", err)
 	}
 	mgrClient := mgr.GetClient()
+
+	// A dedicated metadata-only pod cache used to resolve, server side, which
+	// configuration is assigned to a connecting sidecar from its pod's
+	// dapr.io/config annotation. Kept separate from the manager cache (which holds
+	// typed pods for the watchdog) because a cache can only hold one informer per
+	// GVK, and metadata-only watches avoid transferring/retaining pod specs.
+	podMetaCache, err := operatorcache.NewPodMetadataCache(operatorcache.PodMetadataCacheOptions{
+		RestConfig: conf,
+		Namespace:  opts.WatchNamespace,
+		SyncPeriod: cacheSyncPeriod,
+		HTTPClient: mgr.GetHTTPClient(),
+		Mapper:     mgr.GetRESTMapper(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("unable to create pod metadata cache: %w", err)
+	}
 
 	if opts.WatchdogEnabled {
 		if !opts.LeaderElection {
@@ -188,48 +221,23 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	}
 
 	return &operator{
-		mgr:                         mgr,
-		secProvider:                 secProvider,
-		config:                      config,
-		secHealthz:                  opts.Healthz.AddTarget("operator-security"),
-		apiServerHealthz:            opts.Healthz.AddTarget("operator-api-server"),
-		webhookHealthz:              opts.Healthz.AddTarget("operator-webhook"),
-		httpEndpointInformerHealthz: opts.Healthz.AddTarget("operator-informer"),
-		subInformerHealthz:          opts.Healthz.AddTarget("operator-sub-informer"),
+		mgr:              mgr,
+		podMetaCache:     podMetaCache,
+		secProvider:      secProvider,
+		config:           config,
+		secHealthz:       opts.Healthz.AddTarget("operator-security"),
+		apiServerHealthz: opts.Healthz.AddTarget("operator-api-server"),
+		webhookHealthz:   opts.Healthz.AddTarget("operator-webhook"),
+		cacheHealthz:     opts.Healthz.AddTarget("operator-cache"),
 		apiServer: api.NewAPIServer(api.Options{
 			Client:        mgr.GetClient(),
 			Cache:         mgr.GetCache(),
+			PodReader:     podMetaCache,
 			Security:      secProvider,
 			Port:          opts.APIPort,
 			ListenAddress: opts.APIListenAddress,
 		}),
 	}, nil
-}
-
-func (o *operator) syncHTTPEndpoint(ctx context.Context) func(obj interface{}) {
-	return func(obj interface{}) {
-		e, ok := obj.(*httpendpointsapi.HTTPEndpoint)
-		if ok {
-			log.Debugf("Observed http endpoint to be synced: %s/%s", e.Namespace, e.Name)
-			o.apiServer.OnHTTPEndpointUpdated(ctx, e)
-		}
-	}
-}
-
-func (o *operator) syncSubscription(ctx context.Context, eventType operatorv1pb.ResourceEventType) func(obj interface{}) {
-	return func(obj interface{}) {
-		var s *subapi.Subscription
-		switch o := obj.(type) {
-		case *subapi.Subscription:
-			s = o
-		case cache.DeletedFinalStateUnknown:
-			s = o.Obj.(*subapi.Subscription)
-		}
-		if s != nil {
-			log.Debugf("Observed Subscription to be synced: %s/%s", s.Namespace, s.Name)
-			o.apiServer.OnSubscriptionUpdated(ctx, eventType, s)
-		}
-	}
 }
 
 func (o *operator) Start(ctx context.Context) error {
@@ -328,48 +336,29 @@ func (o *operator) Start(ctx context.Context) error {
 			}
 			return nil
 		},
+		// Run the pod metadata cache on every replica (not just the leader), since
+		// the API server serves configuration updates from all replicas.
+		o.podMetaCache.Start,
 		func(ctx context.Context) error {
 			if !o.mgr.GetCache().WaitForCacheSync(ctx) {
-				return errors.New("failed to wait for cache sync")
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return errors.New("cache failed to sync")
 			}
-
-			httpEndpointInformer, rErr := o.mgr.GetCache().GetInformer(ctx, &httpendpointsapi.HTTPEndpoint{})
-			if rErr != nil {
-				return fmt.Errorf("unable to get http endpoint informer: %w", rErr)
+			// Gate readiness on the pod metadata cache too, so the operator is not
+			// reported ready (and so, in Kubernetes, not added to the Service
+			// endpoints sidecars connect through) until it can resolve a connecting
+			// sidecar's assigned configuration. This avoids a startup window where
+			// appAssignedConfiguration lists an unsynced, empty pod cache and
+			// resolves "", silently streaming no configuration updates.
+			if !o.podMetaCache.WaitForCacheSync(ctx) {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return errors.New("pod metadata cache failed to sync")
 			}
-
-			_, rErr = httpEndpointInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-				AddFunc: o.syncHTTPEndpoint(ctx),
-				UpdateFunc: func(_, newObj interface{}) {
-					o.syncHTTPEndpoint(ctx)(newObj)
-				},
-			})
-			if rErr != nil {
-				return fmt.Errorf("unable to add http endpoint informer event handler: %w", rErr)
-			}
-			o.httpEndpointInformerHealthz.Ready()
-			<-ctx.Done()
-			return nil
-		},
-		func(ctx context.Context) error {
-			if !o.mgr.GetCache().WaitForCacheSync(ctx) {
-				return errors.New("failed to wait for cache sync")
-			}
-			subscriptionInformer, rErr := o.mgr.GetCache().GetInformer(ctx, new(subapi.Subscription))
-			if rErr != nil {
-				return fmt.Errorf("unable to get setup subscriptions informer: %w", rErr)
-			}
-			_, rErr = subscriptionInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-				AddFunc: o.syncSubscription(ctx, operatorv1pb.ResourceEventType_CREATED),
-				UpdateFunc: func(_, newObj interface{}) {
-					o.syncSubscription(ctx, operatorv1pb.ResourceEventType_UPDATED)(newObj)
-				},
-				DeleteFunc: o.syncSubscription(ctx, operatorv1pb.ResourceEventType_DELETED),
-			})
-			if rErr != nil {
-				return fmt.Errorf("unable to add subscriptions informer event handler: %w", rErr)
-			}
-			o.subInformerHealthz.Ready()
+			o.cacheHealthz.Ready()
 			<-ctx.Done()
 			return nil
 		},
@@ -412,9 +401,9 @@ func (o *operator) patchConversionWebhooksInCRDs(ctx context.Context, caBundle [
 		// This code mimics:
 		// kubectl patch crd "subscriptions.dapr.io" --type='json' -p [{'op': 'replace', 'path': '/spec/conversion/webhook/clientConfig/service/namespace', 'value':'${namespace}'},{'op': 'add', 'path': '/spec/conversion/webhook/clientConfig/caBundle', 'value':'${caBundle}'}]"
 		type patchValue struct {
-			Op    string      `json:"op"`
-			Path  string      `json:"path"`
-			Value interface{} `json:"value"`
+			Op    string `json:"op"`
+			Path  string `json:"path"`
+			Value any    `json:"value"`
 		}
 		payload := []patchValue{{
 			Op:    "replace",
@@ -447,8 +436,10 @@ func buildScheme(opts Options) (*runtime.Scheme, error) {
 		configurationapi.AddToScheme,
 		resiliencyapi.AddToScheme,
 		httpendpointsapi.AddToScheme,
+		mcpserverapi.AddToScheme,
 		subscriptionsapiV1alpha1.AddToScheme,
 		subapi.AddToScheme,
+		wfaclapi.AddToScheme,
 	}
 
 	if opts.ArgoRolloutServiceReconcilerEnabled {

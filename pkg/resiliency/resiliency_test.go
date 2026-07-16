@@ -34,7 +34,6 @@ import (
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 type mockOperator struct {
@@ -60,7 +59,7 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 					"pubsubRetry": {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: ptr.Of(10),
+						MaxRetries: new(10),
 					},
 				},
 				CircuitBreakers: map[string]resiliencyV1alpha.CircuitBreaker{
@@ -114,7 +113,7 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 					"pubsubRetry": {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: ptr.Of(10),
+						MaxRetries: new(10),
 					},
 				},
 				CircuitBreakers: map[string]resiliencyV1alpha.CircuitBreaker{
@@ -241,8 +240,8 @@ func TestLoadKubernetesResiliency(t *testing.T) {
 		getOperatorClient(fmt.Sprintf("localhost:%d", port)))
 	assert.NotNil(t, resiliency)
 	assert.Len(t, resiliency, 1)
-	assert.Equal(t, "Resiliency", resiliency[0].TypeMeta.Kind)
-	assert.Equal(t, "resiliency", resiliency[0].ObjectMeta.Name)
+	assert.Equal(t, "Resiliency", resiliency[0].Kind())
+	assert.Equal(t, "resiliency", resiliency[0].Name)
 }
 
 func TestLoadStandaloneResiliency(t *testing.T) {
@@ -250,9 +249,9 @@ func TestLoadStandaloneResiliency(t *testing.T) {
 		configs := LoadLocalResiliency(log, "app1", "./testdata")
 		assert.NotNil(t, configs)
 		assert.Len(t, configs, 2)
-		assert.Equal(t, "Resiliency", configs[0].Kind)
+		assert.Equal(t, "Resiliency", configs[0].Kind())
 		assert.Equal(t, "resiliency", configs[0].Name)
-		assert.Equal(t, "Resiliency", configs[1].Kind)
+		assert.Equal(t, "Resiliency", configs[1].Kind())
 		assert.Equal(t, "resiliency", configs[1].Name)
 	})
 
@@ -406,7 +405,7 @@ func TestResiliencyHasTargetDefined(t *testing.T) {
 					"myRetry": {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: ptr.Of(3),
+						MaxRetries: new(3),
 					},
 				},
 			},
@@ -477,7 +476,7 @@ func TestResiliencyCannotLowerBuiltInRetriesPastThree(t *testing.T) {
 					string(BuiltInServiceRetries): {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: ptr.Of(1),
+						MaxRetries: new(1),
 					},
 				},
 			},
@@ -496,7 +495,7 @@ func TestResiliencyProtectedPolicyCannotBeChanged(t *testing.T) {
 					string(BuiltInActorNotFoundRetries): {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: ptr.Of(10),
+						MaxRetries: new(10),
 					},
 				},
 			},
@@ -558,13 +557,13 @@ func TestGetDefaultPolicy(t *testing.T) {
 					fmt.Sprintf(string(DefaultRetryTemplate), "App"): {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: ptr.Of(10),
+						MaxRetries: new(10),
 					},
 
 					fmt.Sprintf(string(DefaultRetryTemplate), ""): {
 						Policy:     "constant",
 						Duration:   "1s",
-						MaxRetries: ptr.Of(5),
+						MaxRetries: new(5),
 					},
 				},
 				Timeouts: map[string]string{
@@ -612,11 +611,11 @@ func TestGetDefaultPolicy(t *testing.T) {
 	delete(r.circuitBreakers, "DefaultCircuitBreakerPolicy")
 
 	retryName = r.getDefaultRetryPolicy(&ActorPolicy{})
-	assert.Equal(t, "", retryName)
+	assert.Empty(t, retryName)
 	timeoutName = r.getDefaultTimeoutPolicy(&ComponentPolicy{})
-	assert.Equal(t, "", timeoutName)
+	assert.Empty(t, timeoutName)
 	cbName = r.getDefaultCircuitBreakerPolicy(&EndpointPolicy{})
-	assert.Equal(t, "", cbName)
+	assert.Empty(t, cbName)
 }
 
 func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
@@ -627,18 +626,18 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 					"testRetry": {
 						Policy:     "constant",
 						Duration:   "10ms",
-						MaxRetries: ptr.Of(5),
+						MaxRetries: new(5),
 					},
 					fmt.Sprintf(string(DefaultRetryTemplate), "App"): {
 						Policy:     "constant",
 						Duration:   "10ms",
-						MaxRetries: ptr.Of(10),
+						MaxRetries: new(10),
 					},
 
 					fmt.Sprintf(string(DefaultRetryTemplate), ""): {
 						Policy:     "constant",
 						Duration:   "10ms",
-						MaxRetries: ptr.Of(3),
+						MaxRetries: new(3),
 					},
 				},
 				Timeouts: map[string]string{

@@ -55,15 +55,16 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		FailurePolicy: schedFPToCron(job.FailurePolicy),
 	}
 
-	if job.GetOverwrite() {
+	if req.GetOverwrite() {
 		err = cron.Add(ctx, serialized.Name(), apiJob)
 	} else {
 		err = cron.AddIfNotExists(ctx, serialized.Name(), apiJob)
 	}
 
-	logWithField := log.WithFields(map[string]any{"overwrite": job.GetOverwrite()})
+	logWithField := log.WithFields(map[string]any{"overwrite": req.GetOverwrite()})
 	if err != nil {
 		logWithField.Errorf("error scheduling job %s: %s", req.GetName(), err)
+		monitoring.RecordJobsCreatedFailedCount(req.GetMetadata())
 		if apierrors.IsJobAlreadyExists(err) {
 			return nil, status.Errorf(codes.AlreadyExists, "%s", err.Error())
 		}
@@ -92,6 +93,7 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.DeleteJobRequ
 		return nil, err
 	}
 
+	monitoring.RecordJobsDeletedCount(req.GetMetadata())
 	return &schedulerv1pb.DeleteJobResponse{}, nil
 }
 
@@ -135,7 +137,7 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 		return nil, err
 	}
 
-	prefix, err := s.serializer.PrefixFromList(ctx, req.GetMetadata())
+	prefix, err := s.serializer.KeyFromMetadata(ctx, req.GetMetadata(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -147,15 +149,34 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 
 	jobs := make([]*schedulerv1pb.NamedJob, 0, len(list.GetJobs()))
 	for _, job := range list.GetJobs() {
-		meta, err := serialize.MetadataFromKey(job.GetName())
+		// Recover the metadata from the stored protobuf rather than re-parsing
+		// the job key. Re-splitting the key on "||" corrupts the namespace,
+		// actor type and id when any of those values themselves contain "||".
+		var meta schedulerv1pb.JobMetadata
+		if err := job.GetJob().GetMetadata().UnmarshalTo(&meta); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal job metadata: %w", err)
+		}
+
+		// Recover the reminder/job name by trimming the known key prefix built
+		// from the metadata. The cron key is "<etcdNamespace>/jobs/<composed>";
+		// names cannot contain '/', so the segment after the final '/' is the
+		// composed name. Trimming the metadata prefix off it then yields the
+		// reminder/job name unambiguously, even when the name or actor id
+		// contains "||".
+		prefix, err := serialize.PrefixFromMetadata(&meta)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse job metadata: %w", err)
+			return nil, fmt.Errorf("failed to build job key prefix: %w", err)
+		}
+
+		composed := job.GetName()[strings.LastIndex(job.GetName(), "/")+1:]
+		if !strings.HasPrefix(composed, prefix) {
+			return nil, fmt.Errorf("job key %q does not match expected prefix %q from its metadata", job.GetName(), prefix)
 		}
 
 		j := job.GetJob()
 		jobs = append(jobs, &schedulerv1pb.NamedJob{
-			Name:     job.GetName()[strings.LastIndex(job.GetName(), "||")+2:],
-			Metadata: meta,
+			Name:     strings.TrimPrefix(composed, prefix),
+			Metadata: &meta,
 			//nolint:protogetter
 			Job: &schedulerv1pb.Job{
 				Schedule:      j.Schedule,
@@ -185,8 +206,6 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 		return err
 	}
 
-	monitoring.RecordSidecarsConnectedCount(1)
-	defer monitoring.RecordSidecarsConnectedCount(-1)
 	select {
 	case <-s.closeCh:
 		return errors.New("server is closing")
@@ -199,6 +218,57 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 // updates the sidecars upon changes.
 func (s *Server) WatchHosts(_ *schedulerv1pb.WatchHostsRequest, stream schedulerv1pb.Scheduler_WatchHostsServer) error {
 	return s.cron.HostsWatch(stream)
+}
+
+// DeleteByMetadata deletes all jobs matching the provided metadata.
+func (s *Server) DeleteByMetadata(ctx context.Context, req *schedulerv1pb.DeleteByMetadataRequest) (*schedulerv1pb.DeleteByMetadataResponse, error) {
+	var isPrefix bool
+	if req.IdPrefixMatch != nil {
+		isPrefix = req.GetIdPrefixMatch()
+	}
+
+	prefix, err := s.serializer.KeyFromMetadata(ctx, req.GetMetadata(), isPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse metadata: %w", err)
+	}
+
+	cron, err := s.cron.Client(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = cron.DeletePrefixes(ctx, prefix); err != nil {
+		log.Errorf("Failed to delete cron jobs for metadata: %s", err)
+		return nil, err
+	}
+
+	monitoring.RecordJobsBulkDeletedCount()
+	return new(schedulerv1pb.DeleteByMetadataResponse), nil
+}
+
+// DeleteByNamePrefix deletes all jobs matching the provided name prefix.
+func (s *Server) DeleteByNamePrefix(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error) {
+	isPrefix := false
+
+	prefix, err := s.serializer.KeyFromMetadata(ctx, req.GetMetadata(), isPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse metadata: %w", err)
+	}
+
+	prefix += req.GetNamePrefix()
+
+	cron, err := s.cron.Client(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = cron.DeletePrefixes(ctx, prefix); err != nil {
+		log.Errorf("Failed to delete scheduler job for metadata: %s", err)
+		return nil, err
+	}
+
+	monitoring.RecordJobsBulkDeletedCount()
+	return new(schedulerv1pb.DeleteByNamePrefixResponse), nil
 }
 
 //nolint:protogetter

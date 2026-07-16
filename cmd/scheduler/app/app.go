@@ -52,11 +52,12 @@ func Run() {
 	healthz := healthz.New()
 
 	metricsExporter := metrics.New(metrics.Options{
-		Log:       log,
-		Enabled:   opts.Metrics.Enabled(),
-		Namespace: metrics.DefaultMetricNamespace,
-		Port:      opts.Metrics.Port(),
-		Healthz:   healthz,
+		Log:           log,
+		Enabled:       opts.Metrics.Enabled(),
+		Namespace:     metrics.DefaultMetricNamespace,
+		Port:          opts.Metrics.Port(),
+		Healthz:       healthz,
+		ListenAddress: opts.ListenAddress,
 	})
 
 	if merr := monitoring.InitMetrics(); merr != nil {
@@ -92,37 +93,76 @@ func Run() {
 			if serr != nil {
 				return serr
 			}
-
-			server, serr := server.New(server.Options{
-				Port:                      opts.Port,
-				ListenAddress:             opts.ListenAddress,
-				OverrideBroadcastHostPort: opts.OverrideBroadcastHostPort,
-
-				Mode:     modes.DaprMode(opts.Mode),
-				Security: secHandler,
-				Healthz:  healthz,
-
-				KubeConfig:               opts.KubeConfig,
-				EtcdDataDir:              opts.EtcdDataDir,
-				EtcdName:                 opts.ID,
-				EtcdInitialCluster:       opts.EtcdInitialCluster,
-				EtcdClientPort:           opts.EtcdClientPort,
-				EtcdSpaceQuota:           opts.EtcdSpaceQuota,
-				EtcdCompactionMode:       opts.EtcdCompactionMode,
-				EtcdCompactionRetention:  opts.EtcdCompactionRetention,
-				EtcdSnapshotCount:        opts.EtcdSnapshotCount,
-				EtcdMaxSnapshots:         opts.EtcdMaxSnapshots,
-				EtcdMaxWALs:              opts.EtcdMaxWALs,
-				EtcdBackendBatchLimit:    opts.EtcdBackendBatchLimit,
-				EtcdBackendBatchInterval: opts.EtcdBackendBatchInterval,
-				EtcdDefrabThresholdMB:    opts.EtcdDefragThresholdMB,
-				EtcdMetrics:              opts.EtcdMetrics,
-			})
-			if serr != nil {
-				return serr
+			var ctrl *server.Controller
+			if modes.DaprMode(opts.Mode) == modes.KubernetesMode {
+				var cerr error
+				ctrl, cerr = server.NewController(server.ControllerOptions{
+					KubeConfig: opts.KubeConfig,
+					Healthz:    healthz,
+				})
+				if cerr != nil {
+					return cerr
+				}
 			}
 
-			return server.Run(ctx)
+			getServer := func() (*server.Server, error) {
+				server, serr := server.New(ctx, server.Options{
+					Port:                      opts.Port,
+					ListenAddress:             opts.ListenAddress,
+					OverrideBroadcastHostPort: opts.OverrideBroadcastHostPort,
+
+					Mode:       modes.DaprMode(opts.Mode),
+					Security:   secHandler,
+					Healthz:    healthz,
+					Controller: ctrl,
+
+					KubeConfig:                     opts.KubeConfig,
+					EtcdEmbed:                      opts.EtcdEmbed,
+					EtcdDataDir:                    opts.EtcdDataDir,
+					EtcdName:                       opts.ID,
+					EtcdInitialCluster:             opts.EtcdInitialCluster,
+					EtcdClientPort:                 opts.EtcdClientPort,
+					EtcdClientListenAddress:        opts.EtcdClientListenAddress,
+					EtcdSpaceQuota:                 opts.EtcdSpaceQuota,
+					EtcdCompactionMode:             opts.EtcdCompactionMode,
+					EtcdCompactionRetention:        opts.EtcdCompactionRetention,
+					EtcdSnapshotCount:              opts.EtcdSnapshotCount,
+					EtcdMaxSnapshots:               opts.EtcdMaxSnapshots,
+					EtcdMaxWALs:                    opts.EtcdMaxWALs,
+					EtcdBackendBatchLimit:          opts.EtcdBackendBatchLimit,
+					EtcdBackendBatchInterval:       opts.EtcdBackendBatchInterval,
+					EtcdMaxTxnOps:                  opts.EtcdMaxTxnOps,
+					EtcdDefragThresholdMB:          opts.EtcdDefragThresholdMB,
+					EtcdInitialElectionTickAdvance: opts.EtcdInitialElectionTickAdvance,
+					EtcdMetrics:                    opts.EtcdMetrics,
+
+					EtcdClientEndpoints: opts.EtcdClientEndpoints,
+					EtcdClientUsername:  opts.EtcdClientUsername,
+					EtcdClientPassword:  opts.EtcdClientPassword,
+
+					Workers: opts.Workers,
+				})
+				if serr != nil {
+					return nil, serr
+				}
+
+				return server, nil
+			}
+
+			for {
+				server, gerr := getServer()
+				if gerr != nil {
+					return gerr
+				}
+
+				if gerr = server.Run(ctx); gerr != nil {
+					return gerr
+				}
+
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+			}
 		},
 	).Run(ctx)
 	if err != nil {

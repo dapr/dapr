@@ -25,6 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
+	apifake "github.com/diagridio/go-etcd-cron/tests/framework/fake"
+
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	serverfake "github.com/dapr/dapr/pkg/scheduler/server/fake"
@@ -35,8 +37,8 @@ import (
 
 type suite struct {
 	srv          *serverfake.Fake
-	connLoop     *fake.Fake
-	streamLoop   loop.Interface[loops.Event]
+	nsLoop       *fake.Fake
+	streamLoop   loop.Interface[loops.EventStream]
 	clientstream schedulerv1pb.Scheduler_WatchJobsClient
 	serverstream schedulerv1pb.Scheduler_WatchJobsServer
 	closeserver  context.CancelFunc
@@ -58,19 +60,24 @@ func newSuite(t *testing.T) *suite {
 	clstream, err := srv.Client().WatchJobs(t.Context())
 	require.NoError(t, err)
 
-	connLoop := fake.New(t)
+	nsLoop := fake.New(t)
 
 	serverstream := <-serstreamCh
 
-	streamLoop := New(Options{
-		IDx:     123,
-		Channel: serverstream,
-		Request: &schedulerv1pb.WatchJobsRequestInitial{
-			AppId:     "app-id",
-			Namespace: "ns",
+	streamLoop, err := New(t.Context(), Options{
+		IDx: 123,
+		Add: &loops.ConnAdd{
+			Channel: serverstream,
+			Request: &schedulerv1pb.WatchJobsRequestInitial{
+				AppId:     "app-id",
+				Namespace: "ns",
+			},
+			Cancel: func(error) {},
 		},
-		ConnLoop: connLoop.Loop(),
+		NamespaceLoop: nsLoop.Loop(),
+		Cron:          apifake.New(),
 	})
+	require.NoError(t, err)
 
 	errCh := make(chan error)
 	go func() { errCh <- streamLoop.Run(t.Context()) }()
@@ -85,7 +92,7 @@ func newSuite(t *testing.T) *suite {
 
 	return &suite{
 		srv:          srv,
-		connLoop:     connLoop,
+		nsLoop:       nsLoop,
 		streamLoop:   streamLoop,
 		clientstream: clstream,
 		serverstream: serverstream,
@@ -93,13 +100,13 @@ func newSuite(t *testing.T) *suite {
 	}
 }
 
-func (s *suite) expectEvent(t *testing.T, e loops.Event) {
+func (s *suite) expectEvent(t *testing.T, e loops.EventNS) {
 	t.Helper()
 
 	select {
 	case <-time.After(time.Second * 5):
 		require.Fail(t, "timeout")
-	case ev := <-s.connLoop.Events():
+	case ev := <-s.nsLoop.Events():
 		assert.Equal(t, e, ev)
 	}
 }
@@ -115,6 +122,7 @@ func Test_Stream(t *testing.T) {
 		require.NoError(t, suite.clientstream.CloseSend())
 		suite.expectEvent(t, &loops.ConnCloseStream{
 			StreamIDx: 123,
+			Namespace: "ns",
 		})
 		suite.streamLoop.Close(new(loops.StreamShutdown))
 	})
@@ -134,7 +142,7 @@ func Test_Stream(t *testing.T) {
 		}))
 
 		suite.expectEvent(t, &loops.ConnCloseStream{
-			StreamIDx: 123,
+			StreamIDx: 123, Namespace: "ns",
 		})
 
 		suite.streamLoop.Close(new(loops.StreamShutdown))
@@ -155,7 +163,7 @@ func Test_Stream(t *testing.T) {
 		}))
 
 		suite.expectEvent(t, &loops.ConnCloseStream{
-			StreamIDx: 123,
+			StreamIDx: 123, Namespace: "ns",
 		})
 
 		suite.streamLoop.Close(new(loops.StreamShutdown))
@@ -229,14 +237,20 @@ func Test_Stream(t *testing.T) {
 		)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(c, api.TriggerResponseResult_SUCCESS, (*called1.Load()))
-			assert.Equal(c, api.TriggerResponseResult_FAILED, (*called2.Load()))
-			assert.Equal(c, api.TriggerResponseResult_FAILED, (*called3.Load()))
+			ptr1 := called1.Load()
+			ptr2 := called2.Load()
+			ptr3 := called3.Load()
+			if !assert.NotNil(c, ptr1) || !assert.NotNil(c, ptr2) || !assert.NotNil(c, ptr3) {
+				return
+			}
+			assert.Equal(c, api.TriggerResponseResult_SUCCESS, *ptr1)
+			assert.Equal(c, api.TriggerResponseResult_FAILED, *ptr2)
+			assert.Equal(c, api.TriggerResponseResult_FAILED, *ptr3)
 		}, time.Second*10, time.Millisecond*10)
 
 		suite.closeserver()
 		suite.streamLoop.Close(new(loops.StreamShutdown))
-		suite.expectEvent(t, &loops.ConnCloseStream{StreamIDx: 123})
+		suite.expectEvent(t, &loops.ConnCloseStream{StreamIDx: 123, Namespace: "ns"})
 	})
 
 	t.Run("receiving client request for no in-flight request should be a fatal stream error", func(t *testing.T) {
@@ -279,7 +293,7 @@ func Test_Stream(t *testing.T) {
 
 		suite := newSuite(t)
 
-		var called []atomic.Pointer[api.TriggerResponseResult]
+		called := make([]atomic.Pointer[api.TriggerResponseResult], 0, 10)
 		for i := range 10 {
 			called = append(called, atomic.Pointer[api.TriggerResponseResult]{})
 			suite.streamLoop.Enqueue(&loops.TriggerRequest{
@@ -290,11 +304,14 @@ func Test_Stream(t *testing.T) {
 			})
 		}
 
+		time.Sleep(time.Second / 2)
 		suite.closeserver()
 		suite.streamLoop.Close(new(loops.StreamShutdown))
-		suite.expectEvent(t, &loops.ConnCloseStream{StreamIDx: 123})
+		suite.expectEvent(t, &loops.ConnCloseStream{StreamIDx: 123, Namespace: "ns"})
 		for i := range 10 {
-			assert.Equal(t, api.TriggerResponseResult_UNDELIVERABLE, (*called[i].Load()))
+			ptr := called[i].Load()
+			require.NotNil(t, ptr, "callback %d not called", i)
+			assert.Equal(t, api.TriggerResponseResult_UNDELIVERABLE, *ptr)
 		}
 	})
 }

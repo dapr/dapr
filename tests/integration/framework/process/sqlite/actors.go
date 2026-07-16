@@ -55,7 +55,7 @@ type internalActorTypeReminders struct {
 func (s *SQLite) ActorReminders(t *testing.T, ctx context.Context, actorType string) ActorTypeReminders {
 	t.Helper()
 
-	query := fmt.Sprintf("SELECT * FROM '%s' WHERE key = 'actors||%s'", s.tableName, actorType)
+	query := fmt.Sprintf("SELECT key, value, is_binary, etag, expiration_time, update_time FROM '%s' WHERE key = 'actors||%s'", s.tableName, actorType)
 	rows, err := s.GetConnection(t).QueryContext(ctx, query)
 	require.NoError(t, err)
 

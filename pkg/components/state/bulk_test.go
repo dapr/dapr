@@ -25,7 +25,6 @@ import (
 	resiliencyV1alpha1 "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 func TestPerformBulkStoreOperation(t *testing.T) {
@@ -38,7 +37,7 @@ func TestPerformBulkStoreOperation(t *testing.T) {
 			Policies: resiliencyV1alpha1.Policies{
 				Retries: map[string]resiliencyV1alpha1.Retry{
 					"singleRetry": {
-						MaxRetries:  ptr.Of(1),
+						MaxRetries:  new(1),
 						MaxInterval: "100ms",
 						Policy:      "constant",
 						Duration:    "10ms",

@@ -179,6 +179,14 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 	}, nil
 }
 
+func (s *server) OnBulkTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
+	return &runtimev1pb.TopicEventBulkResponse{}, nil
+}
+
+func (s *server) OnJobEvent(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+	return &runtimev1pb.JobEventResponse{}, nil
+}
+
 func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.ListInputBindingsResponse, error) {
 	log.Println("List Input Bindings called")
 	return &runtimev1pb.ListInputBindingsResponse{

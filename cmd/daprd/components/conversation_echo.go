@@ -1,4 +1,4 @@
-//go:build allcomponents
+//go:build allcomponents || conversation_echo
 
 /*
 Copyright 2024 The Dapr Authors

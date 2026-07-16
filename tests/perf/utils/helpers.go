@@ -30,6 +30,8 @@ import (
 	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
 	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/dapr/tests/perf"
+	"github.com/dapr/dapr/tests/perf/markers"
+	"github.com/dapr/dapr/tests/runner"
 	"github.com/dapr/kit/logger"
 )
 
@@ -149,4 +151,17 @@ func HealthCheckApps(urls ...string) error {
 
 	// Will be nil if no error
 	return errors.Join(errs...)
+}
+
+// Do NOT change the below log lines as the charts/ use this to generate charts based on resource usage for perf tests
+func LogPerfTestResourceUsage(appUsage, sidecarUsage *runner.AppUsage, restarts, testerRestarts int) {
+	fmt.Printf("%s %vm CPU and %vMb of Memory\n", markers.TargetDaprAppConsumed, appUsage.CPUm, appUsage.MemoryMb)
+	fmt.Printf("%s %vm CPU and %vMb of Memory\n", markers.TargetDaprConsumed, sidecarUsage.CPUm, sidecarUsage.MemoryMb)
+	fmt.Printf("%s %v times\n", markers.TargetDaprAppRestarted, restarts)
+	fmt.Printf("%s %v times\n", markers.TargetTesterAppRestarted, testerRestarts)
+}
+
+// Do NOT change the below log lines as the charts/ use this to generate charts for perf tests
+func LogPerfTestSummary(summary []byte) {
+	fmt.Printf("Test summary `%s`\n", string(summary))
 }

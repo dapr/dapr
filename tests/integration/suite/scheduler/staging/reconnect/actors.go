@@ -25,7 +25,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -47,7 +46,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 	a.scheduler.WaitUntilRunning(t, ctx)
 	job := a.scheduler.JobNowActor("test1", "namespace", "appid", "actortype", "actorid")
 
-	job.Job.Schedule = ptr.Of("@every 2s")
+	job.Job.Schedule = new("@every 2s")
 	_, err := a.scheduler.Client(t, ctx).ScheduleJob(ctx, job)
 	require.NoError(t, err)
 

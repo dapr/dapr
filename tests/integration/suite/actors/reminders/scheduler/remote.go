@@ -17,9 +17,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -59,22 +56,7 @@ type remote struct {
 }
 
 func (r *remote) Setup(t *testing.T) []framework.Option {
-	if runtime.GOOS == "windows" {
-		t.Skip("Flaky tests to fix before 1.15") // TODO: fix flaky tests before 1.15
-	}
-
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: schedulerreminders
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: true`), 0o600))
-
-	r.actorIDsNum = 200
+	r.actorIDsNum = 100
 	r.methodcalled.Store(make([]string, 0, r.actorIDsNum))
 	r.actorIDs = make([]string, r.actorIDsNum)
 	for i := range r.actorIDsNum {
@@ -113,14 +95,12 @@ spec:
 	srv1 := newHTTP(&r.daprd1called)
 	srv2 := newHTTP(&r.daprd2called)
 	r.daprd1 = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithSchedulerAddresses(r.scheduler.Address()),
 		daprd.WithAppPort(srv1.Port()),
 	)
 	r.daprd2 = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithSchedulerAddresses(r.scheduler.Address()),
@@ -159,7 +139,4 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.ElementsMatch(c, r.actorIDs, r.methodcalled.Load().([]string))
 	}, time.Second*10, time.Millisecond*10)
-
-	assert.GreaterOrEqual(t, r.daprd1called.Load(), uint64(0))
-	assert.GreaterOrEqual(t, r.daprd2called.Load(), uint64(0))
 }

@@ -30,7 +30,7 @@ var bulkPSLogger = logger.NewLogger("bulk.subscribe")
 
 type BulkSubscribeMessageItem struct {
 	EntryId     string            `json:"entryId"` //nolint:stylecheck
-	Event       interface{}       `json:"event"`
+	Event       any               `json:"event"`
 	Metadata    map[string]string `json:"metadata"`
 	ContentType string            `json:"contentType,omitempty"`
 }
@@ -44,7 +44,7 @@ type BulkSubscribeEnvelope struct {
 	EventType string
 }
 
-func NewBulkSubscribeEnvelope(req *BulkSubscribeEnvelope) map[string]interface{} {
+func NewBulkSubscribeEnvelope(req *BulkSubscribeEnvelope) map[string]any {
 	id := req.ID
 	if id == "" {
 		reqID, err := uuid.NewRandom()
@@ -54,12 +54,13 @@ func NewBulkSubscribeEnvelope(req *BulkSubscribeEnvelope) map[string]interface{}
 			id = reqID.String()
 		}
 	}
+
 	eventType := req.EventType
 	if eventType == "" {
 		eventType = contribPubsub.DefaultBulkEventType
 	}
 
-	bulkSubEnvelope := map[string]interface{}{
+	bulkSubEnvelope := map[string]any{
 		contribPubsub.IDField:     id,
 		contribPubsub.TypeField:   eventType,
 		contribPubsub.TopicField:  req.Topic,

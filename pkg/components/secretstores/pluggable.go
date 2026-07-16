@@ -15,6 +15,7 @@ package secretstores
 
 import (
 	"context"
+	"maps"
 
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/dapr/pkg/components/pluggable"
@@ -93,9 +94,7 @@ func (gss *grpcSecretStore) BulkGetSecret(ctx context.Context, req secretstores.
 	for k, v := range resp.GetData() {
 		s := v.GetSecrets()
 		items[k] = make(map[string]string, len(s))
-		for k2, v2 := range s {
-			items[k][k2] = v2
-		}
+		maps.Copy(items[k], s)
 	}
 	return secretstores.BulkGetSecretResponse{
 		Data: items,

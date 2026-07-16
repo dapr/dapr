@@ -13,35 +13,63 @@ limitations under the License.
 
 package compstore
 
-import "github.com/dapr/components-contrib/secretstores"
+import (
+	"context"
+	"fmt"
+	"maps"
+
+	"github.com/dapr/components-contrib/secretstores"
+)
 
 func (c *ComponentStore) AddSecretStore(name string, store secretstores.SecretStore) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	c.secrets[name] = store
 }
 
 func (c *ComponentStore) GetSecretStore(name string) (secretstores.SecretStore, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	store, ok := c.secrets[name]
+
 	return store, ok
 }
 
 func (c *ComponentStore) ListSecretStores() map[string]secretstores.SecretStore {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.secrets
+
+	return maps.Clone(c.secrets)
 }
 
 func (c *ComponentStore) DeleteSecretStore(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	delete(c.secrets, name)
 }
 
 func (c *ComponentStore) SecretStoresLen() int {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	return len(c.secrets)
+}
+
+func (c *ComponentStore) GetSecret(ctx context.Context, storeName, secretName, secretKey string) (string, error) {
+	store, ok := c.GetSecretStore(storeName)
+	if !ok {
+		return "", fmt.Errorf("secret store %q not found", storeName)
+	}
+	resp, err := store.GetSecret(ctx, secretstores.GetSecretRequest{Name: secretName})
+	if err != nil {
+		return "", fmt.Errorf("failed to get secret %q from store %q: %w", secretName, storeName, err)
+	}
+	val, ok := resp.Data[secretKey]
+	if !ok {
+		return "", fmt.Errorf("key %q not found in secret %q (store: %q)", secretKey, secretName, storeName)
+	}
+	return val, nil
 }

@@ -40,7 +40,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	codec "github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
+	"github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	pb "github.com/dapr/dapr/pkg/api/grpc/proxy/testservice"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -71,13 +71,6 @@ const (
 	serviceInvocationResponseRecvName = "runtime/service_invocation/res_recv_total"
 	serviceInvocationRecvLatencyMs    = "runtime/service_invocation/res_recv_latency_ms"
 )
-
-func metricsCleanup() {
-	diag.CleanupRegisteredViews(
-		serviceInvocationRequestSentName,
-		serviceInvocationResponseRecvName,
-		serviceInvocationRecvLatencyMs)
-}
 
 var testLogger = logger.NewLogger("proxy-test")
 
@@ -125,6 +118,8 @@ func (s *assertingService) Ping(ctx context.Context, ping *pb.PingRequest) (*pb.
 	// Send user trailers and headers.
 	grpc.SendHeader(ctx, metadata.Pairs(serverHeaderMdKey, "I like cats."))
 	grpc.SetTrailer(ctx, metadata.Pairs(serverTrailerMdKey, "I also like dogs."))
+	// Set Dapr App ID header
+	grpc.SendHeader(ctx, metadata.Pairs(diagConsts.GRPCProxyAppIDKey, "test-app-id"))
 	return &pb.PingResponse{Value: ping.GetValue(), Counter: 42}, nil
 }
 
@@ -136,7 +131,6 @@ func (s *assertingService) PingList(ping *pb.PingRequest, stream pb.TestService_
 	// Send user trailers and headers.
 	stream.SendHeader(metadata.Pairs(serverHeaderMdKey, "I like cats."))
 	for i := range countListResponses {
-		//nolint:gosec
 		stream.Send(&pb.PingResponse{Value: ping.GetValue(), Counter: int32(i)})
 	}
 	stream.SetTrailer(metadata.Pairs(serverTrailerMdKey, "I also like dogs."))
@@ -237,6 +231,7 @@ func (s *proxyTestSuite) TestPingCarriesServerHeadersAndTrailers() {
 	s.Require().NoError(err, "Ping should succeed without errors")
 	s.Require().Equal("foo", out.GetValue())
 	s.Require().Equal(int32(42), out.GetCounter())
+	s.Require().Len(headerMd.Get(diagConsts.GRPCProxyAppIDKey), 0, "server response headers must not contain the dapr-app-id header")
 	s.Contains(headerMd, serverHeaderMdKey, "server response headers must contain server data")
 	s.Len(trailerMd, 1, "server response headers must contain server data")
 }
@@ -299,13 +294,11 @@ func (s *proxyTestSuite) TestPingStream_StressTest() {
 func (s *proxyTestSuite) TestPingStream_MultipleThreads() {
 	wg := sync.WaitGroup{}
 	for range 4 {
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			for range 10 {
 				s.TestPingStream_StressTest()
 			}
-			wg.Done()
-		}()
+		})
 	}
 
 	ch := make(chan struct{})
@@ -437,7 +430,10 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 			s.service.simulatePingFailures.Store(0)
 		}()
 
-		setupMetrics(s)
+		meter := setupMetrics(s)
+		t.Cleanup(func() {
+			meter.Stop()
+		})
 
 		ctx, cancel := s.ctx()
 		defer cancel()
@@ -452,9 +448,9 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		require.Equal(t, int32(3), s.service.pingCallCount.Load())
 		require.Equal(t, message, res.GetValue())
 
-		assertRequestSentMetrics(t, "unary", 3, nil)
+		assertRequestSentMetrics(t, meter, "unary", 3, nil)
 
-		rows, err := view.RetrieveData(serviceInvocationResponseRecvName)
+		rows, err := meter.RetrieveData(serviceInvocationResponseRecvName)
 		require.NoError(t, err)
 		assert.Len(t, rows, 2)
 		// 2 Ping failures
@@ -475,7 +471,10 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		// Reset callCount before this test
 		s.service.pingCallCount.Store(0)
 
-		setupMetrics(s)
+		meter := setupMetrics(s)
+		t.Cleanup(func() {
+			meter.Stop()
+		})
 
 		ctx := metadata.NewOutgoingContext(t.Context(), metadata.Pairs(diagConsts.GRPCProxyAppIDKey, testAppID))
 
@@ -490,8 +489,8 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		// Sleep for 500ms before returning to allow all timed-out goroutines to catch up with the timeouts
 		time.Sleep(500 * time.Millisecond)
 
-		assertRequestSentMetrics(t, "unary", 4, nil)
-		assertResponseReceiveMetricsSameCode(t, "unary", codes.DeadlineExceeded, 4)
+		assertRequestSentMetrics(t, meter, "unary", 4, nil)
+		assertResponseReceiveMetricsSameCode(t, meter, "unary", codes.DeadlineExceeded, 4)
 	})
 
 	s.T().Run("multiple threads", func(t *testing.T) {
@@ -505,7 +504,10 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 			s.service.simulateRandomFailures.Store(false)
 		}()
 
-		setupMetrics(s)
+		meter := setupMetrics(s)
+		t.Cleanup(func() {
+			meter.Stop()
+		})
 
 		numGoroutines := 10
 		numOperations := 10
@@ -540,13 +542,13 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		// Sleep for 500ms before returning to allow all timed-out goroutines to catch up with the timeouts
 		time.Sleep(500 * time.Millisecond)
 
-		assertRequestSentMetrics(t, "unary", int64(numGoroutines*numOperations), assert.GreaterOrEqual)
+		assertRequestSentMetrics(t, meter, "unary", int64(numGoroutines*numOperations), assert.GreaterOrEqual)
 	})
 }
 
-func assertResponseReceiveMetricsSameCode(t *testing.T, requestType string, code codes.Code, expected int64) []*view.Row {
+func assertResponseReceiveMetricsSameCode(t *testing.T, meter view.Meter, requestType string, code codes.Code, expected int64) []*view.Row {
 	t.Helper()
-	rows, err := view.RetrieveData(serviceInvocationResponseRecvName)
+	rows, err := meter.RetrieveData(serviceInvocationResponseRecvName)
 	require.NoError(t, err)
 	assert.Len(t, rows, 1)
 	count := diag.GetCountValueForObservationWithTagSet(
@@ -558,9 +560,9 @@ func assertResponseReceiveMetricsSameCode(t *testing.T, requestType string, code
 	return rows
 }
 
-func assertRequestSentMetrics(t *testing.T, requestType string, requestsSentExpected int64, assertEqualFn func(t assert.TestingT, e1 interface{}, e2 interface{}, msgAndArgs ...interface{}) bool) []*view.Row {
+func assertRequestSentMetrics(t *testing.T, meter view.Meter, requestType string, requestsSentExpected int64, assertEqualFn func(t assert.TestingT, e1 any, e2 any, msgAndArgs ...any) bool) []*view.Row {
 	t.Helper()
-	rows, err := view.RetrieveData(serviceInvocationRequestSentName)
+	rows, err := meter.RetrieveData(serviceInvocationRequestSentName)
 	require.NoError(t, err)
 	assert.Len(t, rows, 1)
 	requestsSent := diag.GetCountValueForObservationWithTagSet(
@@ -620,7 +622,10 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 		defer cancel()
 
-		setupMetrics(s)
+		meter := setupMetrics(s)
+		t.Cleanup(func() {
+			meter.Stop()
+		})
 
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
 			diagConsts.GRPCProxyAppIDKey, testAppID,
@@ -655,8 +660,8 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		_, err = stream.Recv()
 		s.Require().ErrorIs(err, io.EOF, "stream should close with io.EOF, meaining OK")
 
-		assertRequestSentMetrics(t, "streaming", 1, nil)
-		rows, err := view.RetrieveData(serviceInvocationResponseRecvName)
+		assertRequestSentMetrics(t, meter, "streaming", 1, nil)
+		rows, err := meter.RetrieveData(serviceInvocationResponseRecvName)
 		require.NoError(t, err)
 		assert.Empty(t, rows) // no error so no response metric
 	})
@@ -671,7 +676,10 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 		defer cancel()
 
-		setupMetrics(s)
+		meter := setupMetrics(s)
+		t.Cleanup(func() {
+			meter.Stop()
+		})
 
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
 			diagConsts.GRPCProxyAppIDKey, testAppID,
@@ -695,15 +703,17 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		_, err = stream.Recv()
 		s.Require().ErrorIs(err, io.EOF, "stream should close with io.EOF, meaining OK")
 
-		assertRequestSentMetrics(t, "streaming", 2, nil)
-		assertResponseReceiveMetricsSameCode(t, "streaming", codes.Unavailable, 1)
+		assertRequestSentMetrics(t, meter, "streaming", 2, nil)
+		assertResponseReceiveMetricsSameCode(t, meter, "streaming", codes.Unavailable, 1)
 	})
 }
 
-func setupMetrics(s *proxyTestSuite) {
+func setupMetrics(s *proxyTestSuite) view.Meter {
 	s.T().Helper()
-	metricsCleanup()
-	s.Require().NoError(diag.DefaultMonitoring.Init(testAppID, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(logger.NewLogger("debug"))))
+	meter := view.NewMeter()
+	meter.Start()
+	s.Require().NoError(diag.DefaultMonitoring.Init(meter, testAppID, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(logger.NewLogger("debug"))))
+	return meter
 }
 
 func (s *proxyTestSuite) initServer() {
@@ -811,7 +821,7 @@ func (s *proxyTestSuite) SetupSuite() {
 		}
 		return outCtx, conn, target, teardown, nil
 	}
-	getPolicyFn := func(appID, methodName string) *resiliency.PolicyDefinition {
+	getPolicyFn := func(_ context.Context, appID, methodName string) *resiliency.PolicyDefinition {
 		return s.policyDef
 	}
 	th := TransparentHandler(director, getPolicyFn,
@@ -876,62 +886,62 @@ type testingLog struct {
 }
 
 // Info logs to INFO log. Arguments are handled in the manner of fmt.Print.
-func (t testingLog) Info(args ...interface{}) {
+func (t testingLog) Info(args ...any) {
 }
 
 // Infoln logs to INFO log. Arguments are handled in the manner of fmt.Println.
-func (t testingLog) Infoln(args ...interface{}) {
+func (t testingLog) Infoln(args ...any) {
 }
 
 // Infof logs to INFO log. Arguments are handled in the manner of fmt.Printf.
-func (t testingLog) Infof(format string, args ...interface{}) {
+func (t testingLog) Infof(format string, args ...any) {
 }
 
 // Warning logs to WARNING log. Arguments are handled in the manner of fmt.Print.
-func (t testingLog) Warning(args ...interface{}) {
+func (t testingLog) Warning(args ...any) {
 }
 
 // Warningln logs to WARNING log. Arguments are handled in the manner of fmt.Println.
-func (t testingLog) Warningln(args ...interface{}) {
+func (t testingLog) Warningln(args ...any) {
 }
 
 // Warningf logs to WARNING log. Arguments are handled in the manner of fmt.Printf.
-func (t testingLog) Warningf(format string, args ...interface{}) {
+func (t testingLog) Warningf(format string, args ...any) {
 }
 
 // Error logs to ERROR log. Arguments are handled in the manner of fmt.Print.
-func (t testingLog) Error(args ...interface{}) {
+func (t testingLog) Error(args ...any) {
 	t.T.Error(args...)
 }
 
 // Errorln logs to ERROR log. Arguments are handled in the manner of fmt.Println.
-func (t testingLog) Errorln(args ...interface{}) {
+func (t testingLog) Errorln(args ...any) {
 	t.T.Error(args...)
 }
 
 // Errorf logs to ERROR log. Arguments are handled in the manner of fmt.Printf.
-func (t testingLog) Errorf(format string, args ...interface{}) {
+func (t testingLog) Errorf(format string, args ...any) {
 	t.T.Errorf(format, args...)
 }
 
 // Fatal logs to ERROR log. Arguments are handled in the manner of fmt.Print.
 // gRPC ensures that all Fatal logs will exit with os.Exit(1).
 // Implementations may also call os.Exit() with a non-zero exit code.
-func (t testingLog) Fatal(args ...interface{}) {
+func (t testingLog) Fatal(args ...any) {
 	t.T.Fatal(args...)
 }
 
 // Fatalln logs to ERROR log. Arguments are handled in the manner of fmt.Println.
 // gRPC ensures that all Fatal logs will exit with os.Exit(1).
 // Implementations may also call os.Exit() with a non-zero exit code.
-func (t testingLog) Fatalln(args ...interface{}) {
+func (t testingLog) Fatalln(args ...any) {
 	t.T.Fatal(args...)
 }
 
 // Fatalf logs to ERROR log. Arguments are handled in the manner of fmt.Printf.
 // gRPC ensures that all Fatal logs will exit with os.Exit(1).
 // Implementations may also call os.Exit() with a non-zero exit code.
-func (t testingLog) Fatalf(format string, args ...interface{}) {
+func (t testingLog) Fatalf(format string, args ...any) {
 	t.T.Fatalf(format, args...)
 }
 

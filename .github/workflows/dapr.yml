@@ -20,7 +20,6 @@ on:
       - main
       - master
       - release-*
-      - feature/*
     tags:
       - v*
   pull_request:
@@ -28,7 +27,6 @@ on:
       - main
       - master
       - release-*
-      - feature/*
 
 permissions: {}
 
@@ -44,16 +42,16 @@ jobs:
         target_os: ["linux"]
         target_arch: ["amd64"]
     env:
-      PROTOC_VERSION: "25.4"
+      PROTOC_VERSION: "34.1"
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
       GOPROXY: "https://proxy.golang.org"
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Set up Go
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
       - name: Initialize CodeQL
@@ -69,8 +67,8 @@ jobs:
           TRAILING_WHITESPACE=0
           # only check changed docs in pr
           for file in $(git diff --cached --name-only --diff-filter=ACRMTU $GITHUB_BASE_REF | grep "\.md"); do
-            if grep -r '[[:blank:]]$' "$1" > /dev/null; then
-              echo "trailing whitespace: ${1}" >&2
+            if grep -r '[[:blank:]]$' "$file" > /dev/null; then
+              echo "trailing whitespace: ${file}" >&2
               ERRORS=yes
               ((TRAILING_WHITESPACE=TRAILING_WHITESPACE+1))
             fi
@@ -119,17 +117,22 @@ jobs:
       contents: read
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Dependency review
         uses: actions/dependency-review-action@v4
-        # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
-      - uses: antontroshin/setup-go@bda02de8887c9946189f81e7e59512914aeb9ea4
+      - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run govulncheck
-        run: govulncheck -C '.' -format text --tags=unit,allcomponents,integration ./...
+        # TODO: drop `-scan package` once golang.org/x/tools ships the fix
+        # for the generic-method MethodSet panic (commit 09a1b9b382, fixing
+        # golang/go#79901 and #79600) and govulncheck@latest picks it up.
+        # Until then, symbol-level SSA scanning panics on Go 1.26's stdlib
+        # behavior change in types.MethodSet.Methods, so we fall back to
+        # package-level scanning (less precise, but doesn't traverse SSA).
+        run: GOMEMLIMIT=12GiB govulncheck -C '.' -format text -scan package --tags=unit,allcomponents,integration ./...
         shell: bash
 
   lint-slow:
@@ -144,20 +147,20 @@ jobs:
         target_os: ["linux"]
         target_arch: ["amd64"]
     env:
-      GOLANGCILINT_VER: "v1.64.6"
+      GOLANGCILINT_VER: "v2.10.1"
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
       GOPROXY: "https://proxy.golang.org"
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Set up Go
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6.1.1
+        uses: golangci/golangci-lint-action@v9
         with:
           version: ${{ env.GOLANGCILINT_VER }}
           skip-cache: true
@@ -180,9 +183,10 @@ jobs:
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
-          - os: macOS-latest
+          # TODO: @joshvanl Upgrade to latest once dns is fixed.
+          - os: macos-14
             target_os: darwin
-            target_arch: amd64
+            target_arch: arm64
     env:
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
@@ -191,11 +195,10 @@ jobs:
       TEST_OUTPUT_FILE_PREFIX: "test_report"
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Set up Go
         id: setup-go
-        # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
-        uses: antontroshin/setup-go@bda02de8887c9946189f81e7e59512914aeb9ea4
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
       - name: Run make test
@@ -228,9 +231,10 @@ jobs:
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
-          - os: macOS-latest
+          # TODO: @joshvanl Upgrade to latest once dns is fixed.
+          - os: macos-14
             target_os: darwin
-            target_arch: amd64
+            target_arch: arm64
     env:
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
@@ -241,17 +245,27 @@ jobs:
         run: |
           python3 -c 'import socket;print("localhost resolves to:",list(info[4][0] for info in socket.getaddrinfo("localhost", None)))'
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Set up Go
         id: setup-go
-        # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
-        uses: antontroshin/setup-go@bda02de8887c9946189f81e7e59512914aeb9ea4
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
       - name: Override DAPR_HOST_IP for MacOS
         if: matrix.target_os == 'darwin'
         run: |
           echo "DAPR_HOST_IP=127.0.0.1" >>${GITHUB_ENV}
+      # The integration suite opens a very large number of short-lived
+      # localhost connections. macOS has a small default ephemeral port range
+      # and a long TIME_WAIT, so the outbound pool is exhausted under the
+      # parallel run (surfaces as "can't assign requested address"). Widen the
+      # range and shorten TIME_WAIT as a backstop to the framework-level fixes.
+      - name: Widen ephemeral port range for MacOS
+        if: matrix.target_os == 'darwin'
+        run: |
+          sudo sysctl -w net.inet.ip.portrange.first=16384
+          sudo sysctl -w net.inet.ip.portrange.hifirst=16384
+          sudo sysctl -w net.inet.tcp.msl=1000
       - name: Run make test-integration-parallel
         run: make test-integration-parallel
   build:
@@ -311,12 +325,14 @@ jobs:
             windows_version: ltsc2022
             job_name: "Windows LTSC 2022"
             sidecar_flavor: "allcomponents"
-          - os: macOS-latest
+          # TODO: @joshvanl Upgrade to latest once dns is fixed.
+          - os: macos-14
             target_os: darwin
             target_arch: amd64
             job_name: "macOS/Intel"
             sidecar_flavor: "allcomponents"
-          - os: macOS-latest
+          # TODO: @joshvanl Upgrade to latest once dns is fixed.
+          - os: macos-14
             target_os: darwin
             target_arch: arm64
             job_name: "macOS/Apple Silicon"
@@ -331,14 +347,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
-        with:
-          version: v0.10.1 # Don't use latest since it broke our workflow once
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Set up Go
         id: setup-go
-        # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
-        uses: antontroshin/setup-go@bda02de8887c9946189f81e7e59512914aeb9ea4
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
@@ -452,9 +465,10 @@ jobs:
       contents: read
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
+      - uses: docker/setup-buildx-action@v3
       - name: Set REPO_OWNER
         if: matrix.target_os != 'darwin'
         shell: bash
@@ -559,7 +573,7 @@ jobs:
         sidecar_flavor: ["allcomponents", "stablecomponents"]
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Updates version for sidecar flavor
@@ -614,7 +628,7 @@ jobs:
           DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
         run: |
           # Publish the `-windows-amd64` manifest.
-          # Note, the "latest" tag from the previous step already contains 
+          # Note, the "latest" tag from the previous step already contains
           # the windows images, so we don't need to publish the "latest-windows-amd64" tag.
           DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
           DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
@@ -642,7 +656,7 @@ jobs:
           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
         run: |
           # Publish the `-windows-amd64` manifest.
-          # Note, the "latest" tag from the previous step already contains 
+          # Note, the "latest" tag from the previous step already contains
           # the windows images, so we don't need to publish the "latest-windows-amd64" tag.
           DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
           DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
@@ -669,7 +683,7 @@ jobs:
         with:
           version: ${{ env.HELMVER }}
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Set REPO_OWNER
@@ -733,7 +747,7 @@ jobs:
           name: dapr_helm_charts_package
           path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
       - name: Checkout Helm Charts Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         env:
           DAPR_HELM_REPO: dapr/helm-charts
           DAPR_HELM_REPO_CODE_PATH: helm-charts
@@ -775,9 +789,26 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Trigger GitHub workflow
-        run: gh api repos/dapr/test-infra/actions/workflows/version-update.yml/dispatches \
-             -X POST -f ref="master" -f inputs[rel_version]="${{ env.REL_VERSION }}"
+        run: |
+          gh api repos/dapr/test-infra/actions/workflows/version-update.yml/dispatches \
+            -X POST -f ref="master" -f 'inputs[rel_version]=${{ env.REL_VERSION }}'
+
+  # Opens (or comments on) a tracking issue only when a publish job itself fails:
+  # publish (release binaries/assets), docker-publish (images), or helmpublish
+  # (Helm chart). Upstream build failures skip these jobs, whose result is then
+  # 'skipped' (not 'failure'), so CI flakes never open issues.
+  notify-on-failure:
+    needs: [publish, docker-publish, helmpublish]
+    if: always() && startsWith(github.ref, 'refs/tags/v') && github.repository_owner == 'dapr' && (needs.publish.result == 'failure' || needs['docker-publish'].result == 'failure' || needs.helmpublish.result == 'failure')
+    permissions:
+      issues: write
+      actions: read
+    uses: dapr/.github/.github/workflows/open-issue-on-failure.yml@main
+    with:
+      title: "Release workflow failed: ${{ github.workflow }} (${{ github.ref_name }})"
+      labels: "release,ci/release-failure"
+      mention: "@dapr/maintainers-dapr @dapr/approvers-dapr"

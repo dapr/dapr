@@ -20,10 +20,12 @@ import (
 	"io"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/router"
@@ -65,12 +67,14 @@ func (s *streamer) receive(ctx context.Context) error {
 		if ctx.Err() != nil || errors.Is(err, io.EOF) {
 			return ctx.Err()
 		}
+
 		if err != nil {
 			return err
 		}
 
 		s.wg.Add(1)
 		s.inflight.Add(1)
+
 		go func() {
 			defer func() {
 				s.wg.Done()
@@ -104,7 +108,8 @@ func (s *streamer) outgoing(ctx context.Context) error {
 	for {
 		select {
 		case result := <-s.resultCh:
-			if err := s.stream.Send(result); err != nil {
+			err := s.stream.Send(result)
+			if err != nil {
 				return err
 			}
 		case <-ctx.Done():
@@ -121,13 +126,17 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 
 	switch t := meta.GetTarget(); t.GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Job:
-		if err := s.invokeApp(ctx, job); err != nil {
+		err := s.invokeApp(ctx, job)
+		if err != nil {
 			log.Errorf("failed to invoke schedule app job: %s", err)
 			return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
 		}
+
 		return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 
 	case *schedulerv1pb.JobTargetMetadata_Actor:
+		actorType := meta.GetTarget().GetActor().GetType()
+
 		err := s.invokeActorReminder(ctx, job)
 		if err == nil {
 			return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
@@ -138,21 +147,32 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		}
 
 		if errors.Is(err, actorerrors.ErrReminderCanceled) {
+			// TODO: @joshvanl add support for cancelling a job with a new
+			// WatchJobsRequestResultStatus_CANCELED.
 			return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 		}
 
 		// If the actor was hosted on another instance, the error will be a gRPC status error,
-		// so we need to unwrap it and match on the error message
+		// so we need to unwrap it and match on the error message.
 		if st, ok := status.FromError(err); ok {
 			if st.Code() == codes.FailedPrecondition {
 				return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
 			}
-			if st.Message() == actorerrors.ErrReminderCanceled.Error() {
+
+			// Recognise the user-app "cancel this reminder" signal that crossed a
+			// daprd-to-daprd boundary: app.go raises ErrReminderCanceled when the
+			// app responded with the X-Daprremindercancel header, and gRPC strips
+			// the sentinel wrapping so we only see the message text on this side.
+			// Map it to SUCCESS so the scheduler deletes the recurring job rather
+			// than retrying forever.
+			_, isInternalActor := workflowacl.ParseActorType(actorType)
+			if !isInternalActor && st.Message() == actorerrors.ErrReminderCanceled.Error() {
 				return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 			}
 		}
 
 		log.Errorf("failed to invoke scheduled actor reminder named: %s due to: %s", job.GetName(), err)
+
 		return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
 
 	default:
@@ -168,14 +188,18 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		return errors.New("received job, but app channel not initialized")
 	}
 
+	start := time.Now()
+
 	response, err := appChannel.TriggerJob(ctx, job.GetName(), job.GetData())
 	if err != nil {
 		return fmt.Errorf("error returned from app channel while sending triggered job to app: %w", err)
 	}
+
 	if response != nil {
 		defer response.Close()
 	}
 
+	elapsedMs := diag.ElapsedSince(start)
 	// TODO: standardize on the error code returned by both protocol channels,
 	// converting HTTP status codes to gRPC codes
 	statusCode := response.Status().GetCode()
@@ -184,14 +208,20 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	switch codes.Code(statusCode) {
 	case codes.OK:
 		log.Debugf("Sent job %s to app", job.GetName())
+		diag.DefaultComponentMonitoring.JobTriggeredSuccess(ctx, diag.JobTriggerOp, elapsedMs)
+
 		return nil
 	case codes.NotFound:
+		// NotFound treated as SUCCESS to avoid retriggers by the scheduler, but is monitored as a failure
 		log.Errorf("non-retriable error returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
+		diag.DefaultComponentMonitoring.JobTriggeredFailure(ctx, diag.JobTriggerOp, elapsedMs)
 		// return nil to signal SUCCESS
 		return nil
 	default:
 		err := fmt.Errorf("unexpected status code returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
 		log.Error(err.Error())
+		diag.DefaultComponentMonitoring.JobTriggeredFailure(ctx, diag.JobTriggerOp, elapsedMs)
+
 		return err
 	}
 }
@@ -212,8 +242,10 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 		SkipLock:  actor.GetType() == s.wfengine.ActivityActorType(),
 	})
 	diag.DefaultMonitoring.ActorReminderFired(actor.GetType(), err == nil)
+
 	if err != nil {
 		return err
 	}
+
 	return nil
 }

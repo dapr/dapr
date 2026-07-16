@@ -73,8 +73,7 @@ func TestAnnotationCompletness(t *testing.T) {
 	// Load the annotations listed as properties in SidecarConfig
 	p := patcher.SidecarConfig{}
 	pt := reflect.TypeOf(p)
-	for i := range pt.NumField() {
-		field := pt.Field(i)
+	for field := range pt.Fields() {
 		an := field.Tag.Get("annotation")
 		if an != "" {
 			annotationsStruct = append(annotationsStruct, an)
@@ -86,5 +85,5 @@ func TestAnnotationCompletness(t *testing.T) {
 	slices.Sort(annotationsStruct)
 
 	// Check for completeness
-	require.EqualValues(t, annotationsPkg, annotationsStruct)
+	require.Equal(t, annotationsPkg, annotationsStruct)
 }

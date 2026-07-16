@@ -57,6 +57,7 @@ func TestSpanAttributesMapFromGRPC(t *testing.T) {
 		{"/dapr.proto.runtime.v1.Dapr/GetSecret", &runtimev1pb.GetSecretRequest{StoreName: "mysecretstore"}, "Dapr", "mysecretstore"},
 		{"/dapr.proto.runtime.v1.Dapr/InvokeBinding", &runtimev1pb.InvokeBindingRequest{Name: "mybindings"}, "Dapr", "mybindings"},
 		{"/dapr.proto.runtime.v1.Dapr/PublishEvent", &runtimev1pb.PublishEventRequest{Topic: "mytopic"}, "Dapr", "mytopic"},
+		{"/dapr.proto.runtime.v1.Dapr/BulkPublishEvent", &runtimev1pb.BulkPublishRequest{Topic: "mytopic"}, "Dapr", "mytopic"},
 		{"/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1", &runtimev1pb.BulkPublishRequest{Topic: "mytopic"}, "Dapr", "mytopic"},
 		// Expecting ServiceInvocation because this call will be treated as client call of service invocation.
 		{"/dapr.proto.internals.v1.ServiceInvocation/CallLocal", &internalv1pb.InternalInvokeRequest{Message: &commonv1pb.InvokeRequest{Method: "mymethod"}}, "ServiceInvocation", "mymethod"},
@@ -99,7 +100,7 @@ func TestSpanContextToGRPCMetadata(t *testing.T) {
 }
 
 // runBaggageHeaderPropagationTest runs the same baggage tests across both types of interceptors
-func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
+func runBaggageHeaderPropagationTest(t *testing.T, interceptor any) {
 	// handle both types of interceptors
 	var runInterceptor func(ctx context.Context) (context.Context, error)
 
@@ -132,7 +133,7 @@ func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
 			var handlerCtx context.Context
 			fakeStream := &fakeStream{ctx: ctx}
 
-			streamHandler := func(srv interface{}, stream grpc.ServerStream) error {
+			streamHandler := func(srv any, stream grpc.ServerStream) error {
 				handlerCtx = stream.Context()
 				return nil
 			}

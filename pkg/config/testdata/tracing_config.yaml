@@ -6,5 +6,7 @@ metadata:
 spec:
   tracing:
     otel:
-      timeout: 5000
-      headers: "header1=value1,header2=value2"
+      timeout: 5s
+      headers:
+        - "header1=value1"
+        - "header2=value2"

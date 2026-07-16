@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -25,12 +26,14 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 
 	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/modes"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/sentry/server"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/oidc"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 	validatorInsecure "github.com/dapr/dapr/pkg/sentry/server/validator/insecure"
 	validatorJWKS "github.com/dapr/dapr/pkg/sentry/server/validator/jwks"
@@ -46,6 +49,18 @@ var log = logger.NewLogger("dapr.sentry")
 type Options struct {
 	Config  config.Config
 	Healthz healthz.Healthz
+	OIDC    OIDCOptions
+}
+
+type OIDCOptions struct {
+	Enabled             bool     // Enable OIDC HTTP endpoints
+	ServerListenAddress string   // Address for OIDC HTTP server
+	ServerListenPort    int      // Port for OIDC HTTP endpoints
+	Domains             []string // Domains that public endpoints can be accessed from (Optional)
+	JWKSURI             *string  // Force the public JWKS URI to this value (Optional)
+	PathPrefix          *string  // Path prefix for HTTP endpoints (Optional)
+	TLSCertPath         *string
+	TLSKeyPath          *string
 }
 
 // CertificateAuthority is the interface for the Sentry Certificate Authority.
@@ -89,11 +104,10 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 				return nil, csrErr
 			}
 			certs, csrErr := camngr.SignIdentity(ctx, &ca.SignRequest{
-				PublicKey:          csr.PublicKey.(crypto.PublicKey),
-				SignatureAlgorithm: csr.SignatureAlgorithm,
-				TrustDomain:        opts.Config.TrustDomain,
-				Namespace:          ns,
-				AppID:              "dapr-sentry",
+				PublicKey:   csr.PublicKey.(crypto.PublicKey),
+				TrustDomain: opts.Config.TrustDomain,
+				Namespace:   ns,
+				AppID:       "dapr-sentry",
 			})
 			if csrErr != nil {
 				monitoring.ServerCertIssueFailed("ca_error")
@@ -108,6 +122,16 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 		return nil, fmt.Errorf("error creating security: %s", err)
 	}
 
+	tld := opts.Config.TrustDomain
+	if opts.Config.Mode == modes.KubernetesMode {
+		tldd, err := utils.GetKubeClusterDomainFromDNS(ctx)
+		if err != nil {
+			log.Errorf("Error getting Kubernetes cluster domain, falling back to %q: %v", tld, err)
+		} else {
+			tld = tldd
+		}
+	}
+
 	// Start all background processes
 	runners := concurrency.NewRunnerManager(
 		sec.Run,
@@ -119,8 +143,20 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 			CA:               camngr,
 			Healthz:          opts.Healthz,
 			ListenAddress:    opts.Config.ListenAddress,
+			JWTEnabled:       opts.Config.JWT.Enabled,
+			JWTTTL:           opts.Config.JWT.TTL,
+			TLD:              tld,
 		}).Start,
 	)
+
+	if oidcRunner, err := newOIDCServerRunner(opts, camngr); err != nil {
+		return nil, fmt.Errorf("error creating OIDC server: %w", err)
+	} else if oidcRunner != nil {
+		if err := runners.Add(oidcRunner); err != nil {
+			return nil, fmt.Errorf("error adding OIDC server to runners: %w", err)
+		}
+	}
+
 	for name, val := range vals {
 		log.Infof("Using validator '%s'", strings.ToLower(name.String()))
 		if err := runners.Add(val.Start); err != nil {
@@ -131,6 +167,57 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 	return &sentry{
 		runners: runners,
 	}, nil
+}
+
+func newOIDCServerRunner(opts Options, camngr ca.Signer) (concurrency.Runner, error) {
+	if !opts.OIDC.Enabled || !opts.Config.JWT.Enabled {
+		log.Info("OIDC HTTP server is disabled")
+		return nil, nil
+	}
+
+	log.Infof("Starting OIDC HTTP server on port %d", opts.OIDC.ServerListenPort)
+
+	var issuer string
+	if opts.Config.JWT.Issuer != nil {
+		issuer = *opts.Config.JWT.Issuer
+	}
+
+	signAlg := camngr.JWTSignatureAlgorithm()
+	if signAlg == nil {
+		return nil, errors.New("failed to get JWT signature algorithm from signing key")
+	}
+
+	jwksBytes := []byte{}
+	jwks := camngr.JWKS()
+	if jwks != nil {
+		var err error
+		jwksBytes, err = json.Marshal(jwks)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal JWKS: %w", err)
+		}
+	}
+
+	oidcOpts := oidc.Options{
+		ListenAddress:      opts.OIDC.ServerListenAddress,
+		Port:               opts.OIDC.ServerListenPort,
+		JWKS:               jwksBytes,
+		JWTIssuer:          &issuer,
+		Healthz:            opts.Healthz,
+		AllowedHosts:       opts.OIDC.Domains,
+		TLSCertPath:        opts.OIDC.TLSCertPath,
+		TLSKeyPath:         opts.OIDC.TLSKeyPath,
+		SignatureAlgorithm: signAlg,
+	}
+
+	oidcOpts.JWKSURI = opts.OIDC.JWKSURI
+	oidcOpts.PathPrefix = opts.OIDC.PathPrefix
+
+	httpServer, err := oidc.New(oidcOpts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OIDC server: %w", err)
+	}
+
+	return httpServer.Run, nil
 }
 
 // Start the server.

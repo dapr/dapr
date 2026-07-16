@@ -7,7 +7,7 @@ This folder is intended for `sentry` service APIs that the `daprd` sidecars use 
 Pre-requisites:
 1. Install protoc version: [v4.25.4](https://github.com/protocolbuffers/protobuf/releases/tag/v4.25.4)
 
-2. Install protoc-gen-go and protoc-gen-go-grpc
+2. Install protoc-gen-go, protoc-gen-go-grpc and protoc-gen-connect-go
 
 ```bash
 make init-proto

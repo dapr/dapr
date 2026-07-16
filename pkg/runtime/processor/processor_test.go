@@ -70,6 +70,7 @@ func withReporter(r registry.Reporter) newTestProcOptions {
 
 func newTestProc(setters ...newTestProcOptions) (*Processor, *registry.Registry) {
 	reg := registry.New(registry.NewOptions())
+
 	opts := Options{
 		ID:             "id",
 		Namespace:      "test",
@@ -83,7 +84,6 @@ func newTestProc(setters ...newTestProcOptions) (*Processor, *registry.Registry)
 		}),
 		Resiliency:     resiliency.New(log),
 		Mode:           modes.StandaloneMode,
-		PodName:        "testPodName",
 		OperatorClient: nil,
 		GRPC:           nil,
 		Channels:       new(channels.Channels),
@@ -98,8 +98,32 @@ func newTestProc(setters ...newTestProcOptions) (*Processor, *registry.Registry)
 	return New(opts), reg
 }
 
+// startProc runs the processor's Process loop in a goroutine and registers a
+// t.Cleanup that cancels it and waits for graceful shutdown. Tests that drive
+// the processor via Init / Close / AddPendingComponent must call this first.
+func startProc(t *testing.T, proc *Processor) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- proc.Process(ctx)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case err := <-errCh:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				t.Errorf("processor.Process returned error: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Error("processor.Process did not return in time")
+		}
+	})
+}
+
 func TestProcessComponentsAndDependents(t *testing.T) {
 	proc, _ := newTestProc()
+	startProc(t, proc)
 	incorrectComponentType := componentsapi.Component{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "testpubsub",
@@ -112,7 +136,7 @@ func TestProcessComponentsAndDependents(t *testing.T) {
 	}
 
 	t.Run("test incorrect type", func(t *testing.T) {
-		err := proc.processComponentAndDependents(t.Context(), incorrectComponentType)
+		err := proc.Init(t.Context(), incorrectComponentType)
 		require.Error(t, err, "expected an error")
 		assert.Equal(t, "incorrect type pubsubs.mockPubSub", err.Error(), "expected error strings to match")
 	})
@@ -121,7 +145,9 @@ func TestProcessComponentsAndDependents(t *testing.T) {
 func TestInitSecretStores(t *testing.T) {
 	t.Run("init with store", func(t *testing.T) {
 		proc, reg := newTestProc()
+		startProc(t, proc)
 		m := rtmock.NewMockKubernetesStore()
+
 		reg.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -129,7 +155,7 @@ func TestInitSecretStores(t *testing.T) {
 			"kubernetesMock",
 		)
 
-		err := proc.processComponentAndDependents(t.Context(), componentsapi.Component{
+		err := proc.Init(t.Context(), componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
@@ -143,7 +169,9 @@ func TestInitSecretStores(t *testing.T) {
 
 	t.Run("secret store is registered", func(t *testing.T) {
 		proc, reg := newTestProc()
+		startProc(t, proc)
 		m := rtmock.NewMockKubernetesStore()
+
 		reg.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -151,7 +179,7 @@ func TestInitSecretStores(t *testing.T) {
 			"kubernetesMock",
 		)
 
-		err := proc.processComponentAndDependents(t.Context(), componentsapi.Component{
+		err := proc.Init(t.Context(), componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
@@ -161,6 +189,7 @@ func TestInitSecretStores(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
+
 		store, ok := proc.compStore.GetSecretStore("kubernetesMock")
 		assert.True(t, ok)
 		assert.NotNil(t, store)
@@ -168,7 +197,9 @@ func TestInitSecretStores(t *testing.T) {
 
 	t.Run("get secret store", func(t *testing.T) {
 		proc, reg := newTestProc()
+		startProc(t, proc)
 		m := rtmock.NewMockKubernetesStore()
+
 		reg.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -176,7 +207,7 @@ func TestInitSecretStores(t *testing.T) {
 			"kubernetesMock",
 		)
 
-		proc.processComponentAndDependents(t.Context(), componentsapi.Component{
+		proc.Init(t.Context(), componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
@@ -256,6 +287,7 @@ func TestMetadataUUID(t *testing.T) {
 			},
 		})
 	proc, reg := newTestProc()
+	startProc(t, proc)
 	mockPubSub := new(daprt.MockPubSub)
 
 	reg.PubSubs().RegisterComponent(
@@ -268,7 +300,9 @@ func TestMetadataUUID(t *testing.T) {
 	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 		metadata := args.Get(0).(pubsub.Metadata)
 		consumerID := metadata.Properties["consumerID"]
+
 		var uuid0, uuid1, uuid2 uuid.UUID
+
 		uuid0, err := uuid.Parse(consumerID)
 		require.NoError(t, err)
 
@@ -285,7 +319,7 @@ func TestMetadataUUID(t *testing.T) {
 		assert.NotEqual(t, uuid1, uuid2)
 	})
 
-	err := proc.processComponentAndDependents(t.Context(), pubsubComponent)
+	err := proc.Init(t.Context(), pubsubComponent)
 	require.NoError(t, err)
 }
 
@@ -314,6 +348,7 @@ func TestMetadataPodName(t *testing.T) {
 			},
 		})
 	proc, reg := newTestProc()
+	startProc(t, proc)
 	mockPubSub := new(daprt.MockPubSub)
 
 	reg.PubSubs().RegisterComponent(
@@ -330,7 +365,7 @@ func TestMetadataPodName(t *testing.T) {
 		assert.Equal(t, "testPodName", consumerID)
 	})
 
-	err := proc.processComponentAndDependents(t.Context(), pubsubComponent)
+	err := proc.Init(t.Context(), pubsubComponent)
 	require.NoError(t, err)
 }
 
@@ -360,6 +395,7 @@ func TestMetadataNamespace(t *testing.T) {
 		})
 
 	proc, reg := newTestProc(withID("app1"))
+	startProc(t, proc)
 	mockPubSub := new(daprt.MockPubSub)
 
 	reg.PubSubs().RegisterComponent(
@@ -376,7 +412,7 @@ func TestMetadataNamespace(t *testing.T) {
 		assert.Equal(t, "test.app1", consumerID)
 	})
 
-	err := proc.processComponentAndDependents(t.Context(), pubsubComponent)
+	err := proc.Init(t.Context(), pubsubComponent)
 	require.NoError(t, err)
 }
 
@@ -395,6 +431,7 @@ func TestMetadataClientID(t *testing.T) {
 	// ClientID should be namespace.AppID for Kubernetes
 	t.Run("Kubernetes Mode AppID", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "test")
+
 		pubsubComponent.Spec.Metadata = append(
 			pubsubComponent.Spec.Metadata,
 			commonapi.NameValuePair{
@@ -407,6 +444,7 @@ func TestMetadataClientID(t *testing.T) {
 			})
 
 		proc, reg := newTestProc(withID("myApp"))
+		startProc(t, proc)
 		mockPubSub := new(daprt.MockPubSub)
 
 		reg.PubSubs().RegisterComponent(
@@ -417,14 +455,17 @@ func TestMetadataClientID(t *testing.T) {
 		)
 
 		var k8sClientID string
+
 		clientIDChan := make(chan string, 1)
+
 		mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 			metadata := args.Get(0).(pubsub.Metadata)
+
 			k8sClientID = metadata.Properties["clientID"]
 			clientIDChan <- k8sClientID
 		})
 
-		err := proc.processComponentAndDependents(t.Context(), pubsubComponent)
+		err := proc.Init(t.Context(), pubsubComponent)
 		require.NoError(t, err)
 
 		select {
@@ -449,6 +490,7 @@ func TestMetadataClientID(t *testing.T) {
 			})
 
 		proc, reg := newTestProc(withID(daprt.TestRuntimeConfigID))
+		startProc(t, proc)
 		mockPubSub := new(daprt.MockPubSub)
 
 		reg.PubSubs().RegisterComponent(
@@ -459,17 +501,22 @@ func TestMetadataClientID(t *testing.T) {
 		)
 
 		var standAloneClientID string
+
 		clientIDChan := make(chan string, 1)
+
 		mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 			metadata := args.Get(0).(pubsub.Metadata)
+
 			standAloneClientID = metadata.Properties["clientID"]
 			clientIDChan <- standAloneClientID
 		})
 
-		err := proc.processComponentAndDependents(t.Context(), pubsubComponent)
+		err := proc.Init(t.Context(), pubsubComponent)
 		require.NoError(t, err)
+
 		appIds := strings.Split(standAloneClientID, " ")
 		assert.Len(t, appIds, 2)
+
 		for _, appID := range appIds {
 			assert.Equal(t, daprt.TestRuntimeConfigID, appID)
 		}
@@ -485,8 +532,10 @@ func TestMetadataClientID(t *testing.T) {
 
 func TestProcessNoWorkflow(t *testing.T) {
 	proc, _ := newTestProc()
-	_, ok := proc.managers[components.CategoryWorkflow]
-	require.False(t, ok, "workflow cannot be registered as user facing component")
+	cat := proc.category(componentsapi.Component{
+		Spec: componentsapi.ComponentSpec{Type: string(components.CategoryWorkflow) + ".test"},
+	})
+	require.Empty(t, string(cat), "workflow cannot be registered as user facing component")
 }
 
 func TestReporter(t *testing.T) {
@@ -510,8 +559,10 @@ func TestReporter(t *testing.T) {
 					resultChan <- result
 					return nil
 				}))
+			startProc(t, proc)
 
 			mockPubSub := new(daprt.MockPubSub)
+
 			reg.PubSubs().RegisterComponent(
 				func(_ logger.Logger) pubsub.PubSub {
 					return mockPubSub
@@ -522,7 +573,7 @@ func TestReporter(t *testing.T) {
 			mockPubSub.On("Init", mock.Anything).Return(nil)
 			mockPubSub.On("Close").Return(nil)
 
-			err := proc.processComponentAndDependents(t.Context(), pubsubComponent)
+			err := proc.Init(t.Context(), pubsubComponent)
 			require.NoError(t, err)
 
 			select {
@@ -535,7 +586,7 @@ func TestReporter(t *testing.T) {
 				t.Error("Timed out waiting for reporter result")
 			}
 
-			err = proc.Close(pubsubComponent)
+			err = proc.Close(t.Context(), pubsubComponent)
 			require.NoError(t, err)
 		})
 
@@ -547,8 +598,10 @@ func TestReporter(t *testing.T) {
 					resultChan <- result
 					return nil
 				}))
+			startProc(t, proc)
 
 			mockPubSub := new(daprt.MockPubSub)
+
 			reg.PubSubs().RegisterComponent(
 				func(_ logger.Logger) pubsub.PubSub {
 					return mockPubSub
@@ -558,7 +611,7 @@ func TestReporter(t *testing.T) {
 
 			mockPubSub.On("Init", mock.Anything, mock.Anything).Return(errors.New("error"))
 
-			err := proc.processComponentAndDependents(t.Context(), pubsubComponent)
+			err := proc.Init(t.Context(), pubsubComponent)
 			require.Error(t, err)
 
 			select {
@@ -571,7 +624,7 @@ func TestReporter(t *testing.T) {
 				t.Error("Timed out waiting for reporter result")
 			}
 
-			err = proc.Close(pubsubComponent)
+			err = proc.Close(t.Context(), pubsubComponent)
 			require.NoError(t, err)
 		})
 
@@ -583,8 +636,10 @@ func TestReporter(t *testing.T) {
 					resultChan <- result
 					return nil
 				}))
+			startProc(t, proc)
 
 			mockPubSub := new(daprt.MockPubSub)
+
 			reg.PubSubs().RegisterComponent(
 				func(_ logger.Logger) pubsub.PubSub {
 					return mockPubSub
@@ -595,13 +650,13 @@ func TestReporter(t *testing.T) {
 			mockPubSub.On("Init", mock.Anything, mock.Anything).Return(nil)
 			mockPubSub.On("Close").Return(nil)
 
-			err := proc.processComponentAndDependents(t.Context(), pubsubComponent)
+			err := proc.Init(t.Context(), pubsubComponent)
 			require.NoError(t, err)
 
 			// consume the init message
 			<-resultChan
 
-			err = proc.Close(pubsubComponent)
+			err = proc.Close(t.Context(), pubsubComponent)
 			require.NoError(t, err)
 
 			select {
@@ -623,8 +678,10 @@ func TestReporter(t *testing.T) {
 					resultChan <- result
 					return nil
 				}))
+			startProc(t, proc)
 
 			mockPubSub := new(daprt.MockPubSub)
+
 			reg.PubSubs().RegisterComponent(
 				func(_ logger.Logger) pubsub.PubSub {
 					return mockPubSub
@@ -635,13 +692,13 @@ func TestReporter(t *testing.T) {
 			mockPubSub.On("Init", mock.Anything, mock.Anything).Return(nil)
 			mockPubSub.On("Close").Return(errors.New("error"))
 
-			err := proc.processComponentAndDependents(t.Context(), pubsubComponent)
+			err := proc.Init(t.Context(), pubsubComponent)
 			require.NoError(t, err)
 
 			// consume the init message
 			<-resultChan
 
-			err = proc.Close(pubsubComponent)
+			err = proc.Close(t.Context(), pubsubComponent)
 			require.Error(t, err)
 
 			select {
@@ -659,8 +716,10 @@ func TestReporter(t *testing.T) {
 func TestProcessorWaitGroupError(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	errCh := make(chan error)
+
 	t.Cleanup(func() {
 		cancel()
+
 		select {
 		case err := <-errCh:
 			require.NoError(t, err)
@@ -668,6 +727,7 @@ func TestProcessorWaitGroupError(t *testing.T) {
 			require.Fail(t, "timeout waiting for processor to return")
 		}
 	})
+
 	proc, _ := newTestProc()
 	// spin up the processor
 	go func() {
@@ -704,16 +764,18 @@ func TestProcessorWaitGroupError(t *testing.T) {
 
 	for range 10_000 {
 		go func() {
-			if proc.AddPendingComponent(ctx, comp1) {
-				proc.WaitForEmptyComponentQueue()
-				wg.Done()
+			res := proc.AddPendingComponent(ctx, comp1)
+			if res != nil {
+				<-res
 			}
+			wg.Done()
 		}()
 		go func() {
-			if proc.AddPendingComponent(ctx, comp2) {
-				proc.WaitForEmptyComponentQueue()
-				wg.Done()
+			res := proc.AddPendingComponent(ctx, comp2)
+			if res != nil {
+				<-res
 			}
+			wg.Done()
 		}()
 	}
 

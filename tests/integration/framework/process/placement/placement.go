@@ -43,8 +43,9 @@ import (
 )
 
 type Placement struct {
-	exec  process.Interface
-	ports *ports.Ports
+	exec       process.Interface
+	ports      *ports.Ports
+	httpClient *http.Client
 
 	id                  string
 	port                int
@@ -73,7 +74,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		metricsPort:         fp.Port(t),
 		initialCluster:      uid.String() + "=127.0.0.1:" + strconv.Itoa(port),
 		initialClusterPorts: []int{port},
-		metadataEnabled:     false,
+		metadataEnabled:     true,
 		namespace:           "default",
 	}
 
@@ -113,6 +114,14 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		args = append(args, "--mode="+*opts.mode)
 	}
 
+	if opts.disseminateTimeout != nil {
+		args = append(args, "--disseminate-timeout="+opts.disseminateTimeout.String())
+	}
+
+	if opts.disseminateCoalesceWindow != nil {
+		args = append(args, "--disseminate-coalesce-window="+opts.disseminateCoalesceWindow.String())
+	}
+
 	return &Placement{
 		exec: exec.New(t, binary.EnvValue("placement"), args,
 			append(opts.execOpts, exec.WithEnvVars(t,
@@ -120,6 +129,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 			))...,
 		),
 		ports:               fp,
+		httpClient:          client.HTTP(t),
 		id:                  opts.id,
 		port:                opts.port,
 		healthzPort:         opts.healthzPort,
@@ -138,6 +148,7 @@ func (p *Placement) Run(t *testing.T, ctx context.Context) {
 
 func (p *Placement) Cleanup(t *testing.T) {
 	p.cleanupOnce.Do(func() {
+		p.httpClient.CloseIdleConnections()
 		p.exec.Cleanup(t)
 	})
 }
@@ -145,11 +156,10 @@ func (p *Placement) Cleanup(t *testing.T) {
 func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	t.Helper()
 
-	client := client.HTTP(t)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/healthz", p.healthzPort), nil)
 	require.NoError(t, err)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, respErr := client.Do(req)
+		resp, respErr := p.httpClient.Do(req)
 		if assert.NoError(c, respErr) {
 			defer resp.Body.Close()
 			assert.Equal(c, http.StatusOK, resp.StatusCode)
@@ -179,7 +189,7 @@ func (p *Placement) HealthzPort() int {
 
 // Metrics returns a subset of metrics scraped from the metrics endpoint
 func (p *Placement) Metrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
-	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", p.MetricsAddress()))
+	return metrics.New(t, ctx, p.httpClient, fmt.Sprintf("http://%s/metrics", p.MetricsAddress()))
 }
 
 func (p *Placement) MetricsAddress() string {
@@ -316,6 +326,19 @@ func (p *Placement) AssertRegisterHostFails(t *testing.T, ctx context.Context, a
 	require.Equalf(t, codes.FailedPrecondition, status.Code(err), "error was: %v", err)
 }
 
+func (p *Placement) Client(t *testing.T, ctx context.Context) placementv1pb.PlacementClient {
+	t.Helper()
+
+	//nolint:staticcheck
+	conn, err := grpc.DialContext(ctx, p.Address(),
+		grpc.WithBlock(), //nolint:staticcheck
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+
+	return placementv1pb.NewPlacementClient(conn)
+}
+
 // CheckAPILevelInState Checks the API level reported in the state table matched.
 func (p *Placement) CheckAPILevelInState(t require.TestingT, client *http.Client, expectedAPILevel int) (tableVersion int) {
 	res, err := client.Get(fmt.Sprintf("http://localhost:%d/placement/state", p.HealthzPort()))
@@ -332,4 +355,17 @@ func (p *Placement) CheckAPILevelInState(t require.TestingT, client *http.Client
 	assert.Equal(t, expectedAPILevel, stateRes.APILevel)
 
 	return stateRes.TableVersion
+}
+
+func (p *Placement) HasLeader(t *testing.T, ctx context.Context) bool {
+	t.Helper()
+	return len(p.Metrics(t, ctx).MatchMetric("dapr_placement_leader_status")) == 1
+}
+
+func (p *Placement) IsLeader(t *testing.T, ctx context.Context) bool {
+	if m := p.Metrics(t, ctx).MatchMetric("dapr_placement_leader_status"); len(m) == 1 && m[0].Value == 1 {
+		return true
+	}
+
+	return false
 }

@@ -112,7 +112,7 @@ func TestConnectionPool(t *testing.T) {
 
 		// Share the connection grpcMaxConcurrentStreams times (100)
 		// Should always return the first connection
-		//nolint:gosec
+
 		for i := range grpcMaxConcurrentStreams {
 			conn = cp.Share()
 			require.Equal(t, conns[0], conn)
@@ -123,7 +123,7 @@ func TestConnectionPool(t *testing.T) {
 		require.Equal(t, int32(100), cp.connections[0].referenceCount)
 
 		// Next grpcMaxConcurrentStreams should return the second connection
-		//nolint:gosec
+
 		for i := range grpcMaxConcurrentStreams {
 			conn = cp.Share()
 			require.Equal(t, conns[1], conn)
@@ -187,13 +187,13 @@ func TestConnectionPool(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, conns[0], conn)
 			require.Equal(t, 1, n) // Should not have called createFn again
-			//nolint:gosec
+
 			require.Equal(t, int32(i+1), cp.connections[0].referenceCount)
 		}
 
 		// Next grpcMaxConcurrentStreams calls should return the second connection
 		// After having invoked the method one more time
-		//nolint:gosec
+
 		for i := range grpcMaxConcurrentStreams {
 			conn, err = cp.Get(createFn)
 			require.NoError(t, err)
@@ -366,7 +366,7 @@ func (c *mockConnection) Close() error {
 	return nil
 }
 
-func (c *mockConnection) Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
+func (c *mockConnection) Invoke(ctx context.Context, method string, args any, reply any, opts ...grpc.CallOption) error {
 	return nil
 }
 

@@ -33,11 +33,7 @@ type (
 )
 
 // DefaultRegistry is the singleton with the registry.
-var DefaultRegistry *Registry
-
-func init() {
-	DefaultRegistry = NewRegistry()
-}
+var DefaultRegistry *Registry = NewRegistry()
 
 // NewRegistry creates a name resolution registry.
 func NewRegistry() *Registry {

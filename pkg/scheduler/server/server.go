@@ -21,8 +21,10 @@ import (
 	"net"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
@@ -39,6 +41,17 @@ import (
 
 var log = logger.NewLogger("dapr.scheduler.server")
 
+// Controller is a long-lived k8s controller that must only be created
+// once per process because controller-runtime registers controller names globally in the metrics registry.
+type (
+	Controller        = controller.Controller
+	ControllerOptions = controller.Options
+)
+
+func NewController(opts ControllerOptions) (*Controller, error) {
+	return controller.New(opts)
+}
+
 type Options struct {
 	Healthz                   healthz.Healthz
 	Security                  security.Handler
@@ -47,20 +60,32 @@ type Options struct {
 	Port                      int
 	Mode                      modes.DaprMode
 	KubeConfig                *string
-	EtcdDataDir               string
-	EtcdName                  string
-	EtcdInitialCluster        []string
-	EtcdClientPort            uint64
-	EtcdSpaceQuota            int64
-	EtcdCompactionMode        string
-	EtcdCompactionRetention   string
-	EtcdSnapshotCount         uint64
-	EtcdMaxSnapshots          uint
-	EtcdMaxWALs               uint
-	EtcdBackendBatchLimit     int
-	EtcdBackendBatchInterval  string
-	EtcdDefrabThresholdMB     uint
-	EtcdMetrics               string
+	Controller                *controller.Controller
+
+	Workers uint32
+
+	EtcdEmbed                      bool
+	EtcdDataDir                    string
+	EtcdName                       string
+	EtcdInitialCluster             []string
+	EtcdClientPort                 uint64
+	EtcdClientListenAddress        string
+	EtcdSpaceQuota                 int64
+	EtcdCompactionMode             string
+	EtcdCompactionRetention        string
+	EtcdSnapshotCount              uint64
+	EtcdMaxSnapshots               uint
+	EtcdMaxWALs                    uint
+	EtcdBackendBatchLimit          int
+	EtcdBackendBatchInterval       string
+	EtcdMaxTxnOps                  uint
+	EtcdDefragThresholdMB          uint
+	EtcdInitialElectionTickAdvance bool
+	EtcdMetrics                    string
+
+	EtcdClientEndpoints []string
+	EtcdClientUsername  string
+	EtcdClientPassword  string
 }
 
 // Server is the gRPC server for the Scheduler service.
@@ -72,7 +97,7 @@ type Server struct {
 	serializer *serialize.Serializer
 	cron       cron.Interface
 	etcd       etcd.Interface
-	controller concurrency.Runner
+	controller *controller.Controller
 
 	hzAPIServer healthz.Target
 
@@ -81,7 +106,7 @@ type Server struct {
 	closeCh chan struct{}
 }
 
-func New(opts Options) (*Server, error) {
+func New(ctx context.Context, opts Options) (*Server, error) {
 	var broadcastAddr string
 	switch {
 	case opts.OverrideBroadcastHostPort != nil:
@@ -96,24 +121,32 @@ func New(opts Options) (*Server, error) {
 		broadcastAddr = net.JoinHostPort(haddr, strconv.Itoa(opts.Port))
 	}
 
-	etcd, err := etcd.New(etcd.Options{
-		Name:                 opts.EtcdName,
-		InitialCluster:       opts.EtcdInitialCluster,
-		ClientPort:           opts.EtcdClientPort,
-		SpaceQuota:           opts.EtcdSpaceQuota,
-		CompactionMode:       opts.EtcdCompactionMode,
-		CompactionRetention:  opts.EtcdCompactionRetention,
-		SnapshotCount:        opts.EtcdSnapshotCount,
-		MaxSnapshots:         opts.EtcdMaxSnapshots,
-		MaxWALs:              opts.EtcdMaxWALs,
-		BackendBatchLimit:    opts.EtcdBackendBatchLimit,
-		BackendBatchInterval: opts.EtcdBackendBatchInterval,
-		DefragThresholdMB:    opts.EtcdDefrabThresholdMB,
-		Metrics:              opts.EtcdMetrics,
-		Security:             opts.Security,
-		DataDir:              opts.EtcdDataDir,
-		Healthz:              opts.Healthz,
-		Mode:                 opts.Mode,
+	etcd, err := etcd.New(ctx, etcd.Options{
+		Name:                       opts.EtcdName,
+		Embed:                      opts.EtcdEmbed,
+		InitialCluster:             opts.EtcdInitialCluster,
+		ClientPort:                 opts.EtcdClientPort,
+		ClientListenAddress:        opts.EtcdClientListenAddress,
+		SpaceQuota:                 opts.EtcdSpaceQuota,
+		CompactionMode:             opts.EtcdCompactionMode,
+		CompactionRetention:        opts.EtcdCompactionRetention,
+		SnapshotCount:              opts.EtcdSnapshotCount,
+		MaxSnapshots:               opts.EtcdMaxSnapshots,
+		MaxWALs:                    opts.EtcdMaxWALs,
+		BackendBatchLimit:          opts.EtcdBackendBatchLimit,
+		BackendBatchInterval:       opts.EtcdBackendBatchInterval,
+		MaxTxnOps:                  opts.EtcdMaxTxnOps,
+		DefragThresholdMB:          opts.EtcdDefragThresholdMB,
+		InitialElectionTickAdvance: opts.EtcdInitialElectionTickAdvance,
+		Metrics:                    opts.EtcdMetrics,
+		Security:                   opts.Security,
+		DataDir:                    opts.EtcdDataDir,
+		Healthz:                    opts.Healthz,
+		Mode:                       opts.Mode,
+
+		ClientEndpoints: opts.EtcdClientEndpoints,
+		ClientUsername:  opts.EtcdClientUsername,
+		ClientPassword:  opts.EtcdClientPassword,
 	})
 	if err != nil {
 		return nil, err
@@ -121,29 +154,20 @@ func New(opts Options) (*Server, error) {
 
 	cron := cron.New(cron.Options{
 		ID:      opts.EtcdName,
-		Healthz: opts.Healthz,
 		Host:    &schedulerv1pb.Host{Address: broadcastAddr},
 		Etcd:    etcd,
+		Workers: opts.Workers,
 	})
 
-	var ctrl concurrency.Runner
-	if opts.Mode == modes.KubernetesMode {
-		var err error
-		ctrl, err = controller.New(controller.Options{
-			KubeConfig: opts.KubeConfig,
-			Cron:       cron,
-			Healthz:    opts.Healthz,
-		})
-		if err != nil {
-			return nil, err
-		}
+	if opts.Controller != nil {
+		opts.Controller.SetCron(cron)
 	}
 
 	return &Server{
 		port:          opts.Port,
 		listenAddress: opts.ListenAddress,
 		sec:           opts.Security,
-		controller:    ctrl,
+		controller:    opts.Controller,
 		cron:          cron,
 		etcd:          etcd,
 		serializer: serialize.New(serialize.Options{
@@ -182,7 +206,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	if s.controller != nil {
-		runners = append(runners, s.controller)
+		runners = append(runners, s.controller.Run)
 	}
 
 	mngr := concurrency.NewRunnerCloserManager(log, nil, runners...)
@@ -206,6 +230,10 @@ func (s *Server) runServer(ctx context.Context) error {
 		s.sec.GRPCServerOptionMTLS(),
 		grpc.MaxSendMsgSize(math.MaxInt32),
 		grpc.MaxRecvMsgSize(math.MaxInt32),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    time.Second * 3,
+			Timeout: time.Second * 5,
+		}),
 	)
 	schedulerv1pb.RegisterSchedulerServer(srv, s)
 

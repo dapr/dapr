@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -40,22 +40,9 @@ type scopes struct {
 }
 
 func (s *scopes) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true
-`), 0o600))
-
 	s.resDir = t.TempDir()
 
 	s.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(s.resDir),
 	)
 
@@ -97,8 +84,8 @@ scopes:
 		assert.Empty(c, s.daprd.GetMetaRegisteredComponents(c, ctx))
 	}, time.Second*5, time.Millisecond*10)
 
-	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(
-		fmt.Sprintf(`
+	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"),
+		fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -109,7 +96,7 @@ spec:
 scopes:
 - not-my-app-id
 - '%s'
-`, s.daprd.AppID())), 0o600))
+`, s.daprd.AppID()), 0o600))
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 1)
 	}, time.Second*5, time.Millisecond*10)

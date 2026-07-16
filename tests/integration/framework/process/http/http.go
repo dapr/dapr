@@ -18,6 +18,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -56,10 +57,17 @@ func New(t *testing.T, fopts ...Option) *HTTP {
 		opts.handler = handler
 	}
 
-	fp := ports.Reserve(t, 1)
+	var lis net.Listener
+	if opts.port != nil {
+		var err error
+		lis, err = net.Listen("tcp", "localhost:"+strconv.Itoa(*opts.port))
+		require.NoError(t, err)
+	} else {
+		lis = ports.Reserve(t, 1).Listener(t)
+	}
 
 	return &HTTP{
-		listener: fp.Listener(t),
+		listener: lis,
 		srvErrCh: make(chan error, 1),
 		server: &http.Server{
 			ReadHeaderTimeout: time.Second,
@@ -94,7 +102,6 @@ func (h *HTTP) Run(t *testing.T, ctx context.Context) {
 }
 
 func (h *HTTP) Cleanup(t *testing.T) {
-	//nolint:usetesting
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	require.NoError(t, errors.Join(h.server.Shutdown(ctx), <-h.srvErrCh))

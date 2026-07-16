@@ -41,7 +41,7 @@ type k6 struct {
 // newK6Client returns a k6
 func newK6Client(crdConfig *rest.Config, namespace string) (*k6, error) {
 	v1.AddToScheme(scheme.Scheme)
-	crdConfig.ContentConfig.GroupVersion = &v1.GroupVersion
+	crdConfig.GroupVersion = &v1.GroupVersion
 	crdConfig.APIPath = "/apis"
 	crdConfig.NegotiatedSerializer = serializer.NewCodecFactory(scheme.Scheme)
 	crdConfig.UserAgent = rest.DefaultKubernetesUserAgent()

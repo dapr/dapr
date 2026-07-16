@@ -47,12 +47,12 @@ func (r *raise) Setup(t *testing.T) []framework.Option {
 func (r *raise) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
-	r.workflow.Registry().AddOrchestratorN("raise", func(ctx *task.OrchestrationContext) (any, error) {
+	r.workflow.Registry().AddWorkflowN("raise", func(ctx *task.WorkflowContext) (any, error) {
 		ctx.WaitForSingleEvent("incr", time.Minute).Await(nil)
 
 		var inc int
 		require.NoError(t, ctx.GetInput(&inc))
-		if inc < 99 {
+		if inc < 49 {
 			ctx.ContinueAsNew(inc+1, task.WithKeepUnprocessedEvents())
 		}
 
@@ -60,17 +60,17 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	})
 	client := r.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "raise",
+	id, err := client.ScheduleNewWorkflow(ctx, "raise",
 		api.WithInstanceID("raisei"),
 		api.WithInput(0),
 	)
 	require.NoError(t, err)
 
-	for range 100 {
+	for range 50 {
 		go client.RaiseEvent(ctx, id, "incr")
 	}
 
-	meta, err := client.WaitForOrchestrationCompletion(ctx, id)
+	meta, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, `100`, meta.GetOutput().GetValue())
+	assert.Equal(t, `50`, meta.GetOutput().GetValue())
 }

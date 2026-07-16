@@ -19,13 +19,14 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
+	contribContenttype "github.com/dapr/components-contrib/contenttype"
 	"github.com/dapr/components-contrib/metadata"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
+	pluggablepubsub "github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -66,15 +67,33 @@ type Subscription struct {
 	adapterStreamer rtpubsub.AdapterStreamer
 	adapter         rtpubsub.Adapter
 
-	cancel   func()
-	closed   atomic.Bool
-	wg       sync.WaitGroup
-	inflight atomic.Int64
+	cancel      func(cause error)
+	drainSealed atomic.Bool
+	closed      atomic.Bool
+	inflight    atomic.Int64
 
 	postman postman.Interface
 }
 
 var log = logger.NewLogger("dapr.runtime.processor.subscription")
+
+// drainMaxDuration caps how long Stop will wait for the drain to settle.
+// var rather than const so tests can shorten it.
+var drainMaxDuration = 30 * time.Second
+
+// deadLetterPublishTimeout caps the publish to the dead-letter topic when the
+// inbound message context has already been consumed by the resiliency policy's
+// retry budget. Picked to be generous enough to cover a healthy broker
+// round-trip plus the component's internal publish retries, but short enough
+// that a wedged broker does not block the inbound subscriber loop
+// indefinitely.
+const deadLetterPublishTimeout = 30 * time.Second
+
+const (
+	BinaryCloudEventHeaderPrefix = "ce_"
+	DefaultCloudEventContentType = "application/json"
+	ContentTypeMetadataKey       = "content-type"
+)
 
 func New(opts Options) (*Subscription, error) {
 	allowed := rtpubsub.IsOperationAllowed(opts.Topic, opts.PubSub, opts.PubSub.ScopedSubscriptions)
@@ -82,7 +101,7 @@ func New(opts Options) (*Subscription, error) {
 		return nil, fmt.Errorf("subscription to topic '%s' on pubsub '%s' is not allowed", opts.Topic, opts.PubSubName)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancelCause(context.Background())
 
 	s := &Subscription{
 		appID:           opts.AppID,
@@ -111,9 +130,10 @@ func New(opts Options) (*Subscription, error) {
 	if route.BulkSubscribe != nil && route.BulkSubscribe.Enabled {
 		err := s.bulkSubscribeTopic(ctx, policyDef)
 		if err != nil {
-			cancel()
+			cancel(nil)
 			return nil, fmt.Errorf("failed to bulk subscribe to topic %s: %w", s.topic, err)
 		}
+
 		return s, nil
 	}
 
@@ -122,23 +142,50 @@ func New(opts Options) (*Subscription, error) {
 		subscribeTopic = s.namespace + s.topic
 	}
 
-	err := s.pubsub.Component.Subscribe(ctx, contribpubsub.SubscribeRequest{
+	// Subscribe establishes the consumer connection directly (it does not run
+	// through a policy Runner), so attach the workload's SPIFFE identity to its
+	// context here just as the Runner does for other component operations.
+	err := s.pubsub.Component.Subscribe(policyDef.ComponentContext(ctx), contribpubsub.SubscribeRequest{
 		Topic:    subscribeTopic,
 		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *contribpubsub.NewMessage) error {
-		s.wg.Add(1)
-		s.inflight.Add(1)
-		defer func() {
-			s.wg.Done()
-			s.inflight.Add(-1)
-		}()
-
-		if s.closed.Load() {
-			return errors.New("subscription is closed")
+		// drainSealed bars new work after Stop has sealed the drain.
+		if s.drainSealed.Load() {
+			<-ctx.Done()
+			return ctx.Err()
 		}
+		s.inflight.Add(1)
+
+		// closed signals shutdown is in progress; block on ctx.Done
+		// rather than returning an error (which would cause the broker
+		// to NACK the message and route it to a dead-letter queue
+		// instead of redelivering on rebalance). Decrement before
+		// blocking so Stop's inflight wait can proceed.
+		if s.closed.Load() {
+			s.inflight.Add(-1)
+			<-ctx.Done()
+			return ctx.Err()
+		}
+
+		released := false
+		defer func() {
+			if !released {
+				s.inflight.Add(-1)
+			}
+		}()
 
 		if msg.Metadata == nil {
 			msg.Metadata = make(map[string]string, 1)
+		}
+
+		if msg.ContentType != nil {
+			msg.Metadata[ContentTypeMetadataKey] = *msg.ContentType
+		}
+
+		contentType, ok := msg.Metadata[ContentTypeMetadataKey]
+
+		if !ok {
+			contentType = DefaultCloudEventContentType
 		}
 
 		msg.Metadata[rtpubsub.MetadataKeyPubSub] = name
@@ -151,58 +198,88 @@ func New(opts Options) (*Subscription, error) {
 		rawPayload, err := metadata.IsRawPayload(route.Metadata)
 		if err != nil {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
+
 			if route.DeadLetterTopic != "" {
-				if dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
+				dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+				if dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
 					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 					return nil
 				}
 			}
+
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
+
 			return err
 		}
 
-		var cloudEvent map[string]interface{}
+		var cloudEvent map[string]any
+
 		data := msg.Data
-		if rawPayload {
+
+		switch {
+		case rawPayload:
 			cloudEvent = contribpubsub.FromRawPayload(msg.Data, msgTopic, name)
 			if traceid, ok := msg.Metadata[contribpubsub.TraceIDField]; ok {
 				cloudEvent[contribpubsub.TraceIDField] = traceid
 			}
+
 			if traceparent, ok := msg.Metadata[contribpubsub.TraceParentField]; ok {
 				cloudEvent[contribpubsub.TraceParentField] = traceparent
 				// traceparent supersedes traceid
 				cloudEvent[contribpubsub.TraceIDField] = traceparent
 			}
+
 			if tracestate, ok := msg.Metadata[contribpubsub.TraceStateField]; ok {
 				cloudEvent[contribpubsub.TraceStateField] = tracestate
 			}
+
 			data, err = json.Marshal(cloudEvent)
 			if err != nil {
 				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
+
 				if route.DeadLetterTopic != "" {
-					if dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
+					dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+					if dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
 						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 						return nil
 					}
 				}
+
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
+
 				return err
 			}
-		} else {
-			// all messages consumed with "rawPayload=false" are deserialized as a CloudEvent, even when the payload is not a CloudEvent
+		case contribContenttype.IsBinaryContentType(contentType):
+			cloudEvent = make(map[string]any)
+			// Reconstruct CloudEvent from metadata
+			for k, v := range msg.Metadata {
+				if after, ok0 := strings.CutPrefix(strings.ToLower(k), BinaryCloudEventHeaderPrefix); ok0 {
+					ceKey := after
+					cloudEvent[ceKey] = v
+				}
+			}
+
+			cloudEvent[contribpubsub.DataField] = msg.Data
+			cloudEvent[contribpubsub.DataContentTypeField] = contentType
+		default:
+			// all messages consumed with "rawPayload=false" are deserialized as a CloudEvent
 			err = json.Unmarshal(msg.Data, &cloudEvent)
 			if err != nil {
 				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
+
 				if route.DeadLetterTopic != "" {
-					if dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
+					dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+					if dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
 						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 						return nil
 					}
 				}
+
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
+
 				return err
 			}
 
@@ -212,6 +289,7 @@ func New(opts Options) (*Subscription, error) {
 					cloudEvent[contribpubsub.TraceIDField] = traceid
 				}
 			}
+
 			if _, ok := cloudEvent[contribpubsub.TraceParentField]; !ok {
 				if traceparent, ok := msg.Metadata[contribpubsub.TraceParentField]; ok {
 					cloudEvent[contribpubsub.TraceParentField] = traceparent
@@ -219,6 +297,7 @@ func New(opts Options) (*Subscription, error) {
 					cloudEvent[contribpubsub.TraceIDField] = traceparent
 				}
 			}
+
 			if _, ok := cloudEvent[contribpubsub.TraceStateField]; !ok {
 				if tracestate, ok := msg.Metadata[contribpubsub.TraceStateField]; ok {
 					cloudEvent[contribpubsub.TraceStateField] = tracestate
@@ -233,20 +312,25 @@ func New(opts Options) (*Subscription, error) {
 			if route.DeadLetterTopic != "" {
 				_ = s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
 			}
+
 			return nil
 		}
 
 		routePath, shouldProcess, err := findMatchingRoute(route.Rules, cloudEvent)
 		if err != nil {
 			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[contribpubsub.IDField], name, msgTopic, err)
+
 			if route.DeadLetterTopic != "" {
-				if dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
+				dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+				if dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
 					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 					return nil
 				}
 			}
+
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
+
 			return err
 		}
 
@@ -254,9 +338,11 @@ func New(opts Options) (*Subscription, error) {
 			// The event does not match any route specified so ignore it.
 			log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[contribpubsub.IDField], name, msgTopic)
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), strings.ToLower(string(contribpubsub.Success)), msgTopic, 0)
+
 			if route.DeadLetterTopic != "" {
 				_ = s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
 			}
+
 			return nil
 		}
 
@@ -285,51 +371,158 @@ func New(opts Options) (*Subscription, error) {
 						return nil, pErr
 					}
 				}
+
 				return nil, nil
 			} else if pErr != nil {
 				log.Errorf("encountered a non-retriable error while publishing a subscribed message to topic %s, err: %v", msgTopic, pErr)
 			}
+
 			return nil, pErr
 		})
+		// When the subscription is closing (e.g. during shutdown or
+		// hot-reload), block on the handler context rather than returning
+		// an error. Returning an error causes the broker to NACK the
+		// message (e.g. routing it to a dead-letter queue), which is
+		// incorrect during graceful shutdown. Decrement inflight before
+		// blocking so Stop's wait can proceed.
+		if err != nil && (s.closed.Load() || errors.Is(err, rtpubsub.ErrSubscriptionClosed)) {
+			released = true
+			s.inflight.Add(-1)
+			<-ctx.Done()
+			return ctx.Err()
+		}
+
 		// when runtime shutting down, don't send to DLQ
 		if err != nil && err != context.Canceled {
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
 			if route.DeadLetterTopic != "" {
-				if dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
+				dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+				if dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
 					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 					return nil
 				}
 			}
+
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
+
 			return err
 		}
+
 		return err
 	})
 	if err != nil {
-		cancel()
+		cancel(nil)
 		return nil, fmt.Errorf("failed to subscribe to topic %s: %w", s.topic, err)
 	}
 
 	return s, nil
 }
 
-func (s *Subscription) Stop() {
-	s.closed.Store(true)
+func (s *Subscription) Stop(err ...error) {
+	cause := errors.Join(err...)
+	graceful := errors.Is(cause, contribpubsub.ErrGracefulShutdown)
+
+	// Pause-and-drain on graceful shutdown: keep the broker session
+	// alive so messages already buffered locally still flow to the app.
+	// s.cancel at the end performs the actual close.
+	paused := false
+	if graceful {
+		if pausable, ok := s.pubsub.Component.(contribpubsub.PausableSubscriber); ok {
+			log.Infof("pausing subscription on topic %s during graceful shutdown", s.topic)
+			// Bound Pause so a hung component cannot block shutdown forever.
+			pauseCtx, pauseCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			perr := pausable.Pause(pauseCtx)
+			pauseCancel()
+			switch {
+			case perr == nil:
+				paused = true
+			case errors.Is(perr, pluggablepubsub.ErrPausableUnimplemented):
+				// Legacy pluggable; fall back to close-first silently.
+			default:
+				log.Warnf("failed to pause subscription on topic %s during graceful shutdown: %v", s.topic, perr)
+			}
+		}
+	}
+
+	// On the close-first path closed is set up front so new handlers
+	// self-eject; on the paused path closed stays false during drain.
+	if !paused {
+		s.closed.Store(true)
+	}
+
+	// Snapshot inflight; promoted to true if work is observed during drain
+	// so the 400ms ack-settle below still fires.
 	inflight := s.inflight.Load() > 0
 
-	s.wg.Wait()
+	// Atomic polling rather than wg.Wait — contrib retry loops can
+	// bracket the handler with Add/Done around backoffs and race Wait.
+	// Single shared deadline across the paused drain + post-seal wait so
+	// total Stop time is bounded by drainMaxDuration, not 2x.
+	deadline := time.Now().Add(drainMaxDuration)
+	hitCeiling := false
+	if paused {
+		drainPollInterval := 20 * time.Millisecond
+		requiredStable := 5 // 100ms of stable quiet
+		stable := 0
+		for {
+			if s.inflight.Load() > 0 {
+				inflight = true
+				stable = 0
+			} else {
+				stable++
+				if stable >= requiredStable {
+					break
+				}
+			}
+			if time.Now().After(deadline) {
+				log.Warnf("drain exceeded %s; sealing with inflight=%d on topic %s",
+					drainMaxDuration, s.inflight.Load(), s.topic)
+				hitCeiling = true
+				break
+			}
+			time.Sleep(drainPollInterval)
+		}
+	}
+
+	// Seal: bar new work and signal shutdown to in-flight handlers.
+	s.drainSealed.Store(true)
+	s.closed.Store(true)
+
+	// On ceiling hit, force-cancel so stuck handlers' HTTP/gRPC calls
+	// error out via ctx propagation. Join with the original cause so
+	// downstream cause-based checks still see the graceful-shutdown
+	// signal alongside the ceiling-exceeded reason.
+	if hitCeiling {
+		s.cancel(errors.Join(cause, errors.New("subscription drain ceiling exceeded")))
+	}
+
+	// Catch any handler that snuck in between drainSealed.Load and
+	// inflight.Add — those resolve in microseconds via ctx propagation.
+	// Reuses the same deadline; if the drain loop already burned it,
+	// this exits immediately.
+	for s.inflight.Load() > 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+
 	if s.adapterStreamer != nil {
 		s.adapterStreamer.Close(s.adapterStreamer.StreamerKey(s.pubsubName, s.topic), s.connectionID)
 	}
 	// If there were in-flight requests then wait some time for the result to be
 	// sent to the broker. This is because the message result context is
-	// disparate.
-	if inflight {
+	// disparate. Skipped on ceiling hit: handlers were force-canceled above
+	// and won't be acking, so the wait is wasted shutdown time.
+	if inflight && !hitCeiling {
 		time.Sleep(time.Millisecond * 400)
 	}
-	s.cancel()
+
+	if len(err) > 0 {
+		s.cancel(cause)
+		return
+	}
+
+	s.cancel(nil)
 }
 
 func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *contribpubsub.NewMessage, deadLetterTopic string) error {
@@ -341,8 +534,28 @@ func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *c
 		ContentType: msg.ContentType,
 	}
 
-	if err := s.adapter.Publish(ctx, req); err != nil {
-		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
+	// If the parent context was explicitly canceled (e.g. shutdown), skip
+	// the DLQ publish: detaching the deadline below would otherwise let this
+	// block for up to deadLetterPublishTimeout while the runtime is trying
+	// to shut down. Only a deadline-exhausted parent should be detached.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return ctx.Err()
+	}
+
+	// Detach from the parent context's deadline before publishing. The
+	// inbound message handler ctx is bounded by component-level handler timeouts
+	// (e.g. handlerTimeoutInSec on Azure Service Bus) and may have been fully
+	// consumed by an inbound resiliency policy's retry budget by the time we
+	// reach this path. Publishing on that ctx then fails immediately with
+	// "context deadline exceeded" without ever reaching the broker, the message
+	// is NACK'd back to the broker, redelivered, retried again, DLQ fails again,
+	// and the message never escapes the loop. The timeout below caps the
+	// detached publish so it cannot block indefinitely.
+	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deadLetterPublishTimeout)
+	defer cancel()
+	err := s.adapter.Publish(pubCtx, req, rtpubsub.TransportModeGRPC)
+	if err != nil {
+		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 		return err
 	}
 
@@ -351,16 +564,18 @@ func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *c
 
 // findMatchingRoute selects the path based on routing rules. If there are
 // no matching rules, the route-level path is used.
-func findMatchingRoute(rules []*rtpubsub.Rule, cloudEvent interface{}) (path string, shouldProcess bool, err error) {
+func findMatchingRoute(rules []*rtpubsub.Rule, cloudEvent any) (path string, shouldProcess bool, err error) {
 	hasRules := len(rules) > 0
 	if hasRules {
-		data := map[string]interface{}{
+		data := map[string]any{
 			"event": cloudEvent,
 		}
+
 		rule, err := matchRoutingRule(rules, data)
 		if err != nil {
 			return "", false, err
 		}
+
 		if rule != nil {
 			return rule.Path, true, nil
 		}
@@ -369,15 +584,17 @@ func findMatchingRoute(rules []*rtpubsub.Rule, cloudEvent interface{}) (path str
 	return "", false, nil
 }
 
-func matchRoutingRule(rules []*rtpubsub.Rule, data map[string]interface{}) (*rtpubsub.Rule, error) {
+func matchRoutingRule(rules []*rtpubsub.Rule, data map[string]any) (*rtpubsub.Rule, error) {
 	for _, rule := range rules {
 		if rule.Match == nil || len(rule.Match.String()) == 0 {
 			return rule, nil
 		}
+
 		iResult, err := rule.Match.Eval(data)
 		if err != nil {
 			return nil, err
 		}
+
 		result, ok := iResult.(bool)
 		if !ok {
 			return nil, fmt.Errorf("the result of match expression %s was not a boolean", rule.Match)

@@ -16,6 +16,7 @@ package diagnostics
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -27,6 +28,7 @@ import (
 	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/config"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
@@ -119,9 +121,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 			reqSpanAttr = spanAttributesMapFromGRPC(appID, req, info.FullMethod)
 
 			// Populates dapr- prefixed header first
-			for key, value := range reqSpanAttr {
-				prefixedMetadata[key] = value
-			}
+			maps.Copy(prefixedMetadata, reqSpanAttr)
 			AddAttributesToSpan(span, prefixedMetadata)
 
 			// Correct the span name based on API.
@@ -183,9 +183,13 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 		default:
 			isProxied = true
 			md, _ := metadata.FromIncomingContext(ctx)
-			vals := md.Get(diagConsts.GRPCProxyAppIDKey)
+			vals := md.Get(diagConsts.GRPCProxyCalleeIDKey)
 			if len(vals) == 0 {
-				return fmt.Errorf("cannot proxy request: missing %s metadata", diagConsts.GRPCProxyAppIDKey)
+				log.Debugf("cannot proxy request: missing %s metadata, fallback to %s", diagConsts.GRPCProxyCalleeIDKey, diagConsts.GRPCProxyAppIDKey)
+				vals = md.Get(diagConsts.GRPCProxyAppIDKey)
+				if len(vals) == 0 {
+					return fmt.Errorf("cannot proxy request: missing %s or %s metadata", diagConsts.GRPCProxyCalleeIDKey, diagConsts.GRPCProxyAppIDKey)
+				}
 			}
 			// vals[0] is the target app ID
 			if appID == vals[0] {
@@ -221,9 +225,7 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 			}
 
 			// Populates dapr- prefixed header first
-			for key, value := range reqSpanAttr {
-				prefixedMetadata[key] = value
-			}
+			maps.Copy(prefixedMetadata, reqSpanAttr)
 			AddAttributesToSpan(span, prefixedMetadata)
 
 			// Correct the span name based on API.
@@ -324,6 +326,8 @@ func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContex
 		return ctx
 	}
 
+	traceparent := SpanContextToW3CString(spanContext)
+	ctx = grpcMetadata.AppendToOutgoingContext(ctx, contribpubsub.TraceParentField, traceparent)
 	return grpcMetadata.AppendToOutgoingContext(ctx, diagConsts.GRPCTraceContextKey, string(traceContextBinary))
 }
 

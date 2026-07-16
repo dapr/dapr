@@ -29,7 +29,7 @@ import (
 
 func TestEndpointCompleteness(t *testing.T) {
 	// Get the list of endpoints in the runtime
-	runtimeEndpoints := []string{}
+	runtimeEndpoints := make([]string, 0, len(runtimev1pb.Dapr_ServiceDesc.Methods)+len(runtimev1pb.Dapr_ServiceDesc.Streams))
 	prefix := "/" + runtimev1pb.Dapr_ServiceDesc.ServiceName + "/"
 	for _, m := range runtimev1pb.Dapr_ServiceDesc.Methods {
 		runtimeEndpoints = append(runtimeEndpoints, prefix+m.MethodName)
@@ -40,7 +40,7 @@ func TestEndpointCompleteness(t *testing.T) {
 	sort.Strings(runtimeEndpoints)
 
 	// Get the list of endpoints in this package (regardless of group)
-	packageEndpoints := []string{}
+	packageEndpoints := make([]string, 0, len(endpoints))
 	for _, g := range endpoints {
 		packageEndpoints = append(packageEndpoints, g...)
 	}

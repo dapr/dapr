@@ -16,7 +16,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -28,15 +27,9 @@ const (
 	testResiliencyName           = "testResiliency"
 	testResiliencyNamespace      = "testNamespace"
 	testStateStoreName           = "testStateStore"
+	testCBTimeout                = 500 * time.Millisecond
+	testCBTimeoutStr             = "500ms"
 )
-
-func cleanupRegisteredViews() {
-	diag.CleanupRegisteredViews(
-		resiliencyCountViewName,
-		resiliencyLoadedViewName,
-		resiliencyActivationViewName,
-		resiliencyCBStateViewName)
-}
 
 func TestResiliencyCountMonitoring(t *testing.T) {
 	tests := []struct {
@@ -186,10 +179,14 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			cleanupRegisteredViews()
-			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(test.appID))
+			meter := view.NewMeter()
+			meter.Start()
+			t.Cleanup(func() {
+				meter.Stop()
+			})
+			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(meter, test.appID))
 			test.unitFn()
-			rows, err := view.RetrieveData(resiliencyCountViewName)
+			rows, err := meter.RetrieveData(resiliencyCountViewName)
 			if test.wantErr {
 				require.Error(t, err)
 			}
@@ -217,7 +214,7 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 				for range 2 {
 					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 					policyRunner := resiliency.NewRunner[any](t.Context(), policyDef)
-					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+					_, _ = policyRunner(func(ctx context.Context) (any, error) {
 						return nil, nil
 					})
 				}
@@ -233,7 +230,7 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 				for range 3 {
 					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 					policyRunner := resiliency.NewRunner[any](t.Context(), policyDef)
-					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+					_, _ = policyRunner(func(ctx context.Context) (any, error) {
 						return nil, errors.New("fake error")
 					})
 				}
@@ -252,15 +249,15 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 				for range 3 {
 					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 					policyRunner := resiliency.NewRunner[any](t.Context(), policyDef)
-					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+					_, _ = policyRunner(func(ctx context.Context) (any, error) {
 						return nil, errors.New("fake error")
 					})
 				}
-				// let the circuit breaker to go to half open state (5x cb timeout)
-				time.Sleep(500 * time.Millisecond)
+				// let the circuit breaker go to half open state (>5x cb timeout)
+				time.Sleep(6 * testCBTimeout)
 				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 				policyRunner := resiliency.NewRunner[any](t.Context(), policyDef)
-				_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+				_, _ = policyRunner(func(ctx context.Context) (any, error) {
 					return nil, errors.New("fake error")
 				})
 			},
@@ -270,20 +267,60 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 				diag.NewTag(diag.StatusKey.Name(), string(breaker.StateOpen)):     1,
 				diag.NewTag(diag.StatusKey.Name(), string(breaker.StateHalfOpen)): 1,
 			},
-			wantCbStateLastValue: diag.NewTag(diag.StatusKey.Name(), "half-open"),
+			// The failing probe trips the breaker back to open (half-open -> open).
+			// The gauge now tracks that transition (issue #10113); previously it
+			// stayed stuck at the "half-open" snapshot taken at instantiation.
+			wantCbStateLastValue: diag.NewTag(diag.StatusKey.Name(), "open"),
+		},
+		{
+			// Regression for #10113: when a circuit breaker recovers
+			// (half-open -> closed) during request execution, the cb_state gauge
+			// must reflect "closed". Previously the gauge was only snapshotted at
+			// policy instantiation, so a transition that happened mid-execution
+			// left the gauge stuck at the pre-transition state ("half-open").
+			name: "EndpointPolicyHalfOpenToClosedState",
+			unitFn: func() {
+				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
+				for range 3 {
+					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
+					policyRunner := resiliency.NewRunner[any](t.Context(), policyDef)
+					_, _ = policyRunner(func(ctx context.Context) (any, error) {
+						return nil, errors.New("fake error")
+					})
+				}
+				// let the circuit breaker go to half open state (>5x cb timeout)
+				time.Sleep(6 * testCBTimeout)
+				// a successful probe closes the breaker (MaxRequests == 1)
+				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
+				policyRunner := resiliency.NewRunner[any](t.Context(), policyDef)
+				_, _ = policyRunner(func(ctx context.Context) (any, error) {
+					return nil, nil
+				})
+			},
+			wantNumberOfRows: 5,
+			wantCbStateTagCount: map[tag.Tag]int64{
+				diag.NewTag(diag.StatusKey.Name(), string(breaker.StateClosed)):   2,
+				diag.NewTag(diag.StatusKey.Name(), string(breaker.StateOpen)):     1,
+				diag.NewTag(diag.StatusKey.Name(), string(breaker.StateHalfOpen)): 1,
+			},
+			wantCbStateLastValue: diag.NewTag(diag.StatusKey.Name(), "closed"),
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			cleanupRegisteredViews()
-			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(testAppID))
+			meter := view.NewMeter()
+			meter.Start()
+			t.Cleanup(func() {
+				meter.Stop()
+			})
+			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(meter, testAppID))
 			test.unitFn()
-			rows, err := view.RetrieveData(resiliencyCountViewName)
+			rows, err := meter.RetrieveData(resiliencyCountViewName)
 			require.NoError(t, err)
 			require.Len(t, rows, test.wantNumberOfRows)
 
-			rowsCbState, err := view.RetrieveData(resiliencyCBStateViewName)
+			rowsCbState, err := meter.RetrieveData(resiliencyCBStateViewName)
 			require.NoError(t, err)
 			require.NotNil(t, rowsCbState)
 
@@ -337,7 +374,7 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 				for range 2 {
 					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 					policyRunner := resiliency.NewRunner[any](t.Context(), policyDef)
-					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+					_, _ = policyRunner(func(ctx context.Context) (any, error) {
 						return nil, nil
 					})
 				}
@@ -350,7 +387,7 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
 				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 				policyRunner := resiliency.NewRunner[any](t.Context(), policyDef)
-				_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+				_, _ = policyRunner(func(ctx context.Context) (any, error) {
 					return nil, errors.New("fake error")
 				})
 			},
@@ -371,7 +408,7 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 				for range 2 {
 					policyRunner := resiliency.NewRunner[any](t.Context(), policyDef)
-					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+					_, _ = policyRunner(func(ctx context.Context) (any, error) {
 						return nil, errors.New("fake error")
 					})
 				}
@@ -393,12 +430,12 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
 				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 				policyRunner := resiliency.NewRunner[any](t.Context(), policyDef)
-				_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+				_, _ = policyRunner(func(ctx context.Context) (any, error) {
 					time.Sleep(500 * time.Millisecond)
 					return nil, errors.New("fake error")
 				})
 				policyRunner = resiliency.NewRunner[any](t.Context(), policyDef)
-				_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+				_, _ = policyRunner(func(ctx context.Context) (any, error) {
 					return nil, errors.New("fake error")
 				})
 			},
@@ -422,15 +459,15 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 				for range 2 {
 					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 					policyRunner := resiliency.NewRunner[any](t.Context(), policyDef)
-					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+					_, _ = policyRunner(func(ctx context.Context) (any, error) {
 						return nil, errors.New("fake error")
 					})
 				}
-				// let the circuit breaker to go to half open state (5x cb timeout) and then return success to close it
-				time.Sleep(1000 * time.Millisecond)
+				// let the circuit breaker go to half open state (>5x cb timeout) and then return success to close it
+				time.Sleep(6 * testCBTimeout)
 				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 				policyRunner := resiliency.NewRunner[any](t.Context(), policyDef)
-				_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+				_, _ = policyRunner(func(ctx context.Context) (any, error) {
 					return nil, nil
 				})
 
@@ -438,7 +475,7 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 				for range 2 {
 					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 					policyRunner := resiliency.NewRunner[any](t.Context(), policyDef)
-					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+					_, _ = policyRunner(func(ctx context.Context) (any, error) {
 						return nil, errors.New("fake error")
 					})
 				}
@@ -458,23 +495,28 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			cleanupRegisteredViews()
-			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(testAppID))
+			meter := view.NewMeter()
+			meter.Start()
+			t.Cleanup(func() {
+				meter.Stop()
+			})
+			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(meter, testAppID))
 			test.unitFn()
-			rows, err := view.RetrieveData(resiliencyActivationViewName)
+			rows, err := meter.RetrieveData(resiliencyActivationViewName)
 			require.NoError(t, err)
 			require.Len(t, rows, test.wantNumberOfRows)
 			if test.wantNumberOfRows == 0 {
 				return
 			}
 
-			wantedTags := []tag.Tag{
+			wantedTags := make([]tag.Tag, 0, 5+len(test.wantTags))
+			wantedTags = append(wantedTags,
 				diag.NewTag("app_id", testAppID),
 				diag.NewTag("name", testResiliencyName),
 				diag.NewTag("namespace", testResiliencyNamespace),
 				diag.NewTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
 				diag.NewTag(diag.TargetKey.Name(), diag.ResiliencyAppTarget("fakeApp")),
-			}
+			)
 			wantedTags = append(wantedTags, test.wantTags...)
 			for _, wantTag := range wantedTags {
 				diag.RequireTagExist(t, rows, wantTag)
@@ -515,11 +557,15 @@ func createDefaultTestResiliency(resiliencyName string, resiliencyNamespace stri
 
 func TestResiliencyLoadedMonitoring(t *testing.T) {
 	t.Run(resiliencyLoadedViewName, func(t *testing.T) {
-		cleanupRegisteredViews()
-		require.NoError(t, diag.DefaultResiliencyMonitoring.Init(testAppID))
+		meter := view.NewMeter()
+		meter.Start()
+		t.Cleanup(func() {
+			meter.Stop()
+		})
+		require.NoError(t, diag.DefaultResiliencyMonitoring.Init(meter, testAppID))
 		_ = createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStoreName")
 
-		rows, err := view.RetrieveData(resiliencyLoadedViewName)
+		rows, err := meter.RetrieveData(resiliencyLoadedViewName)
 
 		require.NoError(t, err)
 		require.Len(t, rows, 1)
@@ -550,7 +596,7 @@ func newTestDefaultResiliencyConfig(resiliencyName, resiliencyNamespace string) 
 					"DefaultComponentInboundRetryPolicy": {
 						Policy:     "constant",
 						Duration:   "10ms",
-						MaxRetries: ptr.Of(3),
+						MaxRetries: new(3),
 					},
 				},
 				Timeouts: map[string]string{
@@ -576,13 +622,13 @@ func newTestResiliencyConfig(resiliencyName, resiliencyNamespace, appName, actor
 					"testRetry": {
 						Policy:     "constant",
 						Duration:   "10ms",
-						MaxRetries: ptr.Of(3),
+						MaxRetries: new(3),
 					},
 				},
 				CircuitBreakers: map[string]resiliencyV1alpha.CircuitBreaker{
 					"testCB": {
 						Interval:    "0",
-						Timeout:     "100ms",
+						Timeout:     testCBTimeoutStr,
 						Trip:        "consecutiveFailures > 4",
 						MaxRequests: 1,
 					},

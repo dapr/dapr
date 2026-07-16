@@ -25,10 +25,12 @@ import (
 
 	"golang.org/x/net/http2"
 
+	"github.com/dapr/dapr/pkg/actors/callbackstream"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	httpendpapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
+	grpcchannel "github.com/dapr/dapr/pkg/channel/grpc"
 	channelhttp "github.com/dapr/dapr/pkg/channel/http"
 	compmiddlehttp "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
@@ -67,7 +69,13 @@ type Options struct {
 	// ReadBufferSize is the read buffer size, in bytes
 	ReadBufferSize int
 
-	GRPC *manager.Manager
+	GRPC        *manager.Manager
+	AppAPIToken string
+
+	// ActorCallbackStream is the runtime-owned stream manager attached to
+	// the gRPC app channel, if any. Its event loop is driven by the
+	// runtime's RunnerCloserManager.
+	ActorCallbackStream *callbackstream.Manager
 }
 
 type Channels struct {
@@ -80,7 +88,9 @@ type Channels struct {
 	appMiddlware        middleware.HTTP
 	httpClient          *http.Client
 	grpc                *manager.Manager
+	actorCallbackStream *callbackstream.Manager
 
+	appAPIToken     string
 	appChannel      channel.AppChannel
 	endpChannels    map[string]channel.HTTPEndpointAppChannel
 	httpEndpChannel channel.AppChannel
@@ -97,6 +107,8 @@ func New(opts Options) *Channels {
 		maxRequestBodySize:  opts.MaxRequestBodySize,
 		appMiddlware:        opts.AppMiddleware,
 		grpc:                opts.GRPC,
+		actorCallbackStream: opts.ActorCallbackStream,
+		appAPIToken:         opts.AppAPIToken,
 		httpClient:          appHTTPClient(opts.AppConnectionConfig, opts.GlobalConfig, opts.ReadBufferSize),
 		endpChannels:        make(map[string]channel.HTTPEndpointAppChannel),
 	}
@@ -133,6 +145,7 @@ func (c *Channels) Refresh() error {
 		if err != nil {
 			return fmt.Errorf("failed to create HTTP app channel: %w", err)
 		}
+
 		appChannel.(*channelhttp.Channel).SetAppHealthCheckPath(c.appConnectionConfig.HealthCheckHTTPPath)
 	} else {
 		// create gRPC app channel
@@ -140,9 +153,16 @@ func (c *Channels) Refresh() error {
 		if err != nil {
 			return fmt.Errorf("failed to create gRPC app channel: %w", err)
 		}
+		// Inject the runtime-owned actor callback stream manager so the
+		// gRPC API handler and the actor transport can route over the
+		// SubscribeActorEventsAlpha1 stream.
+		if gc, ok := appChannel.(*grpcchannel.Channel); ok && c.actorCallbackStream != nil {
+			gc.SetActorCallbackStream(c.actorCallbackStream)
+		}
 	}
 
 	c.appChannel = appChannel
+
 	log.Debug("Channels refreshed")
 
 	return nil
@@ -151,18 +171,29 @@ func (c *Channels) Refresh() error {
 func (c *Channels) AppChannel() channel.AppChannel {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	return c.appChannel
+}
+
+// ActorCallbackStream returns the runtime-owned actor callback stream
+// manager. It is available even when no app channel exists (no app-port
+// configured): apps hosting actors over SubscribeActorEventsAlpha1 dial
+// daprd themselves and do not need to listen on any port.
+func (c *Channels) ActorCallbackStream() *callbackstream.Manager {
+	return c.actorCallbackStream
 }
 
 func (c *Channels) HTTPEndpointsAppChannel() channel.HTTPEndpointAppChannel {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	return c.httpEndpChannel
 }
 
 func (c *Channels) EndpointChannels() map[string]channel.HTTPEndpointAppChannel {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	return c.endpChannels
 }
 
@@ -195,6 +226,7 @@ func (c *Channels) appHTTPChannelConfig() channelhttp.ChannelConfiguration {
 
 	conf.Endpoint = c.AppHTTPEndpoint()
 	conf.Client = c.httpClient
+	conf.AppAPIToken = c.appAPIToken
 
 	return conf
 }
@@ -216,7 +248,7 @@ func (c *Channels) initEndpointChannels() (map[string]channel.HTTPEndpointAppCha
 				return nil, err
 			}
 
-			channels[e.ObjectMeta.Name] = ch
+			channels[e.Name] = ch
 		}
 	}
 
@@ -239,7 +271,7 @@ func (c *Channels) getHTTPEndpointAppChannel(endpoint httpendpapi.HTTPEndpoint) 
 		caCertPool := x509.NewCertPool()
 
 		if !caCertPool.AppendCertsFromPEM([]byte(ca)) {
-			return channelhttp.ChannelConfiguration{}, fmt.Errorf("failed to add root cert to cert pool for http endpoint %s", endpoint.ObjectMeta.Name)
+			return channelhttp.ChannelConfiguration{}, fmt.Errorf("failed to add root cert to cert pool for http endpoint %s", endpoint.Name)
 		}
 
 		tlsConfig = &tls.Config{
@@ -251,12 +283,13 @@ func (c *Channels) getHTTPEndpointAppChannel(endpoint httpendpapi.HTTPEndpoint) 
 	if endpoint.HasTLSPrivateKey() {
 		cert, err := tls.X509KeyPair([]byte(endpoint.Spec.ClientTLS.Certificate.Value.String()), []byte(endpoint.Spec.ClientTLS.PrivateKey.Value.String()))
 		if err != nil {
-			return channelhttp.ChannelConfiguration{}, fmt.Errorf("failed to load client certificate for http endpoint %s: %w", endpoint.ObjectMeta.Name, err)
+			return channelhttp.ChannelConfiguration{}, fmt.Errorf("failed to load client certificate for http endpoint %s: %w", endpoint.Name, err)
 		}
 
 		if tlsConfig == nil {
 			tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 		}
+
 		tlsConfig.Certificates = []tls.Certificate{cert}
 	}
 
@@ -269,7 +302,7 @@ func (c *Channels) getHTTPEndpointAppChannel(endpoint httpendpapi.HTTPEndpoint) 
 		case commonapi.NegotiateFreelyAsClient:
 			tlsConfig.Renegotiation = tls.RenegotiateFreelyAsClient
 		default:
-			return channelhttp.ChannelConfiguration{}, fmt.Errorf("invalid renegotiation value %s for http endpoint %s", *endpoint.Spec.ClientTLS.Renegotiation, endpoint.ObjectMeta.Name)
+			return channelhttp.ChannelConfiguration{}, fmt.Errorf("invalid renegotiation value %s for http endpoint %s", *endpoint.Spec.ClientTLS.Renegotiation, endpoint.Name)
 		}
 	}
 

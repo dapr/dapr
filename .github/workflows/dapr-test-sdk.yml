@@ -95,7 +95,7 @@ jobs:
             Commit ref: ${{ env.CHECKOUT_REF }}
 
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
@@ -105,20 +105,22 @@ jobs:
           python-version: "3.9"
       - name: "Set up Go"
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
       - name: Checkout python-sdk repo to run tests.
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: dapr/python-sdk
           path: python-sdk
       - name: Set up Dapr CLI
-        run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s
+        uses: dapr/.github/.github/actions/setup-dapr-cli@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize Dapr runtime
-        run: |
-          dapr uninstall --all
-          dapr init
+        uses: dapr/.github/.github/actions/setup-dapr-runtime@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and override daprd
         run: |
           make
@@ -227,7 +229,7 @@ jobs:
 
             Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
@@ -238,20 +240,22 @@ jobs:
           java-version: ${{ env.JDK_VER }}
       - name: "Set up Go"
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
       - name: Checkout java-sdk repo to run tests.
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: dapr/java-sdk
           path: java-sdk
       - name: Set up Dapr CLI
-        run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s
+        uses: dapr/.github/.github/actions/setup-dapr-cli@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize Dapr runtime
-        run: |
-          dapr uninstall --all
-          dapr init
+        uses: dapr/.github/.github/actions/setup-dapr-runtime@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and override daprd
         run: |
           make
@@ -403,7 +407,7 @@ jobs:
 
             Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
@@ -413,20 +417,22 @@ jobs:
           node-version: ${{ env.NODE_VER }}
       - name: "Set up Go"
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
       - name: Checkout js-sdk repo to run tests.
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: dapr/js-sdk
           path: js-sdk
       - name: Set up Dapr CLI
-        run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s
+        uses: dapr/.github/.github/actions/setup-dapr-cli@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize Dapr runtime
-        run: |
-          dapr uninstall --all
-          dapr init
+        uses: dapr/.github/.github/actions/setup-dapr-runtime@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and override daprd
         run: |
           make
@@ -532,13 +538,13 @@ jobs:
 
             Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
       - name: "Set up Go"
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
       - name: Set up Python 3.9
@@ -546,7 +552,7 @@ jobs:
         with:
           python-version: 3.9
       - name: Checkout go-sdk repo to run tests.
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: dapr/go-sdk
           path: go-sdk
@@ -556,11 +562,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install mechanical-markdown
       - name: Set up Dapr CLI
-        run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s
+        uses: dapr/.github/.github/actions/setup-dapr-cli@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize Dapr runtime
-        run: |
-          dapr uninstall --all
-          dapr init
+        uses: dapr/.github/.github/actions/setup-dapr-runtime@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and override daprd with HEAD.
         run: |
           make

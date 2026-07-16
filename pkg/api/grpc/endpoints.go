@@ -43,6 +43,7 @@ var endpoints = map[string][]string{
 	},
 	"publish.v1": {
 		daprRuntimePrefix + "v1.Dapr/PublishEvent",
+		daprRuntimePrefix + "v1.Dapr/BulkPublishEvent",
 	},
 	"publish.v1alpha1": {
 		daprRuntimePrefix + "v1.Dapr/BulkPublishEventAlpha1",
@@ -58,10 +59,16 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/RegisterActorTimer",
 		daprRuntimePrefix + "v1.Dapr/UnregisterActorTimer",
 		daprRuntimePrefix + "v1.Dapr/RegisterActorReminder",
+		daprRuntimePrefix + "v1.Dapr/GetActorReminder",
 		daprRuntimePrefix + "v1.Dapr/UnregisterActorReminder",
+		daprRuntimePrefix + "v1.Dapr/UnregisterActorRemindersByType",
+		daprRuntimePrefix + "v1.Dapr/ListActorReminders",
 		daprRuntimePrefix + "v1.Dapr/GetActorState",
 		daprRuntimePrefix + "v1.Dapr/ExecuteActorStateTransaction",
 		daprRuntimePrefix + "v1.Dapr/InvokeActor",
+	},
+	"actors.v1alpha1": {
+		daprRuntimePrefix + "v1.Dapr/SubscribeActorEventsAlpha1",
 	},
 	"metadata.v1": {
 		daprRuntimePrefix + "v1.Dapr/GetMetadata",
@@ -118,6 +125,15 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/ScheduleJobAlpha1",
 		daprRuntimePrefix + "v1.Dapr/DeleteJobAlpha1",
 		daprRuntimePrefix + "v1.Dapr/GetJobAlpha1",
+		daprRuntimePrefix + "v1.Dapr/DeleteJobsByPrefixAlpha1",
+		daprRuntimePrefix + "v1.Dapr/ListJobsAlpha1",
+	},
+	"jobs.v1": {
+		daprRuntimePrefix + "v1.Dapr/ScheduleJob",
+		daprRuntimePrefix + "v1.Dapr/DeleteJob",
+		daprRuntimePrefix + "v1.Dapr/GetJob",
+		daprRuntimePrefix + "v1.Dapr/DeleteJobsByPrefix",
+		daprRuntimePrefix + "v1.Dapr/ListJobs",
 	},
 	"shutdown.v1": {
 		daprRuntimePrefix + "v1.Dapr/Shutdown",
@@ -127,6 +143,9 @@ var endpoints = map[string][]string{
 	},
 	"conversation.v1alpha1": {
 		daprRuntimePrefix + "v1.Dapr/ConverseAlpha1",
+	},
+	"conversation.v1alpha2": {
+		daprRuntimePrefix + "v1.Dapr/ConverseAlpha2",
 	},
 }
 

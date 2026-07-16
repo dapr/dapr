@@ -26,9 +26,7 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	admissionv1 "k8s.io/api/admission/v1"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -37,7 +35,6 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/injector/annotations"
-	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
 	"github.com/dapr/kit/logger"
 )
 
@@ -73,13 +70,14 @@ type Injector interface {
 }
 
 type Options struct {
-	AuthUIDs      []string
-	Config        Config
-	DaprClient    scheme.Interface
-	KubeClient    kubernetes.Interface
-	Port          int
-	ListenAddress string
-	Healthz       healthz.Healthz
+	AuthUIDs         []string
+	Config           Config
+	DaprClient       scheme.Interface
+	KubeClient       kubernetes.Interface
+	Port             int
+	ListenAddress    string
+	Healthz          healthz.Healthz
+	SchedulerEnabled bool
 
 	ControlPlaneNamespace   string
 	ControlPlaneTrustDomain string
@@ -98,10 +96,10 @@ type injector struct {
 	controlPlaneTrustDomain string
 	currentTrustAnchors     currentTrustAnchorsFn
 	sentrySPIFFEID          spiffeid.ID
-	schedulerReplicaCount   int
+	schedulerEnabled        bool
 
 	htarget              healthz.Target
-	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
+	namespaceNameMatcher func(namespace, name string) bool
 	running              atomic.Bool
 }
 
@@ -161,9 +159,22 @@ func NewInjector(opts Options) (Injector, error) {
 		controlPlaneNamespace:   opts.ControlPlaneNamespace,
 		controlPlaneTrustDomain: opts.ControlPlaneTrustDomain,
 		htarget:                 opts.Healthz.AddTarget("injector-service"),
+		schedulerEnabled:        opts.SchedulerEnabled,
 	}
 
-	matcher, err := createNamespaceNameMatcher(opts.Config.AllowedServiceAccountsPrefixNames)
+	// All service account entries are matched using glob syntax (*, ?, [...]).
+	// This is backwards-compatible because exact names and trailing-* prefixes
+	// are valid glob patterns with identical semantics.
+	patterns := []string{}
+	patterns = append(patterns, AllowedServiceAccountInfos...)
+	if opts.Config.AllowedServiceAccounts != "" {
+		patterns = append(patterns, strings.Split(opts.Config.AllowedServiceAccounts, ",")...)
+	}
+	if opts.Config.AllowedServiceAccountsPrefixNames != "" {
+		log.Warn("ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES is deprecated; use ALLOWED_SERVICE_ACCOUNTS instead, which now supports glob patterns")
+		patterns = append(patterns, strings.Split(opts.Config.AllowedServiceAccountsPrefixNames, ",")...)
+	}
+	matcher, err := NewServiceAccountMatcher(patterns...)
 	if err != nil {
 		return nil, err
 	}
@@ -173,19 +184,13 @@ func NewInjector(opts Options) (Injector, error) {
 	return i, nil
 }
 
-func createNamespaceNameMatcher(allowedPrefix string) (matcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher, err error) {
-	allowedPrefix = strings.TrimSpace(allowedPrefix)
-	if allowedPrefix != "" {
-		matcher, err = namespacednamematcher.CreateFromString(allowedPrefix)
-		if err != nil {
-			return nil, err
-		}
-		log.Debugf("Sidecar injector configured to allowed serviceaccounts prefixed by: %s", allowedPrefix)
-	}
-	return matcher, nil
-}
-
-// AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
+// AllowedControllersServiceAccountUID returns an array of UID, list of allowed
+// service account on the webhook handler.
+// NOTE: These UIDs overlap with the name-based matcher built in NewInjector via
+// NewServiceAccountMatcher only for exact "namespace:name" entries (including
+// those in AllowedServiceAccountInfos). Glob/pattern-based matches are handled
+// solely by the matcher; this UID-based path is kept as defense-in-depth for
+// isAuthorizedUser.
 func AllowedControllersServiceAccountUID(ctx context.Context, cfg Config, kubeClient kubernetes.Interface) ([]string, error) {
 	allowedList := []string{}
 	if cfg.AllowedServiceAccounts != "" {
@@ -213,7 +218,7 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 		found := false
 		for _, sa := range serviceaccounts.Items {
 			if sa.Namespace == serviceAccountInfo[0] && sa.Name == serviceAccountInfo[1] {
-				allowedUids = append(allowedUids, string(sa.ObjectMeta.UID))
+				allowedUids = append(allowedUids, string(sa.UID))
 				found = true
 				break
 			}
@@ -233,35 +238,6 @@ func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, sentryID spif
 
 	i.currentTrustAnchors = currentTrustAnchors
 	i.sentrySPIFFEID = sentryID
-
-	for {
-		var sched *appsv1.StatefulSet
-		sched, err := i.kubeClient.AppsV1().StatefulSets(i.controlPlaneNamespace).Get(ctx, "dapr-scheduler-server", metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			log.Warnf("%s/dapr-scheduler-server StatefulSet not found, retrying in 5 seconds", i.controlPlaneNamespace)
-			select {
-			case <-time.After(5 * time.Second):
-				continue
-			case <-ctx.Done():
-				return fmt.Errorf("%s/dapr-scheduler-server StatefulSet not found", i.controlPlaneNamespace)
-			}
-		}
-
-		if err != nil {
-			return fmt.Errorf("error getting dapr-scheduler-server StatefulSet: %w", err)
-		}
-
-		if sched.Spec.Replicas == nil {
-			return errors.New("dapr-scheduler-server StatefulSet has no replicas")
-		}
-
-		i.schedulerReplicaCount = int(*sched.Spec.Replicas)
-		break
-	}
-
-	if i.schedulerReplicaCount > 0 {
-		log.Infof("Found dapr-scheduler-server StatefulSet %v replicas", i.schedulerReplicaCount)
-	}
 
 	ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", i.port), tlsConfig)
 	if err != nil {

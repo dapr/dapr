@@ -55,6 +55,7 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 	psName := s.pubsubName
 	route := s.route
 	topic := s.topic
+
 	namespacedConsumer := s.pubsub.NamespaceScoped
 	if namespacedConsumer {
 		subscribeTopic = s.namespace + s.topic
@@ -86,24 +87,35 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 			PsName:          psName,
 			Topic:           topic,
 		}
+
 		rawPayload, err := metadata.IsRawPayload(route.Metadata)
 		if err != nil {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
-			if dlqErr := s.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, true, route); dlqErr != nil {
+
+			dlqErr := s.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, true, route)
+			if dlqErr != nil {
 				todo.PopulateAllBulkResponsesWithError(msg, &bulkResponses, err)
 				todo.ReportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
+
 				return bulkResponses, err
 			}
+
 			todo.ReportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
+
 			return nil, nil
 		}
+
 		hasAnyError := false
+
 		for i, message := range msg.Entries {
-			if entryIdErr := todo.ValidateEntryId(message.EntryId, i); entryIdErr != nil { //nolint:stylecheck
+			entryIdErr := todo.ValidateEntryId(message.EntryId, i)
+			if entryIdErr != nil { //nolint:stylecheck
 				bulkResponses[i].Error = entryIdErr
 				hasAnyError = true
+
 				continue
 			}
+
 			entryIdIndexMap[message.EntryId] = i
 			if rawPayload {
 				rPath, routeErr := s.getRouteIfProcessable(ctx, &bulkSubCallData, route, &(msg.Entries[i]), i, string(message.Event))
@@ -111,24 +123,31 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 					hasAnyError = true
 					continue
 				}
+
 				dataB64 := base64.StdEncoding.EncodeToString(message.Event)
 				if message.ContentType == "" {
 					message.ContentType = "application/octet-stream"
 				}
+
 				todo.PopulateBulkSubcribedMessage(&(msg.Entries[i]), dataB64, &routePathBulkMessageMap, rPath, i, msg, false, psName, message.ContentType, namespacedConsumer, s.namespace)
 			} else {
-				var cloudEvent map[string]interface{}
+				var cloudEvent map[string]any
+
 				err = json.Unmarshal(message.Event, &cloudEvent)
 				if err != nil {
 					log.Errorf("error deserializing one of the messages in bulk cloud event in pubsub %s and topic %s: %s", psName, topic, err)
 					bulkResponses[i].Error = err
 					bulkResponses[i].EntryId = message.EntryId
 					hasAnyError = true
+
 					continue
 				}
+
 				if contribpubsub.HasExpired(cloudEvent) {
 					log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[contribpubsub.IDField], cloudEvent[contribpubsub.ExpirationField])
+
 					bulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)]++
+
 					if route.DeadLetterTopic != "" {
 						_ = s.sendToDeadLetter(ctx, psName, &contribpubsub.NewMessage{
 							Data:        message.Event,
@@ -137,22 +156,29 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 							ContentType: &msg.Entries[i].ContentType,
 						}, route.DeadLetterTopic)
 					}
+
 					bulkResponses[i].EntryId = message.EntryId
 					bulkResponses[i].Error = nil
+
 					continue
 				}
+
 				rPath, routeErr := s.getRouteIfProcessable(ctx, &bulkSubCallData, route, &(msg.Entries[i]), i, cloudEvent)
 				if routeErr != nil {
 					hasAnyError = true
 					continue
 				}
+
 				if message.ContentType == "" {
 					message.ContentType = contenttype.CloudEventContentType
 				}
+
 				todo.PopulateBulkSubcribedMessage(&(msg.Entries[i]), cloudEvent, &routePathBulkMessageMap, rPath, i, msg, true, psName, message.ContentType, namespacedConsumer, s.namespace)
 			}
 		}
+
 		var overallInvokeErr error
+
 		for path, psm := range routePathBulkMessageMap {
 			invokeErr := s.createEnvelopeAndInvokeSubscriber(ctx, &bulkSubCallData, psm, msg, route, path, policyDef, rawPayload)
 			if invokeErr != nil {
@@ -161,24 +187,36 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 				overallInvokeErr = invokeErr
 			}
 		}
+
 		if errors.Is(overallInvokeErr, context.Canceled) {
 			todo.ReportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
 			return bulkResponses, overallInvokeErr
 		}
+
 		if hasAnyError {
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
 			bulkSubDiag.RetryReported = true
-			if dlqErr := s.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, false, route); dlqErr != nil {
+			dlqErr := s.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, false, route)
+			if dlqErr != nil {
 				todo.ReportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
 				return bulkResponses, err
 			}
+
 			todo.ReportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
+
 			return nil, nil
 		}
+
 		todo.ReportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
+
 		return bulkResponses, err
 	}
+
+	// BulkSubscribe establishes the consumer connection directly (it does not run
+	// through a policy Runner), so attach the workload's SPIFFE identity to its
+	// context here just as the Runner does for other component operations.
+	ctx = policyDef.ComponentContext(ctx)
 
 	if bulkSubscriber, ok := s.pubsub.Component.(contribpubsub.BulkSubscriber); ok {
 		return bulkSubscriber.BulkSubscribe(ctx, req, bulkHandler)
@@ -193,31 +231,38 @@ func (s *Subscription) sendBulkToDLQIfConfigured(ctx context.Context, bulkSubCal
 ) error {
 	bscData := *bulkSubCallData
 	if route.DeadLetterTopic != "" {
-		if dlqErr := s.sendBulkToDeadLetter(ctx, bulkSubCallData, msg, route.DeadLetterTopic, sendAllEntries); dlqErr == nil {
+		dlqErr := s.sendBulkToDeadLetter(ctx, bulkSubCallData, msg, route.DeadLetterTopic, sendAllEntries)
+		if dlqErr == nil {
 			// dlq has been configured and whole bulk of messages is successfully sent to dlq.
 			return nil
 		}
 	}
+
 	if !bscData.BulkSubDiag.RetryReported {
 		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += int64(len(msg.Entries))
 	}
+
 	return errors.New("failed to send to DLQ as DLQ was not configured")
 }
 
 // getRouteIfProcessable returns the route path if the message is processable.
 func (s *Subscription) getRouteIfProcessable(ctx context.Context, bulkSubCallData *todo.BulkSubscribeCallData, route rtpubsub.Subscription, message *contribpubsub.BulkMessageEntry,
-	i int, matchElem interface{},
+	i int, matchElem any,
 ) (string, error) {
 	bscData := *bulkSubCallData
+
 	rPath, shouldProcess, routeErr := findMatchingRoute(route.Rules, matchElem)
 	if routeErr != nil {
 		log.Errorf("Error finding matching route for event in bulk subscribe %s and topic %s for entry id %s: %s", bscData.PsName, bscData.Topic, message.EntryId, routeErr)
 		todo.SetBulkResponseEntry(bscData.BulkResponses, i, message.EntryId, routeErr)
+
 		return "", routeErr
 	}
+
 	if !shouldProcess {
 		// The event does not match any route specified so ignore it.
 		log.Warnf("No matching route for event in pubsub %s and topic %s; skipping", bscData.PsName, bscData.Topic)
+
 		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)]++
 		if route.DeadLetterTopic != "" {
 			_ = s.sendToDeadLetter(ctx, bscData.PsName, &contribpubsub.NewMessage{
@@ -227,9 +272,12 @@ func (s *Subscription) getRouteIfProcessable(ctx context.Context, bulkSubCallDat
 				ContentType: &message.ContentType,
 			}, route.DeadLetterTopic)
 		}
+
 		todo.SetBulkResponseEntry(bscData.BulkResponses, i, message.EntryId, nil)
+
 		return "", nil
 	}
+
 	return rPath, nil
 }
 
@@ -239,11 +287,14 @@ func (s *Subscription) createEnvelopeAndInvokeSubscriber(ctx context.Context, bu
 	rawPayload bool,
 ) error {
 	bscData := *bulkSubCallData
+
 	var id string
+
 	idObj, err := uuid.NewRandom()
 	if err != nil {
 		id = idObj.String()
 	}
+
 	psm.PubSubMessages = psm.PubSubMessages[:psm.Length]
 	psm.Path = path
 	envelope := rtpubsub.NewBulkSubscribeEnvelope(&rtpubsub.BulkSubscribeEnvelope{
@@ -254,6 +305,7 @@ func (s *Subscription) createEnvelopeAndInvokeSubscriber(ctx context.Context, bu
 	})
 	_, e := s.applyBulkSubscribeResiliency(ctx, bulkSubCallData, psm, route.DeadLetterTopic,
 		path, policyDef, rawPayload, envelope)
+
 	return e
 }
 
@@ -269,6 +321,7 @@ func (s *Subscription) sendBulkToDeadLetter(ctx context.Context,
 		data = msg.Entries
 	} else {
 		n := 0
+
 		for _, message := range msg.Entries {
 			entryId := (*bscData.EntryIdIndexMap)[message.EntryId] //nolint:stylecheck
 			if (*bscData.BulkResponses)[entryId].Error != nil {
@@ -276,12 +329,15 @@ func (s *Subscription) sendBulkToDeadLetter(ctx context.Context,
 				n++
 			}
 		}
+
 		data = data[:n]
 	}
+
 	bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)] += int64(len(data))
 	if bscData.BulkSubDiag.RetryReported {
 		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] -= int64(len(data))
 	}
+
 	req := &contribpubsub.BulkPublishRequest{
 		Entries:    data,
 		PubsubName: bscData.PsName,
@@ -289,9 +345,20 @@ func (s *Subscription) sendBulkToDeadLetter(ctx context.Context,
 		Metadata:   msg.Metadata,
 	}
 
-	_, err := s.adapter.BulkPublish(ctx, req)
+	// Skip the DLQ publish if the parent was explicitly canceled (e.g.
+	// shutdown), otherwise detaching the deadline below could block for up
+	// to deadLetterPublishTimeout during shutdown. See the matching helper
+	// in pkg/runtime/subscription/subscription.go for why an inherited
+	// inbound-handler deadline cannot be used for the publish itself.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return ctx.Err()
+	}
+	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deadLetterPublishTimeout)
+	defer cancel()
+
+	_, err := s.adapter.BulkPublish(pubCtx, req, rtpubsub.TransportModeGRPC)
 	if err != nil {
-		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
+		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 	}
 
 	return err

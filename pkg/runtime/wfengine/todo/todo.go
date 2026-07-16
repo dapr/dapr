@@ -24,12 +24,24 @@ const (
 	// TODO: @joshvanl: remove
 	CallbackChannelProperty = "dapr.callback"
 
-	CreateWorkflowInstanceMethod = "CreateWorkflowInstance"
-	AddWorkflowEventMethod       = "AddWorkflowEvent"
-	PurgeWorkflowStateMethod     = "PurgeWorkflowState"
-	WaitForRuntimeStatus         = "WaitForRuntimeStatus"
-	ForkWorkflowHistory          = "ForkWorkflowHistory"
-	RerunWorkflowInstance        = "RerunWorkflowInstance"
+	CreateWorkflowInstanceMethod      = "CreateWorkflowInstance"
+	AddWorkflowEventMethod            = "AddWorkflowEvent"
+	PurgeWorkflowStateMethod          = "PurgeWorkflowState"
+	RecursivePurgeWorkflowStateMethod = "RecursivePurgeWorkflowState"
+	WaitForRuntimeStatus              = "WaitForRuntimeStatus"
+	ForkWorkflowHistory               = "ForkWorkflowHistory"
+	RerunWorkflowInstance             = "RerunWorkflowInstance"
+	ExecuteActivityMethod             = "Execute"
+
+	MetadataActivityReminderDueTime = "dueTime"
+	MetadataPurgeRetentionCall      = "PurgeRetentionCall"
+	MetadataPurgeForce              = "PurgeForce"
+	// Set on a WaitForRuntimeStatus call to request that a terminal workflow
+	// also verify all of its child workflows, recursively, are terminal
+	// before replying. Ignored by daprds that predate the flag.
+	MetadataCheckSubtreeTerminal = "CheckSubtreeTerminal"
+
+	ActorTypePrefix = "dapr.internal."
 )
 
 var (
@@ -37,10 +49,10 @@ var (
 	ErrDuplicateInvocation = errors.New("duplicate invocation")
 )
 
-// WorkflowScheduler is a func interface for pushing workflow (orchestration) work items into the backend
-type WorkflowScheduler func(ctx context.Context, wi *backend.OrchestrationWorkItem) error
+// WorkflowScheduler is a func interface for pushing workflow (orchestration) work items into the durabletask backend
+type WorkflowScheduler func(ctx context.Context, wi *backend.WorkflowWorkItem) error
 
-// ActivityScheduler is a func interface for pushing activity work items into the backend
+// ActivityScheduler is a func interface for pushing activity work items into the durabletask backend
 type ActivityScheduler func(ctx context.Context, wi *backend.ActivityWorkItem) error
 
 type RunCompleted bool

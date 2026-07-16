@@ -46,7 +46,7 @@ func (f *failed) Setup(t *testing.T) []framework.Option {
 func (f *failed) Run(t *testing.T, ctx context.Context) {
 	f.workflow.WaitUntilRunning(t, ctx)
 
-	f.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	f.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, ctx.CallActivity("bar").Await(nil)
 	})
 	f.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
@@ -55,15 +55,15 @@ func (f *failed) Run(t *testing.T, ctx context.Context) {
 
 	client := f.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
+	id, err := client.ScheduleNewWorkflow(ctx, "foo", api.WithInstanceID("abc"))
 	require.NoError(t, err)
-	meta, err := client.WaitForOrchestrationCompletion(ctx, id)
+	meta, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_FAILED, meta.GetRuntimeStatus())
 
 	newID, err := client.RerunWorkflowFromEvent(ctx, id, 0)
 	require.NoError(t, err)
-	meta, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	meta, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_FAILED, meta.GetRuntimeStatus())
 }

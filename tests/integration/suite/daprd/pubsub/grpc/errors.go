@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -179,7 +179,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 		require.NotNil(t, resInfo, "ResourceInfo should be present")
 		require.Equal(t, "pubsub", resInfo.GetResourceType())
-		require.Equal(t, "", resInfo.GetResourceName())
+		require.Empty(t, resInfo.GetResourceName())
 		require.Empty(t, resInfo.GetOwner())
 	})
 
@@ -338,7 +338,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 			},
 			Metadata: nil,
 		}
-		_, err := client.BulkPublishEventAlpha1(ctx, req)
+		_, err := client.BulkPublishEvent(ctx, req)
 
 		require.Error(t, err)
 
@@ -376,7 +376,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("pubsub outbox", func(t *testing.T) {
 		name := "state-outbox"
-		ops := make([]*rtv1.TransactionalStateOperation, 0)
+		ops := make([]*rtv1.TransactionalStateOperation, 0, 2)
 		ops = append(ops, &rtv1.TransactionalStateOperation{
 			OperationType: "upsert",
 			Request: &commonv1.StateItem{

@@ -31,16 +31,13 @@ import (
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/dapr/dapr/tests/runner/loadtest"
 	"github.com/dapr/dapr/tests/runner/summary"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
 	tr            *runner.TestRunner
 	appNamePrefix = "perf-workflowsapp"
+	appName       string // actual app name including backend suffix
 )
 
 type K6RunConfig struct {
@@ -53,37 +50,27 @@ type K6RunConfig struct {
 
 func TestMain(m *testing.M) {
 	backend := os.Getenv("DAPR_PERF_WORKFLOW_BACKEND_NAME")
+	appName = appNamePrefix + backend
 
 	utils.SetupLogs("workflow_test")
 	testApps := []kube.AppDescription{
 		{
-			AppName:           appNamePrefix + backend,
+			AppName:           appName,
 			DaprEnabled:       true,
 			ImageName:         "perf-workflowsapp",
 			Replicas:          1,
 			IngressEnabled:    true,
 			IngressPort:       3000,
 			MetricsEnabled:    true,
-			DaprMemoryLimit:   "800Mi",
-			DaprMemoryRequest: "800Mi",
-			AppMemoryLimit:    "800Mi",
-			AppMemoryRequest:  "800Mi",
-			AppPort:           -1,
-		},
-		{
-			AppName:           appNamePrefix + backend + "-scheduler",
-			DaprEnabled:       true,
-			ImageName:         "perf-workflowsapp",
-			Replicas:          1,
-			IngressEnabled:    true,
-			IngressPort:       3000,
-			MetricsEnabled:    true,
-			DaprMemoryLimit:   "800Mi",
-			DaprMemoryRequest: "800Mi",
-			AppMemoryLimit:    "800Mi",
-			AppMemoryRequest:  "800Mi",
-			AppPort:           -1,
-			Config:            "featureactorreminderscheduler",
+			DaprCPULimit:      "1.0",
+			DaprCPURequest:    "0.5",
+			DaprMemoryLimit:   "2Gi",
+			DaprMemoryRequest: "1Gi",
+			AppCPULimit:       "2.0",
+			AppCPURequest:     "1.0",
+			AppMemoryLimit:    "2Gi",
+			AppMemoryRequest:  "1Gi",
+			AppPort:           3000,
 		},
 	}
 
@@ -111,7 +98,7 @@ func runk6test(t *testing.T, config K6RunConfig) *loadtest.K6RunnerMetricsSummar
 	bts, err := json.MarshalIndent(sm, "", " ")
 	require.NoError(t, err)
 	require.True(t, sm.Pass, fmt.Sprintf("test has not passed, results %s", string(bts)))
-	t.Logf("test summary `%s`", string(bts))
+	utils.LogPerfTestSummary(bts)
 	return sm.RunnersResults[0]
 }
 
@@ -122,6 +109,7 @@ func addTestResults(t *testing.T, testName string, testAppName string, result *l
 	require.NoError(t, err)
 	restarts, err := tr.Platform.GetTotalRestarts(testAppName)
 	require.NoError(t, err)
+	utils.LogPerfTestResourceUsage(appUsage, sidecarUsage, restarts, 0)
 
 	return table.
 		OutputInt(testName+"VUs Max", result.VusMax.Values.Max).
@@ -146,30 +134,6 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 		for index2, scenario := range scenarios {
 			subTestName := "[" + strings.ToUpper(scenario) + "]: "
 			t.Run(subTestName, func(t *testing.T) {
-				// restart scheduler if the app is the one using scheduler for reminders under the hood
-				if strings.Contains(testAppName, "-scheduler") {
-					platform, ok := tr.Platform.(*runner.KubeTestPlatform)
-					if !ok {
-						t.Skip("skipping test; only supported on kubernetes")
-					}
-
-					scheme := runtime.NewScheme()
-					require.NoError(t, corev1.AddToScheme(scheme))
-					cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
-					require.NoError(t, err)
-					var pod corev1.Pod
-					err = cl.Get(t.Context(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
-					require.NoError(t, err)
-					err = cl.Delete(t.Context(), &pod)
-					require.NoError(t, err)
-					assert.EventuallyWithT(t, func(c *assert.CollectT) {
-						err = cl.Get(t.Context(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
-						if assert.NoError(c, err) {
-							assert.Equal(c, corev1.PodRunning, pod.Status.Phase)
-						}
-					}, 30*time.Second, time.Millisecond*100)
-				}
-
 				// Re-starting the app to clear previous run's memory
 				if restart {
 					log.Printf("Restarting app %s", testAppName)
@@ -184,8 +148,6 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 
 				// Check if test app endpoint is available
 				require.NoError(t, utils.HealthCheckApps(externalURL))
-
-				time.Sleep(5 * time.Second)
 
 				// Initialize the workflow runtime
 				url := fmt.Sprintf("http://%s/start-workflow-runtime", externalURL)
@@ -211,13 +173,6 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 					table = table.Outputf(subTestName+"Payload Size", "%dKB", int(payloadSize/1000))
 				}
 				table = addTestResults(t, subTestName, testAppName, testResult, table)
-
-				time.Sleep(5 * time.Second)
-
-				// Stop the workflow runtime
-				url = fmt.Sprintf("http://%s/shutdown-workflow-runtime", externalURL)
-				_, err = utils.HTTPGet(url)
-				require.NoError(t, err, "error shutdown workflow runtime")
 			})
 		}
 	}
@@ -231,7 +186,7 @@ func TestWorkflowWithConstantVUs(t *testing.T) {
 	inputs := []string{"100"}
 	scenarios := []string{"t_30_300", "t_30_300", "t_30_300"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
-	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, false, false)
+	testWorkflow(t, workflowName, appName, inputs, scenarios, rateChecks, false, false)
 }
 
 func TestWorkflowWithConstantIterations(t *testing.T) {
@@ -239,7 +194,7 @@ func TestWorkflowWithConstantIterations(t *testing.T) {
 	inputs := []string{"100"}
 	scenarios := []string{"t_30_300", "t_60_300", "t_90_300"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
-	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
+	testWorkflow(t, workflowName, appName, inputs, scenarios, rateChecks, true, false)
 }
 
 // Runs tests for `sum_series_wf` with Max VUs
@@ -248,7 +203,7 @@ func TestSeriesWorkflowWithMaxVUs(t *testing.T) {
 	inputs := []string{"100"}
 	scenarios := []string{"t_350_1400"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1"}}
-	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
+	testWorkflow(t, workflowName, appName, inputs, scenarios, rateChecks, true, false)
 }
 
 // Runs tests for `sum_parallel_wf` with Max VUs
@@ -257,7 +212,7 @@ func TestParallelWorkflowWithMaxVUs(t *testing.T) {
 	inputs := []string{"100"}
 	scenarios := []string{"t_110_440"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1"}}
-	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
+	testWorkflow(t, workflowName, appName, inputs, scenarios, rateChecks, true, false)
 }
 
 // Runs tests for `state_wf` with different Payload
@@ -266,5 +221,14 @@ func TestWorkflowWithDifferentPayloads(t *testing.T) {
 	scenarios := []string{"t_30_300"} // t_workflowCount_iterations
 	inputs := []string{"10000", "50000", "100000"}
 	rateChecks := [][]string{{"rate==1"}, {"rate==1"}, {"rate==1"}}
-	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, true)
+	testWorkflow(t, workflowName, appName, inputs, scenarios, rateChecks, true, true)
+}
+
+// Runs test for delaying workflows: 500 VUs, 10,000 iterations
+func TestDelayWorkflowsAtScale(t *testing.T) {
+	workflowName := "delay_wf"
+	inputs := []string{"5000"}           // delay in milliseconds (5s)
+	scenarios := []string{"t_500_10000"} // t_workflowCount_iterations
+	rateChecks := [][]string{{"rate==1"}}
+	testWorkflow(t, workflowName, appName, inputs, scenarios, rateChecks, true, false)
 }

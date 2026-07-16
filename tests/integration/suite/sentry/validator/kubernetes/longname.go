@@ -15,9 +15,9 @@ package kubernetes
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
 	"strings"
@@ -31,7 +31,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/modes"
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
-	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
@@ -54,10 +54,26 @@ type longname struct {
 }
 
 func (l *longname) Setup(t *testing.T) []framework.Option {
-	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, rootKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
-	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
+	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
+	x509bundle, err := bundle.GenerateX509(bundle.OptionsX509{
+		X509RootKey:      rootKey,
+		TrustDomain:      "integration.test.dapr.io",
+		AllowedClockSkew: time.Second * 20,
+		OverrideCATTL:    nil,
+	})
+	require.NoError(t, err)
+	jwtbundle, err := bundle.GenerateJWT(bundle.OptionsJWT{
+		JWTRootKey:  jwtKey,
+		TrustDomain: "integration.test.dapr.io",
+	})
+	require.NoError(t, err)
+	bundle := bundle.Bundle{
+		X509: x509bundle,
+		JWT:  jwtbundle,
+	}
 
 	kubeAPI1 := utils.KubeAPI(t, utils.KubeAPIOptions{
 		Bundle:         bundle,
@@ -112,12 +128,12 @@ func (l *longname) Run(t *testing.T, ctx context.Context) {
 	conn1 := l.sentry1.DialGRPC(t, ctx, "spiffe://integration.test.dapr.io/ns/sentrynamespace/dapr-sentry")
 	client1 := sentrypbv1.NewCAClient(conn1)
 
-	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, pk, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	csrDer, err := x509.CreateCertificateRequest(rand.Reader, new(x509.CertificateRequest), pk)
 	require.NoError(t, err)
 
-	resp, err := client1.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+	resp, err := client1.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{ //nolint:gosec
 		Id:                        strings.Repeat("n", 253) + ":" + strings.Repeat("s", 253),
 		Namespace:                 strings.Repeat("n", 253),
 		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),
@@ -131,7 +147,7 @@ func (l *longname) Run(t *testing.T, ctx context.Context) {
 	conn2 := l.sentry2.DialGRPC(t, ctx, "spiffe://integration.test.dapr.io/ns/sentrynamespace/dapr-sentry")
 	client2 := sentrypbv1.NewCAClient(conn2)
 
-	resp, err = client2.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+	resp, err = client2.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{ //nolint:gosec
 		Id:                        strings.Repeat("a", 65),
 		Namespace:                 strings.Repeat("n", 253),
 		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),
@@ -145,7 +161,7 @@ func (l *longname) Run(t *testing.T, ctx context.Context) {
 	conn3 := l.sentry3.DialGRPC(t, ctx, "spiffe://integration.test.dapr.io/ns/sentrynamespace/dapr-sentry")
 	client3 := sentrypbv1.NewCAClient(conn3)
 
-	resp, err = client3.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+	resp, err = client3.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{ //nolint:gosec
 		Id:                        strings.Repeat("a", 64),
 		Namespace:                 strings.Repeat("n", 253),
 		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),

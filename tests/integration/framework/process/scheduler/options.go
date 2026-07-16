@@ -14,7 +14,12 @@ limitations under the License.
 package scheduler
 
 import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 )
 
@@ -28,6 +33,12 @@ type options struct {
 	etcdClientPort           int
 	namespace                string
 	etcdBackendBatchInterval string
+	etcdSpaceQuota           *string
+
+	embed           *bool
+	clientEndpoints *[]string
+	clientUsername  *string
+	clientPassword  *string
 
 	logLevel    string
 	port        int
@@ -37,6 +48,7 @@ type options struct {
 	dataDir     *string
 	kubeconfig  *string
 	mode        *string
+	workers     *uint32
 
 	overrideBroadcastHostPort *string
 }
@@ -124,4 +136,60 @@ func WithOverrideBroadcastHostPort(address string) Option {
 	return func(o *options) {
 		o.overrideBroadcastHostPort = &address
 	}
+}
+
+func WithEmbed(embed bool) Option {
+	return func(o *options) {
+		o.embed = &embed
+	}
+}
+
+func WithClientEndpoints(endpoints ...string) Option {
+	return func(o *options) {
+		o.clientEndpoints = &endpoints
+	}
+}
+
+func WithClientUsername(username string) Option {
+	return func(o *options) {
+		o.clientUsername = &username
+	}
+}
+
+func WithClientPassword(password string) Option {
+	return func(o *options) {
+		o.clientPassword = &password
+	}
+}
+
+func WithLogLineStdout(ll *logline.LogLine) Option {
+	return WithExecOptions(exec.WithStdout(ll.Stdout()))
+}
+
+func WithLogLineStderr(ll *logline.LogLine) Option {
+	return WithExecOptions(exec.WithStderr(ll.Stdout()))
+}
+
+func WithWorkers(workers *uint32) Option {
+	return func(o *options) {
+		o.workers = workers
+	}
+}
+
+// WithEtcdSpaceQuota sets the --etcd-space-quota flag. Accepts any value
+// parsable by k8s resource.ParseQuantity (e.g. "16Mi", "1Gi"). Used by tests
+// that need to exercise etcd quota-exceeded behaviour.
+func WithEtcdSpaceQuota(quota string) Option {
+	return func(o *options) {
+		o.etcdSpaceQuota = &quota
+	}
+}
+
+func WithExit1() Option {
+	return WithExecOptions(
+		exec.WithExitCode(1),
+		exec.WithRunError(func(t *testing.T, err error) {
+			assert.ErrorContains(t, err, "exit status 1")
+		}),
+	)
 }

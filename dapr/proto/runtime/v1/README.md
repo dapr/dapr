@@ -1,16 +1,13 @@
 # Public Dapr Runtime APIs
 
-This folder is intended for user-facing APIs. 
-
-- `dapr.proto` is used by the services implemented by the Dapr runtime. Apps calling into the Dapr runtime use these services.
-- `appcallback.proto` is for services implemented by apps to receive messages from the Dapr runtime.
+The `dapr/proto/runtime/v1` folder contains a proto file per the user-facing Dapr APIs.
 
 ## Proto client generation
 
 Pre-requisites:
 1. Install protoc version: [v4.25.4](https://github.com/protocolbuffers/protobuf/releases/tag/v4.25.4)
 
-2. Install protoc-gen-go and protoc-gen-go-grpc
+2. Install protoc-gen-go, protoc-gen-go-grpc and protoc-gen-connect-go
 
 ```bash
 make init-proto

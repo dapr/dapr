@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -54,7 +53,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 			return
 		}
 		if h.rid.Load() == nil {
-			h.rid.Store(ptr.Of(r.Header.Get("Dapr-Reentrancy-Id")))
+			h.rid.Store(new(r.Header.Get("Dapr-Reentrancy-Id")))
 		}
 		h.called.Append(r.URL.Path)
 		<-h.holdCall
@@ -81,6 +80,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 
 func (h *http) Run(t *testing.T, ctx context.Context) {
 	h.app1.WaitUntilRunning(t, ctx)
+	h.app2.WaitUntilRunning(t, ctx)
 
 	client := client.HTTP(t)
 
@@ -90,6 +90,10 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 		assert.NoError(t, err)
 		resp, err := client.Do(req)
+		if err != nil {
+			errCh <- err
+			return
+		}
 		errCh <- errors.Join(err, resp.Body.Close())
 	}()
 
@@ -102,14 +106,18 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	require.NotNil(t, h.rid.Load())
 	id := *(h.rid.Load())
 
-	for i := range 20 {
+	for i := range 10 {
 		go func() {
 			url := fmt.Sprintf("http://%s/v1.0/actors/abc/123/method/foo", h.app1.Daprd().HTTPAddress())
 			req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 			assert.NoError(t, err)
 			req.Header.Add("Dapr-Reentrancy-Id", id)
 			resp, err := client.Do(req)
-			errCh <- errors.Join(err, resp.Body.Close())
+			if resp == nil {
+				errCh <- err
+			} else {
+				errCh <- errors.Join(err, resp.Body.Close())
+			}
 		}()
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -126,7 +134,11 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 			assert.NoError(t, err)
 			req.Header.Add("Dapr-Reentrancy-Id", id)
 			resp, err := client.Do(req)
-			errCh <- errors.Join(err, resp.Body.Close())
+			if resp == nil {
+				errCh <- err
+			} else {
+				errCh <- errors.Join(err, resp.Body.Close())
+			}
 		}()
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -135,11 +147,11 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, 41, h.called.Len())
+		assert.Equal(c, 21, h.called.Len())
 	}, time.Second*10, time.Millisecond*10)
 
-	for range 41 {
-		h.holdCall <- struct{}{}
+	close(h.holdCall)
+	for range 21 {
 		select {
 		case err := <-errCh:
 			require.NoError(t, err)

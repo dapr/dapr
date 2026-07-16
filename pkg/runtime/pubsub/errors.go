@@ -22,6 +22,11 @@ import (
 
 var ErrMessageDropped = errors.New("pubsub message dropped") // TODO: remove this and use apierrors.PubSubMsgDropped
 
+// ErrSubscriptionClosed is returned when a message is published to a
+// subscription that is being closed (e.g. during graceful shutdown or
+// hot-reload). Callers should avoid NACKing the message.
+var ErrSubscriptionClosed = errors.New("subscription is closed")
+
 // pubsub.NotFoundError is returned by the runtime when the pubsub does not exist.
 type NotFoundError struct {
 	PubsubName string

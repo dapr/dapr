@@ -1,5 +1,4 @@
 //go:build unit
-// +build unit
 
 /*
 Copyright 2023 The Dapr Authors
@@ -25,6 +24,7 @@ import (
 
 type SecretStore struct {
 	secretstores.SecretStore
+
 	CloseErr error
 }
 
@@ -61,6 +61,7 @@ func (b *Binding) Init(ctx context.Context, metadata bindings.Metadata) error {
 
 func (b *Binding) Read(ctx context.Context, handler bindings.Handler) error {
 	b.Data = string(TestInputBindingData)
+
 	metadata := map[string]string{}
 	if b.Metadata != nil {
 		metadata = b.Metadata
@@ -81,6 +82,7 @@ func (b *Binding) Read(ctx context.Context, handler bindings.Handler) error {
 	}
 
 	_, err := handler(ctx, resp)
+
 	return err
 }
 
@@ -105,6 +107,7 @@ func (m *MockKubernetesStateStore) Init(ctx context.Context, metadata secretstor
 	if m.Callback != nil {
 		return m.Callback(ctx)
 	}
+
 	return nil
 }
 
@@ -125,6 +128,7 @@ func (m *MockKubernetesStateStore) BulkGetSecret(ctx context.Context, req secret
 		"_value": "_value_data",
 		"name1":  "value1",
 	}
+
 	return secretstores.BulkGetSecretResponse{
 		Data: response,
 	}, nil
@@ -134,6 +138,7 @@ func (m *MockKubernetesStateStore) Close() error {
 	if m.CloseFn != nil {
 		return m.CloseFn()
 	}
+
 	return nil
 }
 

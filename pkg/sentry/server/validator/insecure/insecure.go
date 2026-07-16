@@ -16,8 +16,6 @@ package insecure
 import (
 	"context"
 
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
-
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 	"github.com/dapr/dapr/pkg/sentry/server/validator/internal"
@@ -36,6 +34,12 @@ func (s *insecure) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *insecure) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
-	return internal.Validate(ctx, req)
+func (s *insecure) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error) {
+	td, err := internal.Validate(ctx, req)
+	if err != nil {
+		return validator.ValidateResult{}, err
+	}
+	return validator.ValidateResult{
+		TrustDomain: td,
+	}, nil
 }

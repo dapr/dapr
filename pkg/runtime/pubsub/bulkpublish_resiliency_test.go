@@ -15,20 +15,23 @@ package pubsub
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var (
@@ -64,27 +67,27 @@ func NewMockBulkPublisher(t *testing.T, failCount int, failEvenOnes bool, failAl
 func (m *mockBulkPublisher) BulkPublish(ctx context.Context, req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
 	m.rwLock.Lock()
 	defer m.rwLock.Unlock()
+
 	if req == nil {
 		return zero, assert.AnError
 	}
+
 	if m.applyTimeout {
 		time.Sleep(m.timeoutSleep)
 		// return some error
 		res := contribPubsub.NewBulkPublishResponse(req.Entries, assert.AnError)
 		res.FailedEntries = res.FailedEntries[1:]
+
 		return res, assert.AnError
 	}
+
 	res := contribPubsub.BulkPublishResponse{
 		FailedEntries: make([]contribPubsub.BulkPublishResponseFailedEntry, 0, len(req.Entries)),
 	}
 
 	for _, entry := range req.Entries {
 		// count the entryId retry times
-		if _, ok := m.entryIDRetryTimes[entry.EntryId]; ok {
-			m.entryIDRetryTimes[entry.EntryId]++
-		} else {
-			m.entryIDRetryTimes[entry.EntryId] = 1
-		}
+		m.entryIDRetryTimes[entry.EntryId]++
 		// assert the data and metadata are correct
 		assert.Equal(m.t, map[string]string{
 			"key" + entry.EntryId: "value" + entry.EntryId,
@@ -94,6 +97,7 @@ func (m *mockBulkPublisher) BulkPublish(ctx context.Context, req *contribPubsub.
 	// fail events based on the input count
 	if m.failCount > 0 {
 		m.failCount--
+
 		for _, entry := range req.Entries {
 			k, _ := strconv.ParseInt(entry.EntryId, 10, 32)
 			if m.failAllEvents || (k%2 == 0 && m.failEvenOnes) {
@@ -104,8 +108,10 @@ func (m *mockBulkPublisher) BulkPublish(ctx context.Context, req *contribPubsub.
 					})
 			}
 		}
+
 		return res, assert.AnError
 	}
+
 	return res, nil
 }
 
@@ -179,14 +185,14 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher := NewMockBulkPublisher(t, 1, true, true)
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		// expecting no final error, the events will pass in the second try
@@ -211,14 +217,14 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher := NewMockBulkPublisher(t, 3, true, true)
 
 		// set short retry with 2 retries max
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		// Expect final error from the bulk publisher
@@ -245,14 +251,14 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher := NewMockBulkPublisher(t, 1, true, false)
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		// expecting no final error, all the events will pass in the second try
@@ -277,14 +283,14 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher := NewMockBulkPublisher(t, 0, false, false)
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		// expecting no final error, all the events will pass in a single try
@@ -312,7 +318,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher.timeoutSleep = 5 * time.Second
 
 		// set short retry with 0 retry max
-		shortRetry.MaxRetries = ptr.Of(0)
+		shortRetry.MaxRetries = new(0)
 
 		// timeout will be triggered here
 		// no retries
@@ -320,7 +326,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -343,7 +349,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 			Timeout:     "30s",                     // half-open after 30s. So in test this will not be triggered
 		}
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
@@ -351,7 +357,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		// Act
 
 		// Make the request twice to make sure circuitBreaker is exhausted
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -374,7 +380,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Act
 		// Here the circuitBreaker is open and it will short the request, so the bulkPublisher will not be called
-		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -400,7 +406,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		}
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 		// timeout will not be triggered here
 
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
@@ -408,7 +414,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Act
 		// Make the request twice to make sure circuitBreaker is exhausted
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -431,7 +437,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Act
 		// Here the circuitBreaker is open and it will short the request, so the bulkPublisher will not be called
-		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -458,14 +464,14 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		}
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
 		// Make the request twice to make sure circuitBreaker is exhausted
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.NoError(t, err)
@@ -501,14 +507,14 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		}
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
 		// Make the request twice to make sure circuitBreaker is exhausted
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -535,7 +541,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		// Act
 		// mock bulk publisher will fail the request only twice,
 		// the circuitBreaker will be half-open now and then after request served will be closed
-		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.NoError(t, err)
@@ -559,7 +565,6 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		// fail events with even Ids at least 10 times in a row, simulate partial failures
 		// this will also simulate circuitBreaker being triggered
 		// timeout will be triggered here
-
 		bulkPublisher := NewMockBulkPublisher(t, 10, true, false)
 		shortTimeout := "1s"
 		bulkPublisher.applyTimeout = true
@@ -572,7 +577,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 			Timeout:     "30s",                     // half-open after 30s. So in test this will not be triggered
 		}
 		// set short retry with 2 retries max
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		// timeout will be triggered here
 		policyProvider := createResPolicyProvider(cb, shortTimeout, shortRetry)
@@ -580,7 +585,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Act
 		// Make the request twice to make sure circuitBreaker is exhausted
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -591,7 +596,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Act
 		// Here the circuitBreaker is open and it will short the request, so the bulkPublisher will not be called
-		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -615,7 +620,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher.timeoutSleep = 5 * time.Second
 
 		// retry time period twice that of timeout sleep and 10 times that of the timeout
-		longRetry.MaxRetries = ptr.Of(2)
+		longRetry.MaxRetries = new(2)
 
 		// set a circuit breaker with 1 consecutive failure
 		cb := resiliencyV1alpha.CircuitBreaker{
@@ -629,7 +634,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Act
 		// Make the request twice to make sure circuitBreaker is exhausted
-		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -640,7 +645,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Act
 		// Here the circuitBreaker is open and it will short the request, so the bulkPublisher will not be called
-		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
+		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher, TransportModeGRPC)
 
 		// Assert
 		require.Error(t, err)
@@ -648,6 +653,78 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		assert.Len(t, res.FailedEntries, 6)
 		// Not aaserting the number of called times since it may or may not be updated(component called) in actually code.
 		// In above case, it is not updated.
+	})
+}
+
+// statusBulkPublisher is a BulkPublisher whose BulkPublish returns a configurable
+// error per call, used to verify retry `matching` on the bulk publish path.
+type statusBulkPublisher struct {
+	calls  atomic.Int32
+	bulkFn func(call int32) error
+}
+
+func (m *statusBulkPublisher) BulkPublish(ctx context.Context, req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
+	return contribPubsub.BulkPublishResponse{}, m.bulkFn(m.calls.Add(1))
+}
+
+// TestBulkPublishMatching verifies that, on the bulk publish path, a component error
+// carrying a gRPC status is wrapped in a resiliency.CodeError so the configured retry
+// `matching` is consulted — and that errors without a status keep retrying as before.
+func TestBulkPublishMatching(t *testing.T) {
+	ctx := t.Context()
+	pubsubName := "test-pubsub"
+	// Only gRPC code 14 (Unavailable) is configured as retriable
+	matching := &resiliencyV1alpha.RetryMatching{GRPCStatusCodes: "14"}
+
+	policyDefFor := func(maxRetries int) *resiliency.PolicyDefinition {
+		retry := resiliencyV1alpha.Retry{
+			Policy:     "constant",
+			Duration:   "1ms",
+			MaxRetries: new(maxRetries),
+			Matching:   matching,
+		}
+		provider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, "10s", retry)
+		return provider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
+	}
+
+	req := &contribPubsub.BulkPublishRequest{PubsubName: pubsubName, Topic: "test-topic"}
+
+	t.Run("non-retriable gRPC status code is not retried", func(t *testing.T) {
+		bp := &statusBulkPublisher{bulkFn: func(int32) error {
+			return status.Error(codes.InvalidArgument, "bad request")
+		}}
+
+		_, err := ApplyBulkPublishResiliency(ctx, req, policyDefFor(5), bp, TransportModeGRPC)
+
+		require.Error(t, err)
+		assert.Equal(t, int32(1), bp.calls.Load())
+	})
+
+	t.Run("retriable gRPC status code is retried until success", func(t *testing.T) {
+		bp := &statusBulkPublisher{bulkFn: func(call int32) error {
+			if call <= 2 {
+				return status.Error(codes.Unavailable, "try later")
+			}
+			return nil
+		}}
+
+		_, err := ApplyBulkPublishResiliency(ctx, req, policyDefFor(5), bp, TransportModeGRPC)
+
+		require.NoError(t, err)
+		// 2 failures then success = 3 calls
+		assert.Equal(t, int32(3), bp.calls.Load())
+	})
+
+	t.Run("plain error without status still retries (no regression)", func(t *testing.T) {
+		bp := &statusBulkPublisher{bulkFn: func(int32) error {
+			return errors.New("boom")
+		}}
+
+		_, err := ApplyBulkPublishResiliency(ctx, req, policyDefFor(3), bp, TransportModeGRPC)
+
+		require.Error(t, err)
+		// No gRPC status = retried up to maxRetries (initial + 3)
+		assert.Equal(t, int32(4), bp.calls.Load())
 	})
 }
 
@@ -678,6 +755,7 @@ func createResPolicyProvider(ciruitBreaker resiliencyV1alpha.CircuitBreaker, tim
 			},
 		},
 	}
+
 	return resiliency.FromConfigurations(testLogger, r)
 }
 

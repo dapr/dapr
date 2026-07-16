@@ -17,12 +17,17 @@ import (
 	"encoding/json"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/dapr/dapr/pkg/apis/common"
+	"github.com/dapr/dapr/pkg/apis/resiliency"
 )
 
 // +genclient
 // +genclient:noStatus
 // +kubebuilder:object:root=true
 
+//nolint:recvcheck
 type Resiliency struct {
 	metav1.TypeMeta `json:",inline"`
 	// +optional
@@ -33,10 +38,72 @@ type Resiliency struct {
 	Scopes []string `json:"scopes,omitempty"`
 }
 
+const (
+	kindResiliency = "Resiliency"
+	version        = "v1alpha1"
+)
+
 // String implements fmt.Stringer and is used for debugging. It returns the policy object encoded as JSON.
 func (r *Resiliency) String() string {
 	b, _ := json.Marshal(r)
 	return string(b)
+}
+
+// Kind returns the resiliency kind.
+func (Resiliency) Kind() string {
+	return kindResiliency
+}
+
+// APIVersion returns the resiliency API version.
+func (Resiliency) APIVersion() string {
+	return resiliency.GroupName + "/" + version
+}
+
+// GetName returns the resiliency name.
+func (r Resiliency) GetName() string {
+	return r.Name
+}
+
+// GetNamespace returns the resiliency namespace.
+func (r Resiliency) GetNamespace() string {
+	return r.Namespace
+}
+
+// LogName returns the name of the resiliency that can be used in logging.
+func (r Resiliency) LogName() string {
+	return r.Name
+}
+
+// GetSecretStore returns the name of the secret store (empty for resiliency).
+func (r Resiliency) GetSecretStore() string {
+	return ""
+}
+
+// NameValuePairs returns empty slice as resiliencies don't have metadata pairs.
+func (r Resiliency) NameValuePairs() []common.NameValuePair {
+	return nil
+}
+
+// ClientObject returns the resiliency as a client.Object.
+func (r Resiliency) ClientObject() client.Object {
+	return &r
+}
+
+// GetScopes returns the scopes for this resiliency.
+func (r Resiliency) GetScopes() []string {
+	return r.Scopes
+}
+
+// EmptyMetaDeepCopy returns a new instance of the resiliency type with the
+// TypeMeta's Kind and APIVersion fields set.
+func (r Resiliency) EmptyMetaDeepCopy() metav1.Object {
+	n := r.DeepCopy()
+	n.TypeMeta = metav1.TypeMeta{
+		Kind:       kindResiliency,
+		APIVersion: resiliency.GroupName + "/" + version,
+	}
+	n.ObjectMeta = metav1.ObjectMeta{Name: r.Name, Namespace: r.Namespace}
+	return n
 }
 
 type ResiliencySpec struct {

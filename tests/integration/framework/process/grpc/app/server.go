@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -72,11 +72,25 @@ func (s *server) OnTopicEvent(ctx context.Context, in *rtv1.TopicEventRequest) (
 	return s.onTopicEventFn(ctx, in)
 }
 
+func (s *server) OnBulkTopicEvent(ctx context.Context, in *rtv1.TopicEventBulkRequest) (*rtv1.TopicEventBulkResponse, error) {
+	if s.onBulkTopicEventFn == nil {
+		return new(rtv1.TopicEventBulkResponse), nil
+	}
+	return s.onBulkTopicEventFn(ctx, in)
+}
+
 func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *rtv1.TopicEventBulkRequest) (*rtv1.TopicEventBulkResponse, error) {
 	if s.onBulkTopicEventFn == nil {
 		return new(rtv1.TopicEventBulkResponse), nil
 	}
 	return s.onBulkTopicEventFn(ctx, in)
+}
+
+func (s *server) OnJobEvent(ctx context.Context, in *rtv1.JobEventRequest) (*rtv1.JobEventResponse, error) {
+	if s.onJobEventFn == nil {
+		return new(rtv1.JobEventResponse), nil
+	}
+	return s.onJobEventFn(ctx, in)
 }
 
 func (s *server) OnJobEventAlpha1(ctx context.Context, in *rtv1.JobEventRequest) (*rtv1.JobEventResponse, error) {

@@ -31,7 +31,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -92,7 +91,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 		daprd.WithNamespace("default"),
 		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
 		daprd.WithExecOptions(exec.WithEnvVars(t,
-			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors),
 		)),
 	)
 
@@ -125,7 +124,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		PubSubName:      "mypubsub",
 		Topic:           "a",
 		Data:            `{"status": "completed"}`,
-		DataContentType: ptr.Of("application/json"),
+		DataContentType: new("application/json"),
 	})
 	resp = h.sub.Receive(t, ctx)
 	assert.Equal(t, "/a", resp.Route)
@@ -141,7 +140,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		PubSubName:      "mypubsub",
 		Topic:           "a",
 		Data:            `{"status": "completed"}`,
-		DataContentType: ptr.Of("foo/bar"),
+		DataContentType: new("foo/bar"),
 	})
 	resp = h.sub.Receive(t, ctx)
 	assert.Equal(t, "/a", resp.Route)

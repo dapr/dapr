@@ -73,7 +73,7 @@ var (
 	ErrDirectInvokeNotReady = APIError{"invoke API is not ready", errorcodes.ServiceInvocationDirectInvoke, http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Healthz.
-	ErrHealthNotReady         = APIError{"dapr is not ready", errorcodes.HealthNotReady, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrHealthNotReady         = APIError{"dapr is not ready: %v", errorcodes.HealthNotReady, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrOutboundHealthNotReady = APIError{"dapr outbound is not ready", errorcodes.HealthOutboundNotReady, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrHealthAppIDNotMatch    = APIError{"dapr app-id does not match", errorcodes.HealthAppidNotMatch, http.StatusInternalServerError, grpcCodes.Internal}
 
@@ -92,6 +92,7 @@ var (
 
 	// Actor.
 	ErrActorReminderOpActorNotHosted = APIError{"operations on actor reminders are only possible on hosted actor types", errorcodes.ActorReminderNonHosted, http.StatusForbidden, grpcCodes.PermissionDenied}
+	ErrActorTypeReserved             = APIError{"actor type %q is reserved for the Dapr workflow runtime; direct actor API access is not permitted", errorcodes.ActorTypeReserved, http.StatusForbidden, grpcCodes.PermissionDenied}
 	ErrActorRuntimeNotFound          = APIError{`the state store is not configured to use the actor runtime. Have you set the - name: actorStateStore value: "true" in your state store component file?`, errorcodes.ActorRuntimeNotFound, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorNoAppChannel             = APIError{"app channel is not initialized", errorcodes.ErrActorNoAppChannel, http.StatusBadRequest, grpcCodes.Unavailable}
 	ErrActorInstanceMissing          = APIError{"actor instance is missing", errorcodes.ActorInstanceMissing, http.StatusBadRequest, grpcCodes.Internal}
@@ -101,12 +102,14 @@ var (
 	ErrActorReminderCreate           = APIError{"error creating actor reminder: %s", errorcodes.ActorReminderCreate, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorReminderGet              = APIError{"error getting actor reminder: %s", errorcodes.ActorReminderGet, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorReminderDelete           = APIError{"error deleting actor reminder: %s", errorcodes.ActorReminderDelete, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorReminderNotFound         = APIError{"actor reminder not found: %s", errorcodes.ActorReminderNotFound, http.StatusNotFound, grpcCodes.NotFound}
+	ErrActorReminderAlreadyExists    = APIError{"actor reminder already exists: %s", errorcodes.ActorReminderAlreadyExists, http.StatusConflict, grpcCodes.AlreadyExists}
 	ErrActorTimerCreate              = APIError{"error creating actor timer: %s", errorcodes.ActorTimerCreate, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorMaxStackDepthExceeded    = APIError{"maximum stack depth exceeded", errorcodes.ErrActorMaxStackDepthExceeded, http.StatusInternalServerError, grpcCodes.ResourceExhausted}
 	ErrActorNoPlacement              = APIError{"placement service is not configured", errorcodes.ErrActorNoPlacement, http.StatusBadRequest, grpcCodes.Unavailable}
 	ErrActorRuntimeClosed            = APIError{"actor runtime is closed", errorcodes.ErrActorRuntimeClosed, http.StatusServiceUnavailable, grpcCodes.Unavailable}
 	ErrActorNamespaceRequired        = APIError{"actors must have a namespace configured when running in Kubernetes mode", errorcodes.ErrActorNamespaceRequired, http.StatusPreconditionFailed, grpcCodes.FailedPrecondition}
-	ErrActorNoAddress                = APIError{"did not find address for actor", errorcodes.ErrActorNoAddress, http.StatusNotFound, grpcCodes.FailedPrecondition}
+	ErrActorNoAddress                = APIError{"did not find address for actor '%s'", errorcodes.ErrActorNoAddress, http.StatusNotFound, grpcCodes.FailedPrecondition}
 
 	// Lock.
 	ErrLockStoresNotConfigured    = APIError{"lock store is not configured", errorcodes.LockStoreNotConfigured, http.StatusInternalServerError, grpcCodes.FailedPrecondition}
@@ -136,7 +139,7 @@ var (
 
 	// Conversation
 	ErrConversationNotFound      = APIError{"failed finding conversation component %s", errorcodes.ConversationNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrConversationInvalidParams = APIError{"failed conversing with component %s: invalid params", errorcodes.ConversationInvalidParms, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrConversationInvalidParams = APIError{"failed conversing with component %s: invalid params: %s", errorcodes.ConversationInvalidParms, http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrConversationInvoke        = APIError{"failed conversing with component %s: %s", errorcodes.ConversationInvoke, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrConversationMissingInputs = APIError{"failed conversing with component %s: missing inputs in request", errorcodes.ConversationMissingInputs, http.StatusBadRequest, grpcCodes.InvalidArgument}
 )

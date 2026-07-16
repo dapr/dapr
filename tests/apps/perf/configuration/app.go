@@ -102,8 +102,8 @@ func sendResponse(w http.ResponseWriter, statusCode int, message string) {
 }
 
 // return key-value pairs as a list of strings
-func getRedisValuesFromItems(items map[string]*Item) []interface{} {
-	m := make([]interface{}, 0, 2*len(items)+1)
+func getRedisValuesFromItems(items map[string]*Item) []any {
+	m := make([]any, 0, 2*len(items)+1)
 	for key, item := range items {
 		val := item.Value + separator + item.Version
 		m = append(m, key, val)
@@ -137,8 +137,8 @@ func buildQueryParams(keys []string) string {
 // extract key from subscribed channel
 func parseRedisKeyFromChannel(eventChannel string) (string, error) {
 	channelPrefix := "__keyspace@0__:"
-	index := strings.Index(eventChannel, channelPrefix)
-	if index == -1 {
+	found := strings.Contains(eventChannel, channelPrefix)
+	if !found {
 		return "", fmt.Errorf("wrong format of event channel, it should start with '%s': eventChannel=%s", channelPrefix, eventChannel)
 	}
 
@@ -165,7 +165,7 @@ func (r *RedisUpdater) Update(items map[string]*Item) error {
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), writeTimeout)
 	defer cancel()
 	values := getRedisValuesFromItems(items)
-	valuesWithCommand := append([]interface{}{"MSET"}, values...)
+	valuesWithCommand := append([]any{"MSET"}, values...)
 	return r.client.Do(timeoutCtx, valuesWithCommand...).Err()
 }
 
@@ -278,14 +278,16 @@ func getKeyValues(w http.ResponseWriter, r *http.Request) {
 	}
 	var response string
 
-	if test == "baseline" {
+	switch test {
+	case "baseline":
 		response, err = getBaseline(keys)
-	} else if test == "dapr" {
-		if protocol == "http" {
+	case "dapr":
+		switch protocol {
+		case "http":
 			response, err = getDaprHTTP(keys)
-		} else if protocol == "grpc" {
+		case "grpc":
 			response, err = getDaprGRPC(keys)
-		} else {
+		default:
 			err = fmt.Errorf("unknown protocol in Get call: %s", protocol)
 		}
 	}
@@ -348,7 +350,7 @@ func subscribeHTTP(keys []string) (string, error) {
 	if strings.Contains(string(sub), "errorCode") {
 		return "", fmt.Errorf("error subscribing to config updates: %s", string(sub))
 	}
-	var subid map[string]interface{}
+	var subid map[string]any
 	json.Unmarshal(sub, &subid)
 	log.Printf("App subscribed to config changes with subscription id: %s", subid["id"])
 	subscriptionID = subid["id"].(string)
@@ -382,11 +384,12 @@ func startSubscription(w http.ResponseWriter, r *http.Request) {
 	if test == "baseline" {
 		subscriptionID, err = updater.Subscribe(keys)
 	} else {
-		if protocol == "http" {
+		switch protocol {
+		case "http":
 			subscriptionID, err = subscribeHTTP(keys)
-		} else if protocol == "grpc" {
+		case "grpc":
 			subscriptionID, err = subscribeGRPC(keys)
-		} else {
+		default:
 			err = fmt.Errorf("unknown protocol in Subscribe call: %s", protocol)
 		}
 	}
@@ -444,11 +447,12 @@ func stopSubscription(w http.ResponseWriter, r *http.Request) {
 	if test == "baseline" {
 		response, err = unsubscribeBaseline(subscriptionID)
 	} else {
-		if protocol == "http" {
+		switch protocol {
+		case "http":
 			response, err = unsubscribeHTTP(subscriptionID)
-		} else if protocol == "grpc" {
+		case "grpc":
 			response, err = unsubscribeGRPC(subscriptionID)
-		} else {
+		default:
 			err = fmt.Errorf("unknown protocol in unsubscribe call: %s", protocol)
 		}
 	}

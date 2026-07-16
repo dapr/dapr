@@ -49,8 +49,8 @@ func (n *noawait) Run(t *testing.T, ctx context.Context) {
 	n.workflow.WaitUntilRunning(t, ctx)
 
 	var barCalled atomic.Int64
-	n.workflow.Registry().AddOrchestratorN("noawait", func(ctx *task.OrchestrationContext) (any, error) {
-		for range 50 {
+	n.workflow.Registry().AddWorkflowN("noawait", func(ctx *task.WorkflowContext) (any, error) {
+		for range 30 {
 			ctx.CallActivity("bar")
 		}
 		return nil, nil
@@ -61,11 +61,11 @@ func (n *noawait) Run(t *testing.T, ctx context.Context) {
 	})
 	client := n.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "noawait", api.WithInstanceID("noawait"))
+	id, err := client.ScheduleNewWorkflow(ctx, "noawait", api.WithInstanceID("noawait"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(50), barCalled.Load())
+		assert.Equal(c, int64(30), barCalled.Load())
 	}, time.Second*10, time.Millisecond*10)
 }

@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -72,21 +71,19 @@ func (r *reconnect) Setup(t *testing.T) []framework.Option {
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(srv, r.daprd),
+		framework.WithProcesses(srv, r.scheduler1, r.daprd),
 	}
 }
 
 func (r *reconnect) Run(t *testing.T, ctx context.Context) {
-	r.scheduler1.Run(t, ctx)
-	t.Cleanup(func() { r.scheduler1.Cleanup(t) })
 	r.scheduler1.WaitUntilRunning(t, ctx)
 	r.scheduler1.WaitUntilLeadership(t, ctx, 1)
 	r.daprd.WaitUntilRunning(t, ctx)
 
-	_, err := r.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+	_, err := r.daprd.GRPCClient(t, ctx).ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     "test",
-			Schedule: ptr.Of("@every 1s"),
+			Schedule: new("@every 100ms"),
 		},
 	})
 	require.NoError(t, err)
@@ -104,7 +101,7 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 	r.scheduler2.Run(t, ctx)
 	r.scheduler2.WaitUntilRunning(t, ctx)
 	r.scheduler2.WaitUntilLeadership(t, ctx, 1)
-	t.Cleanup(func() { r.scheduler2.Cleanup(t) })
+	t.Cleanup(func() { r.scheduler2.Kill(t) })
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Greater(c, r.jobCalled.Load(), called)

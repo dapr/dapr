@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -41,18 +40,15 @@ type single struct {
 	daprdC    *daprd.Daprd
 	scheduler *scheduler.Scheduler
 
-	called     atomic.Int64
-	totalCalls atomic.Int64
+	called atomic.Int64
 }
 
 func (s *single) Setup(t *testing.T) []framework.Option {
 	s.called.Store(0)
-	s.totalCalls.Store(0)
 
 	var hasCalledA, hasCalledB, hasCalledC atomic.Bool
 	srvA := app.New(t,
 		app.WithOnJobEventFn(func(ctx context.Context, in *rtv1pb.JobEventRequest) (*rtv1pb.JobEventResponse, error) {
-			s.totalCalls.Add(1)
 			if hasCalledA.CompareAndSwap(false, true) {
 				s.called.Add(1)
 			}
@@ -61,7 +57,6 @@ func (s *single) Setup(t *testing.T) []framework.Option {
 	)
 	srvB := app.New(t,
 		app.WithOnJobEventFn(func(ctx context.Context, in *rtv1pb.JobEventRequest) (*rtv1pb.JobEventResponse, error) {
-			s.totalCalls.Add(1)
 			if hasCalledB.CompareAndSwap(false, true) {
 				s.called.Add(1)
 			}
@@ -70,7 +65,6 @@ func (s *single) Setup(t *testing.T) []framework.Option {
 	)
 	srvC := app.New(t,
 		app.WithOnJobEventFn(func(ctx context.Context, in *rtv1pb.JobEventRequest) (*rtv1pb.JobEventResponse, error) {
-			s.totalCalls.Add(1)
 			if hasCalledC.CompareAndSwap(false, true) {
 				s.called.Add(1)
 			}
@@ -110,18 +104,16 @@ func (s *single) Run(t *testing.T, ctx context.Context) {
 	s.daprdB.WaitUntilRunning(t, ctx)
 	s.daprdC.WaitUntilRunning(t, ctx)
 
-	_, err := s.daprdA.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1pb.ScheduleJobRequest{
+	_, err := s.daprdA.GRPCClient(t, ctx).ScheduleJob(ctx, &rtv1pb.ScheduleJobRequest{
 		Job: &rtv1pb.Job{
 			Name:     "job1",
-			Schedule: ptr.Of("@every 1s"),
-			DueTime:  ptr.Of("0s"),
-			Repeats:  ptr.Of(uint32(3)),
+			Schedule: new("@every 1s"),
+			DueTime:  new("0s"),
 		},
 	})
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
 		assert.Equal(col, int64(3), s.called.Load())
-	}, time.Second*10, time.Millisecond*10)
-	assert.Equal(t, int64(3), s.totalCalls.Load())
+	}, time.Second*20, time.Millisecond*10)
 }

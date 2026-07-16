@@ -46,21 +46,10 @@ type grpc struct {
 func (g *grpc) Setup(t *testing.T) []framework.Option {
 	g.sub = subscriber.New(t)
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true`), 0o600))
-
 	g.resDir1, g.resDir2 = t.TempDir(), t.TempDir()
 
 	for i, dir := range []string{g.resDir1, g.resDir2} {
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "pubsub.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "pubsub.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -68,13 +57,12 @@ metadata:
 spec:
  type: pubsub.in-memory
  version: v1
-`, i)), 0o600))
+`, i), 0o600))
 	}
 
 	g.daprd = daprd.New(t,
 		daprd.WithAppPort(g.sub.Port(t)),
 		daprd.WithAppProtocol("grpc"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(g.resDir1, g.resDir2),
 	)
 

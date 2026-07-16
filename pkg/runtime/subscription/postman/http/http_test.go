@@ -40,7 +40,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 	topic := "topic1"
 
 	testPubSubMessage := &runtimePubsub.SubscribedMessage{
-		CloudEvent: map[string]interface{}{},
+		CloudEvent: map[string]any{},
 		Topic:      topic,
 		Data:       []byte("testing"),
 		Metadata:   map[string]string{"pubsubName": "testpubsub"},
@@ -62,9 +62,13 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 			Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
 		})
 
-		var appResp contribpubsub.AppResponse
-		var buf bytes.Buffer
+		var (
+			appResp contribpubsub.AppResponse
+			buf     bytes.Buffer
+		)
+
 		require.NoError(t, json.NewEncoder(&buf).Encode(appResp))
+
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).WithRawData(&buf)
 		defer fakeResp.Close()
 
@@ -147,7 +151,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
 
-		require.NoError(t, h.Deliver(t.Context(), testPubSubMessage))
+		assert.Equal(t, runtimePubsub.ErrMessageDropped, h.Deliver(t.Context(), testPubSubMessage))
 	})
 }
 
@@ -185,9 +189,13 @@ func TestOnNewPublishedMessage(t *testing.T) {
 			Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
 		})
 
-		var appResp contribpubsub.AppResponse
-		var buf bytes.Buffer
+		var (
+			appResp contribpubsub.AppResponse
+			buf     bytes.Buffer
+		)
+
 		require.NoError(t, json.NewEncoder(&buf).Encode(appResp))
+
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).WithRawData(&buf)
 		defer fakeResp.Close()
 
@@ -204,9 +212,13 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		})
 
 		// User App subscribes 1 topics via http app channel
-		var appResp contribpubsub.AppResponse
-		var buf bytes.Buffer
+		var (
+			appResp contribpubsub.AppResponse
+			buf     bytes.Buffer
+		)
+
 		require.NoError(t, json.NewEncoder(&buf).Encode(appResp))
+
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).WithRawData(&buf)
 		defer fakeResp.Close()
 
@@ -232,6 +244,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 			WithContentType(contenttype.CloudEventContentType).
 			WithCustomHTTPMetadata(testPubSubMessage.Metadata)
 		defer fakeReqNoTraceID.Close()
+
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReqNoTraceID).Return(fakeResp, nil)
 
 		require.NoError(t, h.Deliver(t.Context(), message))
@@ -288,7 +301,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
-		var cloudEvent map[string]interface{}
+		var cloudEvent map[string]any
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
 		expectedClientError := fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent["id"].(string), rterrors.NewRetriable(nil))
 		assert.Equal(t, expectedClientError.Error(), h.Deliver(t.Context(), testPubSubMessage).Error())
@@ -398,7 +411,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		err := h.Deliver(t.Context(), testPubSubMessage)
 
-		require.NoError(t, err, "expected error to be nil")
+		assert.Equal(t, runtimePubsub.ErrMessageDropped, err, "expected error to be ErrMessageDropped")
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -417,7 +430,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		err := h.Deliver(t.Context(), testPubSubMessage)
 
-		var cloudEvent map[string]interface{}
+		var cloudEvent map[string]any
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
 		errMsg := fmt.Sprintf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: Internal Error. status code returned: 500", cloudEvent["id"].(string), cloudEvent["topic"])
 		expectedClientError := rterrors.NewRetriable(errors.New(errMsg))

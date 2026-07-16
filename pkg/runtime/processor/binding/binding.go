@@ -101,21 +101,25 @@ func (b *binding) Init(ctx context.Context, comp compapi.Component) error {
 	var found bool
 
 	if b.registry.HasInputBinding(comp.Spec.Type, comp.Spec.Version) {
-		if err := b.initInputBinding(ctx, comp); err != nil {
+		err := b.initInputBinding(ctx, comp)
+		if err != nil {
 			return err
 		}
+
 		found = true
 	}
 
 	if b.registry.HasOutputBinding(comp.Spec.Type, comp.Spec.Version) {
-		if err := b.initOutputBinding(ctx, comp); err != nil {
+		err := b.initOutputBinding(ctx, comp)
+		if err != nil {
 			return err
 		}
+
 		found = true
 	}
 
 	if !found {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.Name)
 		return fmt.Errorf("couldn't find binding %s", comp.LogName())
 	}
 
@@ -131,11 +135,15 @@ func (b *binding) Close(comp compapi.Component) error {
 	inbinding, ok := b.compStore.GetInputBinding(comp.Name)
 	if ok {
 		defer b.compStore.DeleteInputBinding(comp.Name)
+
 		if input := b.activeInputs[comp.Name]; input != nil {
 			input.Stop()
 		}
+
 		delete(b.activeInputs, comp.Name)
-		if err := inbinding.Close(); err != nil {
+
+		err := inbinding.Close()
+		if err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -143,7 +151,9 @@ func (b *binding) Close(comp compapi.Component) error {
 	outbinding, ok := b.compStore.GetOutputBinding(comp.Name)
 	if ok {
 		defer b.compStore.DeleteOutputBinding(comp.Name)
-		if err := b.closeOutputBinding(outbinding); err != nil {
+
+		err := b.closeOutputBinding(outbinding)
+		if err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -161,32 +171,35 @@ func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) 
 	}
 
 	fName := comp.LogName()
+
 	binding, err := b.registry.CreateInputBinding(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.Name)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
 	meta, err := b.meta.ToBaseMetadata(comp)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
 	err = binding.Init(ctx, bindings.Metadata{Base: meta})
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
 	log.Infof("successful init for input binding (%s)", comp.LogName())
 	b.compStore.AddInputBindingRoute(comp.Name, comp.Name)
+
 	for _, item := range comp.Spec.Metadata {
 		if item.Name == "route" {
-			b.compStore.AddInputBindingRoute(comp.ObjectMeta.Name, item.Value.String())
+			b.compStore.AddInputBindingRoute(comp.Name, item.Value.String())
 			break
 		}
 	}
+
 	b.compStore.AddInputBinding(comp.Name, binding)
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 
@@ -203,28 +216,31 @@ func (b *binding) initOutputBinding(ctx context.Context, comp compapi.Component)
 	}
 
 	fName := comp.LogName()
+
 	binding, err := b.registry.CreateOutputBinding(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.Name)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
 	if binding != nil {
 		meta, err := b.meta.ToBaseMetadata(comp)
 		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 		}
 
 		err = binding.Init(ctx, bindings.Metadata{Base: meta})
 		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 		}
+
 		log.Infof("successful init for output binding (%s)", comp.LogName())
-		b.compStore.AddOutputBinding(comp.ObjectMeta.Name, binding)
+		b.compStore.AddOutputBinding(comp.Name, binding)
 		diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 	}
+
 	return nil
 }
 
@@ -235,8 +251,8 @@ func (b *binding) isBindingOfDirection(direction string, metadata []common.NameV
 		if strings.EqualFold(m.Name, ComponentDirection) {
 			directionFound = true
 
-			directions := strings.Split(m.Value.String(), ",")
-			for _, d := range directions {
+			directions := strings.SplitSeq(m.Value.String(), ",")
+			for d := range directions {
 				if strings.TrimSpace(strings.ToLower(d)) == direction {
 					return true
 				}

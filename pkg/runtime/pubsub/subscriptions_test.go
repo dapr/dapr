@@ -50,6 +50,7 @@ func TestFilterSubscriptions(t *testing.T) {
 	if assert.Len(t, subs, 2) {
 		assert.Equal(t, "topic0", subs[0].Topic)
 		assert.Equal(t, "topic1", subs[1].Topic)
+
 		if assert.Len(t, subs[1].Rules, 1) {
 			assert.Equal(t, "custom/topic1", subs[1].Rules[0].Path)
 		}
@@ -58,6 +59,7 @@ func TestFilterSubscriptions(t *testing.T) {
 
 type mockUnstableHTTPSubscriptions struct {
 	channel.AppChannel
+
 	callCount        int
 	alwaysError      bool
 	successThreshold int
@@ -102,6 +104,7 @@ func (m *mockUnstableHTTPSubscriptions) InvokeMethod(ctx context.Context, req *i
 	response := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 		WithRawDataBytes(responseBytes).
 		WithContentType("application/json")
+
 	return response, nil
 }
 
@@ -138,6 +141,7 @@ func (m *mockHTTPSubscriptions) InvokeMethod(ctx context.Context, req *invokev1.
 	response := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 		WithRawDataBytes(responseBytes).
 		WithContentType("application/json")
+
 	return response, nil
 }
 
@@ -146,13 +150,16 @@ func TestHTTPSubscriptions(t *testing.T) {
 		m := mockHTTPSubscriptions{}
 		subs, err := GetSubscriptionsHTTP(t.Context(), &m, log, resiliency.FromConfigurations(log), "")
 		require.NoError(t, err)
+
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
+
 			if assert.Len(t, subs[0].Rules, 3) {
 				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
 				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
 				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
 			}
+
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
 			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
 		}
@@ -166,13 +173,16 @@ func TestHTTPSubscriptions(t *testing.T) {
 		subs, err := GetSubscriptionsHTTP(t.Context(), &m, log, resiliency.FromConfigurations(log), "")
 		assert.Equal(t, m.successThreshold, m.callCount)
 		require.NoError(t, err)
+
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
+
 			if assert.Len(t, subs[0].Rules, 3) {
 				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
 				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
 				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
 			}
+
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
 			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
 		}
@@ -195,13 +205,16 @@ func TestHTTPSubscriptions(t *testing.T) {
 		subs, err := GetSubscriptionsHTTP(t.Context(), &m, log, resiliency.FromConfigurations(log), "")
 		assert.Equal(t, m.successThreshold, m.callCount)
 		require.NoError(t, err)
+
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
+
 			if assert.Len(t, subs[0].Rules, 3) {
 				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
 				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
 				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
 			}
+
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
 			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
 		}
@@ -219,6 +232,7 @@ func TestHTTPSubscriptions(t *testing.T) {
 
 type mockUnstableGRPCSubscriptions struct {
 	runtimev1pb.AppCallbackClient
+
 	callCount        int
 	successThreshold int
 	unimplemented    bool
@@ -297,13 +311,16 @@ func TestGRPCSubscriptions(t *testing.T) {
 		m := mockGRPCSubscriptions{}
 		subs, err := GetSubscriptionsGRPC(t.Context(), &m, log, resiliency.FromConfigurations(log))
 		require.NoError(t, err)
+
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
+
 			if assert.Len(t, subs[0].Rules, 3) {
 				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
 				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
 				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
 			}
+
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
 			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
 		}
@@ -317,13 +334,16 @@ func TestGRPCSubscriptions(t *testing.T) {
 		subs, err := GetSubscriptionsGRPC(t.Context(), &m, log, resiliency.FromConfigurations(log))
 		assert.Equal(t, m.successThreshold, m.callCount)
 		require.NoError(t, err)
+
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
+
 			if assert.Len(t, subs[0].Rules, 3) {
 				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
 				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
 				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
 			}
+
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
 			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
 		}
@@ -350,13 +370,16 @@ func TestGRPCSubscriptions(t *testing.T) {
 		subs, err := GetSubscriptionsGRPC(t.Context(), &m, log, resiliency.FromConfigurations(log))
 		assert.Equal(t, m.successThreshold, m.callCount)
 		require.NoError(t, err)
+
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
+
 			if assert.Len(t, subs[0].Rules, 3) {
 				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
 				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
 				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
 			}
+
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
 			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
 		}

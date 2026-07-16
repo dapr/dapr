@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"time"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,7 +40,7 @@ var (
 // to limit what items end up in the cache. The following is removed/clear from the resources:
 // - pods -> managed fields, status (we care for spec to find out containers, the rests are set to empty)
 // - deploy/sts -> template.spec, status, managedfields (we only care about template/metadata except for injector deployment)
-func GetFilteredCache(namespace string, podSelector labels.Selector) cache.NewCacheFunc {
+func GetFilteredCache(namespace string, podSelector labels.Selector, syncPeriod *time.Duration) cache.NewCacheFunc {
 	return func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
 		// The only pods we are interested are in watchdog. we don't need to
 		// list/watch pods that we are almost sure have dapr sidecar already.
@@ -47,6 +49,11 @@ func GetFilteredCache(namespace string, podSelector labels.Selector) cache.NewCa
 			opts.DefaultNamespaces = map[string]cache.Config{
 				namespace: {},
 			}
+		}
+		// Override the informer resync period when configured. Zero/nil leaves
+		// the controller-runtime default (10h) in place.
+		if syncPeriod != nil {
+			opts.SyncPeriod = syncPeriod
 		}
 		return cache.New(config, opts)
 	}
@@ -65,9 +72,9 @@ func getTransformerFunctions(podSelector labels.Selector) map[client.Object]cach
 					return i, nil
 				}
 
-				if operatormeta.IsAnnotatedForDapr(obj.ObjectMeta.GetAnnotations()) && !operatormeta.IsSidecarPresent(obj.ObjectMeta.GetLabels()) {
+				if operatormeta.IsAnnotatedForDapr(obj.GetAnnotations()) && !operatormeta.IsSidecarPresent(obj.GetLabels()) {
 					objClone := obj.DeepCopy()
-					objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
+					objClone.ManagedFields = []metav1.ManagedFieldsEntry{}
 					objClone.Status = podEmptyStatus
 					return objClone, nil
 				}
@@ -88,10 +95,10 @@ func getTransformerFunctions(podSelector labels.Selector) map[client.Object]cach
 				}
 
 				// slim down dapr deployments and sinkhole non-dapr ones
-				if operatormeta.IsAnnotatedForDapr(obj.Spec.Template.ObjectMeta.GetAnnotations()) {
+				if operatormeta.IsAnnotatedForDapr(obj.Spec.Template.GetAnnotations()) {
 					// keep metadata but remove the rest
 					objClone := obj.DeepCopy()
-					objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
+					objClone.ManagedFields = []metav1.ManagedFieldsEntry{}
 					objClone.Spec.Template.Spec = podEmptySpec
 					objClone.Status = deployEmptyStatus
 					return objClone, nil
@@ -107,10 +114,10 @@ func getTransformerFunctions(podSelector labels.Selector) map[client.Object]cach
 					return i, nil
 				}
 
-				if operatormeta.IsAnnotatedForDapr(obj.Spec.Template.ObjectMeta.GetAnnotations()) {
+				if operatormeta.IsAnnotatedForDapr(obj.Spec.Template.GetAnnotations()) {
 					// keep metadata but remove the rest
 					objClone := obj.DeepCopy()
-					objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
+					objClone.ManagedFields = []metav1.ManagedFieldsEntry{}
 					objClone.Spec.Template.Spec = podEmptySpec
 					objClone.Status = stsEmptyStatus
 					return objClone, nil

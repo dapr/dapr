@@ -21,6 +21,7 @@ DAPR_CLI_VERSION=${4:-""}
 PROTOC_VERSION=${5:-"25.4"}
 PROTOC_GEN_GO_VERSION=${6:-"1.32.0"}
 PROTOC_GEN_GO_GRPC_VERSION=${7:-"1.3.0"}
+PROTOC_GEN_CONNECT_GO_VERSION=${7:-"1.9.1"}
 GOLANGCI_LINT_VERSION=${8:-"1.64.6"}
 
 set -e
@@ -57,13 +58,15 @@ unzip -o "${PROTOC_ZIP}" -d /usr/local 'include/*'
 chmod -R 755 /usr/local/include/google/protobuf
 rm -f "${PROTOC_ZIP}"
 
-# Install protoc-gen-go and protoc-gen-go-grpc
+# Install protoc-gen-go, protoc-gen-go-grpc and protoc-gen-connect-go
 # Must be installed as the non-root user
 export GOBIN="${GOPATH}/bin"
 sudo -u ${USERNAME} --preserve-env=GOPATH,GOBIN,GOROOT \
     go install "google.golang.org/protobuf/cmd/protoc-gen-go@v${PROTOC_GEN_GO_VERSION}"
 sudo -u ${USERNAME} --preserve-env=GOPATH,GOBIN,GOROOT \
     go install "google.golang.org/grpc/cmd/protoc-gen-go-grpc@v${PROTOC_GEN_GO_GRPC_VERSION}"
+sudo -u ${USERNAME} --preserve-env=GOPATH,GOBIN,GOROOT \
+    go install "google.golang.org/grpc/cmd/protoc-gen-connect_go@v${PROTOC_GEN_CONNECT_GO_VERSION}"
 
 # Install golangci-lint using the recommended method (best to avoid using go install according to their docs)
 # Must be installed as the non-root user

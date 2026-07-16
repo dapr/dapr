@@ -18,6 +18,10 @@ import (
 
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/dapr/dapr/pkg/apis/common"
+	"github.com/dapr/dapr/pkg/apis/configuration"
 )
 
 // +genclient
@@ -25,12 +29,76 @@ import (
 // +kubebuilder:object:root=true
 
 // Configuration describes an Dapr configuration setting.
+//
+//nolint:recvcheck
 type Configuration struct {
 	metav1.TypeMeta `json:",inline"`
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	// +optional
 	Spec ConfigurationSpec `json:"spec,omitempty"`
+}
+
+const (
+	kindConfiguration = "Configuration"
+	version           = "v1alpha1"
+)
+
+// Kind returns the configuration kind.
+func (Configuration) Kind() string {
+	return kindConfiguration
+}
+
+// APIVersion returns the configuration API version.
+func (Configuration) APIVersion() string {
+	return configuration.GroupName + "/" + version
+}
+
+// GetName returns the configuration name.
+func (c Configuration) GetName() string {
+	return c.Name
+}
+
+// GetNamespace returns the configuration namespace.
+func (c Configuration) GetNamespace() string {
+	return c.Namespace
+}
+
+// LogName returns the name of the configuration that can be used in logging.
+func (c Configuration) LogName() string {
+	return c.Name
+}
+
+// GetSecretStore returns the name of the secret store (empty for configuration).
+func (c Configuration) GetSecretStore() string {
+	return ""
+}
+
+// NameValuePairs returns empty slice as configurations don't have metadata pairs.
+func (c Configuration) NameValuePairs() []common.NameValuePair {
+	return nil
+}
+
+// ClientObject returns the configuration as a client.Object.
+func (c Configuration) ClientObject() client.Object {
+	return &c
+}
+
+// GetScopes returns empty slice as configurations don't have scopes.
+func (c Configuration) GetScopes() []string {
+	return nil
+}
+
+// EmptyMetaDeepCopy returns a new instance of the configuration type with the
+// TypeMeta's Kind and APIVersion fields set.
+func (c Configuration) EmptyMetaDeepCopy() metav1.Object {
+	n := c.DeepCopy()
+	n.TypeMeta = metav1.TypeMeta{
+		Kind:       kindConfiguration,
+		APIVersion: configuration.GroupName + "/" + version,
+	}
+	n.ObjectMeta = metav1.ObjectMeta{Name: c.Name, Namespace: c.Namespace}
+	return n
 }
 
 // ConfigurationSpec is the spec for a configuration.
@@ -71,14 +139,81 @@ type ConfigurationSpec struct {
 type WorkflowSpec struct {
 	// maxConcurrentWorkflowInvocations is the maximum number of concurrent workflow invocations that can be scheduled by a single Dapr instance.
 	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
-	// If omitted, the default value of 100 will be used.
+	// If omitted, no maximum will be enforced.
 	// +optional
 	MaxConcurrentWorkflowInvocations int32 `json:"maxConcurrentWorkflowInvocations,omitempty"`
 	// maxConcurrentActivityInvocations is the maximum number of concurrent activities that can be processed by a single Dapr instance.
 	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
-	// If omitted, the default value of 100 will be used.
+	// If omitted, no maximum will be enforced.
 	// +optional
 	MaxConcurrentActivityInvocations int32 `json:"maxConcurrentActivityInvocations,omitempty"`
+
+	// globalMaxConcurrentWorkflowInvocations is the maximum number of concurrent
+	// workflow invocations across all replicas, enforced by the scheduler.
+	// If omitted, no global maximum will be enforced.
+	// +optional
+	GlobalMaxConcurrentWorkflowInvocations *int32 `json:"globalMaxConcurrentWorkflowInvocations,omitempty"`
+
+	// globalMaxConcurrentActivityInvocations is the maximum number of concurrent
+	// activity invocations across all replicas, enforced by the scheduler.
+	// If omitted, no global maximum will be enforced.
+	// +optional
+	GlobalMaxConcurrentActivityInvocations *int32 `json:"globalMaxConcurrentActivityInvocations,omitempty"`
+
+	// workflowConcurrencyLimits defines per-workflow-name concurrency limits
+	// enforced globally across all replicas by the scheduler.
+	// +optional
+	WorkflowConcurrencyLimits []NamedConcurrencyLimit `json:"workflowConcurrencyLimits,omitempty"`
+	// activityConcurrencyLimits defines per-activity-name concurrency limits
+	// enforced globally across all replicas by the scheduler.
+	// +optional
+	ActivityConcurrencyLimits []NamedConcurrencyLimit `json:"activityConcurrencyLimits,omitempty"`
+
+	// StateRetentionPolicy defines the retention configuration for workflow
+	// state once a workflow reaches a terminal state. If not set, workflow
+	// instances will not be automatically purged.
+	// +optional
+	StateRetentionPolicy *WorkflowStateRetentionPolicy `json:"stateRetentionPolicy,omitempty"`
+}
+
+// NamedConcurrencyLimit defines a per-name concurrency limit for a specific
+// workflow or activity name.
+type NamedConcurrencyLimit struct {
+	// Name is the workflow or activity name to limit.
+	// +optional
+	Name *string `json:"name,omitempty"`
+	// MaxConcurrent is the maximum number of concurrent invocations across all
+	// replicas.
+	// +optional
+	MaxConcurrent *int32 `json:"maxConcurrent,omitempty"`
+}
+
+// WorkflowStateRetentionPolicy defines the retention policy of workflow state
+// for workflow instances once they reaches a specific or any terminal state.
+// If not set, workflow instances will not be automatically purged. If a
+// specific and any terminal state are both set, the specific terminal state
+// takes precedence. Accepts duration strings, e.g. "72h" or "30m", including
+// immediate values "0s".
+type WorkflowStateRetentionPolicy struct {
+	// AnyTerminal is the TTL for purging workflow instances that reach any
+	// terminal state.
+	// +optional
+	AnyTerminal *metav1.Duration `json:"anyTerminal,omitempty"`
+
+	// Completed is the TTL for purging workflow instances that reach the
+	// Completed terminal state.
+	// +optional
+	Completed *metav1.Duration `json:"completed,omitempty"`
+
+	// Failed is the TTL for purging workflow instances that reach the Failed
+	// terminal state.
+	// +optional
+	Failed *metav1.Duration `json:"failed,omitempty"`
+
+	// Terminated is the TTL for purging workflow instances that reach the
+	// Terminated terminal state.
+	// +optional
+	Terminated *metav1.Duration `json:"terminated,omitempty"`
 }
 
 // APISpec describes the configuration for Dapr APIs.
@@ -201,6 +336,13 @@ type OtelSpec struct {
 	Protocol        string `json:"protocol" yaml:"protocol"`
 	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
 	IsSecure        *bool  `json:"isSecure" yaml:"isSecure"`
+	// Headers to add to the OTLP trace exporter request.
+	// Each header can contain plaintext values, reference secrets, or reference environment variables.
+	// +optional
+	Headers []common.NameValuePair `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// Timeout for the OTLP trace exporter request.
+	// +optional
+	Timeout *metav1.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 // ZipkinSpec defines Zipkin trace configurations.

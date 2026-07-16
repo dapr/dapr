@@ -26,6 +26,7 @@ import (
 
 func Test_component(t *testing.T) {
 	var store Store[componentsapi.Component]
+
 	compStore := compstore.New()
 	store = NewComponents(compStore)
 	comp1, comp2 := componentsapi.Component{

@@ -102,7 +102,7 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 	)
 
 	// TODO: @joshvanl: add support for bulk publish to in-memory pubsub.
-	resp, err := client.BulkPublishEventAlpha1(ctx, &rtv1.BulkPublishRequest{
+	resp, err := client.BulkPublishEvent(ctx, &rtv1.BulkPublishRequest{
 		PubsubName: "mypub",
 		Topic:      "a",
 		Entries: []*rtv1.BulkPublishRequestEntry{
@@ -120,7 +120,7 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 	b.sub.ReceiveBulk(t, ctx)
 	b.sub.AssertBulkEventChanLen(t, 0)
 
-	resp, err = client.BulkPublishEventAlpha1(ctx, &rtv1.BulkPublishRequest{
+	resp, err = client.BulkPublishEvent(ctx, &rtv1.BulkPublishRequest{
 		PubsubName: "mypub",
 		Topic:      "b",
 		Entries: []*rtv1.BulkPublishRequestEntry{

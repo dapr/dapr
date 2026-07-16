@@ -94,3 +94,15 @@ func (p *PubSub) Cleanup(t *testing.T) {
 	require.NoError(t, <-p.srvErrCh)
 	require.NoError(t, p.component.impl.(io.Closer).Close())
 }
+
+// PauseCalled reports how many times Pause was invoked on the pluggable
+// server. Exposed for integration tests that assert the runtime's
+// pause-and-drain shutdown path was exercised.
+func (p *PubSub) PauseCalled() int64 { return p.component.pauseCalled.Load() }
+
+// IsPaused reports whether the pluggable server is currently in the
+// paused state.
+func (p *PubSub) IsPaused() bool { return p.component.paused.Load() }
+
+// PauseStarted returns a channel closed the first time Pause is called.
+func (p *PubSub) PauseStarted() <-chan struct{} { return p.component.pauseStartCh }

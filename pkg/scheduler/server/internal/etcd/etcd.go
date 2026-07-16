@@ -34,19 +34,29 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server.etcd")
 
 type Options struct {
-	Name                 string
-	InitialCluster       []string
-	ClientPort           uint64
-	SpaceQuota           int64
-	CompactionMode       string
-	CompactionRetention  string
-	SnapshotCount        uint64
-	MaxSnapshots         uint
-	MaxWALs              uint
-	BackendBatchLimit    int
-	BackendBatchInterval string
-	DefragThresholdMB    uint
-	Metrics              string
+	Name string
+
+	Embed bool
+
+	InitialCluster             []string
+	ClientPort                 uint64
+	ClientListenAddress        string
+	SpaceQuota                 int64
+	CompactionMode             string
+	CompactionRetention        string
+	SnapshotCount              uint64
+	MaxSnapshots               uint
+	MaxWALs                    uint
+	BackendBatchLimit          int
+	BackendBatchInterval       string
+	MaxTxnOps                  uint
+	DefragThresholdMB          uint
+	InitialElectionTickAdvance bool
+	Metrics                    string
+
+	ClientEndpoints []string
+	ClientUsername  string
+	ClientPassword  string
 
 	Security security.Handler
 
@@ -71,25 +81,53 @@ type etcd struct {
 	readyCh             chan struct{}
 }
 
-func New(opts Options) (Interface, error) {
-	config, err := config(opts)
+func New(ctx context.Context, opts Options) (Interface, error) {
+	if opts.Embed {
+		config, err := config(ctx, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create etcd config: %w", err)
+		}
+
+		return &etcd{
+			hz:      opts.Healthz.AddTarget("scheduler-etcd-embed"),
+			config:  config,
+			mode:    opts.Mode,
+			readyCh: make(chan struct{}),
+
+			existingClusterPath: filepath.Join(opts.DataDir, "dapr-scheduler-existing-cluster"),
+		}, nil
+	}
+
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints: opts.ClientEndpoints,
+		Username:  opts.ClientUsername,
+		Password:  opts.ClientPassword,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create etcd config: %w", err)
+		return nil, fmt.Errorf("failed to create etcd client: %w", err)
 	}
 
 	return &etcd{
-		hz:      opts.Healthz.AddTarget("scheduler-etcd"),
-		config:  config,
+		hz:      opts.Healthz.AddTarget("scheduler-etcd-external"),
+		client:  client,
 		mode:    opts.Mode,
 		readyCh: make(chan struct{}),
-
-		existingClusterPath: filepath.Join(opts.DataDir, "dapr-scheduler-existing-cluster"),
 	}, nil
 }
 
 func (e *etcd) Run(ctx context.Context) error {
 	defer e.hz.NotReady()
 	log.Info("Starting Etcd provider")
+
+	if e.config == nil {
+		log.Info("Using external Etcd database, will not start embedded Etcd")
+		e.hz.Ready()
+		close(e.readyCh)
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
+	log.Infof("Starting embedded Etcd")
 
 	if err := e.maybeDeleteDataDir(); err != nil {
 		return err
@@ -163,7 +201,7 @@ func (e *etcd) runDefragLoop(ctx context.Context) error {
 
 func (e *etcd) doDefrag(ctx context.Context) error {
 	log.Debug("Checking if Etcd needs Defragmentation")
-	resp, err := e.client.Maintenance.Status(ctx, e.config.ListenClientUrls[0].Host)
+	resp, err := e.client.Status(ctx, e.config.ListenClientUrls[0].Host)
 	if err != nil {
 		return err
 	}
@@ -178,7 +216,7 @@ func (e *etcd) doDefrag(ctx context.Context) error {
 
 	log.Infof("Defragmenting Etcd (dbSize: %s, dbSizeInUse: %s)", dbSize, dbSizeInUse)
 	start := time.Now()
-	_, err = e.client.Maintenance.Defragment(ctx, e.config.ListenClientUrls[0].Host)
+	_, err = e.client.Defragment(ctx, e.config.ListenClientUrls[0].Host)
 	if err != nil {
 		return err
 	}

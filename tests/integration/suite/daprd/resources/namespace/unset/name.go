@@ -87,19 +87,19 @@ func (n *name) Run(t *testing.T, ctx context.Context) {
 	assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{
 			Name: "abc", Type: "state.in-memory", Version: "v1",
-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 		},
 		{
 			Name: "123", Type: "state.in-memory", Version: "v1",
-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 		},
 		{
 			Name: "456", Type: "state.in-memory", Version: "v1",
-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 		},
 		{
 			Name: "789", Type: "state.in-memory", Version: "v1",
-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 		},
 	}, resp.GetRegisteredComponents())
 }

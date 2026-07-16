@@ -21,6 +21,12 @@ import (
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 )
 
+// ValidateResult is the result of a validation.
+type ValidateResult struct {
+	// TrustDomain is the trust domain of the client.
+	TrustDomain spiffeid.TrustDomain
+}
+
 // Validator is used to validate the identity of a certificate requester by
 // using an ID and token.
 // Returns the trust domain of the certificate requester.
@@ -32,5 +38,5 @@ type Validator interface {
 	// Returns the Trust Domain of the certificate requester, and whether the
 	// signed certificates duration should be overridden to the maximum time
 	// permitted by the singing certificate.
-	Validate(context.Context, *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error)
+	Validate(context.Context, *sentryv1pb.SignCertificateRequest) (ValidateResult, error)
 }

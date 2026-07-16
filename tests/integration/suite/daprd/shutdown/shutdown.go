@@ -14,6 +14,7 @@ limitations under the License.
 package shutdown
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/api"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/block"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/graceful"
 )

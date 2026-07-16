@@ -181,6 +181,9 @@ func TraceIDAndStateFromSpan(span trace.Span) (string, string) {
 	var traceID, traceState string
 
 	if span != nil {
+		if !span.SpanContext().IsValid() {
+			return traceID, traceState
+		}
 		sc := span.SpanContext()
 
 		if !sc.Equal(trace.SpanContext{}) {

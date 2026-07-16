@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -58,10 +57,10 @@ func (d *data) Run(t *testing.T, ctx context.Context) {
 	_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name: "test1",
 		Job: &schedulerv1pb.Job{
-			Repeats:  ptr.Of(uint32(10)),
-			Schedule: ptr.Of("@every 20s"),
-			DueTime:  ptr.Of("100s"),
-			Ttl:      ptr.Of("200s"),
+			Repeats:  new(uint32(10)),
+			Schedule: new("@every 20s"),
+			DueTime:  new("100s"),
+			Ttl:      new("200s"),
 			Data:     data1,
 		},
 		Metadata: &schedulerv1pb.JobMetadata{
@@ -78,10 +77,10 @@ func (d *data) Run(t *testing.T, ctx context.Context) {
 	_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name: "test2",
 		Job: &schedulerv1pb.Job{
-			Repeats:  ptr.Of(uint32(20)),
-			Schedule: ptr.Of("@every 40s"),
-			DueTime:  ptr.Of("200s"),
-			Ttl:      ptr.Of("300s"),
+			Repeats:  new(uint32(20)),
+			Schedule: new("@every 40s"),
+			DueTime:  new("200s"),
+			Ttl:      new("300s"),
 			Data:     data2,
 		},
 		Metadata: &schedulerv1pb.JobMetadata{

@@ -17,8 +17,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -68,17 +66,6 @@ type idtype struct {
 }
 
 func (i *idtype) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: schedulerreminders
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: true`), 0o600))
-
 	i.scheduler = scheduler.New(t)
 	i.place = placement.New(t)
 
@@ -94,7 +81,7 @@ spec:
 	for x := range i.daprdsNum {
 		i.actorDaprds[x].actorTypes = make([]actortype, i.actorTypesNum)
 
-		var appOpts []app.Option
+		appOpts := make([]app.Option, 0, 3*i.actorIDsNum*i.actorTypesNum)
 		for y := range i.actorTypesNum {
 			typeuid, err := uuid.NewUUID()
 			require.NoError(t, err)
@@ -136,7 +123,6 @@ spec:
 		)...)
 
 		i.daprds[x] = daprd.New(t,
-			daprd.WithConfigs(configFile),
 			daprd.WithInMemoryActorStateStore("mystore"),
 			daprd.WithPlacementAddresses(i.place.Address()),
 			daprd.WithSchedulerAddresses(i.scheduler.Address()),

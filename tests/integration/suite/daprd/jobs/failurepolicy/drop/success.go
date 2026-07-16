@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -66,11 +65,12 @@ func (f *success) Setup(t *testing.T) []framework.Option {
 func (f *success) Run(t *testing.T, ctx context.Context) {
 	f.scheduler.WaitUntilRunning(t, ctx)
 	f.daprd.WaitUntilRunning(t, ctx)
+	f.scheduler.WaitUntilSidecarsConnected(t, ctx, 3)
 
-	_, err := f.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err := f.daprd.GRPCClient(t, ctx).ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:    "test",
-			DueTime: ptr.Of("0s"),
+			DueTime: new("0s"),
 			FailurePolicy: &corev1.JobFailurePolicy{
 				Policy: &corev1.JobFailurePolicy_Drop{
 					Drop: &corev1.JobFailurePolicyDrop{},

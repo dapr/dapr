@@ -26,7 +26,6 @@ import (
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
-	"github.com/dapr/dapr/pkg/operator/api"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -65,20 +64,12 @@ func (i *inflight) Setup(t *testing.T) []framework.Option {
 	sentry := sentry.New(t)
 	i.operator = operator.New(t,
 		operator.WithSentry(sentry),
-		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
-			return &operatorv1.GetConfigurationResponse{
-				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"features":[{"name":"HotReload","enabled":true}]}}`,
-				),
-			}, nil
-		}),
 	)
 
 	i.daprd = daprd.New(t,
 		daprd.WithAppPort(i.sub.Port()),
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
-		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(i.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
@@ -110,7 +101,7 @@ func (i *inflight) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 	i.operator.AddSubscriptions(sub)
-	i.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	i.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub,
 		EventType:    operatorv1.ResourceEventType_CREATED,
 	})
@@ -134,7 +125,7 @@ func (i *inflight) Run(t *testing.T, ctx context.Context) {
 	}
 
 	i.operator.SetSubscriptions()
-	i.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	i.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub,
 		EventType:    operatorv1.ResourceEventType_DELETED,
 	})

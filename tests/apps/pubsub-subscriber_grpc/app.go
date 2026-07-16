@@ -179,6 +179,8 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 		s.setRespondWithEmptyJSON()
 	case "set-respond-invalid-status":
 		s.setRespondWithInvalidStatus()
+	case "set-respond-success":
+		s.setRespondWithSuccess()
 	}
 
 	return &commonv1pb.InvokeResponse{Data: respBody, ContentType: "application/json"}, nil
@@ -208,21 +210,41 @@ func (s *server) getMessages(reqID string) []byte {
 func (s *server) setRespondWithError() {
 	log.Println("setRespondWithError called")
 	respondWithError = true
+	respondWithRetry = false
+	respondWithEmptyJSON = false
+	respondWithInvalidStatus = false
 }
 
 func (s *server) setRespondWithRetry() {
 	log.Println("setRespondWithRetry called")
 	respondWithRetry = true
+	respondWithError = false
+	respondWithEmptyJSON = false
+	respondWithInvalidStatus = false
 }
 
 func (s *server) setRespondWithEmptyJSON() {
 	log.Println("setRespondWithEmptyJSON called")
 	respondWithEmptyJSON = true
+	respondWithError = false
+	respondWithRetry = false
+	respondWithInvalidStatus = false
 }
 
 func (s *server) setRespondWithInvalidStatus() {
 	log.Println("setRespondWithInvalidStatus called")
 	respondWithInvalidStatus = true
+	respondWithError = false
+	respondWithRetry = false
+	respondWithEmptyJSON = false
+}
+
+func (s *server) setRespondWithSuccess() {
+	log.Println("setRespondWithSuccess called")
+	respondWithError = false
+	respondWithRetry = false
+	respondWithEmptyJSON = false
+	respondWithInvalidStatus = false
 }
 
 // Dapr will call this method to get the list of topics the app wants to subscribe to. In this example, we are telling Dapr
@@ -436,13 +458,17 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 	}, nil
 }
 
-func (s *server) OnJobEventAlpha1(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
-	return nil, nil
+func (s *server) OnJobEvent(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+	return &runtimev1pb.JobEventResponse{}, nil
 }
 
-func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
+func (s *server) OnJobEventAlpha1(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+	return &runtimev1pb.JobEventResponse{}, nil
+}
+
+func (s *server) bulkTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest, endpoint string) (*runtimev1pb.TopicEventBulkResponse, error) {
 	reqID := uuid.New().String()
-	log.Printf("(%s) Entered in OnBulkTopicEventAlpha1 in Bulk Subscribe - Topic: %s", reqID, in.GetTopic())
+	log.Printf("(%s) Entered in %s in Bulk Subscribe - Topic: %s", reqID, endpoint, in.GetTopic())
 	lock.Lock()
 	defer lock.Unlock()
 
@@ -501,6 +527,14 @@ func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.Top
 	return &runtimev1pb.TopicEventBulkResponse{
 		Statuses: bulkResponses,
 	}, nil
+}
+
+func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
+	return s.bulkTopicEvent(ctx, in, "OnBulkTopicEventAlpha1")
+}
+
+func (s *server) OnBulkTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
+	return s.bulkTopicEvent(ctx, in, "OnBulkTopicEvent")
 }
 
 // Dapr will call this method to get the list of bindings the app will get invoked by. In this example, we are telling Dapr

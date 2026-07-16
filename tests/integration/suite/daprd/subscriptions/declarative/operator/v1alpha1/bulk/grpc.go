@@ -108,7 +108,7 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		daprd.WithNamespace("default"),
 		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
 		daprd.WithExecOptions(exec.WithEnvVars(t,
-			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors),
 		)),
 	)
 
@@ -124,7 +124,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	client := g.daprd.GRPCClient(t, ctx)
 
 	// TODO: @joshvanl: add support for bulk publish to in-memory pubsub.
-	resp, err := client.BulkPublishEventAlpha1(ctx, &rtv1.BulkPublishRequest{
+	resp, err := client.BulkPublishEvent(ctx, &rtv1.BulkPublishRequest{
 		PubsubName: "mypub",
 		Topic:      "a",
 		Entries: []*rtv1.BulkPublishRequestEntry{
@@ -142,7 +142,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	g.sub.ReceiveBulk(t, ctx)
 	g.sub.AssertBulkEventChanLen(t, 0)
 
-	resp, err = client.BulkPublishEventAlpha1(ctx, &rtv1.BulkPublishRequest{
+	resp, err = client.BulkPublishEvent(ctx, &rtv1.BulkPublishRequest{
 		PubsubName: "mypub",
 		Topic:      "b",
 		Entries: []*rtv1.BulkPublishRequestEntry{

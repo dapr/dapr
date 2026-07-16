@@ -64,7 +64,9 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_scheduler_sidecars_connected: The total number of dapr sidecars connected to the scheduler service.
 * dapr_scheduler_jobs_created_total: The total number of jobs scheduled.
 * dapr_scheduler_jobs_triggered_total: The total number of successfully triggered jobs.
-* dapr_scheduler_trigger_latency: The latency of triggering jobs from the scheduler service.
+* dapr_scheduler_trigger_jobs_failed_total: The total number of failed jobs.
+* dapr_scheduler_trigger_jobs_undelivered_total: The total number of undelivered jobs.
+* dapr_scheduler_trigger_latency: The total time it takes to trigger a job from the scheduler service.
 
 ## Dapr Runtime metrics
 
@@ -132,6 +134,8 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_runtime_workflow_activity_operation_latency: The total time taken to run an activity request.
 * dapr_runtime_workflow_activity_execution_count: The number of successful/failed/recoverable activity executions.
 * dapr_runtime_workflow_activity_execution_latency: The total time taken to run an activity to completion.
+* dapr_runtime_workflow_payload_size_ratio: Workflow dispatch payload size as a fraction of the configured gRPC `--max-body-size`; values >0.95 trip the graceful stall, values >1 exceed the limit. Not recorded when `--max-body-size` is non-positive.
+* dapr_runtime_workflow_activity_payload_size_ratio: Activity dispatch payload size as a fraction of the configured gRPC `--max-body-size`; values >0.95 trip the graceful stall, values >1 exceed the limit. Not recorded when `--max-body-size` is non-positive.
 
 ### gRPC monitoring metrics
 
@@ -206,3 +210,8 @@ We support only server side metrics.
 * dapr_component_secret_count: The number of operations performed on the secret component
 * dapr_component_secret_latencies: The latency of the response from the secret component
 
+### Job metrics
+
+* dapr_component_job_success_count: The number of successful job triggers
+* dapr_component_job_failure_count: The number of failed job triggers
+* dapr_component_job_latencies: The latency of the response from the app that processed the triggered job

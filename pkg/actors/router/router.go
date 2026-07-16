@@ -18,6 +18,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc"
@@ -26,81 +29,96 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/utils/clock"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
-	"github.com/dapr/dapr/pkg/actors/locker"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/table"
-	"github.com/dapr/dapr/pkg/actors/targets"
+	targetserrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagutils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/kit/concurrency/fifo"
-	"github.com/dapr/kit/events/queue"
 )
 
 type Interface interface {
+	Run(ctx context.Context) error
 	Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 	CallReminder(ctx context.Context, reminder *api.Reminder) error
-	CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error
+	CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, fn func(*internalv1pb.InternalInvokeResponse) (bool, error)) error
 }
 
 type Options struct {
 	Namespace          string
+	AppID              string
 	Table              table.Interface
 	Placement          placement.Interface
 	Resiliency         resiliency.Provider
 	Reminders          reminders.Interface
 	GRPC               *manager.Manager
-	IdlerQueue         *queue.Processor[string, targets.Idlable]
-	SchedulerReminders bool
-	Locker             locker.Interface
 	MaxRequestBodySize int
 }
 
 type router struct {
-	namespace          string
-	schedulerReminders bool
+	namespace string
+	appID     string
 
 	table      table.Interface
 	placement  placement.Interface
 	resiliency resiliency.Provider
 	reminders  reminders.Interface
 	grpc       *manager.Manager
-	locker     locker.Interface
 
-	idlerQueue *queue.Processor[string, targets.Idlable]
-
-	lock  *fifo.Mutex
 	clock clock.Clock
 
 	callOptions []grpc.CallOption
+
+	lock   sync.RWMutex
+	ctxs   sync.Map
+	idx    atomic.Uint64
+	closed bool
 }
 
 func New(opts Options) Interface {
 	return &router{
-		namespace:          opts.Namespace,
-		schedulerReminders: opts.SchedulerReminders,
-		table:              opts.Table,
-		placement:          opts.Placement,
-		resiliency:         opts.Resiliency,
-		grpc:               opts.GRPC,
-		idlerQueue:         opts.IdlerQueue,
-		reminders:          opts.Reminders,
-		locker:             opts.Locker,
-		lock:               fifo.New(),
-		clock:              clock.RealClock{},
+		namespace:  opts.Namespace,
+		appID:      opts.AppID,
+		table:      opts.Table,
+		placement:  opts.Placement,
+		resiliency: opts.Resiliency,
+		grpc:       opts.GRPC,
+		reminders:  opts.Reminders,
+		clock:      clock.RealClock{},
 		callOptions: []grpc.CallOption{
 			grpc.MaxCallRecvMsgSize(opts.MaxRequestBodySize),
 			grpc.MaxCallSendMsgSize(opts.MaxRequestBodySize),
 		},
+		ctxs: sync.Map{},
 	}
 }
 
+func (r *router) Run(ctx context.Context) error {
+	<-ctx.Done()
+
+	r.lock.Lock()
+	r.closed = true
+	r.lock.Unlock()
+
+	r.ctxs.Range(func(key, value any) bool {
+		cancel := value.(context.CancelFunc)
+		cancel()
+		return true
+	})
+
+	return ctx.Err()
+}
+
 func (r *router) Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	ctx, cancel := r.withContext(ctx)
+	defer cancel()
+
 	var res *internalv1pb.InternalInvokeResponse
 	var err error
 
@@ -123,6 +141,9 @@ func (r *router) Call(ctx context.Context, req *internalv1pb.InternalInvokeReque
 }
 
 func (r *router) CallReminder(ctx context.Context, req *api.Reminder) error {
+	ctx, cancel := r.withContext(ctx)
+	defer cancel()
+
 	if req.SkipLock {
 		return r.callReminder(ctx, req)
 	}
@@ -138,37 +159,40 @@ func (r *router) CallReminder(ctx context.Context, req *api.Reminder) error {
 	}
 }
 
-func (r *router) CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
+func (r *router) CallStream(ctx context.Context,
+	req *internalv1pb.InternalInvokeRequest,
+	stream func(*internalv1pb.InternalInvokeResponse) (bool, error),
+) error {
+	ctx, cancel := r.withContext(ctx)
+	defer cancel()
+
 	policyRunner := resiliency.NewRunner[struct{}](ctx, r.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
 	_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
-		err := r.callStream(ctx, req, stream)
+		serr := r.callStream(ctx, req, stream)
 		// Suppress EOF errors as this simply means the stream is closing.
-		if errors.Is(err, io.EOF) {
+		if errors.Is(serr, io.EOF) {
 			return struct{}{}, nil
 		}
-		return struct{}{}, err
+		return struct{}{}, serr
 	})
 
 	return err
 }
 
 func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
-	if !req.SkipLock {
-		var cancel context.CancelFunc
-		var err error
-		ctx, cancel, err = r.placement.Lock(ctx)
-		if err != nil {
-			return backoff.Permanent(err)
-		}
-		defer cancel()
-	}
-
-	lar, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
+	lar, cctx, cancel, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.ActorType,
 		ActorID:   req.ActorID,
 	})
 	if err != nil {
 		return err
+	}
+
+	if req.SkipLock || !lar.Local {
+		cancel(nil)
+	} else {
+		defer cancel(nil)
+		ctx = cctx
 	}
 
 	if !lar.Local {
@@ -184,17 +208,7 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 		return err
 	}
 
-	if !req.SkipLock {
-		// Only lock the request if it is a local call.
-		var cancel context.CancelFunc
-		cancel, err = r.locker.Lock(req.ActorType, req.ActorID)
-		if err != nil {
-			return err
-		}
-		defer cancel()
-	}
-
-	target, _, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
+	target, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
 	if err != nil {
 		return backoff.Permanent(err)
 	}
@@ -205,25 +219,15 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 		err = target.InvokeReminder(ctx, req)
 	}
 
+	if ctx.Err() != nil || targetserrors.IsClosed(err) {
+		return err
+	}
+
 	return backoff.Permanent(err)
 }
 
 func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	// If we are in a reentrancy which is local, skip the placement lock.
-	_, isDaprRemote := req.GetMetadata()["X-Dapr-Remote"]
-	_, isAPICall := req.GetMetadata()["Dapr-API-Call"]
-
-	if isAPICall || isDaprRemote {
-		var cancel context.CancelFunc
-		var err error
-		ctx, cancel, err = r.placement.Lock(ctx)
-		if err != nil {
-			return nil, backoff.Permanent(err)
-		}
-		defer cancel()
-	}
-
-	lar, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
+	lar, cctx, cancel, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.GetActor().GetActorType(),
 		ActorID:   req.GetActor().GetActorId(),
 	})
@@ -232,25 +236,29 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	}
 
 	if lar.Local {
-		// Only lock the request if it is a local call.
-		var cancel context.CancelFunc
-		cancel, err = r.locker.LockRequest(req)
-		if err != nil {
-			return nil, err
-		}
-		defer cancel()
+		defer cancel(nil)
+		ctx = cctx
+
+		r.stampLocalCallerIdentity(req)
 
 		var resp *internalv1pb.InternalInvokeResponse
 		resp, err = r.callLocalActor(ctx, req)
 		if err != nil {
+			// Don't return permanent errors because of dissemination.
+			if ctx.Err() != nil || targetserrors.IsClosed(err) {
+				return resp, err
+			}
+
 			return resp, backoff.Permanent(err)
 		}
 		return resp, nil
 	}
 
+	cancel(nil)
+
 	// If this is a dapr-dapr call and the actor didn't pass the local check
-	// above, it means it has been moved in the meantime
-	if isDaprRemote {
+	// above, it means it has been moved in the meantime.
+	if _, isDaprRemote := req.GetMetadata()["X-Dapr-Remote"]; isDaprRemote {
 		return nil, backoff.Permanent(errors.New("remote actor moved"))
 	}
 
@@ -259,11 +267,20 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		return res, nil
 	}
 
+	if ctx.Err() != nil {
+		return nil, err
+	}
+
 	attempt := resiliency.GetAttempt(ctx)
-	code := status.Code(err)
-	if code == codes.Unavailable {
-		// Destroy the connection and force a re-connection on the next attempt
-		return res, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", lar.Address, attempt-1, err)
+	s, ok := status.FromError(err)
+	if ok {
+		if s.Code() == codes.Unavailable ||
+			(s.Code() == codes.Internal &&
+				(s.Message() == "error invoke actor method: remote actor moved" ||
+					strings.HasSuffix(s.Message(), ": placement is disseminating"))) {
+			// Destroy the connection and force a re-connection on the next attempt
+			return res, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", lar.Address, attempt-1, err)
+		}
 	}
 
 	return res, backoff.Permanent(err)
@@ -320,7 +337,7 @@ func (r *router) callRemoteActorReminder(ctx context.Context, lar *api.LookupAct
 }
 
 func (r *router) callLocalActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	target, err := r.getOrCreateActor(req.GetActor().GetActorType(), req.GetActor().GetActorId())
+	target, err := r.table.GetOrCreate(req.GetActor().GetActorType(), req.GetActor().GetActorId())
 	if err != nil {
 		return nil, err
 	}
@@ -328,20 +345,18 @@ func (r *router) callLocalActor(ctx context.Context, req *internalv1pb.InternalI
 	return target.InvokeMethod(ctx, req)
 }
 
-func (r *router) callStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
-	ctx, pcancel, err := r.placement.Lock(ctx)
-	if err != nil {
-		return backoff.Permanent(err)
-	}
-	defer pcancel()
-
-	lar, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
+func (r *router) callStream(ctx context.Context,
+	req *internalv1pb.InternalInvokeRequest,
+	stream func(*internalv1pb.InternalInvokeResponse) (bool, error),
+) error {
+	lar, ctx, pcancel, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.GetActor().GetActorType(),
 		ActorID:   req.GetActor().GetActorId(),
 	})
 	if err != nil {
 		return err
 	}
+	defer pcancel(nil)
 
 	if !lar.Local {
 		// If this is a dapr-dapr call and the actor didn't pass the local check
@@ -353,18 +368,16 @@ func (r *router) callStream(ctx context.Context, req *internalv1pb.InternalInvok
 		return r.callRemoteActorStream(ctx, lar, req, stream)
 	}
 
-	if err = r.callLocalActorStream(ctx, req, stream); err != nil {
-		return backoff.Permanent(err)
-	}
+	r.stampLocalCallerIdentity(req)
 
-	return nil
+	return r.callLocalActorStream(ctx, req, stream)
 }
 
 func (r *router) callLocalActorStream(ctx context.Context,
 	req *internalv1pb.InternalInvokeRequest,
-	stream chan<- *internalv1pb.InternalInvokeResponse,
+	stream func(*internalv1pb.InternalInvokeResponse) (bool, error),
 ) error {
-	target, err := r.getOrCreateActor(req.GetActor().GetActorType(), req.GetActor().GetActorId())
+	target, err := r.table.GetOrCreate(req.GetActor().GetActorType(), req.GetActor().GetActorId())
 	if err != nil {
 		return err
 	}
@@ -375,7 +388,7 @@ func (r *router) callLocalActorStream(ctx context.Context,
 func (r *router) callRemoteActorStream(ctx context.Context,
 	lar *api.LookupActorResponse,
 	req *internalv1pb.InternalInvokeRequest,
-	stream chan<- *internalv1pb.InternalInvokeResponse,
+	stream func(*internalv1pb.InternalInvokeResponse) (bool, error),
 ) error {
 	conn, cancel, err := r.grpc.GetGRPCConnection(ctx, lar.Address, lar.AppID, r.namespace)
 	if err != nil {
@@ -398,26 +411,44 @@ func (r *router) callRemoteActorStream(ctx context.Context,
 			return err
 		}
 
-		select {
-		case stream <- resp:
-		case <-ctx.Done():
-			return ctx.Err()
+		if ok, err := stream(resp); err != nil || ok {
+			return err
 		}
 	}
 }
 
-func (r *router) getOrCreateActor(actorType, actorID string) (targets.Interface, error) {
-	target, created, err := r.table.GetOrCreate(actorType, actorID)
-	if err != nil {
-		return nil, err
+func (r *router) withContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	ctx, cancel := context.WithCancel(ctx)
+
+	if r.closed {
+		cancel()
+		return ctx, cancel
 	}
 
-	if created {
-		// If the target is idlable, then add it to the queue.
-		if idler, ok := target.(targets.Idlable); ok {
-			r.idlerQueue.Enqueue(idler)
-		}
+	id := r.idx.Add(1)
+
+	r.ctxs.Store(id, cancel)
+
+	wrappedCancel := func() {
+		cancel()
+		r.ctxs.Delete(id)
 	}
 
-	return target, nil
+	return ctx, wrappedCancel
+}
+
+func (r *router) stampLocalCallerIdentity(req *internalv1pb.InternalInvokeRequest) {
+	if req == nil {
+		return
+	}
+	// Preserve identity stamped upstream (e.g. by the CallActor gRPC
+	// handler from a remote SPIFFE peer) so a remote-routed-local call
+	// keeps the remote caller's identity.
+	if workflowacl.CallerAppID(req.GetMetadata()) != "" {
+		return
+	}
+	workflowacl.SetCallerIdentity(req, r.appID, r.namespace)
 }

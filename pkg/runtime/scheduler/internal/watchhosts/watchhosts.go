@@ -26,6 +26,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/healthz"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/clients"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops"
 	"github.com/dapr/dapr/pkg/scheduler/client"
@@ -41,7 +42,7 @@ type Options struct {
 	Healthz   healthz.Healthz
 	Security  security.Handler
 	Clients   *clients.Clients
-	HostLoop  loop.Interface[loops.Event]
+	HostLoop  loop.Interface[loops.EventHost]
 }
 
 type WatchHosts struct {
@@ -50,7 +51,7 @@ type WatchHosts struct {
 	security security.Handler
 	clients  *clients.Clients
 
-	loop loop.Interface[loops.Event]
+	loop loop.Interface[loops.EventHost]
 }
 
 func New(opts Options) *WatchHosts {
@@ -70,6 +71,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 		log.Warnf("No scheduler host addresses provided. Scheduler disabled")
 		w.htarget.Ready()
 		<-ctx.Done()
+
 		return nil
 	}
 
@@ -77,18 +79,17 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 		stream, closeCon, err := w.connSchedulerHosts(ctx)
 		if err != nil {
 			log.Errorf("Failed to connect to scheduler host: %s", err)
+
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(time.Second):
+			case <-time.After(retry.Jitter(time.Second, time.Second/2)):
 				continue
 			}
 		}
 
 		resp, err := stream.Recv()
-		code := status.Code(err)
-		switch code {
-		case codes.Unimplemented:
+		if status.Code(err) == codes.Unimplemented {
 			if err = w.clients.Reload(ctx, w.allAddrs); err != nil {
 				return err
 			}
@@ -101,15 +102,22 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 			closeCon()
 			w.htarget.Ready()
 			<-ctx.Done()
-			return nil
 
-		case codes.Canceled:
 			return nil
 		}
 
 		if err != nil {
 			closeCon()
-			return err
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			log.Warnf("Scheduler WatchHosts stream error, reconnecting: %s", err)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+				continue
+			}
 		}
 
 		gotAddrs := make([]string, 0, len(resp.GetHosts()))
@@ -122,6 +130,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 		if err = w.clients.Reload(ctx, gotAddrs); err != nil {
 			return err
 		}
+
 		w.loop.Enqueue(&loops.ReloadClients{
 			Addresses: gotAddrs,
 		})
@@ -129,6 +138,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 		w.htarget.Ready()
 		stream.Recv()
 		closeCon()
+
 		if err = ctx.Err(); err != nil {
 			return err
 		}

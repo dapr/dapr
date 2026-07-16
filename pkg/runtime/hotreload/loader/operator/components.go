@@ -31,10 +31,9 @@ type components struct {
 // the generic operator.
 //
 //nolint:unused
-func (c *components) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error) {
+func (c *components) list(ctx context.Context, opclient operatorpb.OperatorClient, ns string) ([][]byte, error) {
 	resp, err := opclient.ListComponents(ctx, &operatorpb.ListComponentsRequest{
 		Namespace: ns,
-		PodName:   podName,
 	})
 	if err != nil {
 		return nil, err
@@ -46,14 +45,15 @@ func (c *components) list(ctx context.Context, opclient operatorpb.OperatorClien
 //nolint:unused
 func (c *components) close() error {
 	if c.Operator_ComponentUpdateClient != nil {
-		return c.Operator_ComponentUpdateClient.CloseSend()
+		return c.CloseSend()
 	}
+
 	return nil
 }
 
 //nolint:unused
 func (c *components) recv(context.Context) (*loader.Event[componentsapi.Component], error) {
-	event, err := c.Operator_ComponentUpdateClient.Recv()
+	event, err := c.Recv()
 	if err != nil {
 		return nil, err
 	}
@@ -70,15 +70,15 @@ func (c *components) recv(context.Context) (*loader.Event[componentsapi.Componen
 }
 
 //nolint:unused
-func (c *components) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) error {
+func (c *components) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns string) error {
 	stream, err := opclient.ComponentUpdate(ctx, &operatorpb.ComponentUpdateRequest{
 		Namespace: ns,
-		PodName:   podName,
 	})
 	if err != nil {
 		return err
 	}
 
 	c.Operator_ComponentUpdateClient = stream
+
 	return nil
 }

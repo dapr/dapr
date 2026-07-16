@@ -92,13 +92,13 @@ func New(opts Options) Interface {
 
 func (s *state) Get(ctx context.Context, req *api.GetStateRequest, lock bool) (*api.StateResponse, error) {
 	if lock {
-		var cancel context.CancelFunc
+		var cancel context.CancelCauseFunc
 		var err error
-		ctx, cancel, err = s.placement.Lock(ctx)
+		ctx, cancel, err = s.placement.Lock(ctx, req.ActorType)
 		if err != nil {
 			return nil, err
 		}
-		defer cancel()
+		defer cancel(nil)
 	}
 
 	storeName, store, err := s.stateStore()
@@ -134,18 +134,19 @@ func (s *state) Get(ctx context.Context, req *api.GetStateRequest, lock bool) (*
 	return &api.StateResponse{
 		Data:     resp.Data,
 		Metadata: resp.Metadata,
+		ETag:     resp.ETag,
 	}, nil
 }
 
 func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock bool) (api.BulkStateResponse, error) {
 	if lock {
-		var cancel context.CancelFunc
+		var cancel context.CancelCauseFunc
 		var err error
-		ctx, cancel, err = s.placement.Lock(ctx)
+		ctx, cancel, err = s.placement.Lock(ctx, req.ActorType)
 		if err != nil {
 			return nil, err
 		}
-		defer cancel()
+		defer cancel(nil)
 	}
 
 	storeName, store, err := s.stateStore()
@@ -185,7 +186,10 @@ func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock 
 		}
 
 		// Trim the prefix from the key
-		bulkRes[strings.TrimPrefix(r.Key, baseKey)] = r.Data
+		bulkRes[strings.TrimPrefix(r.Key, baseKey)] = api.BulkStateEntry{
+			Data: r.Data,
+			ETag: r.ETag,
+		}
 	}
 
 	return bulkRes, nil
@@ -193,19 +197,17 @@ func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock 
 
 func (s *state) TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error {
 	if lock {
-		var cancel context.CancelFunc
+		var cancel context.CancelCauseFunc
 		var err error
-		ctx, cancel, err = s.placement.Lock(ctx)
+		ctx, cancel, err = s.placement.Lock(ctx, req.ActorType)
 		if err != nil {
 			return err
 		}
-		defer cancel()
+		defer cancel(nil)
 	}
 
-	if !ignoreHosted {
-		if _, ok := s.table.HostedTarget(req.ActorType, req.ActorID); !ok {
-			return messages.ErrActorInstanceMissing
-		}
+	if !ignoreHosted && !s.table.ActorExists(req.ActorType, req.ActorID) {
+		return messages.ErrActorInstanceMissing
 	}
 
 	operations := make([]contribstate.TransactionalStateOperation, len(req.Operations))

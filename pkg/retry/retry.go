@@ -13,9 +13,23 @@ limitations under the License.
 
 package retry
 
-import "time"
+import (
+	"math/rand"
+	"time"
+)
 
 const (
 	DefaultLinearBackoffInterval = time.Second
 	DefaultLinearRetryCount      = 3
 )
+
+// Jitter returns a random duration in the range [base-jitter, base+jitter).
+// Returns base if jitter is zero or negative.
+//
+//nolint:gosec
+func Jitter(base, jitter time.Duration) time.Duration {
+	if jitter <= 0 {
+		return base
+	}
+	return base - jitter + time.Duration(rand.Int63n(int64(jitter*2)))
+}

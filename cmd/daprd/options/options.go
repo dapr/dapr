@@ -67,8 +67,11 @@ type Options struct {
 	DaprGracefulShutdownSeconds   int
 	DaprBlockShutdownDuration     *time.Duration
 	ActorsService                 string
+	ActorsDisseminationTimeout    time.Duration
+	HotReloadReconcileInterval    time.Duration
 	RemindersService              string
 	SchedulerAddress              []string
+	SchedulerJobStreams           uint
 	DaprAPIListenAddresses        string
 	AppHealthProbeInterval        int
 	AppHealthProbeTimeout         int
@@ -81,8 +84,10 @@ type Options struct {
 	DisableBuiltinK8sSecretStore  bool
 	AppHealthCheckPath            string
 	AppChannelAddress             string
+	SentryRequestJwtAudiences     []string
 	Logger                        logger.Options
 	Metrics                       *metrics.FlagOptions
+	DisableInitEndpoints          []string
 }
 
 func New(origArgs []string) (*Options, error) {
@@ -138,6 +143,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.SentryAddress, "sentry-address", "", "Address for the Sentry CA service")
 	fs.StringVar(&opts.ControlPlaneTrustDomain, "control-plane-trust-domain", "localhost", "Trust domain of the Dapr control plane")
 	fs.StringVar(&opts.ControlPlaneNamespace, "control-plane-namespace", "default", "Namespace of the Dapr control plane")
+	fs.StringSliceVar(&opts.SentryRequestJwtAudiences, "sentry-request-jwt-audiences", nil, "JWT audience list for certificate signing requests. If not specified, the trust domain will be used")
 	fs.StringVar(&opts.AllowedOrigins, "allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
 	fs.BoolVar(&opts.EnableProfiling, "enable-profiling", false, "Enable profiling")
 	fs.BoolVar(&opts.RuntimeVersion, "version", false, "Prints the runtime version")
@@ -164,14 +170,24 @@ func New(origArgs []string) (*Options, error) {
 	fs.IntVar(&opts.AppHealthProbeTimeout, "app-health-probe-timeout", int(config.AppHealthConfigDefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
 	fs.IntVar(&opts.AppHealthThreshold, "app-health-threshold", int(config.AppHealthConfigDefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
 	fs.StringVar(&opts.AppChannelAddress, "app-channel-address", runtime.DefaultChannelAddress, "The network address the application listens on")
+	fs.StringSliceVar(&opts.DisableInitEndpoints, "disable-init-endpoints", nil, "List of initialization endpoints to disable. Supported values: config, subscribe,. If not specified, all endpoints will be enabled")
 
 	// Add flags for actors, placement, and reminders
 	// --placement-host-address is a legacy (but not deprecated) flag that is translated to the actors-service flag
 	var placementServiceHostAddr string
 	fs.StringVar(&placementServiceHostAddr, "placement-host-address", "", "Addresses for Dapr Actor Placement servers (overrides actors-service)")
 	fs.StringSliceVar(&opts.SchedulerAddress, "scheduler-host-address", nil, "Addresses of the Scheduler service instance(s), as comma separated host:port pairs")
-	fs.StringVar(&opts.ActorsService, "actors-service", "", "Type and address of the actors service, in the format 'type:address'")
+	fs.UintVar(&opts.SchedulerJobStreams, "scheduler-job-streams", 3, "The number of active job streams to connect to the Scheduler service")
+	fs.DurationVar(&opts.ActorsDisseminationTimeout, "actors-disseminate-timeout", runtime.DefaultActorsDisseminationTimeout, "Timeout for the daprd-side actor placement dissemination round; if exceeded, daprd resets its placement stream and halts hosted actors. Should be greater than the placement service --disseminate-timeout (default 8s).")
+	fs.DurationVar(&opts.HotReloadReconcileInterval, "hot-reload-reconcile-interval", 0, "Period of the hot-reload backup reconcile that lists resources and reconciles any the event watch missed, e.g. '30s'. Zero uses the default (60s)")
+
+	// DEPRECATED.
 	fs.StringVar(&opts.RemindersService, "reminders-service", "", "Type and address of the reminders service, in the format 'type:address'")
+	fs.StringVar(&opts.ActorsService, "actors-service", "", "Type and address of the actors service, in the format 'type:address'")
+	fs.MarkHidden("reminders-service")
+	fs.MarkHidden("actors-service")
+	fs.MarkDeprecated("reminders-service", "flag no longer has any effect")
+	fs.MarkDeprecated("actors-service", "flag no longer has any effect")
 
 	// Add flags for logger and metrics
 	opts.Logger = logger.DefaultOptions()
@@ -252,17 +268,16 @@ func New(origArgs []string) (*Options, error) {
 		opts.DaprBlockShutdownDuration = nil
 	}
 
+	// TODO: @joshvanl: remove in 1.18
 	if !fs.Changed("scheduler-host-address") {
-		// TODO: remove env var lookup in v1.16
 		addr, ok := os.LookupEnv(injectorconsts.SchedulerHostAddressDNSAEnvVar)
 		if ok {
 			opts.SchedulerAddress = strings.Split(addr, ",")
-		} else {
-			addr, ok := os.LookupEnv(injectorconsts.SchedulerHostAddressEnvVar)
-			if ok {
-				opts.SchedulerAddress = strings.Split(addr, ",")
-			}
 		}
+	}
+
+	if opts.ActorsDisseminationTimeout <= 0 {
+		return nil, fmt.Errorf("invalid value for 'actors-disseminate-timeout' option: must be positive, got %s", opts.ActorsDisseminationTimeout)
 	}
 
 	return &opts, nil

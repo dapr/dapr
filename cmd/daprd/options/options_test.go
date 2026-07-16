@@ -32,9 +32,9 @@ func TestAppFlag(t *testing.T) {
 		"--metrics-port", strconv.Itoa(10000),
 	})
 	require.NoError(t, err)
-	assert.EqualValues(t, "testapp", opts.AppID)
-	assert.EqualValues(t, "80", opts.AppPort)
-	assert.EqualValues(t, "http", opts.AppProtocol)
+	assert.Equal(t, "testapp", opts.AppID)
+	assert.Equal(t, "80", opts.AppPort)
+	assert.Equal(t, "http", opts.AppProtocol)
 }
 
 func TestStandaloneGlobalConfig(t *testing.T) {
@@ -45,8 +45,8 @@ func TestStandaloneGlobalConfig(t *testing.T) {
 		"--metrics-port", strconv.Itoa(10000),
 	})
 	require.NoError(t, err)
-	assert.EqualValues(t, "testapp", opts.AppID)
-	assert.EqualValues(t, string(modes.StandaloneMode), opts.Mode)
+	assert.Equal(t, "testapp", opts.AppID)
+	assert.Equal(t, string(modes.StandaloneMode), opts.Mode)
 	assert.Equal(t, []string{"../../../pkg/config/testdata/metric_disabled.yaml"}, opts.Config)
 }
 
@@ -309,8 +309,8 @@ func TestControlPlaneEnvVar(t *testing.T) {
 		opts, err := New([]string{})
 		require.NoError(t, err)
 
-		assert.EqualValues(t, "localhost", opts.ControlPlaneTrustDomain)
-		assert.EqualValues(t, "default", opts.ControlPlaneNamespace)
+		assert.Equal(t, "localhost", opts.ControlPlaneTrustDomain)
+		assert.Equal(t, "default", opts.ControlPlaneNamespace)
 	})
 
 	t.Run("should use CLI flags if defined", func(t *testing.T) {
@@ -320,8 +320,8 @@ func TestControlPlaneEnvVar(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		assert.EqualValues(t, "flag-trust-domain", opts.ControlPlaneTrustDomain)
-		assert.EqualValues(t, "flag-namespace", opts.ControlPlaneNamespace)
+		assert.Equal(t, "flag-trust-domain", opts.ControlPlaneTrustDomain)
+		assert.Equal(t, "flag-namespace", opts.ControlPlaneNamespace)
 	})
 
 	t.Run("should use env vars if flags were not defined", func(t *testing.T) {
@@ -331,8 +331,8 @@ func TestControlPlaneEnvVar(t *testing.T) {
 		opts, err := New([]string{})
 		require.NoError(t, err)
 
-		assert.EqualValues(t, "env-trust-domain", opts.ControlPlaneTrustDomain)
-		assert.EqualValues(t, "env-namespace", opts.ControlPlaneNamespace)
+		assert.Equal(t, "env-trust-domain", opts.ControlPlaneTrustDomain)
+		assert.Equal(t, "env-namespace", opts.ControlPlaneNamespace)
 	})
 
 	t.Run("should priorities CLI flags if both flags and env vars are defined", func(t *testing.T) {
@@ -345,7 +345,45 @@ func TestControlPlaneEnvVar(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		assert.EqualValues(t, "flag-trust-domain", opts.ControlPlaneTrustDomain)
-		assert.EqualValues(t, "flag-namespace", opts.ControlPlaneNamespace)
+		assert.Equal(t, "flag-trust-domain", opts.ControlPlaneTrustDomain)
+		assert.Equal(t, "flag-namespace", opts.ControlPlaneNamespace)
+	})
+}
+
+func TestDisableInitEndpoints(t *testing.T) {
+	t.Run("flag is unset", func(t *testing.T) {
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		assert.Empty(t, opts.DisableInitEndpoints)
+	})
+
+	t.Run("disable single endpoint", func(t *testing.T) {
+		opts, err := New([]string{
+			"--disable-init-endpoints", "config",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"config"}, opts.DisableInitEndpoints)
+	})
+
+	t.Run("disable multiple endpoints with comma separation", func(t *testing.T) {
+		opts, err := New([]string{
+			"--disable-init-endpoints", "config,subscribe",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"config", "subscribe"}, opts.DisableInitEndpoints)
+	})
+	t.Run("single dash flag support", func(t *testing.T) {
+		opts, err := New([]string{
+			"-disable-init-endpoints", "config", // Single dash
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"config"}, opts.DisableInitEndpoints)
+	})
+	t.Run("empty value should be allowed", func(t *testing.T) {
+		opts, err := New([]string{
+			"--disable-init-endpoints", "",
+		})
+		require.NoError(t, err)
+		assert.Empty(t, opts.DisableInitEndpoints)
 	})
 }

@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
+	grpclib "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -40,6 +41,13 @@ import (
 )
 
 var log = logger.NewLogger("dapr.runtime.processor.pubsub.subscription.grpc")
+
+// deadLetterPublishTimeout is the deadline given to a DLQ publish issued
+// from this postman. The parent inbound context arrives here without
+// usable time budget after the resiliency policy exhausts, so the publish
+// is given a fresh deadline. Matches the value used in
+// pkg/runtime/subscription and the HTTP postman.
+const deadLetterPublishTimeout = 30 * time.Second
 
 type Options struct {
 	Channel *manager.Manager
@@ -64,17 +72,19 @@ func New(opts Options) postman.Interface {
 func (g *grpc) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error {
 	cloudEvent := msg.CloudEvent
 
-	envelope, span, err := pubsub.GRPCEnvelopeFromSubscriptionMessage(ctx, msg, log, g.tracingSpec)
+	ctx, envelope, span, err := pubsub.GRPCEnvelopeFromSubscriptionMessage(ctx, msg, log, g.tracingSpec)
 	if err != nil {
 		return err
 	}
 
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.Metadata)
+	ctx = g.channel.AddAppTokenToContext(ctx)
 
-	conn, err := g.channel.GetAppClient()
+	conn, teardown, err := g.channel.GetAppClient()
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
+	defer teardown(false)
 	clientV1 := rtv1.NewAppCallbackClient(conn)
 
 	start := time.Now()
@@ -132,6 +142,7 @@ func (g *grpc) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 
 	// Consider unknown status field as error and retry
 	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
+
 	return fmt.Errorf("unknown status returned from app while processing pub/sub event %v, status: %v, err: %w", cloudEvent[contribpubsub.IDField], res.GetStatus(), rterrors.NewRetriable(nil))
 }
 
@@ -143,15 +154,20 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	bulkResponses := req.BulkResponses
 
 	items := make([]*rtv1.TopicEventBulkRequestEntry, len(psm.PubSubMessages))
+
 	entryRespReceived := make(map[string]bool, len(psm.PubSubMessages))
 	for i, pubSubMsg := range psm.PubSubMessages {
 		entry := pubSubMsg.Entry
+
 		item, err := pubsub.FetchEntry(req.RawPayload, entry, psm.PubSubMessages[i].CloudEvent)
 		if err != nil {
 			bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)]++
+
 			todo.AddBulkResponseEntry(bulkResponses, entry.EntryId, err)
+
 			continue
 		}
+
 		items[i] = item
 	}
 
@@ -159,6 +175,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	if err != nil {
 		return fmt.Errorf("failed to generate UUID: %w", err)
 	}
+
 	envelope := &rtv1.TopicEventBulkRequest{
 		Id:         uuidObj.String(),
 		Entries:    items,
@@ -171,18 +188,22 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 	spans := make([]trace.Span, len(psm.PubSubMessages))
 	n := 0
+
 	for _, pubSubMsg := range psm.PubSubMessages {
 		cloudEvent := pubSubMsg.CloudEvent
+
 		iTraceID := cloudEvent[contribpubsub.TraceParentField]
 		if iTraceID == nil {
 			iTraceID = cloudEvent[contribpubsub.TraceIDField]
 		}
+
 		if iTraceID != nil {
 			if traceID, ok := iTraceID.(string); ok {
 				sc, _ := diag.SpanContextFromW3CString(traceID)
 
 				// no ops if trace is off
 				var span trace.Span
+
 				ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, g.tracingSpec)
 				if span != nil {
 					ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
@@ -194,19 +215,45 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 			}
 		}
 	}
+
 	spans = spans[:n]
 	defer todo.EndSpans(spans)
-	ctx = invokev1.WithCustomGRPCMetadata(ctx, psm.Metadata)
 
-	conn, err := g.channel.GetAppClient()
+	ctx = invokev1.WithCustomGRPCMetadata(ctx, psm.Metadata)
+	ctx = g.channel.AddAppTokenToContext(ctx)
+
+	conn, teardown, err := g.channel.GetAppClient()
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
-	clientV1 := rtv1.NewAppCallbackAlphaClient(conn)
+	defer teardown(false)
+	clientV1 := rtv1.NewAppCallbackClient(conn)
+	clientAlpha := rtv1.NewAppCallbackAlphaClient(conn)
 
-	start := time.Now()
-	res, err := clientV1.OnBulkTopicEventAlpha1(ctx, envelope)
-	elapsed := diag.ElapsedSince(start)
+	var (
+		res     *rtv1.TopicEventBulkResponse
+		elapsed float64
+	)
+
+	call := func(fn func(context.Context, *rtv1.TopicEventBulkRequest, ...grpclib.CallOption) (*rtv1.TopicEventBulkResponse, error)) (*rtv1.TopicEventBulkResponse, error) {
+		start := time.Now()
+
+		var resp *rtv1.TopicEventBulkResponse
+
+		resp, err = fn(ctx, envelope)
+		elapsed = diag.ElapsedSince(start)
+
+		return resp, err
+	}
+
+	res, err = call(clientV1.OnBulkTopicEvent)
+	if err != nil {
+		if errStatus, hasErrStatus := status.FromError(err); hasErrStatus && errStatus.Code() == codes.Unimplemented {
+			// fallback: to alpha if unimplemented
+			log.Warnf("falling back to OnBulkTopicEventAlpha1 due to unimplemented error: %s", err)
+			res, err = call(clientAlpha.OnBulkTopicEventAlpha1) //nolint:staticcheck
+		}
+	}
 
 	for _, span := range spans {
 		m := diag.ConstructSubscriptionSpanAttributes(envelope.GetTopic())
@@ -219,16 +266,21 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		if hasErrStatus && (errStatus.Code() == codes.Unimplemented) {
 			// DROP
 			log.Warnf("non-retriable error returned from app while processing bulk pub/sub event: %s", err)
+
 			bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)] += int64(len(psm.PubSubMessages))
 			bscData.BulkSubDiag.Elapsed = elapsed
+
 			todo.PopulateBulkSubscribeResponsesWithError(psm, bulkResponses, nil)
+
 			return nil
 		}
 
 		err = fmt.Errorf("error returned from app while processing bulk pub/sub event: %w", err)
 		log.Debug(err)
+
 		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += int64(len(psm.PubSubMessages))
 		bscData.BulkSubDiag.Elapsed = elapsed
+
 		todo.PopulateBulkSubscribeResponsesWithError(psm, bulkResponses, err)
 
 		// return error status code for resiliency to decide on retry
@@ -243,6 +295,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	}
 
 	hasAnyError := false
+
 	for _, response := range res.GetStatuses() {
 		entryID := response.GetEntryId()
 		if _, ok := (*bscData.EntryIdIndexMap)[entryID]; ok {
@@ -258,12 +311,15 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 				entryRespReceived[entryID] = true
 				todo.AddBulkResponseEntry(bulkResponses, entryID,
 					fmt.Errorf("RETRY status returned from app while processing pub/sub event for entry id: %v", entryID))
+
 				hasAnyError = true
 			case rtv1.TopicEventResponse_DROP: //nolint:nosnakecase
 				log.Warnf("DROP status returned from app while processing pub/sub event for entry id: %v", entryID)
+
 				bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)] += 1
 				entryRespReceived[entryID] = true
 				todo.AddBulkResponseEntry(bulkResponses, entryID, nil)
+
 				if req.DeadLetterTopic != "" {
 					msg := psm.PubSubMessages[(*bscData.EntryIdIndexMap)[entryID]]
 					_ = g.sendToDeadLetter(ctx, bscData.PsName, &contribpubsub.NewMessage{
@@ -279,6 +335,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 				entryRespReceived[entryID] = true
 				todo.AddBulkResponseEntry(bulkResponses, entryID,
 					fmt.Errorf("unknown status returned from app while processing pub/sub event  for entry id %v: %v", entryID, response.GetStatus()))
+
 				hasAnyError = true
 			}
 		} else {
@@ -286,19 +343,22 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 			continue
 		}
 	}
+
 	for _, item := range psm.PubSubMessages {
 		if !entryRespReceived[item.Entry.EntryId] {
 			todo.AddBulkResponseEntry(bulkResponses, item.Entry.EntryId,
-				fmt.Errorf("Response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.Entry.EntryId), //nolint:stylecheck
+				fmt.Errorf("response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.Entry.EntryId),
 			)
+
 			hasAnyError = true
 			bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += 1
 		}
 	}
+
 	bscData.BulkSubDiag.Elapsed = elapsed
+
 	if hasAnyError {
-		//nolint:stylecheck
-		return errors.New("Few message(s) have failed during bulk subscribe operation")
+		return errors.New("few message(s) have failed during bulk subscribe operation")
 	} else {
 		return nil
 	}
@@ -313,8 +373,20 @@ func (g *grpc) sendToDeadLetter(ctx context.Context, name string, msg *contribpu
 		ContentType: msg.ContentType,
 	}
 
-	if err := g.adapter.Publish(ctx, req); err != nil {
-		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
+	// Skip the DLQ publish if the parent was explicitly canceled (e.g.
+	// shutdown); detaching the deadline below would otherwise let this block
+	// for up to deadLetterPublishTimeout during shutdown. See the matching
+	// helper in pkg/runtime/subscription/subscription.go for why an inherited
+	// inbound-handler deadline cannot be used for the publish itself.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return ctx.Err()
+	}
+	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deadLetterPublishTimeout)
+	defer cancel()
+
+	err := g.adapter.Publish(pubCtx, req, pubsub.TransportModeGRPC)
+	if err != nil {
+		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 		return err
 	}
 

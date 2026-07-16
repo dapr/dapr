@@ -20,8 +20,6 @@ import (
 
 	"google.golang.org/grpc"
 	kclock "k8s.io/utils/clock"
-
-	"github.com/dapr/kit/ptr"
 )
 
 // Real-time clock (wrapper around time.Time) to allow mocking
@@ -243,7 +241,7 @@ func (pic *connectionPoolConnection) Expired(maxConnIdle time.Duration) bool {
 
 // MarkIdle sets the current time as when the connection became idle.
 func (pic *connectionPoolConnection) MarkIdle() {
-	pic.idleSince.Store(ptr.Of(clock.Now()))
+	pic.idleSince.Store(new(clock.Now()))
 }
 
 // RemoteConnectionPool is used to hold connections to remote addresses.

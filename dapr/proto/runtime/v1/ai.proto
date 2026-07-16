@@ -1,0 +1,440 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.runtime.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/duration.proto";
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "DaprAiProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
+
+// Note: in general for conversation api reference these links:
+// https://platform.openai.com/docs/api-reference/chat/create
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go
+
+
+// ConversationRequest is the request object for Conversation.
+message ConversationRequest {
+  option deprecated = true;
+  
+  // The name of Conversation component
+  string name = 1;
+
+  // The ID of an existing chat (like in ChatGPT)
+  optional string contextID = 2;
+
+  // Inputs for the conversation, support multiple input in one time.
+  repeated ConversationInput inputs = 3;
+
+  // Parameters for all custom fields.
+  map<string, google.protobuf.Any> parameters = 4;
+
+  // The metadata passing to conversation components.
+  map<string, string> metadata = 5;
+
+  // Scrub PII data that comes back from the LLM
+  optional bool scrubPII = 6;
+
+  // Temperature for the LLM to optimize for creativity or predictability
+  optional double temperature = 7;
+}
+
+// Note: in general for conversation api reference these links:
+// https://platform.openai.com/docs/api-reference/chat/create
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go
+
+// Also, when we go stable we need to remove context_id and parameters in ConversationRequestAlpha2 as these are not used.
+
+// ConversationRequestAlpha2 is the new request object for Conversation.
+// Many of these fields are inspired by openai.ChatCompletionNewParams
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2106
+message ConversationRequestAlpha2 {
+  // The name of Conversation component
+  string name = 1;
+
+  // The ID of an existing chat (like in ChatGPT)
+  optional string context_id = 2;
+
+  // Inputs for the conversation.
+  repeated ConversationInputAlpha2 inputs = 3;
+
+  // Parameters for all custom fields.
+  map<string, google.protobuf.Any> parameters = 4;
+
+  // Set of 16 key-value pairs that can be attached to the conversation. 
+  // This can be useful for storing additional information about the object in a structured format, 
+  // and querying for objects via API or the dashboard.
+  // Keys are strings with a maximum length of 64 characters.
+  // Values are strings with a maximum length of 512 characters.
+  // NOTE: In the next iteration of this API, this will be within the HTTP/gRPC headers instead.
+  map<string, string> metadata = 5;
+
+  // Scrub PII data that comes back from the LLM
+  optional bool scrub_pii = 6;
+
+  // Temperature for the LLM to optimize for creativity or predictability
+  optional double temperature = 7;
+
+  // Tools register the tools available to be used by the LLM during the conversation.
+  // These are sent on a per request basis.
+  // The tools available during the first round of the conversation
+  // may be different than tools specified later on.
+  repeated ConversationTools tools = 8;
+
+  // Controls which (if any) tool is called by the model. 
+  // `none` means the model will not call any tool and instead generates a message. 
+  // `auto` means the model can pick between generating a message or calling one or more tools.
+  // Alternatively, a specific tool name may be used here, and casing/syntax must match on tool name.
+  // `none` is the default when no tools are present.
+  // `auto` is the default if tools are present.
+  // `required` requires one or more functions to be called.
+  // ref: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L1976
+  // ref: https://python.langchain.com/docs/how_to/tool_choice/
+  optional string tool_choice = 9;
+
+  // Structured outputs described using a JSON Schema object.
+  // Use this when you want strict, typed structured output.
+  // This corresponds to OpenAI's:
+  //   { "type": "json_schema", "json_schema": { ... } }
+  //
+  // The schema must be provided as a parsed JSON object.
+  // Note: This is currently only supported by OpenAI components.
+  // This is only supported by Deepseek, GoogleAI, HuggingFace, OpenAI, and Anthropic.
+  // inspired by openai.ResponseFormat
+  // ref: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L3111
+  optional google.protobuf.Struct response_format = 10;
+
+  // Retention policy for the prompt cache.
+  // If using OpenAI with this value set to `24h` it enables extended prompt caching,
+  // which keeps cached prefixes active for longer, up to a maximum of 24 hours.
+	// [Learn more](https://platform.openai.com/docs/guides/prompt-caching#prompt-cache-retention).
+  // inspired by openai.ChatCompletionMessageParamUnion.PromptCacheRetention
+  // ref: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L3030
+  optional google.protobuf.Duration prompt_cache_retention = 11;
+
+  /* TODO: the rest of the fields to bring in from openai.ChatCompletionNewParams are optional, so we can add later.
+  Note: They can be within the other messages, not necessarily top level here.
+  ...
+  MaxCompletionTokens: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2131
+  ReasoningEffort: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2224
+  Stop: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2249 <----------------should we bring this in?
+  StreamOptions: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2251
+  */
+}
+
+// maintained for backwards compatibility
+message ConversationInput {
+  option deprecated = true;
+
+  // The content to send to the llm
+  string content = 1;
+
+  // The role to set for the message
+  optional string role = 2;
+
+  // Scrub PII data that goes into the LLM
+  optional bool scrubPII = 3;
+}
+
+// TODO: when going stable just make these flat in the ConversationRequestAlpha2,
+// or reevaluate the grouping of fields...
+// directly inspired by openai.ChatCompletionNewParams
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2106
+message ConversationInputAlpha2 {
+  // The content to send to the llm
+  repeated ConversationMessage messages = 1;
+
+  // Scrub PII data that goes into the LLM
+  optional bool scrub_pii = 2;
+}
+
+
+// inspired by openai.ChatCompletionMessageParamUnion
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L1449
+// The role field is inherent to the type of ConversationMessage,
+// and is propagated in the backend according to the underlying LLM provider type.
+message ConversationMessage {
+  oneof message_types {
+    ConversationMessageOfDeveloper of_developer = 1;
+    ConversationMessageOfSystem of_system = 2;
+    ConversationMessageOfUser of_user = 3;
+    ConversationMessageOfAssistant of_assistant = 4;
+    ConversationMessageOfTool of_tool = 5; 
+    // Note: there could be a ConversationMessageOfFunction type here too, 
+    // but that is deprecated in openai, so we will not support this.
+  }
+}
+
+// inspired by openai.ChatCompletionDeveloperMessageParam
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L1130
+// ConversationMessageOfDeveloper is intended to be the contents of a conversation message,
+// as the role of a developer.
+message ConversationMessageOfDeveloper {
+  // The name of the participant in the message.
+  optional string name = 1;
+  repeated ConversationMessageContent content = 2;
+}
+
+// inspired by openai.ChatCompletionSystemMessageParam
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L1842
+// ConversationMessageOfSystem is intended to be the contents of a conversation message,
+// as the role of a system.
+message ConversationMessageOfSystem {
+  optional string name = 1;
+  repeated ConversationMessageContent content = 2;
+}
+
+// inspired by openai.ChatCompletionUserMessageParam
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2060C6-L2060C36
+// ConversationMessageOfUser is intended to be the contents of a conversation message,
+// as the role of an end user.
+message ConversationMessageOfUser {
+  optional string name = 1;
+  repeated ConversationMessageContent content = 2;
+}
+
+// inspired by openai.ChatCompletionAssistantMessageParam
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L310
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2060C6-L2060C36
+// ConversationMessageOfAssistant is intended to be the contents of a conversation message,
+// as the role of an assistant.
+message ConversationMessageOfAssistant {
+  optional string name = 1;
+
+  repeated ConversationMessageContent content = 2;
+
+  // Tool calls generated by the model, such as function calls for the client to then make.
+  repeated ConversationToolCalls tool_calls = 3;
+
+  // TODO: the rest of the fields to bring in from openai.ChatCompletionAssistantMessageParam are optional, so we can add later.
+  // ie refusal
+
+  // TODO: there is a refusal field that openai has here,
+  // but langchain does not have support for this yet,
+  // so we do not add to our api.
+
+  // Note: There is a FunctionCall type too that is deprecated,
+  // so we are not bringing that to dapr.
+}
+
+// Note on ConversationMessageOfTool.tool_id: openai does have this as required; 
+// however, some llm providers (ie mistral) do not require this field,
+// so we denote as optional.
+
+// inspired by openai.ChatCompletionToolMessageParam
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2011
+// ConversationMessageOfTool is intended to be the contents of a conversation message,
+// as the role of a tool.
+message ConversationMessageOfTool {
+  // Tool ID is helpful for tracking tool history
+  optional string tool_id = 1;
+
+  // Name of tool associated with the message
+  string name = 2;
+
+  repeated ConversationMessageContent content = 3;
+}
+
+// inspired by openai.ChatCompletionMessageToolCallParam and openai.ChatCompletionMessageToolCall
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L1669
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L1611
+// ConversationToolCalls is the tool call request sent from the llm to the client to then call to execute.
+// This assumes that in our api if a client makes a request that would get a tool call response from the llm,
+// that this client can also have the tool handy itself to execute it.
+message ConversationToolCalls {
+  optional string id = 1;
+  oneof tool_types {
+      ConversationToolCallsOfFunction function = 2;
+      // TODO: we are currently missing an OfCustom -> ConversationToolCallsOfFunction
+  }
+}
+
+// inspired by openai.ChatCompletionMessageToolCallFunctionParam
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L1859
+message ConversationToolCallsOfFunction {
+  string name = 1;
+  // The arguments to call the function with, as generated by the model in JSON
+  // format. Note that the model does not always generate valid JSON, and may
+  // hallucinate parameters not defined by your function schema. Validate the
+  // arguments in your code before calling your function.
+  string arguments = 2;
+}
+
+// inspired by openai.ChatCompletionContentPartTextParam & openai.ChatCompletionDeveloperMessageParamContentUnion
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L1084
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L1154C6-L1154C53
+// Note: openai has this message be either a message of string or message of array type,
+// so instead of this, we support that in one message type instead.
+message ConversationMessageContent {
+  string text = 1;
+}
+
+// ConversationResult is the result for one input.
+message ConversationResult {
+  option deprecated = true;
+
+  // Result for the one conversation input.
+  string result = 1;
+  // Parameters for all custom fields.
+  map<string, google.protobuf.Any> parameters = 2;
+}
+
+// inspired by openai.ChatCompletion
+// ConversationResultAlpha2 is the result for one input.
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L167
+message ConversationResultAlpha2 {
+  // Result for the conversation input.
+  repeated ConversationResultChoices choices = 1;
+
+  // The model used for the conversation.
+  optional string model = 2;
+
+   // Usage statistics for the completion request.
+  optional ConversationResultAlpha2CompletionUsage usage = 3;
+}
+
+// ref: https://github.com/openai/openai-go/blob/main/completion.go#L162
+// inspired by openai.ChatCompletion.Usage of type CompletionUsage
+message ConversationResultAlpha2CompletionUsage {
+  // Number of tokens in the generated completion.
+  uint64 completion_tokens = 1;
+
+  // Number of tokens in the prompt.
+  uint64 prompt_tokens = 2;
+
+  // Total number of tokens used in the request (prompt + completion).
+  uint64 total_tokens = 3;
+
+  // Breakdown of tokens used in completion.
+  optional ConversationResultAlpha2CompletionUsageCompletionTokensDetails completion_tokens_details = 4;
+
+  // Breakdown of tokens used in the prompt.
+  optional ConversationResultAlpha2CompletionUsagePromptTokensDetails prompt_tokens_details = 5;
+
+}
+
+// inspired by openai.CompletionUsageCompletionTokensDetails
+// ref: https://github.com/openai/openai-go/blob/main/completion.go#L192
+message ConversationResultAlpha2CompletionUsageCompletionTokensDetails {
+  // When using Predicted Outputs,
+  // the number of tokens in the prediction that appeared in the completion.
+  uint64 accepted_prediction_tokens = 1;
+
+  // Audio input tokens generated by the model.
+  uint64 audio_tokens = 2;
+
+  // Tokens generated by the model for reasoning.
+  uint64 reasoning_tokens = 3;
+
+  // When using Predicted Outputs, the number of tokens in the prediction that did
+	// not appear in the completion. However, like reasoning tokens, these tokens are
+	// still counted in the total completion tokens for purposes of billing, output,
+	// and context window limits.
+  uint64 rejected_prediction_tokens = 4;
+}
+
+// inspired by openai.CompletionUsagePromptTokensDetails
+// ref: https://github.com/openai/openai-go/blob/main/completion.go#L223C6-L223C40
+message ConversationResultAlpha2CompletionUsagePromptTokensDetails {
+  // Audio input tokens present in the prompt.
+  uint64 audio_tokens = 1;
+
+  // Cached tokens present in the prompt.
+  uint64 cached_tokens = 2;
+}
+
+// inspired by openai.ChatCompletionChoice
+// based on https://github.com/openai/openai-go/blob/main/chatcompletion.go#L226
+message ConversationResultChoices {
+  // The reason the model stopped generating tokens. This will be `stop` if the model
+  // hit a natural stop point or a provided stop sequence, `length` if the maximum
+  // number of tokens specified in the request was reached, `content_filter` if
+  // content was omitted due to a flag from our content filters, `tool_calls` if the
+  // model called a tool.
+  // Any of "stop", "length", "tool_calls", "content_filter".
+  string finish_reason = 1;
+
+  // The index of the choice in the list of choices.
+  int64 index = 2;
+
+  // A chat completion message generated by the model.
+  ConversationResultMessage message = 3;
+
+  // logprobs can be added later as is null everywhere I see in openai docs: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L241
+}
+
+// inspired by openai.ChatCompletionMessage
+// based on https://github.com/openai/openai-go/blob/main/chatcompletion.go#L1218C6-L1218C27
+message ConversationResultMessage {
+  // The contents of the message.
+  string content = 1;
+  // The tool calls generated by the model.
+  repeated ConversationToolCalls tool_calls = 2;
+
+  // TODO: after 1.16 there is a refusal field that openai has here,
+  // but langchain does not have support for this yet,
+  // so we do not add to our api.
+}
+
+// ConversationResponse is the response for Conversation.
+message ConversationResponse {
+  option deprecated = true;
+
+  // The ID of an existing chat (like in ChatGPT)
+  optional string contextID = 1;
+
+  // An array of results.
+  repeated ConversationResult outputs = 2;
+}
+
+// ConversationResponseAlpha2 is the Alpha2 response for Conversation.
+message ConversationResponseAlpha2 {
+  // The ID of an existing chat (like in ChatGPT)
+  optional string context_id = 1;
+
+  // An array of results.
+  repeated ConversationResultAlpha2 outputs = 2;
+}
+
+// ConversationTools are the typed tools available to be called.
+// inspired by openai.ChatCompletionToolParam
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L1950
+message ConversationTools {
+  oneof tool_types {
+    ConversationToolsFunction function = 1;
+  }
+}
+
+// ConversationToolsFunction is the main tool type to be used in a conversation.
+// inspired by openai.FunctionDefinitionParam
+// https://pkg.go.dev/github.com/openai/openai-go/shared#FunctionDefinitionParam
+message ConversationToolsFunction {
+  // The name of the function to be called.
+  string name = 1;
+
+  // A description of what the function does, 
+  // used by the model to choose when and how to call the function.
+  optional string description = 2;
+
+  // The parameters the functions accepts, described as a JSON Schema object. 
+  // See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+  // and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.
+  // Omitting `parameters` defines a function with an empty parameter list.
+  google.protobuf.Struct parameters = 3;
+}

@@ -76,7 +76,6 @@ import (
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -95,13 +94,13 @@ var testResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  ptr.Of(1),
+					MaxRetries:  new(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
 				},
 				"tenRetries": {
-					MaxRetries:  ptr.Of(10),
+					MaxRetries:  new(10),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
@@ -205,7 +204,7 @@ func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *runtimev1pb.PublishE
 	return &emptypb.Empty{}, nil
 }
 
-func (m *mockGRPCAPI) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error) {
+func (m *mockGRPCAPI) BulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error) {
 	return &runtimev1pb.BulkPublishResponse{}, nil
 }
 
@@ -275,8 +274,8 @@ func startTestServerWithTracing() (*grpc.Server, *string, *bufconn.Listener) {
 		grpc.UnaryInterceptor(grpcMiddleware.ChainUnaryServer(diag.GRPCTraceUnaryServerInterceptor("id", spec))),
 	)
 
+	internalv1pb.RegisterServiceInvocationServer(server, &mockGRPCAPI{})
 	go func() {
-		internalv1pb.RegisterServiceInvocationServer(server, &mockGRPCAPI{})
 		if err := server.Serve(lis); err != nil {
 			panic(err)
 		}
@@ -314,8 +313,8 @@ func startInternalServer(testAPIServer *api) (*grpc.Server, *bufconn.Listener) {
 	lis := bufconn.Listen(bufconnBufSize)
 
 	server := grpc.NewServer()
+	internalv1pb.RegisterServiceInvocationServer(server, testAPIServer)
 	go func() {
-		internalv1pb.RegisterServiceInvocationServer(server, testAPIServer)
 		if err := server.Serve(lis); err != nil {
 			panic(err)
 		}
@@ -353,10 +352,22 @@ func startDaprAPIServer(t *testing.T, testAPIServer *api, token string) *bufconn
 			t.Fatalf("timeout waiting for server to stop")
 		}
 	})
+
+	runtimev1pb.RegisterDaprServer(server, testAPIServer)
+
 	go func() {
-		runtimev1pb.RegisterDaprServer(server, testAPIServer)
 		errCh <- server.Serve(lis)
 	}()
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		//nolint:staticcheck
+		conn, err := grpc.DialContext(t.Context(), "bufnet", grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return lis.DialContext(ctx)
+		}), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+		if assert.NoError(c, err) {
+			conn.Close()
+		}
+	}, time.Second*5, time.Millisecond*10)
 
 	return lis
 }
@@ -1249,7 +1260,7 @@ func TestGetState(t *testing.T) {
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
-			ETag: ptr.Of("test-etag"),
+			ETag: new("test-etag"),
 		}, nil)
 	fakeStore.On("Get", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == errorStoreKey
@@ -1651,10 +1662,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 					const retry = 3
 					count := 0
 					_, err := resp.Recv()
-					for {
-						if err != nil {
-							break
-						}
+					for err == nil {
 						if count > retry {
 							break
 						}
@@ -1704,7 +1712,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			return len(req.Keys) == 1 && req.Keys[0] == goodKey
 		}),
 		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
-			if !(len(tempReq.Keys) == 1 && tempReq.Keys[0] == goodKey) {
+			if len(tempReq.Keys) != 1 || tempReq.Keys[0] != goodKey {
 				return true
 			}
 			go func() {
@@ -1738,7 +1746,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			return len(req.Keys) == 2 && req.Keys[0] == goodKey && req.Keys[1] == goodKey2
 		}),
 		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
-			if !(len(tempReq.Keys) == 2 && tempReq.Keys[0] == goodKey && tempReq.Keys[1] == goodKey2) {
+			if len(tempReq.Keys) != 2 || tempReq.Keys[0] != goodKey || tempReq.Keys[1] != goodKey2 {
 				return true
 			}
 			go func() {
@@ -1835,10 +1843,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			const retry = 3
 			count := 0
 			var subscribeID string
-			for {
-				if count > retry {
-					break
-				}
+			for count <= retry {
 				count++
 				time.Sleep(time.Millisecond * 10)
 				rsp, recvErr := resp.Recv()
@@ -1858,10 +1863,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			})
 			require.NoError(t, err, "Error should be nil")
 			count = 0
-			for {
-				if errors.Is(err, io.EOF) {
-					break
-				}
+			for !errors.Is(err, io.EOF) {
 				if count > retry {
 					break
 				}
@@ -1884,10 +1886,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			const retry = 3
 			count := 0
 			var subscribeID string
-			for {
-				if count > retry {
-					break
-				}
+			for count <= retry {
 				count++
 				time.Sleep(time.Millisecond * 10)
 				rsp, recvErr := resp.Recv()
@@ -1907,10 +1906,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			})
 			require.NoError(t, err, "Error should be nil")
 			count = 0
-			for {
-				if errors.Is(err, io.EOF) {
-					break
-				}
+			for !errors.Is(err, io.EOF) {
 				if count > retry {
 					break
 				}
@@ -2001,7 +1997,7 @@ func TestGetBulkState(t *testing.T) {
 		})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
-			ETag: ptr.Of("test-etag"),
+			ETag: new("test-etag"),
 		}, nil)
 	fakeStore.On("Get",
 		mock.MatchedBy(matchContextInterface),
@@ -2460,12 +2456,12 @@ func TestPublishTopic(t *testing.T) {
 	})
 
 	t.Run("err: empty bulk publish event request", func(t *testing.T) {
-		_, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{})
+		_, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{})
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
 	t.Run("err: bulk publish event request with duplicate entry Ids", func(t *testing.T) {
-		_, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
+		_, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "topic",
 			Entries: []*runtimev1pb.BulkPublishRequestEntry{
@@ -2489,7 +2485,7 @@ func TestPublishTopic(t *testing.T) {
 	})
 
 	t.Run("err: bulk publish event request with missing entry Ids", func(t *testing.T) {
-		_, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
+		_, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "topic",
 			Entries: []*runtimev1pb.BulkPublishRequestEntry{
@@ -2511,14 +2507,14 @@ func TestPublishTopic(t *testing.T) {
 		assert.Contains(t, err.Error(), "not present for entry")
 	})
 	t.Run("err: bulk publish event request with pubsub and empty topic", func(t *testing.T) {
-		_, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
+		_, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 		})
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
 	t.Run("no err: bulk publish event request with pubsub, topic and empty entries", func(t *testing.T) {
-		_, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
+		_, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "topic",
 		})
@@ -2526,7 +2522,7 @@ func TestPublishTopic(t *testing.T) {
 	})
 
 	t.Run("err: bulk publish event request with error-topic and pubsub", func(t *testing.T) {
-		_, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
+		_, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "error-topic",
 		})
@@ -2534,7 +2530,7 @@ func TestPublishTopic(t *testing.T) {
 	})
 
 	t.Run("err: bulk publish event request with err-not-found topic and pubsub", func(t *testing.T) {
-		_, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
+		_, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "err-not-found",
 		})
@@ -2542,7 +2538,7 @@ func TestPublishTopic(t *testing.T) {
 	})
 
 	t.Run("err: bulk publish event request with err-not-allowed topic and pubsub", func(t *testing.T) {
-		_, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
+		_, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "err-not-allowed",
 		})
@@ -2561,7 +2557,8 @@ func TestBulkPublish(t *testing.T) {
 			BulkPublishFn: func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 				entries := []pubsub.BulkPublishResponseFailedEntry{}
 				// Construct sample response from the broker.
-				if req.Topic == "error-topic" {
+				switch req.Topic {
+				case "error-topic":
 					for _, e := range req.Entries {
 						entry := pubsub.BulkPublishResponseFailedEntry{
 							EntryId: e.EntryId,
@@ -2569,7 +2566,7 @@ func TestBulkPublish(t *testing.T) {
 						entry.Error = errors.New("error on publish")
 						entries = append(entries, entry)
 					}
-				} else if req.Topic == "even-error-topic" {
+				case "even-error-topic":
 					for i, e := range req.Entries {
 						if i%2 == 0 {
 							entry := pubsub.BulkPublishResponseFailedEntry{
@@ -2605,7 +2602,7 @@ func TestBulkPublish(t *testing.T) {
 	}
 
 	t.Run("no failures", func(t *testing.T) {
-		res, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
+		res, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "topic",
 			Entries:    sampleEntries,
@@ -2615,7 +2612,7 @@ func TestBulkPublish(t *testing.T) {
 	})
 
 	t.Run("no failures with ce metadata override", func(t *testing.T) {
-		res, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
+		res, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "topic",
 			Entries:    sampleEntries,
@@ -2630,7 +2627,7 @@ func TestBulkPublish(t *testing.T) {
 	})
 
 	t.Run("all failures from component", func(t *testing.T) {
-		res, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
+		res, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "error-topic",
 			Entries:    sampleEntries,
@@ -2643,7 +2640,7 @@ func TestBulkPublish(t *testing.T) {
 	})
 
 	t.Run("partial failures from component", func(t *testing.T) {
-		res, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
+		res, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "even-error-topic",
 			Entries:    sampleEntries,
@@ -3161,22 +3158,25 @@ func TestGetConfigurationAPI(t *testing.T) {
 }
 
 func TestSubscribeConfigurationAPI(t *testing.T) {
-	compStore := compstore.New()
-	compStore.AddConfiguration("store1", &mockConfigStore{})
+	client := func(t *testing.T) runtimev1pb.DaprClient {
+		compStore := compstore.New()
+		compStore.AddConfiguration("store1", &mockConfigStore{})
 
-	lis := startDaprAPIServer(t, &api{
-		logger: logger.NewLogger("grpc.api.test"),
-		Universal: universal.New(universal.Options{
-			AppID:      "fakeAPI",
-			CompStore:  compStore,
-			Resiliency: resiliency.New(nil),
-		}),
-	}, "")
+		lis := startDaprAPIServer(t, &api{
+			logger: logger.NewLogger("grpc.api.test"),
+			Universal: universal.New(universal.Options{
+				AppID:      "fakeAPI",
+				CompStore:  compStore,
+				Resiliency: resiliency.New(nil),
+			}),
+		}, "")
 
-	clientConn := createTestClient(lis)
-	defer clientConn.Close()
-
-	client := runtimev1pb.NewDaprClient(clientConn)
+		clientConn := createTestClient(lis)
+		t.Cleanup(func() {
+			clientConn.Close()
+		})
+		return runtimev1pb.NewDaprClient(clientConn)
+	}
 
 	getConfigurationItemTest := func(subscribeFn subscribeConfigurationFn) func(t *testing.T) {
 		return func(t *testing.T) {
@@ -3212,14 +3212,14 @@ func TestSubscribeConfigurationAPI(t *testing.T) {
 		Recv() (*runtimev1pb.SubscribeConfigurationResponse, error)
 	}, error,
 	) {
-		return client.SubscribeConfigurationAlpha1(ctx, in)
+		return client(t).SubscribeConfigurationAlpha1(ctx, in)
 	}))
 
 	t.Run("get configuration item", getConfigurationItemTest(func(ctx context.Context, in *runtimev1pb.SubscribeConfigurationRequest, opts ...grpc.CallOption) (interface {
 		Recv() (*runtimev1pb.SubscribeConfigurationResponse, error)
 	}, error,
 	) {
-		return client.SubscribeConfiguration(ctx, in)
+		return client(t).SubscribeConfiguration(ctx, in)
 	}))
 
 	getAllConfigurationItemTest := func(subscribeFn subscribeConfigurationFn) func(t *testing.T) {
@@ -3255,14 +3255,14 @@ func TestSubscribeConfigurationAPI(t *testing.T) {
 		Recv() (*runtimev1pb.SubscribeConfigurationResponse, error)
 	}, error,
 	) {
-		return client.SubscribeConfigurationAlpha1(ctx, in)
+		return client(t).SubscribeConfigurationAlpha1(ctx, in)
 	}))
 
 	t.Run("get all configuration item for empty list", getAllConfigurationItemTest(func(ctx context.Context, in *runtimev1pb.SubscribeConfigurationRequest, opts ...grpc.CallOption) (interface {
 		Recv() (*runtimev1pb.SubscribeConfigurationResponse, error)
 	}, error,
 	) {
-		return client.SubscribeConfiguration(ctx, in)
+		return client(t).SubscribeConfiguration(ctx, in)
 	}))
 }
 
@@ -3396,9 +3396,9 @@ func TestStateAPIWithResiliency(t *testing.T) {
 
 	t.Run("bulk state get fails with bulk support", func(t *testing.T) {
 		// Adding this will make the bulk operation fail
-		failingStore.BulkFailKey.Store(ptr.Of("timeoutBulkGetKeyBulk"))
+		failingStore.BulkFailKey.Store(new("timeoutBulkGetKeyBulk"))
 		t.Cleanup(func() {
-			failingStore.BulkFailKey.Store(ptr.Of(""))
+			failingStore.BulkFailKey.Store(new(""))
 		})
 
 		_, err := client.GetBulkState(t.Context(), &runtimev1pb.GetBulkStateRequest{
@@ -4219,6 +4219,11 @@ func TestMetadata(t *testing.T) {
 				},
 			},
 			GlobalConfig: &config.Configuration{},
+			WorkflowEngine: wfenginefake.New().WithRuntimeMetadata(func() *runtimev1pb.MetadataWorkflows {
+				return &runtimev1pb.MetadataWorkflows{
+					ConnectedWorkers: 1,
+				}
+			}),
 		}),
 	}
 
@@ -4246,7 +4251,7 @@ func TestMetadata(t *testing.T) {
 		bytes, err := json.Marshal(res)
 		require.NoError(t, err)
 
-		expectedResponse := `{"id":"fakeAPI","active_actors_count":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"registered_components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended_metadata":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead","type":2}],"http_endpoints":[{"name":"MockHTTPEndpoint"}],"app_connection_properties":{"port":5000,"protocol":"grpc","channel_address":"1.2.3.4","max_concurrency":10,"health":{"health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}},"runtime_version":"edge","actor_runtime":{"runtime_status":2,"active_actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"host_ready":true}}`
+		expectedResponse := `{"id":"fakeAPI","active_actors_count":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"registered_components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended_metadata":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead","type":2}],"http_endpoints":[{"name":"MockHTTPEndpoint"}],"app_connection_properties":{"port":5000,"protocol":"grpc","channel_address":"1.2.3.4","max_concurrency":10,"health":{"health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}},"runtime_version":"edge","actor_runtime":{"runtime_status":2,"active_actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"host_ready":true},"workflows":{"connected_workers":1}}`
 		assert.Equal(t, expectedResponse, string(bytes))
 	})
 }

@@ -25,13 +25,25 @@ import (
 // isolated when running in parallel.
 // The returned client will call CloseIdleConnections on test cleanup.
 func HTTP(t assert.TestingT) *http.Client {
-	return HTTPWithTimeout(t, time.Second*10)
+	return HTTPWithTimeout(t, time.Second*30)
 }
 
 func HTTPWithTimeout(t assert.TestingT, timeout time.Duration) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	// Integration tests poll a handful of localhost endpoints thousands of
+	// times. The default MaxIdleConnsPerHost is 2 and idle connections linger
+	// for 90s; under heavy parallelism on macOS (ephemeral range only ~16k
+	// ports) short-lived connections accumulate in TIME_WAIT and exhaust the
+	// outbound port pool (EADDRNOTAVAIL). Keep more idle keep-alive connections
+	// around for reuse and drop them quickly so they do not pin a per-host port
+	// for the lifetime of a test.
+	transport.MaxIdleConns = 100
+	transport.MaxIdleConnsPerHost = 32
+	transport.IdleConnTimeout = 10 * time.Second
+
 	client := &http.Client{
 		Timeout:   timeout,
-		Transport: http.DefaultTransport.(*http.Transport).Clone(),
+		Transport: transport,
 	}
 
 	if tt, ok := t.(interface{ Cleanup(func()) }); ok {

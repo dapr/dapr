@@ -21,6 +21,7 @@ func (e *RetriableError) Error() string {
 	if e.err != nil {
 		return "retriable error occurred: " + e.err.Error()
 	}
+
 	return "retriable error occurred"
 }
 

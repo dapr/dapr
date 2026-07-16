@@ -33,10 +33,13 @@ func WaitUntilDaprOutboundReady(daprHTTPPort string) {
 	client := &http.Client{
 		Timeout: time.Duration(requestTimeoutMillis) * time.Millisecond,
 	}
+
 	println(fmt.Sprintf("Waiting for Dapr to be outbound ready (timeout: %d seconds): url=%s\n", timeoutSeconds, outboundReadyHealthURL))
 
 	var err error
+
 	timeoutAt := time.Now().Add(time.Duration(timeoutSeconds) * time.Second)
+
 	lastPrintErrorTime := time.Now()
 	for time.Now().Before(timeoutAt) {
 		err = checkIfOutboundReady(client, outboundReadyHealthURL)
@@ -48,6 +51,7 @@ func WaitUntilDaprOutboundReady(daprHTTPPort string) {
 		if time.Now().After(lastPrintErrorTime) {
 			// print the error once in one seconds to avoid too many errors
 			lastPrintErrorTime = time.Now().Add(time.Second)
+
 			println(fmt.Sprintf("Dapr outbound NOT ready yet: %v", err))
 		}
 
@@ -67,11 +71,14 @@ func checkIfOutboundReady(client *http.Client, outboundReadyHealthURL string) er
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = resp.Body.Close() }()
+
 	_, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
+
 	if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("HTTP status code %v", resp.StatusCode)
 	}

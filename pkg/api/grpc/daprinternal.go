@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -32,10 +33,11 @@ import (
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
+	"github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/dapr/pkg/sse"
 )
 
 // CallLocal is used for internal dapr to dapr calls. It is invoked by another Dapr instance with a request to the local app.
@@ -135,10 +137,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	}()
 
 	// Read the rest of the data in background as we submit the request
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
-
+	a.wg.Go(func() {
 		var (
 			expectSeq uint64
 			readSeq   uint64
@@ -185,15 +184,39 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		}
 
 		pw.Close()
-	}()
+	})
+
+	isSSERequest := sse.IsSSEGrpcRequest(chunk.GetRequest())
+
+	if isSSERequest {
+		req.WithHTTPResponseWriter(&streamResponseWriter{
+			logger: a.logger,
+			stream: stream,
+			appID:  a.AppID(),
+			header: http.Header{},
+		})
+	}
 
 	// Submit the request to the app
 	res, err := appChannel.InvokeMethod(ctx, req, "")
 	if err != nil {
-		statusCode = int32(codes.Internal)
 		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 	}
-	defer res.Close()
+
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
+
+	if isSSERequest {
+		return sse.HandleSSEGrpcResponse(res)
+	}
+
+	if res == nil {
+		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, errors.New("no response received from stream"))
+	}
+
 	statusCode = res.Status().GetCode()
 
 	// Respond to the caller
@@ -273,6 +296,10 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 
 // CallActor invokes a virtual actor.
 func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	if err := a.callActorValidateWorkflowACL(ctx, in); err != nil {
+		return nil, err
+	}
+
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
 	var res *internalv1pb.InternalInvokeResponse
 	router, err := a.ActorRouter(ctx)
@@ -306,6 +333,12 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 // CallActorReminder invokes an internal virtual actor.
 func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) (*emptypb.Empty, error) {
+	// Enforce workflow access policy on reminder calls to prevent a malicious
+	// sidecar from injecting fake activity results or workflow events.
+	if err := a.callActorReminderValidateWorkflowACL(ctx, in); err != nil {
+		return nil, err
+	}
+
 	router, err := a.ActorRouter(ctx)
 	if err != nil {
 		return nil, err
@@ -327,6 +360,10 @@ func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) 
 }
 
 func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream internalv1pb.ServiceInvocation_CallActorStreamServer) error {
+	if err := a.callActorValidateWorkflowACL(stream.Context(), req); err != nil {
+		return err
+	}
+
 	router, err := a.ActorRouter(stream.Context())
 	if err != nil {
 		return err
@@ -337,35 +374,37 @@ func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream in
 	}
 	req.Metadata["X-Dapr-Remote"] = &internalv1pb.ListStringValue{Values: []string{"true"}}
 
-	ch := make(chan *internalv1pb.InternalInvokeResponse)
+	err = router.CallStream(stream.Context(), req, func(req *internalv1pb.InternalInvokeResponse) (bool, error) {
+		return false, stream.Send(req)
+	})
+	if err != nil {
+		return err
+	}
 
-	return concurrency.NewRunnerManager(
-		func(ctx context.Context) error {
-			for {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case val := <-ch:
-					if err := stream.Send(val); err != nil {
-						return err
-					}
-				}
-			}
-		},
-		func(ctx context.Context) error {
-			return router.CallStream(stream.Context(), req, ch)
-		},
-	).Run(stream.Context())
+	return nil
 }
 
-// Used by CallLocal and CallLocalStream to check the request against the access control list
+// Used by CallLocal and CallLocalStream to check the request against the access control list.
+// The method is normalized (forbidden characters rejected, path traversal resolved) as
+// defense-in-depth before ACL evaluation. The normalized form is written back to the
+// request so dispatch uses the same canonical string.
 func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMethodRequest) error {
+	// Normalize method as defense-in-depth (caller should have already normalized).
+	operation := req.Message().GetMethod()
+	normalized, err := method.NormalizeMethod(operation)
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, "invalid method: %v", err)
+	}
+	if normalized != operation {
+		req.Message().Method = normalized
+		operation = normalized
+	}
+
 	if a.accessControlList != nil {
 		// An access control policy has been specified for the app. Apply the policies.
-		operation := req.Message().GetMethod()
 		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
 		// Get the HTTP verb in case the application protocol is "http"
-		appProtocolIsHTTP := a.Universal.AppConnectionConfig().Protocol.IsHTTP()
+		appProtocolIsHTTP := a.AppConnectionConfig().Protocol.IsHTTP()
 		if appProtocolIsHTTP && req.Metadata() != nil && len(req.Metadata()) > 0 {
 			httpExt := req.Message().GetHttpExtension()
 			if httpExt != nil {

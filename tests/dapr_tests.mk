@@ -63,7 +63,7 @@ configurationapp \
 workflowsapp \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http configuration workflowsapp
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http configuration workflowsapp jobs
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -148,8 +148,14 @@ ifeq ($(DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME),)
 DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME=test_all.yaml
 endif
 
+# Only default WINDOWS_VERSION when building for Windows. When set during a
+# Linux build it leaks into `$(MAKE) docker-push` sub-makes (via
+# docker-push-retry) where docker.mk bakes `-ltsc2022-` into BUILD_TAG,
+# mismatching the tag computed by docker-deploy-k8s and breaking image pull.
+ifeq ($(TARGET_OS),windows)
 ifeq ($(WINDOWS_VERSION),)
 WINDOWS_VERSION=ltsc2022
+endif
 endif
 
 # check the required environment variables
@@ -277,9 +283,13 @@ setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup
 
 setup-pubsub-subs-perf-test-components: setup-test-env-rabbitmq setup-test-env-pulsar setup-test-env-mqtt
 
-e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
+build-deploy: build docker-push docker-deploy-k8s
 
-perf-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-perf-app-all push-perf-app-all test-perf-all
+init-build-deploy: create-test-namespace setup-3rd-party build-deploy
+
+e2e-build-deploy-run: init-build-deploy setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
+
+perf-build-deploy-run: init-build-deploy setup-test-components build-perf-app-all push-perf-app-all test-perf-all
 
 # Generate perf app image push targets
 $(foreach ITEM,$(PERF_TEST_APPS),$(eval $(call genPerfAppImagePush,$(ITEM))))
@@ -492,6 +502,7 @@ setup-test-env-kafka:
 	  --set broker.persistence.size=1Gi \
 	  --set broker.logPersistence.size=1Gi \
 	  --set zookeeper.persistence.size=1Gi \
+	  --set image.repository=bitnamilegacy/kafka \
 	  --timeout 10m0s
 
 # install rabbitmq to the cluster
@@ -503,6 +514,7 @@ setup-test-env-rabbitmq:
 	  --set auth.password='admin' \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
 	  --set persistence.size=1Gi \
+	  --set image.repository=bitnamilegacy/rabbitmq \
 	  --timeout 10m0s
 
 # install mqtt to the cluster
@@ -536,6 +548,7 @@ setup-test-env-postgres:
 	  --version 12.8.0 \
 	  -f ./tests/config/postgres_override.yaml \
 	  --set primary.persistence.size=1Gi \
+	  --set image.repository=bitnamilegacy/postgresql \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
 	  --wait \
 	  --timeout 5m0s
@@ -575,7 +588,6 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_host_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/kubernetes_actor_reminder_scheduler_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state_actorstore.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_QUERY_STATE_STORE)_query_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -583,7 +595,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_tests_cluster_role_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_CONFIG_STORE)_configuration.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/pubsub_no_resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/pubsub_resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kafka_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_crypto_$(DAPR_TEST_CRYPTO).yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_pluggable_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -595,6 +607,8 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_pubsub_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_allowlists_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_allowlists_grpc_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/kubernetes_wfacl_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/kubernetes_wfacl_policy.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_query.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badhost.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badpass.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -617,6 +631,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/grpcproxyserverexternal_service.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/externalinvocationcrd.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/omithealthchecks_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/workflow_retention_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/external_invocation_http_endpoint_tls.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	# Don't set namespace as Namespace is defind in the yaml.
 	$(KUBECTL) apply -f ./tests/config/ignore_daprsystem_config.yaml

@@ -30,8 +30,8 @@ import (
 
 // KeyValState is a key value struct for state.
 type KeyValState struct {
-	Key   string      `json:"key"`
-	Value interface{} `json:"value"`
+	Key   string `json:"key"`
+	Value any    `json:"value"`
 }
 
 // Event is an app response event.
@@ -39,9 +39,9 @@ type Event struct {
 	EventName   string        `json:"eventName,omitempty"`
 	To          []string      `json:"to,omitempty"`
 	Concurrency string        `json:"concurrency,omitempty"`
-	CreatedAt   time.Time     `json:"createdAt,omitempty"`
+	CreatedAt   time.Time     `json:"createdAt,omitzero"`
 	State       []KeyValState `json:"state,omitempty"`
-	Data        interface{}   `json:"data,omitempty"`
+	Data        any           `json:"data,omitempty"`
 }
 
 // MockApp is a mock for an app.

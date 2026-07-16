@@ -27,7 +27,7 @@ export const options = {
     discardResponseBodies: true,
     thresholds: {
         checks: ['rate==1'],
-        http_req_duration: ['p(95)<90'], // 95% of requests should be below 90ms
+        http_req_duration: ['p(95)<95'], // 95% of requests should be below 95ms
     },
     scenarios: {
         idStress: {

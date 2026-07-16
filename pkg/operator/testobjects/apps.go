@@ -1,6 +1,8 @@
 package testobjects
 
 import (
+	"maps"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,17 +22,13 @@ func (r resourceOpts) updateMetadata(m *metaV1.ObjectMeta) {
 		if m.Labels == nil {
 			m.Labels = make(map[string]string, len(r.additionalLabels))
 		}
-		for k, v := range r.additionalLabels {
-			m.Labels[k] = v
-		}
+		maps.Copy(m.Labels, r.additionalLabels)
 	}
 	if len(r.additionalAnnotations) != 0 {
 		if m.Annotations == nil {
 			m.Annotations = make(map[string]string, len(r.additionalAnnotations))
 		}
-		for k, v := range r.additionalAnnotations {
-			m.Annotations[k] = v
-		}
+		maps.Copy(m.Annotations, r.additionalAnnotations)
 	}
 }
 

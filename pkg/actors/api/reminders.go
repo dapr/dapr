@@ -20,6 +20,8 @@ import (
 
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
 // GetReminderRequest is the request object to get an existing reminder.
@@ -40,7 +42,14 @@ type CreateReminderRequest struct {
 	DueTime   string     `json:"dueTime"`
 	Period    string     `json:"period"`
 	TTL       string     `json:"ttl"`
-	IsOneShot bool       `json:"-"`
+	Overwrite *bool      `json:"overwrite"`
+
+	FailurePolicy *commonv1.JobFailurePolicy `json:"failure_policy,omitempty"`
+
+	// ConcurrencyKey is an optional key used for per-name concurrency limiting
+	// at the scheduler level. For activities this is the activity name, for
+	// workflows this is the workflow name.
+	ConcurrencyKey *string `json:"-"`
 }
 
 // ActorKey returns the key of the actor for this reminder.
@@ -76,7 +85,8 @@ func (req *CreateReminderRequest) UnmarshalJSON(data []byte) error {
 	*req = CreateReminderRequest{}
 
 	m := &struct {
-		Data json.RawMessage `json:"data"`
+		Data          json.RawMessage            `json:"data"`
+		FailurePolicy *commonv1.JobFailurePolicy `json:"failure_policy,omitempty"`
 		*createReminderAlias
 	}{
 		createReminderAlias: (*createReminderAlias)(req),
@@ -93,6 +103,8 @@ func (req *CreateReminderRequest) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("failed to unmarshal data: %w", err)
 		}
 	}
+
+	req.FailurePolicy = m.FailurePolicy
 
 	return nil
 }
@@ -171,7 +183,7 @@ func setReminderTimes(reminder *Reminder, dueTime string, period string, ttl str
 	reminder.RegisteredTime = now
 	reminder.DueTime = dueTime
 	if dueTime != "" {
-		reminder.RegisteredTime, err = parseTimeTruncateSeconds(dueTime, &now)
+		reminder.RegisteredTime, err = parseReminderTime(dueTime, &now)
 		if err != nil {
 			return fmt.Errorf("error parsing %s due time: %w", logMsg, err)
 		}
@@ -185,7 +197,7 @@ func setReminderTimes(reminder *Reminder, dueTime string, period string, ttl str
 
 	// Set expiration time if configured
 	if ttl != "" {
-		reminder.ExpirationTime, err = parseTimeTruncateSeconds(ttl, &reminder.RegisteredTime)
+		reminder.ExpirationTime, err = parseReminderTime(ttl, &reminder.RegisteredTime)
 		if err != nil {
 			return fmt.Errorf("error parsing %s TTL: %w", logMsg, err)
 		}
@@ -216,8 +228,15 @@ func (req DeleteReminderRequest) Key() string {
 	return req.ActorType + DaprSeparator + req.ActorID + DaprSeparator + req.Name
 }
 
+type DeleteRemindersByActorIDRequest struct {
+	ActorType       string
+	ActorID         string
+	MatchIDAsPrefix bool
+}
+
 type ListRemindersRequest struct {
 	ActorType string
+	ActorID   *string
 }
 
 // DeleteTimerRequest is a request object for deleting a timer.

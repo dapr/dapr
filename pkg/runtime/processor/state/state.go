@@ -72,9 +72,10 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 	defer s.lock.Unlock()
 
 	fName := comp.LogName()
+
 	store, err := s.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.Name)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
@@ -85,30 +86,32 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 	secretStoreName := s.meta.AuthSecretStoreOrDefault(&comp)
 
 	secretStore, _ := s.compStore.GetSecretStore(secretStoreName)
+
 	encKeys, err := encryption.ComponentEncryptionKey(comp, secretStore)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.Name)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
 	if encKeys.Primary.Key != "" {
-		ok := encryption.AddEncryptedStateStore(comp.ObjectMeta.Name, encKeys)
+		ok := encryption.AddEncryptedStateStore(comp.Name, encKeys)
 		if ok {
-			log.Infof("Automatic encryption enabled for state store %s", comp.ObjectMeta.Name)
+			log.Infof("Automatic encryption enabled for state store %s", comp.Name)
 			log.Info("WARNING: Automatic state store encryption should never be used to store more than 4 billion items in the state store (including updates). Storing more items than that can cause the private key to be exposed.")
 		}
 	}
 
 	meta, err := s.meta.ToBaseMetadata(comp)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
 	props := meta.Properties
+
 	err = store.Init(ctx, contribstate.Metadata{Base: meta})
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
@@ -116,6 +119,7 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 	if s.actorsEnabled {
 		// set specified actor store if "actorStateStore" is true in the spec.
 		actorStoreSpecified := false
+
 		for k, v := range props {
 			//nolint:gocritic
 			if strings.ToLower(k) == PropertyKeyActorStateStore {
@@ -126,20 +130,24 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 
 		if actorStoreSpecified {
 			if s.actorStateStoreName == nil {
-				log.Info("Using '" + comp.ObjectMeta.Name + "' as actor state store")
-				s.actorStateStoreName = &comp.ObjectMeta.Name
-			} else if *s.actorStateStoreName != comp.ObjectMeta.Name {
-				return fmt.Errorf("detected duplicate actor state store: %s and %s", *s.actorStateStoreName, comp.ObjectMeta.Name)
+				log.Info("Using '" + comp.Name + "' as actor state store")
+				s.actorStateStoreName = &comp.Name
+			} else if *s.actorStateStoreName != comp.Name {
+				return fmt.Errorf("detected duplicate actor state store: %s and %s", *s.actorStateStoreName, comp.Name)
 			}
-			s.compStore.AddStateStoreActor(comp.ObjectMeta.Name, store)
+
+			s.compStore.AddStateStoreActor(comp.Name, store)
 		}
 	}
 
-	s.compStore.AddStateStore(comp.ObjectMeta.Name, store)
-	err = compstate.SaveStateConfiguration(comp.ObjectMeta.Name, props)
+	s.compStore.AddStateStore(comp.Name, store)
+
+	err = compstate.SaveStateConfiguration(comp.Name, props)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
+
 		wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
+
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, wrapError)
 	}
 
@@ -161,7 +169,8 @@ func (s *state) Close(comp compapi.Component) error {
 
 	defer s.compStore.DeleteStateStore(comp.Name)
 
-	if err := ss.Close(); err != nil {
+	err := ss.Close()
+	if err != nil {
 		return err
 	}
 
@@ -175,5 +184,6 @@ func (s *state) ActorStateStoreName() (string, bool) {
 	if s.actorStateStoreName == nil {
 		return "", false
 	}
+
 	return *s.actorStateStoreName, true
 }

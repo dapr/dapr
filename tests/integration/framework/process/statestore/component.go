@@ -303,6 +303,7 @@ func (c *component) Transact(ctx context.Context, req *compv1pb.TransactionalSta
 			if v.Set.GetEtag() != nil && v.Set.GetEtag().GetValue() != "" {
 				setReq.ETag = &v.Set.GetEtag().Value
 			}
+			operations = append(operations, setReq)
 		default:
 			return nil, fmt.Errorf("unknown operation type %T", v)
 		}

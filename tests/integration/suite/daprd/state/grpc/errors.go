@@ -7,7 +7,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -345,7 +345,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	// Covers errutils.StateStoreTooManyTransactionalOps()
 	t.Run("state store too many transactional operations", func(t *testing.T) {
 		stateStoreName := "mystore-pluggable-multimaxsize"
-		ops := make([]*rtv1.TransactionalStateOperation, 0)
+		ops := make([]*rtv1.TransactionalStateOperation, 0, 2)
 		ops = append(ops, &rtv1.TransactionalStateOperation{
 			OperationType: "upsert",
 			Request: &commonv1.StateItem{
@@ -405,7 +405,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	// Covers errutils.StateStoreTransactionsNotSupported()
 	t.Run("state transactions not supported", func(t *testing.T) {
 		stateStoreName := "mystore-non-transactional"
-		ops := make([]*rtv1.TransactionalStateOperation, 0)
+		ops := make([]*rtv1.TransactionalStateOperation, 0, 2)
 		ops = append(ops, &rtv1.TransactionalStateOperation{
 			OperationType: "upsert",
 			Request: &commonv1.StateItem{

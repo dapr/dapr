@@ -40,6 +40,17 @@ type options struct {
 	onBindingEventFn   func(context.Context, *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error)
 	healthCheckFn      func(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error)
 	pingFn             func(context.Context, *testpb.PingRequest) (*testpb.PingResponse, error)
+
+	// Actor streaming options. When daprdGRPCAddr is set the harness
+	// opens SubscribeActorEventsAlpha1 against daprd, sends the
+	// actorRegistration as the initial message, and dispatches incoming
+	// callbacks to the onActor* closures.
+	daprdGRPCAddrFn     func() string
+	actorRegistrationFn func() *rtv1.SubscribeActorEventsRequestInitialAlpha1
+	onActorInvokeFn     func(context.Context, *rtv1.SubscribeActorEventsResponseInvokeRequestAlpha1) (*rtv1.SubscribeActorEventsRequestInvokeResponseAlpha1, error)
+	onActorReminderFn   func(context.Context, *rtv1.SubscribeActorEventsResponseReminderRequestAlpha1) (*rtv1.SubscribeActorEventsRequestReminderResponseAlpha1, error)
+	onActorTimerFn      func(context.Context, *rtv1.SubscribeActorEventsResponseTimerRequestAlpha1) (*rtv1.SubscribeActorEventsRequestReminderResponseAlpha1, error)
+	onActorDeactivateFn func(context.Context, *rtv1.SubscribeActorEventsResponseDeactivateRequestAlpha1) (*rtv1.SubscribeActorEventsRequestDeactivateResponseAlpha1, error)
 }
 
 func WithGRPCOptions(opts ...procgrpc.Option) func(*options) {
@@ -105,5 +116,53 @@ func WithPingFn(fn func(context.Context, *testpb.PingRequest) (*testpb.PingRespo
 func WithRegister(fn func(s *grpc.Server)) func(*options) {
 	return func(opts *options) {
 		opts.withRegister = fn
+	}
+}
+
+// WithDaprdGRPCAddrFn instructs the harness to open a
+// SubscribeActorEventsAlpha1 stream against the daprd instance whose gRPC
+// address is returned by fn. The closure is evaluated at Run time so tests
+// can reference a daprd.Daprd that is created after the harness.
+func WithDaprdGRPCAddrFn(fn func() string) func(*options) {
+	return func(opts *options) {
+		opts.daprdGRPCAddrFn = fn
+	}
+}
+
+// WithActorRegistration supplies the initial SubscribeActorEventsRequest
+// message the harness sends when opening the actor callback stream. Must
+// be combined with WithDaprdGRPCAddrFn.
+func WithActorRegistration(fn func() *rtv1.SubscribeActorEventsRequestInitialAlpha1) func(*options) {
+	return func(opts *options) {
+		opts.actorRegistrationFn = fn
+	}
+}
+
+// WithOnActorInvokeFn installs a handler the harness invokes when daprd
+// pushes an SubscribeActorEventsResponseInvokeRequestAlpha1 on the stream.
+func WithOnActorInvokeFn(fn func(context.Context, *rtv1.SubscribeActorEventsResponseInvokeRequestAlpha1) (*rtv1.SubscribeActorEventsRequestInvokeResponseAlpha1, error)) func(*options) {
+	return func(opts *options) {
+		opts.onActorInvokeFn = fn
+	}
+}
+
+// WithOnActorReminderFn installs a handler for SubscribeActorEventsResponseReminderRequestAlpha1.
+func WithOnActorReminderFn(fn func(context.Context, *rtv1.SubscribeActorEventsResponseReminderRequestAlpha1) (*rtv1.SubscribeActorEventsRequestReminderResponseAlpha1, error)) func(*options) {
+	return func(opts *options) {
+		opts.onActorReminderFn = fn
+	}
+}
+
+// WithOnActorTimerFn installs a handler for SubscribeActorEventsResponseTimerRequestAlpha1.
+func WithOnActorTimerFn(fn func(context.Context, *rtv1.SubscribeActorEventsResponseTimerRequestAlpha1) (*rtv1.SubscribeActorEventsRequestReminderResponseAlpha1, error)) func(*options) {
+	return func(opts *options) {
+		opts.onActorTimerFn = fn
+	}
+}
+
+// WithOnActorDeactivateFn installs a handler for SubscribeActorEventsResponseDeactivateRequestAlpha1.
+func WithOnActorDeactivateFn(fn func(context.Context, *rtv1.SubscribeActorEventsResponseDeactivateRequestAlpha1) (*rtv1.SubscribeActorEventsRequestDeactivateResponseAlpha1, error)) func(*options) {
+	return func(opts *options) {
+		opts.onActorDeactivateFn = fn
 	}
 }

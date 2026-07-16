@@ -22,7 +22,7 @@ import (
 
 type Fake[T meta.Resource] struct {
 	runFn          func(context.Context) error
-	watchUpdatesFn func(context.Context, string) (<-chan *informer.Event[T], error)
+	watchUpdatesFn func(context.Context, string) (<-chan *informer.Event[T], context.CancelFunc, error)
 }
 
 func New[T meta.Resource]() *Fake[T] {
@@ -30,8 +30,8 @@ func New[T meta.Resource]() *Fake[T] {
 		runFn: func(context.Context) error {
 			return nil
 		},
-		watchUpdatesFn: func(context.Context, string) (<-chan *informer.Event[T], error) {
-			return nil, nil
+		watchUpdatesFn: func(context.Context, string) (<-chan *informer.Event[T], context.CancelFunc, error) {
+			return nil, nil, nil
 		},
 	}
 }
@@ -41,7 +41,7 @@ func (f *Fake[T]) WithRun(fn func(context.Context) error) *Fake[T] {
 	return f
 }
 
-func (f *Fake[T]) WithWatchUpdates(fn func(context.Context, string) (<-chan *informer.Event[T], error)) *Fake[T] {
+func (f *Fake[T]) WithWatchUpdates(fn func(context.Context, string) (<-chan *informer.Event[T], context.CancelFunc, error)) *Fake[T] {
 	f.watchUpdatesFn = fn
 	return f
 }
@@ -50,6 +50,6 @@ func (f *Fake[T]) Run(ctx context.Context) error {
 	return f.runFn(ctx)
 }
 
-func (f *Fake[T]) WatchUpdates(ctx context.Context, namespace string) (<-chan *informer.Event[T], error) {
+func (f *Fake[T]) WatchUpdates(ctx context.Context, namespace string) (<-chan *informer.Event[T], context.CancelFunc, error) {
 	return f.watchUpdatesFn(ctx, namespace)
 }

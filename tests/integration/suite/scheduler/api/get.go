@@ -23,7 +23,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -49,7 +48,7 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 
 	_, err := client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name: "test",
-		Job:  &schedulerv1pb.Job{Schedule: ptr.Of("@daily")},
+		Job:  &schedulerv1pb.Job{Schedule: new("@daily")},
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     "foo",
 			Namespace: "default",

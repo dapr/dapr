@@ -28,6 +28,7 @@ func Test_toComparableObj(t *testing.T) {
 	t.Parallel()
 
 	const numCases = 500
+
 	components := make([]componentsapi.Component, numCases)
 
 	fz := fuzz.New()
@@ -53,6 +54,7 @@ func Test_AreSame(t *testing.T) {
 	t.Parallel()
 
 	const numCases = 250
+
 	components := make([]componentsapi.Component, numCases)
 	componentsDiff := make([]componentsapi.Component, numCases)
 
@@ -96,6 +98,7 @@ func Test_detectDiff(t *testing.T) {
 	t.Parallel()
 
 	const numCases = 100
+
 	components := make([]componentsapi.Component, numCases)
 	componentsDiff := make([]componentsapi.Component, numCases)
 
@@ -140,6 +143,7 @@ func Test_detectDiff(t *testing.T) {
 			for i := range numCases {
 				expDiffComponents[componentsDiff[i].Name] = componentsDiff[i]
 			}
+
 			assert.Equal(t, expDiffComponents, detectDiff[componentsapi.Component](components, append(components, componentsDiff...), nil))
 			assert.Equal(t, expDiffComponents, detectDiff[componentsapi.Component](components, append(componentsDiff, components...), nil))
 		})
@@ -162,24 +166,32 @@ func Test_detectDiff(t *testing.T) {
 			t.Parallel()
 
 			expDiffComponents := make(map[string]componentsapi.Component)
+
 			var j int
+
 			assert.Equal(t, expDiffComponents, detectDiff[componentsapi.Component](components, append(components, componentsDiff...), func(c componentsapi.Component) bool {
 				if j < len(components) {
 					assert.Equal(t, components[j], c)
 				} else {
 					assert.Equal(t, componentsDiff[j-len(components)], c)
 				}
+
 				j++
+
 				return true
 			}))
+
 			j = 0
+
 			assert.Equal(t, expDiffComponents, detectDiff[componentsapi.Component](components, append(componentsDiff, components...), func(c componentsapi.Component) bool {
 				if j < len(components) {
 					assert.Equal(t, componentsDiff[j], c)
 				} else {
 					assert.Equal(t, components[j-len(components)], c)
 				}
+
 				j++
+
 				return true
 			}))
 		})
@@ -199,17 +211,21 @@ func Test_Diff(t *testing.T) {
 	forCh := func(name string) bool {
 		ok := len(name) == 0 || takenNames[name]
 		takenNames[name] = true
+
 		return ok
 	}
 
 	fz := fuzz.New()
+
 	for i := range numCases {
 		for forCh(components[i].Name) {
 			fz.Fuzz(&components[i])
 		}
+
 		for forCh(componentsDiff1[i].Name) {
 			fz.Fuzz(&componentsDiff1[i])
 		}
+
 		for forCh(componentsDiff2[i].Name) {
 			fz.Fuzz(&componentsDiff2[i])
 		}

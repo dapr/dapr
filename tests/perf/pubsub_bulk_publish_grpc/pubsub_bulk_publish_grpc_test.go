@@ -155,7 +155,7 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 			restarts, err := tr.Platform.GetTotalRestarts(appName)
 			require.NoError(t, err)
 
-			t.Logf("dapr sidecar consumed %vm Cpu and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
+			utils.LogPerfTestResourceUsage(appUsage, sidecarUsage, restarts, 0)
 
 			var bulkResult perf.TestResult
 			err = json.Unmarshal(bulkResp, &bulkResult)
@@ -213,6 +213,9 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 			require.Equal(t, 0, restarts)
 			require.True(t, bulkResult.ActualQPS > float64(p.QPS)*0.99)
 			require.Greater(t, tp90Latency, 0.0)
+			summaryBytes, err := json.Marshal(bulkResult)
+			require.NoError(t, err)
+			utils.LogPerfTestSummary(summaryBytes)
 		})
 	}
 }

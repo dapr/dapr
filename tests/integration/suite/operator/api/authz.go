@@ -31,6 +31,7 @@ import (
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	mcpapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	resapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -187,6 +188,30 @@ func (a *authz) Run(t *testing.T, ctx context.Context) {
 			},
 			funcBadNamespace: func() (any, error) {
 				return client.ListHTTPEndpoints(ctx, &operatorv1pb.ListHTTPEndpointsRequest{Namespace: "random-namespace"})
+			},
+		},
+		"ListMCPServers": {
+			funcGoodNamespace: func() (any, error) {
+				return client.ListMCPServers(ctx, &operatorv1pb.ListMCPServersRequest{Namespace: "default"})
+			},
+			funcBadNamespace: func() (any, error) {
+				return client.ListMCPServers(ctx, &operatorv1pb.ListMCPServersRequest{Namespace: "random-namespace"})
+			},
+		},
+		"MCPServerUpdate": {
+			funcGoodNamespace: func() (any, error) {
+				stream, err := client.MCPServerUpdate(ctx, &operatorv1pb.MCPServerUpdateRequest{Namespace: "default"})
+				require.NoError(t, err)
+				a.kubeapi.Informer().Add(t, &mcpapi.MCPServer{
+					TypeMeta:   metav1.TypeMeta{Kind: "MCPServer", APIVersion: "dapr.io/v1alpha1"},
+					ObjectMeta: metav1.ObjectMeta{Name: "mymcpserver", Namespace: "default"},
+				})
+				return stream.Recv()
+			},
+			funcBadNamespace: func() (any, error) {
+				stream, err := client.MCPServerUpdate(ctx, &operatorv1pb.MCPServerUpdateRequest{Namespace: "random-namespace"})
+				require.NoError(t, err)
+				return stream.Recv()
 			},
 		},
 		"ListResiliency": {

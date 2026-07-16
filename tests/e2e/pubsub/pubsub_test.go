@@ -47,7 +47,7 @@ const (
 	// used as the exclusive max of a random number that is used as a suffix to the first message sent.  Each subsequent message gets this number+1.
 	// This is random so the first message name is not the same every time.
 	randomOffsetMax           = 49
-	numberOfMessagesToPublish = 60
+	numberOfMessagesToPublish = 40
 	publishRateLimitRPS       = 25
 
 	receiveMessageRetries = 5
@@ -80,10 +80,11 @@ type publishCommand struct {
 }
 
 type callSubscriberMethodRequest struct {
-	ReqID     string `json:"reqID"`
-	RemoteApp string `json:"remoteApp"`
-	Protocol  string `json:"protocol"`
-	Method    string `json:"method"`
+	ReqID        string   `json:"reqID"`
+	RemoteApp    string   `json:"remoteApp"`
+	Protocol     string   `json:"protocol"`
+	Method       string   `json:"method"`
+	PodEndpoints []string `json:"podEndpoints,omitempty"` // for getMessages: call each pod once and merge (HA)
 }
 
 // data returned from the subscriber app.
@@ -307,7 +308,10 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 	}
 }
 
-func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string, podEndpoints []string) string {
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health check failed for publisher")
+
 	setDesiredResponse(t, subscriberAppName, "drop", publisherExternalURL, protocol)
 	callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 
@@ -328,7 +332,40 @@ func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternal
 		ReceivedByTopicDead:       sentTopicDeadMessages,
 		ReceivedByTopicDeadLetter: sentTopicDeadMessages,
 	}
-	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, received)
+	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, received, podEndpoints)
+	return subscriberExternalURL
+}
+
+// testResiliencyExhaustion verifies that messages are not delivered to the
+// app while the subscriber keeps erroring: they are retried per the
+// pubsubRetry policy (maxRetries=5) and then dropped. The wait below only
+// needs to outlast the point at which the app would have received a message,
+// not the full exhaustion, so it is robust to broker redelivery timing.
+func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string, podEndpoints []string) string {
+	log.Printf("Test resiliency exhaustion - messages should be dropped after retries exhausted")
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health check failed for publisher")
+
+	callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
+	setDesiredResponse(t, subscriberAppName, "error", publisherExternalURL, protocol)
+	sentMessages := testPublish(t, publisherExternalURL, protocol)
+	_ = sentMessages
+
+	// After exhaustion, messages should be ACK'd and dropped. The wait is
+	// comfortably longer than the pubsubRetry budget (maxRetries=5); this
+	// assertion only requires that the messages are not delivered to the
+	// app, which holds whether they are still retrying or already dropped.
+	log.Printf("Waiting for resiliency policy to exhaust retries...")
+	time.Sleep(65 * time.Second)
+
+	log.Printf("Validating messages were dropped after retry exhaustion...")
+	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, receivedMessagesResponse{
+		ReceivedByTopicA:    []string{},
+		ReceivedByTopicB:    []string{},
+		ReceivedByTopicC:    []string{},
+		ReceivedByTopicRaw:  []string{},
+		ReceivedByTopicDead: []string{},
+	}, podEndpoints)
 	return subscriberExternalURL
 }
 
@@ -347,19 +384,29 @@ func postSingleMessage(url string, data []byte) (int, error) {
 	return statusCode, err
 }
 
-func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string, podEndpoints []string) string {
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health check failed for publisher")
+	err = utils.HealthCheckApps(subscriberExternalURL)
+	require.NoError(t, err, "Health check failed for subscriber")
+
 	// set to respond with success
 	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
 	log.Printf("Test bulkPublish and normal subscribe success flow")
 	sentMessages := testPublishBulk(t, publisherExternalURL, protocol)
 
-	time.Sleep(5 * time.Second)
-	validateBulkMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
+	time.Sleep(10 * time.Second)
+	validateBulkMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages, podEndpoints)
 	return subscriberExternalURL
 }
 
-func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string, podEndpoints []string) string {
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health check failed for publisher")
+	err = utils.HealthCheckApps(subscriberExternalURL)
+	require.NoError(t, err, "Health check failed for subscriber")
+
 	// set to respond with success
 	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
@@ -367,11 +414,11 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
 	time.Sleep(5 * time.Second)
-	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages)
+	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages, podEndpoints)
 	return subscriberExternalURL
 }
 
-func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _, protocol string) string {
+func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _, protocol string, _ []string) string {
 	log.Print("Test publish without topic")
 	commandBody := publishCommand{
 		ReqID:    "c-" + uuid.New().String(),
@@ -393,8 +440,17 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExter
 	return subscriberExternalURL
 }
 
-func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string) string {
+func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string, podEndpoints []string) string {
 	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health check failed for publisher")
+
+	// Flush any redelivery backlog left by the previous scenario before we
+	// reset the received sets, otherwise leaked in-flight messages inflate
+	// this scenario's counts (observed as the retry scenario seeing 80/40
+	// after the error scenario built up a backlog).
+	log.Println("Draining backlog from previous scenario ...")
+	drainSubscriberBacklog(t, publisherExternalURL, subscriberAppName, protocol, podEndpoints)
 
 	log.Println("Initialize the sets for this scenario ...")
 	callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
@@ -407,20 +463,58 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	if subscriberResponse == "empty-json" {
 		// on empty-json response case immediately validate the received messages
 		time.Sleep(10 * time.Second)
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages)
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages, podEndpoints)
 
 		callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
+	} else if subscriberResponse == "error" {
+		// Keep the subscriber in the error state and wait for every message
+		// on the dead-letter-configured topic to be dead-lettered BEFORE
+		// flipping back to success. While the app keeps erroring, a
+		// dead-letter-configured message can only ever end up on the
+		// dead-letter topic (the subscriber app always records and accepts
+		// the dead-letter sink), so the count converges deterministically.
+		//
+		// Flipping to success first (as the retry/invalid cases below do)
+		// races the broker: on Azure Service Bus a message whose lock is
+		// lost mid-retry is redelivered, and if the subscriber has by then
+		// flipped to success the redelivered copy is delivered on its
+		// primary topic instead of being dead-lettered, permanently
+		// stranding part of the expected dead-letter set (observed as the
+		// count landing at 0/20/30 of 40 across runs).
+		// A message is dead-lettered once its inbound resiliency policy
+		// (pubsubRetry, maxRetries=5) exhausts. With the small retry
+		// budget this is fast and bounded on every broker, including
+		// Redis on KinD where each retry maps to a multi-second
+		// redelivery cycle. EventuallyWithT returns as soon as all
+		// messages are dead-lettered; the cap is generous headroom for
+		// the slowest broker.
+		log.Printf("Validating dead-lettered messages for 'error' subscriber...")
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			got, err := subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
+			assert.NoError(c, err, "error calling subscriber to get dead letter count")
+			assert.Equal(c, len(sentMessages.ReceivedByTopicDeadLetter), got)
+		}, 300*time.Second, 5*time.Second,
+			"subscriber did not receive all dead letter messages within timeout")
+
+		// Now flip to success so the non-dead-letter topics (a/b/c/raw)
+		// drain their outstanding retries and get recorded, then validate
+		// the full received set including the dead-letter topic.
+		setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages, podEndpoints)
+		return subscriberExternalURL
 	} else {
-		// Sleep a few seconds to ensure there's time for all messages to be delivered at least once, so if they have to be sent to the DLQ, they can be before we change the desired response status
-		time.Sleep(5 * time.Second)
+		// Sleep briefly to allow initial delivery attempts to fail. We sleep
+		// well under the resiliency retry window (pubsubRetry, maxRetries=5
+		// @ 1s) so that when we flip to success the messages are still being
+		// retried and are then delivered rather than dropped.
+		time.Sleep(2 * time.Second)
 	}
 
 	// set to respond with success
 	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
 	if subscriberResponse == "empty-json" {
-		// validate that there is no redelivery of messages
-		log.Printf("Validating no redelivered messages...")
+		log.Printf("Validating no redelivered messages for 'empty-json' subscriber...")
 		time.Sleep(30 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, receivedMessagesResponse{
 			// empty string slices
@@ -429,16 +523,12 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 			ReceivedByTopicC:    []string{},
 			ReceivedByTopicRaw:  []string{},
 			ReceivedByTopicDead: []string{},
-		})
-	} else if subscriberResponse == "error" {
-		log.Printf("Validating redelivered messages...")
-		time.Sleep(30 * time.Second)
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages)
+		}, podEndpoints)
 	} else {
-		// validate redelivery of messages
+		// validate redelivery of messages (retry / invalid-status cases)
 		log.Printf("Validating redelivered messages...")
 		time.Sleep(30 * time.Second)
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages)
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages, podEndpoints)
 	}
 
 	return subscriberExternalURL
@@ -472,15 +562,95 @@ func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, pub
 	require.Equal(t, http.StatusOK, code)
 }
 
-func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse) {
+func subscriberReceivedDeadLetterCount(publisherURL, subscriberApp, protocol string, podEndpoints []string) (int, error) {
+	req := callSubscriberMethodRequest{
+		ReqID:        "c-" + uuid.New().String(),
+		RemoteApp:    subscriberApp,
+		Protocol:     protocol,
+		Method:       "getMessages",
+		PodEndpoints: podEndpoints,
+	}
+	rawReq, _ := json.Marshal(req)
+	resp, err := utils.HTTPPost(fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherURL), rawReq)
+	if err != nil {
+		return 0, err
+	}
+	var appResp receivedMessagesResponse
+	if json.Unmarshal(resp, &appResp) != nil {
+		return 0, err
+	}
+
+	return len(appResp.ReceivedByTopicDeadLetter), nil
+}
+
+// subscriberReceivedTotal returns the total number of messages the subscriber
+// app has recorded across every topic. Used to detect when a broker
+// redelivery backlog has drained.
+func subscriberReceivedTotal(publisherURL, subscriberApp, protocol string, podEndpoints []string) (int, error) {
+	req := callSubscriberMethodRequest{
+		ReqID:        "c-" + uuid.New().String(),
+		RemoteApp:    subscriberApp,
+		Protocol:     protocol,
+		Method:       "getMessages",
+		PodEndpoints: podEndpoints,
+	}
+	rawReq, _ := json.Marshal(req)
+	resp, err := utils.HTTPPost(fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherURL), rawReq)
+	if err != nil {
+		return 0, err
+	}
+	var r receivedMessagesResponse
+	if err := json.Unmarshal(resp, &r); err != nil {
+		return 0, err
+	}
+	return len(r.ReceivedByTopicA) + len(r.ReceivedByTopicB) + len(r.ReceivedByTopicC) +
+		len(r.ReceivedByTopicRaw) + len(r.ReceivedByTopicDead) + len(r.ReceivedByTopicDeadLetter) +
+		len(r.ReceivedByTopicBulk) + len(r.ReceivedByTopicRawBulk) +
+		len(r.ReceivedByTopicCEBulk) + len(r.ReceivedByTopicDefBulk), nil
+}
+
+// drainSubscriberBacklog flushes any messages still being redelivered from a
+// previous scenario before the next one starts. A scenario that holds the
+// subscriber in a failing state (notably the "error" scenario) builds up a
+// broker redelivery backlog; if those messages arrive after the next
+// scenario has reset its received sets they inflate that scenario's counts
+// (observed as 80/40 on the retry scenario). The subscriber is placed in
+// success mode so the broker drains, and we wait until the recorded total
+// stops growing, i.e. the backlog is empty. The caller is expected to
+// re-initialize (reset) the subscriber sets afterwards so the drained
+// messages are discarded.
+func drainSubscriberBacklog(t *testing.T, publisherExternalURL, subscriberAppName, protocol string, podEndpoints []string) {
+	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
+
+	var last int
+	stable := 0
+	require.Eventually(t, func() bool {
+		got, err := subscriberReceivedTotal(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
+		if err != nil {
+			return false
+		}
+		if got == last {
+			stable++
+		} else {
+			stable = 0
+			last = got
+		}
+		// Three consecutive quiet polls (~15s) with no new arrivals means
+		// the broker has no more in-flight redeliveries to hand us.
+		return stable >= 3
+	}, 180*time.Second, 5*time.Second, "subscriber backlog did not drain before scenario start")
+}
+
+func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse, podEndpoints []string) {
 	// this is the subscribe app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherExternalURL)
 	log.Printf("Getting messages received by subscriber using url %s", url)
 
 	request := callSubscriberMethodRequest{
-		RemoteApp: subscriberApp,
-		Protocol:  protocol,
-		Method:    "getMessages",
+		RemoteApp:    subscriberApp,
+		Protocol:     protocol,
+		Method:       "getMessages",
+		PodEndpoints: podEndpoints,
 	}
 
 	var appResp receivedMessagesResponse
@@ -543,15 +713,16 @@ func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL
 	assert.Equal(t, sentMessages.ReceivedByTopicDefBulk, appResp.ReceivedByTopicDefBulk, "different messages received in Topic Def Bulk impl redis")
 }
 
-func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, validateDeadLetter bool, sentMessages receivedMessagesResponse) {
+func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, validateDeadLetter bool, sentMessages receivedMessagesResponse, podEndpoints []string) {
 	// this is the subscribe app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherExternalURL)
 	log.Printf("Getting messages received by subscriber using url %s", url)
 
 	request := callSubscriberMethodRequest{
-		RemoteApp: subscriberApp,
-		Protocol:  protocol,
-		Method:    "getMessages",
+		RemoteApp:    subscriberApp,
+		Protocol:     protocol,
+		Method:       "getMessages",
+		PodEndpoints: podEndpoints,
 	}
 
 	var appResp receivedMessagesResponse
@@ -746,7 +917,7 @@ func TestMain(m *testing.M) {
 
 var pubsubTests = []struct {
 	name               string
-	handler            func(*testing.T, string, string, string, string, string) string
+	handler            func(*testing.T, string, string, string, string, string, []string) string
 	subscriberResponse string
 }{
 	{
@@ -776,6 +947,11 @@ var pubsubTests = []struct {
 		name:               "publish with subscriber invalid status test redelivery of messages",
 		handler:            testValidateRedeliveryOrEmptyJSON,
 		subscriberResponse: "invalid-status",
+	},
+	{
+		name:               "publish with subscriber error test messages dropped after resiliency exhaustion",
+		handler:            testResiliencyExhaustion,
+		subscriberResponse: "error",
 	},
 	{
 		name:    "bulk publish and normal subscribe successfully",
@@ -809,7 +985,10 @@ func TestPubSubHTTP(t *testing.T) {
 		log.Printf("initial %s offset: %d", app.suite, offset)
 		for _, tc := range pubsubTests {
 			t.Run(fmt.Sprintf("%s_%s_%s", app.suite, tc.name, protocol), func(t *testing.T) {
-				subscriberExternalURL = tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, app.subscriber, protocol)
+				var podEndpoints []string
+				podEndpoints, err = tr.Platform.GetAppPodEndpoints(app.subscriber)
+				require.NoError(t, err)
+				subscriberExternalURL = tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, app.subscriber, protocol, podEndpoints)
 			})
 		}
 	}

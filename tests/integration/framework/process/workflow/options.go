@@ -16,44 +16,146 @@ package workflow
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/durabletask-go/task"
 )
 
 type Option func(*options)
 
+type orchestratorConfig struct {
+	index int
+	name  string
+	fn    func(*task.WorkflowContext) (any, error)
+}
+
+type activityConfig struct {
+	index int
+	name  string
+	fn    func(task.ActivityContext) (any, error)
+}
+
+type daprdOptionConfig struct {
+	index int
+	opts  []daprd.Option
+}
+
 type options struct {
-	registry *task.TaskRegistry
-	daprds   int
+	daprds          int
+	skipDB          bool
+	mtls            bool
+	signingDisabled []int
 
-	enableScheduler bool
+	orchestrators     []orchestratorConfig
+	activities        []activityConfig
+	daprdOptions      []daprdOptionConfig
+	schedulerOptions  []scheduler.Option
+	placementOptions  []placement.Option
+	schedulerInstance *scheduler.Scheduler
+	schedulerAddress  *string
 }
 
-func WithScheduler(enable bool) Option {
-	return func(o *options) {
-		o.enableScheduler = enable
-	}
+func WithAddOrchestrator(t *testing.T, name string, or func(*task.WorkflowContext) (any, error)) Option {
+	t.Helper()
+	return WithAddWorkflowN(t, 0, name, or)
 }
 
-func WithAddOrchestratorN(t *testing.T, name string, or func(*task.OrchestrationContext) (any, error)) Option {
+func WithAddWorkflowN(t *testing.T, index int, name string, or func(*task.WorkflowContext) (any, error)) Option {
 	t.Helper()
 
 	return func(o *options) {
-		require.NoError(t, o.registry.AddOrchestratorN(name, or))
+		o.orchestrators = append(o.orchestrators, orchestratorConfig{
+			index: index,
+			name:  name,
+			fn:    or,
+		})
 	}
 }
 
-func WithAddActivityN(t *testing.T, name string, a func(task.ActivityContext) (any, error)) Option {
+func WithAddActivity(t *testing.T, name string, a func(task.ActivityContext) (any, error)) Option {
+	t.Helper()
+	return WithAddActivityN(t, 0, name, a)
+}
+
+func WithAddActivityN(t *testing.T, index int, name string, a func(task.ActivityContext) (any, error)) Option {
 	t.Helper()
 
 	return func(o *options) {
-		require.NoError(t, o.registry.AddActivityN(name, a))
+		o.activities = append(o.activities, activityConfig{
+			index: index,
+			name:  name,
+			fn:    a,
+		})
 	}
 }
 
 func WithDaprds(daprds int) Option {
 	return func(o *options) {
 		o.daprds = daprds
+	}
+}
+
+func WithDaprdOptions(index int, opts ...daprd.Option) Option {
+	return func(o *options) {
+		o.daprdOptions = append(o.daprdOptions, daprdOptionConfig{
+			index: index,
+			opts:  opts,
+		})
+	}
+}
+
+func WithNoDB() Option {
+	return func(o *options) {
+		o.skipDB = true
+	}
+}
+
+// WithMTLS spins up a Sentry process for mTLS and enables the
+// WorkflowHistorySigning feature flag on every daprd in the workflow.
+func WithMTLS(t *testing.T) Option {
+	t.Helper()
+	return func(o *options) {
+		o.mtls = true
+	}
+}
+
+// WithSigningDisabledN excludes the daprd at the given index from having
+// the WorkflowHistorySigning feature flag set. Has no effect without
+// WithMTLS.
+func WithSigningDisabledN(index int) Option {
+	return func(o *options) {
+		o.signingDisabled = append(o.signingDisabled, index)
+	}
+}
+
+func WithSchedulerOptions(opts ...scheduler.Option) Option {
+	return func(o *options) {
+		o.schedulerOptions = append(o.schedulerOptions, opts...)
+	}
+}
+
+// WithSchedulerInstance lets a test supply a pre-constructed scheduler. The
+// framework uses this scheduler instead of creating its own and skips
+// adding it to its process list (the caller is responsible for that).
+// Combine with WithSchedulerAddress when interposing a proxy.
+func WithSchedulerInstance(sched *scheduler.Scheduler) Option {
+	return func(o *options) {
+		o.schedulerInstance = sched
+	}
+}
+
+// WithSchedulerAddress overrides the address used for the daprd's
+// --scheduler-host-address flag. Use this to point daprd at a proxy that
+// fronts the real scheduler.
+func WithSchedulerAddress(addr string) Option {
+	return func(o *options) {
+		o.schedulerAddress = &addr
+	}
+}
+
+func WithPlacementOptions(opts ...placement.Option) Option {
+	return func(o *options) {
+		o.placementOptions = append(o.placementOptions, opts...)
 	}
 }

@@ -96,7 +96,7 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 		perf.WithDuration("1m"),
 		perf.WithPayloadSize(1024),
 	)
-	t.Logf("running service invocation http test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
+	t.Logf("running service invocation http test with params: qps=%v, connections=%v, duration=%s, payload size=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB)
 
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL("testapp")
@@ -156,8 +156,7 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 
 	t.Log("running dapr test...")
 	daprResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
-	t.Logf("dapr test results: %s", string(daprResp))
-	t.Log("checking err...")
+	utils.LogPerfTestSummary(daprResp)
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
 	// fast fail if daprResp starts with error
@@ -172,7 +171,7 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	restarts, err := tr.Platform.GetTotalRestarts("testapp")
 	require.NoError(t, err)
 
-	t.Logf("target dapr sidecar consumed %vm Cpu and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
+	utils.LogPerfTestResourceUsage(appUsage, sidecarUsage, restarts, 0)
 
 	var daprResult perf.TestResult
 	err = json.Unmarshal(daprResp, &daprResult)

@@ -211,7 +211,7 @@ func TestGetUnixDomainSocketVolume(t *testing.T) {
 	volume, daprdMount, appMount := c.getUnixDomainSocketVolumeMount()
 
 	assert.Equal(t, injectorConsts.UnixDomainSocketVolume, volume.Name)
-	assert.NotNil(t, volume.VolumeSource.EmptyDir)
+	assert.NotNil(t, volume.EmptyDir)
 	assert.Equal(t, injectorConsts.UnixDomainSocketVolume, daprdMount.Name)
 	assert.Equal(t, injectorConsts.UnixDomainSocketDaprdPath, daprdMount.MountPath)
 	assert.Equal(t, injectorConsts.UnixDomainSocketVolume, appMount.Name)

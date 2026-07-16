@@ -105,7 +105,7 @@ func TestResponseWriterWritingHeader(t *testing.T) {
 	rw.WriteHeader(http.StatusNotFound)
 
 	require.Equal(t, rec.Code, rw.Status())
-	require.Equal(t, "", rec.Body.String())
+	require.Empty(t, rec.Body.String())
 	require.Equal(t, http.StatusNotFound, rw.Status())
 	require.Equal(t, 0, rw.Size())
 }
@@ -118,7 +118,7 @@ func TestResponseWriterWritingHeaderTwice(t *testing.T) {
 	rw.WriteHeader(http.StatusInternalServerError)
 
 	require.Equal(t, rw.Status(), rec.Code)
-	require.Equal(t, "", rec.Body.String())
+	require.Empty(t, rec.Body.String())
 	require.Equal(t, http.StatusNotFound, rw.Status())
 	require.Equal(t, 0, rw.Size())
 }
@@ -138,7 +138,7 @@ func TestResponseWriterBefore(t *testing.T) {
 	rw.WriteHeader(http.StatusNotFound)
 
 	require.Equal(t, rec.Code, rw.Status())
-	require.Equal(t, "", rec.Body.String())
+	require.Empty(t, rec.Body.String())
 	require.Equal(t, http.StatusNotFound, rw.Status())
 	require.Equal(t, 0, rw.Size())
 	require.Equal(t, "barfoo", result)
@@ -196,7 +196,7 @@ func (rw *mockResponseWriterWithReadFrom) ReadFrom(r io.Reader) (n int64, err er
 		return 0, err
 	}
 	rw.writtenStr = string(bytes)
-	rw.ResponseRecorder.Write(bytes)
+	rw.Write(bytes)
 	return int64(len(bytes)), nil
 }
 

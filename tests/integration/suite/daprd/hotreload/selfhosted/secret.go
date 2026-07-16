@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -49,22 +49,10 @@ type secret struct {
 }
 
 func (s *secret) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-    - name: HotReload
-      enabled: true`), 0o600))
-
 	s.resDir1, s.resDir2, s.resDir3 = t.TempDir(), t.TempDir(), t.TempDir()
 	s.client = client.HTTP(t)
 
 	s.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(s.resDir1, s.resDir2, s.resDir3),
 		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"FOO_SEC_1", "bar1",
@@ -136,7 +124,7 @@ spec:
 }
 `), 0o600))
 
-		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -147,7 +135,7 @@ spec:
  metadata:
  - name: secretsFile
    value: '%s'
-`, filepath.Join(s.resDir2, "2-sec.json"))), 0o600))
+`, filepath.Join(s.resDir2, "2-sec.json")), 0o600))
 
 		require.NoError(t, os.WriteFile(filepath.Join(s.resDir3, "3.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -227,7 +215,7 @@ spec:
 }
 `), 0o600))
 
-		require.NoError(t, os.WriteFile(filepath.Join(s.resDir1, "1.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir1, "1.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -249,9 +237,9 @@ spec:
  metadata:
  - name: prefix
    value: BAZ_
-`, filepath.Join(s.resDir1, "1-sec.json"))), 0o600))
+`, filepath.Join(s.resDir1, "1-sec.json")), 0o600))
 
-		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -262,7 +250,7 @@ spec:
  metadata:
  - name: secretsFile
    value: '%s'
-`, filepath.Join(s.resDir2, "2-sec.json"))), 0o600))
+`, filepath.Join(s.resDir2, "2-sec.json")), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.daprd.GetMetaRegisteredComponents(t, ctx)
@@ -289,7 +277,7 @@ spec:
 	})
 
 	t.Run("renaming a component should close the old name, and open the new one", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -300,7 +288,7 @@ spec:
  metadata:
  - name: secretsFile
    value: '%s'
- `, filepath.Join(s.resDir2, "2-sec.json"))), 0o600))
+ `, filepath.Join(s.resDir2, "2-sec.json")), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.daprd.GetMetaRegisteredComponents(t, ctx)
@@ -346,7 +334,7 @@ spec:
 					{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
 					{
 						Name: "bar", Type: "state.in-memory", Version: "v1",
-						Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+						Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 					},
 				}, resp)
 		}, time.Second*5, time.Millisecond*10)
@@ -374,7 +362,7 @@ spec:
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
 				{
 					Name: "bar", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 			}, resp)
 		}, time.Second*5, time.Millisecond*10)

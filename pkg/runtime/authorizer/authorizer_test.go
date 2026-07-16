@@ -30,12 +30,13 @@ func TestAuthorizedComponents(t *testing.T) {
 
 	t.Run("standalone mode, no namespce", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "default")
+
 		auth := New(Options{
 			ID:           daprt.TestRuntimeConfigID,
 			GlobalConfig: &config.Configuration{},
 		})
 		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
+		component.Name = testCompName
 
 		componentObj := auth.GetAuthorizedObjects([]componentsV1alpha1.Component{component}, auth.IsObjectAuthorized)
 		components, ok := componentObj.([]componentsV1alpha1.Component)
@@ -46,14 +47,15 @@ func TestAuthorizedComponents(t *testing.T) {
 
 	t.Run("namespace mismatch", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "a")
+
 		auth := New(Options{
 			ID:           daprt.TestRuntimeConfigID,
 			GlobalConfig: &config.Configuration{},
 		})
 
 		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-		component.ObjectMeta.Namespace = "b"
+		component.Name = testCompName
+		component.Namespace = "b"
 
 		componentObj := auth.GetAuthorizedObjects([]componentsV1alpha1.Component{component}, auth.IsObjectAuthorized)
 		components, ok := componentObj.([]componentsV1alpha1.Component)
@@ -63,14 +65,15 @@ func TestAuthorizedComponents(t *testing.T) {
 
 	t.Run("namespace match", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "a")
+
 		auth := New(Options{
 			ID:           daprt.TestRuntimeConfigID,
 			GlobalConfig: &config.Configuration{},
 		})
 
 		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-		component.ObjectMeta.Namespace = "a"
+		component.Name = testCompName
+		component.Namespace = "a"
 
 		componentObj := auth.GetAuthorizedObjects([]componentsV1alpha1.Component{component}, auth.IsObjectAuthorized)
 		components, ok := componentObj.([]componentsV1alpha1.Component)
@@ -80,14 +83,15 @@ func TestAuthorizedComponents(t *testing.T) {
 
 	t.Run("in scope, namespace match", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "a")
+
 		auth := New(Options{
 			ID:           daprt.TestRuntimeConfigID,
 			GlobalConfig: &config.Configuration{},
 		})
 
 		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-		component.ObjectMeta.Namespace = "a"
+		component.Name = testCompName
+		component.Namespace = "a"
 		component.Scopes = []string{daprt.TestRuntimeConfigID}
 
 		componentObj := auth.GetAuthorizedObjects([]componentsV1alpha1.Component{component}, auth.IsObjectAuthorized)
@@ -98,14 +102,15 @@ func TestAuthorizedComponents(t *testing.T) {
 
 	t.Run("not in scope, namespace match", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "a")
+
 		auth := New(Options{
 			ID:           daprt.TestRuntimeConfigID,
 			GlobalConfig: &config.Configuration{},
 		})
 
 		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-		component.ObjectMeta.Namespace = "a"
+		component.Name = testCompName
+		component.Namespace = "a"
 		component.Scopes = []string{"other"}
 
 		componentObj := auth.GetAuthorizedObjects([]componentsV1alpha1.Component{component}, auth.IsObjectAuthorized)
@@ -116,14 +121,15 @@ func TestAuthorizedComponents(t *testing.T) {
 
 	t.Run("in scope, namespace mismatch", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "a")
+
 		auth := New(Options{
 			ID:           daprt.TestRuntimeConfigID,
 			GlobalConfig: &config.Configuration{},
 		})
 
 		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-		component.ObjectMeta.Namespace = "b"
+		component.Name = testCompName
+		component.Namespace = "b"
 		component.Scopes = []string{daprt.TestRuntimeConfigID}
 
 		componentObj := auth.GetAuthorizedObjects([]componentsV1alpha1.Component{component}, auth.IsObjectAuthorized)
@@ -134,14 +140,15 @@ func TestAuthorizedComponents(t *testing.T) {
 
 	t.Run("not in scope, namespace mismatch", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "a")
+
 		auth := New(Options{
 			ID:           daprt.TestRuntimeConfigID,
 			GlobalConfig: &config.Configuration{},
 		})
 
 		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-		component.ObjectMeta.Namespace = "b"
+		component.Name = testCompName
+		component.Namespace = "b"
 		component.Scopes = []string{"other"}
 
 		componentObj := auth.GetAuthorizedObjects([]componentsV1alpha1.Component{component}, auth.IsObjectAuthorized)
@@ -152,6 +159,7 @@ func TestAuthorizedComponents(t *testing.T) {
 
 	t.Run("no authorizers", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "a")
+
 		auth := New(Options{
 			ID: "test",
 			// Namespace mismatch, should be accepted anyways
@@ -160,8 +168,8 @@ func TestAuthorizedComponents(t *testing.T) {
 		auth.componentAuthorizers = []ComponentAuthorizer{}
 
 		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-		component.ObjectMeta.Namespace = "b"
+		component.Name = testCompName
+		component.Namespace = "b"
 
 		componentObj := auth.GetAuthorizedObjects([]componentsV1alpha1.Component{component}, auth.IsObjectAuthorized)
 		components, ok := componentObj.([]componentsV1alpha1.Component)
@@ -172,6 +180,7 @@ func TestAuthorizedComponents(t *testing.T) {
 
 	t.Run("only deny all", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "a")
+
 		auth := New(Options{
 			ID:           daprt.TestRuntimeConfigID,
 			GlobalConfig: &config.Configuration{},
@@ -183,7 +192,7 @@ func TestAuthorizedComponents(t *testing.T) {
 		}
 
 		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
+		component.Name = testCompName
 
 		componentObj := auth.GetAuthorizedObjects([]componentsV1alpha1.Component{component}, auth.IsObjectAuthorized)
 		components, ok := componentObj.([]componentsV1alpha1.Component)
@@ -193,6 +202,7 @@ func TestAuthorizedComponents(t *testing.T) {
 
 	t.Run("additional authorizer denies all", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "a")
+
 		auth := New(Options{
 			ID: "test",
 			GlobalConfig: &config.Configuration{
@@ -205,7 +215,7 @@ func TestAuthorizedComponents(t *testing.T) {
 		})
 
 		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
+		component.Name = testCompName
 
 		componentObj := auth.GetAuthorizedObjects([]componentsV1alpha1.Component{component}, auth.IsObjectAuthorized)
 		components, ok := componentObj.([]componentsV1alpha1.Component)
@@ -216,6 +226,7 @@ func TestAuthorizedComponents(t *testing.T) {
 
 func TestAuthorizedHTTPEndpoints(t *testing.T) {
 	t.Setenv("NAMESPACE", "a")
+
 	auth := New(Options{
 		ID: daprt.TestRuntimeConfigID,
 		GlobalConfig: &config.Configuration{
@@ -241,7 +252,7 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 
 	t.Run("namespace mismatch", func(t *testing.T) {
 		auth.namespace = "a"
-		endpoint.ObjectMeta.Namespace = "b"
+		endpoint.Namespace = "b"
 
 		endpointObjs := auth.GetAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
 		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
@@ -251,7 +262,7 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 
 	t.Run("namespace match", func(t *testing.T) {
 		auth.namespace = "a"
-		endpoint.ObjectMeta.Namespace = "a"
+		endpoint.Namespace = "a"
 
 		endpointObjs := auth.GetAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
 		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
@@ -261,7 +272,7 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 
 	t.Run("in scope, namespace match", func(t *testing.T) {
 		auth.namespace = "a"
-		endpoint.ObjectMeta.Namespace = "a"
+		endpoint.Namespace = "a"
 		endpoint.Scopes = []string{daprt.TestRuntimeConfigID}
 
 		endpointObjs := auth.GetAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
@@ -272,7 +283,7 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 
 	t.Run("not in scope, namespace match", func(t *testing.T) {
 		auth.namespace = "a"
-		endpoint.ObjectMeta.Namespace = "a"
+		endpoint.Namespace = "a"
 		endpoint.Scopes = []string{"other"}
 
 		endpointObjs := auth.GetAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
@@ -283,7 +294,7 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 
 	t.Run("in scope, namespace mismatch", func(t *testing.T) {
 		auth.namespace = "a"
-		endpoint.ObjectMeta.Namespace = "b"
+		endpoint.Namespace = "b"
 		endpoint.Scopes = []string{daprt.TestRuntimeConfigID}
 
 		endpointObjs := auth.GetAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
@@ -294,7 +305,7 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 
 	t.Run("not in scope, namespace mismatch", func(t *testing.T) {
 		auth.namespace = "a"
-		endpoint.ObjectMeta.Namespace = "b"
+		endpoint.Namespace = "b"
 		endpoint.Scopes = []string{"other"}
 
 		endpointObjs := auth.GetAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
@@ -307,12 +318,12 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 		auth.httpEndpointAuthorizers = []HTTPEndpointAuthorizer{}
 		// Namespace mismatch, should be accepted anyways
 		auth.namespace = "a"
-		endpoint.ObjectMeta.Namespace = "b"
+		endpoint.Namespace = "b"
 
 		endpointObjs := auth.GetAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
 		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
 		assert.True(t, ok)
 		assert.Len(t, endpoints, 1)
-		assert.Equal(t, endpoint.Name, endpoints[0].ObjectMeta.Name)
+		assert.Equal(t, endpoint.Name, endpoints[0].Name)
 	})
 }

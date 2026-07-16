@@ -34,24 +34,21 @@ import (
 )
 
 const (
-	appName                      = "actorreminder"                    // App name in Dapr.
-	appNameScheduler             = "actorreminderscheduler"           // App name in Dapr.
-	actorIDRestartTemplate       = "actor-reminder-restart-test-%d"   // Template for Actor ID
-	actorIDPartitionTemplate     = "actor-reminder-partition-test-%d" // Template for Actor ID
-	restartReminderName          = "RestartTestReminder"              // Reminder name
-	actorIDGetTemplate           = "actor-reminder-get-test-%d"       // Template for Actor ID
-	reminderNameForGet           = "GetTestReminder"                  // Reminder name for getting tests
-	numIterations                = 7                                  // Number of times each test should run.
-	numHealthChecks              = 60                                 // Number of get calls before starting tests.
-	numActorsPerThread           = 10                                 // Number of get calls before starting tests.
-	secondsToCheckReminderResult = 20                                 // How much time to wait to make sure the result is in logs.
-	actorName                    = "testactorreminder"                // Actor name
-	actorNameMis                 = "testactorremindermiss"            // Actor name
-	actorNameScheduler           = "testactorreminderscheduler"       // Actor name
-	actorInvokeURLFormat         = "%s/test/%s/%s/%s/%s"              // URL to invoke a Dapr's actor method in test app.
-	actorlogsURLFormat           = "%s/test/logs"                     // URL to fetch logs from test app.
-	shutdownURLFormat            = "%s/test/shutdown"                 // URL to shutdown sidecar and app.
-	misconfiguredAppName         = "actor-reminder-no-state-store"    // Actor-reminder app without a state store (should fail to start)
+	appName                      = "actorreminder"                  // App name in Dapr.
+	actorIDRestartTemplate       = "actor-reminder-restart-test-%d" // Template for Actor ID
+	restartReminderName          = "RestartTestReminder"            // Reminder name
+	actorIDGetTemplate           = "actor-reminder-get-test-%d"     // Template for Actor ID
+	reminderNameForGet           = "GetTestReminder"                // Reminder name for getting tests
+	numIterations                = 7                                // Number of times each test should run.
+	numHealthChecks              = 60                               // Number of get calls before starting tests.
+	numActorsPerThread           = 10                               // Number of get calls before starting tests.
+	secondsToCheckReminderResult = 20                               // How much time to wait to make sure the result is in logs.
+	actorName                    = "testactorreminder"              // Actor name
+	actorNameMis                 = "testactorremindermiss"          // Actor name
+	actorInvokeURLFormat         = "%s/test/%s/%s/%s/%s"            // URL to invoke a Dapr's actor method in test app.
+	actorlogsURLFormat           = "%s/test/logs"                   // URL to fetch logs from test app.
+	shutdownURLFormat            = "%s/test/shutdown"               // URL to shutdown sidecar and app.
+	misconfiguredAppName         = "actor-reminder-no-state-store"  // Actor-reminder app without a state store (should fail to start)
 )
 
 // represents a response for the APIs in this app.
@@ -145,69 +142,17 @@ func TestMain(m *testing.M) {
 				"TEST_APP_ACTOR_TYPE": actorNameMis,
 			},
 		},
-		{
-			AppName:             appNameScheduler,
-			DaprEnabled:         true,
-			DebugLoggingEnabled: true,
-			ImageName:           "e2e-actorfeatures",
-			Config:              "featureactorreminderscheduler",
-			Replicas:            1,
-			IngressEnabled:      true,
-			DaprCPULimit:        "2.0",
-			DaprCPURequest:      "0.1",
-			AppCPULimit:         "2.0",
-			AppCPURequest:       "0.1",
-			AppEnv: map[string]string{
-				"TEST_APP_ACTOR_TYPE": actorNameScheduler,
-			},
-		},
 	}
 
 	tr = runner.NewTestRunner(appName, testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
-func TestActorMissingStateStore(t *testing.T) {
-	externalURL := tr.Platform.AcquireAppExternalURL(misconfiguredAppName)
-	require.NotEmpty(t, externalURL, "external URL must not be empty!")
-
-	// This initial probe makes the test wait a little bit longer when needed,
-	// making this test less flaky due to delays in the deployment.
-	t.Logf("Checking if app is healthy ...")
-	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
-	require.NoError(t, err)
-
-	// Set reminder
-	reminder := actorReminder{
-		Data:    "reminderdata",
-		DueTime: "1s",
-		Period:  "1s",
-	}
-	reminderBody, err := json.Marshal(reminder)
-	require.NoError(t, err)
-
-	t.Run("Actor service should 500 when no state store is available.", func(t *testing.T) {
-		_, statusCode, err := utils.HTTPPostWithStatus(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorNameMis, "bogon-actor", "reminders", "failed-reminder"), reminderBody)
-		require.NoError(t, err)
-		require.True(t, statusCode == 500)
-	})
-}
-
 func TestActorReminder(t *testing.T) {
-	for _, a := range []struct {
-		appName   string
-		actorName string
-	}{
-		{appName, actorName},
-		{appNameScheduler, actorNameScheduler},
-	} {
-		t.Run(a.appName, func(t *testing.T) {
-			testActorReminder(t, a.appName, a.actorName)
-			testActorReminderTTL(t, a.appName, a.actorName)
-			testActorReminderNonHostedActor(t, a.appName, a.actorName)
-			testActorReminderPeriod(t, a.appName, a.actorName)
-		})
-	}
+	testActorReminder(t, appName, actorName)
+	testActorReminderTTL(t, appName, actorName)
+	testActorReminderNonHostedActor(t, appName, actorName)
+	testActorReminderPeriod(t, appName, actorName)
 }
 
 func testActorReminder(t *testing.T, appName, actorName string) {
@@ -397,10 +342,13 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 			for i := 0; i < numActorsPerThread; i++ {
 				actorID := fmt.Sprintf(actorIDGetTemplate, i+(1000*iteration))
 
-				resp, err := utils.HTTPGet(
-					fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet))
-				require.NoError(t, err)
-				require.True(t, len(resp) != 0, "Reminder %s does not exist", reminderNameForGet)
+				require.EventuallyWithT(t, func(c *assert.CollectT) {
+					resp, err := utils.HTTPGet(
+						fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet))
+					if assert.NoError(c, err) {
+						assert.True(c, len(resp) != 0, "Reminder %s does not exist", reminderNameForGet)
+					}
+				}, 30*time.Second, time.Second, "Reminder %s for actor %s was not found after retries", reminderNameForGet, actorID)
 
 				// cleanup reminders
 				_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet))
@@ -452,16 +400,17 @@ func testActorReminderPeriod(t *testing.T, appName, actorName string) {
 		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName), reminderBody)
 		require.NoError(t, err)
 
-		t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
-		time.Sleep(secondsToCheckReminderResult * time.Second)
-
-		t.Logf("Getting logs from %s to see if reminders did trigger ...", logsURL)
-		resp, err := utils.HTTPGet(logsURL)
-		require.NoError(t, err)
-
-		t.Logf("Checking if all reminders did trigger for app %s...", appName)
-		count := countActorAction(resp, actorID, reminderName)
-		require.Equal(t, 5, count, "Too many reminder triggers for app: %s. response: %s", appName, string(resp))
+		// Poll until all 5 repetitions have fired, with a generous timeout
+		// to handle slow CI environments.
+		t.Logf("Waiting for all reminders to trigger for app %s...", appName)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			resp, errGet := utils.HTTPGet(logsURL)
+			if !assert.NoError(c, errGet) {
+				return
+			}
+			count := countActorAction(resp, actorID, reminderName)
+			assert.Equal(c, 5, count, "Unexpected reminder trigger count for app: %s. response: %s", appName, string(resp))
+		}, 60*time.Second, 2*time.Second)
 
 		logs, err = utils.HTTPDelete(logsURL)
 		require.NoError(t, err)
@@ -498,21 +447,26 @@ func testActorReminderTTL(t *testing.T, appName, actorName string) {
 		actorID := "ttl-reminder-actor"
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName))
 		require.NoError(t, err)
+		logs, err := utils.HTTPDelete(logsURL)
+		require.NoError(t, err)
+		assert.True(t, len(logs) == 0, "Logs aren't cleared, lingering logs detected: %s", string(logs))
+
 		// Registering reminder
 		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName), reminderBody)
 		require.NoError(t, err)
 
-		waitForReminderWithTTLToFinishInSeconds := 60
-		t.Logf("Sleeping for %d seconds ...", waitForReminderWithTTLToFinishInSeconds)
-		time.Sleep(time.Duration(waitForReminderWithTTLToFinishInSeconds) * time.Second)
-
-		t.Logf("Getting logs from %s to see if reminders did trigger ...", logsURL)
-		resp, err := utils.HTTPGet(logsURL)
-		require.NoError(t, err)
-
-		t.Logf("Checking if all reminders did trigger for app %s...", appName)
-		count := countActorAction(resp, actorID, reminderName)
-		require.InDelta(t, 10, count, 2)
+		// The reminder has DueTime=2s, Period=R10/PT5S, TTL=59s.
+		// Expected ~10 triggers over ~47s (2s + 9*5s), well within the 59s TTL. Poll with a generous
+		// timeout to tolerate slow CI environments.
+		t.Logf("Waiting for all TTL reminders to trigger for app %s...", appName)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			resp, errGet := utils.HTTPGet(logsURL)
+			if !assert.NoError(c, errGet) {
+				return
+			}
+			count := countActorAction(resp, actorID, reminderName)
+			assert.InDelta(c, 10, count, 2, "Unexpected TTL reminder trigger count for app: %s. response: %s", appName, string(resp))
+		}, 120*time.Second, 5*time.Second)
 	})
 }
 

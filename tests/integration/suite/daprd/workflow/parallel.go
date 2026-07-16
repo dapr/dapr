@@ -58,16 +58,7 @@ func (p *parallel) Setup(t *testing.T) []framework.Option {
 	}
 
 	p.legacy = daprd.New(t, opts...)
-	p.scheduler = daprd.New(t, append(opts, daprd.WithConfigManifests(t, `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: schedulerreminders
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: true`))...,
-	)
+	p.scheduler = daprd.New(t, opts...)
 
 	return []framework.Option{
 		framework.WithProcesses(scheduler, place, app, p.legacy, p.scheduler),
@@ -83,7 +74,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 		var activityWaiting atomic.Int64
 
 		r := task.NewTaskRegistry()
-		require.NoError(t, r.AddOrchestratorN("foo", func(c *task.OrchestrationContext) (any, error) {
+		require.NoError(t, r.AddWorkflowN("foo", func(c *task.WorkflowContext) (any, error) {
 			ts := make([]task.Task, 10)
 			for i := range ts {
 				ts[i] = c.CallActivity("bar", task.WithActivityInput(strconv.Itoa(i)))
@@ -116,8 +107,8 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 		}, 10*time.Second, 10*time.Millisecond)
 		close(releaseCh)
 
-		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID(resp.GetInstanceId()))
+		metadata, err := backendClient.WaitForWorkflowCompletion(ctx, api.InstanceID(resp.GetInstanceId()))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	}
 }

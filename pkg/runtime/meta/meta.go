@@ -73,6 +73,7 @@ func (m *Meta) ToBaseMetadata(comp compapi.Component) (metadata.Base, error) {
 
 func (m *Meta) convertItemsToProps(items []common.NameValuePair) (map[string]string, error) {
 	properties := map[string]string{}
+
 	for _, c := range items {
 		val := c.Value.String()
 		for strings.Contains(val, "{uuid}") {
@@ -80,18 +81,23 @@ func (m *Meta) convertItemsToProps(items []common.NameValuePair) (map[string]str
 			if err != nil {
 				return nil, fmt.Errorf("failed to generate UUID: %w", err)
 			}
+
 			val = strings.Replace(val, "{uuid}", u.String(), 1)
 		}
+
 		if strings.Contains(val, "{podName}") {
 			if m.podName == "" {
 				return nil, fmt.Errorf("failed to parse metadata: property %s refers to {podName} but podName is not set", c.Name)
 			}
+
 			val = strings.ReplaceAll(val, "{podName}", m.podName)
 		}
+
 		val = strings.ReplaceAll(val, "{namespace}", m.namespace+"."+m.id)
 		val = strings.ReplaceAll(val, "{appID}", m.id)
 		properties[c.Name] = val
 	}
+
 	return properties, nil
 }
 
@@ -103,6 +109,7 @@ func (m *Meta) AuthSecretStoreOrDefault(resource Resource) string {
 			return "kubernetes"
 		}
 	}
+
 	return secretStore
 }
 
@@ -113,6 +120,7 @@ func ContainsNamespace(items []common.NameValuePair) bool {
 			return true
 		}
 	}
+
 	return false
 }
 

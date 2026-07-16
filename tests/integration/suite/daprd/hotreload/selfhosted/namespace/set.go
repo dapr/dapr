@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://wwn.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -43,17 +43,6 @@ type set struct {
 }
 
 func (s *set) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true`), 0o600))
-
 	s.resDir = t.TempDir()
 
 	s.logline = logline.New(t, logline.WithStdoutLineContains(
@@ -61,7 +50,6 @@ spec:
 	))
 
 	s.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(s.resDir),
 		daprd.WithExit1(),
 		daprd.WithLogLineStdout(s.logline),
@@ -90,7 +78,7 @@ func (s *set) Run(t *testing.T, ctx context.Context) {
 		assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 			},
 		}, s.daprd.GetMetaRegisteredComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
@@ -141,7 +129,7 @@ spec:
 		assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 			},
 		}, s.daprd.GetMetaRegisteredComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)

@@ -98,6 +98,8 @@ func TestActorDoubleActivation(t *testing.T) {
 	restarts, err := tr.Platform.GetTotalRestarts(serviceApplicationName)
 	require.NoError(t, err)
 
+	utils.LogPerfTestResourceUsage(appUsage, sidecarUsage, restarts, 0)
+
 	summary.ForTest(t).
 		Service(serviceApplicationName).
 		CPU(appUsage.CPUm).
@@ -109,5 +111,6 @@ func TestActorDoubleActivation(t *testing.T) {
 		Flush()
 
 	require.Truef(t, sm.Pass, "test has not passed, results: %s", string(bts))
-	t.Logf("Test summary `%s`", string(bts))
+
+	utils.LogPerfTestSummary(bts)
 }

@@ -1,5 +1,4 @@
 //go:build subtlecrypto
-// +build subtlecrypto
 
 /*
 Copyright 2023 The Dapr Authors

@@ -17,7 +17,6 @@ import (
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	"github.com/dapr/kit/ptr"
 )
 
 type DeclarativeSubscription struct {
@@ -45,18 +44,21 @@ type subscriptions struct {
 // MetadataSubscription is a temporary wrapper for rtpubsub.Subscription to add a Type attribute to be used in GetMetadata
 type TypedSubscription struct {
 	rtpubsub.Subscription
+
 	Type runtimev1pb.PubsubSubscriptionType
 }
 
 func (c *ComponentStore) SetProgramaticSubscriptions(subs ...rtpubsub.Subscription) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	c.subscriptions.programmatics = subs
 }
 
 func (c *ComponentStore) AddDeclarativeSubscription(comp *subapi.Subscription, sub rtpubsub.Subscription) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	for i, existing := range c.subscriptions.declarativesList {
 		if existing == comp.Name {
 			c.subscriptions.declarativesList = append(c.subscriptions.declarativesList[:i], c.subscriptions.declarativesList[i+1:]...)
@@ -67,7 +69,7 @@ func (c *ComponentStore) AddDeclarativeSubscription(comp *subapi.Subscription, s
 	c.subscriptions.declaratives[comp.Name] = &DeclarativeSubscription{
 		Comp: comp,
 		NamedSubscription: &NamedSubscription{
-			Name:         ptr.Of(comp.Name),
+			Name:         new(comp.Name),
 			Subscription: sub,
 		},
 	}
@@ -83,7 +85,7 @@ func (c *ComponentStore) AddStreamSubscription(comp *subapi.Subscription, connec
 	sub := &DeclarativeSubscription{
 		Comp: comp,
 		NamedSubscription: &NamedSubscription{
-			Name:         ptr.Of(comp.Name),
+			Name:         new(comp.Name),
 			ConnectionID: connectionID,
 			Subscription: rtpubsub.Subscription{
 				PubsubName:      comp.Spec.Pubsubname,
@@ -104,6 +106,7 @@ func (c *ComponentStore) DeleteStreamSubscription(comp *subapi.Subscription) {
 	defer func() {
 		c.lock.Unlock()
 	}()
+
 	streamingSubscriptions, ok := c.subscriptions.streams[comp.Name]
 	if ok && len(streamingSubscriptions) > 0 {
 		for i, sub := range streamingSubscriptions {
@@ -112,6 +115,7 @@ func (c *ComponentStore) DeleteStreamSubscription(comp *subapi.Subscription) {
 			}
 		}
 	}
+
 	if len(c.subscriptions.streams[comp.Name]) == 0 {
 		delete(c.subscriptions.streams, comp.Name)
 	}
@@ -123,6 +127,7 @@ func (c *ComponentStore) DeleteDeclarativeSubscription(names ...string) {
 
 	for _, name := range names {
 		delete(c.subscriptions.declaratives, name)
+
 		for i, existing := range c.subscriptions.declarativesList {
 			if existing == name {
 				c.subscriptions.declarativesList = append(c.subscriptions.declarativesList[:i], c.subscriptions.declarativesList[i+1:]...)
@@ -137,6 +142,7 @@ func (c *ComponentStore) ListTypedSubscriptions() []TypedSubscription {
 	defer c.lock.RUnlock()
 
 	var subs []TypedSubscription
+
 	taken := make(map[string]int)
 
 	for _, name := range c.subscriptions.declarativesList {
@@ -145,18 +151,21 @@ func (c *ComponentStore) ListTypedSubscriptions() []TypedSubscription {
 			Subscription: sub,
 			Type:         runtimev1pb.PubsubSubscriptionType_DECLARATIVE,
 		}
+
 		key := sub.PubsubName + "||" + sub.Topic
 		if _, ok := taken[key]; !ok {
 			taken[key] = len(subs)
 			subs = append(subs, typedSub)
 		}
 	}
+
 	for i := range c.subscriptions.programmatics {
 		sub := c.subscriptions.programmatics[i]
 		typedSub := TypedSubscription{
 			Subscription: sub,
 			Type:         runtimev1pb.PubsubSubscriptionType_PROGRAMMATIC,
 		}
+
 		key := sub.PubsubName + "||" + sub.Topic
 		if j, ok := taken[key]; ok {
 			subs[j] = typedSub
@@ -165,6 +174,7 @@ func (c *ComponentStore) ListTypedSubscriptions() []TypedSubscription {
 			subs = append(subs, typedSub)
 		}
 	}
+
 	for _, streamingSubs := range c.subscriptions.streams {
 		for _, sub := range streamingSubs {
 			typedSub := TypedSubscription{
@@ -183,21 +193,24 @@ func (c *ComponentStore) ListSubscriptionsAppByPubSub(name string) []*NamedSubsc
 	defer c.lock.RUnlock()
 
 	var subs []*NamedSubscription
+
 	taken := make(map[string]int)
+
 	for _, subName := range c.subscriptions.declarativesList {
 		sub := c.subscriptions.declaratives[subName]
-		if sub.Subscription.PubsubName != name {
+		if sub.PubsubName != name {
 			continue
 		}
 
-		if _, ok := taken[sub.Subscription.Topic]; !ok {
-			taken[sub.Subscription.Topic] = len(subs)
+		if _, ok := taken[sub.Topic]; !ok {
+			taken[sub.Topic] = len(subs)
 			subs = append(subs, &NamedSubscription{
-				Name:         ptr.Of(subName),
+				Name:         new(subName),
 				Subscription: sub.Subscription,
 			})
 		}
 	}
+
 	for i := range c.subscriptions.programmatics {
 		sub := c.subscriptions.programmatics[i]
 		if sub.PubsubName != name {
@@ -220,9 +233,10 @@ func (c *ComponentStore) ListSubscriptionsStreamByPubSub(name string) []*NamedSu
 	defer c.lock.RUnlock()
 
 	var subs []*NamedSubscription
+
 	for _, subscriptions := range c.subscriptions.streams {
 		for _, sub := range subscriptions {
-			if sub.Subscription.PubsubName == name {
+			if sub.PubsubName == name {
 				subs = append(subs, sub.NamedSubscription)
 			}
 		}
@@ -234,17 +248,20 @@ func (c *ComponentStore) ListSubscriptionsStreamByPubSub(name string) []*NamedSu
 func (c *ComponentStore) GetDeclarativeSubscription(name string) (*DeclarativeSubscription, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	for i, sub := range c.subscriptions.declaratives {
 		if sub.Comp.Name == name {
 			return c.subscriptions.declaratives[i], true
 		}
 	}
+
 	return nil, false
 }
 
 func (c *ComponentStore) GetStreamSubscription(subscription *subapi.Subscription) (*NamedSubscription, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	for _, subscriptions := range c.subscriptions.streams {
 		for _, sub := range subscriptions {
 			if sub.Comp == subscription {
@@ -252,22 +269,26 @@ func (c *ComponentStore) GetStreamSubscription(subscription *subapi.Subscription
 			}
 		}
 	}
+
 	return nil, false
 }
 
 func (c *ComponentStore) ListDeclarativeSubscriptions() []subapi.Subscription {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	subs := make([]subapi.Subscription, 0, len(c.subscriptions.declaratives))
 	for i := range c.subscriptions.declarativesList {
 		subs = append(subs, *c.subscriptions.declaratives[c.subscriptions.declarativesList[i]].Comp)
 	}
+
 	return subs
 }
 
 func (c *ComponentStore) ListProgramaticSubscriptions() []rtpubsub.Subscription {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	return c.subscriptions.programmatics
 }
 

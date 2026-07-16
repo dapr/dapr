@@ -35,7 +35,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/subscription/postman/http"
 	"github.com/dapr/dapr/pkg/runtime/subscription/todo"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -47,7 +46,7 @@ var testLogger = logger.NewLogger("dapr.runtime.test")
 type input struct {
 	pbsm     todo.BulkSubscribedMessage
 	bscData  todo.BulkSubscribeCallData
-	envelope map[string]interface{}
+	envelope map[string]any
 }
 
 type testSettings struct {
@@ -96,12 +95,15 @@ func getPubSubMessages() []todo.Message {
 
 	bulkEntries := getBulkMessageEntriesForResiliency(10)
 	i := 0
+
 	for _, ord := range orders {
-		var cloudEvent map[string]interface{}
+		var cloudEvent map[string]any
+
 		err := json.Unmarshal([]byte(ord), &cloudEvent)
 		if err == nil {
 			pubSubMessages[i].CloudEvent = cloudEvent
 		}
+
 		pubSubMessages[i].Entry = &bulkEntries[i]
 		rawData := runtimePubsub.BulkSubscribeMessageItem{
 			EntryId: bulkEntries[i].EntryId,
@@ -110,6 +112,7 @@ func getPubSubMessages() []todo.Message {
 		pubSubMessages[i].RawData = &rawData
 		i++
 	}
+
 	return pubSubMessages
 }
 
@@ -142,14 +145,17 @@ func createResPolicyProvider(ciruitBreaker resiliencyV1alpha.CircuitBreaker, tim
 			},
 		},
 	}
+
 	return resiliency.FromConfigurations(testLogger, r)
 }
 
 func getResponse(req *invokev1.InvokeMethodRequest, ts *testSettings) *invokev1.InvokeMethodResponse {
 	var data map[string]any
+
 	v, _ := req.RawDataFull()
 	e := json.Unmarshal(v, &data)
 	appResponses := []contribpubsub.AppBulkResponseEntry{}
+
 	if e == nil {
 		entries, _ := data["entries"].([]any)
 		for j := 1; j <= len(entries); j++ {
@@ -157,22 +163,23 @@ func getResponse(req *invokev1.InvokeMethodRequest, ts *testSettings) *invokev1.
 			abre := contribpubsub.AppBulkResponseEntry{
 				EntryId: entryId,
 			}
+
 			if ts.failCount > 0 && (ts.failAllEntries || (ts.failEvenOnes && j%2 == 0)) {
 				testLogger.Infof("ts.failCount: %d", ts.failCount)
+
 				abre.Status = "RETRY"
 			} else {
 				abre.Status = "SUCCESS"
 			}
+
 			appResponses = append(appResponses, abre)
 
-			if _, ok := ts.entryIdRetryTimes[entryId]; ok {
-				ts.entryIdRetryTimes[entryId]++
-			} else {
-				ts.entryIdRetryTimes[entryId] = 1
-			}
+			ts.entryIdRetryTimes[entryId]++
 		}
+
 		ts.failCount--
 	}
+
 	re := contribpubsub.AppBulkResponse{
 		AppResponses: appResponses,
 	}
@@ -180,6 +187,7 @@ func getResponse(req *invokev1.InvokeMethodRequest, ts *testSettings) *invokev1.
 	respInvoke := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 		WithRawDataBytes(v).
 		WithContentType("application/json")
+
 	return respInvoke
 }
 
@@ -199,10 +207,12 @@ func getInput() input {
 	bulkResponses := make([]contribpubsub.BulkSubscribeResponseEntry, 10)
 	in.bscData.BulkResponses = &bulkResponses
 	entryIdIndexMap := make(map[string]int) //nolint:stylecheck
+
 	in.bscData.EntryIdIndexMap = &entryIdIndexMap
 	for i, entry := range msgArr {
 		(*in.bscData.EntryIdIndexMap)[entry.EntryId] = i
 	}
+
 	in.envelope = runtimePubsub.NewBulkSubscribeEnvelope(&runtimePubsub.BulkSubscribeEnvelope{
 		ID:     "",
 		Topic:  "topic0",
@@ -212,6 +222,7 @@ func getInput() input {
 	in.bscData.BulkSubDiag = &bulkSubDiag
 	in.bscData.Topic = "topic0"
 	in.bscData.PsName = testBulkSubscribePubsub
+
 	return in
 }
 
@@ -219,8 +230,10 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	t.Run("verify Responses when few entries fail even after retries", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
+
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
+
 		comp := inmemory.New(log)
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
@@ -252,7 +265,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -276,6 +289,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 				{EntryId: "10101010j", IsError: false},
 			},
 		}
+
 		assertRetryCount(t, map[string]int{
 			"1111111a":  1,
 			"2222222b":  2,
@@ -295,6 +309,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	t.Run("verify Responses when ALL entries fail even after retries", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
+
 		comp := inmemory.New(log)
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
@@ -328,7 +343,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -352,6 +367,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 				{EntryId: "10101010j", IsError: true},
 			},
 		}
+
 		assertRetryCount(t, map[string]int{
 			"1111111a":  3,
 			"2222222b":  3,
@@ -371,6 +387,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	t.Run("pass ALL entries in second attempt", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
+
 		comp := inmemory.New(log)
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
@@ -404,7 +421,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -428,6 +445,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 				{EntryId: "10101010j", IsError: false},
 			},
 		}
+
 		assertRetryCount(t, map[string]int{
 			"1111111a":  2,
 			"2222222b":  2,
@@ -447,6 +465,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	t.Run("pass ALL entries in first attempt", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
+
 		comp := inmemory.New(log)
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
@@ -480,7 +499,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -504,6 +523,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 				{EntryId: "10101010j", IsError: false},
 			},
 		}
+
 		assertRetryCount(t, map[string]int{
 			"1111111a":  1,
 			"2222222b":  1,
@@ -523,6 +543,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	t.Run("fail ALL entries due to timeout", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
+
 		comp := inmemory.New(log)
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
@@ -559,7 +580,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, shortTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -582,6 +603,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 				{EntryId: "10101010j", IsError: true},
 			},
 		}
+
 		require.Error(t, e)
 		require.ErrorIs(t, e, context.DeadlineExceeded)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
@@ -590,6 +612,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	t.Run("verify Responses when ALL entries fail with Circuitbreaker and exhaust retries", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
+
 		comp := inmemory.New(log)
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
@@ -630,7 +653,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			Timeout:     "30s",                     // half-open after 30s. So in test this will not be triggered
 		}
 
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -663,6 +686,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"9999999i":  2,
 			"10101010j": 2,
 		}
+
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
 		assert.Len(t, *b, 10)
 		assertRetryCount(t, expectedCBRetryCount, ts.entryIdRetryTimes)
@@ -683,6 +707,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	t.Run("verify Responses when Partial entries fail with Circuitbreaker and exhaust retries", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
+
 		comp := inmemory.New(log)
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
@@ -723,7 +748,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			Timeout:     "30s",                     // half-open after 30s. So in test this will not be triggered
 		}
 
-		shortRetry.MaxRetries = ptr.Of(5)
+		shortRetry.MaxRetries = new(5)
 
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -756,6 +781,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"9999999i":  1,
 			"10101010j": 2,
 		}
+
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
 		assert.Len(t, *b, 10)
 		assertRetryCount(t, expectedCBRetryCount, ts.entryIdRetryTimes)
@@ -776,6 +802,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	t.Run("verify Responses when Partial entries Pass with Circuitbreaker half open timeout", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
+
 		comp := inmemory.New(log)
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
@@ -816,7 +843,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			Timeout:     "1ms",                     // half-open after 1ms. So in test this will be triggered
 		}
 
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -849,6 +876,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"9999999i":  1,
 			"10101010j": 2,
 		}
+
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
 		assert.Len(t, *b, 10)
 		assertRetryCount(t, expectedCBRetryCount, ts.entryIdRetryTimes)
@@ -860,6 +888,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	t.Run("Partial success with CB and exhaust retries, then act with short half open timeout", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
+
 		comp := inmemory.New(log)
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
@@ -900,7 +929,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			Timeout:     "4s",                      // half-open after 4s. So in test this will be triggered
 		}
 
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -933,6 +962,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"9999999i":  1,
 			"10101010j": 2,
 		}
+
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
 		assert.Len(t, *b, 10)
 		assertRetryCount(t, expectedCBRetryCount, ts.entryIdRetryTimes)
@@ -970,6 +1000,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"9999999i":  2,
 			"10101010j": 3,
 		}
+
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
 		assert.Len(t, *b, 10)
 		assertRetryCount(t, expectedCBRetryCount, ts.entryIdRetryTimes)
@@ -981,6 +1012,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	t.Run("Fail all events with timeout and then Open CB - short retries", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
+
 		comp := inmemory.New(log)
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
@@ -1022,7 +1054,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			Timeout:     "30s",                     // half-open after 30s. So in test this will NOT be triggered
 		}
 
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		policyProvider := createResPolicyProvider(cb, shortTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -1043,6 +1075,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 				{EntryId: "10101010j", IsError: true},
 			},
 		}
+
 		assert.Len(t, *b, 10)
 		require.Error(t, e)
 		assert.Equal(t, breaker.ErrOpenState, e)
@@ -1064,6 +1097,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
+
 		comp := inmemory.New(log)
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
@@ -1101,7 +1135,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 			Timeout:     "4s",                      // half-open after 4s. So in test this will be triggered
 		}
 
-		shortRetry.MaxRetries = ptr.Of(20)
+		shortRetry.MaxRetries = new(20)
 
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -1236,6 +1270,7 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 	t.Run("Fail all events with timeout and then Open CB - long retries", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
+
 		comp := inmemory.New(log)
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
@@ -1277,7 +1312,7 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 			Timeout:     "30s",                     // half-open after 30s. So in test this will NOT be triggered
 		}
 
-		shortRetry.MaxRetries = ptr.Of(7)
+		shortRetry.MaxRetries = new(7)
 
 		policyProvider := createResPolicyProvider(cb, shortTimeout, longRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -1298,6 +1333,7 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 				{EntryId: "10101010j", IsError: true},
 			},
 		}
+
 		assert.Len(t, *b, 10)
 		require.Error(t, e)
 		assert.Equal(t, breaker.ErrOpenState, e)

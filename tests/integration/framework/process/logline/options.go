@@ -17,6 +17,11 @@ package logline
 type options struct {
 	stdoutContains []string
 	stderrContains []string
+	// captureAll enables continuous log capture mode, where all logs are
+	// captured to the buffer even without specific expected lines configured.
+	// This is useful for tests that need to dynamically check log contents
+	// using Contains() or Reset().
+	captureAll bool
 }
 
 func WithStdoutLineContains(lines ...string) func(*options) {
@@ -28,5 +33,15 @@ func WithStdoutLineContains(lines ...string) func(*options) {
 func WithStderrLineContains(lines ...string) func(*options) {
 	return func(o *options) {
 		o.stderrContains = append(o.stderrContains, lines...)
+	}
+}
+
+// WithCaptureAll enables continuous log capture mode, where all logs are
+// captured to the buffer even without specific expected lines configured.
+// This is useful for tests that need to dynamically check log contents
+// using Contains() or Reset().
+func WithCaptureAll() func(*options) {
+	return func(o *options) {
+		o.captureAll = true
 	}
 }

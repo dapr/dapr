@@ -38,7 +38,14 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
     spec:
+    {{- with .Values.global.initContainers.operator }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
       containers:
+    {{- with .Values.global.extraContainers.operator }}
+        {{- toYaml . | nindent 6 }}
+    {{- end }}
       - name: dapr-operator
         livenessProbe:
           httpGet:
@@ -220,7 +227,7 @@ spec:
                   operator: In
                   values:
                   - dapr-operator
-              topologyKey: topology.kubernetes.io/zone
+              topologyKey: {{ .Values.global.ha.topologyKey }}
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:

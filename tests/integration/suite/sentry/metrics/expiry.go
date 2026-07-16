@@ -16,9 +16,9 @@ package metrics
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/rsa"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,7 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -47,11 +47,27 @@ type expiry struct {
 }
 
 func (e *expiry) Setup(t *testing.T) []framework.Option {
-	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
 	onemonth := time.Hour * 24 * 30
-	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, &onemonth)
+	_, rootKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
+	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	x509bundle, err := bundle.GenerateX509(bundle.OptionsX509{
+		X509RootKey:      rootKey,
+		TrustDomain:      "integration.test.dapr.io",
+		AllowedClockSkew: time.Second * 20,
+		OverrideCATTL:    &onemonth,
+	})
+	require.NoError(t, err)
+	jwtbundle, err := bundle.GenerateJWT(bundle.OptionsJWT{
+		JWTRootKey:  jwtKey,
+		TrustDomain: "integration.test.dapr.io",
+	})
+	require.NoError(t, err)
+	bundle := bundle.Bundle{
+		X509: x509bundle,
+		JWT:  jwtbundle,
+	}
 
 	e.notGiven = procsentry.New(t, procsentry.WithWriteTrustBundle(false))
 	e.given = procsentry.New(t, procsentry.WithCABundle(bundle))
@@ -78,7 +94,7 @@ func (e *expiry) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
-		for _, line := range bytes.Split(respBody, []byte("\n")) {
+		for line := range bytes.SplitSeq(respBody, []byte("\n")) {
 			if len(line) == 0 || line[0] == '#' {
 				continue
 			}

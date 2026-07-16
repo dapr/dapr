@@ -1,4 +1,4 @@
-/*
+/*t *testing.T
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,14 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/socket"
@@ -36,35 +38,40 @@ type Option func(*options)
 type options struct {
 	execOpts []exec.Option
 
-	appID                   string
-	namespace               *string
-	appPort                 *int
-	grpcPort                int
-	httpPort                int
-	internalGRPCPort        int
-	publicPort              int
-	metricsPort             int
-	profilePort             int
-	appProtocol             string
-	appHealthCheck          bool
-	appHealthCheckPath      string
-	appHealthProbeInterval  int
-	appHealthProbeThreshold int
-	resourceFiles           []string
-	resourceDirs            []string
-	configs                 []string
-	placementAddresses      []string
-	logLevel                string
-	mode                    string
-	enableMTLS              bool
-	sentryAddress           string
-	controlPlaneAddress     string
-	disableK8sSecretStore   *bool
-	gracefulShutdownSeconds *int
-	blockShutdownDuration   *string
-	controlPlaneTrustDomain *string
-	schedulerAddresses      []string
-	maxBodySize             *string
+	appID                      string
+	namespace                  *string
+	appPort                    *int
+	grpcPort                   int
+	httpPort                   int
+	internalGRPCPort           int
+	publicPort                 int
+	metricsPort                int
+	profilePort                int
+	appProtocol                string
+	appHealthCheck             bool
+	appHealthCheckPath         string
+	appHealthProbeInterval     int
+	appHealthProbeThreshold    int
+	resourceFiles              []string
+	resourceDirs               []string
+	configs                    []string
+	placementAddresses         []string
+	logLevel                   string
+	mode                       string
+	enableMTLS                 bool
+	sentryAddress              string
+	sentryRequestJwtAudiences  []string
+	controlPlaneAddress        string
+	disableK8sSecretStore      *bool
+	gracefulShutdownSeconds    *int
+	blockShutdownDuration      *string
+	actorsDisseminateTimeout   *time.Duration
+	hotReloadReconcileInterval *time.Duration
+	controlPlaneTrustDomain    *string
+	schedulerAddresses         []string
+	disableInitEndpoints       []string
+	maxBodySize                *string
+	allowedOrigins             *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -239,6 +246,23 @@ func WithSchedulerAddresses(addresses ...string) Option {
 	}
 }
 
+// WithSchedulerAddressesReset replaces any previously configured scheduler
+// addresses with the supplied set. Use this when a later option layer needs
+// to redirect daprd away from a scheduler address an earlier layer already
+// added (for example pointing daprd at a scheduler proxy instead of the
+// real scheduler).
+func WithSchedulerAddressesReset(addresses ...string) Option {
+	return func(o *options) {
+		o.schedulerAddresses = append([]string(nil), addresses...)
+	}
+}
+
+func WithDisableInitEndpoints(endpoints ...string) Option {
+	return func(o *options) {
+		o.disableInitEndpoints = append(o.disableInitEndpoints, endpoints...)
+	}
+}
+
 func WithLogLevel(logLevel string) Option {
 	return func(o *options) {
 		o.logLevel = logLevel
@@ -260,6 +284,15 @@ func WithEnableMTLS(enable bool) Option {
 func WithSentryAddress(address string) Option {
 	return func(o *options) {
 		o.sentryAddress = address
+	}
+}
+
+// WithSentryRequestJwtAudiences pre-registers JWT audiences with sentry at startup.
+// Required when a runtime caller (e.g. an MCPServer with SPIFFE JWT auth configured)
+// needs to request a JWT for an audience that is not the trust domain default.
+func WithSentryRequestJwtAudiences(audiences ...string) Option {
+	return func(o *options) {
+		o.sentryRequestJwtAudiences = audiences
 	}
 }
 
@@ -287,6 +320,18 @@ func WithDaprBlockShutdownDuration(duration string) Option {
 	}
 }
 
+func WithActorsDisseminateTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		o.actorsDisseminateTimeout = &timeout
+	}
+}
+
+func WithHotReloadReconcileInterval(interval time.Duration) Option {
+	return func(o *options) {
+		o.hotReloadReconcileInterval = &interval
+	}
+}
+
 func WithControlPlaneTrustDomain(trustDomain string) Option {
 	return func(o *options) {
 		o.controlPlaneTrustDomain = &trustDomain
@@ -311,9 +356,15 @@ func WithDaprAPIToken(t *testing.T, token string) Option {
 	))
 }
 
+func WithAllowedOrigins(t *testing.T, origins string) Option {
+	return func(o *options) {
+		o.allowedOrigins = &origins
+	}
+}
+
 func WithSentry(t *testing.T, sentry *sentry.Sentry) Option {
 	return func(o *options) {
-		WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)))(o)
+		WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors)))(o)
 		WithSentryAddress(sentry.Address())(o)
 		WithEnableMTLS(true)(o)
 	}
@@ -351,5 +402,17 @@ spec:
 func WithMaxBodySize(size string) Option {
 	return func(o *options) {
 		o.maxBodySize = &size
+	}
+}
+
+func WithSkipStateStoreReminderMigration(t *testing.T) Option {
+	return WithExecOptions(exec.WithEnvVars(t,
+		"DAPR_SKIP_REMINDER_MIGRATION", "true",
+	))
+}
+
+func WithPlacement(placement *placement.Placement) Option {
+	return func(o *options) {
+		o.placementAddresses = append(o.placementAddresses, placement.Address())
 	}
 }

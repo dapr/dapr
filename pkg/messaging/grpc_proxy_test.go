@@ -47,9 +47,9 @@ func connectionFn(ctx context.Context, address, id string, namespace string, cus
 	return conn, teardown, err
 }
 
-func appClientFn() (grpc.ClientConnInterface, error) {
-	appClient, _, err := connectionFn(context.Background(), "a:123", "a", "")
-	return appClient, err
+func appClientFn() (grpc.ClientConnInterface, func(bool), error) {
+	appClient, teardown, err := connectionFn(context.Background(), "a:123", "a", "")
+	return appClient, teardown, err
 }
 
 func TestNewProxy(t *testing.T) {
@@ -75,14 +75,14 @@ func TestSetRemoteAppFn(t *testing.T) {
 		ACL:               nil,
 		Resiliency:        resiliency.New(nil),
 	})
-	p.SetRemoteAppFn(func(s string) (remoteApp, error) {
+	p.SetRemoteAppFn(func(_ context.Context, s string) (remoteApp, error) {
 		return remoteApp{
 			id: "a",
 		}, nil
 	})
 
 	proxy := p.(*proxy)
-	app, err := proxy.remoteAppFn("a")
+	app, err := proxy.remoteAppFn(t.Context(), "a")
 
 	require.NoError(t, err)
 	assert.Equal(t, "a", app.id)
@@ -132,7 +132,7 @@ func TestIntercept(t *testing.T) {
 			return ctx
 		})
 
-		p.SetRemoteAppFn(func(s string) (remoteApp, error) {
+		p.SetRemoteAppFn(func(_ context.Context, s string) (remoteApp, error) {
 			return remoteApp{
 				id: "a",
 			}, nil
@@ -158,7 +158,7 @@ func TestIntercept(t *testing.T) {
 			return ctx
 		})
 
-		p.SetRemoteAppFn(func(s string) (remoteApp, error) {
+		p.SetRemoteAppFn(func(_ context.Context, s string) (remoteApp, error) {
 			return remoteApp{
 				id: "a",
 			}, nil
@@ -177,12 +177,15 @@ func TestIntercept(t *testing.T) {
 			AppClientFn:       appClientFn,
 			AppID:             "a",
 			Resiliency:        resiliency.New(nil),
+			AppendAppTokenFn: func(ctx context.Context) context.Context {
+				return metadata.AppendToOutgoingContext(ctx, securityConsts.APITokenHeader, "token1")
+			},
 		})
 		p.SetTelemetryFn(func(ctx context.Context) context.Context {
 			return ctx
 		})
 
-		p.SetRemoteAppFn(func(s string) (remoteApp, error) {
+		p.SetRemoteAppFn(func(_ context.Context, s string) (remoteApp, error) {
 			return remoteApp{
 				id: "a",
 			}, nil
@@ -215,7 +218,7 @@ func TestIntercept(t *testing.T) {
 			return ctx
 		})
 
-		p.SetRemoteAppFn(func(s string) (remoteApp, error) {
+		p.SetRemoteAppFn(func(_ context.Context, s string) (remoteApp, error) {
 			return remoteApp{
 				id: "b",
 			}, nil
@@ -252,7 +255,7 @@ func TestIntercept(t *testing.T) {
 			ACL:               acl,
 			Resiliency:        resiliency.New(nil),
 		})
-		p.SetRemoteAppFn(func(s string) (remoteApp, error) {
+		p.SetRemoteAppFn(func(_ context.Context, s string) (remoteApp, error) {
 			return remoteApp{
 				id:      "a",
 				address: "a:123",

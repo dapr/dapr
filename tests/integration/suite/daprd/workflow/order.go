@@ -76,7 +76,7 @@ func (o *order) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("schedule_workflow_before_worker_connected", func(t *testing.T) {
 		r := task.NewTaskRegistry()
-		r.AddOrchestratorN("ScheduleWorkflowBeforeWorkerConnected", func(ctx *task.OrchestrationContext) (any, error) {
+		r.AddWorkflowN("ScheduleWorkflowBeforeWorkerConnected", func(ctx *task.WorkflowContext) (any, error) {
 			var input string
 			if err := ctx.GetInput(&input); err != nil {
 				return nil, err
@@ -95,12 +95,12 @@ func (o *order) Run(t *testing.T, ctx context.Context) {
 
 		require.NoError(t, backendClient1.StartWorkItemListener(ctx, r))
 
-		id, err := backendClient2.ScheduleNewOrchestration(ctx, "ScheduleWorkflowBeforeWorkerConnected", api.WithInstanceID("Dapr"), api.WithInput("Dapr"))
+		id, err := backendClient2.ScheduleNewWorkflow(ctx, "ScheduleWorkflowBeforeWorkerConnected", api.WithInstanceID("Dapr"), api.WithInput("Dapr"))
 		require.NoError(t, err)
 
-		metadata, err := backendClient2.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+		metadata, err := backendClient2.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 		assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 	})
 }

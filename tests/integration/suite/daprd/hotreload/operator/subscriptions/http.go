@@ -55,21 +55,13 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 
 	h.operator = operator.New(t,
 		operator.WithSentry(sentry),
-		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
-			return &operatorv1.GetConfigurationResponse{
-				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"features":[{"name":"HotReload","enabled":true}]}}`,
-				),
-			}, nil
-		}),
 	)
 
 	h.daprd = daprd.New(t,
 		daprd.WithAppPort(h.sub.Port()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
-		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(h.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
@@ -119,7 +111,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 	h.operator.AddSubscriptions(sub1)
-	h.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	h.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub1,
 		EventType:    operatorv1.ResourceEventType_CREATED,
 	})
@@ -138,7 +130,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 	h.operator.AddSubscriptions(sub2)
-	h.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	h.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub2,
 		EventType:    operatorv1.ResourceEventType_CREATED,
 	})
@@ -149,7 +141,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	h.sub.ExpectPublishReceive(t, ctx, newReq(h.daprd, "pubsub0", "b"))
 
 	h.operator.SetSubscriptions(sub2)
-	h.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	h.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub1,
 		EventType:    operatorv1.ResourceEventType_DELETED,
 	})
@@ -168,7 +160,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 	h.operator.AddSubscriptions(sub3)
-	h.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	h.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub3,
 		EventType:    operatorv1.ResourceEventType_CREATED,
 	})
@@ -181,7 +173,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	sub2.Spec.Topic = "d"
 	sub2.Spec.Routes.Default = "/d"
 	h.operator.SetSubscriptions(sub2, sub3)
-	h.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	h.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub2,
 		EventType:    operatorv1.ResourceEventType_UPDATED,
 	})

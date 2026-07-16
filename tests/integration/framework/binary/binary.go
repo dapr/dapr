@@ -35,11 +35,23 @@ type options struct {
 	tags     []string
 }
 
+var buildTags = []string{
+	"stablecomponents",
+	"state_etcd",
+	"crypto_localstorage",
+	"middleware_http_routeralias",
+	"conversation_echo",
+	// state_spiffeprobe compiles in an integration-test-only state store that
+	// reports whether the SPIFFE identity reached the component operation
+	// context. Never set for released daprd flavors.
+	"state_spiffeprobe",
+}
+
 func BuildAll(t *testing.T) {
 	t.Helper()
 
 	binaryNames := []string{"daprd", "placement", "sentry", "operator", "injector", "scheduler"}
-	helperBinaryNames := []string{"helmtemplate"}
+	helperBinaryNames := []string{"helmtemplate", "mcpstdioserver", "controllergen"}
 
 	var wg sync.WaitGroup
 	wg.Add(len(binaryNames))
@@ -49,7 +61,7 @@ func BuildAll(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			build(t, name, options{
 				dir:  rootDir,
-				tags: []string{"allcomponents"},
+				tags: buildTags,
 			})
 			wg.Done()
 		} else {
@@ -57,7 +69,7 @@ func BuildAll(t *testing.T) {
 				defer wg.Done()
 				build(t, name, options{
 					dir:  rootDir,
-					tags: []string{"allcomponents"},
+					tags: buildTags,
 				})
 			}(name)
 		}

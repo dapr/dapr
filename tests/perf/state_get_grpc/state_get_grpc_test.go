@@ -109,8 +109,7 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 
 	t.Log("running dapr test...")
 	daprResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
-	t.Logf("dapr test results: %s", string(daprResp))
-	t.Log("checking err...")
+	utils.LogPerfTestSummary(daprResp)
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
 	// fast fail if daprResp starts with error
@@ -125,7 +124,7 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 	restarts, err := tr.Platform.GetTotalRestarts(appName)
 	require.NoError(t, err)
 
-	t.Logf("dapr sidecar consumed %vm Cpu and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
+	utils.LogPerfTestResourceUsage(appUsage, sidecarUsage, restarts, 0)
 
 	var daprResult perf.TestResult
 	err = json.Unmarshal(daprResp, &daprResult)

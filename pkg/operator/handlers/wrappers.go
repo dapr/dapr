@@ -21,7 +21,7 @@ func (d *DeploymentWrapper) GetMatchLabels() map[string]string {
 }
 
 func (d *DeploymentWrapper) GetTemplateAnnotations() map[string]string {
-	return d.Spec.Template.ObjectMeta.Annotations
+	return d.Spec.Template.Annotations
 }
 
 func (d *DeploymentWrapper) GetObject() client.Object {
@@ -37,7 +37,7 @@ func (s *StatefulSetWrapper) GetMatchLabels() map[string]string {
 }
 
 func (s *StatefulSetWrapper) GetTemplateAnnotations() map[string]string {
-	return s.Spec.Template.ObjectMeta.Annotations
+	return s.Spec.Template.Annotations
 }
 
 func (s *StatefulSetWrapper) GetObject() client.Object {
@@ -53,7 +53,7 @@ func (r *RolloutWrapper) GetMatchLabels() map[string]string {
 }
 
 func (r *RolloutWrapper) GetTemplateAnnotations() map[string]string {
-	return r.Spec.Template.ObjectMeta.Annotations
+	return r.Spec.Template.Annotations
 }
 
 func (r *RolloutWrapper) GetObject() client.Object {

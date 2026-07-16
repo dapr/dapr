@@ -88,7 +88,6 @@ func TestActorIdStress(t *testing.T) {
 	bts, err := json.MarshalIndent(summary, "", " ")
 	require.NoError(t, err)
 	require.True(t, summary.Pass, fmt.Sprintf("test has not passed, results %s", string(bts)))
-	t.Logf("test summary `%s`", string(bts))
 
 	appUsage, err := tr.Platform.GetAppUsage(serviceApplicationName)
 	require.NoError(t, err)
@@ -98,9 +97,8 @@ func TestActorIdStress(t *testing.T) {
 
 	restarts, err := tr.Platform.GetTotalRestarts(serviceApplicationName)
 	require.NoError(t, err)
-
-	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
-	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
-	t.Logf("target dapr app or sidecar restarted %v times", restarts)
 	require.Equal(t, 0, restarts)
+
+	utils.LogPerfTestResourceUsage(appUsage, sidecarUsage, restarts, 0)
+	utils.LogPerfTestSummary(bts)
 }

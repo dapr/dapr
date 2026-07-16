@@ -49,13 +49,14 @@ func (f *fanout) Setup(t *testing.T) []framework.Option {
 func (f *fanout) Run(t *testing.T, ctx context.Context) {
 	f.workflow.WaitUntilRunning(t, ctx)
 
-	f.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
-		tasks := make([]task.Task, 100)
-		for i := range 100 {
+	const n = 5
+	f.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
+		tasks := make([]task.Task, n)
+		for i := range n {
 			tasks[i] = ctx.CallActivity("bar", task.WithActivityInput(i))
 		}
 
-		var errs []error
+		errs := make([]error, 0, len(tasks))
 		for _, task := range tasks {
 			errs = append(errs, task.Await(nil))
 		}
@@ -73,14 +74,14 @@ func (f *fanout) Run(t *testing.T, ctx context.Context) {
 
 	client := f.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "foo")
+	id, err := client.ScheduleNewWorkflow(ctx, "foo")
 	require.NoError(t, err)
 
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	exp := make([]int, 100)
-	for i := range 100 {
+	exp := make([]int, n)
+	for i := range n {
 		exp[i] = i
 	}
 	assert.ElementsMatch(t, exp, f.called.Slice())

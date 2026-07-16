@@ -35,10 +35,9 @@ type subscriptions struct {
 // the generic operator.
 //
 //nolint:unused
-func (s *subscriptions) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error) {
+func (s *subscriptions) list(ctx context.Context, opclient operatorpb.OperatorClient, ns string) ([][]byte, error) {
 	resp, err := opclient.ListSubscriptionsV2(ctx, &operatorpb.ListSubscriptionsRequest{
 		Namespace: ns,
-		PodName:   podName,
 	})
 
 	// Ignore proto marshal nil errors from older gRPC servers.
@@ -57,20 +56,22 @@ func (s *subscriptions) list(ctx context.Context, opclient operatorpb.OperatorCl
 //nolint:unused
 func (s *subscriptions) close() error {
 	if s.Operator_SubscriptionUpdateClient != nil {
-		return s.Operator_SubscriptionUpdateClient.CloseSend()
+		return s.CloseSend()
 	}
+
 	return nil
 }
 
 //nolint:unused
 func (s *subscriptions) recv(ctx context.Context) (*loader.Event[subapi.Subscription], error) {
-	event, err := s.Operator_SubscriptionUpdateClient.Recv()
+	event, err := s.Recv()
 
 	// Ignore servers which don't implement the subscription update stream.
 	status, ok := status.FromError(err)
 	if ok && status.Code() == codes.Unimplemented {
 		log.Warn("Subscription HotReloading is not supported by the Dapr control plane. Subscription updates will not be Hot Reloaded.")
 		<-ctx.Done()
+
 		return nil, ctx.Err()
 	}
 
@@ -90,15 +91,15 @@ func (s *subscriptions) recv(ctx context.Context) (*loader.Event[subapi.Subscrip
 }
 
 //nolint:unused
-func (s *subscriptions) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) error {
+func (s *subscriptions) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns string) error {
 	stream, err := opclient.SubscriptionUpdate(ctx, &operatorpb.SubscriptionUpdateRequest{
 		Namespace: ns,
-		PodName:   podName,
 	})
 	if err != nil {
 		return err
 	}
 
 	s.Operator_SubscriptionUpdateClient = stream
+
 	return nil
 }

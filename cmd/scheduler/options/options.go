@@ -47,20 +47,32 @@ type Options struct {
 	Mode             string
 	KubeConfig       *string
 
-	ID                       string
-	EtcdInitialCluster       []string
-	EtcdDataDir              string
-	EtcdClientPort           uint64
-	EtcdSpaceQuota           int64
-	EtcdCompactionMode       string
-	EtcdCompactionRetention  string
-	EtcdSnapshotCount        uint64
-	EtcdMaxSnapshots         uint
-	EtcdMaxWALs              uint
-	EtcdBackendBatchLimit    int
-	EtcdBackendBatchInterval string
-	EtcdDefragThresholdMB    uint
-	EtcdMetrics              string
+	ID string
+
+	EtcdEmbed                      bool
+	EtcdInitialCluster             []string
+	EtcdDataDir                    string
+	EtcdClientPort                 uint64
+	EtcdClientListenAddress        string
+	EtcdSpaceQuota                 int64
+	EtcdCompactionMode             string
+	EtcdCompactionRetention        string
+	EtcdSnapshotCount              uint64
+	EtcdMaxSnapshots               uint
+	EtcdMaxWALs                    uint
+	EtcdBackendBatchLimit          int
+	EtcdBackendBatchInterval       string
+	EtcdMaxTxnOps                  uint
+	EtcdDefragThresholdMB          uint
+	EtcdInitialElectionTickAdvance bool
+	EtcdMetrics                    string
+
+	// TODO: @joshvanl: add Etcd client TLS enabled flag.
+	EtcdClientEndpoints []string
+	EtcdClientUsername  string
+	EtcdClientPassword  string
+
+	Workers uint32
 
 	IdentityDirectoryWrite string
 
@@ -97,21 +109,33 @@ func New(origArgs []string) (*Options, error) {
 	}
 
 	fs.StringVar(&opts.ID, "id", "dapr-scheduler-server-0", "Scheduler server ID")
+
+	fs.BoolVar(&opts.EtcdEmbed, "etcd-embed", true, "When enabled, the Etcd database will be embedded in the scheduler server. If false, the scheduler will connect to an external Etcd cluster using the --etcd-client-endpoints flag.")
+
 	fs.StringSliceVar(&opts.EtcdInitialCluster, "etcd-initial-cluster", []string{"dapr-scheduler-server-0=http://localhost:2380"}, "Initial etcd cluster peers")
 	fs.StringVar(&opts.EtcdDataDir, "etcd-data-dir", "./data", "Directory to store scheduler etcd data")
 	fs.Uint64Var(&opts.EtcdClientPort, "etcd-client-port", 2379, "Port for etcd client communication")
+	fs.StringVar(&opts.EtcdClientListenAddress, "etcd-client-listen-address", "localhost", "Listen address for etcd client communication")
 	fs.StringVar(&opts.etcdSpaceQuota, "etcd-space-quota", "9.2E", "Space quota for etcd")
-	fs.StringVar(&opts.EtcdCompactionMode, "etcd-compaction-mode", "periodic", "Compaction mode for etcd. Can be 'periodic' or 'revision'")
-	fs.StringVar(&opts.EtcdCompactionRetention, "etcd-compaction-retention", "10m", "Compaction retention for etcd. Can express time  or number of revisions, depending on the value of 'etcd-compaction-mode'")
-	fs.Uint64Var(&opts.EtcdSnapshotCount, "etcd-snapshot-count", 10000, "Number of committed transactions to trigger a snapshot to disk.")
+	fs.StringVar(&opts.EtcdCompactionMode, "etcd-compaction-mode", "revision", "Compaction mode for etcd. Can be 'periodic' or 'revision'")
+	fs.StringVar(&opts.EtcdCompactionRetention, "etcd-compaction-retention", "1000000", "Compaction retention for etcd. Can express time or number of revisions, depending on the value of 'etcd-compaction-mode'")
+	fs.Uint64Var(&opts.EtcdSnapshotCount, "etcd-snapshot-count", 100000, "Number of committed transactions to trigger a snapshot to disk.")
 	fs.UintVar(&opts.EtcdMaxSnapshots, "etcd-max-snapshots", 10, "Maximum number of snapshot files to retain (0 is unlimited).")
 	fs.UintVar(&opts.EtcdMaxWALs, "etcd-max-wals", 10, "Maximum number of write-ahead logs to retain (0 is unlimited).")
-	fs.IntVar(&opts.EtcdBackendBatchLimit, "etcd-backend-batch-limit", 5000, "Maximum operations before committing the backend transaction.")
-	fs.StringVar(&opts.EtcdBackendBatchInterval, "etcd-backend-batch-interval", "50ms", "Maximum time before committing the backend transaction.")
+	fs.IntVar(&opts.EtcdBackendBatchLimit, "etcd-backend-batch-limit", 10000, "Maximum operations before committing the backend transaction.")
+	fs.StringVar(&opts.EtcdBackendBatchInterval, "etcd-backend-batch-interval", "100ms", "Maximum time before committing the backend transaction.")
+	fs.UintVar(&opts.EtcdMaxTxnOps, "etcd-max-txn-ops", 10000, "Maximum number of operations permitted in a single etcd transaction. Workflow fan-out can batch many puts/deletes into one txn, so this is raised well above etcd's default of 128.")
 	fs.UintVar(&opts.EtcdDefragThresholdMB, "etcd-experimental-bootstrap-defrag-threshold-megabytes", 100, "Minimum number of megabytes needed to be freed for etcd to consider running defrag during bootstrap. Needs to be set to non-zero value to take effect.")
+	fs.BoolVar(&opts.EtcdInitialElectionTickAdvance, "etcd-initial-election-tick-advance", false, "Whether to fast-forward initial election ticks on boot for faster election. When it is true, then local member fast-forwards election ticks to speed up “initial” leader election trigger. This benefits the case of larger election ticks. Disabling this would slow down initial bootstrap process for cross datacenter deployments. Make your own tradeoffs by configuring this flag at the cost of slow initial bootstrap.")
 	fs.StringVar(&opts.EtcdMetrics, "etcd-metrics", "basic", "Level of detail for exported metrics, specify ’extensive’ to include histogram metrics.")
 
+	fs.StringSliceVar(&opts.EtcdClientEndpoints, "etcd-client-endpoints", nil, "Comma-separated list of etcd client endpoints to connect to. Only used when --etcd-embed is false.")
+	fs.StringVar(&opts.EtcdClientUsername, "etcd-client-username", "", "Username for etcd client authentication. Only used when --etcd-embed is false.")
+	fs.StringVar(&opts.EtcdClientPassword, "etcd-client-password", "", "Password for etcd client authentication. Only used when --etcd-embed is false.")
+
 	fs.StringVar(&opts.IdentityDirectoryWrite, "identity-directory-write", filepath.Join(os.TempDir(), "secrets/dapr.io/tls"), "Directory to write identity certificate certificate, private key and trust anchors")
+
+	fs.Uint32Var(&opts.Workers, "workers", 2048, "Workers is the number of workers that handle job events. The higher the number the more go routines will be spawned, each working over a partition of the total job space. The higher the number, the higher the number of jobs which can be concurrently delivered to runtimes. Increasing this number increases the number of go routines for this instance. This number should be tuned to the bottleneck of job execution, i.e., CPU, I/O, memory, etc.")
 
 	if err := fs.MarkHidden("identity-directory-write"); err != nil {
 		log.Fatal(err)
@@ -144,6 +168,24 @@ func New(origArgs []string) (*Options, error) {
 
 	if fs.Changed("override-broadcast-host-port") {
 		opts.OverrideBroadcastHostPort = &opts.overrideBroadcastHostPort
+	}
+
+	if opts.EtcdEmbed {
+		if len(opts.EtcdClientEndpoints) > 0 {
+			return nil, errors.New("cannot use --etcd-client-endpoints with --etcd-embed")
+		}
+
+		if len(opts.EtcdClientUsername) > 0 {
+			return nil, errors.New("cannot use --etcd-client-username with --etcd-embed")
+		}
+
+		if len(opts.EtcdClientPassword) > 0 {
+			return nil, errors.New("cannot use --etcd-client-password with --etcd-embed")
+		}
+	}
+
+	if !opts.EtcdEmbed && len(opts.EtcdClientEndpoints) == 0 {
+		return nil, errors.New("must specify --etcd-client-endpoints when not using embedded etcd")
 	}
 
 	return &opts, nil

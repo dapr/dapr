@@ -15,9 +15,9 @@ package actors
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
@@ -29,17 +29,21 @@ type options struct {
 	db    *sqlite.SQLite
 	types []string
 
-	placement         *placement.Placement
-	scheduler         *scheduler.Scheduler
-	daprdConfigs      []string
-	actorTypeHandlers map[string]http.HandlerFunc
-	handlers          map[string]http.HandlerFunc
-	reentry           *bool
-	reentryMaxDepth   *uint32
-	actorIdleTimeout  *time.Duration
-	entityConfig      []entityConfig
-	resources         []string
-	maxBodySize       *string
+	placement               *placement.Placement
+	scheduler               *scheduler.Scheduler
+	sharedControlPlane      bool
+	daprdConfigs            []string
+	actorTypeHandlers       map[string]http.HandlerFunc
+	handlers                map[string]http.HandlerFunc
+	reentry                 *bool
+	reentryMaxDepth         *uint32
+	actorIdleTimeout        *time.Duration
+	drainOngoingCallTimeout *time.Duration
+	drainRebalancedActors   *bool
+	entityConfig            []entityConfig
+	resources               []string
+	maxBodySize             *string
+	daprdOpts               []daprd.Option
 }
 
 func WithDB(db *sqlite.SQLite) Option {
@@ -68,20 +72,6 @@ func WithScheduler(scheduler *scheduler.Scheduler) Option {
 	}
 }
 
-func WithFeatureSchedulerReminders(enabled bool) Option {
-	return func(o *options) {
-		o.daprdConfigs = append(o.daprdConfigs, `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: appconfig
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: `+strconv.FormatBool(enabled))
-	}
-}
-
 func WithActorTypeHandler(actorType string, handler http.HandlerFunc) Option {
 	return func(o *options) {
 		if o.actorTypeHandlers == nil {
@@ -100,11 +90,18 @@ func WithHandler(pattern string, handler http.HandlerFunc) Option {
 	}
 }
 
+func WithSharedControlPlane() Option {
+	return func(o *options) {
+		o.sharedControlPlane = true
+	}
+}
+
 func WithPeerActor(actor *Actors) Option {
 	return func(o *options) {
 		WithDB(actor.DB())(o)
 		WithPlacement(actor.Placement())(o)
 		WithScheduler(actor.Scheduler())(o)
+		WithSharedControlPlane()(o)
 	}
 }
 
@@ -123,6 +120,18 @@ func WithReentryMaxDepth(maxDepth uint32) Option {
 func WithActorIdleTimeout(timeout time.Duration) Option {
 	return func(o *options) {
 		o.actorIdleTimeout = &timeout
+	}
+}
+
+func WithDrainOngoingCallTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		o.drainOngoingCallTimeout = &timeout
+	}
+}
+
+func WithDrainRebalancedActors(drain bool) Option {
+	return func(o *options) {
+		o.drainRebalancedActors = &drain
 	}
 }
 
@@ -145,5 +154,13 @@ func WithResources(resources ...string) Option {
 func WithMaxBodySize(size string) Option {
 	return func(o *options) {
 		o.maxBodySize = &size
+	}
+}
+
+// WithDaprdOptions appends additional daprd options applied when building the
+// underlying daprd process.
+func WithDaprdOptions(dopts ...daprd.Option) Option {
+	return func(o *options) {
+		o.daprdOpts = append(o.daprdOpts, dopts...)
 	}
 }

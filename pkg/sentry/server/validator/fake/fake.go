@@ -1,5 +1,4 @@
 //go:build unit
-// +build unit
 
 /*
 Copyright 2023 The Dapr Authors
@@ -19,14 +18,13 @@ package fake
 import (
 	"context"
 
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
-
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
+	"github.com/dapr/dapr/pkg/sentry/server/validator"
 )
 
 // Fake implements the validator.Interface. It is used in tests.
 type Fake struct {
-	validateFn func(context.Context, *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error)
+	validateFn func(context.Context, *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error)
 	startFn    func(context.Context) error
 }
 
@@ -35,13 +33,13 @@ func New() *Fake {
 		startFn: func(context.Context) error {
 			return nil
 		},
-		validateFn: func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
-			return spiffeid.TrustDomain{}, nil
+		validateFn: func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error) {
+			return validator.ValidateResult{}, nil
 		},
 	}
 }
 
-func (f *Fake) WithValidateFn(fn func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error)) *Fake {
+func (f *Fake) WithValidateFn(fn func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error)) *Fake {
 	f.validateFn = fn
 	return f
 }
@@ -51,7 +49,7 @@ func (f *Fake) WithStartFn(fn func(ctx context.Context) error) *Fake {
 	return f
 }
 
-func (f *Fake) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
+func (f *Fake) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error) {
 	return f.validateFn(ctx, req)
 }
 

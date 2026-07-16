@@ -48,6 +48,7 @@ type PlatformInterface interface {
 	AddSecrets(secrets []kube.SecretDescription) error
 	AcquireAppExternalURL(name string) string
 	GetAppHostDetails(name string) (string, string, error)
+	GetAppPodEndpoints(name string) ([]string, error)
 	Restart(name string) error
 	Scale(name string, replicas int32) error
 	PortForwardToApp(appName string, targetPort ...int) ([]int, error)
@@ -121,7 +122,7 @@ func (tr *TestRunner) Start(m runnable) int {
 		return runnerFailExitCode
 	}
 
-	if tr.secrets != nil && len(tr.secrets) > 0 {
+	if len(tr.secrets) > 0 {
 		if err := tr.Platform.AddSecrets(tr.secrets); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed Platform.addSecrets(), %s", err.Error())
 			return runnerFailExitCode
@@ -129,7 +130,7 @@ func (tr *TestRunner) Start(m runnable) int {
 	}
 
 	// Install components.
-	if tr.components != nil && len(tr.components) > 0 {
+	if len(tr.components) > 0 {
 		log.Println("Installing components...")
 		if err := tr.Platform.AddComponents(tr.components); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed Platform.addComponents(), %s", err.Error())
@@ -140,7 +141,7 @@ func (tr *TestRunner) Start(m runnable) int {
 	// Install init apps. Init apps will be deployed before the main
 	// test apps and can be used to initialize components and perform
 	// other setup work.
-	if tr.initApps != nil && len(tr.initApps) > 0 {
+	if len(tr.initApps) > 0 {
 		log.Println("Installing init apps...")
 		if err := tr.Platform.AddApps(tr.initApps); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed Platform.addInitApps(), %s", err.Error())
@@ -149,7 +150,7 @@ func (tr *TestRunner) Start(m runnable) int {
 	}
 
 	// Install test apps. These are the main apps that provide the actual testing.
-	if tr.testApps != nil && len(tr.testApps) > 0 {
+	if len(tr.testApps) > 0 {
 		log.Println("Installing test apps...")
 		if err := tr.Platform.AddApps(tr.testApps); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed Platform.addApps(), %s", err.Error())

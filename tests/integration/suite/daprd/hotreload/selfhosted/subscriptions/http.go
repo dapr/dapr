@@ -48,21 +48,10 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 		subscriber.WithRoutes("/a", "/b", "/c", "/d", "/e", "/f"),
 	)
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true`), 0o600))
-
 	h.resDir1, h.resDir2 = t.TempDir(), t.TempDir()
 
 	for i, dir := range []string{h.resDir1, h.resDir2} {
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "pubsub.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "pubsub.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -70,13 +59,12 @@ metadata:
 spec:
  type: pubsub.in-memory
  version: v1
-`, i)), 0o600))
+`, i), 0o600))
 	}
 
 	h.daprd = daprd.New(t,
 		daprd.WithAppPort(h.sub.Port()),
 		daprd.WithAppProtocol("http"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(h.resDir1, h.resDir2),
 	)
 

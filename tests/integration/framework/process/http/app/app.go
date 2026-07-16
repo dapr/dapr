@@ -48,7 +48,8 @@ func New(t *testing.T, fopts ...Option) *App {
 	var healthz atomic.Bool
 	healthz.Store(opts.initialHealth)
 
-	httpopts := []http.Option{
+	httpopts := make([]http.Option, 0, 3+len(opts.handlerFuncs))
+	httpopts = append(httpopts,
 		http.WithHandlerFunc("/dapr/config", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 			w.Write([]byte(opts.config))
 		}),
@@ -62,7 +63,7 @@ func New(t *testing.T, fopts ...Option) *App {
 				w.WriteHeader(nethttp.StatusServiceUnavailable)
 			}
 		}),
-	}
+	)
 	httpopts = append(httpopts, opts.handlerFuncs...)
 
 	return &App{

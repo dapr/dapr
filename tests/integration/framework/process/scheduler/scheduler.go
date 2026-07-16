@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -46,15 +47,13 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/metrics"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/kit/ptr"
 )
 
 type Scheduler struct {
-	exec       process.Interface
+	exec       *exec.Exec
 	ports      *ports.Ports
 	httpClient *http.Client
 
@@ -67,10 +66,13 @@ type Scheduler struct {
 	id                 string
 	etcdInitialCluster string
 	etcdClientPort     int
+	etcdSpaceQuota     *string
 	sentry             *sentry.Sentry
 
-	runOnce     sync.Once
-	cleanupOnce sync.Once
+	embed    bool
+	userpass bool
+
+	runOnce sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *Scheduler {
@@ -91,7 +93,8 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		metricsPort:              fp.Port(t),
 		etcdClientPort:           fp.Port(t),
 		namespace:                "default",
-		etcdBackendBatchInterval: "50ms",
+		etcdBackendBatchInterval: "100ms",
+		workers:                  new(uint32(128)),
 	}
 
 	for _, fopt := range fopts {
@@ -131,9 +134,9 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	if opts.etcdInitialCluster == nil {
 		if opts.sentry == nil {
-			opts.etcdInitialCluster = ptr.Of(opts.id + "=http://127.0.0.1:" + strconv.Itoa(fp.Port(t)))
+			opts.etcdInitialCluster = new(opts.id + "=http://127.0.0.1:" + strconv.Itoa(fp.Port(t)))
 		} else {
-			opts.etcdInitialCluster = ptr.Of(opts.id + "=https://127.0.0.1:" + strconv.Itoa(fp.Port(t)))
+			opts.etcdInitialCluster = new(opts.id + "=https://127.0.0.1:" + strconv.Itoa(fp.Port(t)))
 		}
 	}
 
@@ -147,6 +150,28 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	}
 	if opts.overrideBroadcastHostPort != nil {
 		args = append(args, "--override-broadcast-host-port="+*opts.overrideBroadcastHostPort)
+	}
+
+	if opts.embed != nil {
+		args = append(args, "--etcd-embed="+strconv.FormatBool(*opts.embed))
+	}
+	if opts.clientEndpoints != nil {
+		args = append(args, `--etcd-client-endpoints=`+strings.Join(*opts.clientEndpoints, ","))
+	}
+
+	if opts.clientUsername != nil {
+		args = append(args, "--etcd-client-username="+*opts.clientUsername)
+	}
+	if opts.clientPassword != nil {
+		args = append(args, "--etcd-client-password="+*opts.clientPassword)
+	}
+
+	if opts.workers != nil {
+		args = append(args, fmt.Sprintf("--workers=%d", *opts.workers))
+	}
+
+	if opts.etcdSpaceQuota != nil {
+		args = append(args, "--etcd-space-quota="+*opts.etcdSpaceQuota)
 	}
 
 	return &Scheduler{
@@ -163,9 +188,12 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		metricsPort:        opts.metricsPort,
 		etcdInitialCluster: *opts.etcdInitialCluster,
 		etcdClientPort:     opts.etcdClientPort,
+		etcdSpaceQuota:     opts.etcdSpaceQuota,
 		dataDir:            dataDir,
 		sentry:             opts.sentry,
 		namespace:          opts.namespace,
+		userpass:           opts.clientUsername != nil && opts.clientPassword != nil,
+		embed:              opts.embed == nil || *opts.embed,
 	}
 }
 
@@ -177,12 +205,33 @@ func (s *Scheduler) Run(t *testing.T, ctx context.Context) {
 }
 
 func (s *Scheduler) Cleanup(t *testing.T) {
-	s.cleanupOnce.Do(func() {
-		if s.httpClient != nil {
-			s.httpClient.CloseIdleConnections()
-		}
-		s.exec.Cleanup(t)
-	})
+	if s.httpClient != nil {
+		s.httpClient.CloseIdleConnections()
+	}
+	s.exec.Cleanup(t)
+}
+
+func (s *Scheduler) Kill(t *testing.T) {
+	if s.httpClient != nil {
+		s.httpClient.CloseIdleConnections()
+	}
+	s.exec.Kill(t)
+}
+
+func (s *Scheduler) Restart(t *testing.T, ctx context.Context) {
+	t.Helper()
+	clone := s.exec.Clone(t)
+	s.Kill(t)
+	s.exec = clone
+	s.exec.Run(t, ctx)
+}
+
+func (s *Scheduler) RestartGraceful(t *testing.T, ctx context.Context) {
+	t.Helper()
+	clone := s.exec.Clone(t)
+	s.Cleanup(t)
+	s.exec = clone
+	s.exec.Run(t, ctx)
 }
 
 func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
@@ -200,6 +249,15 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		assert.Equal(c, http.StatusOK, resp.StatusCode, string(body))
 		assert.NoError(t, resp.Body.Close())
 	}, time.Second*20, 10*time.Millisecond)
+
+	if s.embed && !s.userpass {
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			resp, err := s.ETCDClient(t, ctx).Get(ctx, "dapr/leadership/"+s.id)
+			if assert.NoError(c, err) {
+				assert.Len(c, resp.Kvs, 1)
+			}
+		}, 10*time.Second, 10*time.Millisecond)
+	}
 }
 
 func (s *Scheduler) WaitUntilLeadership(t *testing.T, ctx context.Context, leaders int) {
@@ -209,6 +267,29 @@ func (s *Scheduler) WaitUntilLeadership(t *testing.T, ctx context.Context, leade
 			assert.Len(col, resp.Kvs, leaders)
 		}
 	}, 10*time.Second, 10*time.Millisecond)
+}
+
+// WaitUntilSidecarsConnected blocks until the scheduler has exactly `want`
+// sidecar stream connections and that count has remained stable across 20
+// consecutive polls (~1s). This catches the startup window where daprd's
+// WatchHosts stream can trigger a short disconnect/reconnect cycle of all
+// scheduler job streams, during which a newly-scheduled job can be delivered
+// to streams that are about to disconnect as well as their replacements.
+func (s *Scheduler) WaitUntilSidecarsConnected(t *testing.T, ctx context.Context, want int) {
+	t.Helper()
+
+	const stableObservations = 20
+	var consecutive int
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		got := int(s.Metrics(c, ctx).All()["dapr_scheduler_sidecars_connected"])
+		if got != want {
+			consecutive = 0
+			assert.Equal(c, want, got)
+			return
+		}
+		consecutive++
+		assert.GreaterOrEqual(c, consecutive, stableObservations)
+	}, 20*time.Second, 50*time.Millisecond)
 }
 
 func (s *Scheduler) ID() string {
@@ -260,10 +341,20 @@ func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.Sche
 
 func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) schedulerv1pb.SchedulerClient {
 	t.Helper()
+	return s.clientMTLS(t, ctx, nil, appID)
+}
+
+func (s *Scheduler) ClientMTLSNS(t *testing.T, ctx context.Context, ns, appID string) schedulerv1pb.SchedulerClient {
+	t.Helper()
+	return s.clientMTLS(t, ctx, &ns, appID)
+}
+
+func (s *Scheduler) clientMTLS(t *testing.T, ctx context.Context, ns *string, appID string) schedulerv1pb.SchedulerClient {
+	t.Helper()
 
 	require.NotNil(t, s.sentry)
 
-	sech := s.security(t, ctx, appID)
+	sech := s.security(t, ctx, ns, appID)
 
 	id, err := spiffeid.FromSegments(sech.ControlPlaneTrustDomain(), "ns", s.namespace, "dapr-scheduler")
 	require.NoError(t, err)
@@ -285,18 +376,19 @@ func (s *Scheduler) ipPort(port int) string {
 	return "127.0.0.1:" + strconv.Itoa(port)
 }
 
-func (s *Scheduler) security(t *testing.T, ctx context.Context, appID string) security.Handler {
+func (s *Scheduler) security(t *testing.T, ctx context.Context, ns *string, appID string) security.Handler {
 	t.Helper()
 
 	sec, err := security.New(ctx, security.Options{
-		SentryAddress:           "localhost:" + strconv.Itoa(s.sentry.Port()),
-		ControlPlaneTrustDomain: s.sentry.TrustDomain(t),
-		ControlPlaneNamespace:   s.sentry.Namespace(),
-		TrustAnchorsFile:        ptr.Of(s.sentry.TrustAnchorsFile(t)),
-		AppID:                   appID,
-		Mode:                    modes.StandaloneMode,
-		MTLSEnabled:             true,
-		Healthz:                 healthz.New(),
+		SentryAddress:            "localhost:" + strconv.Itoa(s.sentry.Port()),
+		ControlPlaneTrustDomain:  s.sentry.TrustDomain(t),
+		ControlPlaneNamespace:    s.sentry.Namespace(),
+		TrustAnchorsFile:         new(s.sentry.TrustAnchorsFile(t)),
+		AppID:                    appID,
+		Mode:                     modes.StandaloneMode,
+		MTLSEnabled:              true,
+		Healthz:                  healthz.New(),
+		OverrideRequestNamespace: ns,
 	})
 	require.NoError(t, err)
 
@@ -322,7 +414,11 @@ func (s *Scheduler) MetricsAddress() string {
 
 // Metrics returns a subset of metrics scraped from the metrics endpoint
 func (s *Scheduler) Metrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
-	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
+	return metrics.New(t, ctx, s.httpClient, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
+}
+
+func (s *Scheduler) MetricsWithLabels(t *testing.T, ctx context.Context) *metrics.MetricsWithLabels {
+	return metrics.NewWithLabels(t, ctx, s.httpClient, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
 }
 
 func (s *Scheduler) ETCDClient(t *testing.T, ctx context.Context) *clientv3.Client {
@@ -343,7 +439,7 @@ func (s *Scheduler) ETCDClient(t *testing.T, ctx context.Context) *clientv3.Clie
 
 func (s *Scheduler) EtcdJobs(t *testing.T, ctx context.Context) []*mvccpb.KeyValue {
 	t.Helper()
-	resp, err := s.ETCDClient(t, ctx).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+	resp, err := s.ETCDClient(t, ctx).Get(ctx, "dapr/jobs", clientv3.WithPrefix())
 	require.NoError(t, err)
 	return resp.Kvs
 }
@@ -425,7 +521,7 @@ func (s *Scheduler) WatchJobsFailed(t *testing.T, ctx context.Context, initial *
 func (s *Scheduler) JobNowJob(name, namespace, appID string) *schedulerv1pb.ScheduleJobRequest {
 	return &schedulerv1pb.ScheduleJobRequest{
 		Name: name,
-		Job:  &schedulerv1pb.Job{DueTime: ptr.Of(time.Now().Format(time.RFC3339))},
+		Job:  &schedulerv1pb.Job{DueTime: new(time.Now().Format(time.RFC3339))},
 		Metadata: &schedulerv1pb.JobMetadata{
 			Namespace: namespace, AppId: appID,
 			Target: &schedulerv1pb.JobTargetMetadata{
@@ -438,7 +534,7 @@ func (s *Scheduler) JobNowJob(name, namespace, appID string) *schedulerv1pb.Sche
 func (s *Scheduler) JobNowActor(name, namespace, appID, actorType, actorID string) *schedulerv1pb.ScheduleJobRequest {
 	return &schedulerv1pb.ScheduleJobRequest{
 		Name: name,
-		Job:  &schedulerv1pb.Job{DueTime: ptr.Of(time.Now().Format(time.RFC3339))},
+		Job:  &schedulerv1pb.Job{DueTime: new(time.Now().Format(time.RFC3339))},
 		Metadata: &schedulerv1pb.JobMetadata{
 			Namespace: namespace, AppId: appID,
 			Target: &schedulerv1pb.JobTargetMetadata{
@@ -493,7 +589,7 @@ func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
 		DialTimeout: 40 * time.Second,
 	}).ListAllKeys(ctx, prefix)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	return resp
 }

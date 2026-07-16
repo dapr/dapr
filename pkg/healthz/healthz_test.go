@@ -21,7 +21,7 @@ import (
 
 func Test_healthz_interface(t *testing.T) {
 	var _ Healthz = new(healthz)
-	var _ Healthz = New()
+	_ = New()
 }
 
 func Test_healthz(t *testing.T) {

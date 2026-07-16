@@ -26,29 +26,29 @@ import (
 
 type Options struct {
 	Security  security.Handler
-	Connector loop.Interface[loops.Event]
+	Connector loop.Interface[loops.EventConn]
+	StreamN   uint
 }
 
 type hosts struct {
 	security  security.Handler
-	connector loop.Interface[loops.Event]
-
-	closeConns []context.CancelFunc
+	streamN   uint
+	connector loop.Interface[loops.EventConn]
 }
 
-func New(opts Options) loop.Interface[loops.Event] {
-	return loop.New(&hosts{
+func New(opts Options) loop.Interface[loops.EventHost] {
+	return loop.New[loops.EventHost](1024).NewLoop(&hosts{
+		streamN:   opts.StreamN,
 		security:  opts.Security,
 		connector: opts.Connector,
-	}, 1024)
+	})
 }
 
-func (h *hosts) Handle(ctx context.Context, event loops.Event) error {
+func (h *hosts) Handle(ctx context.Context, event loops.EventHost) error {
 	switch e := event.(type) {
 	case *loops.ReloadClients:
 		return h.handleReloadClients(ctx, e)
 	case *loops.Close:
-		h.handleCloseCons()
 		return nil
 	default:
 		return fmt.Errorf("unexpected event type %T", e)
@@ -56,30 +56,27 @@ func (h *hosts) Handle(ctx context.Context, event loops.Event) error {
 }
 
 func (h *hosts) handleReloadClients(ctx context.Context, event *loops.ReloadClients) error {
-	h.handleCloseCons()
+	var (
+		clients    []schedulerv1pb.SchedulerClient
+		closeConns []context.CancelFunc
+	)
 
-	clients := make([]schedulerv1pb.SchedulerClient, len(event.Addresses))
-	closeConns := make([]context.CancelFunc, len(event.Addresses))
+	for range h.streamN {
+		for _, addr := range event.Addresses {
+			client, closeCon, err := client.New(ctx, addr, h.security)
+			if err != nil {
+				for _, cc := range closeConns {
+					cc()
+				}
+				return fmt.Errorf("failed to create scheduler client for address %s: %w", addr, err)
+			}
 
-	for i, addr := range event.Addresses {
-		client, closeCon, err := client.New(ctx, addr, h.security)
-		if err != nil {
-			return fmt.Errorf("failed to create scheduler client for address %s: %w", addr, err)
+			clients = append(clients, client)
+			closeConns = append(closeConns, closeCon)
 		}
-
-		clients[i] = client
-		closeConns[i] = closeCon
 	}
 
-	h.closeConns = closeConns
-	h.connector.Enqueue(&loops.Connect{Clients: clients})
+	h.connector.Enqueue(&loops.Connect{Clients: clients, CloseConns: closeConns})
 
 	return nil
-}
-
-func (h *hosts) handleCloseCons() {
-	for _, closeCon := range h.closeConns {
-		closeCon()
-	}
-	h.closeConns = nil
 }

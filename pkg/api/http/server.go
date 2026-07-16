@@ -36,9 +36,10 @@ import (
 	chi "github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
+	"golang.org/x/net/http2/h2c" //nolint:staticcheck
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
+	"github.com/dapr/dapr/pkg/api/listen"
 	"github.com/dapr/dapr/pkg/config"
 	corsDapr "github.com/dapr/dapr/pkg/cors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -58,7 +59,7 @@ var (
 // Server is an interface for the Dapr HTTP server.
 type Server interface {
 	io.Closer
-	StartNonBlocking() error
+	StartNonBlocking(ctx context.Context) error
 }
 
 type server struct {
@@ -97,15 +98,16 @@ func NewServer(opts NewServerOpts) Server {
 }
 
 // StartNonBlocking starts a new server in a goroutine.
-func (s *server) StartNonBlocking() error {
+func (s *server) StartNonBlocking(ctx context.Context) error {
 	// Create a chi router and add middlewares
 	r := s.getRouter()
 	s.useMaxBodySize(r)
 	s.useContextSetup(r)
 	s.useTracing(r)
 	s.useMetrics(r)
-	s.useAPIAuthentication(r)
 	s.useCors(r)
+	// register API authentication middleware after CORS middleware
+	s.useAPIAuthentication(r)
 	s.useComponents(r)
 	s.useAPILogging(r)
 
@@ -125,7 +127,7 @@ func (s *server) StartNonBlocking() error {
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
-			l, err := net.Listen("tcp", addr)
+			l, err := listen.TCP(ctx, addr)
 			if err != nil {
 				log.Debugf("Failed to listen for HTTP server on TCP address %s with error: %v", addr, err)
 			} else {
@@ -141,7 +143,7 @@ func (s *server) StartNonBlocking() error {
 	// Create a handler with support for HTTP/2 Cleartext
 	var handler http.Handler = r
 	if !kitstrings.IsTruthy(os.Getenv("DAPR_HTTP_DISABLE_H2C")) {
-		handler = h2c.NewHandler(r, &http2.Server{})
+		handler = h2c.NewHandler(r, &http2.Server{}) //nolint:staticcheck
 	}
 
 	for _, listener := range listeners {
@@ -181,19 +183,17 @@ func (s *server) StartNonBlocking() error {
 		}
 		s.servers = append(s.servers, healthServer)
 
-		s.wg.Add(1)
-		go func() {
-			defer s.wg.Done()
+		s.wg.Go(func() {
 			if err := healthServer.ListenAndServe(); err != http.ErrServerClosed {
 				log.Fatal(err)
 			}
-		}()
+		})
 	}
 
 	if s.config.EnableProfiling {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.ProfilePort)
-			pl, err := net.Listen("tcp", addr)
+			pl, err := listen.TCP(ctx, addr)
 			if err != nil {
 				log.Debugf("Failed to listen for profiling server on TCP address %s with error: %v", addr, err)
 			} else {
@@ -361,15 +361,27 @@ func (s *server) useComponents(r chi.Router) {
 }
 
 func (s *server) useCors(r chi.Router) {
-	// TODO: Technically, if "AllowedOrigins" is "*", all origins should be allowed
-	// This behavior is not quite correct as in this case we are disallowing all origins
 	if s.config.AllowedOrigins == corsDapr.DefaultAllowedOrigins {
 		return
 	}
-
 	log.Info("Enabled CORS HTTP middleware")
+
+	if s.config.AllowedOrigins == corsDapr.AllowAllOrigins {
+		r.Use(cors.AllowAll().Handler)
+		return
+	}
+
 	r.Use(cors.New(cors.Options{
 		AllowedOrigins: strings.Split(s.config.AllowedOrigins, ","),
+		AllowedMethods: []string{
+			http.MethodHead,
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodPatch,
+			http.MethodDelete,
+		},
+		AllowedHeaders: []string{"*"},
 		Debug:          false,
 	}).Handler)
 }

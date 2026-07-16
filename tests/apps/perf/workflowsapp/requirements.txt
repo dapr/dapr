@@ -1,3 +1,4 @@
 dapr-ext-workflow
 dapr
 flask
+gunicorn>=21.2.0

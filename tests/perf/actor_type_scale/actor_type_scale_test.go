@@ -87,7 +87,7 @@ func TestActorIdStress(t *testing.T) {
 	require.NoError(t, err)
 
 	k6Test := loadtest.NewK6("./test.js", loadtest.WithParallelism(1), loadtest.WithRunnerEnvVar("ACTORS_TYPES", actorsTypes))
-	// defer k6Test.Dispose()
+	defer k6Test.Dispose()
 	t.Log("running the k6 load test...")
 	require.NoError(t, tr.Platform.LoadTest(k6Test))
 	sm, err := loadtest.K6ResultDefault(k6Test)
@@ -115,11 +115,9 @@ func TestActorIdStress(t *testing.T) {
 		OutputK6(sm.RunnersResults).
 		Flush()
 
-	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
-	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
-	t.Logf("target dapr app or sidecar restarted %v times", restarts)
-
 	require.True(t, sm.Pass, fmt.Sprintf("test has not passed, results %s", string(bts)))
 	require.Equal(t, 0, restarts)
-	t.Logf("test summary `%s`", string(bts))
+
+	utils.LogPerfTestResourceUsage(appUsage, sidecarUsage, restarts, 0)
+	utils.LogPerfTestSummary(bts)
 }

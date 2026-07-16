@@ -24,8 +24,8 @@ import (
 func getBucketFromKey(t *testing.T, k string) float64 {
 	t.Helper()
 	// k = "a:b|le:5000"
-	keyParts := strings.Split(k, "|")
-	for _, k := range keyParts {
+	keyParts := strings.SplitSeq(k, "|")
+	for k := range keyParts {
 		if v, ok := strings.CutPrefix(k, "le:"); ok {
 			d, err := strconv.ParseUint(v, 10, 64)
 			require.NoError(t, err)

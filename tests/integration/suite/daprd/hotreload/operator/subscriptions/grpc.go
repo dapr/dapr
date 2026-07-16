@@ -53,21 +53,13 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 
 	g.operator = operator.New(t,
 		operator.WithSentry(sentry),
-		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
-			return &operatorv1.GetConfigurationResponse{
-				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"features":[{"name":"HotReload","enabled":true}]}}`,
-				),
-			}, nil
-		}),
 	)
 
 	g.daprd = daprd.New(t,
 		daprd.WithAppPort(g.sub.Port(t)),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
-		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(g.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
@@ -112,7 +104,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 	g.operator.AddSubscriptions(sub1)
-	g.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	g.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub1,
 		EventType:    operatorv1.ResourceEventType_CREATED,
 	})
@@ -131,7 +123,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 	g.operator.AddSubscriptions(sub2)
-	g.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	g.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub2,
 		EventType:    operatorv1.ResourceEventType_CREATED,
 	})
@@ -142,7 +134,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	g.sub.ExpectPublishReceive(t, ctx, g.daprd, newReq("pubsub0", "b"))
 
 	g.operator.SetSubscriptions(sub2)
-	g.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	g.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub1,
 		EventType:    operatorv1.ResourceEventType_DELETED,
 	})
@@ -161,7 +153,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 	g.operator.AddSubscriptions(sub3)
-	g.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	g.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub3,
 		EventType:    operatorv1.ResourceEventType_CREATED,
 	})
@@ -174,7 +166,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	sub2.Spec.Topic = "d"
 	sub2.Spec.Routes.Default = "/d"
 	g.operator.SetSubscriptions(sub2, sub3)
-	g.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	g.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub2,
 		EventType:    operatorv1.ResourceEventType_UPDATED,
 	})

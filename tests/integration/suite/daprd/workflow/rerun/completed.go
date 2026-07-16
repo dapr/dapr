@@ -49,7 +49,7 @@ func (c *completed) Setup(t *testing.T) []framework.Option {
 func (c *completed) Run(t *testing.T, ctx context.Context) {
 	c.workflow.WaitUntilRunning(t, ctx)
 
-	c.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	c.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
 	})
@@ -60,10 +60,10 @@ func (c *completed) Run(t *testing.T, ctx context.Context) {
 
 	client := c.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
+	id, err := client.ScheduleNewWorkflow(ctx, "foo", api.WithInstanceID("abc"))
 	require.NoError(t, err)
 	_, err = client.RerunWorkflowFromEvent(ctx, id, 0)
 	assert.Equal(t, status.Error(codes.InvalidArgument, "'abc' is not in a terminal state"), err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 }
