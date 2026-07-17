@@ -378,10 +378,13 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	// Dispatch activities and messages, collecting failures.
 	activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory)
-	addResult := o.callAddEventStateMessage(ctx, addWorkflows)
-	createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows)
+	if o.messages == nil {
+		return todo.RunCompletedFalse, errors.New("messages dispatcher is not initialized")
+	}
+	addResult := o.messages.CallAddEventStateMessage(ctx, addWorkflows)
+	createResult := o.messages.CallCreateWorkflowStateMessage(ctx, createWorkflows)
 
-	dispatchErr := errors.Join(activityResult.err, addResult.err, createResult.err)
+	dispatchErr := errors.Join(activityResult.Err, addResult.Err, createResult.Err)
 	if dispatchErr != nil {
 		if errors.Is(dispatchErr, errPayloadSizeExceeded) {
 			return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs,
@@ -393,10 +396,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			// keep their events in history so they are not re-dispatched on
 			// retry. The inbox is preserved so the existing reminder retries
 			// the full execution.
-			allFailed := make(map[int32]struct{}, len(activityResult.failedEventIDs)+len(createResult.failedEventIDs)+len(addResult.failedEventIDs))
-			maps.Copy(allFailed, activityResult.failedEventIDs)
-			maps.Copy(allFailed, createResult.failedEventIDs)
-			maps.Copy(allFailed, addResult.failedEventIDs)
+			allFailed := make(map[int32]struct{}, len(activityResult.FailedEventIDs)+len(createResult.FailedEventIDs)+len(addResult.FailedEventIDs))
+			maps.Copy(allFailed, activityResult.FailedEventIDs)
+			maps.Copy(allFailed, createResult.FailedEventIDs)
+			maps.Copy(allFailed, addResult.FailedEventIDs)
 
 			// Temporarily replace rs.NewEvents with a filtered copy that excludes
 			// failed dispatch events, then restore the original after
