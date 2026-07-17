@@ -154,12 +154,12 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// will trigger this callback channel.
 	callback := make(chan bool, 1)
 	wi.Properties[todo.CallbackChannelProperty] = callback
-	// Setting executionStatus to failed by default to record metrics for non-recoverable errors.
-	executionStatus := diag.StatusFailed
+	// Setting diagnoseStatus to failed by default to record metrics for non-recoverable errors.
+	diagnoseStatus := diag.StatusFailed
 	if rs != nil && runtimestate.IsCompleted(rs) {
 		// If workflow is already completed, set executionStatus to empty string
 		// which will skip recording metrics for this execution.
-		executionStatus = ""
+		diagnoseStatus = ""
 	}
 	// Request to execute workflow
 	log.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", o.actorID, wi.InstanceID)
@@ -186,9 +186,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	wfExecutionElapsedTime := float64(0)
 
 	defer func() {
-		if executionStatus != "" {
-			diag.DefaultWorkflowMonitoring.WorkflowExecutionEvent(ctx, workflowName, executionStatus)
-			diag.DefaultWorkflowMonitoring.WorkflowExecutionLatency(ctx, workflowName, executionStatus, wfExecutionElapsedTime)
+		if diagnoseStatus != "" {
+			diag.DefaultWorkflowMonitoring.WorkflowExecutionEvent(ctx, workflowName, diagnoseStatus)
+			diag.DefaultWorkflowMonitoring.WorkflowExecutionLatency(ctx, workflowName, diagnoseStatus, wfExecutionElapsedTime)
 		}
 	}()
 
@@ -198,7 +198,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// wi.State pointer before the context was cancelled. Restore the
 		// snapshot so the cached state stays consistent with the store.
 		o.rstate = rstateSnapshot
-		executionStatus = diag.StatusRecoverable
+		diagnoseStatus = diag.StatusRecoverable
 		return todo.RunCompletedFalse, ctx.Err()
 	case completed := <-callback:
 		if !completed {
@@ -272,7 +272,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			} else {
 				o.rstate = rstateSnapshot
 			}
-			executionStatus = diag.StatusRecoverable
+			diagnoseStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(todo.ErrExecutionAborted)
 		}
 	}
@@ -304,12 +304,12 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// Delete timer reminders for WaitForSingleEvent timers where the event has
 		// been received before the timer fired.
 		if err = o.deleteCancelledEventTimers(ctx, rs); err != nil {
-			executionStatus = diag.StatusRecoverable
+			diagnoseStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
 		}
 
 		if err = o.createTimers(ctx, rs.GetPendingTimers(), state.Generation); err != nil {
-			executionStatus = diag.StatusRecoverable
+			diagnoseStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
 		}
 	}
@@ -419,11 +419,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			if saveErr := o.signAndSaveState(ctx, state); saveErr != nil {
 				return todo.RunCompletedFalse, saveErr
 			}
-			executionStatus = diag.StatusRecoverable
+			diagnoseStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
 		}
 
-		executionStatus = diag.StatusRecoverable
+		diagnoseStatus = diag.StatusRecoverable
 		return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
 	}
 
@@ -436,17 +436,12 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 
 	rstatus := runtimestate.RuntimeStatus(rs)
-	if executionStatus != "" {
+	if diagnoseStatus != "" {
 		// If workflow is not completed, set executionStatus to empty string
 		// which will skip recording metrics for this execution.
-		executionStatus = ""
+		diagnoseStatus = ""
 		if runtimestate.IsCompleted(rs) {
-			if rstatus == api.RUNTIME_STATUS_COMPLETED {
-				executionStatus = diag.StatusSuccess
-			} else {
-				// Setting executionStatus to failed if workflow has failed/terminated/cancelled
-				executionStatus = diag.StatusFailed
-			}
+			diagnoseStatus = executionStatusForRuntimeStatus(rstatus)
 			wfExecutionElapsedTime = o.calculateWorkflowExecutionLatency(state)
 		}
 	}
@@ -469,6 +464,25 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 
 	return todo.RunCompletedFalse, nil
+}
+
+// executionStatusForRuntimeStatus maps a terminal workflow runtime status to
+// the status label recorded on the workflow execution metrics. It is only
+// meaningful for completed workflows. Completed maps to success and terminated
+// to its own label; every other terminal status (in practice
+// RUNTIME_STATUS_FAILED) is recorded as failed. The engine never assigns
+// RUNTIME_STATUS_CANCELED to a top-level orchestration, so cancelled is
+// unreachable; the default arm keeps any unexpected future terminal status
+// accounted for rather than silently dropped.
+func executionStatusForRuntimeStatus(status api.OrchestrationStatus) string {
+	switch status {
+	case api.RUNTIME_STATUS_COMPLETED:
+		return diag.StatusSuccess
+	case api.RUNTIME_STATUS_TERMINATED:
+		return diag.StatusTerminated
+	default:
+		return diag.StatusFailed
+	}
 }
 
 func (*orchestrator) calculateWorkflowExecutionLatency(state *wfenginestate.State) (wExecutionElapsedTime float64) {
