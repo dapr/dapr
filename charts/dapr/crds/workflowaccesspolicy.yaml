@@ -69,24 +69,75 @@ spec:
                           name:
                             description: Name is the exact name or glob pattern for
                               the activity.
+                            maxLength: 256
                             minLength: 1
                             type: string
+                          requires:
+                            description: |-
+                              Requires is an ordered list of history events that must all be present in
+                              the caller's propagated workflow history for this rule to apply. The
+                              entries must be satisfied in the order they are listed: each successive
+                              entry matches an event at or after the event matched by the previous one.
+                            items:
+                              description: |-
+                                RequiredEvent is a single entry in a rule's Requires list. It matches when
+                                the caller's propagated history contains an event of the given EventType,
+                                produced by AppID, with the given Name.
+                              properties:
+                                appID:
+                                  description: |-
+                                    AppID is the app ID that must have produced the matched event. An event
+                                    only matches when it came from this app's propagated history.
+                                  maxLength: 256
+                                  minLength: 1
+                                  type: string
+                                eventType:
+                                  description: EventType is the history event that
+                                    must be present.
+                                  enum:
+                                  - activity.started
+                                  - activity.completed
+                                  - workflow.started
+                                  - workflow.completed
+                                  - event.raised
+                                  type: string
+                                name:
+                                  description: |-
+                                    Name is the activity name (activity.started|activity.completed), the
+                                    child-workflow name (workflow.started|workflow.completed), or the
+                                    external event name (event.raised).
+                                  maxLength: 256
+                                  minLength: 1
+                                  type: string
+                              required:
+                              - appID
+                              - eventType
+                              - name
+                              type: object
+                            maxItems: 20
+                            type: array
                         required:
                         - name
                         type: object
+                      maxItems: 100
                       type: array
                     callers:
-                      description: Callers that this rule applies to.
+                      description: |-
+                        Callers that this rule applies to. The policy is a cross-app gate;
+                        listing the target app's own appID here has no effect because
+                        same-app calls are always exempt from enforcement.
                       items:
                         description: WorkflowCaller identifies a calling application.
                         properties:
                           appID:
                             description: AppID is the Dapr app ID of the caller.
+                            maxLength: 256
                             minLength: 1
                             type: string
                         required:
                         - appID
                         type: object
+                      maxItems: 100
                       minItems: 1
                       type: array
                     workflows:
@@ -95,11 +146,17 @@ spec:
                       items:
                         description: |-
                           WorkflowRule grants the matched callers access to the listed operations on
-                          workflows whose name matches Name (exact or glob).
+                          workflows whose name matches Name (exact or glob). An optional `requires`
+                          gate may be attached, but only when the rule's sole operation is
+                          `schedule` — schedule is the only operation that carries propagated
+                          workflow history to check against. Express OR across prerequisite sets by
+                          listing multiple workflow rules with the same Name, each with its own
+                          `requires`; access is granted if any matching rule is satisfied.
                         properties:
                           name:
                             description: Name is the exact name or glob pattern for
                               the workflow.
+                            maxLength: 256
                             minLength: 1
                             type: string
                           operations:
@@ -118,13 +175,65 @@ spec:
                               - get
                               - rerun
                               type: string
+                            maxItems: 8
                             minItems: 1
                             type: array
                             x-kubernetes-list-type: set
+                          requires:
+                            description: |-
+                              Requires is an ordered list of history events that must all be present in
+                              the caller's propagated workflow history for this rule to apply. The
+                              entries must be satisfied in the order they are listed: each successive
+                              entry matches an event at or after the event matched by the previous one.
+                              Only valid when the rule's only operation is `schedule`.
+                            items:
+                              description: |-
+                                RequiredEvent is a single entry in a rule's Requires list. It matches when
+                                the caller's propagated history contains an event of the given EventType,
+                                produced by AppID, with the given Name.
+                              properties:
+                                appID:
+                                  description: |-
+                                    AppID is the app ID that must have produced the matched event. An event
+                                    only matches when it came from this app's propagated history.
+                                  maxLength: 256
+                                  minLength: 1
+                                  type: string
+                                eventType:
+                                  description: EventType is the history event that
+                                    must be present.
+                                  enum:
+                                  - activity.started
+                                  - activity.completed
+                                  - workflow.started
+                                  - workflow.completed
+                                  - event.raised
+                                  type: string
+                                name:
+                                  description: |-
+                                    Name is the activity name (activity.started|activity.completed), the
+                                    child-workflow name (workflow.started|workflow.completed), or the
+                                    external event name (event.raised).
+                                  maxLength: 256
+                                  minLength: 1
+                                  type: string
+                              required:
+                              - appID
+                              - eventType
+                              - name
+                              type: object
+                            maxItems: 20
+                            type: array
                         required:
                         - name
                         - operations
                         type: object
+                        x-kubernetes-validations:
+                        - message: requires is only valid when the rule's only operation
+                            is 'schedule'
+                          rule: '!has(self.requires) || size(self.requires) == 0 ||
+                            (size(self.operations) == 1 && self.operations[0] == ''schedule'')'
+                      maxItems: 100
                       type: array
                   required:
                   - callers
@@ -134,6 +243,7 @@ spec:
                       a rule
                     rule: (has(self.workflows) && size(self.workflows) > 0) || (has(self.activities)
                       && size(self.activities) > 0)
+                maxItems: 100
                 type: array
             type: object
         type: object
