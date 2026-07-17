@@ -159,7 +159,8 @@ func TestCreateDaprServiceAppProtocol(t *testing.T) {
 		Name:      "test",
 	}
 
-	appProtocols := func(service *corev1.Service) []string {
+	appProtocols := func(t *testing.T, service *corev1.Service) []string {
+		t.Helper()
 		protocols := make([]string, 0, len(service.Spec.Ports))
 		for _, port := range service.Spec.Ports {
 			require.NotNil(t, port.AppProtocol)
@@ -174,7 +175,7 @@ func TestCreateDaprServiceAppProtocol(t *testing.T) {
 
 		service := testDaprHandler.createDaprServiceValues(t.Context(), myDaprService, deployment, "test")
 		require.NotNil(t, service)
-		assert.Equal(t, []string{"http", "grpc", "grpc", "http"}, appProtocols(service))
+		assert.Equal(t, []string{"http", "grpc", "grpc", "http"}, appProtocols(t, service))
 	})
 
 	t.Run("mTLS enabled uses tls for internal port", func(t *testing.T) {
@@ -183,7 +184,7 @@ func TestCreateDaprServiceAppProtocol(t *testing.T) {
 
 		service := testDaprHandler.createDaprServiceValues(t.Context(), myDaprService, deployment, "test")
 		require.NotNil(t, service)
-		assert.Equal(t, []string{"http", "grpc", "tls", "http"}, appProtocols(service))
+		assert.Equal(t, []string{"http", "grpc", "tls", "http"}, appProtocols(t, service))
 	})
 }
 
