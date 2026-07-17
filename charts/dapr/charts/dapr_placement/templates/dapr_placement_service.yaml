@@ -29,13 +29,19 @@ spec:
   ports:
   - name: api
     port: {{ .Values.ports.apiPort }}
+    # gRPC wrapped in Dapr control plane mTLS: declare tls, not grpc, so
+    # service meshes do not parse the traffic as plaintext h2c.
+    appProtocol: tls
   - name: raft-node
     port: {{ .Values.ports.raftRPCPort }}
+    # raft RPC wrapped in Dapr control plane mTLS.
+    appProtocol: tls
 {{- if eq .Values.global.prometheus.enabled true }}
   - name: metrics
     port: {{ .Values.global.prometheus.port }}
     targetPort: {{ .Values.global.prometheus.port }}
     protocol: TCP
+    appProtocol: http
 {{- end}}
   clusterIP: None
 {{- end }}

@@ -153,6 +153,40 @@ func TestCreateDaprServiceAppIDAndPortsOverride(t *testing.T) {
 	assert.Equal(t, intstr.FromInt(12346), service.Spec.Ports[2].TargetPort)
 }
 
+func TestCreateDaprServiceAppProtocol(t *testing.T) {
+	myDaprService := types.NamespacedName{
+		Namespace: "test",
+		Name:      "test",
+	}
+
+	appProtocols := func(service *corev1.Service) []string {
+		protocols := make([]string, 0, len(service.Spec.Ports))
+		for _, port := range service.Spec.Ports {
+			require.NotNil(t, port.AppProtocol)
+			protocols = append(protocols, *port.AppProtocol)
+		}
+		return protocols
+	}
+
+	t.Run("mTLS disabled uses grpc for internal port", func(t *testing.T) {
+		testDaprHandler := getTestDaprHandler()
+		deployment := getDeployment("test", "true")
+
+		service := testDaprHandler.createDaprServiceValues(t.Context(), myDaprService, deployment, "test")
+		require.NotNil(t, service)
+		assert.Equal(t, []string{"http", "grpc", "grpc", "http"}, appProtocols(service))
+	})
+
+	t.Run("mTLS enabled uses tls for internal port", func(t *testing.T) {
+		testDaprHandler := &DaprHandler{mtlsEnabled: true}
+		deployment := getDeployment("test", "true")
+
+		service := testDaprHandler.createDaprServiceValues(t.Context(), myDaprService, deployment, "test")
+		require.NotNil(t, service)
+		assert.Equal(t, []string{"http", "grpc", "tls", "http"}, appProtocols(service))
+	})
+}
+
 func TestCreateDaprServiceWithCustomAnnotations(t *testing.T) {
 	testDaprHandler := getTestDaprHandler()
 	ctx := t.Context()
