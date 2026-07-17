@@ -21,6 +21,11 @@ import (
 	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 )
 
+func evalAllowed(cp *CompiledPolicies, callerAppID string, opType OperationType, operation wfaclapi.WorkflowOperation, opName string) bool {
+	allowed, _ := cp.Evaluate(callerAppID, opType, operation, opName, nil, true)
+	return allowed
+}
+
 const (
 	opSchedule  = wfaclapi.WorkflowOperationSchedule
 	opTerminate = wfaclapi.WorkflowOperationTerminate
@@ -71,12 +76,12 @@ func TestCompile_NilWhenNoPolicies(t *testing.T) {
 
 func TestEvaluate_NilPoliciesAllowAll(t *testing.T) {
 	var cp *CompiledPolicies
-	assert.True(t, cp.Evaluate("any-app", OperationTypeWorkflow, opSchedule, "AnyWF"))
+	assert.True(t, evalAllowed(cp, "any-app", OperationTypeWorkflow, opSchedule, "AnyWF"))
 }
 
 func TestEvaluate_PoliciesPresentDefaultDeny(t *testing.T) {
 	cp := Compile([]wfaclapi.WorkflowAccessPolicy{makePolicy()})
-	assert.False(t, cp.Evaluate("any-app", OperationTypeWorkflow, opSchedule, "AnyWF"))
+	assert.False(t, evalAllowed(cp, "any-app", OperationTypeWorkflow, opSchedule, "AnyWF"))
 }
 
 func TestEvaluate_MatchingRuleAllows(t *testing.T) {
@@ -86,10 +91,10 @@ func TestEvaluate_MatchingRuleAllows(t *testing.T) {
 		}, nil),
 	)})
 
-	assert.True(t, cp.Evaluate("checkout", OperationTypeWorkflow, opSchedule, "ProcessOrder"))
-	assert.False(t, cp.Evaluate("other-app", OperationTypeWorkflow, opSchedule, "ProcessOrder"))
-	assert.False(t, cp.Evaluate("checkout", OperationTypeWorkflow, opSchedule, "OtherWorkflow"))
-	assert.False(t, cp.Evaluate("checkout", OperationTypeActivity, opSchedule, "ProcessOrder"))
+	assert.True(t, evalAllowed(cp, "checkout", OperationTypeWorkflow, opSchedule, "ProcessOrder"))
+	assert.False(t, evalAllowed(cp, "other-app", OperationTypeWorkflow, opSchedule, "ProcessOrder"))
+	assert.False(t, evalAllowed(cp, "checkout", OperationTypeWorkflow, opSchedule, "OtherWorkflow"))
+	assert.False(t, evalAllowed(cp, "checkout", OperationTypeActivity, opSchedule, "ProcessOrder"))
 }
 
 func TestEvaluate_OperationGranularity(t *testing.T) {
@@ -99,10 +104,10 @@ func TestEvaluate_OperationGranularity(t *testing.T) {
 		}, nil),
 	)})
 
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, opSchedule, "OrderWF"))
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, opTerminate, "OrderWF"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, opPurge, "OrderWF"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, opGet, "OrderWF"))
+	assert.True(t, evalAllowed(cp, "app-a", OperationTypeWorkflow, opSchedule, "OrderWF"))
+	assert.True(t, evalAllowed(cp, "app-a", OperationTypeWorkflow, opTerminate, "OrderWF"))
+	assert.False(t, evalAllowed(cp, "app-a", OperationTypeWorkflow, opPurge, "OrderWF"))
+	assert.False(t, evalAllowed(cp, "app-a", OperationTypeWorkflow, opGet, "OrderWF"))
 }
 
 func TestEvaluate_GlobAndExactPatterns(t *testing.T) {
@@ -116,11 +121,11 @@ func TestEvaluate_GlobAndExactPatterns(t *testing.T) {
 		),
 	)})
 
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, opSchedule, "ProcessOrder"))
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, opTerminate, "ProcessRefund"))
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, opSchedule, "Exact"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, opSchedule, "CancelOrder"))
-	assert.True(t, cp.Evaluate("app-a", OperationTypeActivity, opSchedule, "AnyActivity"))
+	assert.True(t, evalAllowed(cp, "app-a", OperationTypeWorkflow, opSchedule, "ProcessOrder"))
+	assert.True(t, evalAllowed(cp, "app-a", OperationTypeWorkflow, opTerminate, "ProcessRefund"))
+	assert.True(t, evalAllowed(cp, "app-a", OperationTypeWorkflow, opSchedule, "Exact"))
+	assert.False(t, evalAllowed(cp, "app-a", OperationTypeWorkflow, opSchedule, "CancelOrder"))
+	assert.True(t, evalAllowed(cp, "app-a", OperationTypeActivity, opSchedule, "AnyActivity"))
 }
 
 func TestEvaluate_MultipleCallers(t *testing.T) {
@@ -130,9 +135,9 @@ func TestEvaluate_MultipleCallers(t *testing.T) {
 		}, nil),
 	)})
 
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, opSchedule, "Any"))
-	assert.True(t, cp.Evaluate("app-b", OperationTypeWorkflow, opSchedule, "Any"))
-	assert.False(t, cp.Evaluate("app-c", OperationTypeWorkflow, opSchedule, "Any"))
+	assert.True(t, evalAllowed(cp, "app-a", OperationTypeWorkflow, opSchedule, "Any"))
+	assert.True(t, evalAllowed(cp, "app-b", OperationTypeWorkflow, opSchedule, "Any"))
+	assert.False(t, evalAllowed(cp, "app-c", OperationTypeWorkflow, opSchedule, "Any"))
 }
 
 func TestEvaluate_MultiplePoliciesMerged(t *testing.T) {
@@ -145,10 +150,10 @@ func TestEvaluate_MultiplePoliciesMerged(t *testing.T) {
 		}, nil)),
 	})
 
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, opSchedule, "WorkflowA"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, opSchedule, "WorkflowB"))
-	assert.True(t, cp.Evaluate("app-b", OperationTypeWorkflow, opSchedule, "WorkflowB"))
-	assert.False(t, cp.Evaluate("app-b", OperationTypeWorkflow, opSchedule, "WorkflowA"))
+	assert.True(t, evalAllowed(cp, "app-a", OperationTypeWorkflow, opSchedule, "WorkflowA"))
+	assert.False(t, evalAllowed(cp, "app-a", OperationTypeWorkflow, opSchedule, "WorkflowB"))
+	assert.True(t, evalAllowed(cp, "app-b", OperationTypeWorkflow, opSchedule, "WorkflowB"))
+	assert.False(t, evalAllowed(cp, "app-b", OperationTypeWorkflow, opSchedule, "WorkflowA"))
 }
 
 func TestEvaluate_InvalidGlobSkipped(t *testing.T) {
@@ -159,7 +164,7 @@ func TestEvaluate_InvalidGlobSkipped(t *testing.T) {
 		}, nil),
 	)})
 
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, opSchedule, "ValidWorkflow"))
+	assert.True(t, evalAllowed(cp, "app-a", OperationTypeWorkflow, opSchedule, "ValidWorkflow"))
 }
 
 func TestEvaluate_EmptyCallersSkipped(t *testing.T) {
@@ -172,7 +177,7 @@ func TestEvaluate_EmptyCallersSkipped(t *testing.T) {
 		},
 	)})
 
-	assert.False(t, cp.Evaluate("any-app", OperationTypeWorkflow, opSchedule, "AnyWF"))
+	assert.False(t, evalAllowed(cp, "any-app", OperationTypeWorkflow, opSchedule, "AnyWF"))
 }
 
 func TestEvaluate_TypeIsolation(t *testing.T) {
@@ -180,6 +185,6 @@ func TestEvaluate_TypeIsolation(t *testing.T) {
 		callerRule([]string{"app-a"}, nil, []wfaclapi.ActivityRule{actRule("*")}),
 	)})
 
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, opSchedule, "AnyWorkflow"))
-	assert.True(t, cp.Evaluate("app-a", OperationTypeActivity, opSchedule, "AnyActivity"))
+	assert.False(t, evalAllowed(cp, "app-a", OperationTypeWorkflow, opSchedule, "AnyWorkflow"))
+	assert.True(t, evalAllowed(cp, "app-a", OperationTypeActivity, opSchedule, "AnyActivity"))
 }
