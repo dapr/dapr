@@ -27,6 +27,7 @@ import (
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	wfbackenderrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -157,10 +158,23 @@ func (o *orchestrator) notifyStreams() {
 	}
 }
 
-// signAndSaveState signs any newly added history events and then persists the
-// state. This is the single entry point for all state persistence; callers
-// must never call saveInternalState directly.
+// signAndSaveState offloads large payloads on any newly added events, signs
+// any newly added history events, and then persists the state. This is the
+// single entry point for all state persistence; callers must never call
+// saveInternalState directly.
 func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestate.State) error {
+	// Offload must run before signing so the signature covers the
+	// reference-carrying bytes that are actually persisted. No-op when no
+	// payload store is configured. A failed Put aborts the save before
+	// anything is persisted; the recoverable error keeps the reminder
+	// alive, and invalidating the cache makes the retry reload and rebuild
+	// the events, so no half-offloaded state ever becomes durable.
+	if o.payloadStore != nil {
+		if err := state.OffloadNewPayloads(ctx, o.payloadStore, o.actorID); err != nil {
+			o.invalidateCachedState()
+			return wfbackenderrors.NewRecoverable(fmt.Errorf("failed to offload large event payloads: %w", err))
+		}
+	}
 	if err := o.signing.SignNewEvents(state); err != nil {
 		o.invalidateCachedState()
 		return fmt.Errorf("failed to sign new history events: %w", err)

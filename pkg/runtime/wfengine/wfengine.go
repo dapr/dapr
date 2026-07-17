@@ -40,6 +40,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine/wfregistrar"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/payloadstore"
 	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/logger"
 )
@@ -97,6 +98,13 @@ type Options struct {
 
 	// May be nil when the WorkflowAccessPolicy feature is disabled.
 	WorkflowAccessPolicies *workflowacl.Holder
+
+	// PayloadStore, when non-nil, receives the event payloads it elects to
+	// offload (Store.ShouldOffload) before they are persisted; workflow
+	// history then carries small references instead of the payloads. It is
+	// nil (offloading disabled) unless an embedder injects a store
+	// programmatically.
+	PayloadStore payloadstore.Store
 }
 
 type engine struct {
@@ -156,6 +164,7 @@ func New(opts Options) (Interface, error) {
 		Signer:                 s,
 		MaxRequestBodySize:     opts.MaxRequestBodySize,
 		WorkflowAccessPolicies: opts.WorkflowAccessPolicies,
+		PayloadStore:           opts.PayloadStore,
 
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
@@ -231,6 +240,7 @@ func New(opts Options) (Interface, error) {
 		}),
 		backend.WithStreamSendTimeout(time.Second*10),
 		backend.WithStreamShutdownChannel(wfe.streamShutdownCh),
+		backend.WithExecutorPayloadStore(opts.PayloadStore),
 	)
 
 	var topts []backend.NewTaskWorkerOptions
@@ -247,6 +257,7 @@ func New(opts Options) (Interface, error) {
 		InProcessNamePrefix: ReservedWorkflowNamePrefix,
 		Logger:              wfBackendLogger,
 		AppID:               opts.AppID,
+		PayloadStore:        opts.PayloadStore,
 	}, topts...)
 
 	topts = nil
@@ -256,21 +267,21 @@ func New(opts Options) (Interface, error) {
 		}
 	}
 
-	aworker := backend.NewActivityTaskWorkerWithInProcess(
-		abackend,
-		grpcExec,
-		inProcessExec.Backend(),
-		ReservedWorkflowNamePrefix,
-		wfBackendLogger,
-		topts...,
-	)
+	aworker := backend.NewActivityWorker(backend.ActivityWorkerOptions{
+		Backend:             abackend,
+		Executor:            grpcExec,
+		InProcessExecutor:   inProcessExec.Backend(),
+		InProcessNamePrefix: ReservedWorkflowNamePrefix,
+		Logger:              wfBackendLogger,
+		PayloadStore:        opts.PayloadStore,
+	}, topts...)
 	worker := backend.NewTaskHubWorker(abackend, oworker, aworker, wfBackendLogger)
 
 	wfe.worker = worker
 	wfe.registerGrpcServerFn = registerGrpcServerFn
 	wfe.client = &client{
 		logger: wfBackendLogger,
-		client: backend.NewTaskHubClient(abackend),
+		client: backend.NewTaskHubClient(abackend, backend.WithClientPayloadStore(opts.PayloadStore, wfBackendLogger)),
 	}
 	return wfe, nil
 }

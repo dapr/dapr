@@ -45,6 +45,12 @@ var buildTags = []string{
 	// reports whether the SPIFFE identity reached the component operation
 	// context. Never set for released daprd flavors.
 	"state_spiffeprobe",
+	// wfpayloadstore_inmemory compiles in an integration-test-only in-memory
+	// workflow payload store, enabled per daprd via the
+	// DAPR_TEST_WORKFLOW_PAYLOAD_STORE_THRESHOLD environment variable (also
+	// only read under this tag). Never set for released daprd flavors, which
+	// therefore have no way to enable workflow payload offloading.
+	"wfpayloadstore_inmemory",
 }
 
 func BuildAll(t *testing.T) {

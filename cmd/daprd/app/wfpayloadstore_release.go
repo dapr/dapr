@@ -1,5 +1,7 @@
+//go:build !wfpayloadstore_inmemory
+
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,25 +13,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package wfbackend
+package app
 
-type recoverable struct {
-	cause error
-}
+import "github.com/dapr/durabletask-go/backend/payloadstore"
 
-func NewRecoverable(err error) error {
-	return &recoverable{cause: err}
-}
-
-func IsRecoverable(err error) bool {
-	_, ok := err.(*recoverable)
-	return ok
-}
-
-func (err *recoverable) Error() string {
-	return err.cause.Error()
-}
-
-func (err *recoverable) Unwrap() error {
-	return err.cause
-}
+// workflowPayloadStore returns nil in every released daprd flavor:
+// without the wfpayloadstore_inmemory build tag there is no way to enable
+// workflow payload offloading - no store, no flag, no environment
+// variable. The integration-test binary compiles the in-memory variant
+// instead.
+func workflowPayloadStore() payloadstore.Store { return nil }

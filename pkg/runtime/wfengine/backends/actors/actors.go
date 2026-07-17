@@ -56,6 +56,7 @@ import (
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/local"
+	"github.com/dapr/durabletask-go/backend/payloadstore"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/crypto/spiffe/signer"
@@ -103,6 +104,12 @@ type Options struct {
 
 	// May be nil when the WorkflowAccessPolicy feature is disabled.
 	WorkflowAccessPolicies *workflowacl.Holder
+
+	// PayloadStore, when non-nil, receives the event payloads it elects to
+	// offload (Store.ShouldOffload) before they are persisted; workflow
+	// history then carries small references instead of the payloads. Nil
+	// (the default) disables offloading entirely.
+	PayloadStore payloadstore.Store
 }
 
 type Actors struct {
@@ -122,6 +129,7 @@ type Actors struct {
 	signer                 *signer.Signer
 	maxRequestBodySize     int
 	workflowAccessPolicies *workflowacl.Holder
+	payloadStore           payloadstore.Store
 
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
@@ -168,6 +176,7 @@ func New(opts Options) *Actors {
 		signer:                    opts.Signer,
 		maxRequestBodySize:        opts.MaxRequestBodySize,
 		workflowAccessPolicies:    opts.WorkflowAccessPolicies,
+		payloadStore:              opts.PayloadStore,
 
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
@@ -193,6 +202,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		Signer:                 abe.signer,
 		MaxRequestBodySize:     abe.maxRequestBodySize,
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
+		PayloadStore:           abe.payloadStore,
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
