@@ -169,21 +169,27 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 
 	projections := map[string]state.SetRequest{}
 
-	for i, op := range operations {
+	var filteredOps []state.TransactionalStateOperation
+	for _, op := range operations {
 		sr, ok := op.(state.SetRequest)
-
 		if ok {
+			isProjection := false
 			for k, v := range sr.Metadata {
 				if k == "outbox.projection" && kitstrings.IsTruthy(v) {
 					projections[sr.Key] = sr
-
-					operations = append(operations[:i], operations[i+1:]...)
+					isProjection = true
+					break
 				}
 			}
+			if !isProjection {
+				filteredOps = append(filteredOps, op)
+			}
+		} else {
+			filteredOps = append(filteredOps, op)
 		}
 	}
 
-	for _, op := range operations {
+	for _, op := range filteredOps {
 		sr, ok := op.(state.SetRequest)
 		if ok {
 			tr, err := transaction()
@@ -260,11 +266,11 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 				return nil, err
 			}
 
-			operations = append(operations, tr)
+			filteredOps = append(filteredOps, tr)
 		}
 	}
 
-	return operations, nil
+	return filteredOps, nil
 }
 
 func outboxTopic(appID, topic, namespace string) string {
@@ -349,7 +355,10 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 				return err
 			}
 
-			contentType := cloudEvent[contribPubsub.DataContentTypeField].(string)
+			var contentType string
+			if ct, ok := cloudEvent[contribPubsub.DataContentTypeField].(string); ok {
+				contentType = ct
+			}
 
 			err = o.publisher.Publish(ctx, &contribPubsub.PublishRequest{
 				PubsubName:  c.publishPubSub,
