@@ -15,6 +15,7 @@ package runtime
 
 import (
 	"context"
+	"slices"
 
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/internal/loader"
@@ -49,7 +50,9 @@ func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
 	}
 
 	for _, s := range subs {
-		log.Infof("Found Subscription: %s", s.Name)
+		if subscriptionIsInScope(a.runtimeConfig.id, s) {
+			log.Infof("Found Subscription: %s", s.Name)
+		}
 	}
 
 	// Wait for every declarative subscription to be committed to the component
@@ -74,4 +77,8 @@ func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func subscriptionIsInScope(appID string, subscription subapi.Subscription) bool {
+	return len(subscription.Scopes) == 0 || slices.Contains(subscription.Scopes, appID)
 }
