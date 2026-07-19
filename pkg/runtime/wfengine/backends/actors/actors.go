@@ -333,10 +333,10 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 // Internally, creating a workflow instance also creates a new actor with the same ID. The create
 // request is saved into the actor's "inbox" and then executed via a reminder thread. If the app is
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
-func (abe *Actors) CreateWorkflowInstance(ctx context.Context, e *backend.HistoryEvent) error {
+func (abe *Actors) CreateWorkflowInstance(ctx context.Context, createReq *backend.CreateWorkflowInstanceRequest) error {
 	var workflowInstanceID string
 
-	if es := e.GetExecutionStarted(); es == nil {
+	if es := createReq.GetStartEvent().GetExecutionStarted(); es == nil {
 		return errors.New("the history event must be an ExecutionStartedEvent")
 	} else if oi := es.GetWorkflowInstance(); oi == nil {
 		return errors.New("the ExecutionStartedEvent did not contain orchestration instance information")
@@ -344,9 +344,7 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, e *backend.Histor
 		workflowInstanceID = oi.GetInstanceId()
 	}
 
-	requestBytes, err := proto.Marshal(&backend.CreateWorkflowInstanceRequest{
-		StartEvent: e,
-	})
+	requestBytes, err := proto.Marshal(createReq)
 	if err != nil {
 		return fmt.Errorf("failed to marshal CreateWorkflowInstanceRequest: %w", err)
 	}
