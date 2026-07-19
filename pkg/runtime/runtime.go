@@ -98,6 +98,7 @@ type DaprRuntime struct {
 	accessControlList      *config.AccessControlList
 	grpc                   *manager.Manager
 	channels               *channels.Channels
+	appAPITokenHeader      string
 	appConfig              config.ApplicationConfig
 	directMessaging        invokev1.DirectMessaging
 	actors                 actors.Interface
@@ -205,7 +206,8 @@ func newDaprRuntime(ctx context.Context,
 	}
 
 	appAPIToken := security.GetAppToken()
-	grpc := createGRPCManager(sec, runtimeConfig, globalConfig, appAPIToken)
+	appAPITokenHeader := security.GetAppTokenHeader()
+	grpc := createGRPCManager(sec, runtimeConfig, globalConfig, appAPIToken, appAPITokenHeader)
 
 	authz := authorizer.New(authorizer.Options{
 		ID:           runtimeConfig.id,
@@ -228,6 +230,7 @@ func newDaprRuntime(ctx context.Context,
 		GRPC:                grpc,
 		AppMiddleware:       httpMiddlewareApp,
 		AppAPIToken:         appAPIToken,
+		AppAPITokenHeader:   appAPITokenHeader,
 		ActorCallbackStream: actorCallbackStream,
 	})
 
@@ -389,6 +392,7 @@ func newDaprRuntime(ctx context.Context,
 		meta:                   meta,
 		operatorClient:         operatorClient,
 		channels:               channels,
+		appAPITokenHeader:      appAPITokenHeader,
 		sec:                    sec,
 		processor:              processor,
 		jobsManager:            jobsManager,
@@ -1046,6 +1050,7 @@ func (a *DaprRuntime) initProxy() {
 		Resiliency:         a.resiliency,
 		MaxRequestBodySize: a.runtimeConfig.maxRequestBodySize,
 		AppendAppTokenFn:   a.grpc.AddAppTokenToContext,
+		AppAPITokenHeader:  a.appAPITokenHeader,
 	})
 }
 
@@ -1478,7 +1483,7 @@ func featureTypeToString(features any) []string {
 	return featureStr
 }
 
-func createGRPCManager(sec security.Handler, runtimeConfig *internalConfig, globalConfig *config.Configuration, appAPIToken string) *manager.Manager {
+func createGRPCManager(sec security.Handler, runtimeConfig *internalConfig, globalConfig *config.Configuration, appAPIToken, appAPITokenHeader string) *manager.Manager {
 	grpcAppChannelConfig := &manager.AppChannelConfig{}
 	if globalConfig != nil {
 		grpcAppChannelConfig.TracingSpec = globalConfig.GetTracingSpec()
@@ -1494,6 +1499,7 @@ func createGRPCManager(sec security.Handler, runtimeConfig *internalConfig, glob
 	}
 
 	grpcAppChannelConfig.AppAPIToken = appAPIToken
+	grpcAppChannelConfig.AppAPITokenHeader = appAPITokenHeader
 	m := manager.NewManager(sec, runtimeConfig.mode, grpcAppChannelConfig)
 	m.StartCollector()
 

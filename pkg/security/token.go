@@ -37,6 +37,14 @@ func GetAppToken() string {
 	return os.Getenv(consts.AppAPITokenEnvVar)
 }
 
+// GetAppTokenHeader returns the HTTP header or gRPC metadata name for the app API token.
+func GetAppTokenHeader() string {
+	if header := os.Getenv(consts.AppAPITokenHeaderEnvVar); header != "" {
+		return header
+	}
+	return consts.APITokenHeader
+}
+
 // getKubernetesIdentityToken returns the value of the Kubernetes identity
 // token.
 func getKubernetesIdentityToken() (string, error) {

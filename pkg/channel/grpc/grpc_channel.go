@@ -45,25 +45,27 @@ type ConnFn func() (*grpc.ClientConn, func(bool), error)
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code.
 type Channel struct {
-	connFn              ConnFn
-	actorCallbackStream *callbackstream.Manager
-	baseAddress         string
-	ch                  chan struct{}
-	tracingSpec         config.TracingSpec
-	appMetadataToken    string
-	maxRequestBodySize  int
-	appHealth           *apphealth.AppHealth
+	connFn               ConnFn
+	actorCallbackStream  *callbackstream.Manager
+	baseAddress          string
+	ch                   chan struct{}
+	tracingSpec          config.TracingSpec
+	appMetadataToken     string
+	appMetadataTokenName string
+	maxRequestBodySize   int
+	appHealth            *apphealth.AppHealth
 }
 
 // CreateLocalChannel creates a gRPC connection with user code.
-func CreateLocalChannel(port, maxConcurrency int, connFn ConnFn, spec config.TracingSpec, maxRequestBodySize int, readBufferSize int, baseAddress string, appAPIToken string) *Channel {
+func CreateLocalChannel(port, maxConcurrency int, connFn ConnFn, spec config.TracingSpec, maxRequestBodySize int, readBufferSize int, baseAddress, appAPIToken, appAPITokenHeader string) *Channel {
 	// readBufferSize is unused
 	c := &Channel{
-		connFn:             connFn,
-		baseAddress:        net.JoinHostPort(baseAddress, strconv.Itoa(port)),
-		tracingSpec:        spec,
-		appMetadataToken:   appAPIToken,
-		maxRequestBodySize: maxRequestBodySize,
+		connFn:               connFn,
+		baseAddress:          net.JoinHostPort(baseAddress, strconv.Itoa(port)),
+		tracingSpec:          spec,
+		appMetadataToken:     appAPIToken,
+		appMetadataTokenName: appAPITokenHeader,
+		maxRequestBodySize:   maxRequestBodySize,
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan struct{}, maxConcurrency)
@@ -209,10 +211,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	md := invokev1.InternalMetadataToGrpcMetadata(ctx, pd.GetMetadata(), true)
-
-	if g.appMetadataToken != "" {
-		md.Set(securityConsts.APITokenHeader, g.appMetadataToken)
-	}
+	g.setAppTokenMetadata(md)
 
 	// Prepare gRPC Metadata
 	ctx = grpcMetadata.NewOutgoingContext(context.Background(), md)
@@ -299,8 +298,31 @@ func (g *Channel) SetAppHealth(ah *apphealth.AppHealth) {
 // AddAppTokenToContext adds the app API token to the outgoing gRPC context using the
 // token captured at channel creation time
 func (g *Channel) AddAppTokenToContext(ctx context.Context) context.Context {
-	if g.appMetadataToken != "" {
-		return grpcMetadata.AppendToOutgoingContext(ctx, securityConsts.APITokenHeader, g.appMetadataToken)
+	md, ok := grpcMetadata.FromOutgoingContext(ctx)
+	if !ok {
+		if g.appMetadataToken == "" {
+			return ctx
+		}
+		md = grpcMetadata.MD{}
+	} else {
+		md = md.Copy()
 	}
-	return ctx
+	g.setAppTokenMetadata(md)
+	return grpcMetadata.NewOutgoingContext(ctx, md)
+}
+
+func (g *Channel) appTokenMetadataName() string {
+	if g.appMetadataTokenName != "" {
+		return g.appMetadataTokenName
+	}
+	return securityConsts.APITokenHeader
+}
+
+func (g *Channel) setAppTokenMetadata(md grpcMetadata.MD) {
+	header := g.appTokenMetadataName()
+	md.Delete(securityConsts.APITokenHeader)
+	md.Delete(header)
+	if g.appMetadataToken != "" {
+		md.Set(header, g.appMetadataToken)
+	}
 }

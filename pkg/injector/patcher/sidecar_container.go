@@ -413,6 +413,13 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		})
 	}
 
+	if c.AppTokenHeader != "" {
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  securityConsts.AppAPITokenHeaderEnvVar,
+			Value: c.AppTokenHeader,
+		})
+	}
+
 	// Resources for the container
 	resources, err := c.getResourceRequirements()
 	if err != nil {

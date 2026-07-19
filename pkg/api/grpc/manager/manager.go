@@ -59,6 +59,7 @@ type AppChannelConfig struct {
 	ReadBufferSize     int // In bytes
 	BaseAddress        string
 	AppAPIToken        string
+	AppAPITokenHeader  string
 }
 
 // Manager is a wrapper around gRPC connection pooling.
@@ -109,6 +110,7 @@ func (g *Manager) GetAppChannel() (channel.AppChannel, error) {
 		g.channelConfig.ReadBufferSize,
 		g.channelConfig.BaseAddress,
 		g.channelConfig.AppAPIToken,
+		g.channelConfig.AppAPITokenHeader,
 	)
 	return ch, nil
 }
@@ -277,13 +279,29 @@ func nopTeardown(destroy bool) {
 	// Nop
 }
 
-// AddAppTokenToContext appends the app API token to outgoing gRPC context.
+// AddAppTokenToContext sets the app API token on the outgoing gRPC context.
 func (g *Manager) AddAppTokenToContext(ctx context.Context) context.Context {
 	if g == nil || g.channelConfig == nil {
 		return ctx
 	}
-	if g.channelConfig.AppAPIToken != "" {
-		return md.AppendToOutgoingContext(ctx, securityConsts.APITokenHeader, g.channelConfig.AppAPIToken)
+	header := g.channelConfig.AppAPITokenHeader
+	if header == "" {
+		header = securityConsts.APITokenHeader
 	}
-	return ctx
+
+	outMD, ok := md.FromOutgoingContext(ctx)
+	if !ok {
+		if g.channelConfig.AppAPIToken == "" {
+			return ctx
+		}
+		outMD = md.MD{}
+	} else {
+		outMD = outMD.Copy()
+	}
+	outMD.Delete(securityConsts.APITokenHeader)
+	outMD.Delete(header)
+	if g.channelConfig.AppAPIToken != "" {
+		outMD.Set(header, g.channelConfig.AppAPIToken)
+	}
+	return md.NewOutgoingContext(ctx, outMD)
 }
