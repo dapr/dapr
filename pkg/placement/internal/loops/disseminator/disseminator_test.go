@@ -112,6 +112,21 @@ func TestHandleTimeout_IgnoresStaleVersion(t *testing.T) {
 	assert.True(t, d.store.Has(0))
 }
 
+func TestHandleTimeout_IgnoresCompletedRound(t *testing.T) {
+	d := newTestDisseminator(t)
+	addFakeStream(d, 0, []string{"actorA"})
+	d.currentVersion = 1
+	d.currentOperation = v1pb.HostOperation_REPORT
+	d.streams[0].currentState = v1pb.HostOperation_UNLOCK
+
+	d.handleTimeout(t.Context(), &loops.DisseminationTimeout{Version: 1})
+
+	assert.Contains(t, d.streams, uint64(0))
+	assert.True(t, d.store.Has(0))
+	assert.Equal(t, uint64(1), d.currentVersion)
+	assert.Equal(t, v1pb.HostOperation_REPORT, d.currentOperation)
+}
+
 func TestHandleTimeout_ClosesOnlyNonRespondingStreams(t *testing.T) {
 	d := newTestDisseminator(t)
 	addFakeStream(d, 0, []string{"actorA"})

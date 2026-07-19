@@ -295,8 +295,9 @@ func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 }
 
 func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.DisseminationTimeout) {
-	if timeout.Version != d.currentVersion {
-		// Ignore old timeouts.
+	if timeout.Version != d.currentVersion || d.currentOperation == v1pb.HostOperation_REPORT {
+		// Ignore old timeouts and events which were already queued when a round
+		// completed successfully.
 		return
 	}
 
