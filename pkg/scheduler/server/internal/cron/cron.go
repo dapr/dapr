@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/events/loop"
@@ -235,19 +236,38 @@ func (c *cron) triggerHandler(req *api.TriggerRequest, fn func(*api.TriggerRespo
 		return
 	}
 
-	idx := strings.LastIndex(req.GetName(), "||")
-	if idx == -1 || len(req.GetName()) <= idx+2 {
-		log.Errorf("Job name is malformed: %s", req.GetName())
+	name, err := nameFromKey(req.GetName(), &meta)
+	if err != nil {
+		log.Errorf("Job name is malformed: %s", err)
 		fn(&api.TriggerResponse{Result: api.TriggerResponseResult_UNDELIVERABLE})
 		return
 	}
 
 	c.connectionPool.Trigger(&internalsv1pb.JobEvent{
 		Key:      req.GetName(),
-		Name:     req.GetName()[idx+2:],
+		Name:     name,
 		Data:     req.GetPayload(),
 		Metadata: &meta,
 	}, c.respHandler(req.GetName(), &meta, fn))
+}
+
+// nameFromKey recovers the reminder/job name delivered to the app from the
+// stored job key. The key is the metadata prefix (built by serialize) followed
+// by the name, so the name is recovered by trimming that prefix rather than by
+// re-splitting the key on the last "||". This is unambiguous even when the name
+// (or the actor id) itself contains "||", which is a permitted character, and
+// it does not drop names that end in "||".
+func nameFromKey(key string, meta *schedulerv1pb.JobMetadata) (string, error) {
+	prefix, err := serialize.PrefixFromMetadata(meta)
+	if err != nil {
+		return "", err
+	}
+
+	if !strings.HasPrefix(key, prefix) {
+		return "", fmt.Errorf("key %q does not match expected prefix %q from its metadata", key, prefix)
+	}
+
+	return strings.TrimPrefix(key, prefix), nil
 }
 
 func (c *cron) respHandler(name string, meta *schedulerv1pb.JobMetadata, fn func(*api.TriggerResponse)) func(api.TriggerResponseResult) {
