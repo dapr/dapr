@@ -73,9 +73,28 @@ func TestScheduleTimezonePrefixes(t *testing.T) {
 		assert.Equal(t, cronTZ.Next(start), tz.Next(start))
 	})
 
-	t.Run("the prefix works with descriptors", func(t *testing.T) {
-		_, err := parser.Parse("CRON_TZ=Europe/Rome @daily")
+	t.Run("the prefix applies to descriptors", func(t *testing.T) {
+		rome, err := time.LoadLocation("Europe/Rome")
 		require.NoError(t, err)
+
+		sched, err := parser.Parse("CRON_TZ=Europe/Rome @daily")
+		require.NoError(t, err)
+
+		next := sched.Next(time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC))
+		assert.Equal(t, "2026-07-21T00:00:00+02:00", next.In(rome).Format(time.RFC3339))
+		assert.Equal(t, "2026-07-20T22:00:00Z", next.UTC().Format(time.RFC3339))
+	})
+
+	// A constant delay has no wall clock for a zone to apply to.
+	t.Run("the prefix is ignored for @every", func(t *testing.T) {
+		from := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+
+		withTZ, err := parser.Parse("CRON_TZ=Europe/Rome @every 1h")
+		require.NoError(t, err)
+		without, err := parser.Parse("@every 1h")
+		require.NoError(t, err)
+
+		assert.Equal(t, without.Next(from), withTZ.Next(from))
 	})
 
 	t.Run("an unknown zone is rejected", func(t *testing.T) {
