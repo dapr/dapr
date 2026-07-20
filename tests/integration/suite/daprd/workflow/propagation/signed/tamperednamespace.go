@@ -116,7 +116,7 @@ func (s *tamperednamespace) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		meta, err := client1.FetchWorkflowMetadata(ctx, api.InstanceID(childID))
 		assert.NoError(c, err)
-		assert.Equal(c, api.RUNTIME_STATUS_FAILED, meta.GetRuntimeStatus(),
+		assert.Equal(c, api.RUNTIME_STATUS_CANCELED, meta.GetRuntimeStatus(),
 			"signing cert with mismatched namespace must tombstone the child")
 	}, 20*time.Second, 10*time.Millisecond)
 }
