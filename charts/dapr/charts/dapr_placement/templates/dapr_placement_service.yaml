@@ -29,13 +29,16 @@ spec:
   ports:
   - name: api
     port: {{ .Values.ports.apiPort }}
+    appProtocol: {{ if .Values.global.mtls.enabled }}grpcs{{ else }}grpc{{ end }}
   - name: raft-node
     port: {{ .Values.ports.raftRPCPort }}
+    appProtocol: tcp
 {{- if eq .Values.global.prometheus.enabled true }}
   - name: metrics
     port: {{ .Values.global.prometheus.port }}
     targetPort: {{ .Values.global.prometheus.port }}
     protocol: TCP
+    appProtocol: http
 {{- end}}
   clusterIP: None
 {{- end }}
