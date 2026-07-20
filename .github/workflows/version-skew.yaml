@@ -61,8 +61,31 @@ jobs:
         - dapr-sidecar-master
     steps:
     - name: Set up for Dapr lastest release
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
-        echo "DAPR_PREV_VERSION=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
+        set -euo pipefail
+        # Authenticate the API call (anonymous requests are aggressively rate
+        # limited and would otherwise return an error body with no tag_name,
+        # silently yielding a bogus ref like "vull" and failing the checkout).
+        tag=""
+        for i in 1 2 3 4 5; do
+          tag="$(curl -sSf \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/dapr/dapr/releases/latest \
+            | jq -r '.tag_name // empty')"
+          if [ -n "$tag" ]; then
+            break
+          fi
+          echo "Attempt $i: could not resolve latest Dapr release tag, retrying..." >&2
+          sleep $((i * 5))
+        done
+        if [ -z "$tag" ]; then
+          echo "Failed to resolve the latest Dapr release tag" >&2
+          exit 1
+        fi
+        echo "DAPR_PREV_VERSION=${tag#v}" >> $GITHUB_ENV
     - name: Set up for master
       if: github.event_name != 'repository_dispatch'
       run: |
@@ -243,8 +266,31 @@ jobs:
         - dapr-sidecar-master
     steps:
     - name: Set up for Dapr lastest release
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
-        echo "DAPR_PREV_VERSION=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
+        set -euo pipefail
+        # Authenticate the API call (anonymous requests are aggressively rate
+        # limited and would otherwise return an error body with no tag_name,
+        # silently yielding a bogus ref like "vull" and failing the checkout).
+        tag=""
+        for i in 1 2 3 4 5; do
+          tag="$(curl -sSf \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/dapr/dapr/releases/latest \
+            | jq -r '.tag_name // empty')"
+          if [ -n "$tag" ]; then
+            break
+          fi
+          echo "Attempt $i: could not resolve latest Dapr release tag, retrying..." >&2
+          sleep $((i * 5))
+        done
+        if [ -z "$tag" ]; then
+          echo "Failed to resolve the latest Dapr release tag" >&2
+          exit 1
+        fi
+        echo "DAPR_PREV_VERSION=${tag#v}" >> $GITHUB_ENV
     - name: Set up for master
       if: github.event_name != 'repository_dispatch'
       run: |
