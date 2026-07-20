@@ -83,7 +83,7 @@ func (b *baseline) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, strconv.Itoa(activityCount), statefulMeta.GetOutput().GetValue())
 	assert.Equal(t, strconv.Itoa(activityCount), baselineMeta.GetOutput().GetValue())
 
-	assert.Greater(t, statefulWorker.Observer.Deltas(), 0, "stateful worker must receive deltas")
+	assert.Positive(t, statefulWorker.Observer.Deltas(), "stateful worker must receive deltas")
 	assert.Zero(t, baselineWorker.Observer.Deltas(), "disabled worker must never receive a delta")
 	assert.Positive(t, baselineWorker.Observer.FullSends(), "disabled worker receives full histories")
 

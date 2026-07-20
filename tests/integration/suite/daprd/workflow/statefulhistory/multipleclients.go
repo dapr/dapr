@@ -85,7 +85,7 @@ func (m *multipleclients) Run(t *testing.T, ctx context.Context) {
 	aWork := workerA.Observer.FullSends() + workerA.Observer.Deltas()
 	bWork := workerB.Observer.FullSends() + workerB.Observer.Deltas()
 
-	assert.Greater(t, aWork, 0, "worker A must receive work")
-	assert.Greater(t, bWork, 0, "worker B must receive work")
-	assert.Greater(t, workerA.Observer.Deltas()+workerB.Observer.Deltas(), 0, "deltas must flow across two workers")
+	assert.Positive(t, aWork, "worker A must receive work")
+	assert.Positive(t, bWork, "worker B must receive work")
+	assert.Positive(t, workerA.Observer.Deltas()+workerB.Observer.Deltas(), "deltas must flow across two workers")
 }

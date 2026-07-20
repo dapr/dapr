@@ -74,7 +74,7 @@ func (c *clientchurn) Run(t *testing.T, ctx context.Context) {
 		ids[i] = id
 	}
 
-	for round := 0; round < 4; round++ {
+	for range 4 {
 		next := c.workflow.ConnectWorker(t, ctx, newRegistry())
 		c.workflow.WaitForConnectedWorkers(t, ctx, 2)
 		current.Disconnect(t)

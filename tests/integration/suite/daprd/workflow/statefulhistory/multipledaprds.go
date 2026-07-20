@@ -102,7 +102,7 @@ func (m *multipledaprds) Run(t *testing.T, ctx context.Context) {
 	work1 := worker1.Observer.FullSends() + worker1.Observer.Deltas()
 	totalDeltas := worker0.Observer.Deltas() + worker1.Observer.Deltas()
 
-	assert.Greater(t, work0, 0, "worker on daprd 0 must execute some instances")
-	assert.Greater(t, work1, 0, "worker on daprd 1 must execute some instances")
-	assert.Greater(t, totalDeltas, 0, "deltas must flow with workflows spread across both sidecars")
+	assert.Positive(t, work0, "worker on daprd 0 must execute some instances")
+	assert.Positive(t, work1, "worker on daprd 1 must execute some instances")
+	assert.Positive(t, totalDeltas, "deltas must flow with workflows spread across both sidecars")
 }
