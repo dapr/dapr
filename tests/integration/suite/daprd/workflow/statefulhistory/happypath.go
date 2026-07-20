@@ -71,5 +71,5 @@ func (h *happypath) Run(t *testing.T, ctx context.Context) {
 	assertAccumulateHistory(t, hist.GetEvents(), activityCount)
 
 	assert.GreaterOrEqual(t, worker.Observer.FullSends(), 1, "the cold first turn must be a full send")
-	assert.Greater(t, worker.Observer.Deltas(), 0, "later turns must be delivered as deltas")
+	assert.Positive(t, worker.Observer.Deltas(), "later turns must be delivered as deltas")
 }

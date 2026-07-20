@@ -67,14 +67,14 @@ func (m *maxinstances) Run(t *testing.T, ctx context.Context) {
 	idA, err := mgmt.ScheduleNewWorkflow(ctx, "AccumulateThenWait")
 	require.NoError(t, err)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Greater(c, worker.Observer.DeltasFor(string(idA)), 0)
+		assert.Positive(c, worker.Observer.DeltasFor(string(idA)))
 	}, time.Second*30, time.Millisecond*10)
 	require.Zero(t, worker.Observer.GetInstanceHistoryCalls())
 
 	idB, err := mgmt.ScheduleNewWorkflow(ctx, "AccumulateThenWait")
 	require.NoError(t, err)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Greater(c, worker.Observer.DeltasFor(string(idB)), 0)
+		assert.Positive(c, worker.Observer.DeltasFor(string(idB)))
 	}, time.Second*30, time.Millisecond*10)
 
 	require.NoError(t, mgmt.RaiseEvent(ctx, idA, "go"))

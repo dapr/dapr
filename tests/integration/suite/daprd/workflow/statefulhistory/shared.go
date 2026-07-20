@@ -112,7 +112,7 @@ func assertAccumulateHistory(t *testing.T, events []*protos.HistoryEvent, n int)
 func accumulate(n int) func(*task.WorkflowContext) (any, error) {
 	return func(ctx *task.WorkflowContext) (any, error) {
 		total := 0
-		for i := 0; i < n; i++ {
+		for range n {
 			var got int
 			if err := ctx.CallActivity("AddOne", task.WithActivityInput(total)).Await(&got); err != nil {
 				return nil, err
@@ -141,7 +141,7 @@ func waitAccumulate(n int) func(*task.WorkflowContext) (any, error) {
 			return nil, err
 		}
 		total := 0
-		for i := 0; i < n; i++ {
+		for range n {
 			var got int
 			if err := ctx.CallActivity("AddOne", task.WithActivityInput(total)).Await(&got); err != nil {
 				return nil, err
@@ -161,7 +161,7 @@ func waitAccumulate(n int) func(*task.WorkflowContext) (any, error) {
 func accumulateThenWait(n int) func(*task.WorkflowContext) (any, error) {
 	return func(ctx *task.WorkflowContext) (any, error) {
 		total := 0
-		for i := 0; i < n; i++ {
+		for range n {
 			var got int
 			if err := ctx.CallActivity("AddOne", task.WithActivityInput(total)).Await(&got); err != nil {
 				return nil, err

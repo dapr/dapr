@@ -74,7 +74,7 @@ func (x *ttl) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Greater(c, worker.Observer.DeltasFor(string(id)), 0)
+		assert.Positive(c, worker.Observer.DeltasFor(string(id)))
 	}, time.Second*30, time.Millisecond*10)
 	require.Zero(t, worker.Observer.GetInstanceHistoryCalls(),
 		"a warm worker must not fetch history while its cache is fresh")
