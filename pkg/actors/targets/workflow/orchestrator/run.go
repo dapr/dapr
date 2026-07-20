@@ -81,6 +81,24 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		state.Inbox = append(state.Inbox, timerEvent)
 	}
 
+	// A recursively-terminated parent delivers its cascade via this reminder,
+	// carrying the ExecutionTerminated event as data (see terminateChildren).
+	// Feed it into the inbox like a fired timer; if the workflow is already
+	// terminal the redelivery is skipped and the reminder deleted.
+	if reminder.Name == reminderCascadeTerminate && !runtimestate.IsCompleted(o.rstate) {
+		var cascadeEvent backend.HistoryEvent
+		if err = reminder.Data.UnmarshalTo(&cascadeEvent); err != nil {
+			return todo.RunCompletedTrue, err
+		}
+		// Validate the event type. A crafted reminder could contain arbitrary
+		// event types to inject into the inbox.
+		if cascadeEvent.GetExecutionTerminated() == nil {
+			return todo.RunCompletedTrue, fmt.Errorf("workflow actor '%s': cascade-terminate reminder contains non-ExecutionTerminated event type %T", o.actorID, cascadeEvent.GetEventType())
+		}
+		cascadeEvent.Timestamp = timestamppb.Now()
+		state.Inbox = append(state.Inbox, &cascadeEvent)
+	}
+
 	if len(state.Inbox) == 0 && !runtimestate.IsCompleted(o.rstate) {
 		// The in-memory cache may be stale: during a placement cluster failure
 		// daprds will roll over the actor, so a peer host may have written a new
@@ -115,6 +133,12 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		if runtimestate.IsCompleted(o.rstate) {
 			if rerr := o.handleRetention(ctx, runtimestate.RuntimeStatus(o.rstate)); rerr != nil {
 				return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to (re)create retention reminder on empty-inbox completion path: %w", rerr))
+			}
+			// Re-attempt the recursive terminate cascade idempotently: this is
+			// the retry path for terminateChildren failures on the completion
+			// path, since the inbox is drained by then.
+			if terr := o.terminateChildren(ctx, state); terr != nil {
+				return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to (re)deliver recursive terminate to children on empty-inbox path: %w", terr))
 			}
 		}
 		log.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", o.actorID, reminder.Name)
@@ -327,6 +351,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		case msg.GetHistoryEvent().GetChildWorkflowInstanceCompleted() != nil, msg.GetHistoryEvent().GetChildWorkflowInstanceFailed() != nil:
 			addWorkflows = append(addWorkflows, msg)
 
+		case msg.GetHistoryEvent().GetExecutionTerminated() != nil && runtimestate.IsCompleted(rs):
+			// Recursive-terminate cascade messages. Not dispatched here as this
+			// runs before the terminal state is persisted; terminateChildren
+			// delivers them after the save in the completion block below.
+
 		default:
 			return todo.RunCompletedTrue, fmt.Errorf("workflow actor '%s': don't know how to process outbound message '%v'", o.actorID, msg)
 		}
@@ -457,6 +486,13 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// path.
 		if err = o.handleRetention(ctx, rstatus); err != nil {
 			return todo.RunCompletedFalse, err
+		}
+		// Deliver the recursive terminate to children only after the terminal
+		// state is persisted above, so a delivery failure retries via the
+		// wake-up reminder rather than rolling back the completion.
+		if err = o.terminateChildren(ctx, state); err != nil {
+			return todo.RunCompletedFalse, wferrors.NewRecoverable(
+				fmt.Errorf("failed to deliver recursive terminate to children: %w", err))
 		}
 		if hasUnfiredTimers(rs) {
 			if err = o.deleteAllReminders(ctx); err != nil {
