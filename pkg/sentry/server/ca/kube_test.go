@@ -560,12 +560,12 @@ func TestKube_getRotationState(t *testing.T) {
 		t.Helper()
 
 		secretData := map[string][]byte{
-			"ca.crt":                  base.X509.TrustAnchors,
-			"tls.crt":                 base.X509.IssChainPEM,
-			"tls.key":                 base.X509.IssKeyPEM,
-			"rotation.phase":          []byte(ca_bundle.RotationPhaseDistributing),
-			"rotation.new-ca.crt":     pending.X509.TrustAnchors,
-			"rotation.new-issuer.crt": pending.X509.IssChainPEM,
+			"ca.crt":                      base.X509.TrustAnchors,
+			"tls.crt":                     base.X509.IssChainPEM,
+			"tls.key":                     base.X509.IssKeyPEM,
+			"rotation.phase":              []byte(ca_bundle.RotationPhaseDistributing),
+			"rotation.new-ca.crt":         pending.X509.TrustAnchors,
+			"rotation.new-issuer.crt":     pending.X509.IssChainPEM,
 			"rotation.new-issuer.key":     pending.X509.IssKeyPEM,
 			"rotation.distributed-at":     []byte("2026-01-01T00:00:00Z"),
 			"rotation.old-root-not-after": []byte("2027-01-01T00:00:00Z"),
@@ -712,4 +712,86 @@ func TestKube_getRotationStateValidation(t *testing.T) {
 			require.ErrorContains(t, err, test.expErr)
 		})
 	}
+}
+
+func TestKube_storeRotationState(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-ns")
+
+	base := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+	pending := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+
+	newKube := func(t *testing.T) *kube {
+		t.Helper()
+		fakeclient := fake.NewSimpleClientset(
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"},
+			},
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"},
+			},
+		)
+		return &kube{
+			client: fakeclient,
+			config: config.Config{
+				RootCertPath:   "ca.crt",
+				IssuerCertPath: "tls.crt",
+				IssuerKeyPath:  "tls.key",
+			},
+			namespace: "dapr-system-test",
+		}
+	}
+
+	newRotation := func() *ca_bundle.RotationState {
+		return &ca_bundle.RotationState{
+			Phase:           ca_bundle.RotationPhaseDistributing,
+			NewTrustAnchors: pending.X509.TrustAnchors,
+			NewIssChainPEM:  pending.X509.IssChainPEM,
+			NewIssKeyPEM:    pending.X509.IssKeyPEM,
+			DistributedAt:   time.Now(),
+			OldRootNotAfter: time.Now().Add(time.Hour),
+		}
+	}
+
+	t.Run("zero SigningAt is stored by omitting the key, not as nil", func(t *testing.T) {
+		k := newKube(t)
+		bndl := ca_bundle.Bundle{X509: base.X509, Rotation: newRotation()}
+		require.NoError(t, k.store(t.Context(), bndl))
+
+		secret, err := k.client.CoreV1().Secrets("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		_, ok := secret.Data["rotation.signing-at"]
+		assert.False(t, ok, "zero SigningAt must not be stored")
+		assert.NotEmpty(t, secret.Data["rotation.distributed-at"])
+		assert.NotEmpty(t, secret.Data["rotation.old-root-not-after"])
+		for key, value := range secret.Data {
+			assert.NotNil(t, value, "secret value for %q must never be nil", key)
+		}
+	})
+
+	t.Run("non-zero SigningAt is stored", func(t *testing.T) {
+		k := newKube(t)
+		rot := newRotation()
+		rot.Phase = ca_bundle.RotationPhaseSigning
+		rot.SigningAt = time.Now()
+		bndl := ca_bundle.Bundle{X509: base.X509, Rotation: rot}
+		require.NoError(t, k.store(t.Context(), bndl))
+
+		secret, err := k.client.CoreV1().Secrets("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.NotEmpty(t, secret.Data["rotation.signing-at"])
+	})
+
+	t.Run("stale signing-at from a previous write is removed when zero", func(t *testing.T) {
+		k := newKube(t)
+		rot := newRotation()
+		rot.Phase = ca_bundle.RotationPhaseSigning
+		rot.SigningAt = time.Now()
+		require.NoError(t, k.store(t.Context(), ca_bundle.Bundle{X509: base.X509, Rotation: rot}))
+
+		require.NoError(t, k.store(t.Context(), ca_bundle.Bundle{X509: base.X509, Rotation: newRotation()}))
+		secret, err := k.client.CoreV1().Secrets("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		_, ok := secret.Data["rotation.signing-at"]
+		assert.False(t, ok, "a zero SigningAt must remove any previously stored value")
+	})
 }

@@ -185,9 +185,21 @@ func (k *kube) store(ctx context.Context, bundle bundle.Bundle) error {
 		secret.Data[rotationNewCACertKey] = bundle.Rotation.NewTrustAnchors
 		secret.Data[rotationNewIssCertKey] = bundle.Rotation.NewIssChainPEM
 		secret.Data[rotationNewIssKeyKey] = bundle.Rotation.NewIssKeyPEM
-		secret.Data[rotationDistributedAtKey] = marshalTime(bundle.Rotation.DistributedAt)
-		secret.Data[rotationSigningAtKey] = marshalTime(bundle.Rotation.SigningAt)
-		secret.Data[rotationOldRootNotAfterKey] = marshalTime(bundle.Rotation.OldRootNotAfter)
+		// Zero timestamps (e.g. SigningAt during the distributing phase) are
+		// stored by omitting the key: a nil value would be serialised as JSON
+		// null, which the Kubernetes API may reject, and an absent key reads
+		// back as the zero time anyway.
+		for key, ts := range map[string]time.Time{
+			rotationDistributedAtKey:   bundle.Rotation.DistributedAt,
+			rotationSigningAtKey:       bundle.Rotation.SigningAt,
+			rotationOldRootNotAfterKey: bundle.Rotation.OldRootNotAfter,
+		} {
+			if ts.IsZero() {
+				delete(secret.Data, key)
+			} else {
+				secret.Data[key] = marshalTime(ts)
+			}
+		}
 	} else {
 		// Clean up any leftover rotation keys.
 		delete(secret.Data, rotationPhaseKey)
