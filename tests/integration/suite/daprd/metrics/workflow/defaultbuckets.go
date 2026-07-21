@@ -93,7 +93,7 @@ func (b *defaultBuckets) Run(t *testing.T, ctx context.Context) {
 			assert.NotEmpty(c, activityLatencyBuckets)
 		}, time.Second*10, time.Millisecond*100)
 
-		// default copied from pkg/config/configuration.go:277
+		// Default copied from pkg/config.MetricSpec.GetLatencyDistribution.
 		expected := []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000}
 		assert.ElementsMatch(t, expected, workflowLatencyBuckets[:len(workflowLatencyBuckets)-1])
 		assert.ElementsMatch(t, expected, activityLatencyBuckets[:len(activityLatencyBuckets)-1])
