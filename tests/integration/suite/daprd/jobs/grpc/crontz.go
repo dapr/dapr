@@ -45,7 +45,7 @@ type crontz struct {
 func (c *crontz) Setup(t *testing.T) []framework.Option {
 	c.scheduler = scheduler.New(t)
 
-	c.jobCh = make(chan *runtimev1pb.JobEventRequest, 2)
+	c.jobCh = make(chan *runtimev1pb.JobEventRequest, 64)
 	srv := app.New(t,
 		app.WithOnJobEventFn(func(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
 			c.jobCh <- in
@@ -109,13 +109,22 @@ func (c *crontz) Run(t *testing.T, ctx context.Context) {
 		schedule(t, "crontz-absent", fmt.Sprintf("* %d %d * * *",
 			target.Minute(), target.Hour()))
 
-		select {
-		case job := <-c.jobCh:
-			assert.Fail(t, "job triggered unexpectedly",
-				"%q fired inside the observation window, but without a CRON_TZ prefix "+
-					"its wall-clock time resolves to the scheduler's local zone, which is "+
-					"at least 30 minutes from %s", job.GetMethod(), loc)
-		case <-time.After(time.Second * 20):
+		deadline := time.After(time.Second * 20)
+		for {
+			select {
+			case job := <-c.jobCh:
+				if job.GetMethod() != "job/crontz-absent" {
+					continue
+				}
+				assert.Fail(t, "job triggered unexpectedly",
+					"%q fired inside the observation window, but without a CRON_TZ prefix "+
+						"its wall-clock time resolves to the scheduler's local zone, which is "+
+						"hours away from %s", job.GetMethod(), loc)
+
+				return
+			case <-deadline:
+				return
+			}
 		}
 	})
 }
