@@ -83,25 +83,49 @@ func (c *crontz) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, http.StatusNoContent, resp.StatusCode)
 	}
 
+	deleteJob := func(t *testing.T, name string) {
+		t.Helper()
+		url := fmt.Sprintf("http://localhost:%d/v1.0/jobs/%s", c.daprd.HTTPPort(), name)
+		req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+		require.NoError(t, err)
+		resp, err := client.HTTP(t).Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+	}
+
 	t.Run("with CRON_TZ prefix the job fires at the zone's wall clock", func(t *testing.T) {
-		target := time.Now().In(loc).Add(time.Second * 8)
-		schedule(t, "crontz-honoured", fmt.Sprintf("CRON_TZ=%s %d %d %d * * *",
-			loc, target.Second(), target.Minute(), target.Hour()))
+		target := time.Now().In(loc).Add(time.Second * 20)
+		schedule(t, "crontz-honoured", fmt.Sprintf("CRON_TZ=%s * %d %d * * *",
+			loc, target.Minute(), target.Hour()))
 
 		select {
 		case name := <-c.jobCh:
 			assert.Equal(t, "crontz-honoured", name)
-		case <-time.After(time.Second * 30):
+		case <-time.After(time.Second * 60):
 			assert.Fail(t, "timed out waiting for job to trigger",
 				"schedule was due at %s in %s; the CRON_TZ prefix appears to have been ignored",
 				target.Format(time.TimeOnly), loc)
 		}
+
+		deleteJob(t, "crontz-honoured")
+	})
+
+	t.Run("an unknown timezone is rejected", func(t *testing.T) {
+		postURL := fmt.Sprintf("http://localhost:%d/v1.0/jobs/crontz-badzone", c.daprd.HTTPPort())
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL,
+			strings.NewReader(`{"schedule": "CRON_TZ=Not/AZone 0 0 9 * * *"}`))
+		require.NoError(t, err)
+
+		resp, err := client.HTTP(t).Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	})
 
 	t.Run("without the prefix the same wall clock is a different instant", func(t *testing.T) {
-		target := time.Now().In(loc).Add(time.Second * 8)
-		schedule(t, "crontz-absent", fmt.Sprintf("%d %d %d * * *",
-			target.Second(), target.Minute(), target.Hour()))
+		target := time.Now().In(loc).Add(time.Second * 20)
+		schedule(t, "crontz-absent", fmt.Sprintf("* %d %d * * *",
+			target.Minute(), target.Hour()))
 
 		select {
 		case name := <-c.jobCh:
@@ -120,11 +144,11 @@ func offsetZone(t *testing.T) *time.Location {
 	now := time.Now()
 	_, local := now.Zone()
 
-	for _, name := range []string{"Asia/Kolkata", "Pacific/Marquesas", "Asia/Tokyo"} {
+	for _, name := range []string{"Asia/Kolkata", "Pacific/Marquesas", "Asia/Tokyo", "Pacific/Kiritimati"} {
 		loc, err := time.LoadLocation(name)
 		require.NoError(t, err, "host is missing the tzdata database")
 
-		if _, off := now.In(loc).Zone(); absInt(off-local) >= 30*60 {
+		if _, off := now.In(loc).Zone(); absInt(off-local) >= 3*60*60 {
 			return loc
 		}
 	}

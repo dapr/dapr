@@ -76,6 +76,7 @@ func (n *nodata) Run(t *testing.T, ctx context.Context) {
 		select {
 		case job := <-n.jobCh:
 			assert.Equal(t, "job/"+name, job.GetMethod())
+			assert.Nil(t, job.GetData())
 		case <-time.After(time.Second * 10):
 			assert.Fail(t, "timed out waiting for triggered job")
 		}
