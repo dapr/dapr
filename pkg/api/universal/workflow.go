@@ -149,7 +149,7 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 	}
 	if err := a.workflowEngine.Client().Terminate(ctx, req); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId(), err)
+			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId())
 		} else {
 			err = messages.ErrTerminateWorkflow.WithFormat(in.GetInstanceId(), err)
 		}
@@ -274,7 +274,7 @@ func (a *Universal) PurgeWorkflow(ctx context.Context, in *runtimev1pb.PurgeWork
 
 	if err := a.workflowEngine.Client().Purge(ctx, &req); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId(), err)
+			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId())
 		} else {
 			err = messages.ErrPurgeWorkflow.WithFormat(in.GetInstanceId(), err)
 		}

@@ -25,6 +25,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/fake"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/kit/logger"
 )
 
@@ -405,6 +406,7 @@ func TestResumeWorkflowApi(t *testing.T) {
 	}
 }
 
+
 func TestPurgeWorkflowApi(t *testing.T) {
 	testCases := []struct {
 		testName          string
@@ -468,6 +470,54 @@ func TestValidateWorkflowComponent(t *testing.T) {
 		u := &Universal{} // workflowEngine intentionally nil to simulate no engine configured
 		err := u.validateWorkflowComponent("my-workflow-component")
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "my-workflow-component")
+		require.Contains(t, err.Error(), "my-workflow-component"
+                     
+// TestWorkflowInstanceNotFoundError verifies that the Terminate and Purge
+// handlers format ErrWorkflowInstanceNotFound with a single argument. The
+// message template has one verb, so passing the sentinel error as an extra
+// argument used to append a "%!(EXTRA ...)" formatting marker to the message.
+// ErrorIs cannot catch this because APIError.Is ignores the message, so the
+// exact message is asserted here.
+func TestWorkflowInstanceNotFoundError(t *testing.T) {
+	expectedMessage := messages.ErrWorkflowInstanceNotFound.WithFormat(fakeInstanceID).Message()
+
+	fakeAPI := &Universal{
+		logger:     logger.NewLogger("test"),
+		resiliency: resiliency.New(nil),
+		workflowEngine: fake.New().WithClient(func() workflows.Workflow {
+			return fake.NewClient().
+				WithTerminate(func(ctx context.Context, req *workflows.TerminateRequest) error {
+					return api.ErrInstanceNotFound
+				}).
+				WithPurge(func(ctx context.Context, req *workflows.PurgeRequest) error {
+					return api.ErrInstanceNotFound
+				})
+		}),
+		actors: actorsfake.New(),
+	}
+
+	t.Run("Terminate returns the not-found error without extra formatting", func(t *testing.T) {
+		_, err := fakeAPI.TerminateWorkflow(t.Context(), &runtimev1pb.TerminateWorkflowRequest{
+			WorkflowComponent: fakeComponentName,
+			InstanceId:        fakeInstanceID,
+		})
+		require.ErrorIs(t, err, messages.ErrWorkflowInstanceNotFound)
+		var apiErr messages.APIError
+		require.ErrorAs(t, err, &apiErr)
+		require.Equal(t, expectedMessage, apiErr.Message())
+		require.NotContains(t, apiErr.Message(), "%!(EXTRA")
+	})
+
+	t.Run("Purge returns the not-found error without extra formatting", func(t *testing.T) {
+		_, err := fakeAPI.PurgeWorkflow(t.Context(), &runtimev1pb.PurgeWorkflowRequest{
+			WorkflowComponent: fakeComponentName,
+			InstanceId:        fakeInstanceID,
+		})
+		require.ErrorIs(t, err, messages.ErrWorkflowInstanceNotFound)
+		var apiErr messages.APIError
+		require.ErrorAs(t, err, &apiErr)
+		require.Equal(t, expectedMessage, apiErr.Message())
+		require.NotContains(t, apiErr.Message(), "%!(EXTRA")
+
 	})
 }
