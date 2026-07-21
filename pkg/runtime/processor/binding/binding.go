@@ -212,7 +212,7 @@ func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) 
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 
 	if b.readingBindings {
-		return b.startInputBinding(comp, binding)
+		return b.startInputBinding(ctx, comp, binding)
 	}
 
 	return nil

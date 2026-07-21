@@ -341,7 +341,7 @@ func TestReadInputBindings(t *testing.T) {
 				Name: testInputBindingName,
 			},
 		}
-		b.startInputBinding(comp, &mockBinding)
+		b.startInputBinding(t.Context(), comp, &mockBinding)
 
 		assert.False(t, <-ch)
 	})
@@ -390,7 +390,7 @@ func TestReadInputBindings(t *testing.T) {
 				Name: testInputBindingName,
 			},
 		}
-		b.startInputBinding(comp, &mockBinding)
+		b.startInputBinding(t.Context(), comp, &mockBinding)
 
 		assert.True(t, <-ch)
 	})
@@ -440,7 +440,7 @@ func TestReadInputBindings(t *testing.T) {
 				Name: testInputBindingName,
 			},
 		}
-		b.startInputBinding(comp, &mockBinding)
+		b.startInputBinding(t.Context(), comp, &mockBinding)
 
 		assert.Equal(t, string(rtmock.TestInputBindingData), mockBinding.Data)
 	})
@@ -480,7 +480,7 @@ func TestReadInputBindings(t *testing.T) {
 			},
 		}
 		b.compStore.AddInputBinding(testInputBindingName, mockBinding)
-		b.startInputBinding(comp, mockBinding)
+		b.startInputBinding(t.Context(), comp, mockBinding)
 
 		time.Sleep(80 * time.Millisecond)
 
