@@ -102,8 +102,10 @@ func TestRotatorTick(t *testing.T) {
 	t.Run("no rotation in progress, cert near expiry, starts distributing phase", func(t *testing.T) {
 		bndle := makeTestX509Bundle(t, time.Now().Add(15*24*time.Hour))
 
-		// Capture issuer cert expiry before tick can mutate the shared *X509 pointer.
-		originalIssuerExpiry := bndle.X509.IssChain[0].NotAfter
+		// Capture the expiry of the last cert in the issuer chain (what the
+		// rotator records as OldRootNotAfter) before tick can mutate the
+		// shared *X509 pointer.
+		originalIssuerExpiry := bndle.X509.IssChain[len(bndle.X509.IssChain)-1].NotAfter
 		originalAnchorLen := len(bndle.X509.TrustAnchors)
 
 		ms := &mockRotationStore{bndle: bndle}
