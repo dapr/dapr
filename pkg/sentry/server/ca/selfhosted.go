@@ -155,6 +155,19 @@ func (s *selfhosted) get(_ context.Context) (bundle.Bundle, error) {
 func (s *selfhosted) loadRotationState() (*bundle.RotationState, error) {
 	metaBytes, err := os.ReadFile(s.rotationStatePath())
 	if os.IsNotExist(err) {
+		// No rotation in progress. Best-effort removal of any orphaned pending
+		// credential files left behind by a crash between the pending-file and
+		// state-file writes, so a stale private key does not linger on disk
+		// until the next rotation.
+		for _, p := range []string{
+			s.rotationCACertPath(),
+			s.rotationIssCertPath(),
+			s.rotationIssKeyPath(),
+		} {
+			if removeErr := os.Remove(p); removeErr != nil && !os.IsNotExist(removeErr) {
+				log.Warnf("Failed to remove orphaned rotation file %s: %v", p, removeErr)
+			}
+		}
 		return nil, nil
 	}
 	if err != nil {
