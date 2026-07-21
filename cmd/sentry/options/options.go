@@ -50,9 +50,16 @@ type Options struct {
 	Metrics               *metrics.FlagOptions
 	Mode                  string
 
-	X509 X509Options
-	JWT  JWTOptions
-	OIDC OIDCOptions
+	X509     X509Options
+	JWT      JWTOptions
+	OIDC     OIDCOptions
+	Rotation RotationOptions
+}
+
+type RotationOptions struct {
+	TriggerWindow     time.Duration
+	PropagationWindow time.Duration
+	CheckInterval     time.Duration
 }
 
 type X509Options struct {
@@ -134,6 +141,9 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.JWT.SigningAlgorithm, "jwt-signing-algorithm", string(bundle.DefaultJWTSignatureAlgorithm), "Algorithm used for JWT signing, must be supported by signing key")
 	fs.StringVar(&opts.JWT.keyID, "jwt-key-id", "", "Key ID (kid) used for JWT signing (defaults to base64 encoded SHA-256 of the signing key)")
 	fs.DurationVar(&opts.JWT.TTL, "jwt-ttl", config.DefaultJWTTTL, "Time-to-live for JWT tokens (default 24h)")
+	fs.DurationVar(&opts.Rotation.TriggerWindow, "rotation-trigger-window", config.DefaultRotationTriggerWindow, "How long before root CA expiry to begin automatic rotation")
+	fs.DurationVar(&opts.Rotation.PropagationWindow, "rotation-propagation-window", config.DefaultRotationPropagationWindow, "How long to distribute combined trust anchors before switching signing to the new issuer; must be at least the workload certificate TTL")
+	fs.DurationVar(&opts.Rotation.CheckInterval, "rotation-check-interval", config.DefaultRotationCheckInterval, "How often to check root CA expiry for automatic rotation")
 	fs.BoolVar(&opts.OIDC.Enabled, "oidc-enabled", false, "Enable OIDC HTTP server for Dapr Sentry")
 	fs.IntVar(&opts.OIDC.ServerListenPort, "oidc-server-listen-port", 9080, "The port for the OIDC HTTP server")
 	fs.StringVar(&opts.OIDC.ServerListenAddress, "oidc-server-listen-address", "localhost", "The address for the OIDC HTTP server")
@@ -198,6 +208,16 @@ func (o *Options) Validate() error {
 
 	if o.JWT.Issuer != nil && !o.JWT.Enabled {
 		return errors.New("jwt-issuer cannot be set when jwt-enabled is false")
+	}
+
+	if o.Rotation.TriggerWindow <= 0 {
+		return errors.New("rotation-trigger-window must be greater than 0")
+	}
+	if o.Rotation.PropagationWindow <= 0 {
+		return errors.New("rotation-propagation-window must be greater than 0")
+	}
+	if o.Rotation.CheckInterval <= 0 {
+		return errors.New("rotation-check-interval must be greater than 0")
 	}
 
 	return nil

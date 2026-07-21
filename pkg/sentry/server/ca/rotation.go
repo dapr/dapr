@@ -20,21 +20,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
-)
-
-const (
-	// rotationTriggerWindow is how far before expiry to begin rotation.
-	rotationTriggerWindow = 30 * 24 * time.Hour
-
-	// propagationWindow is how long to distribute dual trust anchors before
-	// switching signing to the new issuer. Must be >= workload cert TTL so all
-	// existing workload certs are renewed against the new trust anchors.
-	propagationWindow = 24 * time.Hour
-
-	// rotationCheckInterval is how often the rotation loop polls cert expiry.
-	rotationCheckInterval = 1 * time.Hour
 )
 
 // rotator runs the root CA rotation state machine inside the sentry process.
@@ -50,25 +38,55 @@ type rotatorConfig struct {
 	TrustDomain      string
 	AllowedClockSkew time.Duration
 	WorkloadCertTTL  time.Duration
+
+	// TriggerWindow is how far before expiry to begin rotation.
+	TriggerWindow time.Duration
+	// PropagationWindow is how long to distribute dual trust anchors before
+	// switching signing to the new issuer. Must be >= workload cert TTL so all
+	// existing workload certs are renewed against the new trust anchors.
+	PropagationWindow time.Duration
+	// CheckInterval is how often the rotation loop polls cert expiry.
+	CheckInterval time.Duration
 }
 
 func newRotator(s store, c *ca) *rotator {
+	rcfg := rotatorConfig{
+		TrustDomain:       c.config.TrustDomain,
+		AllowedClockSkew:  c.config.AllowedClockSkew,
+		WorkloadCertTTL:   c.config.WorkloadCertTTL,
+		TriggerWindow:     c.config.Rotation.TriggerWindow,
+		PropagationWindow: c.config.Rotation.PropagationWindow,
+		CheckInterval:     c.config.Rotation.CheckInterval,
+	}
+	if rcfg.TriggerWindow <= 0 {
+		rcfg.TriggerWindow = config.DefaultRotationTriggerWindow
+	}
+	if rcfg.PropagationWindow <= 0 {
+		rcfg.PropagationWindow = config.DefaultRotationPropagationWindow
+	}
+	if rcfg.CheckInterval <= 0 {
+		rcfg.CheckInterval = config.DefaultRotationCheckInterval
+	}
+
 	return &rotator{
-		store: s,
-		ca:    c,
-		config: rotatorConfig{
-			TrustDomain:      c.config.TrustDomain,
-			AllowedClockSkew: c.config.AllowedClockSkew,
-			WorkloadCertTTL:  c.config.WorkloadCertTTL,
-		},
+		store:  s,
+		ca:     c,
+		config: rcfg,
 	}
 }
 
 // Run is the long-running rotation loop. It is registered as a concurrency
 // runner alongside the gRPC server.
 func (r *rotator) Run(ctx context.Context) error {
-	ticker := time.NewTicker(rotationCheckInterval)
+	ticker := time.NewTicker(r.config.CheckInterval)
 	defer ticker.Stop()
+
+	// Evaluate immediately on startup so a sentry restarted mid-rotation (or
+	// started close to root CA expiry) does not wait a full check interval
+	// before acting.
+	if err := r.tick(ctx); err != nil {
+		log.Errorf("Root CA rotation error: %v", err)
+	}
 
 	for {
 		select {
@@ -94,7 +112,7 @@ func (r *rotator) tick(ctx context.Context) error {
 	if rot == nil {
 		// No rotation in progress — check if we should start one.
 		rootCert := bndle.X509.IssChain[len(bndle.X509.IssChain)-1]
-		if time.Until(rootCert.NotAfter) < rotationTriggerWindow {
+		if time.Until(rootCert.NotAfter) < r.config.TriggerWindow {
 			return r.startDistributing(ctx, bndle)
 		}
 		return nil
@@ -105,7 +123,7 @@ func (r *rotator) tick(ctx context.Context) error {
 		// Wait until the propagation window has elapsed so that all Kubernetes
 		// pods have had a chance to pick up the combined trust anchors via the
 		// ConfigMap volume mount before we switch signing.
-		if time.Since(rot.DistributedAt) >= propagationWindow {
+		if time.Since(rot.DistributedAt) >= r.config.PropagationWindow {
 			return r.switchSigning(ctx, bndle)
 		}
 	case bundle.RotationPhaseSigning:
@@ -168,7 +186,7 @@ func (r *rotator) startDistributing(ctx context.Context, bndle bundle.Bundle) er
 	r.ca.mu.Unlock()
 
 	monitoring.RootCARotationPhaseChanged(string(bundle.RotationPhaseDistributing))
-	log.Infof("Root CA rotation: dual trust anchors distributed; will switch signing in %s", propagationWindow)
+	log.Infof("Root CA rotation: dual trust anchors distributed; will switch signing in %s", r.config.PropagationWindow)
 	return nil
 }
 

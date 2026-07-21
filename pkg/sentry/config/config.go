@@ -62,6 +62,20 @@ const (
 
 	// DefaultJWTTTL is the default time-to-live for JWT tokens.
 	DefaultJWTTTL = time.Hour * 24
+
+	// DefaultRotationTriggerWindow is how far before root CA expiry to begin
+	// automatic rotation.
+	DefaultRotationTriggerWindow = 30 * 24 * time.Hour
+
+	// DefaultRotationPropagationWindow is how long to distribute combined
+	// trust anchors before switching signing to the new issuer. Must be >= the
+	// workload cert TTL so all existing workload certs are renewed against the
+	// new trust anchors.
+	DefaultRotationPropagationWindow = 24 * time.Hour
+
+	// DefaultRotationCheckInterval is how often the rotation loop polls root
+	// CA expiry.
+	DefaultRotationCheckInterval = time.Hour
 )
 
 // Config holds the configuration for the Certificate Authority.
@@ -76,6 +90,7 @@ type Config struct {
 	IssuerCertPath   string
 	IssuerKeyPath    string
 	JWT              ConfigJWT
+	Rotation         ConfigRotation
 	Mode             modes.DaprMode
 	Validators       map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string
 	DefaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
@@ -90,6 +105,18 @@ type ConfigJWT struct {
 	SigningAlgorithm string
 	KeyID            *string // Key ID (kid) used for JWT signing (defaults to base64 encoded SHA-256 of the signing key)
 	TTL              time.Duration
+}
+
+// ConfigRotation holds the timing configuration for automatic root CA
+// rotation.
+type ConfigRotation struct {
+	// TriggerWindow is how far before root CA expiry to begin rotation.
+	TriggerWindow time.Duration
+	// PropagationWindow is how long to distribute combined trust anchors
+	// before switching signing to the new issuer.
+	PropagationWindow time.Duration
+	// CheckInterval is how often the rotation loop polls root CA expiry.
+	CheckInterval time.Duration
 }
 
 // FromConfigName returns a Sentry configuration based on a configuration spec.
@@ -129,6 +156,11 @@ func getDefaultConfig() Config {
 		AllowedClockSkew: defaultAllowedClockSkew,
 		TrustDomain:      defaultTrustDomain,
 		JWT:              ConfigJWT{},
+		Rotation: ConfigRotation{
+			TriggerWindow:     DefaultRotationTriggerWindow,
+			PropagationWindow: DefaultRotationPropagationWindow,
+			CheckInterval:     DefaultRotationCheckInterval,
+		},
 	}
 }
 

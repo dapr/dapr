@@ -24,20 +24,28 @@ import (
 type options struct {
 	execOpts []exec.Option
 
-	bundle        *bundle.Bundle
-	writeBundle   bool
-	port          int
-	healthzPort   int
-	metricsPort   int
-	configuration string
-	writeConfig   bool
-	kubeconfig    *string
-	trustDomain   *string
-	namespace     *string
-	mode          *string
+	bundle         *bundle.Bundle
+	writeBundle    bool
+	credentialsDir *string
+	port           int
+	healthzPort    int
+	metricsPort    int
+	configuration  string
+	writeConfig    bool
+	kubeconfig     *string
+	trustDomain    *string
+	namespace      *string
+	mode           *string
 
-	jwt  jwtOptions
-	oidc oidcOptions
+	jwt      jwtOptions
+	oidc     oidcOptions
+	rotation rotationOptions
+}
+
+type rotationOptions struct {
+	triggerWindow     *time.Duration
+	propagationWindow *time.Duration
+	checkInterval     *time.Duration
 }
 
 type jwtOptions struct {
@@ -100,6 +108,16 @@ func WithConfiguration(config string) Option {
 func WithWriteTrustBundle(writeBundle bool) Option {
 	return func(o *options) {
 		o.writeBundle = writeBundle
+	}
+}
+
+// WithCredentialsDirectory uses the given directory for issuer credentials
+// instead of a fresh temporary directory. Combine with
+// WithWriteTrustBundle(false) to start a sentry from another sentry's
+// on-disk bundle, e.g. to exercise restarts.
+func WithCredentialsDirectory(dir string) Option {
+	return func(o *options) {
+		o.credentialsDir = &dir
 	}
 }
 
@@ -214,5 +232,29 @@ func WithOIDCTLSKeyFile(keyFile string) Option {
 func WithJWTKeyID(kid string) Option {
 	return func(o *options) {
 		o.jwt.keyID = &kid
+	}
+}
+
+// WithRotationTriggerWindow sets how long before root CA expiry automatic
+// rotation begins.
+func WithRotationTriggerWindow(window time.Duration) Option {
+	return func(o *options) {
+		o.rotation.triggerWindow = &window
+	}
+}
+
+// WithRotationPropagationWindow sets how long combined trust anchors are
+// distributed before signing switches to the new issuer.
+func WithRotationPropagationWindow(window time.Duration) Option {
+	return func(o *options) {
+		o.rotation.propagationWindow = &window
+	}
+}
+
+// WithRotationCheckInterval sets how often the rotation loop polls root CA
+// expiry.
+func WithRotationCheckInterval(interval time.Duration) Option {
+	return func(o *options) {
+		o.rotation.checkInterval = &interval
 	}
 }
