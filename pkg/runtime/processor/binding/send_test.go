@@ -204,19 +204,29 @@ func TestBindingOptionsTimeout(t *testing.T) {
 	t.Run("very short timeout causes OPTIONS probe to fail with deadline exceeded", func(t *testing.T) {
 		// Set up a mock channel whose InvokeMethod returns a deadline exceeded error,
 		// simulating a slow-starting app that exceeds the probe timeout.
+		probeTimeout := 50 * time.Millisecond
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:                true,
 			Resiliency:            resiliency.New(log),
 			ComponentStore:        compstore.New(),
 			Meta:                  meta.New(meta.Options{}),
-			BindingOptionsTimeout: time.Millisecond, // extremely short so it reliably times out
+			BindingOptionsTimeout: probeTimeout,
 		})
 		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
-		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).
-			Return(nil, context.DeadlineExceeded)
-
+		mockAppChannel.On(
+			"InvokeMethod",
+			mock.MatchedBy(func(ctx context.Context) bool {
+				d, ok := ctx.Deadline()
+				if !ok {
+					return false
+				}
+				remaining := time.Until(d)
+				return remaining > 0 && remaining <= probeTimeout
+			}),
+			mock.Anything,
+		).Return(nil, context.DeadlineExceeded)
 		m := &rtmock.Binding{}
 		b.compStore.AddInputBinding("slow-app", m)
 
