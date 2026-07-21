@@ -442,3 +442,38 @@ func TestRotatorRunImmediateTick(t *testing.T) {
 		t.Fatal("rotation loop did not stop on context cancellation")
 	}
 }
+
+func TestNewRotatorPropagationClamp(t *testing.T) {
+	caObj := &ca{config: config.Config{
+		WorkloadCertTTL: 48 * time.Hour,
+		Rotation: config.ConfigRotation{
+			PropagationWindow: 24 * time.Hour,
+		},
+	}}
+	r := newRotator(&mockRotationStore{}, caObj)
+	assert.Equal(t, 48*time.Hour, r.config.PropagationWindow,
+		"propagation window must be clamped to at least the workload cert TTL")
+}
+
+func TestRotatorTickUnknownPhase(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-ns")
+
+	bndle := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+	bndle.Rotation = &bundle.RotationState{
+		Phase:         bundle.RotationPhase("bogus"),
+		DistributedAt: time.Now(),
+	}
+	ms := &mockRotationStore{bndle: bndle}
+	caObj := &ca{bundle: bndle}
+	r := newTestRotator(ms, caObj, rotatorConfig{
+		TrustDomain:       "test.example.com",
+		WorkloadCertTTL:   24 * time.Hour,
+		TriggerWindow:     30 * 24 * time.Hour,
+		PropagationWindow: 24 * time.Hour,
+		CheckInterval:     time.Hour,
+	})
+
+	err := r.tick(t.Context())
+	require.ErrorContains(t, err, "unknown rotation phase")
+	assert.Nil(t, ms.stored, "no state may be written for an unknown phase")
+}

@@ -45,9 +45,10 @@ type cleanup struct {
 
 func (e *cleanup) Setup(t *testing.T) []framework.Option {
 	// The root CA expires 20s in, so the full cycle runs during the test:
-	// distributing on the first check, signing ~2s in (propagation window),
-	// cleanup once the old root CA has expired (~20s) and the workload cert
-	// grace period (workloadCertTTL + allowedClockSkew = 4s) has elapsed.
+	// distributing on the first check, signing ~3s in (propagation window,
+	// which must be at least the workload cert TTL), cleanup once the old
+	// root CA has expired (~20s) and the workload cert grace period
+	// (workloadCertTTL + allowedClockSkew = 4s) has elapsed.
 	e.bndl = genBundle(t, time.Second*20)
 
 	kubeAPI, tb := sentryutils.KubeAPIRW(t, sentryutils.KubeAPIOptions{
@@ -60,7 +61,7 @@ func (e *cleanup) Setup(t *testing.T) []framework.Option {
 	})
 	e.tb = tb
 	e.sentry = newSentry(t, kubeAPI, e.bndl,
-		procsentry.WithRotationPropagationWindow(time.Second*2),
+		procsentry.WithRotationPropagationWindow(time.Second*3),
 	)
 
 	return []framework.Option{framework.WithProcesses(kubeAPI, e.sentry)}

@@ -45,15 +45,16 @@ type cleanup struct {
 
 func (e *cleanup) Setup(t *testing.T) []framework.Option {
 	// The root CA expires 20s in, so the full cycle runs during the test:
-	// distributing on the first check, signing ~2s in (propagation window),
-	// cleanup once the old root CA has expired (~20s) and the workload cert
-	// grace period (workloadCertTTL + allowedClockSkew = 4s) has elapsed.
+	// distributing on the first check, signing ~3s in (propagation window,
+	// which must be at least the workload cert TTL), cleanup once the old
+	// root CA has expired (~20s) and the workload cert grace period
+	// (workloadCertTTL + allowedClockSkew = 4s) has elapsed.
 	e.bundle = genBundle(t, time.Second*20)
 	e.sentry = procsentry.New(t,
 		procsentry.WithTrustDomain(trustDomain),
 		procsentry.WithCABundle(e.bundle),
 		procsentry.WithRotationCheckInterval(time.Second),
-		procsentry.WithRotationPropagationWindow(time.Second*2),
+		procsentry.WithRotationPropagationWindow(time.Second*3),
 		procsentry.WithConfiguration(`
 apiVersion: dapr.io/v1alpha1
 kind: Configuration

@@ -54,7 +54,8 @@ func (r *restart) Setup(t *testing.T) []framework.Option {
 	)
 
 	// The second sentry shares the credentials directory. Its short
-	// propagation window has already elapsed relative to the persisted
+	// propagation window (paired with a matching workload cert TTL so it is
+	// not clamped) has already elapsed relative to the persisted
 	// DistributedAt, so on resume it must progress the rotation to signing.
 	r.restarted = procsentry.New(t,
 		procsentry.WithTrustDomain(trustDomain),
@@ -63,6 +64,16 @@ func (r *restart) Setup(t *testing.T) []framework.Option {
 		procsentry.WithWriteTrustBundle(false),
 		procsentry.WithRotationCheckInterval(time.Second),
 		procsentry.WithRotationPropagationWindow(time.Second*2),
+		procsentry.WithConfiguration(`
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: sentryconfig
+spec:
+  mtls:
+    workloadCertTTL: "2s"
+    allowedClockSkew: "1s"
+`),
 	)
 
 	return []framework.Option{framework.WithProcesses(r.fresh)}

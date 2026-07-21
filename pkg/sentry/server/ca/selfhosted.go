@@ -16,7 +16,6 @@ package ca
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,22 +60,30 @@ type rotationStateJSON struct {
 
 // store saves the certificate bundle to the local filesystem.
 func (s *selfhosted) store(_ context.Context, bundle bundle.Bundle) error {
-	files := make(map[string][]byte)
-	files[s.config.RootCertPath] = bundle.X509.TrustAnchors
-	files[s.config.IssuerCertPath] = bundle.X509.IssChainPEM
-	files[s.config.IssuerKeyPath] = bundle.X509.IssKeyPEM
+	type fileWrite struct {
+		path string
+		data []byte
+	}
+
+	// Files are written in order. rotation-state.json must come last: its
+	// presence is what marks a rotation as in progress on load, so the pending
+	// credential files must already be on disk when it appears. A crash before
+	// the state file is written just leaves orphaned pending files, which are
+	// ignored and overwritten by the next rotation.
+	writes := []fileWrite{
+		{s.config.RootCertPath, bundle.X509.TrustAnchors},
+		{s.config.IssuerCertPath, bundle.X509.IssChainPEM},
+		{s.config.IssuerKeyPath, bundle.X509.IssKeyPEM},
+	}
 
 	if s.config.JWT.Enabled {
-		files[s.config.JWT.SigningKeyPath] = bundle.JWT.SigningKeyPEM
-		files[s.config.JWT.JWKSPath] = bundle.JWT.JWKSJson
+		writes = append(writes,
+			fileWrite{s.config.JWT.SigningKeyPath, bundle.JWT.SigningKeyPEM},
+			fileWrite{s.config.JWT.JWKSPath, bundle.JWT.JWKSJson},
+		)
 	}
 
 	if bundle.Rotation != nil {
-		// Write pending cert/key files and a metadata JSON file.
-		files[s.rotationCACertPath()] = bundle.Rotation.NewTrustAnchors
-		files[s.rotationIssCertPath()] = bundle.Rotation.NewIssChainPEM
-		files[s.rotationIssKeyPath()] = bundle.Rotation.NewIssKeyPEM
-
 		meta := rotationStateJSON{
 			Phase:           string(bundle.Rotation.Phase),
 			DistributedAt:   bundle.Rotation.DistributedAt,
@@ -87,9 +94,15 @@ func (s *selfhosted) store(_ context.Context, bundle bundle.Bundle) error {
 		if err != nil {
 			return fmt.Errorf("failed to marshal rotation state: %w", err)
 		}
-		files[s.rotationStatePath()] = metaBytes
+		writes = append(writes,
+			fileWrite{s.rotationCACertPath(), bundle.Rotation.NewTrustAnchors},
+			fileWrite{s.rotationIssCertPath(), bundle.Rotation.NewIssChainPEM},
+			fileWrite{s.rotationIssKeyPath(), bundle.Rotation.NewIssKeyPEM},
+			fileWrite{s.rotationStatePath(), metaBytes},
+		)
 	} else {
-		// Remove any stale rotation files.
+		// Remove any stale rotation files, the state file first so a crash
+		// mid-removal never leaves a state file without its credentials.
 		for _, p := range []string{
 			s.rotationStatePath(),
 			s.rotationCACertPath(),
@@ -102,12 +115,12 @@ func (s *selfhosted) store(_ context.Context, bundle bundle.Bundle) error {
 		}
 	}
 
-	for path, data := range files {
-		if path == "" || data == nil {
+	for _, w := range writes {
+		if w.path == "" || w.data == nil {
 			continue
 		}
-		if err := os.WriteFile(path, data, 0o600); err != nil {
-			return fmt.Errorf("failed to write file %s: %w", path, err)
+		if err := os.WriteFile(w.path, w.data, 0o600); err != nil {
+			return fmt.Errorf("failed to write file %s: %w", w.path, err)
 		}
 	}
 
@@ -160,10 +173,10 @@ func (s *selfhosted) loadRotationState() (*bundle.RotationState, error) {
 		OldRootNotAfter: meta.OldRootNotAfter,
 	}
 
-	// The pending credential files are written together with the state file; a
-	// state file without complete pending credentials is corruption (e.g. a
-	// crash mid-write), and resuming from it would eventually switch signing
-	// to empty credentials.
+	// The pending credential files are written before the state file; a state
+	// file without complete pending credentials is corruption (e.g. a crash
+	// mid-write), and resuming from it would eventually switch signing to
+	// empty credentials.
 	newCACert, err := os.ReadFile(s.rotationCACertPath())
 	if err != nil {
 		return nil, fmt.Errorf("failed to read rotation CA cert: %w", err)
@@ -176,13 +189,14 @@ func (s *selfhosted) loadRotationState() (*bundle.RotationState, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read rotation issuer key: %w", err)
 	}
-	if len(newCACert) == 0 || len(newIssCert) == 0 || len(newIssKey) == 0 {
-		return nil, errors.New("rotation state file exists but pending rotation credentials are empty")
-	}
 
 	rot.NewTrustAnchors = newCACert
 	rot.NewIssChainPEM = newIssCert
 	rot.NewIssKeyPEM = newIssKey
+
+	if err = validateRotationState(rot); err != nil {
+		return nil, fmt.Errorf("invalid rotation state on disk: %w", err)
+	}
 
 	newX509, err := verifyX509Bundle(rot.NewTrustAnchors, rot.NewIssChainPEM, rot.NewIssKeyPEM)
 	if err != nil {
