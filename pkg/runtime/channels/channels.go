@@ -175,6 +175,14 @@ func (c *Channels) AppChannel() channel.AppChannel {
 	return c.appChannel
 }
 
+// ActorCallbackStream returns the runtime-owned actor callback stream
+// manager. It is available even when no app channel exists (no app-port
+// configured): apps hosting actors over SubscribeActorEventsAlpha1 dial
+// daprd themselves and do not need to listen on any port.
+func (c *Channels) ActorCallbackStream() *callbackstream.Manager {
+	return c.actorCallbackStream
+}
+
 func (c *Channels) HTTPEndpointsAppChannel() channel.HTTPEndpointAppChannel {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
