@@ -16,6 +16,7 @@ package ca
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -159,31 +160,36 @@ func (s *selfhosted) loadRotationState() (*bundle.RotationState, error) {
 		OldRootNotAfter: meta.OldRootNotAfter,
 	}
 
+	// The pending credential files are written together with the state file; a
+	// state file without complete pending credentials is corruption (e.g. a
+	// crash mid-write), and resuming from it would eventually switch signing
+	// to empty credentials.
 	newCACert, err := os.ReadFile(s.rotationCACertPath())
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil {
 		return nil, fmt.Errorf("failed to read rotation CA cert: %w", err)
 	}
 	newIssCert, err := os.ReadFile(s.rotationIssCertPath())
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil {
 		return nil, fmt.Errorf("failed to read rotation issuer cert: %w", err)
 	}
 	newIssKey, err := os.ReadFile(s.rotationIssKeyPath())
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil {
 		return nil, fmt.Errorf("failed to read rotation issuer key: %w", err)
+	}
+	if len(newCACert) == 0 || len(newIssCert) == 0 || len(newIssKey) == 0 {
+		return nil, errors.New("rotation state file exists but pending rotation credentials are empty")
 	}
 
 	rot.NewTrustAnchors = newCACert
 	rot.NewIssChainPEM = newIssCert
 	rot.NewIssKeyPEM = newIssKey
 
-	if len(rot.NewIssChainPEM) > 0 && len(rot.NewIssKeyPEM) > 0 {
-		newX509, verifyErr := verifyX509Bundle(rot.NewTrustAnchors, rot.NewIssChainPEM, rot.NewIssKeyPEM)
-		if verifyErr != nil {
-			return nil, fmt.Errorf("failed to verify rotation bundle: %w", verifyErr)
-		}
-		rot.NewIssChain = newX509.IssChain
-		rot.NewIssKey = newX509.IssKey
+	newX509, err := verifyX509Bundle(rot.NewTrustAnchors, rot.NewIssChainPEM, rot.NewIssKeyPEM)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify rotation bundle: %w", err)
 	}
+	rot.NewIssChain = newX509.IssChain
+	rot.NewIssKey = newX509.IssKey
 
 	return rot, nil
 }

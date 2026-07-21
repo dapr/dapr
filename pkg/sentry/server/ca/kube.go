@@ -111,14 +111,31 @@ func (k *kube) get(ctx context.Context) (bundle.Bundle, error) {
 
 	// Load rotation state if it is present in the Secret.
 	if phase, ok := secret.Data[rotationPhaseKey]; ok && len(phase) > 0 {
+		// Malformed timestamps must invalidate the rotation state rather than
+		// silently becoming the zero time: a zero SigningAt or OldRootNotAfter
+		// would make the cleanup conditions appear satisfied and remove the old
+		// root CA prematurely.
+		distributedAt, err := unmarshalTime(secret.Data[rotationDistributedAtKey])
+		if err != nil {
+			return bundle.Bundle{}, fmt.Errorf("invalid rotation state in trust bundle secret: %w", err)
+		}
+		signingAt, err := unmarshalTime(secret.Data[rotationSigningAtKey])
+		if err != nil {
+			return bundle.Bundle{}, fmt.Errorf("invalid rotation state in trust bundle secret: %w", err)
+		}
+		oldRootNotAfter, err := unmarshalTime(secret.Data[rotationOldRootNotAfterKey])
+		if err != nil {
+			return bundle.Bundle{}, fmt.Errorf("invalid rotation state in trust bundle secret: %w", err)
+		}
+
 		rot := &bundle.RotationState{
 			Phase:           bundle.RotationPhase(phase),
 			NewTrustAnchors: secret.Data[rotationNewCACertKey],
 			NewIssChainPEM:  secret.Data[rotationNewIssCertKey],
 			NewIssKeyPEM:    secret.Data[rotationNewIssKeyKey],
-			DistributedAt:   unmarshalTime(secret.Data[rotationDistributedAtKey]),
-			SigningAt:       unmarshalTime(secret.Data[rotationSigningAtKey]),
-			OldRootNotAfter: unmarshalTime(secret.Data[rotationOldRootNotAfterKey]),
+			DistributedAt:   distributedAt,
+			SigningAt:       signingAt,
+			OldRootNotAfter: oldRootNotAfter,
 		}
 		if len(rot.NewIssChainPEM) > 0 && len(rot.NewIssKeyPEM) > 0 {
 			newX509, verifyErr := verifyX509Bundle(rot.NewTrustAnchors, rot.NewIssChainPEM, rot.NewIssKeyPEM)
@@ -224,13 +241,14 @@ func marshalTime(t time.Time) []byte {
 }
 
 // unmarshalTime deserialises RFC3339 bytes from a Secret back to time.Time.
-func unmarshalTime(b []byte) time.Time {
+// Empty input is valid (the zero time); malformed input is an error.
+func unmarshalTime(b []byte) (time.Time, error) {
 	if len(b) == 0 {
-		return time.Time{}
+		return time.Time{}, nil
 	}
 	t, err := time.Parse(time.RFC3339, string(b))
 	if err != nil {
-		return time.Time{}
+		return time.Time{}, fmt.Errorf("failed to parse rotation timestamp %q: %w", string(b), err)
 	}
-	return t
+	return t, nil
 }
