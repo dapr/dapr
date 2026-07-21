@@ -34,33 +34,92 @@ type KubeAPIOptions struct {
 	Namespace      string
 	ServiceAccount string
 	AppID          string
+
+	// WorkloadCertTTL and AllowedClockSkew are optionally set on the served
+	// daprsystem Configuration's mTLS spec.
+	WorkloadCertTTL  string
+	AllowedClockSkew string
+}
+
+// TrustBundleRW exposes the mutable dapr-trust-bundle Secret and ConfigMap
+// served by the mock Kubernetes API, for asserting on writes made by sentry
+// (e.g. during root CA rotation) and for seeding state before sentry starts.
+type TrustBundleRW struct {
+	Secret    *prockube.ResourceRW[corev1.Secret]
+	ConfigMap *prockube.ResourceRW[corev1.ConfigMap]
 }
 
 func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 	t.Helper()
 
-	return prockube.New(t,
+	return prockube.New(t, append(kubeAPIOptions(t, opts),
+		prockube.WithSecretGet(t, trustBundleSecret(opts.Bundle)),
+		prockube.WithConfigMapGet(t, trustBundleConfigMap(opts.Bundle)),
+	)...)
+}
+
+// KubeAPIRW is like KubeAPI, but serves the dapr-trust-bundle Secret and
+// ConfigMap read-write so sentry can persist trust bundle updates and read
+// them back.
+func KubeAPIRW(t *testing.T, opts KubeAPIOptions) (*prockube.Kubernetes, TrustBundleRW) {
+	t.Helper()
+
+	rw := TrustBundleRW{
+		Secret:    prockube.NewSecretRW(t, trustBundleSecret(opts.Bundle)),
+		ConfigMap: prockube.NewConfigMapRW(t, trustBundleConfigMap(opts.Bundle)),
+	}
+
+	kubeAPI := prockube.New(t, append(kubeAPIOptions(t, opts),
+		rw.Secret.Option(),
+		rw.ConfigMap.Option(),
+	)...)
+
+	return kubeAPI, rw
+}
+
+func trustBundleSecret(bndle bundle.Bundle) *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
+		ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
+		Data: map[string][]byte{
+			"ca.crt":     bndle.X509.TrustAnchors,
+			"issuer.crt": bndle.X509.IssChainPEM,
+			"issuer.key": bndle.X509.IssKeyPEM,
+		},
+	}
+}
+
+func trustBundleConfigMap(bndle bundle.Bundle) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
+		ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
+		Data:       map[string]string{"ca.crt": string(bndle.X509.TrustAnchors)},
+	}
+}
+
+func kubeAPIOptions(t *testing.T, opts KubeAPIOptions) []prockube.Option {
+	t.Helper()
+
+	var workloadCertTTL, allowedClockSkew *string
+	if opts.WorkloadCertTTL != "" {
+		workloadCertTTL = &opts.WorkloadCertTTL
+	}
+	if opts.AllowedClockSkew != "" {
+		allowedClockSkew = &opts.AllowedClockSkew
+	}
+
+	return []prockube.Option{
 		prockube.WithClusterDaprConfigurationList(t, new(configapi.ConfigurationList)),
 		prockube.WithDaprConfigurationGet(t, &configapi.Configuration{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "daprsystem"},
 			Spec: configapi.ConfigurationSpec{
-				MTLSSpec: &configapi.MTLSSpec{ControlPlaneTrustDomain: "integration.test.dapr.io"},
+				MTLSSpec: &configapi.MTLSSpec{
+					ControlPlaneTrustDomain: "integration.test.dapr.io",
+					WorkloadCertTTL:         workloadCertTTL,
+					AllowedClockSkew:        allowedClockSkew,
+				},
 			},
-		}),
-		prockube.WithSecretGet(t, &corev1.Secret{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
-			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
-			Data: map[string][]byte{
-				"ca.crt":     opts.Bundle.X509.TrustAnchors,
-				"issuer.crt": opts.Bundle.X509.IssChainPEM,
-				"issuer.key": opts.Bundle.X509.IssKeyPEM,
-			},
-		}),
-		prockube.WithConfigMapGet(t, &corev1.ConfigMap{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
-			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
-			Data:       map[string]string{"ca.crt": string(opts.Bundle.X509.TrustAnchors)},
 		}),
 		prockube.WithClusterPodList(t, &corev1.PodList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
@@ -96,5 +155,5 @@ func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 			w.Header().Add("Content-Type", "application/json")
 			w.Write(resp)
 		}),
-	)
+	}
 }

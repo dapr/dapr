@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/pkg/sentry/config"
 	bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 )
 
@@ -68,7 +69,7 @@ func makeTestX509Bundle(t *testing.T, notAfter time.Time) bundle.Bundle {
 }
 
 // newTestRotator builds a rotator with controlled config for testing.
-func newTestRotator(ms *mockRotationStore, caObj *ca, cfg rotatorConfig) *rotator {
+func newTestRotator(ms store, caObj *ca, cfg rotatorConfig) *rotator {
 	r := newRotator(ms, caObj)
 	r.config = cfg
 	return r
@@ -79,9 +80,12 @@ func TestRotatorTick(t *testing.T) {
 	t.Setenv("NAMESPACE", "test-ns")
 
 	cfg := rotatorConfig{
-		TrustDomain:      "test.example.com",
-		AllowedClockSkew: 0,
-		WorkloadCertTTL:  24 * time.Hour,
+		TrustDomain:       "test.example.com",
+		AllowedClockSkew:  0,
+		WorkloadCertTTL:   24 * time.Hour,
+		TriggerWindow:     30 * 24 * time.Hour,
+		PropagationWindow: 24 * time.Hour,
+		CheckInterval:     time.Hour,
 	}
 
 	t.Run("no rotation in progress, cert far from expiry, nothing happens", func(t *testing.T) {
@@ -272,9 +276,12 @@ func TestRotatorTickStoreErrors(t *testing.T) {
 	t.Setenv("NAMESPACE", "test-ns")
 
 	cfg := rotatorConfig{
-		TrustDomain:      "test.example.com",
-		AllowedClockSkew: 0,
-		WorkloadCertTTL:  24 * time.Hour,
+		TrustDomain:       "test.example.com",
+		AllowedClockSkew:  0,
+		WorkloadCertTTL:   24 * time.Hour,
+		TriggerWindow:     30 * 24 * time.Hour,
+		PropagationWindow: 24 * time.Hour,
+		CheckInterval:     time.Hour,
 	}
 
 	t.Run("get error is propagated", func(t *testing.T) {
@@ -346,4 +353,92 @@ func TestRotatorTickStoreErrors(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "failed to store cleaned-up bundle")
 	})
+}
+
+func TestNewRotatorConfigDefaults(t *testing.T) {
+	t.Run("zero rotation config falls back to defaults", func(t *testing.T) {
+		caObj := &ca{config: config.Config{
+			TrustDomain:      "test.example.com",
+			AllowedClockSkew: time.Second,
+			WorkloadCertTTL:  time.Minute,
+		}}
+		r := newRotator(&mockRotationStore{}, caObj)
+		assert.Equal(t, config.DefaultRotationTriggerWindow, r.config.TriggerWindow)
+		assert.Equal(t, config.DefaultRotationPropagationWindow, r.config.PropagationWindow)
+		assert.Equal(t, config.DefaultRotationCheckInterval, r.config.CheckInterval)
+		assert.Equal(t, "test.example.com", r.config.TrustDomain)
+		assert.Equal(t, time.Second, r.config.AllowedClockSkew)
+		assert.Equal(t, time.Minute, r.config.WorkloadCertTTL)
+	})
+
+	t.Run("explicit rotation config is preserved", func(t *testing.T) {
+		caObj := &ca{config: config.Config{
+			Rotation: config.ConfigRotation{
+				TriggerWindow:     time.Hour,
+				PropagationWindow: time.Minute,
+				CheckInterval:     time.Second,
+			},
+		}}
+		r := newRotator(&mockRotationStore{}, caObj)
+		assert.Equal(t, time.Hour, r.config.TriggerWindow)
+		assert.Equal(t, time.Minute, r.config.PropagationWindow)
+		assert.Equal(t, time.Second, r.config.CheckInterval)
+	})
+}
+
+// signalStore signals on a channel when store is called. Unlike
+// mockRotationStore it is safe to use across goroutines.
+type signalStore struct {
+	bndle    bundle.Bundle
+	storedCh chan bundle.Bundle
+}
+
+func (s *signalStore) get(_ context.Context) (bundle.Bundle, error) {
+	return s.bndle, nil
+}
+
+func (s *signalStore) store(_ context.Context, b bundle.Bundle) error {
+	select {
+	case s.storedCh <- b:
+	default:
+	}
+	return nil
+}
+
+func TestRotatorRunImmediateTick(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-ns")
+
+	// Near-expiry root CA so the first tick starts the DISTRIBUTING phase.
+	bndle := makeTestX509Bundle(t, time.Now().Add(15*24*time.Hour))
+	ms := &signalStore{bndle: bndle, storedCh: make(chan bundle.Bundle, 1)}
+	caObj := &ca{bundle: bndle}
+	r := newTestRotator(ms, caObj, rotatorConfig{
+		TrustDomain:       "test.example.com",
+		WorkloadCertTTL:   24 * time.Hour,
+		TriggerWindow:     30 * 24 * time.Hour,
+		PropagationWindow: 24 * time.Hour,
+		// Long enough that the ticker cannot fire during the test: any store
+		// call must come from the immediate startup tick.
+		CheckInterval: time.Hour,
+	})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	errCh := make(chan error, 1)
+	go func() { errCh <- r.Run(ctx) }()
+
+	select {
+	case stored := <-ms.storedCh:
+		require.NotNil(t, stored.Rotation)
+		assert.Equal(t, bundle.RotationPhaseDistributing, stored.Rotation.Phase)
+	case <-time.After(10 * time.Second):
+		t.Fatal("rotation loop did not tick immediately on startup")
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("rotation loop did not stop on context cancellation")
+	}
 }
