@@ -460,12 +460,13 @@ func (a *actors) RegisterHosted(ctx context.Context, cfg hostconfig.Config) erro
 			Type:       actorType,
 			Reentrancy: reentrancy,
 			Factory: app.New(app.Options{
-				ActorType:   actorType,
-				AppChannel:  cfg.AppChannel,
-				Resiliency:  a.resiliency,
-				IdleTimeout: idleTimeout,
-				Reentrancy:  a.reentrancyStore,
-				Placement:   a.placement,
+				ActorType:      actorType,
+				AppChannel:     cfg.AppChannel,
+				CallbackStream: cfg.CallbackStream,
+				Resiliency:     a.resiliency,
+				IdleTimeout:    idleTimeout,
+				Reentrancy:     a.reentrancyStore,
+				Placement:      a.placement,
 			}),
 		})
 	}

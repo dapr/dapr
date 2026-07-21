@@ -68,6 +68,7 @@ type Options struct {
 	DaprBlockShutdownDuration     *time.Duration
 	ActorsService                 string
 	ActorsDisseminationTimeout    time.Duration
+	HotReloadReconcileInterval    time.Duration
 	RemindersService              string
 	SchedulerAddress              []string
 	SchedulerJobStreams           uint
@@ -178,6 +179,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringSliceVar(&opts.SchedulerAddress, "scheduler-host-address", nil, "Addresses of the Scheduler service instance(s), as comma separated host:port pairs")
 	fs.UintVar(&opts.SchedulerJobStreams, "scheduler-job-streams", 3, "The number of active job streams to connect to the Scheduler service")
 	fs.DurationVar(&opts.ActorsDisseminationTimeout, "actors-disseminate-timeout", runtime.DefaultActorsDisseminationTimeout, "Timeout for the daprd-side actor placement dissemination round; if exceeded, daprd resets its placement stream and halts hosted actors. Should be greater than the placement service --disseminate-timeout (default 8s).")
+	fs.DurationVar(&opts.HotReloadReconcileInterval, "hot-reload-reconcile-interval", 0, "Period of the hot-reload backup reconcile that lists resources and reconciles any the event watch missed, e.g. '30s'. Zero uses the default (60s)")
 
 	// DEPRECATED.
 	fs.StringVar(&opts.RemindersService, "reminders-service", "", "Type and address of the reminders service, in the format 'type:address'")

@@ -121,6 +121,10 @@ func (b *binding) startInputBinding(comp componentsV1alpha1.Component, binding b
 		Name:    comp.Name,
 		Binding: binding,
 		Handler: b.sendBindingEventToApp,
+		// Read runs the binding directly on a long-lived loop rather than through
+		// a policy Runner, so decorate its context with the workload's SPIFFE
+		// identity just as the Runner does for other component operations.
+		DecorateContext: b.resiliency.ComponentContextDecorator(),
 	})
 	if err != nil {
 		log.Errorf("error reading from input binding %s: %s", comp.Name, err)
