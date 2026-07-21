@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"time"
 
@@ -67,12 +68,47 @@ func newRotator(s store, c *ca) *rotator {
 	if rcfg.CheckInterval <= 0 {
 		rcfg.CheckInterval = config.DefaultRotationCheckInterval
 	}
+	// Switching signing before every workload cert has been renewed against
+	// the combined trust anchors would break mTLS across the mesh, so the
+	// propagation window can never be shorter than the workload cert TTL.
+	if rcfg.PropagationWindow < rcfg.WorkloadCertTTL {
+		log.Warnf("Rotation propagation window %s is shorter than the workload cert TTL %s; using %s",
+			rcfg.PropagationWindow, rcfg.WorkloadCertTTL, rcfg.WorkloadCertTTL)
+		rcfg.PropagationWindow = rcfg.WorkloadCertTTL
+	}
 
 	return &rotator{
 		store:  s,
 		ca:     c,
 		config: rcfg,
 	}
+}
+
+// validateRotationState checks that a rotation state loaded from storage is
+// complete and consistent for its phase. Incomplete state (e.g. from a crash
+// mid-write or manual edits) must not drive the state machine: zero
+// timestamps would make phase transitions appear due immediately, and empty
+// pending credentials would eventually be promoted for signing.
+func validateRotationState(rot *bundle.RotationState) error {
+	switch rot.Phase {
+	case bundle.RotationPhaseDistributing:
+	case bundle.RotationPhaseSigning:
+		if rot.SigningAt.IsZero() {
+			return errors.New("rotation state in signing phase is missing the signing timestamp")
+		}
+	default:
+		return fmt.Errorf("unknown rotation phase %q", rot.Phase)
+	}
+	if rot.DistributedAt.IsZero() {
+		return errors.New("rotation state is missing the distributed timestamp")
+	}
+	if rot.OldRootNotAfter.IsZero() {
+		return errors.New("rotation state is missing the old root CA expiry")
+	}
+	if len(rot.NewTrustAnchors) == 0 || len(rot.NewIssChainPEM) == 0 || len(rot.NewIssKeyPEM) == 0 {
+		return errors.New("rotation state is missing pending rotation credentials")
+	}
+	return nil
 }
 
 // Run is the long-running rotation loop. It is registered as a concurrency
@@ -133,6 +169,11 @@ func (r *rotator) tick(ctx context.Context) error {
 		if time.Now().After(rot.OldRootNotAfter) && graceElapsed {
 			return r.cleanup(ctx, bndle)
 		}
+	default:
+		// A silent no-op here would stall the rotation indefinitely while the
+		// root CA marches towards expiry; surface it so operators see it in
+		// the logs on every check.
+		return fmt.Errorf("unknown rotation phase %q", rot.Phase)
 	}
 
 	return nil

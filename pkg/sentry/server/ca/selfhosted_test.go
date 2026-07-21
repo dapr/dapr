@@ -346,11 +346,11 @@ func TestSelfhosted_loadRotationState(t *testing.T) {
 		return s, dir
 	}
 
-	writeState := func(t *testing.T, dir string) {
+	writeState := func(t *testing.T, dir, content string) {
 		t.Helper()
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "rotation-state.json"),
-			[]byte(`{"phase":"distributing","distributed_at":"2026-01-01T00:00:00Z"}`), writePerm))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "rotation-state.json"), []byte(content), writePerm))
 	}
+	const validState = `{"phase":"distributing","distributed_at":"2026-01-01T00:00:00Z","old_root_not_after":"2027-01-01T00:00:00Z"}`
 
 	writePending := func(t *testing.T, dir string) bundle.Bundle {
 		t.Helper()
@@ -370,7 +370,7 @@ func TestSelfhosted_loadRotationState(t *testing.T) {
 
 	t.Run("complete rotation state is loaded", func(t *testing.T) {
 		s, dir := newStore(t)
-		writeState(t, dir)
+		writeState(t, dir, validState)
 		pending := writePending(t, dir)
 
 		bndl, err := s.get(t.Context())
@@ -384,7 +384,7 @@ func TestSelfhosted_loadRotationState(t *testing.T) {
 
 	t.Run("state file without pending credential files returns error", func(t *testing.T) {
 		s, dir := newStore(t)
-		writeState(t, dir)
+		writeState(t, dir, validState)
 
 		_, err := s.get(t.Context())
 		require.Error(t, err, "a state file without pending credentials must be treated as corruption")
@@ -392,12 +392,39 @@ func TestSelfhosted_loadRotationState(t *testing.T) {
 
 	t.Run("state file with empty pending credential file returns error", func(t *testing.T) {
 		s, dir := newStore(t)
-		writeState(t, dir)
+		writeState(t, dir, validState)
 		writePending(t, dir)
 		// Simulate a crash mid-write leaving an empty pending key file.
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "rotation-issuer.key"), nil, writePerm))
 
 		_, err := s.get(t.Context())
 		require.Error(t, err, "empty pending credentials must be treated as corruption")
+	})
+
+	t.Run("state file with unknown phase returns error", func(t *testing.T) {
+		s, dir := newStore(t)
+		writeState(t, dir, `{"phase":"bogus","distributed_at":"2026-01-01T00:00:00Z","old_root_not_after":"2027-01-01T00:00:00Z"}`)
+		writePending(t, dir)
+
+		_, err := s.get(t.Context())
+		require.ErrorContains(t, err, "unknown rotation phase")
+	})
+
+	t.Run("state file missing distributed timestamp returns error", func(t *testing.T) {
+		s, dir := newStore(t)
+		writeState(t, dir, `{"phase":"distributing","old_root_not_after":"2027-01-01T00:00:00Z"}`)
+		writePending(t, dir)
+
+		_, err := s.get(t.Context())
+		require.ErrorContains(t, err, "missing the distributed timestamp")
+	})
+
+	t.Run("state file in signing phase missing signing timestamp returns error", func(t *testing.T) {
+		s, dir := newStore(t)
+		writeState(t, dir, `{"phase":"signing","distributed_at":"2026-01-01T00:00:00Z","old_root_not_after":"2027-01-01T00:00:00Z"}`)
+		writePending(t, dir)
+
+		_, err := s.get(t.Context())
+		require.ErrorContains(t, err, "missing the signing timestamp")
 	})
 }

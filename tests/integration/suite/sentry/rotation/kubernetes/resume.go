@@ -59,11 +59,15 @@ func (r *resume) Setup(t *testing.T) []framework.Option {
 	})
 	require.NoError(t, err)
 
+	// The workload cert TTL must not exceed the propagation window, or the
+	// rotator clamps the window up to the TTL.
 	kubeAPI, tb := sentryutils.KubeAPIRW(t, sentryutils.KubeAPIOptions{
-		Bundle:         r.bndl,
-		Namespace:      "mynamespace",
-		ServiceAccount: "myserviceaccount",
-		AppID:          "myappid",
+		Bundle:           r.bndl,
+		Namespace:        "mynamespace",
+		ServiceAccount:   "myserviceaccount",
+		AppID:            "myappid",
+		WorkloadCertTTL:  "2s",
+		AllowedClockSkew: "1s",
 	})
 	r.tb = tb
 

@@ -137,14 +137,15 @@ func (k *kube) get(ctx context.Context) (bundle.Bundle, error) {
 			SigningAt:       signingAt,
 			OldRootNotAfter: oldRootNotAfter,
 		}
-		if len(rot.NewIssChainPEM) > 0 && len(rot.NewIssKeyPEM) > 0 {
-			newX509, verifyErr := verifyX509Bundle(rot.NewTrustAnchors, rot.NewIssChainPEM, rot.NewIssKeyPEM)
-			if verifyErr != nil {
-				return bundle.Bundle{}, fmt.Errorf("failed to verify rotation bundle: %w", verifyErr)
-			}
-			rot.NewIssChain = newX509.IssChain
-			rot.NewIssKey = newX509.IssKey
+		if err = validateRotationState(rot); err != nil {
+			return bundle.Bundle{}, fmt.Errorf("invalid rotation state in trust bundle secret: %w", err)
 		}
+		newX509, verifyErr := verifyX509Bundle(rot.NewTrustAnchors, rot.NewIssChainPEM, rot.NewIssKeyPEM)
+		if verifyErr != nil {
+			return bundle.Bundle{}, fmt.Errorf("failed to verify rotation bundle: %w", verifyErr)
+		}
+		rot.NewIssChain = newX509.IssChain
+		rot.NewIssKey = newX509.IssKey
 		bndle.Rotation = rot
 	}
 

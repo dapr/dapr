@@ -566,8 +566,9 @@ func TestKube_getRotationState(t *testing.T) {
 			"rotation.phase":          []byte(ca_bundle.RotationPhaseDistributing),
 			"rotation.new-ca.crt":     pending.X509.TrustAnchors,
 			"rotation.new-issuer.crt": pending.X509.IssChainPEM,
-			"rotation.new-issuer.key": pending.X509.IssKeyPEM,
-			"rotation.distributed-at": []byte("2026-01-01T00:00:00Z"),
+			"rotation.new-issuer.key":     pending.X509.IssKeyPEM,
+			"rotation.distributed-at":     []byte("2026-01-01T00:00:00Z"),
+			"rotation.old-root-not-after": []byte("2027-01-01T00:00:00Z"),
 		}
 		for k, v := range extraSecretData {
 			secretData[k] = v
@@ -629,4 +630,86 @@ func TestKube_getRotationState(t *testing.T) {
 		_, err := k.get(t.Context())
 		require.ErrorContains(t, err, "invalid rotation state")
 	})
+}
+
+func TestKube_getRotationStateValidation(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-ns")
+	// Reuse the fixture from TestKube_getRotationState via table of overrides.
+	base := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+	pending := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+
+	newKube := func(t *testing.T, overrides map[string][]byte) *kube {
+		t.Helper()
+		secretData := map[string][]byte{
+			"ca.crt":                      base.X509.TrustAnchors,
+			"tls.crt":                     base.X509.IssChainPEM,
+			"tls.key":                     base.X509.IssKeyPEM,
+			"rotation.phase":              []byte(ca_bundle.RotationPhaseDistributing),
+			"rotation.new-ca.crt":         pending.X509.TrustAnchors,
+			"rotation.new-issuer.crt":     pending.X509.IssChainPEM,
+			"rotation.new-issuer.key":     pending.X509.IssKeyPEM,
+			"rotation.distributed-at":     []byte("2026-01-01T00:00:00Z"),
+			"rotation.old-root-not-after": []byte("2027-01-01T00:00:00Z"),
+		}
+		for k, v := range overrides {
+			if v == nil {
+				delete(secretData, k)
+			} else {
+				secretData[k] = v
+			}
+		}
+		fakeclient := fake.NewSimpleClientset(
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"},
+				Data:       secretData,
+			},
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"},
+				Data:       map[string]string{"ca.crt": string(base.X509.TrustAnchors)},
+			},
+		)
+		return &kube{
+			client: fakeclient,
+			config: config.Config{
+				RootCertPath:   "ca.crt",
+				IssuerCertPath: "tls.crt",
+				IssuerKeyPath:  "tls.key",
+			},
+			namespace: "dapr-system-test",
+		}
+	}
+
+	tests := map[string]struct {
+		overrides map[string][]byte
+		expErr    string
+	}{
+		"unknown phase": {
+			overrides: map[string][]byte{"rotation.phase": []byte("bogus")},
+			expErr:    "unknown rotation phase",
+		},
+		"missing distributed-at": {
+			overrides: map[string][]byte{"rotation.distributed-at": nil},
+			expErr:    "missing the distributed timestamp",
+		},
+		"missing old-root-not-after": {
+			overrides: map[string][]byte{"rotation.old-root-not-after": nil},
+			expErr:    "missing the old root CA expiry",
+		},
+		"signing phase without signing-at": {
+			overrides: map[string][]byte{"rotation.phase": []byte(ca_bundle.RotationPhaseSigning)},
+			expErr:    "missing the signing timestamp",
+		},
+		"missing pending credentials": {
+			overrides: map[string][]byte{"rotation.new-issuer.key": nil},
+			expErr:    "missing pending rotation credentials",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			k := newKube(t, test.overrides)
+			_, err := k.get(t.Context())
+			require.ErrorContains(t, err, test.expErr)
+		})
+	}
 }
