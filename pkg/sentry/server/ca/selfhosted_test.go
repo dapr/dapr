@@ -427,4 +427,18 @@ func TestSelfhosted_loadRotationState(t *testing.T) {
 		_, err := s.get(t.Context())
 		require.ErrorContains(t, err, "missing the signing timestamp")
 	})
+
+	t.Run("orphaned pending files without a state file are removed", func(t *testing.T) {
+		s, dir := newStore(t)
+		// Simulate a crash after the pending credential files were written but
+		// before the state file was.
+		writePending(t, dir)
+
+		bndl, err := s.get(t.Context())
+		require.NoError(t, err)
+		assert.Nil(t, bndl.Rotation)
+		assert.NoFileExists(t, filepath.Join(dir, "rotation-ca.crt"))
+		assert.NoFileExists(t, filepath.Join(dir, "rotation-issuer.crt"))
+		assert.NoFileExists(t, filepath.Join(dir, "rotation-issuer.key"))
+	})
 }
