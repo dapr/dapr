@@ -20,6 +20,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/stretchr/testify/assert"
@@ -547,4 +548,85 @@ func bundlesEqual(t *testing.T, expected, actual ca_bundle.Bundle) {
 		}
 	}
 	assert.Equal(t, expected.JWT, actual.JWT)
+}
+
+func TestKube_getRotationState(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-ns")
+
+	base := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+	pending := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+
+	newKube := func(t *testing.T, extraSecretData map[string][]byte) *kube {
+		t.Helper()
+
+		secretData := map[string][]byte{
+			"ca.crt":                  base.X509.TrustAnchors,
+			"tls.crt":                 base.X509.IssChainPEM,
+			"tls.key":                 base.X509.IssKeyPEM,
+			"rotation.phase":          []byte(ca_bundle.RotationPhaseDistributing),
+			"rotation.new-ca.crt":     pending.X509.TrustAnchors,
+			"rotation.new-issuer.crt": pending.X509.IssChainPEM,
+			"rotation.new-issuer.key": pending.X509.IssKeyPEM,
+			"rotation.distributed-at": []byte("2026-01-01T00:00:00Z"),
+		}
+		for k, v := range extraSecretData {
+			secretData[k] = v
+		}
+
+		fakeclient := fake.NewSimpleClientset(
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"},
+				Data:       secretData,
+			},
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"},
+				Data:       map[string]string{"ca.crt": string(base.X509.TrustAnchors)},
+			},
+		)
+
+		return &kube{
+			client: fakeclient,
+			config: config.Config{
+				RootCertPath:   "ca.crt",
+				IssuerCertPath: "tls.crt",
+				IssuerKeyPath:  "tls.key",
+				JWT: config.ConfigJWT{
+					SigningKeyPath: "jwt.key",
+					JWKSPath:       "jwks.json",
+					TTL:            config.DefaultJWTTTL,
+				},
+			},
+			namespace: "dapr-system-test",
+		}
+	}
+
+	t.Run("valid rotation state is loaded", func(t *testing.T) {
+		k := newKube(t, nil)
+		bndl, err := k.get(t.Context())
+		require.NoError(t, err)
+		require.NotNil(t, bndl.Rotation)
+		assert.Equal(t, ca_bundle.RotationPhaseDistributing, bndl.Rotation.Phase)
+		assert.Equal(t, pending.X509.TrustAnchors, bndl.Rotation.NewTrustAnchors)
+		assert.Equal(t, "2026-01-01T00:00:00Z", bndl.Rotation.DistributedAt.Format(time.RFC3339))
+		assert.NotNil(t, bndl.Rotation.NewIssChain)
+		assert.NotNil(t, bndl.Rotation.NewIssKey)
+	})
+
+	t.Run("malformed distributed-at returns error", func(t *testing.T) {
+		k := newKube(t, map[string][]byte{"rotation.distributed-at": []byte("not-a-timestamp")})
+		_, err := k.get(t.Context())
+		require.ErrorContains(t, err, "invalid rotation state")
+	})
+
+	t.Run("malformed signing-at returns error", func(t *testing.T) {
+		k := newKube(t, map[string][]byte{"rotation.signing-at": []byte("not-a-timestamp")})
+		_, err := k.get(t.Context())
+		require.ErrorContains(t, err, "invalid rotation state")
+	})
+
+	t.Run("malformed old-root-not-after returns error", func(t *testing.T) {
+		k := newKube(t, map[string][]byte{"rotation.old-root-not-after": []byte("not-a-timestamp")})
+		_, err := k.get(t.Context())
+		require.ErrorContains(t, err, "invalid rotation state")
+	})
 }

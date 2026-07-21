@@ -385,6 +385,9 @@ func TestPatching(t *testing.T) {
 		},
 		{
 			name: "basic test",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.MTLSEnabled = true
+			},
 			assertFn: func(t *testing.T, pod *corev1.Pod) {
 				assertDaprdContainerFn(t, pod)
 
@@ -421,6 +424,8 @@ func TestPatching(t *testing.T) {
 				assert.Equal(t, "dapr-trust-bundle", trustBundleVolume.Name)
 				assert.NotNil(t, trustBundleVolume.ConfigMap)
 				assert.Equal(t, "dapr-trust-bundle", trustBundleVolume.ConfigMap.Name)
+				require.NotNil(t, trustBundleVolume.ConfigMap.Optional)
+				assert.True(t, *trustBundleVolume.ConfigMap.Optional)
 
 				// Assertions on added labels
 				assert.Equal(t, "true", pod.Labels[injectorConsts.SidecarInjectedLabel])
@@ -439,9 +444,25 @@ func TestPatching(t *testing.T) {
 			},
 		},
 		{
+			name: "trust bundle volume is not injected when mTLS is disabled",
+			assertFn: func(t *testing.T, pod *corev1.Pod) {
+				assertDaprdContainerFn(t, pod)
+
+				daprdContainer := pod.Spec.Containers[1]
+				require.Len(t, daprdContainer.VolumeMounts, 1)
+				assert.Equal(t, "dapr-identity-token", daprdContainer.VolumeMounts[0].Name)
+
+				require.Len(t, pod.Spec.Volumes, 1)
+				assert.Equal(t, "dapr-identity-token", pod.Spec.Volumes[0].Name)
+			},
+		},
+		{
 			name: "with UDS",
 			podModifierFn: func(pod *corev1.Pod) {
 				pod.Annotations[annotations.KeyUnixDomainSocketPath] = "/tmp/socket"
+			},
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.MTLSEnabled = true
 			},
 			assertFn: func(t *testing.T, pod *corev1.Pod) {
 				assertDaprdContainerFn(t, pod)

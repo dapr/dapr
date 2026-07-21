@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/stretchr/testify/assert"
@@ -325,4 +326,78 @@ func TestSelfhosted_get(t *testing.T) {
 			bundlesEqual(t, test.expBundle, bundle)
 		})
 	}
+}
+
+func TestSelfhosted_loadRotationState(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-ns")
+
+	newStore := func(t *testing.T) (*selfhosted, string) {
+		t.Helper()
+		dir := t.TempDir()
+		base := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+		s := &selfhosted{config: config.Config{
+			RootCertPath:   filepath.Join(dir, "ca.crt"),
+			IssuerCertPath: filepath.Join(dir, "issuer.crt"),
+			IssuerKeyPath:  filepath.Join(dir, "issuer.key"),
+		}}
+		require.NoError(t, os.WriteFile(s.config.RootCertPath, base.X509.TrustAnchors, writePerm))
+		require.NoError(t, os.WriteFile(s.config.IssuerCertPath, base.X509.IssChainPEM, writePerm))
+		require.NoError(t, os.WriteFile(s.config.IssuerKeyPath, base.X509.IssKeyPEM, writePerm))
+		return s, dir
+	}
+
+	writeState := func(t *testing.T, dir string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "rotation-state.json"),
+			[]byte(`{"phase":"distributing","distributed_at":"2026-01-01T00:00:00Z"}`), writePerm))
+	}
+
+	writePending := func(t *testing.T, dir string) bundle.Bundle {
+		t.Helper()
+		pending := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "rotation-ca.crt"), pending.X509.TrustAnchors, writePerm))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "rotation-issuer.crt"), pending.X509.IssChainPEM, writePerm))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "rotation-issuer.key"), pending.X509.IssKeyPEM, writePerm))
+		return pending
+	}
+
+	t.Run("no rotation state file returns nil rotation", func(t *testing.T) {
+		s, _ := newStore(t)
+		bndl, err := s.get(t.Context())
+		require.NoError(t, err)
+		assert.Nil(t, bndl.Rotation)
+	})
+
+	t.Run("complete rotation state is loaded", func(t *testing.T) {
+		s, dir := newStore(t)
+		writeState(t, dir)
+		pending := writePending(t, dir)
+
+		bndl, err := s.get(t.Context())
+		require.NoError(t, err)
+		require.NotNil(t, bndl.Rotation)
+		assert.Equal(t, bundle.RotationPhaseDistributing, bndl.Rotation.Phase)
+		assert.Equal(t, pending.X509.TrustAnchors, bndl.Rotation.NewTrustAnchors)
+		assert.NotNil(t, bndl.Rotation.NewIssChain)
+		assert.NotNil(t, bndl.Rotation.NewIssKey)
+	})
+
+	t.Run("state file without pending credential files returns error", func(t *testing.T) {
+		s, dir := newStore(t)
+		writeState(t, dir)
+
+		_, err := s.get(t.Context())
+		require.Error(t, err, "a state file without pending credentials must be treated as corruption")
+	})
+
+	t.Run("state file with empty pending credential file returns error", func(t *testing.T) {
+		s, dir := newStore(t)
+		writeState(t, dir)
+		writePending(t, dir)
+		// Simulate a crash mid-write leaving an empty pending key file.
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "rotation-issuer.key"), nil, writePerm))
+
+		_, err := s.get(t.Context())
+		require.Error(t, err, "empty pending credentials must be treated as corruption")
+	})
 }
