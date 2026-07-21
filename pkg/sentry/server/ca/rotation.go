@@ -143,6 +143,14 @@ func (r *rotator) tick(ctx context.Context) error {
 		return fmt.Errorf("failed to load bundle for rotation check: %w", err)
 	}
 
+	// The store returns a nil X.509 bundle when the stored state is absent or
+	// inconsistent (e.g. the trust anchors in the Kubernetes Secret and
+	// ConfigMap diverged after a partial write). The state machine cannot make
+	// safe decisions from that, so surface it rather than dereference nil.
+	if bndle.X509 == nil {
+		return errors.New("stored trust bundle is missing or inconsistent; skipping rotation check")
+	}
+
 	rot := bndle.Rotation
 
 	if rot == nil {
