@@ -397,7 +397,7 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 			var parsed bool
 			sc, parsed = diag.SpanContextFromW3CString(traceID)
 			if !parsed {
-				log.Warnf("failed to parse traceparent for pubsub topic %s, starting new root span", msg.Topic)
+				log.Warnf("failed to parse pubsub trace context for topic %s; will start a new root span if tracing is enabled", msg.Topic)
 			}
 		} else {
 			log.Warnf("ignored non-string traceid value: %v", iTraceID)
