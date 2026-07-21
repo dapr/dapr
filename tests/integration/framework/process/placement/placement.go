@@ -43,8 +43,9 @@ import (
 )
 
 type Placement struct {
-	exec  process.Interface
-	ports *ports.Ports
+	exec       process.Interface
+	ports      *ports.Ports
+	httpClient *http.Client
 
 	id                  string
 	port                int
@@ -128,6 +129,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 			))...,
 		),
 		ports:               fp,
+		httpClient:          client.HTTP(t),
 		id:                  opts.id,
 		port:                opts.port,
 		healthzPort:         opts.healthzPort,
@@ -146,6 +148,7 @@ func (p *Placement) Run(t *testing.T, ctx context.Context) {
 
 func (p *Placement) Cleanup(t *testing.T) {
 	p.cleanupOnce.Do(func() {
+		p.httpClient.CloseIdleConnections()
 		p.exec.Cleanup(t)
 	})
 }
@@ -153,11 +156,10 @@ func (p *Placement) Cleanup(t *testing.T) {
 func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	t.Helper()
 
-	client := client.HTTP(t)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/healthz", p.healthzPort), nil)
 	require.NoError(t, err)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, respErr := client.Do(req)
+		resp, respErr := p.httpClient.Do(req)
 		if assert.NoError(c, respErr) {
 			defer resp.Body.Close()
 			assert.Equal(c, http.StatusOK, resp.StatusCode)
@@ -187,7 +189,7 @@ func (p *Placement) HealthzPort() int {
 
 // Metrics returns a subset of metrics scraped from the metrics endpoint
 func (p *Placement) Metrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
-	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", p.MetricsAddress()))
+	return metrics.New(t, ctx, p.httpClient, fmt.Sprintf("http://%s/metrics", p.MetricsAddress()))
 }
 
 func (p *Placement) MetricsAddress() string {
