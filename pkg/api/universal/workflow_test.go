@@ -455,3 +455,19 @@ func TestPurgeWorkflowApi(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateWorkflowComponent(t *testing.T) {
+	t.Run("empty component name returns missing-component error", func(t *testing.T) {
+		u := &Universal{} // workflowEngine is nil
+		err := u.validateWorkflowComponent("")
+		require.Error(t, err)
+		require.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Error(), err.Error())
+	})
+
+	t.Run("non-empty component with no configured engine returns does-not-exist error", func(t *testing.T) {
+		u := &Universal{} // workflowEngine intentionally nil to simulate no engine configured
+		err := u.validateWorkflowComponent("my-workflow-component")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "my-workflow-component")
+	})
+}
