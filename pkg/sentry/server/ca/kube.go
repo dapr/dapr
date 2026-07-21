@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
@@ -153,10 +154,52 @@ func (k *kube) get(ctx context.Context) (bundle.Bundle, error) {
 }
 
 // store saves the certificate bundle to Kubernetes.
+//
+// The ConfigMap is updated before the Secret: the ConfigMap is the
+// propagation mechanism for trust anchors to workloads, while the Secret
+// carries the rotation state and acts as the state machine's commit point —
+// analogous to rotation-state.json being written last in standalone mode. A
+// failure in between leaves no persisted rotation state, so the next check
+// simply retries; the ConfigMap is best-effort restored in that case to keep
+// the two objects in sync.
 func (k *kube) store(ctx context.Context, bundle bundle.Bundle) error {
+	// Update the ConfigMap, which contains the public root certificate for
+	// other components. During rotation the combined (old+new) trust anchors
+	// are written here so that pods mounting this ConfigMap as a volume pick
+	// up both root CAs automatically.
+	configMap, err := k.client.CoreV1().ConfigMaps(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get trust bundle configmap: %w", err)
+	}
+
+	prevConfigMapData := make(map[string]string, len(configMap.Data))
+	for key, value := range configMap.Data {
+		prevConfigMapData[key] = value
+	}
+
+	if configMap.Data == nil {
+		configMap.Data = make(map[string]string)
+	}
+
+	configMap.Data[filepath.Base(k.config.RootCertPath)] = string(bundle.X509.TrustAnchors)
+
+	// If the OIDC server is enabled, clients could use that to access the JWKS
+	// to verify JWTs. However, the OIDC server is not required and so it is
+	// useful to also distribute the JWKS in the configmap.
+	delete(configMap.Data, filepath.Base(k.config.JWT.JWKSPath))
+	if bundle.JWT != nil {
+		configMap.Data[filepath.Base(k.config.JWT.JWKSPath)] = string(bundle.JWT.JWKSJson)
+	}
+
+	configMap, err = k.client.CoreV1().ConfigMaps(k.namespace).Update(ctx, configMap, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to update trust bundle configmap: %w", err)
+	}
+
 	// Update the Secret with all certificate data
 	secret, err := k.client.CoreV1().Secrets(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
 	if err != nil {
+		k.restoreConfigMap(ctx, configMap, prevConfigMapData)
 		return fmt.Errorf("failed to get trust bundle secret: %w", err)
 	}
 
@@ -211,38 +254,25 @@ func (k *kube) store(ctx context.Context, bundle bundle.Bundle) error {
 		delete(secret.Data, rotationOldRootNotAfterKey)
 	}
 
-	// Update the Secret
+	// Update the Secret. This is the last write: with the Secret persisted,
+	// the stored state is complete and consistent with the ConfigMap.
 	if _, err = k.client.CoreV1().Secrets(k.namespace).Update(ctx, secret, metav1.UpdateOptions{}); err != nil {
+		k.restoreConfigMap(ctx, configMap, prevConfigMapData)
 		return fmt.Errorf("failed to update trust bundle secret: %w", err)
 	}
 
-	// Also update ConfigMap which contains public root certificate for other components.
-	// During rotation the combined (old+new) trust anchors are written here so that
-	// pods mounting this ConfigMap as a volume pick up both root CAs automatically.
-	configMap, err := k.client.CoreV1().ConfigMaps(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to get trust bundle configmap: %w", err)
-	}
-
-	if configMap.Data == nil {
-		configMap.Data = make(map[string]string)
-	}
-
-	configMap.Data[filepath.Base(k.config.RootCertPath)] = string(bundle.X509.TrustAnchors)
-
-	// If the OIDC server is enabled, clients could use that to access the JWKS
-	// to verify JWTs. However, the OIDC server is not required and so it is
-	// useful to also distribute the JWKS in the configmap.
-	delete(configMap.Data, filepath.Base(k.config.JWT.JWKSPath))
-	if bundle.JWT != nil {
-		configMap.Data[filepath.Base(k.config.JWT.JWKSPath)] = string(bundle.JWT.JWKSJson)
-	}
-
-	if _, err = k.client.CoreV1().ConfigMaps(k.namespace).Update(ctx, configMap, metav1.UpdateOptions{}); err != nil {
-		return fmt.Errorf("failed to update trust bundle configmap: %w", err)
-	}
-
 	return nil
+}
+
+// restoreConfigMap best-effort restores the trust bundle ConfigMap to its
+// previous data after a failed Secret update, keeping the two objects in
+// sync: a lasting mismatch between them invalidates the bundle on the next
+// load.
+func (k *kube) restoreConfigMap(ctx context.Context, configMap *corev1.ConfigMap, prevData map[string]string) {
+	configMap.Data = prevData
+	if _, err := k.client.CoreV1().ConfigMaps(k.namespace).Update(ctx, configMap, metav1.UpdateOptions{}); err != nil {
+		log.Warnf("Failed to restore trust bundle ConfigMap after failed Secret update: %v", err)
+	}
 }
 
 // marshalTime serialises a time.Time to RFC3339 bytes for Secret storage.
