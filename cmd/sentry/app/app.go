@@ -149,6 +149,11 @@ func Run() {
 	}
 
 	cfg.JWT.TTL = opts.JWT.TTL
+	cfg.Rotation = config.ConfigRotation{
+		TriggerWindow:     opts.Rotation.TriggerWindow,
+		PropagationWindow: opts.Rotation.PropagationWindow,
+		CheckInterval:     opts.Rotation.CheckInterval,
+	}
 
 	// We use runner manager inception here since we want the inner manager to be
 	// restarted when the CA server needs to be restarted because of file events.
