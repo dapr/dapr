@@ -105,13 +105,11 @@ type engine struct {
 	actors               actors.Interface
 	getWorkItemsCount    atomic.Int32
 	mcpRegistrationCount atomic.Int32
-	// actorRegLock guards the registration counters and actorsRegistered.
-	// Held by the GetWorkItems connect/disconnect callbacks, EnsureActorsRegistered,
-	// and UnregisterMCPServer so all paths can read and write the registration
-	// state without racing.
-	actorRegLock sync.Mutex
-	// actorsRegistered tracks whether workflow actor types are currently
-	// registered with placement. Guarded by actorRegLock.
+	// actorRegLock makes the "increment+check+RegisterActors" and
+	// "decrement+check+UnRegisterActors" sequences atomic, so concurrent
+	// connects/disconnects and MCP register/unregister cannot double-register
+	// or unregister while another path believes actors are still live.
+	actorRegLock     sync.Mutex
 	actorsRegistered bool
 
 	worker        backend.TaskHubWorker
@@ -119,6 +117,11 @@ type engine struct {
 	client        workflows.Workflow
 	inProcessExec *inprocess.Executor
 	compStore     *compstore.ComponentStore
+
+	// streamShutdownCh is closed during shutdown to tell all connected
+	// GetWorkItems streams to terminate, so the gRPC API server's GracefulStop
+	// can complete promptly instead of blocking on long-lived worker streams.
+	streamShutdownCh chan any
 
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 }
@@ -164,12 +167,13 @@ func New(opts Options) (Interface, error) {
 	}
 
 	wfe := &engine{
-		appID:         opts.AppID,
-		namespace:     opts.Namespace,
-		actors:        opts.Actors,
-		backend:       abackend,
-		inProcessExec: inProcessExec,
-		compStore:     opts.ComponentStore,
+		appID:            opts.AppID,
+		namespace:        opts.Namespace,
+		actors:           opts.Actors,
+		backend:          abackend,
+		inProcessExec:    inProcessExec,
+		compStore:        opts.ComponentStore,
+		streamShutdownCh: make(chan any),
 	}
 
 	// Keep the actor refcount balanced when Executor.Run tears holders down
@@ -226,6 +230,7 @@ func New(opts Options) (Interface, error) {
 			return nil
 		}),
 		backend.WithStreamSendTimeout(time.Second*10),
+		backend.WithStreamShutdownChannel(wfe.streamShutdownCh),
 	)
 
 	var topts []backend.NewTaskWorkerOptions
@@ -350,6 +355,11 @@ func (wfe *engine) Run(ctx context.Context) error {
 
 	log.Info("Workflow engine started")
 	<-ctx.Done()
+
+	// Signal all connected GetWorkItems streams to terminate before draining the
+	// worker, so the gRPC API server's GracefulStop does not block on them during
+	// shutdown or a SIGHUP reload.
+	close(wfe.streamShutdownCh)
 
 	if err := wfe.worker.Shutdown(context.Background()); err != nil {
 		return fmt.Errorf("failed to shutdown the workflow worker: %w", err)
