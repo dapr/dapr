@@ -479,3 +479,21 @@ func TestRotatorTickUnknownPhase(t *testing.T) {
 	require.ErrorContains(t, err, "unknown rotation phase")
 	assert.Nil(t, ms.stored, "no state may be written for an unknown phase")
 }
+
+func TestRotatorTickNilBundle(t *testing.T) {
+	// A nil X.509 bundle is what the store returns when the persisted state is
+	// absent or inconsistent (e.g. Secret/ConfigMap trust anchors diverged
+	// after a partial write); tick must error rather than dereference nil.
+	ms := &mockRotationStore{bndle: bundle.Bundle{}}
+	r := newTestRotator(ms, &ca{}, rotatorConfig{
+		TrustDomain:       "test.example.com",
+		WorkloadCertTTL:   24 * time.Hour,
+		TriggerWindow:     30 * 24 * time.Hour,
+		PropagationWindow: 24 * time.Hour,
+		CheckInterval:     time.Hour,
+	})
+
+	err := r.tick(t.Context())
+	require.ErrorContains(t, err, "missing or inconsistent")
+	assert.Nil(t, ms.stored)
+}

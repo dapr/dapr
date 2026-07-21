@@ -19,6 +19,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"testing"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/dapr/dapr/pkg/sentry/config"
 	ca_bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
@@ -793,5 +795,94 @@ func TestKube_storeRotationState(t *testing.T) {
 		require.NoError(t, err)
 		_, ok := secret.Data["rotation.signing-at"]
 		assert.False(t, ok, "a zero SigningAt must remove any previously stored value")
+	})
+}
+
+func TestKube_storePartialFailure(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-ns")
+
+	base := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+	pending := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+
+	origAnchors := []byte("orig-anchors")
+	newObjects := func() (*corev1.Secret, *corev1.ConfigMap) {
+		return &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"},
+				Data:       map[string][]byte{"ca.crt": origAnchors},
+			}, &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"},
+				Data:       map[string]string{"ca.crt": string(origAnchors)},
+			}
+	}
+
+	rotationBundle := ca_bundle.Bundle{
+		X509: base.X509,
+		Rotation: &ca_bundle.RotationState{
+			Phase:           ca_bundle.RotationPhaseDistributing,
+			NewTrustAnchors: pending.X509.TrustAnchors,
+			NewIssChainPEM:  pending.X509.IssChainPEM,
+			NewIssKeyPEM:    pending.X509.IssKeyPEM,
+			DistributedAt:   time.Now(),
+			OldRootNotAfter: time.Now().Add(time.Hour),
+		},
+	}
+
+	newKube := func(t *testing.T, objects ...runtime.Object) *kube {
+		t.Helper()
+		return &kube{
+			client: fake.NewSimpleClientset(objects...),
+			config: config.Config{
+				RootCertPath:   "ca.crt",
+				IssuerCertPath: "tls.crt",
+				IssuerKeyPath:  "tls.key",
+			},
+			namespace: "dapr-system-test",
+		}
+	}
+
+	t.Run("failed ConfigMap update leaves the Secret untouched", func(t *testing.T) {
+		sec, cm := newObjects()
+		k := newKube(t, sec, cm)
+		k.client.(*fake.Clientset).PrependReactor("update", "configmaps", func(k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errors.New("configmap update failed")
+		})
+
+		require.Error(t, k.store(t.Context(), rotationBundle))
+
+		secret, err := k.client.CoreV1().Secrets("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, origAnchors, secret.Data["ca.crt"], "the Secret must not be written before the ConfigMap")
+		_, ok := secret.Data["rotation.phase"]
+		assert.False(t, ok, "no rotation state may be persisted when the ConfigMap update fails")
+	})
+
+	t.Run("failed Secret update restores the ConfigMap", func(t *testing.T) {
+		sec, cm := newObjects()
+		k := newKube(t, sec, cm)
+		k.client.(*fake.Clientset).PrependReactor("update", "secrets", func(k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errors.New("secret update failed")
+		})
+
+		require.Error(t, k.store(t.Context(), rotationBundle))
+
+		configMap, err := k.client.CoreV1().ConfigMaps("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, string(origAnchors), configMap.Data["ca.crt"],
+			"the ConfigMap must be restored when the Secret update fails")
+	})
+
+	t.Run("successful store updates both objects consistently", func(t *testing.T) {
+		sec, cm := newObjects()
+		k := newKube(t, sec, cm)
+
+		require.NoError(t, k.store(t.Context(), rotationBundle))
+
+		secret, err := k.client.CoreV1().Secrets("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		configMap, err := k.client.CoreV1().ConfigMaps("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, string(secret.Data["ca.crt"]), configMap.Data["ca.crt"],
+			"Secret and ConfigMap trust anchors must match after store")
+		assert.NotEmpty(t, secret.Data["rotation.phase"])
 	})
 }
