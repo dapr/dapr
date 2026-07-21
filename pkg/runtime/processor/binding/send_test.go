@@ -232,6 +232,7 @@ func TestBindingOptionsTimeout(t *testing.T) {
 
 		err := b.StartReadingFromBindings(t.Context())
 		require.Error(t, err, "expected OPTIONS probe to fail when app is slow to respond")
+		mockAppChannel.AssertExpectations(t)
 	})
 }
 
