@@ -149,15 +149,34 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 
 	jobs := make([]*schedulerv1pb.NamedJob, 0, len(list.GetJobs()))
 	for _, job := range list.GetJobs() {
-		meta, err := serialize.MetadataFromKey(job.GetName())
+		// Recover the metadata from the stored protobuf rather than re-parsing
+		// the job key. Re-splitting the key on "||" corrupts the namespace,
+		// actor type and id when any of those values themselves contain "||".
+		var meta schedulerv1pb.JobMetadata
+		if err := job.GetJob().GetMetadata().UnmarshalTo(&meta); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal job metadata: %w", err)
+		}
+
+		// Recover the reminder/job name by trimming the known key prefix built
+		// from the metadata. The cron key is "<etcdNamespace>/jobs/<composed>";
+		// names cannot contain '/', so the segment after the final '/' is the
+		// composed name. Trimming the metadata prefix off it then yields the
+		// reminder/job name unambiguously, even when the name or actor id
+		// contains "||".
+		prefix, err := serialize.PrefixFromMetadata(&meta)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse job metadata: %w", err)
+			return nil, fmt.Errorf("failed to build job key prefix: %w", err)
+		}
+
+		composed := job.GetName()[strings.LastIndex(job.GetName(), "/")+1:]
+		if !strings.HasPrefix(composed, prefix) {
+			return nil, fmt.Errorf("job key %q does not match expected prefix %q from its metadata", job.GetName(), prefix)
 		}
 
 		j := job.GetJob()
 		jobs = append(jobs, &schedulerv1pb.NamedJob{
-			Name:     job.GetName()[strings.LastIndex(job.GetName(), "||")+2:],
-			Metadata: meta,
+			Name:     strings.TrimPrefix(composed, prefix),
+			Metadata: &meta,
 			//nolint:protogetter
 			Job: &schedulerv1pb.Job{
 				Schedule:      j.Schedule,
