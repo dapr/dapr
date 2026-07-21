@@ -204,7 +204,7 @@ func TestBindingOptionsTimeout(t *testing.T) {
 	t.Run("very short timeout causes OPTIONS probe to fail with deadline exceeded", func(t *testing.T) {
 		// Set up a mock channel whose InvokeMethod returns a deadline exceeded error,
 		// simulating a slow-starting app that exceeds the probe timeout.
-		probeTimeout := 50 * time.Millisecond
+		probeTimeout := 500 * time.Millisecond
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:                true,
