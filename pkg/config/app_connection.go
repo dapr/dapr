@@ -26,8 +26,8 @@ const (
 	AppHealthConfigDefaultProbeTimeout = 500 * time.Millisecond
 	// AppHealthConfigDefaultThreshold is the default threshold for determining failures in app health checks.
 	AppHealthConfigDefaultThreshold = int32(3)
-	// DefaultBindingOptionsTimeout is the default timeout for the OPTIONS request
-	// sent to an HTTP app to discover whether it is subscribed to an input binding.
+	// DefaultBindingOptionsTimeout is the default timeout for the subscription discovery request
+	// sent to the app for input bindings (HTTP OPTIONS or gRPC ListInputBindings).
 	// Apps with slow startup (JVM, JIT, resource-constrained) may need a larger value.
 	DefaultBindingOptionsTimeout = 3 * time.Second
 )

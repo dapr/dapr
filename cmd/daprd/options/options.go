@@ -181,7 +181,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.UintVar(&opts.SchedulerJobStreams, "scheduler-job-streams", 3, "The number of active job streams to connect to the Scheduler service")
 	fs.DurationVar(&opts.ActorsDisseminationTimeout, "actors-disseminate-timeout", runtime.DefaultActorsDisseminationTimeout, "Timeout for the daprd-side actor placement dissemination round; if exceeded, daprd resets its placement stream and halts hosted actors. Should be greater than the placement service --disseminate-timeout (default 8s).")
 	fs.DurationVar(&opts.HotReloadReconcileInterval, "hot-reload-reconcile-interval", 0, "Period of the hot-reload backup reconcile that lists resources and reconciles any the event watch missed, e.g. '30s'. Zero uses the default (60s)")
-	fs.DurationVar(&opts.BindingOptionsTimeout, "binding-options-timeout", config.DefaultBindingOptionsTimeout, "Timeout for the OPTIONS request sent to HTTP apps to discover input binding subscriptions. Increase for apps with slow startup (e.g. JVM/JIT workloads).")
+	fs.DurationVar(&opts.BindingOptionsTimeout, "binding-options-timeout", config.DefaultBindingOptionsTimeout, "Timeout for input binding subscription discovery requests to the app (HTTP OPTIONS or gRPC ListInputBindings). Increase for apps with slow startup (e.g. JVM/JIT workloads).")
 
 	// DEPRECATED.
 	fs.StringVar(&opts.RemindersService, "reminders-service", "", "Type and address of the reminders service, in the format 'type:address'")

@@ -139,9 +139,9 @@ type Config struct {
 	// HotReloadReconcileInterval overrides the hot-reload backup reconcile
 	// period. Zero uses the reconciler default (60s).
 	HotReloadReconcileInterval time.Duration
-	// BindingOptionsTimeout overrides the default timeout for the OPTIONS
-	// discovery request sent to HTTP apps for input bindings.
-	// Zero uses DefaultBindingOptionsTimeout (3s).
+	// BindingOptionsTimeout overrides the timeout for the subscription discovery
+	// request sent to the app for input bindings (HTTP OPTIONS or gRPC ListInputBindings).
+	// Non-positive values use config.DefaultBindingOptionsTimeout (3s).
 	BindingOptionsTimeout time.Duration
 }
 
