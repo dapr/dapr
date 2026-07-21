@@ -46,6 +46,11 @@ func (NoOp) ComponentOutboundPolicy(name string, componentName ComponentType) *P
 	return nil
 }
 
+// ComponentContextDecorator returns nil; NoOp never decorates component contexts.
+func (NoOp) ComponentContextDecorator() ComponentContextFn {
+	return nil
+}
+
 // BuiltInPolicy returns a NoOp policy definition for a built-in policy.
 func (NoOp) BuiltInPolicy(name BuiltInPolicyName) *PolicyDefinition {
 	return nil
