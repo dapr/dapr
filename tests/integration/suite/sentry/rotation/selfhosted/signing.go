@@ -43,11 +43,23 @@ func (s *signing) Setup(t *testing.T) []framework.Option {
 	// window lets the rotation progress to the signing phase, where it stays as
 	// the old root CA is still valid for the duration of the test.
 	s.bundle = genBundle(t, time.Hour)
+	// The workload cert TTL must not exceed the propagation window, or the
+	// rotator clamps the window up to the TTL.
 	s.sentry = procsentry.New(t,
 		procsentry.WithTrustDomain(trustDomain),
 		procsentry.WithCABundle(s.bundle),
 		procsentry.WithRotationCheckInterval(time.Second),
 		procsentry.WithRotationPropagationWindow(time.Second*2),
+		procsentry.WithConfiguration(`
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: sentryconfig
+spec:
+  mtls:
+    workloadCertTTL: "2s"
+    allowedClockSkew: "1s"
+`),
 	)
 
 	return []framework.Option{framework.WithProcesses(s.sentry)}

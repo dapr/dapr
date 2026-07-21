@@ -47,11 +47,15 @@ func (s *signing) Setup(t *testing.T) []framework.Option {
 	// the old root CA is still valid for the duration of the test.
 	s.bndl = genBundle(t, time.Hour)
 
+	// The workload cert TTL must not exceed the propagation window, or the
+	// rotator clamps the window up to the TTL.
 	kubeAPI, tb := sentryutils.KubeAPIRW(t, sentryutils.KubeAPIOptions{
-		Bundle:         s.bndl,
-		Namespace:      "mynamespace",
-		ServiceAccount: "myserviceaccount",
-		AppID:          "myappid",
+		Bundle:           s.bndl,
+		Namespace:        "mynamespace",
+		ServiceAccount:   "myserviceaccount",
+		AppID:            "myappid",
+		WorkloadCertTTL:  "2s",
+		AllowedClockSkew: "1s",
 	})
 	s.tb = tb
 	s.sentry = newSentry(t, kubeAPI, s.bndl,
