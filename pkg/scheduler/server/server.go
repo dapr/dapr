@@ -64,6 +64,9 @@ type Options struct {
 
 	Workers uint32
 
+	Backend       *string
+	BackendConfig any
+
 	EtcdEmbed                      bool
 	EtcdDataDir                    string
 	EtcdName                       string
@@ -121,42 +124,48 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		broadcastAddr = net.JoinHostPort(haddr, strconv.Itoa(opts.Port))
 	}
 
-	etcd, err := etcd.New(ctx, etcd.Options{
-		Name:                       opts.EtcdName,
-		Embed:                      opts.EtcdEmbed,
-		InitialCluster:             opts.EtcdInitialCluster,
-		ClientPort:                 opts.EtcdClientPort,
-		ClientListenAddress:        opts.EtcdClientListenAddress,
-		SpaceQuota:                 opts.EtcdSpaceQuota,
-		CompactionMode:             opts.EtcdCompactionMode,
-		CompactionRetention:        opts.EtcdCompactionRetention,
-		SnapshotCount:              opts.EtcdSnapshotCount,
-		MaxSnapshots:               opts.EtcdMaxSnapshots,
-		MaxWALs:                    opts.EtcdMaxWALs,
-		BackendBatchLimit:          opts.EtcdBackendBatchLimit,
-		BackendBatchInterval:       opts.EtcdBackendBatchInterval,
-		MaxTxnOps:                  opts.EtcdMaxTxnOps,
-		DefragThresholdMB:          opts.EtcdDefragThresholdMB,
-		InitialElectionTickAdvance: opts.EtcdInitialElectionTickAdvance,
-		Metrics:                    opts.EtcdMetrics,
-		Security:                   opts.Security,
-		DataDir:                    opts.EtcdDataDir,
-		Healthz:                    opts.Healthz,
-		Mode:                       opts.Mode,
+	var etcdServer etcd.Interface
+	if opts.Backend == nil || *opts.Backend == cron.BackendEtcd {
+		var err error
+		etcdServer, err = etcd.New(ctx, etcd.Options{
+			Name:                       opts.EtcdName,
+			Embed:                      opts.EtcdEmbed,
+			InitialCluster:             opts.EtcdInitialCluster,
+			ClientPort:                 opts.EtcdClientPort,
+			ClientListenAddress:        opts.EtcdClientListenAddress,
+			SpaceQuota:                 opts.EtcdSpaceQuota,
+			CompactionMode:             opts.EtcdCompactionMode,
+			CompactionRetention:        opts.EtcdCompactionRetention,
+			SnapshotCount:              opts.EtcdSnapshotCount,
+			MaxSnapshots:               opts.EtcdMaxSnapshots,
+			MaxWALs:                    opts.EtcdMaxWALs,
+			BackendBatchLimit:          opts.EtcdBackendBatchLimit,
+			BackendBatchInterval:       opts.EtcdBackendBatchInterval,
+			MaxTxnOps:                  opts.EtcdMaxTxnOps,
+			DefragThresholdMB:          opts.EtcdDefragThresholdMB,
+			InitialElectionTickAdvance: opts.EtcdInitialElectionTickAdvance,
+			Metrics:                    opts.EtcdMetrics,
+			Security:                   opts.Security,
+			DataDir:                    opts.EtcdDataDir,
+			Healthz:                    opts.Healthz,
+			Mode:                       opts.Mode,
 
-		ClientEndpoints: opts.EtcdClientEndpoints,
-		ClientUsername:  opts.EtcdClientUsername,
-		ClientPassword:  opts.EtcdClientPassword,
-	})
-	if err != nil {
-		return nil, err
+			ClientEndpoints: opts.EtcdClientEndpoints,
+			ClientUsername:  opts.EtcdClientUsername,
+			ClientPassword:  opts.EtcdClientPassword,
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	cron := cron.New(cron.Options{
-		ID:      opts.EtcdName,
-		Host:    &schedulerv1pb.Host{Address: broadcastAddr},
-		Etcd:    etcd,
-		Workers: opts.Workers,
+		ID:            opts.EtcdName,
+		Host:          &schedulerv1pb.Host{Address: broadcastAddr},
+		Etcd:          etcdServer,
+		Backend:       opts.Backend,
+		BackendConfig: opts.BackendConfig,
+		Workers:       opts.Workers,
 	})
 
 	if opts.Controller != nil {
@@ -169,7 +178,7 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		sec:           opts.Security,
 		controller:    opts.Controller,
 		cron:          cron,
-		etcd:          etcd,
+		etcd:          etcdServer,
 		serializer: serialize.New(serialize.Options{
 			Security: opts.Security,
 		}),
@@ -186,7 +195,6 @@ func (s *Server) Run(ctx context.Context) error {
 	log.Info("Dapr Scheduler is starting...")
 
 	runners := []concurrency.Runner{
-		s.etcd.Run,
 		s.runServer,
 		func(ctx context.Context) error {
 			err := s.cron.Run(ctx)
@@ -209,9 +217,16 @@ func (s *Server) Run(ctx context.Context) error {
 		runners = append(runners, s.controller.Run)
 	}
 
+	if s.etcd != nil {
+		runners = append(runners, s.etcd.Run)
+	}
+
 	mngr := concurrency.NewRunnerCloserManager(log, nil, runners...)
-	if err := mngr.AddCloser(s.etcd); err != nil {
-		return err
+
+	if s.etcd != nil {
+		if err := mngr.AddCloser(s.etcd); err != nil {
+			return err
+		}
 	}
 
 	return mngr.Run(ctx)
