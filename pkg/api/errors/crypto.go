@@ -28,7 +28,7 @@ func CryptoProvidersNotConfigured() error {
 		codes.Internal,
 		http.StatusInternalServerError,
 		"crypto providers not configured",
-		"",
+		errorcodes.CryptoProvidersNotConfigured.Code,
 		string(errorcodes.CryptoProvidersNotConfigured.Category),
 	).
 		WithErrorInfo(errorcodes.CryptoProvidersNotConfigured.Code, nil).
@@ -40,7 +40,7 @@ func CryptoProviderNotFound(name string) error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		fmt.Sprintf("crypto provider %s not found", name),
-		"",
+		errorcodes.CryptoProviderNotFound.Code,
 		string(errorcodes.CryptoProviderNotFound.Category),
 	).
 		WithErrorInfo(errorcodes.CryptoProviderNotFound.Code, map[string]string{"provider": name}).
@@ -52,7 +52,7 @@ func CryptoProviderNameEmpty() error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		"invalid request: missing component name",
-		"",
+		errorcodes.CommonBadRequest.Code,
 		string(errorcodes.CommonBadRequest.Category),
 	).
 		WithErrorInfo(errorcodes.CommonBadRequest.Code, nil).
@@ -73,7 +73,7 @@ func CryptoOperation(msg string, err error) error {
 		codes.Internal,
 		http.StatusInternalServerError,
 		fmt.Sprintf("failed to perform operation: %s", detail),
-		"",
+		errorcodes.Crypto.Code,
 		string(errorcodes.Crypto.Category),
 	).
 		WithErrorInfo(errorcodes.Crypto.Code, nil).
@@ -85,7 +85,7 @@ func CryptoBadRequest(msg string) error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		fmt.Sprintf("invalid request: %s", msg),
-		"",
+		errorcodes.CommonBadRequest.Code,
 		string(errorcodes.CommonBadRequest.Category),
 	).
 		WithErrorInfo(errorcodes.CommonBadRequest.Code, nil).
