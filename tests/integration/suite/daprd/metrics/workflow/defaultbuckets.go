@@ -85,7 +85,8 @@ func (b *defaultBuckets) Run(t *testing.T, ctx context.Context) {
 		var workflowLatencyBuckets []float64
 		var activityLatencyBuckets []float64
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			metrics := b.w.Metrics(t, ctx)
+			metrics := b.w.Dapr().Metrics(t, ctx)
+			assert.NotNil(c, metrics)
 			workflowLatencyBuckets = util.CollectBuckets(t, metrics, "dapr_runtime_workflow_execution_latency_bucket", "workflow_name:workflow", "status:success")
 			activityLatencyBuckets = util.CollectBuckets(t, metrics, "dapr_runtime_workflow_activity_execution_latency_bucket", "activity_name:activity", "status:success")
 
