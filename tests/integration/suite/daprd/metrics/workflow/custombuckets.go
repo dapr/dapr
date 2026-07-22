@@ -85,13 +85,13 @@ func (b *customBuckets) Run(t *testing.T, ctx context.Context) {
 		}
 		return nil, nil
 	})
-	client := client.NewTaskHubGrpcClient(b.w.Dapr().GRPCConn(t, ctx), backend.DefaultLogger())
-	require.NoError(t, client.StartWorkItemListener(ctx, r))
+	taskHubClient := client.NewTaskHubGrpcClient(b.w.Dapr().GRPCConn(t, ctx), backend.DefaultLogger())
+	require.NoError(t, taskHubClient.StartWorkItemListener(ctx, r))
 
 	t.Run("custom latency buckets", func(t *testing.T) {
-		id, err := client.ScheduleNewWorkflow(ctx, "workflow", api.WithInput("activity"))
+		id, err := taskHubClient.ScheduleNewWorkflow(ctx, "workflow", api.WithInput("activity"))
 		require.NoError(t, err)
-		metadata, err := client.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
+		metadata, err := taskHubClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
