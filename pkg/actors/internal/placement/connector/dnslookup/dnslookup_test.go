@@ -200,7 +200,7 @@ func TestAuthorityOptionStability(t *testing.T) {
 	if gc2 != nil {
 		t.Cleanup(func() { gc2.Close() })
 	}
-	assert.Equal(t, before, len(c.gOpts))
+	assert.Len(t, c.gOpts, before)
 }
 
 // TestConnectOverridesClientAuthority verifies that the authority string the
