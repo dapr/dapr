@@ -85,6 +85,12 @@ type Signer interface {
 type store interface {
 	store(context.Context, bundle.Bundle) error
 	get(context.Context) (bundle.Bundle, error)
+
+	// verifyPropagation returns nil when the rotation's combined trust
+	// anchors have reached every trust anchor consumer the store knows
+	// about, and an error describing what is lagging otherwise. It gates the
+	// destructive cleanup phase of a rotation.
+	verifyPropagation(context.Context, *bundle.RotationState) error
 }
 
 // ca is the implementation of the CA Signer.

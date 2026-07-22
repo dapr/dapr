@@ -39,6 +39,12 @@ type KubeAPIOptions struct {
 	// daprsystem Configuration's mTLS spec.
 	WorkloadCertTTL  string
 	AllowedClockSkew string
+
+	// ExtraTrustBundleNamespaces creates additional dapr-trust-bundle
+	// ConfigMaps (operator-synced copies) in the given namespaces, seeded with
+	// the bundle's trust anchors and served in the cluster-wide ConfigMap
+	// list. Only honored by KubeAPIRW.
+	ExtraTrustBundleNamespaces []string
 }
 
 // TrustBundleRW exposes the mutable dapr-trust-bundle Secret and ConfigMap
@@ -47,6 +53,13 @@ type KubeAPIOptions struct {
 type TrustBundleRW struct {
 	Secret    *prockube.ResourceRW[corev1.Secret]
 	ConfigMap *prockube.ResourceRW[corev1.ConfigMap]
+
+	// ExtraConfigMaps are additional dapr-trust-bundle ConfigMaps in other
+	// namespaces (operator-synced copies), keyed by namespace. They are
+	// served individually and in the cluster-wide ConfigMap list, which
+	// sentry uses to verify trust anchor propagation before rotation
+	// cleanup.
+	ExtraConfigMaps map[string]*prockube.ResourceRW[corev1.ConfigMap]
 }
 
 func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
@@ -60,19 +73,47 @@ func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 
 // KubeAPIRW is like KubeAPI, but serves the dapr-trust-bundle Secret and
 // ConfigMap read-write so sentry can persist trust bundle updates and read
-// them back.
+// them back. It also serves the cluster-wide ConfigMap list sentry uses to
+// verify trust anchor propagation before rotation cleanup.
 func KubeAPIRW(t *testing.T, opts KubeAPIOptions) (*prockube.Kubernetes, TrustBundleRW) {
 	t.Helper()
 
 	rw := TrustBundleRW{
-		Secret:    prockube.NewSecretRW(t, trustBundleSecret(opts.Bundle)),
-		ConfigMap: prockube.NewConfigMapRW(t, trustBundleConfigMap(opts.Bundle)),
+		Secret:          prockube.NewSecretRW(t, trustBundleSecret(opts.Bundle)),
+		ConfigMap:       prockube.NewConfigMapRW(t, trustBundleConfigMap(opts.Bundle)),
+		ExtraConfigMaps: make(map[string]*prockube.ResourceRW[corev1.ConfigMap]),
 	}
 
-	kubeAPI := prockube.New(t, append(kubeAPIOptions(t, opts),
+	kubeOpts := append(kubeAPIOptions(t, opts),
 		rw.Secret.Option(),
 		rw.ConfigMap.Option(),
-	)...)
+	)
+
+	for _, namespace := range opts.ExtraTrustBundleNamespaces {
+		configMap := trustBundleConfigMap(opts.Bundle)
+		configMap.Namespace = namespace
+		extra := prockube.NewConfigMapRW(t, configMap)
+		rw.ExtraConfigMaps[namespace] = extra
+		kubeOpts = append(kubeOpts, extra.Option())
+	}
+
+	// Cluster-wide ConfigMap list aggregating the current state of every
+	// trust bundle ConfigMap.
+	kubeOpts = append(kubeOpts, prockube.WithPath("/api/v1/configmaps", func(w http.ResponseWriter, r *http.Request) {
+		list := corev1.ConfigMapList{
+			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMapList"},
+			Items:    []corev1.ConfigMap{*rw.ConfigMap.Current(t)},
+		}
+		for _, extra := range rw.ExtraConfigMaps {
+			list.Items = append(list.Items, *extra.Current(t))
+		}
+		resp, err := json.Marshal(list)
+		assert.NoError(t, err)
+		w.Header().Add("Content-Type", "application/json")
+		w.Write(resp)
+	}))
+
+	kubeAPI := prockube.New(t, kubeOpts...)
 
 	return kubeAPI, rw
 }

@@ -886,3 +886,55 @@ func TestKube_storePartialFailure(t *testing.T) {
 		assert.NotEmpty(t, secret.Data["rotation.phase"])
 	})
 }
+
+func TestKube_verifyPropagation(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-ns")
+
+	old := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+	pending := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+	combined := string(old.X509.TrustAnchors) + string(pending.X509.TrustAnchors)
+
+	rot := &ca_bundle.RotationState{NewTrustAnchors: pending.X509.TrustAnchors}
+
+	trustBundleCM := func(ns, anchors string) *corev1.ConfigMap {
+		return &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: ns},
+			Data:       map[string]string{"ca.crt": anchors},
+		}
+	}
+
+	newKube := func(t *testing.T, objects ...runtime.Object) *kube {
+		t.Helper()
+		return &kube{
+			client:    fake.NewSimpleClientset(objects...),
+			config:    config.Config{RootCertPath: "ca.crt"},
+			namespace: "dapr-system-test",
+		}
+	}
+
+	t.Run("all trust bundle configmaps carry the new root", func(t *testing.T) {
+		k := newKube(t,
+			trustBundleCM("dapr-system-test", combined),
+			trustBundleCM("appns", combined),
+		)
+		require.NoError(t, k.verifyPropagation(t.Context(), rot))
+	})
+
+	t.Run("a lagging namespace defers propagation", func(t *testing.T) {
+		k := newKube(t,
+			trustBundleCM("dapr-system-test", combined),
+			trustBundleCM("appns", string(old.X509.TrustAnchors)),
+		)
+		err := k.verifyPropagation(t.Context(), rot)
+		require.ErrorContains(t, err, "appns")
+	})
+
+	t.Run("an empty trust bundle configmap defers propagation", func(t *testing.T) {
+		k := newKube(t,
+			trustBundleCM("dapr-system-test", combined),
+			trustBundleCM("emptyns", ""),
+		)
+		err := k.verifyPropagation(t.Context(), rot)
+		require.ErrorContains(t, err, "emptyns")
+	})
+}

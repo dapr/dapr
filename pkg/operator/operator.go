@@ -30,6 +30,7 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -183,6 +184,21 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		}
 	} else {
 		log.Infof("Dapr Watchdog is not enabled")
+	}
+
+	// Sync the trust bundle ConfigMap into Dapr-enabled namespaces. A direct
+	// clientset is used rather than the manager client, whose cache is
+	// namespace-filtered and does not track ConfigMaps.
+	trustBundleClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return nil, fmt.Errorf("unable to create client for trust bundle sync: %w", err)
+	}
+	if err := mgr.Add(&TrustBundleSync{
+		client:                trustBundleClient,
+		controlPlaneNamespace: security.CurrentNamespace(),
+		interval:              trustBundleSyncInterval,
+	}); err != nil {
+		return nil, fmt.Errorf("unable to add trust bundle sync controller: %w", err)
 	}
 
 	if opts.ServiceReconcilerEnabled {

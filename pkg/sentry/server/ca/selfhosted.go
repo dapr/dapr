@@ -127,6 +127,12 @@ func (s *selfhosted) store(_ context.Context, bundle bundle.Bundle) error {
 	return nil
 }
 
+// verifyPropagation always passes in standalone mode: the single watched
+// trust bundle file this store writes is itself the propagation mechanism.
+func (s *selfhosted) verifyPropagation(context.Context, *bundle.RotationState) error {
+	return nil
+}
+
 // get retrieves the existing certificate bundle from the filesystem.
 func (s *selfhosted) get(_ context.Context) (bundle.Bundle, error) {
 	x509, err := s.loadAndValidateX509Bundle()
