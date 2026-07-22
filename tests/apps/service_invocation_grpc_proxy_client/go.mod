@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/apps/service_invocation_grpc_proxy_client
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/dapr/dapr v0.0.0-00010101000000-000000000000
@@ -15,7 +15,7 @@ require (
 	go.opentelemetry.io/otel v1.43.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
