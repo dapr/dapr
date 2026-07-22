@@ -19,6 +19,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dapr/dapr/tests/integration/framework/metrics"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,11 +40,15 @@ func GetBucketFromKey(t *testing.T, k string) float64 {
 	return 0
 }
 
-func CollectBuckets(t *testing.T, metrics map[string]float64, metric, name, status string) []float64 {
+func CollectBuckets(t *testing.T, metrics *metrics.Metrics, metric, name, status string) []float64 {
 	t.Helper()
 
+	if metrics == nil {
+		return nil
+	}
+
 	var buckets []float64
-	for m := range metrics {
+	for m := range metrics.All() {
 		if strings.HasPrefix(m, metric) && strings.Contains(m, name) && strings.Contains(m, status) {
 			bucket := GetBucketFromKey(t, m)
 			buckets = append(buckets, bucket)
