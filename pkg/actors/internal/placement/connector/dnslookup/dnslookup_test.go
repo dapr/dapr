@@ -180,7 +180,7 @@ func TestAuthorityOptionStability(t *testing.T) {
 		Address:     "dapr-placement-server.dapr-tests.svc.cluster.local:50005",
 		GRPCOptions: inputOpts,
 		resolver: func(ctx context.Context, host string) ([]string, error) {
-			return []string{"add1", "add2", "add3"}, nil
+			return []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"}, nil
 		},
 	})
 	require.NoError(t, err)
