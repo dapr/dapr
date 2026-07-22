@@ -27,6 +27,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -56,6 +57,8 @@ type restartdelivery struct {
 }
 
 func (r *restartdelivery) Setup(t *testing.T) []framework.Option {
+	os.SkipWindows(t)
+
 	handler := http.NewServeMux()
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"entities": ["myactortype"]}`))
