@@ -29,10 +29,11 @@ import (
 
 // mockRotationStore is a minimal in-memory store for testing the rotator.
 type mockRotationStore struct {
-	bndle    bundle.Bundle
-	stored   *bundle.Bundle
-	getErr   error
-	storeErr error
+	bndle          bundle.Bundle
+	stored         *bundle.Bundle
+	getErr         error
+	storeErr       error
+	propagationErr error
 }
 
 func (m *mockRotationStore) get(_ context.Context) (bundle.Bundle, error) {
@@ -43,6 +44,10 @@ func (m *mockRotationStore) store(_ context.Context, b bundle.Bundle) error {
 	cp := b
 	m.stored = &cp
 	return m.storeErr
+}
+
+func (m *mockRotationStore) verifyPropagation(_ context.Context, _ *bundle.RotationState) error {
+	return m.propagationErr
 }
 
 // genEd25519Key returns a fresh Ed25519 private key.
@@ -272,6 +277,23 @@ func TestRotatorTick(t *testing.T) {
 		assert.Equal(t, newTrustAnchors, inMemAnchors,
 			"in-memory trust anchors must be updated to only the new root CA")
 	})
+
+	t.Run("signing phase, cleanup due but propagation lagging, cleanup deferred", func(t *testing.T) {
+		bndle := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+		bndle.Rotation = &bundle.RotationState{
+			Phase:           bundle.RotationPhaseSigning,
+			SigningAt:       time.Now().Add(-26 * time.Hour),
+			OldRootNotAfter: time.Now().Add(-2 * time.Hour),
+			NewTrustAnchors: bndle.X509.TrustAnchors,
+		}
+		ms := &mockRotationStore{bndle: bndle, propagationErr: assert.AnError}
+		caObj := &ca{bundle: bndle}
+		r := newTestRotator(ms, caObj, cfg)
+
+		err := r.tick(t.Context())
+		require.NoError(t, err, "a lagging propagation must defer cleanup, not fail the tick")
+		assert.Nil(t, ms.stored, "cleanup must not run while propagation is lagging")
+	})
 }
 
 func TestRotatorTickStoreErrors(t *testing.T) {
@@ -406,6 +428,10 @@ func (s *signalStore) store(_ context.Context, b bundle.Bundle) error {
 	case s.storedCh <- b:
 	default:
 	}
+	return nil
+}
+
+func (s *signalStore) verifyPropagation(_ context.Context, _ *bundle.RotationState) error {
 	return nil
 }
 

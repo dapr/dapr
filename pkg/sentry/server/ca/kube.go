@@ -15,6 +15,7 @@ package ca
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/sentry/config"
 	bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
+	"github.com/dapr/kit/crypto/pem"
 )
 
 const (
@@ -273,6 +275,55 @@ func (k *kube) restoreConfigMap(ctx context.Context, configMap *corev1.ConfigMap
 	if _, err := k.client.CoreV1().ConfigMaps(k.namespace).Update(ctx, configMap, metav1.UpdateOptions{}); err != nil {
 		log.Warnf("Failed to restore trust bundle ConfigMap after failed Secret update: %v", err)
 	}
+}
+
+// verifyPropagation checks that every dapr-trust-bundle ConfigMap in the
+// cluster (the operator-synced copies workloads mount for their trust
+// anchors) already carries the rotation's new root CA. A namespace that has
+// not received the new root yet would be cut off from the mesh if cleanup
+// removed the old root, so cleanup is deferred until nothing is lagging.
+func (k *kube) verifyPropagation(ctx context.Context, rot *bundle.RotationState) error {
+	newRoots, err := pem.DecodePEMCertificates(rot.NewTrustAnchors)
+	if err != nil {
+		return fmt.Errorf("failed to decode pending trust anchors: %w", err)
+	}
+
+	configMaps, err := k.client.CoreV1().ConfigMaps(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+		FieldSelector: "metadata.name=" + TrustBundleK8sName,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list trust bundle configmaps: %w", err)
+	}
+
+	var lagging []string
+	for _, configMap := range configMaps.Items {
+		anchors, decErr := pem.DecodePEMCertificates([]byte(configMap.Data[filepath.Base(k.config.RootCertPath)]))
+		if decErr != nil || !containsCerts(anchors, newRoots) {
+			lagging = append(lagging, configMap.Namespace)
+		}
+	}
+	if len(lagging) > 0 {
+		return fmt.Errorf("new trust anchors have not yet propagated to the trust bundle ConfigMap in namespaces %v", lagging)
+	}
+
+	return nil
+}
+
+// containsCerts returns whether every cert in want is present in have.
+func containsCerts(have, want []*x509.Certificate) bool {
+	for _, w := range want {
+		found := false
+		for _, h := range have {
+			if h.Equal(w) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 // marshalTime serialises a time.Time to RFC3339 bytes for Secret storage.
