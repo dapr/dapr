@@ -69,7 +69,7 @@ func (m *multipledaprds) Run(t *testing.T, ctx context.Context) {
 
 	const (
 		activityCount = 6
-		workflowCount = 12
+		workflowCount = 32
 	)
 
 	newRegistry := func() *task.TaskRegistry {
