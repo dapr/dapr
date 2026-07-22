@@ -72,7 +72,10 @@ func (c *SidecarConfig) getUnixDomainSocketVolumeMount() (vol corev1.Volume, dap
 // Kubernetes propagate ConfigMap updates to running pods automatically, which is
 // required for live trust anchor distribution during root CA rotation.
 // The volume is optional so pods can still start in namespaces where the
-// ConfigMap does not (yet) exist; kubelet populates the mount once it appears.
+// ConfigMap does not exist. Note that daprd chooses between the mounted file
+// and the static DAPR_TRUST_ANCHORS env var at startup: a pod started before
+// the ConfigMap exists keeps the static trust anchors until it is restarted,
+// even if the ConfigMap appears later.
 func (c *SidecarConfig) getTrustBundleVolume() corev1.Volume {
 	return corev1.Volume{
 		Name: injectorConsts.TrustBundleVolumeName,
