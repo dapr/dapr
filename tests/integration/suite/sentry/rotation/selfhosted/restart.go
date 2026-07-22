@@ -109,13 +109,13 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	// propagation window already elapsed, switch signing to the pending
 	// issuer.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		state, ok := r.fresh.RotationState()
+		state, ok := r.restarted.RotationState()
 		if assert.True(c, ok, "rotation state must be persisted") {
 			assert.Equal(c, string(bundle.RotationPhaseSigning), state.Phase)
 		}
 	}, time.Second*20, time.Millisecond*10)
 
-	stateAfter, ok := r.fresh.RotationState()
+	stateAfter, ok := r.restarted.RotationState()
 	require.True(t, ok)
 	assert.True(t, stateAfter.DistributedAt.Equal(stateBefore.DistributedAt),
 		"the restarted sentry must resume the rotation begun before the restart, not start a new one")
