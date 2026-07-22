@@ -2387,8 +2387,8 @@ func TestOtelResourceDetection(t *testing.T) {
 			}
 
 			// Verify service.name attribute
-			serviceName, exist := attrMap["service.name"]
-			assert.True(t, exist, "service.name attribute should exist")
+			serviceName, exists := attrMap["service.name"]
+			require.True(t, exists, "service.name attribute should exist")
 			assert.Equal(t, tc.expectedServiceName, serviceName,
 				"service.name should be %s, but got %s", tc.expectedServiceName, serviceName)
 
