@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/cert"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
@@ -55,10 +56,11 @@ func (w *workload) Setup(t *testing.T) []framework.Option {
 	// the workload cert grace period expire) — runs while the daprds are
 	// serving. Their certs (3s TTL) renew continuously, rolling onto the new
 	// issuer after the signing switch.
-	bndl := genBundle(t, time.Second*30)
+	bndl := cert.GenerateCABundle(t, trustDomain, time.Second*30)
 	w.sentry = procsentry.New(t,
 		procsentry.WithTrustDomain(trustDomain),
 		procsentry.WithCABundle(bndl),
+		procsentry.WithRotationEnabled(true),
 		procsentry.WithRotationCheckInterval(time.Second),
 		procsentry.WithRotationPropagationWindow(time.Second*3),
 		procsentry.WithConfiguration(`
@@ -118,24 +120,23 @@ func (w *workload) Run(t *testing.T, ctx context.Context) {
 
 	// Invocation works before the rotation completes (the rotation may already
 	// be distributing — both roots are trusted throughout).
-	require.EventuallyWithT(t, invoke, time.Second*20, time.Millisecond*100)
+	require.EventuallyWithT(t, invoke, time.Second*20, time.Millisecond*10)
 
 	// Wait for the full rotation cycle to complete: rotation state cleared and
 	// only the new root CA left in the trust anchors.
-	dir := w.sentry.BundleDirectory()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		_, ok := readRotationState(dir)
+		_, ok := w.sentry.RotationState()
 		if !assert.False(c, ok, "rotation must complete") {
 			return
 		}
-		anchors, err := secpem.DecodePEMCertificates(diskAnchorsPEM(t, dir))
+		anchors, err := secpem.DecodePEMCertificates(w.sentry.DiskTrustAnchorsPEM(t))
 		if assert.NoError(c, err) {
 			assert.Len(c, anchors, 1, "only the new root CA must remain")
 		}
-	}, time.Second*60, time.Millisecond*500)
+	}, time.Second*60, time.Millisecond*10)
 
 	// The old root CA has been rotated out (and has expired); invocation still
 	// works because both daprds picked up the new trust anchors from the
 	// watched file and renewed their certs against the new issuer.
-	require.EventuallyWithT(t, invoke, time.Second*30, time.Millisecond*500)
+	require.EventuallyWithT(t, invoke, time.Second*30, time.Millisecond*10)
 }

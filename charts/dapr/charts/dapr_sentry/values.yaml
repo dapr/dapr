@@ -30,6 +30,12 @@ tls:
     certPEM: ""
   trustDomain: cluster.local
 
+rotation:
+  # Enable automatic rotation of the self-signed root CA. Do not enable when
+  # providing your own root CA (tls.root.certPEM or cert-manager), as rotation
+  # replaces the root CA with a sentry-generated one.
+  enabled: false
+
 jwt:
   # Enable JWT token issuance by Sentry
   enabled: false

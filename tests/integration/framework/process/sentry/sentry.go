@@ -238,6 +238,10 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		args = append(args, "-mode="+*opts.mode)
 	}
 
+	if opts.rotation.enabled != nil {
+		args = append(args, "-rotation-enabled="+strconv.FormatBool(*opts.rotation.enabled))
+	}
+
 	if opts.rotation.triggerWindow != nil {
 		args = append(args, "-rotation-trigger-window="+opts.rotation.triggerWindow.String())
 	}

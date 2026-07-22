@@ -15,6 +15,7 @@ package selfhosted
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/cert"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -43,10 +45,11 @@ func (d *distributing) Setup(t *testing.T) []framework.Option {
 	// The root CA expires within the default 30 day trigger window so rotation
 	// starts on sentry's first check. The default 24h propagation window keeps
 	// the rotation parked in the distributing phase.
-	d.bundle = genBundle(t, time.Hour*24)
+	d.bundle = cert.GenerateCABundle(t, trustDomain, time.Hour*24)
 	d.sentry = procsentry.New(t,
 		procsentry.WithTrustDomain(trustDomain),
 		procsentry.WithCABundle(d.bundle),
+		procsentry.WithRotationEnabled(true),
 		procsentry.WithRotationCheckInterval(time.Second),
 	)
 
@@ -58,28 +61,28 @@ func (d *distributing) Run(t *testing.T, ctx context.Context) {
 	dir := d.sentry.BundleDirectory()
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		state, ok := readRotationState(dir)
+		state, ok := d.sentry.RotationState()
 		if assert.True(c, ok, "rotation state must be persisted") {
 			assert.Equal(c, string(bundle.RotationPhaseDistributing), state.Phase)
 		}
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 
-	oldRoot := certsFromPEM(t, d.bundle.X509.TrustAnchors)[0]
-	newRoot := certsFromFile(t, dir, "rotation-ca.crt")[0]
+	oldRoot := cert.DecodePEM(t, d.bundle.X509.TrustAnchors)[0]
+	newRoot := cert.DecodePEMFile(t, filepath.Join(dir, "rotation-ca.crt"))[0]
 	assert.False(t, newRoot.Equal(oldRoot))
 
 	// The on-disk trust anchors must contain the old and new root CAs,
 	// appended.
-	anchors := certsFromFile(t, dir, "ca.crt")
+	anchors := cert.DecodePEMFile(t, filepath.Join(dir, "ca.crt"))
 	require.Len(t, anchors, 2, "trust anchors must contain both root CAs")
 	assert.True(t, anchors[0].Equal(oldRoot))
 	assert.True(t, anchors[1].Equal(newRoot))
 
 	// Signing must still use the old issuer during distribution.
-	issuer := certsFromFile(t, dir, "issuer.crt")
+	issuer := cert.DecodePEMFile(t, filepath.Join(dir, "issuer.crt"))
 	assert.True(t, issuer[0].Equal(d.bundle.X509.IssChain[0]))
 
-	leaf, chain, respAnchors := signWorkloadCert(t, ctx, d.sentry, diskAnchorsPEM(t, dir))
+	leaf, chain, respAnchors := d.sentry.SignWorkloadCert(t, ctx, d.sentry.DiskTrustAnchorsPEM(t))
 	require.NotEmpty(t, chain)
 	assert.True(t, chain[0].Equal(d.bundle.X509.IssChain[0]), "workload certs must still be signed by the old issuer")
 	require.NoError(t, leaf.CheckSignatureFrom(chain[0]))
@@ -91,11 +94,11 @@ func (d *distributing) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, respAnchors[1].Equal(newRoot))
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		metrics, merr := scrapeMetrics(t, ctx, d.sentry)
+		metrics, merr := d.sentry.Metrics(t, ctx)
 		if !assert.NoError(c, merr) {
 			return
 		}
 		assert.Contains(c, metrics, "dapr_sentry_rootcert_rotation_total")
 		assert.Contains(c, metrics, `phase="distributing"`)
-	}, time.Second*10, time.Millisecond*100)
+	}, time.Second*10, time.Millisecond*10)
 }

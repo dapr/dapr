@@ -40,6 +40,11 @@ type rotatorConfig struct {
 	AllowedClockSkew time.Duration
 	WorkloadCertTTL  time.Duration
 
+	// Enabled turns the rotation loop on. Off by default: rotation replaces
+	// the root CA with a sentry-generated self-signed one, which must never
+	// happen to an operator-provided root CA.
+	Enabled bool
+
 	// TriggerWindow is how far before expiry to begin rotation.
 	TriggerWindow time.Duration
 	// PropagationWindow is how long to distribute dual trust anchors before
@@ -55,6 +60,7 @@ func newRotator(s store, c *ca) *rotator {
 		TrustDomain:       c.config.TrustDomain,
 		AllowedClockSkew:  c.config.AllowedClockSkew,
 		WorkloadCertTTL:   c.config.WorkloadCertTTL,
+		Enabled:           c.config.Rotation.Enabled,
 		TriggerWindow:     c.config.Rotation.TriggerWindow,
 		PropagationWindow: c.config.Rotation.PropagationWindow,
 		CheckInterval:     c.config.Rotation.CheckInterval,
@@ -114,6 +120,17 @@ func validateRotationState(rot *bundle.RotationState) error {
 // Run is the long-running rotation loop. It is registered as a concurrency
 // runner alongside the gRPC server.
 func (r *rotator) Run(ctx context.Context) error {
+	if !r.config.Enabled {
+		// Warn if a previous deployment left rotation state behind: with
+		// rotation disabled it will be neither advanced nor cleaned up.
+		if bndle, err := r.store.get(ctx); err == nil && bndle.Rotation != nil {
+			log.Warnf("Root CA rotation is disabled but rotation state is present (phase %q); the rotation will not be advanced", bndle.Rotation.Phase)
+		}
+		log.Info("Automatic root CA rotation is disabled; enable with -rotation-enabled")
+		<-ctx.Done()
+		return nil
+	}
+
 	ticker := time.NewTicker(r.config.CheckInterval)
 	defer ticker.Stop()
 

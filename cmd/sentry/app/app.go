@@ -150,6 +150,7 @@ func Run() {
 
 	cfg.JWT.TTL = opts.JWT.TTL
 	cfg.Rotation = config.ConfigRotation{
+		Enabled:           opts.Rotation.Enabled,
 		TriggerWindow:     opts.Rotation.TriggerWindow,
 		PropagationWindow: opts.Rotation.PropagationWindow,
 		CheckInterval:     opts.Rotation.CheckInterval,

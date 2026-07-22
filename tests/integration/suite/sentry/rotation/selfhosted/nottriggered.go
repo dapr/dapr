@@ -15,7 +15,6 @@ package selfhosted
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -24,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/cert"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -42,6 +42,7 @@ func (n *nottriggered) Setup(t *testing.T) []framework.Option {
 	// 30 day trigger window.
 	n.sentry = procsentry.New(t,
 		procsentry.WithTrustDomain(trustDomain),
+		procsentry.WithRotationEnabled(true),
 		procsentry.WithRotationCheckInterval(time.Second),
 	)
 
@@ -52,22 +53,21 @@ func (n *nottriggered) Run(t *testing.T, ctx context.Context) {
 	n.sentry.WaitUntilRunning(t, ctx)
 	dir := n.sentry.BundleDirectory()
 
-	statePath := filepath.Join(dir, "rotation-state.json")
 	assert.Never(t, func() bool {
-		_, err := os.Stat(statePath)
-		return err == nil
-	}, time.Second*3, time.Millisecond*100, "rotation must not start for a root CA far from expiry")
+		_, ok := n.sentry.RotationState()
+		return ok
+	}, time.Second*3, time.Millisecond*10, "rotation must not start for a root CA far from expiry")
 
-	anchors := certsFromFile(t, dir, "ca.crt")
+	anchors := cert.DecodePEMFile(t, filepath.Join(dir, "ca.crt"))
 	assert.Len(t, anchors, 1, "trust anchors must contain only the original root CA")
 
-	leaf, chain, respAnchors := signWorkloadCert(t, ctx, n.sentry, diskAnchorsPEM(t, dir))
+	leaf, chain, respAnchors := n.sentry.SignWorkloadCert(t, ctx, n.sentry.DiskTrustAnchorsPEM(t))
 	require.NotEmpty(t, chain)
 	require.Len(t, respAnchors, 1)
 	assert.True(t, anchors[0].Equal(respAnchors[0]))
 	require.NoError(t, leaf.CheckSignatureFrom(chain[0]))
 
-	metrics, err := scrapeMetrics(t, ctx, n.sentry)
+	metrics, err := n.sentry.Metrics(t, ctx)
 	require.NoError(t, err)
 	assert.NotContains(t, metrics, "dapr_sentry_rootcert_rotation_total",
 		"no rotation phase transition must be recorded")

@@ -23,6 +23,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/cert"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 	sentryutils "github.com/dapr/dapr/tests/integration/suite/sentry/utils"
@@ -45,7 +46,7 @@ func (d *distributing) Setup(t *testing.T) []framework.Option {
 	// The root CA expires within the default 30 day trigger window so rotation
 	// starts on sentry's first check. The default 24h propagation window keeps
 	// the rotation parked in the distributing phase.
-	d.bndl = genBundle(t, time.Hour*24)
+	d.bndl = cert.GenerateCABundle(t, trustDomain, time.Hour*24)
 
 	kubeAPI, tb := sentryutils.KubeAPIRW(t, sentryutils.KubeAPIOptions{
 		Bundle:         d.bndl,
@@ -54,7 +55,13 @@ func (d *distributing) Setup(t *testing.T) []framework.Option {
 		AppID:          "myappid",
 	})
 	d.tb = tb
-	d.sentry = newSentry(t, kubeAPI, d.bndl)
+	d.sentry = procsentry.New(t,
+		procsentry.WithKubeAPI(t, kubeAPI, "sentrynamespace"),
+		procsentry.WithCABundle(d.bndl),
+		procsentry.WithTrustDomain(trustDomain),
+		procsentry.WithRotationEnabled(true),
+		procsentry.WithRotationCheckInterval(time.Second),
+	)
 
 	return []framework.Option{framework.WithProcesses(kubeAPI, d.sentry)}
 }
@@ -64,27 +71,27 @@ func (d *distributing) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		secret := d.tb.Secret.Current(t)
-		assert.Equal(c, string(bundle.RotationPhaseDistributing), string(secret.Data[rotationPhaseKey]))
-	}, time.Second*20, time.Millisecond*100)
+		assert.Equal(c, string(bundle.RotationPhaseDistributing), string(secret.Data[procsentry.RotationPhaseSecretKey]))
+	}, time.Second*20, time.Millisecond*10)
 
 	secret := d.tb.Secret.Current(t)
 	for _, key := range []string{
-		rotationNewCACertKey,
-		rotationNewIssCertKey,
-		rotationNewIssKeyKey,
-		rotationDistributedAtKey,
-		rotationOldRootNotAfterKey,
+		procsentry.RotationNewCACertSecretKey,
+		procsentry.RotationNewIssCertSecretKey,
+		procsentry.RotationNewIssKeySecretKey,
+		procsentry.RotationDistributedAtSecretKey,
+		procsentry.RotationOldRootNotAfterSecretKey,
 	} {
 		assert.NotEmpty(t, secret.Data[key], "rotation state key %q must be persisted", key)
 	}
 
-	oldRoot := certsFromPEM(t, d.bndl.X509.TrustAnchors)[0]
-	newRoot := certsFromPEM(t, secret.Data[rotationNewCACertKey])[0]
+	oldRoot := cert.DecodePEM(t, d.bndl.X509.TrustAnchors)[0]
+	newRoot := cert.DecodePEM(t, secret.Data[procsentry.RotationNewCACertSecretKey])[0]
 	assert.False(t, newRoot.Equal(oldRoot))
 
 	// The Secret trust anchors must contain the old and new root CAs,
 	// appended.
-	anchors := certsFromPEM(t, secret.Data["ca.crt"])
+	anchors := cert.DecodePEM(t, secret.Data["ca.crt"])
 	require.Len(t, anchors, 2, "trust anchors must contain both root CAs")
 	assert.True(t, anchors[0].Equal(oldRoot))
 	assert.True(t, anchors[1].Equal(newRoot))
@@ -93,12 +100,12 @@ func (d *distributing) Run(t *testing.T, ctx context.Context) {
 	// carry both root CAs so pods begin trusting the new root before signing
 	// switches.
 	configMap := d.tb.ConfigMap.Current(t)
-	cmAnchors := certsFromPEM(t, []byte(configMap.Data["ca.crt"]))
+	cmAnchors := cert.DecodePEM(t, []byte(configMap.Data["ca.crt"]))
 	require.Len(t, cmAnchors, 2, "ConfigMap trust anchors must contain both root CAs")
 	assert.True(t, cmAnchors[0].Equal(oldRoot))
 	assert.True(t, cmAnchors[1].Equal(newRoot))
 
 	// Signing must still use the old issuer during distribution.
-	issuer := certsFromPEM(t, secret.Data["issuer.crt"])[0]
+	issuer := cert.DecodePEM(t, secret.Data["issuer.crt"])[0]
 	assert.True(t, issuer.Equal(d.bndl.X509.IssChain[0]), "signing must still use the old issuer")
 }

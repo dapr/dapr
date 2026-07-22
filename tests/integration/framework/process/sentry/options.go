@@ -14,10 +14,13 @@ limitations under the License.
 package sentry
 
 import (
+	"testing"
 	"time"
 
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	prockube "github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 )
 
 // options contains the options for running Sentry in integration tests.
@@ -43,6 +46,7 @@ type options struct {
 }
 
 type rotationOptions struct {
+	enabled           *bool
 	triggerWindow     *time.Duration
 	propagationWindow *time.Duration
 	checkInterval     *time.Duration
@@ -151,6 +155,18 @@ func WithMode(mode string) Option {
 	}
 }
 
+// WithKubeAPI configures sentry for Kubernetes mode against the given mock
+// Kubernetes API server, running in the given namespace.
+func WithKubeAPI(t *testing.T, kubeAPI *prockube.Kubernetes, namespace string) Option {
+	return func(o *options) {
+		WithWriteConfig(false)(o)
+		WithKubeconfig(kubeAPI.KubeconfigPath(t))(o)
+		WithNamespace(namespace)(o)
+		WithMode(string(modes.KubernetesMode))(o)
+		WithExecOptions(exec.WithEnvVars(t, "KUBERNETES_SERVICE_HOST", "anything"))(o)
+	}
+}
+
 // WithEnableJWT enables JWT token issuance in Sentry
 func WithEnableJWT(enable bool) Option {
 	return func(o *options) {
@@ -232,6 +248,14 @@ func WithOIDCTLSKeyFile(keyFile string) Option {
 func WithJWTKeyID(kid string) Option {
 	return func(o *options) {
 		o.jwt.keyID = &kid
+	}
+}
+
+// WithRotationEnabled enables automatic root CA rotation, which is off by
+// default.
+func WithRotationEnabled(enabled bool) Option {
+	return func(o *options) {
+		o.rotation.enabled = &enabled
 	}
 }
 
