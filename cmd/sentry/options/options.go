@@ -57,6 +57,7 @@ type Options struct {
 }
 
 type RotationOptions struct {
+	Enabled           bool
 	TriggerWindow     time.Duration
 	PropagationWindow time.Duration
 	CheckInterval     time.Duration
@@ -141,6 +142,7 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.JWT.SigningAlgorithm, "jwt-signing-algorithm", string(bundle.DefaultJWTSignatureAlgorithm), "Algorithm used for JWT signing, must be supported by signing key")
 	fs.StringVar(&opts.JWT.keyID, "jwt-key-id", "", "Key ID (kid) used for JWT signing (defaults to base64 encoded SHA-256 of the signing key)")
 	fs.DurationVar(&opts.JWT.TTL, "jwt-ttl", config.DefaultJWTTTL, "Time-to-live for JWT tokens (default 24h)")
+	fs.BoolVar(&opts.Rotation.Enabled, "rotation-enabled", false, "Enable automatic rotation of the self-signed root CA. Do not enable when providing your own root CA, as rotation replaces it with a sentry-generated one")
 	fs.DurationVar(&opts.Rotation.TriggerWindow, "rotation-trigger-window", config.DefaultRotationTriggerWindow, "How long before root CA expiry to begin automatic rotation")
 	fs.DurationVar(&opts.Rotation.PropagationWindow, "rotation-propagation-window", config.DefaultRotationPropagationWindow, "How long to distribute combined trust anchors before switching signing to the new issuer; must be at least the workload certificate TTL")
 	fs.DurationVar(&opts.Rotation.CheckInterval, "rotation-check-interval", config.DefaultRotationCheckInterval, "How often to check root CA expiry for automatic rotation")

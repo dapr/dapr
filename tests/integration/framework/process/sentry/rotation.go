@@ -11,13 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package selfhosted
+package sentry
 
 import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
@@ -38,87 +37,72 @@ import (
 	"google.golang.org/grpc"
 
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
-	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework/client"
-	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	secpem "github.com/dapr/kit/crypto/pem"
 )
 
-const trustDomain = "integration.test.dapr.io"
+// Rotation state keys persisted by sentry in the dapr-trust-bundle Secret in
+// Kubernetes mode.
+const (
+	RotationPhaseSecretKey           = "rotation.phase"
+	RotationNewCACertSecretKey       = "rotation.new-ca.crt"
+	RotationNewIssCertSecretKey      = "rotation.new-issuer.crt"
+	RotationNewIssKeySecretKey       = "rotation.new-issuer.key"
+	RotationDistributedAtSecretKey   = "rotation.distributed-at"
+	RotationSigningAtSecretKey       = "rotation.signing-at"
+	RotationOldRootNotAfterSecretKey = "rotation.old-root-not-after"
+)
 
-// genBundle generates a CA bundle whose root CA and issuer cert expire after
-// ttl.
-func genBundle(t *testing.T, ttl time.Duration) bundle.Bundle {
-	t.Helper()
-
-	_, rootKey, err := ed25519.GenerateKey(rand.Reader)
-	require.NoError(t, err)
-	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-
-	x509bundle, err := bundle.GenerateX509(bundle.OptionsX509{
-		X509RootKey:      rootKey,
-		TrustDomain:      trustDomain,
-		AllowedClockSkew: time.Second * 5,
-		OverrideCATTL:    &ttl,
-	})
-	require.NoError(t, err)
-	jwtbundle, err := bundle.GenerateJWT(bundle.OptionsJWT{
-		JWTRootKey:  jwtKey,
-		TrustDomain: trustDomain,
-	})
-	require.NoError(t, err)
-
-	return bundle.Bundle{X509: x509bundle, JWT: jwtbundle}
+// RotationSecretKeys is the full set of rotation state keys persisted by
+// sentry in the dapr-trust-bundle Secret.
+var RotationSecretKeys = []string{
+	RotationPhaseSecretKey,
+	RotationNewCACertSecretKey,
+	RotationNewIssCertSecretKey,
+	RotationNewIssKeySecretKey,
+	RotationDistributedAtSecretKey,
+	RotationSigningAtSecretKey,
+	RotationOldRootNotAfterSecretKey,
 }
 
-// rotationState mirrors the on-disk rotation-state.json written by sentry in
+// RotationState mirrors the on-disk rotation-state.json written by sentry in
 // standalone mode.
-type rotationState struct {
+type RotationState struct {
 	Phase           string    `json:"phase"`
 	DistributedAt   time.Time `json:"distributed_at"`
 	SigningAt       time.Time `json:"signing_at"`
 	OldRootNotAfter time.Time `json:"old_root_not_after"`
 }
 
-// readRotationState loads rotation-state.json from the credentials directory,
-// returning false if it does not exist or cannot be parsed yet.
-func readRotationState(dir string) (rotationState, bool) {
-	data, err := os.ReadFile(filepath.Join(dir, "rotation-state.json"))
+// RotationState loads rotation-state.json from the sentry's credentials
+// directory, returning false if it does not exist or cannot be parsed yet.
+func (s *Sentry) RotationState() (RotationState, bool) {
+	data, err := os.ReadFile(filepath.Join(s.bundleDir, "rotation-state.json"))
 	if err != nil {
-		return rotationState{}, false
+		return RotationState{}, false
 	}
-	var state rotationState
+	var state RotationState
 	if json.Unmarshal(data, &state) != nil {
-		return rotationState{}, false
+		return RotationState{}, false
 	}
 	return state, true
 }
 
-// certsFromPEM decodes all certificates from PEM data.
-func certsFromPEM(t *testing.T, data []byte) []*x509.Certificate {
+// DiskTrustAnchorsPEM returns the sentry's current on-disk trust anchors,
+// i.e. what a workload watching the trust bundle would trust.
+func (s *Sentry) DiskTrustAnchorsPEM(t *testing.T) []byte {
 	t.Helper()
-	certs, err := secpem.DecodePEMCertificates(data)
+	data, err := os.ReadFile(filepath.Join(s.bundleDir, "ca.crt"))
 	require.NoError(t, err)
-	require.NotEmpty(t, certs)
-	return certs
+	return data
 }
 
-// certsFromFile decodes all certificates from a PEM file in the credentials
-// directory.
-func certsFromFile(t *testing.T, dir, file string) []*x509.Certificate {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join(dir, file))
-	require.NoError(t, err)
-	return certsFromPEM(t, data)
-}
-
-// signWorkloadCert asks sentry to sign a CSR with the insecure validator,
+// SignWorkloadCert asks sentry to sign a CSR with the insecure validator,
 // trusting the given root CAs for the connection, and returns the issued leaf
 // certificate, its issuer chain, and the trust anchors served in the
 // response. It retries while sentry reloads its credentials, which happens
 // via the file watcher whenever rotation writes files to disk.
-func signWorkloadCert(t *testing.T, ctx context.Context, sentry *procsentry.Sentry, anchorsPEM []byte) (leaf *x509.Certificate, chain, anchors []*x509.Certificate) {
+func (s *Sentry) SignWorkloadCert(t *testing.T, ctx context.Context, anchorsPEM []byte) (leaf *x509.Certificate, chain, anchors []*x509.Certificate) {
 	t.Helper()
 
 	_, pk, err := ed25519.GenerateKey(rand.Reader)
@@ -127,7 +111,7 @@ func signWorkloadCert(t *testing.T, ctx context.Context, sentry *procsentry.Sent
 	require.NoError(t, err)
 	csr := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer})
 
-	sentryID, err := spiffeid.FromString("spiffe://" + trustDomain + "/ns/default/dapr-sentry")
+	sentryID, err := spiffeid.FromString("spiffe://" + s.TrustDomain(t) + "/ns/" + s.Namespace() + "/dapr-sentry")
 	require.NoError(t, err)
 	x509bndl, err := x509bundle.Parse(sentryID.TrustDomain(), anchorsPEM)
 	require.NoError(t, err)
@@ -135,7 +119,7 @@ func signWorkloadCert(t *testing.T, ctx context.Context, sentry *procsentry.Sent
 
 	var resp *sentrypbv1.SignCertificateResponse
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		conn, cerr := grpc.NewClient(sentry.Address(), grpc.WithTransportCredentials(creds))
+		conn, cerr := grpc.NewClient(s.Address(), grpc.WithTransportCredentials(creds))
 		if !assert.NoError(c, cerr) {
 			return
 		}
@@ -151,31 +135,21 @@ func signWorkloadCert(t *testing.T, ctx context.Context, sentry *procsentry.Sent
 			TokenValidator:            sentrypbv1.SignCertificateRequest_INSECURE,
 		})
 		assert.NoError(c, serr)
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 
-	workload := certsFromPEM(t, resp.GetWorkloadCertificate())
+	workload := decodePEM(t, resp.GetWorkloadCertificate())
 	require.NotEmpty(t, resp.GetTrustChainCertificates())
-	anchors = certsFromPEM(t, resp.GetTrustChainCertificates()[0])
+	anchors = decodePEM(t, resp.GetTrustChainCertificates()[0])
 
 	return workload[0], workload[1:], anchors
 }
 
-// diskAnchorsPEM returns the current on-disk trust anchors, i.e. what a
-// workload watching the trust bundle would trust.
-func diskAnchorsPEM(t *testing.T, dir string) []byte {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join(dir, "ca.crt"))
-	require.NoError(t, err)
-	return data
-}
-
-// scrapeMetrics returns the raw metrics endpoint output of the given sentry,
-// or an error while the metrics server is unavailable, e.g. during a
-// credentials reload.
-func scrapeMetrics(t *testing.T, ctx context.Context, sentry *procsentry.Sentry) (string, error) {
+// Metrics returns the raw metrics endpoint output of the sentry, or an error
+// while the metrics server is unavailable, e.g. during a credentials reload.
+func (s *Sentry) Metrics(t *testing.T, ctx context.Context) (string, error) {
 	t.Helper()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/metrics", sentry.MetricsPort()), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/metrics", s.MetricsPort()), nil)
 	require.NoError(t, err)
 	resp, err := client.HTTP(t).Do(req)
 	if err != nil {
@@ -187,4 +161,12 @@ func scrapeMetrics(t *testing.T, ctx context.Context, sentry *procsentry.Sentry)
 		return "", err
 	}
 	return string(body), resp.Body.Close()
+}
+
+func decodePEM(t *testing.T, data []byte) []*x509.Certificate {
+	t.Helper()
+	certs, err := secpem.DecodePEMCertificates(data)
+	require.NoError(t, err)
+	require.NotEmpty(t, certs)
+	return certs
 }

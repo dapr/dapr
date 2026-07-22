@@ -200,6 +200,9 @@ spec:
         - "--issuer-key-filename"
         - "{{ .key }}"
 {{- end }}
+{{- if .Values.rotation.enabled }}
+        - "--rotation-enabled=true"
+{{- end }}
 {{- if .Values.jwt.enabled }}
         - "--jwt-enabled=true"
 {{- if .Values.jwt.keyFilename }}
