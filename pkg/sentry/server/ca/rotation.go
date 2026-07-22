@@ -189,9 +189,16 @@ func (r *rotator) tick(ctx context.Context) error {
 		}
 	case bundle.RotationPhaseSigning:
 		// Clean up once the old root CA has expired AND all workload certs
-		// signed by the old issuer have also expired.
+		// signed by the old issuer have also expired AND the combined trust
+		// anchors have demonstrably reached every trust anchor consumer — a
+		// time window alone cannot rule out a lagging namespace that would be
+		// cut off by removing the old root.
 		graceElapsed := time.Since(rot.SigningAt) > r.config.WorkloadCertTTL+r.config.AllowedClockSkew
 		if time.Now().After(rot.OldRootNotAfter) && graceElapsed {
+			if err := r.store.verifyPropagation(ctx, rot); err != nil {
+				log.Warnf("Root CA rotation: delaying cleanup: %v", err)
+				return nil
+			}
 			return r.cleanup(ctx, bndle)
 		}
 	default:
