@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/apps/resiliencyapp
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/dapr/dapr v0.0.0
@@ -14,9 +14,9 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
-	golang.org/x/net v0.55.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/text v0.39.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260504160031-60b97b32f348 // indirect
 )
 
