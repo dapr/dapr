@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/cert"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 	sentryutils "github.com/dapr/dapr/tests/integration/suite/sentry/utils"
@@ -46,7 +47,7 @@ type resume struct {
 }
 
 func (r *resume) Setup(t *testing.T) []framework.Option {
-	r.bndl = genBundle(t, time.Hour*24)
+	r.bndl = cert.GenerateCABundle(t, trustDomain, time.Hour*24)
 
 	// The pending new CA, as a previous sentry's distributing phase would have
 	// generated it.
@@ -77,17 +78,17 @@ func (r *resume) Setup(t *testing.T) []framework.Option {
 	combined := make([]byte, 0, len(r.bndl.X509.TrustAnchors)+len(r.pending.TrustAnchors))
 	combined = append(combined, r.bndl.X509.TrustAnchors...)
 	combined = append(combined, r.pending.TrustAnchors...)
-	oldRootNotAfter := certsFromPEM(t, r.bndl.X509.TrustAnchors)[0].NotAfter
+	oldRootNotAfter := cert.DecodePEM(t, r.bndl.X509.TrustAnchors)[0].NotAfter
 	r.distributedAt = time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
 
 	secret := tb.Secret.Current(t)
 	secret.Data["ca.crt"] = combined
-	secret.Data[rotationPhaseKey] = []byte(bundle.RotationPhaseDistributing)
-	secret.Data[rotationNewCACertKey] = r.pending.TrustAnchors
-	secret.Data[rotationNewIssCertKey] = r.pending.IssChainPEM
-	secret.Data[rotationNewIssKeyKey] = r.pending.IssKeyPEM
-	secret.Data[rotationDistributedAtKey] = []byte(r.distributedAt)
-	secret.Data[rotationOldRootNotAfterKey] = []byte(oldRootNotAfter.UTC().Format(time.RFC3339))
+	secret.Data[procsentry.RotationPhaseSecretKey] = []byte(bundle.RotationPhaseDistributing)
+	secret.Data[procsentry.RotationNewCACertSecretKey] = r.pending.TrustAnchors
+	secret.Data[procsentry.RotationNewIssCertSecretKey] = r.pending.IssChainPEM
+	secret.Data[procsentry.RotationNewIssKeySecretKey] = r.pending.IssKeyPEM
+	secret.Data[procsentry.RotationDistributedAtSecretKey] = []byte(r.distributedAt)
+	secret.Data[procsentry.RotationOldRootNotAfterSecretKey] = []byte(oldRootNotAfter.UTC().Format(time.RFC3339))
 	tb.Secret.Set(t, secret)
 
 	// The ConfigMap must stay in sync with the Secret's trust anchors,
@@ -99,7 +100,12 @@ func (r *resume) Setup(t *testing.T) []framework.Option {
 	// The propagation window has long elapsed relative to the seeded
 	// DistributedAt, so the resumed rotation must switch signing on the first
 	// check.
-	r.sentry = newSentry(t, kubeAPI, r.bndl,
+	r.sentry = procsentry.New(t,
+		procsentry.WithKubeAPI(t, kubeAPI, "sentrynamespace"),
+		procsentry.WithCABundle(r.bndl),
+		procsentry.WithTrustDomain(trustDomain),
+		procsentry.WithRotationEnabled(true),
+		procsentry.WithRotationCheckInterval(time.Second),
 		procsentry.WithRotationPropagationWindow(time.Second*2),
 	)
 
@@ -111,27 +117,27 @@ func (r *resume) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		secret := r.tb.Secret.Current(t)
-		assert.Equal(c, string(bundle.RotationPhaseSigning), string(secret.Data[rotationPhaseKey]))
-	}, time.Second*20, time.Millisecond*100)
+		assert.Equal(c, string(bundle.RotationPhaseSigning), string(secret.Data[procsentry.RotationPhaseSecretKey]))
+	}, time.Second*20, time.Millisecond*10)
 
 	secret := r.tb.Secret.Current(t)
-	assert.Equal(t, r.distributedAt, string(secret.Data[rotationDistributedAtKey]),
+	assert.Equal(t, r.distributedAt, string(secret.Data[procsentry.RotationDistributedAtSecretKey]),
 		"sentry must resume the seeded rotation, not start a new one")
 
 	// The seeded pending issuer must be the one promoted.
-	issuer := certsFromPEM(t, secret.Data["issuer.crt"])[0]
+	issuer := cert.DecodePEM(t, secret.Data["issuer.crt"])[0]
 	assert.True(t, issuer.Equal(r.pending.IssChain[0]), "the seeded pending issuer must be promoted")
 
 	// Both root CAs must remain in the Secret and ConfigMap.
-	oldRoot := certsFromPEM(t, r.bndl.X509.TrustAnchors)[0]
-	newRoot := certsFromPEM(t, r.pending.TrustAnchors)[0]
-	anchors := certsFromPEM(t, secret.Data["ca.crt"])
+	oldRoot := cert.DecodePEM(t, r.bndl.X509.TrustAnchors)[0]
+	newRoot := cert.DecodePEM(t, r.pending.TrustAnchors)[0]
+	anchors := cert.DecodePEM(t, secret.Data["ca.crt"])
 	require.Len(t, anchors, 2, "both root CAs must remain in the Secret trust anchors")
 	assert.True(t, anchors[0].Equal(oldRoot))
 	assert.True(t, anchors[1].Equal(newRoot))
 
 	configMap := r.tb.ConfigMap.Current(t)
-	cmAnchors := certsFromPEM(t, []byte(configMap.Data["ca.crt"]))
+	cmAnchors := cert.DecodePEM(t, []byte(configMap.Data["ca.crt"]))
 	require.Len(t, cmAnchors, 2, "both root CAs must remain in the ConfigMap trust anchors")
 	assert.True(t, cmAnchors[0].Equal(oldRoot))
 	assert.True(t, cmAnchors[1].Equal(newRoot))

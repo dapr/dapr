@@ -23,6 +23,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/cert"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 	sentryutils "github.com/dapr/dapr/tests/integration/suite/sentry/utils"
@@ -45,7 +46,7 @@ func (s *signing) Setup(t *testing.T) []framework.Option {
 	// Near-expiry root CA triggers rotation immediately; the short propagation
 	// window lets the rotation progress to the signing phase, where it stays as
 	// the old root CA is still valid for the duration of the test.
-	s.bndl = genBundle(t, time.Hour)
+	s.bndl = cert.GenerateCABundle(t, trustDomain, time.Hour)
 
 	// The workload cert TTL must not exceed the propagation window, or the
 	// rotator clamps the window up to the TTL.
@@ -58,7 +59,12 @@ func (s *signing) Setup(t *testing.T) []framework.Option {
 		AllowedClockSkew: "1s",
 	})
 	s.tb = tb
-	s.sentry = newSentry(t, kubeAPI, s.bndl,
+	s.sentry = procsentry.New(t,
+		procsentry.WithKubeAPI(t, kubeAPI, "sentrynamespace"),
+		procsentry.WithCABundle(s.bndl),
+		procsentry.WithTrustDomain(trustDomain),
+		procsentry.WithRotationEnabled(true),
+		procsentry.WithRotationCheckInterval(time.Second),
 		procsentry.WithRotationPropagationWindow(time.Second*2),
 	)
 
@@ -70,32 +76,32 @@ func (s *signing) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		secret := s.tb.Secret.Current(t)
-		assert.Equal(c, string(bundle.RotationPhaseSigning), string(secret.Data[rotationPhaseKey]))
-	}, time.Second*30, time.Millisecond*100)
+		assert.Equal(c, string(bundle.RotationPhaseSigning), string(secret.Data[procsentry.RotationPhaseSecretKey]))
+	}, time.Second*30, time.Millisecond*10)
 
 	secret := s.tb.Secret.Current(t)
-	assert.NotEmpty(t, secret.Data[rotationSigningAtKey], "SigningAt must be recorded")
+	assert.NotEmpty(t, secret.Data[procsentry.RotationSigningAtSecretKey], "SigningAt must be recorded")
 
-	oldRoot := certsFromPEM(t, s.bndl.X509.TrustAnchors)[0]
+	oldRoot := cert.DecodePEM(t, s.bndl.X509.TrustAnchors)[0]
 	oldIssuer := s.bndl.X509.IssChain[0]
-	newRoot := certsFromPEM(t, secret.Data[rotationNewCACertKey])[0]
-	newIssuer := certsFromPEM(t, secret.Data[rotationNewIssCertKey])[0]
+	newRoot := cert.DecodePEM(t, secret.Data[procsentry.RotationNewCACertSecretKey])[0]
+	newIssuer := cert.DecodePEM(t, secret.Data[procsentry.RotationNewIssCertSecretKey])[0]
 
 	// The pending issuer must be promoted to the active issuer.
-	issuer := certsFromPEM(t, secret.Data["issuer.crt"])[0]
+	issuer := cert.DecodePEM(t, secret.Data["issuer.crt"])[0]
 	assert.True(t, issuer.Equal(newIssuer), "the pending issuer must be promoted to the active issuer")
 	assert.False(t, issuer.Equal(oldIssuer))
 	require.NoError(t, issuer.CheckSignatureFrom(newRoot))
 
 	// Both root CAs must remain in the Secret and the ConfigMap so workload
 	// certs signed by the old issuer keep verifying until they expire.
-	anchors := certsFromPEM(t, secret.Data["ca.crt"])
+	anchors := cert.DecodePEM(t, secret.Data["ca.crt"])
 	require.Len(t, anchors, 2, "both root CAs must remain in the Secret trust anchors")
 	assert.True(t, anchors[0].Equal(oldRoot))
 	assert.True(t, anchors[1].Equal(newRoot))
 
 	configMap := s.tb.ConfigMap.Current(t)
-	cmAnchors := certsFromPEM(t, []byte(configMap.Data["ca.crt"]))
+	cmAnchors := cert.DecodePEM(t, []byte(configMap.Data["ca.crt"]))
 	require.Len(t, cmAnchors, 2, "both root CAs must remain in the ConfigMap trust anchors")
 	assert.True(t, cmAnchors[0].Equal(oldRoot))
 	assert.True(t, cmAnchors[1].Equal(newRoot))

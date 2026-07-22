@@ -26,6 +26,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/cert"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 	secpem "github.com/dapr/kit/crypto/pem"
@@ -49,10 +50,11 @@ func (e *cleanup) Setup(t *testing.T) []framework.Option {
 	// which must be at least the workload cert TTL), cleanup once the old
 	// root CA has expired (~20s) and the workload cert grace period
 	// (workloadCertTTL + allowedClockSkew = 4s) has elapsed.
-	e.bundle = genBundle(t, time.Second*20)
+	e.bundle = cert.GenerateCABundle(t, trustDomain, time.Second*20)
 	e.sentry = procsentry.New(t,
 		procsentry.WithTrustDomain(trustDomain),
 		procsentry.WithCABundle(e.bundle),
+		procsentry.WithRotationEnabled(true),
 		procsentry.WithRotationCheckInterval(time.Second),
 		procsentry.WithRotationPropagationWindow(time.Second*3),
 		procsentry.WithConfiguration(`
@@ -78,16 +80,16 @@ func (e *cleanup) Run(t *testing.T, ctx context.Context) {
 	// rotation files are removed on cleanup.
 	var newRoot, newIssuer *x509.Certificate
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		state, ok := readRotationState(dir)
+		state, ok := e.sentry.RotationState()
 		if assert.True(c, ok, "rotation state must be persisted") {
 			assert.Equal(c, string(bundle.RotationPhaseSigning), state.Phase)
 		}
-	}, time.Second*15, time.Millisecond*100)
-	newRoot = certsFromFile(t, dir, "rotation-ca.crt")[0]
-	newIssuer = certsFromFile(t, dir, "rotation-issuer.crt")[0]
+	}, time.Second*15, time.Millisecond*10)
+	newRoot = cert.DecodePEMFile(t, filepath.Join(dir, "rotation-ca.crt"))[0]
+	newIssuer = cert.DecodePEMFile(t, filepath.Join(dir, "rotation-issuer.crt"))[0]
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		_, ok := readRotationState(dir)
+		_, ok := e.sentry.RotationState()
 		if !assert.False(c, ok, "rotation state must be cleared") {
 			return
 		}
@@ -100,13 +102,13 @@ func (e *cleanup) Run(t *testing.T, ctx context.Context) {
 			return
 		}
 		assert.Len(c, anchors, 1, "only the new root CA must remain in the trust anchors")
-	}, time.Second*60, time.Millisecond*500)
+	}, time.Second*60, time.Millisecond*10)
 
 	// Only the new root CA and issuer must remain.
-	anchors := certsFromFile(t, dir, "ca.crt")
+	anchors := cert.DecodePEMFile(t, filepath.Join(dir, "ca.crt"))
 	require.Len(t, anchors, 1)
 	assert.True(t, anchors[0].Equal(newRoot), "the remaining trust anchor must be the new root CA")
-	issuer := certsFromFile(t, dir, "issuer.crt")
+	issuer := cert.DecodePEMFile(t, filepath.Join(dir, "issuer.crt"))
 	assert.True(t, issuer[0].Equal(newIssuer), "the active issuer must be the new issuer")
 
 	// All rotation files must be removed.
@@ -120,11 +122,11 @@ func (e *cleanup) Run(t *testing.T, ctx context.Context) {
 	}
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		metrics, merr := scrapeMetrics(t, ctx, e.sentry)
+		metrics, merr := e.sentry.Metrics(t, ctx)
 		if !assert.NoError(c, merr) {
 			return
 		}
 		assert.Contains(c, metrics, "dapr_sentry_rootcert_rotation_total")
 		assert.Contains(c, metrics, `phase="complete"`)
-	}, time.Second*10, time.Millisecond*100)
+	}, time.Second*10, time.Millisecond*10)
 }

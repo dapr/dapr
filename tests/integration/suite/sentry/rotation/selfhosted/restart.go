@@ -15,6 +15,7 @@ package selfhosted
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/cert"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -42,7 +44,7 @@ type restart struct {
 
 func (r *restart) Setup(t *testing.T) []framework.Option {
 	r.dir = t.TempDir()
-	r.bundle = genBundle(t, time.Hour*24)
+	r.bundle = cert.GenerateCABundle(t, trustDomain, time.Hour*24)
 
 	// The first sentry starts the rotation and parks in the distributing phase
 	// (default 24h propagation window).
@@ -50,6 +52,7 @@ func (r *restart) Setup(t *testing.T) []framework.Option {
 		procsentry.WithTrustDomain(trustDomain),
 		procsentry.WithCABundle(r.bundle),
 		procsentry.WithCredentialsDirectory(r.dir),
+		procsentry.WithRotationEnabled(true),
 		procsentry.WithRotationCheckInterval(time.Second),
 	)
 
@@ -62,6 +65,7 @@ func (r *restart) Setup(t *testing.T) []framework.Option {
 		procsentry.WithCABundle(r.bundle),
 		procsentry.WithCredentialsDirectory(r.dir),
 		procsentry.WithWriteTrustBundle(false),
+		procsentry.WithRotationEnabled(true),
 		procsentry.WithRotationCheckInterval(time.Second),
 		procsentry.WithRotationPropagationWindow(time.Second*2),
 		procsentry.WithConfiguration(`
@@ -83,16 +87,16 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	r.fresh.WaitUntilRunning(t, ctx)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		state, ok := readRotationState(r.dir)
+		state, ok := r.fresh.RotationState()
 		if assert.True(c, ok, "rotation state must be persisted") {
 			assert.Equal(c, string(bundle.RotationPhaseDistributing), state.Phase)
 		}
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 
-	stateBefore, ok := readRotationState(r.dir)
+	stateBefore, ok := r.fresh.RotationState()
 	require.True(t, ok)
-	pendingRoot := certsFromFile(t, r.dir, "rotation-ca.crt")[0]
-	pendingIssuer := certsFromFile(t, r.dir, "rotation-issuer.crt")[0]
+	pendingRoot := cert.DecodePEMFile(t, filepath.Join(r.dir, "rotation-ca.crt"))[0]
+	pendingIssuer := cert.DecodePEMFile(t, filepath.Join(r.dir, "rotation-issuer.crt"))[0]
 
 	// Stop the first sentry mid-rotation and start the second one from the
 	// same credentials directory.
@@ -105,25 +109,25 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	// propagation window already elapsed, switch signing to the pending
 	// issuer.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		state, ok := readRotationState(r.dir)
+		state, ok := r.fresh.RotationState()
 		if assert.True(c, ok, "rotation state must be persisted") {
 			assert.Equal(c, string(bundle.RotationPhaseSigning), state.Phase)
 		}
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 
-	stateAfter, ok := readRotationState(r.dir)
+	stateAfter, ok := r.fresh.RotationState()
 	require.True(t, ok)
 	assert.True(t, stateAfter.DistributedAt.Equal(stateBefore.DistributedAt),
 		"the restarted sentry must resume the rotation begun before the restart, not start a new one")
 
 	// The pending CA generated before the restart must be the one promoted.
-	assert.True(t, certsFromFile(t, r.dir, "rotation-ca.crt")[0].Equal(pendingRoot))
-	issuer := certsFromFile(t, r.dir, "issuer.crt")
+	assert.True(t, cert.DecodePEMFile(t, filepath.Join(r.dir, "rotation-ca.crt"))[0].Equal(pendingRoot))
+	issuer := cert.DecodePEMFile(t, filepath.Join(r.dir, "issuer.crt"))
 	assert.True(t, issuer[0].Equal(pendingIssuer), "the pending issuer from before the restart must be promoted")
 
 	// Both root CAs must remain in the trust anchors across the restart.
-	anchors := certsFromFile(t, r.dir, "ca.crt")
+	anchors := cert.DecodePEMFile(t, filepath.Join(r.dir, "ca.crt"))
 	require.Len(t, anchors, 2, "both root CAs must remain in the trust anchors")
-	assert.True(t, anchors[0].Equal(certsFromPEM(t, r.bundle.X509.TrustAnchors)[0]))
+	assert.True(t, anchors[0].Equal(cert.DecodePEM(t, r.bundle.X509.TrustAnchors)[0]))
 	assert.True(t, anchors[1].Equal(pendingRoot))
 }

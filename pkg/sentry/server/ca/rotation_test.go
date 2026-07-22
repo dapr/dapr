@@ -376,12 +376,14 @@ func TestNewRotatorConfigDefaults(t *testing.T) {
 	t.Run("explicit rotation config is preserved", func(t *testing.T) {
 		caObj := &ca{config: config.Config{
 			Rotation: config.ConfigRotation{
+				Enabled:           true,
 				TriggerWindow:     time.Hour,
 				PropagationWindow: time.Minute,
 				CheckInterval:     time.Second,
 			},
 		}}
 		r := newRotator(&mockRotationStore{}, caObj)
+		assert.True(t, r.config.Enabled)
 		assert.Equal(t, time.Hour, r.config.TriggerWindow)
 		assert.Equal(t, time.Minute, r.config.PropagationWindow)
 		assert.Equal(t, time.Second, r.config.CheckInterval)
@@ -415,6 +417,7 @@ func TestRotatorRunImmediateTick(t *testing.T) {
 	ms := &signalStore{bndle: bndle, storedCh: make(chan bundle.Bundle, 1)}
 	caObj := &ca{bundle: bndle}
 	r := newTestRotator(ms, caObj, rotatorConfig{
+		Enabled:           true,
 		TrustDomain:       "test.example.com",
 		WorkloadCertTTL:   24 * time.Hour,
 		TriggerWindow:     30 * 24 * time.Hour,
@@ -496,4 +499,40 @@ func TestRotatorTickNilBundle(t *testing.T) {
 	err := r.tick(t.Context())
 	require.ErrorContains(t, err, "missing or inconsistent")
 	assert.Nil(t, ms.stored)
+}
+
+func TestRotatorRunDisabled(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-ns")
+
+	// Near-expiry root CA which would trigger rotation immediately were
+	// rotation enabled.
+	bndle := makeTestX509Bundle(t, time.Now().Add(15*24*time.Hour))
+	ms := &signalStore{bndle: bndle, storedCh: make(chan bundle.Bundle, 1)}
+	caObj := &ca{bundle: bndle}
+	r := newTestRotator(ms, caObj, rotatorConfig{
+		Enabled:           false,
+		TrustDomain:       "test.example.com",
+		WorkloadCertTTL:   24 * time.Hour,
+		TriggerWindow:     30 * 24 * time.Hour,
+		PropagationWindow: 24 * time.Hour,
+		CheckInterval:     time.Millisecond * 10,
+	})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	errCh := make(chan error, 1)
+	go func() { errCh <- r.Run(ctx) }()
+
+	select {
+	case <-ms.storedCh:
+		t.Fatal("rotation must not run when disabled")
+	case <-time.After(time.Millisecond * 500):
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("rotation loop did not stop on context cancellation")
+	}
 }

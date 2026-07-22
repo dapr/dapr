@@ -107,9 +107,12 @@ type ConfigJWT struct {
 	TTL              time.Duration
 }
 
-// ConfigRotation holds the timing configuration for automatic root CA
-// rotation.
+// ConfigRotation holds the configuration for automatic root CA rotation.
 type ConfigRotation struct {
+	// Enabled turns automatic root CA rotation on. Off by default: rotation
+	// replaces the root CA with a sentry-generated self-signed one, which must
+	// never happen to an operator-provided root CA.
+	Enabled bool
 	// TriggerWindow is how far before root CA expiry to begin rotation.
 	TriggerWindow time.Duration
 	// PropagationWindow is how long to distribute combined trust anchors
