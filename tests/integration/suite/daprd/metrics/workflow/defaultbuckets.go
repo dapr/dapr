@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package metrics
+package workflow
 
 import (
 	"context"
@@ -73,7 +73,7 @@ func (b *defaultBuckets) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 	client := client.NewTaskHubGrpcClient(b.w.Dapr().GRPCConn(t, ctx), backend.DefaultLogger())
-	client.StartWorkItemListener(ctx, r)
+	require.NoError(t, client.StartWorkItemListener(ctx, r))
 
 	t.Run("default latency buckets", func(t *testing.T) {
 		id, err := client.ScheduleNewWorkflow(ctx, "workflow", api.WithInput("activity"))
