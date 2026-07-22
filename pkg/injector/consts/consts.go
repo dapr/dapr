@@ -49,7 +49,8 @@ const (
 	// Kubernetes to push updated root CAs to running pods automatically during rotation.
 	TrustBundleVolumeName = "dapr-trust-bundle" /* #nosec */
 	// TrustBundleVolumeMountPath is where the trust bundle volume is mounted inside daprd.
-	// This matches ControlPlaneDefaultTrustAnchorsPath so daprd can watch the file for live updates.
+	// The mounted ca.crt matches ControlPlaneDefaultTrustAnchorsPath; the injector points
+	// daprd at it via DAPR_TRUST_ANCHORS_FILE so daprd watches the file for live updates.
 	TrustBundleVolumeMountPath = "/var/run/secrets/dapr.io/tls"
 
 	// TODO: @joshvanl: Remove in 1.18

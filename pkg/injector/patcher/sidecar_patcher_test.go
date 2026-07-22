@@ -400,6 +400,8 @@ func TestPatching(t *testing.T) {
 					daprdEnvVars[env.Name] = env.Value
 				}
 				assert.Equal(t, "testns", daprdEnvVars["NAMESPACE"])
+				assert.Equal(t, "/var/run/secrets/dapr.io/tls/ca.crt", daprdEnvVars["DAPR_TRUST_ANCHORS_FILE"],
+					"daprd must be pointed at the mounted trust anchors file when mTLS is enabled")
 
 				assert.Len(t, daprdContainer.VolumeMounts, 2)
 				assert.Equal(t, "dapr-identity-token", daprdContainer.VolumeMounts[0].Name)
@@ -454,6 +456,11 @@ func TestPatching(t *testing.T) {
 
 				require.Len(t, pod.Spec.Volumes, 1)
 				assert.Equal(t, "dapr-identity-token", pod.Spec.Volumes[0].Name)
+
+				for _, env := range daprdContainer.Env {
+					assert.NotEqual(t, "DAPR_TRUST_ANCHORS_FILE", env.Name,
+						"the trust anchors file env var must not be set when mTLS is disabled")
+				}
 			},
 		},
 		{

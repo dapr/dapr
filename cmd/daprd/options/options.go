@@ -44,6 +44,7 @@ type Options struct {
 	ControlPlaneNamespace         string
 	SentryAddress                 string
 	TrustAnchors                  []byte
+	TrustAnchorsFile              *string
 	AllowedOrigins                string
 	EnableProfiling               bool
 	AppMaxConcurrency             int
@@ -246,7 +247,19 @@ func New(origArgs []string) (*Options, error) {
 		}
 	}
 
-	opts.TrustAnchors = []byte(os.Getenv(consts.TrustAnchorsEnvVar))
+	// Prefer a trust anchors file when one is provided and present: file-based
+	// trust anchors are watched for changes, so updated root CAs (e.g. during
+	// root CA rotation) propagate to the running daprd without a restart. The
+	// static env var remains the fallback, e.g. for older injectors or when
+	// the mounted trust bundle does not (yet) exist in this namespace.
+	if taFile, ok := os.LookupEnv(consts.TrustAnchorsFileEnvVar); ok && taFile != "" {
+		if _, err := os.Stat(taFile); err == nil {
+			opts.TrustAnchorsFile = &taFile
+		}
+	}
+	if opts.TrustAnchorsFile == nil {
+		opts.TrustAnchors = []byte(os.Getenv(consts.TrustAnchorsEnvVar))
+	}
 
 	if !fs.Changed("control-plane-namespace") {
 		ns, ok := os.LookupEnv(consts.ControlPlaneNamespaceEnvVar)
