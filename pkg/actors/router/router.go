@@ -219,8 +219,64 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 		err = target.InvokeReminder(ctx, req)
 	}
 
-	if ctx.Err() != nil || targetserrors.IsClosed(err) {
+	if ctx.Err() != nil {
 		return err
+	}
+
+	// IsClosed means the local actor instance was deactivated (e.g. by
+	// HaltNonHosted after a placement rebalance) while this reminder was
+	// being dispatched. The default resiliency retry path would re-call into
+	// the same closed instance through the cached `target` reference until
+	// the policy exhausts — but here the policy is `BuiltInActorNotFoundRetries`
+	// which has no MaxRetries, so it can spin indefinitely.
+	//
+	// Re-resolve via placement once: if the actor has moved, forward to the
+	// new owner; if placement still says local, ask the table for a fresh
+	// instance (Deactivate removes the old entry from f.table, so GetOrCreate
+	// will produce a fresh orchestrator) and retry once.
+	if targetserrors.IsClosed(err) {
+		rlar, rcctx, rcancel, rerr := r.placement.LookupActor(ctx, &api.LookupActorRequest{
+			ActorType: req.ActorType,
+			ActorID:   req.ActorID,
+		})
+		if rerr != nil {
+			return rerr
+		}
+
+		if !rlar.Local {
+			rcancel(nil)
+			if req.IsRemote {
+				return backoff.Permanent(errors.New("remote actor moved"))
+			}
+			err = r.callRemoteActorReminder(ctx, rlar, req)
+			status, ok := status.FromError(err)
+			if ok && status.Code() == codes.Unavailable {
+				return backoff.Permanent(err)
+			}
+			return err
+		}
+
+		defer rcancel(nil)
+		ctx = rcctx
+		target, err = r.table.GetOrCreate(req.ActorType, req.ActorID)
+		if err != nil {
+			return backoff.Permanent(err)
+		}
+		if req.IsTimer {
+			err = target.InvokeTimer(ctx, req)
+		} else {
+			err = target.InvokeReminder(ctx, req)
+		}
+		if ctx.Err() != nil {
+			return err
+		}
+		if targetserrors.IsClosed(err) {
+			return backoff.Permanent(err)
+		}
+		if err == nil {
+			return nil
+		}
+		return backoff.Permanent(err)
 	}
 
 	return backoff.Permanent(err)
