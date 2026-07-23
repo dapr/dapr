@@ -158,6 +158,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.hotReloadReconcileInterval != nil {
 		args = append(args, "--hot-reload-reconcile-interval="+opts.hotReloadReconcileInterval.String())
 	}
+	if opts.bindingOptionsTimeout != nil {
+		args = append(args, "--binding-options-timeout="+opts.bindingOptionsTimeout.String())
+	}
 	if len(opts.schedulerAddresses) > 0 {
 		args = append(args, "--scheduler-host-address="+strings.Join(opts.schedulerAddresses, ","))
 	}

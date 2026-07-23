@@ -292,6 +292,7 @@ func newDaprRuntime(ctx context.Context,
 		Adapter:                         pubsubAdapter,
 		AdapterStreamer:                 pubsubAdapterStreamer,
 		Reporter:                        runtimeConfig.registry.Reporter(),
+		BindingOptionsTimeout:           runtimeConfig.bindingOptionsTimeout,
 	})
 
 	var reloader *hotreload.Reloader

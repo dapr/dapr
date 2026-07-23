@@ -31,6 +31,7 @@ import (
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/healthz"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
@@ -176,6 +177,65 @@ func TestStartReadingFromBindings(t *testing.T) {
 	})
 }
 
+func TestBindingOptionsTimeout(t *testing.T) {
+	t.Run("zero value falls back to default timeout", func(t *testing.T) {
+		b := New(Options{
+			IsHTTP:                true,
+			Resiliency:            resiliency.New(log),
+			ComponentStore:        compstore.New(),
+			Meta:                  meta.New(meta.Options{}),
+			BindingOptionsTimeout: 0, // should use config.DefaultBindingOptionsTimeout
+		})
+		assert.Equal(t, config.DefaultBindingOptionsTimeout, b.bindingOptionsTimeout)
+	})
+
+	t.Run("custom timeout is stored and respected", func(t *testing.T) {
+		customTimeout := 10 * time.Second
+		b := New(Options{
+			IsHTTP:                true,
+			Resiliency:            resiliency.New(log),
+			ComponentStore:        compstore.New(),
+			Meta:                  meta.New(meta.Options{}),
+			BindingOptionsTimeout: customTimeout,
+		})
+		assert.Equal(t, customTimeout, b.bindingOptionsTimeout)
+	})
+
+	t.Run("very short timeout causes OPTIONS probe to fail with deadline exceeded", func(t *testing.T) {
+		// Set up a mock channel whose InvokeMethod returns a deadline exceeded error,
+		// simulating a slow-starting app that exceeds the probe timeout.
+		probeTimeout := 500 * time.Millisecond
+		mockAppChannel := new(channelt.MockAppChannel)
+		b := New(Options{
+			IsHTTP:                true,
+			Resiliency:            resiliency.New(log),
+			ComponentStore:        compstore.New(),
+			Meta:                  meta.New(meta.Options{}),
+			BindingOptionsTimeout: probeTimeout,
+		})
+		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+
+		mockAppChannel.On(
+			"InvokeMethod",
+			mock.MatchedBy(func(ctx context.Context) bool {
+				d, ok := ctx.Deadline()
+				if !ok {
+					return false
+				}
+				remaining := time.Until(d)
+				return remaining > 0 && remaining <= probeTimeout
+			}),
+			mock.Anything,
+		).Return(nil, context.DeadlineExceeded)
+		m := &rtmock.Binding{}
+		b.compStore.AddInputBinding("slow-app", m)
+
+		err := b.StartReadingFromBindings(t.Context())
+		require.Error(t, err, "expected OPTIONS probe to fail when app is slow to respond")
+		mockAppChannel.AssertExpectations(t)
+	})
+}
+
 func TestGetSubscribedBindingsGRPC(t *testing.T) {
 	secP, err := security.New(t.Context(), security.Options{
 		TrustAnchors:            []byte("test"),
@@ -281,7 +341,7 @@ func TestReadInputBindings(t *testing.T) {
 				Name: testInputBindingName,
 			},
 		}
-		b.startInputBinding(comp, &mockBinding)
+		b.startInputBinding(t.Context(), comp, &mockBinding)
 
 		assert.False(t, <-ch)
 	})
@@ -330,7 +390,7 @@ func TestReadInputBindings(t *testing.T) {
 				Name: testInputBindingName,
 			},
 		}
-		b.startInputBinding(comp, &mockBinding)
+		b.startInputBinding(t.Context(), comp, &mockBinding)
 
 		assert.True(t, <-ch)
 	})
@@ -380,7 +440,7 @@ func TestReadInputBindings(t *testing.T) {
 				Name: testInputBindingName,
 			},
 		}
-		b.startInputBinding(comp, &mockBinding)
+		b.startInputBinding(t.Context(), comp, &mockBinding)
 
 		assert.Equal(t, string(rtmock.TestInputBindingData), mockBinding.Data)
 	})
@@ -420,7 +480,7 @@ func TestReadInputBindings(t *testing.T) {
 			},
 		}
 		b.compStore.AddInputBinding(testInputBindingName, mockBinding)
-		b.startInputBinding(comp, mockBinding)
+		b.startInputBinding(t.Context(), comp, mockBinding)
 
 		time.Sleep(80 * time.Millisecond)
 

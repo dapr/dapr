@@ -29,6 +29,7 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/loop"
@@ -95,6 +96,7 @@ type Options struct {
 	AdapterStreamer                 rtpubsub.AdapterStreamer
 	Reporter                        registry.Reporter
 	ProgrammaticSubscriptionEnabled bool
+	BindingOptionsTimeout           time.Duration
 }
 
 // Processor manages the lifecycle of all components, HTTP endpoints, MCP
@@ -200,14 +202,15 @@ func New(opts Options) *Processor {
 	})
 
 	bindingProc := binding.New(binding.Options{
-		Registry:       opts.Registry.Bindings(),
-		ComponentStore: opts.ComponentStore,
-		Meta:           opts.Meta,
-		IsHTTP:         opts.IsHTTP,
-		Resiliency:     opts.Resiliency,
-		GRPC:           opts.GRPC,
-		TracingSpec:    opts.GlobalConfig.Spec.TracingSpec,
-		Channels:       opts.Channels,
+		Registry:              opts.Registry.Bindings(),
+		ComponentStore:        opts.ComponentStore,
+		Meta:                  opts.Meta,
+		IsHTTP:                opts.IsHTTP,
+		Resiliency:            opts.Resiliency,
+		GRPC:                  opts.GRPC,
+		TracingSpec:           opts.GlobalConfig.Spec.TracingSpec,
+		Channels:              opts.Channels,
+		BindingOptionsTimeout: opts.BindingOptionsTimeout,
 	})
 
 	pubsubProc := pubsub.New(pubsub.Options{
