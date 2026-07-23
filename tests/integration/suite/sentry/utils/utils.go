@@ -41,9 +41,11 @@ type KubeAPIOptions struct {
 	AllowedClockSkew string
 
 	// ExtraTrustBundleNamespaces creates additional dapr-trust-bundle
-	// ConfigMaps (operator-synced copies) in the given namespaces, seeded with
-	// the bundle's trust anchors and served in the cluster-wide ConfigMap
-	// list. Only honored by KubeAPIRW.
+	// ConfigMaps (operator-synced copies) in the given namespaces, seeded
+	// with the bundle's trust anchors and served read-write per namespace. A
+	// sidecar-injected pod is served for each namespace so sentry's
+	// pod-derived propagation check treats it as running Dapr workloads.
+	// Only honored by KubeAPIRW.
 	ExtraTrustBundleNamespaces []string
 }
 
@@ -55,10 +57,9 @@ type TrustBundleRW struct {
 	ConfigMap *prockube.ResourceRW[corev1.ConfigMap]
 
 	// ExtraConfigMaps are additional dapr-trust-bundle ConfigMaps in other
-	// namespaces (operator-synced copies), keyed by namespace. They are
-	// served individually and in the cluster-wide ConfigMap list, which
-	// sentry uses to verify trust anchor propagation before rotation
-	// cleanup.
+	// namespaces (operator-synced copies), keyed by namespace. Each is
+	// served read-write in its namespace, where sentry's per-namespace
+	// propagation check reads it before allowing rotation cleanup.
 	ExtraConfigMaps map[string]*prockube.ResourceRW[corev1.ConfigMap]
 }
 
