@@ -23,6 +23,9 @@ ports:
   targetPort: 50001
 
 tls:
+  # Controls whether this chart renders the dapr-trust-bundle Secret/ConfigMap manifests.
+  # WARNING: Switching this from true -> false on an existing release will cause Helm to delete those resources during upgrade.
+  generateBundleSecret: true
   issuer:
     certPEM: ""
     keyPEM: ""
