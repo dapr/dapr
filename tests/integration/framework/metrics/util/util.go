@@ -11,19 +11,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package distributionbuckets
+package util
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/dapr/dapr/tests/integration/framework/metrics"
+
 	"github.com/stretchr/testify/require"
 )
 
-func getBucketFromKey(t *testing.T, k string) float64 {
+// GetBucketFromKey returns a bucket given a key
+// k = "a:b|le:5000"
+func GetBucketFromKey(t *testing.T, k string) float64 {
 	t.Helper()
-	// k = "a:b|le:5000"
 	keyParts := strings.SplitSeq(k, "|")
 	for k := range keyParts {
 		if v, ok := strings.CutPrefix(k, "le:"); ok {
@@ -34,4 +38,24 @@ func getBucketFromKey(t *testing.T, k string) float64 {
 	}
 	t.Error("did not find any bucket ('le') in key")
 	return 0
+}
+
+func CollectBuckets(t *testing.T, metrics *metrics.Metrics, metric, name, status string) []float64 {
+	t.Helper()
+
+	if metrics == nil {
+		return nil
+	}
+
+	var buckets []float64
+	for m := range metrics.All() {
+		if strings.HasPrefix(m, metric) && strings.Contains(m, name) && strings.Contains(m, status) {
+			bucket := GetBucketFromKey(t, m)
+			buckets = append(buckets, bucket)
+		}
+	}
+
+	slices.Sort(buckets)
+
+	return buckets
 }

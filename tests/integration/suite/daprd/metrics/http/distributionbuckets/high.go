@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/metrics/util"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -80,7 +81,7 @@ func (h *high) Run(t *testing.T, ctx context.Context) {
 			metrics := h.daprd.Metrics(c, ctx).All()
 			for k := range metrics {
 				if strings.HasPrefix(k, "dapr_http_server_latency_bucket") && strings.Contains(k, "app_id:myapp") && strings.Contains(k, "status:200") {
-					bucket := getBucketFromKey(t, k)
+					bucket := util.GetBucketFromKey(t, k)
 					httpServerLatencyBuckets = append(httpServerLatencyBuckets, bucket)
 				}
 			}

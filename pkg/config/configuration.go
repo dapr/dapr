@@ -403,8 +403,49 @@ type MetricSpec struct {
 	RecordErrorCodes *bool       `json:"recordErrorCodes,omitempty"  yaml:"recordErrorCodes,omitempty"`
 	HTTP             *MetricHTTP `json:"http,omitempty" yaml:"http,omitempty"`
 	// Latency distribution buckets. If not set, the default buckets are used.
-	LatencyDistributionBuckets *[]int        `json:"latencyDistributionBuckets,omitempty" yaml:"latencyDistributionBuckets,omitempty"`
-	Rules                      []MetricsRule `json:"rules,omitempty" yaml:"rules,omitempty"`
+	LatencyDistributionBuckets *[]int `json:"latencyDistributionBuckets,omitempty" yaml:"latencyDistributionBuckets,omitempty"`
+	// Workflow holds metrics options specific to workflow and activity metrics.
+	Workflow *WorkflowMetrics `json:"workflow,omitempty" yaml:"workflow,omitempty"`
+	Rules    []MetricsRule    `json:"rules,omitempty" yaml:"rules,omitempty"`
+}
+
+// WorkflowMetrics configures metrics options specific to workflows and activities.
+type WorkflowMetrics struct {
+	// LatencyDistributionBuckets overrides the latency distribution buckets used for the
+	// workflow and activity execution latency histograms. If not set or empty, those
+	// histograms fall back to the shared MetricSpec.LatencyDistributionBuckets.
+	LatencyDistributionBuckets *[]int `json:"latencyDistributionBuckets,omitempty" yaml:"latencyDistributionBuckets,omitempty"`
+	// LatencyDistributionUnits is the unit the LatencyDistributionBuckets values are
+	// expressed in (for example "1ms" or "1s"). It defaults to milliseconds. The buckets
+	// are scaled into the milliseconds the histograms are recorded in.
+	LatencyDistributionUnits *time.Duration `json:"latencyDistributionUnits,omitempty" yaml:"latencyDistributionUnits,omitempty"`
+}
+
+// UnmarshalJSON handles the Kubernetes CRD JSON format sent by the operator,
+// where LatencyDistributionUnits is encoded as a metav1.Duration string (for
+// example "1s" or "1ms"). Standalone configuration files parsed via YAML use the
+// YAML unmarshaling path instead, which handles Go duration strings natively.
+func (w *WorkflowMetrics) UnmarshalJSON(data []byte) error {
+	// alias drops WorkflowMetrics's methods to avoid recursing into this
+	// UnmarshalJSON. The embedded *alias decodes every other field normally,
+	// while the shallower LatencyDistributionUnits field shadows the alias's
+	// *time.Duration field so the metav1.Duration string form decodes.
+	type alias WorkflowMetrics
+	aux := &struct {
+		LatencyDistributionUnits *metav1.Duration `json:"latencyDistributionUnits,omitempty"`
+		*alias
+	}{
+		alias: (*alias)(w),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if aux.LatencyDistributionUnits != nil {
+		d := aux.LatencyDistributionUnits.Duration
+		w.LatencyDistributionUnits = &d
+	}
+
+	return nil
 }
 
 // GetEnabled returns true if metrics are enabled.
@@ -441,6 +482,31 @@ func (m MetricSpec) GetLatencyDistribution(log logger.Logger) *view.Aggregation 
 	buckets := make([]float64, len(*m.LatencyDistributionBuckets))
 	for i, v := range *m.LatencyDistributionBuckets {
 		buckets[i] = float64(v)
+	}
+
+	return view.Distribution(buckets...)
+}
+
+// GetWorkflowLatencyDistribution returns the *view.Aggregation to use for workflow
+// latency histograms. When spec.metrics.workflow.latencyDistributionBuckets is set and
+// non-empty it returns a distribution built from those buckets; otherwise it returns
+// defaultDist (the shared latency distribution), making the workflow buckets an
+// optional override that defaults to the shared histogram.
+func (m MetricSpec) GetWorkflowLatencyDistribution(log logger.Logger, defaultDist *view.Aggregation) *view.Aggregation {
+	if m.Workflow == nil || m.Workflow.LatencyDistributionBuckets == nil || len(*m.Workflow.LatencyDistributionBuckets) == 0 {
+		return defaultDist
+	}
+	// Histograms are always recorded in milliseconds, so scale the configured
+	// buckets from their unit (default millisecond) into milliseconds.
+	unit := time.Millisecond
+	if m.Workflow.LatencyDistributionUnits != nil && *m.Workflow.LatencyDistributionUnits > 0 {
+		unit = *m.Workflow.LatencyDistributionUnits
+	}
+	scale := float64(unit) / float64(time.Millisecond)
+	log.Infof("Using custom workflow latency distribution buckets: %v (unit: %s)", *m.Workflow.LatencyDistributionBuckets, unit)
+	buckets := make([]float64, len(*m.Workflow.LatencyDistributionBuckets))
+	for i, v := range *m.Workflow.LatencyDistributionBuckets {
+		buckets[i] = float64(v) * scale
 	}
 
 	return view.Distribution(buckets...)
@@ -952,6 +1018,10 @@ func (c *Configuration) sortMetricsSpec() {
 
 	if c.Spec.MetricsSpec.LatencyDistributionBuckets != nil {
 		c.Spec.MetricSpec.LatencyDistributionBuckets = c.Spec.MetricsSpec.LatencyDistributionBuckets
+	}
+
+	if c.Spec.MetricsSpec.Workflow != nil {
+		c.Spec.MetricSpec.Workflow = c.Spec.MetricsSpec.Workflow
 	}
 
 	if c.Spec.MetricsSpec.RecordErrorCodes != nil {
