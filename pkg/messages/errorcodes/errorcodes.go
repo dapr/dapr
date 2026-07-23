@@ -140,7 +140,9 @@ var (
 	ConversationNotFound      = ErrorCode{"ERR_CONVERSATION_NOT_FOUND", "", CategoryConversation}      // Conversation not found
 
 	// ### Service Invocation / Direct Messaging API
-	ServiceInvocationDirectInvoke = ErrorCode{"ERR_DIRECT_INVOKE", "", CategoryServiceInvocation} // Error invoking service
+	ServiceInvocationDirectInvoke = ErrorCode{"ERR_DIRECT_INVOKE", "DAPR_DIRECT_INVOKE", CategoryServiceInvocation}           // Error invoking service
+	ServiceInvocationNoAppID      = ErrorCode{"ERR_DIRECT_INVOKE_NO_APP_ID", "DAPR_DIRECT_INVOKE_NO_APP_ID", CategoryServiceInvocation} // App ID missing from service invocation request
+	ServiceInvocationNotReady     = ErrorCode{"ERR_DIRECT_INVOKE_NOT_READY", "DAPR_DIRECT_INVOKE_NOT_READY", CategoryServiceInvocation} // Direct invoke API not ready
 
 	// ### Bindings API
 	BindingInvokeOutputBinding = ErrorCode{"ERR_INVOKE_OUTPUT_BINDING", "", CategoryBinding} // Error invoking output binding
