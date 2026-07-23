@@ -33,6 +33,7 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/reminders"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/messages"
@@ -200,7 +201,7 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 	var req actorapi.CreateReminderRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		msg := messages.ErrMalformedRequest.WithFormat(err)
+		msg := apierrors.ActorMalformedRequest(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -208,7 +209,7 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 
 	name := chi.URLParamFromCtx(ctx, nameParam)
 	if vErr := methodutil.ValidateName(name); vErr != nil {
-		msg := messages.ErrBadRequest.WithFormat(vErr)
+		msg := apierrors.ActorBadRequest(vErr)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -226,7 +227,7 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 	err = rem.Create(ctx, &req)
 	if err != nil {
 		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
-			msg := messages.ErrActorReminderOpActorNotHosted
+			msg := apierrors.ActorReminderNonHosted()
 			respondWithError(w, msg)
 			log.Debug(msg)
 			return
@@ -234,13 +235,13 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 
 		status, ok := status.FromError(err)
 		if ok && status.Code() == codes.AlreadyExists {
-			msg := messages.ErrActorReminderAlreadyExists.WithFormat(req.Name)
+			msg := apierrors.ActorReminderAlreadyExists(req.Name)
 			respondWithError(w, msg)
 			log.Debug(msg)
 			return
 		}
 
-		msg := messages.ErrActorReminderCreate.WithFormat(err)
+		msg := apierrors.ActorReminderCreate(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -261,7 +262,7 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 	var req actorapi.CreateTimerRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		msg := messages.ErrMalformedRequest.WithFormat(err)
+		msg := apierrors.ActorMalformedRequest(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -269,7 +270,7 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 
 	name := chi.URLParamFromCtx(ctx, nameParam)
 	if vErr := methodutil.ValidateName(name); vErr != nil {
-		msg := messages.ErrBadRequest.WithFormat(vErr)
+		msg := apierrors.ActorBadRequest(vErr)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -286,7 +287,7 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 
 	err = timers.Create(ctx, &req)
 	if err != nil {
-		msg := messages.ErrActorTimerCreate.WithFormat(err)
+		msg := apierrors.ActorTimerCreate(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -322,7 +323,7 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	var ops []actorapi.TransactionalOperation
 	err := json.NewDecoder(r.Body).Decode(&ops)
 	if err != nil {
-		msg := messages.ErrMalformedRequest.WithFormat(err)
+		msg := apierrors.ActorMalformedRequest(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -349,7 +350,7 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		msg := messages.ErrActorStateTransactionSave.WithFormat(err)
+		msg := apierrors.ActorStateTransactionSave(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -439,7 +440,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 		{"actorType", actorType}, {"actorId", actorID},
 	} {
 		if vErr := methodutil.ValidateName(param.val); vErr != nil {
-			msg := messages.ErrBadRequest.WithFormat(fmt.Sprintf("invalid %s: %v", param.name, vErr))
+			msg := apierrors.ActorBadRequest(fmt.Sprintf("invalid %s: %v", param.name, vErr))
 			respondWithError(w, msg)
 			log.Debug(msg)
 			return
@@ -448,7 +449,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	verb := strings.ToUpper(r.Method)
 	method, err := methodutil.NormalizeMethod(chi.URLParamFromCtx(ctx, methodParam))
 	if err != nil {
-		msg := messages.ErrBadRequest.WithFormat(err)
+		msg := apierrors.ActorBadRequest(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -457,7 +458,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	// Actor invocation doesn't support streaming, so we need to read the entire reqBody
 	reqBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		msg := messages.ErrBadRequest.WithFormat("failed to read body: " + err.Error())
+		msg := apierrors.ActorBadRequest("failed to read body: " + err.Error())
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -492,7 +493,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 
 		actorErr, isActorError := actorerrors.As(err)
 		if !isActorError {
-			msg := messages.ErrActorInvoke.WithFormat(err)
+			msg := apierrors.ActorInvoke(err)
 			respondWithError(w, msg)
 			log.Debug(msg)
 			return
@@ -508,7 +509,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if res == nil {
-		msg := messages.ErrActorInvoke.WithFormat("failed to cast response")
+		msg := apierrors.ActorInvoke("failed to cast response")
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -559,7 +560,7 @@ func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		msg := messages.ErrActorStateGet.WithFormat(err)
+		msg := apierrors.ActorStateGet(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
