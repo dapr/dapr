@@ -295,14 +295,10 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 				},
 				Resources: corev1.ResourceRequirements{
 					Limits: map[corev1.ResourceName]resource.Quantity{
-						"memory": {
-							Format: resource.Format(k6.testMemoryLimit),
-						},
+						"memory": resource.MustParse(k6.testMemoryLimit),
 					},
 					Requests: map[corev1.ResourceName]resource.Quantity{
-						"memory": {
-							Format: resource.Format(k6.daprMemoryRequest),
-						},
+						"memory": resource.MustParse(k6.testMemoryRequest),
 					},
 				},
 			},
