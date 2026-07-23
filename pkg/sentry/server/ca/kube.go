@@ -18,13 +18,16 @@ import (
 	"crypto/x509"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/kit/crypto/pem"
@@ -277,32 +280,57 @@ func (k *kube) restoreConfigMap(ctx context.Context, configMap *corev1.ConfigMap
 	}
 }
 
-// verifyPropagation checks that every dapr-trust-bundle ConfigMap in the
-// cluster (the operator-synced copies workloads mount for their trust
-// anchors) already carries the rotation's new root CA. A namespace that has
-// not received the new root yet would be cut off from the mesh if cleanup
-// removed the old root, so cleanup is deferred until nothing is lagging.
+// verifyPropagation checks that the trust bundle ConfigMap (the
+// operator-synced copy workloads mount for their trust anchors) in every
+// namespace running Dapr-enabled workloads already carries the rotation's new
+// root CA. The namespaces that need propagation are derived from the pods
+// running Dapr sidecars: a namespace with Dapr workloads but no ConfigMap yet
+// counts as lagging (its pods fell back to static trust anchors and never
+// received the new root), while stale ConfigMaps in namespaces without Dapr
+// workloads are ignored so they cannot block cleanup indefinitely. This runs
+// at most once per rotation check while a rotation awaits cleanup.
 func (k *kube) verifyPropagation(ctx context.Context, rot *bundle.RotationState) error {
 	newRoots, err := pem.DecodePEMCertificates(rot.NewTrustAnchors)
 	if err != nil {
 		return fmt.Errorf("failed to decode pending trust anchors: %w", err)
 	}
 
-	configMaps, err := k.client.CoreV1().ConfigMaps(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
-		FieldSelector: "metadata.name=" + TrustBundleK8sName,
+	pods, err := k.client.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+		LabelSelector: injectorConsts.SidecarInjectedLabel + "=true",
 	})
 	if err != nil {
-		return fmt.Errorf("failed to list trust bundle configmaps: %w", err)
+		return fmt.Errorf("failed to list Dapr-enabled pods: %w", err)
+	}
+
+	// The control-plane namespace holds the source ConfigMap and is always
+	// required.
+	namespaces := map[string]struct{}{k.namespace: {}}
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		// The server-side selector already filters; re-check to be safe.
+		if pod.Labels[injectorConsts.SidecarInjectedLabel] != "true" {
+			continue
+		}
+		namespaces[pod.Namespace] = struct{}{}
 	}
 
 	var lagging []string
-	for _, configMap := range configMaps.Items {
+	for namespace := range namespaces {
+		configMap, cmErr := k.client.CoreV1().ConfigMaps(namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
+		if cmErr != nil {
+			if !apierrors.IsNotFound(cmErr) {
+				return fmt.Errorf("failed to get trust bundle configmap in namespace %s: %w", namespace, cmErr)
+			}
+			lagging = append(lagging, namespace)
+			continue
+		}
 		anchors, decErr := pem.DecodePEMCertificates([]byte(configMap.Data[filepath.Base(k.config.RootCertPath)]))
 		if decErr != nil || !containsCerts(anchors, newRoots) {
-			lagging = append(lagging, configMap.Namespace)
+			lagging = append(lagging, namespace)
 		}
 	}
 	if len(lagging) > 0 {
+		sort.Strings(lagging)
 		return fmt.Errorf("new trust anchors have not yet propagated to the trust bundle ConfigMap in namespaces %v", lagging)
 	}
 

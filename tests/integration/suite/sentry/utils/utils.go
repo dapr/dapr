@@ -97,25 +97,25 @@ func KubeAPIRW(t *testing.T, opts KubeAPIOptions) (*prockube.Kubernetes, TrustBu
 		kubeOpts = append(kubeOpts, extra.Option())
 	}
 
-	// Cluster-wide ConfigMap list aggregating the current state of every
-	// trust bundle ConfigMap.
-	kubeOpts = append(kubeOpts, prockube.WithPath("/api/v1/configmaps", func(w http.ResponseWriter, r *http.Request) {
-		list := corev1.ConfigMapList{
-			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMapList"},
-			Items:    []corev1.ConfigMap{*rw.ConfigMap.Current(t)},
-		}
-		for _, extra := range rw.ExtraConfigMaps {
-			list.Items = append(list.Items, *extra.Current(t))
-		}
-		resp, err := json.Marshal(list)
-		assert.NoError(t, err)
-		w.Header().Add("Content-Type", "application/json")
-		w.Write(resp)
-	}))
-
 	kubeAPI := prockube.New(t, kubeOpts...)
 
 	return kubeAPI, rw
+}
+
+// daprEnabledPods returns one sidecar-injected pod per namespace, so sentry's
+// propagation check treats the namespaces as running Dapr workloads.
+func daprEnabledPods(namespaces []string) []corev1.Pod {
+	pods := make([]corev1.Pod, 0, len(namespaces))
+	for _, namespace := range namespaces {
+		pods = append(pods, corev1.Pod{
+			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace, Name: "daprpod",
+				Labels: map[string]string{"dapr.io/sidecar-injected": "true"},
+			},
+		})
+	}
+	return pods
 }
 
 func trustBundleSecret(bndle bundle.Bundle) *corev1.Secret {
@@ -164,7 +164,7 @@ func kubeAPIOptions(t *testing.T, opts KubeAPIOptions) []prockube.Option {
 		}),
 		prockube.WithClusterPodList(t, &corev1.PodList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
-			Items: []corev1.Pod{
+			Items: append([]corev1.Pod{
 				{
 					TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
 					ObjectMeta: metav1.ObjectMeta{
@@ -173,7 +173,7 @@ func kubeAPIOptions(t *testing.T, opts KubeAPIOptions) []prockube.Option {
 					},
 					Spec: corev1.PodSpec{ServiceAccountName: opts.ServiceAccount},
 				},
-			},
+			}, daprEnabledPods(opts.ExtraTrustBundleNamespaces)...),
 		}),
 		prockube.WithPath("/apis/authentication.k8s.io/v1/tokenreviews", func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "POST", r.Method)
