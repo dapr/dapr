@@ -72,6 +72,13 @@ type options struct {
 	disableInitEndpoints       []string
 	maxBodySize                *string
 	allowedOrigins             *string
+	appMaxConcurrency          *int
+}
+
+func WithAppMaxConcurrency(concurrency int) Option {
+	return func(o *options) {
+		o.appMaxConcurrency = &concurrency
+	}
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
