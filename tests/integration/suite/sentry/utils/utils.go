@@ -74,8 +74,10 @@ func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 
 // KubeAPIRW is like KubeAPI, but serves the dapr-trust-bundle Secret and
 // ConfigMap read-write so sentry can persist trust bundle updates and read
-// them back. It also serves the cluster-wide ConfigMap list sentry uses to
-// verify trust anchor propagation before rotation cleanup.
+// them back. Extra per-namespace trust bundle ConfigMaps (with a
+// sidecar-injected pod each, served in the cluster-wide Pod list) simulate
+// operator-synced copies for sentry's per-namespace propagation check before
+// rotation cleanup.
 func KubeAPIRW(t *testing.T, opts KubeAPIOptions) (*prockube.Kubernetes, TrustBundleRW) {
 	t.Helper()
 
