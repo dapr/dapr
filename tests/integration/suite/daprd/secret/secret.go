@@ -14,6 +14,7 @@ limitations under the License.
 package secret
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/secret/grpc"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/secret/http"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/secret/secretscoping"
 )
