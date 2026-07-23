@@ -24,6 +24,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/metadata"
 
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
@@ -33,7 +34,9 @@ import (
 // into Dapr-enabled namespaces. It must be well below sentry's rotation
 // propagation window (default 24h) so rotated trust anchors reach every
 // namespace long before signing switches.
-const trustBundleSyncInterval = 30 * time.Second
+const trustBundleSyncInterval = 60 * time.Second
+
+var podsGVR = corev1.SchemeGroupVersion.WithResource("pods")
 
 // TrustBundleSync periodically copies the dapr-trust-bundle ConfigMap from
 // the control-plane namespace into every namespace running Dapr-enabled
@@ -42,7 +45,10 @@ const trustBundleSyncInterval = 30 * time.Second
 // workloads; sentry also verifies these copies carry the new root CA before
 // the rotation cleanup removes the old one.
 type TrustBundleSync struct {
-	client                kubernetes.Interface
+	client kubernetes.Interface
+	// metadataClient lists Dapr-enabled pods metadata-only (only their
+	// namespaces are needed), keeping the periodic cluster-wide list cheap.
+	metadataClient        metadata.Interface
 	controlPlaneNamespace string
 	interval              time.Duration
 }
@@ -76,7 +82,7 @@ func (s *TrustBundleSync) Start(ctx context.Context) error {
 // sync copies the source trust bundle ConfigMap into every namespace that
 // runs Dapr-enabled workloads.
 func (s *TrustBundleSync) sync(ctx context.Context) error {
-	source, err := s.client.CoreV1().ConfigMaps(s.controlPlaneNamespace).Get(ctx, securityConsts.TrustBundleK8sSecretName, metav1.GetOptions{})
+	source, err := s.client.CoreV1().ConfigMaps(s.controlPlaneNamespace).Get(ctx, securityConsts.TrustBundleConfigMapName, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Nothing to sync yet; sentry creates the source ConfigMap.
@@ -85,7 +91,7 @@ func (s *TrustBundleSync) sync(ctx context.Context) error {
 		return fmt.Errorf("failed to get source trust bundle configmap: %w", err)
 	}
 
-	pods, err := s.client.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+	pods, err := s.metadataClient.Resource(podsGVR).List(ctx, metav1.ListOptions{
 		LabelSelector: injectorConsts.SidecarInjectedLabel + "=true",
 	})
 	if err != nil {
@@ -94,8 +100,13 @@ func (s *TrustBundleSync) sync(ctx context.Context) error {
 
 	namespaces := make(map[string]struct{})
 	for i := range pods.Items {
-		if ns := pods.Items[i].Namespace; ns != s.controlPlaneNamespace {
-			namespaces[ns] = struct{}{}
+		pod := &pods.Items[i]
+		// The server-side selector already filters; re-check to be safe.
+		if pod.Labels[injectorConsts.SidecarInjectedLabel] != "true" {
+			continue
+		}
+		if pod.Namespace != s.controlPlaneNamespace {
+			namespaces[pod.Namespace] = struct{}{}
 		}
 	}
 
