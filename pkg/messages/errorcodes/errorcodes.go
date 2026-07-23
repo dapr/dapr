@@ -131,7 +131,7 @@ var (
 	PubSubEventsSerEnvelope     = ErrorCode{"ERR_PUBSUB_EVENTS_SER", "DAPR_PUBSUB_MARSHAL_ENVELOPE", CategoryPubsub}               // Error marshalling Cloud Event envelope
 	PubSubEventsMarshalEvents   = ErrorCode{"ERR_PUBSUB_EVENTS_SER", "DAPR_PUBSUB_MARSHAL_EVENTS", CategoryPubsub}                 // Error marshalling events to bytes
 	PubSubEventsUnmarshalEvents = ErrorCode{"ERR_PUBSUB_EVENTS_SER", "DAPR_PUBSUB_UNMARSHAL_EVENTS", CategoryPubsub}               // Error unmarshalling events
-	PubsubPublishOutbox         = ErrorCode{"ERR_PUBLISH_OUTBOX", "", CategoryPubsub}                                              // Error publishing message to outbox
+	PubsubPublishOutbox         = ErrorCode{"ERR_PUBLISH_OUTBOX", "DAPR_PUBLISH_OUTBOX", CategoryPubsub}                                              // Error publishing message to outbox
 
 	// ### Conversation API
 	ConversationInvalidParms  = ErrorCode{"ERR_CONVERSATION_INVALID_PARMS", "", CategoryConversation}  // Invalid parameters for conversation component
