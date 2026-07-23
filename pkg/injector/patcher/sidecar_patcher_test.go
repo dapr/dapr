@@ -426,8 +426,8 @@ func TestPatching(t *testing.T) {
 				assert.Equal(t, "dapr-trust-bundle", trustBundleVolume.Name)
 				assert.NotNil(t, trustBundleVolume.ConfigMap)
 				assert.Equal(t, "dapr-trust-bundle", trustBundleVolume.ConfigMap.Name)
-				require.NotNil(t, trustBundleVolume.ConfigMap.Optional)
-				assert.True(t, *trustBundleVolume.ConfigMap.Optional)
+				assert.Nil(t, trustBundleVolume.ConfigMap.Optional,
+					"the volume must be required so pods wait for the ConfigMap instead of starting on static trust anchors")
 
 				// Assertions on added labels
 				assert.Equal(t, "true", pod.Labels[injectorConsts.SidecarInjectedLabel])

@@ -281,9 +281,9 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	if c.MTLSEnabled {
 		// Pair with the dapr-trust-bundle ConfigMap volume: point daprd at the
 		// mounted trust anchors file so it picks up updated root CAs live
-		// during rotation. DAPR_TRUST_ANCHORS above remains as the fallback
-		// for older daprd images and for namespaces where the ConfigMap does
-		// not (yet) exist.
+		// during rotation. The required volume guarantees the file exists by
+		// the time daprd starts; DAPR_TRUST_ANCHORS above remains as the
+		// fallback for older daprd images only.
 		env = append(env,
 			corev1.EnvVar{
 				Name:  securityConsts.TrustAnchorsFileEnvVar,

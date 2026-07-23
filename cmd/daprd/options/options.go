@@ -249,9 +249,10 @@ func New(origArgs []string) (*Options, error) {
 
 	// Prefer a trust anchors file when one is provided and present: file-based
 	// trust anchors are watched for changes, so updated root CAs (e.g. during
-	// root CA rotation) propagate to the running daprd without a restart. The
-	// static env var remains the fallback, e.g. for older injectors or when
-	// the mounted trust bundle does not (yet) exist in this namespace.
+	// root CA rotation) propagate to the running daprd without a restart. In
+	// Kubernetes the injector mounts the trust bundle as a required volume, so
+	// the file is guaranteed to exist by the time daprd starts; the static env
+	// var remains the fallback for older injectors and non-Kubernetes setups.
 	if taFile, ok := os.LookupEnv(consts.TrustAnchorsFileEnvVar); ok && taFile != "" {
 		if info, err := os.Stat(taFile); err == nil && info.Mode().IsRegular() {
 			opts.TrustAnchorsFile = &taFile
