@@ -902,6 +902,15 @@ func TestKube_verifyPropagation(t *testing.T) {
 			Data:       map[string]string{"ca.crt": anchors},
 		}
 	}
+	daprPod := func(ns, name string) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: ns,
+				Labels:    map[string]string{"dapr.io/sidecar-injected": "true"},
+			},
+		}
+	}
 
 	newKube := func(t *testing.T, objects ...runtime.Object) *kube {
 		t.Helper()
@@ -912,27 +921,57 @@ func TestKube_verifyPropagation(t *testing.T) {
 		}
 	}
 
-	t.Run("all trust bundle configmaps carry the new root", func(t *testing.T) {
+	t.Run("every namespace with Dapr pods carries the new root", func(t *testing.T) {
 		k := newKube(t,
 			trustBundleCM("dapr-system-test", combined),
 			trustBundleCM("appns", combined),
+			daprPod("appns", "pod1"),
 		)
 		require.NoError(t, k.verifyPropagation(t.Context(), rot))
+	})
+
+	t.Run("stale configmaps in namespaces without Dapr pods are ignored", func(t *testing.T) {
+		k := newKube(t,
+			trustBundleCM("dapr-system-test", combined),
+			trustBundleCM("stalens", string(old.X509.TrustAnchors)),
+		)
+		require.NoError(t, k.verifyPropagation(t.Context(), rot),
+			"a stale copy in a namespace without Dapr workloads must not block cleanup")
 	})
 
 	t.Run("a lagging namespace defers propagation", func(t *testing.T) {
 		k := newKube(t,
 			trustBundleCM("dapr-system-test", combined),
 			trustBundleCM("appns", string(old.X509.TrustAnchors)),
+			daprPod("appns", "pod1"),
 		)
 		err := k.verifyPropagation(t.Context(), rot)
 		require.ErrorContains(t, err, "appns")
+	})
+
+	t.Run("a namespace with Dapr pods but no configmap defers propagation", func(t *testing.T) {
+		k := newKube(t,
+			trustBundleCM("dapr-system-test", combined),
+			daprPod("missingns", "pod1"),
+		)
+		err := k.verifyPropagation(t.Context(), rot)
+		require.ErrorContains(t, err, "missingns",
+			"pods in a namespace without the ConfigMap run on static trust anchors and must block cleanup")
+	})
+
+	t.Run("the control-plane namespace source is always required", func(t *testing.T) {
+		k := newKube(t,
+			trustBundleCM("dapr-system-test", string(old.X509.TrustAnchors)),
+		)
+		err := k.verifyPropagation(t.Context(), rot)
+		require.ErrorContains(t, err, "dapr-system-test")
 	})
 
 	t.Run("an empty trust bundle configmap defers propagation", func(t *testing.T) {
 		k := newKube(t,
 			trustBundleCM("dapr-system-test", combined),
 			trustBundleCM("emptyns", ""),
+			daprPod("emptyns", "pod1"),
 		)
 		err := k.verifyPropagation(t.Context(), rot)
 		require.ErrorContains(t, err, "emptyns")
