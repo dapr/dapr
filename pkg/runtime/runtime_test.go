@@ -2549,3 +2549,41 @@ func TestOtelResourceDetection(t *testing.T) {
 		})
 	}
 }
+
+func TestInitRuntime_ComponentInitializationFailure_LocksHealth(t *testing.T) {
+	// Arrange: Create a dedicated health registry instance to inspect
+	testHealthz := healthz.New()
+
+	// Arrange: Intentionally configure the runtime to point to a non-existent directory
+	testConfig := NewTestDaprRuntimeConfig(t, modes.StandaloneMode, string(protocol.HTTPProtocol), 1024)
+	testConfig.outboundHealthz = testHealthz
+	testConfig.standalone = modeconfig.StandaloneConfig{
+		ResourcesPath: []string{filepath.Join(t.TempDir(), "non-existent")},
+	}
+
+	// Act 1: Construct the runtime (this should succeed without error)
+	rt, err := newDaprRuntime(t.Context(), testSecurity(t), testConfig,
+		&config.Configuration{}, &config.AccessControlList{},
+		resiliency.New(logger.NewLogger("test")), nil, nil)
+	require.NoError(t, err)
+
+	// Act 2: Run the runtime with a short timeout to trigger initialization and check the error.
+	// Since component loading fails, this will fail fast and return the error.
+	runCtx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
+	defer cancel()
+
+	runErr := rt.Run(runCtx)
+
+	// Assert: The initialization sequence should report a loading failure error
+	require.Error(t, runErr)
+	assert.Contains(t, runErr.Error(), "failed to load components")
+
+	// Assert: Verify our architectural gatekeeper successfully blocked the probe.
+	// Since components failed, the "components" target must exist but NOT be ready.
+	assert.Contains(
+		t,
+		testHealthz.GetUnhealthyTargets(),
+		"components",
+		"Health probe must lock 'components' to unhealthy if components fail to load",
+	)
+}
