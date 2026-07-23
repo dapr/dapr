@@ -21,26 +21,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/dapr/dapr/pkg/placement/internal/loops"
-	"github.com/dapr/kit/events/loop/fake"
 )
 
-func newTimeout(t *testing.T, duration time.Duration) (*Timeout, chan *loops.DisseminationTimeout) {
+func newTimeout(t *testing.T, duration time.Duration) (*Timeout, chan uint64) {
 	t.Helper()
 
-	events := make(chan *loops.DisseminationTimeout, 1)
-	loop := fake.New[loops.EventDisseminator]().WithEnqueue(func(event loops.EventDisseminator) {
-		timeout, ok := event.(*loops.DisseminationTimeout)
-		if !ok {
-			t.Errorf("unexpected event type %T", event)
-			return
-		}
-		events <- timeout
-	})
-
+	events := make(chan uint64, 1)
 	timeout := New(Options{
-		Loop:    loop,
+		OnTimeout: func(version uint64) {
+			events <- version
+		},
 		Timeout: duration,
 	})
 	t.Cleanup(func() {
@@ -55,8 +45,8 @@ func TestTimeoutEnqueue(t *testing.T) {
 	timeout.Enqueue(42)
 
 	select {
-	case event := <-events:
-		assert.Equal(t, uint64(42), event.Version)
+	case version := <-events:
+		assert.Equal(t, uint64(42), version)
 	case <-time.After(time.Second):
 		t.Fatal("timeout event was not enqueued")
 	}
@@ -68,9 +58,22 @@ func TestTimeoutDequeue(t *testing.T) {
 	timeout.Dequeue(1)
 
 	select {
-	case event := <-events:
-		t.Fatalf("unexpected timeout event for version %d", event.Version)
+	case version := <-events:
+		t.Fatalf("unexpected timeout event for version %d", version)
 	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestTimeoutDequeueIgnoresAnotherVersion(t *testing.T) {
+	timeout, events := newTimeout(t, 10*time.Millisecond)
+	timeout.Enqueue(2)
+	timeout.Dequeue(1)
+
+	select {
+	case version := <-events:
+		assert.Equal(t, uint64(2), version)
+	case <-time.After(time.Second):
+		t.Fatal("active timeout was canceled by another version")
 	}
 }
 
@@ -84,8 +87,8 @@ func TestTimeoutRearmsAfterDequeue(t *testing.T) {
 	timeout.Enqueue(101)
 
 	select {
-	case event := <-events:
-		assert.Equal(t, uint64(101), event.Version)
+	case version := <-events:
+		assert.Equal(t, uint64(101), version)
 	case <-time.After(2 * time.Second):
 		t.Fatal("rearmed timeout event was not enqueued")
 	}
@@ -97,15 +100,15 @@ func TestTimeoutEnqueueReplacesActiveVersion(t *testing.T) {
 	timeout.Enqueue(2)
 
 	select {
-	case event := <-events:
-		assert.Equal(t, uint64(2), event.Version)
+	case version := <-events:
+		assert.Equal(t, uint64(2), version)
 	case <-time.After(2 * time.Second):
 		t.Fatal("replacement timeout event was not enqueued")
 	}
 
 	select {
-	case event := <-events:
-		t.Fatalf("unexpected second timeout event for version %d", event.Version)
+	case version := <-events:
+		t.Fatalf("unexpected second timeout event for version %d", version)
 	case <-time.After(100 * time.Millisecond):
 	}
 }
@@ -114,10 +117,12 @@ func TestTimeoutCloseCancelsActiveVersion(t *testing.T) {
 	timeout, events := newTimeout(t, time.Second)
 	timeout.Enqueue(1)
 	require.NoError(t, timeout.Close())
+	require.NoError(t, timeout.Close())
+	timeout.Enqueue(2)
 
 	select {
-	case event := <-events:
-		t.Fatalf("unexpected timeout event for version %d", event.Version)
+	case version := <-events:
+		t.Fatalf("unexpected timeout event for version %d", version)
 	case <-time.After(100 * time.Millisecond):
 	}
 }
@@ -125,12 +130,11 @@ func TestTimeoutCloseCancelsActiveVersion(t *testing.T) {
 func TestTimeoutCloseWaitsForFiredCallback(t *testing.T) {
 	enqueueStarted := make(chan struct{})
 	releaseEnqueue := make(chan struct{})
-	loop := fake.New[loops.EventDisseminator]().WithEnqueue(func(loops.EventDisseminator) {
-		close(enqueueStarted)
-		<-releaseEnqueue
-	})
 	timeout := New(Options{
-		Loop:    loop,
+		OnTimeout: func(uint64) {
+			close(enqueueStarted)
+			<-releaseEnqueue
+		},
 		Timeout: 10 * time.Millisecond,
 	})
 	timeout.Enqueue(1)

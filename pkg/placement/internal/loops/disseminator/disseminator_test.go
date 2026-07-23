@@ -20,9 +20,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/dapr/dapr/pkg/internal/placement/timeout"
 	"github.com/dapr/dapr/pkg/placement/internal/loops"
 	"github.com/dapr/dapr/pkg/placement/internal/loops/disseminator/store"
-	"github.com/dapr/dapr/pkg/placement/internal/loops/disseminator/timeout"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/kit/events/loop/fake"
 )
@@ -40,13 +40,17 @@ func newTestDisseminator(t *testing.T) *disseminator {
 		streams:          make(map[uint64]*streamConn),
 		store:            store.New(store.Options{ReplicationFactor: 1}),
 		currentOperation: v1pb.HostOperation_REPORT,
-		timeoutQ: timeout.New(timeout.Options{
-			Loop:    dissLoop,
+		timeoutTimer: timeout.New(timeout.Options{
+			OnTimeout: func(version uint64) {
+				dissLoop.Enqueue(&loops.DisseminationTimeout{
+					Version: version,
+				})
+			},
 			Timeout: 5 * time.Second,
 		}),
 	}
 
-	t.Cleanup(func() { d.timeoutQ.Close() })
+	t.Cleanup(func() { d.timeoutTimer.Close() })
 
 	return d
 }
