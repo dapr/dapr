@@ -516,6 +516,8 @@ func executionStatusForRuntimeStatus(status api.OrchestrationStatus) string {
 		return diag.StatusSuccess
 	case api.RUNTIME_STATUS_TERMINATED:
 		return diag.StatusTerminated
+	case api.RUNTIME_STATUS_CANCELED:
+		return diag.StatusCanceled
 	default:
 		return diag.StatusFailed
 	}

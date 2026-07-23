@@ -35,6 +35,7 @@ const (
 	StatusSuccess     = "success"
 	StatusFailed      = "failed"
 	StatusTerminated  = "terminated"
+	StatusCanceled    = "canceled"
 	StatusRecoverable = "recoverable"
 	CreateWorkflow    = "create_workflow"
 	GetWorkflow       = "get_workflow"

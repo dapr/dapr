@@ -1019,7 +1019,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 // IsTamperMarker reports whether e is the well-known terminal event written
 // by [MarkAsTamperFailed] to record that the workflow's persisted state was
 // detected as tampered. It is identified by an ExecutionCompleted with
-// status FAILED and FailureDetails.ErrorType set to
+// status CANCELED and FailureDetails.ErrorType set to
 // [wferrors.ErrorTypeHistoryTampered]. Loaders use this check to bypass
 // signature verification on workflows that have already been terminally
 // failed by tamper detection — without the bypass, the broken signature
@@ -1032,7 +1032,9 @@ func IsTamperMarker(e *backend.HistoryEvent) bool {
 	if ec == nil {
 		return false
 	}
-	if ec.GetWorkflowStatus() != protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED {
+	status := ec.GetWorkflowStatus()
+	if status != protos.OrchestrationStatus_ORCHESTRATION_STATUS_CANCELED &&
+		status != protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED {
 		return false
 	}
 	fd := ec.GetFailureDetails()
@@ -1063,13 +1065,13 @@ func (s *State) HasTamperMarker() bool {
 	return hasTamperMarker(s)
 }
 
-// MarkAsTamperFailed appends a single terminal ExecutionCompleted(FAILED) event to
+// MarkAsTamperFailed appends a single terminal ExecutionCompleted(CANCELED) event to
 // the workflow's history to record that its persisted state was detected as
 // tampered. The original (untrusted) history, inbox, signatures, and certs
 // are left intact for forensics — only the marker event is added, and it is
 // not signed. Subsequent loads detect the marker via [IsTamperMarker] and
 // bypass signature verification, so the workflow surfaces as terminally
-// FAILED with [wferrors.ErrorTypeHistoryTampered] in its FailureDetails.
+// CANCELED with [wferrors.ErrorTypeHistoryTampered] in its FailureDetails.
 //
 // MarkAsTamperFailed is idempotent: if prior already ends in a tamper marker the
 // state is returned unchanged with no store write.
@@ -1088,7 +1090,7 @@ func MarkAsTamperFailed(ctx context.Context, astate state.Interface, actorID str
 		Timestamp: timestamppb.Now(),
 		EventType: &protos.HistoryEvent_ExecutionCompleted{
 			ExecutionCompleted: &protos.ExecutionCompletedEvent{
-				WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED,
+				WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_CANCELED,
 				FailureDetails: &protos.TaskFailureDetails{
 					ErrorType:    wferrors.ErrorTypeHistoryTampered,
 					ErrorMessage: cause.Error(),
