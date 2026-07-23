@@ -14,6 +14,7 @@ limitations under the License.
 package patcher
 
 import (
+	"fmt"
 	"strconv"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
@@ -95,7 +96,18 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 	// (e.g. during rotation) to running pods without a restart. Only relevant
 	// when mTLS is enabled, so non-mTLS workloads are left untouched.
 	if c.MTLSEnabled {
-		volumes = append(volumes, c.getTrustBundleVolume())
+		// A pre-existing volume with the trust bundle name would silently
+		// shadow the injected ConfigMap volume (volume injection skips name
+		// conflicts), leaving daprd without the watched trust anchors file
+		// and breaking root CA rotation for this pod. Fail closed unless it
+		// is exactly the expected ConfigMap volume.
+		if existing := podGetVolume(c.pod, injectorConsts.TrustBundleVolumeName); existing != nil {
+			if existing.ConfigMap == nil || existing.ConfigMap.Name != injectorConsts.TrustBundleVolumeName {
+				return nil, fmt.Errorf("pod defines a volume named %q that is not the Dapr trust bundle ConfigMap; rename the volume so the trust bundle can be mounted", injectorConsts.TrustBundleVolumeName)
+			}
+		} else {
+			volumes = append(volumes, c.getTrustBundleVolume())
+		}
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      injectorConsts.TrustBundleVolumeName,
 			MountPath: injectorConsts.TrustBundleVolumeMountPath,
