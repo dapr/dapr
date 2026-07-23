@@ -92,6 +92,7 @@ type receivedMessagesResponse struct {
 	ReceivedByTopicA          []string `json:"pubsub-a-topic"`
 	ReceivedByTopicB          []string `json:"pubsub-b-topic"`
 	ReceivedByTopicC          []string `json:"pubsub-c-topic"`
+	ReceivedCloudEventIDs     []string `json:"cloudevent-ids"`
 	ReceivedByTopicBulk       []string `json:"pubsub-bulk-topic"`
 	ReceivedByTopicRawBulk    []string `json:"pubsub-raw-bulk-topic"`
 	ReceivedByTopicCEBulk     []string `json:"pubsub-ce-bulk-topic"`
@@ -783,12 +784,23 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 	assert.Equal(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA, "different messages received in Topic A")
 	assert.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB, "different messages received in Topic B")
 	assert.Equal(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC, "different messages received in Topic C")
+	assertCloudEventIDsAreUUIDs(t, appResp.ReceivedCloudEventIDs, len(sentMessages.ReceivedByTopicA)+len(sentMessages.ReceivedByTopicB)+len(sentMessages.ReceivedByTopicC))
 	assert.Equal(t, sentMessages.ReceivedByTopicRaw, appResp.ReceivedByTopicRaw, "different messages received in Topic Raw")
 	if validateDeadLetter {
 		// only error response is expected to validate dead letter
 		sort.Strings(sentMessages.ReceivedByTopicDeadLetter)
 		sort.Strings(appResp.ReceivedByTopicDeadLetter)
 		assert.Equal(t, sentMessages.ReceivedByTopicDeadLetter, appResp.ReceivedByTopicDeadLetter, "different messages received in Topic Dead")
+	}
+}
+
+func assertCloudEventIDsAreUUIDs(t *testing.T, cloudEventIDs []string, expectedCount int) {
+	t.Helper()
+
+	require.Len(t, cloudEventIDs, expectedCount, "unexpected number of CloudEvent IDs")
+	for _, cloudEventID := range cloudEventIDs {
+		_, err := uuid.Parse(cloudEventID)
+		assert.NoError(t, err, "CloudEvent ID is not a UUID")
 	}
 }
 
