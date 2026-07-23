@@ -148,8 +148,8 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		}
 
 		mdCopy := md.Copy()
-		delete(mdCopy, securityConsts.APITokenHeader)
-		delete(mdCopy, p.appAPITokenHeader)
+		mdCopy.Delete(securityConsts.APITokenHeader)
+		mdCopy.Delete(p.appAPITokenHeader)
 		outCtx := metadata.NewOutgoingContext(ctx, mdCopy)
 		if p.appendAppTokenFn != nil {
 			outCtx = p.appendAppTokenFn(outCtx)

@@ -52,11 +52,11 @@ func (c *customheader) Setup(t *testing.T) []framework.Option {
 
 	c.withToken = daprd.New(t,
 		daprd.WithAppAPIToken(t, "abc"),
-		daprd.WithAppAPITokenHeader(t, "x-api-key"),
+		daprd.WithAppAPITokenHeader(t, " X-API-Key "),
 		daprd.WithAppPort(app.Port()),
 	)
 	c.noToken = daprd.New(t,
-		daprd.WithAppAPITokenHeader(t, "x-api-key"),
+		daprd.WithAppAPITokenHeader(t, " X-API-Key "),
 		daprd.WithAppPort(app.Port()),
 	)
 

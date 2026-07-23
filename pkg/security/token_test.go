@@ -59,15 +59,34 @@ func TestAppToken(t *testing.T) {
 }
 
 func TestAppTokenHeader(t *testing.T) {
-	t.Run("existing header", func(t *testing.T) {
-		t.Setenv(consts.AppAPITokenHeaderEnvVar, "x-api-key")
-		assert.Equal(t, "x-api-key", GetAppTokenHeader())
-	})
+	tests := map[string]struct {
+		header string
+		want   string
+	}{
+		"existing header": {
+			header: "x-api-key",
+			want:   "x-api-key",
+		},
+		"normalizes padded mixed-case header": {
+			header: " \tX-API-Key\n",
+			want:   "x-api-key",
+		},
+		"non-existent header": {
+			header: "",
+			want:   consts.APITokenHeader,
+		},
+		"whitespace-only header": {
+			header: " \t\n",
+			want:   consts.APITokenHeader,
+		},
+	}
 
-	t.Run("non-existent header", func(t *testing.T) {
-		t.Setenv(consts.AppAPITokenHeaderEnvVar, "")
-		assert.Equal(t, consts.APITokenHeader, GetAppTokenHeader())
-	})
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(consts.AppAPITokenHeaderEnvVar, test.header)
+			assert.Equal(t, test.want, GetAppTokenHeader())
+		})
+	}
 }
 
 func TestGetKubernetesIdentityToken(t *testing.T) {

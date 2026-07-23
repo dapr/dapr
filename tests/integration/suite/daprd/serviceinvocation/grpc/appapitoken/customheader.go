@@ -37,12 +37,13 @@ func init() {
 }
 
 type customheader struct {
-	daprd *daprd.Daprd
-	ch    chan metadata.MD
+	withToken *daprd.Daprd
+	noToken   *daprd.Daprd
+	ch        chan metadata.MD
 }
 
 func (c *customheader) Setup(t *testing.T) []framework.Option {
-	c.ch = make(chan metadata.MD, 2)
+	c.ch = make(chan metadata.MD, 4)
 	app := app.New(t,
 		app.WithOnInvokeFn(func(ctx context.Context, _ *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
 			md, ok := metadata.FromIncomingContext(ctx)
@@ -57,49 +58,67 @@ func (c *customheader) Setup(t *testing.T) []framework.Option {
 		}),
 	)
 
-	c.daprd = daprd.New(t,
+	c.withToken = daprd.New(t,
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithAppAPIToken(t, "abc"),
-		daprd.WithAppAPITokenHeader(t, "x-api-key"),
+		daprd.WithAppAPITokenHeader(t, " X-API-Key "),
+		daprd.WithAppPort(app.Port(t)),
+	)
+	c.noToken = daprd.New(t,
+		daprd.WithAppProtocol("grpc"),
+		daprd.WithAppAPITokenHeader(t, " X-API-Key "),
 		daprd.WithAppPort(app.Port(t)),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(app, c.daprd),
+		framework.WithProcesses(app, c.withToken, c.noToken),
 	}
 }
 
 func (c *customheader) Run(t *testing.T, ctx context.Context) {
-	c.daprd.WaitUntilRunning(t, ctx)
+	c.withToken.WaitUntilRunning(t, ctx)
+	c.noToken.WaitUntilRunning(t, ctx)
 
-	client := testpb.NewTestServiceClient(c.daprd.GRPCConn(t, ctx))
-	pingCtx := metadata.AppendToOutgoingContext(ctx,
-		"dapr-app-id", c.daprd.AppID(),
-		"dapr-api-token", "default-oldtoken",
-		"x-api-key", "custom-oldtoken",
-	)
-	_, err := client.Ping(pingCtx, new(testpb.PingRequest))
-	require.NoError(t, err)
-	c.assertMetadata(t)
+	exercise := func(daprdProcess *daprd.Daprd, expectedToken string) {
+		t.Helper()
 
-	_, err = c.daprd.GRPCClient(t, ctx).InvokeService(ctx, &runtimev1.InvokeServiceRequest{
-		Id: c.daprd.AppID(),
-		Message: &commonv1.InvokeRequest{
-			Method:        "helloworld",
-			Data:          new(anypb.Any),
-			HttpExtension: &commonv1.HTTPExtension{Verb: commonv1.HTTPExtension_GET},
-		},
-	})
-	require.NoError(t, err)
-	c.assertMetadata(t)
+		requestCtx := metadata.AppendToOutgoingContext(ctx,
+			"dapr-app-id", daprdProcess.AppID(),
+			"dapr-api-token", "default-oldtoken",
+			"x-api-key", "custom-oldtoken",
+		)
+
+		client := testpb.NewTestServiceClient(daprdProcess.GRPCConn(t, ctx))
+		_, err := client.Ping(requestCtx, new(testpb.PingRequest))
+		require.NoError(t, err)
+		c.assertMetadata(t, expectedToken)
+
+		_, err = daprdProcess.GRPCClient(t, ctx).InvokeService(requestCtx, &runtimev1.InvokeServiceRequest{
+			Id: daprdProcess.AppID(),
+			Message: &commonv1.InvokeRequest{
+				Method:        "helloworld",
+				Data:          new(anypb.Any),
+				HttpExtension: &commonv1.HTTPExtension{Verb: commonv1.HTTPExtension_GET},
+			},
+		})
+		require.NoError(t, err)
+		c.assertMetadata(t, expectedToken)
+	}
+
+	exercise(c.withToken, "abc")
+	exercise(c.noToken, "")
 }
 
-func (c *customheader) assertMetadata(t *testing.T) {
+func (c *customheader) assertMetadata(t *testing.T, expectedToken string) {
 	t.Helper()
 	select {
 	case md := <-c.ch:
 		assert.Empty(t, md.Get("dapr-api-token"))
-		assert.Equal(t, []string{"abc"}, md.Get("x-api-key"))
+		if expectedToken == "" {
+			assert.Empty(t, md.Get("x-api-key"))
+		} else {
+			assert.Equal(t, []string{expectedToken}, md.Get("x-api-key"))
+		}
 	case <-time.After(5 * time.Second):
 		assert.Fail(t, "timed out waiting for custom token metadata")
 	}

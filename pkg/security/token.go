@@ -16,6 +16,7 @@ package security
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/dapr/dapr/pkg/security/consts"
 )
@@ -39,7 +40,7 @@ func GetAppToken() string {
 
 // GetAppTokenHeader returns the HTTP header or gRPC metadata name for the app API token.
 func GetAppTokenHeader() string {
-	if header := os.Getenv(consts.AppAPITokenHeaderEnvVar); header != "" {
+	if header := strings.ToLower(strings.TrimSpace(os.Getenv(consts.AppAPITokenHeaderEnvVar))); header != "" {
 		return header
 	}
 	return consts.APITokenHeader
