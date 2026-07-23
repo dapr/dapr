@@ -16,6 +16,7 @@ package http
 import (
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -274,7 +275,7 @@ func (a *api) onStartWorkflowHandler() http.HandlerFunc {
 			InModifier: func(r *http.Request, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowRequest, error) {
 				in.WorkflowName = chi.URLParam(r, workflowName)
 				in.WorkflowComponent = chi.URLParam(r, workflowComponent)
-				in.InstanceId = r.URL.Query().Get(instanceID)
+				in.InstanceId = strings.TrimSpace(r.URL.Query().Get(instanceID))
 
 				// We accept the HTTP request body as the input to the workflow
 				// without making any assumptions about its format.
@@ -311,7 +312,7 @@ func (a *api) onTerminateWorkflowHandler() http.HandlerFunc {
 		UniversalHTTPHandlerOpts[*runtimev1pb.TerminateWorkflowRequest, *emptypb.Empty]{
 			InModifier: func(r *http.Request, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowRequest, error) {
 				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
-				in.SetInstanceId(chi.URLParam(r, instanceID))
+				in.SetInstanceId(strings.TrimSpace(chi.URLParam(r, instanceID)))
 				return in, nil
 			},
 			SuccessStatusCode: http.StatusAccepted,
@@ -326,7 +327,7 @@ func (a *api) onRaiseEventWorkflowHandler() http.HandlerFunc {
 			// We pass the input body manually rather than parsing it using protojson
 			SkipInputBody: true,
 			InModifier: func(r *http.Request, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowRequest, error) {
-				in.InstanceId = chi.URLParam(r, instanceID)
+				in.InstanceId = strings.TrimSpace(chi.URLParam(r, instanceID))
 				in.WorkflowComponent = chi.URLParam(r, workflowComponent)
 				in.EventName = chi.URLParam(r, eventName)
 
@@ -369,7 +370,7 @@ func (a *api) onPurgeWorkflowHandler() http.HandlerFunc {
 		UniversalHTTPHandlerOpts[*runtimev1pb.PurgeWorkflowRequest, *emptypb.Empty]{
 			InModifier: func(r *http.Request, in *runtimev1pb.PurgeWorkflowRequest) (*runtimev1pb.PurgeWorkflowRequest, error) {
 				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
-				in.SetInstanceId(chi.URLParam(r, instanceID))
+				in.SetInstanceId(strings.TrimSpace(chi.URLParam(r, instanceID)))
 				return in, nil
 			},
 			SuccessStatusCode: http.StatusAccepted,
@@ -379,6 +380,6 @@ func (a *api) onPurgeWorkflowHandler() http.HandlerFunc {
 // Shared InModifier method for all universal handlers for workflows that adds the "WorkflowComponent" and "InstanceId" properties
 func workflowInModifier[T runtimev1pb.WorkflowRequests](r *http.Request, in T) (T, error) {
 	in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
-	in.SetInstanceId(chi.URLParam(r, instanceID))
+	in.SetInstanceId(strings.TrimSpace(chi.URLParam(r, instanceID)))
 	return in, nil
 }
