@@ -266,6 +266,41 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	}, 30*time.Second, 10*time.Millisecond)
 }
 
+func (d *Daprd) WaitUntilActorTypesHosted(t *testing.T, ctx context.Context, actorTypes ...string) {
+	t.Helper()
+	require.NotEmpty(t, actorTypes)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		md := d.GetMetadata(c, ctx)
+		if !assert.NotNil(c, md) {
+			return
+		}
+		assert.Truef(c, actorRuntimeHostsTypes(md.ActorRuntime, actorTypes...),
+			"actor runtime did not host actor types %v", actorTypes)
+	}, 60*time.Second, 10*time.Millisecond)
+}
+
+func actorRuntimeHostsTypes(actorRuntime *MetadataActorRuntime, actorTypes ...string) bool {
+	if actorRuntime == nil || actorRuntime.RuntimeStatus != rtv1.ActorRuntime_RUNNING.String() || !actorRuntime.HostReady {
+		return false
+	}
+
+	hosted := make(map[string]struct{}, len(actorRuntime.ActiveActors))
+	for _, active := range actorRuntime.ActiveActors {
+		if active != nil {
+			hosted[active.Type] = struct{}{}
+		}
+	}
+
+	for _, actorType := range actorTypes {
+		if _, ok := hosted[actorType]; !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 	switch d.appProtocol {
 	case "http":
