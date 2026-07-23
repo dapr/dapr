@@ -20,6 +20,9 @@ const (
 	// AppAPITokenEnvVar is the environment variable for the app API token.
 	//nolint:gosec
 	AppAPITokenEnvVar = "APP_API_TOKEN"
+	// AppAPITokenHeaderEnvVar is the environment variable for the HTTP header or gRPC metadata name for the app API token.
+	//nolint:gosec
+	AppAPITokenHeaderEnvVar = "DAPR_APP_API_TOKEN_HEADER"
 	// APITokenHeader is header name for HTTP/gRPC calls to hold the token.
 	//nolint:gosec
 	APITokenHeader = "dapr-api-token"

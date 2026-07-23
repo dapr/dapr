@@ -819,6 +819,39 @@ func TestAppToken(t *testing.T) {
 		testServer.Close()
 	})
 
+	t.Run("custom token header present", func(t *testing.T) {
+		ctx := t.Context()
+		testServer := httptest.NewServer(&testHandlerHeaders{})
+		defer testServer.Close()
+		c := Channel{
+			baseAddress:        testServer.URL,
+			client:             http.DefaultClient,
+			appHeaderToken:     "token1",
+			appHeaderTokenName: "x-api-key",
+			compStore:          compstore.New(),
+			middleware:         httpMiddleware.New().BuildPipelineFromSpec("test", nil),
+		}
+
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "").
+			WithMetadata(map[string][]string{
+				"dapr-api-token": {"default-oldtoken"},
+				"x-api-key":      {"custom-oldtoken"},
+			})
+		defer req.Close()
+
+		resp, err := c.InvokeMethod(ctx, req, "")
+		require.NoError(t, err)
+		defer resp.Close()
+		body, err := resp.RawDataFull()
+		require.NoError(t, err)
+
+		actual := map[string]string{}
+		require.NoError(t, json.Unmarshal(body, &actual))
+		assert.Empty(t, actual["Dapr-Api-Token"])
+		assert.Equal(t, "token1", actual["X-Api-Key"])
+	})
+
 	t.Run("token not present", func(t *testing.T) {
 		ctx := t.Context()
 		testServer := httptest.NewServer(&testHandlerHeaders{})

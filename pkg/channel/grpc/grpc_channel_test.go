@@ -123,6 +123,27 @@ func TestInvokeMethod(t *testing.T) {
 		assert.Equal(t, "param1=val1&param2=val2", actual["querystring"])
 	})
 
+	t.Run("successful request with custom token metadata", func(t *testing.T) {
+		customChannel := c
+		customChannel.appMetadataTokenName = "x-api-key"
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "").
+			WithMetadata(map[string][]string{
+				securityConsts.APITokenHeader: {"default-oldtoken"},
+				"x-api-key":                   {"custom-oldtoken"},
+			})
+		defer req.Close()
+
+		response, err := customChannel.InvokeMethod(ctx, req, "")
+		require.NoError(t, err)
+		defer response.Close()
+
+		actual := map[string]string{}
+		require.NoError(t, json.NewDecoder(response.RawData()).Decode(&actual))
+		assert.Equal(t, "token1", actual["x-api-key"])
+		assert.Empty(t, actual[securityConsts.APITokenHeader])
+	})
+
 	t.Run("request body stream errors", func(t *testing.T) {
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
@@ -174,6 +195,6 @@ func TestHealthProbe(t *testing.T) {
 }
 
 func TestCreateLocalChannelWithBaseAddress(t *testing.T) {
-	ch := CreateLocalChannel(8080, 1, nil, config.TracingSpec{}, 1024, 1, "my.app", "")
+	ch := CreateLocalChannel(8080, 1, nil, config.TracingSpec{}, 1024, 1, "my.app", "", "")
 	assert.Equal(t, "my.app:8080", ch.baseAddress)
 }
