@@ -428,4 +428,14 @@ func TestTrustAnchorsFile(t *testing.T) {
 		assert.Nil(t, opts.TrustAnchorsFile)
 		assert.Equal(t, []byte("static-anchors-pem"), opts.TrustAnchors)
 	})
+
+	t.Run("trust anchors file pointing at a directory falls back to static env var", func(t *testing.T) {
+		t.Setenv("DAPR_TRUST_ANCHORS", "static-anchors-pem")
+		t.Setenv("DAPR_TRUST_ANCHORS_FILE", t.TempDir())
+
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		assert.Nil(t, opts.TrustAnchorsFile, "a directory is not a usable trust anchors file")
+		assert.Equal(t, []byte("static-anchors-pem"), opts.TrustAnchors)
+	})
 }

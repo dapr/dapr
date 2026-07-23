@@ -253,7 +253,7 @@ func New(origArgs []string) (*Options, error) {
 	// static env var remains the fallback, e.g. for older injectors or when
 	// the mounted trust bundle does not (yet) exist in this namespace.
 	if taFile, ok := os.LookupEnv(consts.TrustAnchorsFileEnvVar); ok && taFile != "" {
-		if _, err := os.Stat(taFile); err == nil {
+		if info, err := os.Stat(taFile); err == nil && info.Mode().IsRegular() {
 			opts.TrustAnchorsFile = &taFile
 		}
 	}

@@ -24,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	metadatafake "k8s.io/client-go/metadata/fake"
 )
 
 func TestTrustBundleSync(t *testing.T) {
@@ -33,18 +34,23 @@ func TestTrustBundleSync(t *testing.T) {
 			Data:       data,
 		}
 	}
-	daprPod := func(namespace, name string) *corev1.Pod {
-		return &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: namespace,
-				Labels:    map[string]string{"dapr.io/sidecar-injected": "true"},
-			},
+	podMeta := func(namespace, name string, daprEnabled bool) *metav1.PartialObjectMetadata {
+		var labels map[string]string
+		if daprEnabled {
+			labels = map[string]string{"dapr.io/sidecar-injected": "true"}
+		}
+		return &metav1.PartialObjectMetadata{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Labels: labels},
 		}
 	}
-	newSync := func(objects ...runtime.Object) *TrustBundleSync {
+	newSync := func(t *testing.T, pods []runtime.Object, objects ...runtime.Object) *TrustBundleSync {
+		t.Helper()
+		scheme := runtime.NewScheme()
+		require.NoError(t, metav1.AddMetaToScheme(scheme))
 		return &TrustBundleSync{
 			client:                fake.NewSimpleClientset(objects...),
+			metadataClient:        metadatafake.NewSimpleMetadataClient(scheme, pods...),
 			controlPlaneNamespace: "dapr-system",
 			interval:              time.Second,
 		}
@@ -53,7 +59,10 @@ func TestTrustBundleSync(t *testing.T) {
 	anchors := map[string]string{"ca.crt": "anchors-pem"}
 
 	t.Run("creates the configmap in namespaces with Dapr-enabled pods", func(t *testing.T) {
-		s := newSync(sourceCM(anchors), daprPod("appns", "pod1"), daprPod("otherns", "pod2"))
+		s := newSync(t,
+			[]runtime.Object{podMeta("appns", "pod1", true), podMeta("otherns", "pod2", true)},
+			sourceCM(anchors),
+		)
 		require.NoError(t, s.sync(t.Context()))
 
 		for _, namespace := range []string{"appns", "otherns"} {
@@ -68,7 +77,10 @@ func TestTrustBundleSync(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "appns"},
 			Data:       map[string]string{"ca.crt": "old-anchors-pem"},
 		}
-		s := newSync(sourceCM(anchors), stale, daprPod("appns", "pod1"))
+		s := newSync(t,
+			[]runtime.Object{podMeta("appns", "pod1", true)},
+			sourceCM(anchors), stale,
+		)
 		require.NoError(t, s.sync(t.Context()))
 
 		cm, err := s.client.CoreV1().ConfigMaps("appns").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
@@ -77,8 +89,10 @@ func TestTrustBundleSync(t *testing.T) {
 	})
 
 	t.Run("ignores namespaces without Dapr-enabled pods", func(t *testing.T) {
-		plainPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "plain", Namespace: "plainns"}}
-		s := newSync(sourceCM(anchors), plainPod)
+		s := newSync(t,
+			[]runtime.Object{podMeta("plainns", "plain", false)},
+			sourceCM(anchors),
+		)
 		require.NoError(t, s.sync(t.Context()))
 
 		_, err := s.client.CoreV1().ConfigMaps("plainns").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
@@ -86,7 +100,10 @@ func TestTrustBundleSync(t *testing.T) {
 	})
 
 	t.Run("does not touch the control-plane namespace source", func(t *testing.T) {
-		s := newSync(sourceCM(anchors), daprPod("dapr-system", "sentrypod"))
+		s := newSync(t,
+			[]runtime.Object{podMeta("dapr-system", "sentrypod", true)},
+			sourceCM(anchors),
+		)
 		require.NoError(t, s.sync(t.Context()))
 
 		cm, err := s.client.CoreV1().ConfigMaps("dapr-system").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
@@ -95,7 +112,7 @@ func TestTrustBundleSync(t *testing.T) {
 	})
 
 	t.Run("missing source configmap is a no-op", func(t *testing.T) {
-		s := newSync(daprPod("appns", "pod1"))
+		s := newSync(t, []runtime.Object{podMeta("appns", "pod1", true)})
 		require.NoError(t, s.sync(t.Context()))
 
 		_, err := s.client.CoreV1().ConfigMaps("appns").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
