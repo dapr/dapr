@@ -45,6 +45,13 @@ func TestStartWorkflowAPI(t *testing.T) {
 		expectedError     error
 	}{
 		{
+			testName:          "No workflow component provided in start request",
+			workflowComponent: "",
+			workflowName:      fakeWorkflowName,
+			instanceID:        fakeInstanceID,
+			expectedError:     messages.ErrNoOrMissingWorkflowComponent,
+		},
+		{
 			testName:          "No workflow name provided in start request",
 			workflowComponent: fakeComponentName,
 			workflowName:      "",
@@ -121,6 +128,12 @@ func TestGetWorkflowAPI(t *testing.T) {
 		expectedError     error
 	}{
 		{
+			testName:          "No workflow component provided in get request",
+			workflowComponent: "",
+			instanceID:        fakeInstanceID,
+			expectedError:     messages.ErrNoOrMissingWorkflowComponent,
+		},
+		{
 			testName:          "No instance ID provided in get request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
@@ -165,6 +178,12 @@ func TestTerminateWorkflowAPI(t *testing.T) {
 		instanceID        string
 		expectedError     error
 	}{
+		{
+			testName:          "No workflow component provided in terminate request",
+			workflowComponent: "",
+			instanceID:        fakeInstanceID,
+			expectedError:     messages.ErrNoOrMissingWorkflowComponent,
+		},
 		{
 			testName:          "No instance ID provided in terminate request",
 			workflowComponent: fakeComponentName,
@@ -222,6 +241,13 @@ func TestRaiseEventWorkflowApi(t *testing.T) {
 		expectedError     error
 	}{
 		{
+			testName:          "No workflow component provided in raise event request",
+			workflowComponent: "",
+			instanceID:        fakeInstanceID,
+			eventName:         fakeEventName,
+			expectedError:     messages.ErrNoOrMissingWorkflowComponent,
+		},
+		{
 			testName:          "No instance ID provided in raise event request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
@@ -278,6 +304,12 @@ func TestPauseWorkflowApi(t *testing.T) {
 		expectedError     error
 	}{
 		{
+			testName:          "No workflow component provided in pause request",
+			workflowComponent: "",
+			instanceID:        fakeInstanceID,
+			expectedError:     messages.ErrNoOrMissingWorkflowComponent,
+		},
+		{
 			testName:          "No instance ID provided in pause request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
@@ -331,6 +363,12 @@ func TestResumeWorkflowApi(t *testing.T) {
 		expectedError     error
 	}{
 		{
+			testName:          "No workflow component provided in resume request",
+			workflowComponent: "",
+			instanceID:        fakeInstanceID,
+			expectedError:     messages.ErrNoOrMissingWorkflowComponent,
+		},
+		{
 			testName:          "No instance ID provided in resume request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
@@ -368,6 +406,72 @@ func TestResumeWorkflowApi(t *testing.T) {
 	}
 }
 
+
+func TestPurgeWorkflowApi(t *testing.T) {
+	testCases := []struct {
+		testName          string
+		workflowComponent string
+		instanceID        string
+		expectedError     error
+	}{
+		{
+			testName:          "No workflow component provided in purge request",
+			workflowComponent: "",
+			instanceID:        fakeInstanceID,
+			expectedError:     messages.ErrNoOrMissingWorkflowComponent,
+		},
+		{
+			testName:          "No instance ID provided in purge request",
+			workflowComponent: fakeComponentName,
+			instanceID:        "",
+			expectedError:     messages.ErrMissingOrEmptyInstance,
+		},
+		{
+			testName:          "All is well in purge request",
+			workflowComponent: fakeComponentName,
+			instanceID:        fakeInstanceID,
+		},
+	}
+
+	// Setup universal dapr API
+	fakeAPI := &Universal{
+		logger:         logger.NewLogger("test"),
+		resiliency:     resiliency.New(nil),
+		workflowEngine: fake.New(),
+		actors:         actorsfake.New(),
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.PurgeWorkflowRequest{
+				WorkflowComponent: tt.workflowComponent,
+				InstanceId:        tt.instanceID,
+			}
+			_, err := fakeAPI.PurgeWorkflow(t.Context(), req)
+
+			if tt.expectedError == nil {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, tt.expectedError)
+			}
+		})
+	}
+}
+
+func TestValidateWorkflowComponent(t *testing.T) {
+	t.Run("empty component name returns missing-component error", func(t *testing.T) {
+		u := &Universal{} // workflowEngine is nil
+		err := u.validateWorkflowComponent("")
+		require.Error(t, err)
+		require.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Error(), err.Error())
+	})
+
+	t.Run("non-empty component with no configured engine returns does-not-exist error", func(t *testing.T) {
+		u := &Universal{} // workflowEngine intentionally nil to simulate no engine configured
+		err := u.validateWorkflowComponent("my-workflow-component")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "my-workflow-component"
+                     
 // TestWorkflowInstanceNotFoundError verifies that the Terminate and Purge
 // handlers format ErrWorkflowInstanceNotFound with a single argument. The
 // message template has one verb, so passing the sentinel error as an extra
@@ -414,5 +518,6 @@ func TestWorkflowInstanceNotFoundError(t *testing.T) {
 		require.ErrorAs(t, err, &apiErr)
 		require.Equal(t, expectedMessage, apiErr.Message())
 		require.NotContains(t, apiErr.Message(), "%!(EXTRA")
+
 	})
 }
