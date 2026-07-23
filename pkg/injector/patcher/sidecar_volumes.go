@@ -20,7 +20,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
-	"github.com/dapr/kit/ptr"
 )
 
 // getVolumeMounts returns the list of VolumeMount's for the sidecar container.
@@ -71,11 +70,14 @@ func (c *SidecarConfig) getUnixDomainSocketVolumeMount() (vol corev1.Volume, dap
 // Mounting as a volume (rather than using the DAPR_TRUST_ANCHORS env var alone) lets
 // Kubernetes propagate ConfigMap updates to running pods automatically, which is
 // required for live trust anchor distribution during root CA rotation.
-// The volume is optional so pods can still start in namespaces where the
-// ConfigMap does not exist. Note that daprd chooses between the mounted file
-// and the static DAPR_TRUST_ANCHORS env var at startup: a pod started before
-// the ConfigMap exists keeps the static trust anchors until it is restarted,
-// even if the ConfigMap appears later.
+// The volume is deliberately not optional: daprd chooses between the mounted
+// file and the static DAPR_TRUST_ANCHORS env var at startup, so a pod that
+// started without the file would silently run on static trust anchors and
+// break when rotation switches signing. Blocking pod startup until the
+// ConfigMap exists fails closed instead — the pod object (and its
+// sidecar-injected label) is created regardless, which triggers the
+// operator's trust bundle sync to create the ConfigMap, after which kubelet
+// mounts the volume and the pod starts.
 func (c *SidecarConfig) getTrustBundleVolume() corev1.Volume {
 	return corev1.Volume{
 		Name: injectorConsts.TrustBundleVolumeName,
@@ -84,7 +86,6 @@ func (c *SidecarConfig) getTrustBundleVolume() corev1.Volume {
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: injectorConsts.TrustBundleVolumeName,
 				},
-				Optional: ptr.Of(true),
 			},
 		},
 	}
