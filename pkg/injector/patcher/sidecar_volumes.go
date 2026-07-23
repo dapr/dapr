@@ -164,6 +164,15 @@ func podContainsVolume(pod *corev1.Pod, name string) bool {
 	return false
 }
 
+func podGetVolume(pod *corev1.Pod, name string) *corev1.Volume {
+	for i := range pod.Spec.Volumes {
+		if pod.Spec.Volumes[i].Name == name {
+			return &pod.Spec.Volumes[i]
+		}
+	}
+	return nil
+}
+
 // parseVolumeMountsString parses the annotation and returns volume mounts.
 // The format of the annotation is: "mountPath1:hostPath1,mountPath2:hostPath2"
 // The readOnly parameter applies to all mounts.
