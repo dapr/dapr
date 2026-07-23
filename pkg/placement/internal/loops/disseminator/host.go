@@ -89,9 +89,9 @@ func (d *disseminator) doReport(streamIDx uint64, host *v1pb.Host) {
 		return
 	}
 
-	d.timeoutQ.Dequeue(d.currentVersion)
+	d.timeoutTimer.Dequeue(d.currentVersion)
 	d.currentVersion++
-	d.timeoutQ.Enqueue(d.currentVersion)
+	d.timeoutTimer.Enqueue(d.currentVersion)
 	d.currentOperation = v1pb.HostOperation_LOCK
 	d.streamsInTargetState = 0
 
@@ -168,7 +168,7 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 		d.currentOperation = v1pb.HostOperation_REPORT
 		d.streamsInTargetState = 0
 
-		d.timeoutQ.Dequeue(d.currentVersion)
+		d.timeoutTimer.Dequeue(d.currentVersion)
 		log.Debugf("Dissemination of version %d in %s complete", d.currentVersion, d.namespace)
 
 		// Clean up orphaned store entries- store entries whose streams are no
