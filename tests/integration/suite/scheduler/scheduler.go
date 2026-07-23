@@ -23,5 +23,6 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/kubernetes"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/metrics"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/quorum"
+	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/shutdown"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/staging"
 )
