@@ -154,12 +154,16 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	for _, name := range []string{"sub1", "sub2", "sub3", "sub5"} {
 		h.log1.EventuallyContains(t, "Found Subscription: "+name, time.Second*15, time.Millisecond*10)
 	}
-	assert.False(t, h.log1.Contains("Found Subscription: sub4"))
 
 	for _, name := range []string{"sub1", "sub2", "sub4", "sub5"} {
 		h.log2.EventuallyContains(t, "Found Subscription: "+name, time.Second*15, time.Millisecond*10)
 	}
-	assert.False(t, h.log2.Contains("Found Subscription: sub3"))
+
+	assert.Never(t, func() bool {
+		return h.log1.Contains("Found Subscription: sub4") ||
+			h.log2.Contains("Found Subscription: sub3")
+	}, time.Second*3, time.Millisecond*10,
+		"daprd logged a subscription scoped to another app")
 
 	client1 := h.daprd1.GRPCClient(t, ctx)
 	client2 := h.daprd2.GRPCClient(t, ctx)

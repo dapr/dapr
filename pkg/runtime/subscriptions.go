@@ -15,8 +15,8 @@ package runtime
 
 import (
 	"context"
-	"slices"
 
+	"github.com/dapr/dapr/pkg/apis/common"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/internal/loader"
 	"github.com/dapr/dapr/pkg/internal/loader/disk"
@@ -50,7 +50,8 @@ func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
 	}
 
 	for _, s := range subs {
-		if subscriptionIsInScope(a.runtimeConfig.id, s) {
+		scoped := common.Scoped{Scopes: s.Scopes}
+		if scoped.IsAppScoped(a.runtimeConfig.id) {
 			log.Infof("Found Subscription: %s", s.Name)
 		}
 	}
@@ -77,8 +78,4 @@ func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func subscriptionIsInScope(appID string, subscription subapi.Subscription) bool {
-	return len(subscription.Scopes) == 0 || slices.Contains(subscription.Scopes, appID)
 }
