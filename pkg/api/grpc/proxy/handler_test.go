@@ -24,6 +24,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -64,6 +65,9 @@ const (
 	countListResponses = 20
 
 	testAppID = "test"
+
+	// Use a small 4 KiB limit
+	testMaxMessageBodySize = 4 << 10
 )
 
 const (
@@ -403,6 +407,149 @@ func (s *proxyTestSuite) TestPingSimulateFailure() {
 	_, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: "Ciao mamma guarda come mi diverto"})
 	s.Require().Error(err, "Ping should return a simulated failure")
 	s.Require().ErrorContains(err, "Simulated failure")
+}
+
+func (s *proxyTestSuite) TestMaxRequestBodySize() {
+	oversizedValue := strings.Repeat("a", testMaxMessageBodySize+1)
+
+	s.T().Run("oversized request via transparent handler is rejected", func(t *testing.T) {
+		ctx, cancel := s.ctx()
+		defer cancel()
+		stream, err := s.testClient.PingList(ctx, &pb.PingRequest{Value: oversizedValue})
+		require.NoError(t, err, "creating the stream should not fail")
+		_, err = stream.Recv()
+		require.Error(t, err, "proxying an oversized request should fail")
+		st, ok := status.FromError(err)
+		require.True(t, ok, "must get status from error")
+		require.Equal(t, codes.ResourceExhausted, st.Code())
+	})
+
+	s.T().Run("request within limit via transparent handler succeeds", func(t *testing.T) {
+		ctx, cancel := s.ctx()
+		defer cancel()
+		stream, err := s.testClient.PingList(ctx, &pb.PingRequest{Value: "small"})
+		require.NoError(t, err, "creating the stream should not fail")
+		count := 0
+		for {
+			_, err = stream.Recv()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			require.NoError(t, err, "reading the stream should not fail")
+			count++
+		}
+		require.Equal(t, countListResponses, count)
+	})
+
+	s.T().Run("oversized request via registered service has no limit", func(t *testing.T) {
+		ctx, cancel := s.ctx()
+		defer cancel()
+		out, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: oversizedValue})
+		require.NoError(t, err, "Ping should succeed without errors")
+		require.Equal(t, oversizedValue, out.GetValue())
+	})
+}
+
+func TestProxyRunnerRunReturnsForwardServerToClientSendMsgError(t *testing.T) {
+	sendErr := status.Error(codes.ResourceExhausted, "message too large")
+	clientCtx, clientCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer clientCancel()
+
+	r := proxyRunner{
+		serverStream: &proxyRunnerTestStream{
+			ctx: clientCtx,
+			recvMsgFn: func(any) error {
+				return nil
+			},
+		},
+		clientStream: &proxyRunnerTestStream{
+			ctx: clientCtx,
+			recvMsgFn: func(any) error {
+				<-clientCtx.Done()
+				return clientCtx.Err()
+			},
+			sendMsgFn: func(any) error {
+				return sendErr
+			},
+		},
+		headersSent:  &atomic.Bool{},
+		clientCtx:    clientCtx,
+		clientCancel: clientCancel,
+		teardown:     func(bool) {},
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- r.run()
+	}()
+
+	select {
+	case err := <-errCh:
+		require.Equal(t, codes.ResourceExhausted, status.Code(err))
+		require.ErrorContains(t, err, "message too large")
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for proxy runner to return")
+	}
+}
+
+func TestProxyRunnerForwardClientToServerReturnsSendErrors(t *testing.T) {
+	for name, setup := range map[string]struct {
+		headerErr          error
+		sendErr            error
+		headerSent         bool
+		expectedHeaderSent bool
+	}{
+		"client stream header": {
+			headerErr: status.Error(codes.ResourceExhausted, "header too large"),
+		},
+		"server stream send header": {
+			headerErr: status.Error(codes.ResourceExhausted, "header too large"),
+		},
+		"server stream send msg": {
+			sendErr:            status.Error(codes.ResourceExhausted, "message too large"),
+			headerSent:         true,
+			expectedHeaderSent: true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			headersSent := &atomic.Bool{}
+			headersSent.Store(setup.headerSent)
+
+			r := proxyRunner{
+				serverStream: &proxyRunnerTestStream{
+					ctx: context.Background(),
+					sendHeaderFn: func(metadata.MD) error {
+						return setup.headerErr
+					},
+					sendMsgFn: func(any) error {
+						return setup.sendErr
+					},
+				},
+				clientStream: &proxyRunnerTestStream{
+					ctx: context.Background(),
+					headerFn: func() (metadata.MD, error) {
+						if name == "client stream header" {
+							return nil, setup.headerErr
+						}
+						return metadata.MD{}, nil
+					},
+					recvMsgFn: func(any) error {
+						return nil
+					},
+				},
+				headersSent: headersSent,
+			}
+
+			errCh := r.forwardClientToServer()
+			select {
+			case err := <-errCh:
+				require.Equal(t, codes.ResourceExhausted, status.Code(err))
+				require.Equal(t, setup.expectedHeaderSent, headersSent.Load())
+			case <-time.After(time.Second):
+				t.Fatal("timed out waiting for forwarding error")
+			}
+		})
+	}
 }
 
 func (s *proxyTestSuite) setupResiliency() {
@@ -828,7 +975,7 @@ func (s *proxyTestSuite) SetupSuite() {
 		func(ctx context.Context, address, id, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error) {
 			return s.getServerClientConn()
 		},
-		4<<10,
+		testMaxMessageBodySize,
 	)
 	s.proxy = grpc.NewServer(
 		grpc.UnknownServiceHandler(th),
@@ -878,6 +1025,49 @@ func (s *proxyTestSuite) TearDownSuite() {
 func TestProxySuite(t *testing.T) {
 	codec.Register()
 	suite.Run(t, &proxyTestSuite{})
+}
+
+func TestClientStreamOptions(t *testing.T) {
+	contentSubtype := grpc.CallContentSubtype((&codec.Proxy{}).Name())
+
+	tests := []struct {
+		name               string
+		maxRequestBodySize int
+		expected           []grpc.CallOption
+	}{
+		{
+			name:               "zero max request body size returns only the proxy content subtype option",
+			maxRequestBodySize: 0,
+			expected: []grpc.CallOption{
+				contentSubtype,
+			},
+		},
+		{
+			name:               "negative max request body size returns only the proxy content subtype option",
+			maxRequestBodySize: -1,
+			expected: []grpc.CallOption{
+				contentSubtype,
+			},
+		},
+		{
+			name:               "positive max request body size adds message size options",
+			maxRequestBodySize: testMaxMessageBodySize,
+			expected: []grpc.CallOption{
+				contentSubtype,
+				grpc.MaxCallRecvMsgSize(testMaxMessageBodySize),
+				grpc.MaxCallSendMsgSize(testMaxMessageBodySize),
+				grpc.MaxRetryRPCBufferSize(testMaxMessageBodySize),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := clientStreamOptions(tt.maxRequestBodySize)
+			require.Len(t, got, len(tt.expected))
+			require.Equal(t, tt.expected, got)
+		})
+	}
 }
 
 // Abstraction that allows us to pass the *testing.T as a grpclogger.
@@ -948,6 +1138,72 @@ func (t testingLog) Fatalf(format string, args ...any) {
 // V reports whether verbosity level l is at least the requested verbose level.
 func (t testingLog) V(l int) bool {
 	return true
+}
+
+type proxyRunnerTestStream struct {
+	ctx context.Context
+
+	headerFn     func() (metadata.MD, error)
+	sendHeaderFn func(metadata.MD) error
+	sendMsgFn    func(any) error
+	recvMsgFn    func(any) error
+	closeSendFn  func() error
+
+	trailer metadata.MD
+}
+
+func (s *proxyRunnerTestStream) Header() (metadata.MD, error) {
+	if s.headerFn != nil {
+		return s.headerFn()
+	}
+	return metadata.MD{}, nil
+}
+
+func (s *proxyRunnerTestStream) Trailer() metadata.MD {
+	return s.trailer
+}
+
+func (s *proxyRunnerTestStream) CloseSend() error {
+	if s.closeSendFn != nil {
+		return s.closeSendFn()
+	}
+	return nil
+}
+
+func (s *proxyRunnerTestStream) Context() context.Context {
+	if s.ctx != nil {
+		return s.ctx
+	}
+	return context.Background()
+}
+
+func (s *proxyRunnerTestStream) SetHeader(metadata.MD) error {
+	return nil
+}
+
+func (s *proxyRunnerTestStream) SendHeader(md metadata.MD) error {
+	if s.sendHeaderFn != nil {
+		return s.sendHeaderFn(md)
+	}
+	return nil
+}
+
+func (s *proxyRunnerTestStream) SetTrailer(md metadata.MD) {
+	s.trailer = md
+}
+
+func (s *proxyRunnerTestStream) SendMsg(msg any) error {
+	if s.sendMsgFn != nil {
+		return s.sendMsgFn(msg)
+	}
+	return nil
+}
+
+func (s *proxyRunnerTestStream) RecvMsg(msg any) error {
+	if s.recvMsgFn != nil {
+		return s.recvMsgFn(msg)
+	}
+	return io.EOF
 }
 
 // createGrpcStreamingChaosInterceptor creates a gRPC interceptor that will return the given error code
