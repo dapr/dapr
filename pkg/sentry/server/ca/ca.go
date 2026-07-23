@@ -23,6 +23,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -73,6 +74,9 @@ type Signer interface {
 	// TrustAnchors returns the trust anchors for the CA in PEM format.
 	TrustAnchors() []byte
 
+	// Run starts the background root CA rotation loop.
+	Run(context.Context) error
+
 	// Extends signing to issue JWT tokens.
 	jwt.Issuer
 }
@@ -81,12 +85,20 @@ type Signer interface {
 type store interface {
 	store(context.Context, bundle.Bundle) error
 	get(context.Context) (bundle.Bundle, error)
+
+	// verifyPropagation returns nil when the rotation's combined trust
+	// anchors have reached every trust anchor consumer the store knows
+	// about, and an error describing what is lagging otherwise. It gates the
+	// destructive cleanup phase of a rotation.
+	verifyPropagation(context.Context, *bundle.RotationState) error
 }
 
 // ca is the implementation of the CA Signer.
 type ca struct {
+	mu     sync.RWMutex
 	bundle bundle.Bundle
 	config config.Config
+	store  store
 	jwt.Issuer
 }
 
@@ -250,6 +262,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	return &ca{
 		bundle: bndle,
 		config: conf,
+		store:  castore,
 		Issuer: jwtIss,
 	}, nil
 }
@@ -271,7 +284,12 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 	}
 	tmpl.DNSNames = append(tmpl.DNSNames, req.DNS...)
 
-	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, c.bundle.X509.IssChain[0], req.PublicKey, c.bundle.X509.IssKey)
+	c.mu.RLock()
+	issChain := c.bundle.X509.IssChain
+	issKey := c.bundle.X509.IssKey
+	c.mu.RUnlock()
+
+	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, issChain[0], req.PublicKey, issKey)
 	if err != nil {
 		return nil, err
 	}
@@ -281,10 +299,16 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 		return nil, err
 	}
 
-	return append([]*x509.Certificate{cert}, c.bundle.X509.IssChain...), nil
+	return append([]*x509.Certificate{cert}, issChain...), nil
 }
 
-// TODO: Remove this method in v1.12 since it is not used any more.
 func (c *ca) TrustAnchors() []byte {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.bundle.X509.TrustAnchors
+}
+
+// Run starts the background root CA rotation loop.
+func (c *ca) Run(ctx context.Context) error {
+	return newRotator(c.store, c).Run(ctx)
 }

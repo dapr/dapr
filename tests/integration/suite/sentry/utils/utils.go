@@ -34,37 +34,140 @@ type KubeAPIOptions struct {
 	Namespace      string
 	ServiceAccount string
 	AppID          string
+
+	// WorkloadCertTTL and AllowedClockSkew are optionally set on the served
+	// daprsystem Configuration's mTLS spec.
+	WorkloadCertTTL  string
+	AllowedClockSkew string
+
+	// ExtraTrustBundleNamespaces creates additional dapr-trust-bundle
+	// ConfigMaps (operator-synced copies) in the given namespaces, seeded
+	// with the bundle's trust anchors and served read-write per namespace. A
+	// sidecar-injected pod is served for each namespace so sentry's
+	// pod-derived propagation check treats it as running Dapr workloads.
+	// Only honored by KubeAPIRW.
+	ExtraTrustBundleNamespaces []string
+}
+
+// TrustBundleRW exposes the mutable dapr-trust-bundle Secret and ConfigMap
+// served by the mock Kubernetes API, for asserting on writes made by sentry
+// (e.g. during root CA rotation) and for seeding state before sentry starts.
+type TrustBundleRW struct {
+	Secret    *prockube.ResourceRW[corev1.Secret]
+	ConfigMap *prockube.ResourceRW[corev1.ConfigMap]
+
+	// ExtraConfigMaps are additional dapr-trust-bundle ConfigMaps in other
+	// namespaces (operator-synced copies), keyed by namespace. Each is
+	// served read-write in its namespace, where sentry's per-namespace
+	// propagation check reads it before allowing rotation cleanup.
+	ExtraConfigMaps map[string]*prockube.ResourceRW[corev1.ConfigMap]
 }
 
 func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 	t.Helper()
 
-	return prockube.New(t,
+	return prockube.New(t, append(kubeAPIOptions(t, opts),
+		prockube.WithSecretGet(t, trustBundleSecret(opts.Bundle)),
+		prockube.WithConfigMapGet(t, trustBundleConfigMap(opts.Bundle)),
+	)...)
+}
+
+// KubeAPIRW is like KubeAPI, but serves the dapr-trust-bundle Secret and
+// ConfigMap read-write so sentry can persist trust bundle updates and read
+// them back. Extra per-namespace trust bundle ConfigMaps (with a
+// sidecar-injected pod each, served in the cluster-wide Pod list) simulate
+// operator-synced copies for sentry's per-namespace propagation check before
+// rotation cleanup.
+func KubeAPIRW(t *testing.T, opts KubeAPIOptions) (*prockube.Kubernetes, TrustBundleRW) {
+	t.Helper()
+
+	rw := TrustBundleRW{
+		Secret:          prockube.NewSecretRW(t, trustBundleSecret(opts.Bundle)),
+		ConfigMap:       prockube.NewConfigMapRW(t, trustBundleConfigMap(opts.Bundle)),
+		ExtraConfigMaps: make(map[string]*prockube.ResourceRW[corev1.ConfigMap]),
+	}
+
+	kubeOpts := append(kubeAPIOptions(t, opts),
+		rw.Secret.Option(),
+		rw.ConfigMap.Option(),
+	)
+
+	for _, namespace := range opts.ExtraTrustBundleNamespaces {
+		configMap := trustBundleConfigMap(opts.Bundle)
+		configMap.Namespace = namespace
+		extra := prockube.NewConfigMapRW(t, configMap)
+		rw.ExtraConfigMaps[namespace] = extra
+		kubeOpts = append(kubeOpts, extra.Option())
+	}
+
+	kubeAPI := prockube.New(t, kubeOpts...)
+
+	return kubeAPI, rw
+}
+
+// daprEnabledPods returns one sidecar-injected pod per namespace, so sentry's
+// propagation check treats the namespaces as running Dapr workloads.
+func daprEnabledPods(namespaces []string) []corev1.Pod {
+	pods := make([]corev1.Pod, 0, len(namespaces))
+	for _, namespace := range namespaces {
+		pods = append(pods, corev1.Pod{
+			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace, Name: "daprpod",
+				Labels: map[string]string{"dapr.io/sidecar-injected": "true"},
+			},
+		})
+	}
+	return pods
+}
+
+func trustBundleSecret(bndle bundle.Bundle) *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
+		ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
+		Data: map[string][]byte{
+			"ca.crt":     bndle.X509.TrustAnchors,
+			"issuer.crt": bndle.X509.IssChainPEM,
+			"issuer.key": bndle.X509.IssKeyPEM,
+		},
+	}
+}
+
+func trustBundleConfigMap(bndle bundle.Bundle) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
+		ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
+		Data:       map[string]string{"ca.crt": string(bndle.X509.TrustAnchors)},
+	}
+}
+
+func kubeAPIOptions(t *testing.T, opts KubeAPIOptions) []prockube.Option {
+	t.Helper()
+
+	var workloadCertTTL, allowedClockSkew *string
+	if opts.WorkloadCertTTL != "" {
+		workloadCertTTL = &opts.WorkloadCertTTL
+	}
+	if opts.AllowedClockSkew != "" {
+		allowedClockSkew = &opts.AllowedClockSkew
+	}
+
+	return []prockube.Option{
 		prockube.WithClusterDaprConfigurationList(t, new(configapi.ConfigurationList)),
 		prockube.WithDaprConfigurationGet(t, &configapi.Configuration{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "daprsystem"},
 			Spec: configapi.ConfigurationSpec{
-				MTLSSpec: &configapi.MTLSSpec{ControlPlaneTrustDomain: "integration.test.dapr.io"},
+				MTLSSpec: &configapi.MTLSSpec{
+					ControlPlaneTrustDomain: "integration.test.dapr.io",
+					WorkloadCertTTL:         workloadCertTTL,
+					AllowedClockSkew:        allowedClockSkew,
+				},
 			},
-		}),
-		prockube.WithSecretGet(t, &corev1.Secret{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
-			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
-			Data: map[string][]byte{
-				"ca.crt":     opts.Bundle.X509.TrustAnchors,
-				"issuer.crt": opts.Bundle.X509.IssChainPEM,
-				"issuer.key": opts.Bundle.X509.IssKeyPEM,
-			},
-		}),
-		prockube.WithConfigMapGet(t, &corev1.ConfigMap{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
-			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
-			Data:       map[string]string{"ca.crt": string(opts.Bundle.X509.TrustAnchors)},
 		}),
 		prockube.WithClusterPodList(t, &corev1.PodList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
-			Items: []corev1.Pod{
+			Items: append([]corev1.Pod{
 				{
 					TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
 					ObjectMeta: metav1.ObjectMeta{
@@ -73,7 +176,7 @@ func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 					},
 					Spec: corev1.PodSpec{ServiceAccountName: opts.ServiceAccount},
 				},
-			},
+			}, daprEnabledPods(opts.ExtraTrustBundleNamespaces)...),
 		}),
 		prockube.WithPath("/apis/authentication.k8s.io/v1/tokenreviews", func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "POST", r.Method)
@@ -96,5 +199,5 @@ func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 			w.Header().Add("Content-Type", "application/json")
 			w.Write(resp)
 		}),
-	)
+	}
 }

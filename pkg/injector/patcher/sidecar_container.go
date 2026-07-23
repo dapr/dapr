@@ -278,6 +278,19 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 			Value: c.ControlPlaneTrustDomain,
 		},
 	}
+	if c.MTLSEnabled {
+		// Pair with the dapr-trust-bundle ConfigMap volume: point daprd at the
+		// mounted trust anchors file so it picks up updated root CAs live
+		// during rotation. The required volume guarantees the file exists by
+		// the time daprd starts; DAPR_TRUST_ANCHORS above remains as the
+		// fallback for older daprd images only.
+		env = append(env,
+			corev1.EnvVar{
+				Name:  securityConsts.TrustAnchorsFileEnvVar,
+				Value: securityConsts.ControlPlaneDefaultTrustAnchorsPath,
+			},
+		)
+	}
 	if c.EnableK8sDownwardAPIs {
 		env = append(env,
 			corev1.EnvVar{

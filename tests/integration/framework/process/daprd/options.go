@@ -370,6 +370,18 @@ func WithSentry(t *testing.T, sentry *sentry.Sentry) Option {
 	}
 }
 
+// WithSentryTrustAnchorsFile connects daprd to sentry like WithSentry, but
+// provides the trust anchors as a watched file path instead of the static
+// DAPR_TRUST_ANCHORS env var, so daprd picks up trust anchor updates (e.g.
+// during root CA rotation) live.
+func WithSentryTrustAnchorsFile(t *testing.T, sentry *sentry.Sentry, path string) Option {
+	return func(o *options) {
+		WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS_FILE", path))(o)
+		WithSentryAddress(sentry.Address())(o)
+		WithEnableMTLS(true)(o)
+	}
+}
+
 func WithScheduler(scheduler *scheduler.Scheduler) Option {
 	return func(o *options) {
 		WithSchedulerAddresses(scheduler.Address())(o)

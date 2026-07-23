@@ -27,8 +27,20 @@ const (
 	// TrustBundleK8sSecretName is the name of the kubernetes secret that holds the trust bundle.
 	TrustBundleK8sSecretName = "dapr-trust-bundle" /* #nosec */
 
+	// TrustBundleConfigMapName is the name of the Kubernetes ConfigMap that
+	// holds the trust bundle trust anchors, synced by the operator into
+	// Dapr-enabled namespaces and mounted by daprd as its trust anchor
+	// source.
+	TrustBundleConfigMapName = "dapr-trust-bundle" /* #nosec */
+
 	// TrustAnchorsEnvVar is the environment variable name for the trust anchors in the sidecar.
 	TrustAnchorsEnvVar = "DAPR_TRUST_ANCHORS"
+
+	// TrustAnchorsFileEnvVar is the environment variable name for the path to
+	// the trust anchors file in the sidecar. Unlike TrustAnchorsEnvVar, the
+	// file is watched for changes, so updated root CAs (e.g. during root CA
+	// rotation) propagate to the running sidecar without a restart.
+	TrustAnchorsFileEnvVar = "DAPR_TRUST_ANCHORS_FILE"
 
 	// EnvKeysEnvVar is the variable injected in the daprd container with the list of injected env vars.
 	EnvKeysEnvVar = "DAPR_ENV_KEYS"
