@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/metadata"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
@@ -221,8 +222,13 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to create client for trust bundle sync: %w", err)
 	}
+	trustBundleMetadataClient, err := metadata.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return nil, fmt.Errorf("unable to create metadata client for trust bundle sync: %w", err)
+	}
 	if err := mgr.Add(&TrustBundleSync{
 		client:                trustBundleClient,
+		metadataClient:        trustBundleMetadataClient,
 		controlPlaneNamespace: security.CurrentNamespace(),
 		interval:              trustBundleSyncInterval,
 	}); err != nil {
