@@ -513,3 +513,89 @@ func TestPatching(t *testing.T) {
 		t.Run(tc.name, testCaseFn(tc))
 	}
 }
+
+func TestTrustBundleVolumeConflict(t *testing.T) {
+	newPod := func(volume *corev1.Volume) *corev1.Pod {
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "myapp",
+				Annotations: map[string]string{
+					"dapr.io/enabled": "true",
+					"dapr.io/app-id":  "myapp",
+				},
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "appcontainer", Image: "container:1.0"}},
+			},
+		}
+		if volume != nil {
+			pod.Spec.Volumes = []corev1.Volume{*volume}
+		}
+		return pod
+	}
+	newConfig := func(pod *corev1.Pod) *SidecarConfig {
+		c := NewSidecarConfig(pod)
+		c.Namespace = "testns"
+		c.Identity = "pod:identity"
+		c.SentrySPIFFEID = "spiffe://foo.bar/ns/example/dapr-sentry"
+		c.MTLSEnabled = true
+		c.SetFromPodAnnotations()
+		return c
+	}
+
+	t.Run("a pre-existing volume with the trust bundle name of the wrong type is rejected", func(t *testing.T) {
+		c := newConfig(newPod(&corev1.Volume{
+			Name:         "dapr-trust-bundle",
+			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		}))
+		_, err := c.GetPatch()
+		require.ErrorContains(t, err, "dapr-trust-bundle",
+			"a shadowing volume would leave daprd without the watched trust anchors file")
+	})
+
+	t.Run("a pre-existing volume pointing at another ConfigMap is rejected", func(t *testing.T) {
+		c := newConfig(newPod(&corev1.Volume{
+			Name: "dapr-trust-bundle",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "some-other-configmap"},
+				},
+			},
+		}))
+		_, err := c.GetPatch()
+		require.ErrorContains(t, err, "dapr-trust-bundle")
+	})
+
+	t.Run("a pre-existing expected trust bundle volume is accepted without duplication", func(t *testing.T) {
+		c := newConfig(newPod(&corev1.Volume{
+			Name: "dapr-trust-bundle",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "dapr-trust-bundle"},
+				},
+			},
+		}))
+		patch, err := c.GetPatch()
+		require.NoError(t, err)
+
+		newPod, err := PatchPod(c.pod, patch)
+		require.NoError(t, err)
+
+		count := 0
+		for _, volume := range newPod.Spec.Volumes {
+			if volume.Name == "dapr-trust-bundle" {
+				count++
+			}
+		}
+		assert.Equal(t, 1, count, "the trust bundle volume must not be duplicated")
+
+		daprdContainer := newPod.Spec.Containers[1]
+		found := false
+		for _, mount := range daprdContainer.VolumeMounts {
+			if mount.Name == "dapr-trust-bundle" {
+				found = true
+			}
+		}
+		assert.True(t, found, "the trust bundle mount must still be added")
+	})
+}
