@@ -663,13 +663,13 @@ func (a *api) onGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		code := nethttp.StatusInternalServerError
-		kerr, ok := kiterrors.FromError(err)
-		if ok {
-			code = kerr.HTTPStatusCode()
+		if kerr, ok := kiterrors.FromError(err); ok {
+			respondWithError(w, kerr)
+			log.Debug(kerr)
+			return
 		}
 
-		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()), errorcodes.StateGet, code)
+		resp := apierrors.StateStore(storeName).Get(key, err.Error())
 		respondWithError(w, resp)
 		log.Debug(resp)
 		return
@@ -683,7 +683,7 @@ func (a *api) onGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	if encryption.EncryptedStateStore(storeName) {
 		val, err := encryption.TryDecryptValue(storeName, resp.Data)
 		if err != nil {
-			resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()), errorcodes.StateGet, nethttp.StatusInternalServerError)
+			resp := apierrors.StateStore(storeName).Get(key, err.Error())
 			respondWithError(w, resp)
 			log.Debug(resp)
 			return
