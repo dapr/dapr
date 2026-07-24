@@ -140,6 +140,33 @@ func (s *specialchars) Run(t *testing.T, ctx context.Context) {
 		}, 10*time.Second, 10*time.Millisecond)
 	})
 
+	t.Run("reminder name with the || delimiter fires with its full name", func(t *testing.T) {
+		// '||' is the scheduler's reserved internal key delimiter. A reminder
+		// name that contains it must be delivered to the app in full, not
+		// truncated on the last '||'.
+		const reminderName = "remind||me||now"
+		_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
+			ActorType: "myactortype",
+			ActorId:   "myactorid",
+			Name:      reminderName,
+			DueTime:   "0ms",
+		})
+		require.NoError(t, err)
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			s.lock.Lock()
+			defer s.lock.Unlock()
+			found := false
+			for _, p := range s.remindPaths {
+				if strings.HasSuffix(p, "/method/remind/"+reminderName) {
+					found = true
+					break
+				}
+			}
+			assert.True(c, found, "reminder %q did not fire with its full name; paths seen: %v", reminderName, s.remindPaths)
+		}, 10*time.Second, 10*time.Millisecond)
+	})
+
 	t.Run("schreder-style actor id with || delimiter registers", func(t *testing.T) {
 		// Actor id embeds the '||' delimiter and single pipes, exactly the
 		// shape that previously failed RFC1123 validation in the scheduler.

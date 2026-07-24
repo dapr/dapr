@@ -16,4 +16,5 @@ package api
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/api/list"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/api/watchhosts"
+	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/api/watchjobs"
 )

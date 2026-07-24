@@ -323,6 +323,18 @@ func TestExecution(t *testing.T) {
 			allTagsPresent(t, v, viewData[0].Tags)
 		})
 
+		t.Run("Terminated workflow execution", func(t *testing.T) {
+			w, meter := initWorkflowMetrics()
+			t.Cleanup(func() { meter.Stop() })
+
+			w.WorkflowExecutionEvent(t.Context(), workflowName, StatusTerminated)
+
+			viewData, _ := meter.RetrieveData(countMetricName)
+			v := meter.Find(countMetricName)
+
+			allTagsPresent(t, v, viewData[0].Tags)
+		})
+
 		t.Run("Successful workflow execution", func(t *testing.T) {
 			w, meter := initWorkflowMetrics()
 			t.Cleanup(func() { meter.Stop() })

@@ -44,6 +44,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/retentioner"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -708,6 +709,9 @@ func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*s
 	if err != nil {
 		return nil, err
 	}
+	if astate == nil {
+		return nil, messages.ErrActorRuntimeNotFound
+	}
 
 	// actor id is workflow instance id. Tamper recovery (appending the
 	// terminal failed event) is the orchestrator actor's responsibility, not
@@ -857,6 +861,9 @@ func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstan
 	if err != nil {
 		return nil, err
 	}
+	if ss == nil {
+		return nil, messages.ErrActorRuntimeNotFound
+	}
 
 	resp, err := state.LoadWorkflowState(ctx, ss, req.GetInstanceId(), state.Options{
 		AppID:             abe.appID,
@@ -900,6 +907,9 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 	astate, err := abe.actors.State(ctx)
 	if err != nil {
 		return err
+	}
+	if astate == nil {
+		return messages.ErrActorRuntimeNotFound
 	}
 
 	s, err := state.LoadWorkflowState(ctx, astate, id.String(), state.Options{

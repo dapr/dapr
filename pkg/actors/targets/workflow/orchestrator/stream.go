@@ -37,13 +37,29 @@ func (o *orchestrator) handleStream(ctx context.Context,
 
 	// Load state once and reuse for both the access policy check (workflow
 	// name) and the stream response.
-	_, ometa, err := o.loadInternalState(ctx)
+	state, ometa, err := o.loadInternalState(ctx)
 	if err != nil {
 		return false, err
 	}
 
 	if aerr := o.checkAccessPolicy(ctx, req.GetMessage().GetMethod(), req.GetMessage().GetData().GetValue(), nil, ometa, req.GetMetadata()); aerr != nil {
 		return false, aerr
+	}
+
+	// A caller gating instance ID reuse asks for the whole subtree to be
+	// verified terminal, not just this workflow: recurse into children before
+	// replying. Older daprds never send the flag and older callers are
+	// unaffected by it, so the recursion degrades to a direct status check
+	// across a version boundary rather than failing.
+	if v, ok := req.GetMetadata()[todo.MetadataCheckSubtreeTerminal]; ok && len(v.GetValues()) > 0 && v.GetValues()[0] == "true" {
+		resp, verr := o.subtreeTerminalResponse(ctx, state, ometa)
+		if verr != nil {
+			return false, verr
+		}
+		if resp != nil {
+			_, err = stream(resp)
+			return false, err
+		}
 	}
 
 	if ometa != nil {

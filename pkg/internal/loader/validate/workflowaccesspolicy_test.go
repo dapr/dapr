@@ -88,7 +88,9 @@ func TestWorkflowAccessPolicy_BothWorkflowsAndActivities(t *testing.T) {
 
 func TestWorkflowAccessPolicy_InvalidOperation(t *testing.T) {
 	p := validPolicy()
-	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperation("bogus")}
+	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowOperation{
+		wfaclapi.WorkflowOperation("bogus"),
+	}
 	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
 }
@@ -143,9 +145,105 @@ func TestWorkflowAccessPolicy_MultipleRulesOneInvalid(t *testing.T) {
 	p.Spec.Rules = append(p.Spec.Rules, wfaclapi.WorkflowAccessPolicyRule{
 		Callers: []wfaclapi.WorkflowCaller{{AppID: "other"}},
 		Workflows: []wfaclapi.WorkflowRule{
-			{Name: "wf", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperation("bad")}},
+			{Name: "wf", Operations: []wfaclapi.WorkflowOperation{
+				wfaclapi.WorkflowOperation("bad"),
+			}},
 		},
 	})
 	err := WorkflowAccessPolicy(t.Context(), p)
 	require.Error(t, err)
+}
+
+func withRequires(reqs ...wfaclapi.RequiredEvent) *wfaclapi.WorkflowAccessPolicy {
+	p := validPolicy()
+	p.Spec.Rules[0].Workflows = nil
+	for i := range reqs {
+		if reqs[i].AppID == "" {
+			reqs[i].AppID = "producer-app"
+		}
+	}
+	p.Spec.Rules[0].Activities = []wfaclapi.ActivityRule{{
+		Name:     "ProcessPayment",
+		Requires: reqs,
+	}}
+	return p
+}
+
+func TestWorkflowAccessPolicy_RequiredEvent_EventTypeEnum(t *testing.T) {
+	valid := []wfaclapi.RequiredEventType{
+		wfaclapi.RequiredEventTypeActivityStarted,
+		wfaclapi.RequiredEventTypeActivityCompleted,
+		wfaclapi.RequiredEventTypeWorkflowStarted,
+		wfaclapi.RequiredEventTypeWorkflowCompleted,
+		wfaclapi.RequiredEventTypeEventRaised,
+	}
+	for _, et := range valid {
+		t.Run(string(et)+" is valid", func(t *testing.T) {
+			p := withRequires(wfaclapi.RequiredEvent{EventType: et, Name: "FraudCheck"})
+			require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
+		})
+	}
+}
+
+func TestWorkflowAccessPolicy_RequiredEvent_InvalidEventTypeEnum(t *testing.T) {
+	p := withRequires(wfaclapi.RequiredEvent{
+		EventType: wfaclapi.RequiredEventType("bogus"),
+		Name:      "FraudCheck",
+	})
+	err := WorkflowAccessPolicy(t.Context(), p)
+	require.Error(t, err)
+}
+
+func TestWorkflowAccessPolicy_RequiredEvent_EmptyName(t *testing.T) {
+	p := withRequires(wfaclapi.RequiredEvent{
+		EventType: wfaclapi.RequiredEventTypeActivityCompleted,
+		Name:      "",
+	})
+	err := WorkflowAccessPolicy(t.Context(), p)
+	require.Error(t, err)
+}
+
+func TestWorkflowAccessPolicy_RequiredEvent_EmptyAppID(t *testing.T) {
+	p := validPolicy()
+	p.Spec.Rules[0].Workflows = nil
+	p.Spec.Rules[0].Activities = []wfaclapi.ActivityRule{{
+		Name: "ProcessPayment",
+		Requires: []wfaclapi.RequiredEvent{{
+			EventType: wfaclapi.RequiredEventTypeActivityCompleted,
+			Name:      "FraudCheck",
+		}},
+	}}
+	err := WorkflowAccessPolicy(t.Context(), p)
+	require.Error(t, err)
+}
+
+// workflow-rule requires is rejected when the rule lists any non-schedule
+// operation
+func TestWorkflowAccessPolicy_RequiresOnlyValidOnSchedule(t *testing.T) {
+	p := validPolicy()
+	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowOperation{
+		wfaclapi.WorkflowOperationSchedule,
+		wfaclapi.WorkflowOperationTerminate,
+	}
+	p.Spec.Rules[0].Workflows[0].Requires = []wfaclapi.RequiredEvent{{
+		EventType: wfaclapi.RequiredEventTypeActivityCompleted,
+		Name:      "FraudCheck",
+		AppID:     "producer-app",
+	}}
+	err := WorkflowAccessPolicy(t.Context(), p)
+	require.Error(t, err)
+}
+
+// workflow-rule requires is accepted when the rule's only operation is schedule.
+func TestWorkflowAccessPolicy_RequiresOnScheduleEntryAccepted(t *testing.T) {
+	p := validPolicy()
+	p.Spec.Rules[0].Workflows[0].Operations = []wfaclapi.WorkflowOperation{
+		wfaclapi.WorkflowOperationSchedule,
+	}
+	p.Spec.Rules[0].Workflows[0].Requires = []wfaclapi.RequiredEvent{{
+		EventType: wfaclapi.RequiredEventTypeActivityCompleted,
+		Name:      "FraudCheck",
+		AppID:     "producer-app",
+	}}
+	require.NoError(t, WorkflowAccessPolicy(t.Context(), p))
 }
