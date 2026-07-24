@@ -164,6 +164,20 @@ export DAPR_PERF_TEST="actor_id_scale workflows"
 make test-perf-all
 ```
 
+### Generate performance charts
+
+Charts can be generated from the `gotestsum` JSON report of any perf run
+(local `test_report_perf*.json` output or the `test_perf.json` artifact of a
+CI run):
+
+```bash
+cd tests/perf/report
+go run . -input <path-to-report.json[.gz]> -version <output-folder>
+```
+
+See [the charts README](../perf/report/charts/README.md) for how reports and
+charts are stored and published per release.
+
 ### Remove all tests data
 Once you finished your testing, it's recommended to remove old test data, so it's easier to find the new tests. 
 You can run

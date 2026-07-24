@@ -31,8 +31,10 @@ import (
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
@@ -423,7 +425,7 @@ func Test_runWorkflow_emptyInboxTerminalCreatesRetentionReminder(t *testing.T) {
 	assert.Equal(t, "dapr.internal.default.testapp.retentioner", got.ActorType,
 		"retention reminder must target the retentioner actor type")
 	assert.Equal(t, instanceID, got.ActorID)
-	assert.Equal(t, "anyterminal", got.Name,
+	assert.Equal(t, "retention", got.Name,
 		"retention reminder name must be deterministic (no random suffix) so retries overwrite in place")
 }
 
@@ -576,6 +578,34 @@ func Test_runWorkflow_emptyInboxNonTerminalSkipsRetention(t *testing.T) {
 	assert.Equal(t, todo.RunCompletedTrue, completed)
 	assert.False(t, createCalled,
 		"retention reminder must not be created for a non-terminal workflow")
+}
+
+// Test_executionStatusForRuntimeStatus verifies the terminal-status to
+// metric-label mapping: completed -> success, terminated -> terminated, and
+// every other terminal status -> failed. RUNTIME_STATUS_CANCELED is included
+// to document that a hypothetical cancelled orchestration would be recorded as
+// failed; the engine never actually produces this status for a top-level
+// workflow.
+func Test_executionStatusForRuntimeStatus(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		status api.OrchestrationStatus
+		want   string
+	}{
+		{"completed", api.RUNTIME_STATUS_COMPLETED, diag.StatusSuccess},
+		{"terminated", api.RUNTIME_STATUS_TERMINATED, diag.StatusTerminated},
+		{"failed", api.RUNTIME_STATUS_FAILED, diag.StatusFailed},
+		{"canceled falls back to failed", api.RUNTIME_STATUS_CANCELED, diag.StatusFailed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, executionStatusForRuntimeStatus(tt.status))
+		})
+	}
 }
 
 func TestFilterValidInboxEvents_EmptyInbox(t *testing.T) {

@@ -98,6 +98,7 @@ func (r *retention) Run(t *testing.T, ctx context.Context) {
 	assert.False(t, runv2.Load(), "v2 must not have executed against a v1 workflow instance")
 
 	cancelClient()
+	r.workflow.WaitForNoConnectedWorkers(t, ctx)
 	r.workflow.ResetRegistry(t)
 	require.NoError(t, r.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, makeWF(&runv1)))
 

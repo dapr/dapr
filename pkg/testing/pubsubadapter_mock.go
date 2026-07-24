@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/pubsub/transport"
 )
 
 // MockPubSubAdapter is mock for PubSubAdapter
@@ -30,13 +31,13 @@ type MockPubSubAdapter struct {
 // Publish is an adapter method for the runtime to pre-validate publish requests
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
-func (a *MockPubSubAdapter) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
+func (a *MockPubSubAdapter) Publish(ctx context.Context, req *pubsub.PublishRequest, _ transport.Mode) error {
 	return a.PublishFn(ctx, req)
 }
 
 // Publish is an adapter method for the runtime to pre-validate publish requests
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
-func (a *MockPubSubAdapter) BulkPublish(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+func (a *MockPubSubAdapter) BulkPublish(ctx context.Context, req *pubsub.BulkPublishRequest, _ transport.Mode) (pubsub.BulkPublishResponse, error) {
 	return a.BulkPublishFn(ctx, req)
 }

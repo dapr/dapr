@@ -94,9 +94,10 @@ func TestInvokeMethod(t *testing.T) {
 	conn := createConnection(t)
 	defer closeConnection(t, conn)
 	c := Channel{
-		baseAddress:        "localhost:9998",
-		appCallbackClient:  runtimev1pb.NewAppCallbackClient(conn),
-		conn:               conn,
+		baseAddress: "localhost:9998",
+		connFn: func() (*grpc.ClientConn, func(bool), error) {
+			return conn, func(bool) {}, nil
+		},
 		appMetadataToken:   "token1",
 		maxRequestBodySize: 4 << 20,
 	}
@@ -140,9 +141,10 @@ func TestInvokeMethod(t *testing.T) {
 func TestHealthProbe(t *testing.T) {
 	conn := createConnection(t)
 	c := Channel{
-		baseAddress:        "localhost:9998",
-		appCallbackClient:  runtimev1pb.NewAppCallbackClient(conn),
-		conn:               conn,
+		baseAddress: "localhost:9998",
+		connFn: func() (*grpc.ClientConn, func(bool), error) {
+			return conn, func(bool) {}, nil
+		},
 		appMetadataToken:   "token1",
 		maxRequestBodySize: 4 << 20,
 	}

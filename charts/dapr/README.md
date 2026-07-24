@@ -188,7 +188,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_scheduler.cluster.storageClassName`     | When set, uses this class to provision the database storage volume.                                                                                                                                                                                                                                                                                  |                                            |
 | `dapr_scheduler.cluster.storageSize`          | Default PVC size requested for the scheduler StatefulSet on a fresh install. On an upgrade, the chart detects the live StatefulSet via `lookup` and pins this to the existing PVC size, because `StatefulSet.spec.volumeClaimTemplates` is immutable in Kubernetes - changing it would cause the upgrade to fail. To grow an existing PVC, expand it directly on the cluster. | `16Gi`                                     |
 | `dapr_scheduler.securityContext.runAsNonRoot` | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube                                                                                                                                                                                                                                       | `true`                                     |
-| `dapr_scheduler.securityContext.fsGroup`      | Integer value for `securityContext.fsGroup`. Useful for adding the Scheduler process to the file system group that can write to the mounted database volume.                                                                                                                                                                                         | `65532`                                    |
+| `dapr_scheduler.securityContext.fsGroup`      | Optional integer value for `securityContext.fsGroup`. When set, adds the Scheduler process to the specified file system group (e.g. to write to a mounted volume owned by that group). Unset by default so that platforms such as OpenShift can assign an fsGroup automatically from the namespace range.                                             | `~`                                        |
 | `dapr_scheduler.resources`                    | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty                                                                                                                                                                                                    | `{}`                                       |
 | `dapr_scheduler.debug.enabled`                | Boolean value for enabling debug mode                                                                                                                                                                                                                                                                                                                | `{}`                                       |
 | `dapr_scheduler.statefulsetAnnotations`       | Custom annotations for Dapr Scheduler Statefulset                                                                                                                                                                                                                                                                                                    | `{}`                                       |
@@ -225,6 +225,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sentry.deploymentAnnotations` | Custom annotations for Dapr Sentry Deployment                                                                                                           | `{}`    |
 | `dapr_sentry.service.annotations`   | Custom annotations for "dapr-sentry" Service resource | `{}` |
 | `dapr_sentry.service.type`          | Type for "dapr-sentry" Service resource (e.g. `ClusterIP`, `LoadBalancer`, etc) | `ClusterIP` |
+| `dapr_sentry.extraArgs`             | List of additional command-line args appended to the sentry container (for flags not exposed as dedicated values) | `[]` |
 | `dapr_placement.extraEnvVars`       | Map of (name, value) tuples to use as extra environment variables (e.g. `my-env-var: "my-val"`, etc)                                                     | `{}`        |
 
 ### Dapr Sidecar Injector options:
@@ -278,10 +279,6 @@ helm install dapr dapr/dapr --namespace dapr-system --create-namespace --set-str
 ## Example of installing dapr on Minikube
 Configure a values file with these options:
 ```yaml
-dapr_dashboard:
-  runAsNonRoot: false
-  logLevel: DEBUG
-  serviceType: NodePort  # Allows retrieving the dashboard url by running the command "minikube service list"
 dapr_placement:
   runAsNonRoot: false
   logLevel: DEBUG

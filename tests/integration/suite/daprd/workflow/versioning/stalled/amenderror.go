@@ -89,6 +89,7 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	assert.False(t, runv2.Load(), "v2 must not have executed against a v1 workflow instance")
 
 	cancelClient()
+	d.workflow.WaitForNoConnectedWorkers(t, ctx)
 	d.workflow.ResetRegistry(t)
 	require.NoError(t, d.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, makeWF(&runv1)))
 	clientCtx, cancelClient = context.WithCancel(ctx)

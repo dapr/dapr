@@ -59,6 +59,12 @@ type outboxImpl struct {
 	outboxStores          map[string]outboxConfig
 	lock                  sync.RWMutex
 	namespace             string
+
+	// componentCtxFn decorates the context used for the internal outbox
+	// subscription and its state operations. Dapr wires this to attach the
+	// workload's SPIFFE identity so the pubsub and state components can
+	// authenticate to their backing infrastructure service.
+	componentCtxFn func(context.Context) context.Context
 }
 
 type OptionsOutbox struct {
@@ -67,6 +73,7 @@ type OptionsOutbox struct {
 	GetStateFn            func(string) (state.Store, bool)
 	CloudEventExtractorFn func(map[string]any, string) string
 	Namespace             string
+	ComponentContextFn    func(context.Context) context.Context
 }
 
 // NewOutbox returns an instance of an Outbox.
@@ -78,7 +85,17 @@ func NewOutbox(opts OptionsOutbox) outbox.Outbox {
 		publisher:             opts.Publisher,
 		outboxStores:          make(map[string]outboxConfig),
 		namespace:             opts.Namespace,
+		componentCtxFn:        opts.ComponentContextFn,
 	}
+}
+
+// componentContext decorates ctx with the workload's SPIFFE identity for
+// component operations. It is a no-op when no decorator is configured.
+func (o *outboxImpl) componentContext(ctx context.Context) context.Context {
+	if o.componentCtxFn == nil {
+		return ctx
+	}
+	return o.componentCtxFn(ctx)
 }
 
 // AddOrUpdateOutbox examines a statestore for outbox properties and saves it for later usage in outbox operations.
@@ -238,7 +255,7 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 				PubsubName: c.outboxPubsub,
 				Data:       data,
 				Topic:      outboxTopic(source, c.publishTopic, o.namespace),
-			})
+			}, TransportModeGRPC)
 			if err != nil {
 				return nil, err
 			}
@@ -265,9 +282,14 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 			continue
 		}
 
-		outboxPubsub.Subscribe(ctx, contribPubsub.SubscribeRequest{
+		outboxPubsub.Subscribe(o.componentContext(ctx), contribPubsub.SubscribeRequest{
 			Topic: outboxTopic(appID, c.publishTopic, o.namespace),
 		}, func(ctx context.Context, msg *contribPubsub.NewMessage) error {
+			// The per-message context originates from the pubsub component, so
+			// re-attach the workload's SPIFFE identity for the state operations
+			// (Get/Delete) this handler performs directly.
+			ctx = o.componentContext(ctx)
+
 			var cloudEvent map[string]any
 
 			err := json.Unmarshal(msg.Data, &cloudEvent)
@@ -334,7 +356,7 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 				Data:        b,
 				Topic:       c.publishTopic,
 				ContentType: &contentType,
-			})
+			}, TransportModeGRPC)
 			if err != nil {
 				return err
 			}

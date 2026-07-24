@@ -7,11 +7,19 @@ spec:
   policies:
 
     retries:
-      # Policy for pubsub redelivery tests - allows retries before exhaustion
+      # Policy for pubsub redelivery tests - allows a few retries before
+      # exhaustion. Kept small on purpose: a message is only dead-lettered
+      # once this policy exhausts, and on brokers that redeliver slowly
+      # (e.g. Redis on KinD, where each retry maps to a redelivery cycle of
+      # several seconds) a large retry count pushes dead-lettering out to
+      # many minutes with high run-to-run variance. Five retries keeps
+      # dead-lettering fast and bounded on every broker while still leaving
+      # the retry/invalid-status scenarios (which flip to success after 2s)
+      # comfortably inside the retry window.
       pubsubRetry:
         policy: constant
         duration: 1s
-        maxRetries: 60  # 60 seconds retry window for redelivery tests
+        maxRetries: 5
 
   targets:
   

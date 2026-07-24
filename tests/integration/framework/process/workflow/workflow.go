@@ -218,6 +218,29 @@ func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	}
 }
 
+func (w *Workflow) WaitForNoConnectedWorkers(t *testing.T, ctx context.Context) {
+	t.Helper()
+	w.WaitForNoConnectedWorkersN(t, ctx, 0)
+}
+
+func (w *Workflow) WaitForNoConnectedWorkersN(t *testing.T, ctx context.Context, index int) {
+	t.Helper()
+	require.Less(t, index, len(w.daprds), "index out of range")
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		md := w.DaprN(index).GetMetadata(c, ctx)
+		if !assert.NotNil(c, md) {
+			return
+		}
+		// The workflows metadata field is omitted when there are no connected
+		// workers, so a nil value means zero workers (drained).
+		if md.Workflows == nil {
+			return
+		}
+		assert.Zero(c, md.Workflows.ConnectedWorkers)
+	}, time.Second*30, time.Millisecond*10)
+}
+
 func (w *Workflow) ResetRegistry(t *testing.T) {
 	t.Helper()
 	w.taskregistry[0] = task.NewTaskRegistry()

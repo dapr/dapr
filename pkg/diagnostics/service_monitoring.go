@@ -541,7 +541,8 @@ func (s *serviceMetrics) WorkflowACLActionAllowed(callerAppID, opType, operation
 	}
 }
 
-// WorkflowACLActionDenied records a workflow/activity operation denied by workflow access policy.
+// WorkflowACLActionDenied records a workflow/activity operation denied by
+// workflow access policy.
 func (s *serviceMetrics) WorkflowACLActionDenied(callerAppID, opType, operation string) {
 	if s.enabled {
 		stats.RecordWithOptions(

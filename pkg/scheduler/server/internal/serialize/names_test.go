@@ -14,125 +14,113 @@ limitations under the License.
 package serialize
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/protobuf/proto"
+	"github.com/stretchr/testify/require"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
-func Test_MetadataFromKey(t *testing.T) {
+func actorMeta(namespace, actorType, actorID string) *schedulerv1pb.JobMetadata {
+	return &schedulerv1pb.JobMetadata{
+		Namespace: namespace,
+		Target: &schedulerv1pb.JobTargetMetadata{
+			Type: &schedulerv1pb.JobTargetMetadata_Actor{
+				Actor: &schedulerv1pb.TargetActorReminder{Type: actorType, Id: actorID},
+			},
+		},
+	}
+}
+
+func appMeta(namespace, appID string) *schedulerv1pb.JobMetadata {
+	return &schedulerv1pb.JobMetadata{
+		Namespace: namespace,
+		AppId:     appID,
+		Target:    &schedulerv1pb.JobTargetMetadata{Type: new(schedulerv1pb.JobTargetMetadata_Job)},
+	}
+}
+
+func Test_PrefixFromMetadata(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		key     string
-		expMeta *schedulerv1pb.JobMetadata
-		expErr  bool
+		meta      *schedulerv1pb.JobMetadata
+		expPrefix string
+		expErr    bool
 	}{
-		"an empty key should error": {
-			key:     "",
-			expMeta: nil,
-			expErr:  true,
+		"actor reminder": {
+			meta:      actorMeta("myns", "myactortype", "myactorid"),
+			expPrefix: "actorreminder||myns||myactortype||myactorid||",
 		},
-		"a random key should error": {
-			key:     "random",
-			expMeta: nil,
-			expErr:  true,
+		"app job": {
+			meta:      appMeta("myns", "myid"),
+			expPrefix: "app||myns||myid||",
 		},
-		"a bad reminder should error": {
-			key:     "foo||bar||actorreminde||myns||myactortype||myactorid||myremindername",
-			expMeta: nil,
-			expErr:  true,
+		"actor id containing the || delimiter and single pipes": {
+			meta:      actorMeta("myns", "SmokeDetectorActor", "nexus-fire-safety-api||SmokeDetectorGroupMonitorActor||Nexus|6671cfbe7f48af247700a24b||SmokeDetectorGroupInformation"),
+			expPrefix: "actorreminder||myns||SmokeDetectorActor||nexus-fire-safety-api||SmokeDetectorGroupMonitorActor||Nexus|6671cfbe7f48af247700a24b||SmokeDetectorGroupInformation||",
 		},
-		"a no-namespace actor reminder should return metadata": {
-			key: "actorreminder||myns||myactortype||myactorid||myremindername",
-			expMeta: &schedulerv1pb.JobMetadata{
-				AppId: "", Namespace: "myns",
-				Target: &schedulerv1pb.JobTargetMetadata{
-					Type: &schedulerv1pb.JobTargetMetadata_Actor{
-						Actor: &schedulerv1pb.TargetActorReminder{
-							Id: "myactorid", Type: "myactortype",
-						},
-					},
-				},
-			},
-		},
-		"a namespace actor reminder should return metadata": {
-			key: "foo/bar/actorreminder||myns||myactortype||myactorid||myremindername",
-			expMeta: &schedulerv1pb.JobMetadata{
-				AppId: "", Namespace: "myns",
-				Target: &schedulerv1pb.JobTargetMetadata{
-					Type: &schedulerv1pb.JobTargetMetadata_Actor{
-						Actor: &schedulerv1pb.TargetActorReminder{
-							Id: "myactorid", Type: "myactortype",
-						},
-					},
-				},
-			},
-		},
-		"a namespace (with separator) actor reminder should return metadata": {
-			key: "foo||bar/actorreminder||myns||myactortype||myactorid||myremindername",
-			expMeta: &schedulerv1pb.JobMetadata{
-				AppId: "", Namespace: "myns",
-				Target: &schedulerv1pb.JobTargetMetadata{
-					Type: &schedulerv1pb.JobTargetMetadata_Actor{
-						Actor: &schedulerv1pb.TargetActorReminder{
-							Id: "myactorid", Type: "myactortype",
-						},
-					},
-				},
-			},
-		},
-		"a namespace (with separator 2) actor reminder should return metadata": {
-			key: "foo||bar||actorreminder||myns||myactortype||myactorid||myremindername",
-			expMeta: &schedulerv1pb.JobMetadata{
-				AppId: "", Namespace: "myns",
-				Target: &schedulerv1pb.JobTargetMetadata{
-					Type: &schedulerv1pb.JobTargetMetadata_Actor{
-						Actor: &schedulerv1pb.TargetActorReminder{
-							Id: "myactorid", Type: "myactortype",
-						},
-					},
-				},
-			},
-		},
-		"a no-namespace job should return metadata": {
-			key: "app||myns||myid||jobname",
-			expMeta: &schedulerv1pb.JobMetadata{
-				AppId: "myid", Namespace: "myns",
-				Target: &schedulerv1pb.JobTargetMetadata{Type: new(schedulerv1pb.JobTargetMetadata_Job)},
-			},
-		},
-		"a namespace job should return metadata": {
-			key: "foo/bar/app||myns||myid||jobname",
-			expMeta: &schedulerv1pb.JobMetadata{
-				AppId: "myid", Namespace: "myns",
-				Target: &schedulerv1pb.JobTargetMetadata{Type: new(schedulerv1pb.JobTargetMetadata_Job)},
-			},
-		},
-		"a namespace (with separator) job should return metadata": {
-			key: "foo||bar/app||myns||myid||jobname",
-			expMeta: &schedulerv1pb.JobMetadata{
-				AppId: "myid", Namespace: "myns",
-				Target: &schedulerv1pb.JobTargetMetadata{Type: new(schedulerv1pb.JobTargetMetadata_Job)},
-			},
-		},
-		"a namespace (with separator 2) job should return metadata": {
-			key: "foo||bar||app||myns||myid||jobname",
-			expMeta: &schedulerv1pb.JobMetadata{
-				AppId: "myid", Namespace: "myns",
-				Target: &schedulerv1pb.JobTargetMetadata{Type: new(schedulerv1pb.JobTargetMetadata_Job)},
-			},
+		"unknown target type errors": {
+			meta:   &schedulerv1pb.JobMetadata{Namespace: "myns"},
+			expErr: true,
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got, err := MetadataFromKey(test.key)
-			assert.Equal(t, test.expErr, err != nil)
-			assert.True(t, proto.Equal(test.expMeta, got), "expected: %v, got: %v", test.expMeta, got)
+			prefix, err := PrefixFromMetadata(test.meta)
+			assert.Equal(t, test.expErr, err != nil, "%v", err)
+			if !test.expErr {
+				assert.Equal(t, test.expPrefix, prefix)
+			}
 		})
 	}
 }
+
+// Test_PrefixFromMetadata_RoundTrip proves that trimming the prefix off a full
+// job key recovers the reminder name unambiguously, even when the actor id and
+// the reminder name themselves contain "|" and "||" (the field delimiter).
+func Test_PrefixFromMetadata_RoundTrip(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]reqAdapter{
+		"simple actor reminder": {
+			name: "myremindername",
+			meta: actorMeta("myns", "myactortype", "myactorid"),
+		},
+		"schreder: pipes in id, pipe and at in name": {
+			name: "my@reminder|name",
+			meta: actorMeta("dapr-tests", "SmokeDetectorActor", "nexus-fire-safety-api||SmokeDetectorGroupMonitorActor||Nexus|6671cfbe7f48af247700a24b||SmokeDetectorGroupInformation"),
+		},
+		"app job with pipes in name": {
+			name: "my|job@name",
+			meta: appMeta("myns", "myappid"),
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			fullKey, err := buildJobName(tc)
+			require.NoError(t, err)
+
+			prefix, err := PrefixFromMetadata(tc.meta)
+			require.NoError(t, err)
+
+			require.True(t, strings.HasPrefix(fullKey, prefix), "key %q must start with prefix %q", fullKey, prefix)
+			assert.Equal(t, tc.name, strings.TrimPrefix(fullKey, prefix))
+		})
+	}
+}
+
+type reqAdapter struct {
+	name string
+	meta *schedulerv1pb.JobMetadata
+}
+
+func (r reqAdapter) GetName() string                         { return r.name }
+func (r reqAdapter) GetMetadata() *schedulerv1pb.JobMetadata { return r.meta }

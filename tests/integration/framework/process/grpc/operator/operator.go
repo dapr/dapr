@@ -386,6 +386,13 @@ func (o *Operator) AddMCPServers(servers ...mcpserverapi.MCPServer) {
 	o.currentMCPServers = append(o.currentMCPServers, servers...)
 }
 
+// SetMCPServers sets the list of installed MCPServers.
+func (o *Operator) SetMCPServers(servers ...mcpserverapi.MCPServer) {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+	o.currentMCPServers = servers
+}
+
 func (o *Operator) MCPServerUpdateEvent(t *testing.T, ctx context.Context, event *MCPServerUpdateEvent) {
 	t.Helper()
 	o.lock.Lock()

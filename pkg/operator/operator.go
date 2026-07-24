@@ -33,6 +33,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -82,14 +83,20 @@ type Options struct {
 	WebhookServerPort                   int
 	WebhookServerListenAddress          string
 	Healthz                             healthz.Healthz
+
+	// CacheSyncPeriod optionally overrides the controller-runtime informer
+	// resync period (default 10h). Zero leaves the default in place. Primarily
+	// used by integration tests to exercise resync behaviour deterministically.
+	CacheSyncPeriod time.Duration
 }
 
 type operator struct {
 	apiServer api.Server
 
-	config      *Config
-	mgr         ctrl.Manager
-	secProvider security.Provider
+	config       *Config
+	mgr          ctrl.Manager
+	podMetaCache ctrlcache.Cache
+	secProvider  security.Provider
 
 	secHealthz       healthz.Target
 	apiServerHealthz healthz.Target
@@ -130,6 +137,11 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 
 	watchdogPodSelector := getSideCarInjectedNotExistsSelector()
 
+	var cacheSyncPeriod *time.Duration
+	if opts.CacheSyncPeriod > 0 {
+		cacheSyncPeriod = &opts.CacheSyncPeriod
+	}
+
 	scheme, err := buildScheme(opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build operator scheme: %w", err)
@@ -159,13 +171,29 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		},
 		LeaderElection:                opts.LeaderElection,
 		LeaderElectionID:              "operator.dapr.io",
-		NewCache:                      operatorcache.GetFilteredCache(opts.WatchNamespace, watchdogPodSelector),
+		NewCache:                      operatorcache.GetFilteredCache(opts.WatchNamespace, watchdogPodSelector, cacheSyncPeriod),
 		LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to start manager: %w", err)
 	}
 	mgrClient := mgr.GetClient()
+
+	// A dedicated metadata-only pod cache used to resolve, server side, which
+	// configuration is assigned to a connecting sidecar from its pod's
+	// dapr.io/config annotation. Kept separate from the manager cache (which holds
+	// typed pods for the watchdog) because a cache can only hold one informer per
+	// GVK, and metadata-only watches avoid transferring/retaining pod specs.
+	podMetaCache, err := operatorcache.NewPodMetadataCache(operatorcache.PodMetadataCacheOptions{
+		RestConfig: conf,
+		Namespace:  opts.WatchNamespace,
+		SyncPeriod: cacheSyncPeriod,
+		HTTPClient: mgr.GetHTTPClient(),
+		Mapper:     mgr.GetRESTMapper(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("unable to create pod metadata cache: %w", err)
+	}
 
 	if opts.WatchdogEnabled {
 		if !opts.LeaderElection {
@@ -194,6 +222,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 
 	return &operator{
 		mgr:              mgr,
+		podMetaCache:     podMetaCache,
 		secProvider:      secProvider,
 		config:           config,
 		secHealthz:       opts.Healthz.AddTarget("operator-security"),
@@ -203,6 +232,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		apiServer: api.NewAPIServer(api.Options{
 			Client:        mgr.GetClient(),
 			Cache:         mgr.GetCache(),
+			PodReader:     podMetaCache,
 			Security:      secProvider,
 			Port:          opts.APIPort,
 			ListenAddress: opts.APIListenAddress,
@@ -306,12 +336,27 @@ func (o *operator) Start(ctx context.Context) error {
 			}
 			return nil
 		},
+		// Run the pod metadata cache on every replica (not just the leader), since
+		// the API server serves configuration updates from all replicas.
+		o.podMetaCache.Start,
 		func(ctx context.Context) error {
 			if !o.mgr.GetCache().WaitForCacheSync(ctx) {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
 				return errors.New("cache failed to sync")
+			}
+			// Gate readiness on the pod metadata cache too, so the operator is not
+			// reported ready (and so, in Kubernetes, not added to the Service
+			// endpoints sidecars connect through) until it can resolve a connecting
+			// sidecar's assigned configuration. This avoids a startup window where
+			// appAssignedConfiguration lists an unsynced, empty pod cache and
+			// resolves "", silently streaming no configuration updates.
+			if !o.podMetaCache.WaitForCacheSync(ctx) {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return errors.New("pod metadata cache failed to sync")
 			}
 			o.cacheHealthz.Ready()
 			<-ctx.Done()

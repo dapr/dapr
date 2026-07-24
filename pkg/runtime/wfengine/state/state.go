@@ -125,6 +125,15 @@ type State struct {
 	// only in the in-memory cache.
 	metadataETag *string
 
+	// customStatusPersisted and propagatedHistoryPersisted are observed at load
+	// time from the state store's ETag for those keys. They are the source of
+	// truth for "does this optional key currently exist in the store" at purge
+	// time, independent of whether the in-memory value is populated (a key can
+	// be persisted with an empty proto, which would load as a nil CustomStatus /
+	// IncomingHistory).
+	customStatusPersisted      bool
+	propagatedHistoryPersisted bool
+
 	// change tracking
 	inboxAddedCount                         int
 	inboxRemovedCount                       int
@@ -185,6 +194,17 @@ func (s *State) Reset() {
 
 // ResetChangeTracking resets the change tracking counters. This should be called after a save request.
 func (s *State) ResetChangeTracking() {
+	// A save with any history delta upserts the customStatus key (see
+	// GetSaveRequest), so after a successful save it is now persisted.
+	if s.historyAddedCount > 0 || s.historyRemovedCount > 0 {
+		s.customStatusPersisted = true
+	}
+	// A save with incomingHistoryChanged either upserts or deletes the
+	// propagated-history key; track the resulting persistence state.
+	if s.incomingHistoryChanged {
+		s.propagatedHistoryPersisted = s.IncomingHistory != nil
+	}
+
 	s.inboxAddedCount = 0
 	s.inboxRemovedCount = 0
 	s.historyAddedCount = 0
@@ -392,6 +412,28 @@ func (s *State) ClearInbox() {
 	s.inboxAddedCount = 0
 }
 
+// persistableInbox returns the inbox without timer events, which are never
+// written as inbox keys. Unlike app-delivered events (whose durable home is
+// their inbox row, written before their trigger reminder), a TimerFired's
+// durable home is the scheduler job itself: the job carries the full event
+// payload and is only acked — and deleted — after the run that consumed the
+// event has committed it to history. Until then any failure or stall leaves
+// the job un-acked and the scheduler re-delivers it, so an inbox row would be
+// a second delivery source for the same event, not added durability.
+// Timer events can still sit in s.Inbox when a save happens mid-run (workflow
+// stall, abandoned continue-as-new); persisting or counting them would declare
+// inbox keys that don't exist in the store, making every subsequent
+// LoadWorkflowState fail.
+func (s *State) persistableInbox() []*backend.HistoryEvent {
+	persistable := make([]*backend.HistoryEvent, 0, len(s.Inbox))
+	for _, e := range s.Inbox {
+		if e.GetTimerFired() == nil {
+			persistable = append(persistable, e)
+		}
+	}
+	return persistable
+}
+
 func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error) {
 	// TODO: Batching up the save requests into smaller chunks to avoid batch size limits in Dapr state stores.
 	opsCapacity := s.inboxAddedCount + s.inboxRemovedCount +
@@ -406,7 +448,8 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		Operations: make([]api.TransactionalOperation, 0, opsCapacity),
 	}
 
-	if err := addStateOperations(req, inboxKeyPrefix, s.Inbox, s.inboxAddedCount, s.inboxRemovedCount); err != nil {
+	inbox := s.persistableInbox()
+	if err := addStateOperations(req, inboxKeyPrefix, inbox, s.inboxAddedCount, s.inboxRemovedCount); err != nil {
 		return nil, err
 	}
 
@@ -467,7 +510,7 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 	}
 
 	metaProto, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
-		InboxLength:                      uint64(len(s.Inbox)),
+		InboxLength:                      uint64(len(inbox)),
 		HistoryLength:                    uint64(len(s.History)),
 		Generation:                       s.Generation,
 		SignatureLength:                  uint64(len(s.Signatures)),
@@ -786,13 +829,18 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 	}()
 
-	// Parse responses
+	// Parse responses. If metadata declares N inbox or history entries but
+	// the bulk GET returns nil Data for any of them, return an error so the
+	// caller can retry the load. Silently skipping was the previous
+	// behavior, but under state-store chaos (transient read failures) it
+	// produces a workflow runtime state with truncated history; durabletask
+	// then reports name=(unknown)/events=0 and the workflow strands on the
+	// next save, which clobbers the metadata HistoryLength.
 	var key string
 	for i := range metadata.GetInboxLength() {
 		key = getMultiEntryKeyName(inboxKeyPrefix, i)
 		if bulkRes[key].Data == nil {
-			wfLogger.Warnf("Failed to load inbox state key '%s': not found", key)
-			continue
+			return nil, fmt.Errorf("workflow '%s': inbox key '%s' declared in metadata (inboxLength=%d) but missing from state store (transient store read failure or partial save?)", actorID, key, metadata.GetInboxLength())
 		}
 
 		var hist backend.HistoryEvent
@@ -807,8 +855,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	for i := range metadata.GetHistoryLength() {
 		key = getMultiEntryKeyName(historyKeyPrefix, i)
 		if bulkRes[key].Data == nil {
-			wfLogger.Warnf("Failed to load history state key '%s': not found", key)
-			continue
+			return nil, fmt.Errorf("workflow '%s': history key '%s' declared in metadata (historyLength=%d) but missing from state store (transient store read failure or partial save?)", actorID, key, metadata.GetHistoryLength())
 		}
 
 		var hist backend.HistoryEvent
@@ -890,6 +937,9 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		wState.RawSignatures = append(wState.RawSignatures, raw)
 	}
 
+	if bulkRes[customStatusKey].ETag != nil {
+		wState.customStatusPersisted = true
+	}
 	if len(bulkRes[customStatusKey].Data) > 0 {
 		wState.CustomStatus = &wrapperspb.StringValue{}
 
@@ -907,6 +957,9 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 	}
 
+	if bulkRes[propagatedHistoryKey].ETag != nil {
+		wState.propagatedHistoryPersisted = true
+	}
 	if len(bulkRes[propagatedHistoryKey].Data) > 0 {
 		var ph protos.PropagatedHistory
 		if err = proto.Unmarshal(bulkRes[propagatedHistoryKey].Data, &ph); err != nil {
@@ -1168,7 +1221,7 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 		ActorType: s.workflowActorType,
 		ActorID:   actorID,
 		// Initial capacity should be enough to contain the entire inbox, history, signing data, and custom status + metadata
-		Operations: make([]api.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+len(s.SigningCertificates)+len(s.ExternalSigningCertificates)+len(s.Signatures)+2),
+		Operations: make([]api.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+len(s.SigningCertificates)+len(s.ExternalSigningCertificates)+len(s.Signatures)+3),
 	}
 
 	addPurgeStateOperations(req, inboxKeyPrefix, len(s.Inbox))
@@ -1177,20 +1230,24 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 	addPurgeStateOperations(req, extSigCertKeyPrefix, len(s.ExternalSigningCertificates))
 	addPurgeStateOperations(req, signatureKeyPrefix, len(s.Signatures))
 
-	req.Operations = append(req.Operations,
-		api.TransactionalOperation{
+	// Only emit deletes for optional keys that we know are persisted.
+	if s.customStatusPersisted {
+		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Delete,
 			Request:   api.TransactionalDelete{Key: customStatusKey},
-		},
-		api.TransactionalOperation{
-			Operation: api.Delete,
-			Request:   api.TransactionalDelete{Key: MetadataKey},
-		},
-		api.TransactionalOperation{
+		})
+	}
+	if s.propagatedHistoryPersisted {
+		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Delete,
 			Request:   api.TransactionalDelete{Key: propagatedHistoryKey},
-		},
-	)
+		})
+	}
+
+	req.Operations = append(req.Operations, api.TransactionalOperation{
+		Operation: api.Delete,
+		Request:   api.TransactionalDelete{Key: MetadataKey},
+	})
 
 	return req, nil
 }

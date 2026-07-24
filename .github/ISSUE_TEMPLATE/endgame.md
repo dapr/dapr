@@ -220,7 +220,6 @@ Updated quickstarts to use released SDKs
 - [ ] Js-SDK - https://github.com/dapr/js-sdk/milestone/tbd
 - [ ] Go-SDK - https://github.com/dapr/go-sdk/milestone/tbd
 - [ ] Rust-SDK - https://github.com/dapr/rust-sdk/milestone/tbd
-- [ ] Dashboard - https://github.com/dapr/dashboard/milestone/tbd
 - [ ] Quickstarts - https://github.com/dapr/quickstarts/milestone/tbd
 
 ## Grafana Dashboard - Longhauls

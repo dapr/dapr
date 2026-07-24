@@ -58,6 +58,7 @@ type Options struct {
 	HealthzListenAddress               string
 	WebhookServerPort                  int
 	WebhookServerListenAddress         string
+	CacheSyncPeriod                    time.Duration
 }
 
 func New() *Options {
@@ -87,6 +88,7 @@ func New() *Options {
 	flag.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
 	flag.IntVar(&opts.WebhookServerPort, "webhook-server-port", 19443, "The port for the webhook server to listen on")
 	flag.StringVar(&opts.WebhookServerListenAddress, "webhook-server-listen-address", "", "The listening address for the webhook server")
+	flag.DurationVar(&opts.CacheSyncPeriod, "cache-sync-period", 0, "Resync period for the controller-runtime informer cache, e.g. '10h'. Zero uses the controller-runtime default")
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(flag.StringVar, flag.BoolVar)

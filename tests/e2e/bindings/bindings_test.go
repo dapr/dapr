@@ -28,6 +28,7 @@ import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
 )
@@ -278,8 +279,18 @@ func TestBindings(t *testing.T) {
 }
 
 func httpPostWithAssert(t *testing.T, url string, data []byte, status int) []byte {
-	resp, code, err := utils.HTTPPostWithStatus(url, data)
-	require.NoError(t, err)
-	require.Equal(t, status, code)
+	// Retry on transient transport errors (e.g. "connection reset by peer"
+	// caused by pod restarts or AKS ingress blips). Once we get any HTTP
+	// response, surface the status assertion immediately.
+	var (
+		resp []byte
+		code int
+	)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		var err error
+		resp, code, err = utils.HTTPPostWithStatus(url, data)
+		assert.NoError(c, err, "post %s", url)
+	}, 30*time.Second, 1*time.Second, "post %s never returned a response", url)
+	require.Equal(t, status, code, "unexpected status posting to %s", url)
 	return resp
 }
