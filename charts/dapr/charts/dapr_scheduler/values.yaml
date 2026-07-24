@@ -80,7 +80,12 @@ debug:
 
 securityContext:
   runAsNonRoot: true
-  fsGroup: 65532
+  # fsGroup is intentionally unset by default. Set it only when you need the
+  # Scheduler process to belong to a specific file-system group (e.g. to write
+  # to a mounted volume owned by that group). Leaving it unset lets platforms
+  # such as OpenShift assign an fsGroup automatically from the namespace range.
+  # Example: fsGroup: 65532
+  fsGroup: ~
 
 resources: {}
 

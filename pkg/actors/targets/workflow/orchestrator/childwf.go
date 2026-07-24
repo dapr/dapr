@@ -20,14 +20,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -38,6 +37,7 @@ import (
 func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName string, es []*protos.HistoryEvent, outgoingHistory map[int32]*protos.PropagatedHistory) error {
 	log.Debugf("Workflow actor '%s': calling %d child workflows", o.actorID, len(es))
 
+	var errs []error
 	for _, e := range es {
 		createSO := e.GetChildWorkflowInstanceCreated()
 
@@ -77,7 +77,8 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 
 		reqP, err := proto.Marshal(createReq)
 		if err != nil {
-			return fmt.Errorf("failed to marshal child workflow request: %w", err)
+			errs = append(errs, fmt.Errorf("failed to marshal child workflow request: %w", err))
+			continue
 		}
 
 		id := e.GetChildWorkflowInstanceCreated().GetInstanceId()
@@ -90,56 +91,45 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 		if err != nil {
 			// If the call was denied by a workflow access policy, fail the
 			// child orchestration immediately rather than retrying.
-			if isPermissionDenied(err) {
-				return o.failChildWorkflowACL(ctx, e.GetEventId(), err)
+			if messages.IsPermissionDenied(err) {
+				log.Warnf("Workflow actor '%s': child workflow denied by access policy: %v", o.actorID, err)
+				if ferr := o.failChildWorkflowTask(ctx, e.GetEventId(), messages.ErrorTypeAccessPolicyDenied, messages.ErrorMessageAccessPolicyDenied); ferr != nil {
+					errs = append(errs, ferr)
+				}
+				continue
 			}
-			return fmt.Errorf("failed to call child workflow '%s': %w", id, err)
+			// The target instance ID is occupied by another workflow. Fail the
+			// awaited child task rather than retrying forever.
+			if messages.IsAlreadyExists(err) {
+				log.Warnf("Workflow actor '%s': child workflow instance ID '%s' already exists: %v", o.actorID, id, err)
+				if ferr := o.failChildWorkflowTask(ctx, e.GetEventId(), messages.ErrorTypeAlreadyExists, messages.GRPCStatusMessage(err)); ferr != nil {
+					errs = append(errs, ferr)
+				}
+				continue
+			}
+			errs = append(errs, fmt.Errorf("failed to call child workflow '%s': %w", id, err))
+			continue
 		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
-// isPermissionDenied checks whether the error (possibly wrapped) contains a
-// gRPC PermissionDenied status code. Walks both single-error and multi-error
-// chains.
-func isPermissionDenied(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	// Try direct gRPC status extraction.
-	if st, ok := status.FromError(err); ok && st.Code() == codes.PermissionDenied {
-		return true
-	}
-
-	// Walk the full error chain. errors.As traverses both Unwrap() error
-	// and Unwrap() []error chains (multi-error wrappers like errors.Join).
-	var wrapped interface{ GRPCStatus() *status.Status }
-	if errors.As(err, &wrapped) {
-		if wrapped.GRPCStatus().Code() == codes.PermissionDenied {
-			return true
-		}
-	}
-
-	return false
-}
-
-// failChildWorkflowACL creates a ChildWorkflowInstanceFailed event on the
-// parent orchestrator when the child workflow call is rejected by a
-// WorkflowAccessPolicy. It uses a reminder-based approach to deliver the
+// failChildWorkflowTask creates a ChildWorkflowInstanceFailed event on the
+// parent orchestrator when the child workflow creation cannot succeed (e.g.
+// rejected by a WorkflowAccessPolicy, or the target instance ID is already
+// taken by another workflow). It uses a reminder-based approach to deliver the
 // failure event in a fresh execution cycle, avoiding conflicts with the current
 // run loop's ClearInbox/saveInternalState calls.
 // taskScheduledID is the correlation ID that the parent orchestrator engine
 // uses to match this failure with the original sub-orchestration request.
-func (o *orchestrator) failChildWorkflowACL(ctx context.Context, taskScheduledID int32, callErr error) error {
+func (o *orchestrator) failChildWorkflowTask(ctx context.Context, taskScheduledID int32, errorType, errorMessage string) error {
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
-		EventType: events.NewChildWorkflowFailedEventType(taskScheduledID, "WorkflowAccessPolicyDenied", "access denied by workflow access policy", false),
+		Router:    &protos.TaskRouter{SourceAppID: o.appID},
+		EventType: events.NewChildWorkflowFailedEventType(taskScheduledID, errorType, errorMessage, false),
 	}
-
-	log.Warnf("Workflow actor '%s': child workflow denied by access policy: %v", o.actorID, callErr)
 
 	// Create a reminder that carries the failure event. When this
 	// reminder fires (in a fresh execution cycle after the current run

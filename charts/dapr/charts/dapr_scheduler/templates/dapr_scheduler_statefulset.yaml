@@ -52,8 +52,10 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
     spec:
+      {{- if ne .Values.securityContext.fsGroup nil }}
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
+      {{- end }}
     {{- with .Values.global.initContainers.scheduler }}
       initContainers:
         {{- toYaml . | nindent 8 }}

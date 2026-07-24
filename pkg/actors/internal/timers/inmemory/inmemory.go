@@ -360,17 +360,18 @@ func (i *inmemory) Delete(_ context.Context, timerKey string) {
 
 func (i *inmemory) updateActiveTimersCount(actorType string, inc int64) {
 	i.activeTimersCountLock.RLock()
-	_, ok := i.activeTimersCount[actorType]
+	count, ok := i.activeTimersCount[actorType]
 	i.activeTimersCountLock.RUnlock()
 	if !ok {
 		i.activeTimersCountLock.Lock()
-		if _, ok = i.activeTimersCount[actorType]; !ok { // re-check
-			i.activeTimersCount[actorType] = new(int64)
+		if count, ok = i.activeTimersCount[actorType]; !ok { // re-check
+			count = new(int64)
+			i.activeTimersCount[actorType] = count
 		}
 		i.activeTimersCountLock.Unlock()
 	}
 
-	newVal := atomic.AddInt64(i.activeTimersCount[actorType], inc)
+	newVal := atomic.AddInt64(count, inc)
 	diag.DefaultMonitoring.ActorTimers(actorType, newVal)
 }
 
