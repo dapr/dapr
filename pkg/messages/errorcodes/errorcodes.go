@@ -86,7 +86,7 @@ var (
 	// ### State management API
 	StateTransaction                   = ErrorCode{"ERR_STATE_TRANSACTION", "", CategoryState}                                                 // Error in state transaction
 	StateSave                          = ErrorCode{"ERR_STATE_SAVE", "", CategoryState}                                                        // Error saving state
-	StateGet                           = ErrorCode{"ERR_STATE_GET", "", CategoryState}                                                         // Error getting state
+	StateGet                           = ErrorCode{"ERR_STATE_GET", "DAPR_STATE_GET", CategoryState}                                           // Error getting state
 	StateDelete                        = ErrorCode{"ERR_STATE_DELETE", "", CategoryState}                                                      // Error deleting state
 	StateBulkDelete                    = ErrorCode{"ERR_STATE_BULK_DELETE", "", CategoryState}                                                 // Error deleting state in bulk
 	StateBulkGet                       = ErrorCode{"ERR_STATE_BULK_GET", "", CategoryState}                                                    // Error getting state in bulk
