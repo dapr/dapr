@@ -26,6 +26,9 @@ const (
 	reminderPrefixStart    = "start"
 	reminderPrefixNewEvent = "new-event"
 	reminderPrefixTimer    = "timer-"
+	// Created on each child workflow actor by a recursively-terminated parent,
+	// carrying the ExecutionTerminated event as reminder data.
+	reminderCascadeTerminate = "cascade-terminate"
 )
 
 func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryEvent) error {
@@ -74,8 +77,9 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// already in history or the inbox by (event name, ingestion timestamp).
 	// duplicate the event in history; instead re-assert the wake-up reminder so
 	// a still-pending inbox row that lost its reminder gets re-driven. Distinct
-	// RaiseEvents carry distinct timestamps and fall through to be appended
-	// normally.
+	// RaiseEvents are guaranteed distinct timestamps by the backend at ingestion
+	// (Actors.uniqueEventTimestamp), so they fall through to be appended
+	// normally even when raced onto the same wall-clock nanosecond.
 	if dedup.IsDuplicateExternalEvent(e, state.History, state.Inbox) {
 		log.Debugf("Workflow actor '%s': dropping duplicate external event already present in history/inbox; re-asserting wake-up reminder so the inbox row is not stranded", o.actorID)
 		return o.assertNewEventReminder(ctx, e, state)
@@ -89,26 +93,30 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// and Sentry trust anchors, then absorb the signer certificate into the
 	// ext-sigcert table and strip the companion cert from the event so the
 	// stored form is cert-free. On any verification failure the workflow is
-	// tombstoned. No-op when signing is disabled.
-	if verr := o.signing.VerifyInboxAttestation(ctx, state, e); verr != nil {
-		log.Warnf("Workflow actor '%s': attestation verification failed, tombstoning workflow: %s", o.actorID, verr)
-		opts := wfenginestate.Options{
-			AppID:             o.appID,
-			Namespace:         o.namespace,
-			WorkflowActorType: o.actorType,
-			ActivityActorType: o.activityActorType,
-			Signer:            o.signer,
+	// tombstoned. No-op when signing is disabled. Locally-authored synthetic
+	// failures (policy denials, occupied-ID rejections) are exempt: they have
+	// no attestation by design.
+	if !o.isLocalSyntheticFailure(e) {
+		if verr := o.signing.VerifyInboxAttestation(ctx, state, e); verr != nil {
+			log.Warnf("Workflow actor '%s': attestation verification failed, tombstoning workflow: %s", o.actorID, verr)
+			opts := wfenginestate.Options{
+				AppID:             o.appID,
+				Namespace:         o.namespace,
+				WorkflowActorType: o.actorType,
+				ActivityActorType: o.activityActorType,
+				Signer:            o.signer,
+			}
+			if _, _, terr := o.tombstoneTamperedState(ctx, opts, state, verr); terr != nil {
+				return terr
+			}
+			// Return ErrInstanceNotFound rather than the verification
+			// error so the activity actor on the sender side recognizes
+			// the workflow as gone and stops re-executing the activity.
+			// The reason for tombstoning is preserved in the workflow's
+			// FailureDetails (errorType=DAPR_WORKFLOW_HISTORY_TAMPERED,
+			// errorMessage=verr.Error()) for callers polling metadata.
+			return api.ErrInstanceNotFound
 		}
-		if _, _, terr := o.tombstoneTamperedState(ctx, opts, state, verr); terr != nil {
-			return terr
-		}
-		// Return ErrInstanceNotFound rather than the verification
-		// error so the activity actor on the sender side recognizes
-		// the workflow as gone and stops re-executing the activity.
-		// The reason for tombstoning is preserved in the workflow's
-		// FailureDetails (errorType=DAPR_WORKFLOW_HISTORY_TAMPERED,
-		// errorMessage=verr.Error()) for callers polling metadata.
-		return api.ErrInstanceNotFound
 	}
 
 	// Save the inbox event BEFORE creating the wake-up reminder. The

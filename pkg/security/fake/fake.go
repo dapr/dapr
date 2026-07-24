@@ -46,6 +46,7 @@ type Fake struct {
 	grpcServerOptionMTLSFn             func() grpc.ServerOption
 	grpcServerOptionNoClientAuthFn     func() grpc.ServerOption
 	fetchJWTFn                         func(context.Context, string) (string, error)
+	withSVIDContextFn                  func(context.Context) context.Context
 }
 
 func New() *Fake {
@@ -89,6 +90,9 @@ func New() *Fake {
 		},
 		netDialerIDFn: func(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error) {
 			return net.Dial
+		},
+		withSVIDContextFn: func(ctx context.Context) context.Context {
+			return ctx
 		},
 		mtls: false,
 	}
@@ -213,8 +217,13 @@ func (f *Fake) WatchTrustAnchors(ctx context.Context, ch chan<- []byte) {
 	f.watchTrustAnchorsFn(ctx, ch)
 }
 
+func (f *Fake) WithSVIDContextFn(fn func(context.Context) context.Context) *Fake {
+	f.withSVIDContextFn = fn
+	return f
+}
+
 func (f *Fake) WithSVIDContext(ctx context.Context) context.Context {
-	return ctx
+	return f.withSVIDContextFn(ctx)
 }
 
 func (f *Fake) IdentityDir() *string {

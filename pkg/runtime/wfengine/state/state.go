@@ -412,6 +412,28 @@ func (s *State) ClearInbox() {
 	s.inboxAddedCount = 0
 }
 
+// persistableInbox returns the inbox without timer events, which are never
+// written as inbox keys. Unlike app-delivered events (whose durable home is
+// their inbox row, written before their trigger reminder), a TimerFired's
+// durable home is the scheduler job itself: the job carries the full event
+// payload and is only acked — and deleted — after the run that consumed the
+// event has committed it to history. Until then any failure or stall leaves
+// the job un-acked and the scheduler re-delivers it, so an inbox row would be
+// a second delivery source for the same event, not added durability.
+// Timer events can still sit in s.Inbox when a save happens mid-run (workflow
+// stall, abandoned continue-as-new); persisting or counting them would declare
+// inbox keys that don't exist in the store, making every subsequent
+// LoadWorkflowState fail.
+func (s *State) persistableInbox() []*backend.HistoryEvent {
+	persistable := make([]*backend.HistoryEvent, 0, len(s.Inbox))
+	for _, e := range s.Inbox {
+		if e.GetTimerFired() == nil {
+			persistable = append(persistable, e)
+		}
+	}
+	return persistable
+}
+
 func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error) {
 	// TODO: Batching up the save requests into smaller chunks to avoid batch size limits in Dapr state stores.
 	opsCapacity := s.inboxAddedCount + s.inboxRemovedCount +
@@ -426,7 +448,8 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		Operations: make([]api.TransactionalOperation, 0, opsCapacity),
 	}
 
-	if err := addStateOperations(req, inboxKeyPrefix, s.Inbox, s.inboxAddedCount, s.inboxRemovedCount); err != nil {
+	inbox := s.persistableInbox()
+	if err := addStateOperations(req, inboxKeyPrefix, inbox, s.inboxAddedCount, s.inboxRemovedCount); err != nil {
 		return nil, err
 	}
 
@@ -487,7 +510,7 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 	}
 
 	metaProto, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
-		InboxLength:                      uint64(len(s.Inbox)),
+		InboxLength:                      uint64(len(inbox)),
 		HistoryLength:                    uint64(len(s.History)),
 		Generation:                       s.Generation,
 		SignatureLength:                  uint64(len(s.Signatures)),

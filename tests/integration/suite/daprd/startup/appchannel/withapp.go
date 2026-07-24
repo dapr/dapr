@@ -15,8 +15,10 @@ package appchannel
 
 import (
 	"context"
-	"net/http"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -31,43 +33,36 @@ func init() {
 }
 
 type withApp struct {
-	daprd             *daprd.Daprd
-	logLineAppWaiting *logline.LogLine
-	logLineActorErr   *logline.LogLine
+	daprd   *daprd.Daprd
+	app     *app.App
+	logline *logline.LogLine
 }
 
-// Setup has an app listening on the selected app port
-// to ensure that Dapr waits for app channel readiness before initializing actors;
-// therefore, actors should be initialized here.
 func (s *withApp) Setup(t *testing.T) []framework.Option {
-	s.logLineAppWaiting = logline.New(t, logline.WithStdoutLineContains(
-		"This will block until the app is listening on that port.",
-	))
-	s.logLineActorErr = logline.New(t, logline.WithStdoutLineContains(
-		"DaprBuiltInActorFoundRetries",
-	))
+	s.app = app.New(t)
 
-	app := app.New(t,
-		app.WithHandlerFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		}),
-	)
+	s.logline = logline.New(t, logline.WithCaptureAll())
 
 	s.daprd = daprd.New(t,
-		daprd.WithAppPort(8080),
-		daprd.WithInMemoryActorStateStore("myactorstore"),
-		daprd.WithExecOptions(exec.WithStdout(s.logLineAppWaiting.Stdout())),
-		daprd.WithExecOptions(exec.WithStdout(s.logLineActorErr.Stdout())),
+		daprd.WithAppProtocol("http"),
+		daprd.WithAppPort(s.app.Port()),
+		daprd.WithExecOptions(
+			exec.WithStdout(s.logline.Stdout()),
+			exec.WithStderr(s.logline.Stderr()),
+		),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(app, s.logLineAppWaiting, s.logLineActorErr, s.daprd),
+		framework.WithProcesses(s.app, s.logline, s.daprd),
 	}
 }
 
 func (s *withApp) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 
-	s.logLineAppWaiting.EventuallyFoundAll(t)
-	s.logLineActorErr.EventuallyFoundNone(t)
+	s.logline.EventuallyContains(t,
+		"application discovered on port",
+		time.Second*15, time.Millisecond*10,
+	)
+	assert.False(t, s.logline.Contains("waiting for application to listen on port"))
 }

@@ -1,6 +1,6 @@
 module mcpstdioserver
 
-go 1.26.4
+go 1.26.5
 
 require github.com/modelcontextprotocol/go-sdk v1.6.0
 

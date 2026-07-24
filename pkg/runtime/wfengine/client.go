@@ -200,7 +200,11 @@ func (c *client) Get(ctx context.Context, req *workflows.GetRequest) (*workflows
 		res.Workflow.Properties["dapr.workflow.input"] = metadata.GetInput().GetValue()
 	}
 
-	if metadata.Output != nil {
+	// A failed workflow has no successful output: durabletask-go stores the
+	// failure message in the completed-event result (surfaced here as Output),
+	// but the failure is already reported via dapr.workflow.failure.* below, so
+	// it must not also be exposed as dapr.workflow.output.
+	if metadata.Output != nil && metadata.FailureDetails == nil {
 		res.Workflow.Properties["dapr.workflow.output"] = metadata.GetOutput().GetValue()
 	}
 

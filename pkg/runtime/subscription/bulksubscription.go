@@ -213,6 +213,11 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 		return bulkResponses, err
 	}
 
+	// BulkSubscribe establishes the consumer connection directly (it does not run
+	// through a policy Runner), so attach the workload's SPIFFE identity to its
+	// context here just as the Runner does for other component operations.
+	ctx = policyDef.ComponentContext(ctx)
+
 	if bulkSubscriber, ok := s.pubsub.Component.(contribpubsub.BulkSubscriber); ok {
 		return bulkSubscriber.BulkSubscribe(ctx, req, bulkHandler)
 	}

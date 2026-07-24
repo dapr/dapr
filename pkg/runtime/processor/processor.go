@@ -11,6 +11,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package processor manages the lifecycle of every resource that flows
+// through daprd: components, HTTP endpoints, MCP servers and subscriptions.
+// It is structured as a three-level dapr/kit/events/loop hierarchy:
+//
+//	root  ->  per-resource category  ->  per-named-instance
+//
+// Per-resource public entry points are defined in sibling files
+// (components.go, httpendpoint.go, mcpserver.go, subscription.go); this file
+// holds the shared scaffolding: Options, the Processor struct, construction,
+// the runner manager that drives every loop, the Flush barrier and the
+// default reporter.
 package processor
 
 import (
@@ -18,12 +29,14 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
-	"time"
+
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/events/loop"
+	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/actors"
 	grpcmanager "github.com/dapr/dapr/pkg/api/grpc/manager"
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
@@ -40,6 +53,13 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/conversation"
 	"github.com/dapr/dapr/pkg/runtime/processor/crypto"
 	"github.com/dapr/dapr/pkg/runtime/processor/lock"
+	"github.com/dapr/dapr/pkg/runtime/processor/loops"
+	loopbindings "github.com/dapr/dapr/pkg/runtime/processor/loops/bindings"
+	"github.com/dapr/dapr/pkg/runtime/processor/loops/category"
+	looppubsub "github.com/dapr/dapr/pkg/runtime/processor/loops/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/processor/loops/root"
+	loopsecret "github.com/dapr/dapr/pkg/runtime/processor/loops/secret"
+	loopstatestore "github.com/dapr/dapr/pkg/runtime/processor/loops/statestore"
 	"github.com/dapr/dapr/pkg/runtime/processor/middleware"
 	"github.com/dapr/dapr/pkg/runtime/processor/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/processor/secret"
@@ -49,126 +69,108 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/wfregistrar"
 	"github.com/dapr/dapr/pkg/security"
-	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/logger"
-)
-
-const (
-	defaultComponentInitTimeout = time.Second * 5
 )
 
 var log = logger.NewLogger("dapr.runtime.processor")
 
 type Options struct {
-	// ID is the ID of this Dapr instance.
-	ID string
-
-	// Namespace is the namespace of this Dapr instance.
-	Namespace string
-
-	// Mode is the mode of this Dapr instance.
-	Mode modes.DaprMode
-
-	// ActorsEnabled indicates whether placement service is enabled in this Dapr cluster.
-	ActorsEnabled bool
-	Actors        actors.Interface
-
-	// IsHTTP indicates whether the connection to the application is using the
-	// HTTP protocol.
-	IsHTTP bool
-
-	// Registry is the all-component registry.
-	Registry *registry.Registry
-
-	// ComponentStore is the component store.
-	ComponentStore *compstore.ComponentStore
-
-	// Metadata is the metadata helper.
-	Meta *meta.Meta
-
-	// GlobalConfig is the global configuration.
-	GlobalConfig *config.Configuration
-
-	Resiliency resiliency.Provider
-
-	GRPC *grpcmanager.Manager
-
-	Channels *channels.Channels
-
-	OperatorClient operatorv1.OperatorClient
-
-	MiddlewareHTTP *http.HTTP
-
-	Security security.Handler
-
-	Outbox outbox.Outbox
-
-	Adapter         rtpubsub.Adapter
-	AdapterStreamer rtpubsub.AdapterStreamer
-
-	// Reporter is the reporter for the operator.
-	Reporter registry.Reporter
-
-	// ProgrammaticSubscriptionEnabled indicates whether programmatic subscriptions are active.
+	ID                              string
+	Namespace                       string
+	Mode                            modes.DaprMode
+	ActorsEnabled                   bool
+	Actors                          actors.Interface
+	IsHTTP                          bool
+	Registry                        *registry.Registry
+	ComponentStore                  *compstore.ComponentStore
+	Meta                            *meta.Meta
+	GlobalConfig                    *config.Configuration
+	Resiliency                      resiliency.Provider
+	GRPC                            *grpcmanager.Manager
+	Channels                        *channels.Channels
+	OperatorClient                  operatorv1.OperatorClient
+	MiddlewareHTTP                  *http.HTTP
+	Security                        security.Handler
+	Outbox                          outbox.Outbox
+	Adapter                         rtpubsub.Adapter
+	AdapterStreamer                 rtpubsub.AdapterStreamer
+	Reporter                        registry.Reporter
 	ProgrammaticSubscriptionEnabled bool
 }
 
-// Processor manages the lifecycle of all components categories.
+// Processor manages the lifecycle of all components, HTTP endpoints, MCP
+// servers and subscription resources via a three level dapr/kit/events/loop
+// hierarchy: root -> per-category -> per-named-instance.
+//
+// Concurrency: every mutation to component lifecycle state happens inside one
+// of the loops in this hierarchy. The pending-secret-store-dependents map
+// (for components blocked on a secret store) is owned by the root loop.
+// Sub-processor read paths (SendToOutputBinding, ActorStateStoreName,
+// ProcessResource, ...) still call directly into the sub-processor; the
+// sub-processors retain their internal mutexes to guard those concurrent
+// read callers from concurrent lifecycle writes.
 type Processor struct {
-	appID           string
-	compStore       *compstore.ComponentStore
-	managers        map[components.Category]manager
-	state           StateManager
-	secret          SecretManager
-	binding         BindingManager
-	workflowBackend WorkflowBackendManager
-	security        security.Handler
-	subscriber      *subscriber.Subscriber
-	reporter        registry.Reporter
+	appID     string
+	compStore *compstore.ComponentStore
+	security  security.Handler
+	reporter  registry.Reporter
 
-	// kubernetesMode is true when running in Kubernetes mode.
-	// Used to reject configurations that are unsafe in a cluster (e.g. stdio transport).
+	// Accessor interfaces used by the State/Secret/Binding/Subscriber
+	// methods. Backed by the concrete sub-processor instances constructed in
+	// New.
+	state      StateManager
+	secret     SecretManager
+	binding    BindingManager
+	subscriber *subscriber.Subscriber
+
+	// workflowBackend is held only to satisfy the WorkflowBackend accessor.
+	workflowBackend WorkflowBackendManager
+
+	// kubernetesMode is true when running in Kubernetes mode. Used by MCPServer
+	// security validation to reject configurations that are unsafe in a
+	// cluster.
 	kubernetesMode bool
 
-	pendingHTTPEndpoints       chan httpendpointsapi.HTTPEndpoint
-	pendingMCPServers          chan mcpserverapi.MCPServer
-	pendingComponents          chan componentsapi.Component
-	pendingComponentsWaiting   sync.RWMutex
-	pendingComponentDependents map[string][]componentsapi.Component
-	subErrCh                   chan error
-
-	lock     sync.RWMutex
-	chlock   sync.RWMutex
-	running  atomic.Bool
-	shutdown atomic.Bool
-	closedCh chan struct{}
-
-	// inProcessWorkflows is set after the workflow engine is created via SetInProcessWorkflows.
-	// Used to register in-process workflows when resources are loaded or hot-reloaded.
+	// inProcessWorkflows is installed after the workflow engine is created via
+	// SetInProcessWorkflows and is used to register workflows when MCPServer
+	// resources are loaded or hot-reloaded. Read under inProcessWorkflowsLock
+	// to allow installation from a different goroutine than the consumers
+	// inside the root loop.
 	inProcessWorkflowsLock sync.RWMutex
 	inProcessWorkflows     wfregistrar.Registrar
 
-	// mcpMu serializes Add (channel reader) vs Delete (called externally
-	// from the hot-reload reconciler) on compStore + registrar state.
-	mcpMu sync.Mutex
+	// Root loop and per-category loops.
+	rootLoop  *root.Root
+	stateCat  *loopstatestore.Category
+	secCat    *loopsecret.Category
+	bindCat   *loopbindings.Category
+	psCat     *looppubsub.Category
+	confCat   *category.Category
+	cryptoCat *category.Category
+	lockCat   *category.Category
+	midCat    *category.Category
+	convCat   *category.Category
+
+	// inlineManagers is used by Init/Close when Process is not running
+	// (test-only path). The loop path never reads this map.
+	inlineManagers map[components.Category]inlineManager
+
+	running atomic.Bool
+	closed  atomic.Bool
 }
 
-// SetInProcessWorkflows installs the in-process workflow wfregistrar.
-func (p *Processor) SetInProcessWorkflows(r wfregistrar.Registrar) {
-	p.inProcessWorkflowsLock.Lock()
-	defer p.inProcessWorkflowsLock.Unlock()
-	p.inProcessWorkflows = r
+type inlineManager interface {
+	Init(ctx context.Context, comp compapi.Component) error
+	Close(comp compapi.Component) error
 }
 
-// getInProcessWorkflows returns the wfregistrar, or nil if it has not been set yet.
-func (p *Processor) getInProcessWorkflows() wfregistrar.Registrar {
-	p.inProcessWorkflowsLock.RLock()
-	defer p.inProcessWorkflowsLock.RUnlock()
-	return p.inProcessWorkflows
-}
-
+// New constructs a Processor. The returned Processor is not running; call
+// Process to start the loop hierarchy.
 func New(opts Options) *Processor {
-	subscriber := subscriber.New(subscriber.Options{
+	if opts.GlobalConfig == nil {
+		opts.GlobalConfig = new(config.Configuration)
+	}
+
+	subscriberProc := subscriber.New(subscriber.Options{
 		AppID:                           opts.ID,
 		Namespace:                       opts.Namespace,
 		Resiliency:                      opts.Resiliency,
@@ -182,7 +184,7 @@ func New(opts Options) *Processor {
 		ProgrammaticSubscriptionEnabled: opts.ProgrammaticSubscriptionEnabled,
 	})
 
-	state := state.New(state.Options{
+	stateProc := state.New(state.Options{
 		ActorsEnabled:  opts.ActorsEnabled,
 		Registry:       opts.Registry.StateStores(),
 		ComponentStore: opts.ComponentStore,
@@ -190,14 +192,14 @@ func New(opts Options) *Processor {
 		Outbox:         opts.Outbox,
 	})
 
-	secret := secret.New(secret.Options{
+	secretProc := secret.New(secret.Options{
 		Registry:       opts.Registry.SecretStores(),
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,
 		OperatorClient: opts.OperatorClient,
 	})
 
-	binding := binding.New(binding.Options{
+	bindingProc := binding.New(binding.Options{
 		Registry:       opts.Registry.Bindings(),
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,
@@ -208,96 +210,225 @@ func New(opts Options) *Processor {
 		Channels:       opts.Channels,
 	})
 
-	// ensure a default no-op reporter
+	pubsubProc := pubsub.New(pubsub.Options{
+		AppID:          opts.ID,
+		Registry:       opts.Registry.PubSubs(),
+		Meta:           opts.Meta,
+		ComponentStore: opts.ComponentStore,
+		Subscriber:     subscriberProc,
+	})
+
+	confProc := configuration.New(configuration.Options{
+		Registry:       opts.Registry.Configurations(),
+		ComponentStore: opts.ComponentStore,
+		Meta:           opts.Meta,
+	})
+	cryptoProc := crypto.New(crypto.Options{
+		Registry:       opts.Registry.Crypto(),
+		ComponentStore: opts.ComponentStore,
+		Meta:           opts.Meta,
+	})
+	lockProc := lock.New(lock.Options{
+		Registry:       opts.Registry.Locks(),
+		ComponentStore: opts.ComponentStore,
+		Meta:           opts.Meta,
+	})
+	middleProc := middleware.New(middleware.Options{
+		Meta:         opts.Meta,
+		RegistryHTTP: opts.Registry.HTTPMiddlewares(),
+		HTTP:         opts.MiddlewareHTTP,
+	})
+	convProc := conversation.New(conversation.Options{
+		Meta:     opts.Meta,
+		Registry: opts.Registry.Conversations(),
+		Store:    opts.ComponentStore,
+	})
+
 	reporter := DefaultReporter
 	if opts.Reporter != nil {
 		reporter = opts.Reporter
 	}
 
-	return &Processor{
-		appID:                      opts.ID,
-		kubernetesMode:             opts.Mode == modes.KubernetesMode,
-		pendingHTTPEndpoints:       make(chan httpendpointsapi.HTTPEndpoint),
-		pendingMCPServers:          make(chan mcpserverapi.MCPServer),
-		pendingComponents:          make(chan componentsapi.Component),
-		pendingComponentDependents: make(map[string][]componentsapi.Component),
-		subErrCh:                   make(chan error),
-		closedCh:                   make(chan struct{}),
-		compStore:                  opts.ComponentStore,
-		state:                      state,
-		binding:                    binding,
-		secret:                     secret,
-		security:                   opts.Security,
-		subscriber:                 subscriber,
-		reporter:                   reporter,
-		managers: map[components.Category]manager{
-			components.CategoryBindings: binding,
-			components.CategoryConfiguration: configuration.New(configuration.Options{
-				Registry:       opts.Registry.Configurations(),
-				ComponentStore: opts.ComponentStore,
-				Meta:           opts.Meta,
-			}),
-			components.CategoryCryptoProvider: crypto.New(crypto.Options{
-				Registry:       opts.Registry.Crypto(),
-				ComponentStore: opts.ComponentStore,
-				Meta:           opts.Meta,
-			}),
-			components.CategoryLock: lock.New(lock.Options{
-				Registry:       opts.Registry.Locks(),
-				ComponentStore: opts.ComponentStore,
-				Meta:           opts.Meta,
-			}),
-			components.CategoryPubSub: pubsub.New(pubsub.Options{
-				AppID:          opts.ID,
-				Registry:       opts.Registry.PubSubs(),
-				Meta:           opts.Meta,
-				ComponentStore: opts.ComponentStore,
-				Subscriber:     subscriber,
-			}),
-			components.CategorySecretStore: secret,
-			components.CategoryStateStore:  state,
-			components.CategoryMiddleware: middleware.New(middleware.Options{
-				Meta:         opts.Meta,
-				RegistryHTTP: opts.Registry.HTTPMiddlewares(),
-				HTTP:         opts.MiddlewareHTTP,
-			}),
-			components.CategoryConversation: conversation.New(conversation.Options{
-				Meta:     opts.Meta,
-				Registry: opts.Registry.Conversations(),
-				Store:    opts.ComponentStore,
-			}),
+	p := &Processor{
+		appID:          opts.ID,
+		kubernetesMode: opts.Mode == modes.KubernetesMode,
+		compStore:      opts.ComponentStore,
+		security:       opts.Security,
+		reporter:       reporter,
+		state:          stateProc,
+		secret:         secretProc,
+		binding:        bindingProc,
+		subscriber:     subscriberProc,
+		inlineManagers: map[components.Category]inlineManager{
+			components.CategoryBindings:       bindingProc,
+			components.CategoryConfiguration:  confProc,
+			components.CategoryCryptoProvider: cryptoProc,
+			components.CategoryLock:           lockProc,
+			components.CategoryMiddleware:     middleProc,
+			components.CategoryPubSub:         pubsubProc,
+			components.CategorySecretStore:    secretProc,
+			components.CategoryStateStore:     stateProc,
+			components.CategoryConversation:   convProc,
 		},
 	}
+
+	// Category loops -----------------------------------------------------
+	p.stateCat = loopstatestore.New(loopstatestore.Options{
+		State:     stateProc,
+		CompStore: opts.ComponentStore,
+		Reporter:  reporter,
+		Security:  opts.Security,
+	})
+	p.secCat = loopsecret.New(loopsecret.Options{
+		Secret:    secretProc,
+		CompStore: opts.ComponentStore,
+		Reporter:  reporter,
+		Security:  opts.Security,
+	})
+	p.bindCat = loopbindings.New(loopbindings.Options{
+		Binding:   bindingProc,
+		CompStore: opts.ComponentStore,
+		Reporter:  reporter,
+		Security:  opts.Security,
+	})
+	p.psCat = looppubsub.New(looppubsub.Options{
+		AppID:      opts.ID,
+		PubSub:     pubsubProc,
+		Subscriber: subscriberProc,
+		CompStore:  opts.ComponentStore,
+		Reporter:   reporter,
+		Security:   opts.Security,
+	})
+	p.confCat = category.New(category.Options{
+		Name:      string(components.CategoryConfiguration),
+		Manager:   confProc,
+		CompStore: opts.ComponentStore,
+		Reporter:  reporter,
+		Security:  opts.Security,
+	})
+	p.cryptoCat = category.New(category.Options{
+		Name:      string(components.CategoryCryptoProvider),
+		Manager:   cryptoProc,
+		CompStore: opts.ComponentStore,
+		Reporter:  reporter,
+		Security:  opts.Security,
+	})
+	p.lockCat = category.New(category.Options{
+		Name:      string(components.CategoryLock),
+		Manager:   lockProc,
+		CompStore: opts.ComponentStore,
+		Reporter:  reporter,
+		Security:  opts.Security,
+	})
+	p.midCat = category.New(category.Options{
+		Name:      string(components.CategoryMiddleware),
+		Manager:   middleProc,
+		CompStore: opts.ComponentStore,
+		Reporter:  reporter,
+		Security:  opts.Security,
+	})
+	p.convCat = category.New(category.Options{
+		Name:      string(components.CategoryConversation),
+		Manager:   convProc,
+		CompStore: opts.ComponentStore,
+		Reporter:  reporter,
+		Security:  opts.Security,
+	})
+
+	// Root loop ----------------------------------------------------------
+	cats := map[components.Category]loop.Interface[loops.EventCategory]{
+		components.CategoryBindings:       p.bindCat.Loop(),
+		components.CategoryConfiguration:  p.confCat.Loop(),
+		components.CategoryCryptoProvider: p.cryptoCat.Loop(),
+		components.CategoryLock:           p.lockCat.Loop(),
+		components.CategoryMiddleware:     p.midCat.Loop(),
+		components.CategoryPubSub:         p.psCat.Loop(),
+		components.CategorySecretStore:    p.secCat.Loop(),
+		components.CategoryStateStore:     p.stateCat.Loop(),
+		components.CategoryConversation:   p.convCat.Loop(),
+	}
+	p.rootLoop = root.New(root.Options{
+		CompStore:      opts.ComponentStore,
+		Categories:     cats,
+		PubSubCategory: p.psCat.Loop(),
+		Secret:         secretProc,
+		KubernetesMode: p.kubernetesMode,
+		RegisterMCPServer: func(ctx context.Context, s mcpserverapi.MCPServer) error {
+			reg := p.getInProcessWorkflows()
+			if reg == nil {
+				return nil
+			}
+			return reg.RegisterMCPServer(ctx, s, opts.ComponentStore, opts.Security)
+		},
+		UnregisterMCPServer: func(name string) {
+			reg := p.getInProcessWorkflows()
+			if reg == nil {
+				return
+			}
+			reg.UnregisterMCPServer(name)
+		},
+	})
+
+	return p
 }
 
+// Process runs the loop hierarchy until ctx is cancelled. It coordinates
+// orderly shutdown by closing the root loop, which fans out to category and
+// instance loops.
 func (p *Processor) Process(ctx context.Context) error {
 	if !p.running.CompareAndSwap(false, true) {
 		return errors.New("processor is already running")
 	}
 
+	var shutdownOnce sync.Once
+	shutdown := func() {
+		shutdownOnce.Do(func() {
+			p.closed.Store(true)
+			p.rootLoop.Loop().Close(new(loops.Shutdown))
+		})
+	}
+
 	return concurrency.NewRunnerManager(
-		p.processComponents,
-		p.processHTTPEndpoints,
-		p.processMCPServers,
-		p.processSubscriptions,
+		p.rootLoop.Run,
+		p.stateCat.Run,
+		p.secCat.Run,
+		p.bindCat.Run,
+		p.psCat.Run,
+		p.confCat.Run,
+		p.cryptoCat.Run,
+		p.lockCat.Run,
+		p.midCat.Run,
+		p.convCat.Run,
 		p.subscriber.Run,
 		func(ctx context.Context) error {
 			<-ctx.Done()
-			close(p.closedCh)
-			p.chlock.Lock()
-			defer p.chlock.Unlock()
-
-			p.shutdown.Store(true)
-			close(p.pendingComponents)
-			close(p.pendingHTTPEndpoints)
-			close(p.pendingMCPServers)
-
+			shutdown()
 			return nil
 		},
 	).Run(ctx)
 }
 
-// DefaultReporter is the default resource reporter for the registry. It does nothing.
-func DefaultReporter(context.Context, componentsapi.Component, *operatorv1.ResourceResult) error {
+// Flush blocks until every Init currently enqueued in the root loop has
+// completed. It is a no-op when the processor has already shut down. The
+// Barrier event is queued unconditionally, so it is safe to call Flush
+// concurrently with Process; the call simply waits until the root loop has
+// processed every event queued ahead of the Barrier.
+func (p *Processor) Flush(ctx context.Context) error {
+	if p.closed.Load() {
+		return nil
+	}
+	done := make(chan struct{})
+	p.rootLoop.Loop().Enqueue(&loops.Barrier{Done: done})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-done:
+		return nil
+	}
+}
+
+// DefaultReporter is the default resource reporter for the registry. It does
+// nothing.
+func DefaultReporter(context.Context, compapi.Component, *operatorv1.ResourceResult) error {
 	return nil
 }

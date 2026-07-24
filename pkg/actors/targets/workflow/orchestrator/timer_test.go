@@ -451,6 +451,41 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		assert.False(t, deleteCalled)
 	})
 
+	t.Run("user timer with CreateTimer origin is not cancelled by EventRaised", func(t *testing.T) {
+		t.Parallel()
+		deleteCalled := false
+		reminders := remindersfake.New().WithDelete(func(_ context.Context, _ *actorapi.DeleteReminderRequest) error {
+			deleteCalled = true
+			return nil
+		})
+		o := newOrchestrator(reminders)
+
+		// A user durable timer named identically to the event. Pairing is
+		// keyed on origin.external_event, not Name, so it must not be consumed.
+		matchingName := "bar"
+		rs := &protos.WorkflowRuntimeState{
+			OldEvents: []*protos.HistoryEvent{
+				{
+					EventId: 0,
+					EventType: &protos.HistoryEvent_TimerCreated{
+						TimerCreated: &protos.TimerCreatedEvent{
+							Name: &matchingName,
+							Origin: &protos.TimerCreatedEvent_CreateTimer{
+								CreateTimer: &protos.TimerOriginCreateTimer{},
+							},
+						},
+					},
+				},
+			},
+			NewEvents: []*protos.HistoryEvent{
+				eventRaised("bar"),
+			},
+		}
+		err := o.deleteCancelledEventTimers(t.Context(), rs)
+		require.NoError(t, err)
+		assert.False(t, deleteCalled)
+	})
+
 	t.Run("timer with ChildWorkflowRetry origin is not cancelled by EventRaised", func(t *testing.T) {
 		t.Parallel()
 		deleteCalled := false
@@ -762,6 +797,83 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 				timerCreated(0, eventName("bar")),
 				timerFired(0),
 				eventRaised("bar"),
+			},
+		}
+		err := o.deleteCancelledEventTimers(t.Context(), rs)
+		require.NoError(t, err)
+		assert.False(t, deleteCalled)
+	})
+
+	t.Run("timer cancelled in a previous run does not absorb a new cancellation", func(t *testing.T) {
+		t.Parallel()
+		// Same-name waits across runs: timer-1 was already cancelled when the
+		// old event was consumed. The new event must cancel timer-4, not
+		// re-delete the long-dead timer-1.
+		var deletedNames []string
+		reminders := remindersfake.New().WithDelete(func(_ context.Context, req *actorapi.DeleteReminderRequest) error {
+			deletedNames = append(deletedNames, req.Name)
+			return nil
+		})
+		o := newOrchestrator(reminders)
+
+		rs := &protos.WorkflowRuntimeState{
+			OldEvents: []*protos.HistoryEvent{
+				timerCreated(1, eventName("bar")),
+				eventRaised("bar"),
+				timerCreated(4, eventName("bar")),
+			},
+			NewEvents: []*protos.HistoryEvent{
+				eventRaised("bar"),
+			},
+		}
+		err := o.deleteCancelledEventTimers(t.Context(), rs)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"timer-4"}, deletedNames)
+	})
+
+	t.Run("old event preceding its wait's timer defers pairing to the next event", func(t *testing.T) {
+		t.Parallel()
+		// An event buffered before its wait was armed precedes the wait's
+		// TimerCreated in history. It must not consume that later timer; the
+		// next new event picks it up instead.
+		var deletedNames []string
+		reminders := remindersfake.New().WithDelete(func(_ context.Context, req *actorapi.DeleteReminderRequest) error {
+			deletedNames = append(deletedNames, req.Name)
+			return nil
+		})
+		o := newOrchestrator(reminders)
+
+		rs := &protos.WorkflowRuntimeState{
+			OldEvents: []*protos.HistoryEvent{
+				timerCreated(1, eventName("bar")),
+				eventRaised("bar"),
+				eventRaised("bar"),
+				timerCreated(4, eventName("bar")),
+			},
+			NewEvents: []*protos.HistoryEvent{
+				eventRaised("bar"),
+			},
+		}
+		err := o.deleteCancelledEventTimers(t.Context(), rs)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"timer-4"}, deletedNames)
+	})
+
+	t.Run("timer created after the new event in the same run is not deleted", func(t *testing.T) {
+		t.Parallel()
+		// A timer created after the event guards a still-armed wait, so its
+		// reminder must survive.
+		deleteCalled := false
+		reminders := remindersfake.New().WithDelete(func(_ context.Context, _ *actorapi.DeleteReminderRequest) error {
+			deleteCalled = true
+			return nil
+		})
+		o := newOrchestrator(reminders)
+
+		rs := &protos.WorkflowRuntimeState{
+			NewEvents: []*protos.HistoryEvent{
+				eventRaised("bar"),
+				timerCreated(2, eventName("bar")),
 			},
 		}
 		err := o.deleteCancelledEventTimers(t.Context(), rs)

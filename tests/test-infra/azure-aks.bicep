@@ -94,6 +94,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2023-05-01' = {
           name: 'agentpool'
           osDiskSizeGB: osDiskSizeGB
           enableAutoScaling: false
+          // Keep tests/test-infra/perf-infra-description.txt in sync with this node pool (count and vmSize).
           count: 3
           vmSize: linuxVMSize
           osType: 'Linux'

@@ -1,3 +1,3 @@
 module github.com/dapr/dapr/tests/apps/perf/jobs
 
-go 1.26.4
+go 1.26.5
