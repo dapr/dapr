@@ -391,20 +391,25 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 		iTraceID = cloudEvent[contribpubsub.TraceIDField]
 	}
 
+	spanName := "pubsub/" + msg.Topic
+	var sc trace.SpanContext
 	if iTraceID != nil {
 		if traceID, ok := iTraceID.(string); ok {
-			sc, _ := diag.SpanContextFromW3CString(traceID)
-			spanName := "pubsub/" + msg.Topic
-
-			// no ops if trace is off
-			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, tracingSpec)
-			// span is nil if tracing is disabled (sampling rate is 0)
-			if span != nil {
-				ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
-			}
+			sc, _ = diag.SpanContextFromW3CString(traceID)
 		} else {
 			log.Warnf("ignored non-string traceid value: %v", iTraceID)
 		}
+	}
+
+	// Always start a span. When there is no inbound trace context, an empty
+	// SpanContext is used so the tracer creates a new root span — ensuring
+	// every delivered message has an end-to-end trace regardless of whether
+	// the producer set trace headers.
+	// no ops if trace is off
+	ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, tracingSpec)
+	// span is nil if tracing is disabled (sampling rate is 0)
+	if span != nil {
+		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 	}
 
 	extensions, extensionsErr := ExtractCloudEventExtensions(cloudEvent)
