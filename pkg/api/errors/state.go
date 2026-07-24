@@ -160,7 +160,7 @@ func (s *StateStoreError) Get(key string, msg string) error {
 		errors.NewBuilder(
 			codes.Internal,
 			http.StatusInternalServerError,
-			fmt.Sprintf("fail to get %s from state store %s: %s", key, s.name, msg),
+			fmt.Sprintf("failed to get %s from state store %s: %s", key, s.name, msg),
 			errorcodes.StateGet.Code,
 			string(errorcodes.StateGet.Category),
 		),

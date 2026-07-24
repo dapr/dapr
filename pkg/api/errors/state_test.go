@@ -34,5 +34,5 @@ func TestStateStoreGet(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, kerr.HTTPStatusCode())
 	require.Equal(t, codes.Internal, kerr.GrpcStatusCode())
 	require.Equal(t, errorcodes.StateGet.Code, kerr.ErrorCode())
-	require.Contains(t, kerr.Error(), "fail to get mykey from state store mystore: connection refused")
+	require.Contains(t, kerr.Error(), "failed to get mykey from state store mystore: connection refused")
 }
