@@ -33,7 +33,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/zipkin" //nolint:staticcheck // SA1019: zipkin exporter is deprecated but still needed
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/clock"
 
@@ -668,6 +668,9 @@ func parseOtelHeaders(headerStrings []string) map[string]string {
 // can be set via OTEL_RESOURCE_ATTRIBUTES.
 func createOtelResource(ctx context.Context, defaultServiceName string) (*resource.Resource, error) {
 	return resource.New(ctx,
+		// Set schema URL so semconv attributes are tagged with the correct version,
+		// consistent with other places in the repo that use semantic conventions.
+		resource.WithSchemaURL(semconv.SchemaURL),
 		// Default service name from Dapr app ID
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String(defaultServiceName),

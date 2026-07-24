@@ -2367,6 +2367,16 @@ func TestOtelResourceDetection(t *testing.T) {
 				"test-key-b": "bbbbb",
 			},
 		},
+		{
+			// Regression test: per the OTel SDK env var spec, OTEL_SERVICE_NAME must
+			// take precedence over a service.name entry in OTEL_RESOURCE_ATTRIBUTES.
+			// See: https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/#general-sdk-configuration
+			name:                "OTEL_SERVICE_NAME takes precedence over service.name in OTEL_RESOURCE_ATTRIBUTES",
+			otelServiceName:     "service-from-name",
+			otelResourceAttrs:   "service.name=service-from-attrs",
+			expectedServiceName: "service-from-name",
+			expectedAttrsPrefix: defaultAttrsPrefix,
+		},
 	}
 
 	for _, tc := range tests {
