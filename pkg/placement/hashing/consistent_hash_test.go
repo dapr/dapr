@@ -149,6 +149,62 @@ func TestHostEqual(t *testing.T) {
 	}
 }
 
+func TestGetLeastBoundedLoad(t *testing.T) {
+	t.Run("returns ErrNoHosts on empty ring", func(t *testing.T) {
+		c := NewFromExisting(map[string]*Host{}, 100, NewVirtualNodesCache())
+		_, err := c.GetLeast("any-key")
+		assert.ErrorIs(t, err, ErrNoHosts)
+	})
+
+	t.Run("returns ErrNoHosts when all hosts exceed load", func(t *testing.T) {
+		loadMap := map[string]*Host{
+			"host1": NewHost("host1", "id1", 100, 1),
+			"host2": NewHost("host2", "id2", 100, 1),
+		}
+		c := NewFromExisting(loadMap, 100, NewVirtualNodesCache())
+		_, err := c.GetLeast("any-key")
+		assert.ErrorIs(t, err, ErrNoHosts)
+	})
+
+	t.Run("returns a host when at least one is under load", func(t *testing.T) {
+		loadMap := map[string]*Host{
+			"host1": NewHost("host1", "id1", 0, 1),
+			"host2": NewHost("host2", "id2", 100, 1),
+		}
+		c := NewFromExisting(loadMap, 100, NewVirtualNodesCache())
+		host, err := c.GetLeast("any-key")
+		require.NoError(t, err)
+		assert.Equal(t, "host1", host)
+	})
+}
+
+func TestIncMissingHost(t *testing.T) {
+	loadMap := map[string]*Host{
+		"host1": NewHost("host1", "id1", 0, 1),
+	}
+	c := NewFromExisting(loadMap, 100, NewVirtualNodesCache())
+
+	// Should not panic when incrementing a host that doesn't exist
+	assert.NotPanics(t, func() {
+		c.Inc("nonexistent-host")
+	})
+}
+
+func TestMaxLoadEmptyRing(t *testing.T) {
+	c := NewFromExisting(map[string]*Host{}, 100, NewVirtualNodesCache())
+	assert.Equal(t, int64(1), c.MaxLoad())
+}
+
+func TestLoadOKRemovedHost(t *testing.T) {
+	loadMap := map[string]*Host{
+		"host1": NewHost("host1", "id1", 0, 1),
+	}
+	c := NewFromExisting(loadMap, 100, NewVirtualNodesCache())
+
+	// Should return false, not panic, when host has been removed
+	assert.False(t, c.loadOK("removed-host"))
+}
+
 func TestConsistentEqual(t *testing.T) {
 	cache := NewVirtualNodesCache()
 	mk := func(loadMap map[string]*Host, rf int64) *Consistent {
