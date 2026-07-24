@@ -840,7 +840,9 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	for i := range metadata.GetInboxLength() {
 		key = getMultiEntryKeyName(inboxKeyPrefix, i)
 		if bulkRes[key].Data == nil {
-			return nil, fmt.Errorf("workflow '%s': inbox key '%s' declared in metadata (inboxLength=%d) but missing from state store (transient store read failure or partial save?)", actorID, key, metadata.GetInboxLength())
+			return nil, wferrors.NewTransientReadError(
+				fmt.Errorf("workflow '%s': inbox key '%s' declared in metadata (inboxLength=%d) but missing from state store (transient store read failure or partial save?)", actorID, key, metadata.GetInboxLength()),
+			)
 		}
 
 		var hist backend.HistoryEvent
@@ -855,7 +857,9 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	for i := range metadata.GetHistoryLength() {
 		key = getMultiEntryKeyName(historyKeyPrefix, i)
 		if bulkRes[key].Data == nil {
-			return nil, fmt.Errorf("workflow '%s': history key '%s' declared in metadata (historyLength=%d) but missing from state store (transient store read failure or partial save?)", actorID, key, metadata.GetHistoryLength())
+			return nil, wferrors.NewTransientReadError(
+				fmt.Errorf("workflow '%s': history key '%s' declared in metadata (historyLength=%d) but missing from state store (transient store read failure or partial save?)", actorID, key, metadata.GetHistoryLength()),
+			)
 		}
 
 		var hist backend.HistoryEvent

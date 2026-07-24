@@ -50,6 +50,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	wfstateerrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state/list"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/dapr/utils"
@@ -704,6 +705,14 @@ func (abe *Actors) String() string {
 	return "dapr.actors/v1"
 }
 
+// loadInternalStateMaxRetries bounds how many times loadInternalState
+// re-reads workflow state after a wfstateerrors.TransientReadError. The
+// metadata Get and the inbox/history GetBulk are two separate state-store
+// calls, so a concurrent actor write landing between them can make metadata
+// declare a key the bulk read doesn't (yet) see; this self-heals on the next
+// read, typically within tens of milliseconds.
+const loadInternalStateMaxRetries = 3
+
 func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*state.State, error) {
 	astate, err := abe.actors.State(ctx)
 	if err != nil {
@@ -717,13 +726,26 @@ func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*s
 	// terminal failed event) is the orchestrator actor's responsibility, not
 	// the read path's — readers surface the verification error to clients
 	// and let them detect it.
-	wstate, err := state.LoadWorkflowState(ctx, astate, string(id), state.Options{
-		AppID:             abe.appID,
-		Namespace:         abe.namespace,
-		WorkflowActorType: abe.workflowActorType,
-		ActivityActorType: abe.activityActorType,
-		Signer:            abe.signer,
-	})
+	var wstate *state.State
+	err = backoff.Retry(func() error {
+		var lerr error
+		wstate, lerr = state.LoadWorkflowState(ctx, astate, string(id), state.Options{
+			AppID:             abe.appID,
+			Namespace:         abe.namespace,
+			WorkflowActorType: abe.workflowActorType,
+			ActivityActorType: abe.activityActorType,
+			Signer:            abe.signer,
+		})
+		if lerr == nil {
+			return nil
+		}
+
+		var transientErr *wfstateerrors.TransientReadError
+		if errors.As(lerr, &transientErr) {
+			return lerr
+		}
+		return backoff.Permanent(lerr)
+	}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(25*time.Millisecond), loadInternalStateMaxRetries), ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -857,21 +879,7 @@ func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstance
 }
 
 func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstanceHistoryRequest) (*protos.GetInstanceHistoryResponse, error) {
-	ss, err := abe.actors.State(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if ss == nil {
-		return nil, messages.ErrActorRuntimeNotFound
-	}
-
-	resp, err := state.LoadWorkflowState(ctx, ss, req.GetInstanceId(), state.Options{
-		AppID:             abe.appID,
-		Namespace:         abe.namespace,
-		WorkflowActorType: abe.workflowActorType,
-		ActivityActorType: abe.activityActorType,
-		Signer:            abe.signer,
-	})
+	resp, err := abe.loadInternalState(ctx, api.InstanceID(req.GetInstanceId()))
 	if err != nil {
 		return nil, err
 	}

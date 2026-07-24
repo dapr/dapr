@@ -64,3 +64,27 @@ func (e *ConfigurationError) Error() string {
 func (e *ConfigurationError) Unwrap() error {
 	return e.err
 }
+
+// TransientReadError is returned by LoadWorkflowState when metadata declares
+// an inbox or history key that the bulk read didn't observe. The metadata
+// Get and the inbox/history GetBulk are two separate state-store calls, so a
+// concurrent actor write landing between them can produce this mismatch even
+// though the persisted state itself is intact; the condition clears on the
+// next load. Callers on read-only query paths (GetInstance,
+// GetWorkflowMetadata) should retry a bounded number of times before
+// surfacing the error.
+type TransientReadError struct {
+	err error
+}
+
+func NewTransientReadError(err error) *TransientReadError {
+	return &TransientReadError{err}
+}
+
+func (e *TransientReadError) Error() string {
+	return e.err.Error()
+}
+
+func (e *TransientReadError) Unwrap() error {
+	return e.err
+}

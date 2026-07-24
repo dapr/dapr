@@ -717,6 +717,68 @@ func TestLoadWorkflowState_SetsPersistedFlagsFromETag(t *testing.T) {
 	}
 }
 
+func TestLoadWorkflowState_MissingInboxOrHistoryKeyReturnsTransientReadError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		inboxLength   uint64
+		historyLength uint64
+		missingKey    string
+	}{
+		{
+			name:        "missing inbox key",
+			inboxLength: 1,
+			missingKey:  "inbox-000000",
+		},
+		{
+			name:          "missing history key",
+			historyLength: 1,
+			missingKey:    "history-000000",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			const actorID = "wf-missing-key"
+
+			metaBytes, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
+				InboxLength:   tc.inboxLength,
+				HistoryLength: tc.historyLength,
+				Generation:    1,
+			})
+			require.NoError(t, err)
+
+			store := statefake.New().
+				WithGetFn(func(_ context.Context, req *api.GetStateRequest, _ bool) (*api.StateResponse, error) {
+					if req.Key == MetadataKey {
+						return &api.StateResponse{Data: metaBytes}, nil
+					}
+					return &api.StateResponse{}, nil
+				}).
+				WithGetBulkFn(func(_ context.Context, req *api.GetBulkStateRequest, _ bool) (api.BulkStateResponse, error) {
+					// Simulate the declared key not (yet) being visible to the
+					// bulk read, as happens when a concurrent write races the
+					// metadata Get and the inbox/history GetBulk.
+					return api.BulkStateResponse{}, nil
+				})
+
+			got, err := LoadWorkflowState(t.Context(), store, actorID, Options{
+				WorkflowActorType: "workflow",
+				ActivityActorType: "activity",
+			})
+			require.Nil(t, got)
+			require.Error(t, err)
+
+			var transientErr *wferrors.TransientReadError
+			require.ErrorAs(t, err, &transientErr, "error must be a TransientReadError so read-path callers can retry")
+			assert.Contains(t, err.Error(), tc.missingKey)
+		})
+	}
+}
+
 func TestGetSaveRequest_MetadataIncludesSigningLengths(t *testing.T) {
 	t.Parallel()
 
