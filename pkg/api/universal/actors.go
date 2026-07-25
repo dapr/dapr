@@ -142,7 +142,7 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 	}
 
 	if in.GetName() == "" {
-		err = messages.ErrBadRequest.WithFormat("reminder name cannot be empty")
+		err = apierrors.ActorBadRequest("reminder name cannot be empty")
 		a.logger.Debug(err)
 		return nil, err
 	}
