@@ -39,7 +39,7 @@ func ActorTimerCreate(err error) error {
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
-		fmt.Sprintf("error creating actor timer: %s", err),
+		fmt.Sprintf("error creating actor timer: %v", err),
 		"",
 		string(errorcodes.ActorTimerCreate.Category),
 	).
@@ -51,7 +51,7 @@ func ActorReminderCreate(err error) error {
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
-		fmt.Sprintf("error creating actor reminder: %s", err),
+		fmt.Sprintf("error creating actor reminder: %v", err),
 		"",
 		string(errorcodes.ActorReminderCreate.Category),
 	).
@@ -63,7 +63,7 @@ func ActorReminderDelete(err error) error {
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
-		fmt.Sprintf("error deleting actor reminder: %s", err),
+		fmt.Sprintf("error deleting actor reminder: %v", err),
 		"",
 		string(errorcodes.ActorReminderDelete.Category),
 	).
@@ -75,7 +75,7 @@ func ActorReminderGet(err error) error {
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
-		fmt.Sprintf("error getting actor reminder: %s", err),
+		fmt.Sprintf("error getting actor reminder: %v", err),
 		"",
 		string(errorcodes.ActorReminderGet.Category),
 	).
@@ -147,7 +147,7 @@ func ActorStateTransactionSave(err error) error {
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
-		fmt.Sprintf("error saving actor transaction state: %s", err),
+		fmt.Sprintf("error saving actor transaction state: %v", err),
 		"",
 		string(errorcodes.ActorStateTransactionSave.Category),
 	).
@@ -159,7 +159,7 @@ func ActorStateGet(err error) error {
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
-		fmt.Sprintf("error getting actor state: %s", err),
+		fmt.Sprintf("error getting actor state: %v", err),
 		"",
 		string(errorcodes.ActorStateGet.Category),
 	).
@@ -171,7 +171,7 @@ func ActorInvoke(v any) error {
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
-		fmt.Sprintf("error invoke actor method: %s", v),
+		fmt.Sprintf("error invoking actor method: %v", v),
 		"",
 		string(errorcodes.ActorInvokeMethod.Category),
 	).
