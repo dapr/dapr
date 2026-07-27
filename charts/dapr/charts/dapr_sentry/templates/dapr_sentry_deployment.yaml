@@ -9,6 +9,8 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
+  annotations:
+    helm.sh/resource-policy: keep
 {{ if and .Values.tls.issuer.certPEM (and .Values.tls.issuer.keyPEM .Values.tls.root.certPEM) }}
 data:
   issuer.crt: {{ b64enc .Values.tls.issuer.certPEM | trim }}
@@ -26,6 +28,8 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
+  annotations:
+    helm.sh/resource-policy: keep
 {{ if .Values.tls.root.certPEM }}
 data:
   ca.crt: {{- .Values.tls.root.certPEM | toYaml | indent 1 }}
