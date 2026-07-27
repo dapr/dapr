@@ -353,11 +353,11 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 		opts = append(opts, s.grpcServerOpts...)
 	}
 
-	// MaxRequestBodySize is already in bytes, so no unit conversion is needed
-	// for MaxRecvMsgSize/MaxSendMsgSize. The ReadBufferSize<<10 conversion for
-	// MaxHeaderListSize is round-trip checked before the narrowing conversion.
-	maxHeaderListSize := uint32(s.config.ReadBufferSize << 10) //nolint:gosec // round-trip checked below
-	if int64(maxHeaderListSize) != int64(s.config.ReadBufferSize<<10) {
+	// MaxRequestBodySize and ReadBufferSize are both already in bytes, so no
+	// unit conversion is needed here. ReadBufferSize is round-trip checked
+	// before the narrowing conversion for MaxHeaderListSize.
+	maxHeaderListSize := uint32(s.config.ReadBufferSize) //nolint:gosec // round-trip checked below
+	if int64(maxHeaderListSize) != int64(s.config.ReadBufferSize) {
 		return nil, fmt.Errorf("read buffer size %d is out of range for gRPC max header list size", s.config.ReadBufferSize)
 	}
 	opts = append(opts,
