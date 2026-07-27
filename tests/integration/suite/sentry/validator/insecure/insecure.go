@@ -30,6 +30,7 @@ import (
 
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
+	"github.com/dapr/dapr/pkg/sentry/server/images"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -194,6 +195,12 @@ func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateRe
 	assert.Empty(t, cert.DNSNames)
 	assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
 	assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
+
+	// The insecure validator has no pod to read, so the container images
+	// extension must be absent.
+	_, hasImages, err := images.FromExtensions(cert.Extensions)
+	require.NoError(t, err)
+	assert.False(t, hasImages)
 
 	// Second block should contain the Sentry CA certificate
 	block, rest = pem.Decode(rest)
