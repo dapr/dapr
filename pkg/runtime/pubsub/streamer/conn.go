@@ -69,13 +69,13 @@ func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEv
 
 func (c *conn) notifyPublishResponse(resp *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1) {
 	c.lock.RLock()
-	defer c.lock.RUnlock()
-
 	ch, ok := c.publishResponses[resp.GetId()][c.connectionID]
 	if !ok {
+		c.lock.RUnlock()
 		log.Errorf("no client stream expecting publish response for id %s ConnectionID%d", resp.GetId(), c.connectionID)
 		return
 	}
+	defer c.lock.RUnlock()
 
 	// Deliver under the read lock so the send is mutually exclusive with the
 	// close in cleanup (which holds the write lock): the channel can never be
