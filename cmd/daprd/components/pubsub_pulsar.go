@@ -18,8 +18,16 @@ package components
 import (
 	"github.com/dapr/components-contrib/pubsub/pulsar"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
+	avro "github.com/iskorotkov/avro/v2"
 )
 
+const maxAvroCollectionAllocSize = 10_000
+
 func init() {
+	avro.DefaultConfig = avro.Config{
+		MaxSliceAllocSize: maxAvroCollectionAllocSize,
+		MaxMapAllocSize:   maxAvroCollectionAllocSize,
+	}.Freeze()
+
 	pubsubLoader.DefaultRegistry.RegisterComponent(pulsar.NewPulsar, "pulsar")
 }
