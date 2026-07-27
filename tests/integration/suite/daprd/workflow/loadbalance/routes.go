@@ -84,37 +84,43 @@ func (r *routes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 	}
 
-	routeCounts := make(map[string]float64)
-	taskTypeCounts := make(map[string]float64)
-	for i := range 2 {
-		for k, v := range r.workflow.DaprN(i).Metrics(t, ctx).All() {
-			if !strings.HasPrefix(k, "dapr_runtime_workflow_completion_route_count|") {
-				continue
-			}
-			for _, label := range strings.Split(k, "|") {
-				if route, ok := strings.CutPrefix(label, "route:"); ok {
-					routeCounts[route] += v
+	// Metric recording is asynchronous; retry until the pipeline has
+	// caught up with the last completion.
+	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+		routeCounts := make(map[string]float64)
+		taskTypeCounts := make(map[string]float64)
+		for i := range 2 {
+			for k, v := range r.workflow.DaprN(i).Metrics(col, ctx).All() {
+				if !strings.HasPrefix(k, "dapr_runtime_workflow_completion_route_count|") {
+					continue
 				}
-				if taskType, ok := strings.CutPrefix(label, "task_type:"); ok {
-					taskTypeCounts[taskType] += v
+				for _, label := range strings.Split(k, "|") {
+					if route, ok := strings.CutPrefix(label, "route:"); ok {
+						routeCounts[route] += v
+					}
+					if taskType, ok := strings.CutPrefix(label, "task_type:"); ok {
+						taskTypeCounts[taskType] += v
+					}
 				}
 			}
 		}
-	}
 
-	assert.Positive(t, routeCounts["wait_local"], "expected waiters to use the co-located pending map")
-	assert.Zero(t, routeCounts["wait_watch"], "expected no watch-stream fallbacks in steady state")
-	// The worker is pinned to daprd 0, so its completions arrive on the
-	// waiter's own daprd and must be delivered without any actor machinery.
-	assert.Positive(t, routeCounts["complete_local"], "expected direct local-map deliveries")
-	// Every wait must be matched by a completion delivered either directly
-	// on this daprd or forwarded via the co-located executor actor.
-	assert.Equal(t,
-		routeCounts["wait_local"],
-		routeCounts["complete_local"]+routeCounts["complete_actor"],
-		"every waiter should be completed via the local map or the executor actor")
-	// Both task types must be measured: one activity and at least two
-	// orchestrator turns per workflow.
-	assert.Positive(t, taskTypeCounts["activity"], "expected activity completions to be measured")
-	assert.Positive(t, taskTypeCounts["workflow"], "expected workflow-task completions to be measured")
+		assert.Positive(col, routeCounts["wait_local"], "expected waiters to use the co-located pending map")
+		assert.Zero(col, routeCounts["wait_watch"], "expected no watch-stream fallbacks in steady state")
+		// The worker is pinned to daprd 0, so its completions arrive on the
+		// waiter's own daprd and must be delivered without any actor
+		// machinery.
+		assert.Positive(col, routeCounts["complete_local"], "expected direct local-map deliveries")
+		// Every wait must be matched by a completion delivered either
+		// directly on this daprd or forwarded via the co-located executor
+		// actor.
+		assert.Equal(col,
+			routeCounts["wait_local"],
+			routeCounts["complete_local"]+routeCounts["complete_actor"],
+			"every waiter should be completed via the local map or the executor actor")
+		// Both task types must be measured: one activity and at least two
+		// orchestrator turns per workflow.
+		assert.Positive(col, taskTypeCounts["activity"], "expected activity completions to be measured")
+		assert.Positive(col, taskTypeCounts["workflow"], "expected workflow-task completions to be measured")
+	}, time.Second*20, time.Millisecond*10)
 }

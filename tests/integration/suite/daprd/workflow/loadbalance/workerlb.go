@@ -102,23 +102,27 @@ func (w *workerlb) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, `"done"`, metadata.GetOutput().GetValue())
 	}
 
-	routeCounts := make(map[string]float64)
-	for i := range 2 {
-		for k, v := range w.workflow.DaprN(i).Metrics(t, ctx).All() {
-			if !strings.HasPrefix(k, "dapr_runtime_workflow_completion_route_count|") {
-				continue
-			}
-			for _, label := range strings.Split(k, "|") {
-				if route, ok := strings.CutPrefix(label, "route:"); ok {
-					routeCounts[route] += v
+	// Metric recording is asynchronous; retry until the pipeline has
+	// caught up with the last completion.
+	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+		routeCounts := make(map[string]float64)
+		for i := range 2 {
+			for k, v := range w.workflow.DaprN(i).Metrics(col, ctx).All() {
+				if !strings.HasPrefix(k, "dapr_runtime_workflow_completion_route_count|") {
+					continue
+				}
+				for _, label := range strings.Split(k, "|") {
+					if route, ok := strings.CutPrefix(label, "route:"); ok {
+						routeCounts[route] += v
+					}
 				}
 			}
 		}
-	}
 
-	// With every completion independently round-robined across two daprds,
-	// some must have landed on the non-hosting daprd and been forwarded via
-	// the executor actor.
-	assert.Positive(t, routeCounts["complete_actor"], "expected some completions to be forwarded via the executor actor")
-	assert.Zero(t, routeCounts["wait_watch"], "expected no watch-stream fallbacks: the rendezvous actor must be co-located")
+		// With every completion independently round-robined across two
+		// daprds, some must have landed on the non-hosting daprd and been
+		// forwarded via the executor actor.
+		assert.Positive(col, routeCounts["complete_actor"], "expected some completions to be forwarded via the executor actor")
+		assert.Zero(col, routeCounts["wait_watch"], "expected no watch-stream fallbacks: the rendezvous actor must be co-located")
+	}, time.Second*20, time.Millisecond*10)
 }
