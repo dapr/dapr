@@ -122,6 +122,18 @@ func (c *crontz) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	})
 
+	t.Run("a timezone prefix on an @every schedule is rejected", func(t *testing.T) {
+		postURL := fmt.Sprintf("http://localhost:%d/v1.0/jobs/crontz-every", c.daprd.HTTPPort())
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL,
+			strings.NewReader(`{"schedule": "CRON_TZ=Europe/Rome @every 1h"}`))
+		require.NoError(t, err)
+
+		resp, err := client.HTTP(t).Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	})
+
 	t.Run("without the prefix the same wall clock is a different instant", func(t *testing.T) {
 		target := time.Now().In(loc).Add(time.Second * 20)
 		schedule(t, "crontz-absent", fmt.Sprintf("* %d %d * * *",

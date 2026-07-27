@@ -104,6 +104,13 @@ func (c *crontz) Run(t *testing.T, ctx context.Context) {
 		require.Error(t, err)
 	})
 
+	t.Run("a timezone prefix on an @every schedule is rejected", func(t *testing.T) {
+		_, err := client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
+			Job: &runtimev1pb.Job{Name: "crontz-every", Schedule: new("CRON_TZ=Europe/Rome @every 1h")},
+		})
+		require.Error(t, err)
+	})
+
 	t.Run("without the prefix the same wall clock is a different instant", func(t *testing.T) {
 		target := time.Now().In(loc).Add(time.Second * 20)
 		schedule(t, "crontz-absent", fmt.Sprintf("* %d %d * * *",
