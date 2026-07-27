@@ -15,6 +15,7 @@ package actors
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -134,5 +135,69 @@ func TestLoadInternalState_RetriesTransientReadError(t *testing.T) {
 
 		var transientErr *wfstateerrors.TransientReadError
 		require.ErrorAs(t, err, &transientErr)
+	})
+
+	t.Run("does not retry a non-transient error", func(t *testing.T) {
+		t.Parallel()
+
+		metaBytes, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
+			InboxLength: 1,
+			Generation:  1,
+		})
+		require.NoError(t, err)
+
+		var calls atomic.Int32
+		store := statefake.New().
+			WithGetFn(func(_ context.Context, req *actorsapi.GetStateRequest, _ bool) (*actorsapi.StateResponse, error) {
+				return &actorsapi.StateResponse{Data: metaBytes}, nil
+			}).
+			WithGetBulkFn(func(_ context.Context, req *actorsapi.GetBulkStateRequest, _ bool) (actorsapi.BulkStateResponse, error) {
+				calls.Add(1)
+				return nil, errors.New("boom: permanent state store failure")
+			})
+
+		abe := newActors(store)
+
+		wstate, err := abe.loadInternalState(t.Context(), api.InstanceID("wf-1"))
+		require.Error(t, err)
+		assert.Nil(t, wstate)
+		assert.Equal(t, int32(1), calls.Load(), "a non-transient error must not be retried")
+
+		var transientErr *wfstateerrors.TransientReadError
+		assert.False(t, errors.As(err, &transientErr))
+	})
+
+	t.Run("stops retrying once the context is canceled mid-retry", func(t *testing.T) {
+		t.Parallel()
+
+		metaBytes, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
+			InboxLength: 1,
+			Generation:  1,
+		})
+		require.NoError(t, err)
+
+		ctx, cancel := context.WithCancel(t.Context())
+		var calls atomic.Int32
+		store := statefake.New().
+			WithGetFn(func(_ context.Context, req *actorsapi.GetStateRequest, _ bool) (*actorsapi.StateResponse, error) {
+				return &actorsapi.StateResponse{Data: metaBytes}, nil
+			}).
+			WithGetBulkFn(func(_ context.Context, req *actorsapi.GetBulkStateRequest, _ bool) (actorsapi.BulkStateResponse, error) {
+				// Simulate the caller's context being canceled (e.g. the
+				// client disconnected) immediately after observing the
+				// transient mismatch on the first attempt, before any
+				// further retry can run.
+				calls.Add(1)
+				cancel()
+				return actorsapi.BulkStateResponse{}, nil
+			})
+
+		abe := newActors(store)
+
+		wstate, err := abe.loadInternalState(ctx, api.InstanceID("wf-1"))
+		require.Error(t, err)
+		assert.Nil(t, wstate)
+		assert.Equal(t, int32(1), calls.Load(), "backoff must stop once the context is canceled instead of exhausting the retry budget")
+		assert.ErrorIs(t, err, context.Canceled, "a mid-retry cancellation must surface as context.Canceled, not be masked or retried further")
 	})
 }
