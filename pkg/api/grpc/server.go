@@ -358,8 +358,8 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 		opts = append(opts, s.grpcServerOpts...)
 	}
 
-	// TODO: fix types
-	//nolint:gosec
+	// MaxRequestBodySize is already in bytes, so no unit conversion is needed
+	// for MaxRecvMsgSize/MaxSendMsgSize.
 	opts = append(opts,
 		grpcGo.MaxRecvMsgSize(s.config.MaxRequestBodySize),
 		grpcGo.MaxSendMsgSize(s.config.MaxRequestBodySize),
@@ -426,8 +426,8 @@ func (s *server) printAPILog(ctx context.Context, method string, duration time.D
 	}
 	// Report duration in milliseconds
 	fields["duration"] = duration.Milliseconds()
-	// TODO: fix types
-	//nolint:gosec
-	fields["code"] = int32(code)
+	// grpcCodes.Code is a small, well-known enum (currently 0-16), so the
+	// narrowing conversion to int32 for the log field cannot overflow.
+	fields["code"] = int32(code) //nolint:gosec // bounded enum, see comment above
 	s.infoLogger.WithFields(fields).Info("gRPC API Called")
 }
