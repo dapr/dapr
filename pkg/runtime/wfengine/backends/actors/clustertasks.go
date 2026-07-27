@@ -22,43 +22,99 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/dapr/pkg/actors"
+	actorsapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
-	"github.com/dapr/durabletask-go/backend"
 )
 
 type ClusterTasksBackendOptions struct {
 	Actors            actors.Interface
 	ExecutorActorType string
+	Pending           *pending.Pending
 }
 
+// ClusterTasksBackend rendezvouses pending work-item waiters with the
+// completions reported by the application when daprd runs behind a load
+// balancer (WorkflowsClusteredDeployment): the completion RPC can land on any
+// daprd, not necessarily the one hosting the pending work item.
+//
+// The waiter always runs on the daprd hosting the workflow or activity actor,
+// and it registers in the process-local pending map. The executor rendezvous
+// actor shares its actor ID with the waiter's actor (the workflow instance ID
+// for workflow tasks, the activity actor ID for activity tasks), so
+// placement resolves it to the waiter's host: a completion arriving on
+// another daprd is forwarded via a single executor actor call and delivered
+// into the pending map in-process. The watch-stream path on the executor
+// actor is kept as a fallback for waiters whose executor actor is not local
+// (legacy-format activity reminders created by pre-upgrade daprds, placement
+// disagreement windows).
 type ClusterTasksBackend struct {
 	actors            actors.Interface
 	executorActorType string
+	pending           *pending.Pending
 }
 
 func NewClusterTasksBackend(opts ClusterTasksBackendOptions) *ClusterTasksBackend {
 	return &ClusterTasksBackend{
 		actors:            opts.Actors,
 		executorActorType: opts.ExecutorActorType,
+		pending:           opts.Pending,
 	}
 }
 
 func (be *ClusterTasksBackend) CompleteActivityTask(ctx context.Context, resp *protos.ActivityResponse) error {
-	router, err := be.actors.Router(ctx)
-	if err != nil {
-		return err
-	}
-
-	key := backend.GetActivityExecutionKey(
+	key := common.ActivityActorID(
 		resp.GetInstanceId(),
 		resp.GetTaskId(),
 	)
 
 	data, err := proto.Marshal(resp)
+	if err != nil {
+		return err
+	}
+
+	return be.completeTask(ctx, diag.TaskTypeActivity, key, data)
+}
+
+func (be *ClusterTasksBackend) CancelActivityTask(ctx context.Context, id api.InstanceID, taskID int32) error {
+	key := common.ActivityActorID(
+		string(id),
+		taskID,
+	)
+
+	return be.cancelTask(ctx, key)
+}
+
+func (be *ClusterTasksBackend) CompleteWorkflowTask(ctx context.Context, resp *protos.WorkflowResponse) error {
+	data, err := proto.Marshal(resp)
+	if err != nil {
+		return err
+	}
+
+	return be.completeTask(ctx, diag.TaskTypeWorkflow, resp.GetInstanceId(), data)
+}
+
+func (be *ClusterTasksBackend) CancelWorkflowTask(ctx context.Context, id api.InstanceID) error {
+	return be.cancelTask(ctx, string(id))
+}
+
+// completeTask delivers a completion to the waiter registered for key. When
+// the waiter lives on this daprd its pending-map entry is completed
+// in-process; otherwise the completion is forwarded via the executor actor,
+// which placement resolves to the waiter's host.
+func (be *ClusterTasksBackend) completeTask(ctx context.Context, taskType, key string, data []byte) error {
+	if be.pending.Deliver(key, data) {
+		diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteCompleteLocal)
+		return nil
+	}
+
+	router, err := be.actors.Router(ctx)
 	if err != nil {
 		return err
 	}
@@ -70,20 +126,22 @@ func (be *ClusterTasksBackend) CompleteActivityTask(ctx context.Context, resp *p
 		WithContentType(invokev1.ProtobufContentType)
 
 	_, err = router.Call(ctx, req)
+	if err == nil {
+		diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteCompleteActor)
+	}
 
 	return err
 }
 
-func (be *ClusterTasksBackend) CancelActivityTask(ctx context.Context, id api.InstanceID, taskID int32) error {
+func (be *ClusterTasksBackend) cancelTask(ctx context.Context, key string) error {
+	if be.pending.Cancel(key) {
+		return nil
+	}
+
 	router, err := be.actors.Router(ctx)
 	if err != nil {
 		return err
 	}
-
-	key := backend.GetActivityExecutionKey(
-		string(id),
-		taskID,
-	)
 
 	req := internalsv1pb.
 		NewInternalInvokeRequest(executor.MethodCancel).
@@ -96,119 +154,130 @@ func (be *ClusterTasksBackend) CancelActivityTask(ctx context.Context, id api.In
 }
 
 func (be *ClusterTasksBackend) WaitForActivityCompletion(req *protos.ActivityRequest) func(context.Context) (*protos.ActivityResponse, error) {
+	key := common.ActivityActorID(
+		req.GetWorkflowInstance().GetInstanceId(),
+		req.GetTaskId(),
+	)
+
+	wait := be.waitForCompletion(diag.TaskTypeActivity, key)
+
 	return func(ctx context.Context) (*protos.ActivityResponse, error) {
-		router, err := be.actors.Router(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		key := backend.GetActivityExecutionKey(
-			req.GetWorkflowInstance().GetInstanceId(),
-			req.GetTaskId(),
-		)
-		sreq := internalsv1pb.
-			NewInternalInvokeRequest(executor.MethodWatchComplete).
-			WithActor(be.executorActorType, key).
-			WithContentType(invokev1.ProtobufContentType)
-
 		var resp protos.ActivityResponse
-
-		err = router.CallStream(ctx, sreq, func(res *internalsv1pb.InternalInvokeResponse) (bool, error) {
-			if res == nil {
-				return false, errors.New("received nil response from activity completion")
-			}
-
-			if res.GetStatus().GetCode() == int32(codes.Aborted) {
-				return false, api.ErrTaskCancelled
-			}
-
-			err = proto.Unmarshal(res.GetMessage().GetData().GetValue(), &resp)
-			if err != nil {
-				return false, err
-			}
-
-			return true, nil
-		})
-		if err != nil {
+		if err := wait(ctx, &resp); err != nil {
 			return nil, err
 		}
-
 		return &resp, nil
 	}
-}
-
-func (be *ClusterTasksBackend) CompleteWorkflowTask(ctx context.Context, resp *protos.WorkflowResponse) error {
-	router, err := be.actors.Router(ctx)
-	if err != nil {
-		return err
-	}
-
-	data, err := proto.Marshal(resp)
-	if err != nil {
-		return err
-	}
-
-	req := internalsv1pb.
-		NewInternalInvokeRequest(executor.MethodComplete).
-		WithActor(be.executorActorType, resp.GetInstanceId()).
-		WithData(data).
-		WithContentType(invokev1.ProtobufContentType)
-
-	_, err = router.Call(ctx, req)
-
-	return err
-}
-
-func (be *ClusterTasksBackend) CancelWorkflowTask(ctx context.Context, id api.InstanceID) error {
-	router, err := be.actors.Router(ctx)
-	if err != nil {
-		return err
-	}
-
-	req := internalsv1pb.
-		NewInternalInvokeRequest(executor.MethodCancel).
-		WithActor(be.executorActorType, string(id)).
-		WithContentType(invokev1.ProtobufContentType)
-
-	_, err = router.Call(ctx, req)
-
-	return err
 }
 
 func (be *ClusterTasksBackend) WaitForWorkflowTaskCompletion(req *protos.WorkflowRequest) func(context.Context) (*protos.WorkflowResponse, error) {
+	wait := be.waitForCompletion(diag.TaskTypeWorkflow, req.GetInstanceId())
+
 	return func(ctx context.Context) (*protos.WorkflowResponse, error) {
-		router, err := be.actors.Router(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		sreq := internalsv1pb.
-			NewInternalInvokeRequest(executor.MethodWatchComplete).
-			WithActor(be.executorActorType, req.GetInstanceId()).
-			WithContentType(invokev1.ProtobufContentType)
-
 		var resp protos.WorkflowResponse
-
-		err = router.CallStream(ctx, sreq, func(res *internalsv1pb.InternalInvokeResponse) (bool, error) {
-			if res == nil {
-				return false, errors.New("received nil response from activity completion")
-			}
-
-			if res.GetStatus().GetCode() == int32(codes.Aborted) {
-				return false, api.ErrTaskCancelled
-			}
-
-			err = proto.Unmarshal(res.GetMessage().GetData().GetValue(), &resp)
-			if err != nil {
-				return false, err
-			}
-
-			return true, nil
-		})
-		if err != nil {
+		if err := wait(ctx, &resp); err != nil {
 			return nil, err
 		}
-
 		return &resp, nil
 	}
+}
+
+// waitForCompletion registers a waiter for key in the process-local pending
+// map. Registration happens here, before the work item is dispatched to the
+// application, so no completion can be reported before the waiter exists. The
+// returned function blocks until the completion is delivered.
+//
+// The pending map is only consulted by completions arriving on this daprd or
+// forwarded here by the executor actor, so blocking on it is only correct
+// when placement resolves the executor actor for key to this host. That is
+// the steady state by construction (the executor actor ID equals the
+// waiter's actor ID); when it does not hold, the waiter deregisters and falls
+// back to a watch stream on the executor actor, wherever it is placed.
+func (be *ClusterTasksBackend) waitForCompletion(taskType, key string) func(context.Context, proto.Message) error {
+	waitCh, deregister := be.pending.Register(key)
+
+	return func(ctx context.Context, resp proto.Message) error {
+		defer deregister()
+
+		if be.executorLocal(ctx, key) {
+			diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteWaitLocal)
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case res := <-waitCh:
+				if res.Cancelled {
+					return api.ErrTaskCancelled
+				}
+				return proto.Unmarshal(res.Data, resp)
+			}
+		}
+
+		// A completion may already have been delivered into the local map
+		// between registration and this fallback decision; deregister
+		// (delivery and deregistration are serialized, so nothing can be
+		// delivered afterwards) and drain before watching.
+		deregister()
+		select {
+		case res := <-waitCh:
+			if res.Cancelled {
+				return api.ErrTaskCancelled
+			}
+			return proto.Unmarshal(res.Data, resp)
+		default:
+		}
+
+		diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteWaitWatch)
+
+		return be.watchCompletion(ctx, key, resp)
+	}
+}
+
+// executorLocal reports whether placement resolves the executor actor for
+// key to this daprd.
+func (be *ClusterTasksBackend) executorLocal(ctx context.Context, key string) bool {
+	placement, err := be.actors.Placement(ctx)
+	if err != nil {
+		return false
+	}
+
+	lar, _, cancel, err := placement.LookupActor(ctx, &actorsapi.LookupActorRequest{
+		ActorType: be.executorActorType,
+		ActorID:   key,
+	})
+	if cancel != nil {
+		cancel(nil)
+	}
+
+	return err == nil && lar.Local
+}
+
+// watchCompletion is the fallback rendezvous: a watch stream on the executor
+// actor, wherever placement resolves it.
+func (be *ClusterTasksBackend) watchCompletion(ctx context.Context, key string, resp proto.Message) error {
+	router, err := be.actors.Router(ctx)
+	if err != nil {
+		return err
+	}
+
+	sreq := internalsv1pb.
+		NewInternalInvokeRequest(executor.MethodWatchComplete).
+		WithActor(be.executorActorType, key).
+		WithContentType(invokev1.ProtobufContentType)
+
+	return router.CallStream(ctx, sreq, func(res *internalsv1pb.InternalInvokeResponse) (bool, error) {
+		if res == nil {
+			return false, errors.New("received nil response from task completion")
+		}
+
+		if res.GetStatus().GetCode() == int32(codes.Aborted) {
+			return false, api.ErrTaskCancelled
+		}
+
+		if err := proto.Unmarshal(res.GetMessage().GetData().GetValue(), resp); err != nil {
+			return false, err
+		}
+
+		return true, nil
+	})
 }
