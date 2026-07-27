@@ -16,12 +16,17 @@ package hostconfig
 import (
 	"sync"
 
+	"github.com/dapr/dapr/pkg/actors/callbackstream"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 )
 
 type Config struct {
-	AppChannel              channel.AppChannel
+	AppChannel channel.AppChannel
+	// CallbackStream, when set, routes actor callbacks over the
+	// app-initiated SubscribeActorEventsAlpha1 stream instead of the app
+	// channel. This is how apps host actors without listening on a port.
+	CallbackStream          *callbackstream.Manager
 	EntityConfigs           []config.EntityConfig
 	DrainRebalancedActors   *bool
 	DrainOngoingCallTimeout string

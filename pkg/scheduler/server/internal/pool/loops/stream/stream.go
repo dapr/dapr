@@ -55,6 +55,14 @@ type stream struct {
 	loop    loop.Interface[loops.EventStream]
 	cancel  context.CancelCauseFunc
 
+	// closeStream closes the stream exactly once: it cancels the stream
+	// (deregistering its deliverable prefixes and unblocking the WatchJobs
+	// handler) and notifies the namespace loop exactly once. Both the recv
+	// loop and every failed Send race to close the same stream; duplicate
+	// ConnCloseStream events for one stream corrupt the per-namespace
+	// connection accounting and tear down live streams.
+	closeStream func(error)
+
 	// triggerIDx is the uuid of a triggered job. We can use a simple counter as
 	// there are no privacy/time attack concerns as this counter is scoped to a
 	// single client.
@@ -78,9 +86,30 @@ func New(ctx context.Context, opts Options) (loop.Interface[loops.EventStream], 
 	stream.ns = opts.Add.Request.GetNamespace()
 	stream.appID = opts.Add.Request.GetAppId()
 	stream.triggerIDx = 0
+	// The cron prefix deregistration returned by handleAdd is not idempotent:
+	// a second invocation releases a reference which may belong to a
+	// reconnected stream's fresh registration, marking a live app's prefixes
+	// undeliverable. Guard the combined cancel so every path through cancel
+	// and closeStream deregisters exactly once.
+	var cancelOnce sync.Once
 	stream.cancel = func(err error) {
-		opts.Add.Cancel(err)
-		cancel(err)
+		cancelOnce.Do(func() {
+			opts.Add.Cancel(err)
+			cancel(err)
+		})
+	}
+	var closeOnce sync.Once
+	stream.closeStream = func(err error) {
+		closeOnce.Do(func() {
+			// Cancel at detection time rather than when the connections loop
+			// reaps the stream: this promptly deregisters the dead stream's
+			// deliverable prefixes and aborts any Send parked on flow control.
+			stream.cancel(err)
+			stream.nsLoop.Enqueue(&loops.ConnCloseStream{
+				StreamIDx: stream.idx,
+				Namespace: stream.ns,
+			})
+		})
 	}
 
 	stream.loop = streamLoopFactory.NewLoop(stream)
@@ -88,10 +117,7 @@ func New(ctx context.Context, opts Options) (loop.Interface[loops.EventStream], 
 	stream.wg.Go(func() {
 		stream.recvLoop()
 		log.Debugf("Closed receive stream to %s/%s", stream.ns, stream.appID)
-		stream.nsLoop.Enqueue(&loops.ConnCloseStream{
-			StreamIDx: stream.idx,
-			Namespace: stream.ns,
-		})
+		stream.closeStream(errStreamShutdown)
 	})
 
 	return stream.loop, nil
@@ -126,10 +152,13 @@ func (s *stream) handleTriggerRequest(req *loops.TriggerRequest) {
 	if err := s.channel.Send(job); err != nil {
 		log.Warnf("Error sending job to stream %s/%s: %s", s.ns, s.appID, err)
 		monitoring.RecordSidecarSendError()
-		s.nsLoop.Enqueue(&loops.ConnCloseStream{
-			StreamIDx: s.idx,
-			Namespace: s.ns,
-		})
+		// Resolve the trigger promptly so the cron engine redelivers it to a
+		// live stream instead of parking it until this stream is reaped.
+		// LoadAndDelete guarantees the shutdown drain cannot double-resolve.
+		if fn, ok := s.inflight.LoadAndDelete(s.triggerIDx); ok {
+			fn.(func(api.TriggerResponseResult))(api.TriggerResponseResult_UNDELIVERABLE)
+		}
+		s.closeStream(err)
 	}
 }
 
@@ -147,6 +176,9 @@ func (s *stream) handleShutdown() {
 		return true
 	})
 	s.inflight.Clear()
-	streamLoopFactory.CacheLoop(s.loop)
+	// The loop object is deliberately NOT returned to the factory cache:
+	// this handler runs inside the loop's own drain, before Close observes
+	// completion, so a recycled loop could be reused and rewritten while the
+	// closer still reads it (data race, and a lost close signal).
 	streamCache.Put(s)
 }

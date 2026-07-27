@@ -1,0 +1,382 @@
+diff --git a/tests/integration/framework/process/kubernetes/informer/informer.go b/tests/integration/framework/process/kubernetes/informer/informer.go
+index fe393ce9..d96784a2 100644
+--- a/tests/integration/framework/process/kubernetes/informer/informer.go
++++ b/tests/integration/framework/process/kubernetes/informer/informer.go
+@@ -17,6 +17,7 @@ import (
+ 	"bytes"
+ 	"context"
+ 	"encoding/json"
++	"errors"
+ 	"math/rand/v2"
+ 	"net/http"
+ 	"strings"
+@@ -33,6 +34,8 @@ import (
+ 	"k8s.io/apimachinery/pkg/runtime/schema"
+ 	"k8s.io/apimachinery/pkg/watch"
+ 
++	"github.com/dapr/kit/events/loop"
++
+ 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+ 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+ 	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+@@ -42,19 +45,70 @@ import (
+ 	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
+ )
+ 
+-// Informer is a fake informer that adds events to the Kubernetes API server to
+-// send events to clients.
++// informedSendTimeout is how long inform() waits when notifying
++// test-side observers (e.g. DeleteWait) before failing the test.
++const informedSendTimeout = 3 * time.Second
++
++// rotateInterval is how long a /watch connection is held open before the
++// fake informer closes it to force the K8s reflector on the other end to
++// reconnect and re-LIST. See the comment on the close goroutine inside
++// Handler for why this exists.
++const rotateInterval = 200 * time.Millisecond
++
++// streamFactory pools queue segments across all active /watch handlers.
++// The segment size is small because most watchers process events as fast
++// as they arrive; the loop grows additional segments on demand when a
++// burst exceeds one segment.
++var streamFactory = loop.New[streamEvent](16)
++
++// streamEvent is the event type for the per-watcher event loop. A non-nil
++// payload is a watch event to deliver; closed=true is the shutdown
++// sentinel emitted on disconnect so the loop drains and exits.
++type streamEvent struct {
++	payload []byte
++	closed  bool
++}
++
++// Informer is a fake informer that pushes events to Kubernetes watch
++// clients over a single long-lived chunked HTTP response.
++//
++// Previously each call to /watch popped one queued event and closed the
++// connection, forcing the K8s reflector inside the operator to reconnect
++// for every event with exponential backoff. That made every event cost
++// seconds of test wall time. Now the handler holds the connection open
++// for the lifetime of the request and streams events out as they arrive,
++// so the reflector observes a steady-state watch and never needs to
++// backoff between events. The per-watcher queue is a dapr/kit/events/loop
++// so we never have to bound the in-flight buffer.
+ type Informer struct {
+-	lock   sync.Mutex
+-	active map[string][][]byte
++	lock sync.Mutex
++
++	// backlog is per-GVK events emitted while no watcher was connected
++	// for that GVK. Drained on the next /watch connection.
++	backlog map[string][][]byte
++
++	// streams is per-GVK loops held by currently-active /watch handlers.
++	// inform() fans events out to every loop.
++	streams map[string][]loop.Interface[streamEvent]
+ 
+-	informed map[uint64]chan *metav1.WatchEvent
++	// informed is test-side observation channels (DeleteWait & co.).
++	// Fired when an event is actually delivered to a watcher.
++	informed map[uint64]*informedSub
++}
++
++// informedSub is a single test-side observer. done is closed when the observer
++// stops reading ch, so senders select on it rather than risk sending on a
++// channel the observer has abandoned.
++type informedSub struct {
++	ch   chan *metav1.WatchEvent
++	done chan struct{}
+ }
+ 
+ func New() *Informer {
+ 	return &Informer{
+-		active:   make(map[string][][]byte),
+-		informed: make(map[uint64]chan *metav1.WatchEvent),
++		backlog:  make(map[string][][]byte),
++		streams:  make(map[string][]loop.Interface[streamEvent]),
++		informed: make(map[uint64]*informedSub),
+ 	}
+ }
+ 
+@@ -65,58 +119,141 @@ func (i *Informer) Handler(t *testing.T, wrapped http.Handler) http.HandlerFunc
+ 			return
+ 		}
+ 
+-		i.lock.Lock()
+-		defer i.lock.Unlock()
+-
+-		path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/apis/"), "/api/")
+-
+-		var gvk schema.GroupVersionKind
+-		split := strings.Split(path, "/")
+-		if !assert.GreaterOrEqual(t, len(split), 2, "invalid path: %s", path) {
++		gvk, ok := parseGVK(t, r.URL.Path)
++		if !ok {
+ 			return
+ 		}
+-		if split[0] == "v1" {
+-			gvk = schema.GroupVersionKind{Group: "", Version: "v1"}
+-			split = split[1:]
+-		} else {
+-			gvk = schema.GroupVersionKind{Group: strings.Split(path, "/")[0], Version: strings.Split(path, "/")[1]}
+-			split = split[2:]
+-		}
+-		if split[0] == "namespaces" {
+-			// namespace resources are special cased in the Kubernetes CRUD resource
+-			// URL, so we need to handle them differently.
+-			if len(split) > 1 {
+-				split = split[2:]
+-				gvk.Kind = split[0]
+-			} else {
+-				gvk.Kind = "namespaces"
+-			}
+-		} else {
+-			gvk.Kind = split[0]
+-		}
++		gvkKey := gvk.String()
+ 
+ 		w.Header().Add("Transfer-Encoding", "chunked")
+ 		w.Header().Add("Content-Type", "application/json")
+ 		w.WriteHeader(http.StatusOK)
++		flusher, _ := w.(http.Flusher)
+ 
+-		if len(i.active[gvk.String()]) > 0 {
+-			var event metav1.WatchEvent
+-			assert.NoError(t, json.Unmarshal(i.active[gvk.String()][0], &event))
+-			w.Write(i.active[gvk.String()][0])
+-			i.active[gvk.String()] = i.active[gvk.String()][1:]
+-
+-			for _, ch := range i.informed {
+-				select {
+-				case ch <- &event:
+-				case <-time.After(3 * time.Second):
+-					t.Errorf("failed to send informed event to subscriber")
+-				}
++		// Build the per-watcher loop. Its Handle method writes events to
++		// this response; on Write failure it returns errClientGone and
++		// Run unwinds, which we treat as "client disconnected, drain and
++		// stop".
++		h := &streamHandler{
++			informer: i,
++			t:        t,
++			w:        w,
++			flusher:  flusher,
++		}
++		l := streamFactory.NewLoop(h)
++
++		// Register the loop under this GVK and atomically pick up any
++		// backlog so subsequent inform() calls go through us.
++		i.lock.Lock()
++		backlog := i.backlog[gvkKey]
++		i.backlog[gvkKey] = nil
++		i.streams[gvkKey] = append(i.streams[gvkKey], l)
++		i.lock.Unlock()
++
++		// Pre-load backlog onto the loop; Run will process them before
++		// blocking on new events.
++		for _, b := range backlog {
++			l.Enqueue(streamEvent{payload: b})
++		}
++
++		// Cancel the loop when the client disconnects, or after the
++		// rotateInterval window, whichever comes first.
++		//
++		// The periodic close mirrors master's behaviour without the per-
++		// event reconnect penalty: holding /watch open lets bursts of
++		// explicit Informer().Add events stream back-to-back, while the
++		// rotation forces the reflector to do a fresh LIST every few
++		// hundred ms. That fresh LIST is what makes store-only mutations
++		// (tests that call store.Add without a paired Informer().Add)
++		// observable to consumers like the operator, and it lets typed
++		// TypeMeta survive the trip through controller-runtime's cache,
++		// which we have seen get stripped when the same item arrives via
++		// the watch decode path instead of the list decode path.
++		//
++		// The disconnect goroutine reads loop internals via l.Close, so
++		// we must wait for it to fully exit before recycling the loop,
++		// otherwise the next NewLoop on the recycled instance races with
++		// this Close.
++		runCtx, cancel := context.WithCancel(r.Context())
++		closerDone := make(chan struct{})
++		go func() {
++			defer close(closerDone)
++			select {
++			case <-runCtx.Done():
++			case <-time.After(rotateInterval):
++			}
++			l.Close(streamEvent{closed: true})
++		}()
++
++		runErr := l.Run(runCtx)
++
++		// Unregister before triggering Close so no further inform() calls
++		// can enqueue onto a loop that's about to be recycled.
++		i.lock.Lock()
++		for j, c := range i.streams[gvkKey] {
++			if c == l {
++				i.streams[gvkKey] = append(i.streams[gvkKey][:j], i.streams[gvkKey][j+1:]...)
++				break
+ 			}
+ 		}
+-		w.(http.Flusher).Flush()
++		i.lock.Unlock()
++
++		cancel()
++		<-closerDone
++		streamFactory.CacheLoop(l)
++		_ = runErr
+ 	}
+ }
+ 
++// streamHandler is the per-watcher loop.Handler[streamEvent] that writes
++// events to one HTTP response.
++type streamHandler struct {
++	informer *Informer
++	t        *testing.T
++	w        http.ResponseWriter
++	flusher  http.Flusher
++}
++
++var errClientGone = errors.New("informer: client disconnected")
++
++// Handle writes one streamEvent. Returns errClientGone if the HTTP write
++// fails (the client closed its end), which exits the per-watcher loop.
++func (h *streamHandler) Handle(_ context.Context, ev streamEvent) error {
++	if ev.closed {
++		return errClientGone
++	}
++	var event metav1.WatchEvent
++	if err := json.Unmarshal(ev.payload, &event); err != nil {
++		assert.NoError(h.t, err)
++		return errClientGone
++	}
++	if _, err := h.w.Write(ev.payload); err != nil {
++		return errClientGone
++	}
++	if h.flusher != nil {
++		h.flusher.Flush()
++	}
++
++	// Snapshot informed subscribers under the lock, then notify outside
++	// the lock so a slow subscriber cannot wedge inform() callers.
++	h.informer.lock.Lock()
++	subs := make([]*informedSub, 0, len(h.informer.informed))
++	for _, c := range h.informer.informed {
++		subs = append(subs, c)
++	}
++	h.informer.lock.Unlock()
++
++	for _, c := range subs {
++		select {
++		case c.ch <- &event:
++		case <-c.done:
++		case <-time.After(informedSendTimeout):
++			h.t.Errorf("failed to send informed event to subscriber")
++		}
++	}
++	return nil
++}
++
+ func (i *Informer) Add(t *testing.T, obj runtime.Object) {
+ 	t.Helper()
+ 	i.inform(t, obj, string(watch.Added))
+@@ -138,15 +275,18 @@ func (i *Informer) DeleteWait(t *testing.T, ctx context.Context, obj runtime.Obj
+ 	i.lock.Lock()
+ 	//nolint:gosec
+ 	ui := rand.Uint64()
+-	ch := make(chan *metav1.WatchEvent)
+-	i.informed[ui] = ch
++	sub := &informedSub{
++		ch:   make(chan *metav1.WatchEvent),
++		done: make(chan struct{}),
++	}
++	i.informed[ui] = sub
+ 	i.lock.Unlock()
+ 
+ 	defer func() {
+ 		i.lock.Lock()
+-		close(ch)
+ 		delete(i.informed, ui)
+ 		i.lock.Unlock()
++		close(sub.done)
+ 	}()
+ 
+ 	i.Delete(t, obj)
+@@ -159,7 +299,7 @@ func (i *Informer) DeleteWait(t *testing.T, ctx context.Context, obj runtime.Obj
+ 		case <-ctx.Done():
+ 			assert.Fail(t, "failed to wait for delete event to occur")
+ 			return
+-		case e := <-ch:
++		case e := <-sub.ch:
+ 			if e.Type != string(watch.Deleted) {
+ 				continue
+ 			}
+@@ -175,9 +315,6 @@ func (i *Informer) DeleteWait(t *testing.T, ctx context.Context, obj runtime.Obj
+ 
+ func (i *Informer) inform(t *testing.T, obj runtime.Object, event string) {
+ 	t.Helper()
+-	i.lock.Lock()
+-	defer i.lock.Unlock()
+-
+ 	gvk := i.objToGVK(t, obj)
+ 
+ 	watchObjB, err := json.Marshal(obj)
+@@ -188,7 +325,58 @@ func (i *Informer) inform(t *testing.T, obj runtime.Object, event string) {
+ 		Object: runtime.RawExtension{Raw: watchObjB, Object: obj},
+ 	})
+ 	require.NoError(t, err)
+-	i.active[gvk.String()] = append(i.active[gvk.String()], watchEvent)
++
++	i.lock.Lock()
++	defer i.lock.Unlock()
++
++	streams := i.streams[gvk.String()]
++	if len(streams) == 0 {
++		// No connected watcher: stash until one connects.
++		i.backlog[gvk.String()] = append(i.backlog[gvk.String()], watchEvent)
++		return
++	}
++	for _, l := range streams {
++		// Enqueue is non-blocking and the loop's queue is unbounded.
++		l.Enqueue(streamEvent{payload: watchEvent})
++	}
++}
++
++// parseGVK pulls the GroupVersionKind out of a Kubernetes watch URL of the
++// form /apis/<group>/<version>/[namespaces/<ns>/]<kind> or
++// /api/v1/[namespaces/<ns>/]<kind>.
++func parseGVK(t *testing.T, urlPath string) (schema.GroupVersionKind, bool) {
++	t.Helper()
++	path := strings.TrimPrefix(strings.TrimPrefix(urlPath, "/apis/"), "/api/")
++	split := strings.Split(path, "/")
++	if !assert.GreaterOrEqual(t, len(split), 2, "invalid path: %s", path) {
++		return schema.GroupVersionKind{}, false
++	}
++
++	var gvk schema.GroupVersionKind
++	if split[0] == "v1" {
++		gvk = schema.GroupVersionKind{Group: "", Version: "v1"}
++		split = split[1:]
++	} else {
++		gvk = schema.GroupVersionKind{Group: split[0], Version: split[1]}
++		split = split[2:]
++	}
++	if !assert.NotEmpty(t, split, "invalid path: %s", path) {
++		return schema.GroupVersionKind{}, false
++	}
++	if split[0] == "namespaces" {
++		switch {
++		case len(split) == 1:
++			gvk.Kind = "namespaces"
++		case len(split) >= 3:
++			gvk.Kind = split[2]
++		default:
++			assert.Fail(t, "invalid path: missing kind", path)
++			return schema.GroupVersionKind{}, false
++		}
++	} else {
++		gvk.Kind = split[0]
++	}
++	return gvk, true
+ }
+ 
+ func (i *Informer) objToGVK(t *testing.T, obj runtime.Object) schema.GroupVersionKind {

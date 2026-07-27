@@ -141,6 +141,12 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 		}
 	}
 
+	if in.GetName() == "" {
+		err = messages.ErrBadRequest.WithFormat("reminder name cannot be empty")
+		a.logger.Debug(err)
+		return nil, err
+	}
+
 	if vErr := method.ValidateName(in.GetName()); vErr != nil {
 		vErr = messages.ErrBadRequest.WithFormat(vErr)
 		a.logger.Debug(vErr)
