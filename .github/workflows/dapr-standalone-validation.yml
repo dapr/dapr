@@ -51,7 +51,7 @@ jobs:
           python3 -m pip install --upgrade pip
       - name: Install required Python packages
         run: |
-          python3 -m pip install numpy scipy psutil requests
+          python3 -m pip install numpy scipy requests
       - name: Install latest Dapr CLI
         uses: dapr/.github/.github/actions/setup-dapr-cli@main
         with:

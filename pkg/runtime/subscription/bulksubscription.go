@@ -213,6 +213,11 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 		return bulkResponses, err
 	}
 
+	// BulkSubscribe establishes the consumer connection directly (it does not run
+	// through a policy Runner), so attach the workload's SPIFFE identity to its
+	// context here just as the Runner does for other component operations.
+	ctx = policyDef.ComponentContext(ctx)
+
 	if bulkSubscriber, ok := s.pubsub.Component.(contribpubsub.BulkSubscriber); ok {
 		return bulkSubscriber.BulkSubscribe(ctx, req, bulkHandler)
 	}
@@ -340,7 +345,18 @@ func (s *Subscription) sendBulkToDeadLetter(ctx context.Context,
 		Metadata:   msg.Metadata,
 	}
 
-	_, err := s.adapter.BulkPublish(ctx, req)
+	// Skip the DLQ publish if the parent was explicitly canceled (e.g.
+	// shutdown), otherwise detaching the deadline below could block for up
+	// to deadLetterPublishTimeout during shutdown. See the matching helper
+	// in pkg/runtime/subscription/subscription.go for why an inherited
+	// inbound-handler deadline cannot be used for the publish itself.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return ctx.Err()
+	}
+	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deadLetterPublishTimeout)
+	defer cancel()
+
+	_, err := s.adapter.BulkPublish(pubCtx, req, rtpubsub.TransportModeGRPC)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 	}

@@ -62,6 +62,14 @@ func (w *WrappedInMemory) Publish(ctx context.Context, req *pubsub.PublishReques
 	return w.PubSub.Publish(ctx, req)
 }
 
+// Features overrides the embedded inmemory.PubSub's static feature list
+// so test framework consumers can inject features via WithFeatures.
+// Without this override the embedded PubSub's Features() would shadow
+// w.features and WithFeatures would be silently ignored.
+func (w *WrappedInMemory) Features() []pubsub.Feature {
+	return w.features
+}
+
 func (w *WrappedInMemory) Init(ctx context.Context, metadata pubsub.Metadata) error {
 	w.lock.Lock()
 	defer w.lock.Unlock()

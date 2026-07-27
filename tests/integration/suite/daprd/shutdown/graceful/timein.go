@@ -81,5 +81,5 @@ func (i *timein) Run(t *testing.T, ctx context.Context) {
 
 	// Sleep to ensure entire runtime is spun up so we hit the log line on
 	// shutdown.
-	time.Sleep(time.Millisecond * 500)
+	time.Sleep(time.Second)
 }

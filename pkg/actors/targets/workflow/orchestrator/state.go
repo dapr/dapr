@@ -15,15 +15,20 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	contribstate "github.com/dapr/components-contrib/state"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -38,25 +43,139 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 		return o.state, o.ometa, nil
 	}
 
-	// state is not cached, so try to load it from the state store
-	state, err := wfenginestate.LoadWorkflowState(ctx, o.actorState, o.actorID, wfenginestate.Options{
+	opts := wfenginestate.Options{
 		AppID:             o.appID,
+		Namespace:         o.namespace,
 		WorkflowActorType: o.actorType,
 		ActivityActorType: o.activityActorType,
-	})
+		Signer:            o.signer,
+	}
+
+	// state is not cached, so try to load it from the state store
+	state, err := wfenginestate.LoadWorkflowState(ctx, o.actorState, o.actorID, opts)
 	if err != nil {
+		var verifyErr *wferrors.VerificationError
+		if errors.As(err, &verifyErr) {
+			if !state.IsCompleted() {
+				return o.tombstoneTamperedState(ctx, opts, state, err)
+			}
+		}
 		return nil, nil, err
 	}
 	if state == nil {
 		// No such state exists in the state store
 		return nil, nil, nil
 	}
+
+	// When signing is enabled, any inbox event that does not match signed
+	// history can only have been written via state store tampering. Treat the
+	// state as unrecoverable: fail the workflow terminally so no further
+	// progress is made on forged input. Skip the scan on an empty inbox as
+	// nothing to validate and the history-index build is pure waste. Skip
+	// when the workflow is already terminal, so we don't re-detect the same
+	// condition on every load.
+	if o.signer != nil && len(state.Inbox) > 0 && !state.IsCompleted() {
+		if filtered := filterValidInboxEvents(state); len(filtered) != len(state.Inbox) {
+			cause := fmt.Errorf("workflow actor '%s': inbox contained %d events that did not match signed history (state store tampering)",
+				o.actorID, len(state.Inbox)-len(filtered))
+			return o.tombstoneTamperedState(ctx, opts, state, cause)
+		}
+	}
+
+	// Re-verify any persisted IncomingHistory on cold start. The state store is
+	// not in the trust boundary, and verifySignatureChain only covers
+	// state.History, not the propagated-history key. So an attacker who edits
+	// the persisted propagated-history bytes alone is only caught here. Skip on
+	// terminal workflows for the same reason as inbox-tamper above.
+	// VerifyAndAbsorbPropagatedHistory handles the disabled-signer case
+	// (warns when a signed payload arrives at an unsigned receiver) and
+	// the nil-payload case internally; only the terminal check stays here
+	// to avoid re-tombstoning an already-completed workflow on every load.
+	if state.IncomingHistory != nil && !state.IsCompleted() {
+		if err := o.signing.VerifyAndAbsorbPropagatedHistory(state.IncomingHistory, state); err != nil {
+			cause := fmt.Errorf("workflow actor '%s': persisted propagated history failed verification (state store tampering): %w",
+				o.actorID, err)
+			return o.tombstoneTamperedState(ctx, opts, state, cause)
+		}
+	}
+
 	// Update cached state
 	o.state = state
 	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
 	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
 
 	return state, o.ometa, nil
+}
+
+// tombstoneTamperedState invokes the signing tombstone path (append
+// tamper marker + delete reminders) and refreshes the orchestrator's
+// cached state/runtime/metadata views with the new failed state.
+func (o *orchestrator) tombstoneTamperedState(ctx context.Context, opts wfenginestate.Options, prior *wfenginestate.State, cause error) (*wfenginestate.State, *backend.WorkflowMetadata, error) {
+	failed, err := o.signing.Tombstone(ctx, o.actorState, opts, prior, cause)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	o.state = failed
+	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, failed.CustomStatus, failed.History)
+	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(failed))
+
+	if o.eventSink != nil {
+		o.eventSink(o.ometa)
+	}
+	o.notifyStreams()
+
+	return failed, o.ometa, nil
+}
+
+// notifyStreams pushes the current cached metadata to all registered
+// runtime-status stream watchers and removes any whose condition fired or
+// whose callback errored. Safe to call with no streams registered.
+func (o *orchestrator) notifyStreams() {
+	if len(o.streamFns) == 0 {
+		return
+	}
+	arstate, err := anypb.New(o.ometa)
+	if err != nil {
+		return
+	}
+	streamReq := &internalsv1pb.InternalInvokeResponse{
+		Status:  &internalsv1pb.Status{Code: http.StatusOK},
+		Message: &commonv1pb.InvokeResponse{Data: arstate},
+	}
+	isTerminal := api.WorkflowMetadataIsComplete(o.ometa)
+	for idx, stream := range o.streamFns {
+		if stream.done.Load() {
+			delete(o.streamFns, idx)
+			continue
+		}
+		ok, ferr := stream.fn(streamReq)
+		if ferr != nil || ok || isTerminal {
+			stream.errCh <- ferr
+			delete(o.streamFns, idx)
+		}
+	}
+}
+
+// signAndSaveState signs any newly added history events and then persists the
+// state. This is the single entry point for all state persistence; callers
+// must never call saveInternalState directly.
+func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestate.State) error {
+	if err := o.signing.SignNewEvents(state); err != nil {
+		o.invalidateCachedState()
+		return fmt.Errorf("failed to sign new history events: %w", err)
+	}
+	if err := o.saveInternalState(ctx, state); err != nil {
+		o.invalidateCachedState()
+		return err
+	}
+	return nil
+}
+
+func (o *orchestrator) invalidateCachedState() {
+	o.state = nil
+	o.rstate = nil
+	o.ometa = nil
 }
 
 func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State) error {
@@ -69,11 +188,49 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 	log.Debugf("Workflow actor '%s': saving %d keys to actor state store", o.actorID, len(req.Operations))
 
 	if err = o.actorState.TransactionalStateOperation(ctx, true, req, false); err != nil {
+		// ETagMismatch means a peer host wrote to this workflow's metadata
+		// row underneath us between our load and this save. The whole Multi
+		// rolled back atomically, so the durable state still reflects the
+		// peer's view; our in-memory state is stale. The caller
+		// (signAndSaveState) handles cache invalidation on any error from
+		// this function; we just classify the error here so the log line
+		// distinguishes peer-write conflicts from real save failures, and
+		// the caller's recoverable-error retry path re-runs the operation
+		// against the updated state on the next firing.
+		var etagErr *contribstate.ETagError
+		if errors.As(err, &etagErr) && etagErr.Kind() == contribstate.ETagMismatch {
+			log.Debugf("Workflow actor '%s': save aborted by peer write (etag mismatch); surfacing for retry", o.actorID)
+		}
 		return err
 	}
 
 	// ResetChangeTracking should always be called after a save operation succeeds
 	state.ResetChangeTracking()
+
+	// Refresh the metadata ETag for the next save. Multi does not return new
+	// ETags, so we read just the metadata row back. A read error here is
+	// non-fatal: the persisted save is durable, we just don't know the new
+	// version token; drop the cache and let the next operation reload. A nil
+	// response or nil ETag is fine: we record whatever the store returned
+	// and the next save proceeds with that (which falls through to a blind
+	// upsert if no ETag is known, the same semantics as a brand-new
+	// workflow).
+	// TODO: @joshvanl: add etag support to Multi and remove this extra read.
+	metaRes, metaErr := o.actorState.Get(ctx, &actorsapi.GetStateRequest{
+		ActorType: o.actorType,
+		ActorID:   o.actorID,
+		Key:       wfenginestate.MetadataKey,
+	}, false)
+	if metaErr != nil {
+		log.Debugf("Workflow actor '%s': failed to refresh metadata etag after save (%v); next operation will reload", o.actorID, metaErr)
+		o.invalidateCachedState()
+		return nil
+	}
+	if metaRes != nil {
+		state.SetMetadataETag(metaRes.ETag)
+	} else {
+		state.SetMetadataETag(nil)
+	}
 
 	// Update cached state
 	o.state = state
@@ -82,32 +239,7 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 	if o.eventSink != nil {
 		o.eventSink(o.ometa)
 	}
-
-	if len(o.streamFns) > 0 {
-		arstate, err := anypb.New(o.ometa)
-		if err != nil {
-			return err
-		}
-
-		streamReq := &internalsv1pb.InternalInvokeResponse{
-			Status:  &internalsv1pb.Status{Code: http.StatusOK},
-			Message: &commonv1pb.InvokeResponse{Data: arstate},
-		}
-
-		var ok bool
-		for idx, stream := range o.streamFns {
-			if stream.done.Load() {
-				delete(o.streamFns, idx)
-				continue
-			}
-
-			ok, err = stream.fn(streamReq)
-			if err != nil || ok {
-				stream.errCh <- err
-				delete(o.streamFns, idx)
-			}
-		}
-	}
+	o.notifyStreams()
 
 	return nil
 }
@@ -179,9 +311,18 @@ func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, star
 	output, _ := runtimestate.Output(rstate)
 	failureDetails, _ := runtimestate.FailureDetails(rstate)
 	var parentInstanceID string
+	var parentAppID *wrapperspb.StringValue
 	if se != nil && se.GetParentInstance() != nil && se.GetParentInstance().GetWorkflowInstance() != nil {
 		parentInstanceID = se.GetParentInstance().GetWorkflowInstance().GetInstanceId()
+		if se.GetParentInstance().GetAppID() != "" {
+			parentAppID = wrapperspb.String(se.GetParentInstance().GetAppID())
+		}
 	}
+	var startedAt *timestamppb.Timestamp
+	if t := runtimestate.GetStartedTime(rstate); !t.IsZero() {
+		startedAt = timestamppb.New(t)
+	}
+
 	return &backend.WorkflowMetadata{
 		InstanceId:       rstate.GetInstanceId(),
 		Name:             name,
@@ -194,6 +335,9 @@ func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, star
 		CustomStatus:     rstate.GetCustomStatus(),
 		FailureDetails:   failureDetails,
 		ParentInstanceId: parentInstanceID,
+		ParentAppId:      parentAppID,
+		Version:          wfenginestate.WorkflowVersion(rstate.GetOldEvents()),
+		StartedAt:        startedAt,
 	}
 }
 

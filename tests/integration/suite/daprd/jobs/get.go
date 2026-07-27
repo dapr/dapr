@@ -68,10 +68,10 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 			Schedule: new("@daily"),
 		},
 	}
-	_, err := client.ScheduleJobAlpha1(ctx, req)
+	_, err := client.ScheduleJob(ctx, req)
 	require.NoError(t, err)
 
-	_, err = client.GetJobAlpha1(ctx, &runtimev1pb.GetJobRequest{
+	_, err = client.GetJob(ctx, &runtimev1pb.GetJobRequest{
 		Name: "test",
 	})
 	require.NoError(t, err)

@@ -60,7 +60,7 @@ var (
 )
 
 func makeHTTPCall(jobName string, body []byte, methodType string) ([]byte, int, error) {
-	url := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/%s", daprPortHTTP, jobName)
+	url := fmt.Sprintf("http://localhost:%d/v1.0/jobs/%s", daprPortHTTP, jobName)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

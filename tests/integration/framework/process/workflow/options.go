@@ -17,6 +17,8 @@ import (
 	"testing"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -40,12 +42,18 @@ type daprdOptionConfig struct {
 }
 
 type options struct {
-	daprds int
-	skipDB bool
+	daprds          int
+	skipDB          bool
+	mtls            bool
+	signingDisabled []int
 
-	orchestrators []orchestratorConfig
-	activities    []activityConfig
-	daprdOptions  []daprdOptionConfig
+	orchestrators     []orchestratorConfig
+	activities        []activityConfig
+	daprdOptions      []daprdOptionConfig
+	schedulerOptions  []scheduler.Option
+	placementOptions  []placement.Option
+	schedulerInstance *scheduler.Scheduler
+	schedulerAddress  *string
 }
 
 func WithAddOrchestrator(t *testing.T, name string, or func(*task.WorkflowContext) (any, error)) Option {
@@ -100,5 +108,54 @@ func WithDaprdOptions(index int, opts ...daprd.Option) Option {
 func WithNoDB() Option {
 	return func(o *options) {
 		o.skipDB = true
+	}
+}
+
+// WithMTLS spins up a Sentry process for mTLS and enables the
+// WorkflowHistorySigning feature flag on every daprd in the workflow.
+func WithMTLS(t *testing.T) Option {
+	t.Helper()
+	return func(o *options) {
+		o.mtls = true
+	}
+}
+
+// WithSigningDisabledN excludes the daprd at the given index from having
+// the WorkflowHistorySigning feature flag set. Has no effect without
+// WithMTLS.
+func WithSigningDisabledN(index int) Option {
+	return func(o *options) {
+		o.signingDisabled = append(o.signingDisabled, index)
+	}
+}
+
+func WithSchedulerOptions(opts ...scheduler.Option) Option {
+	return func(o *options) {
+		o.schedulerOptions = append(o.schedulerOptions, opts...)
+	}
+}
+
+// WithSchedulerInstance lets a test supply a pre-constructed scheduler. The
+// framework uses this scheduler instead of creating its own and skips
+// adding it to its process list (the caller is responsible for that).
+// Combine with WithSchedulerAddress when interposing a proxy.
+func WithSchedulerInstance(sched *scheduler.Scheduler) Option {
+	return func(o *options) {
+		o.schedulerInstance = sched
+	}
+}
+
+// WithSchedulerAddress overrides the address used for the daprd's
+// --scheduler-host-address flag. Use this to point daprd at a proxy that
+// fronts the real scheduler.
+func WithSchedulerAddress(addr string) Option {
+	return func(o *options) {
+		o.schedulerAddress = &addr
+	}
+}
+
+func WithPlacementOptions(opts ...placement.Option) Option {
+	return func(o *options) {
+		o.placementOptions = append(o.placementOptions, opts...)
 	}
 }

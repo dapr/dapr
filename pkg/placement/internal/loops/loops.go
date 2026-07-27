@@ -108,6 +108,14 @@ type DisseminationTimeout struct {
 	Version uint64
 }
 
+// CoalesceFire is enqueued by the post-round coalesce timer. When it
+// arrives, the disseminator drains any waitingToDelete / waitingToDisseminate
+// accumulated during the coalesce window and starts a single follow-up
+// dissemination round covering all of them.
+type CoalesceFire struct {
+	*dissbase
+}
+
 type NamespaceTableRequest struct {
 	*dissbase
 	Table func(*v1pb.StatePlacementTable)

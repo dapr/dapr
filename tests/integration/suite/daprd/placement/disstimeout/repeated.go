@@ -47,7 +47,7 @@ type repeated struct {
 
 func (r *repeated) Setup(t *testing.T) []framework.Option {
 	r.place = placement.New(t,
-		placement.WithDisseminateTimeout(time.Second*7),
+		placement.WithDisseminateTimeout(time.Second*2),
 	)
 
 	r.actors = dactors.New(t,
@@ -112,10 +112,10 @@ func (r *repeated) Run(t *testing.T, ctx context.Context) {
 	}
 
 	connectBlocker(t, "blocker-1")
-	time.Sleep(9 * time.Second)
+	time.Sleep(4 * time.Second)
 	assertActorWorks(t)
 
 	connectBlocker(t, "blocker-2")
-	time.Sleep(9 * time.Second)
+	time.Sleep(4 * time.Second)
 	assertActorWorks(t)
 }

@@ -78,10 +78,21 @@ func (r *upgradereplica) Run(t *testing.T, ctx context.Context) {
 
 	r.fw.RestartAsReplica(t, ctx, "old")
 
-	require.NoError(t, r.fw.CurrentClient.RaiseEvent(ctx, id, "Continue"))
+	// After restart as "old", the workflow can stall immediately on replay
+	// due to the patch mismatch (history records patch1 from the "new" run,
+	// but "old" never calls IsPatched). Tolerate either ordering: if the
+	// event lands before the stall it is queued and resumes the workflow
+	// after the upgrade back to "new"; otherwise raise it after the upgrade.
+	err := r.fw.CurrentClient.RaiseEvent(ctx, id, "Continue")
+	if err != nil {
+		require.ErrorContains(t, err, "stalled")
+	}
 
 	r.fw.WaitForStalled(t, ctx, id)
 
 	r.fw.RestartAsReplica(t, ctx, "new")
+	if err != nil {
+		require.NoError(t, r.fw.CurrentClient.RaiseEvent(ctx, id, "Continue"))
+	}
 	r.fw.WaitForCompleted(t, ctx, id)
 }

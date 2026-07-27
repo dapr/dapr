@@ -107,6 +107,44 @@ func NewFromExisting(loadMap map[string]*Host, replicationFactor int64, virtualN
 	return newHash
 }
 
+// Equal reports whether two Hosts have the same identity in the placement
+// ring. The Load field is daprd-local and excluded from the comparison: two
+// Hosts representing the same placement-ring entry can carry different
+// daprd-observed load values without being considered different.
+func (h *Host) Equal(o *Host) bool {
+	if h == nil || o == nil {
+		return h == o
+	}
+	return h.Name == o.Name && h.Port == o.Port && h.AppID == o.AppID
+}
+
+// Equal reports whether two consistent hash rings would route actors to the
+// same set of hosts. Only the inputs to ring construction (loadMap entries
+// and replicationFactor) are compared; derived fields (hosts, sortedSet,
+// totalLoad) are skipped because they are deterministic functions of the
+// inputs and totalLoad is a daprd-local counter that does not affect routing.
+func (c *Consistent) Equal(o *Consistent) bool {
+	if c == nil || o == nil {
+		return c == o
+	}
+	if c.replicationFactor != o.replicationFactor {
+		return false
+	}
+	if len(c.loadMap) != len(o.loadMap) {
+		return false
+	}
+	for k, v := range c.loadMap {
+		ov, ok := o.loadMap[k]
+		if !ok {
+			return false
+		}
+		if !v.Equal(ov) {
+			return false
+		}
+	}
+	return true
+}
+
 // VirtualNodesCache data example:
 //
 //	100 -> (the replication factor)

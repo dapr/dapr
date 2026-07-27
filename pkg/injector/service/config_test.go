@@ -48,7 +48,6 @@ func TestGetInjectorConfig(t *testing.T) {
 		t.Setenv("KUBE_CLUSTER_DOMAIN", "cluster.local")
 		t.Setenv("ALLOWED_SERVICE_ACCOUNTS", "test1:test-service-account1,test2:test-service-account2")
 		t.Setenv("ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES", "namespace:test-service-account1,namespace2*:test-service-account2")
-
 		cfg, err := GetConfig()
 		require.NoError(t, err)
 		assert.Equal(t, "daprd-test-image", cfg.SidecarImage)
@@ -142,6 +141,46 @@ func TestGetInjectorConfig(t *testing.T) {
 			Err:  errors.New("invalid syntax"),
 		})
 		assert.Nil(t, cfg.GetRunAsGroup())
+	})
+}
+
+func TestNativeSidecarConfig(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-namespace")
+	t.Setenv("SIDECAR_IMAGE", "daprd-test-image")
+
+	t.Run("default is disabled", func(t *testing.T) {
+		t.Setenv("NATIVE_SIDECAR_ENABLED", "")
+		cfg, err := GetConfig()
+		require.NoError(t, err)
+		assert.False(t, cfg.GetNativeSidecarEnabled())
+	})
+
+	t.Run("enabled with truthy value", func(t *testing.T) {
+		t.Setenv("NATIVE_SIDECAR_ENABLED", "true")
+		cfg, err := GetConfig()
+		require.NoError(t, err)
+		assert.True(t, cfg.GetNativeSidecarEnabled())
+	})
+
+	t.Run("enabled with 1", func(t *testing.T) {
+		t.Setenv("NATIVE_SIDECAR_ENABLED", "1")
+		cfg, err := GetConfig()
+		require.NoError(t, err)
+		assert.True(t, cfg.GetNativeSidecarEnabled())
+	})
+
+	t.Run("disabled with falsy value", func(t *testing.T) {
+		t.Setenv("NATIVE_SIDECAR_ENABLED", "false")
+		cfg, err := GetConfig()
+		require.NoError(t, err)
+		assert.False(t, cfg.GetNativeSidecarEnabled())
+	})
+
+	t.Run("disabled with 0", func(t *testing.T) {
+		t.Setenv("NATIVE_SIDECAR_ENABLED", "0")
+		cfg, err := GetConfig()
+		require.NoError(t, err)
+		assert.False(t, cfg.GetNativeSidecarEnabled())
 	})
 }
 

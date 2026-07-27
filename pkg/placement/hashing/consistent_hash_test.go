@@ -127,3 +127,81 @@ func TestGetAndSetVirtualNodeCacheHashesConcurrently(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestHostEqual(t *testing.T) {
+	tests := map[string]struct {
+		a, b *Host
+		want bool
+	}{
+		"both nil":             {a: nil, b: nil, want: true},
+		"left nil":             {a: nil, b: NewHost("a", "1", 0, 1), want: false},
+		"right nil":            {a: NewHost("a", "1", 0, 1), b: nil, want: false},
+		"identical":            {a: NewHost("a", "1", 0, 1), b: NewHost("a", "1", 0, 1), want: true},
+		"different load equal": {a: NewHost("a", "1", 5, 1), b: NewHost("a", "1", 99, 1), want: true},
+		"different name":       {a: NewHost("a", "1", 0, 1), b: NewHost("b", "1", 0, 1), want: false},
+		"different appid":      {a: NewHost("a", "1", 0, 1), b: NewHost("a", "2", 0, 1), want: false},
+		"different port":       {a: NewHost("a", "1", 0, 1), b: NewHost("a", "1", 0, 2), want: false},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, tc.a.Equal(tc.b))
+		})
+	}
+}
+
+func TestConsistentEqual(t *testing.T) {
+	cache := NewVirtualNodesCache()
+	mk := func(loadMap map[string]*Host, rf int64) *Consistent {
+		return NewFromExisting(loadMap, rf, cache)
+	}
+
+	t.Run("both nil", func(t *testing.T) {
+		var a, b *Consistent
+		assert.True(t, a.Equal(b))
+	})
+
+	t.Run("left nil", func(t *testing.T) {
+		assert.False(t, (*Consistent)(nil).Equal(mk(map[string]*Host{}, 100)))
+	})
+
+	t.Run("identical empty", func(t *testing.T) {
+		a := mk(map[string]*Host{}, 100)
+		b := mk(map[string]*Host{}, 100)
+		assert.True(t, a.Equal(b))
+	})
+
+	t.Run("identical hosts", func(t *testing.T) {
+		a := mk(map[string]*Host{"h1": NewHost("h1", "id1", 0, 1)}, 100)
+		b := mk(map[string]*Host{"h1": NewHost("h1", "id1", 0, 1)}, 100)
+		assert.True(t, a.Equal(b))
+	})
+
+	t.Run("loads differ but identity same", func(t *testing.T) {
+		a := mk(map[string]*Host{"h1": NewHost("h1", "id1", 5, 1)}, 100)
+		b := mk(map[string]*Host{"h1": NewHost("h1", "id1", 17, 1)}, 100)
+		assert.True(t, a.Equal(b))
+	})
+
+	t.Run("different replication factor", func(t *testing.T) {
+		a := mk(map[string]*Host{"h1": NewHost("h1", "id1", 0, 1)}, 100)
+		b := mk(map[string]*Host{"h1": NewHost("h1", "id1", 0, 1)}, 200)
+		assert.False(t, a.Equal(b))
+	})
+
+	t.Run("different host count", func(t *testing.T) {
+		a := mk(map[string]*Host{
+			"h1": NewHost("h1", "id1", 0, 1),
+		}, 100)
+		b := mk(map[string]*Host{
+			"h1": NewHost("h1", "id1", 0, 1),
+			"h2": NewHost("h2", "id2", 0, 1),
+		}, 100)
+		assert.False(t, a.Equal(b))
+	})
+
+	t.Run("same names different appid", func(t *testing.T) {
+		a := mk(map[string]*Host{"h1": NewHost("h1", "old", 0, 1)}, 100)
+		b := mk(map[string]*Host{"h1": NewHost("h1", "new", 0, 1)}, 100)
+		assert.False(t, a.Equal(b))
+	})
+}

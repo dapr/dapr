@@ -149,6 +149,7 @@ func config(ctx context.Context, opts Options) (*embed.Config, error) {
 	config.SnapshotCount = opts.SnapshotCount
 	config.BackendBatchLimit = opts.BackendBatchLimit
 	config.BackendBatchInterval = backendBatchInterval
+	config.MaxTxnOps = opts.MaxTxnOps
 	config.ExperimentalBootstrapDefragThresholdMegabytes = opts.DefragThresholdMB
 
 	// Must be set to false to prevent aggressive election ticks where leader changes can happen

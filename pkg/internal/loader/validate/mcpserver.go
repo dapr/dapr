@@ -15,109 +15,103 @@ package validate
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
-
-	apiextinternal "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
-	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema/cel"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/apimachinery/pkg/util/validation/field"
-	celconfig "k8s.io/apiserver/pkg/apis/cel"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 
 	daprcrds "github.com/dapr/dapr/charts/dapr"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 )
 
-var (
-	celValidator *cel.Validator
-	initOnce     sync.Once
-	errInit      error
-)
+var mcpServerValidator = NewValidator("MCPServer", daprcrds.MCPServerCRD)
 
-func initValidator() {
-	// Decode the embedded CRD YAML.
-	scheme := runtime.NewScheme()
-	if err := apiextensionsv1.AddToScheme(scheme); err != nil {
-		errInit = fmt.Errorf("failed to add apiextensions to scheme: %w", err)
-		return
+// MCPServerSecurity validates security-sensitive fields on an MCPServer.
+// Called after CEL validation.
+// Rejects unsafe configurations that the schema alone cannot catch.
+func MCPServerSecurity(server *mcpserverapi.MCPServer, kubernetesMode bool) error {
+	// Stdio transport: reject in Kubernetes mode
+	switch {
+	case server.Spec.Endpoint.Stdio != nil:
+		if kubernetesMode {
+			return fmt.Errorf("MCPServer %q: stdio transport is not allowed in Kubernetes mode", server.Name)
+		}
+		if server.Spec.Endpoint.Stdio.Command == "" {
+			return fmt.Errorf("MCPServer %q: stdio.command must not be empty", server.Name)
+		}
+		if err := validateStdioCommand(server.Name, server.Spec.Endpoint.Stdio.Command); err != nil {
+			return err
+		}
+		for _, env := range server.Spec.Endpoint.Stdio.Env {
+			if strings.ContainsAny(env.Name, "=\n\x00") {
+				return fmt.Errorf("MCPServer %q: stdio.env name %q contains invalid characters", server.Name, env.Name)
+			}
+		}
+	// HTTP URL validation: only allow http:// and https:// schemes.
+	case server.Spec.Endpoint.StreamableHTTP != nil:
+		if err := validateMCPURL(server.Name, "streamableHTTP", server.Spec.Endpoint.StreamableHTTP.URL); err != nil {
+			return err
+		}
+	case server.Spec.Endpoint.SSE != nil:
+		if err := validateMCPURL(server.Name, "sse", server.Spec.Endpoint.SSE.URL); err != nil {
+			return err
+		}
 	}
-	codecs := serializer.NewCodecFactory(scheme)
-	obj, _, err := codecs.UniversalDeserializer().Decode(daprcrds.MCPServerCRD, nil, nil)
+
+	return nil
+}
+
+// validateStdioCommand rejects relative commands that resolve outside pwd.
+// Bare commands (no separator) are deferred to exec.LookPath at run time;
+// absolute paths are explicit user choice and pass through.
+func validateStdioCommand(serverName, command string) error {
+	if !strings.ContainsRune(command, filepath.Separator) || filepath.IsAbs(command) {
+		return nil
+	}
+	pwd, err := os.Getwd()
 	if err != nil {
-		errInit = fmt.Errorf("failed to decode CRD YAML: %w", err)
-		return
+		return fmt.Errorf("MCPServer %q: cannot determine working directory: %w", serverName, err)
 	}
-
-	crd, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
-	if !ok {
-		errInit = fmt.Errorf("decoded object is %T, not CustomResourceDefinition", obj)
-		return
-	}
-
-	if len(crd.Spec.Versions) == 0 || crd.Spec.Versions[0].Schema == nil ||
-		crd.Spec.Versions[0].Schema.OpenAPIV3Schema == nil {
-		errInit = errors.New("CRD has no OpenAPI schema")
-		return
-	}
-
-	v1Schema := crd.Spec.Versions[0].Schema.OpenAPIV3Schema
-
-	// Convert v1 JSONSchemaProps to internal.
-	var internalSchema apiextinternal.JSONSchemaProps
-	convertErr := apiextensionsv1.Convert_v1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(
-		v1Schema, &internalSchema, nil,
-	)
-	if convertErr != nil {
-		errInit = fmt.Errorf("failed to convert schema to internal: %w", convertErr)
-		return
-	}
-
-	// Build structural schema.
-	structural, err := structuralschema.NewStructural(&internalSchema)
+	abs, err := filepath.Abs(command)
 	if err != nil {
-		errInit = fmt.Errorf("failed to create structural schema: %w", err)
-		return
+		return fmt.Errorf("MCPServer %q: stdio.command not resolvable: %w", serverName, err)
 	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("MCPServer %q: stdio.command path: %w", serverName, err)
+		}
+		resolved = abs
+	}
+	rel, err := filepath.Rel(pwd, resolved)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return fmt.Errorf("MCPServer %q: stdio.command must not escape working directory", serverName)
+	}
+	return nil
+}
 
-	// Compile CEL validators from the embedded XValidation rules.
-	celValidator = cel.NewValidator(structural, true, celconfig.PerCallLimit)
+func validateMCPURL(serverName, transport, rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("MCPServer %q: %s.url is not a valid URL: %w", serverName, transport, err)
+	}
+	switch u.Scheme {
+	case "http", "https":
+		// ok
+	default:
+		return fmt.Errorf("MCPServer %q: %s.url scheme must be http or https, got %q", serverName, transport, u.Scheme)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("MCPServer %q: %s.url must have a host", serverName, transport)
+	}
+	return nil
 }
 
 // MCPServer validates an MCPServer against the CEL rules and schema
 // constraints embedded in the CRD. This provides the same validation in
 // standalone mode that the Kubernetes API server provides via CRD admission.
 func MCPServer(ctx context.Context, server *mcpserverapi.MCPServer) error {
-	initOnce.Do(initValidator)
-	if errInit != nil {
-		return fmt.Errorf("CEL validator initialization failed: %w", errInit)
-	}
-
-	// Convert typed struct to unstructured map for CEL evaluation.
-	raw, err := json.Marshal(server)
-	if err != nil {
-		return fmt.Errorf("failed to marshal MCPServer: %w", err)
-	}
-	var obj any
-	if err := json.Unmarshal(raw, &obj); err != nil {
-		return fmt.Errorf("failed to unmarshal MCPServer: %w", err)
-	}
-
-	errs, _ := celValidator.Validate(
-		ctx,
-		field.NewPath(""),
-		nil,
-		obj,
-		nil,
-		celconfig.RuntimeCELCostBudget,
-	)
-
-	if len(errs) > 0 {
-		return errs.ToAggregate()
-	}
-	return nil
+	return mcpServerValidator.Validate(ctx, server)
 }

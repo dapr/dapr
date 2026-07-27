@@ -27,6 +27,24 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
 )
 
+// generationCounter assigns a unique, monotonically increasing Generation to
+// every resource emitted by the disk hot-reload loader. This gives
+// self-hosted mode the same "newer vs older" semantics as Kubernetes'
+// metadata.generation, so the reconciler can reject out-of-order events.
+var generationCounter atomic.Int64
+
+// stampGeneration sets a monotonic Generation on each resource. The concrete
+// types (Component, Subscription, ...) embed metav1.ObjectMeta which exposes
+// SetGeneration via a pointer receiver; we use a generic type assertion so
+// this helper works for every resource type.
+func stampGeneration[T differ.Resource](resources []T) {
+	for i := range resources {
+		if setter, ok := any(&resources[i]).(interface{ SetGeneration(int64) }); ok {
+			setter.SetGeneration(generationCounter.Add(1))
+		}
+	}
+}
+
 // resource is a generic implementation of a disk resource loader. resource
 // will watch and load resources from disk.
 type resource[T differ.Resource] struct {
@@ -82,6 +100,8 @@ func (r *resource[T]) list(ctx context.Context, dirData *dirdata.DirData) (*diff
 	if err != nil {
 		return nil, err
 	}
+
+	stampGeneration(remotes)
 
 	return &differ.LocalRemoteResources[T]{
 		Local:  r.store.List(),

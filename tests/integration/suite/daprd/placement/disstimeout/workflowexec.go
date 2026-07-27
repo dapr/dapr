@@ -68,7 +68,7 @@ func (w *workflowexec) Setup(t *testing.T) []framework.Option {
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	sched := scheduler.New(t)
 	w.place = placement.New(t,
-		placement.WithDisseminateTimeout(time.Second*7),
+		placement.WithDisseminateTimeout(time.Second*2),
 	)
 	w.daprd = daprd.New(t,
 		daprd.WithAppPort(srv.Port()),
@@ -152,7 +152,7 @@ func (w *workflowexec) Run(t *testing.T, ctx context.Context) {
 
 	for i := range 2 {
 		connectBlocker(t, fmt.Sprintf("blocker-%d", i))
-		time.Sleep(9 * time.Second)
+		time.Sleep(4 * time.Second)
 	}
 
 	instanceID := w.startWorkflow(ctx, t, "TimeoutWorkflow", "World")

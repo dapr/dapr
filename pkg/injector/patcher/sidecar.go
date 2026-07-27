@@ -85,14 +85,14 @@ type SidecarConfig struct {
 	SidecarMemoryRequest                string  `annotation:"dapr.io/sidecar-memory-request"`
 	SidecarMemoryLimit                  string  `annotation:"dapr.io/sidecar-memory-limit"`
 	SidecarListenAddresses              string  `annotation:"dapr.io/sidecar-listen-addresses" default:"[::1],127.0.0.1"`
-	SidecarLivenessProbeDelaySeconds    int32   `annotation:"dapr.io/sidecar-liveness-probe-delay-seconds"    default:"3"`
+	SidecarLivenessProbeDelaySeconds    int32   `annotation:"dapr.io/sidecar-liveness-probe-delay-seconds"    default:"180"`
 	SidecarLivenessProbeTimeoutSeconds  int32   `annotation:"dapr.io/sidecar-liveness-probe-timeout-seconds"  default:"3"`
-	SidecarLivenessProbePeriodSeconds   int32   `annotation:"dapr.io/sidecar-liveness-probe-period-seconds"   default:"6"`
-	SidecarLivenessProbeThreshold       int32   `annotation:"dapr.io/sidecar-liveness-probe-threshold"        default:"3"`
-	SidecarReadinessProbeDelaySeconds   int32   `annotation:"dapr.io/sidecar-readiness-probe-delay-seconds"   default:"3"`
-	SidecarReadinessProbeTimeoutSeconds int32   `annotation:"dapr.io/sidecar-readiness-probe-timeout-seconds" default:"3"`
-	SidecarReadinessProbePeriodSeconds  int32   `annotation:"dapr.io/sidecar-readiness-probe-period-seconds"  default:"6"`
-	SidecarReadinessProbeThreshold      int32   `annotation:"dapr.io/sidecar-readiness-probe-threshold"       default:"3"`
+	SidecarLivenessProbePeriodSeconds   int32   `annotation:"dapr.io/sidecar-liveness-probe-period-seconds"   default:"10"`
+	SidecarLivenessProbeThreshold       int32   `annotation:"dapr.io/sidecar-liveness-probe-threshold"        default:"5"`
+	SidecarReadinessProbeDelaySeconds   int32   `annotation:"dapr.io/sidecar-readiness-probe-delay-seconds"   default:"1"`
+	SidecarReadinessProbeTimeoutSeconds int32   `annotation:"dapr.io/sidecar-readiness-probe-timeout-seconds" default:"1"`
+	SidecarReadinessProbePeriodSeconds  int32   `annotation:"dapr.io/sidecar-readiness-probe-period-seconds"  default:"1"`
+	SidecarReadinessProbeThreshold      int32   `annotation:"dapr.io/sidecar-readiness-probe-threshold"       default:"5"`
 	SidecarImage                        string  `annotation:"dapr.io/sidecar-image"`
 	SidecarSeccompProfileType           string  `annotation:"dapr.io/sidecar-seccomp-profile-type"`
 	HTTPMaxRequestSize                  *int    `annotation:"dapr.io/http-max-request-size"` // Legacy flag
@@ -112,6 +112,7 @@ type SidecarConfig struct {
 	AppHealthProbeTimeout               int32   `annotation:"dapr.io/app-health-probe-timeout" default:"500"` // In milliseconds
 	AppHealthThreshold                  int32   `annotation:"dapr.io/app-health-threshold" default:"3"`
 	PlacementAddress                    string  `annotation:"dapr.io/placement-host-address"`
+	ActorsDisseminateTimeout            *string `annotation:"dapr.io/actors-disseminate-timeout"`
 	SchedulerAddress                    *string `annotation:"dapr.io/scheduler-host-address"`
 	SchedulerEnabled                    bool
 	PluggableComponents                 string  `annotation:"dapr.io/pluggable-components"`
@@ -122,6 +123,7 @@ type SidecarConfig struct {
 	SentryRequestJwtAudiences           string  `annotation:"dapr.io/sentry-request-jwt-audiences"`
 	DaprServiceAnnotations              string  `annotation:"dapr.io/sidecar-svc-annotations"`
 	DisableInitEndpoint                 *string `annotation:"dapr.io/disable-init-endpoints"`
+	EnableNativeSidecar                 bool    `annotation:"dapr.io/enable-native-sidecar"`
 
 	pod *corev1.Pod
 }

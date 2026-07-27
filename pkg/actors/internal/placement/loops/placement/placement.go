@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/healthz"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/retry"
 	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
@@ -116,6 +117,8 @@ func (p *placement) Handle(ctx context.Context, event loops.EventPlace) error {
 		p.handleUpdateTypes(e)
 	case *loops.SetDrainOngoingCallTimeout:
 		p.handleSetDrainOngoingCallTimeout(e)
+	case *loops.SetEntityDrainOngoingCallTimeouts:
+		p.inflight.SetEntityDrainOngoingCallTimeouts(e.Timeouts)
 	case *loops.Shutdown:
 		p.handleShutdown(e)
 	default:
@@ -174,11 +177,15 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Second / 2):
+		case <-time.After(retry.Jitter(time.Second/2, time.Second/4)):
 		}
 	}
 
-	log.Infof("Connected to placement service: %s", p.connector.Address())
+	if recon.TransientPrior {
+		log.Debugf("Connected to placement service: %s", p.connector.Address())
+	} else {
+		log.Infof("Connected to placement service: %s", p.connector.Address())
+	}
 
 	p.idx++
 
@@ -207,7 +214,11 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		p.host.Entities = *recon.ActorTypes
 	}
 
-	log.Infof("Reporting initial host to placement service with initial types %v", p.host.GetEntities())
+	if recon.TransientPrior {
+		log.Debugf("Reporting initial host to placement service with initial types %v", p.host.GetEntities())
+	} else {
+		log.Infof("Reporting initial host to placement service with initial types %v", p.host.GetEntities())
+	}
 	p.dissLoop.Enqueue(&loops.ReportHost{
 		Host: proto.Clone(p.host).(*v1pb.Host),
 	})
@@ -242,8 +253,18 @@ func (p *placement) handleCloseStream(ctx context.Context, closeStream *loops.Co
 		return ctx.Err()
 	}
 
-	log.Infof("Placement stream closed: %v. Reconnecting...", closeStream.Error)
-	return p.handleReconnect(ctx, new(loops.PlacementReconnect))
+	// Classify this close so the matching reconnect's per-cycle log lines
+	// (Connected to placement service, Reporting initial host) follow the
+	// same level. Threaded onto the PlacementReconnect event we hand to
+	// handleReconnect rather than carried as receiver state, so there's no
+	// stale carry-over between unrelated close events.
+	transient := loops.IsTransientLeaderError(closeStream.Error)
+	if transient {
+		log.Debugf("Placement stream closed: %v. Reconnecting...", closeStream.Error)
+	} else {
+		log.Infof("Placement stream closed: %v. Reconnecting...", closeStream.Error)
+	}
+	return p.handleReconnect(ctx, &loops.PlacementReconnect{TransientPrior: transient})
 }
 
 func (p *placement) handleShutdown(shutdown *loops.Shutdown) {

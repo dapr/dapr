@@ -120,16 +120,17 @@ func Run() {
 			}
 
 			place, serr = placement.New(placement.Options{
-				NodeID:             opts.RaftID,
-				Port:               opts.PlacementPort,
-				ListenAddress:      opts.PlacementListenAddress,
-				Security:           secHandler,
-				Healthz:            healthz,
-				KeepAliveTime:      opts.KeepAliveTime,
-				KeepAliveTimeout:   opts.KeepAliveTimeout,
-				ReplicationFactor:  int64(opts.ReplicationFactor),
-				Peers:              opts.RaftPeers,
-				DisseminateTimeout: opts.DisseminateTimeout,
+				NodeID:                    opts.RaftID,
+				Port:                      opts.PlacementPort,
+				ListenAddress:             opts.PlacementListenAddress,
+				Security:                  secHandler,
+				Healthz:                   healthz,
+				KeepAliveTime:             opts.KeepAliveTime,
+				KeepAliveTimeout:          opts.KeepAliveTimeout,
+				ReplicationFactor:         int64(opts.ReplicationFactor),
+				Peers:                     opts.RaftPeers,
+				DisseminateTimeout:        opts.DisseminateTimeout,
+				DisseminateCoalesceWindow: opts.DisseminateCoalesceWindow,
 			})
 			if serr != nil {
 				return serr

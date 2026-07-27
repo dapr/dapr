@@ -81,7 +81,7 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 
 	name1 := uuid.New().String()
 	name2 := uuid.New().String()
-	_, err := s.daprdA.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+	_, err := s.daprdA.GRPCClient(t, ctx).ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name: name1, Schedule: new("@every 1s"),
 			DueTime: new(time.Now().Format(time.RFC3339)),

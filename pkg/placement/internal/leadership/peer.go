@@ -17,6 +17,8 @@ import (
 	"context"
 	"net"
 	"time"
+
+	"github.com/dapr/dapr/pkg/retry"
 )
 
 const (
@@ -37,7 +39,7 @@ func (s *Leadership) resolveRaftAdvertiseAddr(ctx context.Context, bindAddr stri
 		select {
 		case <-ctx.Done():
 			return nil, err
-		case <-time.After(nameResolveRetryInterval):
+		case <-time.After(retry.Jitter(nameResolveRetryInterval, nameResolveRetryInterval/2)):
 			// nop
 		}
 	}

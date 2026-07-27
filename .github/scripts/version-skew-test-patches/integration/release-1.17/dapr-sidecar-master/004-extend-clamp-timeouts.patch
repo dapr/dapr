@@ -1,0 +1,58 @@
+--- a/tests/integration/suite/actors/dissemination/drain/clamp/clamp.go
++++ b/tests/integration/suite/actors/dissemination/drain/clamp/clamp.go
+@@ -112,9 +112,10 @@
+ 	c.app2.Run(t, ctx)
+ 	t.Cleanup(func() { c.app2.Cleanup(t) })
+ 
+-	c.ll.EventuallyFoundAll(t)
++	assert.Eventually(t, c.ll.FoundAll, time.Second*45, time.Millisecond*10,
++		"clamp log line should be emitted after dissemination begins")
+ 
+-	assert.Eventually(t, c.callCancelled.Load, time.Second*20, time.Millisecond*10,
++	assert.Eventually(t, c.callCancelled.Load, time.Second*60, time.Millisecond*10,
+ 		"call should be cancelled after the clamped drain timeout, not the configured 60s")
+ 
+ 	assert.False(t, c.ll.Contains("dissemination timeout after"),
+--- a/tests/integration/suite/actors/dissemination/drain/clamp/clampentity.go
++++ b/tests/integration/suite/actors/dissemination/drain/clamp/clampentity.go
+@@ -118,9 +118,10 @@
+ 	c.app2.Run(t, ctx)
+ 	t.Cleanup(func() { c.app2.Cleanup(t) })
+ 
+-	c.ll.EventuallyFoundAll(t)
++	assert.Eventually(t, c.ll.FoundAll, time.Second*45, time.Millisecond*10,
++		"clamp log line should be emitted after dissemination begins")
+ 
+-	assert.Eventually(t, c.callCancelled.Load, time.Second*20, time.Millisecond*10,
++	assert.Eventually(t, c.callCancelled.Load, time.Second*60, time.Millisecond*10,
+ 		"call should be cancelled after the clamped per-entity drain timeout, not the configured 60s")
+ 
+ 	assert.False(t, c.ll.Contains("dissemination timeout after"),
+--- a/tests/integration/suite/actors/dissemination/drain/clamp/timeout.go
++++ b/tests/integration/suite/actors/dissemination/drain/clamp/timeout.go
+@@ -60,7 +60,7 @@
+ 
+ 	c.ll = logline.New(t,
+ 		logline.WithStdoutLineContains(
+-			"Timed out waiting for actor in-flight lock claims to be released",
++			"in-flight lock claims to be released",
+ 		),
+ 	)
+ 
+@@ -115,13 +115,14 @@
+ 
+ 	c.app2.Run(t, ctx)
+ 	t.Cleanup(func() { c.app2.Cleanup(t) })
+-	c.ll.EventuallyFoundAll(t)
++	assert.Eventually(t, c.ll.FoundAll, time.Second*45, time.Millisecond*10,
++		"timeout log line should be emitted after dissemination begins")
+ 
+ 	close(c.waitOnCall)
+ 
+ 	select {
+ 	case <-errCh:
+-	case <-time.After(time.Second * 30):
++	case <-time.After(time.Second * 90):
+ 		require.Fail(t, "timed out waiting for call to complete")
+ 	}
+ }

@@ -33,6 +33,7 @@ type options struct {
 	etcdClientPort           int
 	namespace                string
 	etcdBackendBatchInterval string
+	etcdSpaceQuota           *string
 
 	embed           *bool
 	clientEndpoints *[]string
@@ -172,6 +173,15 @@ func WithLogLineStderr(ll *logline.LogLine) Option {
 func WithWorkers(workers *uint32) Option {
 	return func(o *options) {
 		o.workers = workers
+	}
+}
+
+// WithEtcdSpaceQuota sets the --etcd-space-quota flag. Accepts any value
+// parsable by k8s resource.ParseQuantity (e.g. "16Mi", "1Gi"). Used by tests
+// that need to exercise etcd quota-exceeded behaviour.
+func WithEtcdSpaceQuota(quota string) Option {
+	return func(o *options) {
+		o.etcdSpaceQuota = &quota
 	}
 }
 

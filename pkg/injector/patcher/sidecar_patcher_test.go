@@ -207,6 +207,22 @@ func TestPodNeedsPatching(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "false if daprd already exists in init containers",
+			want: false,
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotations.KeyEnabled: "yes",
+					},
+				},
+				Spec: corev1.PodSpec{
+					InitContainers: []corev1.Container{
+						{Name: "daprd"},
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -286,6 +302,87 @@ func TestPatching(t *testing.T) {
 	}
 
 	tests := []testCase{
+		{
+			name: "native sidecar injects into init containers",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.EnableNativeSidecar = true
+			},
+			assertFn: func(t *testing.T, pod *corev1.Pod) {
+				// App container should still be in spec.containers
+				assert.Len(t, pod.Spec.Containers, 1)
+				assert.Equal(t, "appcontainer", pod.Spec.Containers[0].Name)
+
+				// Daprd should be in spec.initContainers
+				require.Len(t, pod.Spec.InitContainers, 1)
+				assert.Equal(t, "daprd", pod.Spec.InitContainers[0].Name)
+
+				// RestartPolicy must be Always for native sidecar
+				require.NotNil(t, pod.Spec.InitContainers[0].RestartPolicy)
+				assert.Equal(t, corev1.ContainerRestartPolicyAlways, *pod.Spec.InitContainers[0].RestartPolicy)
+
+				// Labels should still be set
+				assert.Equal(t, "true", pod.Labels[injectorConsts.SidecarInjectedLabel])
+				assert.Equal(t, "myapp", pod.Labels[injectorConsts.SidecarAppIDLabel])
+			},
+		},
+		{
+			name: "native sidecar via annotation",
+			podModifierFn: func(pod *corev1.Pod) {
+				pod.Annotations[annotations.KeyEnableNativeSidecar] = "true"
+			},
+			assertFn: func(t *testing.T, pod *corev1.Pod) {
+				assert.Len(t, pod.Spec.Containers, 1)
+				require.Len(t, pod.Spec.InitContainers, 1)
+				assert.Equal(t, "daprd", pod.Spec.InitContainers[0].Name)
+				require.NotNil(t, pod.Spec.InitContainers[0].RestartPolicy)
+				assert.Equal(t, corev1.ContainerRestartPolicyAlways, *pod.Spec.InitContainers[0].RestartPolicy)
+			},
+		},
+		{
+			name: "native sidecar preserves existing init containers",
+			podModifierFn: func(pod *corev1.Pod) {
+				pod.Spec.InitContainers = []corev1.Container{
+					{Name: "init-migrations", Image: "migrations:1.0"},
+				}
+			},
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.EnableNativeSidecar = true
+			},
+			assertFn: func(t *testing.T, pod *corev1.Pod) {
+				assert.Len(t, pod.Spec.Containers, 1)
+				require.Len(t, pod.Spec.InitContainers, 2)
+				assert.Equal(t, "init-migrations", pod.Spec.InitContainers[0].Name)
+				assert.Equal(t, "daprd", pod.Spec.InitContainers[1].Name)
+				require.NotNil(t, pod.Spec.InitContainers[1].RestartPolicy)
+				assert.Equal(t, corev1.ContainerRestartPolicyAlways, *pod.Spec.InitContainers[1].RestartPolicy)
+			},
+		},
+		{
+			name: "non-native sidecar injects into containers as before",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.EnableNativeSidecar = false
+			},
+			assertFn: func(t *testing.T, pod *corev1.Pod) {
+				assert.Len(t, pod.Spec.Containers, 2)
+				assert.Equal(t, "daprd", pod.Spec.Containers[1].Name)
+				assert.Nil(t, pod.Spec.Containers[1].RestartPolicy)
+				assert.Empty(t, pod.Spec.InitContainers)
+			},
+		},
+		{
+			name: "native sidecar preserves graceful shutdown",
+			podModifierFn: func(pod *corev1.Pod) {
+				pod.Annotations[annotations.KeyGracefulShutdownSeconds] = "30"
+			},
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.EnableNativeSidecar = true
+			},
+			assertFn: func(t *testing.T, pod *corev1.Pod) {
+				require.Len(t, pod.Spec.InitContainers, 1)
+				args := strings.Join(pod.Spec.InitContainers[0].Args, " ")
+				assert.Contains(t, args, "--dapr-graceful-shutdown-seconds 30")
+			},
+		},
 		{
 			name: "basic test",
 			assertFn: func(t *testing.T, pod *corev1.Pod) {

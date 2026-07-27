@@ -624,60 +624,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 	})
 }
 
-func TestNormalizeOperation(t *testing.T) {
-	t.Run("normal path no slash", func(t *testing.T) {
-		p := "path"
-		p, _ = normalizeOperation(p)
-
-		assert.Equal(t, "path", p)
-	})
-
-	t.Run("normal path caps", func(t *testing.T) {
-		p := "Path"
-		p, _ = normalizeOperation(p)
-
-		assert.Equal(t, "Path", p)
-	})
-
-	t.Run("single slash", func(t *testing.T) {
-		p := "/path"
-		p, _ = normalizeOperation(p)
-
-		assert.Equal(t, "/path", p)
-	})
-
-	t.Run("multiple slashes", func(t *testing.T) {
-		p := "///path"
-		p, _ = normalizeOperation(p)
-
-		assert.Equal(t, "/path", p)
-	})
-
-	t.Run("prefix", func(t *testing.T) {
-		p := "../path"
-		p, _ = normalizeOperation(p)
-
-		assert.Equal(t, "path", p)
-	})
-
-	t.Run("encoded", func(t *testing.T) {
-		p := "path%72"
-		p, _ = normalizeOperation(p)
-
-		assert.Equal(t, "pathr", p)
-	})
-
-	t.Run("normal multiple paths", func(t *testing.T) {
-		p := "path1/path2/path3"
-		p, _ = normalizeOperation(p)
-
-		assert.Equal(t, "path1/path2/path3", p)
-	})
-
-	t.Run("normal multiple paths leading slash", func(t *testing.T) {
-		p := "/path1/path2/path3"
-		p, _ = normalizeOperation(p)
-
-		assert.Equal(t, "/path1/path2/path3", p)
-	})
-}
+// normalizeOperation was removed — the ACL no longer normalizes at
+// runtime. Normalization is the responsibility of the service invocation
+// entry points (NormalizeMethod). The behavior previously tested here is
+// covered by pkg/method.TestNormalizeMethod.

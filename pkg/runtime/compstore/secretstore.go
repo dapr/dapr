@@ -14,6 +14,8 @@ limitations under the License.
 package compstore
 
 import (
+	"context"
+	"fmt"
 	"maps"
 
 	"github.com/dapr/components-contrib/secretstores"
@@ -54,4 +56,20 @@ func (c *ComponentStore) SecretStoresLen() int {
 	defer c.lock.RUnlock()
 
 	return len(c.secrets)
+}
+
+func (c *ComponentStore) GetSecret(ctx context.Context, storeName, secretName, secretKey string) (string, error) {
+	store, ok := c.GetSecretStore(storeName)
+	if !ok {
+		return "", fmt.Errorf("secret store %q not found", storeName)
+	}
+	resp, err := store.GetSecret(ctx, secretstores.GetSecretRequest{Name: secretName})
+	if err != nil {
+		return "", fmt.Errorf("failed to get secret %q from store %q: %w", secretName, storeName, err)
+	}
+	val, ok := resp.Data[secretKey]
+	if !ok {
+		return "", fmt.Errorf("key %q not found in secret %q (store: %q)", secretKey, secretName, storeName)
+	}
+	return val, nil
 }

@@ -275,20 +275,22 @@ func New(t *testing.T, fopts ...Option) *Operator {
 		}),
 		procgrpc.WithRegister(func(s *grpc.Server) {
 			srv := &server{
-				componentUpdateFn:     opts.componentUpdateFn,
-				configurationUpdateFn: opts.configurationUpdateFn,
-				getConfigurationFn:    opts.getConfigurationFn,
-				getResiliencyFn:       opts.getResiliencyFn,
-				httpEndpointUpdateFn:  opts.httpEndpointUpdateFn,
-				listComponentsFn:      opts.listComponentsFn,
-				listHTTPEndpointsFn:   opts.listHTTPEndpointsFn,
-				listMCPServersFn:      opts.listMCPServersFn,
-				listResiliencyFn:      opts.listResiliencyFn,
-				listSubscriptionsFn:   opts.listSubscriptionsFn,
-				listSubscriptionsV2Fn: opts.listSubscriptionsV2Fn,
-				mcpServerUpdateFn:     opts.mcpServerUpdateFn,
-				resiliencyUpdateFn:    opts.resiliencyUpdateFn,
-				subscriptionUpdateFn:  opts.subscriptionUpdateFn,
+				componentUpdateFn:            opts.componentUpdateFn,
+				configurationUpdateFn:        opts.configurationUpdateFn,
+				getConfigurationFn:           opts.getConfigurationFn,
+				getResiliencyFn:              opts.getResiliencyFn,
+				httpEndpointUpdateFn:         opts.httpEndpointUpdateFn,
+				listComponentsFn:             opts.listComponentsFn,
+				listHTTPEndpointsFn:          opts.listHTTPEndpointsFn,
+				listMCPServersFn:             opts.listMCPServersFn,
+				listResiliencyFn:             opts.listResiliencyFn,
+				listSubscriptionsFn:          opts.listSubscriptionsFn,
+				listSubscriptionsV2Fn:        opts.listSubscriptionsV2Fn,
+				mcpServerUpdateFn:            opts.mcpServerUpdateFn,
+				resiliencyUpdateFn:           opts.resiliencyUpdateFn,
+				subscriptionUpdateFn:         opts.subscriptionUpdateFn,
+				listWorkflowAccessPoliciesFn: opts.listWorkflowAccessPoliciesFn,
+				workflowAccessPolicyUpdateFn: opts.workflowAccessPolicyUpdateFn,
 			}
 
 			operatorv1.RegisterOperatorServer(s, srv)
@@ -382,6 +384,13 @@ func (o *Operator) AddMCPServers(servers ...mcpserverapi.MCPServer) {
 	o.lock.Lock()
 	defer o.lock.Unlock()
 	o.currentMCPServers = append(o.currentMCPServers, servers...)
+}
+
+// SetMCPServers sets the list of installed MCPServers.
+func (o *Operator) SetMCPServers(servers ...mcpserverapi.MCPServer) {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+	o.currentMCPServers = servers
 }
 
 func (o *Operator) MCPServerUpdateEvent(t *testing.T, ctx context.Context, event *MCPServerUpdateEvent) {

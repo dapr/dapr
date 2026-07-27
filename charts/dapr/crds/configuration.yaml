@@ -548,6 +548,40 @@ spec:
               workflow:
                 description: WorkflowSpec defines the configuration for Dapr workflows.
                 properties:
+                  activityConcurrencyLimits:
+                    description: |-
+                      activityConcurrencyLimits defines per-activity-name concurrency limits
+                      enforced globally across all replicas by the scheduler.
+                    items:
+                      description: |-
+                        NamedConcurrencyLimit defines a per-name concurrency limit for a specific
+                        workflow or activity name.
+                      properties:
+                        maxConcurrent:
+                          description: |-
+                            MaxConcurrent is the maximum number of concurrent invocations across all
+                            replicas.
+                          format: int32
+                          type: integer
+                        name:
+                          description: Name is the workflow or activity name to limit.
+                          type: string
+                      type: object
+                    type: array
+                  globalMaxConcurrentActivityInvocations:
+                    description: |-
+                      globalMaxConcurrentActivityInvocations is the maximum number of concurrent
+                      activity invocations across all replicas, enforced by the scheduler.
+                      If omitted, no global maximum will be enforced.
+                    format: int32
+                    type: integer
+                  globalMaxConcurrentWorkflowInvocations:
+                    description: |-
+                      globalMaxConcurrentWorkflowInvocations is the maximum number of concurrent
+                      workflow invocations across all replicas, enforced by the scheduler.
+                      If omitted, no global maximum will be enforced.
+                    format: int32
+                    type: integer
                   maxConcurrentActivityInvocations:
                     description: |-
                       maxConcurrentActivityInvocations is the maximum number of concurrent activities that can be processed by a single Dapr instance.
@@ -589,6 +623,26 @@ spec:
                           Terminated terminal state.
                         type: string
                     type: object
+                  workflowConcurrencyLimits:
+                    description: |-
+                      workflowConcurrencyLimits defines per-workflow-name concurrency limits
+                      enforced globally across all replicas by the scheduler.
+                    items:
+                      description: |-
+                        NamedConcurrencyLimit defines a per-name concurrency limit for a specific
+                        workflow or activity name.
+                      properties:
+                        maxConcurrent:
+                          description: |-
+                            MaxConcurrent is the maximum number of concurrent invocations across all
+                            replicas.
+                          format: int32
+                          type: integer
+                        name:
+                          description: Name is the workflow or activity name to limit.
+                          type: string
+                      type: object
+                    type: array
                 type: object
             type: object
         type: object

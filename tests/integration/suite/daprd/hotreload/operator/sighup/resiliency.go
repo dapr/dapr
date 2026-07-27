@@ -60,13 +60,6 @@ func (r *resiliency) Setup(t *testing.T) []framework.Option {
 
 	r.operator = operator.New(t,
 		operator.WithSentry(snt),
-		operator.WithGetConfigurationFn(func(_ context.Context, _ *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
-			return &operatorv1.GetConfigurationResponse{
-				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"features":[{"name":"HotReload","enabled":true}]}}`,
-				),
-			}, nil
-		}),
 		operator.WithListResiliencyFn(func(_ context.Context, _ *operatorv1.ListResiliencyRequest) (*operatorv1.ListResiliencyResponse, error) {
 			return new(operatorv1.ListResiliencyResponse), nil
 		}),
@@ -110,7 +103,6 @@ func (r *resiliency) Setup(t *testing.T) []framework.Option {
 
 	r.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
 			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", r.trustAnchor),
 			exec.WithStdout(r.logOut),

@@ -68,6 +68,12 @@ const (
 	DefaultReadBufferSize = 4 << 10
 	// DefaultGracefulShutdownDuration is the default option for the duration of the graceful shutdown.
 	DefaultGracefulShutdownDuration = time.Second * 5
+	// DefaultActorsDisseminationTimeout is the default daprd-side timeout
+	// for a placement LOCK -> UPDATE -> UNLOCK round. Must be larger than
+	// the placement service --disseminate-timeout (8s default) so that
+	// daprd does not reset the stream before placement can finish a
+	// legitimately slow round.
+	DefaultActorsDisseminationTimeout = time.Second * 30
 	// DefaultAppHealthCheckPath is the default path for HTTP health checks.
 	DefaultAppHealthCheckPath = "/healthz"
 	// DefaultChannelAddress is the default local network address that user application listen on.
@@ -108,6 +114,7 @@ type Config struct {
 	DaprGracefulShutdownSeconds   int
 	DaprBlockShutdownDuration     *time.Duration
 	ActorsService                 string
+	ActorsDisseminationTimeout    time.Duration
 	RemindersService              string
 	SchedulerAddress              []string
 	SchedulerStreams              uint
@@ -129,6 +136,9 @@ type Config struct {
 	Healthz                       healthz.Healthz
 	WorkflowEventSink             orchestrator.EventSink
 	DisableInitEndpoints          []string
+	// HotReloadReconcileInterval overrides the hot-reload backup reconcile
+	// period. Zero uses the reconciler default (60s).
+	HotReloadReconcileInterval time.Duration
 }
 
 type internalConfig struct {
@@ -145,6 +155,7 @@ type internalConfig struct {
 	appConnectionConfig          config.AppConnectionConfig
 	mode                         modes.DaprMode
 	actorsService                string
+	actorsDisseminationTimeout   time.Duration
 	remindersService             string
 	schedulerAddress             []string
 	schedulerStreams             uint
@@ -167,6 +178,7 @@ type internalConfig struct {
 	outboundHealthz              healthz.Healthz
 	workflowEventSink            orchestrator.EventSink
 	disableInitEndpoints         []string
+	hotReloadReconcileInterval   time.Duration
 }
 
 func (i internalConfig) SchedulerEnabled() bool {
@@ -308,6 +320,17 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		}
 	}
 
+	// Attach the workload's SPIFFE identity to the context of every component
+	// operation. The resiliency runner is the common chokepoint for component
+	// outbound/inbound calls, so injecting here reaches each building-block
+	// component (state, pubsub, bindings, secrets, etc.) regardless of whether
+	// the call originated from an API request or a background loop. Components
+	// extract the X.509/JWT SVID source from the context to authenticate to
+	// their backing infrastructure service.
+	if resiliencyProvider != nil && cfg.Security != nil {
+		resiliencyProvider.SetComponentContextDecorator(cfg.Security.WithSVIDContext)
+	}
+
 	accessControlList, err := acl.ParseAccessControlSpec(
 		globalConfig.Spec.AccessControlSpec,
 		intc.appConnectionConfig.Protocol.IsHTTP(),
@@ -349,18 +372,20 @@ func (c *Config) toInternal() (*internalConfig, error) {
 			HealthCheckHTTPPath: c.AppHealthCheckPath,
 			MaxConcurrency:      c.AppMaxConcurrency,
 		},
-		registry:                  registry.New(c.Registry),
-		metricsExporter:           metrics.New(c.Metrics),
-		blockShutdownDuration:     c.DaprBlockShutdownDuration,
-		actorsService:             c.ActorsService,
-		remindersService:          c.RemindersService,
-		schedulerAddress:          c.SchedulerAddress,
-		schedulerStreams:          c.SchedulerStreams,
-		publicListenAddress:       c.DaprPublicListenAddress,
-		internalGRPCListenAddress: c.DaprInternalGRPCListenAddress,
-		healthz:                   c.Healthz,
-		outboundHealthz:           healthz.New(),
-		workflowEventSink:         c.WorkflowEventSink,
+		registry:                   registry.New(c.Registry),
+		metricsExporter:            metrics.New(c.Metrics),
+		blockShutdownDuration:      c.DaprBlockShutdownDuration,
+		actorsService:              c.ActorsService,
+		actorsDisseminationTimeout: c.ActorsDisseminationTimeout,
+		hotReloadReconcileInterval: c.HotReloadReconcileInterval,
+		remindersService:           c.RemindersService,
+		schedulerAddress:           c.SchedulerAddress,
+		schedulerStreams:           c.SchedulerStreams,
+		publicListenAddress:        c.DaprPublicListenAddress,
+		internalGRPCListenAddress:  c.DaprInternalGRPCListenAddress,
+		healthz:                    c.Healthz,
+		outboundHealthz:            healthz.New(),
+		workflowEventSink:          c.WorkflowEventSink,
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
@@ -445,6 +470,10 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		intc.gracefulShutdownDuration = DefaultGracefulShutdownDuration
 	} else {
 		intc.gracefulShutdownDuration = time.Duration(c.DaprGracefulShutdownSeconds) * time.Second
+	}
+
+	if intc.actorsDisseminationTimeout <= 0 {
+		intc.actorsDisseminationTimeout = DefaultActorsDisseminationTimeout
 	}
 
 	if intc.appConnectionConfig.MaxConcurrency == -1 {

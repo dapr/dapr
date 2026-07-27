@@ -16,7 +16,7 @@ syntax = "proto3";
 package dapr.proto.runtime.v1;
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
-option java_outer_classname = "DaprProtos";
+option java_outer_classname = "DaprMetadataProtos";
 option java_package = "io.dapr.v1";
 option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
 
@@ -41,6 +41,8 @@ message GetMetadataResponse {
   optional MetadataScheduler scheduler = 11 [json_name = "scheduler"];
   optional MetadataWorkflows workflows = 12 [json_name = "workflows"];
   repeated MetadataMCPServer mcp_servers = 13 [json_name = "mcpServers"];
+  repeated MetadataWorkflowAccessPolicy workflow_access_policies = 14 [json_name = "workflowAccessPolicies"];
+  repeated MetadataResiliency resiliencies = 15 [json_name = "resiliencies"];
 }
 
 message MetadataWorkflows {
@@ -92,6 +94,20 @@ message MetadataHTTPEndpoint {
 }
 
 message MetadataMCPServer {
+  string name = 1 [json_name = "name"];
+}
+
+// MetadataWorkflowAccessPolicy describes a loaded WorkflowAccessPolicy
+// resource. Lets clients verify which policies are currently in effect on
+// the sidecar, including after a hot reload.
+message MetadataWorkflowAccessPolicy {
+  string name = 1 [json_name = "name"];
+}
+
+// MetadataResiliency describes a loaded Resiliency resource. Lets clients
+// verify which resiliency resources are currently in effect on the sidecar,
+// including after a hot reload.
+message MetadataResiliency {
   string name = 1 [json_name = "name"];
 }
 

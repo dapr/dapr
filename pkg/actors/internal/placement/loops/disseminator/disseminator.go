@@ -78,6 +78,14 @@ type disseminator struct {
 
 	currentOperation v1pb.HostOperation
 	currentVersion   uint64
+
+	// roundChangedTypes accumulates the union of actor types whose hash
+	// ring changed across all UPDATE messages since the last UNLOCK. The
+	// placement server may compress multiple rounds (LOCK n, UPDATE n,
+	// LOCK n+1, UPDATE n+1, UNLOCK n+1) by eliding intermediate UNLOCKs;
+	// in that case, the final UNLOCK must release every type accumulated
+	// across the compressed rounds, not just the most recent UPDATE.
+	roundChangedTypes map[string]struct{}
 }
 
 func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
@@ -91,6 +99,7 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 	diss.currentOperation = v1pb.HostOperation_LOCK
 	diss.currentVersion = 0
 	diss.timeoutVersion = 0
+	diss.roundChangedTypes = make(map[string]struct{})
 	diss.healthTarget = opts.HTarget
 	diss.ready = opts.Ready
 
@@ -143,7 +152,7 @@ func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 	defer d.wg.Wait()
 
 	d.streamLoop.Close(shutdown)
-	d.inflight.Lock(shutdown.Error)
+	d.inflight.Close(shutdown.Error)
 	d.timeoutQ.Close()
 
 	stream.LoopFactory.CacheLoop(d.streamLoop)

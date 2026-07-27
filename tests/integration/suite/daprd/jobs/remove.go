@@ -92,7 +92,7 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 			DueTime:  new("0s"),
 		},
 	}
-	_, err := client.ScheduleJobAlpha1(ctx, req)
+	_, err := client.ScheduleJob(ctx, req)
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -103,7 +103,7 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 		assert.GreaterOrEqual(c, r.triggered.Load(), int64(1))
 	}, 30*time.Second, 10*time.Millisecond)
 
-	_, err = client.DeleteJobAlpha1(ctx, &runtimev1pb.DeleteJobRequest{
+	_, err = client.DeleteJob(ctx, &runtimev1pb.DeleteJobRequest{
 		Name: "test",
 	})
 	require.NoError(t, err)

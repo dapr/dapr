@@ -70,11 +70,8 @@ func (c *configuration) Setup(t *testing.T) []framework.Option {
 			config := map[string]any{
 				"kind":       "Configuration",
 				"apiVersion": "dapr.io/v1alpha1",
-				"metadata":   map[string]any{"name": "hotreloading"},
+				"metadata":   map[string]any{"name": "tracing"},
 				"spec": map[string]any{
-					"features": []map[string]any{
-						{"name": "HotReload", "enabled": true},
-					},
 					"tracing": map[string]any{
 						"samplingRate": rate,
 					},
@@ -100,7 +97,7 @@ func (c *configuration) Setup(t *testing.T) []framework.Option {
 				b, err := json.Marshal(map[string]any{
 					"kind":       "Configuration",
 					"apiVersion": "dapr.io/v1alpha1",
-					"metadata":   map[string]any{"name": "hotreloading"},
+					"metadata":   map[string]any{"name": "tracing"},
 					"spec": map[string]any{
 						"tracing": map[string]any{
 							"samplingRate": c.samplingCh.Load().(string),
@@ -125,7 +122,7 @@ func (c *configuration) Setup(t *testing.T) []framework.Option {
 
 	c.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
+		daprd.WithConfigs("tracing"),
 		daprd.WithExecOptions(
 			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", c.trustAnchor),
 			exec.WithStdout(c.logOut),

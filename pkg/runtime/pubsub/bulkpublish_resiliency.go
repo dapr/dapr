@@ -17,6 +17,8 @@ import (
 	"context"
 	"sync/atomic"
 
+	"google.golang.org/grpc/status"
+
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/utils"
@@ -25,6 +27,7 @@ import (
 func ApplyBulkPublishResiliency(ctx context.Context, req *contribPubsub.BulkPublishRequest,
 	policyDef *resiliency.PolicyDefinition,
 	bulkPublisher contribPubsub.BulkPublisher,
+	mode TransportMode,
 ) (contribPubsub.BulkPublishResponse, error) {
 	// Contains the latest request entries to be sent to the component
 	var requestEntries atomic.Pointer[[]contribPubsub.BulkMessageEntry]
@@ -55,7 +58,13 @@ func ApplyBulkPublishResiliency(ctx context.Context, req *contribPubsub.BulkPubl
 			Metadata:   req.Metadata,
 		}
 
-		return bulkPublisher.BulkPublish(ctx, newReq)
+		res, err := bulkPublisher.BulkPublish(ctx, newReq)
+		if err != nil {
+			if st, ok := status.FromError(err); ok {
+				return res, NewPublishResiliencyError(mode, st.Code(), err)
+			}
+		}
+		return res, err
 	})
 	// If final error is timeout, CB open or CB too many requests, return the current request entries as failed
 	if err != nil &&

@@ -232,6 +232,21 @@ else
 endif
 endif
 
+# push docker image to the registry with retry for transient errors
+docker-push-retry: SHELL := $(shell which bash)
+docker-push-retry:
+	@for attempt in 1 2 3; do \
+		if $(MAKE) docker-push; then \
+			exit 0; \
+		fi; \
+		if [ $$attempt -eq 3 ]; then \
+			echo "docker-push failed after 3 attempts"; \
+			exit 1; \
+		fi; \
+		echo "docker-push attempt $$attempt failed, retrying in $$((attempt * 5))s..."; \
+		sleep $$((attempt * 5)); \
+	done
+
 # push docker image to kind cluster
 docker-push-kind: SHELL := $(shell which bash)
 docker-push-kind: docker-build

@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
@@ -30,6 +31,7 @@ type options struct {
 
 	placement               *placement.Placement
 	scheduler               *scheduler.Scheduler
+	sharedControlPlane      bool
 	daprdConfigs            []string
 	actorTypeHandlers       map[string]http.HandlerFunc
 	handlers                map[string]http.HandlerFunc
@@ -41,6 +43,7 @@ type options struct {
 	entityConfig            []entityConfig
 	resources               []string
 	maxBodySize             *string
+	daprdOpts               []daprd.Option
 }
 
 func WithDB(db *sqlite.SQLite) Option {
@@ -87,11 +90,18 @@ func WithHandler(pattern string, handler http.HandlerFunc) Option {
 	}
 }
 
+func WithSharedControlPlane() Option {
+	return func(o *options) {
+		o.sharedControlPlane = true
+	}
+}
+
 func WithPeerActor(actor *Actors) Option {
 	return func(o *options) {
 		WithDB(actor.DB())(o)
 		WithPlacement(actor.Placement())(o)
 		WithScheduler(actor.Scheduler())(o)
+		WithSharedControlPlane()(o)
 	}
 }
 
@@ -144,5 +154,13 @@ func WithResources(resources ...string) Option {
 func WithMaxBodySize(size string) Option {
 	return func(o *options) {
 		o.maxBodySize = &size
+	}
+}
+
+// WithDaprdOptions appends additional daprd options applied when building the
+// underlying daprd process.
+func WithDaprdOptions(dopts ...daprd.Option) Option {
+	return func(o *options) {
+		o.daprdOpts = append(o.daprdOpts, dopts...)
 	}
 }

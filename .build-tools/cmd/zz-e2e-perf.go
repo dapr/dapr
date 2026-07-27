@@ -25,6 +25,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/crane"
 	gitignore "github.com/sabhiram/go-gitignore"
@@ -210,15 +211,21 @@ func (c *cmdE2EPerf) buildAndPushCmd(cmd *cobra.Command, args []string) error {
 	// This will fail if the image is not in cache, and that's ok
 	if c.flags.CacheRegistry != "" {
 		fmt.Printf("Trying to copy image %s directly from cache %s\n", destImage, cachedImage)
-		err = crane.Copy(cachedImage, destImage)
-		if err == nil {
-			// If there's no error, we're done
-			fmt.Println("Image copied from cache directly! You're all set.")
-			return nil
+		for attempt := 1; attempt <= 3; attempt++ {
+			err = crane.Copy(cachedImage, destImage)
+			if err == nil {
+				// If there's no error, we're done
+				fmt.Println("Image copied from cache directly! You're all set.")
+				return nil
+			}
+			fmt.Printf("crane.Copy attempt %d/3 failed: %v\n", attempt, err)
+			if attempt < 3 {
+				time.Sleep(time.Duration(attempt*2) * time.Second)
+			}
 		}
 
 		// Copying the image failed, so we'll resort to build + push
-		fmt.Printf("Copying image directly from cache failed with error '%s'. Will build image.\n", err)
+		fmt.Printf("Copying image directly from cache failed after 3 attempts: %v. Will build image.\n", err)
 	} else {
 		fmt.Println("Cache registry not set: will not use cache")
 	}
@@ -373,17 +380,23 @@ func (c *cmdE2EPerf) buildDockerImage(cachedImage string) error {
 
 // Pushes the pre-built Docker image to the target registry
 func (c *cmdE2EPerf) pushDockerImage(destImage string) error {
-	fmt.Println("Pushing image", destImage)
-	e := exec.Command("docker", "push", destImage)
-	e.Stdout = os.Stdout
-	e.Stderr = os.Stderr
-	err := e.Run()
-	if err != nil {
-		fmt.Println("'docker push' returned an error:", err)
-		return err
+	var err error
+	for attempt := 1; attempt <= 3; attempt++ {
+		fmt.Printf("Pushing image %s (attempt %d/3)\n", destImage, attempt)
+		e := exec.Command("docker", "push", destImage)
+		e.Stdout = os.Stdout
+		e.Stderr = os.Stderr
+		err = e.Run()
+		if err == nil {
+			return nil
+		}
+		fmt.Printf("'docker push' attempt %d/3 returned an error: %v\n", attempt, err)
+		if attempt < 3 {
+			time.Sleep(time.Duration(attempt*2) * time.Second)
+		}
 	}
 
-	return nil
+	return err
 }
 
 // Loads the ".gitignore" (or whatever the value of ignoreFile is) in the appDir and in the appDir/name folders

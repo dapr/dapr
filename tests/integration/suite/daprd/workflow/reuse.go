@@ -20,6 +20,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -74,8 +76,10 @@ func (r *reuse) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, errs[0] != nil || errs[1] != nil, errs)
 	assert.True(t, errs[0] == nil || errs[1] == nil, errs)
 	if errs[0] != nil {
+		assert.Equal(t, codes.AlreadyExists, status.Code(errs[0]), errs[0])
 		assert.Contains(t, errs[0].Error(), "an active workflow with ID 'foo' already exists")
 	} else {
+		assert.Equal(t, codes.AlreadyExists, status.Code(errs[1]), errs[1])
 		assert.Contains(t, errs[1].Error(), "an active workflow with ID 'foo' already exists")
 	}
 
@@ -86,6 +90,7 @@ func (r *reuse) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	_, err = client.ScheduleNewWorkflow(ctx, "reuse", api.WithInstanceID("foo"))
 	require.Error(t, err)
+	assert.Equal(t, codes.AlreadyExists, status.Code(err), err)
 	assert.Contains(t, err.Error(), "an active workflow with ID 'foo' already exists")
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)

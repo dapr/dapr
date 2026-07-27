@@ -21,7 +21,17 @@ func (s *stream) recvLoop() error {
 	for {
 		err := s.recv()
 		if err != nil {
-			log.Warnf("Error receiving from stream: %s", err)
+			// "not a leader" rejections are expected when a daprd
+			// happens to round-robin onto a non-leader placement
+			// replica - it'll cycle to another replica on the next
+			// reconnect. Logging this at warning level on every
+			// cycle spams the runtime log during placement leader
+			// churn; demote to debug.
+			if loops.IsTransientLeaderError(err) {
+				log.Debugf("Error receiving from stream: %s", err)
+			} else {
+				log.Warnf("Error receiving from stream: %s", err)
+			}
 			return err
 		}
 	}

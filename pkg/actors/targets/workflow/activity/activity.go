@@ -71,7 +71,6 @@ func (a *activity) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder)
 // DeactivateActor implements actors.InternalActor
 func (a *activity) Deactivate(context.Context) error {
 	a.table.Delete(a.actorID)
-	activityCache.Put(a)
 	return nil
 }
 

@@ -58,13 +58,17 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 
 	switch order.Order.GetOperation() {
 	case operationLock:
+		// LOCK signals that the placement server is about to push a new
+		// table. The new tables haven't arrived yet, so we don't know
+		// which actor types will change. Lookups continue to resolve
+		// against the current table; per-type queueing only kicks in at
+		// UPDATE once the diff is known.
 		d.timeoutQ.Dequeue(d.timeoutVersion)
 		d.timeoutVersion++
 		d.timeoutQ.Enqueue(d.timeoutVersion)
 
 		d.currentOperation = v1pb.HostOperation_LOCK
 		d.currentVersion = version
-		d.inflight.Lock(errors.New("disseminator lock in progress"))
 
 		d.streamLoop.Enqueue(&loops.StreamSend{
 			Host: &v1pb.Host{
@@ -88,8 +92,27 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 
 		d.timeoutQ.Dequeue(d.timeoutVersion)
 
-		d.inflight.Set(order.Order.GetTables(), version)
+		// Diff old vs new tables, install new tables, and block only the
+		// actor types whose hash ring actually changed. Open ensures the
+		// claim-tracking loop is running and flushes any queued requests
+		// for unchanged types. Accumulate into roundChangedTypes so a
+		// later UNLOCK releases every type touched across compressed
+		// rounds (the placement server may elide intermediate UNLOCKs).
+		changed := d.inflight.Set(order.Order.GetTables(), version)
+		for _, t := range changed {
+			d.roundChangedTypes[t] = struct{}{}
+		}
+		d.inflight.LockTypes(changed)
+		d.inflight.Open(ctx)
+
 		d.currentOperation = v1pb.HostOperation_UPDATE
+
+		// Drain in-flight claims for actor types whose hash ring changed
+		// in this UPDATE so the request layer can retry against the new
+		// routing. Claims for unchanged types survive: a routine
+		// dissemination round is no longer fatal to in-flight invocations
+		// of unaffected types.
+		d.inflight.CancelClaimsForTypes(changed, errors.New("placement table updated"))
 
 		if err := d.actorTable.HaltNonHosted(ctx, d.inflight.IsActorHostedNoLock); err != nil {
 			log.Errorf("Error draining non-hosted actors: %s", err)
@@ -119,14 +142,24 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		}
 		d.currentVersion = version
 
-		log.Infof("Dissemination complete for version %d, unlocking disseminator %s/%s",
-			version, d.namespace, d.id,
+		// Release every type accumulated since the last UNLOCK. This
+		// covers the compressed-rounds case where the placement server
+		// emitted multiple LOCK+UPDATE pairs before a single trailing
+		// UNLOCK.
+		toUnlock := make([]string, 0, len(d.roundChangedTypes))
+		for t := range d.roundChangedTypes {
+			toUnlock = append(toUnlock, t)
+		}
+
+		log.Infof("Dissemination complete for version %d (changed types %v), unlocking disseminator %s/%s",
+			version, toUnlock, d.namespace, d.id,
 		)
 
 		d.currentOperation = v1pb.HostOperation_UNLOCK
 		d.scheduler.ReloadActorTypes(d.actorTable.Types())
 
-		d.inflight.Unlock(ctx)
+		d.inflight.UnlockTypes(toUnlock)
+		clear(d.roundChangedTypes)
 
 		d.streamLoop.Enqueue(&loops.StreamSend{
 			Host: &v1pb.Host{

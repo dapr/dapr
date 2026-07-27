@@ -33,6 +33,7 @@ import (
 	grpcStatus "google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
+	"github.com/dapr/dapr/pkg/api/listen"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -56,7 +57,7 @@ const (
 // Server is an interface for the dapr gRPC server.
 type Server interface {
 	io.Closer
-	StartNonBlocking() error
+	StartNonBlocking(ctx context.Context) error
 }
 
 type Options struct {
@@ -78,6 +79,11 @@ type OptionsInternal struct {
 	Security    security.Handler
 	Proxy       messaging.Proxy
 	Healthz     healthz.Healthz
+	// Listener, when set, is served directly instead of binding Config.Port.
+	// It lets the runtime reserve the internal gRPC port early (before
+	// components are initialized) and hand the already-bound listener to the
+	// server, avoiding an ephemeral-source-port collision.
+	Listener net.Listener
 }
 
 type server struct {
@@ -97,6 +103,9 @@ type server struct {
 	sec            security.Handler
 	wg             sync.WaitGroup
 	htarget        healthz.Target
+	// listener, when set, is served directly instead of binding config.Port.
+	// See OptionsInternal.Listener and issue #6023.
+	listener net.Listener
 }
 
 var (
@@ -189,11 +198,12 @@ func NewInternalServer(opts OptionsInternal) Server {
 		proxy:          opts.Proxy,
 		sec:            opts.Security,
 		htarget:        opts.Healthz.AddTarget("grpc-internal-server"),
+		listener:       opts.Listener,
 	}
 }
 
 // StartNonBlocking starts a new server in a goroutine.
-func (s *server) StartNonBlocking() error {
+func (s *server) StartNonBlocking(ctx context.Context) error {
 	var listeners []net.Listener
 	if s.config.UnixDomainSocket != "" && s.kind == apiServer {
 		socket := fmt.Sprintf("%s/dapr-%s-grpc.socket", s.config.UnixDomainSocket, s.config.AppID)
@@ -203,10 +213,14 @@ func (s *server) StartNonBlocking() error {
 		}
 		s.logger.Infof("gRPC server listening on UNIX socket: %s", socket)
 		listeners = append(listeners, l)
+	} else if s.listener != nil {
+		// The port was reserved earlier and the bound listener handed to us.
+		s.logger.Infof("gRPC server listening on pre-bound TCP address: %s", s.listener.Addr())
+		listeners = append(listeners, s.listener)
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
-			l, err := net.Listen("tcp", addr)
+			l, err := listen.TCP(ctx, addr)
 			if err != nil {
 				s.logger.Errorf("Failed to listen for gRPC server on TCP address %s with error: %v", addr, err)
 			} else {
@@ -253,8 +267,6 @@ func (s *server) StartNonBlocking() error {
 }
 
 func (s *server) Close() error {
-	defer s.wg.Wait()
-
 	s.htarget.NotReady()
 
 	if s.api != nil {
@@ -263,14 +275,18 @@ func (s *server) Close() error {
 		}
 	}
 
-	s.wg.Add(len(s.servers))
+	var stopWg sync.WaitGroup
+	stopWg.Add(len(s.servers))
 	for _, server := range s.servers {
 		// This calls `Close()` on the underlying listener.
 		go func(server *grpcGo.Server) {
-			defer s.wg.Done()
+			defer stopWg.Done()
 			server.GracefulStop()
 		}(server)
 	}
+	stopWg.Wait()
+
+	s.wg.Wait()
 
 	return nil
 }

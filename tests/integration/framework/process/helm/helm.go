@@ -46,9 +46,12 @@ func New(t *testing.T, fopts ...OptionFunc) *Helm {
 	}
 
 	// helm options (not all are available)
-	args := make([]string, 0, 2*(len(opts.setValues)+len(opts.showOnly)))
+	args := make([]string, 0, 2*(len(opts.setValues)+len(opts.setJSONValues)+len(opts.showOnly)))
 	for _, v := range opts.setValues {
 		args = append(args, "--set", v)
+	}
+	for _, v := range opts.setJSONValues {
+		args = append(args, "--set-json", v)
 	}
 	for _, v := range opts.showOnly {
 		args = append(args, "--show-only", v)

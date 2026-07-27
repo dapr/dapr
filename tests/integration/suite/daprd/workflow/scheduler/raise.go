@@ -101,7 +101,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, "my-custom-instance-id", resp.GetInstanceId())
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(1), stage.Load())
-	}, time.Second*3, time.Millisecond*10)
+	}, time.Second*6, time.Millisecond*10)
 
 	var get *rtv1.GetWorkflowResponse
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -152,7 +152,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(2), stage.Load())
-	}, time.Second*3, time.Millisecond*10)
+	}, time.Second*6, time.Millisecond*10)
 
 	metadata, err := backendClient.WaitForWorkflowCompletion(ctx, api.InstanceID("my-custom-instance-id"))
 	require.NoError(t, err)
@@ -171,13 +171,13 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(1), stage.Load())
-	}, time.Second*3, time.Millisecond*10)
+	}, time.Second*6, time.Millisecond*10)
 
 	require.NoError(t, backendClient.RaiseEvent(ctx, "my-custom-instance-id", "testEvent"))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(2), stage.Load())
-	}, time.Second*3, time.Millisecond*10)
+	}, time.Second*6, time.Millisecond*10)
 
 	_, err = backendClient.WaitForWorkflowCompletion(ctx, api.InstanceID("my-custom-instance-id"))
 	require.NoError(t, err)

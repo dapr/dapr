@@ -1,0 +1,15 @@
+apiVersion: dapr.io/v1alpha1
+kind: WorkflowAccessPolicy
+metadata:
+  name: wfacl-e2e-policy
+scopes:
+  - wfacl-target
+spec:
+  rules:
+    - callers:
+        - appID: "wfacl-caller"
+      workflows:
+        - name: "AllowedWorkflow"
+          operations: [schedule]
+      activities:
+        - name: "*"

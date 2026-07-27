@@ -150,7 +150,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	client := h.daprd.GRPCClient(t, ctx)
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+			_, err := client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 				Job: &runtimev1pb.Job{
 					Name:    name,
 					DueTime: new("0s"),

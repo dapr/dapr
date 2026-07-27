@@ -43,7 +43,7 @@ type multiplereplicas struct {
 
 func (m *multiplereplicas) Setup(t *testing.T) []framework.Option {
 	m.place = placement.New(t,
-		placement.WithDisseminateTimeout(time.Second*7),
+		placement.WithDisseminateTimeout(time.Second*2),
 	)
 
 	actor1 := dactors.New(t,
@@ -112,7 +112,7 @@ func (m *multiplereplicas) Run(t *testing.T, ctx context.Context) {
 
 	for i := range 2 {
 		connectBlocker(t, fmt.Sprintf("blocker-%d", i))
-		time.Sleep(9 * time.Second)
+		time.Sleep(4 * time.Second)
 
 		for j, a := range m.actors {
 			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/actors/myactor/replica%d_%d/method/foo", a.Daprd().HTTPPort(), i, j)

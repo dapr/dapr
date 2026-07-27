@@ -71,7 +71,7 @@ func (d *durable) Run(t *testing.T, ctx context.Context) {
 
 	now := new(time.Now().UTC().Format(time.RFC3339))
 	for i := range 40 {
-		_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+		_, err := client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{Name: strconv.Itoa(i), DueTime: now},
 		})
 		require.NoError(t, err)

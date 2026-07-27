@@ -62,22 +62,12 @@ func (s *secretref) Setup(t *testing.T) []framework.Option {
 		kubernetes.WithDaprConfigurationGet(t, &configapi.Configuration{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 			ObjectMeta: metav1.ObjectMeta{Name: "mcpconfig", Namespace: "default"},
-			Spec: configapi.ConfigurationSpec{
-				Features: []configapi.FeatureSpec{
-					{Name: "MCPServerResource", Enabled: new(true)},
-				},
-			},
 		}),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ConfigurationList"},
 			Items: []configapi.Configuration{{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 				ObjectMeta: metav1.ObjectMeta{Name: "mcpconfig", Namespace: "default"},
-				Spec: configapi.ConfigurationSpec{
-					Features: []configapi.FeatureSpec{
-						{Name: "MCPServerResource", Enabled: new(true)},
-					},
-				},
 			}},
 		}),
 		kubernetes.WithClusterDaprMCPServerList(t, &mcpapi.MCPServerList{
@@ -86,6 +76,8 @@ func (s *secretref) Setup(t *testing.T) []framework.Option {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "secreted-mcp", Namespace: "default"},
 					Spec: mcpapi.MCPServerSpec{
+						// example.com is unreachable; ignoreErrors keeps daprd up.
+						IgnoreErrors: true,
 						Endpoint: mcpapi.MCPEndpoint{
 							StreamableHTTP: &mcpapi.MCPStreamableHTTP{
 								URL: "http://example.com/mcp",
@@ -150,9 +142,15 @@ func (s *secretref) Run(t *testing.T, ctx context.Context) {
 		s.logline.EventuallyFoundAll(t)
 	})
 
-	// TODO(sicoyle): Once the metadata API exposes MCPServers, add metadata API
-	// checks to verify secreted-mcp appears with resolved headers.
-	t.Run("metadata API does not yet expose MCPServers on this branch", func(t *testing.T) {
-		assert.Empty(t, s.daprd.GetMetaMCPServers(t, ctx))
+	t.Run("metadata API exposes the operator-loaded MCPServer", func(t *testing.T) {
+		servers := s.daprd.GetMetaMCPServers(t, ctx)
+
+		names := make([]string, 0, len(servers))
+		for _, m := range servers {
+			names = append(names, m.GetName())
+		}
+
+		assert.ElementsMatch(t, []string{"secreted-mcp"}, names,
+			"metadata API should expose the operator-loaded MCPServer")
 	})
 }

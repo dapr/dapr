@@ -19,6 +19,7 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/kit/logger"
 )
@@ -33,6 +34,10 @@ type ComponentAuthorizer func(component componentsapi.Component) bool
 // The function receives the http endpoint and must return true if the http endpoint is authorized.
 type HTTPEndpointAuthorizer func(endpoint httpendpointsapi.HTTPEndpoint) bool
 
+// Type of function that determines if an MCPServer is authorized.
+// The function receives the MCPServer and must return true if the MCPServer is authorized.
+type MCPServerAuthorizer func(server mcpserverapi.MCPServer) bool
+
 type Options struct {
 	ID           string
 	GlobalConfig *config.Configuration
@@ -44,6 +49,7 @@ type Authorizer struct {
 
 	componentAuthorizers    []ComponentAuthorizer
 	httpEndpointAuthorizers []HTTPEndpointAuthorizer
+	mcpServerAuthorizers    []MCPServerAuthorizer
 }
 
 func New(opts Options) *Authorizer {
@@ -60,6 +66,8 @@ func New(opts Options) *Authorizer {
 	}
 
 	r.httpEndpointAuthorizers = []HTTPEndpointAuthorizer{r.namespaceHTTPEndpointAuthorizer}
+
+	r.mcpServerAuthorizers = []MCPServerAuthorizer{r.namespaceMCPServerAuthorizer}
 
 	return r
 }
@@ -92,6 +100,12 @@ func (a *Authorizer) IsObjectAuthorized(object any) bool {
 				return false
 			}
 		}
+	case mcpserverapi.MCPServer:
+		for _, auth := range a.mcpServerAuthorizers {
+			if !auth(obj) {
+				return false
+			}
+		}
 	}
 
 	return true
@@ -111,6 +125,14 @@ func (a *Authorizer) namespaceHTTPEndpointAuthorizer(endpoint httpendpointsapi.H
 func (a *Authorizer) namespaceComponentAuthorizer(comp componentsapi.Component) bool {
 	if a.namespace == "" || comp.Namespace == "" || (a.namespace != "" && comp.Namespace == a.namespace) {
 		return comp.IsAppScoped(a.id)
+	}
+
+	return false
+}
+
+func (a *Authorizer) namespaceMCPServerAuthorizer(server mcpserverapi.MCPServer) bool {
+	if a.namespace == "" || server.Namespace == "" || (a.namespace != "" && server.Namespace == a.namespace) {
+		return server.IsAppScoped(a.id)
 	}
 
 	return false

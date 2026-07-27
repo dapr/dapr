@@ -24,15 +24,22 @@ const (
 	// TODO: @joshvanl: remove
 	CallbackChannelProperty = "dapr.callback"
 
-	CreateWorkflowInstanceMethod = "CreateWorkflowInstance"
-	AddWorkflowEventMethod       = "AddWorkflowEvent"
-	PurgeWorkflowStateMethod     = "PurgeWorkflowState"
-	WaitForRuntimeStatus         = "WaitForRuntimeStatus"
-	ForkWorkflowHistory          = "ForkWorkflowHistory"
-	RerunWorkflowInstance        = "RerunWorkflowInstance"
+	CreateWorkflowInstanceMethod      = "CreateWorkflowInstance"
+	AddWorkflowEventMethod            = "AddWorkflowEvent"
+	PurgeWorkflowStateMethod          = "PurgeWorkflowState"
+	RecursivePurgeWorkflowStateMethod = "RecursivePurgeWorkflowState"
+	WaitForRuntimeStatus              = "WaitForRuntimeStatus"
+	ForkWorkflowHistory               = "ForkWorkflowHistory"
+	RerunWorkflowInstance             = "RerunWorkflowInstance"
+	ExecuteActivityMethod             = "Execute"
 
 	MetadataActivityReminderDueTime = "dueTime"
 	MetadataPurgeRetentionCall      = "PurgeRetentionCall"
+	MetadataPurgeForce              = "PurgeForce"
+	// Set on a WaitForRuntimeStatus call to request that a terminal workflow
+	// also verify all of its child workflows, recursively, are terminal
+	// before replying. Ignored by daprds that predate the flag.
+	MetadataCheckSubtreeTerminal = "CheckSubtreeTerminal"
 
 	ActorTypePrefix = "dapr.internal."
 )

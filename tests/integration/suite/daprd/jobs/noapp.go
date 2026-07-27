@@ -54,7 +54,7 @@ func (n *noapp) Run(t *testing.T, ctx context.Context) {
 
 	client := n.daprd.GRPCClient(t, ctx)
 
-	_, err := client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err := client.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:    "helloworld",
 			DueTime: new("2s"),
@@ -62,7 +62,7 @@ func (n *noapp) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	resp, err := client.GetJobAlpha1(ctx, &rtv1.GetJobRequest{
+	resp, err := client.GetJob(ctx, &rtv1.GetJobRequest{
 		Name: "helloworld",
 	})
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func (n *noapp) Run(t *testing.T, ctx context.Context) {
 
 	time.Sleep(3 * time.Second)
 
-	resp, err = client.GetJobAlpha1(ctx, &rtv1.GetJobRequest{
+	resp, err = client.GetJob(ctx, &rtv1.GetJobRequest{
 		Name: "helloworld",
 	})
 	require.NoError(t, err)

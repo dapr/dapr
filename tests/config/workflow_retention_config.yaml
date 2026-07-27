@@ -5,4 +5,4 @@ metadata:
 spec:
   workflow:
     stateRetentionPolicy:
-      anyTerminal: "1s"
+      anyTerminal: "5s"

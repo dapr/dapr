@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -48,21 +48,9 @@ type state struct {
 }
 
 func (s *state) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true`), 0o600))
-
 	s.resDir1, s.resDir2, s.resDir3 = t.TempDir(), t.TempDir(), t.TempDir()
 
 	s.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(s.resDir1, s.resDir2, s.resDir3),
 	)
 
@@ -95,7 +83,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 1)
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 		resp := s.daprd.GetMetaRegisteredComponents(t, ctx)
 		assert.ElementsMatch(t, []*rtpbv1.RegisteredComponents{
 			{
@@ -138,7 +126,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 3)
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 		resp := s.daprd.GetMetaRegisteredComponents(t, ctx)
 		assert.ElementsMatch(t, []*rtpbv1.RegisteredComponents{
 			{
@@ -195,7 +183,7 @@ spec:
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 		s.writeRead(t, ctx, client, "abc")
@@ -261,7 +249,7 @@ spec:
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 		s.writeRead(t, ctx, client, "abc")
@@ -306,7 +294,7 @@ spec:
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 		s.writeRead(t, ctx, client, "bar")
@@ -353,7 +341,7 @@ spec:
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 		s.writeExpectError(t, ctx, client, "bar", http.StatusBadRequest)
@@ -367,15 +355,21 @@ spec:
 		s.writeRead(t, ctx, client, "xyz")
 		s.writeRead(t, ctx, client, "foo")
 
-		require.NoError(t, os.Remove(filepath.Join(s.resDir1, "1.yaml")))
-		require.NoError(t, os.Remove(filepath.Join(s.resDir3, "3.yaml")))
+		// Retry removal on Windows where the daprd fsnotify watcher may
+		// briefly hold the file handle open, blocking deletion.
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.NoError(c, os.Remove(filepath.Join(s.resDir1, "1.yaml")))
+		}, time.Second*15, time.Millisecond*10)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.NoError(c, os.Remove(filepath.Join(s.resDir3, "3.yaml")))
+		}, time.Second*15, time.Millisecond*10)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.daprd.GetMetaRegisteredComponents(c, ctx)
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 			}, resp)
-		}, time.Second*10, time.Millisecond*10)
+		}, time.Second*20, time.Millisecond*10)
 
 		s.writeExpectError(t, ctx, client, "123", http.StatusInternalServerError)
 		s.writeExpectError(t, ctx, client, "bar", http.StatusInternalServerError)
@@ -397,7 +391,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 2)
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 	})

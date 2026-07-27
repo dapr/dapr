@@ -29,6 +29,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/utils/clock"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
@@ -51,6 +52,7 @@ type Interface interface {
 
 type Options struct {
 	Namespace          string
+	AppID              string
 	Table              table.Interface
 	Placement          placement.Interface
 	Resiliency         resiliency.Provider
@@ -61,6 +63,7 @@ type Options struct {
 
 type router struct {
 	namespace string
+	appID     string
 
 	table      table.Interface
 	placement  placement.Interface
@@ -81,6 +84,7 @@ type router struct {
 func New(opts Options) Interface {
 	return &router{
 		namespace:  opts.Namespace,
+		appID:      opts.AppID,
 		table:      opts.Table,
 		placement:  opts.Placement,
 		resiliency: opts.Resiliency,
@@ -235,6 +239,8 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		defer cancel(nil)
 		ctx = cctx
 
+		r.stampLocalCallerIdentity(req)
+
 		var resp *internalv1pb.InternalInvokeResponse
 		resp, err = r.callLocalActor(ctx, req)
 		if err != nil {
@@ -362,6 +368,8 @@ func (r *router) callStream(ctx context.Context,
 		return r.callRemoteActorStream(ctx, lar, req, stream)
 	}
 
+	r.stampLocalCallerIdentity(req)
+
 	return r.callLocalActorStream(ctx, req, stream)
 }
 
@@ -430,4 +438,17 @@ func (r *router) withContext(ctx context.Context) (context.Context, context.Canc
 	}
 
 	return ctx, wrappedCancel
+}
+
+func (r *router) stampLocalCallerIdentity(req *internalv1pb.InternalInvokeRequest) {
+	if req == nil {
+		return
+	}
+	// Preserve identity stamped upstream (e.g. by the CallActor gRPC
+	// handler from a remote SPIFFE peer) so a remote-routed-local call
+	// keeps the remote caller's identity.
+	if workflowacl.CallerAppID(req.GetMetadata()) != "" {
+		return
+	}
+	workflowacl.SetCallerIdentity(req, r.appID, r.namespace)
 }

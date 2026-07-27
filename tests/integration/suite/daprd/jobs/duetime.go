@@ -74,7 +74,7 @@ func (d *duetime) Run(t *testing.T, ctx context.Context) {
 			DueTime:  new("0s"),
 		},
 	}
-	_, err := client.ScheduleJobAlpha1(ctx, req)
+	_, err := client.ScheduleJob(ctx, req)
 	require.NoError(t, err)
 
 	select {

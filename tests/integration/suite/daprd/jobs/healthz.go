@@ -81,7 +81,7 @@ func (h *healthz) Run(t *testing.T, ctx context.Context) {
 
 	client := h.daprd.GRPCClient(t, ctx)
 
-	_, err := client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err := client.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:     "test",
 			Schedule: new("@every 1s"),

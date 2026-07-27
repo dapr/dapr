@@ -27,6 +27,7 @@ import (
 
 type Options struct {
 	AppID             string
+	Namespace         string
 	ActorType         string
 	ActivityActorType string
 	InstanceID        string
@@ -65,6 +66,7 @@ func New(opts Options) *Fork {
 		targetEventID: opts.TargetEventID,
 		newState: state.NewState(state.Options{
 			AppID:             opts.AppID,
+			Namespace:         opts.Namespace,
 			WorkflowActorType: opts.ActorType,
 			ActivityActorType: opts.ActivityActorType,
 		}),
@@ -121,6 +123,12 @@ func (f *Fork) Build() (*state.State, error) {
 	}
 
 	f.newState.AddToInbox(found)
+
+	// Preserve the propagated history received from the caller so the reran
+	// workflow can continue lineage forwarding to its own children
+	if f.oldState.IncomingHistory != nil {
+		f.newState.SetIncomingHistory(f.oldState.IncomingHistory)
+	}
 
 	return f.newState, nil
 }
@@ -208,6 +216,13 @@ func (f *Fork) handleFound(i int, his *backend.HistoryEvent) (*protos.HistoryEve
 		}
 
 		return his, nil
+
+	case *protos.HistoryEvent_DetachedWorkflowInstanceCreated:
+		// Detached spawns are fire-and-forget: there is no awaitable Task on
+		// the caller and no completion or failure event ever flows back. The
+		// caller-side history records only that a spawn happened, so there
+		// is nothing to re-execute by rerunning this point in the workflow.
+		return nil, status.Errorf(codes.InvalidArgument, "event '%d' is a detached workflow spawn and cannot be rerun: detached spawns are fire-and-forget and have no replayable continuation in the caller", f.targetEventID)
 
 	default:
 		return nil, status.Errorf(codes.NotFound, "target event '%T' with ID '%d' is not an event that can be rerun", his.GetEventType(), f.targetEventID)

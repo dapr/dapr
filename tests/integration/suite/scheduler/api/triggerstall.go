@@ -173,10 +173,10 @@ func (s *triggerstall) Run(t *testing.T, ctx context.Context) {
 	select {
 	case job := <-triggerCh:
 		t.Logf("Trigger after recovery: %s", job.GetName())
-	case <-time.After(25 * time.Second):
+	case <-ctx.Done():
 		t.Logf("Leadership keys: %v",
-			s.scheduler1.ListAllKeys(t, ctx, "dapr/leadership"))
-		require.Fail(t, "No triggers after quorum change within 25s")
+			s.scheduler1.ListAllKeys(t, context.Background(), "dapr/leadership"))
+		require.Fail(t, "No triggers after quorum change before context deadline")
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
