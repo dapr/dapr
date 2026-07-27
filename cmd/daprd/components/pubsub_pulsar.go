@@ -16,9 +16,10 @@ limitations under the License.
 package components
 
 import (
+	avro "github.com/iskorotkov/avro/v2"
+
 	"github.com/dapr/components-contrib/pubsub/pulsar"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
-	avro "github.com/iskorotkov/avro/v2"
 )
 
 const maxAvroCollectionAllocSize = 10_000
