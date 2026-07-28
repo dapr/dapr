@@ -39,7 +39,12 @@ func init() {
 // waiters rendezvous with completions through the process-local pending map
 // (wait_local), not the watch-stream fallback (wait_watch): the executor
 // rendezvous actor shares its ID with the workflow/activity actor, so
-// placement co-locates it with the waiter.
+// placement co-locates it with the waiter. A worker is connected to BOTH
+// daprds so every workflow actor type's placement ring spans two hosts and
+// actors spread across them: co-location is then a real property of the
+// shared ID, not a single-host tautology. If the executor actor ID did not
+// match the waiter's actor ID, placement would resolve it to the wrong host
+// for about half the waits and they would surface as wait_watch fallbacks.
 type routes struct {
 	workflow *workflow.Workflow
 }
@@ -55,20 +60,24 @@ func (r *routes) Setup(t *testing.T) []framework.Option {
 func (r *routes) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
-	require.NoError(t, r.workflow.RegistryN(0).AddWorkflowN("routes", func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.CallActivity("abc").Await(nil); err != nil {
-			return nil, err
-		}
-		return nil, nil
-	}))
-	require.NoError(t, r.workflow.RegistryN(0).AddActivityN("abc", func(ctx task.ActivityContext) (any, error) {
-		return nil, nil
-	}))
-	_ = r.workflow.BackendClientN(t, ctx, 0)
+	for i := range 2 {
+		require.NoError(t, r.workflow.RegistryN(i).AddWorkflowN("routes", func(ctx *task.WorkflowContext) (any, error) {
+			if err := ctx.CallActivity("abc").Await(nil); err != nil {
+				return nil, err
+			}
+			return nil, nil
+		}))
+		require.NoError(t, r.workflow.RegistryN(i).AddActivityN("abc", func(ctx task.ActivityContext) (any, error) {
+			return nil, nil
+		}))
+		_ = r.workflow.BackendClientN(t, ctx, i)
+	}
 
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		assert.GreaterOrEqual(col,
-			len(r.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
+		for i := range 2 {
+			assert.GreaterOrEqual(col,
+				len(r.workflow.DaprN(i).GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
+		}
 	}, time.Second*10, time.Millisecond*10)
 
 	client := client.NewTaskHubGrpcClient(grpc.LoadBalance(t,
@@ -76,7 +85,7 @@ func (r *routes) Run(t *testing.T, ctx context.Context) {
 		r.workflow.DaprN(1).GRPCConn(t, ctx),
 	), logger.New(t))
 
-	const n = 5
+	const n = 10
 	for range n {
 		id, err := client.ScheduleNewWorkflow(ctx, "routes")
 		require.NoError(t, err)
