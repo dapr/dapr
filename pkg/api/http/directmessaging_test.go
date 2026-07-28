@@ -1077,6 +1077,8 @@ func TestFindTargetIDAndMethod(t *testing.T) {
 		{name: "dapr-app-id header trailing slash preserved", path: "/foo/bar/", headers: http.Header{"Dapr-App-Id": []string{"myapp"}}, wantTargetID: "myapp", wantMethod: "foo/bar/"},
 		{name: "basic auth trailing slash preserved", path: "/foo/bar/", headers: http.Header{"Authorization": []string{"Basic ZGFwci1hcHAtaWQ6YXV0aA=="}}, wantTargetID: "auth", wantMethod: "foo/bar/"},
 		{name: "dapr-app-id header root path trailing slash not duplicated", path: "/", headers: http.Header{"Dapr-App-Id": []string{"myapp"}}, wantTargetID: "myapp", wantMethod: ""},
+		{name: "url-form trailing slash preserved", path: "/v1.0/invoke/myapp/method/foo/bar/", wantTargetID: "myapp", wantMethod: "foo/bar/"},
+		{name: "url-form trailing slash with http target", path: "/v1.0/invoke/http://example.com/method/foo/", wantTargetID: "http://example.com", wantMethod: "foo/"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

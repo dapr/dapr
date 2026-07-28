@@ -404,8 +404,8 @@ func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string
 		// - `http%3A%2F%2Fexample.com/method/mymethod`
 		if idx = strings.Index(reqPath, "/method/"); idx > 0 {
 			targetID := reqPath[:idx]
-			method := path.Clean(reqPath[(idx + len("/method/")):])
-			if method == "." {
+			method := cleanPath(reqPath[(idx + len("/method/")):])
+			if method == "." || method == "/" {
 				method = ""
 			}
 			if t, _ := url.QueryUnescape(targetID); t != "" {
