@@ -350,6 +350,7 @@ func newDaprRuntime(ctx context.Context,
 		InProcessExecutor:               inProcessExec,
 		MaxRequestBodySize:              runtimeConfig.maxRequestBodySize,
 		WorkflowAccessPolicies:          workflowAccessPolicies,
+		PayloadStore:                    runtimeConfig.workflowPayloadStore,
 	})
 	if err != nil {
 		return nil, err
