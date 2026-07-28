@@ -17,7 +17,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"testing"
 
 	"github.com/dapr/dapr/tests/integration/framework/metrics"
 
@@ -26,23 +25,28 @@ import (
 
 // GetBucketFromKey returns a bucket given a key
 // k = "a:b|le:5000"
-func GetBucketFromKey(t *testing.T, k string) float64 {
-	t.Helper()
+//
+// t is a require.TestingT so callers can pass either a *testing.T or, when
+// invoked inside an EventuallyWithT retry loop, the *assert.CollectT. Passing
+// the CollectT scopes scrape/parse failures to the retry loop instead of
+// failing the outer test on a transient miss.
+func GetBucketFromKey(t require.TestingT, k string) float64 {
 	keyParts := strings.SplitSeq(k, "|")
-	for k := range keyParts {
-		if v, ok := strings.CutPrefix(k, "le:"); ok {
+	for part := range keyParts {
+		if v, ok := strings.CutPrefix(part, "le:"); ok {
 			d, err := strconv.ParseUint(v, 10, 64)
 			require.NoError(t, err)
 			return float64(d)
 		}
 	}
-	t.Error("did not find any bucket ('le') in key")
+	require.Fail(t, "did not find any bucket ('le') in key")
 	return 0
 }
 
-func CollectBuckets(t *testing.T, metrics *metrics.Metrics, metric, name, status string) []float64 {
-	t.Helper()
-
+// CollectBuckets returns the sorted bucket boundaries for the histogram whose
+// key matches metric/name/status. See GetBucketFromKey for why t is a
+// require.TestingT.
+func CollectBuckets(t require.TestingT, metrics *metrics.Metrics, metric, name, status string) []float64 {
 	if metrics == nil {
 		return nil
 	}

@@ -81,7 +81,7 @@ func (h *high) Run(t *testing.T, ctx context.Context) {
 			metrics := h.daprd.Metrics(c, ctx).All()
 			for k := range metrics {
 				if strings.HasPrefix(k, "dapr_http_server_latency_bucket") && strings.Contains(k, "app_id:myapp") && strings.Contains(k, "status:200") {
-					bucket := util.GetBucketFromKey(t, k)
+					bucket := util.GetBucketFromKey(c, k)
 					httpServerLatencyBuckets = append(httpServerLatencyBuckets, bucket)
 				}
 			}
