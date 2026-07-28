@@ -71,6 +71,7 @@ type SidecarConfig struct {
 	APITokenSecret                      string  `annotation:"dapr.io/api-token-secret"`
 	AppTokenSecret                      string  `annotation:"dapr.io/app-token-secret"`
 	LogAsJSON                           bool    `annotation:"dapr.io/log-as-json"`
+	LogTimestampFormat                  string  `annotation:"dapr.io/log-timestamp-format"`
 	AppMaxConcurrency                   *int    `annotation:"dapr.io/app-max-concurrency"`
 	EnableMetrics                       bool    `annotation:"dapr.io/enable-metrics" default:"true"`
 	SidecarMetricsPort                  int32   `annotation:"dapr.io/metrics-port" default:"9090"`

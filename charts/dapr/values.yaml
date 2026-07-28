@@ -3,6 +3,7 @@ global:
   tag: 'edge'
   dnsSuffix: ".cluster.local"
   logAsJson: false
+  logTimestampFormat: ""
   imagePullPolicy: IfNotPresent
 
   # To help compatibility with other charts which use global.imagePullSecrets.

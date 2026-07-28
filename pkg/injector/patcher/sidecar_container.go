@@ -147,6 +147,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--log-as-json")
 	}
 
+	if c.LogTimestampFormat != "" {
+		args = append(args, "--log-timestamp-format", c.LogTimestampFormat)
+	}
+
 	if c.EnableProfiling {
 		args = append(args, "--enable-profiling")
 	}

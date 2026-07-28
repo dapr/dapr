@@ -160,6 +160,10 @@ spec:
 {{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
 {{- end }}
+{{- if .Values.global.logTimestampFormat }}
+        - "--log-timestamp-format"
+        - "{{ .Values.global.logTimestampFormat }}"
+{{- end }}
 {{- if eq .Values.global.prometheus.enabled true }}
         - "--enable-metrics"
         - "--metrics-port"
