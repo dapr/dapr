@@ -16,6 +16,7 @@ package executor
 import (
 	"context"
 	"strings"
+	"time"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -58,7 +59,7 @@ func taskTypeOf(req *internalsv1pb.InternalInvokeRequest, actorID string) string
 	if v, ok := req.GetMetadata()[MetadataTaskType]; ok && len(v.GetValues()) > 0 {
 		return v.GetValues()[0]
 	}
-	if i := strings.LastIndex(actorID, "/"); i > 0 && isTaskID(actorID[i+1:]) {
+	if _, _, ok := legacyActivityKey(actorID); ok {
 		return TaskTypeActivity
 	}
 	return TaskTypeWorkflow
@@ -75,13 +76,25 @@ func taskTypeOf(req *internalsv1pb.InternalInvokeRequest, actorID string) string
 // Instance IDs cannot contain "/" (the scheduler rejects such job names), so
 // the first form only ever matches genuine pre-upgrade activity keys.
 func siblingRendezvousKey(actorID string) string {
-	if i := strings.LastIndex(actorID, "/"); i > 0 && isTaskID(actorID[i+1:]) {
-		return actorID[:i] + "::" + actorID[i+1:]
+	if iid, taskID, ok := legacyActivityKey(actorID); ok {
+		return iid + "::" + taskID
 	}
 	if i := strings.LastIndex(actorID, "::"); i > 0 && isTaskID(actorID[i+2:]) {
 		return actorID[:i] + "/" + actorID[i+2:]
 	}
 	return ""
+}
+
+// legacyActivityKey reports whether actorID is a pre-upgrade activity
+// rendezvous key "<instanceID>/<taskID>" and returns its parts. The shape is
+// unambiguous: the scheduler rejects job names containing "/", so no
+// workflow instance ID (and hence no current-format rendezvous key) can
+// match it.
+func legacyActivityKey(actorID string) (string, string, bool) {
+	if i := strings.LastIndex(actorID, "/"); i > 0 && isTaskID(actorID[i+1:]) {
+		return actorID[:i], actorID[i+1:], true
+	}
+	return "", "", false
 }
 
 // isTaskID reports whether s is a base-10 integer as produced by task ID
@@ -101,17 +114,37 @@ func isTaskID(s string) bool {
 	return true
 }
 
+// forwardTimeout bounds a sibling forward. The forward is best effort (the
+// durable reminder retry converges without it), so it must never hold
+// resources for long.
+const forwardTimeout = 10 * time.Second
+
 // forwardSibling forwards a completion to the sibling-format rendezvous
 // actor. It bridges rolling upgrades: a completion routed with one version's
 // activity rendezvous key still reaches a waiter that rendezvouses under the
 // other version's key, instead of waiting for the durable reminder retry.
 // Best effort; on failure the retry path still converges.
-func (e *executor) forwardSibling(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) {
+//
+// The forward runs in its own goroutine with a bounded, detached context and
+// is deliberately not tracked by the actor's wait group: a slow cross-node
+// call must not delay the completion reply, nor the actor's deactivation
+// (Deactivate waits on the wait group, and the deactivation queue is drained
+// serially). The goroutine only touches the actor's immutable identity
+// fields, so it is safe past deactivation.
+func (e *executor) forwardSibling(ctx context.Context, data []byte) {
 	sibling := siblingRendezvousKey(e.actorID)
 	if sibling == "" {
 		return
 	}
 
+	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), forwardTimeout)
+	go func() {
+		defer cancel()
+		e.callSibling(fctx, sibling, data)
+	}()
+}
+
+func (e *executor) callSibling(ctx context.Context, sibling string, data []byte) {
 	router, err := e.actors.Router(ctx)
 	if err != nil {
 		log.Debugf("Executor actor '%s': unable to forward completion to sibling rendezvous '%s': %s", e.actorID, sibling, err)
@@ -123,7 +156,7 @@ func (e *executor) forwardSibling(ctx context.Context, req *internalsv1pb.Intern
 	freq := internalsv1pb.
 		NewInternalInvokeRequest(MethodComplete).
 		WithActor(e.actorType, sibling).
-		WithData(req.GetMessage().GetData().GetValue()).
+		WithData(data).
 		WithContentType(invokev1.ProtobufContentType).
 		WithMetadata(map[string][]string{
 			MetadataForwarded: {"true"},

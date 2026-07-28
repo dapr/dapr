@@ -17,6 +17,7 @@ package actors
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
@@ -60,18 +61,18 @@ type ClusterTasksBackend struct {
 	pending           *pending.Pending
 }
 
-func NewClusterTasksBackend(opts ClusterTasksBackendOptions) *ClusterTasksBackend {
+func NewClusterTasksBackend(opts ClusterTasksBackendOptions) (*ClusterTasksBackend, error) {
 	if opts.Pending == nil {
-		// Defensive: same-daprd waits and deliveries still work, but for
-		// cross-daprd delivery the same instance must be shared with the
-		// executor actor factory (executor.Options.Pending).
-		opts.Pending = pending.New()
+		// A silently defaulted map would deliver into a different instance
+		// than the executor actor factory's, losing every cross-daprd
+		// completion; fail fast at construction instead.
+		return nil, errors.New("pending rendezvous is required and must be the same instance passed to executor.Options.Pending")
 	}
 	return &ClusterTasksBackend{
 		actors:            opts.Actors,
 		executorActorType: opts.ExecutorActorType,
 		pending:           opts.Pending,
-	}
+	}, nil
 }
 
 func (be *ClusterTasksBackend) CompleteActivityTask(ctx context.Context, resp *protos.ActivityResponse) error {
@@ -193,10 +194,17 @@ func (be *ClusterTasksBackend) WaitForWorkflowTaskCompletion(req *protos.Workflo
 	}
 }
 
-// waitForCompletion registers a waiter for key in the process-local pending
-// map. Registration happens here, before the work item is dispatched to the
-// application, so no completion can be reported before the waiter exists. The
-// returned function blocks until the completion is delivered.
+// waitForCompletion returns a function that registers a waiter for key in
+// the process-local pending map and blocks until the completion is
+// delivered. Registration happens when the returned function is invoked, not
+// when it is constructed: durabletask may abandon the work item between
+// constructing the waiter and invoking it (context cancellation during
+// dispatch), and an entry registered eagerly would leak and swallow a later
+// completion for the same key. The window this opens (a completion reported
+// before the returned function runs) is bounded by a full application round
+// trip racing the next statement in the caller; if it is ever lost, the
+// completion parks on the co-located executor actor and the durable reminder
+// retry redispatches the work item.
 //
 // The pending map is only consulted by completions arriving on this daprd or
 // forwarded here by the executor actor, so blocking on it is only correct
@@ -205,9 +213,8 @@ func (be *ClusterTasksBackend) WaitForWorkflowTaskCompletion(req *protos.Workflo
 // waiter's actor ID); when it does not hold, the waiter deregisters and falls
 // back to a watch stream on the executor actor, wherever it is placed.
 func (be *ClusterTasksBackend) waitForCompletion(taskType, key string) func(context.Context, proto.Message) error {
-	waitCh, deregister := be.pending.Register(executor.PendingKey(taskType, key))
-
 	return func(ctx context.Context, resp proto.Message) error {
+		waitCh, deregister := be.pending.Register(executor.PendingKey(taskType, key))
 		defer deregister()
 
 		if be.executorLocal(ctx, key) {
@@ -240,7 +247,7 @@ func (be *ClusterTasksBackend) waitForCompletion(taskType, key string) func(cont
 
 		diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteWaitWatch)
 
-		return be.watchCompletion(ctx, key, resp)
+		return be.watchCompletion(ctx, taskType, key, resp)
 	}
 }
 
@@ -264,8 +271,14 @@ func (be *ClusterTasksBackend) executorLocal(ctx context.Context, key string) bo
 }
 
 // watchCompletion is the fallback rendezvous: a watch stream on the executor
-// actor, wherever placement resolves it.
-func (be *ClusterTasksBackend) watchCompletion(ctx context.Context, key string, resp proto.Message) error {
+// actor, wherever placement resolves it. The executor actor ID space is
+// shared between task types, so a completion of the other type sharing this
+// actor (a workflow instance ID colliding with an activity actor ID) could
+// be streamed here; completions parked by current daprds carry their task
+// type as a response header and are rejected on mismatch (the durable
+// reminder retry converges), while completions parked by pre-upgrade daprds
+// carry no header and are accepted as before.
+func (be *ClusterTasksBackend) watchCompletion(ctx context.Context, taskType, key string, resp proto.Message) error {
 	router, err := be.actors.Router(ctx)
 	if err != nil {
 		return err
@@ -283,6 +296,10 @@ func (be *ClusterTasksBackend) watchCompletion(ctx context.Context, key string, 
 
 		if res.GetStatus().GetCode() == int32(codes.Aborted) {
 			return false, api.ErrTaskCancelled
+		}
+
+		if v, ok := res.GetHeaders()[executor.MetadataTaskType]; ok && len(v.GetValues()) > 0 && v.GetValues()[0] != taskType {
+			return false, fmt.Errorf("received completion for task type %q while watching %q", v.GetValues()[0], taskType)
 		}
 
 		if err := proto.Unmarshal(res.GetMessage().GetData().GetValue(), resp); err != nil {

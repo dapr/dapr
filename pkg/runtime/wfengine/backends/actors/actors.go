@@ -142,16 +142,20 @@ type Actors struct {
 	stopped atomic.Bool
 }
 
-func New(opts Options) *Actors {
+func New(opts Options) (*Actors, error) {
 	var pendingTasksBackend PendingTasksBackend
 	var pendingCompletions *pending.Pending
 	if opts.EnableClusteredDeployment {
 		pendingCompletions = pending.New()
-		pendingTasksBackend = NewClusterTasksBackend(ClusterTasksBackendOptions{
+		var err error
+		pendingTasksBackend, err = NewClusterTasksBackend(ClusterTasksBackendOptions{
 			Actors:            opts.Actors,
 			ExecutorActorType: todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
 			Pending:           pendingCompletions,
 		})
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		pendingTasksBackend = local.NewTasksBackend()
 	}
@@ -178,7 +182,7 @@ func New(opts Options) *Actors {
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 		pendingCompletions:              pendingCompletions,
-	}
+	}, nil
 }
 
 func (abe *Actors) RegisterActors(ctx context.Context) error {

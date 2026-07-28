@@ -68,11 +68,6 @@ const (
 	// instance, or eventTime fell outside the cached window).
 	CertCacheMiss = "miss"
 
-	// TaskTypeActivity/TaskTypeWorkflow tag pending-task completion routing
-	// events by the kind of task completed.
-	TaskTypeActivity = "activity"
-	TaskTypeWorkflow = "workflow"
-
 	// Completion routes under WorkflowsClusteredDeployment. Wait side: the
 	// waiter either blocks on the process-local pending map
 	// (CompletionRouteWaitLocal, the expected steady state) or falls back to

@@ -145,7 +145,7 @@ func New(opts Options) (Interface, error) {
 	}
 
 	// If no backend was initialized by the manager, create a backend backed by actors
-	abackend := backendactors.New(backendactors.Options{
+	abackend, err := backendactors.New(backendactors.Options{
 		AppID:                  opts.AppID,
 		Namespace:              opts.Namespace,
 		Actors:                 opts.Actors,
@@ -160,6 +160,9 @@ func New(opts Options) (Interface, error) {
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	inProcessExec := opts.InProcessExecutor
 	if inProcessExec == nil {
