@@ -532,3 +532,5 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
+
+replace github.com/dapr/kit => github.com/MyMirelHub/kit v0.17.1-0.20260728125431-6a1a0a15e941

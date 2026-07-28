@@ -15,6 +15,7 @@ package patcher
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -621,6 +622,29 @@ func TestGetSidecarContainer(t *testing.T) {
 		assert.Equal(t, "daprio/dapr", container.Image)
 		assert.Equal(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
+	})
+
+	t.Run("get sidecar container with log timestamp format", func(t *testing.T) {
+		c := NewSidecarConfig(&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: map[string]string{
+					annotations.KeyAppID:              "app_id",
+					annotations.KeyLogTimestampFormat: "2006/01/02 15:04:05.000",
+				},
+			},
+		})
+		c.SidecarImage = "daprio/dapr"
+		c.Namespace = "dapr-system"
+
+		c.SetFromPodAnnotations()
+
+		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
+		require.NoError(t, err)
+
+		assert.Contains(t, container.Args, "--log-timestamp-format")
+		idx := slices.Index(container.Args, "--log-timestamp-format")
+		require.Greater(t, len(container.Args), idx+1)
+		assert.Equal(t, "2006/01/02 15:04:05.000", container.Args[idx+1])
 	})
 
 	t.Run("get sidecar container with custom grpc ports", func(t *testing.T) {
