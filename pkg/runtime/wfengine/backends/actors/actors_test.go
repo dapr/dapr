@@ -164,7 +164,7 @@ func TestLoadInternalState_RetriesTransientReadError(t *testing.T) {
 		assert.Equal(t, int32(1), calls.Load(), "a non-transient error must not be retried")
 
 		var transientErr *wfstateerrors.TransientReadError
-		assert.False(t, errors.As(err, &transientErr))
+		assert.NotErrorAs(t, err, &transientErr)
 	})
 
 	t.Run("stops retrying once the context is canceled mid-retry", func(t *testing.T) {
