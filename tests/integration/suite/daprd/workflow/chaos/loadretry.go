@@ -93,7 +93,9 @@ func (l *loadretry) Run(t *testing.T, ctx context.Context) {
 
 	r := l.workflow.Registry()
 	require.NoError(t, r.AddWorkflowN("wf", func(octx *task.WorkflowContext) (any, error) {
-		octx.WaitForSingleEvent("go", time.Minute).Await(nil)
+		if err := octx.WaitForSingleEvent("go", time.Minute).Await(nil); err != nil {
+			return nil, err
+		}
 		return nil, nil
 	}))
 
