@@ -67,6 +67,11 @@ func (c *clientchurn) Run(t *testing.T, ctx context.Context) {
 	current := c.workflow.ConnectWorker(t, ctx, newRegistry())
 	c.workflow.WaitForConnectedWorkers(t, ctx, 1)
 
+	// Keep a reference to every worker so their observers can be summed after the
+	// churn: a disconnected worker retains the counts it saw while connected.
+	//nolint:prealloc
+	workers := []*workflow.ConnectedWorker{current}
+
 	ids := make([]api.InstanceID, workflowCount)
 	for i := range ids {
 		id, err := mgmt.ScheduleNewWorkflow(ctx, "Accumulate")
@@ -76,6 +81,7 @@ func (c *clientchurn) Run(t *testing.T, ctx context.Context) {
 
 	for range 4 {
 		next := c.workflow.ConnectWorker(t, ctx, newRegistry())
+		workers = append(workers, next)
 		c.workflow.WaitForConnectedWorkers(t, ctx, 2)
 		current.Disconnect(t)
 		c.workflow.WaitForConnectedWorkers(t, ctx, 1)
@@ -88,4 +94,16 @@ func (c *clientchurn) Run(t *testing.T, ctx context.Context) {
 		assert.True(t, api.WorkflowMetadataIsComplete(meta))
 		assert.Equal(t, strconv.Itoa(activityCount), meta.GetOutput().GetValue())
 	}
+
+	// Across the churn we must have observed both full-history re-warms (each fresh
+	// worker starts cold) and deltas (turns resuming on a warm stream). Asserting
+	// both catches a silent regression where delta delivery stops while results stay
+	// correct.
+	var totalFulls, totalDeltas int
+	for _, w := range workers {
+		totalFulls += w.Observer.FullSends()
+		totalDeltas += w.Observer.Deltas()
+	}
+	assert.Positive(t, totalFulls, "fresh workers must be re-warmed with a full history at least once")
+	assert.Positive(t, totalDeltas, "deltas must flow at least once across the churn")
 }

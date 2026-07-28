@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
@@ -230,10 +231,8 @@ func (w *Workflow) ConnectWorkerN(t *testing.T, ctx context.Context, index int, 
 	obs := newWorkItemObserver()
 	wctx, cancel := context.WithCancel(ctx)
 
-	//nolint:staticcheck
-	conn, err := grpc.DialContext(wctx, w.daprds[index].GRPCAddress(),
+	conn, err := grpc.NewClient(w.daprds[index].GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(), //nolint:staticcheck
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(math.MaxInt32),
 			grpc.MaxCallSendMsgSize(math.MaxInt32),
@@ -242,6 +241,13 @@ func (w *Workflow) ConnectWorkerN(t *testing.T, ctx context.Context, index int, 
 		grpc.WithChainUnaryInterceptor(obs.unaryInterceptor()),
 	)
 	require.NoError(t, err)
+
+	// grpc.NewClient connects lazily; eagerly connect to replicate the old
+	// grpc.WithBlock behaviour so the worker is ready before the test proceeds.
+	conn.Connect()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, connectivity.Ready, conn.GetState())
+	}, time.Second*10, time.Millisecond*10)
 
 	cl := client.NewTaskHubGrpcClient(conn, logger.New(t), opts...)
 	require.NoError(t, cl.StartWorkItemListener(wctx, r))

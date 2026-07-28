@@ -67,6 +67,7 @@ func (l *largehistory) Run(t *testing.T, ctx context.Context) {
 
 	deltas := worker.Observer.DeltasFor(string(id))
 	fulls := worker.Observer.FullSendsFor(string(id))
+	assert.Equal(t, 1, fulls, "only the cold start is a full send; every later turn is a delta")
 	assert.Greater(t, deltas, fulls, "deltas must dominate full sends over a long history")
 
 	hist, err := mgmt.GetInstanceHistory(ctx, id)

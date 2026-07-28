@@ -85,4 +85,6 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 
 	assert.GreaterOrEqual(t, worker2.Observer.FullSendsFor(string(id)), 1,
 		"the reconnected cold worker must be re-warmed with a full history")
+	assert.Positive(t, worker2.Observer.DeltasFor(string(id)),
+		"deltas must resume on the re-warmed worker after the full-history re-send")
 }
