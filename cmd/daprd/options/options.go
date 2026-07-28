@@ -14,6 +14,7 @@ limitations under the License.
 package options
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -257,6 +258,9 @@ func New(origArgs []string) (*Options, error) {
 	// deprecated DAPR_TRUST_ANCHORS literal PEM.
 	switch {
 	case fs.Changed("trust-anchors-file"):
+		if trustAnchorsFile == "" {
+			return nil, errors.New("'trust-anchors-file' option cannot be empty")
+		}
 		opts.TrustAnchorsFile = &trustAnchorsFile
 	case os.Getenv(consts.TrustAnchorsFileEnvVar) != "":
 		taFile := os.Getenv(consts.TrustAnchorsFileEnvVar)

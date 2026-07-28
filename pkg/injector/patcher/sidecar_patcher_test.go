@@ -487,3 +487,48 @@ func TestPatching(t *testing.T) {
 		t.Run(tc.name, testCaseFn(tc))
 	}
 }
+
+func TestPatchingTrustDistributionDisabled(t *testing.T) {
+	c := NewSidecarConfig(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod",
+			Namespace: "testns",
+			Annotations: map[string]string{
+				"dapr.io/enabled": "true",
+				"dapr.io/app-id":  "myapp",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "appcontainer"}},
+		},
+	})
+	c.TrustDistributionEnabled = false
+	c.CurrentTrustAnchors = []byte("pem")
+	c.SetFromPodAnnotations()
+
+	patch, err := c.GetPatch()
+	require.NoError(t, err)
+
+	pod, err := PatchPod(c.pod, patch)
+	require.NoError(t, err)
+
+	for _, volume := range pod.Spec.Volumes {
+		assert.NotEqual(t, "dapr-trust-anchors", volume.Name)
+	}
+
+	daprdContainer := pod.Spec.Containers[1]
+	require.Equal(t, "daprd", daprdContainer.Name)
+	for _, mount := range daprdContainer.VolumeMounts {
+		assert.NotEqual(t, "dapr-trust-anchors", mount.Name)
+	}
+
+	var foundLegacyEnv bool
+	for _, env := range daprdContainer.Env {
+		assert.NotEqual(t, "DAPR_TRUST_ANCHORS_FILE", env.Name)
+		if env.Name == "DAPR_TRUST_ANCHORS" {
+			assert.Equal(t, "pem", env.Value)
+			foundLegacyEnv = true
+		}
+	}
+	assert.True(t, foundLegacyEnv, "daprd must fall back to the deprecated inline trust anchors env var")
+}

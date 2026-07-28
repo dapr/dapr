@@ -78,6 +78,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.SentrySPIFFEID = i.sentrySPIFFEID.String()
 	sidecar.CurrentTrustAnchors = trustAnchors
 	sidecar.TrustAnchorsConfigMapName = i.config.TrustAnchorsConfigMapName
+	sidecar.TrustDistributionEnabled = i.config.GetTrustDistributionEnabled()
 	sidecar.DisableTokenVolume = !token.HasKubernetesToken()
 	sidecar.KubeClusterDomain = i.config.KubeClusterDomain
 	sidecar.SchedulerEnabled = i.schedulerEnabled

@@ -55,6 +55,7 @@ type Config struct {
 
 	TrustAnchorsFile          string `envconfig:"DAPR_TRUST_ANCHORS_FILE"`
 	TrustAnchorsConfigMapName string `envconfig:"DAPR_TRUST_ANCHORS_CONFIGMAP_NAME"`
+	TrustDistributionEnabled  string `envconfig:"DAPR_TRUST_DISTRIBUTION_ENABLED"`
 	ControlPlaneTrustDomain   string `envconfig:"DAPR_CONTROL_PLANE_TRUST_DOMAIN"`
 	SentryAddress             string `envconfig:"DAPR_SENTRY_ADDRESS"`
 
@@ -66,6 +67,7 @@ type Config struct {
 	parsedEnableK8sDownwardAPIs      bool
 	parsedSidecarDropALLCapabilities bool
 	parsedNativeSidecarEnabled       bool
+	parsedTrustDistributionEnabled   bool
 	parsedEntrypointTolerations      []corev1.Toleration
 	parsedRunAsUser                  *int64
 	parsedRunAsGroup                 *int64
@@ -80,6 +82,7 @@ func NewConfigWithDefaults() Config {
 		ControlPlaneTrustDomain:   "cluster.local",
 		TrustAnchorsFile:          "/var/run/dapr.io/tls/ca.crt",
 		TrustAnchorsConfigMapName: securityConsts.TrustAnchorsConfigMapName,
+		TrustDistributionEnabled:  "true",
 	}
 }
 
@@ -157,6 +160,10 @@ func (c Config) GetNativeSidecarEnabled() bool {
 	return c.parsedNativeSidecarEnabled
 }
 
+func (c Config) GetTrustDistributionEnabled() bool {
+	return c.parsedTrustDistributionEnabled
+}
+
 func (c Config) GetActorsEnabled() bool {
 	return c.parsedActorsEnabled
 }
@@ -204,6 +211,7 @@ func (c *Config) parse() (err error) {
 	c.parsedEnableK8sDownwardAPIs = strings.IsTruthy(c.EnableK8sDownwardAPIs)
 	c.parsedSidecarDropALLCapabilities = strings.IsTruthy(c.SidecarDropALLCapabilities)
 	c.parsedNativeSidecarEnabled = strings.IsTruthy(c.NativeSidecarEnabled)
+	c.parsedTrustDistributionEnabled = isTruthyDefaultTrue(c.TrustDistributionEnabled)
 
 	// Parse the runAsUser and runAsGroup
 	c.parsedRunAsUser, err = parseStringToInt64Pointer(c.RunAsUser)

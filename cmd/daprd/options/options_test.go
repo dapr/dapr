@@ -417,6 +417,11 @@ func TestTrustAnchors(t *testing.T) {
 		assert.Equal(t, []byte("pem-data"), opts.TrustAnchors)
 	})
 
+	t.Run("explicitly empty flag is rejected", func(t *testing.T) {
+		_, err := New([]string{"--trust-anchors-file", ""})
+		require.ErrorContains(t, err, "'trust-anchors-file' option cannot be empty")
+	})
+
 	t.Run("nothing set leaves both empty", func(t *testing.T) {
 		opts, err := New(nil)
 		require.NoError(t, err)
