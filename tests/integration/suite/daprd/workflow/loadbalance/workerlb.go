@@ -111,7 +111,7 @@ func (w *workerlb) Run(t *testing.T, ctx context.Context) {
 				if !strings.HasPrefix(k, "dapr_runtime_workflow_completion_route_count|") {
 					continue
 				}
-				for _, label := range strings.Split(k, "|") {
+				for label := range strings.SplitSeq(k, "|") {
 					if route, ok := strings.CutPrefix(label, "route:"); ok {
 						routeCounts[route] += v
 					}

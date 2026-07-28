@@ -25,6 +25,45 @@ import (
 // sibling-format rendezvous actor, so it is never forwarded again.
 const MetadataForwarded = "forwarded"
 
+const (
+	// MetadataTaskType carries the task type of a Complete/Cancel call so
+	// the receiving executor actor can deliver into the correctly
+	// namespaced pending entry. Calls from pre-upgrade daprds lack it; the
+	// task type is then inferred from the rendezvous key shape.
+	MetadataTaskType = "tasktype"
+
+	TaskTypeActivity = "activity"
+	TaskTypeWorkflow = "workflow"
+)
+
+// PendingKey namespaces a rendezvous key by task type. The executor actor ID
+// space is shared between workflow tasks (bare instance ID) and activity
+// tasks (the activity actor ID "<instanceID>::<taskID>"), and instance IDs
+// created through the TaskHub API may themselves contain "::": a workflow
+// with instance ID "abc::5" and the activity with task ID 5 of a workflow
+// "abc" share the executor actor ID "abc::5". Namespacing the pending map
+// keeps their waiters and completions apart; the shared executor actor
+// instance is harmless as it only ferries typed deliveries.
+func PendingKey(taskType, key string) string {
+	return taskType + "|" + key
+}
+
+// taskTypeOf resolves the task type of a Complete/Cancel call: from request
+// metadata when present, otherwise inferred from the rendezvous key shape.
+// Only pre-upgrade daprds omit the metadata, and their activity keys are
+// always "<instanceID>/<taskID>" shaped, which no workflow instance ID can
+// be (the scheduler rejects job names containing "/", so such a workflow
+// could never have been created).
+func taskTypeOf(req *internalsv1pb.InternalInvokeRequest, actorID string) string {
+	if v, ok := req.GetMetadata()[MetadataTaskType]; ok && len(v.GetValues()) > 0 {
+		return v.GetValues()[0]
+	}
+	if i := strings.LastIndex(actorID, "/"); i > 0 && isTaskID(actorID[i+1:]) {
+		return TaskTypeActivity
+	}
+	return TaskTypeWorkflow
+}
+
 // siblingRendezvousKey returns the rendezvous actor ID used by the other
 // daprd version for the same activity task, or "" when actorID is not an
 // activity rendezvous key. Pre-upgrade daprds key the activity rendezvous on
@@ -79,12 +118,17 @@ func (e *executor) forwardSibling(ctx context.Context, req *internalsv1pb.Intern
 		return
 	}
 
+	// Only activity keys have sibling forms, so the forward is always an
+	// activity completion.
 	freq := internalsv1pb.
 		NewInternalInvokeRequest(MethodComplete).
 		WithActor(e.actorType, sibling).
 		WithData(req.GetMessage().GetData().GetValue()).
 		WithContentType(invokev1.ProtobufContentType).
-		WithMetadata(map[string][]string{MetadataForwarded: {"true"}})
+		WithMetadata(map[string][]string{
+			MetadataForwarded: {"true"},
+			MetadataTaskType:  {TaskTypeActivity},
+		})
 
 	if _, err = router.Call(ctx, freq); err != nil {
 		log.Debugf("Executor actor '%s': failed to forward completion to sibling rendezvous '%s': %s", e.actorID, sibling, err)

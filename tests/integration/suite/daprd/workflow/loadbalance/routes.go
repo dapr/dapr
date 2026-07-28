@@ -94,7 +94,7 @@ func (r *routes) Run(t *testing.T, ctx context.Context) {
 				if !strings.HasPrefix(k, "dapr_runtime_workflow_completion_route_count|") {
 					continue
 				}
-				for _, label := range strings.Split(k, "|") {
+				for label := range strings.SplitSeq(k, "|") {
 					if route, ok := strings.CutPrefix(label, "route:"); ok {
 						routeCounts[route] += v
 					}
@@ -114,10 +114,10 @@ func (r *routes) Run(t *testing.T, ctx context.Context) {
 		// Every wait must be matched by a completion delivered either
 		// directly on this daprd or forwarded via the co-located executor
 		// actor.
-		assert.Equal(col,
+		assert.InDelta(col,
 			routeCounts["wait_local"],
 			routeCounts["complete_local"]+routeCounts["complete_actor"],
-			"every waiter should be completed via the local map or the executor actor")
+			0)
 		// Both task types must be measured: one activity and at least two
 		// orchestrator turns per workflow.
 		assert.Positive(col, taskTypeCounts["activity"], "expected activity completions to be measured")

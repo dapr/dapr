@@ -61,6 +61,12 @@ type ClusterTasksBackend struct {
 }
 
 func NewClusterTasksBackend(opts ClusterTasksBackendOptions) *ClusterTasksBackend {
+	if opts.Pending == nil {
+		// Defensive: same-daprd waits and deliveries still work, but for
+		// cross-daprd delivery the same instance must be shared with the
+		// executor actor factory (executor.Options.Pending).
+		opts.Pending = pending.New()
+	}
 	return &ClusterTasksBackend{
 		actors:            opts.Actors,
 		executorActorType: opts.ExecutorActorType,
@@ -79,7 +85,7 @@ func (be *ClusterTasksBackend) CompleteActivityTask(ctx context.Context, resp *p
 		return err
 	}
 
-	return be.completeTask(ctx, diag.TaskTypeActivity, key, data)
+	return be.completeTask(ctx, executor.TaskTypeActivity, key, data)
 }
 
 func (be *ClusterTasksBackend) CancelActivityTask(ctx context.Context, id api.InstanceID, taskID int32) error {
@@ -88,7 +94,7 @@ func (be *ClusterTasksBackend) CancelActivityTask(ctx context.Context, id api.In
 		taskID,
 	)
 
-	return be.cancelTask(ctx, key)
+	return be.cancelTask(ctx, executor.TaskTypeActivity, key)
 }
 
 func (be *ClusterTasksBackend) CompleteWorkflowTask(ctx context.Context, resp *protos.WorkflowResponse) error {
@@ -97,19 +103,22 @@ func (be *ClusterTasksBackend) CompleteWorkflowTask(ctx context.Context, resp *p
 		return err
 	}
 
-	return be.completeTask(ctx, diag.TaskTypeWorkflow, resp.GetInstanceId(), data)
+	return be.completeTask(ctx, executor.TaskTypeWorkflow, resp.GetInstanceId(), data)
 }
 
 func (be *ClusterTasksBackend) CancelWorkflowTask(ctx context.Context, id api.InstanceID) error {
-	return be.cancelTask(ctx, string(id))
+	return be.cancelTask(ctx, executor.TaskTypeWorkflow, string(id))
 }
 
 // completeTask delivers a completion to the waiter registered for key. When
 // the waiter lives on this daprd its pending-map entry is completed
 // in-process; otherwise the completion is forwarded via the executor actor,
-// which placement resolves to the waiter's host.
+// which placement resolves to the waiter's host. Pending entries are
+// namespaced by task type: the executor actor ID space is shared between
+// workflow and activity tasks and instance IDs may collide with activity
+// keys (see executor.PendingKey).
 func (be *ClusterTasksBackend) completeTask(ctx context.Context, taskType, key string, data []byte) error {
-	if be.pending.Deliver(key, data) {
+	if be.pending.Deliver(executor.PendingKey(taskType, key), data) {
 		diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteCompleteLocal)
 		return nil
 	}
@@ -123,7 +132,8 @@ func (be *ClusterTasksBackend) completeTask(ctx context.Context, taskType, key s
 		NewInternalInvokeRequest(executor.MethodComplete).
 		WithActor(be.executorActorType, key).
 		WithData(data).
-		WithContentType(invokev1.ProtobufContentType)
+		WithContentType(invokev1.ProtobufContentType).
+		WithMetadata(map[string][]string{executor.MetadataTaskType: {taskType}})
 
 	_, err = router.Call(ctx, req)
 	if err == nil {
@@ -133,8 +143,8 @@ func (be *ClusterTasksBackend) completeTask(ctx context.Context, taskType, key s
 	return err
 }
 
-func (be *ClusterTasksBackend) cancelTask(ctx context.Context, key string) error {
-	if be.pending.Cancel(key) {
+func (be *ClusterTasksBackend) cancelTask(ctx context.Context, taskType, key string) error {
+	if be.pending.Cancel(executor.PendingKey(taskType, key)) {
 		return nil
 	}
 
@@ -146,7 +156,8 @@ func (be *ClusterTasksBackend) cancelTask(ctx context.Context, key string) error
 	req := internalsv1pb.
 		NewInternalInvokeRequest(executor.MethodCancel).
 		WithActor(be.executorActorType, key).
-		WithContentType(invokev1.ProtobufContentType)
+		WithContentType(invokev1.ProtobufContentType).
+		WithMetadata(map[string][]string{executor.MetadataTaskType: {taskType}})
 
 	_, err = router.Call(ctx, req)
 
@@ -159,7 +170,7 @@ func (be *ClusterTasksBackend) WaitForActivityCompletion(req *protos.ActivityReq
 		req.GetTaskId(),
 	)
 
-	wait := be.waitForCompletion(diag.TaskTypeActivity, key)
+	wait := be.waitForCompletion(executor.TaskTypeActivity, key)
 
 	return func(ctx context.Context) (*protos.ActivityResponse, error) {
 		var resp protos.ActivityResponse
@@ -171,7 +182,7 @@ func (be *ClusterTasksBackend) WaitForActivityCompletion(req *protos.ActivityReq
 }
 
 func (be *ClusterTasksBackend) WaitForWorkflowTaskCompletion(req *protos.WorkflowRequest) func(context.Context) (*protos.WorkflowResponse, error) {
-	wait := be.waitForCompletion(diag.TaskTypeWorkflow, req.GetInstanceId())
+	wait := be.waitForCompletion(executor.TaskTypeWorkflow, req.GetInstanceId())
 
 	return func(ctx context.Context) (*protos.WorkflowResponse, error) {
 		var resp protos.WorkflowResponse
@@ -194,7 +205,7 @@ func (be *ClusterTasksBackend) WaitForWorkflowTaskCompletion(req *protos.Workflo
 // waiter's actor ID); when it does not hold, the waiter deregisters and falls
 // back to a watch stream on the executor actor, wherever it is placed.
 func (be *ClusterTasksBackend) waitForCompletion(taskType, key string) func(context.Context, proto.Message) error {
-	waitCh, deregister := be.pending.Register(key)
+	waitCh, deregister := be.pending.Register(executor.PendingKey(taskType, key))
 
 	return func(ctx context.Context, resp proto.Message) error {
 		defer deregister()

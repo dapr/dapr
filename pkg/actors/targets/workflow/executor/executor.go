@@ -61,7 +61,7 @@ func (e *executor) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 	case MethodComplete:
 		return nil, e.complete(ctx, req)
 	case MethodCancel:
-		return nil, e.cancel()
+		return nil, e.cancel(req)
 	default:
 		return nil, errors.New("unknown method: " + req.GetMessage().GetMethod())
 	}
@@ -72,7 +72,7 @@ func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvo
 	// actor's ID, so placement co-locates them) and is registered in the
 	// process-local pending map: deliver in-process. The channel park below
 	// remains for waiters that fell back to a WatchComplete stream.
-	if e.pending != nil && e.pending.Deliver(e.actorID, req.GetMessage().GetData().GetValue()) {
+	if e.pending != nil && e.pending.Deliver(PendingKey(taskTypeOf(req, e.actorID), e.actorID), req.GetMessage().GetData().GetValue()) {
 		e.deactivateCh <- e
 		return nil
 	}
@@ -106,8 +106,8 @@ func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvo
 	}
 }
 
-func (e *executor) cancel() error {
-	if e.pending != nil && e.pending.Cancel(e.actorID) {
+func (e *executor) cancel(req *internalsv1pb.InternalInvokeRequest) error {
+	if e.pending != nil && e.pending.Cancel(PendingKey(taskTypeOf(req, e.actorID), e.actorID)) {
 		e.deactivateCh <- e
 		return nil
 	}
