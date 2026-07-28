@@ -22,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/dapr/dapr/pkg/injector/patcher"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/strings"
 )
@@ -52,9 +53,10 @@ type Config struct {
 	SidecarDropALLCapabilities        string `envconfig:"SIDECAR_DROP_ALL_CAPABILITIES"`
 	NativeSidecarEnabled              string `envconfig:"NATIVE_SIDECAR_ENABLED"`
 
-	TrustAnchorsFile        string `envconfig:"DAPR_TRUST_ANCHORS_FILE"`
-	ControlPlaneTrustDomain string `envconfig:"DAPR_CONTROL_PLANE_TRUST_DOMAIN"`
-	SentryAddress           string `envconfig:"DAPR_SENTRY_ADDRESS"`
+	TrustAnchorsFile          string `envconfig:"DAPR_TRUST_ANCHORS_FILE"`
+	TrustAnchorsConfigMapName string `envconfig:"DAPR_TRUST_ANCHORS_CONFIGMAP_NAME"`
+	ControlPlaneTrustDomain   string `envconfig:"DAPR_CONTROL_PLANE_TRUST_DOMAIN"`
+	SentryAddress             string `envconfig:"DAPR_SENTRY_ADDRESS"`
 
 	parsedActorsEnabled              bool
 	parsedActorsService              patcher.Service
@@ -74,9 +76,10 @@ type Config struct {
 // and/or override default values.
 func NewConfigWithDefaults() Config {
 	return Config{
-		SidecarImagePullPolicy:  "Always",
-		ControlPlaneTrustDomain: "cluster.local",
-		TrustAnchorsFile:        "/var/run/dapr.io/tls/ca.crt",
+		SidecarImagePullPolicy:    "Always",
+		ControlPlaneTrustDomain:   "cluster.local",
+		TrustAnchorsFile:          "/var/run/dapr.io/tls/ca.crt",
+		TrustAnchorsConfigMapName: securityConsts.TrustAnchorsConfigMapName,
 	}
 }
 

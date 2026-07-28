@@ -76,6 +76,12 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 	}
 	componentPatchOps, componentsSocketVolumeMount := c.componentsPatchOps(componentContainers, injectedComponentContainers)
 
+	// Per-namespace trust anchors ConfigMap, mounted so daprd hot reloads
+	// appended trust anchors without a restart.
+	trustAnchorsVolume, trustAnchorsMount := c.getTrustAnchorsVolume()
+	volumes = append(volumes, trustAnchorsVolume)
+	volumeMounts = append(volumeMounts, trustAnchorsMount)
+
 	// Projected volume with the token
 	if !c.DisableTokenVolume {
 		tokenVolume := c.getTokenVolume()

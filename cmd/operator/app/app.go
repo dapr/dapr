@@ -64,6 +64,8 @@ func Run() {
 		WatchdogEnabled:                     opts.WatchdogEnabled,
 		WatchdogInterval:                    opts.WatchdogInterval,
 		WatchdogCanPatchPodLabels:           opts.WatchdogCanPatchPodLabels,
+		TrustDistributionEnabled:            opts.TrustDistributionEnabled,
+		TrustAnchorsConfigMapName:           opts.TrustAnchorsConfigMapName,
 		APIPort:                             opts.APIPort,
 		APIListenAddress:                    opts.APIListenAddress,
 		WebhookServerPort:                   opts.WebhookServerPort,

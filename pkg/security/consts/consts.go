@@ -28,7 +28,22 @@ const (
 	TrustBundleK8sSecretName = "dapr-trust-bundle" /* #nosec */
 
 	// TrustAnchorsEnvVar is the environment variable name for the trust anchors in the sidecar.
+	//
+	// Deprecated: use TrustAnchorsFileEnvVar so trust anchor changes are picked up without a restart.
 	TrustAnchorsEnvVar = "DAPR_TRUST_ANCHORS"
+
+	// TrustAnchorsFileEnvVar is the environment variable name for the path to a
+	// trust anchors PEM bundle file. The file is watched for changes so appended
+	// trust anchors are picked up without a restart.
+	TrustAnchorsFileEnvVar = "DAPR_TRUST_ANCHORS_FILE"
+
+	// TrustAnchorsConfigMapName is the name of the per-namespace ConfigMap,
+	// written by the operator, which holds the current trust anchors.
+	TrustAnchorsConfigMapName = "dapr-root-ca.crt"
+
+	// TrustAnchorsConfigMapKey is the data key of the trust anchors PEM bundle
+	// inside TrustAnchorsConfigMapName.
+	TrustAnchorsConfigMapKey = "ca.crt"
 
 	// EnvKeysEnvVar is the variable injected in the daprd container with the list of injected env vars.
 	EnvKeysEnvVar = "DAPR_ENV_KEYS"

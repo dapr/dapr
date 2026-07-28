@@ -140,3 +140,66 @@ func decodePEM(t *testing.T, pemData []byte) (*x509.Certificate, *x509.Certifica
 
 	return cert, issuer
 }
+
+func TestRenewX509(t *testing.T) {
+	_, oldRootKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	existing, err := GenerateX509(OptionsX509{
+		X509RootKey:      oldRootKey,
+		TrustDomain:      "test.example.com",
+		AllowedClockSkew: time.Second * 20,
+	})
+	require.NoError(t, err)
+
+	_, newRootKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	ttl := time.Hour * 24
+	renewed, err := RenewX509(OptionsRenewX509{
+		Existing:         existing,
+		X509RootKey:      newRootKey,
+		TrustDomain:      "test.example.com",
+		AllowedClockSkew: time.Second * 20,
+		OverrideCATTL:    &ttl,
+	})
+	require.NoError(t, err)
+
+	t.Run("trust anchors are appended, old anchor retained byte for byte", func(t *testing.T) {
+		require.Greater(t, len(renewed.TrustAnchors), len(existing.TrustAnchors))
+		require.Equal(t, existing.TrustAnchors, renewed.TrustAnchors[:len(existing.TrustAnchors)])
+	})
+
+	t.Run("active issuer pair is unchanged", func(t *testing.T) {
+		require.Equal(t, existing.IssChainPEM, renewed.IssChainPEM)
+		require.Equal(t, existing.IssKeyPEM, renewed.IssKeyPEM)
+		require.Equal(t, existing.IssChain, renewed.IssChain)
+		require.Equal(t, existing.IssKey, renewed.IssKey)
+	})
+
+	t.Run("new root is self-signed with the fresh key and honours OverrideCATTL", func(t *testing.T) {
+		newAnchorPEM := renewed.TrustAnchors[len(existing.TrustAnchors):]
+		block, _ := pem.Decode(newAnchorPEM)
+		require.NotNil(t, block)
+		newRoot, cerr := x509.ParseCertificate(block.Bytes)
+		require.NoError(t, cerr)
+		require.NoError(t, newRoot.CheckSignatureFrom(newRoot))
+		require.Equal(t, newRootKey.Public(), newRoot.PublicKey)
+		require.WithinDuration(t, newRoot.NotBefore.Add(time.Second*20).Add(ttl), newRoot.NotAfter, time.Second)
+
+		t.Run("next issuer chains to the new root only", func(t *testing.T) {
+			require.Len(t, renewed.NextIssChain, 1)
+			require.NoError(t, renewed.NextIssChain[0].CheckSignatureFrom(newRoot))
+			require.Error(t, renewed.NextIssChain[0].CheckSignatureFrom(existing.IssChain[0]))
+			oldRootBlock, _ := pem.Decode(existing.TrustAnchors)
+			require.NotNil(t, oldRootBlock)
+			oldRoot, perr := x509.ParseCertificate(oldRootBlock.Bytes)
+			require.NoError(t, perr)
+			require.Error(t, renewed.NextIssChain[0].CheckSignatureFrom(oldRoot))
+		})
+	})
+
+	t.Run("next issuer key differs from the active issuer key", func(t *testing.T) {
+		require.NotEqual(t, renewed.IssKeyPEM, renewed.NextIssKeyPEM)
+		require.NotEmpty(t, renewed.NextIssKeyPEM)
+		require.NotNil(t, renewed.NextIssKey)
+	})
+}

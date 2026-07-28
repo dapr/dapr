@@ -256,9 +256,16 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 			Name:  "NAMESPACE",
 			Value: c.Namespace,
 		},
+		// TODO: Deprecated in favour of the trust anchors file below; remove per
+		// the trust distribution proposal deprecation cycle.
 		{
+			//nolint:staticcheck
 			Name:  securityConsts.TrustAnchorsEnvVar,
 			Value: string(c.CurrentTrustAnchors),
+		},
+		{
+			Name:  securityConsts.TrustAnchorsFileEnvVar,
+			Value: injectorConsts.TrustAnchorsVolumeMountPath + "/" + securityConsts.TrustAnchorsConfigMapKey,
 		},
 		{
 			Name: "POD_NAME",

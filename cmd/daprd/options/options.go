@@ -44,6 +44,7 @@ type Options struct {
 	ControlPlaneNamespace         string
 	SentryAddress                 string
 	TrustAnchors                  []byte
+	TrustAnchorsFile              *string
 	AllowedOrigins                string
 	EnableProfiling               bool
 	AppMaxConcurrency             int
@@ -102,6 +103,7 @@ func New(origArgs []string) (*Options, error) {
 		maxBodySize      string
 		readBufferSizeKB int
 		readBufferSize   string
+		trustAnchorsFile string
 	)
 
 	// We are using pflag to parse the CLI flags
@@ -143,6 +145,8 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.SentryAddress, "sentry-address", "", "Address for the Sentry CA service")
 	fs.StringVar(&opts.ControlPlaneTrustDomain, "control-plane-trust-domain", "localhost", "Trust domain of the Dapr control plane")
 	fs.StringVar(&opts.ControlPlaneNamespace, "control-plane-namespace", "default", "Namespace of the Dapr control plane")
+	//nolint:staticcheck
+	fs.StringVar(&trustAnchorsFile, "trust-anchors-file", "", "Filepath to the trust anchors PEM bundle, watched for changes. Takes priority over the "+consts.TrustAnchorsFileEnvVar+" and "+consts.TrustAnchorsEnvVar+" environment variables")
 	fs.StringSliceVar(&opts.SentryRequestJwtAudiences, "sentry-request-jwt-audiences", nil, "JWT audience list for certificate signing requests. If not specified, the trust domain will be used")
 	fs.StringVar(&opts.AllowedOrigins, "allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
 	fs.BoolVar(&opts.EnableProfiling, "enable-profiling", false, "Enable profiling")
@@ -248,7 +252,19 @@ func New(origArgs []string) (*Options, error) {
 		}
 	}
 
-	opts.TrustAnchors = []byte(os.Getenv(consts.TrustAnchorsEnvVar))
+	// Prefer a file based trust anchors source so appended trust anchors are
+	// picked up without a restart: flag, then DAPR_TRUST_ANCHORS_FILE, then the
+	// deprecated DAPR_TRUST_ANCHORS literal PEM.
+	switch {
+	case fs.Changed("trust-anchors-file"):
+		opts.TrustAnchorsFile = &trustAnchorsFile
+	case os.Getenv(consts.TrustAnchorsFileEnvVar) != "":
+		taFile := os.Getenv(consts.TrustAnchorsFileEnvVar)
+		opts.TrustAnchorsFile = &taFile
+	default:
+		//nolint:staticcheck
+		opts.TrustAnchors = []byte(os.Getenv(consts.TrustAnchorsEnvVar))
+	}
 
 	if !fs.Changed("control-plane-namespace") {
 		ns, ok := os.LookupEnv(consts.ControlPlaneNamespaceEnvVar)

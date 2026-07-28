@@ -30,6 +30,25 @@ tls:
     certPEM: ""
   trustDomain: cluster.local
 
+# Time-to-live used when generating or renewing the root and issuer
+# certificates.
+caTTL: 8760h
+
+# Automatic append-only CA renewal. Sentry appends a fresh trust anchor once
+# the issuer certificate has passed the threshold fraction of its lifetime,
+# keeps signing with the old issuer key for the propagation grace so the new
+# anchor can propagate everywhere, then switches to the new key. Old trust
+# anchors are never removed.
+# When user-provided certificates are set (tls.issuer / tls.root), renewal
+# defaults to disabled since renewing migrates the cluster to a
+# sentry-generated CA; set caRenewal.enabled explicitly to opt in.
+caRenewal:
+  enabled: ""
+  # Fraction of the issuer certificate's lifetime after which the CA is
+  # renewed, in the range (0, 1).
+  threshold: 0.9
+  propagationGrace: 24h
+
 jwt:
   # Enable JWT token issuance by Sentry
   enabled: false

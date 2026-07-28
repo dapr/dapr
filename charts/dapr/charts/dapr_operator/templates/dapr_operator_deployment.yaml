@@ -157,6 +157,12 @@ spec:
         - "{{ .Values.logLevel }}"
         - "--trust-anchors-file"
         - "/var/run/secrets/dapr.io/tls/ca.crt"
+{{- if or .Values.global.rbac.namespaced (not .Values.global.trustDistribution.enabled) }}
+        - "--trust-distribution=false"
+{{- else }}
+        - "--trust-anchors-configmap-name"
+        - "{{ .Values.global.trustDistribution.configMapName }}"
+{{- end }}
 {{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
 {{- end }}

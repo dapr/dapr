@@ -192,6 +192,19 @@ spec:
 {{- end }}
         - "--trust-domain"
         - {{ .Values.global.mtls.controlPlaneTrustDomain }}
+{{- $caRenewalEnabled := not (and .Values.tls.issuer.certPEM .Values.tls.issuer.keyPEM .Values.tls.root.certPEM) }}
+{{- if not (kindIs "string" .Values.caRenewal.enabled) }}
+{{- $caRenewalEnabled = .Values.caRenewal.enabled }}
+{{- end }}
+        - "--ca-renewal-enabled={{ $caRenewalEnabled }}"
+{{- if $caRenewalEnabled }}
+        - "--ca-ttl"
+        - "{{ .Values.caTTL }}"
+        - "--ca-renewal-threshold"
+        - "{{ .Values.caRenewal.threshold }}"
+        - "--trust-anchor-propagation-grace"
+        - "{{ .Values.caRenewal.propagationGrace }}"
+{{- end }}
 {{- with .Values.global.issuerFilenames }}
         - "--issuer-ca-filename"
         - "{{ .ca }}"
