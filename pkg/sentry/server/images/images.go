@@ -25,7 +25,11 @@ import (
 )
 
 // OIDContainerImages is the Dapr container images certificate extension OID.
-var OIDContainerImages = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 62884, 1, 1}
+// It lives under the CNCF Private Enterprise Number arc (1.3.6.1.4.1.57683),
+// in a Dapr project sub-arc (100) chosen to stay clear of the low-numbered
+// sub-arcs Kubernetes uses for its certificate attributes.
+// https://www.iana.org/assignments/enterprise-numbers/?q=57683
+var OIDContainerImages = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 57683, 100, 1}
 
 // Role is the role of a container in a Dapr workload pod.
 type Role string

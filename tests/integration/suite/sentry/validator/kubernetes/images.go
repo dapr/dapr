@@ -19,6 +19,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/asn1"
 	"encoding/pem"
 	"testing"
 	"time"
@@ -30,7 +31,6 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
-	sentryimages "github.com/dapr/dapr/pkg/sentry/server/images"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -131,19 +131,29 @@ func (i *images) Run(t *testing.T, ctx context.Context) {
 	require.Len(t, certs, 2)
 	require.NoError(t, certs[0].CheckSignatureFrom(certs[1]))
 
-	imgs, ok, err := sentryimages.FromExtensions(certs[0].Extensions)
-	require.NoError(t, err)
-	require.True(t, ok, "certificate should carry the container images extension")
-	assert.Equal(t, []sentryimages.ContainerImage{
-		{Role: sentryimages.RoleDaprd, ContainerName: "daprd", Image: "ghcr.io/dapr/daprd:1.16.0", Digest: "sha256:aaa111"},
-		{Role: sentryimages.RoleApp, ContainerName: "myapp", Image: "docker.io/library/myapp:v2", Digest: "sha256:bbb222"},
-		{Role: sentryimages.RoleApp, ContainerName: "notstarted", Image: "docker.io/library/notstarted:v1"},
-	}, imgs)
+	// The OID and wire format are hardcoded rather than referencing the
+	// pkg/sentry/server/images constants, so an accidental change to either
+	// fails this test instead of moving producer and assertion together.
+	oidContainerImages := asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 57683, 100, 1}
 
+	var found bool
 	for _, ext := range certs[0].Extensions {
-		if ext.Id.Equal(sentryimages.OIDContainerImages) {
-			assert.False(t, ext.Critical, "container images extension must be non-critical")
+		if !ext.Id.Equal(oidContainerImages) {
+			continue
 		}
+		found = true
+		assert.False(t, ext.Critical, "container images extension must be non-critical")
+
+		var jsonBytes []byte
+		rest, err := asn1.Unmarshal(ext.Value, &jsonBytes)
+		require.NoError(t, err)
+		assert.Empty(t, rest)
+		assert.JSONEq(t, `[
+			{"role":"daprd","containerName":"daprd","image":"ghcr.io/dapr/daprd:1.16.0","digest":"sha256:aaa111"},
+			{"role":"app","containerName":"myapp","image":"docker.io/library/myapp:v2","digest":"sha256:bbb222"},
+			{"role":"app","containerName":"notstarted","image":"docker.io/library/notstarted:v1"}
+		]`, string(jsonBytes))
 	}
+	require.True(t, found, "certificate should carry the container images extension")
 	assert.Empty(t, certs[0].UnhandledCriticalExtensions)
 }
