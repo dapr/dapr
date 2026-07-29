@@ -147,6 +147,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.blockShutdownDuration != nil {
 		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
 	}
+	if opts.appBindingOptionsTimeout != nil {
+		args = append(args, "--app-binding-options-timeout="+opts.appBindingOptionsTimeout.String())
+	}
 	if len(opts.schedulerAddresses) > 0 {
 		args = append(args, "--scheduler-host-address="+strings.Join(opts.schedulerAddresses, ","))
 	}

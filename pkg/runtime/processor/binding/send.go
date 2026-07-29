@@ -77,7 +77,8 @@ func (b *binding) StartReadingFromBindings(ctx context.Context) error {
 	}
 
 	for name, bind := range b.compStore.ListInputBindings() {
-		if err := b.startInputBinding(bindings[name], bind); err != nil {
+		err := b.startInputBinding(ctx, bindings[name], bind)
+		if err != nil {
 			return err
 		}
 	}
@@ -85,7 +86,7 @@ func (b *binding) StartReadingFromBindings(ctx context.Context) error {
 	return nil
 }
 
-func (b *binding) startInputBinding(comp componentsV1alpha1.Component, binding bindings.InputBinding) error {
+func (b *binding) startInputBinding(ctx context.Context, comp componentsV1alpha1.Component, binding bindings.InputBinding) error {
 	var isSubscribed bool
 
 	meta, err := b.meta.ToBaseMetadata(comp)
@@ -98,9 +99,10 @@ func (b *binding) startInputBinding(comp componentsV1alpha1.Component, binding b
 	if isBindingOfExplicitDirection(ComponentTypeInput, m) {
 		isSubscribed = true
 	} else {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+		probeCtx, cancel := context.WithTimeout(ctx, b.appBindingOptionsTimeout)
 		defer cancel()
-		isSubscribed, err = b.isAppSubscribedToBinding(ctx, comp.Name)
+
+		isSubscribed, err = b.isAppSubscribedToBinding(probeCtx, comp.Name)
 		if err != nil {
 			return err
 		}

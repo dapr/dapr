@@ -109,6 +109,10 @@ type Options struct {
 
 	// Reporter is the reporter for the operator.
 	Reporter registry.Reporter
+
+	// AppBindingOptionsTimeout is the timeout for the input binding
+	// subscription discovery request sent to the app.
+	AppBindingOptionsTimeout time.Duration
 }
 
 // Processor manages the lifecycle of all components categories.
@@ -167,14 +171,15 @@ func New(opts Options) *Processor {
 	})
 
 	binding := binding.New(binding.Options{
-		Registry:       opts.Registry.Bindings(),
-		ComponentStore: opts.ComponentStore,
-		Meta:           opts.Meta,
-		IsHTTP:         opts.IsHTTP,
-		Resiliency:     opts.Resiliency,
-		GRPC:           opts.GRPC,
-		TracingSpec:    opts.GlobalConfig.Spec.TracingSpec,
-		Channels:       opts.Channels,
+		Registry:                 opts.Registry.Bindings(),
+		ComponentStore:           opts.ComponentStore,
+		Meta:                     opts.Meta,
+		IsHTTP:                   opts.IsHTTP,
+		Resiliency:               opts.Resiliency,
+		GRPC:                     opts.GRPC,
+		TracingSpec:              opts.GlobalConfig.Spec.TracingSpec,
+		Channels:                 opts.Channels,
+		AppBindingOptionsTimeout: opts.AppBindingOptionsTimeout,
 	})
 
 	// ensure a default no-op reporter
