@@ -111,6 +111,7 @@ type SidecarConfig struct {
 	AppHealthProbeInterval              int32   `annotation:"dapr.io/app-health-probe-interval" default:"5"`  // In seconds
 	AppHealthProbeTimeout               int32   `annotation:"dapr.io/app-health-probe-timeout" default:"500"` // In milliseconds
 	AppHealthThreshold                  int32   `annotation:"dapr.io/app-health-threshold" default:"3"`
+	AppBindingOptionsTimeout            *string `annotation:"dapr.io/app-binding-options-timeout"`
 	PlacementAddress                    string  `annotation:"dapr.io/placement-host-address"`
 	ActorsDisseminateTimeout            *string `annotation:"dapr.io/actors-disseminate-timeout"`
 	SchedulerAddress                    *string `annotation:"dapr.io/scheduler-host-address"`
