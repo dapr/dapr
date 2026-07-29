@@ -2567,12 +2567,10 @@ func TestInitRuntime_ComponentInitializationFailure_LocksHealth(t *testing.T) {
 		resiliency.New(logger.NewLogger("test")), nil, nil)
 	require.NoError(t, err)
 
-	// Act 2: Run the runtime with a short timeout to trigger initialization and check the error.
-	// Since component loading fails, this will fail fast and return the error.
-	runCtx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
-	defer cancel()
-
-	runErr := rt.Run(runCtx)
+	// Act 2: Run initialization (should fail fast during component loading)
+	runErr := rt.initRuntime(t.Context())
+	// Best-effort cleanup for anything init started/registered before failing
+	_ = rt.runnerCloser.Close()
 
 	// Assert: The initialization sequence should report a loading failure error
 	require.Error(t, runErr)

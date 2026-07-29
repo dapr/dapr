@@ -724,8 +724,9 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 
 	// Register a health target tracking component initialization status.
-	// This forces /healthz to return a failure status until this target is marked Ready.
+	// This forces /v1.0/healthz/outbound to return a failure status until this target is marked Ready.
 	componentTarget := a.runtimeConfig.outboundHealthz.AddTarget("components")
+	appTarget := a.runtimeConfig.outboundHealthz.AddTarget("app")
 
 	// Start proxy
 	a.initProxy()
@@ -866,7 +867,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return err
 	}
 
-	a.runtimeConfig.outboundHealthz.AddTarget("app").Ready()
+	appTarget.Ready()
 
 	if err := a.blockUntilAppIsReady(ctx); err != nil {
 		return err
