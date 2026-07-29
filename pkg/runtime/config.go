@@ -128,6 +128,10 @@ type Config struct {
 	Healthz                       healthz.Healthz
 	WorkflowEventSink             orchestrator.EventSink
 	DisableInitEndpoints          []string
+	// AppBindingOptionsTimeout overrides the timeout for the subscription discovery
+	// request sent to the app for input bindings (HTTP OPTIONS or gRPC ListInputBindings).
+	// Non-positive values use config.DefaultAppBindingOptionsTimeout (3s).
+	AppBindingOptionsTimeout time.Duration
 }
 
 type internalConfig struct {
@@ -166,6 +170,7 @@ type internalConfig struct {
 	outboundHealthz              healthz.Healthz
 	workflowEventSink            orchestrator.EventSink
 	disableInitEndpoints         []string
+	appBindingOptionsTimeout     time.Duration
 }
 
 func (i internalConfig) SchedulerEnabled() bool {
@@ -340,6 +345,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		metricsExporter:           metrics.New(c.Metrics),
 		blockShutdownDuration:     c.DaprBlockShutdownDuration,
 		actorsService:             c.ActorsService,
+		appBindingOptionsTimeout:  c.AppBindingOptionsTimeout,
 		remindersService:          c.RemindersService,
 		schedulerAddress:          c.SchedulerAddress,
 		schedulerStreams:          c.SchedulerStreams,

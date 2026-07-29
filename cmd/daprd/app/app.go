@@ -176,6 +176,7 @@ func Run() {
 				EnableAPILogging:              opts.EnableAPILogging,
 				Config:                        opts.Config,
 				DisableInitEndpoints:          opts.DisableInitEndpoints,
+				AppBindingOptionsTimeout:      opts.AppBindingOptionsTimeout,
 				Metrics: metrics.Options{
 					Enabled:       opts.Metrics.Enabled(),
 					Log:           log,
