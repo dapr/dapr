@@ -52,14 +52,14 @@ var log = logger.NewLogger("dapr.runtime.processor.binding")
 type Options struct {
 	IsHTTP bool
 
-	Registry              *compbindings.Registry
-	ComponentStore        *compstore.ComponentStore
-	Meta                  *meta.Meta
-	Resiliency            resiliency.Provider
-	GRPC                  *manager.Manager
-	TracingSpec           *config.TracingSpec
-	Channels              *channels.Channels
-	BindingOptionsTimeout time.Duration
+	Registry                 *compbindings.Registry
+	ComponentStore           *compstore.ComponentStore
+	Meta                     *meta.Meta
+	Resiliency               resiliency.Provider
+	GRPC                     *manager.Manager
+	TracingSpec              *config.TracingSpec
+	Channels                 *channels.Channels
+	AppBindingOptionsTimeout time.Duration
 }
 
 type binding struct {
@@ -77,28 +77,28 @@ type binding struct {
 	readingBindings bool
 	stopForever     bool
 
-	subscribeBindingList  []string
-	activeInputs          map[string]*input.Input
-	wg                    sync.WaitGroup
-	bindingOptionsTimeout time.Duration
+	subscribeBindingList     []string
+	activeInputs             map[string]*input.Input
+	wg                       sync.WaitGroup
+	appBindingOptionsTimeout time.Duration
 }
 
 func New(opts Options) *binding {
-	bindingOptionsTimeout := opts.BindingOptionsTimeout
-	if bindingOptionsTimeout <= 0 {
-		bindingOptionsTimeout = config.DefaultBindingOptionsTimeout
+	appBindingOptionsTimeout := opts.AppBindingOptionsTimeout
+	if appBindingOptionsTimeout <= 0 {
+		appBindingOptionsTimeout = config.DefaultAppBindingOptionsTimeout
 	}
 	return &binding{
-		registry:              opts.Registry,
-		compStore:             opts.ComponentStore,
-		meta:                  opts.Meta,
-		isHTTP:                opts.IsHTTP,
-		resiliency:            opts.Resiliency,
-		tracingSpec:           opts.TracingSpec,
-		grpc:                  opts.GRPC,
-		channels:              opts.Channels,
-		activeInputs:          make(map[string]*input.Input),
-		bindingOptionsTimeout: bindingOptionsTimeout,
+		registry:                 opts.Registry,
+		compStore:                opts.ComponentStore,
+		meta:                     opts.Meta,
+		isHTTP:                   opts.IsHTTP,
+		resiliency:               opts.Resiliency,
+		tracingSpec:              opts.TracingSpec,
+		grpc:                     opts.GRPC,
+		channels:                 opts.Channels,
+		activeInputs:             make(map[string]*input.Input),
+		appBindingOptionsTimeout: appBindingOptionsTimeout,
 	}
 }
 

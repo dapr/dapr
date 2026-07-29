@@ -209,7 +209,7 @@ func runWithContext(ctx context.Context, opts *options.Options) error {
 				EnableAPILogging:              opts.EnableAPILogging,
 				Config:                        opts.Config,
 				DisableInitEndpoints:          opts.DisableInitEndpoints,
-				BindingOptionsTimeout:         opts.BindingOptionsTimeout,
+				AppBindingOptionsTimeout:      opts.AppBindingOptionsTimeout,
 				Metrics: metrics.Options{
 					Enabled:       opts.Metrics.Enabled(),
 					Log:           log,

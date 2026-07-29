@@ -96,7 +96,7 @@ type Options struct {
 	AdapterStreamer                 rtpubsub.AdapterStreamer
 	Reporter                        registry.Reporter
 	ProgrammaticSubscriptionEnabled bool
-	BindingOptionsTimeout           time.Duration
+	AppBindingOptionsTimeout        time.Duration
 }
 
 // Processor manages the lifecycle of all components, HTTP endpoints, MCP
@@ -202,15 +202,15 @@ func New(opts Options) *Processor {
 	})
 
 	bindingProc := binding.New(binding.Options{
-		Registry:              opts.Registry.Bindings(),
-		ComponentStore:        opts.ComponentStore,
-		Meta:                  opts.Meta,
-		IsHTTP:                opts.IsHTTP,
-		Resiliency:            opts.Resiliency,
-		GRPC:                  opts.GRPC,
-		TracingSpec:           opts.GlobalConfig.Spec.TracingSpec,
-		Channels:              opts.Channels,
-		BindingOptionsTimeout: opts.BindingOptionsTimeout,
+		Registry:                 opts.Registry.Bindings(),
+		ComponentStore:           opts.ComponentStore,
+		Meta:                     opts.Meta,
+		IsHTTP:                   opts.IsHTTP,
+		Resiliency:               opts.Resiliency,
+		GRPC:                     opts.GRPC,
+		TracingSpec:              opts.GlobalConfig.Spec.TracingSpec,
+		Channels:                 opts.Channels,
+		AppBindingOptionsTimeout: opts.AppBindingOptionsTimeout,
 	})
 
 	pubsubProc := pubsub.New(pubsub.Options{

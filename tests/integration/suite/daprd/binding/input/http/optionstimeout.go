@@ -34,7 +34,7 @@ func init() {
 	suite.Register(new(optionstimeout))
 }
 
-// optionstimeout verifies that --binding-options-timeout controls when daprd
+// optionstimeout verifies that --app-binding-options-timeout controls when daprd
 // gives up waiting for an HTTP app to respond to the OPTIONS subscription
 // discovery probe.
 //
@@ -139,7 +139,7 @@ spec:
 	o.daprdFail = daprd.New(t,
 		daprd.WithAppPort(o.failApp.Port()),
 		daprd.WithAppProtocol("http"),
-		daprd.WithBindingOptionsTimeout(failTimeout),
+		daprd.WithAppBindingOptionsTimeout(failTimeout),
 		daprd.WithResourceFiles(bindingResource),
 	)
 
@@ -148,7 +148,7 @@ spec:
 	o.daprdCustom = daprd.New(t,
 		daprd.WithAppPort(o.customApp.Port()),
 		daprd.WithAppProtocol("http"),
-		daprd.WithBindingOptionsTimeout(customTimeout),
+		daprd.WithAppBindingOptionsTimeout(customTimeout),
 		daprd.WithResourceFiles(bindingResource),
 	)
 

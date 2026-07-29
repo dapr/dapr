@@ -180,25 +180,25 @@ func TestStartReadingFromBindings(t *testing.T) {
 func TestBindingOptionsTimeout(t *testing.T) {
 	t.Run("zero value falls back to default timeout", func(t *testing.T) {
 		b := New(Options{
-			IsHTTP:                true,
-			Resiliency:            resiliency.New(log),
-			ComponentStore:        compstore.New(),
-			Meta:                  meta.New(meta.Options{}),
-			BindingOptionsTimeout: 0, // should use config.DefaultBindingOptionsTimeout
+			IsHTTP:                   true,
+			Resiliency:               resiliency.New(log),
+			ComponentStore:           compstore.New(),
+			Meta:                     meta.New(meta.Options{}),
+			AppBindingOptionsTimeout: 0, // should use config.DefaultAppBindingOptionsTimeout
 		})
-		assert.Equal(t, config.DefaultBindingOptionsTimeout, b.bindingOptionsTimeout)
+		assert.Equal(t, config.DefaultAppBindingOptionsTimeout, b.appBindingOptionsTimeout)
 	})
 
 	t.Run("custom timeout is stored and respected", func(t *testing.T) {
 		customTimeout := 10 * time.Second
 		b := New(Options{
-			IsHTTP:                true,
-			Resiliency:            resiliency.New(log),
-			ComponentStore:        compstore.New(),
-			Meta:                  meta.New(meta.Options{}),
-			BindingOptionsTimeout: customTimeout,
+			IsHTTP:                   true,
+			Resiliency:               resiliency.New(log),
+			ComponentStore:           compstore.New(),
+			Meta:                     meta.New(meta.Options{}),
+			AppBindingOptionsTimeout: customTimeout,
 		})
-		assert.Equal(t, customTimeout, b.bindingOptionsTimeout)
+		assert.Equal(t, customTimeout, b.appBindingOptionsTimeout)
 	})
 
 	t.Run("very short timeout causes OPTIONS probe to fail with deadline exceeded", func(t *testing.T) {
@@ -207,11 +207,11 @@ func TestBindingOptionsTimeout(t *testing.T) {
 		probeTimeout := 500 * time.Millisecond
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
-			IsHTTP:                true,
-			Resiliency:            resiliency.New(log),
-			ComponentStore:        compstore.New(),
-			Meta:                  meta.New(meta.Options{}),
-			BindingOptionsTimeout: probeTimeout,
+			IsHTTP:                   true,
+			Resiliency:               resiliency.New(log),
+			ComponentStore:           compstore.New(),
+			Meta:                     meta.New(meta.Options{}),
+			AppBindingOptionsTimeout: probeTimeout,
 		})
 		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 

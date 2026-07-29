@@ -34,7 +34,7 @@ func init() {
 	suite.Register(new(optionstimeout))
 }
 
-// optionstimeout checks --binding-options-timeout bounds the gRPC discovery
+// optionstimeout checks --app-binding-options-timeout bounds the gRPC discovery
 // probe, which uses ListInputBindings instead of HTTP OPTIONS.
 //
 // Each daprd gets its own app because OnBindingEvent carries no daprd identity.
@@ -100,14 +100,14 @@ spec:
 	o.daprdFail = daprd.New(t,
 		daprd.WithAppPort(o.failApp.Port(t)),
 		daprd.WithAppProtocol("grpc"),
-		daprd.WithBindingOptionsTimeout(failTimeout),
+		daprd.WithAppBindingOptionsTimeout(failTimeout),
 		daprd.WithResourceFiles(bindingResource),
 	)
 
 	o.daprdCustom = daprd.New(t,
 		daprd.WithAppPort(o.customApp.Port(t)),
 		daprd.WithAppProtocol("grpc"),
-		daprd.WithBindingOptionsTimeout(customTimeout),
+		daprd.WithAppBindingOptionsTimeout(customTimeout),
 		daprd.WithResourceFiles(bindingResource),
 	)
 
