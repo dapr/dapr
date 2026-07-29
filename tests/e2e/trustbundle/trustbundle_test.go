@@ -234,16 +234,27 @@ func TestTrustDistribution(t *testing.T) {
 	})
 }
 
-// TestCARenewal patches sentry with an aggressive renewal configuration and
-// verifies the full rollover on a real cluster: a new trust anchor is
-// appended to the trust bundle (the old anchor is retained), the appended
-// anchors are re-distributed to the per-namespace ConfigMaps, the signing key
-// switches over after the propagation grace, and service invocation keeps
-// working throughout, all without restarting any workload.
+// TestCARenewal patches sentry to renew immediately and verifies the
+// append-and-propagate half of the rollover on a real cluster: a new trust
+// anchor is appended to the trust bundle (the old anchor is retained), the
+// pending issuer pair is stored, the appended anchors are re-distributed to
+// the per-namespace ConfigMaps, and service invocation keeps working, all
+// without restarting any workload.
 //
-// Note this test mutates the shared control plane (append-only, so existing
-// workload certificates keep verifying) and restores the original sentry
-// configuration on completion.
+// The propagation grace is deliberately far longer than the test so the
+// renewal stays PENDING throughout: the signing key never changes, which
+// keeps this test safe for the shared e2e control plane (test packages run
+// concurrently with -p 2). Renewals never recur while one is pending, so
+// exactly one anchor is appended. The switchover itself is exercised by the
+// sentry/ca/renewal integration suite, where the whole environment is
+// private; switching signing keys here with the e2e kubelet ConfigMap
+// propagation delay would break sidecars deployed concurrently by other
+// test packages.
+//
+// The original sentry configuration is restored on completion. Restoring
+// while pending is safe: the restored sentry resumes the pending state with
+// the default 24h grace and keeps signing with the old, fully distributed
+// issuer.
 func TestCARenewal(t *testing.T) {
 	platform, ok := tr.Platform.(*runner.KubeTestPlatform)
 	if !ok {
@@ -299,16 +310,20 @@ func TestCARenewal(t *testing.T) {
 		patched = append(patched,
 			"--ca-renewal-enabled=true",
 			"--ca-renewal-threshold=0.000001",
-			"--trust-anchor-propagation-grace=30s",
+			// Far longer than the test: the renewal must stay pending so the
+			// signing key never changes on the shared control plane.
+			"--trust-anchor-propagation-grace=1h",
 		)
 		deploy.Spec.Template.Spec.Containers[0].Args = patched
 		_, derr = deployments.Update(ctx, deploy, metav1.UpdateOptions{})
 		return derr
 	}))
 	t.Cleanup(func() {
-		// Restore the original sentry configuration. The appended anchors are
-		// left in place: they are harmless by design, and removing them would
-		// invalidate certificates issued during this test.
+		// Restore the original sentry configuration. The appended anchor and
+		// pending issuer pair are left in place: they are harmless by design
+		// (the restored sentry resumes the pending state with the default 24h
+		// grace and keeps signing with the old issuer), and removing them
+		// would invalidate the renewed state.
 		cctx, cancel := context.WithTimeout(context.Background(), time.Minute*4)
 		defer cancel()
 		require.NoError(t, retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -320,6 +335,34 @@ func TestCARenewal(t *testing.T) {
 			_, derr = deployments.Update(cctx, deploy, metav1.UpdateOptions{})
 			return derr
 		}))
+
+		// Wait for the restored sentry to be ready and self-consistent so a
+		// torn Secret/ConfigMap write during the rollout cannot leak into
+		// test packages running after this one: the restored sentry heals the
+		// ConfigMap from the Secret on startup.
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			deploy, derr := deployments.Get(cctx, "dapr-sentry", metav1.GetOptions{})
+			if !assert.NoError(c, derr) {
+				return
+			}
+			replicas := int32(1)
+			if deploy.Spec.Replicas != nil {
+				replicas = *deploy.Spec.Replicas
+			}
+			assert.GreaterOrEqual(c, deploy.Status.ObservedGeneration, deploy.Generation)
+			assert.Equal(c, replicas, deploy.Status.UpdatedReplicas)
+			assert.Equal(c, replicas, deploy.Status.ReadyReplicas)
+
+			secret, serr := kc.ClientSet.CoreV1().Secrets(namespace).Get(cctx, trustBundleName, metav1.GetOptions{})
+			if !assert.NoError(c, serr) {
+				return
+			}
+			cm, cerr := kc.ClientSet.CoreV1().ConfigMaps(namespace).Get(cctx, trustBundleName, metav1.GetOptions{})
+			if !assert.NoError(c, cerr) {
+				return
+			}
+			assert.Equal(c, string(secret.Data["ca.crt"]), cm.Data["ca.crt"], "trust bundle ConfigMap must be consistent with the Secret")
+		}, time.Minute*3, time.Second)
 	})
 	waitForRollout(t)
 
@@ -349,23 +392,15 @@ func TestCARenewal(t *testing.T) {
 		}
 	})
 
+	t.Run("pending issuer pair is stored and the signing issuer is unchanged", func(t *testing.T) {
+		secret, serr := kc.ClientSet.CoreV1().Secrets(namespace).Get(ctx, trustBundleName, metav1.GetOptions{})
+		require.NoError(t, serr)
+		assert.Contains(t, secret.Data, "issuer.next.crt")
+		assert.Contains(t, secret.Data, "issuer.next.key")
+		assert.Equal(t, issuerBefore, string(secret.Data["issuer.crt"]), "sentry must keep signing with the old issuer during the grace")
+	})
+
 	t.Run("service invocation works while the renewal is pending", func(t *testing.T) {
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.NoError(c, invokeCallee(externalURL))
-		}, time.Minute, time.Second*2)
-	})
-
-	t.Run("the signing key switches to the renewed issuer after the grace", func(t *testing.T) {
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			secret, serr := kc.ClientSet.CoreV1().Secrets(namespace).Get(ctx, trustBundleName, metav1.GetOptions{})
-			if !assert.NoError(c, serr) {
-				return
-			}
-			assert.NotEqual(c, issuerBefore, string(secret.Data["issuer.crt"]), "issuer should have been promoted")
-		}, time.Minute*3, time.Second)
-	})
-
-	t.Run("service invocation works after the switchover, without workload restarts", func(t *testing.T) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.NoError(c, invokeCallee(externalURL))
 		}, time.Minute, time.Second*2)
