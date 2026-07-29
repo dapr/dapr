@@ -25,12 +25,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/components-contrib/contenttype"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
@@ -190,6 +192,29 @@ func TestDeliverRestoresTraceState(t *testing.T) {
 		Tracing:  &config.TracingSpec{SamplingRate: "1"},
 	})
 
+	require.NoError(t, h.Deliver(t.Context(), message))
+	mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+}
+
+func TestDeliverRestoresBaggage(t *testing.T) {
+	cloudEvent := contribpubsub.NewCloudEventsEnvelope("", "", contribpubsub.DefaultCloudEventType, "", "topic",
+		"pubsub", "", []byte("message"), "", "")
+	cloudEvent[diagConsts.BaggageHeader] = "key=value"
+	message := &runtimePubsub.SubscribedMessage{
+		CloudEvent: cloudEvent,
+		Topic:      "topic",
+		Data:       []byte("message"),
+		Path:       "topic",
+	}
+
+	response := invokev1.NewInvokeMethodResponse(200, "OK", nil).WithRawDataString(`{"status":"SUCCESS"}`)
+	defer response.Close()
+	mockAppChannel := new(channelt.MockAppChannel)
+	mockAppChannel.On("InvokeMethod", mock.MatchedBy(func(ctx context.Context) bool {
+		return baggage.FromContext(ctx).String() == "key=value"
+	}), mock.Anything).Return(response, nil)
+
+	h := New(Options{Channels: new(channels.Channels).WithAppChannel(mockAppChannel)})
 	require.NoError(t, h.Deliver(t.Context(), message))
 	mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 }
