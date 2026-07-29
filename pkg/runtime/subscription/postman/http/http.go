@@ -88,6 +88,9 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 	if iTraceID != nil {
 		traceID := iTraceID.(string)
 		sc, _ := diag.SpanContextFromW3CString(traceID)
+		if traceState, ok := cloudEvent[contribpubsub.TraceStateField].(string); ok && traceState != "" {
+			sc = sc.WithTraceState(*diag.TraceStateFromW3CString(traceState))
+		}
 		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.Topic, sc, h.tracingSpec)
 	}
 
@@ -246,6 +249,9 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		if iTraceID != nil {
 			traceID := iTraceID.(string)
 			sc, _ := diag.SpanContextFromW3CString(traceID)
+			if traceState, ok := cloudEvent[contribpubsub.TraceStateField].(string); ok && traceState != "" {
+				sc = sc.WithTraceState(*diag.TraceStateFromW3CString(traceState))
+			}
 
 			var span trace.Span
 
