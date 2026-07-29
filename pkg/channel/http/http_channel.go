@@ -202,9 +202,11 @@ func (h *Channel) constructJobRequest(ctx context.Context, name string, data *an
 		if err != nil {
 			return nil, err
 		}
-		value, err = v.MarshalJSON()
-		if err != nil {
-			return nil, err
+		if v.GetKind() != nil {
+			value, err = v.MarshalJSON()
+			if err != nil {
+				return nil, err
+			}
 		}
 	default:
 		value = bytes.TrimSpace(data.GetValue())
