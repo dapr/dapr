@@ -25,6 +25,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/baggage"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -919,4 +920,19 @@ func TestNoInvalidTraceContext(t *testing.T) {
 		assert.NotEqual(t, "00-00000000000000000000000000000000-0000000000000000-00", traceparent)
 	}
 	testServer.Close()
+}
+
+func TestConstructRequestInjectsBaggage(t *testing.T) {
+	bag, err := baggage.Parse("key=value")
+	require.NoError(t, err)
+
+	ctx := baggage.ContextWithBaggage(t.Context(), bag)
+
+	c := Channel{baseAddress: "http://localhost", compStore: compstore.New()}
+	req := invokev1.NewInvokeMethodRequest("method").WithHTTPExtension(http.MethodPost, "")
+	defer req.Close()
+
+	channelReq, err := c.constructRequest(ctx, req, "")
+	require.NoError(t, err)
+	assert.Equal(t, "key=value", channelReq.Header.Get("baggage"))
 }
