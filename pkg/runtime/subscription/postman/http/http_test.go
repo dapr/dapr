@@ -25,10 +25,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/components-contrib/contenttype"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
@@ -155,6 +157,41 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 		assert.Equal(t, runtimePubsub.ErrMessageDropped, h.Deliver(t.Context(), testPubSubMessage))
 	})
+}
+
+func TestDeliverRestoresTraceState(t *testing.T) {
+	traceID, err := trace.TraceIDFromHex("00112233445566778899aabbccddeeff")
+	require.NoError(t, err)
+	spanID, err := trace.SpanIDFromHex("0011223344556677")
+	require.NoError(t, err)
+	traceState, err := trace.ParseTraceState("vendor=value")
+	require.NoError(t, err)
+
+	cloudEvent := contribpubsub.NewCloudEventsEnvelope("", "", contribpubsub.DefaultCloudEventType, "", "topic",
+		"pubsub", "", []byte("message"), "00-00112233445566778899aabbccddeeff-0011223344556677-01", traceState.String())
+	message := &runtimePubsub.SubscribedMessage{
+		CloudEvent: cloudEvent,
+		Topic:      "topic",
+		Data:       []byte("message"),
+		Path:       "topic",
+	}
+
+	response := invokev1.NewInvokeMethodResponse(200, "OK", nil).WithRawDataString(`{"status":"SUCCESS"}`)
+	defer response.Close()
+	mockAppChannel := new(channelt.MockAppChannel)
+	mockAppChannel.On("InvokeMethod", mock.MatchedBy(func(ctx context.Context) bool {
+		spanContext := trace.SpanContextFromContext(ctx)
+		return spanContext.TraceID() == traceID && spanContext.SpanID() == spanID &&
+			spanContext.TraceState().String() == traceState.String()
+	}), mock.Anything).Return(response, nil)
+
+	h := New(Options{
+		Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+		Tracing:  &config.TracingSpec{SamplingRate: "1"},
+	})
+
+	require.NoError(t, h.Deliver(t.Context(), message))
+	mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 }
 
 func TestOnNewPublishedMessage(t *testing.T) {

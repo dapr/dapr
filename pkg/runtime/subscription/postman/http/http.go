@@ -87,6 +87,9 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 
 	if traceID, ok := iTraceID.(string); ok {
 		sc, _ := diag.SpanContextFromW3CString(traceID)
+		if traceState, ok := cloudEvent[contribpubsub.TraceStateField].(string); ok && traceState != "" {
+			sc = sc.WithTraceState(*diag.TraceStateFromW3CString(traceState))
+		}
 		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.Topic, sc, h.tracingSpec)
 	} else if iTraceID != nil {
 		log.Debugf("skipping tracing for pub/sub event %v: non-string trace id of type %T", cloudEvent[contribpubsub.IDField], iTraceID)
@@ -246,6 +249,9 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 		if traceID, ok := iTraceID.(string); ok {
 			sc, _ := diag.SpanContextFromW3CString(traceID)
+			if traceState, ok := cloudEvent[contribpubsub.TraceStateField].(string); ok && traceState != "" {
+				sc = sc.WithTraceState(*diag.TraceStateFromW3CString(traceState))
+			}
 
 			var span trace.Span
 
