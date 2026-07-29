@@ -25,7 +25,6 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/dapr/components-contrib/workflows"
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
@@ -61,7 +60,7 @@ type Interface interface {
 
 	Run(context.Context) error
 	RegisterGrpcServer(*grpc.Server)
-	Client() workflows.Workflow
+	Client() backend.TaskHubClient
 	RuntimeMetadata() *runtimev1pb.MetadataWorkflows
 	InProcessExecutor() *inprocess.Executor
 	ActivityActorType() string
@@ -114,7 +113,7 @@ type engine struct {
 
 	worker        backend.TaskHubWorker
 	backend       *backendactors.Actors
-	client        workflows.Workflow
+	client        backend.TaskHubClient
 	inProcessExec *inprocess.Executor
 	compStore     *compstore.ComponentStore
 
@@ -268,10 +267,7 @@ func New(opts Options) (Interface, error) {
 
 	wfe.worker = worker
 	wfe.registerGrpcServerFn = registerGrpcServerFn
-	wfe.client = &client{
-		logger: wfBackendLogger,
-		client: backend.NewTaskHubClient(abackend),
-	}
+	wfe.client = backend.NewTaskHubClient(abackend)
 	return wfe, nil
 }
 
@@ -370,7 +366,7 @@ func (wfe *engine) Run(ctx context.Context) error {
 	return nil
 }
 
-func (wfe *engine) Client() workflows.Workflow {
+func (wfe *engine) Client() backend.TaskHubClient {
 	return wfe.client
 }
 
