@@ -24,7 +24,6 @@ import (
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/components-contrib/workflows"
 	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
@@ -52,7 +51,6 @@ type ComponentStore struct {
 	outputBindings          map[string]bindings.OutputBinding
 	locks                   map[string]lock.Store
 	pubSubs                 map[string]*rtpubsub.PubsubItem
-	workflowComponents      map[string]workflows.Workflow
 	workflowBackends        map[string]backend.Backend
 	cryptoProviders         map[string]crypto.SubtleCrypto
 	components              []compsv1alpha1.Component
@@ -88,7 +86,6 @@ func New() *ComponentStore {
 		outputBindings:          make(map[string]bindings.OutputBinding),
 		locks:                   make(map[string]lock.Store),
 		pubSubs:                 make(map[string]*rtpubsub.PubsubItem),
-		workflowComponents:      make(map[string]workflows.Workflow),
 		workflowBackends:        make(map[string]backend.Backend),
 		cryptoProviders:         make(map[string]crypto.SubtleCrypto),
 		subscriptions: &subscriptions{
