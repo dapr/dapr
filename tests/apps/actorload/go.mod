@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	fortio.org/fortio v1.6.8
-	github.com/go-chi/chi/v5 v5.0.8
+	github.com/go-chi/chi/v5 v5.2.4
 	github.com/google/uuid v1.2.0
 	go.opentelemetry.io/otel v1.7.0
 	go.opentelemetry.io/otel/exporters/prometheus v0.30.0

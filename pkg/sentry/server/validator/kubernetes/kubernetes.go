@@ -36,8 +36,10 @@ import (
 	configv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security/consts"
+	"github.com/dapr/dapr/pkg/sentry/server/images"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 	"github.com/dapr/dapr/pkg/sentry/server/validator/internal"
 	"github.com/dapr/kit/logger"
@@ -197,9 +199,12 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		return validator.ValidateResult{}, fmt.Errorf("app-id mismatch. expected: %s, received: %s", expID, req.GetId())
 	}
 
+	imgs := containerImages(&pod)
+
 	if isControlPlane {
 		return validator.ValidateResult{
-			TrustDomain: k.controlPlaneTD,
+			TrustDomain:     k.controlPlaneTD,
+			ContainerImages: imgs,
 		}, nil
 	}
 
@@ -207,7 +212,8 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	if !ok {
 		// Return early with default trust domain if no config annotation is found.
 		return validator.ValidateResult{
-			TrustDomain: spiffeid.RequireTrustDomainFromString("public"),
+			TrustDomain:     spiffeid.RequireTrustDomainFromString("public"),
+			ContainerImages: imgs,
 		}, nil
 	}
 
@@ -220,7 +226,8 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 
 	if config.Spec.AccessControlSpec == nil || len(config.Spec.AccessControlSpec.TrustDomain) == 0 {
 		return validator.ValidateResult{
-			TrustDomain: spiffeid.RequireTrustDomainFromString("public"),
+			TrustDomain:     spiffeid.RequireTrustDomainFromString("public"),
+			ContainerImages: imgs,
 		}, nil
 	}
 
@@ -229,8 +236,62 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		return validator.ValidateResult{}, fmt.Errorf("failed to parse trust domain %q: %w", config.Spec.AccessControlSpec.TrustDomain, err)
 	}
 	return validator.ValidateResult{
-		TrustDomain: td,
+		TrustDomain:     td,
+		ContainerImages: imgs,
 	}, nil
+}
+
+// containerImages extracts the image references of the pod's containers.
+// Regular containers are always included; init containers only when they are
+// native sidecars (restartPolicy Always), since daprd runs as one when native
+// sidecar mode is enabled. Digest is best effort and left empty for
+// containers which have not started at issuance time.
+func containerImages(pod *corev1.Pod) []images.ContainerImage {
+	imgs := make([]images.ContainerImage, 0, len(pod.Spec.Containers)+len(pod.Spec.InitContainers))
+
+	for i := range pod.Spec.InitContainers {
+		ctr := &pod.Spec.InitContainers[i]
+		if ctr.RestartPolicy == nil || *ctr.RestartPolicy != corev1.ContainerRestartPolicyAlways {
+			continue
+		}
+		imgs = append(imgs, containerImage(ctr, pod.Status.InitContainerStatuses))
+	}
+
+	for i := range pod.Spec.Containers {
+		imgs = append(imgs, containerImage(&pod.Spec.Containers[i], pod.Status.ContainerStatuses))
+	}
+
+	if len(imgs) == 0 {
+		return nil
+	}
+	return imgs
+}
+
+func containerImage(ctr *corev1.Container, statuses []corev1.ContainerStatus) images.ContainerImage {
+	role := images.RoleApp
+	if ctr.Name == injectorConsts.SidecarContainerName {
+		role = images.RoleDaprd
+	}
+
+	img := images.ContainerImage{
+		Role:          role,
+		ContainerName: ctr.Name,
+		Image:         ctr.Image,
+	}
+
+	for _, status := range statuses {
+		if status.Name != ctr.Name {
+			continue
+		}
+		if di := strings.LastIndex(status.ImageID, "@"); di >= 0 {
+			img.Digest = status.ImageID[di+1:]
+		} else if strings.HasPrefix(status.ImageID, "sha256:") {
+			img.Digest = status.ImageID
+		}
+		break
+	}
+
+	return img
 }
 
 // expectedID returns the expected ID for the pod. If the pod is a control

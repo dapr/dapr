@@ -207,7 +207,7 @@ See the [Development Guide](https://docs.dapr.io/contributing/) to get started w
 | [Docs](https://docs.dapr.io) | The documentation for Dapr.
 | [Quickstarts](https://github.com/dapr/quickstarts) | This repository contains a series of simple code samples that highlight the main Dapr capabilities.
 | [Samples](https://github.com/dapr/samples) | This repository holds community maintained samples for various Dapr use cases.
-| [Components-contrib ](https://github.com/dapr/components-contrib) | The purpose of components contrib is to provide open, community driven reusable components for building distributed applications.
+| [Components-contrib](https://github.com/dapr/components-contrib) | The purpose of components contrib is to provide open, community driven reusable components for building distributed applications.
 | [Go-sdk](https://github.com/dapr/go-sdk) | Dapr SDK for Go
 | [Java-sdk](https://github.com/dapr/java-sdk) | Dapr SDK for Java
 | [JS-sdk](https://github.com/dapr/js-sdk) | Dapr SDK for JavaScript

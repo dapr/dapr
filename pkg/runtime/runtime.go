@@ -292,6 +292,7 @@ func newDaprRuntime(ctx context.Context,
 		Adapter:                         pubsubAdapter,
 		AdapterStreamer:                 pubsubAdapterStreamer,
 		Reporter:                        runtimeConfig.registry.Reporter(),
+		AppBindingOptionsTimeout:        runtimeConfig.appBindingOptionsTimeout,
 	})
 
 	var reloader *hotreload.Reloader
@@ -865,8 +866,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	if err := a.blockUntilAppIsReady(ctx); err != nil {
 		return err
 	}
-
-	a.initDirectMessaging(a.nameResolver)
 
 	if a.runtimeConfig.appConnectionConfig.MaxConcurrency > 0 {
 		log.Infof("app max concurrency set to %v", a.runtimeConfig.appConnectionConfig.MaxConcurrency)

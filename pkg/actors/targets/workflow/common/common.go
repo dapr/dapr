@@ -13,6 +13,10 @@ limitations under the License.
 
 package common
 
+import (
+	"strconv"
+)
+
 type ActorTypeBuilder struct {
 	ns string
 }
@@ -29,4 +33,14 @@ func (a *ActorTypeBuilder) Workflow(appID string) string {
 
 func (a *ActorTypeBuilder) Activity(appID string) string {
 	return "dapr.internal." + a.ns + "." + appID + ".activity"
+}
+
+// ActivityActorID returns the activity actor ID for a scheduled task. The
+// executor rendezvous actor for the task deliberately uses the same ID
+// (ClusterTasksBackend): placement hashes only the actor ID and all workflow
+// actor types are registered by the same hosts, so equal IDs resolve to equal
+// hosts across actor types, co-locating the rendezvous with the activity
+// actor and its pending-task waiter.
+func ActivityActorID(workflowID string, taskID int32) string {
+	return workflowID + "::" + strconv.Itoa(int(taskID))
 }

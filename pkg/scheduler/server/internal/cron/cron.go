@@ -31,18 +31,28 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.scheduler.server.cron")
 
+const BackendEtcd = etcdcron.BackendEtcd
+
 type Options struct {
-	ID      string
-	Host    *schedulerv1pb.Host
-	Etcd    etcd.Interface
+	ID   string
+	Host *schedulerv1pb.Host
+
+	Etcd etcd.Interface
+
+	Backend *string
+
+	BackendConfig any
+
 	Workers uint32
 }
 
@@ -72,6 +82,8 @@ type cron struct {
 	lock            sync.RWMutex
 	currHosts       []*schedulerv1pb.Host
 	etcd            etcd.Interface
+	backend         *string
+	backendConfig   any
 	workers         uint32
 
 	readyCh chan struct{}
@@ -87,15 +99,12 @@ func New(opts Options) Interface {
 		readyCh:         make(chan struct{}),
 		closeCh:         make(chan struct{}),
 		etcd:            opts.Etcd,
+		backend:         opts.Backend,
+		backendConfig:   opts.BackendConfig,
 	}
 }
 
 func (c *cron) Run(ctx context.Context) error {
-	client, err := c.etcd.Client(ctx)
-	if err != nil {
-		return err
-	}
-
 	log.Info("Starting Cron")
 
 	watchLeadershipCh := make(chan []*anypb.Any)
@@ -105,17 +114,29 @@ func (c *cron) Run(ctx context.Context) error {
 		return err
 	}
 
-	c.etcdcron, err = etcdcron.New(etcdcron.Options{
-		Client:          client,
-		Namespace:       "dapr",
+	cronOpts := etcdcron.Options{
 		ID:              c.id,
 		TriggerFn:       c.triggerHandler,
 		ReplicaData:     hostAny,
 		WatchLeadership: watchLeadershipCh,
 		Workers:         new(c.workers),
-	})
+		Backend:         c.backend,
+		BackendConfig:   c.backendConfig,
+	}
+
+	if c.backend == nil || *c.backend == etcdcron.BackendEtcd {
+		client, cerr := c.etcd.Client(ctx)
+		if cerr != nil {
+			return cerr
+		}
+		cronOpts.Backend = ptr.Of(etcdcron.BackendEtcd)
+		cronOpts.Client = client
+		cronOpts.Namespace = "dapr"
+	}
+
+	c.etcdcron, err = etcdcron.New(cronOpts)
 	if err != nil {
-		return fmt.Errorf("fail to create etcd-cron: %s", err)
+		return fmt.Errorf("fail to create cron: %s", err)
 	}
 
 	c.connectionPool = pool.New(pool.Options{
@@ -235,19 +256,38 @@ func (c *cron) triggerHandler(req *api.TriggerRequest, fn func(*api.TriggerRespo
 		return
 	}
 
-	idx := strings.LastIndex(req.GetName(), "||")
-	if idx == -1 || len(req.GetName()) <= idx+2 {
-		log.Errorf("Job name is malformed: %s", req.GetName())
+	name, err := nameFromKey(req.GetName(), &meta)
+	if err != nil {
+		log.Errorf("Job name is malformed: %s", err)
 		fn(&api.TriggerResponse{Result: api.TriggerResponseResult_UNDELIVERABLE})
 		return
 	}
 
 	c.connectionPool.Trigger(&internalsv1pb.JobEvent{
 		Key:      req.GetName(),
-		Name:     req.GetName()[idx+2:],
+		Name:     name,
 		Data:     req.GetPayload(),
 		Metadata: &meta,
 	}, c.respHandler(req.GetName(), &meta, fn))
+}
+
+// nameFromKey recovers the reminder/job name delivered to the app from the
+// stored job key. The key is the metadata prefix (built by serialize) followed
+// by the name, so the name is recovered by trimming that prefix rather than by
+// re-splitting the key on the last "||". This is unambiguous even when the name
+// (or the actor id) itself contains "||", which is a permitted character, and
+// it does not drop names that end in "||".
+func nameFromKey(key string, meta *schedulerv1pb.JobMetadata) (string, error) {
+	prefix, err := serialize.PrefixFromMetadata(meta)
+	if err != nil {
+		return "", err
+	}
+
+	if !strings.HasPrefix(key, prefix) {
+		return "", fmt.Errorf("key %q does not match expected prefix %q from its metadata", key, prefix)
+	}
+
+	return strings.TrimPrefix(key, prefix), nil
 }
 
 func (c *cron) respHandler(name string, meta *schedulerv1pb.JobMetadata, fn func(*api.TriggerResponse)) func(api.TriggerResponseResult) {
