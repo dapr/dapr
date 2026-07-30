@@ -15,12 +15,14 @@ package wrapper
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	v1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/clients"
 )
@@ -168,8 +170,16 @@ func (w *wrapper) call(ctx context.Context, fn apiFn) error {
 
 		done()
 
+		// A scheduler shutting down cancels in-flight RPCs; retry against the
+		// next client, with backoff so a cluster-wide restart does not turn
+		// this loop into a hot spin.
 		status, ok := status.FromError(err)
-		if ok && status.Code() == codes.Canceled {
+		if ok && status.Code() == codes.Canceled && ctx.Err() == nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(retry.Jitter(time.Second/4, time.Second/8)):
+			}
 			continue
 		}
 
