@@ -143,6 +143,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		)
 	}
 
+	if c.AppBindingOptionsTimeout != nil {
+		args = append(args, "--app-binding-options-timeout", *c.AppBindingOptionsTimeout)
+	}
+
 	if c.LogAsJSON {
 		args = append(args, "--log-as-json")
 	}
