@@ -114,12 +114,12 @@ namespace DaprDemoActor
     private async Task<IActionResult> ProxyWorkflowAPI(HttpMethod method, string path, string body = null)
     {
       await daprClient.WaitForSidecarAsync();
-      var request = new HttpRequestMessage(method, httpEndpoint + "/v1.0-beta1/workflows/" + path);
+      using var request = new HttpRequestMessage(method, httpEndpoint + "/v1.0-beta1/workflows/" + path);
       if (body != null)
       {
         request.Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
       }
-      var response = await httpClient.SendAsync(request);
+      using var response = await httpClient.SendAsync(request);
       var responseBody = await response.Content.ReadAsStringAsync();
       return StatusCode((int)response.StatusCode, responseBody);
     }

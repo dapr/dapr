@@ -388,10 +388,12 @@ func (r *router) callStream(ctx context.Context,
 	r.stampLocalCallerIdentity(req)
 
 	err = r.callLocalActorStream(ctx, req, stream)
+	// Don't return permanent errors because of dissemination: a closed target
+	// (actor deactivated or moved) and context cancellation stay retryable,
+	// mirroring the unary callActor local path.
 	if err == nil || errors.Is(err, io.EOF) || ctx.Err() != nil || targetserrors.IsClosed(err) {
 		return err
 	}
-	// Don't return permanent errors because of dissemination.
 	return backoff.Permanent(err)
 }
 

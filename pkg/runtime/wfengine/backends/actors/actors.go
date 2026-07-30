@@ -518,8 +518,12 @@ func (abe *Actors) getWorkflowMetadataRemote(ctx context.Context, id api.Instanc
 		if resp.GetStatus().GetCode() == http.StatusNotFound {
 			return true, nil
 		}
+		data := resp.GetMessage().GetData()
+		if data == nil {
+			return false, fmt.Errorf("workflow metadata response from app '%s' has status %d and no payload", targetAppID, resp.GetStatus().GetCode())
+		}
 		var m backend.WorkflowMetadata
-		if perr := resp.GetMessage().GetData().UnmarshalTo(&m); perr != nil {
+		if perr := data.UnmarshalTo(&m); perr != nil {
 			return false, perr
 		}
 		meta = &m
