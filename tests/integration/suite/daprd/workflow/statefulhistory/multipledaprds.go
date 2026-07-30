@@ -72,9 +72,13 @@ spec:
 func (m *multipledaprds) Run(t *testing.T, ctx context.Context) {
 	m.workflow.WaitUntilRunning(t, ctx)
 
+	// TEMPORARY: counts are bumped to raise the odds of reproducing the intermittent
+	// single-instance completion stall under CI contention so the watchdog diagnostics
+	// below capture it. A healthy run still finishes in a couple of seconds, far under the
+	// 30s watchdog. Revert to a modest count (e.g. 20x4) once the stall is root-caused.
 	const (
-		activityCount = 4
-		workflowCount = 20
+		activityCount = 6
+		workflowCount = 48
 	)
 
 	newRegistry := func() *task.TaskRegistry {
