@@ -144,7 +144,7 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		)
 	}
 
-	if c.AppBindingOptionsTimeout != nil {
+	if c.AppBindingOptionsTimeout != nil && *c.AppBindingOptionsTimeout != "" {
 		args = append(args, "--app-binding-options-timeout", *c.AppBindingOptionsTimeout)
 	}
 

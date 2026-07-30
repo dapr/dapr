@@ -900,6 +900,16 @@ func TestGetSidecarContainer(t *testing.T) {
 				assert.Contains(t, args, "--app-binding-options-timeout 30s")
 			},
 		},
+		{
+			name: "empty annotation value does not emit the flag",
+			annotations: map[string]string{
+				annotations.KeyAppBindingOptionsTimeout: "",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--app-binding-options-timeout")
+			},
+		},
 	}))
 
 	t.Run("sidecar image", testSuiteGenerator([]testCase{

@@ -315,7 +315,6 @@ func WithAppBindingOptionsTimeout(timeout time.Duration) Option {
 	}
 }
 
-
 func WithControlPlaneTrustDomain(trustDomain string) Option {
 	return func(o *options) {
 		o.controlPlaneTrustDomain = &trustDomain
