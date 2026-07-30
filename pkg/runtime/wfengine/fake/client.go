@@ -18,121 +18,136 @@ package fake
 import (
 	"context"
 
-	"github.com/dapr/components-contrib/workflows"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
 )
 
 type FakeClient struct {
-	initFn       func(metadata workflows.Metadata) error
-	startFn      func(ctx context.Context, req *workflows.StartRequest) (*workflows.StartResponse, error)
-	terminateFn  func(ctx context.Context, req *workflows.TerminateRequest) error
-	getFn        func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error)
-	raiseEventFn func(ctx context.Context, req *workflows.RaiseEventRequest) error
-	purgeFn      func(ctx context.Context, req *workflows.PurgeRequest) error
-	pauseFn      func(ctx context.Context, req *workflows.PauseRequest) error
-	resumeFn     func(ctx context.Context, req *workflows.ResumeRequest) error
-	closeFn      func() error
+	scheduleNewWorkflowFn       func(ctx context.Context, workflow any, opts ...api.NewWorkflowOptions) (api.InstanceID, error)
+	fetchWorkflowMetadataFn     func(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error)
+	waitForWorkflowStartFn      func(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error)
+	waitForWorkflowCompletionFn func(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error)
+	terminateWorkflowFn         func(ctx context.Context, id api.InstanceID, opts ...api.TerminateOptions) error
+	raiseEventFn                func(ctx context.Context, id api.InstanceID, eventName string, opts ...api.RaiseEventOptions) error
+	suspendWorkflowFn           func(ctx context.Context, id api.InstanceID, reason string) error
+	resumeWorkflowFn            func(ctx context.Context, id api.InstanceID, reason string) error
+	purgeWorkflowStateFn        func(ctx context.Context, id api.InstanceID, opts ...api.PurgeOptions) error
+	rerunWorkflowFromEventFn    func(ctx context.Context, source api.InstanceID, eventID uint32, opts ...api.RerunOptions) (api.InstanceID, error)
 }
 
 func NewClient() *FakeClient {
 	return &FakeClient{
-		initFn: func(metadata workflows.Metadata) error { return nil },
-		startFn: func(ctx context.Context, req *workflows.StartRequest) (*workflows.StartResponse, error) {
-			return new(workflows.StartResponse), nil
+		scheduleNewWorkflowFn: func(ctx context.Context, workflow any, opts ...api.NewWorkflowOptions) (api.InstanceID, error) {
+			return api.EmptyInstanceID, nil
 		},
-		terminateFn: func(ctx context.Context, req *workflows.TerminateRequest) error { return nil },
-		getFn: func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
-			return &workflows.StateResponse{
-				Workflow: &workflows.WorkflowState{
-					InstanceID: req.InstanceID,
-					Properties: map[string]string{},
-				},
-			}, nil
+		fetchWorkflowMetadataFn: func(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error) {
+			return &backend.WorkflowMetadata{InstanceId: string(id)}, nil
 		},
-		raiseEventFn: func(ctx context.Context, req *workflows.RaiseEventRequest) error { return nil },
-		purgeFn:      func(ctx context.Context, req *workflows.PurgeRequest) error { return nil },
-		pauseFn:      func(ctx context.Context, req *workflows.PauseRequest) error { return nil },
-		resumeFn:     func(ctx context.Context, req *workflows.ResumeRequest) error { return nil },
-		closeFn:      func() error { return nil },
+		waitForWorkflowStartFn: func(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error) {
+			return &backend.WorkflowMetadata{InstanceId: string(id)}, nil
+		},
+		waitForWorkflowCompletionFn: func(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error) {
+			return &backend.WorkflowMetadata{InstanceId: string(id)}, nil
+		},
+		terminateWorkflowFn: func(ctx context.Context, id api.InstanceID, opts ...api.TerminateOptions) error { return nil },
+		raiseEventFn: func(ctx context.Context, id api.InstanceID, eventName string, opts ...api.RaiseEventOptions) error {
+			return nil
+		},
+		suspendWorkflowFn:    func(ctx context.Context, id api.InstanceID, reason string) error { return nil },
+		resumeWorkflowFn:     func(ctx context.Context, id api.InstanceID, reason string) error { return nil },
+		purgeWorkflowStateFn: func(ctx context.Context, id api.InstanceID, opts ...api.PurgeOptions) error { return nil },
+		rerunWorkflowFromEventFn: func(ctx context.Context, source api.InstanceID, eventID uint32, opts ...api.RerunOptions) (api.InstanceID, error) {
+			return api.EmptyInstanceID, nil
+		},
 	}
 }
 
-func (f *FakeClient) WithInit(initFn func(metadata workflows.Metadata) error) *FakeClient {
-	f.initFn = initFn
+func (f *FakeClient) WithScheduleNewWorkflow(fn func(ctx context.Context, workflow any, opts ...api.NewWorkflowOptions) (api.InstanceID, error)) *FakeClient {
+	f.scheduleNewWorkflowFn = fn
 	return f
 }
 
-func (f *FakeClient) WithStart(startFn func(ctx context.Context, req *workflows.StartRequest) (*workflows.StartResponse, error)) *FakeClient {
-	f.startFn = startFn
+func (f *FakeClient) WithFetchWorkflowMetadata(fn func(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error)) *FakeClient {
+	f.fetchWorkflowMetadataFn = fn
 	return f
 }
 
-func (f *FakeClient) WithTerminate(terminateFn func(ctx context.Context, req *workflows.TerminateRequest) error) *FakeClient {
-	f.terminateFn = terminateFn
+func (f *FakeClient) WithWaitForWorkflowStart(fn func(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error)) *FakeClient {
+	f.waitForWorkflowStartFn = fn
 	return f
 }
 
-func (f *FakeClient) WithGet(getFn func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error)) *FakeClient {
-	f.getFn = getFn
+func (f *FakeClient) WithWaitForWorkflowCompletion(fn func(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error)) *FakeClient {
+	f.waitForWorkflowCompletionFn = fn
 	return f
 }
 
-func (f *FakeClient) WithRaiseEvent(raiseEventFn func(ctx context.Context, req *workflows.RaiseEventRequest) error) *FakeClient {
-	f.raiseEventFn = raiseEventFn
+func (f *FakeClient) WithTerminateWorkflow(fn func(ctx context.Context, id api.InstanceID, opts ...api.TerminateOptions) error) *FakeClient {
+	f.terminateWorkflowFn = fn
 	return f
 }
 
-func (f *FakeClient) WithPurge(purgeFn func(ctx context.Context, req *workflows.PurgeRequest) error) *FakeClient {
-	f.purgeFn = purgeFn
+func (f *FakeClient) WithRaiseEvent(fn func(ctx context.Context, id api.InstanceID, eventName string, opts ...api.RaiseEventOptions) error) *FakeClient {
+	f.raiseEventFn = fn
 	return f
 }
 
-func (f *FakeClient) WithPause(pauseFn func(ctx context.Context, req *workflows.PauseRequest) error) *FakeClient {
-	f.pauseFn = pauseFn
+func (f *FakeClient) WithSuspendWorkflow(fn func(ctx context.Context, id api.InstanceID, reason string) error) *FakeClient {
+	f.suspendWorkflowFn = fn
 	return f
 }
 
-func (f *FakeClient) WithResume(resumeFn func(ctx context.Context, req *workflows.ResumeRequest) error) *FakeClient {
-	f.resumeFn = resumeFn
+func (f *FakeClient) WithResumeWorkflow(fn func(ctx context.Context, id api.InstanceID, reason string) error) *FakeClient {
+	f.resumeWorkflowFn = fn
 	return f
 }
 
-func (f *FakeClient) WithClose(closeFn func() error) *FakeClient {
-	f.closeFn = closeFn
+func (f *FakeClient) WithPurgeWorkflowState(fn func(ctx context.Context, id api.InstanceID, opts ...api.PurgeOptions) error) *FakeClient {
+	f.purgeWorkflowStateFn = fn
 	return f
 }
 
-func (f *FakeClient) Init(metadata workflows.Metadata) error {
-	return f.initFn(metadata)
+func (f *FakeClient) WithRerunWorkflowFromEvent(fn func(ctx context.Context, source api.InstanceID, eventID uint32, opts ...api.RerunOptions) (api.InstanceID, error)) *FakeClient {
+	f.rerunWorkflowFromEventFn = fn
+	return f
 }
 
-func (f *FakeClient) Start(ctx context.Context, req *workflows.StartRequest) (*workflows.StartResponse, error) {
-	return f.startFn(ctx, req)
+func (f *FakeClient) ScheduleNewWorkflow(ctx context.Context, workflow any, opts ...api.NewWorkflowOptions) (api.InstanceID, error) {
+	return f.scheduleNewWorkflowFn(ctx, workflow, opts...)
 }
 
-func (f *FakeClient) Terminate(ctx context.Context, req *workflows.TerminateRequest) error {
-	return f.terminateFn(ctx, req)
+func (f *FakeClient) FetchWorkflowMetadata(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error) {
+	return f.fetchWorkflowMetadataFn(ctx, id)
 }
 
-func (f *FakeClient) Get(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
-	return f.getFn(ctx, req)
+func (f *FakeClient) WaitForWorkflowStart(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error) {
+	return f.waitForWorkflowStartFn(ctx, id)
 }
 
-func (f *FakeClient) RaiseEvent(ctx context.Context, req *workflows.RaiseEventRequest) error {
-	return f.raiseEventFn(ctx, req)
+func (f *FakeClient) WaitForWorkflowCompletion(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error) {
+	return f.waitForWorkflowCompletionFn(ctx, id)
 }
 
-func (f *FakeClient) Purge(ctx context.Context, req *workflows.PurgeRequest) error {
-	return f.purgeFn(ctx, req)
+func (f *FakeClient) TerminateWorkflow(ctx context.Context, id api.InstanceID, opts ...api.TerminateOptions) error {
+	return f.terminateWorkflowFn(ctx, id, opts...)
 }
 
-func (f *FakeClient) Pause(ctx context.Context, req *workflows.PauseRequest) error {
-	return f.pauseFn(ctx, req)
+func (f *FakeClient) RaiseEvent(ctx context.Context, id api.InstanceID, eventName string, opts ...api.RaiseEventOptions) error {
+	return f.raiseEventFn(ctx, id, eventName, opts...)
 }
 
-func (f *FakeClient) Resume(ctx context.Context, req *workflows.ResumeRequest) error {
-	return f.resumeFn(ctx, req)
+func (f *FakeClient) SuspendWorkflow(ctx context.Context, id api.InstanceID, reason string) error {
+	return f.suspendWorkflowFn(ctx, id, reason)
 }
 
-func (f *FakeClient) Close() error {
-	return f.closeFn()
+func (f *FakeClient) ResumeWorkflow(ctx context.Context, id api.InstanceID, reason string) error {
+	return f.resumeWorkflowFn(ctx, id, reason)
+}
+
+func (f *FakeClient) PurgeWorkflowState(ctx context.Context, id api.InstanceID, opts ...api.PurgeOptions) error {
+	return f.purgeWorkflowStateFn(ctx, id, opts...)
+}
+
+func (f *FakeClient) RerunWorkflowFromEvent(ctx context.Context, source api.InstanceID, eventID uint32, opts ...api.RerunOptions) (api.InstanceID, error) {
+	return f.rerunWorkflowFromEventFn(ctx, source, eventID, opts...)
 }

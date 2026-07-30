@@ -22,9 +22,12 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	"github.com/dapr/dapr/pkg/injector/annotations"
+	injectorconsts "github.com/dapr/dapr/pkg/injector/consts"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
@@ -54,6 +57,23 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 		Version: "v1alpha1",
 		Kind:    "Configuration",
 	})
+	// The operator resolves the configuration assigned to "myapp" from its pod's
+	// dapr.io/config annotation, and only streams updates for that configuration.
+	pod := &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "myapp",
+			Namespace: "default",
+			Labels:    map[string]string{injectorconsts.SidecarInjectedLabel: "true"},
+			Annotations: map[string]string{
+				annotations.KeyEnabled: "true",
+				annotations.KeyAppID:   "myapp",
+				annotations.KeyConfig:  "myconfig",
+			},
+		},
+		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "daprd"}}},
+	}
+
 	b.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
 			spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
@@ -61,6 +81,10 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 			b.sentry.Port(),
 		),
 		kubernetes.WithClusterDaprConfigurationListFromStore(t, b.store),
+		kubernetes.WithClusterPodList(t, &corev1.PodList{
+			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
+			Items:    []corev1.Pod{*pod},
+		}),
 	)
 
 	b.operator = operator.New(t,

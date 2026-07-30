@@ -15,6 +15,7 @@ package hotreload
 
 import (
 	"context"
+	"time"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
@@ -47,6 +48,9 @@ type OptionsReloaderDisk struct {
 	Authorizer     *authorizer.Authorizer
 	Processor      *processor.Processor
 	Healthz        healthz.Healthz
+	// ReconcileInterval overrides the backup reconcile period. Zero uses the
+	// reconciler default (60s).
+	ReconcileInterval time.Duration
 }
 
 type OptionsReloaderOperator struct {
@@ -57,6 +61,9 @@ type OptionsReloaderOperator struct {
 	Authorizer     *authorizer.Authorizer
 	Processor      *processor.Processor
 	Healthz        healthz.Healthz
+	// ReconcileInterval overrides the backup reconcile period. Zero uses the
+	// reconciler default (60s).
+	ReconcileInterval time.Duration
 }
 
 type Reloader struct {
@@ -96,25 +103,28 @@ func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
 		isEnabled: isEnabled,
 		loader:    loader,
 		componentsReconciler: reconciler.NewComponents(reconciler.Options[compapi.Component]{
-			Loader:     loader,
-			CompStore:  opts.ComponentStore,
-			Processor:  opts.Processor,
-			Authorizer: opts.Authorizer,
-			Healthz:    opts.Healthz,
+			Loader:            loader,
+			CompStore:         opts.ComponentStore,
+			Processor:         opts.Processor,
+			Authorizer:        opts.Authorizer,
+			Healthz:           opts.Healthz,
+			ReconcileInterval: opts.ReconcileInterval,
 		}),
 		subscriptionsReconciler: reconciler.NewSubscriptions(reconciler.Options[subapi.Subscription]{
-			Loader:     loader,
-			CompStore:  opts.ComponentStore,
-			Processor:  opts.Processor,
-			Authorizer: opts.Authorizer,
-			Healthz:    opts.Healthz,
+			Loader:            loader,
+			CompStore:         opts.ComponentStore,
+			Processor:         opts.Processor,
+			Authorizer:        opts.Authorizer,
+			Healthz:           opts.Healthz,
+			ReconcileInterval: opts.ReconcileInterval,
 		}),
 		mcpServersReconciler: reconciler.NewMCPServers(reconciler.Options[mcpserverapi.MCPServer]{
-			Loader:     loader,
-			CompStore:  opts.ComponentStore,
-			Processor:  opts.Processor,
-			Authorizer: opts.Authorizer,
-			Healthz:    opts.Healthz,
+			Loader:            loader,
+			CompStore:         opts.ComponentStore,
+			Processor:         opts.Processor,
+			Authorizer:        opts.Authorizer,
+			Healthz:           opts.Healthz,
+			ReconcileInterval: opts.ReconcileInterval,
 		}),
 		configurationsReconciler: reconciler.NewSIGHUPConfigurations(reconciler.Options[configapi.Configuration]{
 			Loader:    loader,
@@ -151,25 +161,28 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 		isEnabled: isEnabled,
 		loader:    loader,
 		componentsReconciler: reconciler.NewComponents(reconciler.Options[compapi.Component]{
-			Loader:     loader,
-			CompStore:  opts.ComponentStore,
-			Processor:  opts.Processor,
-			Authorizer: opts.Authorizer,
-			Healthz:    opts.Healthz,
+			Loader:            loader,
+			CompStore:         opts.ComponentStore,
+			Processor:         opts.Processor,
+			Authorizer:        opts.Authorizer,
+			Healthz:           opts.Healthz,
+			ReconcileInterval: opts.ReconcileInterval,
 		}),
 		subscriptionsReconciler: reconciler.NewSubscriptions(reconciler.Options[subapi.Subscription]{
-			Loader:     loader,
-			CompStore:  opts.ComponentStore,
-			Processor:  opts.Processor,
-			Authorizer: opts.Authorizer,
-			Healthz:    opts.Healthz,
+			Loader:            loader,
+			CompStore:         opts.ComponentStore,
+			Processor:         opts.Processor,
+			Authorizer:        opts.Authorizer,
+			Healthz:           opts.Healthz,
+			ReconcileInterval: opts.ReconcileInterval,
 		}),
 		mcpServersReconciler: reconciler.NewMCPServers(reconciler.Options[mcpserverapi.MCPServer]{
-			Loader:     loader,
-			CompStore:  opts.ComponentStore,
-			Processor:  opts.Processor,
-			Authorizer: opts.Authorizer,
-			Healthz:    opts.Healthz,
+			Loader:            loader,
+			CompStore:         opts.ComponentStore,
+			Processor:         opts.Processor,
+			Authorizer:        opts.Authorizer,
+			Healthz:           opts.Healthz,
+			ReconcileInterval: opts.ReconcileInterval,
 		}),
 		configurationsReconciler: reconciler.NewSIGHUPConfigurations(reconciler.Options[configapi.Configuration]{
 			Loader:    loader,

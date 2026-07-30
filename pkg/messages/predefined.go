@@ -139,7 +139,7 @@ var (
 
 	// Conversation
 	ErrConversationNotFound      = APIError{"failed finding conversation component %s", errorcodes.ConversationNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrConversationInvalidParams = APIError{"failed conversing with component %s: invalid params", errorcodes.ConversationInvalidParms, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrConversationInvalidParams = APIError{"failed conversing with component %s: invalid params: %s", errorcodes.ConversationInvalidParms, http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrConversationInvoke        = APIError{"failed conversing with component %s: %s", errorcodes.ConversationInvoke, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrConversationMissingInputs = APIError{"failed conversing with component %s: missing inputs in request", errorcodes.ConversationMissingInputs, http.StatusBadRequest, grpcCodes.InvalidArgument}
 )

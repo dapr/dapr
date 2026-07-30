@@ -24,7 +24,7 @@ import (
 
 	ocprom "contrib.go.opencensus.io/exporter/prometheus"
 	prom "github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/kit/logger"
@@ -79,11 +79,16 @@ func (e *exporter) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to parse metrics port: %w", err)
 	}
 
+	// A private registry is used for the opencensus metrics so that
+	// restarting the exporter in the same process does not panic with a
+	// duplicate collector registration. Go and process collectors are not
+	// registered here as the default registry already provides them.
 	reg := prom.NewRegistry()
-	reg.MustRegister(collectors.NewGoCollector())
-	reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
-	ocExporter, err := ocprom.NewExporter(ocprom.Options{
+	// The opencensus exporter registers its view collector on reg. The
+	// returned handler is not used; reg is gathered below together with the
+	// default gatherer.
+	_, err = ocprom.NewExporter(ocprom.Options{
 		Namespace: e.namespace,
 		Registry:  reg,
 	})
@@ -98,7 +103,20 @@ func (e *exporter) Start(ctx context.Context) error {
 	}
 	e.logger.Infof("metrics server started on %s%s", addr, defaultMetricsPath)
 	mux := http.NewServeMux()
-	mux.Handle(defaultMetricsPath, ocExporter)
+	// Gather both the private registry (dapr_* opencensus views) and the
+	// global default registry. Third party libraries, notably the embedded
+	// etcd server in the scheduler, register their collectors on the default
+	// registry via package init, so gathering it exposes those metrics
+	// (etcd_*, grpc_*, go_*, process_*) on the metrics endpoint without ever
+	// registering on the default registry, keeping restarts of this exporter
+	// in the same process safe.
+	mux.Handle(defaultMetricsPath, promhttp.HandlerFor(
+		prom.Gatherers{reg, prom.DefaultGatherer},
+		promhttp.HandlerOpts{
+			ErrorHandling: promhttp.ContinueOnError,
+			ErrorLog:      promErrorLogger{e.logger},
+		},
+	))
 
 	server := &http.Server{
 		Handler:     mux,
@@ -126,4 +144,13 @@ func (e *exporter) Start(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	return errors.Join(server.Shutdown(ctx), err, <-errCh)
+}
+
+// promErrorLogger adapts the dapr logger to the promhttp.Logger interface.
+type promErrorLogger struct {
+	log logger.Logger
+}
+
+func (p promErrorLogger) Println(v ...any) {
+	p.log.Error(v...)
 }

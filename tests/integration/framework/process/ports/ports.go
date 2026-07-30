@@ -47,6 +47,14 @@ func portsBase() int {
 
 const blockSize = 500
 
+// portsCeil is the exclusive upper bound for reservation probing. It is kept
+// strictly below the OS ephemeral port range (macOS default 49152-65535) so
+// that held-open reserved listeners never squat on ports the kernel needs to
+// assign for outbound dials. Exhausting the outbound ephemeral pool surfaces
+// as EADDRNOTAVAIL ("can't assign requested address") and was the dominant
+// failure mode on the 3-core macos-14 CI runner.
+const portsCeil = 49000
+
 // Ports reserves network ports, and then frees them when the test is ready to
 // run so a  process can bind to them at runtime.
 type Ports struct {
@@ -75,7 +83,7 @@ func Reserve(t *testing.T, count int) *Ports {
 		t.Logf("reserving %d more ports", blockSize)
 		for i := 0; i < blockSize; i++ {
 			last++
-			if last+i > 65535 {
+			if last+i >= portsCeil {
 				last = portsBase()
 			}
 			ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(last))

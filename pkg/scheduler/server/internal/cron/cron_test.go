@@ -152,3 +152,90 @@ func embeddedEtcdClient(t *testing.T) *clientv3.Client {
 
 	return cl
 }
+
+// Test_nameFromKey asserts that the reminder/job name delivered to the app is
+// recovered from the stored job key by trimming the metadata prefix, not by
+// splitting on the last "||". "||" is a permitted character inside reminder and
+// job names, so splitting truncates names that contain it and drops names that
+// end in it.
+func Test_nameFromKey(t *testing.T) {
+	t.Parallel()
+
+	actorMeta := func(actorType, actorID string) *schedulerv1pb.JobMetadata {
+		return &schedulerv1pb.JobMetadata{
+			Namespace: "myns",
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Actor{
+					Actor: &schedulerv1pb.TargetActorReminder{Type: actorType, Id: actorID},
+				},
+			},
+		}
+	}
+	jobMeta := func(appID string) *schedulerv1pb.JobMetadata {
+		return &schedulerv1pb.JobMetadata{
+			Namespace: "myns", AppId: appID,
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Job{Job: new(schedulerv1pb.TargetJob)},
+			},
+		}
+	}
+
+	tests := map[string]struct {
+		key     string
+		meta    *schedulerv1pb.JobMetadata
+		expName string
+		expErr  bool
+	}{
+		"job name without delimiter": {
+			key:     "app||myns||myapp||myjob",
+			meta:    jobMeta("myapp"),
+			expName: "myjob",
+		},
+		"job name containing the || delimiter is not truncated": {
+			key:     "app||myns||myapp||foo||bar",
+			meta:    jobMeta("myapp"),
+			expName: "foo||bar",
+		},
+		"job name with multiple || delimiters is not truncated": {
+			key:     "app||myns||myapp||a||b||c",
+			meta:    jobMeta("myapp"),
+			expName: "a||b||c",
+		},
+		"job name ending in || is not dropped": {
+			key:     "app||myns||myapp||myjob||",
+			meta:    jobMeta("myapp"),
+			expName: "myjob||",
+		},
+		"actor reminder name containing the || delimiter is not truncated": {
+			key:     "actorreminder||myns||mytype||myid||foo||bar",
+			meta:    actorMeta("mytype", "myid"),
+			expName: "foo||bar",
+		},
+		"actor id containing || does not corrupt the recovered name": {
+			key:     "actorreminder||myns||mytype||my||id||myreminder",
+			meta:    actorMeta("mytype", "my||id"),
+			expName: "myreminder",
+		},
+		"key not matching the metadata prefix is an error": {
+			key:    "app||otherns||myapp||myjob",
+			meta:   jobMeta("myapp"),
+			expErr: true,
+		},
+		"unknown target type is an error": {
+			key:    "app||myns||myapp||myjob",
+			meta:   new(schedulerv1pb.JobMetadata),
+			expErr: true,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got, err := nameFromKey(test.key, test.meta)
+			assert.Equal(t, test.expErr, err != nil, "unexpected error state: %v", err)
+			if !test.expErr {
+				assert.Equal(t, test.expName, got)
+			}
+		})
+	}
+}

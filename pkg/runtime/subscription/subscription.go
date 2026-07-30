@@ -142,7 +142,10 @@ func New(opts Options) (*Subscription, error) {
 		subscribeTopic = s.namespace + s.topic
 	}
 
-	err := s.pubsub.Component.Subscribe(ctx, contribpubsub.SubscribeRequest{
+	// Subscribe establishes the consumer connection directly (it does not run
+	// through a policy Runner), so attach the workload's SPIFFE identity to its
+	// context here just as the Runner does for other component operations.
+	err := s.pubsub.Component.Subscribe(policyDef.ComponentContext(ctx), contribpubsub.SubscribeRequest{
 		Topic:    subscribeTopic,
 		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *contribpubsub.NewMessage) error {
