@@ -281,7 +281,7 @@ func (w *Workflow) WaitForConnectedWorkersN(t *testing.T, ctx context.Context, i
 	t.Helper()
 	require.Less(t, index, len(w.daprds), "index out of range")
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		md := w.DaprN(index).GetMetadata(c, ctx)
 		if !assert.NotNil(c, md) {
 			return
