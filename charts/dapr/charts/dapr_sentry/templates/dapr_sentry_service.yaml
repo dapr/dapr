@@ -27,15 +27,20 @@ spec:
     port: {{ .Values.ports.port }}
     targetPort: {{ .Values.ports.targetPort }}
     name: grpc
+    # gRPC over TLS: declare tls, not grpc, so service meshes do not parse
+    # the traffic as plaintext h2c.
+    appProtocol: tls
 {{- if eq .Values.global.prometheus.enabled true }}
   - name: metrics
     port: {{ .Values.global.prometheus.port }}
     targetPort: {{ .Values.global.prometheus.port }}
     protocol: TCP
+    appProtocol: http
 {{- end}}
 {{- if .Values.oidc.enabled }}
   - name: oidc
     port: {{ .Values.oidc.server.port }}
     targetPort: 9080
     protocol: TCP
+    appProtocol: {{ if .Values.oidc.tls.enabled }}https{{ else }}http{{ end }}
 {{- end }}
