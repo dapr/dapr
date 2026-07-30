@@ -41,6 +41,9 @@ func buildPodWithContainers(name string, annotations map[string]string, containe
 			Containers: containers,
 		},
 	}
-	b, _ := json.Marshal(pod)
+	b, err := json.Marshal(pod)
+	if err != nil {
+		panic(err)
+	}
 	return b
 }

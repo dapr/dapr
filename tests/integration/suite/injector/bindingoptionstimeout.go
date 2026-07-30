@@ -93,7 +93,7 @@ func (b *bindingoptionstimeout) daprdArgs(t *testing.T, ctx context.Context, ann
 			UID:       uuid.NewUUID(),
 			Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
 			Name:      "dapr-app",
-			Namespace: "dapr-system",
+			Namespace: "default",
 			Operation: "CREATE",
 			UserInfo:  authenticationv1.UserInfo{Groups: []string{"system:masters"}},
 			Object:    runtime.RawExtension{Raw: podBytes},
