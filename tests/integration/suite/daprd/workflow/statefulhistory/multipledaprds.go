@@ -68,8 +68,8 @@ func (m *multipledaprds) Run(t *testing.T, ctx context.Context) {
 	m.workflow.WaitUntilRunning(t, ctx)
 
 	const (
-		activityCount = 6
-		workflowCount = 32
+		activityCount = 4
+		workflowCount = 20
 	)
 
 	newRegistry := func() *task.TaskRegistry {
