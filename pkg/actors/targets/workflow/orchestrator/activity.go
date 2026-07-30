@@ -59,7 +59,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 			continue
 		}
 
-		err := o.callActivity(ctx, e, dueTime, state.Generation, outgoingHistory[e.GetEventId()], workflowName)
+		err := o.callActivity(ctx, e, dueTime, outgoingHistory[e.GetEventId()], workflowName)
 		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
 				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
@@ -74,7 +74,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 	return result
 }
 
-func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, generation uint64, ph *protos.PropagatedHistory, workflowName string) error {
+func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, ph *protos.PropagatedHistory, workflowName string) error {
 	ts := e.GetTaskScheduled()
 	if ts == nil {
 		log.Warnf("Workflow actor '%s': unable to process task '%v'", o.actorID, e)
@@ -107,7 +107,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		activityActorType = o.actorTypeBuilder.Activity(router.GetTargetAppID())
 	}
 
-	targetActorID := buildActivityActorID(o.actorID, e.GetEventId(), generation)
+	targetActorID := buildActivityActorID(o.actorID, e.GetEventId())
 
 	o.activityResultAwaited.Store(true)
 
@@ -162,6 +162,6 @@ func (o *orchestrator) failActivityACL(ctx context.Context, e *backend.HistoryEv
 	return nil
 }
 
-func buildActivityActorID(workflowID string, taskID int32, generation uint64) string {
-	return workflowID + "::" + strconv.Itoa(int(taskID)) + "::" + strconv.FormatUint(generation, 10)
+func buildActivityActorID(workflowID string, taskID int32) string {
+	return common.ActivityActorID(workflowID, taskID)
 }
