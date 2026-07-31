@@ -50,6 +50,14 @@ type executor struct {
 
 	watchLock chan struct{}
 
+	// mu serializes each side's check-then-act pair of the rendezvous:
+	// complete's pending-map miss followed by its channel park, cancel's map
+	// miss followed by closing cancelCh, claim's drain of both, and close on
+	// deactivation. Without it a waiter's whole Register+Claim can land
+	// between a completer's miss and its park, with each side missing the
+	// other. Every section held under it is non-blocking.
+	mu sync.Mutex
+
 	closed       atomic.Bool
 	cancelClosed atomic.Bool
 	wg           sync.WaitGroup
@@ -92,7 +100,11 @@ func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvo
 	// The waiter for this task normally lives on this host (it shares this
 	// actor's ID, so placement co-locates them) and is registered in the
 	// process-local pending map: deliver in-process. The channel park below
-	// remains for waiters that fell back to a WatchComplete stream.
+	// remains for waiters that fell back to a WatchComplete stream and for
+	// waiters whose Register+Claim has not happened yet. The miss and the
+	// park are one critical section: a claim can never observe the channel
+	// empty after the map was checked but before the park lands.
+	e.mu.Lock()
 	if e.pending != nil && e.pending.Deliver(PendingKey(taskType, e.actorID), req.GetMessage().GetData().GetValue()) {
 		// A stale watch stream from a superseded attempt may still be
 		// parked on this actor; feed it a copy so it terminates promptly
@@ -102,9 +114,30 @@ func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvo
 		case e.completeCh <- d:
 		default:
 		}
+		e.mu.Unlock()
 		e.tryDeactivate()
 		return nil
 	}
+
+	// A concurrent claim may have found nothing and requested deactivation;
+	// the close happens under mu, so this check is race-free: parking into a
+	// closed actor would strand the payload, erroring instead makes the
+	// caller's closed-actor retry redeliver onto a fresh actor.
+	select {
+	case <-e.closeCh:
+		e.mu.Unlock()
+		return targeterrors.NewClosed("executor")
+	default:
+	}
+
+	parked := false
+	select {
+	case e.completeCh <- d:
+		parked = true
+	default:
+	}
+	forward := taskType == TaskTypeActivity && !isForwarded(req) && len(e.watchLock) == 0
+	e.mu.Unlock()
 
 	// No waiter is registered on this host. If no watch stream is parked on
 	// this actor either, and this call was not itself forwarded, forward once
@@ -113,10 +146,17 @@ func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvo
 	// activity keys have sibling forms, so workflow completions never
 	// forward (a workflow instance ID that happens to look like an activity
 	// key must not be rewritten).
-	if taskType == TaskTypeActivity && !isForwarded(req) && len(e.watchLock) == 0 {
+	if forward {
 		e.forwardSibling(ctx, req.GetMessage().GetData().GetValue())
 	}
 
+	if parked {
+		return nil
+	}
+
+	// The channel already holds an earlier parked completion (a superseded
+	// attempt): block outside the critical section until a consumer or
+	// lifecycle event resolves it.
 	select {
 	case e.completeCh <- d:
 		return nil
@@ -132,13 +172,18 @@ func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvo
 // claim hands a parked completion to a co-located waiter whose pending-map
 // registration lost the race with the completion RPC: complete() found no
 // waiter and parked the payload in completeCh, which the pending map never
-// consults. The waiter registers first and claims second, pairing with
-// complete()'s deliver-then-park, so whichever side loses the race, the
-// completion is observed by the other. Non-blocking: no parked completion
-// means the waiter goes back to its pending-map channel, where any later
-// completion is delivered directly.
+// consults. The waiter registers first and claims second; complete()'s
+// map-miss and park form one mu critical section and this whole drain is
+// another, so the two sides cannot interleave: a completer that missed the
+// map has parked before any later claim runs, and a claim that found nothing
+// ran before the completer's map check, which then finds the registered
+// waiter. Non-blocking: no parked completion means the waiter goes back to
+// its pending-map channel, where any later completion is delivered directly.
 func (e *executor) claim(req *internalsv1pb.InternalInvokeRequest) *internalsv1pb.InternalInvokeResponse {
 	claimType := taskTypeOf(req, e.actorID)
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
 	select {
 	case d := <-e.completeCh:
@@ -183,8 +228,12 @@ func (e *executor) claim(req *internalsv1pb.InternalInvokeRequest) *internalsv1p
 	// Nothing parked: the waiter rendezvouses through the pending map, which
 	// completions arriving on this daprd reach without touching this actor,
 	// so don't leave an idle entry in the table (a later remote forward
-	// simply re-creates it). A completion parked concurrently with the
-	// deactivation is redelivered by the caller's closed-actor retry.
+	// simply re-creates it). A completion racing this deactivation either
+	// finds the still-registered waiter in the map, or observes the closed
+	// actor (the close and complete's closed-check are both under mu) and is
+	// redelivered by the caller's retry onto a fresh actor. A park can only
+	// slip in before the close after the waiter deregistered, where the
+	// durable reminder retry already owns redelivery.
 	e.tryDeactivate()
 	return &internalsv1pb.InternalInvokeResponse{
 		Status: &internalsv1pb.Status{Code: int32(codes.NotFound)},
@@ -192,16 +241,21 @@ func (e *executor) claim(req *internalsv1pb.InternalInvokeRequest) *internalsv1p
 }
 
 func (e *executor) cancel(req *internalsv1pb.InternalInvokeRequest) error {
+	e.mu.Lock()
 	if e.pending != nil && e.pending.Cancel(PendingKey(taskTypeOf(req, e.actorID), e.actorID)) {
+		e.mu.Unlock()
 		e.tryDeactivate()
 		return nil
 	}
 
 	// Cancels are at-least-once (stream disconnect cleanup and executor
-	// shutdown can both cancel the same task); only the first closes.
+	// shutdown can both cancel the same task); only the first closes. The
+	// miss and the close are one mu critical section, mirroring complete's
+	// miss-then-park, so a claim can never run between them.
 	if e.cancelClosed.CompareAndSwap(false, true) {
 		close(e.cancelCh)
 	}
+	e.mu.Unlock()
 	return nil
 }
 
@@ -229,8 +283,13 @@ func (e *executor) Deactivate(_ context.Context) error {
 		return nil
 	}
 
+	// Close under mu so complete's closed-check-then-park cannot straddle
+	// the close and strand a payload in a deactivated actor. wg.Wait stays
+	// outside: in-flight invocations hold wg and may be waiting on mu.
+	e.mu.Lock()
 	close(e.closeCh)
 	e.table.Delete(e.actorID)
+	e.mu.Unlock()
 	e.wg.Wait()
 	return nil
 }

@@ -15,6 +15,7 @@ package executor
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -61,6 +62,57 @@ func cancelReq(taskType string) *internalsv1pb.InternalInvokeRequest {
 		WithActor("dapr.internal.default.test.executor", "abc").
 		WithContentType(invokev1.ProtobufContentType).
 		WithMetadata(map[string][]string{MetadataTaskType: {taskType}})
+}
+
+// Test_claimCompleteRace hammers the interleaving where a waiter's whole
+// Register+Claim lands between a completer's pending-map miss and its channel
+// park: without the executor's rendezvous mutex the claim can observe an
+// empty channel, the park lands afterwards with no reader, and the waiter
+// hangs. The window is a few instructions wide, so this cannot reliably
+// reproduce the unsynchronized bug; the guarantee is the mu critical
+// sections in complete/claim. This keeps regression pressure on the
+// invariant: every iteration must resolve the waiter via either the claim or
+// the pending map, whichever side wins the race.
+func Test_claimCompleteRace(t *testing.T) {
+	t.Parallel()
+
+	for range 10_000 {
+		f := &factory{
+			actorType:    "dapr.internal.default.test.executor",
+			deactivateCh: make(chan *executor, 10),
+			pending:      pending.New(),
+		}
+		e, ok := f.GetOrCreate("abc").(*executor)
+		require.True(t, ok)
+
+		completerDone := make(chan error, 1)
+		go func() {
+			_, err := e.InvokeMethod(t.Context(), completeReq(TaskTypeWorkflow, []byte("payload")))
+			completerDone <- err
+		}()
+
+		waitCh, deregister := f.pending.Register(PendingKey(TaskTypeWorkflow, "abc"))
+
+		res, err := e.InvokeMethod(t.Context(), claimReq(TaskTypeWorkflow))
+		require.NoError(t, err)
+
+		switch res.GetStatus().GetCode() {
+		case int32(codes.OK):
+			assert.Equal(t, []byte("payload"), res.GetMessage().GetData().GetValue())
+		case int32(codes.NotFound):
+			select {
+			case pres := <-waitCh:
+				assert.Equal(t, []byte("payload"), pres.Data)
+			case <-time.After(time.Second * 5):
+				t.Fatal("completion neither claimed nor delivered to the pending map waiter")
+			}
+		default:
+			t.Fatalf("unexpected claim status %d", res.GetStatus().GetCode())
+		}
+
+		deregister()
+		require.NoError(t, <-completerDone)
+	}
 }
 
 func Test_claim(t *testing.T) {
