@@ -28,6 +28,7 @@ on:
       - master
       - release-*
       - feature/*
+  merge_group:
 
 permissions: {}
 
@@ -77,6 +78,8 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "ref=${{ github.base_ref }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "merge_group" ]; then
+            echo "ref=${{ github.event.merge_group.base_sha }}" >> $GITHUB_OUTPUT
           elif [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
             echo "ref=${{ github.event.before }}" >> $GITHUB_OUTPUT
           else

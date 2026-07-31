@@ -36,6 +36,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/pkg/sentry/server/ca/jwt"
+	"github.com/dapr/dapr/pkg/sentry/server/images"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
@@ -58,6 +59,10 @@ type SignRequest struct {
 
 	// Optional DNS names to add to the certificate.
 	DNS []string
+
+	// ContainerImages are optional image references of the workload's
+	// containers, embedded as a certificate extension when non-empty.
+	ContainerImages []images.ContainerImage
 }
 
 // Signer is the interface for the CA.
@@ -270,6 +275,14 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 		return nil, err
 	}
 	tmpl.DNSNames = append(tmpl.DNSNames, req.DNS...)
+
+	ext, ok, err := images.Extension(req.ContainerImages)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		tmpl.ExtraExtensions = append(tmpl.ExtraExtensions, ext)
+	}
 
 	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, c.bundle.X509.IssChain[0], req.PublicKey, c.bundle.X509.IssKey)
 	if err != nil {

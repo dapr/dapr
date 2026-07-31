@@ -196,7 +196,9 @@ jobs:
         echo "DAPR_INTEGRATION_SCHEDULER_PATH=$(pwd)/downloads/scheduler" >> $GITHUB_ENV
 
     - name: Run make test-integration
-      run: cd latest-release && make test-integration ARGS="-timeout=45m"
+      # The v1.18.2 suite takes over 45 minutes to run, so give plenty of
+      # headroom before the go test binary panics on timeout.
+      run: cd latest-release && make test-integration ARGS="-timeout=70m"
 
     - name: Upload test results
       if: always()

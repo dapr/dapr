@@ -27,6 +27,9 @@ spec:
     port: {{ .Values.ports.port }}
     targetPort: {{ .Values.ports.targetPort }}
     name: grpc
+    # gRPC wrapped in Dapr control plane mTLS: declare tls, not grpc, so
+    # service meshes do not parse the traffic as plaintext h2c.
+    appProtocol: tls
 # Added for backwards compatibility where previous clients will attempt to
 # connect on port 80.
 # TOOD: @joshvanl: remove in v1.14
@@ -35,12 +38,14 @@ spec:
     port: 80
     targetPort: {{ .Values.ports.targetPort }}
     name: legacy
+    appProtocol: tls
 {{ end }}
 {{- if eq .Values.global.prometheus.enabled true }}
   - name: metrics
     port: {{ .Values.global.prometheus.port }}
     targetPort: {{ .Values.global.prometheus.port }}
     protocol: TCP
+    appProtocol: http
 {{- end}}
 ---
 apiVersion: v1
@@ -62,5 +67,6 @@ spec:
   - port: 443
     targetPort: 19443
     protocol: TCP
+    appProtocol: https
   selector:
     app: dapr-operator
