@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
@@ -51,13 +52,14 @@ var log = logger.NewLogger("dapr.runtime.processor.binding")
 type Options struct {
 	IsHTTP bool
 
-	Registry       *compbindings.Registry
-	ComponentStore *compstore.ComponentStore
-	Meta           *meta.Meta
-	Resiliency     resiliency.Provider
-	GRPC           *manager.Manager
-	TracingSpec    *config.TracingSpec
-	Channels       *channels.Channels
+	Registry                 *compbindings.Registry
+	ComponentStore           *compstore.ComponentStore
+	Meta                     *meta.Meta
+	Resiliency               resiliency.Provider
+	GRPC                     *manager.Manager
+	TracingSpec              *config.TracingSpec
+	Channels                 *channels.Channels
+	AppBindingOptionsTimeout time.Duration
 }
 
 type binding struct {
@@ -75,22 +77,28 @@ type binding struct {
 	readingBindings bool
 	stopForever     bool
 
-	subscribeBindingList []string
-	activeInputs         map[string]*input.Input
-	wg                   sync.WaitGroup
+	subscribeBindingList     []string
+	activeInputs             map[string]*input.Input
+	wg                       sync.WaitGroup
+	appBindingOptionsTimeout time.Duration
 }
 
 func New(opts Options) *binding {
+	appBindingOptionsTimeout := opts.AppBindingOptionsTimeout
+	if appBindingOptionsTimeout <= 0 {
+		appBindingOptionsTimeout = config.DefaultAppBindingOptionsTimeout
+	}
 	return &binding{
-		registry:     opts.Registry,
-		compStore:    opts.ComponentStore,
-		meta:         opts.Meta,
-		isHTTP:       opts.IsHTTP,
-		resiliency:   opts.Resiliency,
-		tracingSpec:  opts.TracingSpec,
-		grpc:         opts.GRPC,
-		channels:     opts.Channels,
-		activeInputs: make(map[string]*input.Input),
+		registry:                 opts.Registry,
+		compStore:                opts.ComponentStore,
+		meta:                     opts.Meta,
+		isHTTP:                   opts.IsHTTP,
+		resiliency:               opts.Resiliency,
+		tracingSpec:              opts.TracingSpec,
+		grpc:                     opts.GRPC,
+		channels:                 opts.Channels,
+		activeInputs:             make(map[string]*input.Input),
+		appBindingOptionsTimeout: appBindingOptionsTimeout,
 	}
 }
 
@@ -191,7 +199,7 @@ func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) 
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 
 	if b.readingBindings {
-		return b.startInputBinding(comp, binding)
+		return b.startInputBinding(ctx, comp, binding)
 	}
 
 	return nil

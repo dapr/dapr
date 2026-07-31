@@ -69,6 +69,7 @@ const (
 	KeyAppHealthProbeInterval           = "dapr.io/app-health-probe-interval"
 	KeyAppHealthProbeTimeout            = "dapr.io/app-health-probe-timeout"
 	KeyAppHealthThreshold               = "dapr.io/app-health-threshold"
+	KeyAppBindingOptionsTimeout         = "dapr.io/app-binding-options-timeout"
 	KeyPlacementHostAddresses           = "dapr.io/placement-host-address"
 	KeySchedulerHostAddresses           = "dapr.io/scheduler-host-address"
 	KeyPluggableComponents              = "dapr.io/pluggable-components"
