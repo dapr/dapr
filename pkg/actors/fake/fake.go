@@ -17,8 +17,10 @@ import (
 	"context"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
+	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	remindersfake "github.com/dapr/dapr/pkg/actors/reminders/fake"
 	"github.com/dapr/dapr/pkg/actors/router"
@@ -124,6 +126,20 @@ func (f *Fake) WithReminders(fn func(context.Context) (reminders.Interface, erro
 
 func (f *Fake) WithPlacement(fn func(context.Context) (placement.Interface, error)) *Fake {
 	f.fnPlacement = fn
+	return f
+}
+
+// WithPlacementLookupActor configures the fake's placement to answer
+// LookupActor with the given function. Unlike WithPlacement, callers outside
+// the actors tree can use this without importing the internal placement
+// package.
+func (f *Fake) WithPlacementLookupActor(fn func(context.Context, *api.LookupActorRequest) (*api.LookupActorResponse, error)) *Fake {
+	f.fnPlacement = func(context.Context) (placement.Interface, error) {
+		return placementfake.New().WithLookupActor(func(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
+			lar, err := fn(ctx, req)
+			return lar, ctx, func(error) {}, err
+		}), nil
+	}
 	return f
 }
 
