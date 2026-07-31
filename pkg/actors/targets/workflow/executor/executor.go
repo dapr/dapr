@@ -360,12 +360,14 @@ func (e *executor) InvokeStream(ctx context.Context,
 func (e *executor) watchComplete(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream func(*internalsv1pb.InternalInvokeResponse) (bool, error)) error {
 	defer func() {
 		// A displaced completion still needs the actor alive for its own
-		// waiter; skip deactivation until it is consumed.
+		// waiter; skip deactivation until it is consumed. Non-blocking: a
+		// blocking send can deadlock when the queue is full and its consumer
+		// is waiting on this actor's wait group, which this stream holds.
 		e.mu.Lock()
 		displaced := e.displaced != nil
 		e.mu.Unlock()
 		if !displaced {
-			e.deactivateCh <- e
+			e.tryDeactivate()
 		}
 	}()
 

@@ -299,7 +299,7 @@ func (be *ClusterTasksBackend) claimParked(ctx context.Context, taskType, key st
 		// An unexpected status must settle the wait rather than leave the
 		// waiter parked on the pending map: the work item is abandoned and
 		// the durable retry converges.
-		return false, fmt.Errorf("unexpected claim status %d for task %q", res.GetStatus().GetCode(), key)
+		return true, fmt.Errorf("unexpected claim status %d for task %q", res.GetStatus().GetCode(), key)
 	}
 }
 
