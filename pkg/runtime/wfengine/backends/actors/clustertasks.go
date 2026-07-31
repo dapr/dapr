@@ -201,10 +201,11 @@ func (be *ClusterTasksBackend) WaitForWorkflowTaskCompletion(req *protos.Workflo
 // constructing the waiter and invoking it (context cancellation during
 // dispatch), and an entry registered eagerly would leak and swallow a later
 // completion for the same key. The window this opens (a completion reported
-// before the returned function runs) is bounded by a full application round
-// trip racing the next statement in the caller; if it is ever lost, the
-// completion parks on the co-located executor actor and the durable reminder
-// retry redispatches the work item.
+// before the returned function runs) is real: the work item is dispatched
+// before the returned function runs, so a fast application round trip can
+// report the completion first. Such a completion parks on the co-located
+// executor actor and is drained by the claim call made right after
+// registration on the wait_local path below.
 //
 // The pending map is only consulted by completions arriving on this daprd or
 // forwarded here by the executor actor, so blocking on it is only correct
