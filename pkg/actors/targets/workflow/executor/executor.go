@@ -144,13 +144,16 @@ func (e *executor) claim(req *internalsv1pb.InternalInvokeRequest) *internalsv1p
 	case d := <-e.completeCh:
 		// A parked completion of the colliding other task type (a workflow
 		// instance ID equal to an activity actor ID) belongs to a different
-		// waiter: put it back for its own watcher or claimer.
+		// waiter: put it back for its own watcher or claimer, and keep the
+		// actor alive for it.
 		if v, ok := d.GetHeaders()[MetadataTaskType]; ok && len(v.GetValues()) > 0 && v.GetValues()[0] != claimType {
 			select {
 			case e.completeCh <- d:
 			default:
 			}
-			break
+			return &internalsv1pb.InternalInvokeResponse{
+				Status: &internalsv1pb.Status{Code: int32(codes.NotFound)},
+			}
 		}
 
 		// A stale watch stream from a superseded attempt may still be parked
@@ -177,6 +180,12 @@ func (e *executor) claim(req *internalsv1pb.InternalInvokeRequest) *internalsv1p
 	default:
 	}
 
+	// Nothing parked: the waiter rendezvouses through the pending map, which
+	// completions arriving on this daprd reach without touching this actor,
+	// so don't leave an idle entry in the table (a later remote forward
+	// simply re-creates it). A completion parked concurrently with the
+	// deactivation is redelivered by the caller's closed-actor retry.
+	e.tryDeactivate()
 	return &internalsv1pb.InternalInvokeResponse{
 		Status: &internalsv1pb.Status{Code: int32(codes.NotFound)},
 	}
