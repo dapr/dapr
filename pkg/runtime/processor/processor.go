@@ -358,7 +358,13 @@ func New(opts Options) *Processor {
 			if reg == nil {
 				return nil
 			}
-			return reg.RegisterMCPServer(ctx, s, opts.ComponentStore, opts.Security)
+			policyRunner := resiliency.NewRunner[any](ctx,
+				opts.Resiliency.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
+			)
+			_, err := policyRunner(func(ctx context.Context) (any, error) {
+				return nil, reg.RegisterMCPServer(ctx, s, opts.ComponentStore, opts.Security)
+			})
+			return err
 		},
 		UnregisterMCPServer: func(name string) {
 			reg := p.getInProcessWorkflows()
