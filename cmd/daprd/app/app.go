@@ -175,6 +175,7 @@ func Run() {
 				AppChannelAddress:             opts.AppChannelAddress,
 				EnableAPILogging:              opts.EnableAPILogging,
 				Config:                        opts.Config,
+				AppBindingOptionsTimeout:      opts.AppBindingOptionsTimeout,
 				Metrics: metrics.Options{
 					Enabled:       opts.Metrics.Enabled(),
 					Log:           log,

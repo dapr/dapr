@@ -881,6 +881,27 @@ func TestGetSidecarContainer(t *testing.T) {
 		},
 	}))
 
+	t.Run("app binding options timeout", testSuiteGenerator([]testCase{
+		{
+			name:        "default to empty",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--app-binding-options-timeout")
+			},
+		},
+		{
+			name: "add an app binding options timeout",
+			annotations: map[string]string{
+				annotations.KeyAppBindingOptionsTimeout: "30s",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--app-binding-options-timeout 30s")
+			},
+		},
+	}))
+
 	t.Run("sidecar image", testSuiteGenerator([]testCase{
 		{
 			name:        "no annotation",

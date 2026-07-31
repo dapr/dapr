@@ -85,6 +85,7 @@ type Options struct {
 	SentryRequestJwtAudiences     []string
 	Logger                        logger.Options
 	Metrics                       *metrics.FlagOptions
+	AppBindingOptionsTimeout      time.Duration
 }
 
 func New(origArgs []string) (*Options, error) {
@@ -174,6 +175,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&placementServiceHostAddr, "placement-host-address", "", "Addresses for Dapr Actor Placement servers (overrides actors-service)")
 	fs.StringSliceVar(&opts.SchedulerAddress, "scheduler-host-address", nil, "Addresses of the Scheduler service instance(s), as comma separated host:port pairs")
 	fs.UintVar(&opts.SchedulerJobStreams, "scheduler-job-streams", 3, "The number of active job streams to connect to the Scheduler service")
+	fs.DurationVar(&opts.AppBindingOptionsTimeout, "app-binding-options-timeout", config.DefaultAppBindingOptionsTimeout, "Timeout for input binding subscription discovery requests to the app (HTTP OPTIONS or gRPC ListInputBindings). Increase for apps with slow startup (e.g. JVM/JIT workloads). Non-positive values use the default.")
 	fs.StringVar(&opts.ActorsService, "actors-service", "", "Type and address of the actors service, in the format 'type:address'")
 	fs.StringVar(&opts.RemindersService, "reminders-service", "", "Type and address of the reminders service, in the format 'type:address'")
 
