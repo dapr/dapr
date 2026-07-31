@@ -35,6 +35,7 @@ var log = logger.NewLogger("dapr.runtime.actors.targets.executor")
 const (
 	MethodComplete      = "Complete"
 	MethodCancel        = "Cancel"
+	MethodClaim         = "Claim"
 	MethodWatchComplete = "WatchComplete"
 )
 
@@ -63,6 +64,8 @@ func (e *executor) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 		return nil, e.complete(ctx, req)
 	case MethodCancel:
 		return nil, e.cancel(req)
+	case MethodClaim:
+		return e.claim(req), nil
 	default:
 		return nil, errors.New("unknown method: " + req.GetMessage().GetMethod())
 	}
@@ -123,6 +126,59 @@ func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvo
 		return targeterrors.NewClosed("executor")
 	case <-ctx.Done():
 		return errors.New("context cancelled before completion result was sent")
+	}
+}
+
+// claim hands a parked completion to a co-located waiter whose pending-map
+// registration lost the race with the completion RPC: complete() found no
+// waiter and parked the payload in completeCh, which the pending map never
+// consults. The waiter registers first and claims second, pairing with
+// complete()'s deliver-then-park, so whichever side loses the race, the
+// completion is observed by the other. Non-blocking: no parked completion
+// means the waiter goes back to its pending-map channel, where any later
+// completion is delivered directly.
+func (e *executor) claim(req *internalsv1pb.InternalInvokeRequest) *internalsv1pb.InternalInvokeResponse {
+	claimType := taskTypeOf(req, e.actorID)
+
+	select {
+	case d := <-e.completeCh:
+		// A parked completion of the colliding other task type (a workflow
+		// instance ID equal to an activity actor ID) belongs to a different
+		// waiter: put it back for its own watcher or claimer.
+		if v, ok := d.GetHeaders()[MetadataTaskType]; ok && len(v.GetValues()) > 0 && v.GetValues()[0] != claimType {
+			select {
+			case e.completeCh <- d:
+			default:
+			}
+			break
+		}
+
+		// A stale watch stream from a superseded attempt may still be parked
+		// on this actor; feed it a copy so it terminates promptly. Duplicate
+		// deliveries are discarded by the workflow-side dedup guards.
+		if len(e.watchLock) > 0 {
+			select {
+			case e.completeCh <- d:
+			default:
+			}
+		} else {
+			e.tryDeactivate()
+		}
+		return d
+	default:
+	}
+
+	select {
+	case <-e.cancelCh:
+		e.tryDeactivate()
+		return &internalsv1pb.InternalInvokeResponse{
+			Status: &internalsv1pb.Status{Code: int32(codes.Aborted)},
+		}
+	default:
+	}
+
+	return &internalsv1pb.InternalInvokeResponse{
+		Status: &internalsv1pb.Status{Code: int32(codes.NotFound)},
 	}
 }
 
