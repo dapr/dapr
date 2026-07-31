@@ -15,6 +15,7 @@ package reconciler
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,10 +26,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
+	inmemory "github.com/dapr/components-contrib/state/in-memory"
+	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
+	outboxfake "github.com/dapr/dapr/pkg/outbox/fake"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -111,6 +115,131 @@ func runProc(t *testing.T, proc *processor.Processor) context.Context {
 		}
 	})
 	return ctx
+}
+
+// actorStoreComp builds a state store component, optionally marked as the
+// actor state store.
+func actorStoreComp(name string, marked bool, gen int64) compapi.Component {
+	comp := compapi.Component{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Generation: gen},
+		Spec: compapi.ComponentSpec{
+			Type:    "state.in-memory",
+			Version: "v1",
+		},
+	}
+	if marked {
+		comp.Spec.Metadata = []commonapi.NameValuePair{{
+			Name:  "actorStateStore",
+			Value: commonapi.DynamicValue{JSON: apiextv1.JSON{Raw: []byte(`"true"`)}},
+		}}
+	}
+	return comp
+}
+
+func newComponentsActorStoreManager(t *testing.T, kicks *atomic.Int64) (*components, *processor.Processor, *compstore.ComponentStore) {
+	t.Helper()
+
+	cs := compstore.New()
+	reg := registry.New(registry.NewOptions())
+
+	reg.StateStores().RegisterComponent(
+		inmemory.NewInMemoryStateStore,
+		"in-memory",
+	)
+
+	proc := processor.New(processor.Options{
+		ID:             "id",
+		Namespace:      "test",
+		Registry:       reg,
+		ComponentStore: cs,
+		Meta:           meta.New(meta.Options{ID: "id", Namespace: "test", Mode: modes.StandaloneMode}),
+		Resiliency:     resiliency.New(log),
+		Mode:           modes.StandaloneMode,
+		Channels:       new(channels.Channels),
+		GlobalConfig:   new(config.Configuration),
+		Security:       securityfake.New(),
+		Reporter:       reg.Reporter(),
+		Outbox:         outboxfake.New(),
+		ActorsEnabled:  true,
+		Actors: actorsfake.New().WithOnActorStateStoreChanged(func() {
+			kicks.Add(1)
+		}),
+	})
+
+	m := &components{
+		store: cs,
+		proc:  proc,
+		auth:  authorizer.New(authorizer.Options{ID: "id"}),
+	}
+	return m, proc, cs
+}
+
+// Test_components_actorStateStore verifies the actor state store can be hot
+// reloaded: added, updated in place, and deleted, with change notifications
+// kicked to the actor runtime; and that a second actor state store is
+// skipped.
+func Test_components_actorStateStore(t *testing.T) {
+	t.Run("add, update and delete the actor state store", func(t *testing.T) {
+		var kicks atomic.Int64
+		m, proc, cs := newComponentsActorStoreManager(t, &kicks)
+		ctx := runProc(t, proc)
+
+		// Add: an unmarked store does not occupy the actor slot or kick.
+		require.NoError(t, m.update(ctx, actorStoreComp("mystore", false, 1)))
+		_, _, ok := cs.GetStateStoreActor()
+		assert.False(t, ok)
+		assert.Equal(t, int64(0), kicks.Load())
+
+		// Update to marked: slot occupied, kick delivered.
+		require.NoError(t, m.update(ctx, actorStoreComp("mystore", true, 2)))
+		_, name, ok := cs.GetStateStoreActor()
+		require.True(t, ok)
+		assert.Equal(t, "mystore", name)
+		assert.Equal(t, int64(1), kicks.Load())
+
+		// Same-name update: one kick after the update settles - the actor
+		// runtime never observes the transient store-less state between the
+		// close and re-init.
+		comp := actorStoreComp("mystore", true, 3)
+		comp.Spec.Metadata = append(comp.Spec.Metadata, commonapi.NameValuePair{
+			Name:  "marker",
+			Value: commonapi.DynamicValue{JSON: apiextv1.JSON{Raw: []byte(`"x"`)}},
+		})
+		require.NoError(t, m.update(ctx, comp))
+		_, name, ok = cs.GetStateStoreActor()
+		require.True(t, ok)
+		assert.Equal(t, "mystore", name)
+		assert.Equal(t, int64(2), kicks.Load())
+
+		// Delete: slot cleared, kick delivered.
+		require.NoError(t, m.delete(ctx, comp))
+		_, _, ok = cs.GetStateStoreActor()
+		assert.False(t, ok)
+		_, exists := cs.GetComponent("mystore")
+		assert.False(t, exists)
+		assert.Equal(t, int64(3), kicks.Load())
+	})
+
+	t.Run("a second actor state store is skipped", func(t *testing.T) {
+		var kicks atomic.Int64
+		m, proc, cs := newComponentsActorStoreManager(t, &kicks)
+		ctx := runProc(t, proc)
+
+		require.NoError(t, m.update(ctx, actorStoreComp("mystore", true, 1)))
+		require.NoError(t, m.update(ctx, actorStoreComp("otherstore", true, 1)))
+
+		_, name, ok := cs.GetStateStoreActor()
+		require.True(t, ok)
+		assert.Equal(t, "mystore", name)
+		_, exists := cs.GetComponent("otherstore")
+		assert.False(t, exists, "second actor state store must not be installed")
+		assert.Equal(t, int64(1), kicks.Load())
+
+		// An unmarked second store is unaffected by the guard.
+		require.NoError(t, m.update(ctx, actorStoreComp("plainstore", false, 1)))
+		_, exists = cs.GetComponent("plainstore")
+		assert.True(t, exists)
+	})
 }
 
 // Test_components_update_generationGuard pins the behaviour of the

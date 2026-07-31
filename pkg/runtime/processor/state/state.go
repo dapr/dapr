@@ -52,9 +52,8 @@ type state struct {
 	meta      *meta.Meta
 	lock      sync.RWMutex
 
-	actorStateStoreName *string
-	actorsEnabled       bool
-	outbox              outbox.Outbox
+	actorsEnabled bool
+	outbox        outbox.Outbox
 }
 
 func New(opts Options) *state {
@@ -129,14 +128,11 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 		}
 
 		if actorStoreSpecified {
-			if s.actorStateStoreName == nil {
-				log.Info("Using '" + comp.Name + "' as actor state store")
-				s.actorStateStoreName = &comp.Name
-			} else if *s.actorStateStoreName != comp.Name {
-				return fmt.Errorf("detected duplicate actor state store: %s and %s", *s.actorStateStoreName, comp.Name)
+			if err = s.compStore.AddStateStoreActor(comp.Name, store); err != nil {
+				diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
+				return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 			}
-
-			s.compStore.AddStateStoreActor(comp.Name, store)
+			log.Info("Using '" + comp.Name + "' as actor state store")
 		}
 	}
 
@@ -178,12 +174,6 @@ func (s *state) Close(comp compapi.Component) error {
 }
 
 func (s *state) ActorStateStoreName() (string, bool) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	if s.actorStateStoreName == nil {
-		return "", false
-	}
-
-	return *s.actorStateStoreName, true
+	_, name, ok := s.compStore.GetStateStoreActor()
+	return name, ok
 }

@@ -116,6 +116,10 @@ type Processor struct {
 	security  security.Handler
 	reporter  registry.Reporter
 
+	// actors is notified of actor state store changes by the hot reload
+	// reconciler. May be nil in tests.
+	actors actors.Interface
+
 	// Accessor interfaces used by the State/Secret/Binding/Subscriber
 	// methods. Backed by the concrete sub-processor instances constructed in
 	// New.
@@ -258,6 +262,7 @@ func New(opts Options) *Processor {
 		compStore:      opts.ComponentStore,
 		security:       opts.Security,
 		reporter:       reporter,
+		actors:         opts.Actors,
 		state:          stateProc,
 		secret:         secretProc,
 		binding:        bindingProc,
