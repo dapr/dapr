@@ -50,6 +50,15 @@ type executor struct {
 
 	watchLock chan struct{}
 
+	// displaced holds a parked completion of the colliding other task type
+	// that a claim drained from completeCh. It cannot be put back on the
+	// channel: a completer blocked on a full channel (the only sender
+	// outside mu) can refill the freed slot first, and the non-blocking
+	// put-back would silently drop the payload. Guarded by mu; consumed by
+	// the first matching claim or watch stream. While it is non-nil the
+	// actor must not deactivate, or the payload would be stranded.
+	displaced *internalsv1pb.InternalInvokeResponse
+
 	// mu serializes each side's check-then-act pair of the rendezvous:
 	// complete's pending-map miss followed by its channel park, cancel's map
 	// miss followed by closing cancelCh, claim's drain of both, and close on
@@ -114,8 +123,11 @@ func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvo
 		case e.completeCh <- d:
 		default:
 		}
+		deactivate := e.displaced == nil
 		e.mu.Unlock()
-		e.tryDeactivate()
+		if deactivate {
+			e.tryDeactivate()
+		}
 		return nil
 	}
 
@@ -185,66 +197,102 @@ func (e *executor) claim(req *internalsv1pb.InternalInvokeRequest) *internalsv1p
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	select {
-	case d := <-e.completeCh:
-		// A parked completion of the colliding other task type (a workflow
-		// instance ID equal to an activity actor ID) belongs to a different
-		// waiter: put it back for its own watcher or claimer, and keep the
-		// actor alive for it.
-		if v, ok := d.GetHeaders()[MetadataTaskType]; ok && len(v.GetValues()) > 0 && v.GetValues()[0] != claimType {
-			select {
-			case e.completeCh <- d:
-			default:
-			}
-			return &internalsv1pb.InternalInvokeResponse{
-				Status: &internalsv1pb.Status{Code: int32(codes.NotFound)},
-			}
-		}
+	// A completion of this type displaced by an earlier claim of the
+	// colliding other task type is checked first: it is older than anything
+	// still in the channel.
+	if d := e.displaced; d != nil && parkedTaskType(d) == claimType {
+		e.displaced = nil
+		return e.claimed(d)
+	}
 
-		// A stale watch stream from a superseded attempt may still be parked
-		// on this actor; feed it a copy so it terminates promptly. Duplicate
-		// deliveries are discarded by the workflow-side dedup guards.
-		if len(e.watchLock) > 0 {
-			select {
-			case e.completeCh <- d:
-			default:
-			}
-		} else {
-			e.tryDeactivate()
+	// Drain parked completions. One of the colliding other task type (a
+	// workflow instance ID equal to an activity actor ID) belongs to a
+	// different waiter and is moved to the displaced slot rather than put
+	// back: a completer blocked on a full channel (the only sender outside
+	// mu) can refill the slot the drain freed, and a non-blocking put-back
+	// would silently drop the payload. A same-type duplicate overwrites the
+	// slot, which the workflow-side dedup guards make safe.
+	for {
+		var d *internalsv1pb.InternalInvokeResponse
+		select {
+		case d = <-e.completeCh:
+		default:
 		}
-		return d
-	default:
+		if d == nil {
+			break
+		}
+		if pt := parkedTaskType(d); pt != "" && pt != claimType {
+			e.displaced = d
+			continue
+		}
+		return e.claimed(d)
 	}
 
 	select {
 	case <-e.cancelCh:
-		e.tryDeactivate()
+		if e.displaced == nil {
+			e.tryDeactivate()
+		}
 		return &internalsv1pb.InternalInvokeResponse{
 			Status: &internalsv1pb.Status{Code: int32(codes.Aborted)},
 		}
 	default:
 	}
 
-	// Nothing parked: the waiter rendezvouses through the pending map, which
-	// completions arriving on this daprd reach without touching this actor,
-	// so don't leave an idle entry in the table (a later remote forward
-	// simply re-creates it). A completion racing this deactivation either
-	// finds the still-registered waiter in the map, or observes the closed
-	// actor (the close and complete's closed-check are both under mu) and is
-	// redelivered by the caller's retry onto a fresh actor. A park can only
-	// slip in before the close after the waiter deregistered, where the
-	// durable reminder retry already owns redelivery.
-	e.tryDeactivate()
+	// Nothing parked for this type: the waiter rendezvouses through the
+	// pending map, which completions arriving on this daprd reach without
+	// touching this actor, so don't leave an idle entry in the table (a
+	// later remote forward simply re-creates it), unless a displaced
+	// completion still needs the actor alive for its own waiter. A
+	// completion racing this deactivation either finds the still-registered
+	// waiter in the map, or observes the closed actor (the close and
+	// complete's closed-check are both under mu) and is redelivered by the
+	// caller's retry onto a fresh actor. A park can only slip in before the
+	// close after the waiter deregistered, where the durable reminder retry
+	// already owns redelivery.
+	if e.displaced == nil {
+		e.tryDeactivate()
+	}
 	return &internalsv1pb.InternalInvokeResponse{
 		Status: &internalsv1pb.Status{Code: int32(codes.NotFound)},
 	}
 }
 
+// claimed finalizes a successful claim under mu: a stale watch stream from a
+// superseded attempt is fed a copy so it terminates promptly (duplicates are
+// discarded by the workflow-side dedup guards), and the actor deactivates
+// when no watcher is parked and nothing displaced remains for the colliding
+// other task type.
+func (e *executor) claimed(d *internalsv1pb.InternalInvokeResponse) *internalsv1pb.InternalInvokeResponse {
+	if len(e.watchLock) > 0 {
+		select {
+		case e.completeCh <- d:
+		default:
+		}
+	} else if e.displaced == nil {
+		e.tryDeactivate()
+	}
+	return d
+}
+
+// parkedTaskType reads the task type a parked completion was stamped with by
+// complete; "" only for payloads parked by builds predating the stamp, which
+// any claimer may take.
+func parkedTaskType(d *internalsv1pb.InternalInvokeResponse) string {
+	if v, ok := d.GetHeaders()[MetadataTaskType]; ok && len(v.GetValues()) > 0 {
+		return v.GetValues()[0]
+	}
+	return ""
+}
+
 func (e *executor) cancel(req *internalsv1pb.InternalInvokeRequest) error {
 	e.mu.Lock()
 	if e.pending != nil && e.pending.Cancel(PendingKey(taskTypeOf(req, e.actorID), e.actorID)) {
+		deactivate := e.displaced == nil
 		e.mu.Unlock()
-		e.tryDeactivate()
+		if deactivate {
+			e.tryDeactivate()
+		}
 		return nil
 	}
 
@@ -303,15 +351,22 @@ func (e *executor) InvokeStream(ctx context.Context,
 
 	switch req.GetMessage().GetMethod() {
 	case MethodWatchComplete:
-		return e.watchComplete(ctx, stream)
+		return e.watchComplete(ctx, req, stream)
 	default:
 		return errors.New("unknown method: " + req.GetMessage().GetMethod())
 	}
 }
 
-func (e *executor) watchComplete(ctx context.Context, stream func(*internalsv1pb.InternalInvokeResponse) (bool, error)) error {
+func (e *executor) watchComplete(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream func(*internalsv1pb.InternalInvokeResponse) (bool, error)) error {
 	defer func() {
-		e.deactivateCh <- e
+		// A displaced completion still needs the actor alive for its own
+		// waiter; skip deactivation until it is consumed.
+		e.mu.Lock()
+		displaced := e.displaced != nil
+		e.mu.Unlock()
+		if !displaced {
+			e.deactivateCh <- e
+		}
 	}()
 
 	select {
@@ -324,6 +379,25 @@ func (e *executor) watchComplete(ctx context.Context, stream func(*internalsv1pb
 	defer func() {
 		<-e.watchLock
 	}()
+
+	// A completion displaced by a wrong-type claim never reaches the channel
+	// select below: hand it to the first watcher whose advertised type
+	// matches. A watcher advertising no type (a pre-upgrade daprd) takes
+	// whatever is held and applies its own type check stream-side.
+	watchType := ""
+	if v, ok := req.GetMetadata()[MetadataTaskType]; ok && len(v.GetValues()) > 0 {
+		watchType = v.GetValues()[0]
+	}
+	e.mu.Lock()
+	if d := e.displaced; d != nil {
+		if pt := parkedTaskType(d); watchType == "" || pt == "" || pt == watchType {
+			e.displaced = nil
+			e.mu.Unlock()
+			_, err := stream(d)
+			return err
+		}
+	}
+	e.mu.Unlock()
 
 	select {
 	case <-ctx.Done():

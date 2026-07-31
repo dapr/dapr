@@ -193,6 +193,76 @@ func Test_claim(t *testing.T) {
 		assert.Equal(t, []byte("payload"), res.GetMessage().GetData().GetValue())
 	})
 
+	t.Run("displaced completion is claimed before the channel", func(t *testing.T) {
+		t.Parallel()
+		e, _ := newClaimTestExecutor(t)
+
+		_, err := e.InvokeMethod(t.Context(), completeReq(TaskTypeWorkflow, []byte("first")))
+		require.NoError(t, err)
+
+		// The wrong-type claim moves "first" to the displaced slot, freeing
+		// the channel for "second".
+		res, err := e.InvokeMethod(t.Context(), claimReq(TaskTypeActivity))
+		require.NoError(t, err)
+		assert.Equal(t, int32(codes.NotFound), res.GetStatus().GetCode())
+
+		_, err = e.InvokeMethod(t.Context(), completeReq(TaskTypeWorkflow, []byte("second")))
+		require.NoError(t, err)
+
+		for _, want := range [][]byte{[]byte("first"), []byte("second")} {
+			res, err = e.InvokeMethod(t.Context(), claimReq(TaskTypeWorkflow))
+			require.NoError(t, err)
+			assert.Equal(t, int32(codes.OK), res.GetStatus().GetCode())
+			assert.Equal(t, want, res.GetMessage().GetData().GetValue())
+		}
+	})
+
+	t.Run("no completion is lost to a concurrent blocked completer", func(t *testing.T) {
+		t.Parallel()
+		e, f := newClaimTestExecutor(t)
+
+		// Fill the channel slot with a workflow-type completion, then block an
+		// activity-type completer on the full channel: the moment a claim
+		// drains the slot this sender refills it, which is exactly the window
+		// where a channel put-back would drop the drained payload. The two
+		// payloads are of different task types, so neither may ever be lost.
+		_, err := e.InvokeMethod(t.Context(), completeReq(TaskTypeWorkflow, []byte("wf")))
+		require.NoError(t, err)
+		blockedDone := make(chan error, 1)
+		go func() {
+			_, berr := e.InvokeMethod(t.Context(), completeReq(TaskTypeActivity, []byte("act")))
+			blockedDone <- berr
+		}()
+
+		// The activity claim displaces "wf"; depending on whether the blocked
+		// sender has refilled the slot yet it returns "act" or not-found.
+		res, err := e.InvokeMethod(t.Context(), claimReq(TaskTypeActivity))
+		require.NoError(t, err)
+		gotAct := res.GetStatus().GetCode() == int32(codes.OK)
+		if gotAct {
+			assert.Equal(t, []byte("act"), res.GetMessage().GetData().GetValue())
+		}
+		assert.Empty(t, f.deactivateCh, "a displaced completion must keep the actor alive")
+
+		res, err = e.InvokeMethod(t.Context(), claimReq(TaskTypeWorkflow))
+		require.NoError(t, err)
+		assert.Equal(t, int32(codes.OK), res.GetStatus().GetCode())
+		assert.Equal(t, []byte("wf"), res.GetMessage().GetData().GetValue())
+
+		if !gotAct {
+			assert.EventuallyWithT(t, func(col *assert.CollectT) {
+				cres, cerr := e.InvokeMethod(t.Context(), claimReq(TaskTypeActivity))
+				if !assert.NoError(col, cerr) {
+					return
+				}
+				if assert.Equal(col, int32(codes.OK), cres.GetStatus().GetCode()) {
+					assert.Equal(col, []byte("act"), cres.GetMessage().GetData().GetValue())
+				}
+			}, time.Second*5, time.Millisecond)
+		}
+		require.NoError(t, <-blockedDone)
+	})
+
 	t.Run("delivers to registered waiter instead of parking", func(t *testing.T) {
 		t.Parallel()
 		e, f := newClaimTestExecutor(t)

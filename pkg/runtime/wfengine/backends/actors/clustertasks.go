@@ -293,8 +293,13 @@ func (be *ClusterTasksBackend) claimParked(ctx context.Context, taskType, key st
 		return true, proto.Unmarshal(res.GetMessage().GetData().GetValue(), resp)
 	case int32(codes.Aborted):
 		return true, api.ErrTaskCancelled
-	default:
+	case int32(codes.NotFound):
 		return false, nil
+	default:
+		// An unexpected status must settle the wait rather than leave the
+		// waiter parked on the pending map: the work item is abandoned and
+		// the durable retry converges.
+		return false, fmt.Errorf("unexpected claim status %d for task %q", res.GetStatus().GetCode(), key)
 	}
 }
 
@@ -331,10 +336,14 @@ func (be *ClusterTasksBackend) watchCompletion(ctx context.Context, taskType, ke
 		return err
 	}
 
+	// Advertising the task type lets the executor actor hand a displaced
+	// completion only to a watcher of its own type; the stream-side check
+	// below stays as the guard for untyped deliveries.
 	sreq := internalsv1pb.
 		NewInternalInvokeRequest(executor.MethodWatchComplete).
 		WithActor(be.executorActorType, key).
-		WithContentType(invokev1.ProtobufContentType)
+		WithContentType(invokev1.ProtobufContentType).
+		WithMetadata(map[string][]string{executor.MetadataTaskType: {taskType}})
 
 	return router.CallStream(ctx, sreq, func(res *internalsv1pb.InternalInvokeResponse) (bool, error) {
 		if res == nil {
