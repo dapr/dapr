@@ -201,10 +201,11 @@ func (be *ClusterTasksBackend) WaitForWorkflowTaskCompletion(req *protos.Workflo
 // constructing the waiter and invoking it (context cancellation during
 // dispatch), and an entry registered eagerly would leak and swallow a later
 // completion for the same key. The window this opens (a completion reported
-// before the returned function runs) is bounded by a full application round
-// trip racing the next statement in the caller; if it is ever lost, the
-// completion parks on the co-located executor actor and the durable reminder
-// retry redispatches the work item.
+// before the returned function runs) is real: the work item is dispatched
+// before the returned function runs, so a fast application round trip can
+// report the completion first. Such a completion parks on the co-located
+// executor actor and is drained by the claim call made right after
+// registration on the wait_local path below.
 //
 // The pending map is only consulted by completions arriving on this daprd or
 // forwarded here by the executor actor, so blocking on it is only correct
@@ -219,6 +220,20 @@ func (be *ClusterTasksBackend) waitForCompletion(taskType, key string) func(cont
 
 		if be.executorLocal(ctx, key) {
 			diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteWaitLocal)
+
+			// The completion RPC can win the race with the Register above:
+			// finding no waiter, it parks the payload on the co-located
+			// executor actor, which the pending map never consults, and the
+			// select below would block forever (the durable reminder retry
+			// cannot redispatch, because the reminder invocation is this
+			// blocked call chain). Register-then-claim pairs with the
+			// executor actor's deliver-then-park so whichever order the race
+			// resolves in, one side observes the other. A claim error is
+			// returned rather than waited out: the work item is abandoned and
+			// the durable retry converges.
+			if done, err := be.claimParked(ctx, taskType, key, resp); done || err != nil {
+				return err
+			}
 
 			select {
 			case <-ctx.Done():
@@ -248,6 +263,43 @@ func (be *ClusterTasksBackend) waitForCompletion(taskType, key string) func(cont
 		diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteWaitWatch)
 
 		return be.watchCompletion(ctx, taskType, key, resp)
+	}
+}
+
+// claimParked drains a completion or cancellation for key that was parked on
+// the co-located executor actor before the waiter registered in the pending
+// map. It reports whether the wait is settled: a claimed completion is
+// unmarshalled into resp, a parked cancellation surfaces as ErrTaskCancelled.
+// Not-found (the steady state) leaves the waiter on its pending-map channel.
+func (be *ClusterTasksBackend) claimParked(ctx context.Context, taskType, key string, resp proto.Message) (bool, error) {
+	router, err := be.actors.Router(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	req := internalsv1pb.
+		NewInternalInvokeRequest(executor.MethodClaim).
+		WithActor(be.executorActorType, key).
+		WithContentType(invokev1.ProtobufContentType).
+		WithMetadata(map[string][]string{executor.MetadataTaskType: {taskType}})
+
+	res, err := router.Call(ctx, req)
+	if err != nil {
+		return false, err
+	}
+
+	switch res.GetStatus().GetCode() {
+	case int32(codes.OK):
+		return true, proto.Unmarshal(res.GetMessage().GetData().GetValue(), resp)
+	case int32(codes.Aborted):
+		return true, api.ErrTaskCancelled
+	case int32(codes.NotFound):
+		return false, nil
+	default:
+		// An unexpected status must settle the wait rather than leave the
+		// waiter parked on the pending map: the work item is abandoned and
+		// the durable retry converges.
+		return true, fmt.Errorf("unexpected claim status %d for task %q", res.GetStatus().GetCode(), key)
 	}
 }
 
@@ -284,10 +336,14 @@ func (be *ClusterTasksBackend) watchCompletion(ctx context.Context, taskType, ke
 		return err
 	}
 
+	// Advertising the task type lets the executor actor hand a displaced
+	// completion only to a watcher of its own type; the stream-side check
+	// below stays as the guard for untyped deliveries.
 	sreq := internalsv1pb.
 		NewInternalInvokeRequest(executor.MethodWatchComplete).
 		WithActor(be.executorActorType, key).
-		WithContentType(invokev1.ProtobufContentType)
+		WithContentType(invokev1.ProtobufContentType).
+		WithMetadata(map[string][]string{executor.MetadataTaskType: {taskType}})
 
 	return router.CallStream(ctx, sreq, func(res *internalsv1pb.InternalInvokeResponse) (bool, error) {
 		if res == nil {
