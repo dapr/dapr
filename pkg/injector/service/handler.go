@@ -48,7 +48,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
 			return
 		}
-		log.Error("Empty body")
+		log.Errorf("Failed to read request body: %v", err)
 		http.Error(w, "empty body", http.StatusBadRequest)
 		return
 	}
@@ -107,7 +107,7 @@ func readRequestBody(r *http.Request) ([]byte, error) {
 		if errors.Is(err, streams.ErrStreamTooLarge) {
 			return nil, err
 		}
-		return nil, errors.New("empty body")
+		return nil, fmt.Errorf("failed to read request body: %w", err)
 	}
 	if len(body) == 0 {
 		return nil, errors.New("empty body")
