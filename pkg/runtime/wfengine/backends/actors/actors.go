@@ -40,10 +40,12 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/retentioner"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -125,6 +127,7 @@ type Actors struct {
 
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
+	pendingCompletions              *pending.Pending
 
 	orchestrationWorkItemChan chan *backend.WorkflowWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
@@ -139,13 +142,20 @@ type Actors struct {
 	stopped atomic.Bool
 }
 
-func New(opts Options) *Actors {
+func New(opts Options) (*Actors, error) {
 	var pendingTasksBackend PendingTasksBackend
+	var pendingCompletions *pending.Pending
 	if opts.EnableClusteredDeployment {
-		pendingTasksBackend = NewClusterTasksBackend(ClusterTasksBackendOptions{
+		pendingCompletions = pending.New()
+		var err error
+		pendingTasksBackend, err = NewClusterTasksBackend(ClusterTasksBackendOptions{
 			Actors:            opts.Actors,
 			ExecutorActorType: todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
+			Pending:           pendingCompletions,
 		})
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		pendingTasksBackend = local.NewTasksBackend()
 	}
@@ -171,7 +181,8 @@ func New(opts Options) *Actors {
 
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
-	}
+		pendingCompletions:              pendingCompletions,
+	}, nil
 }
 
 func (abe *Actors) RegisterActors(ctx context.Context) error {
@@ -251,6 +262,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		opts.Executor = &executor.Options{
 			ActorType: abe.executorActorType,
 			Actors:    abe.actors,
+			Pending:   abe.pendingCompletions,
 		}
 	}
 
@@ -708,6 +720,9 @@ func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*s
 	if err != nil {
 		return nil, err
 	}
+	if astate == nil {
+		return nil, messages.ErrActorRuntimeNotFound
+	}
 
 	// actor id is workflow instance id. Tamper recovery (appending the
 	// terminal failed event) is the orchestrator actor's responsibility, not
@@ -857,6 +872,9 @@ func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstan
 	if err != nil {
 		return nil, err
 	}
+	if ss == nil {
+		return nil, messages.ErrActorRuntimeNotFound
+	}
 
 	resp, err := state.LoadWorkflowState(ctx, ss, req.GetInstanceId(), state.Options{
 		AppID:             abe.appID,
@@ -900,6 +918,9 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 	astate, err := abe.actors.State(ctx)
 	if err != nil {
 		return err
+	}
+	if astate == nil {
+		return messages.ErrActorRuntimeNotFound
 	}
 
 	s, err := state.LoadWorkflowState(ctx, astate, id.String(), state.Options{
