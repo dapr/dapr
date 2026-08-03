@@ -15,6 +15,7 @@ package inflight
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"strconv"
 	"sync"
@@ -22,11 +23,13 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/hashing/rendezvous"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/inflight/lock"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
 )
@@ -77,6 +80,22 @@ type Inflight struct {
 
 	hashTable         *hashing.ConsistentHashTables
 	virtualNodesCache *hashing.VirtualNodesCache
+
+	// v2Entries are the per actor type rendezvous tables installed by the v2
+	// (scheduler placement) protocol via Merge. A process uses either the v1
+	// ring tables or the v2 rendezvous tables, never both.
+	v2Entries map[string]*rendezvousEntry
+
+	// versionByType are the v2 per actor type table versions, monotonic
+	// within a single stream session. Reset on reconnect via ResetVersions.
+	versionByType map[string]uint64
+}
+
+// rendezvousEntry is the v2 placement table of a single actor type.
+type rendezvousEntry struct {
+	table *rendezvous.Table
+	// hosts maps host address to app ID.
+	hosts map[string]string
 }
 
 func New(opts Options) *Inflight {
@@ -87,8 +106,10 @@ func New(opts Options) *Inflight {
 		hashTable: &hashing.ConsistentHashTables{
 			Entries: make(map[string]*hashing.Consistent),
 		},
-		queued:       make(map[string][]func()),
-		blockedTypes: make(map[string]struct{}),
+		v2Entries:     make(map[string]*rendezvousEntry),
+		versionByType: make(map[string]uint64),
+		queued:        make(map[string][]func()),
+		blockedTypes:  make(map[string]struct{}),
 	}
 }
 
@@ -169,6 +190,84 @@ func (i *Inflight) Set(in *v1pb.PlacementTables, version uint64) []string {
 	i.hashTable.Version = strconv.FormatUint(version, 10)
 	i.hashTable.Entries = newEntries
 	return changed
+}
+
+// Merge installs the v2 partial placement tables: only the actor types
+// present in the input are replaced; a type with no hosts is removed. Returns
+// the actor types whose table actually changed. Errors on an unknown hash
+// algorithm or a per type version regression, both of which must close the
+// stream.
+func (i *Inflight) Merge(in *schedulerv1pb.PlacementTables, versions map[string]uint64) ([]string, error) {
+	if len(in.GetEntries()) == 0 {
+		return nil, nil
+	}
+
+	if alg := in.GetHashAlgorithm(); alg != schedulerv1pb.HashAlgorithm_HASH_ALGORITHM_RENDEZVOUS {
+		return nil, fmt.Errorf("unsupported placement hash algorithm: %s", alg)
+	}
+
+	var changed []string
+	for actorType, table := range in.GetEntries() {
+		if version, ok := versions[actorType]; ok {
+			if current, cok := i.versionByType[actorType]; cok && version < current {
+				return nil, fmt.Errorf("placement table version regression for actor type %s: %d < %d",
+					actorType, version, current)
+			}
+			i.versionByType[actorType] = version
+		}
+
+		if len(table.GetHosts()) == 0 {
+			if _, ok := i.v2Entries[actorType]; ok {
+				delete(i.v2Entries, actorType)
+				changed = append(changed, actorType)
+			}
+			continue
+		}
+
+		addrs := make([]string, 0, len(table.GetHosts()))
+		hosts := make(map[string]string, len(table.GetHosts()))
+		for addr, host := range table.GetHosts() {
+			addrs = append(addrs, addr)
+			hosts[addr] = host.GetAppId()
+		}
+
+		entry := &rendezvousEntry{
+			table: rendezvous.New(addrs),
+			hosts: hosts,
+		}
+
+		if existing, ok := i.v2Entries[actorType]; !ok ||
+			!existing.table.Equal(entry.table) ||
+			!maps.Equal(existing.hosts, hosts) {
+			changed = append(changed, actorType)
+		}
+
+		i.v2Entries[actorType] = entry
+	}
+
+	return changed, nil
+}
+
+// HasTables returns whether a placement table is installed for every given
+// actor type.
+func (i *Inflight) HasTables(types []string) bool {
+	for _, t := range types {
+		if _, ok := i.v2Entries[t]; ok {
+			continue
+		}
+		if _, ok := i.hashTable.Entries[t]; ok {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// ResetVersions clears the v2 per type version tracking. Called on stream
+// reconnect: versions are only monotonic within a single stream session and
+// restart at zero when a new placement leader is elected.
+func (i *Inflight) ResetVersions() {
+	clear(i.versionByType)
 }
 
 // LockTypes marks the given actor types as blocked. New acquires for these
@@ -262,6 +361,12 @@ func (i *Inflight) isBlocked(actorType string) bool {
 	return ok
 }
 
+// IsBlocked returns whether new acquires for the actor type currently queue
+// due to an in-flight dissemination round.
+func (i *Inflight) IsBlocked(actorType string) bool {
+	return i.isBlocked(actorType)
+}
+
 func (i *Inflight) getLockResponse(lu *loops.LockRequest) *loops.LockResponse {
 	aq := aquireCache.Get().(*lock.Acquire)
 	aq.ActorType = lu.ActorType
@@ -305,6 +410,18 @@ func (i *Inflight) IsActorHostedNoLock(req *api.LookupActorRequest) bool {
 }
 
 func (i *Inflight) resolve(req *api.LookupActorRequest) (*api.LookupActorResponse, error) {
+	if entry, ok := i.v2Entries[req.ActorType]; ok {
+		addr, ok := entry.table.Lookup(req.ActorID)
+		if !ok {
+			return nil, messages.ErrActorNoAddress.WithFormat(req.ActorKey())
+		}
+		return &api.LookupActorResponse{
+			Address: addr,
+			AppID:   entry.hosts[addr],
+			Local:   loops.IsActorLocal(addr, i.hostname, i.port),
+		}, nil
+	}
+
 	table, ok := i.hashTable.Entries[req.ActorType]
 	if !ok {
 		return nil, messages.ErrActorNoAddress.WithFormat(req.ActorKey())

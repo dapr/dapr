@@ -51,11 +51,21 @@ type options struct {
 	workers     *uint32
 
 	overrideBroadcastHostPort *string
+
+	placementEnabled *bool
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
 	return func(o *options) {
 		o.execOpts = append(o.execOpts, execOptions...)
+	}
+}
+
+// WithPlacementEnabled serves actor placement from this scheduler
+// (--placement-enabled).
+func WithPlacementEnabled(enabled bool) Option {
+	return func(o *options) {
+		o.placementEnabled = &enabled
 	}
 }
 

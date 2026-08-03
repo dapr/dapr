@@ -147,9 +147,10 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 	}
 
 	c.streams[streamIDx] = c.streamPool.Add(store.Options{
-		Loop:       streamLoop,
-		AppID:      appID,
-		ActorTypes: add.Request.GetActorTypes(),
+		Loop:         streamLoop,
+		AppID:        appID,
+		ActorTypes:   add.Request.GetActorTypes(),
+		ActorAddress: add.Request.ActorAddress,
 	})
 
 	c.updateConcurrencyLimits(streamIDx, add.Request)
@@ -438,7 +439,11 @@ func (c *connections) getStreamLoop(meta *schedulerv1pb.JobMetadata) (loop.Inter
 	case *schedulerv1pb.JobTargetMetadata_Job:
 		return c.streamPool.AppID(meta.GetAppId())
 	case *schedulerv1pb.JobTargetMetadata_Actor:
-		return c.streamPool.ActorType(t.GetActor().GetType())
+		// Route the reminder to the placement owner host for this actor ID
+		// when host addresses are known; round robin otherwise. A non-owner
+		// host forwards to the owner via its own placement table, so a
+		// stale or missing table costs one extra hop, never correctness.
+		return c.streamPool.ActorHost(t.GetActor().GetType(), t.GetActor().GetId())
 	default:
 		return nil, false
 	}

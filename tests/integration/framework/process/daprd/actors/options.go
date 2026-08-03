@@ -44,6 +44,7 @@ type options struct {
 	resources               []string
 	maxBodySize             *string
 	daprdOpts               []daprd.Option
+	schedulerPlacement      bool
 }
 
 func WithDB(db *sqlite.SQLite) Option {
@@ -87,6 +88,16 @@ func WithHandler(pattern string, handler http.HandlerFunc) Option {
 			o.handlers = make(map[string]http.HandlerFunc)
 		}
 		o.handlers[pattern] = handler
+	}
+}
+
+// WithSchedulerPlacement serves actor placement from the scheduler instead of
+// the standalone placement service: no placement process is started, the
+// scheduler runs with placement enabled, and daprd enables the
+// SchedulerPlacement preview feature.
+func WithSchedulerPlacement() Option {
+	return func(o *options) {
+		o.schedulerPlacement = true
 	}
 }
 

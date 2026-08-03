@@ -95,6 +95,14 @@ global:
   scheduler:
     # Enables scheduler functionality in the cluster
     enabled: true
+    placement:
+      # Serves actor placement from the Scheduler service instead of the
+      # standalone placement service. When enabled, the placement StatefulSet
+      # is not deployed and sidecars are not given a placement address.
+      # Requires the SchedulerPlacement preview feature to be enabled in
+      # application Configuration resources, and all sidecars to run a Dapr
+      # version supporting it.
+      enabled: false
 
   daprControlPlaneOs: linux
   labels: {}

@@ -62,13 +62,34 @@ func New(t *testing.T, fopts ...Option) *Actors {
 			sqlite.WithActorStateStore(true),
 			sqlite.WithCreateStateTables(),
 		),
-		placement: placement.New(t),
-		scheduler: scheduler.New(t,
-			scheduler.WithID("dapr-scheduler-0"),
-		),
 	}
 	for _, fopt := range fopts {
 		fopt(&opts)
+	}
+
+	if opts.scheduler == nil {
+		sopts := []scheduler.Option{scheduler.WithID("dapr-scheduler-0")}
+		if opts.schedulerPlacement {
+			sopts = append(sopts, scheduler.WithPlacementEnabled(true))
+		}
+		opts.scheduler = scheduler.New(t, sopts...)
+	}
+
+	// No standalone placement process runs when placement is served by the
+	// scheduler.
+	if opts.placement == nil && !opts.schedulerPlacement {
+		opts.placement = placement.New(t)
+	}
+
+	if opts.schedulerPlacement {
+		opts.daprdConfigs = append(opts.daprdConfigs, `apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: schedulerplacement
+spec:
+  features:
+  - name: SchedulerPlacement
+    enabled: true`)
 	}
 
 	handlers := make([]app.Option, 0, len(opts.actorTypeHandlers))
@@ -111,12 +132,15 @@ func New(t *testing.T, fopts ...Option) *Actors {
 
 	dopts := []daprd.Option{
 		daprd.WithAppPort(app.Port()),
-		daprd.WithPlacementAddresses(opts.placement.Address()),
 		daprd.WithResourceFiles(opts.db.GetComponent(t)),
 		daprd.WithConfigManifests(t, opts.daprdConfigs...),
 		daprd.WithScheduler(opts.scheduler),
 		daprd.WithResourceFiles(opts.resources...),
 		daprd.WithErrorCodeMetrics(t),
+	}
+
+	if opts.placement != nil {
+		dopts = append(dopts, daprd.WithPlacementAddresses(opts.placement.Address()))
 	}
 
 	if opts.maxBodySize != nil {
@@ -139,7 +163,9 @@ func (a *Actors) Run(t *testing.T, ctx context.Context) {
 	a.runOnce.Do(func() {
 		a.app.Run(t, ctx)
 		a.db.Run(t, ctx)
-		a.place.Run(t, ctx)
+		if a.place != nil {
+			a.place.Run(t, ctx)
+		}
 		a.sched.Run(t, ctx)
 		a.daprd.Run(t, ctx)
 	})
@@ -150,7 +176,9 @@ func (a *Actors) Cleanup(t *testing.T) {
 		a.daprd.Cleanup(t)
 		if !a.sharedControlPlane {
 			a.sched.Cleanup(t)
-			a.place.Cleanup(t)
+			if a.place != nil {
+				a.place.Cleanup(t)
+			}
 			a.db.Cleanup(t)
 		}
 		a.app.Cleanup(t)
@@ -158,7 +186,9 @@ func (a *Actors) Cleanup(t *testing.T) {
 }
 
 func (a *Actors) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	a.place.WaitUntilRunning(t, ctx)
+	if a.place != nil {
+		a.place.WaitUntilRunning(t, ctx)
+	}
 	a.sched.WaitUntilRunning(t, ctx)
 	a.daprd.WaitUntilRunning(t, ctx)
 }

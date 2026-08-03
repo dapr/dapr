@@ -50,6 +50,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/leadership"
 	"github.com/dapr/dapr/pkg/security"
 )
 
@@ -73,6 +74,12 @@ type Options struct {
 	// DisseminationTimeout is the daprd-side timeout for a placement
 	// LOCK -> UPDATE -> UNLOCK round.
 	DisseminationTimeout time.Duration
+
+	// SchedulerPlacementEnabled connects the placement client to the
+	// scheduler placement leader instead of the standalone placement
+	// service (SchedulerPlacement preview feature). Actors are enabled even
+	// without placement addresses when set.
+	SchedulerPlacementEnabled bool
 }
 
 type InitOptions struct {
@@ -80,6 +87,10 @@ type InitOptions struct {
 	GRPC              *manager.Manager
 	SchedulerClient   schedulerv1pb.SchedulerClient
 	SchedulerReloader schedclient.Reloader
+
+	// SchedulerLeadership tracks the scheduler placement leader, used by the
+	// placement client when SchedulerPlacementEnabled is set.
+	SchedulerLeadership *leadership.Leadership
 }
 
 // Interface is the main runtime for the actors subsystem.
@@ -116,9 +127,10 @@ type actors struct {
 	healthz            healthz.Healthz
 	compStore          *compstore.ComponentStore
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
-	stateTTLEnabled      bool
-	maxRequestBodySize   int
-	disseminationTimeout time.Duration
+	stateTTLEnabled           bool
+	maxRequestBodySize        int
+	disseminationTimeout      time.Duration
+	schedulerPlacementEnabled bool
 
 	reminders       reminders.Interface
 	table           table.Interface
@@ -154,35 +166,37 @@ type actors struct {
 // New create a new actors runtime with given config.
 func New(opts Options) Interface {
 	var disabled atomic.Pointer[error]
-	if len(opts.PlacementAddresses) == 0 ||
-		(len(opts.PlacementAddresses) == 1 && strings.TrimSpace(strings.Trim(opts.PlacementAddresses[0], `"'`)) == "") {
+	noPlacementAddresses := len(opts.PlacementAddresses) == 0 ||
+		(len(opts.PlacementAddresses) == 1 && strings.TrimSpace(strings.Trim(opts.PlacementAddresses[0], `"'`)) == "")
+	if noPlacementAddresses && !opts.SchedulerPlacementEnabled {
 		var err error = messages.ErrActorNoPlacement
-		log.Warnf("Actor runtime disabled: %s. Actors and Workflow APIs will be unavailable", err)
+		log.Warnf("Actor runtime disabled: %s. Actors and Workflow APIs will be unavailable. Configure a placement address or enable the SchedulerPlacement preview feature with a scheduler address", err)
 		disabled.Store(&err)
 	}
 
 	return &actors{
-		appID:                opts.AppID,
-		namespace:            opts.Namespace,
-		port:                 opts.Port,
-		placementAddresses:   opts.PlacementAddresses,
-		healthEndpoint:       opts.HealthEndpoint,
-		resiliency:           opts.Resiliency,
-		security:             opts.Security,
-		compStore:            opts.CompStore,
-		stateTTLEnabled:      opts.StateTTLEnabled,
-		clock:                clock.RealClock{},
-		disabled:             &disabled,
-		healthz:              opts.Healthz,
-		readyCh:              make(chan struct{}),
-		closedCh:             make(chan struct{}),
-		initDoneCh:           make(chan struct{}),
-		registerDoneCh:       make(chan struct{}),
-		storeKickCh:          make(chan struct{}, 1),
-		maxRequestBodySize:   opts.MaxRequestBodySize,
-		mode:                 opts.Mode,
-		disseminationTimeout: opts.DisseminationTimeout,
-		reentrancyStore:      reentrancystore.New(),
+		appID:                     opts.AppID,
+		namespace:                 opts.Namespace,
+		port:                      opts.Port,
+		placementAddresses:        opts.PlacementAddresses,
+		healthEndpoint:            opts.HealthEndpoint,
+		resiliency:                opts.Resiliency,
+		security:                  opts.Security,
+		compStore:                 opts.CompStore,
+		stateTTLEnabled:           opts.StateTTLEnabled,
+		clock:                     clock.RealClock{},
+		disabled:                  &disabled,
+		healthz:                   opts.Healthz,
+		readyCh:                   make(chan struct{}),
+		closedCh:                  make(chan struct{}),
+		initDoneCh:                make(chan struct{}),
+		registerDoneCh:            make(chan struct{}),
+		storeKickCh:               make(chan struct{}, 1),
+		maxRequestBodySize:        opts.MaxRequestBodySize,
+		mode:                      opts.Mode,
+		disseminationTimeout:      opts.DisseminationTimeout,
+		schedulerPlacementEnabled: opts.SchedulerPlacementEnabled,
+		reentrancyStore:           reentrancystore.New(),
 	}
 }
 
@@ -227,6 +241,8 @@ func (a *actors) Init(opts InitOptions) error {
 		Mode:                 a.mode,
 		Scheduler:            opts.SchedulerReloader,
 		DisseminationTimeout: a.disseminationTimeout,
+		SchedulerPlacement:   a.schedulerPlacementEnabled,
+		SchedulerLeadership:  opts.SchedulerLeadership,
 	})
 	if err != nil {
 		return err

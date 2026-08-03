@@ -43,6 +43,12 @@ var log = logger.NewLogger("dapr.scheduler.server.cron")
 
 const BackendEtcd = etcdcron.BackendEtcd
 
+// PlacementLeader consumes placement leadership changes derived from the cron
+// leadership table.
+type PlacementLeader interface {
+	SetLeader(leader bool)
+}
+
 type Options struct {
 	ID   string
 	Host *schedulerv1pb.Host
@@ -54,6 +60,10 @@ type Options struct {
 	BackendConfig any
 
 	Workers uint32
+
+	// Placement, when non-nil, is notified whether this scheduler is the
+	// current placement leader on every leadership table change.
+	Placement PlacementLeader
 }
 
 // Interface manages the cron framework, exposing a client to schedule jobs.
@@ -76,6 +86,7 @@ type cron struct {
 	id string
 
 	host            *schedulerv1pb.Host
+	placement       PlacementLeader
 	connectionPool  *pool.Pool
 	etcdcron        api.Interface
 	hostBroadcaster *broadcaster.Broadcaster[[]*schedulerv1pb.Host]
@@ -94,6 +105,7 @@ func New(opts Options) Interface {
 	return &cron{
 		id:              opts.ID,
 		host:            opts.Host,
+		placement:       opts.Placement,
 		hostBroadcaster: broadcaster.New[[]*schedulerv1pb.Host](),
 		workers:         opts.Workers,
 		readyCh:         make(chan struct{}),
@@ -156,6 +168,7 @@ func (c *cron) Run(ctx context.Context) error {
 		readyCh:         c.readyCh,
 		ownAddress:      c.host.GetAddress(),
 		pool:            c.connectionPool,
+		placement:       c.placement,
 	})
 
 	return concurrency.NewRunnerManager(
@@ -167,6 +180,9 @@ func (c *cron) Run(ctx context.Context) error {
 			defer close(c.closeCh)
 			defer c.hostBroadcaster.Close()
 			defer leaderLoop.Close(nil)
+			if c.placement != nil {
+				defer c.placement.SetLeader(false)
+			}
 
 			for {
 				select {

@@ -3,6 +3,7 @@ syntax = "proto3";
 package dapr.proto.scheduler.v1;
 
 import "dapr/proto/common/v1/common.proto";
+import "dapr/proto/scheduler/v1/placement.proto";
 import "google/protobuf/any.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/scheduler/v1;scheduler";
@@ -29,6 +30,13 @@ service Scheduler {
   // DeleteByNamePrefix is used by the daprd sidecar to delete jobs by name
   // prefix. An empty prefix deletes all jobs from the target.
   rpc DeleteByNamePrefix(DeleteByNamePrefixRequest) returns (DeleteByNamePrefixResponse) {}
+  // ReportActorTypes is used by the daprd sidecar to report its presence and
+  // hosted actor types, and to receive per-actor-type placement orders
+  // (lock/update/unlock) in return. Only served by the current scheduler
+  // placement leader. Returns Unimplemented when the scheduler does not serve
+  // placement, and FailedPrecondition when this scheduler is not the
+  // placement leader.
+  rpc ReportActorTypes(stream ReportActorTypesRequest) returns (stream PlacementOrder) {}
 }
 
 message Job {
@@ -135,6 +143,12 @@ message WatchJobsRequestInitial {
   // a key which groups triggers, and an optional concurrency_key for per-name
   // sub-limits within a group.
   repeated ConcurrencyLimit concurrency_limits = 5;
+
+  // actor_address is the daprd internal gRPC host:port of this client, the
+  // same string reported as ActorHost.address on the ReportActorTypes stream.
+  // When set, schedulers route actor reminder triggers directly to the
+  // placement owner host instead of load balancing across hosts.
+  optional string actor_address = 6;
 }
 
 // ConcurrencyLimit defines a global concurrency limit enforced by the
@@ -289,6 +303,17 @@ message WatchHostsResponse {
 message Host {
   // address is the address of the host.
   string address = 1;
+
+  // leader is true on the single scheduler host which is currently the
+  // placement leader, serving the ReportActorTypes RPC. At most one host in a
+  // WatchHostsResponse has this set. Never set when no scheduler in the
+  // cluster serves placement.
+  bool leader = 2;
+
+  // placement_enabled is true when this scheduler host is capable of serving
+  // placement (started with placement enabled). Used to elect the placement
+  // leader among capable hosts only, keeping mixed-version clusters safe.
+  bool placement_enabled = 3;
 }
 
 // DeleteByMetadataRequest is the message used by the daprd sidecar to delete jobs by metadata.

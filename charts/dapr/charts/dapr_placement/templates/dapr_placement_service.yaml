@@ -1,4 +1,4 @@
-{{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") }}
+{{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") (ne .Values.global.scheduler.placement.enabled true) }}
 kind: Service
 apiVersion: v1
 metadata:

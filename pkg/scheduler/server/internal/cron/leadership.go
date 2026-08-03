@@ -28,7 +28,8 @@ import (
 // leadership processes leadership updates from go-etcd-cron. It unmarshals the
 // host addresses, broadcasts them to WatchHosts subscribers, and pushes the
 // cluster size and this scheduler's index into the connection pool so
-// concurrency gates stay in sync with membership.
+// concurrency gates stay in sync with membership. It also derives the single
+// placement leader from the leadership table.
 type leadership struct {
 	hostBroadcaster *broadcaster.Broadcaster[[]*schedulerv1pb.Host]
 	lock            *sync.RWMutex
@@ -36,6 +37,7 @@ type leadership struct {
 	readyCh         chan struct{}
 	ownAddress      string
 	pool            *pool.Pool
+	placement       PlacementLeader
 }
 
 // Handle processes a single leadership update. Called sequentially by the
@@ -58,6 +60,18 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 	count, idx := schedulerPosition(hosts, h.ownAddress)
 	h.pool.SetSchedulerInfo(count, idx)
 
+	// The leader bit is stamped on the hosts here at broadcast time, never in
+	// the go-etcd-cron ReplicaData: the elector treats a replica's stored
+	// data changing under a live lease as a fatal leadership error.
+	leaderAddr := placementLeader(hosts)
+	for _, host := range hosts {
+		host.Leader = host.GetAddress() == leaderAddr && leaderAddr != ""
+	}
+
+	if h.placement != nil {
+		h.placement.SetLeader(leaderAddr != "" && leaderAddr == h.ownAddress)
+	}
+
 	h.lock.Lock()
 	*h.currHosts = hosts
 
@@ -72,6 +86,24 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 	h.lock.Unlock()
 
 	return nil
+}
+
+// placementLeader returns the address of the placement leader: the first host
+// in address-sorted order which is capable of serving placement. Returns ""
+// when no host is capable, in which case no leader is advertised. Filtering on
+// the capability bit keeps mixed-version and mixed-flag clusters safe: a
+// scheduler without placement support (or with it disabled) is never elected.
+func placementLeader(hosts []*schedulerv1pb.Host) string {
+	leader := ""
+	for _, host := range hosts {
+		if !host.GetPlacementEnabled() {
+			continue
+		}
+		if leader == "" || host.GetAddress() < leader {
+			leader = host.GetAddress()
+		}
+	}
+	return leader
 }
 
 // schedulerPosition derives (count, idx) by sorting hosts by address (stable

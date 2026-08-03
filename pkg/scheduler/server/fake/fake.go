@@ -21,7 +21,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
@@ -37,6 +39,7 @@ type Fake struct {
 	watchJobsFn          func(schedulerv1pb.Scheduler_WatchJobsServer) error
 	deleteByMetadataFn   func(ctx context.Context, req *schedulerv1pb.DeleteByMetadataRequest) (*schedulerv1pb.DeleteByMetadataResponse, error)
 	deleteByNamePrefixFn func(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error)
+	reportActorTypesFn   func(schedulerv1pb.Scheduler_ReportActorTypesServer) error
 }
 
 func New(t *testing.T) *Fake {
@@ -69,6 +72,9 @@ func New(t *testing.T) *Fake {
 		},
 		deleteByNamePrefixFn: func(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error) {
 			return nil, nil
+		},
+		reportActorTypesFn: func(schedulerv1pb.Scheduler_ReportActorTypesServer) error {
+			return status.Error(codes.Unimplemented, "placement is not enabled on this scheduler")
 		},
 	}
 
@@ -173,4 +179,13 @@ func (f *Fake) DeleteByMetadata(ctx context.Context, req *schedulerv1pb.DeleteBy
 
 func (f *Fake) DeleteByNamePrefix(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error) {
 	return f.deleteByNamePrefixFn(ctx, req)
+}
+
+func (f *Fake) WithReportActorTypes(fn func(schedulerv1pb.Scheduler_ReportActorTypesServer) error) *Fake {
+	f.reportActorTypesFn = fn
+	return f
+}
+
+func (f *Fake) ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorTypesServer) error {
+	return f.reportActorTypesFn(stream)
 }
