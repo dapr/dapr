@@ -126,6 +126,7 @@ type Processor struct {
 	security        security.Handler
 	subscriber      *subscriber.Subscriber
 	reporter        registry.Reporter
+	resiliency      resiliency.Provider
 
 	// kubernetesMode is true when running in Kubernetes mode.
 	// Used to reject configurations that are unsafe in a cluster (e.g. stdio transport).
@@ -232,6 +233,7 @@ func New(opts Options) *Processor {
 		security:                   opts.Security,
 		subscriber:                 subscriber,
 		reporter:                   reporter,
+		resiliency:                 opts.Resiliency,
 		managers: map[components.Category]manager{
 			components.CategoryBindings: binding,
 			components.CategoryConfiguration: configuration.New(configuration.Options{

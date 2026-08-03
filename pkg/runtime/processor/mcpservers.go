@@ -20,6 +20,7 @@ import (
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/internal/loader/validate"
+	"github.com/dapr/dapr/pkg/resiliency"
 )
 
 // mcpStdioEnvResource is a thin adapter that wraps an MCPServer and overrides
@@ -100,7 +101,13 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 			return nil
 		}
 
-		if err := registrar.RegisterMCPServer(ctx, s, p.compStore, p.security); err != nil {
+		policyRunner := resiliency.NewRunner[any](ctx,
+			p.resiliency.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
+		)
+		_, err := policyRunner(func(ctx context.Context) (any, error) {
+			return nil, registrar.RegisterMCPServer(ctx, s, p.compStore, p.security)
+		})
+		if err != nil {
 			err = fmt.Errorf("MCPServer %q: failed to register workflows: %w", s.Name, err)
 			if s.Spec.IgnoreErrors {
 				log.Errorf("Ignoring error processing MCPServer: %s", err)
