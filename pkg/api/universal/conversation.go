@@ -419,6 +419,15 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	}
 
 	request.Temperature = req.GetTemperature()
+	if req.MaxTokens != nil {
+		if req.GetMaxTokens() <= 0 {
+			err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "max_tokens must be greater than 0")
+			a.logger.Debug(err)
+			return nil, err
+		}
+		maxTokens := req.GetMaxTokens()
+		request.MaxTokens = &maxTokens
+	}
 	toolChoice := req.GetToolChoice()
 	tools := req.GetTools()
 	if req.GetPromptCacheRetention() != nil {
