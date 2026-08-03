@@ -196,6 +196,7 @@ func New(opts Options) *Processor {
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,
 		Outbox:         opts.Outbox,
+		Actors:         opts.Actors,
 	})
 
 	secretProc := secret.New(secret.Options{

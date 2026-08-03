@@ -60,24 +60,26 @@ func TestHostValidation(t *testing.T) {
 func TestConvergeHosting(t *testing.T) {
 	t.Parallel()
 
-	newConverge := func(t *testing.T) (*actors, *compstore.ComponentStore, *int, *int) {
+	// newConverge returns an actors runtime whose table records the ordered
+	// sequence of suspend/resume operations.
+	newConverge := func(t *testing.T) (*actors, *compstore.ComponentStore, *[]string) {
 		t.Helper()
 
-		var suspends, resumes int
+		var ops []string
 		cs := compstore.New()
 		a := &actors{
 			compStore: cs,
 			table: tablefake.New().
 				WithSuspendHosting(func(context.Context) error {
-					suspends++
+					ops = append(ops, "suspend")
 					return nil
 				}).
 				WithResumeHosting(func() {
-					resumes++
+					ops = append(ops, "resume")
 				}),
 		}
 		_, a.hostingName, a.hostingRev, a.hostingActive = cs.GetStateStoreActorWithRevision()
-		return a, cs, &suspends, &resumes
+		return a, cs, &ops
 	}
 
 	store := func(t *testing.T) contribstate.Store {
@@ -87,44 +89,40 @@ func TestConvergeHosting(t *testing.T) {
 
 	t.Run("no change is a no-op", func(t *testing.T) {
 		t.Parallel()
-		a, _, suspends, resumes := newConverge(t)
+		a, _, ops := newConverge(t)
 
 		a.convergeHosting(t.Context())
-		assert.Equal(t, 0, *suspends)
-		assert.Equal(t, 0, *resumes)
+		assert.Empty(t, *ops)
 	})
 
 	t.Run("store added resumes without draining", func(t *testing.T) {
 		t.Parallel()
-		a, cs, suspends, resumes := newConverge(t)
+		a, cs, ops := newConverge(t)
 
 		require.NoError(t, cs.AddStateStoreActor("mystore", store(t)))
 		a.convergeHosting(t.Context())
-		assert.Equal(t, 0, *suspends)
-		assert.Equal(t, 1, *resumes)
+		assert.Equal(t, []string{"resume"}, *ops)
 
 		// Converging again with no further change is a no-op.
 		a.convergeHosting(t.Context())
-		assert.Equal(t, 0, *suspends)
-		assert.Equal(t, 1, *resumes)
+		assert.Equal(t, []string{"resume"}, *ops)
 	})
 
 	t.Run("store removed drains and stays suspended", func(t *testing.T) {
 		t.Parallel()
-		a, cs, suspends, resumes := newConverge(t)
+		a, cs, ops := newConverge(t)
 
 		require.NoError(t, cs.AddStateStoreActor("mystore", store(t)))
 		a.convergeHosting(t.Context())
 
 		cs.DeleteStateStore("mystore")
 		a.convergeHosting(t.Context())
-		assert.Equal(t, 1, *suspends)
-		assert.Equal(t, 1, *resumes)
+		assert.Equal(t, []string{"resume", "suspend"}, *ops)
 	})
 
 	t.Run("same-name update swaps in place without draining", func(t *testing.T) {
 		t.Parallel()
-		a, cs, suspends, resumes := newConverge(t)
+		a, cs, ops := newConverge(t)
 
 		require.NoError(t, cs.AddStateStoreActor("mystore", store(t)))
 		a.convergeHosting(t.Context())
@@ -135,24 +133,23 @@ func TestConvergeHosting(t *testing.T) {
 		cs.DeleteStateStore("mystore")
 		require.NoError(t, cs.AddStateStoreActor("mystore", store(t)))
 		a.convergeHosting(t.Context())
-		assert.Equal(t, 0, *suspends)
-		assert.Equal(t, 1, *resumes)
+		assert.Equal(t, []string{"resume"}, *ops)
 	})
 
-	t.Run("renamed store drains then resumes", func(t *testing.T) {
+	t.Run("renamed store drains before resuming", func(t *testing.T) {
 		t.Parallel()
-		a, cs, suspends, resumes := newConverge(t)
+		a, cs, ops := newConverge(t)
 
 		require.NoError(t, cs.AddStateStoreActor("mystore", store(t)))
 		a.convergeHosting(t.Context())
 
 		// A different component becoming the actor state store is a
-		// different backing store, so hosted actors are drained.
+		// different backing store, so hosted actors are drained before
+		// hosting resumes against the new store.
 		cs.DeleteStateStore("mystore")
 		require.NoError(t, cs.AddStateStoreActor("otherstore", store(t)))
 		a.convergeHosting(t.Context())
-		assert.Equal(t, 1, *suspends)
-		assert.Equal(t, 2, *resumes)
+		assert.Equal(t, []string{"resume", "suspend", "resume"}, *ops)
 	})
 }
 

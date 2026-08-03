@@ -15,6 +15,7 @@ package selfhosted
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -47,10 +48,33 @@ func init() {
 // deactivated and continue against the new store instance - and that a
 // second component marked as an actor state store is skipped.
 type actorstateupdate struct {
-	daprd         *daprd.Daprd
-	logline       *logline.LogLine
-	resDir        string
-	deactivatedCh chan string
+	daprd            *daprd.Daprd
+	loglineUpdate    *logline.LogLine
+	loglineDuplicate *logline.LogLine
+	resDir           string
+	deactivatedCh    chan string
+}
+
+// multiWriteCloser fans a process's output out to multiple logline watchers.
+type multiWriteCloser struct {
+	ws []io.WriteCloser
+}
+
+func (m multiWriteCloser) Write(p []byte) (int, error) {
+	for _, w := range m.ws {
+		if _, err := w.Write(p); err != nil {
+			return 0, err
+		}
+	}
+	return len(p), nil
+}
+
+func (m multiWriteCloser) Close() error {
+	var errs []error
+	for _, w := range m.ws {
+		errs = append(errs, w.Close())
+	}
+	return errors.Join(errs...)
 }
 
 func (a *actorstateupdate) Setup(t *testing.T) []framework.Option {
@@ -74,7 +98,10 @@ func (a *actorstateupdate) Setup(t *testing.T) []framework.Option {
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	place := placement.New(t)
 
-	a.logline = logline.New(t, logline.WithStdoutLineContains(
+	a.loglineUpdate = logline.New(t, logline.WithStdoutLineContains(
+		"Actor state store mystore updated - actor hosting continues",
+	))
+	a.loglineDuplicate = logline.New(t, logline.WithStdoutLineContains(
 		"mystore is already the actor state store, only one actor state store is allowed",
 	))
 
@@ -87,12 +114,15 @@ func (a *actorstateupdate) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithExecOptions(
-			exec.WithStdout(a.logline.Stdout()),
+			exec.WithStdout(multiWriteCloser{ws: []io.WriteCloser{
+				a.loglineUpdate.Stdout(),
+				a.loglineDuplicate.Stdout(),
+			}}),
 		),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(srv, place, a.logline, a.daprd),
+		framework.WithProcesses(srv, place, a.loglineUpdate, a.loglineDuplicate, a.daprd),
 	}
 }
 
@@ -164,6 +194,11 @@ spec:
 			assert.Equal(c, http.StatusNoContent, code)
 		}, time.Second*20, time.Millisecond*10)
 
+		// Wait for the actor runtime to have processed the store change, so
+		// asserting no deactivation happened is deterministic: a drain would
+		// have been delivered before this log line.
+		a.loglineUpdate.EventuallyFoundAll(t)
+
 		// The hosted actor was not deactivated and keeps being invocable.
 		select {
 		case act := <-a.deactivatedCh:
@@ -190,7 +225,7 @@ spec:
    value: "true"
 `), 0o600))
 
-		a.logline.EventuallyFoundAll(t)
+		a.loglineDuplicate.EventuallyFoundAll(t)
 
 		// The second store is not registered and the original remains the
 		// actor state store; actors keep working.

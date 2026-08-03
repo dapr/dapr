@@ -190,16 +190,18 @@ func Test_components_actorStateStore(t *testing.T) {
 		assert.False(t, ok)
 		assert.Equal(t, int64(0), kicks.Load())
 
-		// Update to marked: slot occupied, kick delivered.
+		// Update to marked: slot occupied. Both the state processor (add
+		// side) and the reconciler (settle) notify; kicks coalesce in the
+		// real runtime.
 		require.NoError(t, m.update(ctx, actorStoreComp("mystore", true, 2)))
 		_, name, ok := cs.GetStateStoreActor()
 		require.True(t, ok)
 		assert.Equal(t, "mystore", name)
-		assert.Equal(t, int64(1), kicks.Load())
+		assert.Equal(t, int64(2), kicks.Load())
 
-		// Same-name update: one kick after the update settles - the actor
+		// Same-name update: the close side does not notify, so the actor
 		// runtime never observes the transient store-less state between the
-		// close and re-init.
+		// close and re-init; the re-init and reconciler settle notify.
 		comp := actorStoreComp("mystore", true, 3)
 		comp.Spec.Metadata = append(comp.Spec.Metadata, commonapi.NameValuePair{
 			Name:  "marker",
@@ -209,15 +211,15 @@ func Test_components_actorStateStore(t *testing.T) {
 		_, name, ok = cs.GetStateStoreActor()
 		require.True(t, ok)
 		assert.Equal(t, "mystore", name)
-		assert.Equal(t, int64(2), kicks.Load())
+		assert.Equal(t, int64(4), kicks.Load())
 
-		// Delete: slot cleared, kick delivered.
+		// Delete: slot cleared, reconciler settle notifies.
 		require.NoError(t, m.delete(ctx, comp))
 		_, _, ok = cs.GetStateStoreActor()
 		assert.False(t, ok)
 		_, exists := cs.GetComponent("mystore")
 		assert.False(t, exists)
-		assert.Equal(t, int64(3), kicks.Load())
+		assert.Equal(t, int64(5), kicks.Load())
 	})
 
 	t.Run("a second actor state store is skipped", func(t *testing.T) {
@@ -233,11 +235,71 @@ func Test_components_actorStateStore(t *testing.T) {
 		assert.Equal(t, "mystore", name)
 		_, exists := cs.GetComponent("otherstore")
 		assert.False(t, exists, "second actor state store must not be installed")
-		assert.Equal(t, int64(1), kicks.Load())
+		assert.Equal(t, int64(2), kicks.Load())
 
 		// An unmarked second store is unaffected by the guard.
 		require.NoError(t, m.update(ctx, actorStoreComp("plainstore", false, 1)))
 		_, exists = cs.GetComponent("plainstore")
+		assert.True(t, exists)
+	})
+
+	t.Run("skipped store is replayed when the actor state store is deleted", func(t *testing.T) {
+		var kicks atomic.Int64
+		m, proc, cs := newComponentsActorStoreManager(t, &kicks)
+		ctx := runProc(t, proc)
+
+		// A rename delivered create-before-delete: the new store is skipped
+		// while the old one occupies the slot, and applied when the old one
+		// is deleted.
+		require.NoError(t, m.update(ctx, actorStoreComp("mystore", true, 1)))
+		require.NoError(t, m.update(ctx, actorStoreComp("otherstore", true, 1)))
+		_, exists := cs.GetComponent("otherstore")
+		require.False(t, exists)
+
+		require.NoError(t, m.delete(ctx, actorStoreComp("mystore", true, 2)))
+
+		_, name, ok := cs.GetStateStoreActor()
+		require.True(t, ok)
+		assert.Equal(t, "otherstore", name)
+		_, exists = cs.GetComponent("otherstore")
+		assert.True(t, exists)
+		_, exists = cs.GetComponent("mystore")
+		assert.False(t, exists)
+	})
+
+	t.Run("skipped store is replayed when the actor state store is unmarked", func(t *testing.T) {
+		var kicks atomic.Int64
+		m, proc, cs := newComponentsActorStoreManager(t, &kicks)
+		ctx := runProc(t, proc)
+
+		require.NoError(t, m.update(ctx, actorStoreComp("mystore", true, 1)))
+		require.NoError(t, m.update(ctx, actorStoreComp("otherstore", true, 1)))
+
+		require.NoError(t, m.update(ctx, actorStoreComp("mystore", false, 2)))
+
+		_, name, ok := cs.GetStateStoreActor()
+		require.True(t, ok)
+		assert.Equal(t, "otherstore", name)
+		_, exists := cs.GetComponent("mystore")
+		assert.True(t, exists, "unmarked store remains installed")
+	})
+
+	t.Run("a newer event supersedes the skipped store", func(t *testing.T) {
+		var kicks atomic.Int64
+		m, proc, cs := newComponentsActorStoreManager(t, &kicks)
+		ctx := runProc(t, proc)
+
+		require.NoError(t, m.update(ctx, actorStoreComp("mystore", true, 1)))
+		require.NoError(t, m.update(ctx, actorStoreComp("otherstore", true, 1)))
+
+		// The skipped store is unmarked before the slot frees; it installs as
+		// a plain store and must not be replayed as the actor state store.
+		require.NoError(t, m.update(ctx, actorStoreComp("otherstore", false, 2)))
+		require.NoError(t, m.delete(ctx, actorStoreComp("mystore", true, 2)))
+
+		_, _, ok := cs.GetStateStoreActor()
+		assert.False(t, ok)
+		_, exists := cs.GetComponent("otherstore")
 		assert.True(t, exists)
 	})
 }

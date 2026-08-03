@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"k8s.io/utils/clock"
 
@@ -34,6 +35,13 @@ type components struct {
 	proc  *processor.Processor
 	auth  *authorizer.Authorizer
 	loader.Loader[compapi.Component]
+
+	// skippedActorStore stashes the most recent component skipped because
+	// another component currently occupies the actor state store slot. It is
+	// replayed once that store is removed or unmarked, healing an
+	// out-of-order create-before-delete rename delivered by an event stream.
+	skippedActorStore     *compapi.Component
+	skippedActorStoreLock sync.Mutex
 }
 
 func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Component] {
@@ -56,11 +64,19 @@ func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Componen
 func (c *components) update(ctx context.Context, comp compapi.Component) error {
 	// Only a single actor state store may be configured. Skip a component
 	// which would become a second actor state store, rather than failing its
-	// init and exiting daprd.
+	// init and exiting daprd. The skipped component is stashed and replayed
+	// if the current actor state store is removed, so a rename delivered as
+	// create-before-delete converges without waiting for the next reconcile.
 	if _, name, ok := c.store.GetStateStoreActor(); ok && name != comp.Name && isMarkedActorStateStore(comp) {
-		log.Errorf("Aborting hot reload of %s: %s is already the actor state store, only one actor state store is allowed", comp.LogName(), name)
+		log.Errorf("Skipping hot reload of %s: %s is already the actor state store, only one actor state store is allowed. The component will be applied if %s is removed", comp.LogName(), name, name)
+		c.skippedActorStoreLock.Lock()
+		c.skippedActorStore = &comp
+		c.skippedActorStoreLock.Unlock()
 		return nil
 	}
+
+	// Any other event for the stashed component supersedes the stash.
+	c.dropSkippedActorStore(comp.Name)
 
 	// Notify the actor runtime once the update fully settles, and only if
 	// the actor state store actually changed. Notifying after both the close
@@ -114,7 +130,9 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 	case err := <-res:
 		if err == nil {
 			log.Infof("Component updated: %s", comp.LogName())
-			return nil
+			// An update which unmarked the actor state store frees the slot
+			// for a previously skipped component.
+			return c.replaySkippedActorStore(ctx)
 		}
 		err = fmt.Errorf("process component %s error: %s", comp.Name, err)
 		if comp.Spec.IgnoreErrors {
@@ -127,12 +145,45 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 }
 
 func (c *components) delete(ctx context.Context, comp compapi.Component) error {
+	c.dropSkippedActorStore(comp.Name)
+
 	defer c.notifyActorStateStoreChanged()()
 
 	if err := c.proc.Close(ctx, comp); err != nil {
 		log.Errorf("error closing deleted component: %s", err)
 	}
-	return nil
+
+	return c.replaySkippedActorStore(ctx)
+}
+
+// dropSkippedActorStore forgets the stashed skipped actor state store when a
+// newer event for the same component arrives.
+func (c *components) dropSkippedActorStore(name string) {
+	c.skippedActorStoreLock.Lock()
+	defer c.skippedActorStoreLock.Unlock()
+	if c.skippedActorStore != nil && c.skippedActorStore.Name == name {
+		c.skippedActorStore = nil
+	}
+}
+
+// replaySkippedActorStore applies the stashed skipped actor state store if
+// the actor state store slot has become free.
+func (c *components) replaySkippedActorStore(ctx context.Context) error {
+	c.skippedActorStoreLock.Lock()
+	skipped := c.skippedActorStore
+	if skipped == nil {
+		c.skippedActorStoreLock.Unlock()
+		return nil
+	}
+	if _, _, ok := c.store.GetStateStoreActor(); ok {
+		c.skippedActorStoreLock.Unlock()
+		return nil
+	}
+	c.skippedActorStore = nil
+	c.skippedActorStoreLock.Unlock()
+
+	log.Infof("Applying previously skipped actor state store: %s", skipped.LogName())
+	return c.update(ctx, *skipped)
 }
 
 // notifyActorStateStoreChanged captures the actor state store revision and

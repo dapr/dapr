@@ -16,6 +16,7 @@ package state_test
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,6 +27,7 @@ import (
 	"github.com/dapr/components-contrib/metadata"
 	contribstate "github.com/dapr/components-contrib/state"
 	inmemory "github.com/dapr/components-contrib/state/in-memory"
+	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
@@ -142,7 +144,7 @@ func TestInitState(t *testing.T) {
 }
 
 func TestActorStateStore(t *testing.T) {
-	newProc := func(t *testing.T) (*processor.Processor, *compstore.ComponentStore) {
+	newProc := func(t *testing.T, kicks *atomic.Int64) (*processor.Processor, *compstore.ComponentStore) {
 		t.Helper()
 
 		reg := registry.New(registry.NewOptions().WithStateStores(stateLoader.NewRegistry()))
@@ -160,6 +162,9 @@ func TestActorStateStore(t *testing.T) {
 			Security:       fake.New(),
 			Outbox:         outboxfake.New(),
 			ActorsEnabled:  true,
+			Actors: actorsfake.New().WithOnActorStateStoreChanged(func() {
+				kicks.Add(1)
+			}),
 		})
 		return proc, compStore
 	}
@@ -181,22 +186,25 @@ func TestActorStateStore(t *testing.T) {
 		return c
 	}
 
-	t.Run("init marks the compstore slot", func(t *testing.T) {
-		proc, compStore := newProc(t)
+	t.Run("init marks the compstore slot and notifies", func(t *testing.T) {
+		var kicks atomic.Int64
+		proc, compStore := newProc(t, &kicks)
 
 		require.NoError(t, proc.Init(t.Context(), comp("mystore", true)))
 
 		_, name, ok := compStore.GetStateStoreActor()
 		require.True(t, ok)
 		assert.Equal(t, "mystore", name)
+		assert.Equal(t, int64(1), kicks.Load())
 
 		name, ok = proc.State().ActorStateStoreName()
 		require.True(t, ok)
 		assert.Equal(t, "mystore", name)
 	})
 
-	t.Run("unmarked store does not touch the slot", func(t *testing.T) {
-		proc, compStore := newProc(t)
+	t.Run("unmarked store does not touch the slot or notify", func(t *testing.T) {
+		var kicks atomic.Int64
+		proc, compStore := newProc(t, &kicks)
 
 		require.NoError(t, proc.Init(t.Context(), comp("plain", false)))
 
@@ -204,10 +212,12 @@ func TestActorStateStore(t *testing.T) {
 		assert.False(t, ok)
 
 		require.NoError(t, proc.Close(t.Context(), comp("plain", false)))
+		assert.Equal(t, int64(0), kicks.Load())
 	})
 
 	t.Run("duplicate actor state store surfaces an init error", func(t *testing.T) {
-		proc, compStore := newProc(t)
+		var kicks atomic.Int64
+		proc, compStore := newProc(t, &kicks)
 
 		require.NoError(t, proc.Init(t.Context(), comp("mystore", true)))
 		err := proc.Init(t.Context(), comp("otherstore", true))
@@ -216,10 +226,13 @@ func TestActorStateStore(t *testing.T) {
 		_, name, ok := compStore.GetStateStoreActor()
 		require.True(t, ok)
 		assert.Equal(t, "mystore", name)
+		// The failed init does not notify.
+		assert.Equal(t, int64(1), kicks.Load())
 	})
 
 	t.Run("close clears the slot and allows a different store", func(t *testing.T) {
-		proc, compStore := newProc(t)
+		var kicks atomic.Int64
+		proc, compStore := newProc(t, &kicks)
 
 		require.NoError(t, proc.Init(t.Context(), comp("mystore", true)))
 		require.NoError(t, proc.Close(t.Context(), comp("mystore", true)))
@@ -233,6 +246,8 @@ func TestActorStateStore(t *testing.T) {
 		_, name, ok := compStore.GetStateStoreActor()
 		require.True(t, ok)
 		assert.Equal(t, "otherstore", name)
+		// Close does not notify; the second init does.
+		assert.Equal(t, int64(2), kicks.Load())
 	})
 }
 

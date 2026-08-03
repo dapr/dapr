@@ -36,7 +36,22 @@ func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 	// secret-store dependencies.
 	_, unreadyStore := r.secret.ProcessResource(ctx, &comp)
 	if unreadyStore != "" {
-		r.pendingDependents[unreadyStore] = append(r.pendingDependents[unreadyStore], comp)
+		// Dedupe by name: the hot reload reconciler re-creates a parked
+		// component on every reconcile (it is not in the component store
+		// while parked), which would otherwise grow the parked list and
+		// double-init on flush.
+		deps := r.pendingDependents[unreadyStore]
+		replaced := false
+		for i := range deps {
+			if deps[i].Name == comp.Name {
+				deps[i] = comp
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			r.pendingDependents[unreadyStore] = append(deps, comp)
+		}
 		// Defer indication: report success to caller (matches legacy semantics
 		// where AddPendingComponent returns true even when a component is
 		// queued behind an unready secret store).

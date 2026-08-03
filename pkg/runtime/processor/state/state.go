@@ -38,12 +38,19 @@ const (
 
 var log = logger.NewLogger("dapr.runtime.processor.state")
 
+// Actors is the subset of the actor runtime which is notified when a
+// component becomes the actor state store.
+type Actors interface {
+	OnActorStateStoreChanged()
+}
+
 type Options struct {
 	Registry       *compstate.Registry
 	ComponentStore *compstore.ComponentStore
 	Meta           *meta.Meta
 	ActorsEnabled  bool
 	Outbox         outbox.Outbox
+	Actors         Actors
 }
 
 type state struct {
@@ -54,6 +61,7 @@ type state struct {
 
 	actorsEnabled bool
 	outbox        outbox.Outbox
+	actors        Actors
 }
 
 func New(opts Options) *state {
@@ -63,6 +71,7 @@ func New(opts Options) *state {
 		meta:          opts.Meta,
 		actorsEnabled: opts.ActorsEnabled,
 		outbox:        opts.Outbox,
+		actors:        opts.Actors,
 	}
 }
 
@@ -133,6 +142,16 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 				return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 			}
 			log.Info("Using '" + comp.Name + "' as actor state store")
+
+			// Notify the actor runtime directly on the add side: components
+			// parked behind a not-yet-loaded secret store are initialized
+			// outside the hot reload reconciler, so its notification does not
+			// cover them. Notifications coalesce, so double notification via
+			// the reconciler is harmless. The remove side is only notified by
+			// the reconciler, once a remove or update has fully settled.
+			if s.actors != nil {
+				s.actors.OnActorStateStoreChanged()
+			}
 		}
 	}
 
