@@ -132,7 +132,7 @@ auth:
 
 	secretsFile := filepath.Join(t.TempDir(), "secrets.json")
 	require.NoError(t, os.WriteFile(secretsFile, []byte(`{"mysecret": "myvalue"}`), 0o600))
-	require.NoError(t, os.WriteFile(filepath.Join(a.resDir, "secret.yaml"), []byte(fmt.Sprintf(`
+	require.NoError(t, os.WriteFile(filepath.Join(a.resDir, "secret.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -143,7 +143,7 @@ spec:
  metadata:
  - name: secretsFile
    value: '%s'
-`, secretsFile)), 0o600))
+`, secretsFile), 0o600))
 
 	gclient := a.daprd.GRPCClient(t, ctx)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {

@@ -15,7 +15,6 @@ package selfhosted
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -31,6 +30,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
@@ -43,38 +43,12 @@ func init() {
 	suite.Register(new(actorstateupdate))
 }
 
-// actorstateupdate ensures that updating the actor state store component in
-// place swaps the store instance without draining - hosted actors are not
-// deactivated and continue against the new store instance - and that a
-// second component marked as an actor state store is skipped.
 type actorstateupdate struct {
 	daprd            *daprd.Daprd
 	loglineUpdate    *logline.LogLine
 	loglineDuplicate *logline.LogLine
 	resDir           string
 	deactivatedCh    chan string
-}
-
-// multiWriteCloser fans a process's output out to multiple logline watchers.
-type multiWriteCloser struct {
-	ws []io.WriteCloser
-}
-
-func (m multiWriteCloser) Write(p []byte) (int, error) {
-	for _, w := range m.ws {
-		if _, err := w.Write(p); err != nil {
-			return 0, err
-		}
-	}
-	return len(p), nil
-}
-
-func (m multiWriteCloser) Close() error {
-	var errs []error
-	for _, w := range m.ws {
-		errs = append(errs, w.Close())
-	}
-	return errors.Join(errs...)
 }
 
 func (a *actorstateupdate) Setup(t *testing.T) []framework.Option {
@@ -114,10 +88,10 @@ func (a *actorstateupdate) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithExecOptions(
-			exec.WithStdout(multiWriteCloser{ws: []io.WriteCloser{
+			exec.WithStdout(iowriter.NewMultiWriteCloser(
 				a.loglineUpdate.Stdout(),
 				a.loglineDuplicate.Stdout(),
-			}}),
+			)),
 		),
 	)
 
