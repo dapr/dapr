@@ -63,6 +63,10 @@ type ComponentStore struct {
 	actorStateStore         struct {
 		name  string
 		store state.Store
+		// rev increments on every mutation of the actor state store slot
+		// (set or clear), letting observers detect transitions even when
+		// notifications for a remove+add pair coalesce.
+		rev uint64
 	}
 
 	conversations map[string]conversation.Conversation
