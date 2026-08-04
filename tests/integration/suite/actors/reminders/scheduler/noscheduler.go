@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -33,16 +33,18 @@ import (
 )
 
 func init() {
-	suite.Register(new(nostore))
+	suite.Register(new(noscheduler))
 }
 
-type nostore struct {
+// noscheduler ensures reminder operations on a hosted actor type error when
+// no scheduler is configured.
+type noscheduler struct {
 	place *placement.Placement
 
 	daprd *daprd.Daprd
 }
 
-func (n *nostore) Setup(t *testing.T) []framework.Option {
+func (n *noscheduler) Setup(t *testing.T) []framework.Option {
 	app := app.New(t,
 		app.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`{"entities": ["foo"]}`))
@@ -55,6 +57,18 @@ func (n *nostore) Setup(t *testing.T) []framework.Option {
 	n.daprd = daprd.New(t,
 		daprd.WithPlacementAddresses(n.place.Address()),
 		daprd.WithAppPort(app.Port()),
+		daprd.WithResourceFiles(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: mystore
+spec:
+  type: state.in-memory
+  version: v1
+  metadata:
+  - name: actorStateStore
+    value: "true"
+`),
 	)
 
 	return []framework.Option{
@@ -62,18 +76,32 @@ func (n *nostore) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (n *nostore) Run(t *testing.T, ctx context.Context) {
+func (n *noscheduler) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
 	n.daprd.WaitUntilRunning(t, ctx)
 
 	client := client.HTTP(t)
 
-	// Without an actor state store the app's actor types are not hosted, so
-	// all reminder operations fail as non-hosted.
-	for _, method := range []string{http.MethodPost, http.MethodGet, http.MethodDelete} {
+	for method, test := range map[string]struct {
+		body string
+		err  string
+	}{
+		http.MethodPost: {
+			body: `{"dueTime": "100s"}`,
+			err:  `{"errorCode":"ERR_ACTOR_REMINDER_CREATE","message":"error creating actor reminder: scheduler clients are disabled"}`,
+		},
+		http.MethodGet: {
+			body: `{"dueTime": "100s"}`,
+			err:  `{"errorCode":"ERR_ACTOR_REMINDER_GET","message":"error getting actor reminder: api error: code = Internal desc = failed to get job due to: scheduler clients are disabled"}`,
+		},
+		http.MethodDelete: {
+			body: `{"dueTime": "100s"}`,
+			err:  `{"errorCode":"ERR_ACTOR_REMINDER_DELETE","message":"error deleting actor reminder: scheduler clients are disabled"}`,
+		},
+	} {
 		var bodyReader io.Reader
-		if method != http.MethodGet {
-			bodyReader = strings.NewReader(`{"dueTime": "100s"}`)
+		if test.body != "" {
+			bodyReader = strings.NewReader(test.body)
 		}
 
 		req, err := http.NewRequestWithContext(ctx, method,
@@ -83,10 +111,10 @@ func (n *nostore) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		resp, err := client.Do(req)
 		require.NoError(t, err)
-		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		assert.JSONEq(t, `{"errorCode":"ERR_ACTOR_REMINDER_NON_HOSTED","message":"operations on actor reminders are only possible on hosted actor types"}`, string(body))
+		assert.JSONEq(t, test.err, string(body))
 	}
 }
