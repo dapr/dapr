@@ -319,6 +319,34 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
+	t.Run("max tokens must fit in int32", func(t *testing.T) {
+		_, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+			Name: "test-alpha2-echo",
+			Inputs: []*rtv1.ConversationInputAlpha2{
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfUser{
+								OfUser: &rtv1.ConversationMessageOfUser{
+									Content: []*rtv1.ConversationMessageContent{
+										{
+											Text: "hello",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			// math.MaxInt32 + 1: would wrap to a negative int on 32-bit builds
+			// if it reached a component, so the API rejects it up front.
+			MaxTokens: new(int64(2147483648)),
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
 	t.Run("invalid json - malformed request", func(t *testing.T) {
 		_, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
 			Name: "test-alpha2-echo",

@@ -15,6 +15,7 @@ package universal
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/tmc/langchaingo/llms"
@@ -420,8 +421,10 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 	request.Temperature = req.GetTemperature()
 	if req.MaxTokens != nil {
-		if req.GetMaxTokens() <= 0 {
-			err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "max_tokens must be greater than 0")
+		// Bounded to int32 range so component SDKs can narrow to int safely on
+		// every architecture; no model accepts caps anywhere near this large.
+		if req.GetMaxTokens() <= 0 || req.GetMaxTokens() > math.MaxInt32 {
+			err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "max_tokens must be greater than 0 and at most 2147483647")
 			a.logger.Debug(err)
 			return nil, err
 		}
