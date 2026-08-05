@@ -97,3 +97,12 @@ func (p *Processor) WorkflowBackend() WorkflowBackendManager {
 func (p *Processor) Subscriber() SubscribeManager {
 	return p.subscriber
 }
+
+// OnActorStateStoreChanged notifies the actor runtime that the actor state
+// store was added, removed, or replaced. Safe to call when no actor runtime
+// is configured.
+func (p *Processor) OnActorStateStoreChanged() {
+	if p.actors != nil {
+		p.actors.OnActorStateStoreChanged()
+	}
+}
