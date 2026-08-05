@@ -15,13 +15,14 @@ package appchannel
 
 import (
 	"context"
-	"net/http"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -31,41 +32,30 @@ func init() {
 }
 
 type noAppPort struct {
-	daprd             *daprd.Daprd
-	logLineAppWaiting *logline.LogLine
-	logLineActorErr   *logline.LogLine
+	daprd   *daprd.Daprd
+	logline *logline.LogLine
 }
 
-// Setup does not specify an app port,
-// so Dapr should not wait for app channel readiness and should initialize actors normally.
 func (n *noAppPort) Setup(t *testing.T) []framework.Option {
-	n.logLineAppWaiting = logline.New(t, logline.WithStdoutLineContains(
-		"waiting for application to listen on port",
-	))
-	n.logLineActorErr = logline.New(t, logline.WithStdoutLineContains(
-		"DaprBuiltInActorNotFoundRetries",
-	))
-
-	app := app.New(t,
-		app.WithHandlerFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		}),
-	)
+	n.logline = logline.New(t, logline.WithCaptureAll())
 
 	n.daprd = daprd.New(t,
-		daprd.WithInMemoryActorStateStore("myactorstore"),
-		daprd.WithExecOptions(exec.WithStdout(n.logLineAppWaiting.Stdout())),
-		daprd.WithExecOptions(exec.WithStdout(n.logLineActorErr.Stdout())),
+		daprd.WithExecOptions(
+			exec.WithStdout(n.logline.Stdout()),
+			exec.WithStderr(n.logline.Stderr()),
+		),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(app, n.logLineAppWaiting, n.logLineActorErr, n.daprd),
+		framework.WithProcesses(n.logline, n.daprd),
 	}
 }
 
 func (n *noAppPort) Run(t *testing.T, ctx context.Context) {
 	n.daprd.WaitUntilRunning(t, ctx)
 
-	n.logLineAppWaiting.EventuallyFoundNone(t)
-	n.logLineActorErr.EventuallyFoundNone(t)
+	assert.Never(t, func() bool {
+		return n.logline.Contains("This will block until the app is listening on that port.") ||
+			n.logline.Contains("waiting for application to listen on port")
+	}, time.Second*3, time.Millisecond*10)
 }

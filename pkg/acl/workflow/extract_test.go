@@ -181,13 +181,13 @@ func TestWorkflowNameFromCreateRequest(t *testing.T) {
 		data, err := proto.Marshal(req)
 		require.NoError(t, err)
 
-		name, err := WorkflowNameFromCreateRequest(data)
+		name, _, err := WorkflowNameFromCreateRequest(data)
 		require.NoError(t, err)
 		assert.Equal(t, "ProcessOrder", name)
 	})
 
 	t.Run("invalid payload errors", func(t *testing.T) {
-		_, err := WorkflowNameFromCreateRequest([]byte("garbage"))
+		_, _, err := WorkflowNameFromCreateRequest([]byte("garbage"))
 		require.Error(t, err)
 	})
 
@@ -198,13 +198,13 @@ func TestWorkflowNameFromCreateRequest(t *testing.T) {
 		data, err := proto.Marshal(req)
 		require.NoError(t, err)
 
-		_, err = WorkflowNameFromCreateRequest(data)
+		_, _, err = WorkflowNameFromCreateRequest(data)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "ExecutionStarted")
 	})
 
 	t.Run("empty payload errors with missing ExecutionStarted", func(t *testing.T) {
-		_, err := WorkflowNameFromCreateRequest([]byte{})
+		_, _, err := WorkflowNameFromCreateRequest([]byte{})
 		require.Error(t, err)
 	})
 }
@@ -222,19 +222,19 @@ func TestActivityNameFromExecute(t *testing.T) {
 		data, err := proto.Marshal(ev)
 		require.NoError(t, err)
 
-		name, err := ActivityNameFromExecute("Execute", data)
+		name, _, err := ActivityNameFromExecute("Execute", data)
 		require.NoError(t, err)
 		assert.Equal(t, "ChargePayment", name)
 	})
 
 	t.Run("non-Execute method is not subject", func(t *testing.T) {
-		name, err := ActivityNameFromExecute("Other", nil)
+		name, _, err := ActivityNameFromExecute("Other", nil)
 		require.NoError(t, err)
 		assert.Empty(t, name)
 	})
 
 	t.Run("invalid data errors", func(t *testing.T) {
-		_, err := ActivityNameFromExecute("Execute", []byte("not a protobuf"))
+		_, _, err := ActivityNameFromExecute("Execute", []byte("not a protobuf"))
 		require.Error(t, err)
 	})
 
@@ -243,7 +243,7 @@ func TestActivityNameFromExecute(t *testing.T) {
 		data, err := proto.Marshal(ev)
 		require.NoError(t, err)
 
-		_, err = ActivityNameFromExecute("Execute", data)
+		_, _, err = ActivityNameFromExecute("Execute", data)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "TaskScheduled")
 	})

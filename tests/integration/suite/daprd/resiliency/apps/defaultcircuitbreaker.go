@@ -175,11 +175,13 @@ func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		require.NoError(t, resp.Body.Close())
 
-		// make sure gauge is half open
+		// The gauge must immediately update to "closed" once the probe succeeds
+		// (fix for #10113: the gauge previously stayed stuck at "half-open" until
+		// the next policy instantiation).
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			mtc := d.daprdClient.Metrics(c, ctx).All()
-			assert.InDelta(c, float64(0), mtc["dapr_resiliency_cb_state|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:open|target:app_server"], 0)
-			assert.InDelta(c, float64(1), mtc["dapr_resiliency_cb_state|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:half-open|target:app_server"], 0)
+			assert.InDelta(c, float64(0), mtc["dapr_resiliency_cb_state|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:half-open|target:app_server"], 0)
+			assert.InDelta(c, float64(1), mtc["dapr_resiliency_cb_state|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:closed|target:app_server"], 0)
 		}, time.Second*4, 10*time.Millisecond)
 
 		// Subsequent calls should succeed
@@ -189,13 +191,6 @@ func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		require.NoError(t, resp.Body.Close())
-
-		// make sure gauge is closed
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			mtc := d.daprdClient.Metrics(c, ctx).All()
-			assert.InDelta(c, float64(0), mtc["dapr_resiliency_cb_state|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:half-open|target:app_server"], 0)
-			assert.InDelta(c, float64(1), mtc["dapr_resiliency_cb_state|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:closed|target:app_server"], 0)
-		}, time.Second*4, 10*time.Millisecond)
 
 		// Verify the total number of calls made to the server
 		assert.Equal(t, int32(5), d.callCount2.Load())

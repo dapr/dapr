@@ -277,6 +277,21 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 		return nil, errors.New("cannot invoke local endpoint: app channel not initialized")
 	}
 
+	// A self-invocation bypasses invokeRemote, so stamp the caller/callee
+	// identity headers here too. caller == callee == this app. Any
+	// caller-supplied identity headers are stripped first and re-stamped
+	// unconditionally, mirroring invokeRemote, so an app cannot spoof its own
+	// identity headers on the local leg. The strip is case-insensitive because
+	// HTTP-origin metadata retains the request's original header casing.
+	md := req.Metadata()
+	for k := range md {
+		switch strings.ToLower(k) {
+		case invokev1.CallerIDHeader, invokev1.CallerNamespaceHeader, invokev1.CalleeIDHeader:
+			delete(md, k)
+		}
+	}
+	d.addCallerAndCalleeAppIDHeaderToMetadata(d.namespace, d.appID, d.appID, req)
+
 	return appChannel.InvokeMethod(ctx, req, "")
 }
 

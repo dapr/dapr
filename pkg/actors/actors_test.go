@@ -14,11 +14,18 @@ limitations under the License.
 package actors
 
 import (
+	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	contribstate "github.com/dapr/components-contrib/state"
+	inmemory "github.com/dapr/components-contrib/state/in-memory"
+	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/kit/logger"
 )
 
 func TestHostValidation(t *testing.T) {
@@ -48,4 +55,121 @@ func TestHostValidation(t *testing.T) {
 		err := ValidateHostEnvironment(false, modes.StandaloneMode, "")
 		require.NoError(t, err)
 	})
+}
+
+func TestConvergeHosting(t *testing.T) {
+	t.Parallel()
+
+	// newConverge returns an actors runtime whose table records the ordered
+	// sequence of suspend/resume operations.
+	newConverge := func(t *testing.T) (*actors, *compstore.ComponentStore, *[]string) {
+		t.Helper()
+
+		var ops []string
+		cs := compstore.New()
+		a := &actors{
+			compStore: cs,
+			table: tablefake.New().
+				WithSuspendHosting(func(context.Context) error {
+					ops = append(ops, "suspend")
+					return nil
+				}).
+				WithResumeHosting(func() {
+					ops = append(ops, "resume")
+				}),
+		}
+		_, a.hostingName, a.hostingRev, a.hostingActive = cs.GetStateStoreActorWithRevision()
+		return a, cs, &ops
+	}
+
+	store := func(t *testing.T) contribstate.Store {
+		t.Helper()
+		return inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))
+	}
+
+	t.Run("no change is a no-op", func(t *testing.T) {
+		t.Parallel()
+		a, _, ops := newConverge(t)
+
+		a.convergeHosting(t.Context())
+		assert.Empty(t, *ops)
+	})
+
+	t.Run("store added resumes without draining", func(t *testing.T) {
+		t.Parallel()
+		a, cs, ops := newConverge(t)
+
+		require.NoError(t, cs.AddStateStoreActor("mystore", store(t)))
+		a.convergeHosting(t.Context())
+		assert.Equal(t, []string{"resume"}, *ops)
+
+		// Converging again with no further change is a no-op.
+		a.convergeHosting(t.Context())
+		assert.Equal(t, []string{"resume"}, *ops)
+	})
+
+	t.Run("store removed drains and stays suspended", func(t *testing.T) {
+		t.Parallel()
+		a, cs, ops := newConverge(t)
+
+		require.NoError(t, cs.AddStateStoreActor("mystore", store(t)))
+		a.convergeHosting(t.Context())
+
+		cs.DeleteStateStore("mystore")
+		a.convergeHosting(t.Context())
+		assert.Equal(t, []string{"resume", "suspend"}, *ops)
+	})
+
+	t.Run("same-name update swaps in place without draining", func(t *testing.T) {
+		t.Parallel()
+		a, cs, ops := newConverge(t)
+
+		require.NoError(t, cs.AddStateStoreActor("mystore", store(t)))
+		a.convergeHosting(t.Context())
+
+		// A same-name update is a delete immediately followed by an add; the
+		// data path resolves the store per call so hosted actors continue
+		// against the new instance without a drain cycle.
+		cs.DeleteStateStore("mystore")
+		require.NoError(t, cs.AddStateStoreActor("mystore", store(t)))
+		a.convergeHosting(t.Context())
+		assert.Equal(t, []string{"resume"}, *ops)
+	})
+
+	t.Run("renamed store drains before resuming", func(t *testing.T) {
+		t.Parallel()
+		a, cs, ops := newConverge(t)
+
+		require.NoError(t, cs.AddStateStoreActor("mystore", store(t)))
+		a.convergeHosting(t.Context())
+
+		// A different component becoming the actor state store is a
+		// different backing store, so hosted actors are drained before
+		// hosting resumes against the new store.
+		cs.DeleteStateStore("mystore")
+		require.NoError(t, cs.AddStateStoreActor("otherstore", store(t)))
+		a.convergeHosting(t.Context())
+		assert.Equal(t, []string{"resume", "suspend", "resume"}, *ops)
+	})
+}
+
+func TestOnActorStateStoreChanged(t *testing.T) {
+	t.Parallel()
+
+	a := &actors{storeKickCh: make(chan struct{}, 1)}
+	// Never blocks, regardless of how many notifications are outstanding.
+	a.OnActorStateStoreChanged()
+	a.OnActorStateStoreChanged()
+	a.OnActorStateStoreChanged()
+
+	select {
+	case <-a.storeKickCh:
+	default:
+		t.Fatal("expected a latched kick")
+	}
+	select {
+	case <-a.storeKickCh:
+		t.Fatal("expected kicks to coalesce")
+	default:
+	}
 }

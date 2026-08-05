@@ -443,11 +443,13 @@ func newFakeManager() *fakeManager {
 }
 
 //nolint:unused
-func (f *fakeManager) update(ctx context.Context, comp componentsapi.Component) {
+func (f *fakeManager) update(ctx context.Context, comp componentsapi.Component) error {
 	f.updateFn(ctx, comp)
+	return nil
 }
 
 //nolint:unused
-func (f *fakeManager) delete(ctx context.Context, comp componentsapi.Component) {
+func (f *fakeManager) delete(ctx context.Context, comp componentsapi.Component) error {
 	f.deleteFn(ctx, comp)
+	return nil
 }
