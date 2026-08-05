@@ -116,6 +116,10 @@ type Processor struct {
 	security  security.Handler
 	reporter  registry.Reporter
 
+	// actors is notified of actor state store changes by the hot reload
+	// reconciler. May be nil in tests.
+	actors actors.Interface
+
 	// Accessor interfaces used by the State/Secret/Binding/Subscriber
 	// methods. Backed by the concrete sub-processor instances constructed in
 	// New.
@@ -192,6 +196,7 @@ func New(opts Options) *Processor {
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,
 		Outbox:         opts.Outbox,
+		Actors:         opts.Actors,
 	})
 
 	secretProc := secret.New(secret.Options{
@@ -258,6 +263,7 @@ func New(opts Options) *Processor {
 		compStore:      opts.ComponentStore,
 		security:       opts.Security,
 		reporter:       reporter,
+		actors:         opts.Actors,
 		state:          stateProc,
 		secret:         secretProc,
 		binding:        bindingProc,
@@ -361,7 +367,13 @@ func New(opts Options) *Processor {
 			if reg == nil {
 				return nil
 			}
-			return reg.RegisterMCPServer(ctx, s, opts.ComponentStore, opts.Security)
+			policyRunner := resiliency.NewRunner[any](ctx,
+				opts.Resiliency.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
+			)
+			_, err := policyRunner(func(ctx context.Context) (any, error) {
+				return nil, reg.RegisterMCPServer(ctx, s, opts.ComponentStore, opts.Security)
+			})
+			return err
 		},
 		UnregisterMCPServer: func(name string) {
 			reg := p.getInProcessWorkflows()
