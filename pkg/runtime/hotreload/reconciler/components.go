@@ -41,10 +41,6 @@ type components struct {
 	skippedActorStoreLock sync.Mutex
 }
 
-// The go linter does not yet understand that these functions are being used by
-// the generic reconciler.
-//
-//nolint:unused
 func (c *components) update(ctx context.Context, comp compapi.Component) {
 	// Only a single actor state store may be configured. Skip a component
 	// which would become a second actor state store, rather than failing its
@@ -102,7 +98,6 @@ func (c *components) update(ctx context.Context, comp compapi.Component) {
 	}
 }
 
-//nolint:unused
 func (c *components) delete(ctx context.Context, comp compapi.Component) {
 	c.dropSkippedActorStore(comp.Name)
 
@@ -118,8 +113,6 @@ func (c *components) delete(ctx context.Context, comp compapi.Component) {
 
 // dropSkippedActorStore forgets the stashed skipped actor state store when a
 // newer event for the same component arrives.
-//
-//nolint:unused
 func (c *components) dropSkippedActorStore(name string) {
 	c.skippedActorStoreLock.Lock()
 	defer c.skippedActorStoreLock.Unlock()
@@ -130,8 +123,6 @@ func (c *components) dropSkippedActorStore(name string) {
 
 // replaySkippedActorStore applies the stashed skipped actor state store if
 // the actor state store slot has become free.
-//
-//nolint:unused
 func (c *components) replaySkippedActorStore(ctx context.Context) {
 	c.skippedActorStoreLock.Lock()
 	skipped := c.skippedActorStore
@@ -153,8 +144,6 @@ func (c *components) replaySkippedActorStore(ctx context.Context) {
 // notifyActorStateStoreChanged captures the actor state store revision and
 // returns a func which notifies the actor runtime if the revision has since
 // changed.
-//
-//nolint:unused
 func (c *components) notifyActorStateStoreChanged() func() {
 	//nolint:dogsled
 	_, _, before, _ := c.store.GetStateStoreActorWithRevision()
@@ -168,8 +157,6 @@ func (c *components) notifyActorStateStoreChanged() func() {
 // isMarkedActorStateStore returns whether the component is a state store
 // carrying the actor state store metadata key. Presence based, since the
 // value may be resolved from a secret.
-//
-//nolint:unused
 func isMarkedActorStateStore(comp compapi.Component) bool {
 	if !strings.HasPrefix(comp.Spec.Type, "state.") {
 		return false
