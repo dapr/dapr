@@ -11,6 +11,7 @@ on:
     paths: # Explicitly declare which paths
       - ".github/workflows/test-tooling.yml"
       - ".build-tools/*"
+  merge_group:
 
 permissions: {}
 

@@ -68,6 +68,7 @@ type options struct {
 	actorsDisseminateTimeout   *time.Duration
 	hotReloadReconcileInterval *time.Duration
 	controlPlaneTrustDomain    *string
+	appBindingOptionsTimeout   *time.Duration
 	schedulerAddresses         []string
 	disableInitEndpoints       []string
 	maxBodySize                *string
@@ -329,6 +330,12 @@ func WithActorsDisseminateTimeout(timeout time.Duration) Option {
 func WithHotReloadReconcileInterval(interval time.Duration) Option {
 	return func(o *options) {
 		o.hotReloadReconcileInterval = &interval
+	}
+}
+
+func WithAppBindingOptionsTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		o.appBindingOptionsTimeout = &timeout
 	}
 }
 

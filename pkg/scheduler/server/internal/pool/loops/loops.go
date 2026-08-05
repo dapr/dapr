@@ -72,6 +72,16 @@ type ConnCloseStream struct {
 	Namespace string
 }
 
+// ConnCloseNamespace is sent by a namespace's connections loop when its last
+// stream has been removed. The connections loop owns the authoritative stream
+// set, so namespace deletion is driven by this confirmation rather than by
+// per-event counting alone, which a stray or duplicate close event could
+// otherwise corrupt into deleting a namespace that still has live streams.
+type ConnCloseNamespace struct {
+	*nsbase
+	Namespace string
+}
+
 type ConcurrencyRelease struct {
 	*connbase
 	GateKeys []string

@@ -19,12 +19,18 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
+	"github.com/dapr/dapr/pkg/sentry/server/images"
 )
 
 // ValidateResult is the result of a validation.
 type ValidateResult struct {
 	// TrustDomain is the trust domain of the client.
 	TrustDomain spiffeid.TrustDomain
+
+	// ContainerImages are the image references of the requesting workload's
+	// containers, when known to the validator. Only the Kubernetes validator
+	// populates this; it is empty for all other validators.
+	ContainerImages []images.ContainerImage
 }
 
 // Validator is used to validate the identity of a certificate requester by
