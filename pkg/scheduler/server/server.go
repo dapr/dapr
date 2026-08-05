@@ -264,9 +264,38 @@ func (s *Server) runServer(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			<-ctx.Done()
-			srv.GracefulStop()
+			// Fail readiness before draining so probes go unhealthy during
+			// shutdown rather than only after the drain completes (the defer
+			// at the top of runServer cannot run until GracefulStop returns).
+			s.hzAPIServer.NotReady()
+
+			// Bounded drain: GracefulStop waits for every open stream, but a
+			// WatchJobs handler can be parked in its initial stream Recv (and
+			// a WatchHosts handler in a Send to a hung client), never
+			// reaching its closeCh select. An unbounded GracefulStop then
+			// waits forever and the process becomes a zombie: the gRPC
+			// transport keeps ACKing keepalives and healthz stays serving
+			// while every handler is dead. Scheduler streams are infinite
+			// watches, so a drain either completes almost immediately via
+			// closeCh or never will: force the stop after the grace period.
+			stopped := make(chan struct{})
+			go func() {
+				srv.GracefulStop()
+				close(stopped)
+			}()
+			select {
+			case <-stopped:
+			case <-time.After(gracefulShutdownTimeout):
+				log.Warnf("Graceful shutdown timed out after %s, forcing stop", gracefulShutdownTimeout)
+				srv.Stop()
+				<-stopped
+			}
 			log.Info("Scheduler GRPC server stopped")
 			return nil
 		},
 	).Run(ctx)
 }
+
+// gracefulShutdownTimeout bounds how long the scheduler waits for open
+// streams to drain on shutdown before forcing the gRPC server to stop.
+const gracefulShutdownTimeout = time.Second * 5
