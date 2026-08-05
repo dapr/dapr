@@ -1,0 +1,1 @@
+Azure AKS, 3x Standard_D2s_v6 (2 vCPU, 8 GiB) Linux nodes

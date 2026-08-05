@@ -24,14 +24,12 @@ import (
 
 	"k8s.io/utils/clock"
 
-	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
-	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/actors/internal/scheduler"
@@ -78,7 +76,6 @@ type Options struct {
 }
 
 type InitOptions struct {
-	StateStoreName    string
 	Hostname          string
 	GRPC              *manager.Manager
 	SchedulerClient   schedulerv1pb.SchedulerClient
@@ -101,6 +98,11 @@ type Interface interface {
 	RegisterHosted(context.Context, hostconfig.Config) error
 	UnRegisterHosted(ctx context.Context, actorTypes ...string) error
 	WaitForRegisteredHosts(ctx context.Context) error
+
+	// OnActorStateStoreChanged notifies the actor runtime that the actor
+	// state store was added, removed, or replaced in the component store.
+	// Non-blocking and safe to call at any point in the runtime lifecycle.
+	OnActorStateStoreChanged()
 }
 
 type actors struct {
@@ -136,6 +138,15 @@ type actors struct {
 	registerDoneCh   chan struct{}
 	registerDoneLock sync.RWMutex
 
+	// storeKickCh coalesces actor state store change notifications; the
+	// converge runner in Run drains it and reconciles hosting against the
+	// component store. hostingRev, hostingActive, and hostingName are only
+	// touched by Init and the converge runner.
+	storeKickCh   chan struct{}
+	hostingRev    uint64
+	hostingActive bool
+	hostingName   string
+
 	clock clock.Clock
 	mode  modes.DaprMode
 }
@@ -167,6 +178,7 @@ func New(opts Options) Interface {
 		closedCh:             make(chan struct{}),
 		initDoneCh:           make(chan struct{}),
 		registerDoneCh:       make(chan struct{}),
+		storeKickCh:          make(chan struct{}, 1),
 		maxRequestBodySize:   opts.MaxRequestBodySize,
 		mode:                 opts.Mode,
 		disseminationTimeout: opts.DisseminationTimeout,
@@ -181,13 +193,15 @@ func (a *actors) Init(opts InitOptions) error {
 		return nil
 	}
 
+	_, a.hostingName, a.hostingRev, a.hostingActive = a.compStore.GetStateStoreActorWithRevision()
+	if !a.hostingActive {
+		log.Info("Actor state store not configured - actor hosting disabled until one is configured, but invocation enabled")
+	}
+
 	a.table = table.New(table.Options{
 		ReentrancyStore: a.reentrancyStore,
+		StartSuspended:  !a.hostingActive,
 	})
-
-	apiLevel := apilevel.New()
-
-	storeEnabled := a.buildStateStore(opts, apiLevel)
 
 	a.scheduler = scheduler.New(scheduler.Options{
 		Namespace: a.namespace,
@@ -218,17 +232,17 @@ func (a *actors) Init(opts InitOptions) error {
 		return err
 	}
 
-	if storeEnabled {
-		a.state = actorstate.New(actorstate.Options{
-			AppID:           a.appID,
-			StoreName:       opts.StateStoreName,
-			CompStore:       a.compStore,
-			Resiliency:      a.resiliency,
-			StateTTLEnabled: a.stateTTLEnabled,
-			Table:           a.table,
-			Placement:       a.placement,
-		})
-	}
+	// The state facade is always constructed; it resolves the actor state
+	// store from the component store on every call so the store can be hot
+	// reloaded at any point in the runtime's lifetime.
+	a.state = actorstate.New(actorstate.Options{
+		AppID:           a.appID,
+		CompStore:       a.compStore,
+		Resiliency:      a.resiliency,
+		StateTTLEnabled: a.stateTTLEnabled,
+		Table:           a.table,
+		Placement:       a.placement,
+	})
 
 	a.router = router.New(router.Options{
 		Namespace:          a.namespace,
@@ -279,7 +293,7 @@ func (a *actors) Run(ctx context.Context) error {
 			// Only wait for host registration before starting the placement client,
 			// since registering Actor host types is dependent on the Actor state
 			// store being configured.
-			if a.state != nil {
+			if _, _, ok := a.compStore.GetStateStoreActor(); ok {
 				select {
 				case <-a.registerDoneCh:
 				case <-ctx.Done():
@@ -287,6 +301,16 @@ func (a *actors) Run(ctx context.Context) error {
 				}
 			}
 			return a.placement.Run(ctx)
+		},
+		func(ctx context.Context) error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-a.storeKickCh:
+				}
+				a.convergeHosting(ctx)
+			}
 		},
 		func(ctx context.Context) error {
 			<-ctx.Done()
@@ -460,12 +484,13 @@ func (a *actors) RegisterHosted(ctx context.Context, cfg hostconfig.Config) erro
 			Type:       actorType,
 			Reentrancy: reentrancy,
 			Factory: app.New(app.Options{
-				ActorType:   actorType,
-				AppChannel:  cfg.AppChannel,
-				Resiliency:  a.resiliency,
-				IdleTimeout: idleTimeout,
-				Reentrancy:  a.reentrancyStore,
-				Placement:   a.placement,
+				ActorType:      actorType,
+				AppChannel:     cfg.AppChannel,
+				CallbackStream: cfg.CallbackStream,
+				Resiliency:     a.resiliency,
+				IdleTimeout:    idleTimeout,
+				Reentrancy:     a.reentrancyStore,
+				Placement:      a.placement,
 			}),
 		})
 	}
@@ -541,6 +566,49 @@ func (a *actors) WaitForRegisteredHosts(ctx context.Context) error {
 	}
 }
 
+func (a *actors) OnActorStateStoreChanged() {
+	select {
+	case a.storeKickCh <- struct{}{}:
+	default:
+	}
+}
+
+// convergeHosting reconciles actor hosting with the current actor state
+// store: hosting is suspended when the store is removed and resumed when one
+// is configured. A same-name update (for example a hot reload picking up a
+// rotated secret) swaps the store instance in place without draining: the
+// data path resolves the store from the component store on every call, so
+// hosted actors continue uninterrupted against the same backing store.
+// Draining is reserved for the store being removed, unmarked, or replaced by
+// a different component.
+func (a *actors) convergeHosting(ctx context.Context) {
+	_, name, rev, ok := a.compStore.GetStateStoreActorWithRevision()
+	if rev == a.hostingRev {
+		return
+	}
+	a.hostingRev = rev
+
+	if ok && a.hostingActive && name == a.hostingName {
+		log.Infof("Actor state store %s updated - actor hosting continues", name)
+		return
+	}
+
+	if a.hostingActive {
+		log.Info("Actor state store removed or replaced - draining hosted actors")
+		if err := a.table.SuspendHosting(ctx); err != nil {
+			log.Errorf("Error draining hosted actors after actor state store change: %s", err)
+		}
+	}
+
+	if ok {
+		log.Infof("Actor state store %s configured - enabling actor hosting", name)
+		a.table.ResumeHosting()
+	}
+
+	a.hostingActive = ok
+	a.hostingName = name
+}
+
 func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
 	const placementDisconnected = "placement: disconnected"
 
@@ -593,27 +661,6 @@ func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
 		Placement:     statusMessage,
 		HostReady:     hostReady,
 	}
-}
-
-func (a *actors) buildStateStore(opts InitOptions, apiLevel *apilevel.APILevel) bool {
-	storeS, ok := a.compStore.GetStateStore(opts.StateStoreName)
-	if !ok {
-		log.Info("Actor state store not configured - actor hosting disabled, but invocation enabled")
-		return false
-	}
-
-	store, ok := storeS.(actorstate.Backend)
-	if !ok {
-		log.Warn("Actor state management disabled")
-		return false
-	}
-
-	if !state.FeatureETag.IsPresent(store.Features()) || !state.FeatureTransactional.IsPresent(store.Features()) {
-		log.Warnf("Actor state store %s does not support required features: %s, %s", opts.StateStoreName, state.FeatureETag, state.FeatureTransactional)
-		return false
-	}
-
-	return true
 }
 
 // ValidateHostEnvironment validates that actors can be initialized properly given a set of parameters

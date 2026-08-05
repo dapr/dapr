@@ -42,6 +42,10 @@ type Options[T meta.Resource] struct {
 	Namespace      string
 	KubeClient     client.Client
 	ProcessSecrets func(context.Context, *T, string, client.Client) error
+	// Filter, when set, drops any event for which it returns false before it is
+	// enqueued or streamed. Used to forward only the resources that belong to the
+	// connecting app.
+	Filter func(T) bool
 }
 
 type Client[T meta.Resource] struct {
@@ -50,6 +54,7 @@ type Client[T meta.Resource] struct {
 	namespace      string
 	kubeClient     client.Client
 	processSecrets func(context.Context, *T, string, client.Client) error
+	filter         func(T) bool
 
 	loop       loop.Interface[loops.EventClient]
 	streamLoop loop.Interface[loops.EventStream]
@@ -62,6 +67,7 @@ func New[T meta.Resource](opts Options[T]) *Client[T] {
 		namespace:      opts.Namespace,
 		kubeClient:     opts.KubeClient,
 		processSecrets: opts.ProcessSecrets,
+		filter:         opts.Filter,
 		streamLoop: stream.New(stream.Options{
 			Stream: opts.Stream,
 		}),
@@ -94,6 +100,9 @@ func (c *Client[T]) watchEvents(ctx context.Context) error {
 			if !ok {
 				c.loop.Close(&loops.Shutdown{})
 				return nil
+			}
+			if c.filter != nil && !c.filter(event.Manifest) {
+				continue
 			}
 			c.loop.Enqueue(&loops.ResourceUpdate[T]{
 				Resource:  event.Manifest,

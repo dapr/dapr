@@ -33,6 +33,22 @@ func init() {
 	suite.Register(new(mcpserverignoreerrors))
 }
 
+// mcpserverignoreerrors mirrors the components ignoreerrors suite for
+// MCPServer hot-reload. It exercises:
+//
+//  1. Hot-reload update on an existing server with a spec that fails
+//     security validation under IgnoreErrors=true: the old server is closed
+//     (DeleteMCPServer side) and the new one is rejected, so compstore ends
+//     up empty.
+//  2. After IgnoreErrors=true failure, switching back to a valid spec
+//     re-registers the server.
+//  3. A hot-reload update that fails validation with IgnoreErrors=false
+//     surfaces the error through the reconciler and shuts down daprd.
+//
+// All servers in this test use IgnoreErrors=true (except the final exit
+// case) so the workflow-registration step against example.com can fail
+// without crashing daprd; we are exercising the reconciler error-policy
+// machinery, not real MCP traffic.
 type mcpserverignoreerrors struct {
 	daprd   *daprd.Daprd
 	logline *logline.LogLine
@@ -42,8 +58,13 @@ type mcpserverignoreerrors struct {
 func (m *mcpserverignoreerrors) Setup(t *testing.T) []framework.Option {
 	m.logline = logline.New(t,
 		logline.WithStdoutLineContains(
-			`Ignoring error processing MCPServer: MCPServer \"a\" failed security validation:`,
-			`Error processing MCPServer, daprd will exit gracefully: MCPServer \"a\" failed security validation:`,
+			// daprd writes the message field in logrus's quoted form, so
+			// MCPServer "a" appears in the line as MCPServer \"a\".
+			// Update with ignoreErrors=true and a bad scheme: logged then
+			// ignored, server is not re-added.
+			`Ignoring error processing MCPServer: process MCPServer a error: MCPServer \"a\" failed security validation:`,
+			// Final update with ignoreErrors=false: daprd exits gracefully.
+			`Error processing MCPServer, daprd will exit gracefully: process MCPServer a error: MCPServer \"a\" failed security validation:`,
 		),
 	)
 
@@ -95,6 +116,8 @@ spec:
     streamableHTTP:
       url: ftp://example.com/mcp
 `), 0o600))
+		// Reconciler runs DeleteMCPServer (close) then AddPendingMCPServer
+		// (rejected by security validation). End state: empty compstore.
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			assert.Empty(t, m.daprd.GetMetaMCPServers(t, ctx))
 		}, time.Second*5, time.Millisecond*10)
