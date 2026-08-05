@@ -95,13 +95,16 @@ func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.S
 	}
 	log.Infof("Workflow actor '%s': workflow is stalled; holding execution until context is canceled", o.actorID)
 
-	unlock := o.lock.Stall()
+	releaseCh, unlock := o.lock.Stall()
 	defer unlock()
 
 	// Clear in-memory state to save resources as stalling is indefinite.
 	o.invalidateCachedState()
 
-	<-ctx.Done()
+	select {
+	case <-ctx.Done():
+	case <-releaseCh:
+	}
 
 	return api.ErrStalled
 }

@@ -107,6 +107,18 @@ func (f *Stalled) RestartAsReplica(t *testing.T, ctx context.Context, name strin
 	f.restart(t, ctx)
 }
 
+// ReconnectAsReplica switches the workflow replica by disconnecting the
+// current client and connecting a new one, without restarting daprd.
+func (f *Stalled) ReconnectAsReplica(t *testing.T, ctx context.Context, name string) {
+	t.Helper()
+	f.runWorkflowReplica = name
+	f.currentClientCancel()
+	f.workflows.WaitForNoConnectedWorkers(t, ctx)
+	clientCtx, cancel := context.WithCancel(ctx)
+	f.currentClientCancel = cancel
+	f.CurrentClient = f.workflows.BackendClient(t, clientCtx)
+}
+
 func (f *Stalled) restart(t *testing.T, ctx context.Context) {
 	t.Helper()
 	f.currentClientCancel()
