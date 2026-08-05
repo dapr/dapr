@@ -27,6 +27,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 )
 
 // Init initializes a component of a category and reports the result.
@@ -74,6 +75,17 @@ func (p *Processor) init(ctx context.Context, comp componentsapi.Component) erro
 	m, err := p.managerFromComp(comp)
 	if err != nil {
 		return err
+	}
+
+	// A component identical to one already installed is a no-op. This makes
+	// duplicate init events idempotent: a component parked behind an unready
+	// secret store is re-created by the hot reload reconciler on subsequent
+	// reconciles (it is not in the component store while parked), so when the
+	// secret store arrives the flushed parked copy and the reconciler's copy
+	// race to init the same component.
+	if existing, ok := p.compStore.GetComponent(comp.Name); ok && differ.AreSame(existing, comp) {
+		log.Debugf("Component init skipped: identical component already installed: %s", comp.LogName())
+		return nil
 	}
 
 	if err := p.compStore.AddPendingComponentForCommit(comp); err != nil {
@@ -212,7 +224,22 @@ func (p *Processor) processComponentAndDependents(ctx context.Context, comp comp
 
 	res := p.preprocessOneComponent(ctx, &comp)
 	if res.unreadyDependency != "" {
-		p.pendingComponentDependents[res.unreadyDependency] = append(p.pendingComponentDependents[res.unreadyDependency], comp)
+		// Dedupe by name: the hot reload reconciler re-creates a parked
+		// component on every reconcile (it is not in the component store
+		// while parked), which would otherwise grow the parked list and
+		// double-init on flush.
+		deps := p.pendingComponentDependents[res.unreadyDependency]
+		replaced := false
+		for i := range deps {
+			if deps[i].Name == comp.Name {
+				deps[i] = comp
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			p.pendingComponentDependents[res.unreadyDependency] = append(deps, comp)
+		}
 		return nil
 	}
 

@@ -128,6 +128,10 @@ type Processor struct {
 	reporter        registry.Reporter
 	resiliency      resiliency.Provider
 
+	// actors is notified of actor state store changes by the hot reload
+	// reconciler. May be nil in tests.
+	actors actors.Interface
+
 	// kubernetesMode is true when running in Kubernetes mode.
 	// Used to reject configurations that are unsafe in a cluster (e.g. stdio transport).
 	kubernetesMode bool
@@ -190,6 +194,7 @@ func New(opts Options) *Processor {
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,
 		Outbox:         opts.Outbox,
+		Actors:         opts.Actors,
 	})
 
 	secret := secret.New(secret.Options{
@@ -234,6 +239,7 @@ func New(opts Options) *Processor {
 		subscriber:                 subscriber,
 		reporter:                   reporter,
 		resiliency:                 opts.Resiliency,
+		actors:                     opts.Actors,
 		managers: map[components.Category]manager{
 			components.CategoryBindings: binding,
 			components.CategoryConfiguration: configuration.New(configuration.Options{
