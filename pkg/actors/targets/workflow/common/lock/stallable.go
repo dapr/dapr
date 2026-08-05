@@ -15,31 +15,35 @@ package lock
 
 import (
 	"context"
-	"sync/atomic"
+	"sync"
 
 	"github.com/dapr/dapr/pkg/actors/targets/errors"
-	"github.com/dapr/kit/ptr"
 )
 
 type Stallable struct {
 	*Lock
-	stalledCh atomic.Pointer[chan struct{}]
+	mu        sync.Mutex
+	stalledCh chan struct{}
+	releaseCh chan struct{}
 }
 
 func NewStallable() *Stallable {
 	return &Stallable{
 		Lock:      New(),
-		stalledCh: atomic.Pointer[chan struct{}]{},
+		stalledCh: make(chan struct{}),
 	}
 }
 
 func (l *Stallable) ContextLock(ctx context.Context) (context.CancelFunc, error) {
-	stalledCh := l.stalledCh.Load()
+	l.mu.Lock()
+	stalledCh := l.stalledCh
+	l.mu.Unlock()
+
 	select {
 	case l.ch <- struct{}{}:
 	case <-l.closeCh:
 		return nil, errors.NewClosed("lock")
-	case <-*stalledCh:
+	case <-stalledCh:
 		return nil, errors.NewStalled()
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -50,19 +54,52 @@ func (l *Stallable) ContextLock(ctx context.Context) (context.CancelFunc, error)
 
 func (l *Stallable) Init() {
 	l.Lock.Init()
-	l.resetStalledChannel()
+	l.mu.Lock()
+	l.stalledCh = make(chan struct{})
+	l.releaseCh = nil
+	l.mu.Unlock()
 }
 
-func (l *Stallable) Stall() context.CancelFunc {
-	stalledCh := l.stalledCh.Load()
+// Stall marks the lock as stalled and returns a channel which is closed by
+// ReleaseStall to wake the stall holder, plus a cancel func which resets the
+// stalled state.
+func (l *Stallable) Stall() (<-chan struct{}, context.CancelFunc) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	select {
-	case <-*stalledCh:
+	case <-l.stalledCh:
 	default:
-		close(*stalledCh)
+		close(l.stalledCh)
 	}
-	return l.resetStalledChannel
+
+	release := make(chan struct{})
+	l.releaseCh = release
+
+	return release, func() {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.stalledCh = make(chan struct{})
+		if l.releaseCh == release {
+			l.releaseCh = nil
+		}
+	}
 }
 
-func (l *Stallable) resetStalledChannel() {
-	l.stalledCh.Store(ptr.Of(make(chan struct{})))
+// ReleaseStall resets the stalled state and wakes the stall holder, if any,
+// so the actor holding the stall can be deactivated.
+func (l *Stallable) ReleaseStall() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	select {
+	case <-l.stalledCh:
+		l.stalledCh = make(chan struct{})
+	default:
+	}
+
+	if l.releaseCh != nil {
+		close(l.releaseCh)
+		l.releaseCh = nil
+	}
 }
