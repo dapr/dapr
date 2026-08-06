@@ -694,16 +694,14 @@ func (abe *Actors) GetWorkflowRuntimeState(ctx context.Context, owi *backend.Wor
 func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.InstanceID, taskRouter *protos.TaskRouter, condition func(*backend.WorkflowMetadata) bool) error {
 	log.Debugf("Actor backend streaming WorkflowRuntimeStatus %s", id)
 
-	if target := taskRouter.GetTargetAppID(); target != "" && target != abe.appID {
-		return errors.New("cross-app workflow status watches are not supported by the actors backend")
-	}
-
 	router, err := abe.actors.Router(ctx)
 	if err != nil {
 		return err
 	}
 
-	// A router targeting another app watches that app's workflow actor.
+	// A router targeting another app watches that app's workflow actor. This
+	// backs cross-app WaitForWorkflowStart/Completion (e.g. a cross-app
+	// schedule returns only once the instance has started on the target app).
 	actorType := abe.workflowActorType
 	if target := taskRouter.GetTargetAppID(); target != "" && target != abe.appID {
 		actorType = common.NewActorTypeBuilder(abe.namespace).Workflow(target)
