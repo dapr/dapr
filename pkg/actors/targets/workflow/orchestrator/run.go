@@ -577,6 +577,13 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// history and their senders are acked (see the deferred fold handling).
 	foldedCommitted = true
 
+	// This turn consumed the ExecutionStarted event and its commit above is
+	// durable, so the pending start one-shot can only ever fire as a no-op:
+	// elide it from the scheduler, detached and best-effort.
+	if esHistoryEvent != nil && o.fastPath {
+		o.deleteStartReminder(esHistoryEvent)
+	}
+
 	rstatus := runtimestate.RuntimeStatus(rs)
 	if diagnoseStatus != "" {
 		// If workflow is not completed, set executionStatus to empty string
@@ -692,6 +699,13 @@ const retentionReminderName = "retention"
 // per workflow. The dueTime is anchored to the workflow's completion time
 // (not time.Now()) so retries on a transient scheduler failure converge to
 // the same dueTime instead of pushing retention back on every attempt.
+//
+// One one-shot per instance is deliberate, not batched per app: this
+// reminder is idempotently re-creatable from the instance's own durable
+// state (the empty-inbox completion path above re-asserts it after a lost
+// Create), while a shared per-appID bucket job would need a read-modify-write
+// of job data that is not atomic with the completion save, with no durable
+// per-instance anchor (and no completion-time index) to recover a lost join.
 func (o *orchestrator) handleRetention(ctx context.Context, status protos.OrchestrationStatus) error {
 	if o.retentionPolicy == nil {
 		return nil
