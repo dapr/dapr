@@ -27,7 +27,16 @@ var clock kclock.Clock = &kclock.RealClock{}
 
 // Maximum number of concurrent streams in a single gRPC connection
 // This is the default value used by gRPC servers and clients
-const grpcMaxConcurrentStreams = 100
+// grpcMaxConcurrentStreams caps concurrent shared refs per pooled
+// connection before the pool grows. The historical value of 100 was
+// measured as the cluster throughput ceiling for actor-heavy workloads
+// (workflow cross-host traffic sits on these pools): in-flight refs
+// reach the cap at moderate rates, every further caller falls into the
+// write-locked growth path, and new-connection mTLS handshakes
+// serialize per peer. The internal HTTP/2 servers advertise no such
+// stream limit; 100 was self-imposed. 2048 keeps a growth bound while
+// taking the cap out of the operating range.
+const grpcMaxConcurrentStreams = 2048
 
 // ConnectionPool holds a pool of connections to the same address.
 type ConnectionPool struct {
@@ -121,7 +130,7 @@ func (p *ConnectionPool) Share() grpc.ClientConnInterface {
 // doShare performs the sharing of the connection from the pool, incrementing its reference count.
 // This needs to be wrapped in a (read/write) lock.
 func (p *ConnectionPool) doShare() grpc.ClientConnInterface {
-	// If there's more than 1 connection, grab the first one whose reference count is less or equal than 100 (grpcMaxConcurrentStreams)
+	// If there's more than 1 connection, grab the first one whose reference count is at most grpcMaxConcurrentStreams
 	for i := range len(p.connections) {
 		// Check if the connection is still valid first
 		// First we check if the referenceCount is 0, and then we check if the connection has expired
@@ -138,7 +147,7 @@ func (p *ConnectionPool) doShare() grpc.ClientConnInterface {
 		// Increment the reference counter to signal that we're using the connection
 		count := atomic.AddInt32(&p.connections[i].referenceCount, 1)
 
-		// If the reference count is less (or equal) than 100, we can use this connection
+		// If the reference count is within the cap, we can use this connection
 		if count <= grpcMaxConcurrentStreams {
 			return p.connections[i].conn
 		}
