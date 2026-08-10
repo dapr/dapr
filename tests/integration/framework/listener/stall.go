@@ -61,13 +61,15 @@ func (s *Stall) Accept() (net.Conn, error) {
 		return nil, err
 	}
 
-	if stall := s.stall.Load(); stall > 0 {
-		time.Sleep(time.Duration(stall))
-	}
-
+	// Record before stalling, so a connection which is still being held is
+	// dropped by CloseAccepted like any other.
 	s.lock.Lock()
 	s.accepted = append(s.accepted, conn)
 	s.lock.Unlock()
+
+	if stall := s.stall.Load(); stall > 0 {
+		time.Sleep(time.Duration(stall))
+	}
 
 	return conn, nil
 }
