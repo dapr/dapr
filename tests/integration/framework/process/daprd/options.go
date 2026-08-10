@@ -41,6 +41,7 @@ type options struct {
 	appID                      string
 	namespace                  *string
 	appPort                    *int
+	appMaxConcurrency          *int
 	grpcPort                   int
 	httpPort                   int
 	internalGRPCPort           int
@@ -115,6 +116,12 @@ func WithAppPort(port int) Option {
 func WithAppProtocol(protocol string) Option {
 	return func(o *options) {
 		o.appProtocol = protocol
+	}
+}
+
+func WithAppMaxConcurrency(maxConcurrency int) Option {
+	return func(o *options) {
+		o.appMaxConcurrency = &maxConcurrency
 	}
 }
 
