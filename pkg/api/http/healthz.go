@@ -59,13 +59,20 @@ func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 	if !a.healthz.IsReady() {
 		msg := messages.ErrHealthNotReady.WithFormat(a.healthz.GetUnhealthyTargets())
 		respondWithError(w, msg)
-		// Only log once per not-ready streak, at a level visible on default log settings,
-		// so the failure isn't silent but readiness polling doesn't spam the logs.
-		if a.healthzNotReadyLogged.CompareAndSwap(false, true) {
-			log.Warn(msg)
+		// A startup that hasn't become ready yet is expected and stays quiet at Debug.
+		// Once we've been ready at least once, a not-ready poll means a regression, so
+		// surface it at a level visible on default log settings. Still only log once per
+		// not-ready streak, since readiness polling can run as often as every second.
+		if a.healthzEverReady.Load() {
+			if a.healthzNotReadyLogged.CompareAndSwap(false, true) {
+				log.Warn(msg.Message())
+			}
+		} else {
+			log.Debug(msg)
 		}
 		return
 	}
+	a.healthzEverReady.Store(true)
 	if a.healthzNotReadyLogged.CompareAndSwap(true, false) {
 		log.Info("dapr is ready again")
 	}
@@ -87,11 +94,16 @@ func (a *api) onGetOutboundHealthz(w http.ResponseWriter, r *http.Request) {
 	if !a.outboundHealthz.IsReady() {
 		msg := messages.ErrOutboundHealthNotReady
 		respondWithError(w, msg)
-		if a.outboundNotReadyLogged.CompareAndSwap(false, true) {
-			log.Warn(msg)
+		if a.outboundEverReady.Load() {
+			if a.outboundNotReadyLogged.CompareAndSwap(false, true) {
+				log.Warnf("%s: %v", msg.Message(), a.outboundHealthz.GetUnhealthyTargets())
+			}
+		} else {
+			log.Debug(msg)
 		}
 		return
 	}
+	a.outboundEverReady.Store(true)
 	if a.outboundNotReadyLogged.CompareAndSwap(true, false) {
 		log.Info("dapr outbound is ready again")
 	}

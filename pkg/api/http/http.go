@@ -82,6 +82,8 @@ type api struct {
 	outboundHealthz        healthz.Healthz
 	healthzNotReadyLogged  atomic.Bool
 	outboundNotReadyLogged atomic.Bool
+	healthzEverReady       atomic.Bool
+	outboundEverReady      atomic.Bool
 }
 
 const (
