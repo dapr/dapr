@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
+	outboxfake "github.com/dapr/dapr/pkg/outbox/fake"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -75,6 +76,7 @@ func newTestProc(setters ...newTestProcOptions) (*Processor, *registry.Registry)
 		ID:             "id",
 		Namespace:      "test",
 		Registry:       reg,
+		Outbox:         outboxfake.New(),
 		ComponentStore: compstore.New(),
 		Meta: meta.New(meta.Options{
 			ID:        "id",

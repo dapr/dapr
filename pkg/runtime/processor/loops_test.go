@@ -14,15 +14,20 @@ limitations under the License.
 package processor
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
+	contribstate "github.com/dapr/components-contrib/state"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	rtmock "github.com/dapr/dapr/pkg/runtime/mock"
@@ -105,4 +110,138 @@ func TestProcessorSecretStoreDependentReenqueue(t *testing.T) {
 
 	_, ok = proc.compStore.GetComponent("needs-secret")
 	assert.True(t, ok, "dependent must be processed once its secret store initialises")
+}
+
+func actorStateStoreComp(name string) componentsapi.Component {
+	return componentsapi.Component{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: componentsapi.ComponentSpec{
+			Type:    "state.mockState",
+			Version: "v1",
+			Metadata: []commonapi.NameValuePair{{
+				Name: "actorStateStore",
+				Value: commonapi.DynamicValue{
+					JSON: apiextv1.JSON{Raw: []byte(`"true"`)},
+				},
+			}},
+		},
+	}
+}
+
+// TestProcessorActorStateStoreInitRetry asserts that a transiently failing
+// actor state store init is retried with backoff instead of being recorded
+// as a fatal runtime error: the component commits once its backing store
+// recovers and the processor loop stays alive throughout (chaos campaign
+// 10/08/2026 S6: a 25s state store outage crash-looped every sidecar).
+func TestProcessorActorStateStoreInitRetry(t *testing.T) {
+	proc, reg := newTestProc()
+	startProc(t, proc)
+
+	mockStore := new(daprt.MockStateStore)
+	reg.StateStores().RegisterComponent(
+		func(logger.Logger) contribstate.Store { return mockStore },
+		"mockState",
+	)
+	mockStore.On("Init", mock.Anything, mock.Anything).Return(errors.New("connection refused")).Twice()
+	mockStore.On("Init", mock.Anything, mock.Anything).Return(nil)
+	mockStore.On("Features").Return(nil)
+
+	ch := proc.AddPendingComponent(t.Context(), actorStateStoreComp("mystore"))
+	require.NotNil(t, ch)
+
+	select {
+	case err := <-ch:
+		require.NoError(t, err, "init must succeed after the store recovers")
+	case <-time.After(30 * time.Second):
+		t.Fatal("timed out waiting for the actor state store init to recover")
+	}
+
+	_, ok := proc.compStore.GetComponent("mystore")
+	assert.True(t, ok, "component must be committed once init recovers")
+	mockStore.AssertNumberOfCalls(t, "Init", 3)
+}
+
+// TestProcessorActorStateStoreInitRetryShutdown asserts that shutting the
+// processor down while the actor state store init is still retrying stops
+// the retry loop promptly and is treated as a clean shutdown, not a fatal
+// component init failure.
+func TestProcessorActorStateStoreInitRetryShutdown(t *testing.T) {
+	proc, reg := newTestProc()
+
+	mockStore := new(daprt.MockStateStore)
+	reg.StateStores().RegisterComponent(
+		func(logger.Logger) contribstate.Store { return mockStore },
+		"mockState",
+	)
+	firstFailure := make(chan struct{}, 1)
+	mockStore.On("Init", mock.Anything, mock.Anything).Run(func(mock.Arguments) {
+		select {
+		case firstFailure <- struct{}{}:
+		default:
+		}
+	}).Return(errors.New("connection refused"))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- proc.Process(ctx) }()
+
+	ch := proc.AddPendingComponent(ctx, actorStateStoreComp("mystore"))
+	require.NotNil(t, ch)
+
+	select {
+	case <-firstFailure:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the first init failure")
+	}
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			require.ErrorIs(t, err, context.Canceled, "an abandoned retry must not surface as a fatal init error")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the processor to stop")
+	}
+}
+
+// TestProcessorNonActorStateStoreInitStillFatal guards the pre-existing
+// behavior for every other component: a non-ignored init failure is not
+// retried and still surfaces as a fatal error out of Process.
+func TestProcessorNonActorStateStoreInitStillFatal(t *testing.T) {
+	proc, reg := newTestProc()
+
+	mockStore := new(daprt.MockStateStore)
+	reg.StateStores().RegisterComponent(
+		func(logger.Logger) contribstate.Store { return mockStore },
+		"mockState",
+	)
+	mockStore.On("Init", mock.Anything, mock.Anything).Return(errors.New("connection refused"))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- proc.Process(ctx) }()
+
+	comp := actorStateStoreComp("plainstore")
+	comp.Spec.Metadata = nil
+
+	ch := proc.AddPendingComponent(ctx, comp)
+	require.NotNil(t, ch)
+	select {
+	case err := <-ch:
+		require.ErrorContains(t, err, "connection refused")
+		mockStore.AssertNumberOfCalls(t, "Init", 1)
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the init failure")
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		require.ErrorContains(t, err, "process component plainstore error")
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the processor to stop")
+	}
 }

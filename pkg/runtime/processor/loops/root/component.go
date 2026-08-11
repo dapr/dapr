@@ -16,12 +16,17 @@ package root
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	wfcommon "github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/processor/loops"
+	procstate "github.com/dapr/dapr/pkg/runtime/processor/state"
+	"github.com/dapr/kit/events/loop"
+	kitstrings "github.com/dapr/kit/strings"
 )
 
 // DefaultComponentInitTimeout is the init deadline applied to a component
@@ -108,6 +113,17 @@ func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 		// callers stay blocked until the component's Init returns, even when it
 		// overruns its deadline.
 		innerErr := <-intercept
+		// The actor state store retries in place of failing fatally: a
+		// transient outage of its backing database (for example Postgres
+		// restarting) must leave the runtime alive and unready rather than
+		// crash it, which under Kubernetes turns a seconds-long database blip
+		// into a crash-restart cycle of every replica that lasts until the
+		// database returns. The caller stays blocked while retrying, so
+		// readiness keeps reporting the degraded state.
+		var abandoned bool
+		if innerErr != nil && shouldRetryInit(comp) {
+			innerErr, abandoned = r.retryInit(catLoop, comp, timeout, innerErr)
+		}
 		if innerErr != nil {
 			log.Errorf("Failed to init component %s: %s", comp.LogName(), innerErr)
 			wrapped := rterrors.NewInit(rterrors.InitComponentFailure, comp.LogName(), innerErr)
@@ -115,8 +131,10 @@ func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 			// A non-ignored init failure is fatal to the runtime. Record it so
 			// Run surfaces it on a path the runtime's init-context cancellation
 			// cannot mask (the legacy processComponents runner did this), so a
-			// failure that races with shutdown still propagates out of Run.
-			if !comp.Spec.IgnoreErrors {
+			// failure that races with shutdown still propagates out of Run. A
+			// retry loop abandoned by shutdown is not a failure and is not
+			// recorded.
+			if !comp.Spec.IgnoreErrors && !abandoned {
 				r.recordFatalInitError(fmt.Errorf("process component %s error: %w", comp.Name, wrapped))
 			}
 		} else {
@@ -133,6 +151,64 @@ func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 			Err:      innerErr,
 		})
 	})
+}
+
+const (
+	// initRetryBackoffBase and initRetryBackoffCap bound the jittered backoff
+	// between init attempts of a retriable component.
+	initRetryBackoffBase = 500 * time.Millisecond
+	initRetryBackoffCap  = 10 * time.Second
+)
+
+// shouldRetryInit reports whether a failed init of comp is retried in place
+// of being recorded as fatal. Only the component marked as the actor state
+// store qualifies: its availability is a runtime dependency (workflows,
+// actors) whose transient loss must degrade the runtime, not kill it.
+func shouldRetryInit(comp compapi.Component) bool {
+	if comp.Spec.IgnoreErrors || !strings.HasPrefix(comp.Spec.Type, "state.") {
+		return false
+	}
+	for _, m := range comp.Spec.Metadata {
+		if strings.EqualFold(m.Name, procstate.PropertyKeyActorStateStore) {
+			return kitstrings.IsTruthy(m.Value.String())
+		}
+	}
+	return false
+}
+
+// retryInit re-attempts a failed component init with jittered backoff until
+// it succeeds or the runtime shuts down. Each attempt goes through the
+// category loop like the original one, with the same per-attempt timeout.
+// Returns the final error and whether the loop was abandoned by shutdown.
+func (r *Root) retryInit(catLoop loop.Interface[loops.EventCategory], comp compapi.Component, timeout time.Duration, firstErr error) (error, bool) {
+	backoff := wfcommon.NewJitterBackoff(initRetryBackoffBase, initRetryBackoffCap)
+	err := firstErr
+	for {
+		delay := backoff.NextBackOff()
+		log.Warnf("Retrying init of actor state store %s in %s after error: %s", comp.LogName(), delay, err)
+		select {
+		case <-r.runCtx.Done():
+			return err, true
+		case <-time.After(delay):
+		}
+
+		res := make(chan error, 1)
+		catLoop.Enqueue(&loops.Init{
+			Component: comp,
+			Result:    res,
+			Timeout:   timeout,
+		})
+		select {
+		case err = <-res:
+		case <-r.runCtx.Done():
+			// The category loop may already be closed and the enqueued event
+			// dropped, so do not wait on res unconditionally.
+			return err, true
+		}
+		if err == nil {
+			return nil, false
+		}
+	}
 }
 
 func (r *Root) handleClose(_ context.Context, ev *loops.Close) {
