@@ -16,8 +16,10 @@ package app
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/dapr/dapr/cmd/scheduler/options"
+	wfcommon "github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/healthz"
 	healthzserver "github.com/dapr/dapr/pkg/healthz/server"
@@ -149,20 +151,9 @@ func Run() {
 				return server, nil
 			}
 
-			for {
-				server, gerr := getServer()
-				if gerr != nil {
-					return gerr
-				}
-
-				if gerr = server.Run(ctx); gerr != nil {
-					return gerr
-				}
-
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-			}
+			return runServerLoop(ctx, func() (serverRunner, error) {
+				return getServer()
+			})
 		},
 	).Run(ctx)
 	if err != nil {
@@ -170,4 +161,53 @@ func Run() {
 	}
 
 	log.Info("Scheduler service shut down gracefully")
+}
+
+// serverRunner is the subset of *server.Server that runServerLoop drives.
+type serverRunner interface {
+	Run(ctx context.Context) error
+}
+
+const (
+	// serverRetryBackoffBase and serverRetryBackoffCap bound the jittered
+	// backoff between scheduler server incarnations after a runtime failure.
+	serverRetryBackoffBase = 500 * time.Millisecond
+	serverRetryBackoffCap  = 10 * time.Second
+)
+
+// runServerLoop runs scheduler server incarnations until ctx is cancelled. A
+// server that stops with a runtime error (for example the backing store
+// becoming unavailable) is recreated after a jittered backoff instead of
+// crashing the process: a transient dependency blip must not be fatal to an
+// HA fleet, whose members would otherwise all crash-restart together.
+// Healthz reports not-ready between incarnations, so orchestration still
+// observes the outage. Errors from getServer are configuration failures and
+// remain fatal.
+func runServerLoop(ctx context.Context, getServer func() (serverRunner, error)) error {
+	backoff := wfcommon.NewJitterBackoff(serverRetryBackoffBase, serverRetryBackoffCap)
+	for {
+		server, err := getServer()
+		if err != nil {
+			return err
+		}
+
+		err = server.Run(ctx)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err == nil {
+			// A nil return with a live context is a server-requested restart:
+			// recreate immediately and reset the failure backoff.
+			backoff.Reset()
+			continue
+		}
+
+		delay := backoff.NextBackOff()
+		log.Errorf("Scheduler server failed, recreating in %s: %s", delay, err)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+		}
+	}
 }
