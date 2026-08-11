@@ -4180,6 +4180,83 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		resp := fakeServer(t).DoRequest("GET", apiPath, nil, map[string]string{"appid": appID})
 		assert.Equal(t, 204, resp.StatusCode)
 	})
+
+	t.Run("Healthz - not-ready state is only flagged for logging once until recovery", func(t *testing.T) {
+		apiPath := "v1.0/healthz"
+		testAPI.healthzNotReadyLogged.Store(false)
+		htarget.NotReady()
+		t.Cleanup(htarget.NotReady)
+
+		server := fakeServer(t)
+
+		resp := server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.True(t, testAPI.healthzNotReadyLogged.Load(), "flag should be set after the first not-ready poll")
+
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.True(t, testAPI.healthzNotReadyLogged.Load(), "flag should remain set across repeated not-ready polls")
+
+		htarget.Ready()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.False(t, testAPI.healthzNotReadyLogged.Load(), "flag should reset once dapr becomes ready again")
+
+		htarget.NotReady()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.True(t, testAPI.healthzNotReadyLogged.Load(), "flag should be set again on a new not-ready streak")
+	})
+}
+
+func TestV1OutboundHealthzEndpoint(t *testing.T) {
+	outboundHealthz := healthz.New()
+	otarget := outboundHealthz.AddTarget("outbound-test-target")
+	testAPI := &api{
+		outboundHealthz: outboundHealthz,
+	}
+
+	fakeServer := func(t *testing.T) *fakeHTTPServer {
+		f := newFakeHTTPServer()
+		t.Cleanup(f.Shutdown)
+		f.StartServer(testAPI.constructHealthzEndpoints(), nil)
+		return f
+	}
+
+	apiPath := "v1.0/healthz/outbound"
+
+	t.Run("Outbound healthz - 500 when not ready", func(t *testing.T) {
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+	})
+
+	t.Run("Outbound healthz - 204 when ready", func(t *testing.T) {
+		otarget.Ready()
+		t.Cleanup(otarget.NotReady)
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 204, resp.StatusCode)
+	})
+
+	t.Run("Outbound healthz - not-ready state is only flagged for logging once until recovery", func(t *testing.T) {
+		testAPI.outboundNotReadyLogged.Store(false)
+		otarget.NotReady()
+		t.Cleanup(otarget.NotReady)
+
+		server := fakeServer(t)
+
+		resp := server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.True(t, testAPI.outboundNotReadyLogged.Load(), "flag should be set after the first not-ready poll")
+
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.True(t, testAPI.outboundNotReadyLogged.Load(), "flag should remain set across repeated not-ready polls")
+
+		otarget.Ready()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.False(t, testAPI.outboundNotReadyLogged.Load(), "flag should reset once dapr becomes ready again")
+	})
 }
 
 func TestV1TransactionEndpoints(t *testing.T) {

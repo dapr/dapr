@@ -59,8 +59,15 @@ func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 	if !a.healthz.IsReady() {
 		msg := messages.ErrHealthNotReady.WithFormat(a.healthz.GetUnhealthyTargets())
 		respondWithError(w, msg)
-		log.Debug(msg)
+		// Only log once per not-ready streak, at a level visible on default log settings,
+		// so the failure isn't silent but readiness polling doesn't spam the logs.
+		if a.healthzNotReadyLogged.CompareAndSwap(false, true) {
+			log.Warn(msg)
+		}
 		return
+	}
+	if a.healthzNotReadyLogged.CompareAndSwap(true, false) {
+		log.Info("dapr is ready again")
 	}
 
 	// If we have an "appid" parameter in the query string, we will return an error if the ID of this app is not the value of the requested "appid"
@@ -80,8 +87,13 @@ func (a *api) onGetOutboundHealthz(w http.ResponseWriter, r *http.Request) {
 	if !a.outboundHealthz.IsReady() {
 		msg := messages.ErrOutboundHealthNotReady
 		respondWithError(w, msg)
-		log.Debug(msg)
+		if a.outboundNotReadyLogged.CompareAndSwap(false, true) {
+			log.Warn(msg)
+		}
 		return
+	}
+	if a.outboundNotReadyLogged.CompareAndSwap(true, false) {
+		log.Info("dapr outbound is ready again")
 	}
 
 	respondWithEmpty(w)
