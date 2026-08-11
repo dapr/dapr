@@ -2,7 +2,7 @@
 
 # [Choice] Go version: 1, 1.26.5, etc
 ARG GOVERSION=1.26.5
-FROM golang:${GOVERSION}-bullseye
+FROM golang:${GOVERSION}-bookworm
 
 # [Option] Install zsh
 ARG INSTALL_ZSH="true"
