@@ -15,6 +15,22 @@ name: dapr-dev-container
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - master
+      - release-*
+    paths:
+      - '.github/workflows/dapr-dev-container.yml'
+      - 'docker/**'
+      - '.devcontainer/**'
+  pull_request:
+    branches:
+      - master
+      - release-*
+    paths:
+      - '.github/workflows/dapr-dev-container.yml'
+      - 'docker/**'
+      - '.devcontainer/**'
   schedule:
     # Run weekly on Tuesdays
     - cron: "22 03 * * 2"
