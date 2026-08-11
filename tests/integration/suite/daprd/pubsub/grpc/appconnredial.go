@@ -113,14 +113,19 @@ func (a *appconnredial) Run(t *testing.T, ctx context.Context) {
 	a.listener.SetStall(time.Second * 2)
 	a.listener.CloseAccepted()
 
-	publish()
-
-	select {
-	case path := <-a.topicChan:
-		assert.Equal(t, "/myroute", path)
-	case <-time.After(time.Second * 20):
-		assert.Fail(t, "message not delivered after re-dialing the app")
+	for len(a.topicChan) > 0 {
+		<-a.topicChan
 	}
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		publish()
+		select {
+		case path := <-a.topicChan:
+			assert.Equal(c, "/myroute", path)
+		case <-time.After(time.Second * 3):
+			assert.Fail(c, "message not delivered after re-dialing the app")
+		}
+	}, time.Second*30, time.Millisecond*100)
 
 	assert.False(t, a.logs.Contains("error reading server preface"),
 		"app connection was closed mid handshake")

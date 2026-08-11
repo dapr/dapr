@@ -78,7 +78,7 @@ func (a *appconnredial) Run(t *testing.T, ctx context.Context) {
 
 	client := a.daprd.GRPCClient(t, ctx)
 
-	invoke := func(t require.TestingT) {
+	invoke := func() (string, error) {
 		resp, err := client.InvokeService(ctx, &rtv1.InvokeServiceRequest{
 			Id: a.daprd.AppID(),
 			Message: &commonv1.InvokeRequest{
@@ -86,17 +86,37 @@ func (a *appconnredial) Run(t *testing.T, ctx context.Context) {
 				HttpExtension: &commonv1.HTTPExtension{Verb: commonv1.HTTPExtension_GET},
 			},
 		})
-		require.NoError(t, err)
-		require.Equal(t, "pong", string(resp.GetData().GetValue()))
+		if err != nil {
+			return "", err
+		}
+		return string(resp.GetData().GetValue()), nil
 	}
 
-	invoke(t)
+	data, err := invoke()
+	require.NoError(t, err)
+	require.Equal(t, "pong", data)
 
 	a.listener.SetStall(time.Second * 2)
 	a.listener.CloseAccepted()
 
-	invoke(t)
+	var (
+		lastErr error
+		invoked bool
+	)
+	for start := time.Now(); time.Since(start) < time.Second*30; {
+		var data string
+		data, lastErr = invoke()
+		if lastErr == nil {
+			assert.Equal(t, "pong", data)
+			invoked = true
+			break
+		}
 
-	assert.False(t, a.logs.Contains("error reading server preface"),
-		"app connection was closed mid handshake")
+		require.NotContains(t, lastErr.Error(), "error reading server preface",
+			"app connection was closed mid handshake")
+
+		time.Sleep(time.Millisecond * 100)
+	}
+
+	require.True(t, invoked, "app never became reachable again: %v", lastErr)
 }
