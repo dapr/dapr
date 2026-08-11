@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -149,4 +150,38 @@ func (h *httpapi) Run(t *testing.T, ctx context.Context) {
 	code, body = post(t, baseURL+"/"+id2+"/terminate"+appIDQuery, "")
 	require.Equalf(t, http.StatusAccepted, code, "terminate failed: %s", body)
 	waitTargetStatus(t, id2, api.RUNTIME_STATUS_TERMINATED)
+
+	t.Run("invalid app id is rejected", func(t *testing.T) {
+		badQuery := "?appID=" + url.QueryEscape(targetAppID+".workflow")
+
+		for name, path := range map[string]string{
+			"start":       "/HTTPOpsWF/start" + badQuery + "&instanceID=ops-http-invalid",
+			"pause":       "/" + id2 + "/pause" + badQuery,
+			"resume":      "/" + id2 + "/resume" + badQuery,
+			"raise event": "/" + id2 + "/raiseEvent/Finish" + badQuery,
+			"terminate":   "/" + id2 + "/terminate" + badQuery,
+			"purge":       "/" + id2 + "/purge" + badQuery,
+		} {
+			t.Run(name, func(t *testing.T) {
+				code, body := post(t, baseURL+path, "")
+				assert.Equal(t, http.StatusBadRequest, code)
+				assert.Contains(t, body, "ERR_WORKFLOW_APP_ID_INVALID")
+			})
+		}
+
+		t.Run("get", func(t *testing.T) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/"+id2+badQuery, nil)
+			require.NoError(t, err)
+			resp, err := httpClient.Do(req)
+			require.NoError(t, err)
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, resp.Body.Close())
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			assert.Contains(t, string(body), "ERR_WORKFLOW_APP_ID_INVALID")
+		})
+
+		// The instance the rejected operations named is untouched.
+		waitTargetStatus(t, id2, api.RUNTIME_STATUS_TERMINATED)
+	})
 }

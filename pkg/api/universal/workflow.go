@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -461,10 +462,8 @@ func (a *Universal) targetAppID(appID string) (string, error) {
 	if appID == "" || appID == a.AppID() {
 		return "", nil
 	}
-	for _, c := range appID {
-		if !unicode.IsLetter(c) && c != '_' && c != '-' && !unicode.IsDigit(c) {
-			return "", messages.ErrInvalidWorkflowAppID.WithFormat(appID)
-		}
+	if !common.ValidAppID(appID) {
+		return "", messages.ErrInvalidWorkflowAppID.WithFormat(appID)
 	}
 	return appID, nil
 }

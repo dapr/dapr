@@ -85,4 +85,11 @@ func (r *rerun) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 	assert.Equal(t, int64(4), acts.Load(), "rerun from the last activity event must re-execute exactly one activity")
+
+	// Rerun enters the backend through the SDK service rather than the runtime
+	// API, so the target app ID must be validated there too: a '.' would
+	// otherwise smuggle extra segments into the derived actor type name.
+	_, err = caller.RerunWorkflowFromEvent(ctx, id, 2, api.WithRerunAppID(targetAppID+".workflow"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is invalid")
 }

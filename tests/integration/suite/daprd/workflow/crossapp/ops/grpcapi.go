@@ -20,6 +20,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -154,13 +156,82 @@ func (g *grpcapi) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("invalid app id is rejected", func(t *testing.T) {
-		_, err := caller.StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
-			InstanceId:        "ops-grpc-3",
-			WorkflowComponent: "dapr",
-			WorkflowName:      "GRPCOpsWF",
-			AppId:             ptr.Of("bad.app.id"),
-		})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "is invalid")
+		const id = "ops-grpc-3"
+		badAppID := ptr.Of("bad.app.id")
+
+		// Every operation rejects the app ID with the same InvalidArgument
+		// before any routing happens, so none of these can hang.
+		for name, op := range map[string]func(context.Context) error{
+			"start": func(opctx context.Context) error {
+				_, err := caller.StartWorkflowBeta1(opctx, &rtv1.StartWorkflowRequest{
+					InstanceId:        id,
+					WorkflowComponent: "dapr",
+					WorkflowName:      "GRPCOpsWF",
+					AppId:             badAppID,
+				})
+				return err
+			},
+			"get": func(opctx context.Context) error {
+				_, err := caller.GetWorkflowBeta1(opctx, &rtv1.GetWorkflowRequest{
+					InstanceId:        id,
+					WorkflowComponent: "dapr",
+					AppId:             badAppID,
+				})
+				return err
+			},
+			"raise event": func(opctx context.Context) error {
+				_, err := caller.RaiseEventWorkflowBeta1(opctx, &rtv1.RaiseEventWorkflowRequest{
+					InstanceId:        id,
+					WorkflowComponent: "dapr",
+					EventName:         "Finish",
+					EventData:         []byte(`"done"`),
+					AppId:             badAppID,
+				})
+				return err
+			},
+			"pause": func(opctx context.Context) error {
+				_, err := caller.PauseWorkflowBeta1(opctx, &rtv1.PauseWorkflowRequest{
+					InstanceId:        id,
+					WorkflowComponent: "dapr",
+					AppId:             badAppID,
+				})
+				return err
+			},
+			"resume": func(opctx context.Context) error {
+				_, err := caller.ResumeWorkflowBeta1(opctx, &rtv1.ResumeWorkflowRequest{
+					InstanceId:        id,
+					WorkflowComponent: "dapr",
+					AppId:             badAppID,
+				})
+				return err
+			},
+			"terminate": func(opctx context.Context) error {
+				_, err := caller.TerminateWorkflowBeta1(opctx, &rtv1.TerminateWorkflowRequest{
+					InstanceId:        id,
+					WorkflowComponent: "dapr",
+					AppId:             badAppID,
+				})
+				return err
+			},
+			"purge": func(opctx context.Context) error {
+				_, err := caller.PurgeWorkflowBeta1(opctx, &rtv1.PurgeWorkflowRequest{
+					InstanceId:        id,
+					WorkflowComponent: "dapr",
+					AppId:             badAppID,
+				})
+				return err
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				opctx, cancel := context.WithTimeout(ctx, time.Second*20)
+				defer cancel()
+
+				err := op(opctx)
+				require.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err))
+				assert.Contains(t, err.Error(), "is invalid")
+				require.NoError(t, opctx.Err(), "must be rejected up front, not by exhausting the timeout")
+			})
+		}
 	})
 }
