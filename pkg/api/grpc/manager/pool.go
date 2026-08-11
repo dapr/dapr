@@ -126,7 +126,12 @@ func (p *ConnectionPool) doShare() grpc.ClientConnInterface {
 		// Check if the connection is still valid first
 		// First we check if the referenceCount is 0, and then we check if the connection has expired
 		// This should be safe for concurrent use
-		if atomic.LoadInt32(&p.connections[i].referenceCount) == 0 && p.connections[i].Expired(p.maxConnIdle) {
+		// Connections held to satisfy minActiveConns are exempt: they are the pool's warm connections,
+		// which Purge keeps for the same reason. Expiring them here would leave them in the pool
+		// unusable and unclosed, and force a fresh dial for every request that follows an idle period.
+		if i >= p.minActiveConns &&
+			atomic.LoadInt32(&p.connections[i].referenceCount) == 0 &&
+			p.connections[i].Expired(p.maxConnIdle) {
 			continue
 		}
 

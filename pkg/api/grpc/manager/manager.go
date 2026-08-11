@@ -44,6 +44,12 @@ const (
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
 	dialTimeout       = 30 * time.Second
 	maxConnIdle       = 3 * time.Minute
+
+	// appConnectTimeout is the budget gRPC gives a single connection attempt to
+	// the app, covering the TCP connect and the HTTP/2 handshake. This matches
+	// gRPC's own default; it does not bound how long a request waits, which
+	// remains governed by the caller's context.
+	appConnectTimeout = 20 * time.Second
 )
 
 // ConnCreatorFn is a function that returns a gRPC connection
@@ -162,7 +168,7 @@ func (g *Manager) createLocalConnection(parentCtx context.Context, port int, ena
 	}
 	opts = append(opts, grpc.WithConnectParams(grpc.ConnectParams{
 		Backoff:           backoff.DefaultConfig,
-		MinConnectTimeout: 1 * time.Second,
+		MinConnectTimeout: appConnectTimeout,
 	}))
 
 	dialPrefix := GetDialAddressPrefix(g.mode)
