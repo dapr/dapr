@@ -84,6 +84,8 @@ type api struct {
 	outboundNotReadyLogged atomic.Bool
 	healthzEverReady       atomic.Bool
 	outboundEverReady      atomic.Bool
+	healthzNotReadySince   atomic.Int64 // UnixNano; 0 when currently ready
+	outboundNotReadySince  atomic.Int64 // UnixNano; 0 when currently ready
 }
 
 const (

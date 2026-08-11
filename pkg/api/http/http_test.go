@@ -4236,6 +4236,41 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		assert.True(t, testAPI.healthzNotReadyLogged.Load(), "flag should be set again on a new not-ready streak")
 		assert.Equal(t, 1, strings.Count(buf.String(), "level=warning"), "new streak should warn again")
 	})
+
+	t.Run("Healthz - a not-ready streak that never reaches ready escalates to warn once it persists past the threshold", func(t *testing.T) {
+		apiPath := "v1.0/healthz"
+		testAPI.healthzEverReady.Store(false)
+		testAPI.healthzNotReadyLogged.Store(false)
+		testAPI.healthzNotReadySince.Store(0)
+		htarget.NotReady()
+		t.Cleanup(htarget.NotReady)
+
+		var buf bytes.Buffer
+		log.SetOutput(&buf)
+		t.Cleanup(func() { log.SetOutput(os.Stdout) })
+
+		server := fakeServer(t)
+
+		// Within the threshold, a never-ready target stays quiet.
+		resp := server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.False(t, testAPI.healthzNotReadyLogged.Load(), "flag should not be set while within the threshold")
+		assert.NotContains(t, buf.String(), "level=warning", "must not warn while within the threshold")
+
+		// Simulate the streak having persisted past the threshold.
+		testAPI.healthzNotReadySince.Store(time.Now().Add(-notReadyWarnThreshold - time.Second).UnixNano())
+
+		buf.Reset()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.True(t, testAPI.healthzNotReadyLogged.Load(), "flag should be set once the streak persists past the threshold")
+		assert.Equal(t, 1, strings.Count(buf.String(), "level=warning"), "should warn exactly once once the threshold is crossed")
+
+		buf.Reset()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 0, strings.Count(buf.String(), "level=warning"), "repeated not-ready polls in the same streak should not warn again")
+	})
 }
 
 func TestV1OutboundHealthzEndpoint(t *testing.T) {
@@ -4310,6 +4345,43 @@ func TestV1OutboundHealthzEndpoint(t *testing.T) {
 		assert.Equal(t, 204, resp.StatusCode)
 		assert.False(t, testAPI.outboundNotReadyLogged.Load(), "flag should reset once dapr becomes ready again")
 		assert.Contains(t, buf.String(), "dapr outbound is ready again")
+	})
+
+	t.Run("Outbound healthz - a not-ready streak that never reaches ready escalates to warn once it persists past the threshold", func(t *testing.T) {
+		testAPI.outboundEverReady.Store(false)
+		testAPI.outboundNotReadyLogged.Store(false)
+		testAPI.outboundNotReadySince.Store(0)
+		otarget.NotReady()
+		t.Cleanup(otarget.NotReady)
+
+		var buf bytes.Buffer
+		log.SetOutput(&buf)
+		t.Cleanup(func() { log.SetOutput(os.Stdout) })
+
+		server := fakeServer(t)
+
+		// Within the threshold, a never-ready target stays quiet. This is the common
+		// case in a default k8s deployment, since only /v1.0/healthz is polled by the
+		// injector's readiness probe, not this endpoint.
+		resp := server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.False(t, testAPI.outboundNotReadyLogged.Load(), "flag should not be set while within the threshold")
+		assert.NotContains(t, buf.String(), "level=warning", "must not warn while within the threshold")
+
+		// Simulate the streak having persisted past the threshold, e.g. via `daprd wait`
+		// or a custom probe polling this endpoint.
+		testAPI.outboundNotReadySince.Store(time.Now().Add(-notReadyWarnThreshold - time.Second).UnixNano())
+
+		buf.Reset()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.True(t, testAPI.outboundNotReadyLogged.Load(), "flag should be set once the streak persists past the threshold")
+		assert.Equal(t, 1, strings.Count(buf.String(), "level=warning"), "should warn exactly once once the threshold is crossed")
+
+		buf.Reset()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 0, strings.Count(buf.String(), "level=warning"), "repeated not-ready polls in the same streak should not warn again")
 	})
 }
 
