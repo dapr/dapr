@@ -988,13 +988,40 @@ func (r *Resiliency) getDefaultCircuitBreakerPolicy(policyType PolicyType) strin
 	return ""
 }
 
+// expandedTemplateCache caches expandPolicyTemplate results. Policy types
+// and templates form tiny fixed sets, but the expansion runs on every
+// default-policy lookup (per actor invocation among others), each paying
+// several fmt.Sprintf calls and a slice for static strings.
+var expandedTemplateCache sync.Map // expandedTemplateKey -> *expandedTemplate
+
+type expandedTemplateKey struct {
+	policyType PolicyType
+	template   DefaultPolicyTemplate
+}
+
+type expandedTemplate struct {
+	typeTemplates []string
+	topLevel      string
+}
+
 func (r *Resiliency) expandPolicyTemplate(policyType PolicyType, template DefaultPolicyTemplate) ([]string, string) {
+	key := expandedTemplateKey{policyType: policyType, template: template}
+	if v, ok := expandedTemplateCache.Load(key); ok {
+		e := v.(*expandedTemplate)
+		return e.typeTemplates, e.topLevel
+	}
+
 	policyLevels := policyType.getPolicyLevels()
 	typeTemplates := make([]string, len(policyLevels))
 	for i, level := range policyLevels {
 		typeTemplates[i] = fmt.Sprintf(string(template), level)
 	}
-	return typeTemplates, fmt.Sprintf(string(template), "")
+	e := &expandedTemplate{
+		typeTemplates: typeTemplates,
+		topLevel:      fmt.Sprintf(string(template), ""),
+	}
+	expandedTemplateCache.Store(key, e)
+	return e.typeTemplates, e.topLevel
 }
 
 // Get returns a cached circuit breaker if one exists.
