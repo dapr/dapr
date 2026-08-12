@@ -549,6 +549,33 @@ func TestDefaultPolicyInterpolation(t *testing.T) {
 	assert.Equal(t, "DefaultCircuitBreakerPolicy", topPolicy)
 }
 
+func TestExpandPolicyTemplateCacheKeyPointerIndependence(t *testing.T) {
+	r := FromConfigurations(log)
+
+	// Pointer and value callers with equal fields must share one cache
+	// entry: key equality must not depend on pointer identity.
+	cacheLen := func() int {
+		n := 0
+		expandedTemplateCache.Range(func(_, _ any) bool { n++; return true })
+		return n
+	}
+	before := cacheLen()
+
+	byPtr, topPtr := r.expandPolicyTemplate(&ComponentPolicy{componentType: "Statestore", componentDirection: "Outbound"}, DefaultRetryTemplate)
+	afterPtr := cacheLen()
+	byVal, topVal := r.expandPolicyTemplate(ComponentPolicy{componentType: "Statestore", componentDirection: "Outbound"}, DefaultRetryTemplate)
+	afterVal := cacheLen()
+
+	assert.Equal(t, byPtr, byVal)
+	assert.Equal(t, topPtr, topVal)
+	assert.Equal(t, afterPtr, afterVal, "value caller must hit the pointer caller's cache entry")
+	assert.LessOrEqual(t, afterPtr-before, 1)
+
+	// Distinct fields still get their own entry.
+	r.expandPolicyTemplate(ComponentPolicy{componentType: "Pubsub", componentDirection: "Inbound"}, DefaultRetryTemplate)
+	assert.Equal(t, afterVal+1, cacheLen())
+}
+
 func TestGetDefaultPolicy(t *testing.T) {
 	config := &resiliencyV1alpha.Resiliency{
 		Spec: resiliencyV1alpha.ResiliencySpec{

@@ -988,11 +988,12 @@ func (r *Resiliency) getDefaultCircuitBreakerPolicy(policyType PolicyType) strin
 	return ""
 }
 
-// expandedTemplateCache caches expandPolicyTemplate results. Policy types
-// and templates form tiny fixed sets, but the expansion runs on every
+// expandedTemplateCache caches expandPolicyTemplate results. Policy types and
+// templates form tiny fixed sets, but the expansion runs on every
 // default-policy lookup (per actor invocation among others), each paying
 // several fmt.Sprintf calls and a slice for static strings.
-var expandedTemplateCache sync.Map // expandedTemplateKey -> *expandedTemplate
+// expandedTemplateKey -> *expandedTemplate
+var expandedTemplateCache sync.Map
 
 type expandedTemplateKey struct {
 	policyType PolicyType
@@ -1004,8 +1005,23 @@ type expandedTemplate struct {
 	topLevel      string
 }
 
+// normalizePolicyType maps pointer receivers to their values so cache key
+// equality never depends on pointer identity: a *ComponentPolicy caller and
+// a ComponentPolicy caller with equal fields share one cache entry.
+func normalizePolicyType(p PolicyType) PolicyType {
+	switch v := p.(type) {
+	case *EndpointPolicy:
+		return *v
+	case *ActorPolicy:
+		return *v
+	case *ComponentPolicy:
+		return *v
+	}
+	return p
+}
+
 func (r *Resiliency) expandPolicyTemplate(policyType PolicyType, template DefaultPolicyTemplate) ([]string, string) {
-	key := expandedTemplateKey{policyType: policyType, template: template}
+	key := expandedTemplateKey{policyType: normalizePolicyType(policyType), template: template}
 	if v, ok := expandedTemplateCache.Load(key); ok {
 		e := v.(*expandedTemplate)
 		return e.typeTemplates, e.topLevel
