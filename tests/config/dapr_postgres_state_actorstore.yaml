@@ -49,3 +49,5 @@ scopes:
 - perf-workflowsapp-actors
 - wfacl-caller
 - wfacl-target
+- wfxapp-caller
+- wfxapp-target

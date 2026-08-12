@@ -20,8 +20,10 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          WorkflowAccessPolicy controls which app IDs are permitted to schedule
-          specific workflows and activities on a target application.
+          WorkflowAccessPolicy controls which app IDs are permitted to perform
+          workflow operations (schedule, terminate, raise, pause, resume, purge, get,
+          rerun) on specific workflows, and to schedule specific activities, on a
+          target application.
         properties:
           apiVersion:
             description: |-
