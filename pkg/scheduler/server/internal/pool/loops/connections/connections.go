@@ -332,7 +332,9 @@ func (c *connections) handleConcurrencyRelease(rel *loops.ConcurrencyRelease) {
 // their original order, so an elder trigger is never rotated behind fresher
 // arrivals.
 func (c *connections) drainPending(key string, gate *concurrencyGate) {
-	defer monitoring.RecordConcurrencyPending(key, int64(gate.pendingLen()))
+	defer func() {
+		monitoring.RecordConcurrencyPending(key, int64(gate.pendingLen()))
+	}()
 
 	n := gate.pendingLen()
 	var skipped []*loops.TriggerRequest
