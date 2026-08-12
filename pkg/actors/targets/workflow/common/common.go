@@ -15,6 +15,7 @@ package common
 
 import (
 	"strconv"
+	"unicode"
 )
 
 type ActorTypeBuilder struct {
@@ -25,6 +26,19 @@ func NewActorTypeBuilder(namespace string) *ActorTypeBuilder {
 	return &ActorTypeBuilder{
 		ns: namespace,
 	}
+}
+
+// ValidAppID reports whether appID is safe to interpolate into an actor type
+// name. The character set is restricted like instance IDs, in particular
+// rejecting '.' so a caller cannot smuggle extra segments into the derived
+// type "dapr.internal.<namespace>.<appID>.workflow".
+func ValidAppID(appID string) bool {
+	for _, c := range appID {
+		if !unicode.IsLetter(c) && c != '_' && c != '-' && !unicode.IsDigit(c) {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *ActorTypeBuilder) Workflow(appID string) string {
