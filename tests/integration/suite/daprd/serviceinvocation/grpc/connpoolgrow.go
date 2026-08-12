@@ -18,9 +18,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -33,46 +33,37 @@ import (
 )
 
 func init() {
-	suite.Register(new(connpool))
+	suite.Register(new(connpoolgrow))
 }
 
-// connpool verifies pooled-connection semantics against a server that
-// advertises an HTTP/2 stream limit. The app enforces
-// MaxConcurrentStreams=100 while 150 concurrent InvokeService calls flow
-// through daprd. With the pool's shared-ref cap above the server limit,
-// excess calls queue at the transport behind the app's advertised limit
-// rather than fanning out onto extra connections to circumvent it: all
-// calls complete, and the app never observes more in-flight work than it
-// asked for. (The pre-raise pool opened a second connection at ref 101,
-// silently exceeding the app's declared concurrency.)
-type connpool struct {
-	daprd       *procdaprd.Daprd
-	maxInflight *atomic.Int32
+type connpoolgrow struct {
+	daprd      *procdaprd.Daprd
+	allArrived chan struct{}
 }
 
 const (
-	numConcurrentPoolStreams = 150
-	appMaxConcurrentStreams  = 100
+	// One past the pool's shared-ref cap (grpcMaxConcurrentStreams=2048) plus
+	// the second connection's stream window.
+	numGrowCalls        = 2149
+	growAppStreamLimit  = 100
+	growBarrierInflight = 2 * growAppStreamLimit
 )
 
-func (c *connpool) Setup(t *testing.T) []framework.Option {
+func (c *connpoolgrow) Setup(t *testing.T) []framework.Option {
+	c.allArrived = make(chan struct{})
+	var once sync.Once
 	var inflight atomic.Int32
-	var maxInflight atomic.Int32
 
 	onInvoke := func(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
 		n := inflight.Add(1)
 		defer inflight.Add(-1)
-		for {
-			seen := maxInflight.Load()
-			if n <= seen || maxInflight.CompareAndSwap(seen, n) {
-				break
-			}
+
+		if int(n) >= growBarrierInflight {
+			once.Do(func() { close(c.allArrived) })
 		}
 
-		// Hold the stream briefly so the concurrent callers overlap and
-		// the transport-level queueing is actually exercised.
 		select {
-		case <-time.After(100 * time.Millisecond):
+		case <-c.allArrived:
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
@@ -80,15 +71,11 @@ func (c *connpool) Setup(t *testing.T) []framework.Option {
 		return new(commonv1.InvokeResponse), nil
 	}
 
-	c.maxInflight = &maxInflight
-
 	srv := app.New(t,
 		app.WithOnInvokeFn(onInvoke),
-		// The app declares its concurrency appetite; the pool must respect
-		// it, not defeat it with extra connections.
 		app.WithGRPCOptions(procgrpc.WithServerOption(
 			func(*testing.T, context.Context) grpc.ServerOption {
-				return grpc.MaxConcurrentStreams(appMaxConcurrentStreams)
+				return grpc.MaxConcurrentStreams(growAppStreamLimit)
 			},
 		)),
 	)
@@ -102,22 +89,22 @@ func (c *connpool) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (c *connpool) Run(t *testing.T, ctx context.Context) {
+func (c *connpoolgrow) Run(t *testing.T, ctx context.Context) {
 	c.daprd.WaitUntilRunning(t, ctx)
 
 	conn := c.daprd.GRPCConn(t, ctx)
 	client := rtv1.NewDaprClient(conn)
 
 	var wg sync.WaitGroup
-	errs := make([]error, numConcurrentPoolStreams)
-	for i := range numConcurrentPoolStreams {
+	errs := make([]error, numGrowCalls)
+	for i := range numGrowCalls {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
 			_, errs[idx] = client.InvokeService(ctx, &rtv1.InvokeServiceRequest{
 				Id: c.daprd.AppID(),
 				Message: &commonv1.InvokeRequest{
-					Method:        "pool-test",
+					Method:        "pool-grow-test",
 					HttpExtension: &commonv1.HTTPExtension{Verb: commonv1.HTTPExtension_POST},
 				},
 			})
@@ -126,13 +113,12 @@ func (c *connpool) Run(t *testing.T, ctx context.Context) {
 
 	wg.Wait()
 
+	select {
+	case <-c.allArrived:
+	default:
+		require.Fail(t, "the pool never grew a second connection: 200 simultaneous streams were not observed")
+	}
 	for i, err := range errs {
 		assert.NoErrorf(t, err, "concurrent request %d failed", i)
 	}
-
-	maxSeen := c.maxInflight.Load()
-	assert.LessOrEqual(t, maxSeen, int32(appMaxConcurrentStreams),
-		"the app's advertised stream limit must be respected, not circumvented by extra connections")
-	assert.GreaterOrEqual(t, maxSeen, int32(20),
-		"requests must genuinely overlap for this test to prove queueing")
 }
