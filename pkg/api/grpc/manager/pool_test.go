@@ -312,7 +312,7 @@ func TestConnectionPool(t *testing.T) {
 			require.Equal(t, conns[0], cp.connections[0].conn)
 			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 
-			// Release the first connection 100 times, to bring it to 0
+			// Release the first connection grpcMaxConcurrentStreams times, to bring it to 0
 			for range grpcMaxConcurrentStreams {
 				cp.Release(conns[0])
 			}

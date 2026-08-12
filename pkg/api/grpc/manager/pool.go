@@ -25,8 +25,6 @@ import (
 // Real-time clock (wrapper around time.Time) to allow mocking
 var clock kclock.Clock = &kclock.RealClock{}
 
-// Maximum number of concurrent streams in a single gRPC connection
-// This is the default value used by gRPC servers and clients
 // grpcMaxConcurrentStreams caps concurrent shared refs per pooled
 // connection before the pool grows. The historical value of 100 was
 // measured as the cluster throughput ceiling for actor-heavy workloads
@@ -130,7 +128,7 @@ func (p *ConnectionPool) Share() grpc.ClientConnInterface {
 // doShare performs the sharing of the connection from the pool, incrementing its reference count.
 // This needs to be wrapped in a (read/write) lock.
 func (p *ConnectionPool) doShare() grpc.ClientConnInterface {
-	// If there's more than 1 connection, grab the first one whose reference count is at most grpcMaxConcurrentStreams
+	// Grab the first pooled connection whose reference count is below the cap
 	for i := range len(p.connections) {
 		// Check if the connection is still valid first
 		// First we check if the referenceCount is 0, and then we check if the connection has expired
