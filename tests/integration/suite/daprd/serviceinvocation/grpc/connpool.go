@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -127,7 +128,7 @@ func (c *connpool) Run(t *testing.T, ctx context.Context) {
 	wg.Wait()
 
 	for i, err := range errs {
-		assert.NoErrorf(t, err, "concurrent request %d failed", i)
+		require.NoErrorf(t, err, "concurrent request %d failed", i)
 	}
 
 	maxSeen := c.maxInflight.Load()
