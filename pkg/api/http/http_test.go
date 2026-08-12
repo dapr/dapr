@@ -4264,7 +4264,7 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		resp = server.DoRequest("GET", apiPath, nil, nil)
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.True(t, testAPI.healthzNotReadyLogged.Load(), "flag should be set once the streak persists past the threshold")
-		assert.Equal(t, 1, strings.Count(buf.String(), "level=warning"), "should warn exactly once once the threshold is crossed")
+		assert.Equal(t, 1, strings.Count(buf.String(), "level=warning"), "should warn exactly once the threshold is crossed")
 
 		buf.Reset()
 		resp = server.DoRequest("GET", apiPath, nil, nil)
@@ -4376,7 +4376,7 @@ func TestV1OutboundHealthzEndpoint(t *testing.T) {
 		resp = server.DoRequest("GET", apiPath, nil, nil)
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.True(t, testAPI.outboundNotReadyLogged.Load(), "flag should be set once the streak persists past the threshold")
-		assert.Equal(t, 1, strings.Count(buf.String(), "level=warning"), "should warn exactly once once the threshold is crossed")
+		assert.Equal(t, 1, strings.Count(buf.String(), "level=warning"), "should warn exactly once the threshold is crossed")
 
 		buf.Reset()
 		resp = server.DoRequest("GET", apiPath, nil, nil)
