@@ -312,6 +312,14 @@ func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternal
 	err := utils.HealthCheckApps(publisherExternalURL)
 	require.NoError(t, err, "Health check failed for publisher")
 
+	// Flush any redelivery backlog left by earlier scenarios (notably the
+	// resiliency-exhaustion scenario, whose erroring subscriber builds one
+	// up) before resetting the received sets. Stragglers arriving after the
+	// reset land on topics B/C and break the empty-topic assertions below
+	// (observed as 8/0 on topic B and 31/0 on topic C on the pluggable
+	// suite, whose redis component redelivers on a 1s interval).
+	drainSubscriberBacklog(t, publisherExternalURL, subscriberAppName, protocol, podEndpoints)
+
 	setDesiredResponse(t, subscriberAppName, "drop", publisherExternalURL, protocol)
 	callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 
@@ -345,6 +353,11 @@ func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExte
 	log.Printf("Test resiliency exhaustion - messages should be dropped after retries exhausted")
 	err := utils.HealthCheckApps(publisherExternalURL)
 	require.NoError(t, err, "Health check failed for publisher")
+
+	// Flush any redelivery backlog from the previous scenario before
+	// resetting the received sets: this scenario asserts nothing is
+	// delivered, so a single straggler recorded after the reset fails it.
+	drainSubscriberBacklog(t, publisherExternalURL, subscriberAppName, protocol, podEndpoints)
 
 	callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 	setDesiredResponse(t, subscriberAppName, "error", publisherExternalURL, protocol)

@@ -15,7 +15,6 @@ package connections
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -28,7 +27,10 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/connections/store"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/stream"
 	"github.com/dapr/kit/events/loop"
+	"github.com/dapr/kit/logger"
 )
+
+var log = logger.NewLogger("dapr.scheduler.server.pool.loops.connections")
 
 var (
 	loopFactory = loop.New[loops.EventConn](1024)
@@ -379,10 +381,14 @@ func (c *connections) tryDispatchPending(next *loops.TriggerRequest) bool {
 }
 
 // handleCloseStream handles a close stream request.
-func (c *connections) handleCloseStream(closeStream *loops.ConnCloseStream) error {
+func (c *connections) handleCloseStream(closeStream *loops.ConnCloseStream) {
 	cancel, ok := c.streams[closeStream.StreamIDx]
 	if !ok {
-		return errors.New("catastrophic state machine error: lost connection stream reference")
+		// Close events are deduplicated at the stream, so an unknown index is
+		// unexpected, but it must never take down this loop: that tears down
+		// every stream in the namespace. Log loudly and tolerate.
+		log.Errorf("Ignoring close for unknown stream connection %d in namespace %s", closeStream.StreamIDx, closeStream.Namespace)
+		return
 	}
 
 	delete(c.streams, closeStream.StreamIDx)
@@ -391,7 +397,14 @@ func (c *connections) handleCloseStream(closeStream *loops.ConnCloseStream) erro
 
 	c.removeOrphanedGates()
 
-	return nil
+	// This loop owns the authoritative stream set: confirm emptiness to the
+	// namespaces loop so it can delete the namespace. Deleting on the
+	// namespaces loop's own counting alone is unsafe against stray events.
+	if len(c.streams) == 0 {
+		c.nsLoop.Enqueue(&loops.ConnCloseNamespace{
+			Namespace: closeStream.Namespace,
+		})
+	}
 }
 
 // handleShutdown handles the shutdown of the connections.
@@ -412,7 +425,10 @@ func (c *connections) handleShutdown() {
 	clear(c.concurrencyGates)
 	clear(c.streamGateKeys)
 
-	loopFactory.CacheLoop(c.loop)
+	// The loop object is deliberately NOT returned to the factory cache:
+	// this handler runs inside the loop's own drain, before Close observes
+	// completion, so a recycled loop could be reused and rewritten while the
+	// closer still reads it (data race, and a lost close signal).
 	connsCache.Put(c)
 }
 

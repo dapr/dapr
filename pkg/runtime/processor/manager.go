@@ -79,6 +79,15 @@ func (p *Processor) Binding() BindingManager {
 func (p *Processor) Subscriber() SubscribeManager            { return p.subscriber }
 func (p *Processor) WorkflowBackend() WorkflowBackendManager { return p.workflowBackend }
 
+// OnActorStateStoreChanged notifies the actor runtime that the actor state
+// store was added, removed, or replaced. Safe to call when no actor runtime
+// is configured.
+func (p *Processor) OnActorStateStoreChanged() {
+	if p.actors != nil {
+		p.actors.OnActorStateStoreChanged()
+	}
+}
+
 // category returns the components.Category that a component belongs to, based
 // on its Spec.Type prefix. Returns the empty string if the prefix is not
 // recognised.

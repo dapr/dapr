@@ -22,6 +22,7 @@ on:
       - master
       - 'release-*'
       - 'feature/*'
+  merge_group:
 
 defaults:
   run:
