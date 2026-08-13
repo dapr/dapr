@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 )
 
@@ -136,7 +137,18 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 		if err := proto.Unmarshal(reminder.Data.GetValue(), &ev); err != nil {
 			return fmt.Errorf("failed to unmarshal activity-result HistoryEvent: %w", err)
 		}
-		return o.addWorkflowEvent(ctx, &ev)
+		err := o.addWorkflowEvent(ctx, &ev)
+		if errors.Is(err, api.ErrInstanceNotFound) {
+			// The instance is gone (purged or never existed): ack so the scheduler
+			// deletes this one-shot reminder. It is created with a retry-forever
+			// failure policy, so an unclassified error here refires it every second
+			// indefinitely; a batch of such orphans (activities completing across an
+			// instance purge under placement churn) measurably degrades the whole
+			// host.
+			log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s' for a purged instance", o.actorID, reminder.Name)
+			return nil
+		}
+		return err
 
 	default:
 		return fmt.Errorf("unable to handle reminder '%s' for workflow actor '%s': unknown reminder type", reminder.Name, o.actorID)

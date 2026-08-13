@@ -40,6 +40,12 @@ const (
 	// also verify all of its child workflows, recursively, are terminal
 	// before replying. Ignored by daprds that predate the flag.
 	MetadataCheckSubtreeTerminal = "CheckSubtreeTerminal"
+	// Set on a WaitForRuntimeStatus call to request a one-shot metadata fetch:
+	// reply immediately with the current metadata, or ErrInstanceNotFound when
+	// the instance does not exist, instead of parking the stream to wait for a
+	// status change. Used for cross-app GetWorkflowMetadata. Daprds that
+	// predate the flag ignore it, degrading to a wait rather than a failure.
+	MetadataFetchOnly = "MetadataFetchOnly"
 
 	ActorTypePrefix = "dapr.internal."
 )
