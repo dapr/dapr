@@ -45,13 +45,21 @@ func LogDir() string {
 	return filepath.Join(os.TempDir(), "dapr_integration_logs")
 }
 
-// ResetLogDir removes the log files of the previous run, so that
-// `less <dir>/*.log` shows this run and not the last one. Concurrent runs on one
-// machine should set DAPR_INTEGRATION_LOGS_DIR to keep out of each other's way.
+// Reset clears the state of the previous run: the recorded failures, and the
+// log files, so that `less <dir>/*.log` shows this run and not the last one.
+// Concurrent runs on one machine should set DAPR_INTEGRATION_LOGS_DIR to keep
+// out of each other's way.
+//
+// Both matter under `go test -count=N`, which runs the suite N times in one
+// process. Without this, run two reports run one's failures as its own.
 //
 // Only files this package wrote are removed. DAPR_INTEGRATION_LOGS_DIR may point
 // anywhere, so emptying the directory wholesale is not something to do.
-func ResetLogDir() error {
+func Reset() error {
+	failuresLock.Lock()
+	failures = nil
+	failuresLock.Unlock()
+
 	dir := LogDir()
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err

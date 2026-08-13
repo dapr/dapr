@@ -127,17 +127,21 @@ func (e *Exec) Run(t *testing.T, ctx context.Context) {
 	e.logName = iow.Name()
 	iowriter.Eventf(t, "exec %s: %s %s", e.logName, e.binPath, strings.Join(e.args, " "))
 
+	// Both streams report under the one name, but each needs its own line
+	// buffer: sharing one lets either stream's EOF flush a partial line the
+	// other is still writing.
 	for _, pipe := range []struct {
 		cmdPipeFn func() (io.ReadCloser, error)
 		procPipe  io.WriteCloser
+		out       iowriter.WriteCloser
 	}{
-		{cmdPipeFn: e.cmd.StdoutPipe, procPipe: e.stdoutpipe},
-		{cmdPipeFn: e.cmd.StderrPipe, procPipe: e.stderrpipe},
+		{cmdPipeFn: e.cmd.StdoutPipe, procPipe: e.stdoutpipe, out: iow},
+		{cmdPipeFn: e.cmd.StderrPipe, procPipe: e.stderrpipe, out: iow.Stream()},
 	} {
 		cmdPipe, err := pipe.cmdPipeFn()
 		require.NoError(t, err)
 
-		pipe := tee.WriteCloser(iow, pipe.procPipe)
+		pipe := tee.WriteCloser(pipe.out, pipe.procPipe)
 
 		e.wg.Go(func() {
 			io.Copy(pipe, cmdPipe)

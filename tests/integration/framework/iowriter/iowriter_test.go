@@ -427,3 +427,44 @@ func TestRedirectInProcessLogs(t *testing.T) {
 		assert.Empty(t, path)
 	})
 }
+
+func TestStream(t *testing.T) {
+	t.Run("should report under the same name", func(t *testing.T) {
+		logger := &mockLogger{t: t, failed: true}
+		out := New(logger, "daprd")
+		assert.Equal(t, out.Name(), out.Stream().Name())
+	})
+
+	t.Run("should not let one stream flush the other's partial line", func(t *testing.T) {
+		logger := &mockLogger{failed: true}
+		out := report(t, logger, func() {
+			stdout := New(logger, "daprd")
+			stderr := stdout.Stream()
+
+			// stderr is mid-line when stdout reaches EOF and closes.
+			fmt.Fprint(stderr, "partial stderr line")
+			require.NoError(t, stdout.Close())
+			fmt.Fprint(stderr, " completed\n")
+			require.NoError(t, stderr.Close())
+		})
+
+		assert.Contains(t, out, "partial stderr line completed")
+	})
+
+	t.Run("should not concatenate the two streams into one line", func(t *testing.T) {
+		logger := &mockLogger{failed: true}
+		out := report(t, logger, func() {
+			stdout := New(logger, "daprd")
+			stderr := stdout.Stream()
+
+			fmt.Fprint(stdout, "from stdout")
+			fmt.Fprint(stderr, "from stderr")
+			require.NoError(t, stdout.Close())
+			require.NoError(t, stderr.Close())
+		})
+
+		assert.NotContains(t, out, "from stdoutfrom stderr")
+		assert.Contains(t, out, "from stdout")
+		assert.Contains(t, out, "from stderr")
+	})
+}
