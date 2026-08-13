@@ -38,6 +38,10 @@ type Logger interface {
 type WriteCloser interface {
 	io.WriteCloser
 	Name() string
+
+	// Stream returns a second writer reporting under the same name, for another
+	// stream of the same process.
+	Stream() WriteCloser
 }
 
 // stdwriter is an io.WriteCloser which captures process output into the
@@ -65,6 +69,19 @@ func New(t Logger, procName string) WriteCloser {
 // Name returns the label this writer's output is reported under.
 func (w *stdwriter) Name() string {
 	return w.b.name
+}
+
+// Stream returns a second writer feeding the same block, with a line buffer of
+// its own.
+//
+// A process' stdout and stderr must not share one buffer. Closing either would
+// flush a partial line the other was still writing, and a read from one can be
+// concatenated onto an unterminated line from the other.
+func (w *stdwriter) Stream() WriteCloser {
+	s := &stdwriter{c: w.c, b: w.b}
+	w.c.addWriter(s)
+
+	return s
 }
 
 // Eventf records something the framework did, as opposed to something a process

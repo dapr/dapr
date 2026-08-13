@@ -50,7 +50,7 @@ func RunIntegrationTests(t *testing.T) {
 	require.NoError(t, err, "Invalid parameter focus")
 	t.Logf("running test suite with focus: %s", *focusF)
 
-	require.NoError(t, iowriter.ResetLogDir(), "could not prepare the log directory")
+	require.NoError(t, iowriter.Reset(), "could not prepare the log directory")
 
 	_, err = iowriter.RedirectInProcessLogs()
 	require.NoError(t, err, "could not redirect in-process logs")
