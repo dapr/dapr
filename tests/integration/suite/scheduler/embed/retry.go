@@ -52,8 +52,12 @@ func (r *retry) Setup(t *testing.T) []framework.Option {
 	port := r.ln.Addr().(*net.TCPAddr).Port
 	if ln6, err := net.Listen("tcp", net.JoinHostPort("::1", strconv.Itoa(port))); err == nil {
 		r.ln6 = ln6
-		t.Cleanup(func() { r.ln6.Close() })
 	}
+	// Release-on-abort: if the test fails before Run reaches the deliberate
+	// release below, the bound port must not leak. closeListeners is
+	// idempotent (fields are nil-ed on close) so the double invocation on the
+	// happy path is a no-op.
+	t.Cleanup(r.closeListeners)
 
 	r.logline = logline.New(t, logline.WithStdoutLineContains(
 		"Scheduler server failed, recreating in",
@@ -66,6 +70,19 @@ func (r *retry) Setup(t *testing.T) []framework.Option {
 
 	return []framework.Option{
 		framework.WithProcesses(r.logline, r.scheduler),
+	}
+}
+
+// closeListeners releases the squatted etcd client port(s). Safe to call
+// more than once.
+func (r *retry) closeListeners() {
+	if r.ln != nil {
+		r.ln.Close()
+		r.ln = nil
+	}
+	if r.ln6 != nil {
+		r.ln6.Close()
+		r.ln6 = nil
 	}
 }
 
@@ -85,10 +102,7 @@ func (r *retry) Run(t *testing.T, ctx context.Context) {
 	}
 
 	// Release the port: the next incarnation starts etcd and recovers.
-	require.NoError(t, r.ln.Close())
-	if r.ln6 != nil {
-		require.NoError(t, r.ln6.Close())
-	}
+	r.closeListeners()
 
 	r.scheduler.WaitUntilRunning(t, ctx)
 

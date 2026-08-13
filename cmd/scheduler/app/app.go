@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/cmd/scheduler/options"
-	wfcommon "github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/backoff"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/healthz"
 	healthzserver "github.com/dapr/dapr/pkg/healthz/server"
@@ -184,8 +184,14 @@ const (
 // observes the outage. Errors from getServer are configuration failures and
 // remain fatal.
 func runServerLoop(ctx context.Context, getServer func() (serverRunner, error)) error {
-	backoff := wfcommon.NewJitterBackoff(serverRetryBackoffBase, serverRetryBackoffCap)
+	retryBackoff := backoff.NewJitter(serverRetryBackoffBase, serverRetryBackoffCap)
 	for {
+		// A shutdown signal can land between iterations: do not construct a
+		// fresh server just to tear it down.
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
 		server, err := getServer()
 		if err != nil {
 			return err
@@ -198,16 +204,18 @@ func runServerLoop(ctx context.Context, getServer func() (serverRunner, error)) 
 		if err == nil {
 			// A nil return with a live context is a server-requested restart:
 			// recreate immediately and reset the failure backoff.
-			backoff.Reset()
+			retryBackoff.Reset()
 			continue
 		}
 
-		delay := backoff.NextBackOff()
+		delay := retryBackoff.NextBackOff()
 		log.Errorf("Scheduler server failed, recreating in %s: %s", delay, err)
+		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return ctx.Err()
-		case <-time.After(delay):
+		case <-timer.C:
 		}
 	}
 }
