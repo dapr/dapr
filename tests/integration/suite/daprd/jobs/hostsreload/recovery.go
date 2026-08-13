@@ -71,7 +71,19 @@ func (r *recovery) Run(t *testing.T, ctx context.Context) {
 
 	r.scheduler.Restart(t, ctx)
 	r.scheduler.WaitUntilRunning(t, ctx)
-	r.scheduler.WaitUntilLeadership(t, ctx, 1)
+
+	const stableObservations = 20
+	var consecutive int
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		got := int(r.scheduler.Metrics(c, ctx).All()["dapr_scheduler_sidecars_connected"])
+		if got != 1 {
+			consecutive = 0
+			assert.Equal(c, 1, got)
+			return
+		}
+		consecutive++
+		assert.GreaterOrEqual(c, consecutive, stableObservations)
+	}, time.Second*60, time.Millisecond*50)
 
 	attempt := 0
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
