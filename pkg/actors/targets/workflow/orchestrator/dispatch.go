@@ -14,23 +14,8 @@ limitations under the License.
 package orchestrator
 
 import (
-	"errors"
-
 	"github.com/dapr/durabletask-go/backend"
 )
-
-type dispatchResult struct {
-	failedEventIDs map[int32]struct{}
-	err            error
-}
-
-func (r *dispatchResult) recordFailure(eventID int32, err error) {
-	if r.failedEventIDs == nil {
-		r.failedEventIDs = make(map[int32]struct{})
-	}
-	r.failedEventIDs[eventID] = struct{}{}
-	r.err = errors.Join(r.err, err)
-}
 
 func hasRemoteTasks(es []*backend.HistoryEvent) bool {
 	for _, e := range es {
@@ -51,5 +36,7 @@ func hasRemoteMessages(msgs []*backend.WorkflowRuntimeStateMessage) bool {
 }
 
 func isDispatchableEvent(e *backend.HistoryEvent) bool {
-	return e.GetTaskScheduled() != nil || e.GetChildWorkflowInstanceCreated() != nil
+	return e.GetTaskScheduled() != nil ||
+		e.GetChildWorkflowInstanceCreated() != nil ||
+		e.GetDetachedWorkflowInstanceCreated() != nil
 }

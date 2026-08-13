@@ -30,15 +30,22 @@ spec:
   - name: api
     port: 443
     targetPort: 50006
+    # gRPC wrapped in Dapr control plane mTLS: declare tls, not grpc, so
+    # service meshes do not parse the traffic as plaintext h2c.
+    appProtocol: tls
   - name: etcd-client
     port: {{ .Values.ports.etcdGRPCClientPort }}
+    # etcd only listens for client connections on localhost, without TLS.
+    appProtocol: tcp
   - name: etcd-peer
     port: {{ .Values.ports.etcdGRPCPeerPort }}
+    appProtocol: tls
   {{- if eq .Values.global.prometheus.enabled true }}
   - name: metrics
     port: {{ .Values.global.prometheus.port }}
     targetPort: {{ .Values.global.prometheus.port }}
     protocol: TCP
+    appProtocol: http
   {{- end}}
   type: ClusterIP
 {{- end }}
@@ -74,15 +81,22 @@ spec:
   ports:
   - name: api
     port: 50006
+    # gRPC wrapped in Dapr control plane mTLS: declare tls, not grpc, so
+    # service meshes do not parse the traffic as plaintext h2c.
+    appProtocol: tls
   - name: etcd-client
     port: {{ .Values.ports.etcdGRPCClientPort }}
+    # etcd only listens for client connections on localhost, without TLS.
+    appProtocol: tcp
   - name: etcd-peer
     port: {{ .Values.ports.etcdGRPCPeerPort }}
+    appProtocol: tls
   {{- if eq .Values.global.prometheus.enabled true }}
   - name: metrics
     port: {{ .Values.global.prometheus.port }}
     targetPort: {{ .Values.global.prometheus.port }}
     protocol: TCP
+    appProtocol: http
   {{- end}}
   clusterIP: None # make the service headless
 {{- end }}

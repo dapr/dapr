@@ -144,6 +144,57 @@ func Test_WatchUpdates(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("once shutting down, WatchUpdates is rejected and cannot leak a watcher", func(t *testing.T) {
+		appID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/app1")
+		serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
+		pki := test.GenPKI(t, test.PKIOptions{LeafID: serverID, ClientID: appID})
+
+		i := New[compapi.Component](Options{
+			Cache: &fakeCache{
+				getInformerErr: &apimeta.NoKindMatchError{
+					GroupKind:        schema.GroupKind{Group: "dapr.io", Kind: "Component"},
+					SearchedVersions: []string{"v1alpha1"},
+				},
+			},
+		}).(*informer[compapi.Component])
+
+		ctx, cancel := context.WithCancel(t.Context())
+		errCh := make(chan error, 1)
+		go func() { errCh <- i.Run(ctx) }()
+
+		// A watcher registered while running is closed when Run shuts down.
+		appCh, _, err := i.WatchUpdates(pki.ClientGRPCCtx(t), "ns1")
+		require.NoError(t, err)
+
+		cancel()
+		select {
+		case runErr := <-errCh:
+			require.NoError(t, runErr)
+		case <-time.After(time.Second):
+			t.Fatal("expected Run to return after context cancellation")
+		}
+
+		// The existing watcher's channel was closed by Run.
+		select {
+		case _, ok := <-appCh:
+			assert.False(t, ok, "expected watcher channel to be closed on shutdown")
+		case <-time.After(time.Second):
+			assert.Fail(t, "expected watcher channel to be closed on shutdown")
+		}
+
+		// A WatchUpdates that races in after shutdown is rejected rather than
+		// registering a watcher that nobody would ever close.
+		appCh, watchCancel, err := i.WatchUpdates(pki.ClientGRPCCtx(t), "ns1")
+		require.Error(t, err)
+		assert.Equal(t, codes.Unavailable, status.Code(err))
+		assert.Nil(t, appCh)
+		assert.Nil(t, watchCancel)
+
+		i.lock.Lock()
+		assert.Empty(t, i.watchers, "no watcher should be registered after shutdown")
+		i.lock.Unlock()
+	})
 }
 
 func Test_handleEvent_resyncDedup(t *testing.T) {

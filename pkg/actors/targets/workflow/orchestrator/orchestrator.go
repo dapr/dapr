@@ -23,6 +23,7 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -51,7 +52,8 @@ type orchestrator struct {
 	streamFns map[int64]*streamFn
 	streamIDx int64
 
-	signing *signing.Signing
+	signing  *signing.Signing
+	messages *messages.Messages
 }
 
 type streamFn struct {
@@ -113,6 +115,12 @@ func (o *orchestrator) InvokeStream(ctx context.Context, req *internalsv1pb.Inte
 // DeactivateActor implements actors.InternalActor
 func (o *orchestrator) Deactivate(ctx context.Context) error {
 	unlock, err := o.lock.ContextLock(ctx)
+	if targeterrors.IsStalled(err) {
+		// The actor is parked in the stall hold; wake it so its invocation
+		// returns and releases the lock, then take the lock to deactivate.
+		o.lock.ReleaseStall()
+		unlock, err = o.lock.ContextLock(ctx)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to deactivate workflow '%s': %w", o.actorID, err)
 	}

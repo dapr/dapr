@@ -20,6 +20,8 @@ google
 dapr.sln
 
 test_report*
+# Compressed perf reports committed per version are the source data for perf charts
+!tests/perf/report/data/*/test_report_perf.json.gz
 coverage.txt
 
 # Go Workspaces (introduced in Go 1.18+)

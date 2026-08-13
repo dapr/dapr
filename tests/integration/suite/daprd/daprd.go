@@ -40,6 +40,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/secret"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/startup"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/state"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/tracing"

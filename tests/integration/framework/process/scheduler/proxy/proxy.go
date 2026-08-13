@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
@@ -51,7 +52,6 @@ type Proxy struct {
 
 	sched *scheduler.Scheduler
 
-	ports    *ports.Ports
 	port     int
 	listener net.Listener
 	grpcSrv  *grpc.Server
@@ -74,21 +74,42 @@ type armConfig struct {
 	notify    chan struct{}
 }
 
-// New returns a proxy that wraps the given scheduler. The proxy waits for
-// the upstream to be reachable on Run, so framework process ordering
-// relative to the scheduler is not required. daprd should be configured
-// with daprd.WithSchedulerAddresses(proxy.Address()) instead of pointing at
-// the scheduler directly.
+// New returns a proxy that wraps the given scheduler. Run blocks until the
+// upstream is reachable, so the scheduler must precede the proxy in
+// framework process ordering. daprd should be configured with
+// daprd.WithSchedulerAddresses(proxy.Address()) instead of pointing at the
+// scheduler directly.
 func New(t *testing.T, sched *scheduler.Scheduler) *Proxy {
 	t.Helper()
-	fp := ports.Reserve(t, 1)
+	lis := ports.Reserve(t, 1).Listener(t)
+	tcp, ok := lis.Addr().(*net.TCPAddr)
+	require.True(t, ok)
 	return &Proxy{
 		sched:    sched,
-		ports:    fp,
-		port:     fp.Port(t),
+		port:     tcp.Port,
+		listener: lis,
 		armed:    make(map[string]armConfig),
 		done:     make(chan struct{}),
 		serveErr: make(chan error, 1),
+	}
+}
+
+// waitReady blocks until conn is Ready, returning false if the connection is
+// shut down or ctx expires first.
+func waitReady(ctx context.Context, conn *grpc.ClientConn) bool {
+	for {
+		state := conn.GetState()
+		switch state {
+		case connectivity.Ready:
+			return true
+		case connectivity.Shutdown:
+			return false
+		case connectivity.Idle:
+			conn.Connect()
+		}
+		if !conn.WaitForStateChange(ctx, state) {
+			return false
+		}
 	}
 }
 
@@ -96,26 +117,26 @@ func (p *Proxy) Run(t *testing.T, ctx context.Context) {
 	p.runOnce.Do(func() {
 		p.sched.WaitUntilRunning(t, ctx)
 
-		//nolint:staticcheck
-		conn, err := grpc.DialContext(ctx, p.sched.Address(),
+		conn, err := grpc.NewClient(p.sched.Address(),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithBlock(),
-			grpc.WithReturnConnectionError(),
 		)
 		require.NoError(t, err)
+		if !waitReady(ctx, conn) {
+			state := conn.GetState()
+			// Cleanup is not yet registered when Run fails, so close here.
+			cerr := conn.Close()
+			require.Failf(t, "upstream scheduler connection never became ready",
+				"address=%s state=%s ctx err=%v close err=%v",
+				p.sched.Address(), state, ctx.Err(), cerr)
+		}
 		p.upstream = conn
 		p.client = schedulerv1pb.NewSchedulerClient(conn)
-
-		p.ports.Free(t)
-		lis, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(p.port))
-		require.NoError(t, err)
-		p.listener = lis
 
 		p.grpcSrv = grpc.NewServer()
 		schedulerv1pb.RegisterSchedulerServer(p.grpcSrv, p)
 
 		go func() {
-			p.serveErr <- p.grpcSrv.Serve(lis)
+			p.serveErr <- p.grpcSrv.Serve(p.listener)
 			close(p.done)
 		}()
 	})
@@ -128,15 +149,9 @@ func (p *Proxy) Cleanup(t *testing.T) {
 		if err := <-p.serveErr; err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			require.NoError(t, err)
 		}
-	} else if p.ports != nil {
-		// Run never executed (setup-time failure): the reservation made in
-		// New was never released by Run, so release it here to avoid
-		// leaking the port for the rest of the test process lifetime.
-		p.ports.Free(t)
 	}
 	if p.listener != nil {
-		// GracefulStop closes the listener, but close it again explicitly
-		// for symmetry in case the server never started serving.
+		// Close explicitly so the port is released even when Run never executed.
 		_ = p.listener.Close()
 	}
 	if p.upstream != nil {

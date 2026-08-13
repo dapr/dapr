@@ -156,6 +156,10 @@ func WithSecretList(t *testing.T, secrets *corev1.SecretList) Option {
 	return handleClusterListResource(t, "/api/v1/secrets", secrets)
 }
 
+func WithClusterSecretListFromStore(t *testing.T, store *store.Store) Option {
+	return handleClusterListResourceFromStore(t, "/api/v1/secrets", store)
+}
+
 func WithDaprResiliencyGet(t *testing.T, ns, name string, res *resapi.Resiliency) Option {
 	return handleGetResource(t, "/apis/dapr.io/v1alpha1", "resiliencies", ns, name, res)
 }
@@ -177,6 +181,7 @@ func WithBaseOperatorAPI(t *testing.T, td spiffeid.TrustDomain, ns string, sentr
 					},
 				},
 			}),
+			WithClusterPodList(t, &corev1.PodList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"}}),
 			WithClusterServiceList(t, &corev1.ServiceList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ServiceList"}}),
 			WithClusterStatefulSetList(t, &appsv1.StatefulSetList{TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "StatefulSetList"}}),
 			WithClusterDeploymentList(t, &appsv1.DeploymentList{TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "DeploymentList"}}),

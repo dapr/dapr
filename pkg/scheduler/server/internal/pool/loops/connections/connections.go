@@ -15,7 +15,6 @@ package connections
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -28,7 +27,10 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/connections/store"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/stream"
 	"github.com/dapr/kit/events/loop"
+	"github.com/dapr/kit/logger"
 )
+
+var log = logger.NewLogger("dapr.scheduler.server.pool.loops.connections")
 
 var (
 	loopFactory = loop.New[loops.EventConn](1024)
@@ -326,37 +328,50 @@ func (c *connections) handleConcurrencyRelease(rel *loops.ConcurrencyRelease) {
 // drainPending scans the pending queue to find a trigger that can acquire all
 // required gates. This avoids head-of-line blocking when the first pending
 // trigger is blocked on a different gate than the one that just released.
+// Requests skipped by the scan are returned to the front of the queue in
+// their original order, so an elder trigger is never rotated behind fresher
+// arrivals.
 func (c *connections) drainPending(key string, gate *concurrencyGate) {
-	defer monitoring.RecordConcurrencyPending(key, int64(gate.pendingLen()))
+	defer func() {
+		monitoring.RecordConcurrencyPending(key, int64(gate.pendingLen()))
+	}()
 
 	n := gate.pendingLen()
+	var skipped []*loops.TriggerRequest
 	for range n {
 		next := gate.dequeue()
 		if next == nil {
-			return
+			break
 		}
 
-		if c.tryDispatchPending(next) {
-			return
+		dispatched, consumed := c.tryDispatchPending(next)
+		if !consumed {
+			skipped = append(skipped, next)
+		}
+		if dispatched {
+			break
 		}
 	}
+
+	gate.requeueFront(skipped)
 }
 
-// tryDispatchPending attempts to dispatch a single pending trigger. On gate
-// acquisition failure it re-queues the request (or fails it if the queue is
-// full) and releases any partially-acquired gates via defer. Returns true iff
-// the trigger was dispatched.
-func (c *connections) tryDispatchPending(next *loops.TriggerRequest) bool {
+// tryDispatchPending attempts to dispatch a single pending trigger. Returns
+// dispatched=true iff the trigger was handed to a stream loop, and
+// consumed=true when the caller no longer owns the request (dispatched, or
+// resolved undeliverable). On gate acquisition failure the request stays with
+// the caller to requeue at its original position, and partially-acquired
+// gates are released via defer.
+func (c *connections) tryDispatchPending(next *loops.TriggerRequest) (dispatched, consumed bool) {
 	streamLoop, ok := c.getStreamLoop(next.Job.GetMetadata())
 	if !ok {
 		next.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
-		return false
+		return false, true
 	}
 
 	gateKeys := c.gateKeysForTrigger(next)
 
 	var acquired []string
-	dispatched := false
 	defer func() {
 		if !dispatched {
 			c.releaseGates(acquired)
@@ -366,23 +381,22 @@ func (c *connections) tryDispatchPending(next *loops.TriggerRequest) bool {
 	var gotAll bool
 	acquired, gotAll = c.acquireGates(gateKeys)
 	if !gotAll {
-		primaryGate := c.concurrencyGates[gateKeys[0]]
-		if !primaryGate.enqueue(next) {
-			next.ResultFn(api.TriggerResponseResult_FAILED)
-		}
-		return false
+		return false, false
 	}
 
 	c.dispatchWithGates(streamLoop, next, gateKeys)
-	dispatched = true
-	return true
+	return true, true
 }
 
 // handleCloseStream handles a close stream request.
-func (c *connections) handleCloseStream(closeStream *loops.ConnCloseStream) error {
+func (c *connections) handleCloseStream(closeStream *loops.ConnCloseStream) {
 	cancel, ok := c.streams[closeStream.StreamIDx]
 	if !ok {
-		return errors.New("catastrophic state machine error: lost connection stream reference")
+		// Close events are deduplicated at the stream, so an unknown index is
+		// unexpected, but it must never take down this loop: that tears down
+		// every stream in the namespace. Log loudly and tolerate.
+		log.Errorf("Ignoring close for unknown stream connection %d in namespace %s", closeStream.StreamIDx, closeStream.Namespace)
+		return
 	}
 
 	delete(c.streams, closeStream.StreamIDx)
@@ -391,7 +405,14 @@ func (c *connections) handleCloseStream(closeStream *loops.ConnCloseStream) erro
 
 	c.removeOrphanedGates()
 
-	return nil
+	// This loop owns the authoritative stream set: confirm emptiness to the
+	// namespaces loop so it can delete the namespace. Deleting on the
+	// namespaces loop's own counting alone is unsafe against stray events.
+	if len(c.streams) == 0 {
+		c.nsLoop.Enqueue(&loops.ConnCloseNamespace{
+			Namespace: closeStream.Namespace,
+		})
+	}
 }
 
 // handleShutdown handles the shutdown of the connections.
@@ -412,7 +433,10 @@ func (c *connections) handleShutdown() {
 	clear(c.concurrencyGates)
 	clear(c.streamGateKeys)
 
-	loopFactory.CacheLoop(c.loop)
+	// The loop object is deliberately NOT returned to the factory cache:
+	// this handler runs inside the loop's own drain, before Close observes
+	// completion, so a recycled loop could be reused and rewritten while the
+	// closer still reads it (data race, and a lost close signal).
 	connsCache.Put(c)
 }
 

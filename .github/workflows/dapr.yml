@@ -27,6 +27,7 @@ on:
       - main
       - master
       - release-*
+  merge_group:
 
 permissions: {}
 
@@ -126,7 +127,13 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run govulncheck
-        run: GOMEMLIMIT=12GiB govulncheck -C '.' -format text --tags=unit,allcomponents,integration ./...
+        # TODO: drop `-scan package` once golang.org/x/tools ships the fix
+        # for the generic-method MethodSet panic (commit 09a1b9b382, fixing
+        # golang/go#79901 and #79600) and govulncheck@latest picks it up.
+        # Until then, symbol-level SSA scanning panics on Go 1.26's stdlib
+        # behavior change in types.MethodSet.Methods, so we fall back to
+        # package-level scanning (less precise, but doesn't traverse SSA).
+        run: GOMEMLIMIT=12GiB govulncheck -C '.' -format text -scan package --tags=unit,allcomponents,integration ./...
         shell: bash
 
   lint-slow:
@@ -249,6 +256,17 @@ jobs:
         if: matrix.target_os == 'darwin'
         run: |
           echo "DAPR_HOST_IP=127.0.0.1" >>${GITHUB_ENV}
+      # The integration suite opens a very large number of short-lived
+      # localhost connections. macOS has a small default ephemeral port range
+      # and a long TIME_WAIT, so the outbound pool is exhausted under the
+      # parallel run (surfaces as "can't assign requested address"). Widen the
+      # range and shorten TIME_WAIT as a backstop to the framework-level fixes.
+      - name: Widen ephemeral port range for MacOS
+        if: matrix.target_os == 'darwin'
+        run: |
+          sudo sysctl -w net.inet.ip.portrange.first=16384
+          sudo sysctl -w net.inet.ip.portrange.hifirst=16384
+          sudo sysctl -w net.inet.tcp.msl=1000
       - name: Run make test-integration-parallel
         run: make test-integration-parallel
   build:
@@ -323,13 +341,13 @@ jobs:
     steps:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-        if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
+        if: matrix.target_os == 'linux' && github.event_name != 'pull_request' && github.event_name != 'merge_group'
         with:
           image: tonistiigi/binfmt:latest
           platforms: arm64
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
+        if: matrix.target_os == 'linux' && github.event_name != 'pull_request' && github.event_name != 'merge_group'
       - name: Check out code into the Go module directory
         uses: actions/checkout@v6
       - name: Set up Go
@@ -389,7 +407,7 @@ jobs:
           name: dapr_grafana_dashboards
           path: ./grafana/*.json
       - name: Docker Hub Login
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && github.event_name != 'merge_group' && env.DOCKER_REGISTRY_ID != ''
         uses: docker/login-action@v3
         env:
           DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
@@ -397,14 +415,14 @@ jobs:
           username: ${{ secrets.DOCKER_REGISTRY_ID }}
           password: ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: GitHub Container Registry login
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && github.event_name != 'merge_group'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push Docker images to Docker Hub
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && github.event_name != 'merge_group' && env.DOCKER_REGISTRY_ID != ''
         env:
           DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
           DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
@@ -421,7 +439,7 @@ jobs:
           fi
         shell: bash
       - name: Build and push Docker images to GHCR
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && github.event_name != 'merge_group'
         env:
           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
           TARGET_OS: ${{ matrix.target_os }}
@@ -439,7 +457,7 @@ jobs:
   publish:
     name: Publish binaries
     needs: build
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
     env:
       ARTIFACT_DIR: ./release
       DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
@@ -542,7 +560,7 @@ jobs:
   docker-publish:
     name: Publish docker images
     needs: build
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
     env:
       DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
       LATEST_TAG: latest
@@ -611,7 +629,7 @@ jobs:
           DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
         run: |
           # Publish the `-windows-amd64` manifest.
-          # Note, the "latest" tag from the previous step already contains 
+          # Note, the "latest" tag from the previous step already contains
           # the windows images, so we don't need to publish the "latest-windows-amd64" tag.
           DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
           DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
@@ -639,7 +657,7 @@ jobs:
           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
         run: |
           # Publish the `-windows-amd64` manifest.
-          # Note, the "latest" tag from the previous step already contains 
+          # Note, the "latest" tag from the previous step already contains
           # the windows images, so we don't need to publish the "latest-windows-amd64" tag.
           DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
           DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
@@ -650,7 +668,7 @@ jobs:
   helm:
     name: Package Helm Chart
     needs: [publish, docker-publish]
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
     env:
       ARTIFACT_DIR: ./release
       HELM_PACKAGE_DIR: helm
@@ -779,3 +797,19 @@ jobs:
         run: |
           gh api repos/dapr/test-infra/actions/workflows/version-update.yml/dispatches \
             -X POST -f ref="master" -f 'inputs[rel_version]=${{ env.REL_VERSION }}'
+
+  # Opens (or comments on) a tracking issue only when a publish job itself fails:
+  # publish (release binaries/assets), docker-publish (images), or helmpublish
+  # (Helm chart). Upstream build failures skip these jobs, whose result is then
+  # 'skipped' (not 'failure'), so CI flakes never open issues.
+  notify-on-failure:
+    needs: [publish, docker-publish, helmpublish]
+    if: always() && startsWith(github.ref, 'refs/tags/v') && github.repository_owner == 'dapr' && (needs.publish.result == 'failure' || needs['docker-publish'].result == 'failure' || needs.helmpublish.result == 'failure')
+    permissions:
+      issues: write
+      actions: read
+    uses: dapr/.github/.github/workflows/open-issue-on-failure.yml@main
+    with:
+      title: "Release workflow failed: ${{ github.workflow }} (${{ github.ref_name }})"
+      labels: "release,ci/release-failure"
+      mention: "@dapr/maintainers-dapr @dapr/approvers-dapr"

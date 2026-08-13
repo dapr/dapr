@@ -78,6 +78,12 @@ func writeFolderReadme(dir string, imagePrefix string) error {
 	}
 	groups := groupPngsByTest(names)
 	var b strings.Builder
+	if *infra != "" {
+		b.WriteString("**Test environment:** ")
+		b.WriteString(*infra)
+		b.WriteString("\n\n")
+	}
+	writeEfficiencyTable(&b, efficiencyByDir[dir])
 	for _, group := range groups {
 		b.WriteString("### ")
 		b.WriteString(group.baseName)

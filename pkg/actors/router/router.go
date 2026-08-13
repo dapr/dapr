@@ -365,12 +365,36 @@ func (r *router) callStream(ctx context.Context,
 			return backoff.Permanent(errors.New("remote actor moved"))
 		}
 
-		return r.callRemoteActorStream(ctx, lar, req, stream)
+		err = r.callRemoteActorStream(ctx, lar, req, stream)
+		if err == nil || errors.Is(err, io.EOF) || ctx.Err() != nil {
+			return err
+		}
+
+		// Mirror the unary call classification: only placement churn is
+		// transient. Application errors from the target (e.g. access policy
+		// denials, not-found) must not be retried.
+		s, ok := status.FromError(err)
+		if ok {
+			if s.Code() == codes.Unavailable ||
+				(s.Code() == codes.Internal &&
+					(s.Message() == "error invoke actor method: remote actor moved" ||
+						strings.HasSuffix(s.Message(), ": placement is disseminating"))) {
+				return err
+			}
+		}
+		return backoff.Permanent(err)
 	}
 
 	r.stampLocalCallerIdentity(req)
 
-	return r.callLocalActorStream(ctx, req, stream)
+	err = r.callLocalActorStream(ctx, req, stream)
+	// Don't return permanent errors because of dissemination: a closed target
+	// (actor deactivated or moved) and context cancellation stay retryable,
+	// mirroring the unary callActor local path.
+	if err == nil || errors.Is(err, io.EOF) || ctx.Err() != nil || targetserrors.IsClosed(err) {
+		return err
+	}
+	return backoff.Permanent(err)
 }
 
 func (r *router) callLocalActorStream(ctx context.Context,
