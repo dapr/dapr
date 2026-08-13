@@ -110,7 +110,7 @@ func TestConnectionPool(t *testing.T) {
 		require.Equal(t, int32(0), cp.connections[0].referenceCount)
 		require.Equal(t, int32(0), cp.connections[1].referenceCount)
 
-		// Share the connection grpcMaxConcurrentStreams times (100)
+		// Share the connection grpcMaxConcurrentStreams times
 		// Should always return the first connection
 
 		for i := range grpcMaxConcurrentStreams {
@@ -120,7 +120,7 @@ func TestConnectionPool(t *testing.T) {
 			require.Equal(t, int32(0), cp.connections[1].referenceCount)
 		}
 
-		require.Equal(t, int32(100), cp.connections[0].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 
 		// Next grpcMaxConcurrentStreams should return the second connection
 
@@ -128,7 +128,7 @@ func TestConnectionPool(t *testing.T) {
 			conn = cp.Share()
 			require.Equal(t, conns[1], conn)
 			require.Equal(t, int32(i+1), cp.connections[1].referenceCount)
-			require.Equal(t, int32(100), cp.connections[0].referenceCount)
+			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 		}
 
 		// Next call to Share should return nil because all connections are at capacity
@@ -139,18 +139,18 @@ func TestConnectionPool(t *testing.T) {
 		// When both connections have capacity, the first one is used first
 		cp.Release(conns[0])
 		cp.Release(conns[1])
-		require.Equal(t, int32(99), cp.connections[0].referenceCount)
-		require.Equal(t, int32(99), cp.connections[1].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams-1), cp.connections[0].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams-1), cp.connections[1].referenceCount)
 
 		conn = cp.Share()
 		require.Equal(t, conns[0], conn)
-		require.Equal(t, int32(100), cp.connections[0].referenceCount)
-		require.Equal(t, int32(99), cp.connections[1].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams-1), cp.connections[1].referenceCount)
 
 		conn = cp.Share()
 		require.Equal(t, conns[1], conn)
-		require.Equal(t, int32(100), cp.connections[0].referenceCount)
-		require.Equal(t, int32(100), cp.connections[1].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[1].referenceCount)
 
 		// Destroy all connections
 		cp.DestroyAll()
@@ -181,7 +181,7 @@ func TestConnectionPool(t *testing.T) {
 		require.Equal(t, conns[0], conn)
 		require.Equal(t, 1, n)
 
-		// Next grpcMaxConcurrentStreams-1 calls (99) should still return the first connection
+		// Next grpcMaxConcurrentStreams-1 calls should still return the first connection
 		for i := 1; i < grpcMaxConcurrentStreams; i++ { // Start from 1
 			conn, err = cp.Get(createFn)
 			require.NoError(t, err)
@@ -200,7 +200,7 @@ func TestConnectionPool(t *testing.T) {
 			require.Equal(t, conns[1], conn)
 			require.Equal(t, 2, n) // Should have called the function 2 times in total
 			require.Equal(t, int32(i+1), cp.connections[1].referenceCount)
-			require.Equal(t, int32(100), cp.connections[0].referenceCount)
+			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 		}
 
 		// Next call should return errNoNewConns (which is just from our mock handler)
@@ -211,8 +211,8 @@ func TestConnectionPool(t *testing.T) {
 		// Release one from each connection
 		cp.Release(conns[0])
 		cp.Release(conns[1])
-		require.Equal(t, int32(99), cp.connections[0].referenceCount)
-		require.Equal(t, int32(99), cp.connections[1].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams-1), cp.connections[0].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams-1), cp.connections[1].referenceCount)
 
 		// Next calls should return conns[0] and conns[1], without calling createFn again
 		conn, err = cp.Get(createFn)
@@ -266,14 +266,14 @@ func TestConnectionPool(t *testing.T) {
 				}
 			}
 
-			require.Equal(t, int32(100), cp.connections[0].referenceCount)
+			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 			require.Equal(t, int32(1), cp.connections[1].referenceCount)
 
 			// Calling purge should not remove any connection
 			cp.Purge()
 
 			require.Len(t, cp.connections, 2)
-			require.Equal(t, int32(100), cp.connections[0].referenceCount)
+			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 			require.Equal(t, int32(1), cp.connections[1].referenceCount)
 
 			// Wait 15 seconds (more than expiration time) and repeat
@@ -281,13 +281,13 @@ func TestConnectionPool(t *testing.T) {
 			clockMock.Step(15 * time.Second)
 
 			require.Len(t, cp.connections, 2)
-			require.Equal(t, int32(100), cp.connections[0].referenceCount)
+			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 			require.Equal(t, int32(1), cp.connections[1].referenceCount)
 
 			// Release the second connection, which should now become idle
 			cp.Release(conns[1])
 
-			require.Equal(t, int32(100), cp.connections[0].referenceCount)
+			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 			require.Equal(t, int32(0), cp.connections[1].referenceCount)
 			require.Equal(t, clock.Now(), *(cp.connections[1].idleSince.Load()))
 
@@ -295,7 +295,7 @@ func TestConnectionPool(t *testing.T) {
 			cp.Purge()
 
 			require.Len(t, cp.connections, 2)
-			require.Equal(t, int32(100), cp.connections[0].referenceCount)
+			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 			require.Equal(t, int32(0), cp.connections[1].referenceCount)
 
 			// Wait 15 seconds (more than expiration time)
@@ -310,9 +310,9 @@ func TestConnectionPool(t *testing.T) {
 
 			require.Len(t, cp.connections, 1)
 			require.Equal(t, conns[0], cp.connections[0].conn)
-			require.Equal(t, int32(100), cp.connections[0].referenceCount)
+			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 
-			// Release the first connection 100 times, to bring it to 0
+			// Release the first connection grpcMaxConcurrentStreams times, to bring it to 0
 			for range grpcMaxConcurrentStreams {
 				cp.Release(conns[0])
 			}
