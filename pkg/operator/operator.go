@@ -57,7 +57,7 @@ import (
 	"github.com/dapr/kit/ptr"
 )
 
-var log = logger.NewLogger("dapr.operator")
+var log = logger.New("dapr.operator")
 
 // Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle.
 type Operator interface {
@@ -210,7 +210,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 			return nil, fmt.Errorf("unable to add watchdog controller: %w", err)
 		}
 	} else {
-		log.Infof("Dapr Watchdog is not enabled")
+		log.Info("Dapr Watchdog is not enabled")
 	}
 
 	if opts.ServiceReconcilerEnabled {
@@ -283,7 +283,7 @@ func (o *operator) Start(ctx context.Context) error {
 				return fmt.Errorf("API server did not become ready in time: %w", rErr)
 			}
 			o.apiServerHealthz.Ready()
-			log.Infof("Dapr Operator started")
+			log.Info("Dapr Operator started")
 			<-ctx.Done()
 			return nil
 		},
@@ -396,7 +396,7 @@ func (o *operator) patchConversionWebhooksInCRDs(ctx context.Context, caBundle [
 			crd.Spec.Conversion.Webhook.ClientConfig.Service.Namespace == security.CurrentNamespace() &&
 			crd.Spec.Conversion.Webhook.ClientConfig.CABundle != nil &&
 			bytes.Equal(crd.Spec.Conversion.Webhook.ClientConfig.CABundle, caBundle) {
-			log.Infof("Conversion webhook for %q is up to date", crdName)
+			log.Info("Conversion webhook for is up to date", "crd_name", crdName)
 
 			continue
 		}
@@ -426,7 +426,7 @@ func (o *operator) patchConversionWebhooksInCRDs(ctx context.Context, caBundle [
 			return fmt.Errorf("failed to patch webhook in CRD %q: %v", crdName, err)
 		}
 
-		log.Infof("Successfully patched webhook in CRD %q", crdName)
+		log.Info("Successfully patched webhook in CRD", "crd_name", crdName)
 	}
 
 	return nil

@@ -28,7 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/loops"
 )
 
-var log = logger.NewLogger("dapr.runtime.processor.loops.mcpserver")
+var log = logger.New("dapr.runtime.processor.loops.mcpserver")
 
 // SecretProcessor resolves secret references on a resource. Same shape as the
 // one used by the root loop; passed through so per-name loops don't pull in
@@ -127,7 +127,7 @@ func (h *Handler) handleAdd(ctx context.Context, ev *loops.AddMCPServer) {
 	// workflow registration fails is still considered "loaded" and
 	// observable via the metadata API.
 	h.compStore.AddMCPServer(s)
-	log.Infof("MCPServer loaded: %s", s.LogName())
+	log.Info("MCPServer loaded: " + s.LogName())
 
 	if h.registerMCPServer == nil {
 		sendResult(ev.Result, nil)

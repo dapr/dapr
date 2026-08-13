@@ -30,20 +30,20 @@ const (
 	legacyKubeTknPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 )
 
-var log = logger.NewLogger("dapr.security.token")
+var log = logger.New("dapr.security.token")
 
 func GetSentryTokenFromFile(path string) (token string, validator sentryv1pb.SignCertificateRequest_TokenValidator, err error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		log.Warnf("Failed to read token at path '%s': %v", path, err)
+		log.Warn("Failed to read token at path", "path", path, "error", err)
 		return "", sentryv1pb.SignCertificateRequest_UNKNOWN, fmt.Errorf("failed to read token at path '%s': %w", path, err)
 	}
 	if len(b) == 0 {
-		log.Warnf("Token at path '%s' is empty", path)
+		log.Warn("Token at path is empty", "path", path)
 		return "", sentryv1pb.SignCertificateRequest_UNKNOWN, fmt.Errorf("token at path '%s' is empty", path)
 	}
 
-	log.Debugf("Loaded token from path '%s' specified in the DAPR_SENTRY_TOKEN_FILE environmental variable", path)
+	log.Debug("Loaded token from path specified in the DAPR_SENTRY_TOKEN_FILE environmental variable", "path", path)
 	return string(b), sentryv1pb.SignCertificateRequest_JWKS, nil
 }
 
@@ -56,7 +56,7 @@ func GetSentryToken(allowKubernetes bool) (token string, validator sentryv1pb.Si
 		}
 		token, validator, err = GetSentryTokenFromFile(path)
 		if allowKubernetes {
-			log.Debugf("forcing to use kubernetes validator")
+			log.Debug("forcing to use kubernetes validator")
 			validator = sentryv1pb.SignCertificateRequest_KUBERNETES
 		}
 		return token, validator, err

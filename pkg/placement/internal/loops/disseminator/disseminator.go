@@ -34,7 +34,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.placement.server.loops.disseminator")
+var log = logger.New("dapr.placement.server.loops.disseminator")
 
 var (
 	LoopFactory = loop.New[loops.EventDisseminator](1024)
@@ -140,7 +140,7 @@ func New(opts Options) loop.Interface[loops.EventDisseminator] {
 }
 
 func (d *disseminator) Handle(ctx context.Context, event loops.EventDisseminator) error {
-	log.Debugf("Disseminator handling event (%s): %T", d.namespace, event)
+	log.Debug("Disseminator handling event", "namespace", d.namespace, "event", event)
 
 	switch e := event.(type) {
 	case *loops.ConnAdd:
@@ -180,7 +180,7 @@ func (d *disseminator) addStream(ctx context.Context, add *loops.ConnAdd) uint64
 	d.wg.Go(func() {
 		derr := streamLoop.Run(ctx)
 		if derr != nil {
-			log.Errorf("Stream loop for stream %s:%d exited with error: %v", d.namespace, streamIDx, derr)
+			log.Error("Stream loop for stream: exited with error", "namespace", d.namespace, "stream_idx", streamIDx, "error", derr)
 		}
 	})
 
@@ -307,7 +307,7 @@ func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.Dissemi
 		timeout.Version,
 	)
 
-	log.Warnf("Dissemination timeout for version %d", timeout.Version)
+	log.Warn(fmt.Sprintf("Dissemination timeout for version %d", timeout.Version))
 
 	// Only close streams that have NOT reached the current target state. Streams
 	// that responded successfully to the current dissemination phase are healthy
@@ -318,8 +318,8 @@ func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.Dissemi
 			continue
 		}
 
-		log.Warnf("Closing non-responding stream %s:%d (state=%s, expected=%s)",
-			d.namespace, idx, s.currentState.String(), d.currentOperation.String())
+		log.Warn("Closing non-responding stream",
+			"namespace", d.namespace, "stream_idx", idx, "state", s.currentState.String(), "expected", d.currentOperation.String())
 
 		d.store.Delete(idx)
 		monitoring.RecordRuntimesCount(d.connCount.Add(-1), d.namespace)

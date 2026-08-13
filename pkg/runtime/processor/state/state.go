@@ -36,7 +36,7 @@ const (
 	PropertyKeyActorStateStore = "actorstatestore"
 )
 
-var log = logger.NewLogger("dapr.runtime.processor.state")
+var log = logger.New("dapr.runtime.processor.state")
 
 // Actors is the subset of the actor runtime which is notified when a
 // component becomes the actor state store.
@@ -104,7 +104,7 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 	if encKeys.Primary.Key != "" {
 		ok := encryption.AddEncryptedStateStore(comp.Name, encKeys)
 		if ok {
-			log.Infof("Automatic encryption enabled for state store %s", comp.Name)
+			log.Info("Automatic encryption enabled for state store", "name", comp.Name)
 			log.Info("WARNING: Automatic state store encryption should never be used to store more than 4 billion items in the state store (including updates). Storing more items than that can cause the private key to be exposed.")
 		}
 	}

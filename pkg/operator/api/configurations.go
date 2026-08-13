@@ -48,7 +48,7 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 	}
 
 	if err := processConfigurationSecrets(ctx, &config, in.GetNamespace(), a.Client); err != nil {
-		log.Warnf("error processing configuration %s secrets in namespace %s: %s", config.Name, in.GetNamespace(), err)
+		log.Warn("error processing configuration secrets in namespace", "name", config.Name, "namespace", in.GetNamespace(), "error", err)
 		return nil, fmt.Errorf("error processing configuration secrets: %w", err)
 	}
 
@@ -133,9 +133,9 @@ func (a *apiServer) ConfigurationUpdate(in *operatorv1pb.ConfigurationUpdateRequ
 		return fmt.Errorf("failed to resolve assigned configuration for app %s in namespace %s: %w", id.AppID(), in.GetNamespace(), err)
 	}
 	if assigned == "" {
-		log.Debugf("app %s in namespace %s has no assigned configuration; no configuration updates will be streamed", id.AppID(), in.GetNamespace())
+		log.Debug("app in namespace has no assigned configuration; no configuration updates will be streamed", "app_id", id.AppID(), "namespace", in.GetNamespace())
 	} else {
-		log.Debugf("streaming updates for configuration %q to app %s in namespace %s", assigned, id.AppID(), in.GetNamespace())
+		log.Debug("streaming updates for configuration to app in namespace", "assigned", assigned, "app_id", id.AppID(), "namespace", in.GetNamespace())
 	}
 
 	// Verify authorization via informer's WatchUpdates, which checks SPIFFE ID
@@ -166,7 +166,7 @@ func (a *apiServer) ConfigurationUpdate(in *operatorv1pb.ConfigurationUpdateRequ
 
 	// Run the client - this will block until context is done or event channel closes
 	if err := client.Run(ctx); err != nil {
-		log.Warnf("configuration client loop ended with error: %s", err)
+		log.Warn("configuration client loop ended with error", "error", err)
 	}
 
 	return nil

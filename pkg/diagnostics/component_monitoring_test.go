@@ -19,7 +19,7 @@ func componentsMetrics() (*componentMetrics, view.Meter) {
 	c := newComponentMetrics()
 	meter := view.NewMeter()
 	meter.Start()
-	_ = c.Init(meter, "test", "default", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log))
+	_ = c.Init(meter, "test", "default", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log.Legacy()))
 
 	return c, meter
 }

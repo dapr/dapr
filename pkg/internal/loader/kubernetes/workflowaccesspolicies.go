@@ -54,10 +54,10 @@ func (w *workflowAccessPolicies) Load(ctx context.Context) ([]wfaclapi.WorkflowA
 		// this as "no policies" so daprd remains compatible across an
 		// N-1 control plane version skew.
 		if status.Code(err) == codes.Unimplemented {
-			log.Debugf("Operator does not implement ListWorkflowAccessPolicy, skipping: %v", err)
+			log.Debug("Operator does not implement ListWorkflowAccessPolicy, skipping", "error", err)
 			return nil, nil
 		}
-		log.Errorf("Error listing workflow access policies: %v", err)
+		log.Error("Error listing workflow access policies", "error", err)
 		return nil, err
 	}
 

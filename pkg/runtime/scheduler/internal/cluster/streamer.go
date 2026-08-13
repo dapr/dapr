@@ -128,7 +128,7 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	case *schedulerv1pb.JobTargetMetadata_Job:
 		err := s.invokeApp(ctx, job)
 		if err != nil {
-			log.Errorf("failed to invoke schedule app job: %s", err)
+			log.Error("failed to invoke schedule app job", "error", err)
 			return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
 		}
 
@@ -181,12 +181,12 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 			}
 		}
 
-		log.Errorf("failed to invoke scheduled actor reminder named: %s due to: %s", job.GetName(), err)
+		log.Error("failed to invoke scheduled actor reminder", "name", job.GetName(), "error", err)
 
 		return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
 
 	default:
-		log.Errorf("Unknown job metadata type: %+v", t)
+		log.Error("Unknown job metadata type", "t", t)
 		return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
 	}
 }
@@ -217,13 +217,13 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	//nolint:gosec
 	switch codes.Code(statusCode) {
 	case codes.OK:
-		log.Debugf("Sent job %s to app", job.GetName())
+		log.Debug("Sent job to app", "name", job.GetName())
 		diag.DefaultComponentMonitoring.JobTriggeredSuccess(ctx, diag.JobTriggerOp, elapsedMs)
 
 		return nil
 	case codes.NotFound:
 		// NotFound treated as SUCCESS to avoid retriggers by the scheduler, but is monitored as a failure
-		log.Errorf("non-retriable error returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
+		log.Error("non-retriable error returned from app while processing triggered job. status code returned", "name", job.GetName(), "status_code", statusCode)
 		diag.DefaultComponentMonitoring.JobTriggeredFailure(ctx, diag.JobTriggerOp, elapsedMs)
 		// return nil to signal SUCCESS
 		return nil

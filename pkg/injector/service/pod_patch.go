@@ -42,9 +42,9 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 		return nil, fmt.Errorf("could not unmarshal raw object: %w", err)
 	}
 
-	log.Infof(
-		"AdmissionReview for Kind=%v, Namespace=%s Name=%s (%s) UID=%v patchOperation=%v UserInfo=%v",
-		ar.Request.Kind, ar.Request.Namespace, ar.Request.Name, pod.Name, ar.Request.UID, ar.Request.Operation, ar.Request.UserInfo,
+	log.Info(
+		"AdmissionReview",
+		"kind", ar.Request.Kind, "namespace", ar.Request.Namespace, "name", ar.Request.Name, "pod", pod.Name, "uid", ar.Request.UID, "patch_operation", ar.Request.Operation, "user_info", ar.Request.UserInfo,
 	)
 
 	// Keep DNS resolution outside of GetSidecarContainer for unit testing.
@@ -135,12 +135,12 @@ func mTLSEnabled(controlPlaneNamespace string, daprClient scheme.Interface) bool
 		Configurations(controlPlaneNamespace).
 		Get(defaultConfig, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
-		log.Infof("Dapr system configuration '%s' does not exist; using default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
+		log.Info("Dapr system configuration does not exist; using default value for mTLSEnabled", "default_config", defaultConfig, "default_mtls_enabled", defaultMtlsEnabled)
 		return defaultMtlsEnabled
 	}
 
 	if err != nil {
-		log.Errorf("Failed to load dapr configuration from k8s, use default value %t for mTLSEnabled: %s", defaultMtlsEnabled, err)
+		log.Error("Failed to load dapr configuration from k8s, use default value for mTLSEnabled", "default_mtls_enabled", defaultMtlsEnabled, "error", err)
 		return defaultMtlsEnabled
 	}
 

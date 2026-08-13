@@ -96,7 +96,7 @@ func (r *resource[T]) Stream(ctx context.Context) (*loader.StreamConn[T], error)
 		return nil, err
 	}
 
-	log.Debugf("stream established with operator")
+	log.Debug("stream established with operator")
 
 	conn := &loader.StreamConn[T]{
 		EventCh:     make(chan *loader.Event[T]),
@@ -132,7 +132,7 @@ func (r *resource[T]) stream(ctx context.Context, conn *loader.StreamConn[T]) {
 			if err != nil {
 				r.streamer.close()
 				// Retry on stream error.
-				log.Errorf("Error from operator stream: %s", err)
+				log.Error("Error from operator stream", "error", err)
 
 				break
 			}
@@ -151,12 +151,12 @@ func (r *resource[T]) stream(ctx context.Context, conn *loader.StreamConn[T]) {
 		if err := backoff.Retry(func() error {
 			berr := r.streamer.establish(ctx, r.opClient, r.namespace)
 			if berr != nil {
-				log.Errorf("Failed to establish stream: %s", berr)
+				log.Error("Failed to establish stream", "error", berr)
 			}
 
 			return berr
 		}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx)); err != nil {
-			log.Errorf("Stream retry failed: %s", err)
+			log.Error("Stream retry failed", "error", err)
 			return
 		}
 

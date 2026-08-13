@@ -95,7 +95,7 @@ func (r *SIGHUPReconciler[T]) Run(ctx context.Context) error {
 
 	r.htarget.Ready()
 
-	log.Infof("Starting to watch %s updates for SIGHUP reload", r.kind)
+	log.Info(fmt.Sprintf("Starting to watch %s updates for SIGHUP reload", r.kind))
 
 	defer loopFactory.CacheLoop(r.loop)
 
@@ -116,7 +116,7 @@ func (r *SIGHUPReconciler[T]) watchConn(ctx context.Context, conn *loader.Stream
 		case <-conn.ReconcileCh:
 			// On reconnect, we don't need to reconcile since SIGHUP will
 			// restart the runtime and reload everything anyway.
-			log.Debugf("Reconnected %s stream, skipping reconcile (will use SIGHUP)", r.kind)
+			log.Debug("Reconnected stream, skipping reconcile (will use SIGHUP)", "kind", r.kind)
 		case event := <-conn.EventCh:
 			r.loop.Enqueue(&resourceEvent[T]{Event: event})
 		}
@@ -142,16 +142,16 @@ func (r *SIGHUPReconciler[T]) handleResourceEvent(event *loader.Event[T]) {
 	switch event.Type {
 	case operatorv1pb.ResourceEventType_DELETED:
 		if _, exists := r.getExisting(name); !exists {
-			log.Debugf("Ignoring %s %s event for %s: resource not known",
-				r.kind, event.Type, event.Resource.LogName())
+			log.Debug("Ignoring event: resource not known",
+				"kind", r.kind, "event", event.Type, "resource", event.Resource.LogName())
 			return
 		}
 
 	case operatorv1pb.ResourceEventType_CREATED, operatorv1pb.ResourceEventType_UPDATED:
 		if existing, exists := r.getExisting(name); exists {
 			if differ.AreSame(existing, event.Resource) {
-				log.Debugf("Ignoring %s %s event for %s: resource has not changed",
-					r.kind, event.Type, event.Resource.LogName())
+				log.Debug("Ignoring event: resource has not changed",
+					"kind", r.kind, "event", event.Type, "resource", event.Resource.LogName())
 				return
 			}
 		}
@@ -160,15 +160,15 @@ func (r *SIGHUPReconciler[T]) handleResourceEvent(event *loader.Event[T]) {
 		// Unknown event type, still trigger SIGHUP.
 	}
 
-	log.Infof("Received %s %s event: %s - triggering SIGHUP reload",
-		r.kind, event.Type, event.Resource.LogName())
+	log.Info("Received resource event - triggering SIGHUP reload",
+		"kind", r.kind, "event", event.Type, "resource", event.Resource.LogName())
 
 	// Send SIGHUP to ourselves to trigger runtime restart
 	if err := sendSIGHUP(); err != nil {
-		log.Errorf("Failed to send SIGHUP signal: %s", err)
+		log.Error("Failed to send SIGHUP signal", "error", err)
 	}
 }
 
 func (r *SIGHUPReconciler[T]) handleShutdown(e *shutdown) {
-	log.Debugf("%s SIGHUP reconciler loop shutdown: %v", r.kind, e.Error)
+	log.Debug("SIGHUP reconciler loop shutdown", "kind", r.kind, "error", e.Error)
 }

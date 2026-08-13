@@ -39,27 +39,27 @@ func (a *activity) checkAccessPolicy(method string, data []byte, md map[string]*
 
 	name, history, err := workflowacl.ActivityNameFromExecute(method, data)
 	if err != nil {
-		log.Warnf("Activity actor '%s': workflow access policy denied call '%s': could not extract name from request: %v", a.actorID, method, err)
+		log.Warn("Activity actor: workflow access policy denied call: could not extract name from request", "actor_id", a.actorID, "method", method, "error", err)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeActivity), method)
 		return status.Errorf(codes.PermissionDenied, "%s: malformed request for method '%s'", workflowacl.DeniedMessageBase, method)
 	}
 	if name == "" {
 		// Non-Execute methods on the activity actor are only valid from the
 		// local daprd. Cross-app callers cannot invoke them.
-		log.Warnf("Activity actor '%s': workflow access policy denied cross-app call to non-Execute method '%s' from app '%s'", a.actorID, method, callerAppID)
+		log.Warn("Activity actor: workflow access policy denied cross-app call to non-Execute method", "actor_id", a.actorID, "method", method, "caller_app_id", callerAppID)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeActivity), method)
 		return status.Errorf(codes.PermissionDenied, "%s: app '%s' cannot invoke method '%s'", workflowacl.DeniedMessageBase, callerAppID, method)
 	}
 
 	if callerAppID == "" {
-		log.Warnf("Activity actor '%s': workflow access policy denied call '%s' with missing caller identity", a.actorID, method)
+		log.Warn("Activity actor: workflow access policy denied call with missing caller identity", "actor_id", a.actorID, "method", method)
 		diag.DefaultMonitoring.WorkflowACLActionDenied("", string(workflowacl.OperationTypeActivity), string(wfaclapi.WorkflowOperationSchedule))
 		return status.Errorf(codes.PermissionDenied, "%s: caller identity missing on activity '%s' schedule", workflowacl.DeniedMessageBase, name)
 	}
 
 	allowed, reason := policies.Evaluate(callerAppID, workflowacl.OperationTypeActivity, wfaclapi.WorkflowOperationSchedule, name, history, a.signing.Enabled())
 	if !allowed {
-		log.Warnf("Activity actor '%s': workflow access policy denied app '%s' on activity '%s' (reason=%s)", a.actorID, callerAppID, name, reason)
+		log.Warn("Activity actor: workflow access policy denied app on activity ", "actor_id", a.actorID, "caller_app_id", callerAppID, "name", name, "reason", reason)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeActivity), string(wfaclapi.WorkflowOperationSchedule))
 		return status.Errorf(codes.PermissionDenied, "%s: app '%s' schedule on activity '%s'", workflowacl.DeniedMessageBase, callerAppID, name)
 	}

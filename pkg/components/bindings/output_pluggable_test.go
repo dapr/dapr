@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	testingGrpc "github.com/dapr/dapr/pkg/testing/grpc"
+	"github.com/dapr/kit/logger"
 
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 
@@ -122,7 +123,7 @@ func TestOutputBindingCalls(t *testing.T) {
 			proto.RegisterOutputBindingServer(s, srv)
 			go func() {
 				if serveErr := s.Serve(listener); serveErr != nil {
-					testLogger.Debugf("Server exited with error: %v", serveErr)
+					logger.FromLogger(testLogger).Debug("Server exited with error", "error", serveErr)
 				}
 			}()
 

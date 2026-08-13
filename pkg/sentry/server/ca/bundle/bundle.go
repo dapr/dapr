@@ -78,7 +78,7 @@ type JWT struct {
 }
 
 func GenerateX509(opts OptionsX509) (*X509, error) {
-	log.Debugf("Generating X.509 bundle with trust domain %s", opts.TrustDomain)
+	log.Debug("Generating X.509 bundle with trust domain", "trust_domain", opts.TrustDomain)
 
 	rootCert, err := generateRootCert(opts.TrustDomain, opts.AllowedClockSkew, opts.OverrideCATTL)
 	if err != nil {
@@ -126,7 +126,7 @@ func GenerateX509(opts OptionsX509) (*X509, error) {
 }
 
 func GenerateJWT(opts OptionsJWT) (*JWT, error) {
-	log.Debugf("Generating JWT bundle with trust domain %s", opts.TrustDomain)
+	log.Debug("Generating JWT bundle with trust domain", "trust_domain", opts.TrustDomain)
 
 	jwtKey, err := jwk.FromRaw(opts.JWTRootKey)
 	if err != nil {

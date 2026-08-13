@@ -79,7 +79,7 @@ func (p *pipeline) buildChain() {
 		return
 	}
 
-	log.Infof("Building pipeline %s", p.name)
+	log.Info("Building pipeline", "name", p.name)
 
 	next := p.root
 	for i := len(p.spec.Handlers) - 1; i >= 0; i-- {

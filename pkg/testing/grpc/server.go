@@ -25,7 +25,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/dapr/kit/logger"
+	kitlogger "github.com/dapr/kit/logger"
 )
 
 const (
@@ -46,14 +46,15 @@ const (
 //	 	client, cleanup, err := serverFactory(&your_service{})
 //		require.NoError(t, err)
 //		defer cleanup()
-func TestServerFor[TServer any, TClient any](logger logger.Logger, registersvc func(*grpc.Server, TServer), clientFactory func(grpc.ClientConnInterface) TClient) func(svc TServer) (client TClient, cleanup func(), err error) {
+func TestServerFor[TServer any, TClient any](l kitlogger.Logger, registersvc func(*grpc.Server, TServer), clientFactory func(grpc.ClientConnInterface) TClient) func(svc TServer) (client TClient, cleanup func(), err error) {
+	logger := kitlogger.FromLogger(l)
 	return func(srv TServer) (client TClient, cleanup func(), err error) {
 		lis := bufconn.Listen(bufSize)
 		s := grpc.NewServer()
 		registersvc(s, srv)
 		go func() {
 			if serveErr := s.Serve(lis); serveErr != nil {
-				logger.Debugf("Server exited with error: %v", serveErr)
+				logger.Debug("Server exited with error", "error", serveErr)
 			}
 		}()
 		ctx := context.Background()
@@ -75,14 +76,15 @@ func TestServerFor[TServer any, TClient any](logger logger.Logger, registersvc f
 
 // TestServerWithDialer returns a grpcServer factory that bootstraps a grpcserver backed by a buf connection (in memory), and returns a connection dialer to communicate with it.
 // it also provides cleanup function for close the grpcserver but the client connection should be handled by the caller.
-func TestServerWithDialer[TServer any](logger logger.Logger, registersvc func(*grpc.Server, TServer)) func(svc TServer) (dialer func(ctx context.Context, opts ...grpc.DialOption) (*grpc.ClientConn, error), cleanup func(), err error) {
+func TestServerWithDialer[TServer any](l kitlogger.Logger, registersvc func(*grpc.Server, TServer)) func(svc TServer) (dialer func(ctx context.Context, opts ...grpc.DialOption) (*grpc.ClientConn, error), cleanup func(), err error) {
+	logger := kitlogger.FromLogger(l)
 	return func(srv TServer) (dialer func(ctx context.Context, opts ...grpc.DialOption) (*grpc.ClientConn, error), cleanup func(), err error) {
 		lis := bufconn.Listen(bufSize)
 		s := grpc.NewServer()
 		registersvc(s, srv)
 		go func() {
 			if serveErr := s.Serve(lis); serveErr != nil {
-				logger.Debugf("Server exited with error: %v", serveErr)
+				logger.Debug("Server exited with error", "error", serveErr)
 			}
 		}()
 

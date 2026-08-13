@@ -92,7 +92,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 }
 
 func (o *orchestrator) executeMethod(ctx context.Context, methodName string, meta map[string]*internalsv1pb.ListStringValue, request []byte, parsedAddEvent *backend.HistoryEvent) ([]byte, error) {
-	log.Debugf("Workflow actor '%s': invoking method '%s'", o.actorID, methodName)
+	log.Debug("Workflow actor: invoking method", "actor_id", o.actorID, "method", methodName)
 
 	if o.actorState == nil {
 		return nil, messages.ErrActorRuntimeNotFound
@@ -123,7 +123,7 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, met
 }
 
 func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Reminder) error {
-	log.Debugf("Workflow actor '%s': invoking reminder '%s'", o.actorID, reminder.Name)
+	log.Debug("Workflow actor: invoking reminder", "actor_id", o.actorID, "name", reminder.Name)
 
 	switch {
 	case strings.HasPrefix(reminder.Name, reminderPrefixStart),
@@ -145,7 +145,7 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 			// indefinitely; a batch of such orphans (activities completing across an
 			// instance purge under placement churn) measurably degrades the whole
 			// host.
-			log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s' for a purged instance", o.actorID, reminder.Name)
+			log.Warn("Workflow actor: dropping activity-result reminder for a purged instance", "actor_id", o.actorID, "name", reminder.Name)
 			return nil
 		}
 		return err
@@ -167,16 +167,16 @@ func (o *orchestrator) runWorkflowFromReminder(ctx context.Context, reminder *ac
 	case err == nil:
 		return nil
 	case errors.Is(err, context.DeadlineExceeded):
-		log.Warnf("Workflow actor '%s': execution timed-out and will be retried later: '%v'", o.actorID, err)
+		log.Warn("Workflow actor: execution timed-out and will be retried later", "actor_id", o.actorID, "error", err)
 		return err
 	case errors.Is(err, context.Canceled):
-		log.Warnf("Workflow actor '%s': execution was canceled (process shutdown?) and will be retried later: '%v'", o.actorID, err)
+		log.Warn("Workflow actor: execution was canceled (process shutdown?) and will be retried later", "actor_id", o.actorID, "error", err)
 		return err
 	case wferrors.IsRecoverable(err):
-		log.Warnf("Workflow actor '%s': execution failed with a recoverable error and will be retried later: '%v'", o.actorID, err)
+		log.Warn("Workflow actor: execution failed with a recoverable error and will be retried later", "actor_id", o.actorID, "error", err)
 		return err
 	default: // Other error
-		log.Errorf("Workflow actor '%s': execution failed with an error: %v", o.actorID, err)
+		log.Error("Workflow actor: execution failed with an error", "actor_id", o.actorID, "error", err)
 		return err
 	}
 }

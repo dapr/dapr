@@ -34,7 +34,7 @@ func hasSVID(ctx context.Context) bool {
 }
 
 func TestComponentContextDecorator_AppliedForComponentPolicies(t *testing.T) {
-	r := New(testLog)
+	r := New(testLog.Legacy())
 	r.SetComponentContextDecorator(markSVID)
 
 	tests := map[string]*PolicyDefinition{
@@ -60,7 +60,7 @@ func TestComponentContextDecorator_AppliedForComponentPolicies(t *testing.T) {
 }
 
 func TestComponentContextDecorator_NotAppliedForNonComponentPolicies(t *testing.T) {
-	r := New(testLog)
+	r := New(testLog.Legacy())
 	r.addBuiltInPolicies()
 	r.SetComponentContextDecorator(markSVID)
 
@@ -87,7 +87,7 @@ func TestComponentContextDecorator_NotAppliedForNonComponentPolicies(t *testing.
 func TestComponentContextDecorator_NoOpWhenUnset(t *testing.T) {
 	// A provider without a decorator (the default) leaves component contexts
 	// untouched, preserving behaviour when mTLS/SPIFFE is disabled.
-	r := New(testLog)
+	r := New(testLog.Legacy())
 	def := r.ComponentOutboundPolicy("mystore", Statestore)
 
 	runner := NewRunner[bool](context.Background(), def)

@@ -109,8 +109,8 @@ func (s *Signing) VerifyPropagatedHistoryStateless(ph *protos.PropagatedHistory)
 func warnIfSigned(ph *protos.PropagatedHistory, caller string) {
 	for i, chunk := range ph.GetChunks() {
 		if len(chunk.GetRawSignatures()) > 0 || len(chunk.GetSigningCertChains()) > 0 {
-			log.Warnf("%s: receiver has signing disabled but inbound propagated history chunk %d (app %q) carries %d signatures and %d cert chains; payload accepted unverified",
-				caller, i, chunk.GetAppId(), len(chunk.GetRawSignatures()), len(chunk.GetSigningCertChains()))
+			log.Warn("receiver has signing disabled but inbound propagated history chunk carries signatures; payload accepted unverified",
+				"caller", caller, "chunk", i, "app_id", chunk.GetAppId(), "signatures", len(chunk.GetRawSignatures()), "cert_chains", len(chunk.GetSigningCertChains()))
 			return
 		}
 	}

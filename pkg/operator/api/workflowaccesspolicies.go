@@ -59,7 +59,7 @@ func (a *apiServer) WorkflowAccessPolicyUpdate(in *operatorv1pb.WorkflowAccessPo
 	defer cl.CacheLoop()
 
 	if err := cl.Run(ctx); err != nil {
-		log.Warnf("workflow access policy client loop ended with error: %s", err)
+		log.Warn("workflow access policy client loop ended with error", "error", err)
 	}
 
 	return nil
@@ -82,7 +82,7 @@ func (a *apiServer) ListWorkflowAccessPolicy(ctx context.Context, in *operatorv1
 		// If the WorkflowAccessPolicy CRD is not installed, treat as an empty
 		// list so daprd can start in clusters that have not yet applied the CRD.
 		if apimeta.IsNoMatchError(err) {
-			log.Warnf("WorkflowAccessPolicy CRD not installed, returning empty list: %s", err)
+			log.Warn("WorkflowAccessPolicy CRD not installed, returning empty list", "error", err)
 			return resp, nil
 		}
 		return nil, fmt.Errorf("error listing workflow access policies: %w", err)
@@ -91,7 +91,7 @@ func (a *apiServer) ListWorkflowAccessPolicy(ctx context.Context, in *operatorv1
 	for _, item := range policies.Items {
 		b, err := json.Marshal(item)
 		if err != nil {
-			log.Warnf("Error marshalling workflow access policy: %s", err)
+			log.Warn("Error marshalling workflow access policy", "error", err)
 			continue
 		}
 		resp.Policies = append(resp.Policies, b)

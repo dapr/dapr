@@ -14,6 +14,7 @@ limitations under the License.
 package api
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -34,7 +35,7 @@ const (
 	drainTimeoutBudgetRatio = 0.8
 )
 
-var log = logger.NewLogger("dapr.runtime.actor.config")
+var log = logger.New("dapr.runtime.actor.config")
 
 // Remap of config.EntityConfig.
 type EntityConfig struct {
@@ -62,7 +63,7 @@ func TranslateEntityConfig(appConfig config.EntityConfig, disseminationTimeout t
 	if len(appConfig.ActorIdleTimeout) > 0 {
 		idleDuration, err := time.ParseDuration(appConfig.ActorIdleTimeout)
 		if err != nil {
-			log.Warnf("Invalid actor idle timeout value %s, using default value %s", appConfig.ActorIdleTimeout, DefaultIdleTimeout)
+			log.Warn("Invalid actor idle timeout value, using default value", "actor_idle_timeout", appConfig.ActorIdleTimeout, "default_idle_timeout", DefaultIdleTimeout)
 		} else {
 			domainConfig.ActorIdleTimeout = idleDuration
 		}
@@ -71,7 +72,7 @@ func TranslateEntityConfig(appConfig config.EntityConfig, disseminationTimeout t
 	if len(appConfig.DrainOngoingCallTimeout) > 0 {
 		drainCallDuration, err := time.ParseDuration(appConfig.DrainOngoingCallTimeout)
 		if err != nil {
-			log.Warnf("Invalid drain ongoing call timeout value %s, using default value %s", appConfig.DrainOngoingCallTimeout, DefaultOngoingCallTimeout)
+			log.Warn("Invalid drain ongoing call timeout value, using default value", "drain_ongoing_call_timeout", appConfig.DrainOngoingCallTimeout, "default_ongoing_call_timeout", DefaultOngoingCallTimeout)
 		} else {
 			clamped := ClampDrainOngoingCallTimeout(drainCallDuration, disseminationTimeout, "entities="+joinEntities(appConfig.Entities))
 			domainConfig.DrainOngoingCallTimeout = &clamped
@@ -101,8 +102,10 @@ func ClampDrainOngoingCallTimeout(drain, disseminationTimeout time.Duration, sou
 	}
 
 	clamped := max(time.Duration(float64(disseminationTimeout)*drainTimeoutBudgetRatio), DefaultOngoingCallTimeout)
-	log.Warnf("drainOngoingCallTimeout (%s) for %s meets or exceeds the dissemination timeout (%s); clamping to %s to avoid blocking placement dissemination",
-		drain, source, disseminationTimeout, clamped)
+	// The message wording is asserted by integration tests (logline); values
+	// stay interpolated in the message rather than moving to attributes.
+	log.Warn(fmt.Sprintf("drainOngoingCallTimeout (%s) for %s meets or exceeds the dissemination timeout (%s); clamping to %s to avoid blocking placement dissemination",
+		drain, source, disseminationTimeout, clamped))
 	return clamped
 }
 

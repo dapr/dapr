@@ -75,7 +75,7 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
 	if err != nil {
-		log.Fatalf("failed to generate serial number: %s", err)
+		log.Fatal("failed to generate serial number", "error", err)
 	}
 
 	certTemplate := x509.Certificate{

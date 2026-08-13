@@ -34,7 +34,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.processor.secret")
+var log = logger.New("dapr.runtime.processor.secret")
 
 type Options struct {
 	Registry       *compsecret.Registry
@@ -131,7 +131,7 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 			if isEnvVarAllowed(m.EnvRef) {
 				metadata[i].SetValue([]byte(os.Getenv(m.EnvRef)))
 			} else {
-				log.Warnf("%s %s references an env variable that isn't allowed: %s", resource.Kind(), resource.GetName(), m.EnvRef)
+				log.Warn("references an env variable that isn't allowed", "kind", resource.Kind(), "name", resource.GetName(), "env_ref", m.EnvRef)
 			}
 
 			metadata[i].EnvRef = ""
@@ -151,13 +151,13 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 
 			err := json.Unmarshal(m.Value.Raw, &jsonVal)
 			if err != nil {
-				log.Errorf("Error decoding secret: %v", err)
+				log.Error("Error decoding secret", "error", err)
 				continue
 			}
 
 			dec, err := base64.StdEncoding.DecodeString(jsonVal)
 			if err != nil {
-				log.Errorf("Error decoding secret: %v", err)
+				log.Error("Error decoding secret", "error", err)
 				continue
 			}
 
@@ -170,7 +170,7 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 
 		secretStore, ok := s.compStore.GetSecretStore(secretStoreName)
 		if !ok {
-			log.Warnf("%s %s references a secret store that isn't loaded: %s", resource.Kind(), resource.GetName(), secretStoreName)
+			log.Warn("references a secret store that isn't loaded", "kind", resource.Kind(), "name", resource.GetName(), "secret_store_name", secretStoreName)
 			return updated, secretStoreName
 		}
 
@@ -183,7 +183,7 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 				},
 			})
 			if err != nil {
-				log.Errorf("Error getting secret: %v", err)
+				log.Error("Error getting secret", "error", err)
 				continue
 			}
 

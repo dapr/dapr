@@ -41,18 +41,18 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 		return errors.New("invalid execution start event")
 	} else {
 		if es.GetParentInstance() == nil {
-			log.Debugf("Workflow actor '%s': creating workflow '%s' with instanceId '%s'",
-				o.actorID,
-				es.GetName(),
-				es.GetWorkflowInstance().GetInstanceId(),
+			log.Debug("Workflow actor: creating workflow",
+				"actor_id", o.actorID,
+				"name", es.GetName(),
+				"instance_id", es.GetWorkflowInstance().GetInstanceId(),
 			)
 		} else {
-			log.Debugf("Workflow actor '%s': creating child workflow '%s' with instanceId '%s' parentWorkflow '%s' parentWorkflowId '%s'",
-				o.actorID,
-				es.GetName(),
-				es.GetWorkflowInstance().GetInstanceId(),
-				es.GetParentInstance().GetName(),
-				es.GetParentInstance().GetWorkflowInstance().GetInstanceId(),
+			log.Debug("Workflow actor: creating child workflow",
+				"actor_id", o.actorID,
+				"name", es.GetName(),
+				"instance_id", es.GetWorkflowInstance().GetInstanceId(),
+				"parent_workflow", es.GetParentInstance().GetName(),
+				"parent_workflow_id", es.GetParentInstance().GetWorkflowInstance().GetInstanceId(),
 			)
 		}
 	}
@@ -97,8 +97,8 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		// successfully but crashed before persisting its own state, causing it to
 		// re-execute and attempt the child creation again.
 		if o.isSameParentCreation(state, startEvent) {
-			log.Debugf("Workflow actor '%s': ignoring duplicate child workflow creation from parent '%s'",
-				o.actorID, startEvent.GetExecutionStarted().GetParentInstance().GetWorkflowInstance().GetInstanceId())
+			log.Debug("Workflow actor: ignoring duplicate child workflow creation",
+				"actor_id", o.actorID, "parent_workflow_id", startEvent.GetExecutionStarted().GetParentInstance().GetWorkflowInstance().GetInstanceId())
 			return nil
 		}
 		return status.Errorf(codes.AlreadyExists, "an active workflow with ID '%s' already exists", o.actorID)
@@ -123,7 +123,7 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		return status.Errorf(code, "cannot recreate workflow with ID '%s': %s", o.actorID, err.Error())
 	}
 
-	log.Infof("Workflow actor '%s': workflow was previously completed and is being recreated", o.actorID)
+	log.Info("Workflow actor: workflow was previously completed and is being recreated", "actor_id", o.actorID)
 
 	state.Reset()
 

@@ -44,7 +44,7 @@ const (
 	AuthorizationEndpoint = "/authorize"
 )
 
-var log = logger.NewLogger("dapr.sentry.server.oidc.http")
+var log = logger.New("dapr.sentry.server.oidc.http")
 
 // Options is the configuration options for the HTTP server
 type Options struct {
@@ -154,7 +154,7 @@ func New(opts Options) (*Server, error) {
 			return nil, fmt.Errorf("failed to join path for authorization endpoint: %w", err)
 		}
 
-		log.Infof("Using path prefix %q for OIDC HTTP endpoints", *opts.PathPrefix)
+		log.Info("Using path prefix for OIDC HTTP endpoints", "path_prefix", *opts.PathPrefix)
 	}
 
 	return &Server{
@@ -187,7 +187,7 @@ func (s *Server) Run(ctx context.Context) error {
 	addr := net.JoinHostPort(s.listenAddress, strconv.Itoa(s.port))
 
 	if len(s.allowedHosts) > 0 {
-		log.Infof("OIDC server will only accept requests for hosts: %v", s.allowedHosts)
+		log.Info("OIDC server will only accept requests for hosts", "allowed_hosts", s.allowedHosts)
 	} else {
 		log.Info("OIDC server will accept requests for any host")
 	}
@@ -201,7 +201,7 @@ func (s *Server) Run(ctx context.Context) error {
 				break
 			}
 
-			log.Warnf("Waiting for TLS certificate and key files to be available: %v, %v", s.tlsCertPath, s.tlsKeyPath)
+			log.Warn("Waiting for TLS certificate and key files to be available", "tls_cert_path", s.tlsCertPath, "tls_key_path", s.tlsKeyPath)
 
 			select {
 			case <-time.After(5 * time.Second):
@@ -220,7 +220,7 @@ func (s *Server) Run(ctx context.Context) error {
 			MinVersion:   tls.VersionTLS12,
 		}
 
-		log.Infof("Loaded TLS certificate from %s and key from %s", *s.tlsCertPath, *s.tlsKeyPath)
+		log.Info("Loaded TLS certificate from and key from", "tls_cert_path", *s.tlsCertPath, "tls_key_path", *s.tlsKeyPath)
 	}
 
 	server := &http.Server{
@@ -238,13 +238,13 @@ func (s *Server) Run(ctx context.Context) error {
 			}
 			s.htarget.Ready()
 			if tlsConfig == nil {
-				log.Infof("Starting OIDC HTTP server (insecure) on %s", addr)
+				log.Info("Starting OIDC HTTP server (insecure) on", "addr", addr)
 				if err := server.Serve(listener); err != http.ErrServerClosed {
 					return fmt.Errorf("OIDC HTTP server error: %w", err)
 				}
 				return nil
 			}
-			log.Infof("Starting OIDC HTTP server on %s", addr)
+			log.Info("Starting OIDC HTTP server on", "addr", addr)
 			tlsListener := tls.NewListener(listener, tlsConfig)
 			if err := server.Serve(tlsListener); err != http.ErrServerClosed {
 				return fmt.Errorf("OIDC HTTP server error: %w", err)
@@ -281,7 +281,7 @@ func (s *Server) handleJWKS(w http.ResponseWriter, r *http.Request) {
 
 	// The JWKS is already a marshaled JSON object, so we can write it directly
 	if _, err := w.Write(s.jwks); err != nil {
-		log.Errorf("Failed to write JWKS response: %v", err)
+		log.Error("Failed to write JWKS response", "error", err)
 	}
 }
 
@@ -372,7 +372,7 @@ func (s *Server) handleDiscovery(w http.ResponseWriter, r *http.Request) {
 
 		u, err := url.Parse(fmt.Sprintf("%s://%s", scheme, host))
 		if err != nil {
-			log.Errorf("Failed to parse host '%s': %v", host, err)
+			log.Error("Failed to parse host", "host", host, "error", err)
 			http.Error(w, "Invalid host", http.StatusBadRequest)
 			return
 		}
@@ -382,7 +382,7 @@ func (s *Server) handleDiscovery(w http.ResponseWriter, r *http.Request) {
 		if s.jwksURI == nil {
 			jwksURL, err := url.Parse(s.jwksEndpoint)
 			if err != nil {
-				log.Errorf("Failed to parse JWKS endpoint '%s': %v", s.jwksEndpoint, err)
+				log.Error("Failed to parse JWKS endpoint", "jwks_endpoint", s.jwksEndpoint, "error", err)
 				http.Error(w, "Invalid JWKS endpoint", http.StatusInternalServerError)
 				return
 			}
@@ -402,7 +402,7 @@ func (s *Server) handleDiscovery(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(w).Encode(*discovery); err != nil {
-		log.Errorf("Failed to write OIDC discovery response: %v", err)
+		log.Error("Failed to write OIDC discovery response", "error", err)
 	}
 }
 
@@ -438,7 +438,7 @@ func (s *Server) allowedHostsValidationHandler(next http.HandlerFunc) http.Handl
 			}
 		}
 
-		log.Warnf("Request from unauthorized domain: %s", host)
+		log.Warn("Request from unauthorized domain", "host", host)
 		http.Error(w, "Forbidden: unauthorized domain", http.StatusForbidden)
 	}
 }

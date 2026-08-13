@@ -70,7 +70,7 @@ func (c *conn) notifyPublishResponse(resp *rtv1pb.SubscribeTopicEventsRequestPro
 	c.lock.RUnlock()
 
 	if !ok {
-		log.Errorf("no client stream expecting publish response for id %s ConnectionID%d", resp.GetId(), c.connectionID)
+		log.Error("no client stream expecting publish response", "id", resp.GetId(), "connection_id", c.connectionID)
 		return
 	}
 

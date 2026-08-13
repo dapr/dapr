@@ -72,7 +72,7 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 )
 
-var log = logger.NewLogger("dapr.runtime.processor")
+var log = logger.New("dapr.runtime.processor")
 
 type Options struct {
 	ID                              string

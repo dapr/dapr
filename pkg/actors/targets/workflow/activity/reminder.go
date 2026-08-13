@@ -31,7 +31,7 @@ import (
 
 func (a *activity) createReminder(ctx context.Context, invocation *protos.ActivityInvocation, dueTime time.Time, activityName *string) error {
 	const reminderName = "run-activity"
-	log.Debugf("Activity actor '%s||%s': creating reminder '%s' with dueTime=%s", a.actorType, a.actorID, reminderName, dueTime)
+	log.Debug("Activity actor ||: creating reminder with dueTime=", "actor_type", a.actorType, "actor_id", a.actorID, "reminder", reminderName, "due_time", dueTime)
 
 	anydata, err := anypb.New(invocation)
 	if err != nil {

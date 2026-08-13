@@ -112,13 +112,13 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 		e := endpoints.Items[i]
 		err := processHTTPEndpointSecrets(ctx, &e, item.Namespace, a.Client)
 		if err != nil {
-			log.Warnf("error processing secrets for http endpoint '%s/%s': %s", item.Namespace, item.Name, err)
+			log.Warn("error processing secrets for http endpoint /", "namespace", item.Namespace, "name", item.Name, "error", err)
 			return &operatorv1pb.ListHTTPEndpointsResponse{}, err
 		}
 
 		b, err := json.Marshal(e)
 		if err != nil {
-			log.Warnf("Error unmarshalling http endpoints: %s", err)
+			log.Warn("Error unmarshalling http endpoints", "error", err)
 			continue
 		}
 		resp.HttpEndpoints = append(resp.GetHttpEndpoints(), b)
@@ -163,7 +163,7 @@ func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateReques
 
 	// Run the client - this will block until context is done or event channel closes
 	if err := client.Run(ctx); err != nil {
-		log.Warnf("http endpoint client loop ended with error: %s", err)
+		log.Warn("http endpoint client loop ended with error", "error", err)
 	}
 
 	return nil

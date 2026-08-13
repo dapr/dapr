@@ -26,7 +26,7 @@ const (
 	Entries  = "entries"
 )
 
-var bulkPSLogger = logger.NewLogger("bulk.subscribe")
+var bulkPSLogger = logger.New("bulk.subscribe")
 
 type BulkSubscribeMessageItem struct {
 	EntryId     string            `json:"entryId"` //nolint:stylecheck

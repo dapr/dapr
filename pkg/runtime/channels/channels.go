@@ -42,7 +42,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.channels")
+var log = logger.New("dapr.runtime.channels")
 
 type Options struct {
 	// Registry is the all-component registry.

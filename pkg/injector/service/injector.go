@@ -44,7 +44,7 @@ const (
 	serviceAccountUserInfoPrefix              = "system:serviceaccount:"
 )
 
-var log = logger.NewLogger("dapr.injector.service")
+var log = logger.New("dapr.injector.service")
 
 var AllowedServiceAccountInfos = []string{
 	"kube-system:replicaset-controller",
@@ -123,7 +123,7 @@ func getAppIDFromRequest(req *admissionv1.AdmissionRequest) (appID string) {
 	var pod corev1.Pod
 	err := json.Unmarshal(req.Object.Raw, &pod)
 	if err != nil {
-		log.Warnf("could not unmarshal raw object: %v", err)
+		log.Warn("could not unmarshal raw object", "error", err)
 		return ""
 	}
 
@@ -224,7 +224,7 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 			}
 		}
 		if !found {
-			log.Warnf("Unable to get SA %s UID", allowedServiceInfo)
+			log.Warn("Unable to get SA UID", "allowed_service_info", allowedServiceInfo)
 		}
 	}
 
@@ -244,7 +244,7 @@ func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, sentryID spif
 		return fmt.Errorf("error while starting injector: %w", err)
 	}
 
-	log.Infof("Sidecar injector is listening on %s, patching Dapr-enabled pods", ln.Addr())
+	log.Info("Sidecar injector is listening on, patching Dapr-enabled pods", "addr", ln.Addr())
 
 	errCh := make(chan error, 1)
 	go func() {

@@ -33,7 +33,7 @@ func (s *stream) handleLock(version uint64) error {
 
 	s.currentVersion = new(version)
 
-	log.Debugf("Sending LOCK for version %d to stream %s:%d", version, s.ns, s.idx)
+	log.Debug("Sending LOCK for version to stream", "version", version, "ns", s.ns, "idx", s.idx)
 
 	return s.channel.Send(&v1pb.PlacementOrder{
 		Operation: operationLock,
@@ -48,7 +48,7 @@ func (s *stream) handleUpdate(version uint64, tables *v1pb.PlacementTables) erro
 		return nil
 	}
 
-	log.Debugf("Sending UPDATE for version %d to stream %s:%d", version, s.ns, s.idx)
+	log.Debug("Sending UPDATE for version to stream", "version", version, "ns", s.ns, "idx", s.idx)
 
 	return s.channel.Send(&v1pb.PlacementOrder{
 		Operation: operationUpdate,
@@ -61,7 +61,7 @@ func (s *stream) handleUpdate(version uint64, tables *v1pb.PlacementTables) erro
 // This delivers the current placement table without participating in the
 // cluster-wide dissemination protocol.
 func (s *stream) handleTable(version uint64, tables *v1pb.PlacementTables) error {
-	log.Debugf("Sending initial table for version %d to stream %s:%d", version, s.ns, s.idx)
+	log.Debug("Sending initial table for version to stream", "version", version, "ns", s.ns, "idx", s.idx)
 
 	if err := s.channel.Send(&v1pb.PlacementOrder{
 		Operation: operationLock,
@@ -91,7 +91,7 @@ func (s *stream) handleUnlock(version uint64) error {
 		return nil
 	}
 
-	log.Debugf("Sending UNLOCK for version %d to stream %s:%d", version, s.ns, s.idx)
+	log.Debug("Sending UNLOCK for version to stream", "version", version, "ns", s.ns, "idx", s.idx)
 
 	return s.channel.Send(&v1pb.PlacementOrder{
 		Operation: operationUnlock,

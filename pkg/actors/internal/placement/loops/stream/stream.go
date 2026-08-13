@@ -24,7 +24,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.placement.loops.stream")
+var log = logger.New("dapr.runtime.actors.placement.loops.stream")
 
 var (
 	LoopFactory = loop.New[loops.EventStream](8)
@@ -80,7 +80,7 @@ func (s *stream) Handle(ctx context.Context, event loops.EventStream) error {
 	}
 
 	if err != nil {
-		log.Errorf("Error handling stream event %T: %v", event, err)
+		log.Error("Error handling stream event", "event", event, "error", err)
 		s.placeLoop.Enqueue(&loops.ConnCloseStream{
 			Error: err,
 			IDx:   s.idx,
@@ -99,9 +99,9 @@ func (s *stream) handleShutdown(e *loops.Shutdown) {
 	// reconnect cycle during placement leader churn and otherwise drowns the
 	// log with thousands of identical lines per minute.
 	if loops.IsTransientLeaderError(e.Error) {
-		log.Debugf("Closing connection to placement: %s", e.Error)
+		log.Debug("Closing connection to placement", "error", e.Error)
 	} else {
-		log.Infof("Closing connection to placement: %s", e.Error)
+		log.Info("Closing connection to placement", "error", e.Error)
 	}
 	s.channel.CloseSend()
 	s.wg.Wait()

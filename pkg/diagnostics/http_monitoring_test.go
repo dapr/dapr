@@ -29,7 +29,7 @@ func TestHTTPMiddleware(t *testing.T) {
 	t.Cleanup(func() {
 		meter.Stop()
 	})
-	require.NoError(t, testHTTP.Init(meter, "fakeID", configHTTP, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
+	require.NoError(t, testHTTP.Init(meter, "fakeID", configHTTP, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log.Legacy())))
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)
@@ -83,7 +83,7 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 	t.Cleanup(func() {
 		meter.Stop()
 	})
-	require.NoError(t, testHTTP.Init(meter, "fakeID", configHTTP, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
+	require.NoError(t, testHTTP.Init(meter, "fakeID", configHTTP, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log.Legacy())))
 	v := meter.Find("http/server/request_count")
 	views := []*view.View{v}
 	meter.Unregister(views...)
@@ -396,7 +396,7 @@ func TestHTTPMiddleware_Normalization(t *testing.T) {
 			meter.Start()
 			t.Cleanup(func() { meter.Stop() })
 
-			require.NoError(t, testHTTP.Init(meter, "fakeID", configHTTP, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
+			require.NoError(t, testHTTP.Init(meter, "fakeID", configHTTP, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log.Legacy())))
 			handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 
 			req, _ := http.NewRequest(http.MethodPut, "http://localhost:3500"+tc.requestPath, nil)

@@ -40,7 +40,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.processor.pubsub.subscription.grpc")
+var log = logger.New("dapr.runtime.processor.pubsub.subscription.grpc")
 
 // deadLetterPublishTimeout is the deadline given to a DLQ publish issued
 // from this postman. The parent inbound context arrives here without
@@ -102,14 +102,14 @@ func (g *grpc) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 		errStatus, hasErrStatus := status.FromError(err)
 		if hasErrStatus && (errStatus.Code() == codes.Unimplemented) {
 			// DROP
-			log.Warnf("non-retriable error returned from app while processing pub/sub event %v: %s", cloudEvent[contribpubsub.IDField], err)
+			log.Warn("non-retriable error returned from app while processing pub/sub event", "event_id", cloudEvent[contribpubsub.IDField], "error", err)
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Drop)), "", msg.Topic, elapsed)
 
 			return nil
 		}
 
 		err = fmt.Errorf("error returned from app while processing pub/sub event %v: %w", cloudEvent[contribpubsub.IDField], rterrors.NewRetriable(err))
-		log.Debug(err)
+		log.Debug("app returned a retriable error for pub/sub event", "event_id", cloudEvent[contribpubsub.IDField], "error", err)
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
 
 		// return error status code for resiliency to decide on retry
@@ -134,7 +134,7 @@ func (g *grpc) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 		// TODO: add retry error info
 		return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent[contribpubsub.IDField], rterrors.NewRetriable(nil))
 	case rtv1.TopicEventResponse_DROP: //nolint:nosnakecase
-		log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[contribpubsub.IDField])
+		log.Warn("DROP status returned from app while processing pub/sub event", "event_id", cloudEvent[contribpubsub.IDField])
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Drop)), strings.ToLower(string(contribpubsub.Success)), msg.Topic, elapsed)
 
 		return pubsub.ErrMessageDropped
@@ -211,7 +211,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 					n++
 				}
 			} else {
-				log.Warnf("ignored non-string traceid value: %v", iTraceID)
+				log.Warn("ignored non-string traceid value", "trace_id_type", fmt.Sprintf("%T", iTraceID))
 			}
 		}
 	}
@@ -250,7 +250,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	if err != nil {
 		if errStatus, hasErrStatus := status.FromError(err); hasErrStatus && errStatus.Code() == codes.Unimplemented {
 			// fallback: to alpha if unimplemented
-			log.Warnf("falling back to OnBulkTopicEventAlpha1 due to unimplemented error: %s", err)
+			log.Warn("falling back to OnBulkTopicEventAlpha1 due to unimplemented error", "error", err)
 			res, err = call(clientAlpha.OnBulkTopicEventAlpha1) //nolint:staticcheck
 		}
 	}
@@ -265,7 +265,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		errStatus, hasErrStatus := status.FromError(err)
 		if hasErrStatus && (errStatus.Code() == codes.Unimplemented) {
 			// DROP
-			log.Warnf("non-retriable error returned from app while processing bulk pub/sub event: %s", err)
+			log.Warn("non-retriable error returned from app while processing bulk pub/sub event", "error", err)
 
 			bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)] += int64(len(psm.PubSubMessages))
 			bscData.BulkSubDiag.Elapsed = elapsed
@@ -276,7 +276,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		}
 
 		err = fmt.Errorf("error returned from app while processing bulk pub/sub event: %w", err)
-		log.Debug(err)
+		log.Debug("app returned a retriable error for bulk pub/sub event", "error", err)
 
 		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += int64(len(psm.PubSubMessages))
 		bscData.BulkSubDiag.Elapsed = elapsed
@@ -314,7 +314,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 				hasAnyError = true
 			case rtv1.TopicEventResponse_DROP: //nolint:nosnakecase
-				log.Warnf("DROP status returned from app while processing pub/sub event for entry id: %v", entryID)
+				log.Warn("DROP status returned from app while processing pub/sub event", "entry_id", entryID)
 
 				bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)] += 1
 				entryRespReceived[entryID] = true
@@ -339,7 +339,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 				hasAnyError = true
 			}
 		} else {
-			log.Warnf("Invalid entry id received from app while processing pub/sub event %v", entryID)
+			log.Warn("Invalid entry id received from app while processing pub/sub event", "entry_id", entryID)
 			continue
 		}
 	}
@@ -386,7 +386,7 @@ func (g *grpc) sendToDeadLetter(ctx context.Context, name string, msg *contribpu
 
 	err := g.adapter.Publish(pubCtx, req, pubsub.TransportModeGRPC)
 	if err != nil {
-		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
+		log.Error("error sending message to dead letter", "topic", msg.Topic, "dead_letter_topic", deadLetterTopic, "error", err)
 		return err
 	}
 

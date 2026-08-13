@@ -21,7 +21,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.loader.kubernetes")
+var log = logger.New("dapr.runtime.loader.kubernetes")
 
 const (
 	operatorCallTimeout = time.Second * 5

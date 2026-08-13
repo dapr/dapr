@@ -72,7 +72,7 @@ func (t *TelemetryClient) Init() {
 
 	exporter, err := prometheus.New(prometheus.Config{}, ctl)
 	if err != nil {
-		log.Fatalf("failed to initialize prometheus exporter %v", err)
+		log.Fatal("failed to initialize prometheus exporter", "error", err)
 	}
 
 	http.HandleFunc("/metrics", exporter.ServeHTTP)

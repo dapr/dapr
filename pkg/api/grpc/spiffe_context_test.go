@@ -90,10 +90,10 @@ func stateRoundTrip(t *testing.T, ctx context.Context, res resiliency.Provider) 
 	compStore.AddStateStore("store1", store)
 
 	fakeAPI := &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			CompStore:  compStore,
 			Resiliency: res,
 		}),
@@ -138,7 +138,7 @@ func TestComponentOperationSVIDContext(t *testing.T) {
 			ctx = spiffecontext.WithX509(ctx, fakeX509Source{})
 			return spiffecontext.WithJWT(ctx, fakeJWTSource{})
 		})
-		res := resiliency.New(logger.NewLogger("grpc.api.test"))
+		res := resiliency.New(logger.New("grpc.api.test").Legacy())
 		res.SetComponentContextDecorator(sec.WithSVIDContext)
 
 		captured := stateRoundTrip(t, t.Context(), res)
@@ -163,7 +163,7 @@ func TestComponentOperationSVIDContext(t *testing.T) {
 		// Without a decorator (e.g. mTLS/SPIFFE disabled) component contexts are
 		// left untouched, confirming the injection comes specifically from the
 		// wiring above and nothing leaks in by default.
-		res := resiliency.New(logger.NewLogger("grpc.api.test"))
+		res := resiliency.New(logger.New("grpc.api.test").Legacy())
 
 		captured := stateRoundTrip(t, t.Context(), res)
 

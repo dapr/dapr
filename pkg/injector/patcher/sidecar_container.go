@@ -420,7 +420,7 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	// Resources for the container
 	resources, err := c.getResourceRequirements()
 	if err != nil {
-		log.Warnf("couldn't set container resource requirements: %s. using defaults", err)
+		log.Warn("couldn't set container resource requirements:. using defaults", "error", err)
 	} else if resources != nil {
 		container.Resources = *resources
 	}
@@ -471,7 +471,7 @@ func (c *SidecarConfig) getResourceRequirements() (*corev1.ResourceRequirements,
 // GetAppID returns the AppID property, fallinb back to the name of the pod.
 func (c *SidecarConfig) GetAppID() string {
 	if c.AppID == "" {
-		log.Warnf("app-id not set defaulting the app-id to: %s", c.pod.GetName())
+		log.Warn("app-id not set, defaulting app-id to pod name", "name", c.pod.GetName())
 		return c.pod.GetName()
 	}
 

@@ -185,7 +185,7 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 		return err
 	}
 
-	log.Debugf("Workflow actor '%s': saving %d keys to actor state store", o.actorID, len(req.Operations))
+	log.Debug("Workflow actor: saving keys to actor state store", "actor_id", o.actorID, "operations", len(req.Operations))
 
 	if err = o.actorState.TransactionalStateOperation(ctx, true, req, false); err != nil {
 		// ETagMismatch means a peer host wrote to this workflow's metadata
@@ -199,7 +199,7 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 		// against the updated state on the next firing.
 		var etagErr *contribstate.ETagError
 		if errors.As(err, &etagErr) && etagErr.Kind() == contribstate.ETagMismatch {
-			log.Debugf("Workflow actor '%s': save aborted by peer write (etag mismatch); surfacing for retry", o.actorID)
+			log.Debug("Workflow actor: save aborted by peer write (etag mismatch); surfacing for retry", "actor_id", o.actorID)
 		}
 		return err
 	}
@@ -222,7 +222,7 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 		Key:       wfenginestate.MetadataKey,
 	}, false)
 	if metaErr != nil {
-		log.Debugf("Workflow actor '%s': failed to refresh metadata etag after save (%v); next operation will reload", o.actorID, metaErr)
+		log.Debug("Workflow actor: failed to refresh metadata etag after save; next operation will reload", "actor_id", o.actorID, "error", metaErr)
 		o.invalidateCachedState()
 		return nil
 	}
@@ -345,7 +345,7 @@ func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, star
 func (o *orchestrator) purgeWorkflowState(ctx context.Context, meta map[string]*internalsv1pb.ListStringValue) error {
 	defer o.deactivate(o)
 
-	log.Debugf("Workflow actor '%s': purging workflow state", o.actorID)
+	log.Debug("Workflow actor: purging workflow state", "actor_id", o.actorID)
 
 	state, _, err := o.loadInternalState(ctx)
 	if err != nil {

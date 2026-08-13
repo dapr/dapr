@@ -27,7 +27,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.placement.server.loops.stream")
+var log = logger.New("dapr.placement.server.loops.stream")
 
 var (
 	StreamLoopFactory = loop.New[loops.EventStream](8)
@@ -113,7 +113,7 @@ func (s *stream) Handle(ctx context.Context, event loops.EventStream) error {
 	}
 
 	if err != nil {
-		log.Errorf("Error handling stream event %T on %s: %v", event, s.addr, err)
+		log.Error("Error handling stream event on", "event", event, "addr", s.addr, "error", err)
 		// Cancel the stream context rather than enqueueing a ConnCloseStream
 		// directly. recvLoop unwinds on the cancellation and reports the close,
 		// making it the single emission point. Enqueueing here as well would
@@ -129,7 +129,7 @@ func (s *stream) Handle(ctx context.Context, event loops.EventStream) error {
 // handleShutdown handles a shutdown request from placement. It closes the
 // stream.
 func (s *stream) handleShutdown(e *loops.StreamShutdown) {
-	log.Infof("Closing connection to %s: %s", s.addr, e.Error)
+	log.Info("Closing connection", "address", s.addr, "error", e.Error)
 	s.cancel(e.Error)
 	s.wg.Wait()
 	streamCache.Put(s)

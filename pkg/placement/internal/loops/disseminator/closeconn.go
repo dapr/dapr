@@ -126,7 +126,7 @@ func (d *disseminator) advancePhase(ctx context.Context) {
 		d.currentOperation = v1pb.HostOperation_REPORT
 		d.streamsInTargetState = 0
 		d.timeoutQ.Dequeue(d.currentVersion)
-		log.Debugf("Dissemination of version %d in %s complete (via stream close)", d.currentVersion, d.namespace)
+		log.Debug("Dissemination of version in complete (via stream close)", "current_version", d.currentVersion, "namespace", d.namespace)
 
 		// Always arm the coalesce timer after a round completes when coalesceWindow > 0,
 		// regardless of whether anything is currently queued.

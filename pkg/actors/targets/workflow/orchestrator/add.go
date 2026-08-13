@@ -38,7 +38,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	}
 
 	if state == nil {
-		log.Errorf("Workflow actor '%s': cannot add event to workflow as state has been purged. Ignoring event.", o.actorID)
+		log.Error("Workflow actor: cannot add event to workflow as state has been purged. Ignoring event.", "actor_id", o.actorID)
 		return api.ErrInstanceNotFound
 	}
 
@@ -53,7 +53,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	isCompletion := e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil ||
 		e.GetChildWorkflowInstanceCompleted() != nil || e.GetChildWorkflowInstanceFailed() != nil
 	if isCompletion && state.HasTamperMarker() {
-		log.Debugf("Workflow actor '%s': dropping completion event for tombstoned workflow", o.actorID)
+		log.Debug("Workflow actor: dropping completion event for tombstoned workflow", "actor_id", o.actorID)
 		return api.ErrInstanceNotFound
 	}
 
@@ -67,7 +67,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// firing twice during pod migration) would pin the workflow in a replay/spin
 	// loop.
 	if dedup.IsDuplicateCompletion(e, state.History, state.Inbox) {
-		log.Debugf("Workflow actor '%s': dropping duplicate completion event already present in history/inbox; re-asserting wake-up reminder so the inbox row is not stranded", o.actorID)
+		log.Debug("Workflow actor: dropping duplicate completion event already present in history/inbox; re-asserting wake-up reminder so the inbox row is not stranded", "actor_id", o.actorID)
 		return o.assertNewEventReminder(ctx, e, state)
 	}
 
@@ -81,7 +81,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// (Actors.uniqueEventTimestamp), so they fall through to be appended
 	// normally even when raced onto the same wall-clock nanosecond.
 	if dedup.IsDuplicateExternalEvent(e, state.History, state.Inbox) {
-		log.Debugf("Workflow actor '%s': dropping duplicate external event already present in history/inbox; re-asserting wake-up reminder so the inbox row is not stranded", o.actorID)
+		log.Debug("Workflow actor: dropping duplicate external event already present in history/inbox; re-asserting wake-up reminder so the inbox row is not stranded", "actor_id", o.actorID)
 		return o.assertNewEventReminder(ctx, e, state)
 	}
 
@@ -98,7 +98,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// no attestation by design.
 	if !o.isLocalSyntheticFailure(e) {
 		if verr := o.signing.VerifyInboxAttestation(ctx, state, e); verr != nil {
-			log.Warnf("Workflow actor '%s': attestation verification failed, tombstoning workflow: %s", o.actorID, verr)
+			log.Warn("Workflow actor: attestation verification failed, tombstoning workflow", "actor_id", o.actorID, "error", verr)
 			opts := wfenginestate.Options{
 				AppID:             o.appID,
 				Namespace:         o.namespace,
@@ -143,7 +143,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// source app. For cross-app events (e.g. ExecutionTerminated from a
 	// parent in another app), router.SourceAppID is the sender's app and
 	// would route the reminder to a non-existent remote actor.
-	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)
+	log.Debug("Workflow actor: adding event to the workflow inbox", "actor_id", o.actorID)
 	state.AddToInbox(e)
 	if err := o.signAndSaveState(ctx, state); err != nil {
 		return err

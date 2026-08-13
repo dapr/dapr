@@ -53,7 +53,7 @@ func TestTracingOnNewPublishedMessage(t *testing.T) {
 			mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
 
 			ps, err := New(Options{
-				Resiliency: resiliency.New(log),
+				Resiliency: resiliency.New(log.Legacy()),
 				Postman: http.New(http.Options{
 					Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
 				}),

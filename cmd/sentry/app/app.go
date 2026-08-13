@@ -35,31 +35,31 @@ import (
 	"github.com/dapr/kit/signals"
 )
 
-var log = logger.NewLogger("dapr.sentry")
+var log = logger.New("dapr.sentry")
 
 func Run() {
 	opts := options.New(os.Args[1:])
 
 	if err := opts.Validate(); err != nil {
-		log.Fatalf("Invalid options: %s", err)
+		log.Fatal("Invalid options", "error", err)
 	}
 
 	// Apply options to all loggers
 	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
-	log.Infof("Starting Dapr Sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
+	log.Info("Starting Dapr Sentry certificate authority -- version -- commit", "version", buildinfo.Version(), "commit", buildinfo.Commit())
+	log.Info("Log level set to", "output_level", opts.Logger.OutputLevel)
 
 	if err := utils.SetEnvVariables(map[string]string{
 		utils.KubeConfigVar: opts.Kubeconfig,
 	}); err != nil {
-		log.Fatalf("Error setting env: %v", err)
+		log.Fatal("Error setting env", "error", err)
 	}
 
 	if err := monitoring.InitMetrics(); err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
 	var (
@@ -69,32 +69,32 @@ func Run() {
 
 	issuerCertPath := filepath.Join(opts.IssuerCredentialsPath, opts.X509.IssuerCertFilename)
 	if filepath.IsAbs(opts.X509.IssuerCertFilename) {
-		log.Debugf("Using user provided issuer cert path: %s", opts.X509.IssuerCertFilename)
+		log.Debug("Using user provided issuer cert path", "issuer_cert_filename", opts.X509.IssuerCertFilename)
 		issuerCertPath = opts.X509.IssuerCertFilename
 	}
 	issuerKeyPath := filepath.Join(opts.IssuerCredentialsPath, opts.X509.IssuerKeyFilename)
 	if filepath.IsAbs(opts.X509.IssuerKeyFilename) {
-		log.Debugf("Using user provided issuer key path: %s", opts.X509.IssuerKeyFilename)
+		log.Debug("Using user provided issuer key path", "issuer_key_filename", opts.X509.IssuerKeyFilename)
 		issuerKeyPath = opts.X509.IssuerKeyFilename
 	}
 	rootCertPath := filepath.Join(opts.IssuerCredentialsPath, opts.X509.RootCAFilename)
 	if filepath.IsAbs(opts.X509.RootCAFilename) {
-		log.Debugf("Using user provided root cert path: %s", opts.X509.RootCAFilename)
+		log.Debug("Using user provided root cert path", "root_c_a_filename", opts.X509.RootCAFilename)
 		rootCertPath = opts.X509.RootCAFilename
 	}
 	jwtKeyPath := filepath.Join(opts.IssuerCredentialsPath, config.DefaultJWTSigningKeyFilename)
 	if filepath.IsAbs(opts.JWT.SigningKeyFilename) {
-		log.Debugf("Using user provided JWT signing key path: %s", opts.JWT.SigningKeyFilename)
+		log.Debug("Using user provided JWT signing key path", "signing_key_filename", opts.JWT.SigningKeyFilename)
 		jwtKeyPath = opts.JWT.SigningKeyFilename
 	}
 	jwksPath := filepath.Join(opts.IssuerCredentialsPath, config.DefaultJWKSFilename)
 	if filepath.IsAbs(opts.JWT.JWKSFilename) {
-		log.Debugf("Using user provided JWKS path: %s", opts.JWT.JWKSFilename)
+		log.Debug("Using user provided JWKS path", "j_w_k_s_filename", opts.JWT.JWKSFilename)
 		jwksPath = opts.JWT.JWKSFilename
 	}
 
 	if opts.OIDC.TLSCertFile != nil && opts.OIDC.TLSKeyFile != nil {
-		log.Infof("Using OIDC TLS certificate and key files: %s, %s", *opts.OIDC.TLSCertFile, *opts.OIDC.TLSKeyFile)
+		log.Info("Using OIDC TLS certificate and key files", "t_l_s_cert_file", *opts.OIDC.TLSCertFile, "t_l_s_key_file", *opts.OIDC.TLSKeyFile)
 	} else if opts.OIDC.TLSCertFile != nil || opts.OIDC.TLSKeyFile != nil {
 		log.Fatal("both OIDC TLS certificate and key must be provided if one is specified")
 	}
@@ -125,7 +125,7 @@ func Run() {
 
 	cfg, err := config.FromConfigName(opts.ConfigName, opts.Mode)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
 	cfg.IssuerCertPath = issuerCertPath
@@ -157,7 +157,7 @@ func Run() {
 	caMngrFactory := func(ctx context.Context) error {
 		healthz := healthz.New()
 		metricsExporter := metrics.New(metrics.Options{
-			Log:       log,
+			Log:       log.Legacy(),
 			Enabled:   opts.Metrics.Enabled(),
 			Namespace: metrics.DefaultMetricNamespace,
 			Port:      opts.Metrics.Port(),
@@ -183,7 +183,7 @@ func Run() {
 		}
 		return concurrency.NewRunnerManager(
 			healthzserver.New(healthzserver.Options{
-				Log:     log,
+				Log:     log.Legacy(),
 				Port:    opts.HealthzPort,
 				Healthz: healthz,
 			}).Start,
@@ -226,7 +226,7 @@ func Run() {
 		}
 	})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
 	// Watch for changes in the watchDirs
@@ -234,18 +234,18 @@ func Run() {
 		Targets: watchDirs,
 	})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 	if err = mngr.Add(func(ctx context.Context) error {
-		log.Infof("Starting watch on filesystem directories: %v", watchDirs)
+		log.Info("Starting watch on filesystem directories", "watch_dirs", watchDirs)
 		return fs.Run(ctx, issuerEvent)
 	}); err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
 	// Run the runner manager.
 	if err := mngr.Run(signals.Context()); err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 	log.Info("Sentry shut down gracefully")
 }

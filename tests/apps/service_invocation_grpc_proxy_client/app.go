@@ -45,7 +45,7 @@ func run(w http.ResponseWriter, r *http.Request) {
 	var request testCommandRequest
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
-		log.Fatalf("could not decode request body: %v", err)
+		log.Fatal("could not decode request body", "error", err)
 	}
 
 	conn, err := grpc.Dial("localhost:50001",
@@ -54,7 +54,7 @@ func run(w http.ResponseWriter, r *http.Request) {
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(6*1024*1024), grpc.MaxCallSendMsgSize(6*1024*1024)),
 	)
 	if err != nil {
-		log.Fatalf("did not connect: %v", err)
+		log.Fatal("did not connect", "error", err)
 	}
 	defer conn.Close()
 	c := pb.NewGreeterClient(conn)
@@ -91,7 +91,7 @@ func run(w http.ResponseWriter, r *http.Request) {
 
 	b, err := json.Marshal(appResp)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
 	w.WriteHeader(200)

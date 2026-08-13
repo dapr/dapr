@@ -23,7 +23,7 @@ import (
 // Store provides a dynamic dictionary to loaded Component Middleware
 // implementations.
 type Store[T middleware.Middleware] struct {
-	log  logger.Logger
+	log  *logger.Log
 	lock sync.RWMutex
 
 	// loaded is the set of currently loaded middlewares, mapped by name to
@@ -47,7 +47,7 @@ type Item[T middleware.Middleware] struct {
 
 func New[T middleware.Middleware](kind string) *Store[T] {
 	return &Store[T]{
-		log:    logger.NewLogger("dapr.middleware." + kind),
+		log:    logger.New("dapr.middleware." + kind),
 		loaded: make(map[string]Item[T]),
 	}
 }
@@ -56,7 +56,7 @@ func New[T middleware.Middleware](kind string) *Store[T] {
 func (s *Store[T]) Add(item Item[T]) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	s.log.Infof("Adding %s/%s %s middleware", item.Type, item.Version, item.Name)
+	s.log.Info("Adding / middleware", "middleware_type", item.Type, "version", item.Version, "name", item.Name)
 	if len(item.Version) == 0 {
 		item.Version = "v1"
 	}
@@ -84,7 +84,7 @@ func (s *Store[T]) Remove(name string) {
 	defer s.lock.Unlock()
 	m, ok := s.loaded[name]
 	if ok {
-		s.log.Infof("Removing %s/%s %s middleware", m.Type, m.Version, m.Name)
+		s.log.Info("Removing / middleware", "middleware_type", m.Type, "version", m.Version, "name", m.Name)
 	}
 	delete(s.loaded, name)
 }

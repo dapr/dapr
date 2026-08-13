@@ -47,7 +47,7 @@ func (o *orchestrator) recursivePurgeWorkflowState(ctx context.Context, meta map
 
 	v, ok := meta[todo.MetadataPurgeForce]
 	force := ok && len(v.GetValues()) > 0 && v.GetValues()[0] == "true"
-	log.Debugf("Workflow actor '%s': recursive purge (force=%v)", o.actorID, force)
+	log.Debug("Workflow actor: recursive purge", "actor_id", o.actorID, "force", force)
 
 	state, _, err := o.loadInternalState(ctx)
 	if err != nil {

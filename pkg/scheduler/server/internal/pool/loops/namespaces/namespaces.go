@@ -27,7 +27,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.scheduler.server.pool.loops.namespaces")
+var log = logger.New("dapr.scheduler.server.pool.loops.namespaces")
 
 type Options struct {
 	Cron       api.Interface
@@ -104,7 +104,7 @@ func (n *namespaces) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 		n.wg.Go(func() {
 			err := loop.Run(ctx)
 			if err != nil && !errors.Is(err, context.Canceled) {
-				log.Errorf("Error running namespaces loop: %v", err)
+				log.Error("Error running namespaces loop", "error", err)
 				n.cancelPool(err)
 			}
 		})

@@ -29,7 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/loops"
 )
 
-var log = logger.NewLogger("dapr.runtime.processor.loops.httpendpoint")
+var log = logger.New("dapr.runtime.processor.loops.httpendpoint")
 
 // SecretProcessor resolves secret references on a resource. Same shape the
 // root and per-name MCPServer loops use; passed through so this package does
@@ -100,7 +100,7 @@ func (h *Handler) handleAdd(ctx context.Context, ev *loops.AddHTTPEndpoint) {
 	}
 	h.processSecrets(ctx, &endpoint)
 	h.compStore.AddHTTPEndpoint(endpoint)
-	log.Debugf("HTTPEndpoint loaded: %s", endpoint.LogName())
+	log.Debug("HTTPEndpoint loaded", "log_name", endpoint.LogName())
 	sendResult(ev.Result, nil)
 }
 

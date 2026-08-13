@@ -46,7 +46,7 @@ func TestFilterSubscriptions(t *testing.T) {
 		},
 	}
 
-	subs = filterSubscriptions(subs, log)
+	subs = filterSubscriptions(subs, logger.FromLogger(log))
 	if assert.Len(t, subs, 2) {
 		assert.Equal(t, "topic0", subs[0].Topic)
 		assert.Equal(t, "topic1", subs[1].Topic)

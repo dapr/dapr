@@ -53,7 +53,7 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 )
 
-var log = logger.NewLogger("dapr.runtime.actor")
+var log = logger.New("dapr.runtime.actor")
 
 type Options struct {
 	AppID              string
@@ -157,7 +157,7 @@ func New(opts Options) Interface {
 	if len(opts.PlacementAddresses) == 0 ||
 		(len(opts.PlacementAddresses) == 1 && strings.TrimSpace(strings.Trim(opts.PlacementAddresses[0], `"'`)) == "") {
 		var err error = messages.ErrActorNoPlacement
-		log.Warnf("Actor runtime disabled: %s. Actors and Workflow APIs will be unavailable", err)
+		log.Warn("Actor runtime disabled:. Actors and Workflow APIs will be unavailable", "error", err)
 		disabled.Store(&err)
 	}
 
@@ -280,14 +280,14 @@ func (a *actors) Run(ctx context.Context) error {
 	close(a.readyCh)
 
 	if err := a.disabled.Load(); err != nil {
-		log.Infof("Actor runtime disabled: %s", *err)
+		log.Info("Actor runtime disabled", "error", *err)
 		<-ctx.Done()
 		return nil
 	}
 
 	log.Info("Actor runtime started")
 
-	mngr := concurrency.NewRunnerCloserManager(log, nil,
+	mngr := concurrency.NewRunnerCloserManager(log.Legacy(), nil,
 		a.router.Run,
 		func(ctx context.Context) error {
 			// Only wait for host registration before starting the placement client,
@@ -442,7 +442,7 @@ func (a *actors) RegisterHosted(ctx context.Context, cfg hostconfig.Config) erro
 			}
 
 			if !found {
-				log.Warnf("Configuration specified for non-hosted actor type: %s", entity)
+				log.Warn("Configuration specified for non-hosted actor type", "entity", entity)
 			}
 		}
 	}
@@ -495,7 +495,7 @@ func (a *actors) RegisterHosted(ctx context.Context, cfg hostconfig.Config) erro
 		})
 	}
 
-	log.Infof("Registering hosted actors: %v", cfg.HostedActorTypes)
+	log.Info("Registering hosted actors", "hosted_actor_types", cfg.HostedActorTypes)
 	a.table.RegisterActorTypes(table.RegisterActorTypeOptions{
 		Factories: factories,
 		HostOptions: &table.ActorHostOptions{
@@ -589,19 +589,20 @@ func (a *actors) convergeHosting(ctx context.Context) {
 	a.hostingRev = rev
 
 	if ok && a.hostingActive && name == a.hostingName {
-		log.Infof("Actor state store %s updated - actor hosting continues", name)
+		// Message wording asserted by integration tests (logline); keep interpolated.
+		log.Info(fmt.Sprintf("Actor state store %s updated - actor hosting continues", name))
 		return
 	}
 
 	if a.hostingActive {
 		log.Info("Actor state store removed or replaced - draining hosted actors")
 		if err := a.table.SuspendHosting(ctx); err != nil {
-			log.Errorf("Error draining hosted actors after actor state store change: %s", err)
+			log.Error("Error draining hosted actors after actor state store change", "error", err)
 		}
 	}
 
 	if ok {
-		log.Infof("Actor state store %s configured - enabling actor hosting", name)
+		log.Info("Actor state store configured - enabling actor hosting", "name", name)
 		a.table.ResumeHosting()
 	}
 

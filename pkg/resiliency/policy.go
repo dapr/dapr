@@ -52,7 +52,7 @@ type attemptsCtxKey struct{}
 
 // PolicyDefinition contains a definition for a policy, used to create a Runner.
 type PolicyDefinition struct {
-	log                       logger.Logger
+	log                       *logger.Log
 	name                      string
 	t                         time.Duration
 	r                         *Retry
@@ -80,9 +80,9 @@ func (p PolicyDefinition) ComponentContext(ctx context.Context) context.Context 
 }
 
 // NewPolicyDefinition returns a PolicyDefinition object with the given parameters.
-func NewPolicyDefinition(log logger.Logger, name string, t time.Duration, r *Retry, cb *breaker.CircuitBreaker) *PolicyDefinition {
+func NewPolicyDefinition(l logger.Logger, name string, t time.Duration, r *Retry, cb *breaker.CircuitBreaker) *PolicyDefinition {
 	return &PolicyDefinition{
-		log:  log,
+		log:  logger.FromLogger(l),
 		name: name,
 		t:    t,
 		r:    r,
@@ -261,11 +261,11 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 				if def.addRetryActivatedMetric != nil {
 					def.addRetryActivatedMetric()
 				}
-				def.log.Warnf("Error processing operation %s. Retrying in %v…", def.name, d)
-				def.log.Debugf("Error for operation %s was: %v", def.name, opErr)
+				def.log.Warn("Error processing operation. Retrying...", "operation", def.name, "delay", d)
+				def.log.Debug("Error for operation", "operation", def.name, "error", opErr)
 			},
 			func() {
-				def.log.Infof("Recovered processing operation %s after %d attempts", def.name, attempts.Load())
+				def.log.Info("Recovered processing operation", "operation", def.name, "attempts", attempts.Load())
 			},
 		)
 	}

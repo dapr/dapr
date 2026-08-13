@@ -27,7 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 )
 
-var log = logger.NewLogger("dapr.runtime.processor.loops.pubsub")
+var log = logger.New("dapr.runtime.processor.loops.pubsub")
 
 // Manager is the slice of the pubsub sub-processor used by this loop. It is
 // just instance.Manager today (Init / Close).
@@ -124,7 +124,7 @@ func (c *Category) Handle(ctx context.Context, e loops.EventCategory) error {
 			delete(c.instances, name)
 		}
 	default:
-		log.Errorf("pubsub category: unknown event type %T", ev)
+		log.Error("pubsub category: unknown event type", "ev", ev)
 	}
 	return nil
 }
@@ -145,7 +145,7 @@ func (c *Category) routeInstance(ctx context.Context, name string, ev loops.Even
 
 		c.wg.Go(func() {
 			if err := inst.Run(ctx); err != nil {
-				log.Errorf("pubsub instance loop %s error: %s", name, err)
+				log.Error("pubsub instance loop error", "name", name, "error", err)
 			}
 		})
 	}

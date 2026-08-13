@@ -57,6 +57,7 @@ import (
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
 	kiterrors "github.com/dapr/kit/errors"
+	"github.com/dapr/kit/logger"
 )
 
 // API returns a list of HTTP endpoints for Dapr.
@@ -423,7 +424,7 @@ func (a *api) onOutputBindingMessage(w nethttp.ResponseWriter, r *nethttp.Reques
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 
@@ -432,7 +433,7 @@ func (a *api) onOutputBindingMessage(w nethttp.ResponseWriter, r *nethttp.Reques
 	if err != nil {
 		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrMalformedRequestData, err), errorcodes.CommonMalformedRequestData, nethttp.StatusInternalServerError)
 		respondWithError(w, resp)
-		log.Debug(resp)
+		log.Debug("api call returned error", logger.Err(resp))
 		return
 	}
 
@@ -485,7 +486,7 @@ func (a *api) onOutputBindingMessage(w nethttp.ResponseWriter, r *nethttp.Reques
 	if err != nil {
 		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrInvokeOutputBinding, name, err), errorcodes.BindingInvokeOutputBinding, nethttp.StatusInternalServerError)
 		respondWithError(w, resp)
-		log.Debug(resp)
+		log.Debug("api call returned error", logger.Err(resp))
 		return
 	}
 
@@ -499,7 +500,7 @@ func (a *api) onOutputBindingMessage(w nethttp.ResponseWriter, r *nethttp.Reques
 func (a *api) onBulkGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	store, storeName, err := a.getStateStoreWithRequestValidation(w, r)
 	if err != nil {
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		return
 	}
 
@@ -508,7 +509,7 @@ func (a *api) onBulkGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 
@@ -534,7 +535,7 @@ func (a *api) onBulkGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 		if err != nil {
 			status := apierrors.StateStore(storeName).InvalidKeyName(k, err.Error())
 			respondWithError(w, status)
-			log.Debug(status)
+			log.Debug("api call returned error", logger.Err(status))
 			return
 		}
 		r := state.GetRequest{
@@ -566,14 +567,14 @@ func (a *api) onBulkGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 		resp := messages.NewAPIErrorHTTP(err.Error(), errorcodes.StateBulkGet, code)
 		respondWithError(w, resp)
-		log.Debug(resp)
+		log.Debug("api call returned error", logger.Err(resp))
 		return
 	}
 
 	for i := 0; i < len(responses) && i < len(req.Keys); i++ {
 		bulkResp[i].Key = stateLoader.GetOriginalStateKey(responses[i].Key)
 		if responses[i].Error != "" {
-			log.Debugf("bulk get: error getting key %s: %s", bulkResp[i].Key, responses[i].Error)
+			log.Debug("bulk get: error getting key", "key", bulkResp[i].Key, "error", responses[i].Error)
 			bulkResp[i].Error = responses[i].Error
 		} else {
 			bulkResp[i].Data = json.RawMessage(responses[i].Data)
@@ -591,7 +592,7 @@ func (a *api) onBulkGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 			val, err := encryption.TryDecryptValue(storeName, bulkResp[i].Data)
 			if err != nil {
-				log.Debugf("Bulk get error: %v", err)
+				log.Debug("Bulk get error", logger.Err(err))
 				bulkResp[i].Data = nil
 				bulkResp[i].Error = err.Error()
 				continue
@@ -610,7 +611,7 @@ func (a *api) getStateStoreWithRequestValidation(w nethttp.ResponseWriter, r *ne
 
 	if a.universal.CompStore().StateStoresLen() == 0 {
 		err := apierrors.StateStore(storeName).NotConfigured(a.universal.AppID())
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		respondWithError(w, err)
 		return nil, "", err
 	}
@@ -618,7 +619,7 @@ func (a *api) getStateStoreWithRequestValidation(w nethttp.ResponseWriter, r *ne
 	stateStore, ok := a.universal.CompStore().GetStateStore(storeName)
 	if !ok {
 		err := apierrors.StateStore(storeName).NotFound(a.universal.AppID())
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		respondWithError(w, err)
 		return nil, "", err
 	}
@@ -628,7 +629,7 @@ func (a *api) getStateStoreWithRequestValidation(w nethttp.ResponseWriter, r *ne
 func (a *api) onGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	store, storeName, err := a.getStateStoreWithRequestValidation(w, r)
 	if err != nil {
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		return
 	}
 
@@ -640,7 +641,7 @@ func (a *api) onGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	if err != nil {
 		status := apierrors.StateStore(storeName).InvalidKeyName(key, err.Error())
 		respondWithError(w, status)
-		log.Debug(status)
+		log.Debug("api call returned error", logger.Err(status))
 
 		return
 	}
@@ -672,7 +673,7 @@ func (a *api) onGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()), errorcodes.StateGet, code)
 		respondWithError(w, resp)
-		log.Debug(resp)
+		log.Debug("api call returned error", logger.Err(resp))
 		return
 	}
 
@@ -686,7 +687,7 @@ func (a *api) onGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 		if err != nil {
 			resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()), errorcodes.StateGet, nethttp.StatusInternalServerError)
 			respondWithError(w, resp)
-			log.Debug(resp)
+			log.Debug("api call returned error", logger.Err(resp))
 			return
 		}
 
@@ -706,7 +707,7 @@ func (a *api) getConfigurationStoreWithRequestValidation(w nethttp.ResponseWrite
 	if a.universal.CompStore().ConfigurationsLen() == 0 {
 		resp := messages.NewAPIErrorHTTP(messages.ErrConfigurationStoresNotConfigured, errorcodes.ConfigurationStoreNotConfigured, nethttp.StatusInternalServerError)
 		respondWithError(w, resp)
-		log.Debug(resp)
+		log.Debug("api call returned error", logger.Err(resp))
 		return nil, "", errors.New(resp.Message())
 	}
 
@@ -716,7 +717,7 @@ func (a *api) getConfigurationStoreWithRequestValidation(w nethttp.ResponseWrite
 	if !ok {
 		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrConfigurationStoreNotFound, storeName), errorcodes.ConfigurationStoreNotFound, nethttp.StatusBadRequest)
 		respondWithError(w, resp)
-		log.Debug(resp)
+		log.Debug("api call returned error", logger.Err(resp))
 		return nil, "", errors.New(resp.Message())
 	}
 	return conf, storeName, nil
@@ -742,7 +743,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 	appChannel := h.channels.AppChannel()
 	if appChannel == nil {
 		err := fmt.Errorf("app channel is nil. unable to send configuration update from %s", h.storeName)
-		log.Error(err)
+		log.Error("app channel is nil. unable to send configuration update", "store", h.storeName)
 		return err
 	}
 	for key := range e.Items {
@@ -776,7 +777,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 			return struct{}{}, nil
 		})
 		if err != nil {
-			log.Errorf("error sending configuration item to the app: %v", err)
+			log.Error("error sending configuration item to the app", logger.Err(err))
 		}
 	}
 	return nil
@@ -785,13 +786,13 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 func (a *api) onSubscribeConfiguration(w nethttp.ResponseWriter, r *nethttp.Request) {
 	store, storeName, err := a.getConfigurationStoreWithRequestValidation(w, r)
 	if err != nil {
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		return
 	}
 	if a.channels.AppChannel() == nil {
 		msg := NewErrorResponse(errorcodes.CommonAppChannelNil, "app channel is not initialized. cannot subscribe to configuration updates")
 		respondWithJSON(w, nethttp.StatusInternalServerError, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", "code", msg.ErrorCode, "message", msg.Message)
 		return
 	}
 	metadata := getMetadataFromRequest(r)
@@ -833,7 +834,7 @@ func (a *api) onSubscribeConfiguration(w nethttp.ResponseWriter, r *nethttp.Requ
 	if err != nil {
 		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()), errorcodes.ConfigurationSubscribe, nethttp.StatusInternalServerError)
 		respondWithError(w, resp)
-		log.Debug(resp)
+		log.Debug("api call returned error", logger.Err(resp))
 		return
 	}
 
@@ -846,7 +847,7 @@ func (a *api) onSubscribeConfiguration(w nethttp.ResponseWriter, r *nethttp.Requ
 func (a *api) onUnsubscribeConfiguration(w nethttp.ResponseWriter, r *nethttp.Request) {
 	store, storeName, err := a.getConfigurationStoreWithRequestValidation(w, r)
 	if err != nil {
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		return
 	}
 	subscribeID := chi.URLParam(r, configurationSubscribeID)
@@ -872,7 +873,7 @@ func (a *api) onUnsubscribeConfiguration(w nethttp.ResponseWriter, r *nethttp.Re
 			Ok:      false,
 			Message: msg.Message,
 		})
-		log.Debug(msg)
+		log.Debug("api call returned error", "code", msg.ErrorCode, "message", msg.Message)
 		return
 	}
 
@@ -885,7 +886,7 @@ func (a *api) onUnsubscribeConfiguration(w nethttp.ResponseWriter, r *nethttp.Re
 func (a *api) onGetConfiguration(w nethttp.ResponseWriter, r *nethttp.Request) {
 	store, storeName, err := a.getConfigurationStoreWithRequestValidation(w, r)
 	if err != nil {
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		return
 	}
 
@@ -912,7 +913,7 @@ func (a *api) onGetConfiguration(w nethttp.ResponseWriter, r *nethttp.Request) {
 	if err != nil {
 		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrConfigurationGet, keys, storeName, err.Error()), errorcodes.ConfigurationGet, nethttp.StatusInternalServerError)
 		respondWithError(w, resp)
-		log.Debug(resp)
+		log.Debug("api call returned error", logger.Err(resp))
 		return
 	}
 
@@ -933,7 +934,7 @@ func extractEtag(r *nethttp.Request) (hasEtag bool, etag string) {
 func (a *api) onDeleteState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	store, storeName, err := a.getStateStoreWithRequestValidation(w, r)
 	if err != nil {
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		return
 	}
 
@@ -947,7 +948,7 @@ func (a *api) onDeleteState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	if err != nil {
 		status := apierrors.StateStore(storeName).InvalidKeyName(key, err.Error())
 		respondWithError(w, status)
-		log.Debug(status)
+		log.Debug("api call returned error", logger.Err(status))
 		return
 	}
 	req := state.DeleteRequest{
@@ -979,7 +980,7 @@ func (a *api) onDeleteState(w nethttp.ResponseWriter, r *nethttp.Request) {
 		statusCode, errMsg := a.stateErrorResponse(err)
 		apiResp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateDelete, key, errMsg), errorcodes.StateDelete, statusCode)
 		respondWithError(w, apiResp)
-		log.Debug(apiResp)
+		log.Debug("api call returned error", logger.Err(apiResp))
 		return
 	}
 	respondWithEmpty(w)
@@ -988,14 +989,14 @@ func (a *api) onDeleteState(w nethttp.ResponseWriter, r *nethttp.Request) {
 func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	store, storeName, err := a.getStateStoreWithRequestValidation(w, r)
 	if err != nil {
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		return
 	}
 
 	if err != nil {
 		resp := messages.NewAPIErrorHTTP(err.Error(), errorcodes.CommonMalformedRequest, nethttp.StatusBadRequest)
 		respondWithError(w, resp)
-		log.Debug(resp)
+		log.Debug("api call returned error", logger.Err(resp))
 		return
 	}
 	reqs := []state.SetRequest{}
@@ -1003,7 +1004,7 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	if err != nil {
 		resp := messages.NewAPIErrorHTTP(err.Error(), errorcodes.CommonMalformedRequest, nethttp.StatusBadRequest)
 		respondWithError(w, resp)
-		log.Debug(resp)
+		log.Debug("api call returned error", logger.Err(resp))
 		return
 	}
 	if len(reqs) == 0 {
@@ -1017,7 +1018,7 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 		if len(reqs[i].Key) == 0 {
 			resp := messages.NewAPIErrorHTTP(`"key" is a required field`, errorcodes.CommonMalformedRequest, nethttp.StatusBadRequest)
 			respondWithError(w, resp)
-			log.Debug(resp)
+			log.Debug("api call returned error", logger.Err(resp))
 			return
 		}
 
@@ -1032,7 +1033,7 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 		if err != nil {
 			status := apierrors.StateStore(storeName).InvalidKeyName(r.Key, err.Error())
 			respondWithError(w, status)
-			log.Debug(status)
+			log.Debug("api call returned error", logger.Err(status))
 			return
 		}
 
@@ -1043,7 +1044,7 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 				statusCode, errMsg := a.stateErrorResponse(encErr)
 				apiResp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateSave, storeName, errMsg), errorcodes.StateSave, statusCode)
 				respondWithError(w, apiResp)
-				log.Debug(apiResp)
+				log.Debug("api call returned error", logger.Err(apiResp))
 				return
 			}
 
@@ -1066,7 +1067,7 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 		statusCode, errMsg := a.stateErrorResponse(err)
 		apiResp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateSave, storeName, errMsg), errorcodes.StateSave, statusCode)
 		respondWithError(w, apiResp)
-		log.Debug(apiResp)
+		log.Debug("api call returned error", logger.Err(apiResp))
 		return
 	}
 
@@ -1109,7 +1110,7 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 	thepubsub, pubsubName, topic, validationErr := a.validateAndGetPubsubAndTopic(r)
 
 	if validationErr != nil {
-		log.Debug(validationErr)
+		log.Debug("api call returned error", logger.Err(validationErr))
 		respondWithError(w, validationErr)
 		return
 	}
@@ -1119,7 +1120,7 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 	if readErr != nil {
 		err := apierrors.PubSub(pubsubName).PublishMessage(topic, readErr)
 		respondWithError(w, err)
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		return
 	}
 
@@ -1129,7 +1130,7 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 	if metaErr != nil {
 		err := apierrors.PubSub(pubsubName).WithMetadata(metadata).DeserializeError(metaErr)
 		respondWithError(w, err)
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		return
 	}
 
@@ -1152,7 +1153,7 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 				a.universal.AppID(), err,
 			).CloudEventCreation()
 			respondWithError(w, nerr)
-			log.Debug(nerr)
+			log.Debug("api call returned error", logger.Err(nerr))
 			return
 		}
 
@@ -1166,7 +1167,7 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 				a.universal.AppID(), err,
 			).WithTopic(topic).MarshalEnvelope()
 			respondWithError(w, nerr)
-			log.Debug(nerr)
+			log.Debug("api call returned error", logger.Err(nerr))
 			return
 		}
 	}
@@ -1197,7 +1198,7 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 		}
 
 		respondWithError(w, nerr)
-		log.Debug(nerr)
+		log.Debug("api call returned error", logger.Err(nerr))
 	} else {
 		respondWithEmpty(w)
 	}
@@ -1214,7 +1215,7 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 	thepubsub, pubsubName, topic, validationErr := a.validateAndGetPubsubAndTopic(r)
 
 	if validationErr != nil {
-		log.Debug(validationErr)
+		log.Debug("api call returned error", logger.Err(validationErr))
 		respondWithError(w, validationErr)
 		return
 	}
@@ -1223,7 +1224,7 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
 	if metaErr != nil {
 		err := apierrors.PubSub(pubsubName).WithMetadata(metadata).DeserializeError(metaErr)
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		respondWithError(w, err)
 		return
 	}
@@ -1238,7 +1239,7 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 			a.universal.AppID(), nil,
 		).WithTopic(topic).UnmarshalEvents(err)
 		respondWithError(w, nerr)
-		log.Debug(nerr)
+		log.Debug("api call returned error", logger.Err(nerr))
 		return
 	}
 	entries := make([]pubsub.BulkMessageEntry, len(incomingEntries))
@@ -1253,7 +1254,7 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 				a.universal.AppID(), err,
 			).WithTopic(topic).MarshalEnvelope()
 			respondWithError(w, nerr)
-			log.Debug(nerr)
+			log.Debug("api call returned error", logger.Err(nerr))
 			return
 		}
 		entries[i] = pubsub.BulkMessageEntry{
@@ -1271,7 +1272,7 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 				errors.New("entryId is duplicated or not present for entry"),
 			).WithTopic(topic).MarshalEvents()
 			respondWithError(w, nerr)
-			log.Debug(nerr)
+			log.Debug("api call returned error", logger.Err(nerr))
 			return
 		}
 		entryIDSet[entry.EntryID] = struct{}{}
@@ -1314,7 +1315,7 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 					closeChildSpans(standardizedErr.HTTPStatusCode())
 					respondWithError(w, standardizedErr)
 				}
-				log.Debug(nerr)
+				log.Debug("api call returned error", logger.Err(nerr))
 				return
 			}
 
@@ -1330,7 +1331,7 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 					closeChildSpans(standardizedErr.HTTPStatusCode())
 					respondWithError(w, standardizedErr)
 				}
-				log.Debug(nerr)
+				log.Debug("api call returned error", logger.Err(nerr))
 				return
 			}
 		}
@@ -1375,7 +1376,7 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 				closeChildSpans(standardizedErr.HTTPStatusCode())
 				respondWithError(w, standardizedErr)
 			}
-			log.Debug(nerr)
+			log.Debug("api call returned error", logger.Err(nerr))
 			return
 		case errors.As(err, &runtimePubsub.NotFoundError{}):
 			nerr := apierrors.PubSub(pubsubName).TestNotFound(topic, err)
@@ -1387,7 +1388,7 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 			return
 		default:
 			err = apierrors.PubSub(pubsubName).PublishMessage(topic, err)
-			log.Debug(err)
+			log.Debug("api call returned error", logger.Err(err))
 		}
 
 		// Return the error along with the list of failed entries.
@@ -1482,7 +1483,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 
 	if a.universal.CompStore().StateStoresLen() == 0 {
 		err := apierrors.StateStore(storeName).NotConfigured(a.universal.AppID())
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		respondWithError(w, err)
 		return
 	}
@@ -1490,7 +1491,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 	store, ok := a.universal.CompStore().GetStateStore(storeName)
 	if !ok {
 		err := apierrors.StateStore(storeName).NotFound(a.universal.AppID())
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		respondWithError(w, err)
 		return
 	}
@@ -1499,7 +1500,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 	if !ok || !state.FeatureTransactional.IsPresent(store.Features()) {
 		err := apierrors.StateStore(storeName).TransactionsNotSupported()
 		respondWithError(w, err)
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		return
 	}
 
@@ -1507,7 +1508,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 	if len(req.Operations) == 0 {
@@ -1532,14 +1533,14 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 			if err != nil {
 				msg := messages.ErrMalformedRequest.WithFormat(err)
 				respondWithError(w, msg)
-				log.Debug(msg)
+				log.Debug("api call returned error", logger.Err(msg))
 				return
 			}
 			upsertReq.Key, err = stateLoader.GetModifiedStateKey(upsertReq.Key, storeName, a.universal.AppID())
 			if err != nil {
 				status := apierrors.StateStore(storeName).InvalidKeyName(upsertReq.Key, err.Error())
 				respondWithError(w, status)
-				log.Debug(status)
+				log.Debug("api call returned error", logger.Err(status))
 				return
 			}
 
@@ -1558,14 +1559,14 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 			if err != nil {
 				msg := messages.ErrMalformedRequest.WithFormat(err)
 				respondWithError(w, msg)
-				log.Debug(msg)
+				log.Debug("api call returned error", logger.Err(msg))
 				return
 			}
 			delReq.Key, err = stateLoader.GetModifiedStateKey(delReq.Key, storeName, a.universal.AppID())
 			if err != nil {
 				status := apierrors.StateStore(storeName).InvalidKeyName(delReq.Key, err.Error())
 				respondWithError(w, status)
-				log.Debug(status)
+				log.Debug("api call returned error", logger.Err(status))
 
 				return
 			}
@@ -1582,7 +1583,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 		default:
 			resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrNotSupportedStateOperation, o.Operation), errorcodes.StateNotSupportedOperation, nethttp.StatusBadRequest)
 			respondWithError(w, resp)
-			log.Debug(resp)
+			log.Debug("api call returned error", logger.Err(resp))
 			return
 		}
 	}
@@ -1591,7 +1592,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 		max := maxMulti.MultiMaxSize()
 		if max > 0 && len(operations) > max {
 			err := apierrors.StateStore(storeName).TooManyTransactionalOps(len(operations), max)
-			log.Debug(err)
+			log.Debug("api call returned error", logger.Err(err))
 			respondWithError(w, err)
 			return
 		}
@@ -1606,7 +1607,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 				if err != nil {
 					resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateSave, storeName, err.Error()), errorcodes.StateSave, nethttp.StatusBadRequest)
 					respondWithError(w, resp)
-					log.Debug(resp)
+					log.Debug("api call returned error", logger.Err(resp))
 					return
 				}
 
@@ -1624,7 +1625,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 		if err != nil {
 			nerr := apierrors.PubSubOutbox(a.universal.AppID(), err)
 			respondWithError(w, nerr)
-			log.Debug(nerr)
+			log.Debug("api call returned error", logger.Err(nerr))
 			return
 		}
 
@@ -1649,7 +1650,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 	if err != nil {
 		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateTransaction, err.Error()), errorcodes.StateTransaction, nethttp.StatusInternalServerError)
 		respondWithError(w, resp)
-		log.Debug(resp)
+		log.Debug("api call returned error", logger.Err(resp))
 	} else {
 		respondWithEmpty(w)
 	}

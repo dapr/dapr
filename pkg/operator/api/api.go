@@ -46,7 +46,7 @@ const (
 	kubernetesSecretStore = "kubernetes"
 )
 
-var log = logger.NewLogger("dapr.operator.api")
+var log = logger.New("dapr.operator.api")
 
 type Options struct {
 	Client        client.Client
@@ -130,7 +130,7 @@ func (a *apiServer) Run(ctx context.Context) error {
 		return errors.New("api server already running")
 	}
 
-	log.Infof("Starting gRPC server on %s:%s", a.listenAddress, a.port)
+	log.Info("Starting gRPC server on", "listen_address", a.listenAddress, "port", a.port)
 
 	sec, err := a.sec.Handler(ctx)
 	if err != nil {

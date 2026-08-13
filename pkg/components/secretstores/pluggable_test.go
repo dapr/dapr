@@ -124,7 +124,7 @@ func TestComponentCalls(t *testing.T) {
 		proto.RegisterSecretStoreServer(s, srv)
 		go func() {
 			if serveErr := s.Serve(listener); serveErr != nil {
-				testLogger.Debugf("failed to serve: %v", serveErr)
+				logger.FromLogger(testLogger).Debug("failed to serve", "error", serveErr)
 			}
 		}()
 

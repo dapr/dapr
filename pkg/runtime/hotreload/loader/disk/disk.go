@@ -35,7 +35,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.hotreload.loader.disk")
+var log = logger.New("dapr.runtime.hotreload.loader.disk")
 
 type Options struct {
 	AppID          string
@@ -56,7 +56,7 @@ type disk struct {
 }
 
 func New(opts Options) (loader.Interface, error) {
-	log.Infof("Watching directories: [%s]", strings.Join(opts.Dirs, ", "))
+	log.Info("Watching directories", "dirs", strings.Join(opts.Dirs, ", "))
 
 	fs, err := fswatcher.New(fswatcher.Options{
 		Targets: opts.Dirs,

@@ -35,7 +35,7 @@ import (
 )
 
 var (
-	log         = logger.NewLogger("dapr.runtime.hotreload.reconciler")
+	log         = logger.New("dapr.runtime.hotreload.reconciler")
 	loopFactory = loop.New[Event](16)
 )
 
@@ -88,7 +88,7 @@ func (r *Reconciler[T]) Run(ctx context.Context) error {
 
 	r.htarget.Ready()
 
-	log.Infof("Starting to watch %s updates", r.kind)
+	log.Info(fmt.Sprintf("Starting to watch %s updates", r.kind))
 
 	defer loopFactory.CacheLoop(r.loop)
 
@@ -147,19 +147,19 @@ func (r *Reconciler[T]) Handle(ctx context.Context, event Event) error {
 }
 
 func (r *Reconciler[T]) handleTick(ctx context.Context) error {
-	log.Debugf("Running scheduled %s reconcile", r.kind)
+	log.Debug(fmt.Sprintf("Running scheduled %s reconcile", r.kind))
 	return r.doReconcile(ctx)
 }
 
 func (r *Reconciler[T]) handleReconcile(ctx context.Context) error {
-	log.Debugf("Reconciling all %s", r.kind)
+	log.Debug("Reconciling all", "kind", r.kind)
 	return r.doReconcile(ctx)
 }
 
 func (r *Reconciler[T]) doReconcile(ctx context.Context) error {
 	resources, err := r.manager.List(ctx)
 	if err != nil {
-		log.Errorf("Error listing %s: %s", r.kind, err)
+		log.Error("Error listing", "kind", r.kind, "error", err)
 		return nil
 	}
 
@@ -167,24 +167,24 @@ func (r *Reconciler[T]) doReconcile(ctx context.Context) error {
 }
 
 func (r *Reconciler[T]) handleResourceEvent(ctx context.Context, event *loader.Event[T]) error {
-	log.Debugf("Received %s event %s: %s", event.Resource.Kind(), event.Type, event.Resource.LogName())
+	log.Debug("Received event", "kind", event.Resource.Kind(), "event_type", event.Type, "log_name", event.Resource.LogName())
 
 	switch event.Type {
 	case operatorpb.ResourceEventType_CREATED:
-		log.Debugf("Received %s creation: %s", r.kind, event.Resource.LogName())
+		log.Debug("Received creation", "kind", r.kind, "log_name", event.Resource.LogName())
 		return r.manager.update(ctx, event.Resource)
 	case operatorpb.ResourceEventType_UPDATED:
-		log.Debugf("Received %s update: %s", r.kind, event.Resource.LogName())
+		log.Debug("Received update", "kind", r.kind, "log_name", event.Resource.LogName())
 		return r.manager.update(ctx, event.Resource)
 	case operatorpb.ResourceEventType_DELETED:
-		log.Debugf("Received %s deletion, closing: %s", r.kind, event.Resource.LogName())
+		log.Debug("Received deletion, closing", "kind", r.kind, "log_name", event.Resource.LogName())
 		return r.manager.delete(ctx, event.Resource)
 	}
 	return nil
 }
 
 func (r *Reconciler[T]) handleShutdown(e *shutdown) {
-	log.Debugf("reconciler loop shutdown: %v", e.Error)
+	log.Debug("reconciler loop shutdown", "error", e.Error)
 }
 
 func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T]) error {

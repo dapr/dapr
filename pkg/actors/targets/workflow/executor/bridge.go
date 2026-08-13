@@ -147,7 +147,7 @@ func (e *executor) forwardSibling(ctx context.Context, data []byte) {
 func (e *executor) callSibling(ctx context.Context, sibling string, data []byte) {
 	router, err := e.actors.Router(ctx)
 	if err != nil {
-		log.Debugf("Executor actor '%s': unable to forward completion to sibling rendezvous '%s': %s", e.actorID, sibling, err)
+		log.Debug("Executor actor: unable to forward completion to sibling rendezvous", "actor_id", e.actorID, "sibling", sibling, "error", err)
 		return
 	}
 
@@ -164,7 +164,7 @@ func (e *executor) callSibling(ctx context.Context, sibling string, data []byte)
 		})
 
 	if _, err = router.Call(ctx, freq); err != nil {
-		log.Debugf("Executor actor '%s': failed to forward completion to sibling rendezvous '%s': %s", e.actorID, sibling, err)
+		log.Debug("Executor actor: failed to forward completion to sibling rendezvous", "actor_id", e.actorID, "sibling", sibling, "error", err)
 	}
 }
 

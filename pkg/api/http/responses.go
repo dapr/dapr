@@ -78,7 +78,7 @@ func respondWithJSON(w http.ResponseWriter, code int, obj any) {
 	w.WriteHeader(code)
 	err := json.NewEncoder(w).Encode(obj)
 	if err != nil {
-		log.Error("Failed to encode response as JSON:", err)
+		log.Error("Failed to encode response as JSON", "error", err)
 	}
 }
 
@@ -90,7 +90,7 @@ func respondWithData(w http.ResponseWriter, code int, data []byte) {
 	w.WriteHeader(code)
 	_, err := w.Write(data)
 	if err != nil {
-		log.Error("Failed to write response data:", err)
+		log.Error("Failed to write response data", "error", err)
 	}
 }
 
@@ -138,7 +138,7 @@ func respondWithProto(w http.ResponseWriter, m protoreflect.ProtoMessage, status
 	if err != nil {
 		msg := NewErrorResponse(errorcodes.CommonInternal, "failed to encode response as JSON: "+err.Error())
 		respondWithDataAndRecordError(w, http.StatusInternalServerError, msg.JSONErrorValue(), &errorcodes.CommonInternal)
-		log.Debug(msg)
+		log.Debug("api call returned error", "code", msg.ErrorCode, "message", msg.Message)
 		return
 	}
 

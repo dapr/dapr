@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
+
 	"github.com/diagridio/go-etcd-cron/api"
 	etcdcron "github.com/diagridio/go-etcd-cron/cron"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -39,7 +41,7 @@ import (
 	"github.com/dapr/kit/ptr"
 )
 
-var log = logger.NewLogger("dapr.scheduler.server.cron")
+var log = logger.New("dapr.scheduler.server.cron")
 
 const BackendEtcd = etcdcron.BackendEtcd
 
@@ -115,6 +117,10 @@ func (c *cron) Run(ctx context.Context) error {
 	}
 
 	cronOpts := etcdcron.Options{
+		// Route go-etcd-cron's structured logr records through the Dapr
+		// logger. Left unset, the library builds its own zap logger and
+		// scheduler cron logs bypass the Dapr log schema entirely.
+		Log:             logr.FromSlogHandler(log.Handler()),
 		ID:              c.id,
 		TriggerFn:       c.triggerHandler,
 		ReplicaData:     hostAny,
@@ -247,18 +253,18 @@ func (c *cron) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error
 }
 
 func (c *cron) triggerHandler(req *api.TriggerRequest, fn func(*api.TriggerResponse)) {
-	log.Debugf("Triggering job: %s", req.GetName())
+	log.Debug("Triggering job", "job", req.GetName())
 
 	var meta schedulerv1pb.JobMetadata
 	if err := req.GetMetadata().UnmarshalTo(&meta); err != nil {
-		log.Errorf("Error unmarshalling metadata: %s", err)
+		log.Error("Error unmarshalling metadata", logger.Err(err))
 		fn(&api.TriggerResponse{Result: api.TriggerResponseResult_UNDELIVERABLE})
 		return
 	}
 
 	name, err := nameFromKey(req.GetName(), &meta)
 	if err != nil {
-		log.Errorf("Job name is malformed: %s", err)
+		log.Error("Job name is malformed", logger.Err(err))
 		fn(&api.TriggerResponse{Result: api.TriggerResponseResult_UNDELIVERABLE})
 		return
 	}
@@ -305,11 +311,11 @@ func (c *cron) respHandler(name string, meta *schedulerv1pb.JobMetadata, fn func
 		case api.TriggerResponseResult_UNDELIVERABLE:
 			monitoring.RecordJobsUndeliveredCount(meta)
 		default:
-			log.Warnf("Unknown trigger result: %s", result)
+			log.Warn("Unknown trigger result", "result", result)
 			monitoring.RecordJobsUndeliveredCount(meta)
 		}
 
-		log.Debugf("Triggered job %s in %s (%s)", name, duration, result)
+		log.Debug("Triggered job", "job", name, "duration", duration, "result", result)
 
 		fn(&api.TriggerResponse{Result: result})
 	}

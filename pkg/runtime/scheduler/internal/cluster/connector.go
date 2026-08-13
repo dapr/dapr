@@ -46,9 +46,9 @@ func (c *connector) run(ctx context.Context) error {
 		if err != nil {
 			failCount++
 			if failCount == 1 {
-				log.Errorf("Failed to watch scheduler jobs, retrying: %s", err)
+				log.Error("Failed to watch scheduler jobs, retrying", "error", err)
 			} else {
-				log.Debugf("Failed to watch scheduler jobs (attempt %d), retrying: %s", failCount, err)
+				log.Debug("Failed to watch scheduler jobs (attempt ), retrying", "fail_count", failCount, "error", err)
 			}
 
 			select {
@@ -66,9 +66,9 @@ func (c *connector) run(ctx context.Context) error {
 
 			failCount++
 			if failCount == 1 {
-				log.Errorf("Scheduler stream error, re-connecting: %s", err)
+				log.Error("Scheduler stream error, re-connecting", "error", err)
 			} else {
-				log.Debugf("Scheduler stream error (attempt %d), re-connecting: %s", failCount, err)
+				log.Debug("Scheduler stream error (attempt ), re-connecting", "fail_count", failCount, "error", err)
 			}
 
 			select {
@@ -80,7 +80,7 @@ func (c *connector) run(ctx context.Context) error {
 		}
 
 		failCount = 0
-		log.Infof("Scheduler stream connected for %s", c.req.GetInitial().GetAcceptJobTypes())
+		log.Info("Scheduler stream connected", "accept_job_types", c.req.GetInitial().GetAcceptJobTypes())
 
 		err = (&streamer{
 			stream:   stream,
@@ -90,9 +90,9 @@ func (c *connector) run(ctx context.Context) error {
 			wfengine: c.wfengine,
 		}).run(ctx)
 		if err == nil {
-			log.Infof("Scheduler stream disconnected")
+			log.Info("Scheduler stream disconnected")
 		} else {
-			log.Errorf("Scheduler stream disconnected: %v", err)
+			log.Error("Scheduler stream disconnected", "error", err)
 		}
 
 		if ctx.Err() != nil {

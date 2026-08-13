@@ -35,7 +35,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.placement.loops.placement")
+var log = logger.New("dapr.runtime.actors.placement.loops.placement")
 
 type Options struct {
 	Hostname  string
@@ -137,7 +137,7 @@ func (p *placement) handleUpdateTypes(up *loops.UpdateTypes) {
 
 func (p *placement) handleOrder(order *loops.StreamOrder) {
 	if p.idx != order.IDx {
-		log.Debugf("Dropping order from placement idx %d, current idx is %d", order.IDx, p.idx)
+		log.Debug("Dropping order from placement: stale index", "order_idx", order.IDx, "idx", p.idx)
 		return
 	}
 	p.dissLoop.Enqueue(order)
@@ -172,7 +172,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 			return ctx.Err()
 		}
 
-		log.Errorf("Failed to connect to placement service: %s. Retrying...", err)
+		log.Error("Failed to connect to placement service. Retrying...", "error", err)
 
 		select {
 		case <-ctx.Done():
@@ -182,9 +182,9 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 	}
 
 	if recon.TransientPrior {
-		log.Debugf("Connected to placement service: %s", p.connector.Address())
+		log.Debug("Connected to placement service", "address", p.connector.Address())
 	} else {
-		log.Infof("Connected to placement service: %s", p.connector.Address())
+		log.Info("Connected to placement service", "address", p.connector.Address())
 	}
 
 	p.idx++
@@ -206,7 +206,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 	p.wg.Go(func() {
 		derr := p.dissLoop.Run(ctx)
 		if derr != nil {
-			log.Errorf("Placement dissemination loop exited with error: %s", derr)
+			log.Error("Placement dissemination loop exited with error", "error", derr)
 		}
 	})
 
@@ -215,9 +215,9 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 	}
 
 	if recon.TransientPrior {
-		log.Debugf("Reporting initial host to placement service with initial types %v", p.host.GetEntities())
+		log.Debug("Reporting initial host to placement service with initial types", "entities", p.host.GetEntities())
 	} else {
-		log.Infof("Reporting initial host to placement service with initial types %v", p.host.GetEntities())
+		log.Info("Reporting initial host to placement service with initial types", "entities", p.host.GetEntities())
 	}
 	p.dissLoop.Enqueue(&loops.ReportHost{
 		Host: proto.Clone(p.host).(*v1pb.Host),
@@ -233,7 +233,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 
 func (p *placement) handleCloseStream(ctx context.Context, closeStream *loops.ConnCloseStream) error {
 	if closeStream.IDx != p.idx {
-		log.Infof("Ignoring close stream for idx %d, current idx is %d", closeStream.IDx, p.idx)
+		log.Info("Ignoring close stream: stale index", "order_idx", closeStream.IDx, "idx", p.idx)
 		return nil
 	}
 
@@ -246,7 +246,7 @@ func (p *placement) handleCloseStream(ctx context.Context, closeStream *loops.Co
 	disseminator.LoopFactoryCache.CacheLoop(p.dissLoop)
 
 	if err := p.actorTable.HaltAll(ctx); err != nil {
-		log.Errorf("Failed to halt all actors during placement disconnection: %v", err)
+		log.Error("Failed to halt all actors during placement disconnection", "error", err)
 	}
 
 	if ctx.Err() != nil {
@@ -260,9 +260,9 @@ func (p *placement) handleCloseStream(ctx context.Context, closeStream *loops.Co
 	// stale carry-over between unrelated close events.
 	transient := loops.IsTransientLeaderError(closeStream.Error)
 	if transient {
-		log.Debugf("Placement stream closed: %v. Reconnecting...", closeStream.Error)
+		log.Debug("Placement stream closed:. Reconnecting...", "error", closeStream.Error)
 	} else {
-		log.Infof("Placement stream closed: %v. Reconnecting...", closeStream.Error)
+		log.Info("Placement stream closed:. Reconnecting...", "error", closeStream.Error)
 	}
 	return p.handleReconnect(ctx, &loops.PlacementReconnect{TransientPrior: transient})
 }

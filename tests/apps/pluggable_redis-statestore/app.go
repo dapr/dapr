@@ -21,7 +21,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("redis-pluggable")
+var log = logger.New("redis-pluggable")
 
 func main() {
 	dapr.Register("redis-pluggable",

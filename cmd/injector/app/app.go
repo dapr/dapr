@@ -39,7 +39,7 @@ import (
 	"github.com/dapr/kit/signals"
 )
 
-var log = logger.NewLogger("dapr.injector")
+var log = logger.New("dapr.injector")
 
 func Run() {
 	opts := options.New(os.Args[1:])
@@ -47,15 +47,15 @@ func Run() {
 	// Apply options to all loggers
 	err := logger.ApplyOptionsToLoggers(&opts.Logger)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
-	log.Infof("Starting Dapr Sidecar Injector -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
+	log.Info("Starting Dapr Sidecar Injector -- version -- commit", "version", buildinfo.Version(), "commit", buildinfo.Commit())
+	log.Info("Log level set to", "output_level", opts.Logger.OutputLevel)
 
 	healthz := healthz.New()
 	metricsExporter := metrics.New(metrics.Options{
-		Log:       log,
+		Log:       log.Legacy(),
 		Enabled:   opts.Metrics.Enabled(),
 		Namespace: metrics.DefaultMetricNamespace,
 		Port:      opts.Metrics.Port(),
@@ -66,19 +66,19 @@ func Run() {
 		utils.KubeConfigVar: opts.Kubeconfig,
 	})
 	if err != nil {
-		log.Fatalf("Error set env: %v", err)
+		log.Fatal("Error set env", "error", err)
 	}
 
 	// Initialize injector service metrics
 	err = service.InitMetrics()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
 	ctx := signals.Context()
 	cfg, err := service.GetConfig()
 	if err != nil {
-		log.Fatalf("Error getting config: %v", err)
+		log.Fatal("Error getting config", "error", err)
 	}
 
 	conf := utils.GetConfig()
@@ -90,16 +90,16 @@ func Run() {
 	kubeClient := utils.GetKubeClient(conf)
 	daprClient, err := scheme.NewForConfig(conf)
 	if err != nil {
-		log.Fatalf("Error creating Dapr client: %v", err)
+		log.Fatal("Error creating Dapr client", "error", err)
 	}
 	uids, err := service.AllowedControllersServiceAccountUID(ctx, cfg, kubeClient)
 	if err != nil {
-		log.Fatalf("Failed to get authentication uids from services accounts: %s", err)
+		log.Fatal("Failed to get authentication uids from services accounts", "error", err)
 	}
 
 	namespace, err := security.CurrentNamespaceOrError()
 	if err != nil {
-		log.Fatalf("Failed to get current namespace: %s", err)
+		log.Fatal("Failed to get current namespace", "error", err)
 	}
 
 	secProvider, err := security.New(ctx, security.Options{
@@ -117,7 +117,7 @@ func Run() {
 		KeyAlgorithm: ptr.Of(spiffe.KeyAlgorithmRSA),
 	})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
 	inj, err := service.NewInjector(service.Options{
@@ -133,7 +133,7 @@ func Run() {
 		SchedulerEnabled:        opts.SchedulerEnabled,
 	})
 	if err != nil {
-		log.Fatalf("Error creating injector: %v", err)
+		log.Fatal("Error creating injector", "error", err)
 	}
 
 	webConfHealthTarget := healthz.AddTarget("webhook-configuration")
@@ -143,7 +143,7 @@ func Run() {
 		metricsExporter.Start,
 		secProvider.Run,
 		healthzserver.New(healthzserver.Options{
-			Log:     log,
+			Log:     log.Legacy(),
 			Port:    opts.HealthzPort,
 			Healthz: healthz,
 		}).Start,
@@ -210,7 +210,7 @@ func Run() {
 
 	err = mngr.Run(ctx)
 	if err != nil {
-		log.Fatalf("Error running injector: %v", err)
+		log.Fatal("Error running injector", "error", err)
 	}
 
 	log.Info("Dapr sidecar injector shut down gracefully")

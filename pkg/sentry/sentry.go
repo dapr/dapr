@@ -44,7 +44,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.sentry")
+var log = logger.New("dapr.sentry")
 
 type Options struct {
 	Config  config.Config
@@ -126,7 +126,7 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 	if opts.Config.Mode == modes.KubernetesMode {
 		tldd, err := utils.GetKubeClusterDomainFromDNS(ctx)
 		if err != nil {
-			log.Errorf("Error getting Kubernetes cluster domain, falling back to %q: %v", tld, err)
+			log.Error("Error getting Kubernetes cluster domain, falling back to default", "tld", tld, "error", err)
 		} else {
 			tld = tldd
 		}
@@ -158,7 +158,7 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 	}
 
 	for name, val := range vals {
-		log.Infof("Using validator '%s'", strings.ToLower(name.String()))
+		log.Info("Using validator", "string", strings.ToLower(name.String()))
 		if err := runners.Add(val.Start); err != nil {
 			return nil, err
 		}
@@ -175,7 +175,7 @@ func newOIDCServerRunner(opts Options, camngr ca.Signer) (concurrency.Runner, er
 		return nil, nil
 	}
 
-	log.Infof("Starting OIDC HTTP server on port %d", opts.OIDC.ServerListenPort)
+	log.Info("Starting OIDC HTTP server on port", "server_listen_port", opts.OIDC.ServerListenPort)
 
 	var issuer string
 	if opts.Config.JWT.Issuer != nil {

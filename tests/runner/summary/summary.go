@@ -31,7 +31,7 @@ const (
 	testNameSeparator = "/"
 )
 
-var log = logger.NewLogger("tests.runner.summary")
+var log = logger.New("tests.runner.summary")
 
 func sanitizeTestName(testName string) string {
 	return strings.ReplaceAll(testName, testNameSeparator, "_")
@@ -206,7 +206,7 @@ func (t *Table) OutputK6(k6results []*loadtest.K6RunnerMetricsSummary) *Table {
 func (t *Table) Flush() error {
 	bts, err := json.Marshal(t)
 	if err != nil {
-		log.Errorf("error when marshalling table %s: %v", t.Test, err)
+		log.Error("error when marshalling table", "table", t.Test, "error", err)
 		return err
 	}
 
@@ -218,7 +218,7 @@ func (t *Table) Flush() error {
 	//nolint:gosec
 	err = os.WriteFile(filePath(filePrefixOutput, t.Test), bts, os.ModePerm)
 	if err != nil {
-		log.Errorf("error when saving table %s: %v", t.Test, err)
+		log.Error("error when saving table", "table", t.Test, "error", err)
 		return err
 	}
 	return nil

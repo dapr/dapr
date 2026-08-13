@@ -39,7 +39,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.processor.pubsub.subscription.http")
+var log = logger.New("dapr.runtime.processor.pubsub.subscription.http")
 
 // deadLetterPublishTimeout is the deadline given to a DLQ publish issued
 // from this postman. The parent inbound context arrives here without
@@ -89,7 +89,7 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 		sc, _ := diag.SpanContextFromW3CString(traceID)
 		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.Topic, sc, h.tracingSpec)
 	} else if iTraceID != nil {
-		log.Debugf("skipping tracing for pub/sub event %v: non-string trace id of type %T", cloudEvent[contribpubsub.IDField], iTraceID)
+		log.Debug("skipping tracing for pub/sub event: non-string trace id", "event_id", cloudEvent[contribpubsub.IDField], "trace_id_type", fmt.Sprintf("%T", iTraceID))
 	}
 
 	start := time.Now()
@@ -119,9 +119,9 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 		err := json.NewDecoder(resp.RawData()).Decode(&appResponse)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				log.Debugf("skipping status check due to empty response body from pub/sub event %v", cloudEvent[contribpubsub.IDField])
+				log.Debug("skipping status check due to empty response body from pub/sub event", "event_id", cloudEvent[contribpubsub.IDField])
 			} else {
-				log.Debugf("skipping status check due to error parsing result from pub/sub event %v: %s", cloudEvent[contribpubsub.IDField], err)
+				log.Debug("skipping status check due to error parsing result from pub/sub event", "event_id", cloudEvent[contribpubsub.IDField], "error", err)
 			}
 
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Success)), "", msg.Topic, elapsed)
@@ -142,7 +142,7 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 			return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent[contribpubsub.IDField], rterrors.NewRetriable(nil))
 		case contribpubsub.Drop:
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Drop)), strings.ToLower(string(contribpubsub.Success)), msg.Topic, elapsed)
-			log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[contribpubsub.IDField])
+			log.Warn("DROP status returned from app while processing pub/sub event", "event_id", cloudEvent[contribpubsub.IDField])
 
 			return pubsub.ErrMessageDropped
 		}
@@ -157,7 +157,7 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 		// These are errors that are not retriable, for now it is just 404 but more status codes can be added.
 		// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:
 		// https://cloud.google.com/apis/design/errors#handling_errors
-		log.Errorf("non-retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[contribpubsub.IDField], body, statusCode)
+		log.Error("non-retriable error returned from app while processing pub/sub event", "event_id", cloudEvent[contribpubsub.IDField], "body", body, "code", statusCode)
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Drop)), "", msg.Topic, elapsed)
 
 		return pubsub.ErrMessageDropped
@@ -192,7 +192,7 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 	da, marshalErr := json.Marshal(&bsrr.Envelope)
 	if marshalErr != nil {
-		log.Errorf("Error serializing bulk cloud event in pubsub %s and topic %s: %s", psm.Pubsub, psm.Topic, marshalErr)
+		log.Error("Error serializing bulk cloud event", "pubsub", psm.Pubsub, "topic", psm.Topic, "error", marshalErr)
 
 		if req.DeadLetterTopic != "" {
 			entries := make([]contribpubsub.BulkMessageEntry, len(psm.PubSubMessages))
@@ -255,7 +255,7 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 				n++
 			}
 		} else if iTraceID != nil {
-			log.Debugf("skipping tracing for pub/sub event %v: non-string trace id of type %T", cloudEvent[contribpubsub.IDField], iTraceID)
+			log.Debug("skipping tracing for pub/sub event: non-string trace id", "event_id", cloudEvent[contribpubsub.IDField], "trace_id_type", fmt.Sprintf("%T", iTraceID))
 		}
 	}
 
@@ -321,7 +321,7 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 				case contribpubsub.Drop:
 					bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)]++
 					entryRespReceived[response.EntryId] = true
-					log.Warnf("DROP status returned from app while processing pub/sub event %v", response.EntryId)
+					log.Warn("DROP status returned from app while processing pub/sub event", "entry_id", response.EntryId)
 					todo.AddBulkResponseEntry(&bsrr.Entries, response.EntryId, nil)
 
 					if req.DeadLetterTopic != "" {
@@ -343,7 +343,7 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 					hasAnyError = true
 				}
 			} else {
-				log.Warnf("Invalid entry id received from app while processing pub/sub event %v", response.EntryId)
+				log.Warn("Invalid entry id received from app while processing pub/sub event", "entry_id", response.EntryId)
 				continue
 			}
 		}
@@ -372,7 +372,7 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		// These are errors that are not retriable, for now it is just 404 but more status codes can be added.
 		// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:
 		// https://cloud.google.com/apis/design/errors#handling_errors
-		log.Errorf("Non-retriable error returned from app while processing bulk pub/sub event. status code returned: %v", statusCode)
+		log.Error("Non-retriable error returned from app while processing bulk pub/sub event", "code", statusCode)
 
 		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)] += int64(len(rawMsgEntries))
 		bscData.BulkSubDiag.Elapsed = elapsed
@@ -445,7 +445,7 @@ func (h *http) sendBulkToDeadLetter(ctx context.Context,
 	// Internal dead-letter republish (not an HTTP/gRPC publish API call), so match broker errors on native gRPC status codes.
 	_, err := h.adapter.BulkPublish(pubCtx, req, pubsub.TransportModeGRPC)
 	if err != nil {
-		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
+		log.Error("error sending message to dead letter", "topic", msg.Topic, "dead_letter_topic", deadLetterTopic, "error", err)
 	}
 
 	return err
@@ -474,7 +474,7 @@ func (h *http) sendToDeadLetter(ctx context.Context, name string, msg *contribpu
 	// Internal dead-letter republish (not an HTTP/gRPC publish API call), so match broker errors on native gRPC status codes.
 	err := h.adapter.Publish(pubCtx, req, pubsub.TransportModeGRPC)
 	if err != nil {
-		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
+		log.Error("error sending message to dead letter", "topic", msg.Topic, "dead_letter_topic", deadLetterTopic, "error", err)
 		return err
 	}
 

@@ -31,28 +31,28 @@ import (
 	"github.com/dapr/kit/signals"
 )
 
-var log = logger.NewLogger("dapr.scheduler")
+var log = logger.New("dapr.scheduler")
 
 const appID = "dapr-scheduler"
 
 func Run() {
 	opts, err := options.New(os.Args[1:])
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
 	// Apply options to all loggers.
 	if lerr := logger.ApplyOptionsToLoggers(&opts.Logger); lerr != nil {
-		log.Fatal(lerr)
+		log.Fatal("fatal error", "error", lerr)
 	}
 
-	log.Infof("Starting Dapr Scheduler Service -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
+	log.Info("Starting Dapr Scheduler Service -- version -- commit", "version", buildinfo.Version(), "commit", buildinfo.Commit())
+	log.Info("Log level set to", "output_level", opts.Logger.OutputLevel)
 
 	healthz := healthz.New()
 
 	metricsExporter := metrics.New(metrics.Options{
-		Log:           log,
+		Log:           log.Legacy(),
 		Enabled:       opts.Metrics.Enabled(),
 		Namespace:     metrics.DefaultMetricNamespace,
 		Port:          opts.Metrics.Port(),
@@ -61,7 +61,7 @@ func Run() {
 	})
 
 	if merr := monitoring.InitMetrics(); merr != nil {
-		log.Fatal(merr)
+		log.Fatal("fatal error", "error", merr)
 	}
 
 	ctx := signals.Context()
@@ -77,12 +77,12 @@ func Run() {
 		WriteIdentityToFile:     &opts.IdentityDirectoryWrite,
 	})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
 	err = concurrency.NewRunnerManager(
 		healthzserver.New(healthzserver.Options{
-			Log:     log,
+			Log:     log.Legacy(),
 			Port:    opts.HealthzPort,
 			Healthz: healthz,
 		}).Start,
@@ -166,7 +166,7 @@ func Run() {
 		},
 	).Run(ctx)
 	if err != nil {
-		log.Fatalf("Fatal error running scheduler: %v", err)
+		log.Fatal("Fatal error running scheduler", "error", err)
 	}
 
 	log.Info("Scheduler service shut down gracefully")

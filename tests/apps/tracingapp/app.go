@@ -271,7 +271,7 @@ func appRouter() http.Handler {
 func main() {
 	exporter, err := zipkin.New(zipkinEndpoint + zipkinSpans)
 	if err != nil {
-		log.Fatalf("failed to create exporter: %v", err)
+		log.Fatal("failed to create exporter", "error", err)
 	}
 
 	res := resource.NewWithAttributes(
@@ -286,7 +286,7 @@ func main() {
 
 	defer func() {
 		if err := tp.Shutdown(context.Background()); err != nil {
-			log.Fatal(err)
+			log.Fatal("fatal error", "error", err)
 		}
 	}()
 

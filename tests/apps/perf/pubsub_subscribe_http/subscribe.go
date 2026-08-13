@@ -49,25 +49,25 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 
 	jsonBytes, err := json.Marshal(subscriptions)
 	if err != nil {
-		log.Fatalf("Error marshalling subscriptions: %v", err)
+		log.Fatal("Error marshalling subscriptions", "error", err)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_, err = w.Write(jsonBytes)
 	if err != nil {
-		log.Fatalf("Error writing response: %v", err)
+		log.Fatal("Error writing response", "error", err)
 	}
 }
 
 func bulkMessageHandler(w http.ResponseWriter, r *http.Request) {
 	postBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Fatalf("Error reading request body: %v", err)
+		log.Fatal("Error reading request body", "error", err)
 	}
 
 	var bsm bulkSubscribeMessage
 	err = json.Unmarshal(postBody, &bsm)
 	if err != nil {
-		log.Fatalf("Error unmarshalling request body: %v", err)
+		log.Fatal("Error unmarshalling request body", "error", err)
 	}
 
 	// log.Printf("Received %d messages", len(bsm.Entries))
@@ -84,32 +84,32 @@ func bulkMessageHandler(w http.ResponseWriter, r *http.Request) {
 	resp := bulkSubscribeResponse{Statuses: bulkSubscribeResponseStatuses}
 	jsonBytes, err := json.Marshal(resp)
 	if err != nil {
-		log.Fatalf("Error marshalling response: %v", err)
+		log.Fatal("Error marshalling response", "error", err)
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
 	_, err = w.Write(jsonBytes)
 	if err != nil {
-		log.Fatalf("Error writing response: %v", err)
+		log.Fatal("Error writing response", "error", err)
 	}
 }
 
 func messageHandler(w http.ResponseWriter, r *http.Request) {
 	_, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Fatalf("Error reading request body: %v", err)
+		log.Fatal("Error reading request body", "error", err)
 	}
 
 	// log.Printf("received 1 message")
 	uuid, err := uuid.NewUUID()
 	if err != nil {
-		log.Fatalf("Error generating uuid: %v", err)
+		log.Fatal("Error generating uuid", "error", err)
 	}
 	messagesCh <- uuid.String()
 
 	w.WriteHeader(http.StatusOK)
 	_, err = fmt.Fprint(w, "SUCCESS")
 	if err != nil {
-		log.Fatalf("Error writing response: %v", err)
+		log.Fatal("Error writing response", "error", err)
 	}
 }

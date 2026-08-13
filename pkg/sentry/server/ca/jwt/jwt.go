@@ -30,7 +30,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.sentry.ca.jwt")
+var log = logger.New("dapr.sentry.ca.jwt")
 
 const (
 	// DefaultKeyThumbprintAlgorithm
@@ -135,7 +135,7 @@ func (i *issuer) Generate(ctx context.Context, req *Request) (string, error) {
 
 	jti, err := generateJwtID()
 	if err != nil {
-		log.Errorf("Error generating nonce: %v", err)
+		log.Error("Error generating nonce", "error", err)
 		return "", fmt.Errorf("error generating nonce: %w", err)
 	}
 
@@ -157,13 +157,13 @@ func (i *issuer) Generate(ctx context.Context, req *Request) (string, error) {
 	// Build the token
 	token, err := builder.Build()
 	if err != nil {
-		log.Errorf("Error creating JWT token: %v", err)
+		log.Error("Error creating JWT token", "error", err)
 		return "", fmt.Errorf("error creating JWT token: %w", err)
 	}
 
 	signedToken, err := jwt.Sign(token, jwt.WithKey(i.signKey.Algorithm(), i.signKey))
 	if err != nil {
-		log.Errorf("Error signing JWT token: %v", err)
+		log.Error("Error signing JWT token", "error", err)
 		return "", fmt.Errorf("error signing JWT token: %w", err)
 	}
 

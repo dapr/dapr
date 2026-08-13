@@ -22,7 +22,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("kafka-bindings-pluggable")
+var log = logger.New("kafka-bindings-pluggable")
 
 func main() {
 	dapr.Register("kafka-pluggable",

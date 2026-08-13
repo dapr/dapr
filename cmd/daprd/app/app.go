@@ -49,8 +49,8 @@ import (
 )
 
 var (
-	log        = logger.NewLogger("dapr.runtime")
-	logContrib = logger.NewLogger("dapr.contrib")
+	log        = logger.New("dapr.runtime")
+	logContrib = logger.New("dapr.contrib")
 )
 
 func Run() {
@@ -59,7 +59,7 @@ func Run() {
 
 	opts, err := options.New(os.Args[1:])
 	if err != nil {
-		log.Fatalf("Failed to parse flags: %v", err)
+		log.Fatal("Failed to parse flags", "error", err)
 	}
 
 	if opts.RuntimeVersion {
@@ -84,22 +84,22 @@ func Run() {
 
 	err = logger.ApplyOptionsToLoggers(&opts.Logger)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
-	log.Infof("Starting Dapr Runtime -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
+	log.Info("Starting Dapr Runtime", "version", buildinfo.Version(), "commit", buildinfo.Commit())
+	log.Info("Log level set", "log_level", opts.Logger.OutputLevel)
 
-	secretstoresLoader.DefaultRegistry.Logger = logContrib
-	stateLoader.DefaultRegistry.Logger = logContrib
-	cryptoLoader.DefaultRegistry.Logger = logContrib
-	configurationLoader.DefaultRegistry.Logger = logContrib
-	lockLoader.DefaultRegistry.Logger = logContrib
-	pubsubLoader.DefaultRegistry.Logger = logContrib
-	nrLoader.DefaultRegistry.Logger = logContrib
-	bindingsLoader.DefaultRegistry.Logger = logContrib
-	conversationLoader.DefaultRegistry.Logger = logContrib
-	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
+	secretstoresLoader.DefaultRegistry.Logger = logContrib.Legacy()
+	stateLoader.DefaultRegistry.Logger = logContrib.Legacy()
+	cryptoLoader.DefaultRegistry.Logger = logContrib.Legacy()
+	configurationLoader.DefaultRegistry.Logger = logContrib.Legacy()
+	lockLoader.DefaultRegistry.Logger = logContrib.Legacy()
+	pubsubLoader.DefaultRegistry.Logger = logContrib.Legacy()
+	nrLoader.DefaultRegistry.Logger = logContrib.Legacy()
+	bindingsLoader.DefaultRegistry.Logger = logContrib.Legacy()
+	conversationLoader.DefaultRegistry.Logger = logContrib.Legacy()
+	httpMiddlewareLoader.DefaultRegistry.Logger = log.Legacy() // Note this uses log on purpose
 
 	ctx := signals.Context()
 	ctxhupCh := signals.OnHUP(ctx)
@@ -117,7 +117,7 @@ func Run() {
 			}
 
 			if err := runWithContext(hctx, opts); err != nil {
-				log.Fatalf("Fatal error from runtime: %s", err)
+				log.Fatal(fmt.Sprintf("Fatal error from runtime: %s", err))
 			}
 
 			// If hctx was not cancelled, it means the runtime exited on its own
@@ -212,7 +212,7 @@ func runWithContext(ctx context.Context, opts *options.Options) error {
 				AppBindingOptionsTimeout:      opts.AppBindingOptionsTimeout,
 				Metrics: metrics.Options{
 					Enabled:       opts.Metrics.Enabled(),
-					Log:           log,
+					Log:           log.Legacy(),
 					Port:          opts.Metrics.Port(),
 					Namespace:     metrics.DefaultMetricNamespace,
 					Healthz:       healthz,

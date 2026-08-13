@@ -201,7 +201,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	// TODO - consider adding host address to runtime config and/or caching result in utils package
 	host, err := utils.GetHostAddress()
 	if err != nil {
-		log.Warnf("failed to get host address, env variable %s will not be set", env.HostAddress)
+		log.Warn("failed to get host address, env variable will not be set", "host_address", env.HostAddress)
 	}
 
 	variables := map[string]string{
@@ -247,7 +247,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		case modes.KubernetesMode:
 			if len(intc.config) > 1 {
 				// We are not returning an error here because in Kubernetes mode, the injector itself doesn't allow multiple configuration flags to be added, so this should never happen in normal environments
-				log.Warnf("Multiple configurations are not supported in Kubernetes mode; only the first one will be loaded")
+				log.Warn("Multiple configurations are not supported in Kubernetes mode; only the first one will be loaded")
 			}
 
 			log.Debug("Loading Kubernetes config resource: " + intc.config[0])
@@ -312,16 +312,16 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	var resiliencyConfigs []*resiliencyapi.Resiliency
 	switch intc.mode {
 	case modes.KubernetesMode:
-		resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, intc.id, namespace, operatorClient)
-		log.Debugf("Found %d resiliency configurations from Kubernetes", len(resiliencyConfigs))
-		resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
+		resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log.Legacy(), intc.id, namespace, operatorClient)
+		log.Debug("Found resiliency configurations from Kubernetes", "lenresiliency_configs", len(resiliencyConfigs))
+		resiliencyProvider = resiliencyConfig.FromConfigurations(log.Legacy(), resiliencyConfigs...)
 	case modes.StandaloneMode:
 		if len(intc.standalone.ResourcesPath) > 0 {
-			resiliencyConfigs = resiliencyConfig.LoadLocalResiliency(log, intc.id, intc.standalone.ResourcesPath...)
-			log.Debugf("Found %d resiliency configurations in resources path", len(resiliencyConfigs))
-			resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
+			resiliencyConfigs = resiliencyConfig.LoadLocalResiliency(log.Legacy(), intc.id, intc.standalone.ResourcesPath...)
+			log.Debug("Found resiliency configurations in resources path", "lenresiliency_configs", len(resiliencyConfigs))
+			resiliencyProvider = resiliencyConfig.FromConfigurations(log.Legacy(), resiliencyConfigs...)
 		} else {
-			resiliencyProvider = resiliencyConfig.FromConfigurations(log)
+			resiliencyProvider = resiliencyConfig.FromConfigurations(log.Legacy())
 		}
 	}
 

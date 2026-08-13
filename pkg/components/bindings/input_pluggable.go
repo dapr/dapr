@@ -29,7 +29,7 @@ import (
 // grpcInputBinding is a implementation of a inputbinding over a gRPC Protocol.
 type grpcInputBinding struct {
 	*pluggable.GRPCConnector[proto.InputBindingClient]
-	logger logger.Logger
+	logger *logger.Log
 
 	closed  atomic.Bool
 	wg      sync.WaitGroup
@@ -73,7 +73,7 @@ func (b *grpcInputBinding) adaptHandler(ctx context.Context, streamingPull proto
 		var respErr *proto.AckResponseError
 		bts, err := handler(ctx, &m)
 		if err != nil {
-			b.logger.Errorf("error when handling message for message: %s", msg.GetMessageId())
+			b.logger.Error("error when handling message for message", "message_id", msg.GetMessageId())
 			respErr = &proto.AckResponseError{
 				Message: err.Error(),
 			}
@@ -93,7 +93,7 @@ func (b *grpcInputBinding) adaptHandler(ctx context.Context, streamingPull proto
 			ResponseError: respErr,
 			MessageId:     msg.GetMessageId(),
 		}); err != nil {
-			b.logger.Errorf("error when ack'ing message %s", msg.GetMessageId())
+			b.logger.Error("error when ack'ing message", "message_id", msg.GetMessageId())
 		}
 	}
 }
@@ -129,7 +129,7 @@ func (b *grpcInputBinding) Read(ctx context.Context, handler bindings.Handler) e
 
 			// TODO reconnect on error
 			if err != nil {
-				b.logger.Errorf("failed to receive binding message: %v", err)
+				b.logger.Error("failed to receive binding message", "error", err)
 				return
 			}
 			b.wg.Go(func() {
@@ -153,7 +153,7 @@ func (b *grpcInputBinding) Close() error {
 func inputFromConnector(l logger.Logger, connector *pluggable.GRPCConnector[proto.InputBindingClient]) *grpcInputBinding {
 	return &grpcInputBinding{
 		GRPCConnector: connector,
-		logger:        l,
+		logger:        logger.FromLogger(l),
 		closeCh:       make(chan struct{}),
 	}
 }

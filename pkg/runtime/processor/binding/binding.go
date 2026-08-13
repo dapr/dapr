@@ -47,7 +47,7 @@ const (
 	ConcurrencySequential = "sequential"
 )
 
-var log = logger.NewLogger("dapr.runtime.processor.binding")
+var log = logger.New("dapr.runtime.processor.binding")
 
 type Options struct {
 	IsHTTP bool
@@ -198,7 +198,7 @@ func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) 
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
-	log.Infof("successful init for input binding (%s)", comp.LogName())
+	log.Info("successful init for input binding", "log_name", comp.LogName())
 	b.compStore.AddInputBindingRoute(comp.Name, comp.Name)
 
 	for _, item := range comp.Spec.Metadata {
@@ -244,7 +244,7 @@ func (b *binding) initOutputBinding(ctx context.Context, comp compapi.Component)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 		}
 
-		log.Infof("successful init for output binding (%s)", comp.LogName())
+		log.Info("successful init for output binding", "log_name", comp.LogName())
 		b.compStore.AddOutputBinding(comp.Name, binding)
 		diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 	}

@@ -319,7 +319,7 @@ func TestAPILogging(t *testing.T) {
 	// Replace the logger with a custom one for testing
 	prev := infoLog
 	logDest := &bytes.Buffer{}
-	infoLog = logger.NewLogger("test-api-logging")
+	infoLog = logger.New("test-api-logging")
 	infoLog.EnableJSONOutput(true)
 	infoLog.SetOutput(io.MultiWriter(logDest, os.Stderr))
 	defer func() {
@@ -421,7 +421,7 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 	// Replace the logger with a custom one for testing
 	prev := infoLog
 	logDest := &bytes.Buffer{}
-	infoLog = logger.NewLogger("test-api-logging")
+	infoLog = logger.New("test-api-logging")
 	infoLog.EnableJSONOutput(true)
 	infoLog.SetOutput(io.MultiWriter(logDest, os.Stderr))
 	defer func() {

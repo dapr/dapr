@@ -54,7 +54,7 @@ type Options struct {
 type Universal struct {
 	appID                       string
 	namespace                   string
-	logger                      logger.Logger
+	logger                      *logger.Log
 	resiliency                  resiliency.Provider
 	compStore                   *compstore.ComponentStore
 	shutdownFn                  func()
@@ -78,7 +78,7 @@ func New(opts Options) *Universal {
 	return &Universal{
 		appID:                       opts.AppID,
 		namespace:                   opts.Namespace,
-		logger:                      opts.Logger,
+		logger:                      logger.FromLogger(opts.Logger),
 		resiliency:                  opts.Resiliency,
 		compStore:                   opts.CompStore,
 		shutdownFn:                  opts.ShutdownFn,

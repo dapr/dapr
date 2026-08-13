@@ -90,7 +90,7 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 
 		rawPayload, err := metadata.IsRawPayload(route.Metadata)
 		if err != nil {
-			log.Errorf("error deserializing pubsub metadata: %s", err)
+			log.Error("error deserializing pubsub metadata", "error", err)
 
 			dlqErr := s.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, true, route)
 			if dlqErr != nil {
@@ -135,7 +135,7 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 
 				err = json.Unmarshal(message.Event, &cloudEvent)
 				if err != nil {
-					log.Errorf("error deserializing one of the messages in bulk cloud event in pubsub %s and topic %s: %s", psName, topic, err)
+					log.Error("error deserializing one of the messages in bulk cloud event", "pubsub", psName, "topic", topic, "error", err)
 					bulkResponses[i].Error = err
 					bulkResponses[i].EntryId = message.EntryId
 					hasAnyError = true
@@ -144,7 +144,7 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 				}
 
 				if contribpubsub.HasExpired(cloudEvent) {
-					log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[contribpubsub.IDField], cloudEvent[contribpubsub.ExpirationField])
+					log.Warn("dropping expired pub/sub event", "event_id", cloudEvent[contribpubsub.IDField], "expired_at", cloudEvent[contribpubsub.ExpirationField])
 
 					bulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)]++
 
@@ -253,7 +253,7 @@ func (s *Subscription) getRouteIfProcessable(ctx context.Context, bulkSubCallDat
 
 	rPath, shouldProcess, routeErr := findMatchingRoute(route.Rules, matchElem)
 	if routeErr != nil {
-		log.Errorf("Error finding matching route for event in bulk subscribe %s and topic %s for entry id %s: %s", bscData.PsName, bscData.Topic, message.EntryId, routeErr)
+		log.Error("Error finding matching route for event in bulk subscribe", "pubsub", bscData.PsName, "topic", bscData.Topic, "entry_id", message.EntryId, "error", routeErr)
 		todo.SetBulkResponseEntry(bscData.BulkResponses, i, message.EntryId, routeErr)
 
 		return "", routeErr
@@ -261,7 +261,7 @@ func (s *Subscription) getRouteIfProcessable(ctx context.Context, bulkSubCallDat
 
 	if !shouldProcess {
 		// The event does not match any route specified so ignore it.
-		log.Warnf("No matching route for event in pubsub %s and topic %s; skipping", bscData.PsName, bscData.Topic)
+		log.Warn("No matching route for event; skipping", "pubsub", bscData.PsName, "topic", bscData.Topic)
 
 		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)]++
 		if route.DeadLetterTopic != "" {
@@ -358,7 +358,7 @@ func (s *Subscription) sendBulkToDeadLetter(ctx context.Context,
 
 	_, err := s.adapter.BulkPublish(pubCtx, req, rtpubsub.TransportModeGRPC)
 	if err != nil {
-		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
+		log.Error("error sending message to dead letter", "topic", msg.Topic, "dead_letter_topic", deadLetterTopic, "error", err)
 	}
 
 	return err

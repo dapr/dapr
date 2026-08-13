@@ -60,7 +60,7 @@ func (a *activity) executeActivity(ctx context.Context, name string, invocation 
 		// retry can be acked without dispatching the activity to the SDK
 		// again. The owner is responsible for posting the result to the
 		// workflow actor.
-		log.Debugf("Activity actor '%s': following in-flight execution of '%s'", a.actorID, name)
+		log.Debug("Activity actor: following in-flight execution of", "actor_id", a.actorID, "name", name)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

@@ -30,7 +30,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.targets.app")
+var log = logger.New("dapr.runtime.actors.targets.app")
 
 type app struct {
 	*factory
@@ -79,7 +79,7 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error 
 
 	if err := a.transport.InvokeReminder(ctx, reminder); err != nil {
 		if !errors.Is(err, actorerrors.ErrReminderCanceled) {
-			log.Errorf("Error executing reminder for actor %s: %v", reminder.Key(), err)
+			log.Error("Error executing reminder for actor", "actor_key", reminder.Key(), "error", err)
 		}
 		return err
 	}
@@ -103,7 +103,7 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 
 	if err := a.transport.InvokeTimer(ctx, reminder); err != nil {
 		if !errors.Is(err, actorerrors.ErrReminderCanceled) {
-			log.Errorf("Error executing timer for actor %s: %v", reminder.Key(), err)
+			log.Error("Error executing timer for actor", "actor_key", reminder.Key(), "error", err)
 		}
 		return err
 	}
@@ -124,7 +124,7 @@ func (a *app) Deactivate(ctx context.Context) error {
 
 	a.idlerQueue.Dequeue(key.ConstructComposite(a.actorType, a.actorID))
 	diag.DefaultMonitoring.ActorDeactivated(a.actorType)
-	log.Debugf("Deactivated actor '%s'", a.Key())
+	log.Debug("Deactivated actor", "actor_key", a.Key())
 	return nil
 }
 

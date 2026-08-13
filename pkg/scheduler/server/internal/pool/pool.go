@@ -27,7 +27,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.scheduler.server.pool")
+var log = logger.New("dapr.runtime.scheduler.server.pool")
 
 type Options struct {
 	Cron api.Interface

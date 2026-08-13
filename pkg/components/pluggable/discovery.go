@@ -28,7 +28,7 @@ import (
 )
 
 var (
-	discoveryLog        = logger.NewLogger("pluggable-components-discovery")
+	discoveryLog        = logger.New("pluggable-components-discovery")
 	onServiceDiscovered map[string]func(name string, dialer GRPCConnectionDialer)
 )
 
@@ -85,7 +85,7 @@ func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, f
 		return services, nil
 	}
 
-	log.Debugf("loading pluggable components under path %s", componentsSocketPath)
+	log.Debug("loading pluggable components under path", "components_socket_path", componentsSocketPath)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, f
 
 		socket := filepath.Join(componentsSocketPath, f.Name())
 		if !utils.IsSocket(f) {
-			discoveryLog.Warnf("could not use socket for file %s", socket)
+			discoveryLog.Warn("could not use socket for file", "socket", socket)
 			continue
 		}
 
@@ -133,7 +133,7 @@ func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, f
 			})
 		}
 	}
-	log.Debugf("found %d pluggable component services", len(services)-1) // reflection api doesn't count.
+	log.Debug("found pluggable component services", "count", len(services)-1) // reflection api doesn't count.
 	return services, nil
 }
 
@@ -145,7 +145,7 @@ func callback(services []service) {
 			continue
 		}
 		callback(service.componentName, service.dialer)
-		log.Infof("pluggable component '%s' was successfully registered for '%s'", service.componentName, service.protoRef)
+		log.Info("pluggable component was successfully registered for", "component_name", service.componentName, "proto_ref", service.protoRef)
 	}
 }
 

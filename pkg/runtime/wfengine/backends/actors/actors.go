@@ -65,7 +65,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.wfengine.backend.actors")
+var log = logger.New("dapr.wfengine.backend.actors")
 
 const (
 	WorkflowNameLabelKey    = "workflow"
@@ -206,7 +206,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		MaxRequestBodySize:     abe.maxRequestBodySize,
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
-			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
+			log.Debug("scheduling workflow execution with durabletask engine", "instance_id", wi.InstanceID)
 
 			select {
 			case <-ctx.Done(): // <-- engine is shutting down or a caller timeout expired
@@ -225,11 +225,11 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		ActivityActorType: abe.activityActorType,
 		WorkflowActorType: abe.workflowActorType,
 		Scheduler: func(ctx context.Context, wi *backend.ActivityWorkItem) error {
-			log.Debugf(
-				"%s: scheduling [%s#%d] activity execution with durabletask engine",
-				wi.InstanceID,
-				wi.NewEvent.GetTaskScheduled().GetName(),
-				wi.NewEvent.GetEventId())
+			log.Debug(
+				"scheduling activity execution with durabletask engine",
+				"instance_id", wi.InstanceID,
+				"activity", wi.NewEvent.GetTaskScheduled().GetName(),
+				"event_id", wi.NewEvent.GetEventId())
 
 			select {
 			case <-ctx.Done(): // engine is shutting down
@@ -569,7 +569,7 @@ func (abe *Actors) getWorkflowMetadataRemote(ctx context.Context, id api.Instanc
 // AbandonActivityWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow activity execution pipeline.
 func (*Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
-	log.Warnf("%s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.GetEventId())
+	log.Warn("aborting activity execution", "instance_id", wi.InstanceID, "event_id", wi.NewEvent.GetEventId())
 
 	// Sending false signals the waiting activity actor to abort the activity execution.
 	if channel, ok := wi.Properties[todo.CallbackChannelProperty]; ok {
@@ -582,7 +582,7 @@ func (*Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.Activity
 // AbandonWorkflowWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow orchestration execution pipeline.
 func (*Actors) AbandonWorkflowWorkItem(ctx context.Context, wi *backend.WorkflowWorkItem) error {
-	log.Warnf("%s: aborting workflow execution", wi.InstanceID)
+	log.Warn("aborting workflow execution", "instance_id", wi.InstanceID)
 
 	// Sending false signals the waiting workflow actor to abort the workflow execution.
 	// TODO: @joshvanl: remove
@@ -713,7 +713,7 @@ func (abe *Actors) GetWorkflowRuntimeState(ctx context.Context, owi *backend.Wor
 }
 
 func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.InstanceID, taskRouter *protos.TaskRouter, condition func(*backend.WorkflowMetadata) bool) error {
-	log.Debugf("Actor backend streaming WorkflowRuntimeStatus %s", id)
+	log.Debug("Actor backend streaming WorkflowRuntimeStatus", "id", id)
 
 	// A router targeting another app watches that app's workflow actor. This
 	// backs cross-app WaitForWorkflowStart/Completion (e.g. a cross-app
@@ -737,7 +737,7 @@ func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.Instan
 		var meta backend.WorkflowMetadata
 		perr := resp.GetMessage().GetData().UnmarshalTo(&meta)
 		if perr != nil {
-			log.Errorf("Failed to unmarshal orchestration metadata: %s", perr)
+			log.Error("Failed to unmarshal orchestration metadata", "error", perr)
 			return false, perr
 		}
 
@@ -921,7 +921,7 @@ func (abe *Actors) NextWorkflowWorkItem(ctx context.Context) (*backend.WorkflowW
 	// Wait for the workflow actor to signal us with some work to do
 	select {
 	case wi := <-abe.orchestrationWorkItemChan:
-		log.Debugf("Actor backend received a workflow task for workflow '%s'.", wi.InstanceID)
+		log.Debug("Actor backend received a workflow task for workflow.", "instance_id", wi.InstanceID)
 		return wi, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -933,11 +933,11 @@ func (abe *Actors) NextActivityWorkItem(ctx context.Context) (*backend.ActivityW
 	// Wait for the activity actor to signal us with some work to do
 	select {
 	case wi := <-abe.activityWorkItemChan:
-		log.Debugf(
-			"Actor backend received a [%s#%d] activity task for workflow '%s'.",
-			wi.NewEvent.GetTaskScheduled().GetName(),
-			wi.NewEvent.GetEventId(),
-			wi.InstanceID)
+		log.Debug(
+			"Actor backend received an activity task",
+			"activity", wi.NewEvent.GetTaskScheduled().GetName(),
+			"event_id", wi.NewEvent.GetEventId(),
+			"instance_id", wi.InstanceID)
 
 		return wi, nil
 	case <-ctx.Done():
@@ -990,14 +990,14 @@ func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
 			return nil
 
 		case api.IsUnknownTaskIDError(err), api.IsUnknownInstanceIDError(err):
-			log.Warnf("Ignoring complete task which no longer exists: %s", err)
+			log.Warn("Ignoring complete task which no longer exists", "error", err)
 			return nil
 
 		case abe.stopped.Load():
 			return backoff.Permanent(err)
 
 		case ctx.Err() == nil:
-			log.Warnf("error completing activity task: %v, retrying...", err)
+			log.Warn("error completing activity task, retrying...", "error", err)
 		}
 
 		return err
@@ -1082,7 +1082,7 @@ func (abe *Actors) purgeWorkflow(ctx context.Context, id api.InstanceID) error {
 }
 
 func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) error {
-	log.Warnf("Force purging workflow state of '%s'. This can cause corruption if the workflow is being processed", id.String())
+	log.Warn("Force purging workflow state of. This can cause corruption if the workflow is being processed", "string", id.String())
 
 	astate, err := abe.actors.State(ctx)
 	if err != nil {

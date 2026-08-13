@@ -30,7 +30,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.scheduler.server.pool.loops.connections")
+var log = logger.New("dapr.scheduler.server.pool.loops.connections")
 
 var (
 	loopFactory = loop.New[loops.EventConn](1024)
@@ -395,7 +395,7 @@ func (c *connections) handleCloseStream(closeStream *loops.ConnCloseStream) {
 		// Close events are deduplicated at the stream, so an unknown index is
 		// unexpected, but it must never take down this loop: that tears down
 		// every stream in the namespace. Log loudly and tolerate.
-		log.Errorf("Ignoring close for unknown stream connection %d in namespace %s", closeStream.StreamIDx, closeStream.Namespace)
+		log.Error("Ignoring close for unknown stream connection in namespace", "stream_idx", closeStream.StreamIDx, "namespace", closeStream.Namespace)
 		return
 	}
 

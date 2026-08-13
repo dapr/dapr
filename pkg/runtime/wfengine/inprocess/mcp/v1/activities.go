@@ -50,7 +50,7 @@ func listToolsPage(
 		return nil, fmt.Errorf("list-tools: initial call failed for %q: %w", serverName, err)
 	}
 
-	workerLog.Warnf("list-tools: connection lost for %q, reconnecting", serverName)
+	workerLog.Warn("list-tools: connection lost for, reconnecting", "server_name", serverName)
 	session, err = holder.Reconnect(pageCtx)
 	if err != nil {
 		return nil, fmt.Errorf("list-tools: reconnect failed for %q: %w", serverName, err)
@@ -81,7 +81,7 @@ func callToolOnce(
 		return nil, fmt.Errorf("call-tool: initial call failed for %q: %w", serverName, err)
 	}
 
-	workerLog.Warnf("call-tool: connection lost for %q, reconnecting", serverName)
+	workerLog.Warn("call-tool: connection lost for, reconnecting", "server_name", serverName)
 	session, err = holder.Reconnect(callCtx)
 	if err != nil {
 		return nil, fmt.Errorf("call-tool: reconnect failed for %q: %w", serverName, err)
@@ -118,13 +118,13 @@ func makeListToolsActivity(server mcpserverapi.MCPServer, holder *SessionHolder,
 	return func(ctx task.ActivityContext) (any, error) {
 		// Cache hit: return pre-discovered tools without upstream call.
 		if cached, ok := listCache.load(); ok {
-			workerLog.Debugf("list-tools: MCPServer %q served from cache (%d tools)", serverName, len(cached))
+			workerLog.Debug("list-tools: MCPServer served from cache ( tools)", "server_name", serverName, "lencached", len(cached))
 			return &mcp.ListToolsResult{Tools: cached}, nil
 		}
 
 		baseCtx := ctx.Context()
 		timeout := CallTimeout(&server)
-		workerLog.Debugf("list-tools: MCPServer %q per-page timeout=%s", serverName, timeout)
+		workerLog.Debug("list-tools: MCPServer per-page timeout=", "server_name", serverName, "timeout", timeout)
 
 		var tools []*mcp.Tool
 		var cursor string
@@ -174,7 +174,7 @@ func makeCallToolActivity(server mcpserverapi.MCPServer, holder *SessionHolder, 
 			return errorResult("%s", validationErr), nil
 		}
 
-		workerLog.Debugf("call-tool: calling tool %q on MCPServer %q (%d argument keys)", input.ToolName, serverName, len(input.Arguments))
+		workerLog.Debug("call-tool: calling tool on MCPServer ( argument keys)", "tool_name", input.ToolName, "server_name", serverName, "arguments", len(input.Arguments))
 
 		result, err := callToolOnce(callCtx, holder, serverName, &mcp.CallToolParams{
 			Name:      input.ToolName,

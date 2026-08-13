@@ -26,19 +26,20 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	kiterrors "github.com/dapr/kit/errors"
+	"github.com/dapr/kit/logger"
 )
 
 func (a *Universal) GetStateStore(name string) (state.Store, error) {
 	if a.compStore.StateStoresLen() == 0 {
 		err := errors.StateStore(name).NotConfigured("")
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
 	stateStore, ok := a.compStore.GetStateStore(name)
 	if !ok {
 		err := errors.StateStore(name).NotFound("")
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
@@ -55,20 +56,20 @@ func (a *Universal) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryS
 	querier, ok := store.(state.Querier)
 	if !ok {
 		err = errors.StateStore(in.GetStoreName()).QueryUnsupported()
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
 	if encryption.EncryptedStateStore(in.GetStoreName()) {
 		err = errors.StateStore(in.GetStoreName()).QueryFailed("cannot query encrypted store")
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
 	var req state.QueryRequest
 	if err = json.Unmarshal([]byte(in.GetQuery()), &req.Query); err != nil {
 		err = errors.StateStore(in.GetStoreName()).QueryFailed("failed to parse JSON query body: " + err.Error())
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
@@ -91,7 +92,7 @@ func (a *Universal) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryS
 		}
 
 		err = errors.StateStore(in.GetStoreName()).QueryFailed(err.Error())
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 

@@ -54,7 +54,7 @@ type streamer struct {
 	closeCh <-chan struct{}
 }
 
-var log = logger.NewLogger("dapr.runtime.pubsub.streamer")
+var log = logger.New("dapr.runtime.pubsub.streamer")
 
 // TODO: @joshvanl: remove context after refactor.
 func New(ctx context.Context, opts Options) rtpubsub.AdapterStreamer {
@@ -81,7 +81,7 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 
 	s.subscribers[key][connectionID] = connection
 
-	log.Infof("Subscribing to pubsub '%s' topic '%s' ConnectionID %d", req.GetPubsubName(), req.GetTopic(), connectionID)
+	log.Info("Subscribing to pubsub topic", "pubsub", req.GetPubsubName(), "topic", req.GetTopic(), "connection_id", connectionID)
 	s.lock.Unlock()
 
 	defer func() {
@@ -153,12 +153,12 @@ func (s *streamer) recvLoop(
 		if (ok && stat.Code() == codes.Canceled) ||
 			errors.Is(err, context.Canceled) ||
 			errors.Is(err, io.EOF) {
-			log.Infof("Unsubscribed from pubsub '%s' topic '%s'", req.GetPubsubName(), req.GetTopic())
+			log.Info("Unsubscribed from pubsub topic", "pubsub", req.GetPubsubName(), "topic", req.GetTopic())
 			return err
 		}
 
 		if err != nil {
-			log.Errorf("Error receiving message from client stream: %s", err)
+			log.Error("Error receiving message from client stream", logger.Err(err))
 			return err
 		}
 
@@ -218,7 +218,7 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 
 	if err != nil {
 		err = fmt.Errorf("error returned from app while processing pub/sub event %v: %w", msg.CloudEvent[contribpubsub.IDField], rterrors.NewRetriable(err))
-		log.Debug(err)
+		log.Debug("app returned a retriable error for pub/sub event", "event_id", msg.CloudEvent[contribpubsub.IDField], "error", err)
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
 
 		return nil, err

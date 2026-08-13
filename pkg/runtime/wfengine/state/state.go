@@ -61,7 +61,7 @@ const (
 	maxStateEntries = 1_000_000
 )
 
-var wfLogger = logger.NewLogger("dapr.runtime.actor.target.workflow.state")
+var wfLogger = logger.New("dapr.runtime.actor.target.workflow.state")
 
 type Options struct {
 	AppID             string
@@ -724,7 +724,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 			return nil, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
 		}
 
-		wfLogger.Debugf("Loaded legacy workflow state metadata: %s", res.Data)
+		wfLogger.Debug("Loaded legacy workflow state metadata", "data", res.Data)
 
 		metadata.Generation = metadataJSON.Generation
 		metadata.InboxLength = metadataJSON.InboxLength
@@ -825,7 +825,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 		// TODO: @joshvanl: remove in v1.16 where we will no longer have legacy
 		// state parsing issues.
 		if rerr := recover(); rerr != nil {
-			wfLogger.Warnf("Found legacy workflow state, ignoring and overwriting with new storage API: %s; %v", actorID, rerr)
+			wfLogger.Warn("Found legacy workflow state, ignoring and overwriting with new storage API", "actor_id", actorID, "error", rerr)
 		}
 	}()
 
@@ -974,7 +974,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 		wState.IncomingHistory = &ph
 	}
 
-	wfLogger.Debugf("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))
+	wfLogger.Debug("loaded state records", "actor_id", actorID, "records", 1+len(bulkRes), "duration", time.Since(loadStartTime))
 
 	// A workflow that was previously detected as tampered carries an unsigned
 	// ExecutionCompleted(FAILED) marker as its last history event (see

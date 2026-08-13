@@ -32,7 +32,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.placement.loops.disseminator")
+var log = logger.New("dapr.runtime.actors.placement.loops.disseminator")
 
 var (
 	LoopFactoryCache = loop.New[loops.EventDiss](1024)
@@ -120,7 +120,7 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 	diss.wg.Go(func() {
 		derr := diss.streamLoop.Run(ctx)
 		if derr != nil {
-			log.Errorf("Stream loop ended with error: %s", derr)
+			log.Error("Stream loop ended with error", "error", derr)
 		}
 	})
 
@@ -165,7 +165,7 @@ func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.Dissemi
 		return
 	}
 
-	log.Warnf("Dissemination timeout for version %d, closing stream to reconnect", timeout.Version)
+	log.Warn("Dissemination timeout for version, closing stream to reconnect", "version", timeout.Version)
 
 	// Close the stream rather than killing the placement subsystem. The recv
 	// goroutine will exit and enqueue ConnCloseStream to the placement loop,

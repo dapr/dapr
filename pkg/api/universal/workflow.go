@@ -30,6 +30,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/kit/logger"
 )
 
 // Status values are defined at: https://github.com/dapr/durabletask-go/blob/119b361079c45e368f83b223888d56a436ac59b9/internal/protos/orchestrator_service.pb.go#L42-L64
@@ -58,12 +59,12 @@ func (a *Universal) GetWorkflow(ctx context.Context, in *runtimev1pb.GetWorkflow
 		return nil, err
 	}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 	targetAppID, err := a.targetAppID(in.GetAppId())
 	if err != nil {
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 
@@ -79,7 +80,7 @@ func (a *Universal) GetWorkflow(ctx context.Context, in *runtimev1pb.GetWorkflow
 			err = messages.ErrWorkflowGetResponse.WithFormat(in.GetInstanceId(),
 				fmt.Errorf("failed to get workflow metadata for '%s': %w", in.GetInstanceId(), err))
 		}
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return &runtimev1pb.GetWorkflowResponse{
 			InstanceId: in.GetInstanceId(),
 		}, err
@@ -136,18 +137,18 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 		in.InstanceId = randomID.String()
 	}
 	if err := a.validateInstanceID(in.GetInstanceId(), true /* isCreate */); err != nil {
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
 
 	if in.GetWorkflowName() == "" {
 		err := messages.ErrWorkflowNameMissing
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
 	targetAppID, err := a.targetAppID(in.GetAppId())
 	if err != nil {
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
 
@@ -167,7 +168,7 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 		if terr != nil {
 			err := messages.ErrStartWorkflow.WithFormat(in.GetWorkflowName(),
 				errors.New(`start times must be in RFC3339 format (e.g. "2009-11-10T23:00:00Z")`))
-			a.logger.Debug(err)
+			a.logger.Debug("api call returned error", logger.Err(err))
 			return &runtimev1pb.StartWorkflowResponse{}, err
 		}
 		opts = append(opts, api.WithStartTime(startTime))
@@ -185,7 +186,7 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 	})
 	if err != nil {
 		err := messages.ErrStartWorkflow.WithFormat(in.GetWorkflowName(), err)
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
 
@@ -201,13 +202,13 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 	}
 	emptyResponse := &emptypb.Empty{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return emptyResponse, err
 	}
 
 	targetAppID, err := a.targetAppID(in.GetAppId())
 	if err != nil {
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return emptyResponse, err
 	}
 
@@ -222,7 +223,7 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 			err = messages.ErrTerminateWorkflow.WithFormat(in.GetInstanceId(),
 				fmt.Errorf("failed to terminate workflow %s: %w", in.GetInstanceId(), err))
 		}
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return emptyResponse, err
 	}
 
@@ -236,19 +237,19 @@ func (a *Universal) RaiseEventWorkflow(ctx context.Context, in *runtimev1pb.Rais
 	}
 	emptyResponse := &emptypb.Empty{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return emptyResponse, err
 	}
 
 	if in.GetEventName() == "" {
 		err := messages.ErrMissingWorkflowEventName
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return emptyResponse, err
 	}
 
 	targetAppID, err := a.targetAppID(in.GetAppId())
 	if err != nil {
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return emptyResponse, err
 	}
 
@@ -265,7 +266,7 @@ func (a *Universal) RaiseEventWorkflow(ctx context.Context, in *runtimev1pb.Rais
 	if err := a.workflowEngine.Client().RaiseEvent(ctx, api.InstanceID(in.GetInstanceId()), in.GetEventName(), opts...); err != nil {
 		err = messages.ErrRaiseEventWorkflow.WithFormat(in.GetInstanceId(),
 			fmt.Errorf("failed to raise event %s on workflow %s: %w", in.GetEventName(), in.GetInstanceId(), err))
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return emptyResponse, err
 	}
 	return emptyResponse, nil
@@ -278,13 +279,13 @@ func (a *Universal) PauseWorkflow(ctx context.Context, in *runtimev1pb.PauseWork
 	}
 	emptyResponse := &emptypb.Empty{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return emptyResponse, err
 	}
 
 	targetAppID, err := a.targetAppID(in.GetAppId())
 	if err != nil {
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return emptyResponse, err
 	}
 
@@ -295,7 +296,7 @@ func (a *Universal) PauseWorkflow(ctx context.Context, in *runtimev1pb.PauseWork
 	if err := a.workflowEngine.Client().SuspendWorkflow(ctx, api.InstanceID(in.GetInstanceId()), "", opts...); err != nil {
 		err = messages.ErrPauseWorkflow.WithFormat(in.GetInstanceId(),
 			fmt.Errorf("failed to pause workflow %s: %w", in.GetInstanceId(), err))
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return emptyResponse, err
 	}
 
@@ -309,13 +310,13 @@ func (a *Universal) ResumeWorkflow(ctx context.Context, in *runtimev1pb.ResumeWo
 	}
 	emptyResponse := &emptypb.Empty{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return emptyResponse, err
 	}
 
 	targetAppID, err := a.targetAppID(in.GetAppId())
 	if err != nil {
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return emptyResponse, err
 	}
 
@@ -326,7 +327,7 @@ func (a *Universal) ResumeWorkflow(ctx context.Context, in *runtimev1pb.ResumeWo
 	if err := a.workflowEngine.Client().ResumeWorkflow(ctx, api.InstanceID(in.GetInstanceId()), "", opts...); err != nil {
 		err = messages.ErrResumeWorkflow.WithFormat(in.GetInstanceId(),
 			fmt.Errorf("failed to resume workflow %s: %w", in.GetInstanceId(), err))
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return emptyResponse, err
 	}
 
@@ -340,13 +341,13 @@ func (a *Universal) PurgeWorkflow(ctx context.Context, in *runtimev1pb.PurgeWork
 	}
 	emptyResponse := &emptypb.Empty{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return emptyResponse, err
 	}
 
 	targetAppID, err := a.targetAppID(in.GetAppId())
 	if err != nil {
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return emptyResponse, err
 	}
 
@@ -361,7 +362,7 @@ func (a *Universal) PurgeWorkflow(ctx context.Context, in *runtimev1pb.PurgeWork
 			err = messages.ErrPurgeWorkflow.WithFormat(in.GetInstanceId(),
 				fmt.Errorf("failed to Purge workflow %s: %w", in.GetInstanceId(), err))
 		}
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return emptyResponse, err
 	}
 

@@ -37,7 +37,7 @@ var DefaultRegistry *Registry = NewRegistry()
 // NewRegistry is used to create state store registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		Logger:      logger.NewLogger("dapr.state.registry"),
+		Logger:      logger.New("dapr.state.registry").Legacy(),
 		stateStores: make(map[string]func(logger.Logger) state.Store),
 		versionsSet: make(map[string]components.Versioning),
 	}

@@ -39,7 +39,7 @@ type Options struct {
 
 // Server is a healthz server.
 type Server struct {
-	log     logger.Logger
+	log     *logger.Log
 	mux     http.Handler
 	port    int
 	htarget healthz.Target
@@ -50,7 +50,7 @@ func New(opts Options) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if !opts.Healthz.IsReady() {
-			opts.Log.WithFields(map[string]any{"targets": opts.Healthz.GetUnhealthyTargets()}).Debug("targets are unhealthy")
+			logger.FromLogger(opts.Log).Debug("targets are unhealthy", "targets", opts.Healthz.GetUnhealthyTargets())
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
@@ -69,7 +69,7 @@ func New(opts Options) *Server {
 			writer.Header().Set("Content-Type", "application/json")
 			_, err = writer.Write(data)
 			if err != nil {
-				opts.Log.Warnf("failed to encode json to response writer: %s", err.Error())
+				logger.FromLogger(opts.Log).Warn("failed to encode json to response writer", "error", err)
 				writer.WriteHeader(http.StatusInternalServerError)
 				writer.Write([]byte(err.Error()))
 				return
@@ -78,7 +78,7 @@ func New(opts Options) *Server {
 	}
 
 	return &Server{
-		log:     opts.Log,
+		log:     logger.FromLogger(opts.Log),
 		port:    opts.Port,
 		mux:     mux,
 		htarget: opts.Healthz.AddTarget("healthz-server"),
@@ -100,7 +100,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	serveErr := make(chan error, 1)
 	go func() {
-		s.log.Infof("Healthz server is listening on %s", ln.Addr())
+		s.log.Info("Healthz server is listening on", "addr", ln.Addr())
 		err := srv.Serve(ln)
 		if !errors.Is(err, http.ErrServerClosed) {
 			serveErr <- err

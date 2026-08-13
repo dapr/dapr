@@ -39,7 +39,7 @@ func TestCryptoAlpha1(t *testing.T) {
 	fakeAPI := &api{
 		logger: apiServerLogger,
 		Universal: universal.New(universal.Options{
-			Logger:     apiServerLogger,
+			Logger:     apiServerLogger.Legacy(),
 			Resiliency: resiliency.New(nil),
 			CompStore:  compStore,
 		}),

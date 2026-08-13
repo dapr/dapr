@@ -78,9 +78,9 @@ func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPu
 		// runtime-default substitution does not produce a spurious
 		// warning for callers that left the field unset.
 		if req.BulkSubscribeConfig.MaxAwaitDurationMs > 0 {
-			bulkPSLogger.Warnf(
-				"bulk subscribe on topic %q: maxAwaitDurationMs=%dms is ignored because the pubsub component declares immediate-flush; each message is delivered as soon as it arrives",
-				req.Topic, req.BulkSubscribeConfig.MaxAwaitDurationMs)
+			bulkPSLogger.Warn(
+				"bulk subscribe: maxAwaitDurationMs is ignored because the pubsub component declares immediate-flush; each message is delivered as soon as it arrives",
+				"topic", req.Topic, "max_await_duration_ms", req.BulkSubscribeConfig.MaxAwaitDurationMs)
 		}
 		go processBulkMessagesImmediate(ctx, req.Topic, msgCbChan, cfg, handler)
 	} else {

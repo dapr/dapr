@@ -55,10 +55,10 @@ func (m *mcpservers) Load(ctx context.Context) ([]mcpserverapi.MCPServer, error)
 		// "no servers" so daprd remains compatible across an N-1 control
 		// plane version skew.
 		if status.Code(err) == codes.Unimplemented {
-			log.Debugf("Operator does not implement ListMCPServers, skipping: %v", err)
+			log.Debug("Operator does not implement ListMCPServers, skipping", "error", err)
 			return nil, nil
 		}
-		log.Errorf("Error listing MCP servers: %v", err)
+		log.Error("Error listing MCP servers", "error", err)
 		return nil, err
 	}
 

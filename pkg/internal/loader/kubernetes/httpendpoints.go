@@ -47,7 +47,7 @@ func (h *httpendpoints) Load(ctx context.Context) ([]endpointapi.HTTPEndpoint, e
 		Namespace: h.namespace,
 	}, grpcretry.WithMax(operatorMaxRetries), grpcretry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
-		log.Errorf("Error listing http endpoints: %v", err)
+		log.Error("Error listing http endpoints", "error", err)
 		return nil, err
 	}
 

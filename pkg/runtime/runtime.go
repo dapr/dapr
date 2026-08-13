@@ -89,7 +89,7 @@ import (
 	"github.com/dapr/kit/crypto/spiffe/signer"
 )
 
-var log = logger.NewLogger("dapr.runtime")
+var log = logger.New("dapr.runtime")
 
 // DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
@@ -412,7 +412,7 @@ func newDaprRuntime(ctx context.Context,
 	}
 
 	rtHealthz := rt.runtimeConfig.healthz.AddTarget("runtime")
-	rt.runnerCloser = concurrency.NewRunnerCloserManager(log, gracePeriod,
+	rt.runnerCloser = concurrency.NewRunnerCloserManager(log.Legacy(), gracePeriod,
 		rt.runtimeConfig.metricsExporter.Start,
 		rt.processor.Process,
 		rt.reloader.Run,
@@ -423,8 +423,8 @@ func newDaprRuntime(ctx context.Context,
 		func(ctx context.Context) error {
 			start := time.Now()
 
-			log.Infof("%s mode configured", rt.runtimeConfig.mode)
-			log.Infof("app id: %s", rt.runtimeConfig.id)
+			log.Info("mode configured", "mode", rt.runtimeConfig.mode)
+			log.Info("app id", "id", rt.runtimeConfig.id)
 
 			rerr := rt.initRuntime(ctx)
 			if rerr != nil {
@@ -438,7 +438,7 @@ func newDaprRuntime(ctx context.Context,
 			}
 
 			d := time.Since(start).Milliseconds()
-			log.Infof("dapr initialized. Status: Running. Init Elapsed %vms", d)
+			log.Info("dapr initialized. Status: Running. Init Elapsed ms", "d", d)
 
 			rtHealthz.Ready()
 
@@ -481,7 +481,7 @@ func newDaprRuntime(ctx context.Context,
 
 			for _, comp := range comps {
 				go func(comp compapi.Component) {
-					log.Infof("Shutting down component %s", comp.LogName())
+					log.Info("Shutting down component", "log_name", comp.LogName())
 
 					errCh <- rt.processor.Close(context.Background(), comp)
 				}(comp)
@@ -525,7 +525,7 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 				return nil
 			}
 
-			log.Infof("Blocking graceful shutdown for %s or until app reports unhealthy...", *a.runtimeConfig.blockShutdownDuration)
+			log.Info(fmt.Sprintf("Blocking graceful shutdown for %s or until app reports unhealthy...", *a.runtimeConfig.blockShutdownDuration))
 
 			a.processor.Subscriber().StopAllSubscriptionsForever()
 			a.processor.Binding().StopReadingFromBindings(true)
@@ -640,7 +640,7 @@ func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpSt
 
 	// Register a trace sampler based on Sampling settings
 	daprTraceSampler := diag.NewDaprTraceSampler(tracingSpec.SamplingRate)
-	log.Infof("Dapr trace sampler initialized: %s", daprTraceSampler.Description())
+	log.Info("Dapr trace sampler initialized", "description", daprTraceSampler.Description())
 
 	tpStore.RegisterSampler(daprTraceSampler)
 
@@ -677,7 +677,7 @@ func createOtelResource(ctx context.Context, defaultServiceName string) *resourc
 		resource.WithSchemaURL(semconv.SchemaURL),
 	)
 	if err != nil {
-		log.Warnf("failed to create OpenTelemetry resource, using default: %v", err)
+		log.Warn("failed to create OpenTelemetry resource, using default", "error", err)
 		// Fallback without environment detection
 		r = resource.NewWithAttributes(
 			semconv.SchemaURL,
@@ -701,13 +701,13 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// the later bind lets it succeed once the port frees, as it did before the
 	// reservation was introduced.
 	if rerr := a.reserveInternalGRPCServerPort(ctx); rerr != nil {
-		log.Warnf("could not reserve internal gRPC port before component initialization; it will be bound when the internal gRPC server starts: %v", rerr)
+		log.Warn("could not reserve internal gRPC port before component initialization; it will be bound when the internal gRPC server starts", "error", rerr)
 	}
 	// If the port was reserved but init returns before the internal gRPC
 	// server takes ownership of the listener, release it.
 	defer func() {
 		if cerr := a.closeUnstartedInternalGRPCListener(); cerr != nil {
-			log.Warnf("failed to close reserved internal gRPC listener: %v", cerr)
+			log.Warn("failed to close reserved internal gRPC listener", "error", cerr)
 		}
 	}()
 
@@ -746,7 +746,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	err = a.loadHTTPEndpoints(ctx)
 	if err != nil {
-		log.Warnf("failed to load HTTP endpoints: %s", err)
+		log.Warn("failed to load HTTP endpoints", "error", err)
 	}
 
 	if err = a.flushOutstandingHTTPEndpoints(ctx); err != nil {
@@ -759,7 +759,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 
 	if err = a.channels.Refresh(); err != nil {
-		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.appConnectionConfig.Protocol), err)
+		log.Warn("failed to open channel to app", "protocol", string(a.runtimeConfig.appConnectionConfig.Protocol), "error", err)
 	}
 
 	// Setup allow/deny list for secrets
@@ -771,7 +771,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	a.daprUniversal = universal.New(universal.Options{
 		AppID:                       a.runtimeConfig.id,
 		Namespace:                   a.namespace,
-		Logger:                      logger.NewLogger("dapr.api"),
+		Logger:                      logger.New("dapr.api").Legacy(),
 		CompStore:                   a.compStore,
 		Resiliency:                  a.resiliency,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
@@ -786,7 +786,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Create and start internal and external gRPC servers
 	a.daprGRPCAPI = grpc.NewAPI(grpc.APIOpts{
 		Universal:              a.daprUniversal,
-		Logger:                 logger.NewLogger("dapr.grpc.api"),
+		Logger:                 logger.New("dapr.grpc.api").Legacy(),
 		Channels:               a.channels,
 		PubSubAdapter:          a.pubsubAdapter,
 		PubSubAdapterStreamer:  a.pubsubAdapterStreamer,
@@ -824,7 +824,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	if a.runtimeConfig.unixDomainSocket != "" {
 		log.Info("API gRPC server is running on a Unix Domain Socket")
 	} else {
-		log.Infof("API gRPC server is running on port %v", a.runtimeConfig.apiGRPCPort)
+		log.Info("API gRPC server is running on port", "api_g_r_p_c_port", a.runtimeConfig.apiGRPCPort)
 	}
 
 	// Start HTTP Server
@@ -836,10 +836,10 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	if a.runtimeConfig.unixDomainSocket != "" {
 		log.Info("HTTP server is running on a Unix Domain Socket")
 	} else {
-		log.Infof("HTTP server is running on port %v", a.runtimeConfig.httpPort)
+		log.Info("HTTP server is running on port", "http_port", a.runtimeConfig.httpPort)
 	}
 
-	log.Infof("The request body size parameter is: %v bytes", a.runtimeConfig.maxRequestBodySize)
+	log.Info("The request body size parameter is: bytes", "max_request_body_size", a.runtimeConfig.maxRequestBodySize)
 
 	// Start internal gRPC server (used for sidecar-to-sidecar communication)
 	err = a.startGRPCInternalServer(ctx, a.daprGRPCAPI)
@@ -847,7 +847,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return fmt.Errorf("failed to start internal gRPC server: %w", err)
 	}
 
-	log.Infof("Internal gRPC server is running on %s:%d", a.runtimeConfig.internalGRPCListenAddress, a.runtimeConfig.internalGRPCPort)
+	log.Info("Internal gRPC server is running on", "internal_g_r_p_c_listen_address", a.runtimeConfig.internalGRPCListenAddress, "internal_g_r_p_c_port", a.runtimeConfig.internalGRPCPort)
 
 	if err := a.initActors(ctx); err != nil {
 		return fmt.Errorf("failed to initialize actors: %w", err)
@@ -868,7 +868,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 
 	if a.runtimeConfig.appConnectionConfig.MaxConcurrency > 0 {
-		log.Infof("app max concurrency set to %v", a.runtimeConfig.appConnectionConfig.MaxConcurrency)
+		log.Info("app max concurrency set", "max_concurrency", a.runtimeConfig.appConnectionConfig.MaxConcurrency)
 	}
 
 	a.appHealthReady = a.appHealthReadyInit
@@ -924,13 +924,13 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 // initPluggableComponents discover pluggable components and initialize with their respective registries.
 func (a *DaprRuntime) initPluggableComponents(ctx context.Context) {
 	if runtime.GOOS == "windows" {
-		log.Debugf("the current OS does not support pluggable components feature, skipping initialization")
+		log.Debug("the current OS does not support pluggable components feature, skipping initialization")
 		return
 	}
 
 	err := pluggable.Discover(ctx)
 	if err != nil {
-		log.Errorf("could not initialize pluggable components %v", err)
+		log.Error("could not initialize pluggable components", "error", err)
 	}
 }
 
@@ -952,7 +952,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status *apphealth.St
 			err := a.appHealthReady(ctx)
 			if err != nil {
 				// TODO: @joshvanl: this must return error to error exit
-				log.Warnf("Failed to complete app init: %s ", err)
+				log.Warn("Failed to complete app init", "error", err)
 			}
 
 			a.appHealthReady = nil
@@ -961,19 +961,19 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status *apphealth.St
 		if a.channels.AppChannel() != nil {
 			// Start subscribing to topics and reading from input bindings
 			if err := a.processor.Subscriber().StartAppSubscriptions(); err != nil {
-				log.Warnf("failed to subscribe to topics: %s ", err)
+				log.Warn("failed to subscribe to topics", "error", err)
 			}
 
 			err := a.processor.Binding().StartReadingFromBindings(ctx)
 			if err != nil {
-				log.Warnf("failed to read from bindings: %s ", err)
+				log.Warn("failed to read from bindings", "error", err)
 			}
 		}
 
 		// Start subscribing to outbox topics
 		err := a.outbox.SubscribeToInternalTopics(ctx, a.runtimeConfig.id)
 		if err != nil {
-			log.Warnf("failed to subscribe to outbox topics: %s", err)
+			log.Warn("failed to subscribe to outbox topics", "error", err)
 		}
 
 		err = a.actors.RegisterHosted(ctx, hostconfig.Config{
@@ -986,7 +986,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status *apphealth.St
 			AppChannel:              a.channels.AppChannel(),
 		})
 		if err != nil {
-			log.Warnf("Failed to register hosted actors: %s", err)
+			log.Warn("Failed to register hosted actors", "error", err)
 		}
 
 		a.jobsManager.StartApp()
@@ -1004,7 +1004,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status *apphealth.St
 		a.processor.Binding().StopReadingFromBindings(false)
 
 		if err := a.actors.UnRegisterHosted(ctx, a.appConfig.Entities...); err != nil {
-			log.Warnf("Failed to unregister hosted actors: %s", err)
+			log.Warn("Failed to unregister hosted actors", "error", err)
 		}
 	}
 }
@@ -1275,7 +1275,7 @@ func (a *DaprRuntime) initNameResolution(ctx context.Context) (err error) {
 		return err
 	}
 
-	log.Infof("Initialized name resolution to %s", resolverName)
+	log.Info("Initialized name resolution", "resolver", resolverName)
 
 	return nil
 }
@@ -1344,7 +1344,7 @@ func (a *DaprRuntime) blockUntilAppIsReady(ctx context.Context) error {
 		return nil
 	}
 
-	log.Infof("application protocol: %s. waiting on port %v.  This will block until the app is listening on that port.", string(a.runtimeConfig.appConnectionConfig.Protocol), a.runtimeConfig.appConnectionConfig.Port)
+	log.Info("application protocol:. waiting on port. This will block until the app is listening on that port.", "protocol", string(a.runtimeConfig.appConnectionConfig.Protocol), "port", a.runtimeConfig.appConnectionConfig.Port)
 
 	dialAddr := a.runtimeConfig.appConnectionConfig.ChannelAddress + ":" + strconv.Itoa(a.runtimeConfig.appConnectionConfig.Port)
 
@@ -1381,12 +1381,12 @@ func (a *DaprRuntime) blockUntilAppIsReady(ctx context.Context) error {
 		// prevents overwhelming the OS with open connections
 		case <-a.clock.After(time.Millisecond * 100):
 			if counter%100 == 0 {
-				log.Infof("waiting for application to listen on port %v", a.runtimeConfig.appConnectionConfig.Port)
+				log.Info(fmt.Sprintf("waiting for application to listen on port %v", a.runtimeConfig.appConnectionConfig.Port))
 			}
 		}
 	}
 
-	log.Infof("application discovered on port %v", a.runtimeConfig.appConnectionConfig.Port)
+	log.Info(fmt.Sprintf("application discovered on port %v", a.runtimeConfig.appConnectionConfig.Port))
 
 	return nil
 }
@@ -1417,7 +1417,7 @@ func (a *DaprRuntime) loadAppConfiguration(ctx context.Context) {
 
 		for _, e := range appConfig.EntityConfigs {
 			if e.RemindersStoragePartitions > 0 {
-				log.Warnf("remindersStoragePartitions is deprecated and will be removed in future versions (entity: %v)", e.Entities)
+				log.Warn("remindersStoragePartitions is deprecated and will be removed in future versions (entity: )", "entities", e.Entities)
 			}
 		}
 	}
@@ -1506,7 +1506,7 @@ func (a *DaprRuntime) stopTrace(ctx context.Context) error {
 	// Flush and shutdown the tracing provider.
 	err := a.tracerProvider.ForceFlush(ctx)
 	if err != nil && !errors.Is(err, context.Canceled) {
-		log.Warnf("Error flushing tracing provider: %v", err)
+		log.Warn("Error flushing tracing provider", "error", err)
 	}
 
 	err = a.tracerProvider.Shutdown(ctx)

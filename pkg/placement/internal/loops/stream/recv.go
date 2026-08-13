@@ -23,7 +23,7 @@ func (s *stream) recvLoop() error {
 	for {
 		err := s.recv()
 		if err != nil {
-			log.Warnf("Error receiving from stream %s: %s", s.addr, err)
+			log.Warn("Error receiving from stream", "addr", s.addr, "error", err)
 			return err
 		}
 	}
@@ -40,7 +40,7 @@ func (s *stream) recv() error {
 	// TODO: @joshvanl: we can potentially cache the client ID from the stream
 	// context after the first message.
 	if err = s.authz.Host(s.channel, resp); err != nil {
-		log.Warnf("Authorization failed for stream %s: %v", s.addr, err)
+		log.Warn("Authorization failed for stream", "addr", s.addr, "error", err)
 		return err
 	}
 

@@ -58,10 +58,10 @@ var payloadRatioDistribution = view.Distribution(0.1, 0.25, 0.5, 0.75, 0.9, 0.95
 func InitMetrics(meter view.Meter, appID, namespace string, metricSpec config.MetricSpec) error {
 	meter.Start()
 
-	latencyDistribution := metricSpec.GetLatencyDistribution(log)
+	latencyDistribution := metricSpec.GetLatencyDistribution(log.Legacy())
 	// Workflow latency views default to the shared latencyDistribution unless
 	// spec.metrics.workflow.latencyDistributionBuckets provides an override.
-	workflowLatencyDistribution := metricSpec.GetWorkflowLatencyDistribution(log, latencyDistribution)
+	workflowLatencyDistribution := metricSpec.GetWorkflowLatencyDistribution(log.Legacy(), latencyDistribution)
 	if err := DefaultMonitoring.Init(meter, appID, latencyDistribution); err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func InitMetrics(meter view.Meter, appID, namespace string, metricSpec config.Me
 
 	httpConfig := NewHTTPMonitoringConfig(
 		metricSpec.GetHTTPPathMatching(),
-		metricSpec.GetHTTPIncreasedCardinality(log),
+		metricSpec.GetHTTPIncreasedCardinality(log.Legacy()),
 		metricSpec.GetHTTPExcludeVerbs(),
 	)
 	if err := DefaultHTTPMonitoring.Init(meter, appID, httpConfig, latencyDistribution); err != nil {

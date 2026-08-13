@@ -25,7 +25,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.placement.authorizer")
+var log = logger.New("dapr.placement.authorizer")
 
 type Options struct {
 	Security security.Handler
@@ -121,7 +121,7 @@ func (a *Authorizer) getClientID(stream v1pb.Placement_ReportDaprStatusServer) (
 
 	clientID, ok, err := spiffe.FromGRPCContext(stream.Context())
 	if err != nil || !ok {
-		log.Debugf("failed to get client ID from context: err=%v, ok=%t", err, ok)
+		log.Debug("failed to get client ID from context: err=, ok=", "error", err, "ok", ok)
 		return nil, status.Errorf(codes.Unauthenticated, "failed to get client ID from context")
 	}
 

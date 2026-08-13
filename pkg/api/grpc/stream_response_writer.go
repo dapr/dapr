@@ -30,7 +30,7 @@ type streamResponseWriter struct {
 	seq    uint64
 	status int
 	appID  string
-	logger logger.Logger
+	logger *logger.Log
 }
 
 func (lrw *streamResponseWriter) Write(b []byte) (int, error) {
@@ -60,7 +60,7 @@ func (lrw *streamResponseWriter) Flush() {
 		},
 	})
 	if err != nil {
-		lrw.logger.Errorf("Stream flush error: %s", err)
+		lrw.logger.Error("Stream flush error", "error", err)
 	}
 
 	lrw.buf = lrw.buf[:0]

@@ -30,7 +30,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.targets.executor")
+var log = logger.New("dapr.runtime.actors.targets.executor")
 
 const (
 	MethodComplete      = "Complete"

@@ -23,7 +23,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.targets.activity")
+var log = logger.New("dapr.runtime.actors.targets.activity")
 
 type activity struct {
 	*factory

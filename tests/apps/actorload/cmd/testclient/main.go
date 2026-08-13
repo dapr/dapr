@@ -64,7 +64,7 @@ type actorLoadTestRunnable struct {
 // Run is the runnable function executed by one thread.
 // This iterates the preactivated actors to call each activated actor in a round-robin manner.
 func (lt *actorLoadTestRunnable) Run(t int) {
-	log.Debugf("Calling in %d", t)
+	log.Debug("Calling in", "t", t)
 	size := len(lt.payload)
 	code := 200
 
@@ -83,7 +83,7 @@ func (lt *actorLoadTestRunnable) Run(t int) {
 		}
 	}
 
-	log.Debugf("got, code: %3d, size: %d", code, size)
+	log.Debug("got, code, size", "code", code, "size", size)
 
 	elapsed := time.Since(start)
 
@@ -124,16 +124,16 @@ func activateRandomActors(client actorClient.ActorClient, actorType string, maxA
 	activatedActors := []string{}
 	for i := 0; i < maxActor; i++ {
 		actorID := strings.Replace(uuid.New().String(), "-", "", -1)
-		log.Infof("Request to activate %s.%s actor", actorType, actorID)
+		log.Info("Request to activate. actor", "actor_type", actorType, "actor_id", actorID)
 		_, err := client.InvokeMethod(
 			actorType, actorID,
 			"setActorState",
 			"application/json", []byte(initialStateValue))
 		if err != nil {
-			log.Infof("failed to activate actor - %s.%s: %q", actorType, actorID, err)
+			log.Info("failed to activate actor -.", "actor_type", actorType, "actor_id", actorID, "error", err)
 			continue
 		}
-		log.Infof("Completed to activate %s.%s actor", actorType, actorID)
+		log.Info("Completed to activate. actor", "actor_type", actorType, "actor_id", actorID)
 		activatedActors = append(activatedActors, actorID)
 	}
 
@@ -157,11 +157,11 @@ func startLoadTest(opt *actorLoadTestOptions, telemetryClient *telemetry.Telemet
 	if activatedActorsLen == 0 {
 		return nil, errors.New("no actor is activated")
 	}
-	log.Infof("Activated actors: %d", activatedActorsLen)
+	log.Info("Activated actors", "activated_actors_len", activatedActorsLen)
 
 	// Generate randome payload by the given payload size.
 	payload := generatePayload(opt.WritePayloadSize)
-	log.Infof("Random payload: %s", payload)
+	log.Info("Random payload", "payload", payload)
 
 	// Set up Fortio load test runner
 	r := periodic.NewPeriodicRunner(&opt.RunnerOptions)
@@ -259,18 +259,18 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 	testOptions := getFlagOptions()
 
-	log.Infof("Starting Dapr Actor Load Test.")
+	log.Info("Starting Dapr Actor Load Test.")
 	log.Infof("QPS: %f, Number of Threads: %d, Number of test actors: %d",
 		testOptions.RunnerOptions.QPS,
 		testOptions.RunnerOptions.NumThreads,
 		testOptions.NumActors)
-	log.Infof("Actor type: %s", testOptions.TestActorType)
-	log.Infof("Actor method: %s", testOptions.ActorMethod)
-	log.Infof("Write Payload Size: %d Bytes", testOptions.WritePayloadSize)
+	log.Info("Actor type", "test_actor_type", testOptions.TestActorType)
+	log.Info("Actor method", "actor_method", testOptions.ActorMethod)
+	log.Info("Write Payload Size: Bytes", "write_payload_size", testOptions.WritePayloadSize)
 
 	if _, err := startLoadTest(testOptions, telemetry); err != nil {
-		log.Fatalf("Dapr Actor Load Test is failed: %q", err)
+		log.Fatal("Dapr Actor Load Test is failed", "error", err)
 	}
 
-	log.Infof("Dapr Actor Load Test is done")
+	log.Info("Dapr Actor Load Test is done")
 }

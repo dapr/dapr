@@ -49,7 +49,7 @@ func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
 	}
 
 	for _, s := range subs {
-		log.Infof("Found Subscription: %s", s.Name)
+		log.Info("Found Subscription", "name", s.Name)
 	}
 
 	// Wait for every declarative subscription to be committed to the component

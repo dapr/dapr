@@ -28,9 +28,9 @@ func (s *stream) recvLoop() error {
 			// cycle spams the runtime log during placement leader
 			// churn; demote to debug.
 			if loops.IsTransientLeaderError(err) {
-				log.Debugf("Error receiving from stream: %s", err)
+				log.Debug("Error receiving from stream", "error", err)
 			} else {
-				log.Warnf("Error receiving from stream: %s", err)
+				log.Warn("Error receiving from stream", "error", err)
 			}
 			return err
 		}

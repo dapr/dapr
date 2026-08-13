@@ -24,7 +24,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.placement.manager.connector.static")
+var log = logger.New("dapr.runtime.actors.placement.manager.connector.static")
 
 type staticConnector struct {
 	addresses    []string
@@ -50,7 +50,7 @@ func (r *staticConnector) Connect(ctx context.Context) (*grpc.ClientConn, error)
 	r.addressIndex = (r.addressIndex + 1) % len(r.addresses)
 
 	address := r.Address()
-	log.Debugf("Attempting to connect to placement %s", address)
+	log.Debug("Attempting to connect to placement", "address", address)
 
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, address, r.gOpts...)
@@ -58,7 +58,7 @@ func (r *staticConnector) Connect(ctx context.Context) (*grpc.ClientConn, error)
 		return nil, err
 	}
 
-	log.Infof("Connected to placement %s", address)
+	log.Info("Connected to placement", "address", address)
 
 	return conn, nil
 }

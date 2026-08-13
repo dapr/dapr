@@ -33,7 +33,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.hotreload.loader.operator")
+var log = logger.New("dapr.runtime.hotreload.loader.operator")
 
 type Options struct {
 	Namespace      string

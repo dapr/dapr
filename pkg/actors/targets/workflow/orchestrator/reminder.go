@@ -126,7 +126,7 @@ func (o *orchestrator) buildReminderRequest(reminderName string, data proto.Mess
 		}
 	}
 
-	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, dueTime)
+	log.Debug("Workflow actor ||: creating reminder with DueTime =", "actor_type", actorType, "actor_id", o.actorID, "reminder", reminderName, "due_time", dueTime)
 
 	return &actorapi.CreateReminderRequest{
 		ActorType: actorType,
@@ -146,7 +146,7 @@ func (o *orchestrator) buildReminderRequest(reminderName string, data proto.Mess
 func (o *orchestrator) deleteAllReminders(ctx context.Context) error {
 	actorType := o.actorTypeBuilder.Workflow(o.appID)
 
-	log.Debugf("Workflow actor '%s': deleting all reminders for completed workflow", o.actorID)
+	log.Debug("Workflow actor: deleting all reminders for completed workflow", "actor_id", o.actorID)
 
 	if err := o.reminders.DeleteByActorID(ctx, &actorapi.DeleteRemindersByActorIDRequest{
 		ActorType:       actorType,

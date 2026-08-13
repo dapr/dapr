@@ -30,7 +30,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.targets.orchestrator.messages")
+var log = logger.New("dapr.runtime.actors.targets.orchestrator.messages")
 
 // Messages dispatches outbound workflow runtime state messages (child
 // workflow creations and child workflow completion events) to their target
@@ -76,7 +76,7 @@ func (m *Messages) CallCreateWorkflowStateMessage(ctx context.Context, events []
 		req := &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
 		if ph := msg.GetPropagatedHistory(); ph != nil {
 			if m.Signer == nil {
-				log.Warnf("Workflow actor '%s': propagating unsigned workflow history to child workflow '%s' (signing is not configured; chunks cannot be cryptographically verified by the receiver)", m.ActorID, msg.GetTargetInstanceId())
+				log.Warn("Workflow actor: propagating unsigned workflow history to child workflow (signing is not configured; chunks cannot be cryptographically verified by the receiver)", "actor_id", m.ActorID, "get_target_instance_id", msg.GetTargetInstanceId())
 			}
 			req.PropagatedHistory = ph
 		}
@@ -138,7 +138,7 @@ func (m *Messages) callStateMessage(ctx context.Context, msg proto.Message, hist
 
 	if historyEvent != nil && historyEvent.GetRouter() != nil {
 		router := historyEvent.GetRouter()
-		log.Debugf("Cross-app child workflow call: target appID=%s, source appID=%s", router.GetTargetAppID(), router.GetSourceAppID())
+		log.Debug("Cross-app child workflow call", "target_app_id", router.GetTargetAppID(), "source_app_id", router.GetSourceAppID())
 
 		switch msg := msg.(type) {
 		case *backend.CreateWorkflowInstanceRequest:
@@ -162,7 +162,7 @@ func (m *Messages) callStateMessage(ctx context.Context, msg proto.Message, hist
 		}
 	}
 
-	log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s||%s'", m.ActorID, method, actorType, target)
+	log.Debug("Workflow actor: invoking method on workflow actor ||", "actor_id", m.ActorID, "method", method, "actor_type", actorType, "target", target)
 
 	if _, err = m.Router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest(method).
@@ -185,7 +185,7 @@ func (m *Messages) callStateMessage(ctx context.Context, msg proto.Message, hist
 				}
 
 				if es.GetParentInstance() != nil {
-					log.Warnf("Workflow actor '%s': failing child workflow task for '%s': %v", m.ActorID, target, err)
+					log.Warn("Workflow actor: failing child workflow task for", "actor_id", m.ActorID, "target", target, "error", err)
 					if fErr := m.FailChildWorkflowTask(ctx, es.GetParentInstance().GetTaskScheduledId(), errorType, errorMessage); fErr != nil {
 						return fmt.Errorf("failed to record child workflow failure: %w (original: %v)", fErr, err)
 					}
@@ -202,7 +202,7 @@ func (m *Messages) callStateMessage(ctx context.Context, msg proto.Message, hist
 				if r := historyEvent.GetRouter(); r != nil {
 					targetAppID = r.GetTargetAppID()
 				}
-				log.Warnf("Workflow actor '%s': detached workflow spawn '%s' rejected on target app '%s': %v", m.ActorID, target, targetAppID, err)
+				log.Warn("Workflow actor: detached workflow spawn rejected on target app", "actor_id", m.ActorID, "target", target, "target_app_id", targetAppID, "error", err)
 				return nil
 			}
 		}

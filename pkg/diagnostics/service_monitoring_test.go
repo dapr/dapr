@@ -14,7 +14,7 @@ func servicesMetrics() (*serviceMetrics, view.Meter) {
 	s := newServiceMetrics()
 	meter := view.NewMeter()
 	meter.Start()
-	_ = s.Init(meter, "testAppId", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log))
+	_ = s.Init(meter, "testAppId", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log.Legacy()))
 
 	return s, meter
 }

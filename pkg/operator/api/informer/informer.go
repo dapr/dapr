@@ -61,7 +61,7 @@ type informer[T meta.Resource] struct {
 	// the stream handler, and therefore the server's graceful shutdown).
 	closed bool
 
-	log logger.Logger
+	log *logger.Log
 }
 
 type watcher[T meta.Resource] struct {
@@ -78,7 +78,7 @@ type informerEvent[T meta.Resource] struct {
 func New[T meta.Resource](opts Options) Interface[T] {
 	var zero T
 	return &informer[T]{
-		log:      logger.NewLogger("dapr.operator.informer." + strings.ToLower(zero.Kind())),
+		log:      logger.New("dapr.operator.informer." + strings.ToLower(zero.Kind())),
 		watchers: make(map[uint64]*watcher[T]),
 		cache:    opts.Cache,
 	}
@@ -104,7 +104,7 @@ func (i *informer[T]) Run(ctx context.Context) error {
 		// version-skew scenarios where newer control plane binaries run against a
 		// cluster that doesn't yet have all CRDs.
 		if apimeta.IsNoMatchError(err) {
-			i.log.Warnf("CRD for %s/%s not found, skipping informer: %v", zero.APIVersion(), zero.Kind(), err)
+			i.log.Warn("CRD for / not found, skipping informer", "a_p_i_version", zero.APIVersion(), "kind", zero.Kind(), "error", err)
 			<-ctx.Done()
 			return nil
 		}
@@ -197,8 +197,8 @@ func (i *informer[T]) handleEvent(ctx context.Context, oldObj, newObj any, event
 		if oerr == nil && nerr == nil &&
 			oldMeta.GetResourceVersion() != "" &&
 			oldMeta.GetResourceVersion() == newMeta.GetResourceVersion() {
-			i.log.Debugf("Ignoring resync event for %s/%s: resourceVersion %s unchanged",
-				newMeta.GetNamespace(), newMeta.GetName(), newMeta.GetResourceVersion())
+			i.log.Debug("Ignoring resync event: resourceVersion unchanged",
+				"namespace", newMeta.GetNamespace(), "name", newMeta.GetName(), "resource_version", newMeta.GetResourceVersion())
 			return
 		}
 	}
@@ -248,7 +248,7 @@ func (i *informer[T]) anyToT(obj any) (T, bool) {
 	case cache.DeletedFinalStateUnknown:
 		return i.anyToT(obj.(cache.DeletedFinalStateUnknown).Obj)
 	default:
-		i.log.Errorf("unexpected type %T", obj)
+		i.log.Error("unexpected type", "obj", obj)
 		var zero T
 		return zero, false
 	}

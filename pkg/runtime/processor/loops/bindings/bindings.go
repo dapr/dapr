@@ -27,7 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 )
 
-var log = logger.NewLogger("dapr.runtime.processor.loops.bindings")
+var log = logger.New("dapr.runtime.processor.loops.bindings")
 
 // Manager is the slice of the bindings sub-processor surface area used by this
 // loop. Defining it here avoids importing the processor package and prevents
@@ -100,7 +100,7 @@ func (c *Category) Handle(ctx context.Context, e loops.EventCategory) error {
 			delete(c.instances, name)
 		}
 	default:
-		log.Errorf("bindings category: unknown event type %T", ev)
+		log.Error("bindings category: unknown event type", "ev", ev)
 	}
 	return nil
 }
@@ -119,7 +119,7 @@ func (c *Category) routeInstance(ctx context.Context, name string, ev loops.Even
 
 		c.wg.Go(func() {
 			if err := inst.Run(ctx); err != nil {
-				log.Errorf("bindings instance loop %s error: %s", name, err)
+				log.Error("bindings instance loop error", "name", name, "error", err)
 			}
 		})
 	}

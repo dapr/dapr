@@ -56,26 +56,26 @@ func (s *subscriptions) update(ctx context.Context, sub subapi.Subscription) err
 
 	if exists {
 		if differ.AreSame(*oldSub.Comp, sub) {
-			log.Debugf("Subscription update skipped: no changes detected: %s", sub.Name)
+			log.Debug("Subscription update skipped: no changes detected", "name", sub.Name)
 			return nil
 		}
 
 		// See components.update for the rationale on this guard.
 		if sub.GetGeneration() > 0 && sub.GetGeneration() < oldSub.Comp.GetGeneration() {
-			log.Warnf("Ignoring stale Subscription event for %s (generation %d < installed %d)",
-				sub.Name, sub.GetGeneration(), oldSub.Comp.GetGeneration())
+			log.Warn("Ignoring stale Subscription event",
+				"subscription", sub.Name, "generation", sub.GetGeneration(), "installed_generation", oldSub.Comp.GetGeneration())
 			return nil
 		}
 
-		log.Infof("Closing existing Subscription to reload: %s", *oldSub.Name)
+		log.Info("Closing existing Subscription to reload", "name", *oldSub.Name)
 
 		if err := s.proc.CloseSubscription(ctx, oldSub.Comp); err != nil {
-			log.Errorf("Failed to close existing Subscription: %s", err)
+			log.Error("Failed to close existing Subscription", "error", err)
 			return nil
 		}
 	}
 
-	log.Infof("Adding Subscription for processing: %s", sub.Name)
+	log.Info("Adding Subscription for processing", "name", sub.Name)
 
 	res := s.proc.AddPendingSubscription(ctx, sub)
 	if res == nil {
@@ -90,10 +90,10 @@ func (s *subscriptions) update(ctx context.Context, sub subapi.Subscription) err
 			// must propagate and stop daprd rather than leave the compstore and
 			// subscriber partially updated. This matches the components
 			// reconciler, which propagates its AddPendingComponent error.
-			log.Warnf("Error adding subscription %s, daprd will exit gracefully: %s", sub.Name, err)
+			log.Warn("Error adding subscription, daprd will exit gracefully", "name", sub.Name, "error", err)
 			return err
 		}
-		log.Infof("Subscription updated: %s", sub.Name)
+		log.Info("Subscription updated", "name", sub.Name)
 		return nil
 	}
 }
@@ -101,7 +101,7 @@ func (s *subscriptions) update(ctx context.Context, sub subapi.Subscription) err
 //nolint:unused
 func (s *subscriptions) delete(ctx context.Context, sub subapi.Subscription) error {
 	if err := s.proc.CloseSubscription(ctx, &sub); err != nil {
-		log.Errorf("Failed to close Subscription: %s", err)
+		log.Error("Failed to close Subscription", "error", err)
 	}
 	return nil
 }

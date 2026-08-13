@@ -44,8 +44,8 @@ import (
 )
 
 var (
-	log             = logger.NewLogger("dapr.runtime.wfengine")
-	wfBackendLogger = logger.NewLogger("dapr.wfengine.durabletask.backend")
+	log             = logger.New("dapr.runtime.wfengine")
+	wfBackendLogger = logger.New("dapr.wfengine.durabletask.backend")
 )
 
 // ReservedWorkflowNamePrefix is the prefix daprd uses for managed (in-process)
@@ -188,12 +188,12 @@ func New(opts Options) (Interface, error) {
 			err := abackend.UnRegisterActors(context.Background())
 			wfe.actorsRegistered = false
 			if err != nil {
-				log.Warnf("Failed to unregister workflow actors during shutdown: %s", err)
+				log.Warn("Failed to unregister workflow actors during shutdown", "error", err)
 			}
 		}
 	})
 
-	grpcExec, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
+	grpcExec, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log.Legacy(),
 		backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
 			wfe.actorRegLock.Lock()
 			defer wfe.actorRegLock.Unlock()
@@ -247,7 +247,7 @@ func New(opts Options) (Interface, error) {
 		Executor:            grpcExec,
 		InProcessExecutor:   inProcessExec.Backend(),
 		InProcessNamePrefix: ReservedWorkflowNamePrefix,
-		Logger:              wfBackendLogger,
+		Logger:              wfBackendLogger.Legacy(),
 		AppID:               opts.AppID,
 	}, topts...)
 
@@ -263,10 +263,10 @@ func New(opts Options) (Interface, error) {
 		grpcExec,
 		inProcessExec.Backend(),
 		ReservedWorkflowNamePrefix,
-		wfBackendLogger,
+		wfBackendLogger.Legacy(),
 		topts...,
 	)
-	worker := backend.NewTaskHubWorker(abackend, oworker, aworker, wfBackendLogger)
+	worker := backend.NewTaskHubWorker(abackend, oworker, aworker, wfBackendLogger.Legacy())
 
 	wfe.worker = worker
 	wfe.registerGrpcServerFn = registerGrpcServerFn
@@ -327,7 +327,7 @@ func (wfe *engine) UnregisterMCPServer(serverName string) {
 		err := wfe.backend.UnRegisterActors(context.Background())
 		wfe.actorsRegistered = false
 		if err != nil {
-			log.Warnf("Failed to unregister workflow actors: %s", err)
+			log.Warn("Failed to unregister workflow actors", "error", err)
 		}
 	}
 }

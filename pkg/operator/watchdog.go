@@ -53,7 +53,7 @@ func (dw *DaprWatchdog) NeedLeaderElection() bool {
 // Start the controller. This method blocks until the context is canceled.
 // Implements sigs.k8s.io/controller-runtime/pkg/manager.Runnable .
 func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
-	log.Infof("DaprWatchdog worker starting")
+	log.Info("DaprWatchdog worker starting")
 
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
@@ -74,7 +74,7 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 	defer close(workCh)
 	firstCompleteCh := make(chan struct{})
 	go func() {
-		defer log.Infof("DaprWatchdog worker stopped")
+		defer log.Info("DaprWatchdog worker stopped")
 		firstCompleted := false
 		for {
 			select {
@@ -100,7 +100,7 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 		}
 	}()
 
-	log.Infof("DaprWatchdog worker started")
+	log.Info("DaprWatchdog worker started")
 
 	// Start an iteration right away, at startup
 	workCh <- struct{}{}
@@ -127,19 +127,19 @@ forloop:
 		case <-ctx.Done():
 			break forloop
 		case <-t.C:
-			log.Debugf("DaprWatchdog worker tick")
+			log.Debug("DaprWatchdog worker tick")
 			select {
 			case workCh <- struct{}{}:
 				// Successfully queued another iteration
-				log.Debugf("Added listPods iteration to the queue")
+				log.Debug("Added listPods iteration to the queue")
 			default:
 				// Do nothing - there's already an iteration in the queue
-				log.Debugf("There's already an iteration in the listPods queue-not adding another one")
+				log.Debug("There's already an iteration in the listPods queue-not adding another one")
 			}
 		}
 	}
 
-	log.Infof("DaprWatchdog worker stopping")
+	log.Info("DaprWatchdog worker stopping")
 	return nil
 }
 
@@ -148,18 +148,18 @@ func getSideCarInjectedNotExistsSelector() labels.Selector {
 	sel := labels.NewSelector()
 	req, err := labels.NewRequirement(injectorConsts.SidecarInjectedLabel, selection.DoesNotExist, []string{})
 	if err != nil {
-		log.Fatalf("Unable to add label requirement to find pods with Injector created label , err: %s", err)
+		log.Fatal("Unable to add label requirement to find pods with Injector created label, err", "error", err)
 	}
 	sel = sel.Add(*req)
 	req, err = labels.NewRequirement(operatorConsts.WatchdogPatchedLabel, selection.DoesNotExist, []string{})
 	if err != nil {
-		log.Fatalf("Unable to add label requirement to find pods with Watchdog created label , err: %s", err)
+		log.Fatal("Unable to add label requirement to find pods with Watchdog created label, err", "error", err)
 	}
 	return sel.Add(*req)
 }
 
 func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
-	log.Infof("DaprWatchdog started checking pods")
+	log.Info("DaprWatchdog started checking pods")
 
 	// Look for the dapr-sidecar-injector deployment first and ensure it's running
 	// Otherwise, the pods would come back up without the sidecar again
@@ -171,15 +171,15 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 		),
 	})
 	if err != nil {
-		log.Errorf("Failed to list pods to get dapr-sidecar-injector. Error: %v", err)
+		log.Error("Failed to list pods to get dapr-sidecar-injector. Error", "error", err)
 		return false
 	}
 	if len(deployment.Items) == 0 || deployment.Items[0].Status.ReadyReplicas < 1 {
-		log.Warnf("Could not find a running dapr-sidecar-injector; will retry later")
+		log.Warn("Could not find a running dapr-sidecar-injector; will retry later")
 		return false
 	}
 
-	log.Debugf("Found running dapr-sidecar-injector container")
+	log.Debug("Found running dapr-sidecar-injector container")
 
 	// We are splitting the process of finding the potential pods by first querying only for the metadata of the pods
 	// to verify the annotation.  If we find some with dapr enabled annotation we will subsequently query those further.
@@ -191,7 +191,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 	podList := &corev1.PodList{}
 	err = dw.client.List(ctx, podList, podListOpts)
 	if err != nil {
-		log.Errorf("Failed to list pods. Error: %v", err)
+		log.Error("Failed to list pods. Error", "error", err)
 		return false
 	}
 
@@ -206,7 +206,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 
 		// Filter for pods with the dapr.io/enabled annotation
 		if daprEnabled, ok := pod.Annotations[daprEnabledAnnotationKey]; !ok || !strings.IsTruthy(daprEnabled) {
-			log.Debugf("Skipping pod %s: %s is not true", logName, daprEnabledAnnotationKey)
+			log.Debug("Skipping pod: is not true", "log_name", logName, "dapr_enabled_annotation_key", daprEnabledAnnotationKey)
 			continue
 		}
 
@@ -220,34 +220,34 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 		}
 		if hasSidecar {
 			if dw.canPatchPodLabels {
-				log.Debugf("Found Dapr sidecar in pod %s, will patch the pod labels", logName)
+				log.Debug("Found Dapr sidecar in pod, will patch the pod labels", "log_name", logName)
 				err = patchPodLabel(ctx, dw.client, &pod)
 				if err != nil {
-					log.Errorf("problems patching pod %s, err: %s", logName, err)
+					log.Error("problems patching pod, err", "log_name", logName, "error", err)
 				}
 			} else {
-				log.Debugf("Found Dapr sidecar in pod %s", logName)
+				log.Debug("Found Dapr sidecar in pod", "log_name", logName)
 			}
 			continue
 		}
 
 		// Pod doesn't have a sidecar, so we need to delete it, so it can be restarted and have the sidecar injected
-		log.Warnf("Pod %s does not have the Dapr sidecar and will be deleted", logName)
+		log.Warn("Pod does not have the Dapr sidecar and will be deleted", "log_name", logName)
 		err = dw.client.Delete(ctx, &pod)
 		if err != nil {
-			log.Errorf("Failed to delete pod %s. Error: %v", logName, err)
+			log.Error("Failed to delete pod. Error", "log_name", logName, "error", err)
 			continue
 		}
 
-		log.Infof("Deleted pod %s", logName)
+		log.Info("Deleted pod", "log_name", logName)
 
-		log.Debugf("Taking a pod restart token")
+		log.Debug("Taking a pod restart token")
 		before := time.Now()
 		_ = dw.restartLimiter.Take()
-		log.Debugf("Resumed after pausing for %v", time.Since(before))
+		log.Debug("Resumed after pausing", "paused_for", time.Since(before))
 	}
 
-	log.Infof("DaprWatchdog completed checking pods")
+	log.Info("DaprWatchdog completed checking pods")
 
 	return true
 }

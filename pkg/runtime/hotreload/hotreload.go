@@ -38,7 +38,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.hotreload")
+var log = logger.New("dapr.runtime.hotreload")
 
 type OptionsReloaderDisk struct {
 	Config         *config.Configuration

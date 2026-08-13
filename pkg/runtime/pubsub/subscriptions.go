@@ -98,7 +98,8 @@ type (
 	}
 )
 
-func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log logger.Logger, r resiliency.Provider, appID string) ([]Subscription, error) {
+func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, l logger.Logger, r resiliency.Provider, appID string) ([]Subscription, error) {
+	log := logger.FromLogger(l)
 	req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
 		WithHTTPExtension(http.MethodGet, "").
 		WithContentType(invokev1.JSONContentType)
@@ -140,7 +141,7 @@ func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log l
 		err = json.NewDecoder(resp.RawData()).Decode(&subscriptionItems)
 		if err != nil && !errors.Is(err, io.EOF) {
 			err = fmt.Errorf(deserializeTopicsError, err)
-			log.Error(err)
+			log.Error("failed to deserialize subscriptions", "error", err)
 
 			return nil, err
 		}
@@ -197,20 +198,20 @@ func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log l
 
 	default:
 		// Unexpected response: both GRPC and HTTP have to log the same level.
-		log.Errorf("app returned http status code %v from subscription endpoint", resp.Status().GetCode())
+		log.Error("app returned non-OK http status code from subscription endpoint", "code", resp.Status().GetCode())
 	}
 
-	log.Debugf("app responded with subscriptions %v", subscriptions)
+	log.Debug("app responded with subscriptions", "subscriptions", logger.Lazy(func() string { return fmt.Sprintf("%v", subscriptions) }))
 
 	return filterSubscriptions(subscriptions, log), nil
 }
 
-func filterSubscriptions(subscriptions []Subscription, log logger.Logger) []Subscription {
+func filterSubscriptions(subscriptions []Subscription, log *logger.Log) []Subscription {
 	i := 0
 
 	for _, s := range subscriptions {
 		if len(s.Rules) == 0 {
-			log.Warnf("topic %s has an empty routes. removing from subscriptions list", s.Topic)
+			log.Warn("topic has an empty routes. removing from subscriptions list", "topic", s.Topic)
 			continue
 		}
 
@@ -221,7 +222,8 @@ func filterSubscriptions(subscriptions []Subscription, log logger.Logger) []Subs
 	return subscriptions[:i]
 }
 
-func GetSubscriptionsGRPC(ctx context.Context, channel runtimev1pb.AppCallbackClient, log logger.Logger, r resiliency.Provider) ([]Subscription, error) {
+func GetSubscriptionsGRPC(ctx context.Context, channel runtimev1pb.AppCallbackClient, l logger.Logger, r resiliency.Provider) ([]Subscription, error) {
+	log := logger.FromLogger(l)
 	policyRunner := resiliency.NewRunner[*runtimev1pb.ListTopicSubscriptionsResponse](ctx,
 		r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
 	)
@@ -232,7 +234,7 @@ func GetSubscriptionsGRPC(ctx context.Context, channel runtimev1pb.AppCallbackCl
 			s, ok := status.FromError(rErr)
 			if ok && s != nil {
 				if s.Code() == codes.Unimplemented {
-					log.Infof("pubsub subscriptions: gRPC app does not implement ListTopicSubscriptions")
+					log.Info("pubsub subscriptions: gRPC app does not implement ListTopicSubscriptions")
 					return new(runtimev1pb.ListTopicSubscriptionsResponse), nil
 				}
 			}
@@ -242,7 +244,7 @@ func GetSubscriptionsGRPC(ctx context.Context, channel runtimev1pb.AppCallbackCl
 	})
 	if err != nil {
 		// Unexpected response: both GRPC and HTTP have to log the same level.
-		log.Errorf(getTopicsError, err)
+		log.Error("error getting topic list from app", "error", err)
 		return nil, err
 	}
 
@@ -337,7 +339,7 @@ func CreateRoutingRule(match, path string) (*Rule, error) {
 	}, nil
 }
 
-func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMessage, log logger.Logger, tracingSpec *config.TracingSpec) (context.Context, *runtimev1pb.TopicEventRequest, trace.Span, error) {
+func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMessage, log *logger.Log, tracingSpec *config.TracingSpec) (context.Context, *runtimev1pb.TopicEventRequest, trace.Span, error) {
 	cloudEvent := msg.CloudEvent
 
 	envelope := &runtimev1pb.TopicEventRequest{
@@ -355,7 +357,7 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 		if dataAsString, ok := data.(string); ok {
 			decoded, decodeErr := base64.StdEncoding.DecodeString(dataAsString)
 			if decodeErr != nil {
-				log.Debugf("unable to base64 decode cloudEvent field data_base64: %s", decodeErr)
+				log.Debug("unable to base64 decode cloudEvent field data_base64", "error", decodeErr)
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
 
 				return ctx, nil, nil, fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(decodeErr))
@@ -403,7 +405,7 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 				ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 			}
 		} else {
-			log.Warnf("ignored non-string traceid value: %v", iTraceID)
+			log.Warn("ignored non-string traceid value", "trace_id_type", fmt.Sprintf("%T", iTraceID))
 		}
 	}
 

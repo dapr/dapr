@@ -57,7 +57,7 @@ func (a *DaprRuntime) loadMCPServers(ctx context.Context) error {
 	}
 
 	for _, s := range authorizedServers {
-		log.Infof("Found MCP server: %s", s.Name)
+		log.Info("Found MCP server", "name", s.Name)
 		if err := a.addMCPServerBlocking(ctx, s); err != nil {
 			return err
 		}
@@ -84,10 +84,10 @@ func (a *DaprRuntime) addMCPServerBlocking(ctx context.Context, s mcpserverapi.M
 		}
 		err = fmt.Errorf("process MCPServer %s error: %s", s.Name, err)
 		if s.Spec.IgnoreErrors {
-			log.Errorf("Ignoring error processing MCPServer: %s", err)
+			log.Error("Ignoring error processing MCPServer", "error", err)
 			return nil
 		}
-		log.Warnf("Error processing MCPServer, daprd will exit gracefully: %s", err)
+		log.Warn("Error processing MCPServer, daprd will exit gracefully", "error", err)
 		return err
 	}
 }

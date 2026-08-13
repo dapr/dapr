@@ -76,7 +76,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 
 	// Run the client - this will block until context is done or event channel closes
 	if err := client.Run(ctx); err != nil {
-		log.Warnf("component client loop ended with error: %s", err)
+		log.Warn("component client loop ended with error", "error", err)
 	}
 
 	return nil
@@ -108,13 +108,13 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 		c := components.Items[i] // Make a copy since we will refer to this as a reference in this loop.
 		err := processComponentSecrets(ctx, &c, in.GetNamespace(), a.Client)
 		if err != nil {
-			log.Warnf("error processing component %s secrets in namespace %s: %s", c.Name, in.GetNamespace(), err)
+			log.Warn("error processing component secrets in namespace", "name", c.Name, "namespace", in.GetNamespace(), "error", err)
 			return &operatorv1pb.ListComponentResponse{}, err
 		}
 
 		b, err := json.Marshal(&c)
 		if err != nil {
-			log.Warnf("error marshalling component %s in namespace %s: %s", c.Name, in.GetNamespace(), err)
+			log.Warn("error marshalling component in namespace", "name", c.Name, "namespace", in.GetNamespace(), "error", err)
 			continue
 		}
 		resp.Components = append(resp.GetComponents(), b)

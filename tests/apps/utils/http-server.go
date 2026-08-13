@@ -44,7 +44,7 @@ func StartServer(port int, appRouter func() http.Handler, allowHTTP2 bool, enabl
 	addr := fmt.Sprintf(":%d", port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Fatalf("Failed to create listener: %v", err)
+		log.Fatal("Failed to create listener", "error", err)
 	}
 
 	var server *http.Server
@@ -79,7 +79,7 @@ func StartServer(port int, appRouter func() http.Handler, allowHTTP2 bool, enabl
 	if enableTLS {
 		certFile, keyFile, err = getTLSCertAndKey()
 		if err != nil {
-			log.Fatalf("Failed to get TLS cert and key: %v", err)
+			log.Fatal("Failed to get TLS cert and key", "error", err)
 		}
 	}
 
@@ -103,7 +103,7 @@ func StartServer(port int, appRouter func() http.Handler, allowHTTP2 bool, enabl
 	}
 
 	if err != http.ErrServerClosed {
-		log.Fatalf("Failed to run server: %v", err)
+		log.Fatal("Failed to run server", "error", err)
 	}
 
 	log.Println("Server shut down")

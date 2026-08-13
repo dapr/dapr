@@ -36,7 +36,7 @@ func TestCryptoEndpoints(t *testing.T) {
 	compStore.AddCryptoProvider(cryptoComponentName, &daprt.FakeSubtleCrypto{})
 	testAPI := &api{
 		universal: universal.New(universal.Options{
-			Logger:     log,
+			Logger:     log.Legacy(),
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
 		}),

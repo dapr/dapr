@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	log = logger.NewLogger("dapr.operator.api.loops.stream")
+	log = logger.New("dapr.operator.api.loops.stream")
 
 	LoopFactory = loop.New[loops.EventStream](8)
 )
@@ -61,12 +61,12 @@ func (s *stream) Handle(ctx context.Context, event loops.EventStream) error {
 
 func (s *stream) handleSend(e *loops.StreamSend) error {
 	if err := s.sender.Send(e.Resource, e.EventType); err != nil {
-		log.Warnf("error sending message: %s", err)
+		log.Warn("error sending message", "error", err)
 		return err
 	}
 	return nil
 }
 
 func (s *stream) handleShutdown(e *loops.Shutdown) {
-	log.Debugf("stream loop shutdown: %v", e.Error)
+	log.Debug("stream loop shutdown", "error", e.Error)
 }

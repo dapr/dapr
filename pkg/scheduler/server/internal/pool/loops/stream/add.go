@@ -47,7 +47,7 @@ func handleAdd(ctx context.Context, cron api.Interface, add *schedulerv1pb.Watch
 		return nil, err
 	}
 
-	log.Infof("Sidecar connected: %s/%s (actorTypes=%v) (prefixes=%v).", reqNamespace, reqAppID, actorTypes, prefixes)
+	log.Info("Sidecar connected: / (actorTypes=) (prefixes=).", "req_namespace", reqNamespace, "app_id", reqAppID, "actor_types", actorTypes, "prefixes", prefixes)
 
 	return cancel, nil
 }

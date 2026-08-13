@@ -26,7 +26,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.placement.manager.connector.dnslookup")
+var log = logger.New("dapr.runtime.actors.placement.manager.connector.dnslookup")
 
 type lookupFunc func(ctx context.Context, host string) (addrs []string, err error)
 
@@ -89,7 +89,7 @@ func (r *dnsLookUpConnector) Connect(ctx context.Context) (*grpc.ClientConn, err
 	hostPort := net.JoinHostPort(addr, r.port)
 	r.current = hostPort
 
-	log.Debugf("Attempting to connect to placement %s", hostPort)
+	log.Debug("Attempting to connect to placement", "host_port", hostPort)
 
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, hostPort, r.gOpts...)
@@ -97,7 +97,7 @@ func (r *dnsLookUpConnector) Connect(ctx context.Context) (*grpc.ClientConn, err
 		return nil, err
 	}
 
-	log.Debugf("Connected to placement %s", hostPort)
+	log.Debug("Connected to placement", "host_port", hostPort)
 
 	return conn, nil
 }

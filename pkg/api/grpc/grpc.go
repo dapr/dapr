@@ -90,7 +90,7 @@ type API interface {
 
 type api struct {
 	*universal.Universal
-	logger                 logger.Logger
+	logger                 *logger.Log
 	directMessaging        invokev1.DirectMessaging
 	channels               *channels.Channels
 	pubsubAdapter          runtimePubsub.Adapter
@@ -127,7 +127,7 @@ type APIOpts struct {
 func NewAPI(opts APIOpts) API {
 	return &api{
 		Universal:              opts.Universal,
-		logger:                 opts.Logger,
+		logger:                 logger.FromLogger(opts.Logger),
 		directMessaging:        opts.DirectMessaging,
 		channels:               opts.Channels,
 		pubsubAdapter:          opts.PubSubAdapter,
@@ -179,7 +179,7 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
 	thepubsub, pubsubName, topic, rawPayload, validationErr := a.validateAndGetPubsubAndTopic(in.GetPubsubName(), in.GetTopic(), in.GetMetadata())
 	if validationErr != nil {
-		apiServerLogger.Debug(validationErr)
+		apiServerLogger.Debug("api call returned error", logger.Err(validationErr))
 		return &emptypb.Empty{}, validationErr
 	}
 
@@ -206,7 +206,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			nerr := apierrors.PubSub(pubsubName).WithAppError(
 				a.AppID(), err,
 			).CloudEventCreation()
-			apiServerLogger.Debug(nerr)
+			apiServerLogger.Debug("api call returned error", logger.Err(nerr))
 			return &emptypb.Empty{}, nerr
 		}
 
@@ -218,7 +218,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			err = apierrors.PubSub(pubsubName).WithAppError(
 				a.AppID(), nil,
 			).WithTopic(topic).MarshalEnvelope()
-			apiServerLogger.Debug(err)
+			apiServerLogger.Debug("api call returned error", logger.Err(err))
 			return &emptypb.Empty{}, err
 		}
 	} else {
@@ -251,7 +251,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			nerr = apierrors.PubSub(pubsubName).PublishMessage(topic, err)
 		}
 
-		apiServerLogger.Debug(nerr)
+		apiServerLogger.Debug("api call returned error", logger.Err(nerr))
 		return &emptypb.Empty{}, nerr
 	}
 
@@ -376,7 +376,7 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 	thepubsub, pubsubName, topic, rawPayload, validationErr := a.validateAndGetPubsubAndTopic(in.GetPubsubName(), in.GetTopic(), in.GetMetadata())
 
 	if validationErr != nil {
-		apiServerLogger.Debug(validationErr)
+		apiServerLogger.Debug("api call returned error", logger.Err(validationErr))
 		return &runtimev1pb.BulkPublishResponse{}, validationErr
 	}
 
@@ -401,7 +401,7 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 			err := apierrors.PubSub(pubsubName).WithAppError(
 				a.AppID(), errors.New("entryId is duplicated or not present for entry"),
 			).WithTopic(topic).MarshalEvents()
-			apiServerLogger.Debug(err)
+			apiServerLogger.Debug("api call returned error", logger.Err(err))
 			return &runtimev1pb.BulkPublishResponse{}, err
 		}
 		entryIdSet[entry.GetEntryId()] = struct{}{}
@@ -436,7 +436,7 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 				nerr := apierrors.PubSub(pubsubName).WithAppError(
 					a.AppID(), err,
 				).CloudEventCreation()
-				apiServerLogger.Debug(nerr)
+				apiServerLogger.Debug("api call returned error", logger.Err(nerr))
 				closeChildSpans(ctx, nerr)
 				return &runtimev1pb.BulkPublishResponse{}, nerr
 			}
@@ -448,7 +448,7 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 				nerr := apierrors.PubSub(pubsubName).WithAppError(
 					a.AppID(), err,
 				).WithTopic(topic).MarshalEnvelope()
-				apiServerLogger.Debug(nerr)
+				apiServerLogger.Debug("api call returned error", logger.Err(nerr))
 				closeChildSpans(ctx, nerr)
 				return &runtimev1pb.BulkPublishResponse{}, nerr
 			}
@@ -492,7 +492,7 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 			nerr = apierrors.PubSub(pubsubName).PublishMessage(topic, err)
 		}
 
-		apiServerLogger.Debug(nerr)
+		apiServerLogger.Debug("api call returned error", logger.Err(nerr))
 		closeChildSpans(ctx, nerr)
 		return &bulkRes, nerr
 	}
@@ -571,7 +571,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 
 	if err != nil {
 		richError := apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.BindingInvokeOutputBinding, fmt.Sprintf(messages.ErrInvokeOutputBinding, in.GetName(), err.Error()))
-		apiServerLogger.Debug(richError)
+		apiServerLogger.Debug("api call returned error", logger.Err(richError))
 		return r, richError
 	}
 
@@ -646,7 +646,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 
 			val, err := encryption.TryDecryptValue(in.GetStoreName(), bulkResp.GetItems()[i].GetData())
 			if err != nil {
-				apiServerLogger.Debugf("Bulk get error: %v", err)
+				apiServerLogger.Debug("Bulk get error", logger.Err(err))
 				bulkResp.Items[i].Data = nil
 				bulkResp.Items[i].Error = err.Error()
 				continue
@@ -696,7 +696,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 			err = apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.StateGet, fmt.Sprintf(messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error()))
 		}
 
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return &runtimev1pb.GetStateResponse{}, err
 	}
 
@@ -707,7 +707,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		val, err := encryption.TryDecryptValue(in.GetStoreName(), getResponse.Data)
 		if err != nil {
 			err = apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.StateGet, fmt.Sprintf(messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error()))
-			a.logger.Debug(err)
+			a.logger.Debug("api call returned error", logger.Err(err))
 			return &runtimev1pb.GetStateResponse{}, err
 		}
 
@@ -774,7 +774,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		if encryption.EncryptedStateStore(in.GetStoreName()) {
 			val, encErr := encryption.TryEncryptValue(in.GetStoreName(), s.GetValue())
 			if encErr != nil {
-				a.logger.Debug(encErr)
+				a.logger.Debug("api call returned error", logger.Err(encErr))
 				return empty, encErr
 			}
 
@@ -801,7 +801,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		} else {
 			err = apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateSave, fmt.Sprintf(messages.ErrStateSave, in.GetStoreName(), err.Error()))
 		}
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return empty, err
 	}
 	return empty, nil
@@ -866,7 +866,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 		} else {
 			err = apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateDelete, fmt.Sprintf(messages.ErrStateDelete, in.GetKey(), err.Error()))
 		}
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return empty, err
 	}
 	return empty, nil
@@ -920,7 +920,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 		} else {
 			err = apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateBulkDelete, fmt.Sprintf(messages.ErrStateDeleteBulk, in.GetStoreName(), err.Error()))
 		}
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return empty, err
 	}
 
@@ -944,7 +944,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	transactionalStore, ok := store.(state.TransactionalStore)
 	if !ok || !state.FeatureTransactional.IsPresent(store.Features()) {
 		err := apierrors.StateStore(in.GetStoreName()).TransactionsNotSupported()
-		apiServerLogger.Debug(err)
+		apiServerLogger.Debug("api call returned error", logger.Err(err))
 		return &emptypb.Empty{}, err
 	}
 
@@ -1000,7 +1000,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 		default:
 			err = apierrors.Basic(codes.Unimplemented, http.StatusInternalServerError, errorcodes.StateNotSupportedOperation, fmt.Sprintf(messages.ErrNotSupportedStateOperation, inputReq.GetOperationType()))
-			apiServerLogger.Debug(err)
+			apiServerLogger.Debug("api call returned error", logger.Err(err))
 			return &emptypb.Empty{}, err
 		}
 	}
@@ -1009,7 +1009,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		max := maxMulti.MultiMaxSize()
 		if max > 0 && len(operations) > max {
 			err := apierrors.StateStore(in.GetStoreName()).TooManyTransactionalOps(len(operations), max)
-			apiServerLogger.Debug(err)
+			apiServerLogger.Debug("api call returned error", logger.Err(err))
 			return &emptypb.Empty{}, err
 		}
 	}
@@ -1022,7 +1022,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				val, err := encryption.TryEncryptValue(in.GetStoreName(), data)
 				if err != nil {
 					err = apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.StateTransaction, fmt.Sprintf(messages.ErrStateTransaction, err.Error()))
-					apiServerLogger.Debug(err)
+					apiServerLogger.Debug("api call returned error", logger.Err(err))
 					return &emptypb.Empty{}, err
 				}
 
@@ -1039,7 +1039,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		ops, err := a.outbox.PublishInternal(ctx, in.GetStoreName(), operations, a.AppID(), traceID, traceState)
 		if err != nil {
 			nerr := apierrors.PubSubOutbox(a.AppID(), err)
-			apiServerLogger.Debug(nerr)
+			apiServerLogger.Debug("api call returned error", logger.Err(nerr))
 			return &emptypb.Empty{}, nerr
 		}
 
@@ -1063,7 +1063,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 	if err != nil {
 		err = apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.StateTransaction, fmt.Sprintf(messages.ErrStateTransaction, err.Error()))
-		apiServerLogger.Debug(err)
+		apiServerLogger.Debug("api call returned error", logger.Err(err))
 		return &emptypb.Empty{}, err
 	}
 	return &emptypb.Empty{}, nil
@@ -1076,7 +1076,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 
 	astate, err := a.ActorState(ctx)
 	if err != nil {
-		apiServerLogger.Debug(err)
+		apiServerLogger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
@@ -1093,12 +1093,12 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 	resp, err := astate.Get(ctx, &req, true)
 	if err != nil {
 		if _, ok := status.FromError(err); ok {
-			apiServerLogger.Debug(err)
+			apiServerLogger.Debug("api call returned error", logger.Err(err))
 			return nil, err
 		}
 
 		err = messages.ErrActorStateGet.WithFormat(err)
-		apiServerLogger.Debug(err)
+		apiServerLogger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
@@ -1115,7 +1115,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 
 	astate, err := a.ActorState(ctx)
 	if err != nil {
-		apiServerLogger.Debug(err)
+		apiServerLogger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
@@ -1153,7 +1153,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 
 		default:
 			err = apierrors.Basic(codes.Unimplemented, http.StatusInternalServerError, errorcodes.StateNotSupportedOperation, fmt.Sprintf(messages.ErrNotSupportedStateOperation, op.GetOperationType()))
-			apiServerLogger.Debug(err)
+			apiServerLogger.Debug("api call returned error", logger.Err(err))
 			return nil, err
 		}
 
@@ -1169,12 +1169,12 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 	err = astate.TransactionalStateOperation(ctx, false, &req, true)
 	if err != nil {
 		if _, ok := status.FromError(err); ok {
-			apiServerLogger.Debug(err)
+			apiServerLogger.Debug("api call returned error", logger.Err(err))
 			return nil, err
 		}
 
 		err = messages.ErrActorStateTransactionSave.WithFormat(err)
-		apiServerLogger.Debug(err)
+		apiServerLogger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
@@ -1198,14 +1198,14 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		{"actorType", in.GetActorType()}, {"actorId", in.GetActorId()},
 	} {
 		if vErr := method.ValidateName(param.val); vErr != nil {
-			apiServerLogger.Debug(vErr)
+			apiServerLogger.Debug("api call returned error", logger.Err(vErr))
 			return nil, status.Errorf(codes.InvalidArgument, "invalid %s: %v", param.name, vErr)
 		}
 	}
 
 	normalized, err := method.NormalizeMethod(in.GetMethod())
 	if err != nil {
-		apiServerLogger.Debug(err)
+		apiServerLogger.Debug("api call returned error", logger.Err(err))
 		return nil, status.Errorf(codes.InvalidArgument, "invalid actor method: %v", err)
 	}
 	in.Method = normalized
@@ -1225,12 +1225,12 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	})
 	if err != nil {
 		if _, ok := status.FromError(err); ok {
-			apiServerLogger.Debug(err)
+			apiServerLogger.Debug("api call returned error", logger.Err(err))
 			return nil, err
 		}
 		if !actorerrors.Is(err) {
 			err = messages.ErrActorInvoke.WithFormat(err)
-			apiServerLogger.Debug(err)
+			apiServerLogger.Debug("api call returned error", logger.Err(err))
 			return response, err
 		}
 	}
@@ -1268,7 +1268,7 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 
 	store, err := a.getConfigurationStore(in.GetStoreName())
 	if err != nil {
-		apiServerLogger.Debug(err)
+		apiServerLogger.Debug("api call returned error", logger.Err(err))
 		return response, err
 	}
 
@@ -1290,7 +1290,7 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 
 	if err != nil {
 		richError := apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.ConfigurationGet, fmt.Sprintf(messages.ErrConfigurationGet, req.Keys, in.GetStoreName(), err.Error()))
-		apiServerLogger.Debug(richError)
+		apiServerLogger.Debug("api call returned error", logger.Err(richError))
 		return response, richError
 	}
 
@@ -1352,7 +1352,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		Id:    e.ID,
 	})
 	if err != nil {
-		apiServerLogger.Debug(err)
+		apiServerLogger.Debug("api call returned error", logger.Err(err))
 		return err
 	}
 	return nil
@@ -1361,7 +1361,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfigurationRequest, stream runtimev1pb.Dapr_SubscribeConfigurationServer) error { //nolint:nosnakecase
 	store, err := a.getConfigurationStore(request.GetStoreName())
 	if err != nil {
-		apiServerLogger.Debug(err)
+		apiServerLogger.Debug("api call returned error", logger.Err(err))
 		return err
 	}
 
@@ -1390,7 +1390,7 @@ func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfiguration
 		Id: subscribeID,
 	})
 	if err != nil {
-		apiServerLogger.Debug(err)
+		apiServerLogger.Debug("api call returned error", logger.Err(err))
 		return err
 	}
 
@@ -1443,7 +1443,7 @@ func (a *api) subscribeConfiguration(ctx context.Context, request *runtimev1pb.S
 
 	if err != nil {
 		richError := apierrors.Basic(codes.InvalidArgument, http.StatusInternalServerError, errorcodes.ConfigurationSubscribe, fmt.Sprintf(messages.ErrConfigurationSubscribe, componentReq.Keys, request.GetStoreName(), err))
-		apiServerLogger.Debug(richError)
+		apiServerLogger.Debug("api call returned error", logger.Err(richError))
 		return "", richError
 	}
 

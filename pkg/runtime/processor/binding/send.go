@@ -113,7 +113,7 @@ func (b *binding) startInputBinding(ctx context.Context, comp componentsV1alpha1
 	}
 
 	if !isSubscribed {
-		log.Infof("app has not subscribed to binding %s.", comp.Name)
+		log.Info("app has not subscribed to binding.", "name", comp.Name)
 		return nil
 	}
 
@@ -127,7 +127,7 @@ func (b *binding) startInputBinding(ctx context.Context, comp componentsV1alpha1
 		DecorateContext: b.resiliency.ComponentContextDecorator(),
 	})
 	if err != nil {
-		log.Errorf("error reading from input binding %s: %s", comp.Name, err)
+		log.Error("error reading from input binding", "name", comp.Name, "error", err)
 		return err
 	}
 
@@ -173,7 +173,7 @@ func (b *binding) sendBatchOutputBindingsParallel(ctx context.Context, to []stri
 				Operation: bindings.CreateOperation,
 			})
 			if err != nil {
-				log.Error(err)
+				log.Error("unexpected error", "error", err)
 			}
 		}(dst)
 	}
@@ -240,7 +240,7 @@ func (b *binding) onAppResponse(ctx context.Context, response *bindings.AppRespo
 				store.BulkSet,
 			)
 			if err != nil {
-				log.Errorf("error saving state from app response: %v", err)
+				log.Error("error saving state from app response", "error", err)
 			}
 		}(response.State)
 	}
@@ -451,7 +451,7 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 	if len(response.State) > 0 || len(response.To) > 0 {
 		err := b.onAppResponse(ctx, &response)
 		if err != nil {
-			log.Errorf("error executing app response: %s", err)
+			log.Error("error executing app response", "error", err)
 		}
 	}
 

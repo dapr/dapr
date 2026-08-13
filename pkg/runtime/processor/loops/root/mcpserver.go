@@ -55,7 +55,7 @@ func (r *Root) mcpServerLoop(name string) loop.Interface[loops.EventMCPServer] {
 	ctx := r.runCtx
 	r.mcpServersWG.Go(func() {
 		if err := l.Run(ctx); err != nil {
-			log.Errorf("mcpserver loop %s error: %s", name, err)
+			log.Error("mcpserver loop error", "name", name, "error", err)
 		}
 		loops.MCPServerFactory.CacheLoop(l)
 	})

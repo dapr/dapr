@@ -47,7 +47,7 @@ import (
 	"github.com/dapr/kit/ttlcache"
 )
 
-var log = logger.NewLogger("dapr.runtime.direct_messaging")
+var log = logger.New("dapr.runtime.direct_messaging")
 
 const streamingUnsupportedErr = "target app '%s' is running a version of Dapr that does not support streaming-based service invocation"
 
@@ -494,10 +494,10 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 				messageDataValue = nil
 			}
 			if req.CanReplay() {
-				log.Warnf("App %s does not support streaming-based service invocation (most likely because it's using an older version of Dapr); falling back to unary calls", appID)
+				log.Warn("App does not support streaming-based service invocation (most likely because it's using an older version of Dapr); falling back to unary calls", "app_id", appID)
 				return d.invokeRemoteUnary(ctx, clientV1, req, opts)
 			} else {
-				log.Errorf("App %s does not support streaming-based service invocation (most likely because it's using an older version of Dapr) and the request is not replayable. Please upgrade the Dapr sidecar used by the target app, or use Resiliency policies to add retries", appID)
+				log.Error("App does not support streaming-based service invocation (most likely because it's using an older version of Dapr) and the request is not replayable. Please upgrade the Dapr sidecar used by the target app, or use Resiliency policies to add retries", "app_id", appID)
 				return nil, fmt.Errorf(streamingUnsupportedErr, appID)
 			}
 		}

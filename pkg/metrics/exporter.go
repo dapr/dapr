@@ -48,7 +48,7 @@ type exporter struct {
 	enabled       bool
 	port          string
 	listenAddress string
-	logger        logger.Logger
+	logger        *logger.Log
 	htarget       healthz.Target
 }
 
@@ -58,7 +58,7 @@ func New(opts Options) Exporter {
 	return &exporter{
 		htarget:       opts.Healthz.AddTarget("metrics-exporter"),
 		namespace:     opts.Namespace,
-		logger:        opts.Log,
+		logger:        logger.FromLogger(opts.Log),
 		enabled:       opts.Enabled,
 		port:          opts.Port,
 		listenAddress: opts.ListenAddress,
@@ -101,7 +101,7 @@ func (e *exporter) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", addr, err)
 	}
-	e.logger.Infof("metrics server started on %s%s", addr, defaultMetricsPath)
+	e.logger.Info("metrics server started on", "addr", addr, "default_metrics_path", defaultMetricsPath)
 	mux := http.NewServeMux()
 	// Gather both the private registry (dapr_* opencensus views) and the
 	// global default registry. Third party libraries, notably the embedded
@@ -148,9 +148,9 @@ func (e *exporter) Start(ctx context.Context) error {
 
 // promErrorLogger adapts the dapr logger to the promhttp.Logger interface.
 type promErrorLogger struct {
-	log logger.Logger
+	log *logger.Log
 }
 
 func (p promErrorLogger) Println(v ...any) {
-	p.log.Error(v...)
+	p.log.Error(fmt.Sprint(v...))
 }

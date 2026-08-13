@@ -36,7 +36,7 @@ var DefaultRegistry *Registry = NewRegistry()
 // NewRegistry is used to create conversation registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		Logger:        logger.NewLogger("dapr.conversation.registry"),
+		Logger:        logger.New("dapr.conversation.registry").Legacy(),
 		conversations: make(map[string]func(logger.Logger) conversation.Conversation),
 	}
 }

@@ -26,7 +26,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.processor.pubsub.subscription.todo")
+var log = logger.New("dapr.runtime.processor.pubsub.subscription.todo")
 
 func ValidateEntryId(entryId string, i int) error { //nolint:stylecheck
 	if entryId == "" {

@@ -31,13 +31,13 @@ func (d *disseminator) handleReportedHost(ctx context.Context, report *loops.Rep
 
 	//nolint:protogetter
 	if report.Host.Version != nil && *report.Host.Version < d.currentVersion {
-		log.Debugf("Ignoring report from stream %s:%d - old version %d (current %d)",
-			d.namespace, report.StreamIDx, *report.Host.Version, d.currentVersion)
+		log.Debug("Ignoring report from stream - old version",
+			"namespace", d.namespace, "stream_idx", report.StreamIDx, "version", *report.Host.Version, "current_version", d.currentVersion)
 		return
 	}
 
-	log.Debugf("Received report from stream (idx:%d) (ns=%s) (appID=%s) (op=%s) (ver=%d)",
-		report.StreamIDx, d.namespace, report.Host.GetId(), op.String(), d.currentVersion)
+	log.Debug("Received report from stream",
+		"stream_idx", report.StreamIDx, "namespace", d.namespace, "app_id", report.Host.GetId(), "operation", op.String(), "version", d.currentVersion)
 
 	// If this stream is receiving a one-shot table push, ignore responses from
 	// that push. They are not part of the namespace-wide dissemination.
@@ -68,8 +68,8 @@ func (d *disseminator) handleReportedHost(ctx context.Context, report *loops.Rep
 
 func (d *disseminator) doReport(streamIDx uint64, host *v1pb.Host) {
 	if !d.store.Set(streamIDx, host) {
-		log.Debugf("No store changes from stream %s:%d",
-			d.namespace, streamIDx)
+		log.Debug("No store changes from stream",
+			"namespace", d.namespace, "stream_idx", streamIDx)
 
 		// No store changes so skip namespace-wide dissemination. If this stream
 		// has no entities (is not in the store), push the current placement table
@@ -169,7 +169,7 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 		d.streamsInTargetState = 0
 
 		d.timeoutQ.Dequeue(d.currentVersion)
-		log.Debugf("Dissemination of version %d in %s complete", d.currentVersion, d.namespace)
+		log.Debug("Dissemination of version in complete", "current_version", d.currentVersion, "namespace", d.namespace)
 
 		// Clean up orphaned store entries- store entries whose streams are no
 		// longer in d.streams. This handles the case where a stream's

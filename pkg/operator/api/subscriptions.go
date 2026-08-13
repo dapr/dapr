@@ -58,7 +58,7 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 		}
 		b, err := json.Marshal(&s)
 		if err != nil {
-			log.Warnf("error marshalling subscription in namespace %s: %s", in.GetNamespace(), err)
+			log.Warn("error marshalling subscription in namespace", "namespace", in.GetNamespace(), "error", err)
 			continue
 		}
 		resp.Subscriptions = append(resp.GetSubscriptions(), b)
@@ -101,7 +101,7 @@ func (a *apiServer) SubscriptionUpdate(in *operatorv1pb.SubscriptionUpdateReques
 
 	// Run the client - this will block until context is done or event channel closes
 	if err := client.Run(ctx); err != nil {
-		log.Warnf("subscription client loop ended with error: %s", err)
+		log.Warn("subscription client loop ended with error", "error", err)
 	}
 
 	return nil

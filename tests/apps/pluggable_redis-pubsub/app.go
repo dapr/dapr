@@ -48,7 +48,7 @@ func (r *redisPb) Publish(ctx context.Context, req *pubsub.PublishRequest) error
 	})
 }
 
-var log = logger.NewLogger("redis-pubsub-pluggable")
+var log = logger.New("redis-pubsub-pluggable")
 
 func main() {
 	dapr.Register("redis-pluggable", dapr.WithPubSub(func() sdkPubSub.PubSub {

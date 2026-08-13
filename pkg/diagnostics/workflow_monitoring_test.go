@@ -15,8 +15,8 @@ func initWorkflowMetrics() (*workflowMetrics, view.Meter) {
 	meter := view.NewMeter()
 	meter.Start()
 	metricSpec := config.LoadDefaultConfiguration().GetMetricsSpec()
-	latencyDistribution := metricSpec.GetLatencyDistribution(log)
-	workflowLatencyDistribution := metricSpec.GetWorkflowLatencyDistribution(log, latencyDistribution)
+	latencyDistribution := metricSpec.GetLatencyDistribution(log.Legacy())
+	workflowLatencyDistribution := metricSpec.GetWorkflowLatencyDistribution(log.Legacy(), latencyDistribution)
 	_ = w.Init(meter, "test", "default", latencyDistribution, workflowLatencyDistribution)
 
 	return w, meter
@@ -393,8 +393,8 @@ func TestLatencyDistributionRouting(t *testing.T) {
 			LatencyDistributionBuckets: &workflowBuckets,
 		},
 	}
-	sharedDistribution := metricSpec.GetLatencyDistribution(log)
-	workflowDistribution := metricSpec.GetWorkflowLatencyDistribution(log, sharedDistribution)
+	sharedDistribution := metricSpec.GetLatencyDistribution(log.Legacy())
+	workflowDistribution := metricSpec.GetWorkflowLatencyDistribution(log.Legacy(), sharedDistribution)
 
 	w := newWorkflowMetrics()
 	meter := view.NewMeter()

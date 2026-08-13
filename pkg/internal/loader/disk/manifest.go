@@ -34,7 +34,7 @@ import (
 
 const yamlSeparator = "\n---"
 
-var log = logger.NewLogger("dapr.runtime.loader.disk")
+var log = logger.New("dapr.runtime.loader.disk")
 
 type manifestSet[T meta.Resource] struct {
 	d *disk[T]
@@ -71,7 +71,7 @@ func (m *manifestSet[T]) loadManifestsFromDirectory(dir string) error {
 
 		fileName := file.Name()
 		if !kitstrings.IsYaml(fileName) {
-			log.Warnf("A non-YAML %s file %s was detected, it will not be loaded", m.d.kind, fileName)
+			log.Warn("A non-YAML file was detected, it will not be loaded", "kind", m.d.kind, "file_name", fileName)
 			continue
 		}
 
@@ -88,13 +88,13 @@ func (m *manifestSet[T]) loadManifestsFromFile(path string) {
 
 	f, err := os.Open(path)
 	if err != nil {
-		log.Warnf("daprd load %s error when opening file %s: %v", m.d.kind, path, err)
+		log.Warn("daprd load error when opening file", "kind", m.d.kind, "path", path, "error", err)
 		return
 	}
 	defer f.Close()
 
 	if err := m.decodeYaml(f); err != nil {
-		log.Warnf("daprd load %s error when parsing manifests yaml resource in %s: %v", m.d.kind, path, err)
+		log.Warn("daprd load error when parsing manifests yaml resource in", "kind", m.d.kind, "path", path, "error", err)
 	}
 }
 
@@ -104,7 +104,7 @@ func (m *manifestSet[T]) loadManifestsFromBytes(path string, data []byte) {
 	}()
 
 	if err := m.decodeYaml(bytes.NewReader(data)); err != nil {
-		log.Warnf("daprd load %s error when parsing manifests yaml resource in %s: %v", m.d.kind, path, err)
+		log.Warn("daprd load error when parsing manifests yaml resource in", "kind", m.d.kind, "path", path, "error", err)
 	}
 }
 

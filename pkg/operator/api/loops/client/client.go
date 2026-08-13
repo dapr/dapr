@@ -31,7 +31,7 @@ import (
 )
 
 var (
-	log              = logger.NewLogger("dapr.operator.api.loops.client")
+	log              = logger.New("dapr.operator.api.loops.client")
 	LoopFactoryCache = loop.New[loops.EventClient](16)
 )
 
@@ -149,7 +149,7 @@ func (c *Client[T]) handleResourceUpdate(ctx context.Context, e *loops.ResourceU
 		EventType: e.EventType,
 	})
 
-	log.Debugf("updated sidecar with %s %s %s in namespace %s", r.Kind(), e.EventType.String(), r.GetName(), c.namespace)
+	log.Debug("updated sidecar with in namespace", "kind", r.Kind(), "string", e.EventType.String(), "name", r.GetName(), "namespace", c.namespace)
 	return nil
 }
 

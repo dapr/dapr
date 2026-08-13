@@ -84,7 +84,7 @@ func TestStartWorkflowAPI(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		logger:         logger.NewLogger("test"),
+		logger:         logger.New("test"),
 		resiliency:     resiliency.New(nil),
 		workflowEngine: fake.New(),
 		actors:         actorsfake.New(),
@@ -130,7 +130,7 @@ func TestGetWorkflowAPI(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		logger:         logger.NewLogger("test"),
+		logger:         logger.New("test"),
 		resiliency:     resiliency.New(nil),
 		workflowEngine: fake.New(),
 		actors:         actorsfake.New(),
@@ -175,7 +175,7 @@ func TestTerminateWorkflowAPI(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		logger:         logger.NewLogger("test"),
+		logger:         logger.New("test"),
 		resiliency:     resiliency.New(nil),
 		workflowEngine: fake.New(),
 		actors:         actorsfake.New(),
@@ -232,7 +232,7 @@ func TestRaiseEventWorkflowApi(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		logger:         logger.NewLogger("test"),
+		logger:         logger.New("test"),
 		resiliency:     resiliency.New(nil),
 		workflowEngine: fake.New(),
 		actors:         actorsfake.New(),
@@ -279,7 +279,7 @@ func TestPauseWorkflowApi(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		logger:         logger.NewLogger("test"),
+		logger:         logger.New("test"),
 		resiliency:     resiliency.New(nil),
 		workflowEngine: fake.New(),
 		actors:         actorsfake.New(),
@@ -324,7 +324,7 @@ func TestResumeWorkflowApi(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		logger:         logger.NewLogger("test"),
+		logger:         logger.New("test"),
 		resiliency:     resiliency.New(nil),
 		workflowEngine: fake.New(),
 		actors:         actorsfake.New(),
@@ -357,7 +357,7 @@ func TestWorkflowInstanceNotFoundError(t *testing.T) {
 	expectedMessage := messages.ErrWorkflowInstanceNotFound.WithFormat(fakeInstanceID).Message()
 
 	fakeAPI := &Universal{
-		logger:     logger.NewLogger("test"),
+		logger:     logger.New("test"),
 		resiliency: resiliency.New(nil),
 		workflowEngine: fake.New().WithClient(func() backend.TaskHubClient {
 			return fake.NewClient().
@@ -398,7 +398,7 @@ func TestWorkflowInstanceNotFoundError(t *testing.T) {
 
 func newGetWorkflowAPI(metadata *backend.WorkflowMetadata, metadataErr error) *Universal {
 	return &Universal{
-		logger:     logger.NewLogger("test"),
+		logger:     logger.New("test"),
 		resiliency: resiliency.New(nil),
 		workflowEngine: fake.New().WithClient(func() backend.TaskHubClient {
 			return fake.NewClient().WithFetchWorkflowMetadata(func(ctx context.Context, id api.InstanceID, opts ...api.FetchWorkflowMetadataOptions) (*backend.WorkflowMetadata, error) {

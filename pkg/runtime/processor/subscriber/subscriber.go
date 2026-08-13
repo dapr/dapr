@@ -84,7 +84,7 @@ type namedSubscription struct {
 	*subscription.Subscription
 }
 
-var log = logger.NewLogger("dapr.runtime.processor.subscription")
+var log = logger.New("dapr.runtime.processor.subscription")
 
 func New(opts Options) *Subscriber {
 	return &Subscriber{
@@ -272,7 +272,7 @@ func (s *Subscriber) ReloadDeclaredAppSubscription(name, pubsubName string) erro
 
 	ss, err := s.startSubscription(ps, sub.NamedSubscription, false)
 	if err != nil {
-		log.Errorf("Failed to start declared subscription %s for pubsub %s, topic %s: %s", name, pubsubName, sub.Topic, err)
+		log.Error("Failed to start declared subscription for pubsub, topic", "name", name, "pubsub_name", pubsubName, "topic", sub.Topic, "error", err)
 
 		go s.retrySubscription(pubsubName, ps, sub.NamedSubscription)
 
@@ -354,7 +354,7 @@ func (s *Subscriber) StartAppSubscriptions() error {
 			ss, err := s.startSubscription(ps, sub, false)
 			if err != nil {
 				errs = append(errs, err)
-				log.Errorf("Failed to start subscription for pubsub %s, topic %s: %s", name, sub.Topic, err)
+				log.Error("Failed to start subscription for pubsub, topic", "name", name, "topic", sub.Topic, "error", err)
 
 				go s.retrySubscription(name, ps, sub)
 
@@ -386,13 +386,13 @@ func (s *Subscriber) retrySubscription(pubsubName string, pubsub *rtpubsub.Pubsu
 
 	backoff.Retry(func() error {
 		if s.closed.Load() {
-			log.Debugf("Stopping retry for subscription pubsub %s, topic %s due to subscriber closure", pubsubName, sub.Topic)
+			log.Debug("Stopping retry for subscription pubsub, topic due to subscriber closure", "pubsub_name", pubsubName, "topic", sub.Topic)
 			return nil
 		}
 
 		ss, err := s.startSubscription(pubsub, sub, false)
 		if err != nil {
-			log.Errorf("Retry failed for subscription pubsub %s, topic %s: %s. Will retry.", pubsubName, sub.Topic, err)
+			log.Error("Retry failed for subscription pubsub, topic:. Will retry.", "pubsub_name", pubsubName, "topic", sub.Topic, "error", err)
 			return err
 		}
 
@@ -402,7 +402,7 @@ func (s *Subscriber) retrySubscription(pubsubName string, pubsub *rtpubsub.Pubsu
 				name:         sub.Name,
 				Subscription: ss,
 			})
-			log.Infof("Successfully started subscription after retry for pubsub %s, topic %s", pubsubName, sub.Topic)
+			log.Info("Successfully started subscription after retry for pubsub, topic", "pubsub_name", pubsubName, "topic", sub.Topic)
 		} else {
 			// Subscriber was closed while we were retrying, stop the subscription
 			ss.Stop()
@@ -524,7 +524,7 @@ func (s *Subscriber) reloadPubSubApp(name string, pubsub *rtpubsub.PubsubItem) e
 	for _, sub := range appSubs {
 		ss, err := s.startSubscription(pubsub, sub, false)
 		if err != nil {
-			log.Errorf("Failed to reload subscription for pubsub %s, topic %s: %s", name, sub.Topic, err)
+			log.Error("Failed to reload subscription for pubsub, topic", "name", name, "topic", sub.Topic, "error", err)
 			errs = append(errs, fmt.Errorf("failed to create subscription for %s: %s", name, err))
 
 			go s.retrySubscription(name, pubsub, sub)
@@ -573,7 +573,7 @@ func (s *Subscriber) initProgrammaticSubscriptions(ctx context.Context) error {
 
 	// handle app subscriptions
 	if s.isHTTP {
-		subscriptions, err = rtpubsub.GetSubscriptionsHTTP(ctx, appChannel, log, s.resiliency, s.appID)
+		subscriptions, err = rtpubsub.GetSubscriptionsHTTP(ctx, appChannel, log.Legacy(), s.resiliency, s.appID)
 	} else {
 		var conn grpc.ClientConnInterface
 		var teardown func(bool)
@@ -583,7 +583,7 @@ func (s *Subscriber) initProgrammaticSubscriptions(ctx context.Context) error {
 		}
 		defer teardown(false)
 		client := runtimev1pb.NewAppCallbackClient(conn)
-		subscriptions, err = rtpubsub.GetSubscriptionsGRPC(ctx, client, log, s.resiliency)
+		subscriptions, err = rtpubsub.GetSubscriptionsGRPC(ctx, client, log.Legacy(), s.resiliency)
 	}
 
 	if err != nil {
@@ -596,7 +596,7 @@ func (s *Subscriber) initProgrammaticSubscriptions(ctx context.Context) error {
 	}
 
 	for pubsubName, topics := range subbedTopics {
-		log.Infof("app is subscribed to the following topics: [%s] through pubsub=%s", topics, pubsubName)
+		log.Info("app is subscribed to the following topics: through pubsub=", "topics", topics, "pubsub_name", pubsubName)
 	}
 
 	s.compStore.SetProgramaticSubscriptions(subscriptions...)

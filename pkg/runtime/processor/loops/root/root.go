@@ -31,7 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/loops"
 )
 
-var log = logger.NewLogger("dapr.runtime.processor.loops.root")
+var log = logger.New("dapr.runtime.processor.loops.root")
 
 // SecretProcessor resolves secret references on a resource. The root uses it
 // to (a) preprocess incoming components for unresolved secret-store
@@ -215,7 +215,7 @@ func (r *Root) Handle(ctx context.Context, e loops.EventRoot) error {
 	case *loops.Shutdown:
 		r.handleShutdown(ev)
 	default:
-		log.Errorf("root: unknown event type %T", ev)
+		log.Error("root: unknown event type", "ev", ev)
 	}
 	return nil
 }

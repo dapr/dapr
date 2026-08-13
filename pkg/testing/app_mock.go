@@ -101,7 +101,7 @@ func (a *MockApp) handler(w http.ResponseWriter, r *http.Request) {
 
 	var msg Event
 	if err := json.Unmarshal(body, &msg); err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 	str, _ := json.Marshal(msg.Data)
 	if !a.noprint {

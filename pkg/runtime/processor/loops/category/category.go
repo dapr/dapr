@@ -27,7 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 )
 
-var log = logger.NewLogger("dapr.runtime.processor.loops.category")
+var log = logger.New("dapr.runtime.processor.loops.category")
 
 // InstanceFactory builds an Instance loop for a given named component. The
 // factory may return a category-specialised handler that satisfies
@@ -98,7 +98,7 @@ func (c *Category) Handle(ctx context.Context, e loops.EventCategory) error {
 	case *loops.Shutdown:
 		c.handleShutdown(ev)
 	default:
-		log.Errorf("category %s: unknown event type %T", c.name, ev)
+		log.Error("category: unknown event type", "name", c.name, "ev", ev)
 	}
 	return nil
 }
@@ -131,7 +131,7 @@ func (c *Category) getOrCreateInstance(ctx context.Context, name string) loop.In
 
 	c.wg.Go(func() {
 		if err := instLoop.Run(ctx); err != nil {
-			log.Errorf("instance loop %s/%s error: %s", c.name, name, err)
+			log.Error("instance loop / error", "name", c.name, "name2", name, "error", err)
 		}
 	})
 
