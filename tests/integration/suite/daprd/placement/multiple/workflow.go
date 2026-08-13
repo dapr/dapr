@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	dactors "github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -81,7 +82,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 
 	assert.Equal(t, expTable, w.actors1.Placement().PlacementTables(t, ctx))
 
-	client1 := dworkflow.NewClient(w.actors1.Daprd().GRPCConn(t, ctx))
+	client1 := dworkflow.NewClientWithLogger(w.actors1.Daprd().GRPCConn(t, ctx), logger.New(t))
 	cctx1, cancel1 := context.WithCancel(ctx)
 	t.Cleanup(cancel1)
 	require.NoError(t, client1.StartWorker(cctx1, dworkflow.NewRegistry()))
@@ -96,7 +97,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, expTable, w.actors1.Placement().PlacementTables(t, ctx))
 	}, time.Second*10, time.Millisecond*10)
 
-	client2 := dworkflow.NewClient(w.actors2.Daprd().GRPCConn(t, ctx))
+	client2 := dworkflow.NewClientWithLogger(w.actors2.Daprd().GRPCConn(t, ctx), logger.New(t))
 	cctx2, cancel2 := context.WithCancel(ctx)
 	t.Cleanup(cancel2)
 	require.NoError(t, client2.StartWorker(cctx2, dworkflow.NewRegistry()))

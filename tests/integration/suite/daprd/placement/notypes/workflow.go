@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -65,7 +66,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	initVersion := table.Tables["default"].Version
 
 	// Start a workflow client which will register workflow actor types.
-	client := dworkflow.NewClient(w.actors.GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(w.actors.GRPCConn(t, ctx), logger.New(t))
 	cctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	require.NoError(t, client.StartWorker(cctx, dworkflow.NewRegistry()))

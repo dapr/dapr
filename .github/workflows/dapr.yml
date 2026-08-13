@@ -269,6 +269,21 @@ jobs:
           sudo sysctl -w net.inet.tcp.msl=1000
       - name: Run make test-integration-parallel
         run: make test-integration-parallel
+      - name: Summarise integration test failures
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const script = require('./.github/scripts/integration_test_summary.js')
+            await script({ core })
+      - name: Upload integration test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_integration
+          path: |
+            ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.json
+            ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.xml
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"

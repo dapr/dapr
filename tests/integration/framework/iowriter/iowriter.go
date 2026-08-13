@@ -15,84 +15,109 @@ package iowriter
 
 import (
 	"bytes"
-	"errors"
+	"fmt"
 	"io"
-	"os"
 	"strings"
 	"sync"
-
-	kitstrings "github.com/dapr/kit/strings"
 )
 
-// Logger is an interface that provides a Log method and a Name method. The Log
-// method is used to write a log message to the logger. The Name method returns
-// the name of the logger which will be prepended to each log message.
+// Logger is the subset of *testing.T needed to capture and report test output.
+// Output is used rather than Log so that captured lines are not stamped with
+// the source location of this package.
 type Logger interface {
 	Log(args ...any)
 	Name() string
 	Cleanup(func())
 	Failed() bool
+	Output() io.Writer
 }
 
-// stdwriter is an io.WriteCloser that writes to the test logger. It buffers
-// writes until a newline is encountered, at which point it flushes the buffer
-// to the test logger.
+// WriteCloser captures the output of a single process. Name reports the label
+// the output is reported under, which may differ from the requested name when
+// several instances of the same process take part in a test.
+type WriteCloser interface {
+	io.WriteCloser
+	Name() string
+}
+
+// stdwriter is an io.WriteCloser which captures process output into the
+// collector for a test. Output is buffered and only reported if the test
+// fails, or if DAPR_INTEGRATION_LOGS asks for it unconditionally.
 type stdwriter struct {
-	t        Logger
-	procName string
-	buf      bytes.Buffer
-	lock     sync.Mutex
+	c *collector
+	b *block
+
+	lock sync.Mutex
+	buf  bytes.Buffer
 }
 
-func New(t Logger, procName string) io.WriteCloser {
-	s := &stdwriter{
-		t:        t,
-		procName: procName,
-	}
+// New returns a writer which captures the output of procName for t. Calling it
+// more than once with the same name for the same test appends an index to the
+// name, so that multiple instances of a process stay distinguishable.
+func New(t Logger, procName string) WriteCloser {
+	c := collectorFor(t)
+	w := &stdwriter{c: c, b: c.newBlock(procName)}
+	c.addWriter(w)
 
-	t.Cleanup(s.flush)
-
-	return s
+	return w
 }
 
-// Write writes the input bytes to the buffer. If the input contains a newline,
-// the buffer is flushed to the test logger.
-func (w *stdwriter) Write(inp []byte) (n int, err error) {
+// Name returns the label this writer's output is reported under.
+func (w *stdwriter) Name() string {
+	return w.b.name
+}
+
+// Eventf records something the framework did, as opposed to something a process
+// printed. Events share the report of the process output they interleave with,
+// and like it are only shown when the test fails.
+func Eventf(t Logger, format string, args ...any) {
+	c := collectorFor(t)
+	c.events.append(c.since(), fmt.Sprintf(format, args...))
+}
+
+// Notef records a message shown at the top of the report. Reserve it for
+// conditions which explain an entire failure, such as a blown deadline.
+func Notef(t Logger, format string, args ...any) {
+	collectorFor(t).note(fmt.Sprintf(format, args...))
+}
+
+// Write captures the input, timestamping each complete line as it arrives.
+func (w *stdwriter) Write(inp []byte) (int, error) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
-	return w.buf.Write(inp)
+
+	n, err := w.buf.Write(inp)
+	w.drain(false)
+
+	return n, err
 }
 
-// Close is a no-op.
+// Close captures any trailing line which was not newline terminated. It is
+// safe to call more than once.
 func (w *stdwriter) Close() error {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	w.drain(true)
+
 	return nil
 }
 
-// flush writes the buffer to the test logger. Expects the lock to be held
-// before calling.
-func (w *stdwriter) flush() {
-	w.lock.Lock()
-	defer w.lock.Unlock()
-	defer w.buf.Reset()
-
-	// Don't log if the test hasn't failed and the user hasn't requested logs to
-	// always be printed.
-	if !w.t.Failed() &&
-		!kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_LOGS")) {
-		return
-	}
+// drain moves whole lines from the buffer into the block. When final is set,
+// a trailing line without a newline is moved too.
+func (w *stdwriter) drain(final bool) {
+	at := w.c.since()
 
 	for {
-		line, err := w.buf.ReadBytes('\n')
-		if len(line) > 0 {
-			w.t.Log(w.t.Name() + "/" + w.procName + ": " +
-				strings.TrimSuffix(string(line), "\n"))
-		}
-		if err != nil {
-			if !errors.Is(err, io.EOF) {
-				w.t.Log(w.t.Name() + "/" + w.procName + ": " + err.Error())
-			}
+		i := bytes.IndexByte(w.buf.Bytes(), '\n')
+		if i < 0 {
 			break
 		}
+		text := string(w.buf.Next(i + 1)[:i])
+		w.b.append(at, strings.TrimSuffix(text, "\r"))
+	}
+
+	if final && w.buf.Len() > 0 {
+		w.b.append(at, strings.TrimSuffix(w.buf.String(), "\r"))
+		w.buf.Reset()
 	}
 }
