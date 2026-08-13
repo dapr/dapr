@@ -41,6 +41,13 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.processor.pubsub.subscription.http")
 
+// deadLetterPublishTimeout is the deadline given to a DLQ publish issued
+// from this postman. The parent inbound context arrives here without
+// usable time budget after the resiliency policy exhausts, so the publish
+// is given a fresh deadline. Matches the value used in
+// pkg/runtime/subscription and the gRPC postman.
+const deadLetterPublishTimeout = 30 * time.Second
+
 type Options struct {
 	Tracing  *config.TracingSpec
 	Channels *channels.Channels
@@ -78,10 +85,11 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 		iTraceID = cloudEvent[contribpubsub.TraceIDField]
 	}
 
-	if iTraceID != nil {
-		traceID := iTraceID.(string)
+	if traceID, ok := iTraceID.(string); ok {
 		sc, _ := diag.SpanContextFromW3CString(traceID)
 		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.Topic, sc, h.tracingSpec)
+	} else if iTraceID != nil {
+		log.Debugf("skipping tracing for pub/sub event %v: non-string trace id of type %T", cloudEvent[contribpubsub.IDField], iTraceID)
 	}
 
 	start := time.Now()
@@ -236,8 +244,7 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 			iTraceID = cloudEvent[contribpubsub.TraceIDField]
 		}
 
-		if iTraceID != nil {
-			traceID := iTraceID.(string)
+		if traceID, ok := iTraceID.(string); ok {
 			sc, _ := diag.SpanContextFromW3CString(traceID)
 
 			var span trace.Span
@@ -247,6 +254,8 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 				spans[n] = span
 				n++
 			}
+		} else if iTraceID != nil {
+			log.Debugf("skipping tracing for pub/sub event %v: non-string trace id of type %T", cloudEvent[contribpubsub.IDField], iTraceID)
 		}
 	}
 
@@ -422,7 +431,19 @@ func (h *http) sendBulkToDeadLetter(ctx context.Context,
 		Metadata:   msg.Metadata,
 	}
 
-	_, err := h.adapter.BulkPublish(ctx, req)
+	// Skip the DLQ publish if the parent was explicitly canceled (e.g.
+	// shutdown); detaching the deadline below would otherwise let this block
+	// for up to deadLetterPublishTimeout during shutdown. See the matching
+	// helper in pkg/runtime/subscription/subscription.go for why an inherited
+	// inbound-handler deadline cannot be used for the publish itself.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return ctx.Err()
+	}
+	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deadLetterPublishTimeout)
+	defer cancel()
+
+	// Internal dead-letter republish (not an HTTP/gRPC publish API call), so match broker errors on native gRPC status codes.
+	_, err := h.adapter.BulkPublish(pubCtx, req, pubsub.TransportModeGRPC)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 	}
@@ -439,7 +460,19 @@ func (h *http) sendToDeadLetter(ctx context.Context, name string, msg *contribpu
 		ContentType: msg.ContentType,
 	}
 
-	err := h.adapter.Publish(ctx, req)
+	// Skip the DLQ publish if the parent was explicitly canceled (e.g.
+	// shutdown); detaching the deadline below would otherwise let this block
+	// for up to deadLetterPublishTimeout during shutdown. See the matching
+	// helper in pkg/runtime/subscription/subscription.go for why an inherited
+	// inbound-handler deadline cannot be used for the publish itself.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return ctx.Err()
+	}
+	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deadLetterPublishTimeout)
+	defer cancel()
+
+	// Internal dead-letter republish (not an HTTP/gRPC publish API call), so match broker errors on native gRPC status codes.
+	err := h.adapter.Publish(pubCtx, req, pubsub.TransportModeGRPC)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 		return err

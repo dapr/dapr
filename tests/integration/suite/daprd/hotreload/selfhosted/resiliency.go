@@ -88,7 +88,19 @@ spec:
 	})
 
 	t.Run("deleting resiliency file triggers reload", func(t *testing.T) {
-		require.NoError(t, os.Remove(filepath.Join(r.resDir, "resiliency.yaml")))
+		// On Windows the fsnotify watcher holds a handle on the file, so a
+		// single os.Remove may race with the watcher and return:
+		//   "The process cannot access the file because it is being used by
+		//    another process."
+		// Retry the remove briefly to absorb that transient lock.
+		resPath := filepath.Join(r.resDir, "resiliency.yaml")
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			err := os.Remove(resPath)
+			if err == nil || os.IsNotExist(err) {
+				return
+			}
+			assert.NoError(c, err)
+		}, 5*time.Second, 50*time.Millisecond)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Empty(c, resiliencyNames(c))

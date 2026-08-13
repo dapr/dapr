@@ -49,9 +49,21 @@ func NewDefaultBulkSubscriber(p contribPubsub.PubSub) *defaultBulkSubscriber {
 }
 
 // BulkSubscribe subscribes to a topic using a BulkHandler.
-// Dapr buffers messages in memory and flushes them as soon as no more messages
-// are immediately available (drain-and-flush), up to MaxMessagesCount per batch.
-// The MaxAwaitDurationMs timer serves as a safety-net fallback.
+//
+// The flushing policy is chosen from the upstream component's
+// declared features:
+//
+//   - Default: messages are buffered and flushed when either
+//     MaxMessagesCount is reached or MaxAwaitDurationMs elapses since
+//     the first message of the current pending batch. The await timer
+//     is restarted on every flush, so a leftover tail from a previous
+//     batch gets the full window as part of the next pending batch.
+//   - When the component declares pubsub.FeatureBulkSubscribeImmediate
+//     (e.g. Pulsar): each message is flushed as soon as it arrives.
+//     The component is signalling that its delivery model is
+//     incompatible with a batching window — typically because the
+//     broker delivers serially and blocks on ack — and that holding a
+//     message would only delay the ack.
 func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPubsub.SubscribeRequest, handler contribPubsub.BulkHandler) error {
 	cfg := contribPubsub.BulkSubscribeConfig{
 		MaxMessagesCount:   utils.GetIntValOrDefault(req.BulkSubscribeConfig.MaxMessagesCount, defaultMaxMessagesCount),
@@ -59,7 +71,21 @@ func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPu
 	}
 
 	msgCbChan := make(chan msgWithCallback, cfg.MaxMessagesCount)
-	go processBulkMessages(ctx, req.Topic, msgCbChan, cfg, handler)
+	if contribPubsub.FeatureBulkSubscribeImmediate.IsPresent(p.p.Features()) {
+		// Warn if the user configured an explicit await window that
+		// the immediate path will not honour. We check the raw input
+		// (req.BulkSubscribeConfig) rather than cfg, so the
+		// runtime-default substitution does not produce a spurious
+		// warning for callers that left the field unset.
+		if req.BulkSubscribeConfig.MaxAwaitDurationMs > 0 {
+			bulkPSLogger.Warnf(
+				"bulk subscribe on topic %q: maxAwaitDurationMs=%dms is ignored because the pubsub component declares immediate-flush; each message is delivered as soon as it arrives",
+				req.Topic, req.BulkSubscribeConfig.MaxAwaitDurationMs)
+		}
+		go processBulkMessagesImmediate(ctx, req.Topic, msgCbChan, cfg, handler)
+	} else {
+		go processBulkMessagesBatch(ctx, req.Topic, msgCbChan, cfg, handler)
+	}
 
 	// Subscribe to the topic and listen for messages.
 	return p.p.Subscribe(ctx, req, func(ctx context.Context, msg *contribPubsub.NewMessage) error {
@@ -96,16 +122,75 @@ func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPu
 	})
 }
 
-// processBulkMessages reads messages from msgChan and publishes them to a BulkHandler.
-// It buffers messages in memory and publishes them in bulk.
-func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msgWithCallback, cfg contribPubsub.BulkSubscribeConfig, handler contribPubsub.BulkHandler) {
+// processBulkMessagesImmediate flushes the buffer as soon as any
+// message arrives, without waiting for the count threshold or the
+// await timer. It is selected when the upstream component declares
+// pubsub.FeatureBulkSubscribeImmediate — typically because the broker
+// delivers messages serially and blocks on ack, so a second message
+// will never land for accumulation while the first is pending and the
+// batching window cannot form. drainChannel is still applied, so any
+// concurrently-queued siblings are coalesced into the same flush (up
+// to MaxMessagesCount). "Immediate" describes *when* we flush, not
+// the batch size.
+func processBulkMessagesImmediate(ctx context.Context, topic string, msgCbChan <-chan msgWithCallback, cfg contribPubsub.BulkSubscribeConfig, handler contribPubsub.BulkHandler) {
 	messages := make([]contribPubsub.BulkMessageEntry, cfg.MaxMessagesCount)
 	msgCbMap := make(map[string]func(error), cfg.MaxMessagesCount)
 
-	ticker := time.NewTicker(time.Duration(cfg.MaxAwaitDurationMs) * time.Millisecond)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msgCb := <-msgCbChan:
+			messages[0] = msgCb.msg
+			msgCbMap[msgCb.msg.EntryId] = msgCb.cb
+			n := 1
+			n = drainChannel(msgCbChan, messages, msgCbMap, n, cfg.MaxMessagesCount)
+			flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
+			clear(msgCbMap)
+		}
+	}
+}
+
+// processBulkMessagesBatch reads messages from msgChan and publishes them
+// to a BulkHandler. It buffers messages in memory and publishes them in
+// bulk when either MaxMessagesCount is reached or MaxAwaitDurationMs
+// elapses since the first message of the current pending batch.
+//
+// The ticker is restarted in two cases so the await window is always
+// measured from the first message of the pending batch:
+//
+//   - On every flush (count-based or timer-based), so a leftover tail
+//     gets the full window as part of the next pending batch rather
+//     than the stale remainder of the original tick.
+//   - On the n==0 → n==1 transition, so a message arriving after a
+//     period of inactivity is held for the full MaxAwaitDurationMs
+//     instead of being flushed at the next periodic tick (which
+//     would have been scheduled relative to a long-past anchor).
+func processBulkMessagesBatch(ctx context.Context, topic string, msgCbChan <-chan msgWithCallback, cfg contribPubsub.BulkSubscribeConfig, handler contribPubsub.BulkHandler) {
+	messages := make([]contribPubsub.BulkMessageEntry, cfg.MaxMessagesCount)
+	msgCbMap := make(map[string]func(error), cfg.MaxMessagesCount)
+
+	awaitDuration := time.Duration(cfg.MaxAwaitDurationMs) * time.Millisecond
+	ticker := time.NewTicker(awaitDuration)
 	defer ticker.Stop()
 
 	n := 0
+
+	// flush delivers the current buffer and restarts the await-duration
+	// ticker so the next pending batch starts with a fresh window. Draining
+	// any pending tick before the reset avoids a spurious empty flush on
+	// the next select iteration when a tick fires concurrently with a
+	// count-based flush.
+	flush := func() {
+		flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
+		n = 0
+		clear(msgCbMap)
+		select {
+		case <-ticker.C:
+		default:
+		}
+		ticker.Reset(awaitDuration)
+	}
 
 	for {
 		select {
@@ -113,33 +198,39 @@ func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msg
 			flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
 			return
 		case msgCb := <-msgCbChan:
+			if n == 0 {
+				// First message of a new pending batch: align the
+				// await timer to this arrival so the full window is
+				// measured from now, not from a stale anchor (the
+				// goroutine start, the previous flush, or a no-op
+				// tick). Drain any pending tick first so the next
+				// select iteration doesn't see a spurious early
+				// fire.
+				select {
+				case <-ticker.C:
+				default:
+				}
+				ticker.Reset(awaitDuration)
+			}
+
 			messages[n] = msgCb.msg
 			msgCbMap[msgCb.msg.EntryId] = msgCb.cb
 			n++
 
-			// Drain any immediately-available messages up to MaxMessagesCount.
-			// This ensures that in sync mode (where the component delivers
-			// messages one-at-a-time, blocking until the handler returns),
-			// the single message is flushed immediately rather than waiting
-			// for the MaxAwaitDurationMs timer. In async mode, multiple
-			// messages queued concurrently are still batched efficiently.
+			// Opportunistically drain any concurrently-queued messages up
+			// to MaxMessagesCount. This lets a burst of arrivals count
+			// toward the threshold in a single wake-up; it does not force
+			// a flush on its own.
 			n = drainChannel(msgCbChan, messages, msgCbMap, n, cfg.MaxMessagesCount)
 
-			flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
-			n = 0
-			clear(msgCbMap)
-			// Drain any pending tick before resetting to avoid a
-			// spurious empty flush on the next select iteration.
-			select {
-			case <-ticker.C:
-			default:
+			if n >= cfg.MaxMessagesCount {
+				flush()
 			}
-			ticker.Reset(time.Duration(cfg.MaxAwaitDurationMs) * time.Millisecond)
 
 		case <-ticker.C:
-			flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
-			n = 0
-			clear(msgCbMap)
+			if n > 0 {
+				flush()
+			}
 		}
 	}
 }

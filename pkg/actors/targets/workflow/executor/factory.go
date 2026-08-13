@@ -22,28 +22,34 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
-var executorCache = &sync.Pool{
-	New: func() any {
-		return &executor{
-			lock: lock.New(),
-		}
-	},
+func newExecutor() *executor {
+	return &executor{
+		lock: lock.New(),
+	}
 }
 
 type Options struct {
 	Actors actors.Interface
 
 	ActorType string
+
+	// Pending is the process-local completion rendezvous shared with the
+	// cluster tasks backend. Completions arriving at this actor are
+	// delivered into it when the waiter is registered on this host.
+	Pending *pending.Pending
 }
 
 type factory struct {
 	actorType string
 
+	actors       actors.Interface
 	placement    placement.Interface
 	deactivateCh chan *executor
+	pending      *pending.Pending
 
 	table sync.Map
 	lock  sync.Mutex
@@ -64,20 +70,18 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 
 	return &factory{
 		actorType:    opts.ActorType,
+		actors:       opts.Actors,
 		placement:    placement,
 		deactivateCh: deactivateCh,
+		pending:      opts.Pending,
 	}, nil
 }
 
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
 	a, ok := f.table.Load(actorID)
 	if !ok {
-		newActivity := f.initExecutor(executorCache.Get(), actorID)
-		var loaded bool
-		a, loaded = f.table.LoadOrStore(actorID, newActivity)
-		if loaded {
-			executorCache.Put(newActivity)
-		}
+		fresh := f.initExecutor(newExecutor(), actorID)
+		a, _ = f.table.LoadOrStore(actorID, fresh)
 	}
 
 	return a.(*executor)
@@ -90,6 +94,7 @@ func (f *factory) initExecutor(a any, actorID string) *executor {
 	act.actorID = actorID
 
 	act.closed.Store(false)
+	act.cancelClosed.Store(false)
 	act.completeCh = make(chan *internalsv1pb.InternalInvokeResponse, 1)
 	act.cancelCh = make(chan struct{})
 	act.closeCh = make(chan struct{})

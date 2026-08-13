@@ -42,6 +42,13 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.processor.pubsub.subscription.grpc")
 
+// deadLetterPublishTimeout is the deadline given to a DLQ publish issued
+// from this postman. The parent inbound context arrives here without
+// usable time budget after the resiliency policy exhausts, so the publish
+// is given a fresh deadline. Matches the value used in
+// pkg/runtime/subscription and the HTTP postman.
+const deadLetterPublishTimeout = 30 * time.Second
+
 type Options struct {
 	Channel *manager.Manager
 	Tracing *config.TracingSpec
@@ -73,11 +80,11 @@ func (g *grpc) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.Metadata)
 	ctx = g.channel.AddAppTokenToContext(ctx)
 
-	conn, err := g.channel.GetAppClient()
+	conn, teardown, err := g.channel.GetAppClient()
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
-
+	defer teardown(false)
 	clientV1 := rtv1.NewAppCallbackClient(conn)
 
 	start := time.Now()
@@ -215,11 +222,11 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, psm.Metadata)
 	ctx = g.channel.AddAppTokenToContext(ctx)
 
-	conn, err := g.channel.GetAppClient()
+	conn, teardown, err := g.channel.GetAppClient()
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
-
+	defer teardown(false)
 	clientV1 := rtv1.NewAppCallbackClient(conn)
 	clientAlpha := rtv1.NewAppCallbackAlphaClient(conn)
 
@@ -366,7 +373,18 @@ func (g *grpc) sendToDeadLetter(ctx context.Context, name string, msg *contribpu
 		ContentType: msg.ContentType,
 	}
 
-	err := g.adapter.Publish(ctx, req)
+	// Skip the DLQ publish if the parent was explicitly canceled (e.g.
+	// shutdown); detaching the deadline below would otherwise let this block
+	// for up to deadLetterPublishTimeout during shutdown. See the matching
+	// helper in pkg/runtime/subscription/subscription.go for why an inherited
+	// inbound-handler deadline cannot be used for the publish itself.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return ctx.Err()
+	}
+	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deadLetterPublishTimeout)
+	defer cancel()
+
+	err := g.adapter.Publish(pubCtx, req, pubsub.TransportModeGRPC)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 		return err

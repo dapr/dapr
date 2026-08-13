@@ -18,6 +18,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -36,6 +39,12 @@ func (w *workflowAccessPolicies) list(ctx context.Context, opclient operatorpb.O
 		Namespace: ns,
 	})
 	if err != nil {
+		// Older operators do not implement ListWorkflowAccessPolicy. Treat
+		// as "no policies" so daprd remains compatible across an N-1 control
+		// plane version skew.
+		if status.Code(err) == codes.Unimplemented {
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -54,6 +63,16 @@ func (w *workflowAccessPolicies) close() error {
 //nolint:unused
 func (w *workflowAccessPolicies) recv(ctx context.Context) (*loader.Event[wfaclapi.WorkflowAccessPolicy], error) {
 	event, err := w.Recv()
+
+	// Ignore servers which don't implement the workflow access policy update
+	// stream. Block until the context is cancelled to avoid a tight reconnect
+	// loop against an N-1 control plane.
+	if status, ok := status.FromError(err); ok && status.Code() == codes.Unimplemented {
+		log.Warn("WorkflowAccessPolicy HotReloading is not supported by the Dapr control plane. WorkflowAccessPolicy updates will not be Hot Reloaded.")
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+
 	if err != nil {
 		return nil, err
 	}

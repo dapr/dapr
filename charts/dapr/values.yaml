@@ -64,6 +64,22 @@ global:
   #  operator:
   #  injector:
   #  scheduler:
+  # extraContainers are used to add additional sidecar containers to the Dapr
+  # control plane pods. Useful for compliance, logging, and telemetry agents.
+  extraContainers: {}
+  #  sentry:
+  #  placement:
+  #  operator:
+  #  injector:
+  #  scheduler:
+  # initContainers are used to add custom init containers to the Dapr control
+  # plane pods. Useful for pre-flight setup tasks.
+  initContainers: {}
+  #  sentry:
+  #  placement:
+  #  operator:
+  #  injector:
+  #  scheduler:
 
   actors:
     # Enables actor functionality in the cluster

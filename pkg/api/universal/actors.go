@@ -141,6 +141,12 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 		}
 	}
 
+	if in.GetName() == "" {
+		err = messages.ErrBadRequest.WithFormat("reminder name cannot be empty")
+		a.logger.Debug(err)
+		return nil, err
+	}
+
 	if vErr := method.ValidateName(in.GetName()); vErr != nil {
 		vErr = messages.ErrBadRequest.WithFormat(vErr)
 		a.logger.Debug(vErr)
@@ -247,7 +253,7 @@ func (a *Universal) GetActorReminder(ctx context.Context, in *runtimev1pb.GetAct
 		period = new(resp.Period.String())
 	}
 	if !resp.ExpirationTime.IsZero() {
-		ttl = new(resp.ExpirationTime.Format(time.RFC3339))
+		ttl = new(resp.ExpirationTime.Format(time.RFC3339Nano))
 	}
 
 	return &runtimev1pb.GetActorReminderResponse{

@@ -1,0 +1,87 @@
+diff --git a/tests/integration/suite/daprd/workflow/continueasnew/inboxoverload.go b/tests/integration/suite/daprd/workflow/continueasnew/inboxoverload.go
+index 3da2ddc..011a02c 100644
+--- a/tests/integration/suite/daprd/workflow/continueasnew/inboxoverload.go
++++ b/tests/integration/suite/daprd/workflow/continueasnew/inboxoverload.go
+@@ -32,7 +32,6 @@ import (
+
+ 	"github.com/dapr/dapr/tests/integration/framework"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+ 	"github.com/dapr/durabletask-go/api"
+ 	"github.com/dapr/durabletask-go/api/protos"
+ 	"github.com/dapr/durabletask-go/task"
+@@ -40,10 +39,6 @@ import (
+ 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+ )
+
+-func init() {
+-	suite.Register(new(inboxoverload))
+-}
+-
+ // inboxoverload injects 25 events with unique payloads directly into the state
+ // store, guaranteeing MaxContinueAsNewCount (20) is exceeded. The workflow
+ // tracks every received payload. This verifies each payload is received
+diff --git a/tests/integration/suite/daprd/workflow/continueasnew/raisebatch.go b/tests/integration/suite/daprd/workflow/continueasnew/raisebatch.go
+index 5677d34..bc5e51f 100644
+--- a/tests/integration/suite/daprd/workflow/continueasnew/raisebatch.go
++++ b/tests/integration/suite/daprd/workflow/continueasnew/raisebatch.go
+@@ -30,7 +30,6 @@ import (
+
+ 	"github.com/dapr/dapr/tests/integration/framework"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+ 	"github.com/dapr/durabletask-go/api"
+ 	"github.com/dapr/durabletask-go/api/protos"
+ 	"github.com/dapr/durabletask-go/backend"
+@@ -39,10 +38,6 @@ import (
+ 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+ )
+
+-func init() {
+-	suite.Register(new(raisebatch))
+-}
+-
+ // raisebatch is a regression test for the state corruption bug where o.rstate
+ // was shared with wi.State via a bare pointer. When the engine's
+ // ContinueAsNew tight-loop exceeded MaxContinueAsNewCount (20), the applier
+diff --git a/tests/integration/suite/daprd/workflow/continueasnew/raisebatchnodup.go b/tests/integration/suite/daprd/workflow/continueasnew/raisebatchnodup.go
+index acd65ea..f78f80b 100644
+--- a/tests/integration/suite/daprd/workflow/continueasnew/raisebatchnodup.go
++++ b/tests/integration/suite/daprd/workflow/continueasnew/raisebatchnodup.go
+@@ -25,17 +25,12 @@ import (
+
+ 	"github.com/dapr/dapr/tests/integration/framework"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+ 	"github.com/dapr/durabletask-go/api"
+ 	"github.com/dapr/durabletask-go/task"
+
+ 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+ )
+
+-func init() {
+-	suite.Register(new(raisebatchnodup))
+-}
+-
+ // raisebatchnodup verifies that when the ContinueAsNew tight-loop exceeds
+ // MaxContinueAsNewCount and partial CAN progress is saved, events are NOT
+ // duplicated on retry.
+diff --git a/tests/integration/suite/daprd/workflow/purge/retention/config/notexists.go b/tests/integration/suite/daprd/workflow/purge/retention/config/notexists.go
+index 31b1e7c..518e7e3 100644
+--- a/tests/integration/suite/daprd/workflow/purge/retention/config/notexists.go
++++ b/tests/integration/suite/daprd/workflow/purge/retention/config/notexists.go
+@@ -25,14 +25,9 @@ import (
+ 	"github.com/dapr/dapr/tests/integration/framework"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+ 	dworkflow "github.com/dapr/durabletask-go/workflow"
+ )
+
+-func init() {
+-	suite.Register(new(notexists))
+-}
+-
+ type notexists struct {
+ 	workflow *workflow.Workflow
+ }

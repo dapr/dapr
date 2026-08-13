@@ -29,7 +29,7 @@ spec:
       {{- end }}
       resources:
         requests:
-          storage: {{ .Values.cluster.storageSize }}
+          storage: {{ include "dapr_scheduler.storageSize" . }}
   {{- end }}
   template:
     metadata:
@@ -52,9 +52,18 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
     spec:
+      {{- if ne .Values.securityContext.fsGroup nil }}
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
+      {{- end }}
+    {{- with .Values.global.initContainers.scheduler }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
       containers:
+    {{- with .Values.global.extraContainers.scheduler }}
+        {{- toYaml . | nindent 6 }}
+    {{- end }}
       - name: dapr-scheduler-server
         livenessProbe:
           httpGet:
@@ -174,6 +183,7 @@ spec:
         - "--etcd-max-wals={{ .Values.etcdMaxWals }}"
         - "--etcd-backend-batch-limit={{ .Values.etcdBackendBatchLimit }}"
         - "--etcd-backend-batch-interval={{ .Values.etcdBackendBatchInterval }}"
+        - "--etcd-max-txn-ops={{ .Values.etcdMaxTxnOps }}"
         - "--etcd-experimental-bootstrap-defrag-threshold-megabytes={{ .Values.etcdDefragThresholdMB }}"
         - "--etcd-initial-election-tick-advance={{ .Values.etcdInitialElectionTickAdvance }}"
         - "--etcd-metrics={{ .Values.etcdMetrics }}"

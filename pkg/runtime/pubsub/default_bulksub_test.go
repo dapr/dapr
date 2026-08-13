@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -161,441 +162,733 @@ func TestFlushMessages(t *testing.T) {
 	})
 }
 
-func TestProcessBulkMessagesTimerReset(t *testing.T) {
-	t.Run("extra message after count-based flush should be flushed promptly", func(t *testing.T) {
-		// After a count-based flush, an extra message should be flushed
-		// immediately via drain-and-flush (not waiting for the timer).
-		maxMessages := 3
-		awaitDurationMs := 500
+// TestProcessBulkMessagesCountFlushResetsTicker verifies the dapr/dapr#9211
+// fix: after a count-based flush, a single leftover message must wait a full
+// MaxAwaitDurationMs window (measured from the flush) before being delivered,
+// not the stale remainder of the original tick that started when the
+// subscription was created.
+func TestProcessBulkMessagesCountFlushResetsTicker(t *testing.T) {
+	maxMessages := 3
+	awaitDurationMs := 400
 
-		cfg := contribPubsub.BulkSubscribeConfig{
-			MaxMessagesCount:   maxMessages,
-			MaxAwaitDurationMs: awaitDurationMs,
-		}
+	cfg := contribPubsub.BulkSubscribeConfig{
+		MaxMessagesCount:   maxMessages,
+		MaxAwaitDurationMs: awaitDurationMs,
+	}
 
-		msgCbChan := make(chan msgWithCallback, maxMessages*2)
+	msgCbChan := make(chan msgWithCallback, maxMessages*2)
 
-		var mu sync.Mutex
-		flushSizes := make([]int, 0)
+	type flushRecord struct {
+		at   time.Time
+		size int
+	}
 
-		handler := func(ctx context.Context, msg *contribPubsub.BulkMessage) (
-			[]contribPubsub.BulkSubscribeResponseEntry, error,
-		) {
-			mu.Lock()
-			flushSizes = append(flushSizes, len(msg.Entries))
-			mu.Unlock()
+	var mu sync.Mutex
+	flushes := make([]flushRecord, 0, 4)
 
-			return nil, nil
-		}
-
-		ctx, cancel := context.WithCancel(t.Context())
-		defer cancel()
-
-		go processBulkMessages(ctx, "test-topic", msgCbChan, cfg, handler)
-
-		// Send maxMessages concurrently to trigger a count-based flush.
-		var wg sync.WaitGroup
-
-		for i := range maxMessages {
-			wg.Add(1)
-
-			go func(idx int) {
-				defer wg.Done()
-
-				done := make(chan struct{})
-				msgCbChan <- msgWithCallback{
-					msg: contribPubsub.BulkMessageEntry{
-						EntryId: fmt.Sprintf("msg-%d", idx),
-						Event:   []byte(`{}`),
-					},
-					cb: func(err error) {
-						close(done)
-					},
-				}
-
-				<-done
-			}(i)
-		}
-
-		wg.Wait()
-
-		// All maxMessages should have been flushed (possibly across
-		// multiple drain-and-flush cycles due to goroutine scheduling).
+	handler := func(ctx context.Context, msg *contribPubsub.BulkMessage) (
+		[]contribPubsub.BulkSubscribeResponseEntry, error,
+	) {
 		mu.Lock()
-		total := 0
-		for _, size := range flushSizes {
-			total += size
-		}
-		assert.Equal(t, maxMessages, total, "all initial messages should be flushed")
-		initialFlushes := len(flushSizes)
+		flushes = append(flushes, flushRecord{at: time.Now(), size: len(msg.Entries)})
 		mu.Unlock()
+		return nil, nil
+	}
 
-		// Send 1 extra message. It should be flushed immediately via
-		// drain-and-flush, not waiting for the timer.
-		extraDone := make(chan struct{})
-		msgCbChan <- msgWithCallback{
-			msg: contribPubsub.BulkMessageEntry{
-				EntryId: "msg-extra",
-				Event:   []byte(`{}`),
-			},
-			cb: func(err error) {
-				close(extraDone)
-			},
-		}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
 
-		select {
-		case <-extraDone:
-			// OK — flushed promptly.
-		case <-time.After(time.Duration(awaitDurationMs) * time.Millisecond):
-			t.Fatal("timed out waiting for drain-and-flush of extra message")
-		}
+	go processBulkMessagesBatch(ctx, "test-topic", msgCbChan, cfg, handler)
 
-		mu.Lock()
-		require.Len(t, flushSizes, initialFlushes+1, "expected one additional flush for extra message")
-		assert.Equal(t, 1, flushSizes[initialFlushes], "extra flush should contain the single extra message")
-		mu.Unlock()
-
-		cancel()
-	})
-}
-
-func TestProcessBulkMessagesMultipleCountFlushes(t *testing.T) {
-	t.Run("two consecutive count-based flushes plus extra message", func(t *testing.T) {
-		// Send 6 messages with maxMessages=3 to trigger two consecutive
-		// count-based flushes, then send 1 more message and verify it is
-		// flushed promptly via drain-and-flush.
-		maxMessages := 3
-		awaitDurationMs := 500
-
-		cfg := contribPubsub.BulkSubscribeConfig{
-			MaxMessagesCount:   maxMessages,
-			MaxAwaitDurationMs: awaitDurationMs,
-		}
-
-		msgCbChan := make(chan msgWithCallback, maxMessages*3)
-
-		var mu sync.Mutex
-		flushSizes := make([]int, 0)
-
-		handler := func(ctx context.Context, msg *contribPubsub.BulkMessage) (
-			[]contribPubsub.BulkSubscribeResponseEntry, error,
-		) {
-			mu.Lock()
-			flushSizes = append(flushSizes, len(msg.Entries))
-			mu.Unlock()
-
-			return nil, nil
-		}
-
-		ctx, cancel := context.WithCancel(t.Context())
-		defer cancel()
-
-		go processBulkMessages(ctx, "test-topic", msgCbChan, cfg, handler)
-
-		// Helper to send a batch of maxMessages concurrently and wait for
-		// all callbacks.
-		sendBatch := func(offset int) {
-			var wg sync.WaitGroup
-
-			for i := range maxMessages {
-				wg.Add(1)
-
-				go func(idx int) {
-					defer wg.Done()
-
-					done := make(chan struct{})
-					msgCbChan <- msgWithCallback{
-						msg: contribPubsub.BulkMessageEntry{
-							EntryId: fmt.Sprintf("msg-%d", idx),
-							Event:   []byte(`{}`),
-						},
-						cb: func(err error) {
-							close(done)
-						},
-					}
-
-					select {
-					case <-done:
-					case <-time.After(time.Duration(awaitDurationMs*2) * time.Millisecond):
-						t.Errorf("timed out waiting for callback of msg-%d", idx)
-					}
-				}(offset + i)
-			}
-
-			wg.Wait()
-		}
-
-		// First batch.
-		sendBatch(0)
-
-		mu.Lock()
-		total := 0
-		for _, size := range flushSizes {
-			total += size
-		}
-		assert.Equal(t, maxMessages, total, "all first-batch messages should be flushed")
-		mu.Unlock()
-
-		// Second batch.
-		sendBatch(maxMessages)
-
-		mu.Lock()
-		total = 0
-		for _, size := range flushSizes {
-			total += size
-		}
-		assert.Equal(t, maxMessages*2, total, "all second-batch messages should be flushed")
-		flushesBeforeExtra := len(flushSizes)
-		mu.Unlock()
-
-		// Send 1 extra message. It should flush promptly via drain-and-flush.
-		extraDone := make(chan struct{})
-		msgCbChan <- msgWithCallback{
-			msg: contribPubsub.BulkMessageEntry{
-				EntryId: "msg-extra",
-				Event:   []byte(`{}`),
-			},
-			cb: func(err error) {
-				close(extraDone)
-			},
-		}
-
-		select {
-		case <-extraDone:
-			// OK — flushed promptly.
-		case <-time.After(time.Duration(awaitDurationMs) * time.Millisecond):
-			t.Fatal("timed out waiting for drain-and-flush of extra message")
-		}
-
-		mu.Lock()
-		require.Len(t, flushSizes, flushesBeforeExtra+1, "expected one additional flush for extra message")
-		assert.Equal(t, 1, flushSizes[flushesBeforeExtra], "extra flush should contain the single extra message")
-		mu.Unlock()
-
-		cancel()
-	})
-}
-
-func TestProcessBulkMessagesPartialBatchFlush(t *testing.T) {
-	t.Run("messages fewer than maxMessages should flush promptly via drain-and-flush", func(t *testing.T) {
-		// Send fewer messages than maxMessagesCount and verify they are
-		// flushed promptly via drain-and-flush (not waiting for the timer).
-		maxMessages := 5
-		awaitDurationMs := 5000 // Long timer to prove we don't depend on it.
-
-		cfg := contribPubsub.BulkSubscribeConfig{
-			MaxMessagesCount:   maxMessages,
-			MaxAwaitDurationMs: awaitDurationMs,
-		}
-
-		msgCbChan := make(chan msgWithCallback, maxMessages)
-
-		var mu sync.Mutex
-		var flushSize int
-
-		flushed := make(chan struct{})
-		flushOnce := sync.Once{}
-
-		handler := func(ctx context.Context, msg *contribPubsub.BulkMessage) (
-			[]contribPubsub.BulkSubscribeResponseEntry, error,
-		) {
-			mu.Lock()
-			flushSize = len(msg.Entries)
-			mu.Unlock()
-			flushOnce.Do(func() { close(flushed) })
-
-			return nil, nil
-		}
-
-		ctx, cancel := context.WithCancel(t.Context())
-		defer cancel()
-
-		// Enqueue both messages BEFORE starting processBulkMessages so
-		// they are guaranteed to be in the channel when it reads.
-		for i := range 2 {
-			msgCbChan <- msgWithCallback{
-				msg: contribPubsub.BulkMessageEntry{
-					EntryId: fmt.Sprintf("msg-%d", i),
-					Event:   []byte(`{}`),
-				},
-				cb: func(err error) {},
-			}
-		}
-
-		go processBulkMessages(ctx, "test-topic", msgCbChan, cfg, handler)
-
-		// The messages should be flushed promptly via drain-and-flush.
-		select {
-		case <-flushed:
-			// OK
-		case <-time.After(500 * time.Millisecond):
-			t.Fatal("timed out waiting for drain-and-flush; messages should flush immediately")
-		}
-
-		mu.Lock()
-		assert.Equal(t, 2, flushSize, "all buffered messages should be flushed together")
-		mu.Unlock()
-
-		cancel()
-	})
-}
-
-func TestProcessBulkMessagesSyncMode(t *testing.T) {
-	t.Run("sync-mode serial delivery should flush each message promptly", func(t *testing.T) {
-		// Simulates a sync-mode component: messages are delivered
-		// one-at-a-time, each blocking until the handler returns. Without
-		// drain-and-flush, each message would wait for MaxAwaitDurationMs.
-		maxMessages := 10
-		awaitDurationMs := 5000 // Long timer to prove we don't depend on it.
-		numMessages := 5
-
-		cfg := contribPubsub.BulkSubscribeConfig{
-			MaxMessagesCount:   maxMessages,
-			MaxAwaitDurationMs: awaitDurationMs,
-		}
-
-		msgCbChan := make(chan msgWithCallback, maxMessages)
-
-		var mu sync.Mutex
-		flushSizes := make([]int, 0)
-
-		handler := func(ctx context.Context, msg *contribPubsub.BulkMessage) (
-			[]contribPubsub.BulkSubscribeResponseEntry, error,
-		) {
-			mu.Lock()
-			flushSizes = append(flushSizes, len(msg.Entries))
-			mu.Unlock()
-
-			return nil, nil
-		}
-
-		ctx, cancel := context.WithCancel(t.Context())
-		defer cancel()
-
-		go processBulkMessages(ctx, "test-topic", msgCbChan, cfg, handler)
-
-		// Send messages serially, waiting for each callback before sending
-		// the next (simulating sync-mode component behavior).
-		start := time.Now()
-
-		for i := range numMessages {
+	// Publish maxMessages concurrently so we hit the count threshold in
+	// one wake-up.
+	var wg sync.WaitGroup
+	for i := range maxMessages {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
 			done := make(chan struct{})
 			msgCbChan <- msgWithCallback{
 				msg: contribPubsub.BulkMessageEntry{
-					EntryId: fmt.Sprintf("msg-%d", i),
+					EntryId: fmt.Sprintf("msg-%d", idx),
 					Event:   []byte(`{}`),
 				},
-				cb: func(err error) {
-					close(done)
-				},
+				cb: func(error) { close(done) },
 			}
+			<-done
+		}(i)
+	}
+	wg.Wait()
 
-			select {
-			case <-done:
-			case <-time.After(time.Duration(awaitDurationMs) * time.Millisecond):
-				t.Fatalf("timed out waiting for callback of msg-%d", i)
-			}
-		}
+	mu.Lock()
+	require.Len(t, flushes, 1, "expected exactly one count-based flush")
+	assert.Equal(t, maxMessages, flushes[0].size, "first flush should contain all maxMessages")
+	firstFlush := flushes[0].at
+	mu.Unlock()
 
-		elapsed := time.Since(start)
+	// Send a single extra message. It must NOT be flushed immediately and
+	// must NOT be flushed at the stale original tick. It must be flushed
+	// at first_flush + awaitDuration ± tolerance.
+	extraSent := time.Now()
+	extraDone := make(chan struct{})
+	msgCbChan <- msgWithCallback{
+		msg: contribPubsub.BulkMessageEntry{
+			EntryId: "msg-extra",
+			Event:   []byte(`{}`),
+		},
+		cb: func(error) { close(extraDone) },
+	}
 
-		// All 5 messages should complete well under awaitDurationMs.
-		// Without the fix this would take 5 * 5000ms = 25s.
-		maxExpectedElapsed := time.Duration(awaitDurationMs/2) * time.Millisecond
-		assert.Less(t, elapsed, maxExpectedElapsed,
-			"sync-mode messages should be flushed promptly, not waiting for timer")
+	select {
+	case <-extraDone:
+	case <-time.After(time.Duration(awaitDurationMs*3) * time.Millisecond):
+		t.Fatal("timed out waiting for timer-based flush of leftover message")
+	}
 
-		mu.Lock()
-		// Each message should be flushed individually (batch of 1) since
-		// the channel is empty when each message arrives.
-		require.Len(t, flushSizes, numMessages, "expected one flush per message in sync mode")
-		for i, size := range flushSizes {
-			assert.Equal(t, 1, size, "flush %d should contain exactly 1 message", i)
-		}
-		mu.Unlock()
+	mu.Lock()
+	require.Len(t, flushes, 2, "expected exactly two flushes total")
+	assert.Equal(t, 1, flushes[1].size, "second flush should contain the leftover message")
+	secondFlush := flushes[1].at
+	mu.Unlock()
 
-		cancel()
-	})
+	elapsedFromFirstFlush := secondFlush.Sub(firstFlush)
+	elapsedFromExtraSent := secondFlush.Sub(extraSent)
+
+	// Lower bound: the timer was reset at firstFlush, so the second flush
+	// must happen at least close to awaitDuration after firstFlush. Use a
+	// loose lower bound (80% of awaitDuration) to tolerate scheduling
+	// jitter while still proving the timer was reset.
+	lowerBound := time.Duration(awaitDurationMs) * time.Millisecond * 8 / 10
+	require.GreaterOrEqual(t, elapsedFromFirstFlush, lowerBound,
+		"leftover must wait ~awaitDuration after count-based flush (timer was reset); got %v", elapsedFromFirstFlush)
+
+	// Upper bound: the leftover should flush within a reasonable window of
+	// being sent; prevents the test from passing trivially on a stalled loop.
+	upperBound := time.Duration(awaitDurationMs*2) * time.Millisecond
+	require.Less(t, elapsedFromExtraSent, upperBound,
+		"leftover should flush within 2x awaitDuration of arrival; got %v", elapsedFromExtraSent)
 }
 
-func TestProcessBulkMessagesAsyncBatching(t *testing.T) {
-	t.Run("concurrent messages should be batched efficiently", func(t *testing.T) {
-		// Simulates an async-mode component: multiple messages are queued
-		// concurrently. The drain-and-flush should collect them into a
-		// single batch.
-		maxMessages := 10
-		awaitDurationMs := 5000
-		numMessages := 5
+// TestProcessBulkMessagesLeftoverJoinsNextBatch reproduces the customer's
+// 12+12 scenario: two bursts that each exceed MaxMessagesCount leave a
+// residual tail; the tail must accumulate across the bursts and flush
+// exactly once at the timer expiration that follows the last count-based
+// flush (dapr/dapr#9211).
+func TestProcessBulkMessagesLeftoverJoinsNextBatch(t *testing.T) {
+	maxMessages := 10
+	awaitDurationMs := 400
+	burstSize := 12
 
-		cfg := contribPubsub.BulkSubscribeConfig{
-			MaxMessagesCount:   maxMessages,
-			MaxAwaitDurationMs: awaitDurationMs,
+	cfg := contribPubsub.BulkSubscribeConfig{
+		MaxMessagesCount:   maxMessages,
+		MaxAwaitDurationMs: awaitDurationMs,
+	}
+
+	msgCbChan := make(chan msgWithCallback, burstSize*2)
+
+	type flushRecord struct {
+		at   time.Time
+		size int
+	}
+
+	var mu sync.Mutex
+	flushes := make([]flushRecord, 0, 4)
+
+	handler := func(ctx context.Context, msg *contribPubsub.BulkMessage) (
+		[]contribPubsub.BulkSubscribeResponseEntry, error,
+	) {
+		mu.Lock()
+		flushes = append(flushes, flushRecord{at: time.Now(), size: len(msg.Entries)})
+		mu.Unlock()
+		return nil, nil
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	go processBulkMessagesBatch(ctx, "test-topic", msgCbChan, cfg, handler)
+
+	// fireBurst sends burstSize messages asynchronously without waiting
+	// for their callbacks. Senders are background goroutines; the cancel
+	// defer above cleans them up.
+	fireBurst := func(offset int) {
+		for i := range burstSize {
+			go func(idx int) {
+				done := make(chan struct{})
+				msgCbChan <- msgWithCallback{
+					msg: contribPubsub.BulkMessageEntry{
+						EntryId: fmt.Sprintf("msg-%d", offset+idx),
+						Event:   []byte(`{}`),
+					},
+					cb: func(error) { close(done) },
+				}
+				<-done
+			}(i)
 		}
+	}
 
-		msgCbChan := make(chan msgWithCallback, maxMessages)
+	fireBurst(0)
 
-		var mu sync.Mutex
-		flushSizes := make([]int, 0)
+	// Wait for the first count-based flush of maxMessages.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		mu.Lock()
+		defer mu.Unlock()
+		require.Len(c, flushes, 1, "expected exactly one flush so far")
+		require.Equal(c, maxMessages, flushes[0].size, "first flush should be count-based")
+	}, time.Duration(awaitDurationMs)*time.Millisecond, 5*time.Millisecond)
 
-		handler := func(ctx context.Context, msg *contribPubsub.BulkMessage) (
-			[]contribPubsub.BulkSubscribeResponseEntry, error,
-		) {
-			mu.Lock()
-			flushSizes = append(flushSizes, len(msg.Entries))
-			mu.Unlock()
+	// Sleep less than awaitDuration so the second burst arrives before
+	// the timer would fire for the trailing 2 messages of burst 1.
+	sleep := time.Duration(awaitDurationMs*3/10) * time.Millisecond
+	time.Sleep(sleep)
 
-			return nil, nil
+	// At this point the trailing 2 of burst 1 must still be buffered
+	// (no timer-based flush yet, no drain-and-flush).
+	mu.Lock()
+	require.Len(t, flushes, 1, "no second flush expected before second burst")
+	mu.Unlock()
+
+	fireBurst(burstSize)
+
+	// Wait for the second count-based flush.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		mu.Lock()
+		defer mu.Unlock()
+		require.Len(c, flushes, 2, "expected exactly two flushes after second burst")
+		require.Equal(c, maxMessages, flushes[1].size, "second flush should be count-based")
+	}, time.Duration(awaitDurationMs)*time.Millisecond, 5*time.Millisecond)
+
+	mu.Lock()
+	secondFlush := flushes[1].at
+	mu.Unlock()
+
+	// The 4 remaining messages (2 trailing from burst 1 + 2 trailing from
+	// burst 2) must now wait awaitDuration from the second flush, NOT
+	// fire immediately and NOT fire on the stale original tick.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		mu.Lock()
+		defer mu.Unlock()
+		require.Len(c, flushes, 3, "expected exactly three flushes after leftover")
+		require.Equal(c, burstSize*2-maxMessages*2, flushes[2].size,
+			"third flush should contain the 4 leftover messages")
+	}, time.Duration(awaitDurationMs*3)*time.Millisecond, 5*time.Millisecond)
+
+	mu.Lock()
+	thirdFlush := flushes[2].at
+	mu.Unlock()
+
+	elapsed := thirdFlush.Sub(secondFlush)
+	lowerBound := time.Duration(awaitDurationMs) * time.Millisecond * 8 / 10
+	upperBound := time.Duration(awaitDurationMs) * time.Millisecond * 15 / 10
+
+	require.GreaterOrEqual(t, elapsed, lowerBound,
+		"leftover flush must be >= ~awaitDuration after second count flush; got %v", elapsed)
+	require.LessOrEqual(t, elapsed, upperBound,
+		"leftover flush must be <= ~1.5x awaitDuration after second count flush; got %v", elapsed)
+}
+
+// TestProcessBulkMessagesPartialBatchTimerFlush verifies that a partial
+// batch (fewer than MaxMessagesCount) is not flushed until the timer
+// fires.
+func TestProcessBulkMessagesPartialBatchTimerFlush(t *testing.T) {
+	maxMessages := 10
+	awaitDurationMs := 300
+
+	cfg := contribPubsub.BulkSubscribeConfig{
+		MaxMessagesCount:   maxMessages,
+		MaxAwaitDurationMs: awaitDurationMs,
+	}
+
+	msgCbChan := make(chan msgWithCallback, maxMessages)
+
+	var flushSize atomic.Int32
+	flushed := make(chan struct{})
+
+	handler := func(ctx context.Context, msg *contribPubsub.BulkMessage) (
+		[]contribPubsub.BulkSubscribeResponseEntry, error,
+	) {
+		flushSize.Store(int32(len(msg.Entries))) //nolint:gosec
+		close(flushed)
+		return nil, nil
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	go processBulkMessagesBatch(ctx, "test-topic", msgCbChan, cfg, handler)
+
+	const numMessages = 2
+	firstSent := time.Now()
+	for i := range numMessages {
+		msgCbChan <- msgWithCallback{
+			msg: contribPubsub.BulkMessageEntry{
+				EntryId: fmt.Sprintf("msg-%d", i),
+				Event:   []byte(`{}`),
+			},
+			cb: func(error) {},
 		}
+	}
 
-		ctx, cancel := context.WithCancel(t.Context())
-		defer cancel()
+	// The partial batch must NOT be flushed before ~awaitDuration has
+	// elapsed.
+	minWait := time.Duration(awaitDurationMs) * time.Millisecond * 7 / 10
+	select {
+	case <-flushed:
+		elapsed := time.Since(firstSent)
+		if elapsed < minWait {
+			t.Fatalf("partial batch flushed too early: %v < %v (no drain-and-flush allowed)", elapsed, minWait)
+		}
+	case <-time.After(time.Duration(awaitDurationMs*3) * time.Millisecond):
+		t.Fatal("partial batch never flushed")
+	}
 
-		go processBulkMessages(ctx, "test-topic", msgCbChan, cfg, handler)
+	assert.Equal(t, int32(numMessages), flushSize.Load(),
+		"partial batch should contain all %d buffered messages", numMessages)
+}
 
-		// Send all messages concurrently (simulating async-mode component).
+// TestProcessBulkMessagesAsyncBurstBatching verifies the drain-in-select
+// optimization: concurrent arrivals share a single wake-up and are
+// delivered in one batch.
+func TestProcessBulkMessagesAsyncBurstBatching(t *testing.T) {
+	maxMessages := 10
+	awaitDurationMs := 500
+	numMessages := 5
+
+	cfg := contribPubsub.BulkSubscribeConfig{
+		MaxMessagesCount:   maxMessages,
+		MaxAwaitDurationMs: awaitDurationMs,
+	}
+
+	msgCbChan := make(chan msgWithCallback, maxMessages)
+
+	var mu sync.Mutex
+	flushSizes := make([]int, 0)
+
+	handler := func(ctx context.Context, msg *contribPubsub.BulkMessage) (
+		[]contribPubsub.BulkSubscribeResponseEntry, error,
+	) {
+		mu.Lock()
+		flushSizes = append(flushSizes, len(msg.Entries))
+		mu.Unlock()
+		return nil, nil
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	go processBulkMessagesBatch(ctx, "test-topic", msgCbChan, cfg, handler)
+
+	var wg sync.WaitGroup
+	for i := range numMessages {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			done := make(chan struct{})
+			msgCbChan <- msgWithCallback{
+				msg: contribPubsub.BulkMessageEntry{
+					EntryId: fmt.Sprintf("msg-%d", idx),
+					Event:   []byte(`{}`),
+				},
+				cb: func(error) { close(done) },
+			}
+			<-done
+		}(i)
+	}
+	wg.Wait()
+
+	mu.Lock()
+	total := 0
+	for _, size := range flushSizes {
+		total += size
+	}
+	assert.Equal(t, numMessages, total, "all messages should be flushed")
+	mu.Unlock()
+}
+
+// TestProcessBulkMessagesBatchTimerAlignsToFirstMessage verifies that a
+// message arriving after a period of subscriber inactivity is held for
+// the FULL await duration measured from its arrival, not just the
+// stale remainder of a periodic tick that has been ticking against an
+// empty buffer. This is the n==0 → n==1 ticker-reset behaviour.
+func TestProcessBulkMessagesBatchTimerAlignsToFirstMessage(t *testing.T) {
+	awaitDurationMs := 200
+
+	cfg := contribPubsub.BulkSubscribeConfig{
+		MaxMessagesCount:   100,
+		MaxAwaitDurationMs: awaitDurationMs,
+	}
+
+	msgCbChan := make(chan msgWithCallback, 100)
+
+	flushed := make(chan struct{})
+	handler := func(_ context.Context, _ *contribPubsub.BulkMessage) (
+		[]contribPubsub.BulkSubscribeResponseEntry, error,
+	) {
+		close(flushed)
+		return nil, nil
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	go processBulkMessagesBatch(ctx, "test-topic", msgCbChan, cfg, handler)
+
+	// Sit idle for 1.75x awaitDuration. With the buggy behaviour, the
+	// internal ticker has been firing periodically against an empty
+	// buffer, and its next tick is imminent (~50ms away). Sending a
+	// message now would be flushed almost immediately by that next
+	// tick instead of waiting the full window.
+	idle := time.Duration(awaitDurationMs) * time.Millisecond * 7 / 4
+	time.Sleep(idle)
+
+	sent := time.Now()
+	msgCbChan <- msgWithCallback{
+		msg: contribPubsub.BulkMessageEntry{EntryId: "msg-after-idle", Event: []byte(`{}`)},
+		cb:  func(error) {},
+	}
+
+	select {
+	case <-flushed:
+	case <-time.After(time.Duration(awaitDurationMs*3) * time.Millisecond):
+		t.Fatal("expected a timer-based flush within 3x awaitDuration")
+	}
+
+	elapsed := time.Since(sent)
+	lower := time.Duration(awaitDurationMs) * time.Millisecond * 7 / 10
+	require.GreaterOrEqual(t, elapsed, lower,
+		"message after idle period must wait ~awaitDuration from its arrival, not the imminent stale tick; got %v", elapsed)
+}
+
+// TestProcessBulkMessagesMultipleCountFlushes verifies that two
+// back-to-back bursts that each hit MaxMessagesCount produce two
+// count-based flushes, each of size MaxMessagesCount.
+func TestProcessBulkMessagesMultipleCountFlushes(t *testing.T) {
+	maxMessages := 3
+	awaitDurationMs := 500
+
+	cfg := contribPubsub.BulkSubscribeConfig{
+		MaxMessagesCount:   maxMessages,
+		MaxAwaitDurationMs: awaitDurationMs,
+	}
+
+	msgCbChan := make(chan msgWithCallback, maxMessages*3)
+
+	var mu sync.Mutex
+	flushSizes := make([]int, 0)
+
+	handler := func(ctx context.Context, msg *contribPubsub.BulkMessage) (
+		[]contribPubsub.BulkSubscribeResponseEntry, error,
+	) {
+		mu.Lock()
+		flushSizes = append(flushSizes, len(msg.Entries))
+		mu.Unlock()
+		return nil, nil
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	go processBulkMessagesBatch(ctx, "test-topic", msgCbChan, cfg, handler)
+
+	sendBatch := func(offset int) {
 		var wg sync.WaitGroup
-
-		for i := range numMessages {
+		for i := range maxMessages {
 			wg.Add(1)
-
 			go func(idx int) {
 				defer wg.Done()
-
 				done := make(chan struct{})
 				msgCbChan <- msgWithCallback{
 					msg: contribPubsub.BulkMessageEntry{
 						EntryId: fmt.Sprintf("msg-%d", idx),
 						Event:   []byte(`{}`),
 					},
-					cb: func(err error) {
-						close(done)
-					},
+					cb: func(error) { close(done) },
 				}
-
-				select {
-				case <-done:
-				case <-time.After(time.Duration(awaitDurationMs) * time.Millisecond):
-					t.Errorf("timed out waiting for callback of msg-%d", idx)
-				}
-			}(i)
+				<-done
+			}(offset + i)
 		}
-
 		wg.Wait()
+	}
 
+	sendBatch(0)
+	sendBatch(maxMessages)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, flushSizes, 2, "expected two count-based flushes")
+	assert.Equal(t, maxMessages, flushSizes[0])
+	assert.Equal(t, maxMessages, flushSizes[1])
+}
+
+// TestProcessBulkMessagesImmediateFlushesOnArrival verifies that the
+// immediate path delivers each message as it arrives without waiting
+// for a timer or a count threshold. This is the path that components
+// declaring pubsub.FeatureBulkSubscribeImmediate (e.g. Pulsar with
+// processMode=sync) take to avoid piling up unacked messages.
+func TestProcessBulkMessagesImmediateFlushesOnArrival(t *testing.T) {
+	maxMessages := 100
+	// Long await so the test would block forever if a timer were still
+	// in play.
+	awaitDurationMs := 5000
+
+	cfg := contribPubsub.BulkSubscribeConfig{
+		MaxMessagesCount:   maxMessages,
+		MaxAwaitDurationMs: awaitDurationMs,
+	}
+
+	msgCbChan := make(chan msgWithCallback, maxMessages)
+
+	var mu sync.Mutex
+	flushSizes := make([]int, 0)
+
+	handler := func(ctx context.Context, msg *contribPubsub.BulkMessage) (
+		[]contribPubsub.BulkSubscribeResponseEntry, error,
+	) {
 		mu.Lock()
-		// All messages should have been flushed. The total across all
-		// flushes should equal numMessages.
-		total := 0
-		for _, size := range flushSizes {
-			total += size
-		}
-		assert.Equal(t, numMessages, total, "all messages should be flushed")
-		// Batching depends on goroutine scheduling; log for observability.
-		if len(flushSizes) < numMessages {
-			t.Logf("batching observed: %d messages in %d flushes", numMessages, len(flushSizes))
-		}
+		flushSizes = append(flushSizes, len(msg.Entries))
 		mu.Unlock()
+		return nil, nil
+	}
 
-		cancel()
-	})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	go processBulkMessagesImmediate(ctx, "test-topic", msgCbChan, cfg, handler)
+
+	const numMessages = 3
+	start := time.Now()
+	for i := range numMessages {
+		done := make(chan struct{})
+		msgCbChan <- msgWithCallback{
+			msg: contribPubsub.BulkMessageEntry{
+				EntryId: fmt.Sprintf("msg-%d", i),
+				Event:   []byte(`{}`),
+			},
+			cb: func(error) { close(done) },
+		}
+		select {
+		case <-done:
+		case <-time.After(time.Duration(awaitDurationMs/2) * time.Millisecond):
+			t.Fatalf("sync flush should ack msg-%d well under awaitDuration", i)
+		}
+	}
+
+	elapsed := time.Since(start)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, flushSizes, numMessages, "expected one flush per message")
+	for i, size := range flushSizes {
+		require.Equal(t, 1, size, "flush %d should carry one message (no batching window in sync mode)", i)
+	}
+	// Sanity cap: 3 messages should complete in well under the await
+	// duration. Without the sync path they would take ≥ 3 ×
+	// awaitDuration.
+	require.Less(t, elapsed, time.Duration(awaitDurationMs/2)*time.Millisecond,
+		"sync mode should not wait for the timer; got %v", elapsed)
+}
+
+// TestProcessBulkMessagesImmediateBurstCoalesce verifies that when
+// multiple messages happen to land in the channel concurrently (for
+// example, two Pulsar partitions delivering at once), the immediate
+// path still coalesces them via drainChannel up to MaxMessagesCount
+// instead of producing N one-entry flushes. This keeps the path
+// well-behaved under any residual concurrency a sync-mode component
+// might exhibit.
+func TestProcessBulkMessagesImmediateBurstCoalesce(t *testing.T) {
+	maxMessages := 10
+	awaitDurationMs := 5000
+
+	cfg := contribPubsub.BulkSubscribeConfig{
+		MaxMessagesCount:   maxMessages,
+		MaxAwaitDurationMs: awaitDurationMs,
+	}
+
+	msgCbChan := make(chan msgWithCallback, maxMessages)
+
+	var mu sync.Mutex
+	flushSizes := make([]int, 0)
+
+	// Pre-fill the channel so processBulkMessagesSync wakes up on
+	// the first message and drainChannel sees the rest already queued.
+	const numMessages = 5
+	for i := range numMessages {
+		msgCbChan <- msgWithCallback{
+			msg: contribPubsub.BulkMessageEntry{
+				EntryId: fmt.Sprintf("msg-%d", i),
+				Event:   []byte(`{}`),
+			},
+			cb: func(error) {},
+		}
+	}
+
+	handler := func(ctx context.Context, msg *contribPubsub.BulkMessage) (
+		[]contribPubsub.BulkSubscribeResponseEntry, error,
+	) {
+		mu.Lock()
+		flushSizes = append(flushSizes, len(msg.Entries))
+		mu.Unlock()
+		return nil, nil
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	go processBulkMessagesImmediate(ctx, "test-topic", msgCbChan, cfg, handler)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		mu.Lock()
+		defer mu.Unlock()
+		total := 0
+		for _, s := range flushSizes {
+			total += s
+		}
+		require.GreaterOrEqual(c, total, numMessages, "all messages should flush")
+	}, 500*time.Millisecond, 5*time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, flushSizes, 1,
+		"drainChannel should coalesce the 5 pre-queued messages into one flush")
+	require.Equal(t, numMessages, flushSizes[0],
+		"coalesced flush should carry all pre-queued messages")
+}
+
+// fakeFeaturePubSub is a minimal contribPubsub.PubSub used to drive
+// BulkSubscribe through its feature-based dispatch and to inject a
+// single message via the captured subscriber callback.
+type fakeFeaturePubSub struct {
+	features []contribPubsub.Feature
+	handler  contribPubsub.Handler
+	ready    chan struct{}
+}
+
+func (f *fakeFeaturePubSub) Init(context.Context, contribPubsub.Metadata) error { return nil }
+func (f *fakeFeaturePubSub) Features() []contribPubsub.Feature                  { return f.features }
+func (f *fakeFeaturePubSub) Publish(context.Context, *contribPubsub.PublishRequest) error {
+	return nil
+}
+
+func (f *fakeFeaturePubSub) Subscribe(ctx context.Context, _ contribPubsub.SubscribeRequest, handler contribPubsub.Handler) error {
+	f.handler = handler
+	close(f.ready)
+	<-ctx.Done()
+	return nil
+}
+
+func (f *fakeFeaturePubSub) Close() error { return nil }
+
+// TestBulkSubscribeFeatureDispatchImmediate verifies that when the
+// upstream component declares FeatureBulkSubscribeImmediate,
+// BulkSubscribe routes a single arrival through the immediate path —
+// the handler returns within milliseconds rather than waiting for
+// MaxAwaitDurationMs.
+func TestBulkSubscribeFeatureDispatchImmediate(t *testing.T) {
+	fake := &fakeFeaturePubSub{
+		features: []contribPubsub.Feature{contribPubsub.FeatureBulkSubscribeImmediate},
+		ready:    make(chan struct{}),
+	}
+
+	sub := NewDefaultBulkSubscriber(fake)
+
+	flushed := make(chan struct{})
+	bulkHandler := func(_ context.Context, msg *contribPubsub.BulkMessage) ([]contribPubsub.BulkSubscribeResponseEntry, error) {
+		require.Len(t, msg.Entries, 1)
+		close(flushed)
+		return nil, nil
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	subErr := make(chan error, 1)
+	go func() {
+		subErr <- sub.BulkSubscribe(ctx, contribPubsub.SubscribeRequest{
+			Topic: "test-topic",
+			BulkSubscribeConfig: contribPubsub.BulkSubscribeConfig{
+				MaxMessagesCount:   100,
+				MaxAwaitDurationMs: 5_000, // long enough that batch path would block the test
+			},
+		}, bulkHandler)
+	}()
+
+	<-fake.ready
+
+	handlerErr := make(chan error, 1)
+	go func() {
+		handlerErr <- fake.handler(ctx, &contribPubsub.NewMessage{
+			Data:  []byte(`{}`),
+			Topic: "test-topic",
+		})
+	}()
+
+	select {
+	case <-flushed:
+	case <-time.After(time.Second):
+		t.Fatal("immediate path should flush within 1s; got stuck waiting for the timer")
+	}
+
+	select {
+	case err := <-handlerErr:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("subscriber callback should return after the immediate flush ack")
+	}
+
+	cancel()
+	<-subErr
+}
+
+// TestBulkSubscribeFeatureDispatchBatch verifies that when the
+// component does NOT declare FeatureBulkSubscribeImmediate, a single
+// arrival is held by the batch path until MaxAwaitDurationMs elapses.
+func TestBulkSubscribeFeatureDispatchBatch(t *testing.T) {
+	fake := &fakeFeaturePubSub{
+		features: nil,
+		ready:    make(chan struct{}),
+	}
+
+	sub := NewDefaultBulkSubscriber(fake)
+
+	const awaitDurationMs = 200
+
+	flushed := make(chan struct{})
+	bulkHandler := func(_ context.Context, msg *contribPubsub.BulkMessage) ([]contribPubsub.BulkSubscribeResponseEntry, error) {
+		require.Len(t, msg.Entries, 1)
+		close(flushed)
+		return nil, nil
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	subErr := make(chan error, 1)
+	go func() {
+		subErr <- sub.BulkSubscribe(ctx, contribPubsub.SubscribeRequest{
+			Topic: "test-topic",
+			BulkSubscribeConfig: contribPubsub.BulkSubscribeConfig{
+				MaxMessagesCount:   100,
+				MaxAwaitDurationMs: awaitDurationMs,
+			},
+		}, bulkHandler)
+	}()
+
+	<-fake.ready
+
+	start := time.Now()
+	go func() { _ = fake.handler(ctx, &contribPubsub.NewMessage{Data: []byte(`{}`), Topic: "test-topic"}) }()
+
+	select {
+	case <-flushed:
+	case <-time.After(time.Duration(awaitDurationMs*4) * time.Millisecond):
+		t.Fatal("batch path should flush within 4x awaitDuration")
+	}
+
+	elapsed := time.Since(start)
+	lower := time.Duration(awaitDurationMs) * time.Millisecond * 7 / 10
+	require.GreaterOrEqual(t, elapsed, lower,
+		"single message must wait ~awaitDuration in batch mode (no drain-and-flush regression); got %v", elapsed)
+
+	cancel()
+	<-subErr
 }

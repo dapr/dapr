@@ -34,7 +34,7 @@ func init() {
 }
 
 // Proves that when multiple wfs with the same name appear in a lineage chain
-// GetWorkflowByName returns the last one
+// GetLastWorkflowByName returns the last one
 type workflowchain struct {
 	workflow          *procworkflow.Workflow
 	workerPluralCount atomic.Int64
@@ -95,7 +95,7 @@ func (w *workflowchain) Run(t *testing.T, ctx context.Context) {
 			w.pluralLastInstanceID.Store(plural[len(plural)-1].InstanceID)
 		}
 
-		singular, err := ph.GetWorkflowByName("worker")
+		singular, err := ph.GetLastWorkflowByName("worker")
 		if err != nil {
 			return nil, err
 		}
@@ -148,7 +148,7 @@ func (w *workflowchain) Run(t *testing.T, ctx context.Context) {
 	// The first and last must be distinct -diff instances
 	assert.NotEqual(t, first, last, "depth-1 and depth-2 should have distinct instance IDs")
 	assert.Equal(t, last, singular,
-		"GetWorkflowByName('worker') should equal GetWorkflowsByName('worker')[len-1]")
+		"GetLastWorkflowByName('worker') should equal GetWorkflowsByName('worker')[len-1]")
 	assert.True(t, w.singularEqualsPluralLast.Load(),
 		"singular/plural consistency check should pass inside the examiner")
 }

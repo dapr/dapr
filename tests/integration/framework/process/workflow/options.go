@@ -47,11 +47,13 @@ type options struct {
 	mtls            bool
 	signingDisabled []int
 
-	orchestrators    []orchestratorConfig
-	activities       []activityConfig
-	daprdOptions     []daprdOptionConfig
-	schedulerOptions []scheduler.Option
-	placementOptions []placement.Option
+	orchestrators     []orchestratorConfig
+	activities        []activityConfig
+	daprdOptions      []daprdOptionConfig
+	schedulerOptions  []scheduler.Option
+	placementOptions  []placement.Option
+	schedulerInstance *scheduler.Scheduler
+	schedulerAddress  *string
 }
 
 func WithAddOrchestrator(t *testing.T, name string, or func(*task.WorkflowContext) (any, error)) Option {
@@ -130,6 +132,25 @@ func WithSigningDisabledN(index int) Option {
 func WithSchedulerOptions(opts ...scheduler.Option) Option {
 	return func(o *options) {
 		o.schedulerOptions = append(o.schedulerOptions, opts...)
+	}
+}
+
+// WithSchedulerInstance lets a test supply a pre-constructed scheduler. The
+// framework uses this scheduler instead of creating its own and skips
+// adding it to its process list (the caller is responsible for that).
+// Combine with WithSchedulerAddress when interposing a proxy.
+func WithSchedulerInstance(sched *scheduler.Scheduler) Option {
+	return func(o *options) {
+		o.schedulerInstance = sched
+	}
+}
+
+// WithSchedulerAddress overrides the address used for the daprd's
+// --scheduler-host-address flag. Use this to point daprd at a proxy that
+// fronts the real scheduler.
+func WithSchedulerAddress(addr string) Option {
+	return func(o *options) {
+		o.schedulerAddress = &addr
 	}
 }
 

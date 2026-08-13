@@ -93,6 +93,10 @@ func New(t *testing.T, fopts ...Option) *Operator {
 		args = append(args, "-config-path="+*opts.configPath)
 	}
 
+	if opts.cacheSyncPeriod != nil {
+		args = append(args, "-cache-sync-period="+opts.cacheSyncPeriod.String())
+	}
+
 	return &Operator{
 		exec: exec.New(t,
 			binary.EnvValue("operator"), args,

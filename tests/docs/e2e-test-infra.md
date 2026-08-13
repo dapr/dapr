@@ -7,7 +7,7 @@
 The Azure credential must be renewed every 6 months. When the credential expire, you will see the following error in the `Login to Azure` step when running E2E tests on Azure:
 
 ```txt
-Run azure/login@v1
+Run azure/login@v3
 Running Azure CLI Login.
 /usr/bin/az cloud set -n azurecloud
 Done setting cloud: "azurecloud"

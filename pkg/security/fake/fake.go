@@ -45,6 +45,8 @@ type Fake struct {
 	grpcDialOptionUnknownTrustDomainFn func(ns, appID string) grpc.DialOption
 	grpcServerOptionMTLSFn             func() grpc.ServerOption
 	grpcServerOptionNoClientAuthFn     func() grpc.ServerOption
+	fetchJWTFn                         func(context.Context, string) (string, error)
+	withSVIDContextFn                  func(context.Context) context.Context
 }
 
 func New() *Fake {
@@ -88,6 +90,9 @@ func New() *Fake {
 		},
 		netDialerIDFn: func(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error) {
 			return net.Dial
+		},
+		withSVIDContextFn: func(ctx context.Context) context.Context {
+			return ctx
 		},
 		mtls: false,
 	}
@@ -212,8 +217,13 @@ func (f *Fake) WatchTrustAnchors(ctx context.Context, ch chan<- []byte) {
 	f.watchTrustAnchorsFn(ctx, ch)
 }
 
+func (f *Fake) WithSVIDContextFn(fn func(context.Context) context.Context) *Fake {
+	f.withSVIDContextFn = fn
+	return f
+}
+
 func (f *Fake) WithSVIDContext(ctx context.Context) context.Context {
-	return ctx
+	return f.withSVIDContextFn(ctx)
 }
 
 func (f *Fake) IdentityDir() *string {
@@ -247,6 +257,18 @@ func (f *Fake) Run(ctx context.Context) error {
 
 func (f *Fake) Handler(context.Context) (security.Handler, error) {
 	return f, nil
+}
+
+func (f *Fake) WithFetchJWT(fn func(context.Context, string) (string, error)) *Fake {
+	f.fetchJWTFn = fn
+	return f
+}
+
+func (f *Fake) FetchJWT(ctx context.Context, audience string) (string, error) {
+	if f.fetchJWTFn != nil {
+		return f.fetchJWTFn(ctx, audience)
+	}
+	return "", nil
 }
 
 func (f *Fake) Signer() *signer.Signer {

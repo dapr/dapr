@@ -16,6 +16,7 @@ package activity
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
@@ -33,12 +34,10 @@ import (
 	"github.com/dapr/kit/crypto/spiffe/signer"
 )
 
-var activityCache = &sync.Pool{
-	New: func() any {
-		return &activity{
-			lock: lock.New(),
-		}
-	},
+func newActivity() *activity {
+	return &activity{
+		lock: lock.New(),
+	}
 }
 
 type Options struct {
@@ -86,6 +85,10 @@ type factory struct {
 	// composite (activity actor ID, TaskExecutionId) value produced by
 	// inflight.Key. See the inflight subpackage for semantics.
 	inflight inflight.Map
+
+	// selfCallerWarned ensures the "policy lists own appID" warning is only
+	// emitted once per factory lifetime instead of on every self-call.
+	selfCallerWarned atomic.Bool
 }
 
 func New(ctx context.Context, opts Options) (targets.Factory, error) {
@@ -138,24 +141,13 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
 	a, ok := f.table.Load(actorID)
 	if !ok {
-		newActivity := f.initActivity(activityCache.Get(), actorID)
-		var loaded bool
-		a, loaded = f.table.LoadOrStore(actorID, newActivity)
-		if loaded {
-			activityCache.Put(newActivity)
-		}
+		fresh := newActivity()
+		fresh.factory = f
+		fresh.actorID = actorID
+		a, _ = f.table.LoadOrStore(actorID, fresh)
 	}
 
 	return a.(*activity)
-}
-
-func (f *factory) initActivity(a any, actorID string) *activity {
-	act := a.(*activity)
-
-	act.factory = f
-	act.actorID = actorID
-
-	return act
 }
 
 func (f *factory) HaltAll(ctx context.Context) error {

@@ -69,7 +69,7 @@
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>okhttp</artifactId>
-            <version>4.2.1</version>
+            <version>4.9.2</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

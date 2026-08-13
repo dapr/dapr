@@ -18,6 +18,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -33,6 +36,12 @@ func (m *mcpservers) list(ctx context.Context, opclient operatorpb.OperatorClien
 		Namespace: ns,
 	})
 	if err != nil {
+		// Older operators do not implement ListMCPServers. Treat as "no
+		// servers" so daprd remains compatible across an N-1 control plane
+		// version skew.
+		if status.Code(err) == codes.Unimplemented {
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -48,8 +57,18 @@ func (m *mcpservers) close() error {
 }
 
 //nolint:unused
-func (m *mcpservers) recv(_ context.Context) (*loader.Event[mcpserverapi.MCPServer], error) {
+func (m *mcpservers) recv(ctx context.Context) (*loader.Event[mcpserverapi.MCPServer], error) {
 	event, err := m.Recv()
+
+	// Ignore servers which don't implement the MCPServer update stream.
+	// Block until the context is cancelled to avoid a tight reconnect loop
+	// against an N-1 control plane.
+	if status, ok := status.FromError(err); ok && status.Code() == codes.Unimplemented {
+		log.Warn("MCPServer HotReloading is not supported by the Dapr control plane. MCPServer updates will not be Hot Reloaded.")
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+
 	if err != nil {
 		return nil, err
 	}

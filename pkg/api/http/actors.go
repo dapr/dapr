@@ -53,7 +53,7 @@ var endpointGroupActorV1State = &endpoints.EndpointGroup{
 var endpointGroupActorV1Misc = &endpoints.EndpointGroup{
 	Name:                 endpoints.EndpointGroupActors,
 	Version:              endpoints.EndpointGroupVersion1,
-	AppendSpanAttributes: nil, // TODO
+	AppendSpanAttributes: appendActorReminderTimerSpanAttributesFn,
 }
 
 func appendActorStateSpanAttributesFn(r *http.Request, m map[string]string) {
@@ -71,6 +71,19 @@ func appendActorInvocationSpanAttributesFn(r *http.Request, m map[string]string)
 	m[diagConsts.GrpcServiceSpanAttributeKey] = "ServiceInvocation"
 	m[diagConsts.NetPeerNameSpanAttributeKey] = actorTypeID
 	m[diagConsts.DaprAPISpanNameInternal] = "CallActor/" + actorType + "/" + chi.URLParam(r, "method")
+}
+
+// appendActorReminderTimerSpanAttributesFn sets a bounded span name for the
+// reminder and timer endpoints. The raw request path embeds the unbounded
+// actorId and reminder/timer name, so it must not be used as the span name
+// (it causes a tracing cardinality explosion, see issue #4703). The bounded
+// endpoint name and actorType are used instead, dropping actorId and name.
+func appendActorReminderTimerSpanAttributesFn(r *http.Request, m map[string]string) {
+	actorType := chi.URLParam(r, actorTypeParam)
+	m[diagConsts.DaprAPIActorTypeID] = actorType + "." + chi.URLParam(r, actorIDParam)
+
+	endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+	m[diagConsts.DaprAPISpanNameInternal] = endpointData.GetEndpointName() + "/" + actorType
 }
 
 func actorInvocationMethodNameWithIDFn(r *http.Request) string {

@@ -195,4 +195,24 @@ func TestServerConf(t *testing.T) {
 		assert.Equal(t, clientURL, config.ListenClientUrls[0])
 		assert.Empty(t, config.ListenClientHttpUrls)
 	})
+
+	t.Run("MaxTxnOps is propagated onto embed.Config", func(t *testing.T) {
+		config, err := config(t.Context(), Options{
+			Security:             fake.New(),
+			Mode:                 modes.StandaloneMode,
+			DataDir:              "./data",
+			Name:                 "id2",
+			InitialCluster:       []string{"id1=http://localhost:5001", "id2=http://localhost:5002"},
+			ClientPort:           5002,
+			ClientListenAddress:  "127.0.0.1",
+			SpaceQuota:           0,
+			CompactionMode:       "",
+			CompactionRetention:  "",
+			BackendBatchInterval: "100ms",
+			MaxTxnOps:            12345,
+			Healthz:              healthz.New(),
+		})
+		require.NoError(t, err)
+		assert.Equal(t, uint(12345), config.MaxTxnOps)
+	})
 }

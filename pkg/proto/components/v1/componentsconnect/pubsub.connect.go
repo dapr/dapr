@@ -63,19 +63,6 @@ const (
 	PubSubPingProcedure = "/dapr.proto.components.v1.PubSub/Ping"
 )
 
-// These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
-var (
-	pubSubServiceDescriptor            = v1.File_dapr_proto_components_v1_pubsub_proto.Services().ByName("PubSub")
-	pubSubInitMethodDescriptor         = pubSubServiceDescriptor.Methods().ByName("Init")
-	pubSubFeaturesMethodDescriptor     = pubSubServiceDescriptor.Methods().ByName("Features")
-	pubSubPublishMethodDescriptor      = pubSubServiceDescriptor.Methods().ByName("Publish")
-	pubSubBulkPublishMethodDescriptor  = pubSubServiceDescriptor.Methods().ByName("BulkPublish")
-	pubSubPullMessagesMethodDescriptor = pubSubServiceDescriptor.Methods().ByName("PullMessages")
-	pubSubPauseMethodDescriptor        = pubSubServiceDescriptor.Methods().ByName("Pause")
-	pubSubResumeMethodDescriptor       = pubSubServiceDescriptor.Methods().ByName("Resume")
-	pubSubPingMethodDescriptor         = pubSubServiceDescriptor.Methods().ByName("Ping")
-)
-
 // PubSubClient is a client for the dapr.proto.components.v1.PubSub service.
 type PubSubClient interface {
 	// Initializes the pubsub component with the given metadata.
@@ -113,53 +100,54 @@ type PubSubClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewPubSubClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PubSubClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	pubSubMethods := v1.File_dapr_proto_components_v1_pubsub_proto.Services().ByName("PubSub").Methods()
 	return &pubSubClient{
 		init: connect.NewClient[v1.PubSubInitRequest, v1.PubSubInitResponse](
 			httpClient,
 			baseURL+PubSubInitProcedure,
-			connect.WithSchema(pubSubInitMethodDescriptor),
+			connect.WithSchema(pubSubMethods.ByName("Init")),
 			connect.WithClientOptions(opts...),
 		),
 		features: connect.NewClient[v1.FeaturesRequest, v1.FeaturesResponse](
 			httpClient,
 			baseURL+PubSubFeaturesProcedure,
-			connect.WithSchema(pubSubFeaturesMethodDescriptor),
+			connect.WithSchema(pubSubMethods.ByName("Features")),
 			connect.WithClientOptions(opts...),
 		),
 		publish: connect.NewClient[v1.PublishRequest, v1.PublishResponse](
 			httpClient,
 			baseURL+PubSubPublishProcedure,
-			connect.WithSchema(pubSubPublishMethodDescriptor),
+			connect.WithSchema(pubSubMethods.ByName("Publish")),
 			connect.WithClientOptions(opts...),
 		),
 		bulkPublish: connect.NewClient[v1.BulkPublishRequest, v1.BulkPublishResponse](
 			httpClient,
 			baseURL+PubSubBulkPublishProcedure,
-			connect.WithSchema(pubSubBulkPublishMethodDescriptor),
+			connect.WithSchema(pubSubMethods.ByName("BulkPublish")),
 			connect.WithClientOptions(opts...),
 		),
 		pullMessages: connect.NewClient[v1.PullMessagesRequest, v1.PullMessagesResponse](
 			httpClient,
 			baseURL+PubSubPullMessagesProcedure,
-			connect.WithSchema(pubSubPullMessagesMethodDescriptor),
+			connect.WithSchema(pubSubMethods.ByName("PullMessages")),
 			connect.WithClientOptions(opts...),
 		),
 		pause: connect.NewClient[v1.PauseRequest, v1.PauseResponse](
 			httpClient,
 			baseURL+PubSubPauseProcedure,
-			connect.WithSchema(pubSubPauseMethodDescriptor),
+			connect.WithSchema(pubSubMethods.ByName("Pause")),
 			connect.WithClientOptions(opts...),
 		),
 		resume: connect.NewClient[v1.ResumeRequest, v1.ResumeResponse](
 			httpClient,
 			baseURL+PubSubResumeProcedure,
-			connect.WithSchema(pubSubResumeMethodDescriptor),
+			connect.WithSchema(pubSubMethods.ByName("Resume")),
 			connect.WithClientOptions(opts...),
 		),
 		ping: connect.NewClient[v1.PingRequest, v1.PingResponse](
 			httpClient,
 			baseURL+PubSubPingProcedure,
-			connect.WithSchema(pubSubPingMethodDescriptor),
+			connect.WithSchema(pubSubMethods.ByName("Ping")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -251,52 +239,53 @@ type PubSubHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewPubSubHandler(svc PubSubHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	pubSubMethods := v1.File_dapr_proto_components_v1_pubsub_proto.Services().ByName("PubSub").Methods()
 	pubSubInitHandler := connect.NewUnaryHandler(
 		PubSubInitProcedure,
 		svc.Init,
-		connect.WithSchema(pubSubInitMethodDescriptor),
+		connect.WithSchema(pubSubMethods.ByName("Init")),
 		connect.WithHandlerOptions(opts...),
 	)
 	pubSubFeaturesHandler := connect.NewUnaryHandler(
 		PubSubFeaturesProcedure,
 		svc.Features,
-		connect.WithSchema(pubSubFeaturesMethodDescriptor),
+		connect.WithSchema(pubSubMethods.ByName("Features")),
 		connect.WithHandlerOptions(opts...),
 	)
 	pubSubPublishHandler := connect.NewUnaryHandler(
 		PubSubPublishProcedure,
 		svc.Publish,
-		connect.WithSchema(pubSubPublishMethodDescriptor),
+		connect.WithSchema(pubSubMethods.ByName("Publish")),
 		connect.WithHandlerOptions(opts...),
 	)
 	pubSubBulkPublishHandler := connect.NewUnaryHandler(
 		PubSubBulkPublishProcedure,
 		svc.BulkPublish,
-		connect.WithSchema(pubSubBulkPublishMethodDescriptor),
+		connect.WithSchema(pubSubMethods.ByName("BulkPublish")),
 		connect.WithHandlerOptions(opts...),
 	)
 	pubSubPullMessagesHandler := connect.NewBidiStreamHandler(
 		PubSubPullMessagesProcedure,
 		svc.PullMessages,
-		connect.WithSchema(pubSubPullMessagesMethodDescriptor),
+		connect.WithSchema(pubSubMethods.ByName("PullMessages")),
 		connect.WithHandlerOptions(opts...),
 	)
 	pubSubPauseHandler := connect.NewUnaryHandler(
 		PubSubPauseProcedure,
 		svc.Pause,
-		connect.WithSchema(pubSubPauseMethodDescriptor),
+		connect.WithSchema(pubSubMethods.ByName("Pause")),
 		connect.WithHandlerOptions(opts...),
 	)
 	pubSubResumeHandler := connect.NewUnaryHandler(
 		PubSubResumeProcedure,
 		svc.Resume,
-		connect.WithSchema(pubSubResumeMethodDescriptor),
+		connect.WithSchema(pubSubMethods.ByName("Resume")),
 		connect.WithHandlerOptions(opts...),
 	)
 	pubSubPingHandler := connect.NewUnaryHandler(
 		PubSubPingProcedure,
 		svc.Ping,
-		connect.WithSchema(pubSubPingMethodDescriptor),
+		connect.WithSchema(pubSubMethods.ByName("Ping")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.components.v1.PubSub/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

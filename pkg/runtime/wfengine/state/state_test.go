@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,6 +31,7 @@ import (
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/ptr"
 )
 
 func sha256Sum(b []byte) []byte {
@@ -319,6 +321,53 @@ func TestGetSaveRequest_HistoryWithoutMarshaledBytes(t *testing.T) {
 	assert.Equal(t, expected, historyOp.Value)
 }
 
+func TestGetSaveRequest_InboxExcludesUnpersistedTimerEvents(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	s.AddToInbox(testEvent(0))
+
+	// A timer wake appends TimerFired directly to the in-memory inbox
+	// without going through AddToInbox (orchestrator run path); it is never
+	// persisted as an inbox key. A save taken while it is still in the inbox
+	// (workflow stall, abandoned continue-as-new) must not count it.
+	s.Inbox = append(s.Inbox, &backend.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_TimerFired{
+			TimerFired: &protos.TimerFiredEvent{TimerId: 1},
+		},
+	})
+
+	req, err := s.GetSaveRequest("actor1")
+	require.NoError(t, err)
+
+	var inboxKeys []string
+	var metadata *backend.BackendWorkflowStateMetadata
+	for _, op := range req.Operations {
+		if op.Operation != api.Upsert {
+			continue
+		}
+		u, ok := op.Request.(api.TransactionalUpsert)
+		if !ok {
+			continue
+		}
+		switch {
+		case u.Key == MetadataKey:
+			metadata = new(backend.BackendWorkflowStateMetadata)
+			require.NoError(t, proto.Unmarshal(u.Value.([]byte), metadata))
+		case strings.HasPrefix(u.Key, inboxKeyPrefix):
+			inboxKeys = append(inboxKeys, u.Key)
+		}
+	}
+
+	require.NotNil(t, metadata, "expected a metadata upsert")
+	assert.Equal(t, []string{"inbox-000000"}, inboxKeys, "only the non-timer event should be persisted")
+	assert.Equal(t, uint64(1), metadata.GetInboxLength(),
+		"metadata must declare exactly the inbox keys that exist in the store, or the next load will fail on a phantom key")
+}
+
 func TestGetSaveRequest_SigningDataOperations(t *testing.T) {
 	t.Parallel()
 
@@ -429,6 +478,11 @@ func TestGetPurgeRequest(t *testing.T) {
 	s.AddSigningCertificate(&backend.SigningCertificate{Certificate: []byte("cert")})
 	addSig(t, s, &backend.HistorySignature{Signature: []byte("sig1")})
 	addSig(t, s, &backend.HistorySignature{Signature: []byte("sig2")})
+	s.CustomStatus = wrapperspb.String("running")
+	s.SetIncomingHistory(&protos.PropagatedHistory{})
+	// Simulate a successful save so the persistence flags reflect that the
+	// optional keys are present in the store.
+	s.ResetChangeTracking()
 
 	req, err := s.GetPurgeRequest("actor1")
 	require.NoError(t, err)
@@ -454,6 +508,213 @@ func TestGetPurgeRequest(t *testing.T) {
 
 	// Total: 1 inbox + 2 history + 1 sigcert + 2 sig + customStatus + metadata + propagated-history = 9
 	assert.Len(t, req.Operations, 9)
+}
+
+func TestGetPurgeRequest_OmitsAbsentOptionalKeys(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	s.AddToInbox(testEvent(0))
+	s.AddToHistory(testEvent(0))
+
+	req, err := s.GetPurgeRequest("actor1")
+	require.NoError(t, err)
+
+	deleteKeys := make(map[string]bool)
+	for _, op := range req.Operations {
+		if op.Operation == api.Delete {
+			if d, ok := op.Request.(api.TransactionalDelete); ok {
+				deleteKeys[d.Key] = true
+			}
+		}
+	}
+
+	assert.True(t, deleteKeys["inbox-000000"])
+	assert.True(t, deleteKeys["history-000000"])
+	assert.True(t, deleteKeys["metadata"])
+	assert.False(t, deleteKeys["customStatus"], "customStatus delete must be omitted when not persisted")
+	assert.False(t, deleteKeys["propagated-history"], "propagated-history delete must be omitted when not persisted")
+
+	// Total: 1 inbox + 1 history + metadata = 3
+	assert.Len(t, req.Operations, 3)
+}
+
+// TestResetChangeTracking_UpdatesPersistedFlags asserts that the persistence
+// flags reflect the keys actually upserted by the save request.
+func TestResetChangeTracking_UpdatesPersistedFlags(t *testing.T) {
+	t.Parallel()
+
+	t.Run("history change upserts customStatus", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		assert.False(t, s.customStatusPersisted)
+		s.ResetChangeTracking()
+		assert.True(t, s.customStatusPersisted)
+		assert.False(t, s.propagatedHistoryPersisted)
+	})
+
+	t.Run("no history change leaves customStatus flag unchanged", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToInbox(testEvent(0))
+		s.ResetChangeTracking()
+		assert.False(t, s.customStatusPersisted)
+	})
+
+	t.Run("setting incoming history marks propagated-history persisted", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.SetIncomingHistory(&protos.PropagatedHistory{})
+		s.ResetChangeTracking()
+		assert.True(t, s.propagatedHistoryPersisted)
+	})
+
+	t.Run("clearing incoming history marks propagated-history not persisted", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.propagatedHistoryPersisted = true
+		s.SetIncomingHistory(nil)
+		s.ResetChangeTracking()
+		assert.False(t, s.propagatedHistoryPersisted)
+	})
+}
+
+// TestLoadWorkflowState_SetsPersistedFlagsFromETag asserts that the
+// load-time observation path captures whether customStatus and
+// propagated-history exist in the store independently of any save: their
+// persistence flags are derived solely from the bulk-get ETag, which is the
+// authoritative signal that lets a freshly loaded State emit the correct
+// purge batch even when the keys hold empty data (customStatus is upserted
+// with an empty proto whenever history changes, so an absent Data slice is
+// not sufficient evidence of absence in the store).
+func TestLoadWorkflowState_SetsPersistedFlagsFromETag(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                        string
+		customStatusETag            *string
+		propagatedHistoryETag       *string
+		wantCustomStatusPersisted   bool
+		wantPropagatedHistPersisted bool
+		wantCustomStatusInPurge     bool
+		wantPropagatedHistInPurge   bool
+	}{
+		{
+			name:                        "both keys absent",
+			customStatusETag:            nil,
+			propagatedHistoryETag:       nil,
+			wantCustomStatusPersisted:   false,
+			wantPropagatedHistPersisted: false,
+			wantCustomStatusInPurge:     false,
+			wantPropagatedHistInPurge:   false,
+		},
+		{
+			name:                        "customStatus persisted with empty proto",
+			customStatusETag:            ptr.Of("etag-cs"),
+			propagatedHistoryETag:       nil,
+			wantCustomStatusPersisted:   true,
+			wantPropagatedHistPersisted: false,
+			wantCustomStatusInPurge:     true,
+			wantPropagatedHistInPurge:   false,
+		},
+		{
+			name:                        "propagated-history persisted",
+			customStatusETag:            nil,
+			propagatedHistoryETag:       ptr.Of("etag-ph"),
+			wantCustomStatusPersisted:   false,
+			wantPropagatedHistPersisted: true,
+			wantCustomStatusInPurge:     false,
+			wantPropagatedHistInPurge:   true,
+		},
+		{
+			name:                        "both keys persisted",
+			customStatusETag:            ptr.Of("etag-cs"),
+			propagatedHistoryETag:       ptr.Of("etag-ph"),
+			wantCustomStatusPersisted:   true,
+			wantPropagatedHistPersisted: true,
+			wantCustomStatusInPurge:     true,
+			wantPropagatedHistInPurge:   true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			const actorID = "wf-load-flags"
+
+			metaBytes, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
+				HistoryLength: 1,
+				Generation:    1,
+			})
+			require.NoError(t, err)
+			histBytes, err := proto.Marshal(testEvent(0))
+			require.NoError(t, err)
+
+			// Empty Data is the realistic case for customStatus: when the
+			// runtime upserts an empty StringValue the marshalled bytes are
+			// zero length, so the ETag is the only signal that the row
+			// exists in the store.
+			bulk := map[string]api.BulkStateEntry{
+				"history-000000": {Data: histBytes},
+				customStatusKey: {
+					Data: nil,
+					ETag: tc.customStatusETag,
+				},
+				propagatedHistoryKey: {
+					Data: nil,
+					ETag: tc.propagatedHistoryETag,
+				},
+			}
+
+			store := statefake.New().
+				WithGetFn(func(_ context.Context, req *api.GetStateRequest, _ bool) (*api.StateResponse, error) {
+					if req.Key == MetadataKey {
+						return &api.StateResponse{Data: metaBytes}, nil
+					}
+					return &api.StateResponse{}, nil
+				}).
+				WithGetBulkFn(func(_ context.Context, req *api.GetBulkStateRequest, _ bool) (api.BulkStateResponse, error) {
+					out := api.BulkStateResponse{}
+					for _, k := range req.Keys {
+						out[k] = bulk[k]
+					}
+					return out, nil
+				})
+
+			got, err := LoadWorkflowState(t.Context(), store, actorID, Options{
+				WorkflowActorType: "workflow",
+				ActivityActorType: "activity",
+			})
+			require.NoError(t, err)
+			require.NotNil(t, got)
+
+			assert.Equal(t, tc.wantCustomStatusPersisted, got.customStatusPersisted,
+				"customStatusPersisted")
+			assert.Equal(t, tc.wantPropagatedHistPersisted, got.propagatedHistoryPersisted,
+				"propagatedHistoryPersisted")
+
+			req, err := got.GetPurgeRequest(actorID)
+			require.NoError(t, err)
+
+			deleteKeys := make(map[string]bool)
+			for _, op := range req.Operations {
+				if op.Operation == api.Delete {
+					if d, ok := op.Request.(api.TransactionalDelete); ok {
+						deleteKeys[d.Key] = true
+					}
+				}
+			}
+
+			assert.Equal(t, tc.wantCustomStatusInPurge, deleteKeys[customStatusKey],
+				"customStatus delete in purge")
+			assert.Equal(t, tc.wantPropagatedHistInPurge, deleteKeys[propagatedHistoryKey],
+				"propagated-history delete in purge")
+			assert.True(t, deleteKeys[MetadataKey], "metadata delete must always be in purge")
+		})
+	}
 }
 
 func TestGetSaveRequest_MetadataIncludesSigningLengths(t *testing.T) {
@@ -489,6 +750,64 @@ func TestGetSaveRequest_MetadataIncludesSigningLengths(t *testing.T) {
 	assert.Equal(t, uint64(1), meta.GetHistoryLength())
 	assert.Equal(t, uint64(1), meta.GetSigningCertificateLength())
 	assert.Equal(t, uint64(1), meta.GetSignatureLength())
+}
+
+// TestGetSaveRequest_MetadataETag asserts that the cached metadata ETag is
+// the version anchor for the whole save: it flows onto the metadata Upsert
+// when set, and is omitted (blind upsert semantics) when nil. The two cases
+// correspond to the steady-state save-after-load path and the first-save /
+// post-invalidation path respectively.
+func TestGetSaveRequest_MetadataETag(t *testing.T) {
+	t.Parallel()
+
+	findMetadataUpsert := func(t *testing.T, req *api.TransactionalRequest) api.TransactionalUpsert {
+		t.Helper()
+		for _, op := range req.Operations {
+			if op.Operation != api.Upsert {
+				continue
+			}
+			u, ok := op.Request.(api.TransactionalUpsert)
+			if !ok {
+				continue
+			}
+			if u.Key == MetadataKey {
+				return u
+			}
+		}
+		t.Fatalf("metadata upsert not found in save request")
+		return api.TransactionalUpsert{}
+	}
+
+	t.Run("etag set is attached to metadata upsert", func(t *testing.T) {
+		t.Parallel()
+
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		etag := "abc-123"
+		s.SetMetadataETag(&etag)
+
+		req, err := s.GetSaveRequest("actor1")
+		require.NoError(t, err)
+
+		u := findMetadataUpsert(t, req)
+		require.NotNil(t, u.ETag, "metadata upsert must carry the cached ETag when one is known")
+		assert.Equal(t, etag, *u.ETag)
+	})
+
+	t.Run("nil etag falls through to blind upsert", func(t *testing.T) {
+		t.Parallel()
+
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		// metadataETag intentionally left nil (brand-new workflow / post-
+		// invalidation reload).
+
+		req, err := s.GetSaveRequest("actor1")
+		require.NoError(t, err)
+
+		u := findMetadataUpsert(t, req)
+		assert.Nil(t, u.ETag, "no ETag means no version check - blind upsert")
+	})
 }
 
 func tamperMarkerEvent() *backend.HistoryEvent {
@@ -657,7 +976,7 @@ func TestLoadWorkflowState_TamperMarkerBypassesConfigurationError(t *testing.T) 
 			out := api.BulkStateResponse{}
 			for _, k := range req.Keys {
 				if v, ok := bulk[k]; ok {
-					out[k] = v
+					out[k] = api.BulkStateEntry{Data: v}
 				}
 			}
 			return out, nil

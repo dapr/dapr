@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -34,7 +35,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, outgoingHistory map[int32]*protos.PropagatedHistory) dispatchResult {
+func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, outgoingHistory map[int32]*protos.PropagatedHistory) messages.DispatchResult {
 	var dueTime time.Time
 	if len(state.History) > 0 {
 		dueTime = state.History[0].GetTimestamp().AsTime()
@@ -42,7 +43,9 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 		dueTime = state.Inbox[0].GetTimestamp().AsTime()
 	}
 
-	var result dispatchResult
+	workflowName := o.getExecutionStartedEvent(state).GetName()
+
+	var result messages.DispatchResult
 	for _, e := range es {
 		// Don't redispatch activities whose resolution is already known to the
 		// current generation's runtime state. We check rs.OldEvents/NewEvents
@@ -56,14 +59,14 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 			continue
 		}
 
-		err := o.callActivity(ctx, e, dueTime, state.Generation, outgoingHistory[e.GetEventId()])
+		err := o.callActivity(ctx, e, dueTime, outgoingHistory[e.GetEventId()], workflowName)
 		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
 				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
 				continue
 			}
 
-			result.recordFailure(e.GetEventId(), err)
+			result.RecordFailure(e.GetEventId(), err)
 			continue
 		}
 	}
@@ -71,7 +74,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 	return result
 }
 
-func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, generation uint64, ph *protos.PropagatedHistory) error {
+func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, ph *protos.PropagatedHistory, workflowName string) error {
 	ts := e.GetTaskScheduled()
 	if ts == nil {
 		log.Warnf("Workflow actor '%s': unable to process task '%v'", o.actorID, e)
@@ -90,7 +93,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		}
 	}
 
-	if err := o.activityPayloadOversize(payload, e); err != nil {
+	if err := o.activityPayloadOversize(ctx, payload, e, workflowName); err != nil {
 		return err
 	}
 
@@ -104,14 +107,11 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		activityActorType = o.actorTypeBuilder.Activity(router.GetTargetAppID())
 	}
 
-	targetActorID := buildActivityActorID(o.actorID, e.GetEventId(), generation)
+	targetActorID := buildActivityActorID(o.actorID, e.GetEventId())
 
 	o.activityResultAwaited.Store(true)
 
 	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", o.actorID, activityActorType, targetActorID)
-
-	ctx, cancel := context.WithTimeout(ctx, dispatchTimeout)
-	defer cancel()
 
 	_, err = o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest(todo.ExecuteActivityMethod).
@@ -125,7 +125,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	if err != nil {
 		// If the call was denied by a workflow access policy, fail the
 		// activity task immediately rather than retrying.
-		if isPermissionDenied(err) {
+		if messages.IsPermissionDenied(err) {
 			log.Errorf("Workflow actor '%s': activity '%s' denied by workflow access policy: %v", o.actorID, ts.GetName(), err)
 			return o.failActivityACL(ctx, e)
 		}
@@ -147,16 +147,21 @@ func (o *orchestrator) failActivityACL(ctx context.Context, e *backend.HistoryEv
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),
-		EventType: events.NewTaskFailedEventType(e.GetEventId(), "WorkflowAccessPolicyDenied", "access denied by workflow access policy", false),
+		Router:    &protos.TaskRouter{SourceAppID: o.appID},
+		EventType: events.NewTaskFailedEventType(e.GetEventId(), messages.ErrorTypeAccessPolicyDenied, messages.ErrorMessageAccessPolicyDenied, false),
 	}
 
-	if _, err := o.createWorkflowReminder(ctx, common.ReminderPrefixActivityResult, failedEvent, time.Now(), o.appID, nil); err != nil {
+	reminderName, err := randomReminderName(common.ReminderPrefixActivityResult)
+	if err != nil {
+		return fmt.Errorf("failed to create activity failure reminder: %w", err)
+	}
+	if err := o.createWorkflowReminder(ctx, reminderName, failedEvent, time.Now(), o.appID, nil); err != nil {
 		return fmt.Errorf("failed to create activity failure reminder: %w", err)
 	}
 
 	return nil
 }
 
-func buildActivityActorID(workflowID string, taskID int32, generation uint64) string {
-	return workflowID + "::" + strconv.Itoa(int(taskID)) + "::" + strconv.FormatUint(generation, 10)
+func buildActivityActorID(workflowID string, taskID int32) string {
+	return common.ActivityActorID(workflowID, taskID)
 }

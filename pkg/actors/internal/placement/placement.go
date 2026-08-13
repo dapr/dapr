@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -146,7 +147,7 @@ func New(opts Options) (Interface, error) {
 			Healthz:    opts.Healthz,
 			Connector:  conn,
 			InitialHost: &v1pb.Host{
-				Name:      opts.Hostname + ":" + strconv.Itoa(opts.Port),
+				Name:      net.JoinHostPort(opts.Hostname, strconv.Itoa(opts.Port)),
 				Id:        opts.AppID,
 				ApiLevel:  20,
 				Namespace: opts.Namespace,

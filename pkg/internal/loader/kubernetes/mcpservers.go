@@ -19,6 +19,8 @@ import (
 	"fmt"
 
 	grpcretry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
@@ -49,6 +51,13 @@ func (m *mcpservers) Load(ctx context.Context) ([]mcpserverapi.MCPServer, error)
 		Namespace: m.namespace,
 	}, grpcretry.WithMax(operatorMaxRetries), grpcretry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
+		// Older operators do not implement ListMCPServers. Treat this as
+		// "no servers" so daprd remains compatible across an N-1 control
+		// plane version skew.
+		if status.Code(err) == codes.Unimplemented {
+			log.Debugf("Operator does not implement ListMCPServers, skipping: %v", err)
+			return nil, nil
+		}
 		log.Errorf("Error listing MCP servers: %v", err)
 		return nil, err
 	}

@@ -162,6 +162,22 @@ func (e *Exec) Cleanup(t *testing.T) {
 	e.checkExit(t)
 }
 
+// AwaitExit waits for the process to exit on its own and asserts the
+// expected exit code. Unlike Cleanup it does not signal the process,
+// which is important when callers know the process is already terminating
+// (or has terminated) and signaling could fail with "process already
+// finished" on systems that have reaped the PID.
+func (e *Exec) AwaitExit(t *testing.T) {
+	t.Helper()
+	defer func() { e.wg.Wait() }()
+
+	if !e.once.CompareAndSwap(false, true) {
+		return
+	}
+
+	e.checkExit(t)
+}
+
 func (e *Exec) Kill(t *testing.T) {
 	t.Helper()
 	defer e.wg.Wait()

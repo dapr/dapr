@@ -29,11 +29,14 @@ var (
 	attestationKindKey   = tag.MustNewKey("attestation_kind")
 	attestationResultKey = tag.MustNewKey("attestation_result")
 	certCacheOutcomeKey  = tag.MustNewKey("cert_cache_outcome")
+	taskTypeKey          = tag.MustNewKey("task_type")
+	completionRouteKey   = tag.MustNewKey("route")
 )
 
 const (
 	StatusSuccess     = "success"
 	StatusFailed      = "failed"
+	StatusTerminated  = "terminated"
 	StatusRecoverable = "recoverable"
 	CreateWorkflow    = "create_workflow"
 	GetWorkflow       = "get_workflow"
@@ -64,6 +67,20 @@ const (
 	// verification (first use of this cert digest within the orchestrator
 	// instance, or eventTime fell outside the cached window).
 	CertCacheMiss = "miss"
+
+	// Completion routes under WorkflowsClusteredDeployment. Wait side: the
+	// waiter either blocks on the process-local pending map
+	// (CompletionRouteWaitLocal, the expected steady state) or falls back to
+	// a watch stream on the executor rendezvous actor
+	// (CompletionRouteWaitWatch, legacy-format reminders or placement
+	// disagreement). Complete side: the completion is either delivered
+	// straight into the local pending map of the receiving daprd
+	// (CompletionRouteCompleteLocal) or forwarded via the executor actor
+	// (CompletionRouteCompleteActor).
+	CompletionRouteWaitLocal     = "wait_local"
+	CompletionRouteWaitWatch     = "wait_watch"
+	CompletionRouteCompleteLocal = "complete_local"
+	CompletionRouteCompleteActor = "complete_actor"
 )
 
 type workflowMetrics struct {
@@ -71,7 +88,7 @@ type workflowMetrics struct {
 	workflowOperationCount *stats.Int64Measure
 	// workflowOperationLatency records latency of response for workflow operation requests.
 	workflowOperationLatency *stats.Float64Measure
-	// workflowExecutionCount records count of Successful/Failed/Recoverable workflow executions.
+	// workflowExecutionCount records count of Successful/Failed/Terminated/Recoverable workflow executions.
 	workflowExecutionCount *stats.Int64Measure
 	// activityOperationCount records count of Successful/Failed requests to create activities.
 	activityOperationCount *stats.Int64Measure
@@ -99,10 +116,26 @@ type workflowMetrics struct {
 	// attestationCertCacheCount records per-orchestrator cert chain-of-
 	// trust cache lookups, tagged by outcome (hit/miss).
 	attestationCertCacheCount *stats.Int64Measure
-	appID                     string
-	enabled                   bool
-	namespace                 string
-	meter                     stats.Recorder
+	// workflowPayloadSizeRatio records the serialized size of workflow
+	// payloads sent to the SDK as a fraction of the configured gRPC max
+	// body size. Operators use this to track how close payloads are to
+	// the threshold that triggers a PAYLOAD_SIZE_EXCEEDED stall (~0.95).
+	// Only recorded when --max-body-size is configured.
+	workflowPayloadSizeRatio *stats.Float64Measure
+	// activityPayloadSizeRatio records activity payloads as a fraction of
+	// the configured gRPC max body size. Same headroom intent as
+	// workflowPayloadSizeRatio.
+	activityPayloadSizeRatio *stats.Float64Measure
+	// completionRouteCount records how pending-task completions are routed
+	// under WorkflowsClusteredDeployment, tagged by task_type and route.
+	// In steady state completions should take the wait_local/complete_*
+	// routes; sustained wait_watch indicates broken co-location (e.g.
+	// placement churn or legacy-format reminders).
+	completionRouteCount *stats.Int64Measure
+	appID                string
+	enabled              bool
+	namespace            string
+	meter                stats.Recorder
 }
 
 func newWorkflowMetrics() *workflowMetrics {
@@ -125,7 +158,7 @@ func newWorkflowMetrics() *workflowMetrics {
 			stats.UnitMilliseconds),
 		workflowExecutionCount: stats.Int64(
 			"runtime/workflow/execution/count",
-			"The number of successful/failed/recoverable workflow executions.",
+			"The number of successful/failed/terminated/recoverable workflow executions.",
 			stats.UnitDimensionless),
 		activityExecutionCount: stats.Int64(
 			"runtime/workflow/activity/execution/count",
@@ -159,6 +192,18 @@ func newWorkflowMetrics() *workflowMetrics {
 			"runtime/workflow/attestation/cert_cache/count",
 			"The number of per-orchestrator cert chain-of-trust cache lookups, by outcome.",
 			stats.UnitDimensionless),
+		workflowPayloadSizeRatio: stats.Float64(
+			"runtime/workflow/payload/size_ratio",
+			"Workflow payload size as a fraction of the configured gRPC max body size; values >=0.95 trip the stall, values >1 exceed the limit.",
+			stats.UnitDimensionless),
+		activityPayloadSizeRatio: stats.Float64(
+			"runtime/workflow/activity/payload/size_ratio",
+			"Activity payload size as a fraction of the configured gRPC max body size; values >=0.95 trip the stall, values >1 exceed the limit.",
+			stats.UnitDimensionless),
+		completionRouteCount: stats.Int64(
+			"runtime/workflow/completion/route/count",
+			"The number of pending-task completions routed under clustered deployment, by task type and route.",
+			stats.UnitDimensionless),
 	}
 }
 
@@ -167,7 +212,7 @@ func (w *workflowMetrics) IsEnabled() bool {
 }
 
 // Init registers the workflow metrics views.
-func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latencyDistribution *view.Aggregation) error {
+func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latencyDistribution, workflowLatencyDistribution *view.Aggregation) error {
 	w.appID = appID
 	w.enabled = true
 	w.namespace = namespace
@@ -180,13 +225,16 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 		diagUtils.NewMeasureView(w.activityOperationCount, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.activityOperationLatency, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.activityExecutionCount, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(w.activityExecutionLatency, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, latencyDistribution),
-		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey, statusKey}, latencyDistribution),
+		diagUtils.NewMeasureView(w.activityExecutionLatency, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, workflowLatencyDistribution),
+		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey, statusKey}, workflowLatencyDistribution),
 		diagUtils.NewMeasureView(w.workflowSchedulingLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.attestationGeneratedCount, []tag.Key{appIDKey, namespaceKey, attestationKindKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.attestationVerifiedCount, []tag.Key{appIDKey, namespaceKey, attestationKindKey, attestationResultKey}, view.Count()),
 		diagUtils.NewMeasureView(w.attestationVerifyLatency, []tag.Key{appIDKey, namespaceKey, attestationKindKey, attestationResultKey}, latencyDistribution),
-		diagUtils.NewMeasureView(w.attestationCertCacheCount, []tag.Key{appIDKey, namespaceKey, certCacheOutcomeKey}, view.Count()))
+		diagUtils.NewMeasureView(w.attestationCertCacheCount, []tag.Key{appIDKey, namespaceKey, certCacheOutcomeKey}, view.Count()),
+		diagUtils.NewMeasureView(w.workflowPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, payloadRatioDistribution),
+		diagUtils.NewMeasureView(w.activityPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey, activityNameKey}, payloadRatioDistribution),
+		diagUtils.NewMeasureView(w.completionRouteCount, []tag.Key{appIDKey, namespaceKey, taskTypeKey, completionRouteKey}, view.Count()))
 }
 
 // WorkflowOperationEvent records total number of Successful/Failed workflow Operations requests. It also records latency for those requests.
@@ -202,7 +250,7 @@ func (w *workflowMetrics) WorkflowOperationEvent(ctx context.Context, operation,
 	}
 }
 
-// WorkflowExecutionEvent records total number of Successful/Failed/Recoverable workflow executions.
+// WorkflowExecutionEvent records total number of Successful/Failed/Terminated/Recoverable workflow executions.
 // Execution latency for workflow is not supported yet.
 func (w *workflowMetrics) WorkflowExecutionEvent(ctx context.Context, workflowName, status string) {
 	if !w.IsEnabled() {
@@ -299,4 +347,42 @@ func (w *workflowMetrics) AttestationCertCacheLookup(ctx context.Context, outcom
 		stats.WithRecorder(w.meter),
 		stats.WithTags(diagUtils.WithTags(w.attestationCertCacheCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, certCacheOutcomeKey, outcome)...),
 		stats.WithMeasurements(w.attestationCertCacheCount.M(1)))
+}
+
+// WorkflowPayloadSizeRatio records a workflow payload size as a fraction
+// of the configured gRPC max body size. Callers should skip recording
+// when no max body size is configured (ratio is undefined).
+func (w *workflowMetrics) WorkflowPayloadSizeRatio(ctx context.Context, workflowName string, ratio float64) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.workflowPayloadSizeRatio.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName)...),
+		stats.WithMeasurements(w.workflowPayloadSizeRatio.M(ratio)))
+}
+
+// ActivityPayloadSizeRatio records an activity payload size as a fraction
+// of the configured gRPC max body size. Callers should skip recording
+// when no max body size is configured.
+func (w *workflowMetrics) ActivityPayloadSizeRatio(ctx context.Context, workflowName, activityName string, ratio float64) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.activityPayloadSizeRatio.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName, activityNameKey, activityName)...),
+		stats.WithMeasurements(w.activityPayloadSizeRatio.M(ratio)))
+}
+
+// WorkflowCompletionRoute records how a pending-task completion was routed
+// under WorkflowsClusteredDeployment.
+func (w *workflowMetrics) WorkflowCompletionRoute(ctx context.Context, taskType, route string) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.completionRouteCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, taskTypeKey, taskType, completionRouteKey, route)...),
+		stats.WithMeasurements(w.completionRouteCount.M(1)))
 }

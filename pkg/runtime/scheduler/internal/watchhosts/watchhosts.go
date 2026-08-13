@@ -89,13 +89,19 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 		}
 
 		resp, err := stream.Recv()
-
-		code := status.Code(err)
-		switch code {
-		case codes.Unimplemented:
-			err = w.clients.Reload(ctx, w.allAddrs)
-			if err != nil {
-				return err
+		if status.Code(err) == codes.Unimplemented {
+			if err = w.clients.Reload(ctx, w.allAddrs); err != nil {
+				closeCon()
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				log.Errorf("Failed to reload scheduler clients, retrying: %s", err)
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(retry.Jitter(time.Second, time.Second/2)):
+					continue
+				}
 			}
 
 			// Ignore unimplemented error code as we are talking to an old server.
@@ -108,14 +114,20 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 			<-ctx.Done()
 
 			return nil
-
-		case codes.Canceled:
-			return nil
 		}
 
 		if err != nil {
 			closeCon()
-			return err
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			log.Warnf("Scheduler WatchHosts stream error, reconnecting: %s", err)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+				continue
+			}
 		}
 
 		gotAddrs := make([]string, 0, len(resp.GetHosts()))
@@ -126,7 +138,17 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 		log.Infof("Connected and received scheduler hosts addresses: %v", gotAddrs)
 
 		if err = w.clients.Reload(ctx, gotAddrs); err != nil {
-			return err
+			closeCon()
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			log.Errorf("Failed to reload scheduler clients, retrying: %s", err)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(retry.Jitter(time.Second, time.Second/2)):
+				continue
+			}
 		}
 
 		w.loop.Enqueue(&loops.ReloadClients{

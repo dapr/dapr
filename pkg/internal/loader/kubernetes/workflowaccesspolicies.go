@@ -19,6 +19,8 @@ import (
 	"fmt"
 
 	grpcretry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/pkg/internal/loader"
@@ -48,6 +50,13 @@ func (w *workflowAccessPolicies) Load(ctx context.Context) ([]wfaclapi.WorkflowA
 		Namespace: w.namespace,
 	}, grpcretry.WithMax(operatorMaxRetries), grpcretry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
+		// Older operators do not implement ListWorkflowAccessPolicy. Treat
+		// this as "no policies" so daprd remains compatible across an
+		// N-1 control plane version skew.
+		if status.Code(err) == codes.Unimplemented {
+			log.Debugf("Operator does not implement ListWorkflowAccessPolicy, skipping: %v", err)
+			return nil, nil
+		}
 		log.Errorf("Error listing workflow access policies: %v", err)
 		return nil, err
 	}

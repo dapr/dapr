@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
@@ -28,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -36,12 +38,10 @@ import (
 	"github.com/dapr/kit/crypto/spiffe/signer"
 )
 
-var orchestratorCache = sync.Pool{
-	New: func() any {
-		return &orchestrator{
-			lock: lock.NewStallable(),
-		}
-	},
+func newOrchestrator() *orchestrator {
+	return &orchestrator{
+		lock: lock.NewStallable(),
+	}
 }
 
 type Options struct {
@@ -96,6 +96,10 @@ type factory struct {
 
 	table sync.Map
 	lock  sync.Mutex
+
+	// selfCallerWarned ensures the "policy lists own appID" warning is only
+	// emitted once per factory lifetime instead of on every self-call.
+	selfCallerWarned atomic.Bool
 }
 
 func New(ctx context.Context, opts Options) (targets.Factory, error) {
@@ -151,12 +155,8 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
 	o, ok := f.table.Load(actorID)
 	if !ok {
-		newO := f.initOrchestrator(orchestratorCache.Get(), actorID)
-		var loaded bool
-		o, loaded = f.table.LoadOrStore(actorID, newO)
-		if loaded {
-			orchestratorCache.Put(newO)
-		}
+		fresh := f.initOrchestrator(newOrchestrator(), actorID)
+		o, _ = f.table.LoadOrStore(actorID, fresh)
 	}
 
 	return o.(*orchestrator)
@@ -187,6 +187,16 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 		ActorType:         f.actorType,
 		ActivityActorType: f.activityActorType,
 		Reminders:         f.reminders,
+	}
+
+	or.messages = &messages.Messages{
+		AppID:                 f.appID,
+		ActorID:               actorID,
+		ActorType:             f.actorType,
+		Router:                f.router,
+		ActorTypeBuilder:      f.actorTypeBuilder,
+		Signer:                f.signer,
+		FailChildWorkflowTask: or.failChildWorkflowTask,
 	}
 
 	// Reset the cache state to force a reload from the state store

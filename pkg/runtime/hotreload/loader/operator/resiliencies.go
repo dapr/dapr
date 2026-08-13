@@ -18,6 +18,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -51,8 +54,18 @@ func (r *resiliencies) close() error {
 }
 
 //nolint:unused
-func (r *resiliencies) recv(context.Context) (*loader.Event[resiliencyapi.Resiliency], error) {
+func (r *resiliencies) recv(ctx context.Context) (*loader.Event[resiliencyapi.Resiliency], error) {
 	event, err := r.Recv()
+
+	// Ignore servers which don't implement the resiliency update stream.
+	// Block until the context is cancelled to avoid a tight reconnect loop
+	// against an N-1 control plane.
+	if status, ok := status.FromError(err); ok && status.Code() == codes.Unimplemented {
+		log.Warn("Resiliency HotReloading is not supported by the Dapr control plane. Resiliency updates will not be Hot Reloaded.")
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+
 	if err != nil {
 		return nil, err
 	}
