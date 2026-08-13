@@ -29,7 +29,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.sentry.bundle.Bundle")
+var log = logger.New("dapr.sentry.bundle.Bundle")
 
 const (
 	// defaultCATTL is the default CA certificate TTL.

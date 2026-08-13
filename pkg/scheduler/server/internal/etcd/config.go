@@ -50,7 +50,7 @@ func config(ctx context.Context, opts Options) (*embed.Config, error) {
 			var err error
 			tldd, err := utils.GetKubeClusterDomainFromDNS(ctx)
 			if err != nil {
-				log.Errorf("Failed to get cluster domain, falling back to %q: %v", tld, err)
+				log.Error("Failed to get cluster domain, falling back to default", "tld", tld, "error", err)
 			} else {
 				tld = tldd
 			}

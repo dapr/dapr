@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	log = logger.NewLogger("dapr.runtime.actors.loops.disseminator.inflight.lock")
+	log = logger.New("dapr.runtime.actors.loops.disseminator.inflight.lock")
 
 	LoopFactory = loop.New[Event](1024)
 	lockCache   = sync.Pool{
@@ -136,7 +136,7 @@ func (l *lock) handleClose(closeLock *CloseLock) {
 		select {
 		case <-claim.Context.Done():
 		case <-timer.C:
-			log.Errorf("Timed out waiting for actor in-flight lock claims to be released, force cancelling remaining claims")
+			log.Error("Timed out waiting for actor in-flight lock claims to be released, force cancelling remaining claims")
 			// Force cancel all remaining claims after timeout.
 			for _, claim := range l.acquires {
 				claim.Cancel(closeLock.Error)
@@ -228,7 +228,7 @@ func (l *lock) handleCancelTypes(event *CancelTypes) {
 				select {
 				case <-claim.Context.Done():
 				case <-timer.C:
-					log.Errorf("Timed out waiting for actor type '%s' in-flight lock claims to be released for rebalanced types, force cancelling remaining claims", actorType)
+					log.Error("Timed out waiting for actor type in-flight lock claims to be released for rebalanced types, force cancelling remaining claims", "actor_type", actorType)
 					for _, claim := range claims {
 						claim.Cancel(event.Error)
 					}

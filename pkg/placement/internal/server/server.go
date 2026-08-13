@@ -41,7 +41,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.placement.server")
+var log = logger.New("dapr.placement.server")
 
 type Options struct {
 	NodeID            string
@@ -124,7 +124,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	v1pb.RegisterPlacementServer(gserver, s)
 
-	log.Infof("Placement service started on port %d", listener.Addr().(*net.TCPAddr).Port)
+	log.Info("Placement service started on port", "port", listener.Addr().(*net.TCPAddr).Port)
 
 	ctx, cancel := context.WithCancelCause(ctx)
 	s.loop = namespaces.New(namespaces.Options{
@@ -140,11 +140,11 @@ func (s *Server) Run(ctx context.Context) error {
 	return concurrency.NewRunnerManager(
 		s.loop.Run,
 		func(ctx context.Context) error {
-			log.Infof("Node id=%s is waiting for leadership", s.nodeID)
+			log.Info("Node id= is waiting for leadership", "node_id", s.nodeID)
 			if lerr := s.leadership.Wait(ctx); lerr != nil {
 				return lerr
 			}
-			log.Infof("Node id=%s has acquired leadership", s.nodeID)
+			log.Info("Node id= has acquired leadership", "node_id", s.nodeID)
 			s.isLeader.Store(true)
 			monitoring.RecordPlacementLeaderStatus(true)
 			monitoring.RecordRaftPlacementLeaderStatus(true)
@@ -152,7 +152,7 @@ func (s *Server) Run(ctx context.Context) error {
 			return ctx.Err()
 		},
 		func(ctx context.Context) error {
-			log.Infof("Running Placement gRPC server on %s", listener.Addr())
+			log.Info("Running Placement gRPC server on", "addr", listener.Addr())
 			if err := gserver.Serve(listener); err != nil {
 				return fmt.Errorf("failed to serve: %w", err)
 			}
@@ -227,8 +227,8 @@ func (s *Server) ReportDaprStatus(stream v1pb.Placement_ReportDaprStatusServer) 
 		return err
 	}
 
-	log.Infof("Received status report connection from new namespace=%s id=%s host=%s",
-		host.GetNamespace(), host.GetId(), host.GetName())
+	log.Info("Received status report connection from new host",
+		"namespace", host.GetNamespace(), "id", host.GetId(), "host", host.GetName())
 
 	ctx, cancel := context.WithCancelCause(stream.Context())
 	defer cancel(nil)

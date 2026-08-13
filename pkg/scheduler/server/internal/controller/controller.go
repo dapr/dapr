@@ -34,7 +34,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.scheduler.server.controller")
+var log = logger.New("dapr.scheduler.server.controller")
 
 type Options struct {
 	KubeConfig *string

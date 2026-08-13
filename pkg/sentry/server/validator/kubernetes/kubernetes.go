@@ -46,7 +46,7 @@ import (
 )
 
 var (
-	log = logger.NewLogger("dapr.sentry.identity.kubernetes")
+	log = logger.New("dapr.sentry.identity.kubernetes")
 
 	errMissingPodClaim = errors.New("kubernetes.io/pod/name claim is missing from Kubernetes token")
 )
@@ -176,7 +176,7 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	var pod corev1.Pod
 	err = k.client.Get(ctx, types.NamespacedName{Namespace: saNamespace, Name: claims.Pod.Name}, &pod)
 	if err != nil {
-		log.Errorf("Failed to get pod %s/%s for requested identity: %s", saNamespace, claims.Pod.Name, err)
+		log.Error("Failed to get pod / for requested identity", "sa_namespace", saNamespace, "name", claims.Pod.Name, "error", err)
 		return validator.ValidateResult{}, errors.New("failed to get pod of identity")
 	}
 
@@ -185,13 +185,13 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	}
 
 	if pod.Spec.ServiceAccountName != prts[3] {
-		log.Errorf("Service account on pod %s/%s does not match token", req.GetNamespace(), claims.Pod.Name)
+		log.Error("Service account on pod / does not match token", "namespace", req.GetNamespace(), "name", claims.Pod.Name)
 		return validator.ValidateResult{}, errors.New("pod service account mismatch")
 	}
 
 	expID, isControlPlane, err := k.expectedID(&pod)
 	if err != nil {
-		log.Errorf("Failed to get expected ID for pod %s/%s: %s", req.GetNamespace(), claims.Pod.Name, err)
+		log.Error("Failed to get expected ID for pod /", "namespace", req.GetNamespace(), "name", claims.Pod.Name, "error", err)
 		return validator.ValidateResult{}, err
 	}
 
@@ -220,7 +220,7 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	var config configv1alpha1.Configuration
 	err = k.client.Get(ctx, types.NamespacedName{Namespace: req.GetNamespace(), Name: configName}, &config)
 	if err != nil {
-		log.Errorf("Failed to get configuration %q: %v", configName, err)
+		log.Error("Failed to get configuration", "config_name", configName, "error", err)
 		return validator.ValidateResult{}, errors.New("failed to get configuration")
 	}
 

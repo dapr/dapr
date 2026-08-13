@@ -28,7 +28,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.scheduler.server.pool.loops.stream")
+var log = logger.New("dapr.scheduler.server.pool.loops.stream")
 
 var (
 	streamLoopFactory = loop.New[loops.EventStream](1024)
@@ -116,7 +116,7 @@ func New(ctx context.Context, opts Options) (loop.Interface[loops.EventStream], 
 
 	stream.wg.Go(func() {
 		stream.recvLoop()
-		log.Debugf("Closed receive stream to %s/%s", stream.ns, stream.appID)
+		log.Debug("Closed receive stream to /", "ns", stream.ns, "app_id", stream.appID)
 		stream.closeStream(errStreamShutdown)
 	})
 
@@ -150,7 +150,7 @@ func (s *stream) handleTriggerRequest(req *loops.TriggerRequest) {
 	}
 
 	if err := s.channel.Send(job); err != nil {
-		log.Warnf("Error sending job to stream %s/%s: %s", s.ns, s.appID, err)
+		log.Warn("Error sending job to stream /", "ns", s.ns, "app_id", s.appID, "error", err)
 		monitoring.RecordSidecarSendError()
 		// Resolve the trigger promptly so the cron engine redelivers it to a
 		// live stream instead of parking it until this stream is reaped.
@@ -168,7 +168,7 @@ var errStreamShutdown = errors.New("stream shutdown")
 // the stream and calls all inflight result functions with an undeliverable
 // result.
 func (s *stream) handleShutdown() {
-	log.Infof("Closing connection to %s/%s", s.ns, s.appID)
+	log.Info("Closing connection to /", "ns", s.ns, "app_id", s.appID)
 	s.cancel(errStreamShutdown)
 	s.wg.Wait()
 	s.inflight.Range(func(_, fn any) bool {

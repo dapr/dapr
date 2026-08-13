@@ -37,6 +37,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/sse"
+	"github.com/dapr/kit/logger"
 )
 
 // directMessagingSpanData is the data passed by the onDirectMessage endpoint to the tracing middleware
@@ -307,10 +308,10 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		// since this is expected behavior, not a failure.
 		var resCodeErr resiliency.CodeError
 		if errors.As(err, &resCodeErr) {
-			log.Debugf("HTTP service invocation completed with non-success status: %v", err)
+			log.Debug("HTTP service invocation completed with non-success status", logger.Err(err))
 		} else {
 			// Use Warn log here because it's the only way users are notified of the error
-			log.Warnf("HTTP service invocation failed to complete with error: %v", err)
+			log.Warn("HTTP service invocation failed to complete", logger.Err(err))
 		}
 
 		// Do nothing else, as at least some data was already sent to the client
@@ -318,7 +319,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log with debug level and send the error to the client in the body
-	log.Debugf("HTTP service invocation failed to complete with error: %v", err)
+	log.Debug("HTTP service invocation failed to complete", logger.Err(err))
 
 	var headersSet bool
 

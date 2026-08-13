@@ -23,6 +23,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/security/spiffe"
+	"github.com/dapr/kit/logger"
 )
 
 // Per-operation enforcement happens inside the actor itself (orchestrator /
@@ -81,7 +82,7 @@ func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *inte
 	}
 
 	if callerAppID != a.AppID() {
-		a.logger.Warnf("Workflow access policy denied cross-app reminder invocation from app '%s'", callerAppID)
+		a.logger.Warn("Workflow access policy denied cross-app reminder invocation", "caller_app_id", callerAppID)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, "reminder", "invoke")
 		return status.Errorf(codes.PermissionDenied, workflowacl.DeniedMessageBase)
 	}
@@ -95,7 +96,7 @@ func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *inte
 func (a *api) extractCallerIdentity(ctx context.Context) (appID, namespace string, err error) {
 	spiffeID, ok, err := spiffe.FromGRPCContext(ctx)
 	if err != nil {
-		a.logger.Errorf("Workflow access policy failed to extract caller identity: %v", err)
+		a.logger.Error("Workflow access policy failed to extract caller identity", logger.Err(err))
 		return "", "", status.Error(codes.Internal, "workflow access policy: failed to extract caller identity")
 	}
 	if !ok {
@@ -108,7 +109,7 @@ func (a *api) extractCallerIdentity(ctx context.Context) (appID, namespace strin
 // checkNamespace denies cross-namespace calls when policies are active.
 func (a *api) checkNamespace(callerNamespace string) error {
 	if callerNamespace != "" && callerNamespace != a.Namespace() {
-		a.logger.Warnf("Workflow access policy denied cross-namespace call (caller namespace '%s' != target namespace '%s')", callerNamespace, a.Namespace())
+		a.logger.Warn("Workflow access policy denied cross-namespace call", "caller_namespace", callerNamespace, "target_namespace", a.Namespace())
 		return status.Errorf(codes.PermissionDenied, workflowacl.DeniedMessageBase)
 	}
 	return nil

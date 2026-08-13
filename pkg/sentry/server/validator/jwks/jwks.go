@@ -31,7 +31,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.sentry.identity.jwks")
+var log = logger.New("dapr.sentry.identity.jwks")
 
 type Options struct {
 	// SPIFFE ID of Sentry.
@@ -60,7 +60,7 @@ type jwks struct {
 }
 
 func New(opts Options) (validator.Validator, error) {
-	cache := jwkscache.NewJWKSCache(opts.Source, log)
+	cache := jwkscache.NewJWKSCache(opts.Source, log.Legacy())
 
 	// Set options
 	if opts.MinRefreshInterval > time.Second {

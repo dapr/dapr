@@ -53,7 +53,7 @@ func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
 	authorizedHTTPEndpoints := a.authz.GetAuthorizedObjects(endpoints, a.authz.IsObjectAuthorized).([]endpointapi.HTTPEndpoint)
 
 	for _, e := range authorizedHTTPEndpoints {
-		log.Infof("Found http endpoint: %s", e.Name)
+		log.Info("Found http endpoint", "name", e.Name)
 
 		if a.processor.AddPendingEndpoint(ctx, e) == nil {
 			return nil

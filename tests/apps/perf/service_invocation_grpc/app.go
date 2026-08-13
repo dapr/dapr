@@ -24,15 +24,15 @@ import (
 func main() {
 	s, err := daprd.NewService(":3000")
 	if err != nil {
-		log.Fatalf("failed to start the server: %v", err)
+		log.Fatal("failed to start the server", "error", err)
 	}
 
 	if err := s.AddServiceInvocationHandler("load", loadTestHandle); err != nil {
-		log.Fatalf("error adding invocation handler: %v", err)
+		log.Fatal("error adding invocation handler", "error", err)
 	}
 
 	if err := s.Start(); err != nil {
-		log.Fatalf("server error: %v", err)
+		log.Fatal("server error", "error", err)
 	}
 }
 

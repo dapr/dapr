@@ -29,7 +29,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.timers.inmemory")
+var log = logger.New("dapr.runtime.actors.timers.inmemory")
 
 // loopFactory builds the per-actor execution loops. A single queue.Processor
 // (a min-heap keyed by fire time) schedules all timers; when one is due it is
@@ -160,7 +160,7 @@ func (i *inmemory) processorExecuteFn(reminder *api.Reminder) {
 		st.loop = l
 		i.wg.Go(func() {
 			if err := l.Run(i.ctx); err != nil {
-				log.Errorf("Actor timer loop for %s stopped with error: %s", actorKey, err)
+				log.Error("Actor timer loop for stopped with error", "actor_key", actorKey, "error", err)
 			}
 		})
 	}
@@ -268,7 +268,7 @@ func (i *inmemory) executeAndReschedule(ctx context.Context, reminder *api.Remin
 	if err != nil {
 		// Successful and non-successful executions are treated as the same in
 		// terms of ticking forward, so we log the error and continue.
-		log.Errorf("Error executing timer: %s", err)
+		log.Error("Error executing timer", "error", err)
 	}
 
 	// Advance the schedule on a copy: the scheduler reads ScheduledTime()
@@ -299,16 +299,16 @@ func (i *inmemory) executeAndReschedule(ctx context.Context, reminder *api.Remin
 
 	switch {
 	case done:
-		log.Infof("Timer %s has been completed", reminder.Key())
+		log.Info("Timer has been completed", "actor_key", reminder.Key())
 	case !active:
-		log.Infof("Timer %s has expired", reminder.Key())
+		log.Info("Timer has expired", "actor_key", reminder.Key())
 	}
 }
 
 func (i *inmemory) Create(_ context.Context, reminder *api.Reminder) error {
 	timerKey := reminder.Key()
 
-	log.Debugf("Create timer: %s", reminder.String())
+	log.Debug("Create timer", "string", reminder.String())
 
 	_, active := reminder.NextTick()
 
@@ -327,7 +327,7 @@ func (i *inmemory) Create(_ context.Context, reminder *api.Reminder) error {
 
 	// If the reminder has already expired, leave it removed and don't enqueue.
 	if !active {
-		log.Infof("Timer %s has expired", timerKey)
+		log.Info("Timer has expired", "timer_key", timerKey)
 		if replaced {
 			i.updateActorTimers(reminder.ActorKey(), -1)
 		}

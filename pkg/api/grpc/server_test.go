@@ -36,7 +36,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "1",
 			},
-			logger: logger.NewLogger("dapr.runtime.grpc.test"),
+			logger: logger.New("dapr.runtime.grpc.test"),
 		}
 
 		serverOption := fakeServer.getMiddlewareOptions()
@@ -50,7 +50,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "0",
 			},
-			logger: logger.NewLogger("dapr.runtime.grpc.test"),
+			logger: logger.New("dapr.runtime.grpc.test"),
 		}
 
 		serverOption := fakeServer.getMiddlewareOptions()
@@ -64,7 +64,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "0",
 			},
-			logger: logger.NewLogger("dapr.runtime.grpc.test"),
+			logger: logger.New("dapr.runtime.grpc.test"),
 			apiSpec: config.APISpec{
 				Allowed: []config.APIAccessRule{
 					{
@@ -152,7 +152,7 @@ func TestClose(t *testing.T) {
 
 func TestGrpcAPILoggingMiddlewares(t *testing.T) {
 	logDest := &bytes.Buffer{}
-	infoLog := logger.NewLogger("test-api-logging")
+	infoLog := logger.New("test-api-logging")
 	infoLog.EnableJSONOutput(true)
 	infoLog.SetOutput(io.MultiWriter(logDest, os.Stderr))
 

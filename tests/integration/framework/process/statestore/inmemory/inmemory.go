@@ -55,7 +55,7 @@ func New(t *testing.T, fopts ...Option) state.Store {
 		fopt(&opts)
 	}
 
-	impl := inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name() + "_state_store"))
+	impl := inmemory.NewInMemoryStateStore(logger.New(t.Name()+"_state_store").Legacy())
 	return &Wrapped{
 		Store:    impl,
 		features: opts.features,
@@ -70,7 +70,7 @@ func NewQuerier(t *testing.T, fopts ...Option) state.Store {
 		fopt(&opts)
 	}
 
-	impl := inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name() + "_state_store"))
+	impl := inmemory.NewInMemoryStateStore(logger.New(t.Name()+"_state_store").Legacy())
 	return &WrappedQuerier{
 		Wrapped:   &Wrapped{Store: impl, features: opts.features},
 		queryFunc: opts.queryFunc,
@@ -85,7 +85,7 @@ func NewTransactionalMultiMaxSize(t *testing.T, fopts ...Option) state.Store {
 		fopt(&opts)
 	}
 
-	impl := inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name() + "_state_store"))
+	impl := inmemory.NewInMemoryStateStore(logger.New(t.Name()+"_state_store").Legacy())
 	return &WrappedTransactionalMultiMaxSize{
 		Wrapped:                          &Wrapped{Store: impl, features: opts.features},
 		TransactionalStore:               impl.(state.TransactionalStore),

@@ -70,11 +70,37 @@ linters:
     - noinlineerr
     - wsl_v5
   settings:
+    sloglint:
+      # Structured-logging conventions, mirroring dapr/kit. Fields are only
+      # machine-filterable if the same concept is always logged under the same
+      # key in the same shape.
+      no-mixed-args: true
+      # Package-level loggers named for their scope are the established Dapr
+      # pattern.
+      no-global: ""
+      # Context-aware logging is deliberately out of scope for now.
+      context: ""
+      key-naming-case: snake
+      forbidden-keys:
+        # Reserved by the Dapr log schema; a per-call attribute with one of
+        # these names would collide with the schema field and be dropped.
+        - time
+        - level
+        - msg
+        - scope
+        - type
+        - instance
+        - ver
     depguard:
       rules:
         master:
           deny:
+            # Both spellings: logrus was github.com/Sirupsen/logrus before it
+            # was renamed, and only the lower-case path resolves today, so the
+            # original rule never matched anything.
             - pkg: github.com/Sirupsen/logrus
+              desc: must use github.com/dapr/kit/logger
+            - pkg: github.com/sirupsen/logrus
               desc: must use github.com/dapr/kit/logger
             - pkg: github.com/agrea/ptr
               desc: must use github.com/dapr/kit/ptr

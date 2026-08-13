@@ -455,7 +455,8 @@ func (m MetricSpec) GetEnabled() bool {
 }
 
 // GetHTTPIncreasedCardinality returns true if increased cardinality is enabled for HTTP metrics
-func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
+func (m MetricSpec) GetHTTPIncreasedCardinality(l logger.Logger) bool {
+	log := logger.FromLogger(l)
 	if m.HTTP == nil || m.HTTP.IncreasedCardinality == nil {
 		// The default is true in Dapr 1.13, but will be changed to false in 1.15+
 		// TODO: [MetricsCardinality] Change default in 1.15+
@@ -466,19 +467,20 @@ func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 }
 
 // GetLatencyDistribution returns a *view.Aggregration to be used for latency histograms
-func (m MetricSpec) GetLatencyDistribution(log logger.Logger) *view.Aggregation {
+func (m MetricSpec) GetLatencyDistribution(l logger.Logger) *view.Aggregation {
+	log := logger.FromLogger(l)
 	defaultLatencyDistribution := []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000}
 	metricSpecBytes, err := json.Marshal(m)
 	if err != nil {
-		log.Errorf("Error marshalling metric spec to JSON: %s", err)
+		log.Error("Error marshalling metric spec to JSON", "error", err)
 	}
-	log.Infof("metric spec: %s", string(metricSpecBytes))
+	log.Info("metric spec", "stringmetric_spec_bytes", string(metricSpecBytes))
 	if m.LatencyDistributionBuckets == nil || len(*m.LatencyDistributionBuckets) == 0 {
 		// The default is defaultLatencyDistribution
-		log.Infof("Using default latency distribution buckets: %v", defaultLatencyDistribution)
+		log.Info("Using default latency distribution buckets", "default_latency_distribution", defaultLatencyDistribution)
 		return view.Distribution(defaultLatencyDistribution...)
 	}
-	log.Infof("Using custom latency distribution buckets: %v", *m.LatencyDistributionBuckets)
+	log.Info("Using custom latency distribution buckets", "latency_distribution_buckets", *m.LatencyDistributionBuckets)
 	buckets := make([]float64, len(*m.LatencyDistributionBuckets))
 	for i, v := range *m.LatencyDistributionBuckets {
 		buckets[i] = float64(v)
@@ -492,7 +494,8 @@ func (m MetricSpec) GetLatencyDistribution(log logger.Logger) *view.Aggregation 
 // non-empty it returns a distribution built from those buckets; otherwise it returns
 // defaultDist (the shared latency distribution), making the workflow buckets an
 // optional override that defaults to the shared histogram.
-func (m MetricSpec) GetWorkflowLatencyDistribution(log logger.Logger, defaultDist *view.Aggregation) *view.Aggregation {
+func (m MetricSpec) GetWorkflowLatencyDistribution(l logger.Logger, defaultDist *view.Aggregation) *view.Aggregation {
+	log := logger.FromLogger(l)
 	if m.Workflow == nil || m.Workflow.LatencyDistributionBuckets == nil || len(*m.Workflow.LatencyDistributionBuckets) == 0 {
 		return defaultDist
 	}
@@ -503,7 +506,7 @@ func (m MetricSpec) GetWorkflowLatencyDistribution(log logger.Logger, defaultDis
 		unit = *m.Workflow.LatencyDistributionUnits
 	}
 	scale := float64(unit) / float64(time.Millisecond)
-	log.Infof("Using custom workflow latency distribution buckets: %v (unit: %s)", *m.Workflow.LatencyDistributionBuckets, unit)
+	log.Info("Using custom workflow latency distribution buckets: (unit: )", "latency_distribution_buckets", *m.Workflow.LatencyDistributionBuckets, "unit", unit)
 	buckets := make([]float64, len(*m.Workflow.LatencyDistributionBuckets))
 	for i, v := range *m.Workflow.LatencyDistributionBuckets {
 		buckets[i] = float64(v) * scale

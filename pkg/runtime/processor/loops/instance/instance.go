@@ -35,7 +35,7 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 )
 
-var log = logger.NewLogger("dapr.runtime.processor.loops.instance")
+var log = logger.New("dapr.runtime.processor.loops.instance")
 
 // Manager performs Init/Close on a single named component. Per-category
 // sub-processors (binding, pubsub, state, secret, ...) satisfy this interface.
@@ -113,7 +113,7 @@ func (i *Instance) Handle(ctx context.Context, e loops.EventInstance) error {
 		// (see processor.Close and the runtime shutdown path). The Shutdown
 		// sentinel exits the loop without performing component close.
 	default:
-		log.Errorf("instance loop: unknown event type %T", ev)
+		log.Error("instance loop: unknown event type", "ev", ev)
 	}
 	// Never return an error from Handle: a loop that errors stops draining and
 	// the parent would block on its Close. Errors are reported to callers via
@@ -141,7 +141,7 @@ func (i *Instance) handleInit(ctx context.Context, ev *loops.Init) {
 		if i.alsoStartInput {
 			if post, ok := i.manager.(PostInit); ok {
 				if err := post.StartInput(ctx, comp); err != nil {
-					log.Errorf("error starting input for %s: %s", comp.LogName(), err)
+					log.Error("error starting input binding", "component", comp.LogName(), "error", err)
 				}
 			}
 		}
@@ -158,7 +158,7 @@ func (i *Instance) runInit(ctx context.Context, comp compapi.Component) error {
 	// secret store arrives the flushed parked copy and the reconciler's copy
 	// race to init the same component.
 	if existing, ok := i.compStore.GetComponent(comp.Name); ok && differ.AreSame(existing, comp) {
-		log.Debugf("Component init skipped: identical component already installed: %s", comp.LogName())
+		log.Debug("Component init skipped: identical component already installed", "log_name", comp.LogName())
 		return nil
 	}
 
@@ -238,7 +238,7 @@ func (i *Instance) report(ctx context.Context, comp compapi.Component, et operat
 		ObservedGeneration:  comp.GetGeneration(),
 		LastTransactionTime: timestamppb.New(time.Now()),
 	}); err != nil {
-		log.Errorf("error reporting component %s result: %s", et, err)
+		log.Error("error reporting component result", "et", et, "error", err)
 	}
 }
 

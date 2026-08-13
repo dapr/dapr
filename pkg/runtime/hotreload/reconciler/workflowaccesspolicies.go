@@ -75,7 +75,7 @@ func (w *workflowAccessPolicies) recompileAll() {
 	}
 	compiled := workflowacl.Compile(scoped)
 	w.recompiler(compiled)
-	log.Infof("Recompiled %d workflow access policy resource(s) (of %d total)", len(scoped), len(all))
+	log.Info("Recompiled workflow access policy resource(s) (of total)", "lenscoped", len(scoped), "lenall", len(all))
 }
 
 // The go linter does not yet understand that these functions are being used by
@@ -84,7 +84,7 @@ func (w *workflowAccessPolicies) recompileAll() {
 //nolint:unused
 func (w *workflowAccessPolicies) update(ctx context.Context, policy wfaclapi.WorkflowAccessPolicy) error {
 	if err := validate.WorkflowAccessPolicy(ctx, &policy); err != nil {
-		log.Warnf("WorkflowAccessPolicy %q failed validation, skipping: %s", policy.Name, err)
+		log.Warn("WorkflowAccessPolicy failed validation, skipping", "name", policy.Name, "error", err)
 		return nil
 	}
 

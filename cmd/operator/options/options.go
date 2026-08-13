@@ -36,7 +36,7 @@ const (
 	defaultMaxPodRestartsPerMinute = 20
 )
 
-var log = logger.NewLogger("dapr.operator.options")
+var log = logger.New("dapr.operator.options")
 
 type Options struct {
 	Config                             string
@@ -107,10 +107,10 @@ func New() *Options {
 		if wilc != "once" {
 			dur, err := time.ParseDuration(opts.watchdogIntervalStr)
 			if err != nil {
-				log.Fatalf("invalid value for watch-interval: %v", err)
+				log.Fatal("invalid value for watch-interval", "error", err)
 			}
 			if dur < time.Second {
-				log.Fatalf("invalid watch-interval value: if not '0' or 'once', must be at least 1s")
+				log.Fatal("invalid watch-interval value: if not '0' or 'once', must be at least 1s")
 			}
 			opts.WatchdogInterval = dur
 		}

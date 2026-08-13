@@ -185,7 +185,7 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 			md, _ := metadata.FromIncomingContext(ctx)
 			vals := md.Get(diagConsts.GRPCProxyCalleeIDKey)
 			if len(vals) == 0 {
-				log.Debugf("cannot proxy request: missing %s metadata, fallback to %s", diagConsts.GRPCProxyCalleeIDKey, diagConsts.GRPCProxyAppIDKey)
+				log.Debug("cannot proxy request: missing metadata, fallback to", "g_r_p_c_proxy_callee_id_key", diagConsts.GRPCProxyCalleeIDKey, "g_r_p_c_proxy_app_id_key", diagConsts.GRPCProxyAppIDKey)
 				vals = md.Get(diagConsts.GRPCProxyAppIDKey)
 				if len(vals) == 0 {
 					return fmt.Errorf("cannot proxy request: missing %s or %s metadata", diagConsts.GRPCProxyCalleeIDKey, diagConsts.GRPCProxyAppIDKey)

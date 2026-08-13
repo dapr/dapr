@@ -26,6 +26,7 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -111,7 +112,7 @@ func (a *Universal) scheduleJob(ctx context.Context, jobRequest *runtimev1pb.Sch
 
 	_, err := a.scheduler.ScheduleJob(schedCtx, internalScheduleJobReq, grpc.WaitForReady(true))
 	if err != nil {
-		a.logger.Errorf("Error scheduling job %s due to: %s", job.GetName(), err)
+		a.logger.Error("Error scheduling job", "job", job.GetName(), "error", err)
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.SchedulerScheduleJob(errMetadata, err)
 	}
 
@@ -155,7 +156,7 @@ func (a *Universal) deleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 
 	_, err := a.scheduler.DeleteJob(schedCtx, internalDeleteJobReq, grpc.WaitForReady(true))
 	if err != nil {
-		a.logger.Errorf("Error deleting job: %s due to: %s", inReq.GetName(), err)
+		a.logger.Error("Error deleting job", "job", inReq.GetName(), "error", err)
 		return &runtimev1pb.DeleteJobResponse{}, apierrors.SchedulerDeleteJob(errMetadata, err)
 	}
 
@@ -199,7 +200,7 @@ func (a *Universal) getJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 
 	resp, err := a.scheduler.GetJob(schedCtx, internalGetJobReq, grpc.WaitForReady(true))
 	if err != nil {
-		a.logger.Errorf("Error getting job %s due to: %s", inReq.GetName(), err)
+		a.logger.Error("Error getting job", "job", inReq.GetName(), "error", err)
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)
 	}
 
@@ -247,7 +248,7 @@ func (a *Universal) deleteJobsByPrefix(ctx context.Context, req *runtimev1pb.Del
 		},
 	})
 	if err != nil {
-		a.logger.Errorf("Error deleting jobs by prefix due to: %s", err)
+		a.logger.Error("Error deleting jobs by prefix", logger.Err(err))
 		return nil, apierrors.SchedulerDeleteJob(map[string]string{
 			"appID":     a.AppID(),
 			"namespace": a.Namespace(),
@@ -292,7 +293,7 @@ func (a *Universal) listJobs(ctx context.Context, req *runtimev1pb.ListJobsReque
 		},
 	})
 	if err != nil {
-		a.logger.Errorf("Error listing jobs due to: %s", err)
+		a.logger.Error("Error listing jobs", logger.Err(err))
 		return nil, apierrors.SchedulerListJobs(errMetadata, err)
 	}
 

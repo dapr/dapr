@@ -73,7 +73,7 @@ func main() {
 
 	expectAppProtocol := os.Getenv("EXPECT_APP_PROTOCOL")
 	if expectAppProtocol != "" && appProtocol != expectAppProtocol {
-		log.Fatalf("Expected injected APP_PROTOCOL to be %q, but got %q", expectAppProtocol, appProtocol)
+		log.Fatal("Expected injected APP_PROTOCOL to be, but got", "expect_app_protocol", expectAppProtocol, "app_protocol", appProtocol)
 	}
 
 	controlPort = os.Getenv("CONTROL_PORT")
@@ -114,7 +114,7 @@ func main() {
 func startGRPC() {
 	lis, err := net.Listen("tcp", "0.0.0.0:"+appPort)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Fatal("failed to listen", "error", err)
 	}
 
 	h := &grpcServer{}
@@ -135,7 +135,7 @@ func startGRPC() {
 	// Blocking call
 	log.Printf("Health App GRPC server listening on :%s", appPort)
 	if err := s.Serve(lis); err != nil {
-		log.Fatalf("Failed to start gRPC server: %v", err)
+		log.Fatal("Failed to start gRPC server", "error", err)
 	}
 	log.Println("App shut down")
 }
@@ -317,7 +317,7 @@ func startH2C() {
 	// Blocking call
 	err := srv.ListenAndServe()
 	if err != http.ErrServerClosed {
-		log.Fatalf("Failed to run server: %v", err)
+		log.Fatal("Failed to run server", "error", err)
 	}
 
 	log.Println("Server shut down")

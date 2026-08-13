@@ -15,6 +15,7 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -36,12 +37,12 @@ var emptySpanContext trace.SpanContext
 
 // StdoutExporter implements an open telemetry span exporter that writes to stdout.
 type StdoutExporter struct {
-	log logger.Logger
+	log *logger.Log
 }
 
 // NewStdOutExporter returns a StdOutExporter
 func NewStdOutExporter() *StdoutExporter {
-	return &StdoutExporter{logger.NewLogger("dapr.runtime.trace")}
+	return &StdoutExporter{logger.New("dapr.runtime.trace")}
 }
 
 // ExportSpans implements the open telemetry span exporter interface.
@@ -52,7 +53,7 @@ func (e *StdoutExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadO
 		if sd.Parent().IsValid() {
 			parentSpanID = sd.Parent().SpanID()
 		}
-		e.log.Infof(msg, sd.Name(), sd.SpanContext().TraceID(), parentSpanID, sd.SpanContext().SpanID(), sd.StartTime(), sd.EndTime(), sd.Events())
+		e.log.Info(fmt.Sprintf(msg, sd.Name(), sd.SpanContext().TraceID(), parentSpanID, sd.SpanContext().SpanID(), sd.StartTime(), sd.EndTime(), sd.Events()))
 	}
 	return nil
 }

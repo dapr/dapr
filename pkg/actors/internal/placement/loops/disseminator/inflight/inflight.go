@@ -31,7 +31,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.placement.loops.disseminator.inflight")
+var log = logger.New("dapr.runtime.actors.placement.loops.disseminator.inflight")
 
 var aquireCache = sync.Pool{
 	New: func() any {
@@ -121,7 +121,7 @@ func (i *Inflight) Open(ctx context.Context) {
 		i.lock = l
 		i.wg.Go(func() {
 			if lerr := l.Run(ctx); lerr != nil {
-				log.Errorf("Inflight lock loop ended with error: %s", lerr)
+				log.Error("Inflight lock loop ended with error", "error", lerr)
 			}
 		})
 	}

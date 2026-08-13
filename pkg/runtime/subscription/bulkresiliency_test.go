@@ -165,7 +165,7 @@ func getResponse(req *invokev1.InvokeMethodRequest, ts *testSettings) *invokev1.
 			}
 
 			if ts.failCount > 0 && (ts.failAllEntries || (ts.failEvenOnes && j%2 == 0)) {
-				testLogger.Infof("ts.failCount: %d", ts.failCount)
+				logger.FromLogger(testLogger).Info("bulk resiliency test state", "fail_count", ts.failCount)
 
 				abre.Status = "RETRY"
 			} else {
@@ -234,7 +234,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
-		comp := inmemory.New(log)
+		comp := inmemory.New(log.Legacy())
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
 		ps, err := New(Options{
@@ -310,7 +310,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
-		comp := inmemory.New(log)
+		comp := inmemory.New(log.Legacy())
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -388,7 +388,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
-		comp := inmemory.New(log)
+		comp := inmemory.New(log.Legacy())
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -466,7 +466,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
-		comp := inmemory.New(log)
+		comp := inmemory.New(log.Legacy())
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -544,7 +544,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
-		comp := inmemory.New(log)
+		comp := inmemory.New(log.Legacy())
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -613,7 +613,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
-		comp := inmemory.New(log)
+		comp := inmemory.New(log.Legacy())
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -708,7 +708,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
-		comp := inmemory.New(log)
+		comp := inmemory.New(log.Legacy())
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -803,7 +803,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
-		comp := inmemory.New(log)
+		comp := inmemory.New(log.Legacy())
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -889,7 +889,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
-		comp := inmemory.New(log)
+		comp := inmemory.New(log.Legacy())
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -1013,7 +1013,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
-		comp := inmemory.New(log)
+		comp := inmemory.New(log.Legacy())
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -1098,7 +1098,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
-		comp := inmemory.New(log)
+		comp := inmemory.New(log.Legacy())
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
 		ps, err := New(Options{
@@ -1271,7 +1271,7 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
-		comp := inmemory.New(log)
+		comp := inmemory.New(log.Legacy())
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)

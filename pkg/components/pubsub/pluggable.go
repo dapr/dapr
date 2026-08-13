@@ -39,7 +39,7 @@ type grpcPubSub struct {
 	*pluggable.GRPCConnector[proto.PubSubClient]
 	// features is the list of pubsub implemented features.
 	features []pubsub.Feature
-	logger   logger.Logger
+	logger   *logger.Log
 }
 
 // Init initializes the grpc pubsub passing out the metadata to the grpc component.
@@ -139,7 +139,7 @@ func (p *grpcPubSub) adaptHandler(ctx context.Context, streamingPull proto.PubSu
 		var ackError *proto.AckMessageError
 
 		if err := handler(ctx, &m); err != nil {
-			p.logger.Errorf("error when handling message on topic %s", msg.GetTopicName())
+			p.logger.Error("error when handling message on topic", "topic_name", msg.GetTopicName())
 			ackError = &proto.AckMessageError{
 				Message: err.Error(),
 			}
@@ -166,7 +166,7 @@ func (p *grpcPubSub) adaptHandler(ctx context.Context, streamingPull proto.PubSu
 			AckMessageId: msg.GetId(),
 			AckError:     ackError,
 		}); err != nil {
-			p.logger.Errorf("error when ack'ing message %s from topic %s", msg.GetId(), msg.GetTopicName())
+			p.logger.Error("error when ack'ing message from topic", "id", msg.GetId(), "topic_name", msg.GetTopicName())
 		}
 	}
 }
@@ -194,7 +194,7 @@ func (p *grpcPubSub) pullMessages(parentCtx context.Context, topic *proto.Topic,
 
 	cleanup := func() {
 		if closeErr := pull.CloseSend(); closeErr != nil {
-			p.logger.Warnf("could not close pull stream of topic %s: %v", topic.GetName(), closeErr)
+			p.logger.Warn("could not close pull stream of topic", "name", topic.GetName(), "error", closeErr)
 		}
 		streamCancel()
 	}
@@ -215,11 +215,11 @@ func (p *grpcPubSub) pullMessages(parentCtx context.Context, topic *proto.Topic,
 
 			// TODO reconnect on error
 			if err != nil {
-				p.logger.Errorf("Failed to receive pubsub message: %v", err)
+				p.logger.Error("Failed to receive pubsub message", "error", err)
 				return
 			}
 
-			p.logger.Debugf("Received message from stream on topic %s", msg.GetTopicName())
+			p.logger.Debug("Received message from stream on topic", "topic_name", msg.GetTopicName())
 
 			handle(msg)
 		}
@@ -243,7 +243,7 @@ func (p *grpcPubSub) Subscribe(ctx context.Context, req pubsub.SubscribeRequest,
 func (p *grpcPubSub) Pause(ctx context.Context) error {
 	_, err := p.Client.Pause(ctx, &proto.PauseRequest{})
 	if status.Code(err) == codes.Unimplemented {
-		p.logger.Debugf("pluggable pubsub does not implement Pause; falling back to close-first shutdown")
+		p.logger.Debug("pluggable pubsub does not implement Pause; falling back to close-first shutdown")
 		return ErrPausableUnimplemented
 	}
 	return err
@@ -253,7 +253,7 @@ func (p *grpcPubSub) Pause(ctx context.Context) error {
 func (p *grpcPubSub) Resume(ctx context.Context) error {
 	_, err := p.Client.Resume(ctx, &proto.ResumeRequest{})
 	if status.Code(err) == codes.Unimplemented {
-		p.logger.Debugf("pluggable pubsub does not implement Resume")
+		p.logger.Debug("pluggable pubsub does not implement Resume")
 		return ErrPausableUnimplemented
 	}
 	return err
@@ -266,7 +266,7 @@ func fromConnector(l logger.Logger, connector *pluggable.GRPCConnector[proto.Pub
 	return &grpcPubSub{
 		features:      make([]pubsub.Feature, 0),
 		GRPCConnector: connector,
-		logger:        l,
+		logger:        logger.FromLogger(l),
 	}
 }
 

@@ -51,7 +51,7 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 		dueTime = time.UnixMilli(unix)
 	}
 
-	log.Debugf("Activity actor '%s': invoking method '%s'", a.actorID, method)
+	log.Debug("Activity actor: invoking method", "actor_id", a.actorID, "method", method)
 
 	imReq, err := invokev1.FromInternalInvokeRequest(req)
 	if err != nil {
@@ -108,7 +108,7 @@ func taskScheduledName(e *backend.HistoryEvent) *string {
 }
 
 func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Reminder) error {
-	log.Debugf("Activity actor '%s': invoking reminder '%s'", a.actorID, reminder.Name)
+	log.Debug("Activity actor: invoking reminder", "actor_id", a.actorID, "name", reminder.Name)
 
 	// Try the new ActivityInvocation envelope format first. Fall back to
 	// the legacy raw HistoryEvent payload for reminders created by
@@ -136,16 +136,16 @@ func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Remind
 	case err == nil:
 		return nil
 	case errors.Is(err, context.DeadlineExceeded):
-		log.Warnf("%s: execution of '%s' timed-out and will be retried later: %v", a.actorID, reminder.Name, err)
+		log.Warn("execution of timed-out and will be retried later", "actor_id", a.actorID, "name", reminder.Name, "error", err)
 		return err
 	case errors.Is(err, context.Canceled):
-		log.Warnf("%s: received cancellation signal while waiting for activity execution '%s'", a.actorID, reminder.Name)
+		log.Warn("received cancellation signal while waiting for activity execution", "actor_id", a.actorID, "name", reminder.Name)
 		return err
 	case wferrors.IsRecoverable(err):
-		log.Warnf("%s: execution failed with a recoverable error and will be retried later: %v", a.actorID, err)
+		log.Warn("execution failed with a recoverable error and will be retried later", "actor_id", a.actorID, "error", err)
 		return err
 	default: // Other error
-		log.Errorf("%s: execution failed with an error: %v", a.actorID, err)
+		log.Error("execution failed with an error", "actor_id", a.actorID, "error", err)
 		return err
 	}
 }

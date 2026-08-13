@@ -24,7 +24,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.authorizer")
+var log = logger.New("dapr.runtime.authorizer")
 
 // Type of function that determines if a component is authorized.
 // The function receives the component and must return true if the component is authorized.

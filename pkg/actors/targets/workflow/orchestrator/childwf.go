@@ -35,7 +35,7 @@ import (
 )
 
 func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName string, es []*protos.HistoryEvent, outgoingHistory map[int32]*protos.PropagatedHistory) error {
-	log.Debugf("Workflow actor '%s': calling %d child workflows", o.actorID, len(es))
+	log.Debug("Workflow actor: calling child workflows", "actor_id", o.actorID, "lenes", len(es))
 
 	var errs []error
 	for _, e := range es {
@@ -70,7 +70,7 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 		}
 		if ph := outgoingHistory[e.GetEventId()]; ph != nil {
 			if o.signer == nil {
-				log.Warnf("Workflow actor '%s': propagating unsigned workflow history to child workflow '%s' (signing is not configured; chunks cannot be cryptographically verified by the receiver)", o.actorID, createSO.GetInstanceId())
+				log.Warn("Workflow actor: propagating unsigned workflow history to child workflow (signing is not configured; chunks cannot be cryptographically verified by the receiver)", "actor_id", o.actorID, "get_instance_id", createSO.GetInstanceId())
 			}
 			createReq.PropagatedHistory = ph
 		}
@@ -92,7 +92,7 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 			// If the call was denied by a workflow access policy, fail the
 			// child orchestration immediately rather than retrying.
 			if messages.IsPermissionDenied(err) {
-				log.Warnf("Workflow actor '%s': child workflow denied by access policy: %v", o.actorID, err)
+				log.Warn("Workflow actor: child workflow denied by access policy", "actor_id", o.actorID, "error", err)
 				if ferr := o.failChildWorkflowTask(ctx, e.GetEventId(), messages.ErrorTypeAccessPolicyDenied, messages.ErrorMessageAccessPolicyDenied); ferr != nil {
 					errs = append(errs, ferr)
 				}
@@ -101,7 +101,7 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 			// The target instance ID is occupied by another workflow. Fail the
 			// awaited child task rather than retrying forever.
 			if messages.IsAlreadyExists(err) {
-				log.Warnf("Workflow actor '%s': child workflow instance ID '%s' already exists: %v", o.actorID, id, err)
+				log.Warn("Workflow actor: child workflow instance ID already exists", "actor_id", o.actorID, "id", id, "error", err)
 				if ferr := o.failChildWorkflowTask(ctx, e.GetEventId(), messages.ErrorTypeAlreadyExists, messages.GRPCStatusMessage(err)); ferr != nil {
 					errs = append(errs, ferr)
 				}

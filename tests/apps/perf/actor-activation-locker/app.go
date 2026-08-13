@@ -91,6 +91,6 @@ func main() {
 	s.RegisterActorImplFactoryContext(testActorFactory(client, redisClient))
 	log.Println("Started")
 	if err := s.Start(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Error listenning: %v", err)
+		log.Fatal("Error listenning", "error", err)
 	}
 }

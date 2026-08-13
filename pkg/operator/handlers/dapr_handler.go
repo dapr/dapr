@@ -48,7 +48,7 @@ const (
 	annotationPrometheusPath           = "prometheus.io/path"
 )
 
-var log = logger.NewLogger("dapr.operator.handlers")
+var log = logger.New("dapr.operator.handlers")
 
 var defaultOptions = &Options{
 	ArgoRolloutServiceReconcilerEnabled: false,
@@ -177,14 +177,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	err := r.Get(ctx, req.NamespacedName, wrapper.GetObject())
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Debugf("deployment has be deleted, %s", req.NamespacedName)
+			log.Debug("deployment has be deleted", "namespaced_name", req.NamespacedName)
 		} else {
-			log.Errorf("unable to get deployment, %s, err: %s", req.NamespacedName, err)
+			log.Error("unable to get deployment, err", "namespaced_name", req.NamespacedName, "error", err)
 			return ctrl.Result{}, err
 		}
 	} else {
 		if wrapper.GetObject().GetDeletionTimestamp() != nil {
-			log.Debugf("deployment is being deleted, %s", req.NamespacedName)
+			log.Debug("deployment is being deleted", "namespaced_name", req.NamespacedName)
 			return ctrl.Result{}, nil
 		}
 		expectedService = r.isAnnotatedForDapr(wrapper)
@@ -193,7 +193,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if expectedService {
 		err := r.ensureDaprServicePresent(ctx, req.Namespace, wrapper)
 		if err != nil {
-			log.Errorf("failed to ensure dapr service present, err: %v", err)
+			log.Error("failed to ensure dapr service present, err", "error", err)
 			return ctrl.Result{Requeue: true}, err
 		}
 	}
@@ -216,16 +216,16 @@ func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace st
 	err = h.Get(ctx, daprSvcName, &daprSvc)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Debugf("no service for wrapper found, wrapper: %s/%s", namespace, daprSvcName.Name)
+			log.Debug("no service for wrapper found, wrapper: /", "namespace", namespace, "name", daprSvcName.Name)
 			return h.createDaprService(ctx, daprSvcName, wrapper)
 		}
-		log.Errorf("unable to get service, %s, err: %s", daprSvcName, err)
+		log.Error("unable to get service, err", "dapr_svc_name", daprSvcName, "error", err)
 		return err
 	}
 
 	err = h.patchDaprService(ctx, daprSvcName, wrapper, daprSvc)
 	if err != nil {
-		log.Errorf("unable to update service, %s, err: %s", daprSvcName, err)
+		log.Error("unable to update service, err", "dapr_svc_name", daprSvcName, "error", err)
 		return err
 	}
 
@@ -262,10 +262,10 @@ func (h *DaprHandler) createDaprService(ctx context.Context, expectedService typ
 	}
 	err = h.Create(ctx, service)
 	if err != nil {
-		log.Errorf("unable to create Dapr service for wrapper, service: %s, err: %s", expectedService, err)
+		log.Error("unable to create Dapr service for wrapper, service, err", "expected_service", expectedService, "error", err)
 		return err
 	}
-	log.Debugf("created service: %s", expectedService)
+	log.Debug("created service", "expected_service", expectedService)
 	monitoring.RecordServiceCreatedCount(appID)
 	return nil
 }
@@ -273,7 +273,7 @@ func (h *DaprHandler) createDaprService(ctx context.Context, expectedService typ
 func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedService types.NamespacedName, wrapper ObjectWrapper, appID string) *corev1.Service {
 	enableMetrics := h.getEnableMetrics(wrapper)
 	metricsPort := h.getMetricsPort(wrapper)
-	log.Debugf("enableMetrics: %v", enableMetrics)
+	log.Debug("enableMetrics", "enable_metrics", enableMetrics)
 
 	annotationsMap := map[string]string{
 		annotations.KeyAppID: appID,
@@ -295,7 +295,7 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 				key = stdstrings.TrimSpace(key)
 
 				if _, ok := annotationsMap[key]; ok {
-					log.Warnf("Ignoring reserved annotation %q as it operator-managed", key)
+					log.Warn("Ignoring reserved annotation as it operator-managed", "key", key)
 					continue
 				}
 				annotationsMap[key] = stdstrings.TrimSpace(value)

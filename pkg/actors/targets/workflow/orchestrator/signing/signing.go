@@ -21,7 +21,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.targets.orchestrator.signing")
+var log = logger.New("dapr.runtime.actors.targets.orchestrator.signing")
 
 // Signing carries the per-orchestrator signing state. SignNewEvents,
 // AttachChildCompletionAttestation, and VerifyInboxAttestation are

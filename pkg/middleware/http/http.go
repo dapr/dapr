@@ -23,7 +23,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.middleware.http")
+var log = logger.New("dapr.middleware.http")
 
 // HTTP returns HTTP middleware pipelines. These pipelines dynamically update
 // the middleware chain when a component is added or removed from the store.

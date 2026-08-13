@@ -28,7 +28,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.scheduler.cluster")
+var log = logger.New("dapr.runtime.scheduler.cluster")
 
 type Options struct {
 	Namespace    string
@@ -78,7 +78,7 @@ func (c *Cluster) Run(ctx context.Context) error {
 	}
 
 	if err == io.EOF {
-		log.Warnf("Received EOF, re-establishing connection: %v", err)
+		log.Warn("Received EOF, re-establishing connection", "error", err)
 		return nil
 	}
 

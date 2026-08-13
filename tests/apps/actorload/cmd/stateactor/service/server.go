@@ -191,7 +191,7 @@ func (s *ActorService) StartServer() {
 	log.Printf("Listening to %s, Actor Types: %s", s.address, actorTypes)
 
 	if err := s.server.ListenAndServe(); err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 }
 

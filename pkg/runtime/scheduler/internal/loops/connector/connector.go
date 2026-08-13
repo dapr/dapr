@@ -29,7 +29,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.scheduler.loops.connector")
+var log = logger.New("dapr.runtime.scheduler.loops.connector")
 
 type Options struct {
 	Namespace    string
@@ -152,7 +152,7 @@ func (c *connector) maybeClientConnect(ctx context.Context) {
 	go func() {
 		err := cluster.Run(ctx)
 		if err != nil && !errors.Is(err, context.Canceled) {
-			log.Error(err, "failed to run scheduler cluster clients")
+			log.Error("failed to run scheduler cluster clients", "error", err)
 		}
 
 		close(doneCh)

@@ -69,7 +69,7 @@ func TestStreamingServerInterceptor(t *testing.T) {
 		t.Cleanup(func() {
 			meter.Stop()
 		})
-		require.NoError(t, m.Init(meter, "test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
+		require.NoError(t, m.Init(meter, "test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log.Legacy())))
 
 		i := m.StreamingServerInterceptor()
 		s := &fakeProxyStream{}
@@ -96,7 +96,7 @@ func TestStreamingServerInterceptor(t *testing.T) {
 		t.Cleanup(func() {
 			meter.Stop()
 		})
-		require.NoError(t, m.Init(meter, "test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
+		require.NoError(t, m.Init(meter, "test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log.Legacy())))
 
 		i := m.StreamingServerInterceptor()
 		s := &fakeProxyStream{
@@ -133,7 +133,7 @@ func TestStreamingClientInterceptor(t *testing.T) {
 		t.Cleanup(func() {
 			meter.Stop()
 		})
-		require.NoError(t, m.Init(meter, "test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
+		require.NoError(t, m.Init(meter, "test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log.Legacy())))
 
 		i := m.StreamingClientInterceptor()
 		s := &fakeProxyStream{}
@@ -160,7 +160,7 @@ func TestStreamingClientInterceptor(t *testing.T) {
 		t.Cleanup(func() {
 			meter.Stop()
 		})
-		require.NoError(t, m.Init(meter, "test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
+		require.NoError(t, m.Init(meter, "test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log.Legacy())))
 
 		i := m.StreamingClientInterceptor()
 		s := &fakeProxyStream{

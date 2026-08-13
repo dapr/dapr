@@ -47,7 +47,7 @@ func TestConverseAlpha2InvalidParams(t *testing.T) {
 	const componentName = "test-echo"
 
 	compStore := compstore.New()
-	compStore.AddConversation(componentName, echo.NewEcho(testLogger))
+	compStore.AddConversation(componentName, echo.NewEcho(testLogger.Legacy()))
 
 	fakeAPI := &Universal{
 		logger:     testLogger,

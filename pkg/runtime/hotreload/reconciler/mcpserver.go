@@ -55,7 +55,7 @@ func NewMCPServers(opts Options[mcpserverapi.MCPServer]) *Reconciler[mcpserverap
 // the generic reconciler.
 func (m *mcpservers) update(ctx context.Context, server mcpserverapi.MCPServer) error {
 	if !m.auth.IsObjectAuthorized(server) {
-		log.Warnf("Received unauthorized MCPServer update, ignored: %s", server.LogName())
+		log.Warn("Received unauthorized MCPServer update, ignored", "log_name", server.LogName())
 		return nil
 	}
 
@@ -75,14 +75,14 @@ func (m *mcpservers) update(ctx context.Context, server mcpserverapi.MCPServer) 
 		resolved := server.DeepCopy()
 		m.proc.ProcessMCPServerSecrets(ctx, resolved)
 		if differ.AreSame(existing, *resolved) {
-			log.Debugf("MCPServer update skipped: no changes detected: %s", server.LogName())
+			log.Debug("MCPServer update skipped: no changes detected: " + server.LogName())
 			return nil
 		}
 
 		// See components.update for the rationale on this guard.
 		if server.GetGeneration() > 0 && server.GetGeneration() < existing.GetGeneration() {
-			log.Warnf("Ignoring stale MCPServer event for %s (generation %d < installed %d)",
-				server.LogName(), server.GetGeneration(), existing.GetGeneration())
+			log.Warn("Ignoring stale MCPServer event",
+				"server", server.LogName(), "generation", server.GetGeneration(), "installed_generation", existing.GetGeneration())
 			return nil
 		}
 
@@ -90,11 +90,11 @@ func (m *mcpservers) update(ctx context.Context, server mcpserverapi.MCPServer) 
 		// adding the new one. Without this, every update would re-call
 		// wfengine.EnsureActorsRegistered (bumping the refcount) and leak
 		// per-name workflow registrations.
-		log.Infof("Closing existing MCPServer to reload: %s", existing.LogName())
+		log.Info("Closing existing MCPServer to reload: " + existing.LogName())
 		m.proc.DeleteMCPServer(ctx, existing.Name)
 	}
 
-	log.Infof("Adding MCPServer for processing: %s", server.LogName())
+	log.Info("Adding MCPServer for processing", "log_name", server.LogName())
 
 	res := m.proc.AddPendingMCPServer(ctx, server)
 	if res == nil {
@@ -109,10 +109,10 @@ func (m *mcpservers) update(ctx context.Context, server mcpserverapi.MCPServer) 
 		}
 		err = fmt.Errorf("process MCPServer %s error: %s", server.Name, err)
 		if server.Spec.IgnoreErrors {
-			log.Errorf("Ignoring error processing MCPServer: %s", err)
+			log.Error("Ignoring error processing MCPServer", "error", err)
 			return nil
 		}
-		log.Warnf("Error processing MCPServer, daprd will exit gracefully: %s", err)
+		log.Warn("Error processing MCPServer, daprd will exit gracefully", "error", err)
 		return err
 	}
 }
@@ -122,7 +122,7 @@ func (m *mcpservers) update(ctx context.Context, server mcpserverapi.MCPServer) 
 //
 //nolint:unused
 func (m *mcpservers) delete(ctx context.Context, server mcpserverapi.MCPServer) error {
-	log.Infof("MCPServer deleted via hot-reload: %s", server.LogName())
+	log.Info("MCPServer deleted via hot-reload", "log_name", server.LogName())
 	m.proc.DeleteMCPServer(ctx, server.Name)
 	return nil
 }

@@ -69,7 +69,7 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 	for _, item := range resiliencies.Items {
 		b, err := json.Marshal(item)
 		if err != nil {
-			log.Warnf("Error unmarshalling resiliency: %s", err)
+			log.Warn("Error unmarshalling resiliency", "error", err)
 			continue
 		}
 		resp.Resiliencies = append(resp.GetResiliencies(), b)
@@ -112,7 +112,7 @@ func (a *apiServer) ResiliencyUpdate(in *operatorv1pb.ResiliencyUpdateRequest, s
 
 	// Run the client - this will block until context is done or event channel closes
 	if err := client.Run(ctx); err != nil {
-		log.Warnf("resiliency client loop ended with error: %s", err)
+		log.Warn("resiliency client loop ended with error", "error", err)
 	}
 
 	return nil

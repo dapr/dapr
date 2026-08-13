@@ -85,7 +85,7 @@ func (f *factory) publishResult(ctx context.Context, actorID string, completed b
 		executionStatus = diag.StatusRecoverable
 		return wferrors.NewRecoverable(todo.ErrExecutionAborted)
 	}
-	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", actorID, wi.InstanceID, name)
+	log.Debug("Activity actor: activity completed for workflow with instanceId activityName", "actor_id", actorID, "instance_id", wi.InstanceID, "name", name)
 
 	// Attach an attestation so the parent workflow can cryptographically
 	// verify this activity's identity, input, and output. No-op when
@@ -139,7 +139,7 @@ func (f *factory) publishResult(ctx context.Context, actorID string, completed b
 	switch {
 	case err != nil:
 		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
-			log.Errorf("Activity actor '%s': workflow actor instance not found when reporting activity result for workflow with instanceId '%s': %s", actorID, wi.InstanceID, err)
+			log.Error("Activity actor: workflow actor instance not found when reporting activity result for workflow with instanceId", "actor_id", actorID, "instance_id", wi.InstanceID, "error", err)
 			executionStatus = diag.StatusFailed
 			return nil
 		}

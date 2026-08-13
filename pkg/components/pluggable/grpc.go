@@ -27,7 +27,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-var log = logger.NewLogger("pluggable-components-grpc-connector")
+var log = logger.New("pluggable-components-grpc-connector")
 
 // GRPCClient is any client that supports common pluggable grpc operations.
 type GRPCClient interface {
@@ -103,7 +103,7 @@ func socketDialer(socket string, additionalOpts ...grpc.DialOption) GRPCConnecti
 // SocketDial creates a grpc connection using the given socket.
 func SocketDial(ctx context.Context, socket string, additionalOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	udsSocket := "unix://" + socket
-	log.Debugf("using socket defined at '%s'", udsSocket)
+	log.Debug("using socket defined at", "uds_socket", udsSocket)
 	additionalOpts = append(additionalOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
 	grpcConn, err := grpc.DialContext(ctx, udsSocket, additionalOpts...) //nolint:staticcheck

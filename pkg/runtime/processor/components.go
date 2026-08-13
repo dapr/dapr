@@ -173,6 +173,6 @@ func (p *Processor) reportInline(ctx context.Context, comp compapi.Component, et
 		ObservedGeneration:  comp.GetGeneration(),
 		LastTransactionTime: timestamppb.New(time.Now()),
 	}); err != nil {
-		log.Errorf("error reporting component %s result: %s", et, err)
+		log.Error("error reporting component result", "et", et, "error", err)
 	}
 }

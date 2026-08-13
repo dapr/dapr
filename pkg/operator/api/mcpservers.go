@@ -92,7 +92,7 @@ func (a *apiServer) ListMCPServers(ctx context.Context, in *operatorv1pb.ListMCP
 		// If the MCPServer CRD is not installed, treat as an empty list so
 		// daprd can start in clusters that have not yet applied the CRD.
 		if apimeta.IsNoMatchError(err) {
-			log.Warnf("MCPServer CRD not installed, returning empty list: %s", err)
+			log.Warn("MCPServer CRD not installed, returning empty list", "error", err)
 			return resp, nil
 		}
 		return nil, fmt.Errorf("error listing MCP servers: %w", err)
@@ -101,13 +101,13 @@ func (a *apiServer) ListMCPServers(ctx context.Context, in *operatorv1pb.ListMCP
 	for i := range list.Items {
 		item := list.Items[i]
 		if err := processMCPServerSecrets(ctx, &item, item.Namespace, a.Client); err != nil {
-			log.Warnf("error processing secrets for MCP server %q/%q: %s", item.Namespace, item.Name, err)
+			log.Warn("error processing secrets for MCP server /", "namespace", item.Namespace, "name", item.Name, "error", err)
 			return &operatorv1pb.ListMCPServersResponse{}, err
 		}
 
 		b, err := json.Marshal(item)
 		if err != nil {
-			log.Warnf("error marshalling MCP server %q: %s", item.Name, err)
+			log.Warn("error marshalling MCP server", "name", item.Name, "error", err)
 			continue
 		}
 		resp.McpServers = append(resp.GetMcpServers(), b)
@@ -147,7 +147,7 @@ func (a *apiServer) MCPServerUpdate(in *operatorv1pb.MCPServerUpdateRequest, srv
 	defer c.CacheLoop()
 
 	if err := c.Run(ctx); err != nil {
-		log.Warnf("MCP server client loop ended with error: %s", err)
+		log.Warn("MCP server client loop ended with error", "error", err)
 	}
 
 	return nil

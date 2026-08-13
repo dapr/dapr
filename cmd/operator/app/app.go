@@ -26,22 +26,22 @@ import (
 	"github.com/dapr/kit/signals"
 )
 
-var log = logger.NewLogger("dapr.operator")
+var log = logger.New("dapr.operator")
 
 func Run() {
 	opts := options.New()
 
 	// Apply options to all loggers.
 	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
-	log.Infof("Starting Dapr Operator -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
+	log.Info("Starting Dapr Operator -- version -- commit", "version", buildinfo.Version(), "commit", buildinfo.Commit())
+	log.Info("Log level set to", "output_level", opts.Logger.OutputLevel)
 
 	healthz := healthz.New()
 	metricsExporter := metrics.New(metrics.Options{
-		Log:       log,
+		Log:       log.Legacy(),
 		Enabled:   opts.Metrics.Enabled(),
 		Namespace: metrics.DefaultMetricNamespace,
 		Port:      opts.Metrics.Port(),
@@ -49,7 +49,7 @@ func Run() {
 	})
 
 	if err := monitoring.InitMetrics(); err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
 	ctx := signals.Context()
@@ -72,20 +72,20 @@ func Run() {
 		Healthz:                             healthz,
 	})
 	if err != nil {
-		log.Fatalf("error creating operator: %v", err)
+		log.Fatal("error creating operator", "error", err)
 	}
 
 	err = concurrency.NewRunnerManager(
 		metricsExporter.Start,
 		op.Start,
 		server.New(server.Options{
-			Log:     log,
+			Log:     log.Legacy(),
 			Port:    opts.HealthzPort,
 			Healthz: healthz,
 		}).Start,
 	).Run(ctx)
 	if err != nil {
-		log.Fatalf("error running operator: %v", err)
+		log.Fatal("error running operator", "error", err)
 	}
 
 	log.Info("operator shut down gracefully")

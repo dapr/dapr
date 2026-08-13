@@ -32,7 +32,7 @@ import (
 	"github.com/dapr/kit/retry"
 )
 
-var testLog = logger.NewLogger("dapr.resiliency.test")
+var testLog = logger.New("dapr.resiliency.test")
 
 // Example of using NewRunnerWithOptions with an Accumulator function
 func ExampleNewRunnerWithOptions_accumulator() {

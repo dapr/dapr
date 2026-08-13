@@ -18,7 +18,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var testLogger = logger.NewLogger("testlogger")
+var testLogger = logger.New("testlogger")
 
 var testResiliency = &v1alpha1.Resiliency{
 	Spec: v1alpha1.ResiliencySpec{

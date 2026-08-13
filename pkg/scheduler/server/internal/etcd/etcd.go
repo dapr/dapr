@@ -31,7 +31,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.scheduler.server.etcd")
+var log = logger.New("dapr.scheduler.server.etcd")
 
 type Options struct {
 	Name string
@@ -127,7 +127,7 @@ func (e *etcd) Run(ctx context.Context) error {
 		return ctx.Err()
 	}
 
-	log.Infof("Starting embedded Etcd")
+	log.Info("Starting embedded Etcd")
 
 	if err := e.maybeDeleteDataDir(); err != nil {
 		return err
@@ -189,7 +189,7 @@ func (e *etcd) runDefragLoop(ctx context.Context) error {
 			return ctx.Err()
 		case <-time.After(checkInterval):
 			if err := e.doDefrag(ctx); err != nil {
-				log.Errorf("Failed to defrag Etcd, retrying in 5s: %s", err)
+				log.Error("Failed to defrag Etcd, retrying in 5s", "error", err)
 				checkInterval = 5 * time.Second
 				break
 			}
@@ -210,18 +210,18 @@ func (e *etcd) doDefrag(ctx context.Context) error {
 	dbSizeInUse := fmt.Sprintf("%.2fM", float64(resp.DbSizeInUse)/(1024*1024))
 
 	if resp.DbSize < resp.DbSizeInUse*2 {
-		log.Debugf("Defragmenting not needed (dbSize: %s, dbSizeInUse: %s)", dbSize, dbSizeInUse)
+		log.Debug("Defragmenting not needed (dbSize, dbSizeInUse: )", "db_size", dbSize, "db_size_in_use", dbSizeInUse)
 		return nil
 	}
 
-	log.Infof("Defragmenting Etcd (dbSize: %s, dbSizeInUse: %s)", dbSize, dbSizeInUse)
+	log.Info("Defragmenting Etcd (dbSize, dbSizeInUse: )", "db_size", dbSize, "db_size_in_use", dbSizeInUse)
 	start := time.Now()
 	_, err = e.client.Defragment(ctx, e.config.ListenClientUrls[0].Host)
 	if err != nil {
 		return err
 	}
 
-	log.Infof("Defragmentation completed in %s", time.Since(start))
+	log.Info("Defragmentation completed in", "sincestart", time.Since(start))
 
 	return nil
 }
@@ -244,7 +244,7 @@ func (e *etcd) Close() error {
 func (e *etcd) maybeDeleteDataDir() error {
 	_, err := os.Stat(e.existingClusterPath)
 	if err == nil {
-		log.Infof("Found existing cluster data, preserving data dir: %s", e.config.Dir)
+		log.Info("Found existing cluster data, preserving data dir", "dir", e.config.Dir)
 		return nil
 	}
 
@@ -252,12 +252,12 @@ func (e *etcd) maybeDeleteDataDir() error {
 		return err
 	}
 
-	log.Infof("No existing cluster data found, deleting data dir contents: %s", e.config.Dir)
+	log.Info("No existing cluster data found, deleting data dir contents", "dir", e.config.Dir)
 	if err = e.removeContents(); err != nil {
 		return fmt.Errorf("failed to remove data dir contents: %w", err)
 	}
 
-	log.Infof("Data dir contents removed: %s", e.config.Dir)
+	log.Info("Data dir contents removed", "dir", e.config.Dir)
 
 	if err := os.MkdirAll(e.config.Dir, 0o700); err != nil {
 		return fmt.Errorf("failed to create data dir: %w", err)

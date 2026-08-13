@@ -68,7 +68,7 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 	// if the current actor state store is removed, so a rename delivered as
 	// create-before-delete converges without waiting for the next reconcile.
 	if _, name, ok := c.store.GetStateStoreActor(); ok && name != comp.Name && isMarkedActorStateStore(comp) {
-		log.Errorf("Skipping hot reload of %s: %s is already the actor state store, only one actor state store is allowed. The component will be applied if %s is removed", comp.LogName(), name, name)
+		log.Error("Skipping hot reload of: is already the actor state store, only one actor state store is allowed. The component will be applied if is removed", "log_name", comp.LogName(), "name", name, "name2", name)
 		c.skippedActorStoreLock.Lock()
 		c.skippedActorStore = &comp
 		c.skippedActorStoreLock.Unlock()
@@ -89,7 +89,7 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 
 	if exists {
 		if differ.AreSame(oldComp, comp) {
-			log.Debugf("Component update skipped: no changes detected: %s", comp.LogName())
+			log.Debug("Component update skipped: no changes detected", "log_name", comp.LogName())
 			return nil
 		}
 
@@ -100,25 +100,25 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 		// means an older event arrived out of order; skip rather than
 		// downgrade the installed version.
 		if comp.GetGeneration() > 0 && comp.GetGeneration() < oldComp.GetGeneration() {
-			log.Warnf("Ignoring stale Component event for %s (generation %d < installed %d)",
-				comp.LogName(), comp.GetGeneration(), oldComp.GetGeneration())
+			log.Warn("Ignoring stale Component event",
+				"component", comp.LogName(), "generation", comp.GetGeneration(), "installed_generation", oldComp.GetGeneration())
 			return nil
 		}
 
-		log.Infof("Closing existing Component to reload: %s", oldComp.LogName())
+		log.Info("Closing existing Component to reload: " + oldComp.LogName())
 		// TODO: change close to accept pointer
 		if err := c.proc.Close(ctx, oldComp); err != nil {
-			log.Errorf("error closing old component: %s", err)
+			log.Error("error closing old component", "error", err)
 			return nil
 		}
 	}
 
 	if !c.auth.IsObjectAuthorized(comp) {
-		log.Warnf("Received unauthorized component update, ignored: %s", comp.LogName())
+		log.Warn("Received unauthorized component update, ignored", "log_name", comp.LogName())
 		return nil
 	}
 
-	log.Infof("Adding Component for processing: %s", comp.LogName())
+	log.Info("Adding Component for processing", "log_name", comp.LogName())
 
 	res := c.proc.AddPendingComponent(ctx, comp)
 	if res == nil {
@@ -129,17 +129,17 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 		return nil
 	case err := <-res:
 		if err == nil {
-			log.Infof("Component updated: %s", comp.LogName())
+			log.Info("Component updated: " + comp.LogName())
 			// An update which unmarked the actor state store frees the slot
 			// for a previously skipped component.
 			return c.replaySkippedActorStore(ctx)
 		}
 		err = fmt.Errorf("process component %s error: %s", comp.Name, err)
 		if comp.Spec.IgnoreErrors {
-			log.Errorf("Ignoring error processing component: %s", err)
+			log.Error(fmt.Sprintf("Ignoring error processing component: %s", err))
 			return nil
 		}
-		log.Warnf("Error processing component, daprd will exit gracefully: %s", err)
+		log.Warn(fmt.Sprintf("Error processing component, daprd will exit gracefully: %s", err))
 		return err
 	}
 }
@@ -150,7 +150,7 @@ func (c *components) delete(ctx context.Context, comp compapi.Component) error {
 	defer c.notifyActorStateStoreChanged()()
 
 	if err := c.proc.Close(ctx, comp); err != nil {
-		log.Errorf("error closing deleted component: %s", err)
+		log.Error("error closing deleted component", "error", err)
 	}
 
 	return c.replaySkippedActorStore(ctx)
@@ -182,7 +182,7 @@ func (c *components) replaySkippedActorStore(ctx context.Context) error {
 	c.skippedActorStore = nil
 	c.skippedActorStoreLock.Unlock()
 
-	log.Infof("Applying previously skipped actor state store: %s", skipped.LogName())
+	log.Info("Applying previously skipped actor state store", "log_name", skipped.LogName())
 	return c.update(ctx, *skipped)
 }
 

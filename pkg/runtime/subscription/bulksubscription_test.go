@@ -153,7 +153,7 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
 
 		ps, err := New(Options{
-			Resiliency: resiliency.New(log),
+			Resiliency: resiliency.New(log.Legacy()),
 			Postman: http.New(http.Options{
 				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
 			}),
@@ -211,7 +211,7 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
 
 		ps, err := New(Options{
-			Resiliency: resiliency.New(log),
+			Resiliency: resiliency.New(log.Legacy()),
 			Postman: http.New(http.Options{
 				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
 			}),
@@ -273,7 +273,7 @@ func TestBulkSubscribe(t *testing.T) {
 		channels := new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		ps, err := New(Options{
-			Resiliency: resiliency.New(log),
+			Resiliency: resiliency.New(log.Legacy()),
 			Postman:    http.New(http.Options{Channels: channels}),
 			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
@@ -421,7 +421,7 @@ func TestBulkSubscribe(t *testing.T) {
 		require.NoError(t, err)
 
 		ps, err := New(Options{
-			Resiliency: resiliency.New(log),
+			Resiliency: resiliency.New(log.Legacy()),
 			Postman: http.New(http.Options{
 				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
 			}),
@@ -511,7 +511,7 @@ func TestBulkSubscribe(t *testing.T) {
 		require.NoError(t, err)
 
 		ps, err := New(Options{
-			Resiliency: resiliency.New(log),
+			Resiliency: resiliency.New(log.Legacy()),
 			Postman: http.New(http.Options{
 				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
 			}),
@@ -581,7 +581,7 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.Init()
 
 		ps, err := New(Options{
-			Resiliency: resiliency.New(log),
+			Resiliency: resiliency.New(log.Legacy()),
 			Postman: http.New(http.Options{
 				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
 			}),
@@ -660,7 +660,7 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.Init()
 
 		ps, err := New(Options{
-			Resiliency: resiliency.New(log),
+			Resiliency: resiliency.New(log.Legacy()),
 			Postman: http.New(http.Options{
 				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
 			}),
@@ -743,7 +743,7 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.Init()
 
 		ps, err := New(Options{
-			Resiliency: resiliency.New(log),
+			Resiliency: resiliency.New(log.Legacy()),
 			Postman: http.New(http.Options{
 				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
 			}),
@@ -874,7 +874,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, mockAppChannel.Refresh())
 
 		ps, err := New(Options{
-			Resiliency: resiliency.New(log),
+			Resiliency: resiliency.New(log.Legacy()),
 			GRPC:       g,
 			Postman:    grpc.New(grpc.Options{Channel: g}),
 			PubSub:     &pubsub.PubsubItem{Component: comp},
@@ -1023,7 +1023,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, mockAppChannel.Refresh())
 
 		ps, err := New(Options{
-			Resiliency: resiliency.New(log),
+			Resiliency: resiliency.New(log.Legacy()),
 			GRPC:       g,
 			Postman:    grpc.New(grpc.Options{Channel: g}),
 			PubSub:     &pubsub.PubsubItem{Component: comp},
@@ -1125,7 +1125,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, mockAppChannel.Refresh())
 
 		ps, err := New(Options{
-			Resiliency: resiliency.New(log),
+			Resiliency: resiliency.New(log.Legacy()),
 			GRPC:       g,
 			Postman:    grpc.New(grpc.Options{Channel: g}),
 			PubSub:     &pubsub.PubsubItem{Component: comp},
@@ -1226,7 +1226,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, mockAppChannel.Refresh())
 
 		ps, err := New(Options{
-			Resiliency: resiliency.New(log),
+			Resiliency: resiliency.New(log.Legacy()),
 			GRPC:       g,
 			Postman:    grpc.New(grpc.Options{Channel: g}),
 			PubSub:     &pubsub.PubsubItem{Component: comp},
@@ -1324,7 +1324,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, mockAppChannel.Refresh())
 
 		ps, err := New(Options{
-			Resiliency: resiliency.New(log),
+			Resiliency: resiliency.New(log.Legacy()),
 			GRPC:       g,
 			Postman:    grpc.New(grpc.Options{Channel: g}),
 			PubSub:     &pubsub.PubsubItem{Component: comp},
@@ -1405,7 +1405,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, mockAppChannel.Refresh())
 
 		ps, err := New(Options{
-			Resiliency: resiliency.New(log),
+			Resiliency: resiliency.New(log.Legacy()),
 			GRPC:       g,
 			Postman:    grpc.New(grpc.Options{Channel: g}),
 			PubSub:     &pubsub.PubsubItem{Component: comp},
@@ -1686,7 +1686,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 		})
 
 		ps, err := New(Options{
-			Resiliency: resiliency.New(log),
+			Resiliency: resiliency.New(log.Legacy()),
 			Postman: http.New(http.Options{
 				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
 			}),

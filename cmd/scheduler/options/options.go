@@ -29,7 +29,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.scheduler")
+var log = logger.New("dapr.scheduler")
 
 type Options struct {
 	Port                 int
@@ -105,7 +105,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr Scheduler")
 	fs.StringVar(&opts.kubeconfig, "kubeconfig", "", "Kubernetes mode only. Absolute path to the kubeconfig file.")
 	if err := fs.MarkHidden("kubeconfig"); err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
 	fs.StringVar(&opts.ID, "id", "dapr-scheduler-server-0", "Scheduler server ID")
@@ -138,7 +138,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.Uint32Var(&opts.Workers, "workers", 2048, "Workers is the number of workers that handle job events. The higher the number the more go routines will be spawned, each working over a partition of the total job space. The higher the number, the higher the number of jobs which can be concurrently delivered to runtimes. Increasing this number increases the number of go routines for this instance. This number should be tuned to the bottleneck of job execution, i.e., CPU, I/O, memory, etc.")
 
 	if err := fs.MarkHidden("identity-directory-write"); err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
 	opts.Logger = logger.DefaultOptions()

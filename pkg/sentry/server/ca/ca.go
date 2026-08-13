@@ -41,7 +41,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.sentry.ca")
+var log = logger.New("dapr.sentry.ca")
 
 // SignRequest signs a certificate request with the issuer certificate.
 type SignRequest struct {
@@ -223,14 +223,14 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 			var kid string
 			if conf.JWT.KeyID != nil {
 				kid = *conf.JWT.KeyID
-				log.Infof("Using JWT kid from configuration: %s", kid)
+				log.Info("Using JWT kid from configuration", "kid", kid)
 			} else {
 				thumbprint, thumbErr := signKey.Thumbprint(bundle.DefaultKeyThumbprintAlgorithm)
 				if thumbErr != nil {
 					return nil, fmt.Errorf("failed to generate JWK thumbprint: %w", thumbErr)
 				}
 				kid = base64.StdEncoding.EncodeToString(thumbprint)
-				log.Infof("Using JWT kid from thumbprint: %s, please ensure this aligns with your JWKS", kid)
+				log.Info("Using JWT kid from thumbprint, please ensure this aligns with your JWKS", "kid", kid)
 			}
 
 			if err = signKey.Set(jwk.KeyIDKey, kid); err != nil {

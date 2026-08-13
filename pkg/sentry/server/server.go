@@ -38,7 +38,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.sentry.server")
+var log = logger.New("dapr.sentry.server")
 
 // Options is the configuration for the server.
 type Options struct {
@@ -119,7 +119,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Infof("Running gRPC server on port %d", s.port)
+		log.Info("Running gRPC server on port", "port", s.port)
 		if err := srv.Serve(lis); err != nil {
 			errCh <- fmt.Errorf("failed to serve: %w", err)
 			return
@@ -155,43 +155,43 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	}
 	namespace := req.GetNamespace()
 	if validator == sentryv1pb.SignCertificateRequest_UNKNOWN {
-		log.Debugf("Validator '%s' is not known for %s/%s", validator.String(), namespace, req.GetId())
+		log.Debug("Validator is not known for /", "string", validator.String(), "namespace", namespace, "id", req.GetId())
 		return nil, status.Error(codes.InvalidArgument, "a validator name must be specified in this environment")
 	}
 	if _, ok := s.vals[validator]; !ok {
-		log.Debugf("Validator '%s' is not enabled for %s/%s", validator.String(), namespace, req.GetId())
+		log.Debug("Validator is not enabled for /", "string", validator.String(), "namespace", namespace, "id", req.GetId())
 		return nil, status.Error(codes.InvalidArgument, "the requested validator is not enabled")
 	}
 
-	log.Debugf("Processing SignCertificate request for %s/%s (validator: %s)", namespace, req.GetId(), validator.String())
+	log.Debug("Processing SignCertificate request for / (validator: )", "namespace", namespace, "id", req.GetId(), "string", validator.String())
 
 	res, err := s.vals[validator].Validate(ctx, req)
 	if err != nil {
-		log.Debugf("Failed to validate request for %s/%s: %s", namespace, req.GetId(), err)
+		log.Debug("Failed to validate request for /", "namespace", namespace, "id", req.GetId(), "error", err)
 		return nil, status.Error(codes.PermissionDenied, err.Error())
 	}
 
 	der, _ := pem.Decode(req.GetCertificateSigningRequest())
 	if der == nil {
-		log.Debugf("Invalid CSR: PEM block is nil for %s/%s", namespace, req.GetId())
+		log.Debug("Invalid CSR: PEM block is nil for /", "namespace", namespace, "id", req.GetId())
 		return nil, status.Error(codes.InvalidArgument, "invalid certificate signing request")
 	}
 
 	// TODO: @joshvanl: Before v1.12, daprd was sending CSRs with the PEM block type "CERTIFICATE"
 	// After 1.14, allow only "CERTIFICATE REQUEST"
 	if der.Type != "CERTIFICATE REQUEST" && der.Type != "CERTIFICATE" {
-		log.Debugf("Invalid CSR: PEM block type is invalid for %s/%s: %s", namespace, req.GetId(), der.Type)
+		log.Debug("Invalid CSR: PEM block type is invalid for /", "namespace", namespace, "id", req.GetId(), "pem_type", der.Type)
 		return nil, status.Error(codes.InvalidArgument, "invalid certificate signing request")
 	}
 
 	csr, err := x509.ParseCertificateRequest(der.Bytes)
 	if err != nil {
-		log.Debugf("Failed to parse CSR for %s/%s: %v", namespace, req.GetId(), err)
+		log.Debug("Failed to parse CSR for /", "namespace", namespace, "id", req.GetId(), "error", err)
 		return nil, status.Errorf(codes.InvalidArgument, "failed to parse certificate signing request: %v", err)
 	}
 
 	if csr.CheckSignature() != nil {
-		log.Debugf("Invalid CSR: invalid signature for %s/%s", namespace, req.GetId())
+		log.Debug("Invalid CSR: invalid signature for /", "namespace", namespace, "id", req.GetId())
 		return nil, status.Error(codes.InvalidArgument, "invalid signature")
 	}
 
@@ -218,17 +218,17 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		ContainerImages: res.ContainerImages,
 	})
 	if err != nil {
-		log.Errorf("Error signing identity: %v", err)
+		log.Error("Error signing identity", "error", err)
 		return nil, status.Error(codes.Internal, "failed to sign certificate")
 	}
 
 	chainPEM, err := secpem.EncodeX509Chain(chain)
 	if err != nil {
-		log.Errorf("Error encoding certificate chain: %v", err)
+		log.Error("Error encoding certificate chain", "error", err)
 		return nil, status.Error(codes.Internal, "failed to encode certificate chain")
 	}
 
-	log.Debugf("Successfully signed certificate for %s/%s", namespace, req.GetId())
+	log.Debug("Successfully signed certificate for /", "namespace", namespace, "id", req.GetId())
 
 	audiences := append([]string{res.TrustDomain.String()}, req.GetJwtAudiences()...) // Default audience is the trust domain
 

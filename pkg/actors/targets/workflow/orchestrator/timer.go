@@ -95,7 +95,7 @@ func (o *orchestrator) createTimer(ctx context.Context, e *backend.HistoryEvent,
 	reminderName := timerReminderName(e.GetTimerFired().GetTimerId())
 	data := &backend.DurableTimer{TimerEvent: e, Generation: generation}
 
-	log.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer, duetime=%s", o.actorID, reminderName, start)
+	log.Debug("Workflow actor: creating reminder for the durable timer, duetime=", "actor_id", o.actorID, "reminder", reminderName, "start", start)
 
 	if err := o.createTimerReminder(ctx, reminderName, data, start); err != nil {
 		return fmt.Errorf("actor '%s' failed to create reminder for timer: %w", o.actorID, err)
@@ -113,7 +113,7 @@ func (o *orchestrator) createTimerReminder(ctx context.Context, name string, dat
 		return err
 	}
 
-	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, name, dueTime)
+	log.Debug("Workflow actor ||: creating reminder with DueTime =", "actor_type", actorType, "actor_id", o.actorID, "name", name, "due_time", dueTime)
 
 	return common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
 		ActorType: actorType,
@@ -223,14 +223,14 @@ func (o *orchestrator) deleteCancelledEventTimers(ctx context.Context, rs *proto
 	actorType := o.actorTypeBuilder.Workflow(o.appID)
 	for _, timerID := range cancelledTimerIDs {
 		name := timerReminderName(timerID)
-		log.Debugf("Workflow actor '%s': deleting cancelled event timer reminder '%s'", o.actorID, name)
+		log.Debug("Workflow actor: deleting cancelled event timer reminder", "actor_id", o.actorID, "name", name)
 		if err := o.reminders.Delete(ctx, &actorapi.DeleteReminderRequest{
 			Name:      name,
 			ActorType: actorType,
 			ActorID:   o.actorID,
 		}); err != nil {
 			if s, ok := grpcstatus.FromError(err); ok && s.Code() == codes.NotFound {
-				log.Debugf("Workflow actor '%s': timer reminder '%s' already deleted, ignoring", o.actorID, name)
+				log.Debug("Workflow actor: timer reminder already deleted, ignoring", "actor_id", o.actorID, "name", name)
 				continue
 			}
 			return fmt.Errorf("actor '%s' failed to delete cancelled timer reminder '%s': %w", o.actorID, name, err)

@@ -92,7 +92,7 @@ func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.S
 			return err
 		}
 	}
-	log.Infof("Workflow actor '%s': workflow is stalled; holding execution until context is canceled", o.actorID)
+	log.Info("Workflow actor: workflow is stalled; holding execution until context is canceled", "actor_id", o.actorID)
 
 	releaseCh, unlock := o.lock.Stall()
 	defer unlock()

@@ -35,7 +35,7 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 )
 
-var workerLog = logger.NewLogger("dapr.runtime.wfengine.inprocess.mcp.worker")
+var workerLog = logger.New("dapr.runtime.wfengine.inprocess.mcp.worker")
 
 // Options configures the MCP in-process workflow subsystem.
 type Options struct {

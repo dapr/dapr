@@ -57,7 +57,7 @@ func (a *DaprRuntime) loadWorkflowAccessPolicies(ctx context.Context) error {
 	valid := policies[:0]
 	for _, p := range policies {
 		if err := validate.WorkflowAccessPolicy(ctx, &p); err != nil {
-			log.Warnf("WorkflowAccessPolicy %q failed validation, skipping: %s", p.Name, err)
+			log.Warn("WorkflowAccessPolicy failed validation, skipping", "name", p.Name, "error", err)
 			continue
 		}
 		a.compStore.AddWorkflowAccessPolicy(p)
@@ -68,7 +68,7 @@ func (a *DaprRuntime) loadWorkflowAccessPolicies(ctx context.Context) error {
 	a.workflowAccessPolicies.Store(compiled)
 
 	if compiled != nil {
-		log.Infof("Loaded %d workflow access policy resource(s)", len(valid))
+		log.Info("Loaded workflow access policy resource(s)", "lenvalid", len(valid))
 	}
 
 	return nil

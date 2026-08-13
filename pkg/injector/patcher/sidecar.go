@@ -203,7 +203,7 @@ func setValueFromString(rt reflect.Type, rv reflect.Value, val string, key strin
 		if err == nil {
 			rv.SetInt(v)
 		} else {
-			log.Warnf("Failed to parse int value from annotation %s (annotation will be ignored): %v", key, err)
+			log.Warn("Failed to parse int value from annotation (annotation will be ignored)", "key", key, "error", err)
 			return false
 		}
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
@@ -211,7 +211,7 @@ func setValueFromString(rt reflect.Type, rv reflect.Value, val string, key strin
 		if err == nil {
 			rv.SetUint(v)
 		} else {
-			log.Warnf("Failed to parse uint value from annotation %s (annotation will be ignored): %v", key, err)
+			log.Warn("Failed to parse uint value from annotation (annotation will be ignored)", "key", key, "error", err)
 			return false
 		}
 	}

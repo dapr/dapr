@@ -28,7 +28,7 @@ import (
 
 func TestCircuitBreaker_RequestCount(t *testing.T) {
 	t.Parallel()
-	log := logger.NewLogger("test")
+	log := logger.New("test")
 
 	var trip expr.Expr
 	err := trip.DecodeString("requests > 4")
@@ -68,7 +68,7 @@ func TestCircuitBreaker_RequestCount(t *testing.T) {
 
 func TestCircuitBreaker_TotalFailures(t *testing.T) {
 	t.Parallel()
-	log := logger.NewLogger("test")
+	log := logger.New("test")
 
 	var trip expr.Expr
 	err := trip.DecodeString("totalFailures > 4")
@@ -122,7 +122,7 @@ func TestCircuitBreaker_TotalFailures(t *testing.T) {
 
 func TestCircuitBreaker_ConsecutiveFailures(t *testing.T) {
 	t.Parallel()
-	log := logger.NewLogger("test")
+	log := logger.New("test")
 
 	var trip expr.Expr
 	err := trip.DecodeString("consecutiveFailures > 3")

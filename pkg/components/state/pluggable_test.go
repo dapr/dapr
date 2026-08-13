@@ -203,7 +203,7 @@ func TestComponentCalls(t *testing.T) {
 			proto.RegisterStateStoreServer(s, srv)
 			go func() {
 				if serveErr := s.Serve(listener); serveErr != nil {
-					testLogger.Debugf("Server exited with error: %v", serveErr)
+					logger.FromLogger(testLogger).Debug("Server exited with error", "error", serveErr)
 				}
 			}()
 

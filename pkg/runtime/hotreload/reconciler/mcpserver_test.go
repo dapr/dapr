@@ -82,7 +82,7 @@ func newMCPGuardManager(t *testing.T) (*mcpservers, *processor.Processor, *comps
 		Registry:       reg,
 		ComponentStore: cs,
 		Meta:           meta.New(meta.Options{ID: "id", Namespace: "test", Mode: modes.StandaloneMode}),
-		Resiliency:     resiliency.New(log),
+		Resiliency:     resiliency.New(log.Legacy()),
 		Mode:           modes.StandaloneMode,
 		Channels:       new(channels.Channels),
 		GlobalConfig:   new(config.Configuration),

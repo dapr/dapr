@@ -54,7 +54,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		version, _ = strconv.ParseUint(order.Order.GetTables().GetVersion(), 10, 64)
 	}
 
-	log.Debugf("Handling placement order=%s version=%d", order.Order.GetOperation(), version)
+	log.Debug("Handling placement order= version=", "operation", order.Order.GetOperation(), "version", version)
 
 	switch order.Order.GetOperation() {
 	case operationLock:
@@ -115,7 +115,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		d.inflight.CancelClaimsForTypes(changed, errors.New("placement table updated"))
 
 		if err := d.actorTable.HaltNonHosted(ctx, d.inflight.IsActorHostedNoLock); err != nil {
-			log.Errorf("Error draining non-hosted actors: %s", err)
+			log.Error("Error draining non-hosted actors", "error", err)
 		}
 
 		d.streamLoop.Enqueue(&loops.StreamSend{
@@ -129,14 +129,14 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 
 	case operationUnlock:
 		if d.currentOperation != v1pb.HostOperation_UPDATE {
-			log.Warnf("Invalid operation sequence: expected UPDATE before UNLOCK, ignoring unlock")
+			log.Warn("Invalid operation sequence: expected UPDATE before UNLOCK, ignoring unlock")
 			return nil
 		}
 
 		if d.currentVersion > version {
-			log.Errorf("Version mismatch: expected %d, got %d, ignoring unlock",
-				d.currentVersion,
-				version,
+			log.Error("Version mismatch, ignoring unlock",
+				"expected", d.currentVersion,
+				"got", version,
 			)
 			return nil
 		}
@@ -151,8 +151,8 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 			toUnlock = append(toUnlock, t)
 		}
 
-		log.Infof("Dissemination complete for version %d (changed types %v), unlocking disseminator %s/%s",
-			version, toUnlock, d.namespace, d.id,
+		log.Info("Dissemination complete, unlocking disseminator",
+			"version", version, "changed_types", toUnlock, "namespace", d.namespace, "id", d.id,
 		)
 
 		d.currentOperation = v1pb.HostOperation_UNLOCK

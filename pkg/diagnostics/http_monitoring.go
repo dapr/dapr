@@ -34,7 +34,7 @@ var (
 	httpPathKey       = tag.MustNewKey("path")
 	httpMethodKey     = tag.MustNewKey("method")
 
-	log = logger.NewLogger("dapr.runtime.diagnostics")
+	log = logger.New("dapr.runtime.diagnostics")
 )
 
 type httpMetrics struct {

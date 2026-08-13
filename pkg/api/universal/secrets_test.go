@@ -266,7 +266,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 	// Setup Dapr API
 	fakeAPI := &Universal{
 		logger:     testLogger,
-		resiliency: resiliency.FromConfigurations(testLogger, testResiliency),
+		resiliency: resiliency.FromConfigurations(testLogger.Legacy(), testResiliency),
 		compStore:  compStore,
 	}
 

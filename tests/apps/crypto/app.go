@@ -339,7 +339,7 @@ func main() {
 	)
 	cancel()
 	if err != nil {
-		log.Fatalf("Error connecting to Dapr's gRPC endpoint on port %d: %v", daprGRPCPort, err)
+		log.Fatal("Error connecting to Dapr's gRPC endpoint on port", "dapr_g_r_p_c_port", daprGRPCPort, "error", err)
 	}
 
 	// Create a Dapr SDK client

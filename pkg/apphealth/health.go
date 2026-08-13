@@ -27,7 +27,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.apphealth")
+var log = logger.New("dapr.apphealth")
 
 // AppHealth manages the health checks for the app.
 type AppHealth struct {
@@ -185,7 +185,7 @@ func (h *AppHealth) doProbe(parentCtx context.Context) {
 	if err != nil {
 		reason := fmt.Sprintf("Probe error: %v", err)
 		h.setResult(parentCtx, NewStatus(false, &reason))
-		log.Errorf("App health probe could not complete with error: %v", err)
+		log.Error("App health probe could not complete with error", "error", err)
 		return
 	}
 

@@ -75,7 +75,7 @@ type Subscription struct {
 	postman postman.Interface
 }
 
-var log = logger.NewLogger("dapr.runtime.processor.subscription")
+var log = logger.New("dapr.runtime.processor.subscription")
 
 // drainMaxDuration caps how long Stop will wait for the drain to settle.
 // var rather than const so tests can shorten it.
@@ -197,7 +197,7 @@ func New(opts Options) (*Subscription, error) {
 
 		rawPayload, err := metadata.IsRawPayload(route.Metadata)
 		if err != nil {
-			log.Errorf("error deserializing pubsub metadata: %s", err)
+			log.Error("error deserializing pubsub metadata", logger.Err(err))
 
 			if route.DeadLetterTopic != "" {
 				dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
@@ -236,7 +236,7 @@ func New(opts Options) (*Subscription, error) {
 
 			data, err = json.Marshal(cloudEvent)
 			if err != nil {
-				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
+				log.Error("error serializing cloud event", "pubsub", name, "topic", msgTopic, "error", err)
 
 				if route.DeadLetterTopic != "" {
 					dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
@@ -267,7 +267,7 @@ func New(opts Options) (*Subscription, error) {
 			// all messages consumed with "rawPayload=false" are deserialized as a CloudEvent
 			err = json.Unmarshal(msg.Data, &cloudEvent)
 			if err != nil {
-				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
+				log.Error("error deserializing cloud event", "pubsub", name, "topic", msgTopic, "error", err)
 
 				if route.DeadLetterTopic != "" {
 					dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
@@ -306,7 +306,7 @@ func New(opts Options) (*Subscription, error) {
 		}
 
 		if contribpubsub.HasExpired(cloudEvent) {
-			log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[contribpubsub.IDField], cloudEvent[contribpubsub.ExpirationField])
+			log.Warn("dropping expired pub/sub event", "event_id", cloudEvent[contribpubsub.IDField], "expired_at", cloudEvent[contribpubsub.ExpirationField])
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 
 			if route.DeadLetterTopic != "" {
@@ -318,7 +318,7 @@ func New(opts Options) (*Subscription, error) {
 
 		routePath, shouldProcess, err := findMatchingRoute(route.Rules, cloudEvent)
 		if err != nil {
-			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[contribpubsub.IDField], name, msgTopic, err)
+			log.Error("error finding matching route for event", "event_id", cloudEvent[contribpubsub.IDField], "pubsub", name, "topic", msgTopic, "error", err)
 
 			if route.DeadLetterTopic != "" {
 				dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
@@ -336,7 +336,7 @@ func New(opts Options) (*Subscription, error) {
 
 		if !shouldProcess {
 			// The event does not match any route specified so ignore it.
-			log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[contribpubsub.IDField], name, msgTopic)
+			log.Debug("no matching route for event; skipping", "event_id", cloudEvent[contribpubsub.IDField], "pubsub", name, "topic", msgTopic)
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), strings.ToLower(string(contribpubsub.Success)), msgTopic, 0)
 
 			if route.DeadLetterTopic != "" {
@@ -361,20 +361,20 @@ func New(opts Options) (*Subscription, error) {
 
 			var rErr *rterrors.RetriableError
 			if errors.As(pErr, &rErr) {
-				log.Warnf("encountered a retriable error while publishing a subscribed message to topic %s, err: %v", msgTopic, rErr.Unwrap())
+				log.Warn("encountered a retriable error while publishing a subscribed message", "topic", msgTopic, "error", rErr.Unwrap())
 			} else if errors.Is(pErr, rtpubsub.ErrMessageDropped) {
 				// send dropped message to dead letter queue if configured
 				if route.DeadLetterTopic != "" {
 					derr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
 					if derr != nil {
-						log.Warnf("failed to send dropped message to dead letter queue for topic %s: %v", msgTopic, derr)
+						log.Warn("failed to send dropped message to dead letter queue", "topic", msgTopic, "error", derr)
 						return nil, pErr
 					}
 				}
 
 				return nil, nil
 			} else if pErr != nil {
-				log.Errorf("encountered a non-retriable error while publishing a subscribed message to topic %s, err: %v", msgTopic, pErr)
+				log.Error("encountered a non-retriable error while publishing a subscribed message", "topic", msgTopic, "error", pErr)
 			}
 
 			return nil, pErr
@@ -430,7 +430,7 @@ func (s *Subscription) Stop(err ...error) {
 	paused := false
 	if graceful {
 		if pausable, ok := s.pubsub.Component.(contribpubsub.PausableSubscriber); ok {
-			log.Infof("pausing subscription on topic %s during graceful shutdown", s.topic)
+			log.Info("pausing subscription during graceful shutdown", "topic", s.topic)
 			// Bound Pause so a hung component cannot block shutdown forever.
 			pauseCtx, pauseCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			perr := pausable.Pause(pauseCtx)
@@ -441,7 +441,7 @@ func (s *Subscription) Stop(err ...error) {
 			case errors.Is(perr, pluggablepubsub.ErrPausableUnimplemented):
 				// Legacy pluggable; fall back to close-first silently.
 			default:
-				log.Warnf("failed to pause subscription on topic %s during graceful shutdown: %v", s.topic, perr)
+				log.Warn("failed to pause subscription during graceful shutdown", "topic", s.topic, "error", perr)
 			}
 		}
 	}
@@ -477,8 +477,8 @@ func (s *Subscription) Stop(err ...error) {
 				}
 			}
 			if time.Now().After(deadline) {
-				log.Warnf("drain exceeded %s; sealing with inflight=%d on topic %s",
-					drainMaxDuration, s.inflight.Load(), s.topic)
+				log.Warn("drain deadline exceeded; sealing subscription",
+					"deadline", drainMaxDuration, "inflight", s.inflight.Load(), "topic", s.topic)
 				hitCeiling = true
 				break
 			}
@@ -555,7 +555,7 @@ func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *c
 	defer cancel()
 	err := s.adapter.Publish(pubCtx, req, rtpubsub.TransportModeGRPC)
 	if err != nil {
-		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
+		log.Error("error sending message to dead letter", "topic", msg.Topic, "dead_letter_topic", deadLetterTopic, "error", err)
 		return err
 	}
 

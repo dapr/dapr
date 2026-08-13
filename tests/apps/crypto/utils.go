@@ -67,7 +67,7 @@ func StartServer(port int, appRouter func() http.Handler) {
 	addr := fmt.Sprintf(":%d", port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Fatalf("Failed to create listener: %v", err)
+		log.Fatal("Failed to create listener", "error", err)
 	}
 
 	//nolint:gosec
@@ -90,7 +90,7 @@ func StartServer(port int, appRouter func() http.Handler) {
 
 	// Blocking call
 	if server.Serve(ln) != http.ErrServerClosed {
-		log.Fatalf("Failed to run server: %v", err)
+		log.Fatal("Failed to run server", "error", err)
 	}
 
 	log.Println("Server shut down")

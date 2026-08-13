@@ -41,6 +41,7 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/kit/logger"
 )
 
 var endpointGroupActorV1State = &endpoints.EndpointGroup{
@@ -96,7 +97,7 @@ func actorInvocationMethodNameFn(r *http.Request) string {
 
 func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 	methodNameFn := actorInvocationMethodNameWithIDFn
-	if a.metricSpec != nil && !a.metricSpec.GetHTTPIncreasedCardinality(log) {
+	if a.metricSpec != nil && !a.metricSpec.GetHTTPIncreasedCardinality(log.Legacy()) {
 		methodNameFn = actorInvocationMethodNameFn
 	}
 	return []endpoints.Endpoint{
@@ -202,7 +203,7 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 
@@ -210,7 +211,7 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 	if vErr := methodutil.ValidateName(name); vErr != nil {
 		msg := messages.ErrBadRequest.WithFormat(vErr)
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 	req.Name = name
@@ -228,7 +229,7 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
 			msg := messages.ErrActorReminderOpActorNotHosted
 			respondWithError(w, msg)
-			log.Debug(msg)
+			log.Debug("api call returned error", logger.Err(msg))
 			return
 		}
 
@@ -236,13 +237,13 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 		if ok && status.Code() == codes.AlreadyExists {
 			msg := messages.ErrActorReminderAlreadyExists.WithFormat(req.Name)
 			respondWithError(w, msg)
-			log.Debug(msg)
+			log.Debug("api call returned error", logger.Err(msg))
 			return
 		}
 
 		msg := messages.ErrActorReminderCreate.WithFormat(err)
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 
@@ -263,7 +264,7 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 
@@ -271,7 +272,7 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 	if vErr := methodutil.ValidateName(name); vErr != nil {
 		msg := messages.ErrBadRequest.WithFormat(vErr)
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 	req.Name = name
@@ -288,7 +289,7 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		msg := messages.ErrActorTimerCreate.WithFormat(err)
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 
@@ -324,7 +325,7 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 
@@ -337,7 +338,7 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	state, err := a.universal.ActorState(ctx)
 	if err != nil {
 		respondWithError(w, err)
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		return
 	}
 
@@ -345,13 +346,13 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.As(err, new(messages.APIError)) {
 			respondWithError(w, err)
-			log.Debug(err)
+			log.Debug("api call returned error", logger.Err(err))
 			return
 		}
 
 		msg := messages.ErrActorStateTransactionSave.WithFormat(err)
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 
@@ -441,7 +442,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 		if vErr := methodutil.ValidateName(param.val); vErr != nil {
 			msg := messages.ErrBadRequest.WithFormat(fmt.Sprintf("invalid %s: %v", param.name, vErr))
 			respondWithError(w, msg)
-			log.Debug(msg)
+			log.Debug("api call returned error", logger.Err(msg))
 			return
 		}
 	}
@@ -450,7 +451,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		msg := messages.ErrBadRequest.WithFormat(err)
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 
@@ -459,7 +460,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		msg := messages.ErrBadRequest.WithFormat("failed to read body: " + err.Error())
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 
@@ -486,7 +487,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if merr, ok := err.(messages.APIError); ok {
 			respondWithError(w, merr)
-			log.Debug(merr)
+			log.Debug("api call returned error", logger.Err(merr))
 			return
 		}
 
@@ -494,7 +495,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 		if !isActorError {
 			msg := messages.ErrActorInvoke.WithFormat(err)
 			respondWithError(w, msg)
-			log.Debug(msg)
+			log.Debug("api call returned error", logger.Err(msg))
 			return
 		}
 		// Use Add to ensure headers are appended and not replaced
@@ -510,7 +511,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	if res == nil {
 		msg := messages.ErrActorInvoke.WithFormat("failed to cast response")
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 
@@ -555,13 +556,13 @@ func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.As(err, new(messages.APIError)) {
 			respondWithError(w, err)
-			log.Debug(err)
+			log.Debug("api call returned error", logger.Err(err))
 			return
 		}
 
 		msg := messages.ErrActorStateGet.WithFormat(err)
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 

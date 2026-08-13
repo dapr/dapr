@@ -25,7 +25,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.processor.binding.input")
+var log = logger.New("dapr.runtime.processor.binding.input")
 
 type Options struct {
 	Name    string
@@ -108,7 +108,7 @@ func (i *Input) read(ctx context.Context) error {
 		diag.DefaultComponentMonitoring.InputBindingEvent(context.Background(), i.name, err == nil, elapsed)
 
 		if err != nil {
-			log.Debugf("error from app consumer for binding [%s]: %s", i.name, err)
+			log.Debug("error from app consumer for binding", "name", i.name, "error", err)
 			return nil, err
 		}
 

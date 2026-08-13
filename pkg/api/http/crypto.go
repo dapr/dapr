@@ -23,6 +23,7 @@ import (
 	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/kit/logger"
 	encv1 "github.com/dapr/kit/schemes/enc/v1"
 	kitstrings "github.com/dapr/kit/strings"
 )
@@ -90,14 +91,14 @@ func (a *api) onCryptoEncrypt(w http.ResponseWriter, r *http.Request) {
 	keyName := r.Header.Get(cryptoHeaderKeyName)
 	if keyName == "" {
 		err = messages.ErrBadRequest.WithFormat("missing header '" + cryptoHeaderKeyName + "'")
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		respondWithError(w, err)
 		return
 	}
 	algorithm := r.Header.Get(cryptoHeaderKeyWrapAlgorithm)
 	if algorithm == "" {
 		err = messages.ErrBadRequest.WithFormat("missing header '" + cryptoHeaderKeyWrapAlgorithm + "'")
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		respondWithError(w, err)
 		return
 	}
@@ -124,7 +125,7 @@ func (a *api) onCryptoEncrypt(w http.ResponseWriter, r *http.Request) {
 	enc, err := encv1.Encrypt(r.Body, encOpts)
 	if err != nil {
 		err = messages.ErrCryptoOperation.WithFormat(err)
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		respondWithError(w, err)
 		return
 	}
@@ -168,7 +169,7 @@ func (a *api) onCryptoDecrypt(w http.ResponseWriter, r *http.Request) {
 	dec, err := encv1.Decrypt(r.Body, decOpts)
 	if err != nil {
 		err = messages.ErrCryptoOperation.WithFormat(err)
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		respondWithError(w, err)
 		return
 	}
@@ -187,20 +188,20 @@ func (a *api) onCryptoDecrypt(w http.ResponseWriter, r *http.Request) {
 func (a *api) cryptoGetComponent(componentName string) (contribCrypto.SubtleCrypto, error) {
 	if a.universal.CompStore().CryptoProvidersLen() == 0 {
 		err := messages.ErrCryptoProvidersNotConfigured
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
 	if componentName == "" {
 		err := messages.ErrBadRequest.WithFormat("missing component name")
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
 	component, ok := a.universal.CompStore().GetCryptoProvider(componentName)
 	if !ok {
 		err := messages.ErrCryptoProviderNotFound.WithFormat(componentName)
-		log.Debug(err)
+		log.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 

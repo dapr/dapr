@@ -510,7 +510,7 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 			grpc.WithBlock(), //nolint:staticcheck
 		)
 		if err != nil {
-			log.Fatalf("did not connect: %v", err)
+			log.Fatal("did not connect", "error", err)
 		}
 		defer conn.Close()
 		client := pb.NewGreeterClient(conn)

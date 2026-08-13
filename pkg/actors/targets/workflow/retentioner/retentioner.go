@@ -28,7 +28,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.targets.retentioner")
+var log = logger.New("dapr.runtime.actors.targets.retentioner")
 
 type retentioner struct {
 	*factory
@@ -40,7 +40,7 @@ func (r *retentioner) InvokeMethod(context.Context, *internalsv1pb.InternalInvok
 }
 
 func (r *retentioner) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
-	log.Debugf("Invoking retention purge reminder for workflow instance %s", r.actorID)
+	log.Debug("Invoking retention purge reminder for workflow instance", "actor_id", r.actorID)
 
 	req := internalsv1pb.
 		NewInternalInvokeRequest(todo.PurgeWorkflowStateMethod).

@@ -51,7 +51,7 @@ var (
 	GRPCCodeETagInvalid           = codes.InvalidArgument
 	GRPCCodeBulkDeleteRowMismatch = codes.Internal
 
-	log = logger.NewLogger("state-pluggable-logger")
+	log = logger.New("state-pluggable-logger")
 )
 
 const (
@@ -377,7 +377,7 @@ func (ss *grpcStateStore) MultiMaxSize() int {
 
 	resp, err := ss.Client.MultiMaxSize(ctx, new(proto.MultiMaxSizeRequest))
 	if err != nil {
-		log.Error("failed to get multi max size from state store", err)
+		log.Error("failed to get multi max size from state store", "error", err)
 		ss.multiMaxSize = new(-1)
 		return *ss.multiMaxSize
 	}
@@ -387,7 +387,7 @@ func (ss *grpcStateStore) MultiMaxSize() int {
 	// In this case, we set the max size to the maximum possible value for a 32bit system.
 	is32bitSystem := math.MaxInt == math.MaxInt32
 	if is32bitSystem && resp.GetMaxSize() > int64(math.MaxInt32) {
-		log.Warnf("multi max size %d is too large for 32bit systems, setting to max possible", resp.GetMaxSize())
+		log.Warn("multi max size is too large for 32bit systems, setting to max possible", "max_size", resp.GetMaxSize())
 		ss.multiMaxSize = ptr.Of(math.MaxInt32)
 		return *ss.multiMaxSize
 	}

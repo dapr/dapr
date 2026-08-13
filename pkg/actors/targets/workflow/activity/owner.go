@@ -57,7 +57,7 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 	//       introduce some kind of heartbeat protocol to help identify such cases.
 	callback := make(chan bool, 1)
 	wi.Properties[todo.CallbackChannelProperty] = callback
-	log.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", a.actorID, name, wi.InstanceID)
+	log.Debug("Activity actor: scheduling activity for workflow with instanceId", "actor_id", a.actorID, "name", name, "instance_id", wi.InstanceID)
 	start := time.Now()
 	err := a.scheduler(ctx, wi)
 	elapsed := diag.ElapsedSince(start)

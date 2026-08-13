@@ -93,8 +93,8 @@ type server struct {
 	metricSpec     config.MetricSpec
 	servers        []*grpcGo.Server
 	kind           string
-	logger         logger.Logger
-	infoLogger     logger.Logger
+	logger         *logger.Log
+	infoLogger     *logger.Log
 	grpcServerOpts []grpcGo.ServerOption
 	authToken      string
 	apiSpec        config.APISpec
@@ -109,14 +109,14 @@ type server struct {
 }
 
 var (
-	apiServerLogger      = logger.NewLogger("dapr.runtime.grpc.api")
-	apiServerInfoLogger  = logger.NewLogger("dapr.runtime.grpc.api-info")
-	internalServerLogger = logger.NewLogger("dapr.runtime.grpc.internal")
+	apiServerLogger      = logger.New("dapr.runtime.grpc.api")
+	apiServerInfoLogger  = logger.New("dapr.runtime.grpc.api-info")
+	internalServerLogger = logger.New("dapr.runtime.grpc.internal")
 )
 
 // NewAPIServer returns a new user facing gRPC API server.
 func NewAPIServer(opts Options) Server {
-	apiServerInfoLogger.SetOutputLevel(logger.LogLevel("info"))
+	apiServerInfoLogger.SetOutputLevel(logger.InfoLevel)
 
 	// This is equivalent to "infinity" time (see: https://github.com/grpc/grpc-go/blob/master/internal/transport/defaults.go)
 	const infinity = time.Duration(math.MaxInt64)
@@ -211,20 +211,20 @@ func (s *server) StartNonBlocking(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		s.logger.Infof("gRPC server listening on UNIX socket: %s", socket)
+		s.logger.Info("gRPC server listening on UNIX socket", "socket", socket)
 		listeners = append(listeners, l)
 	} else if s.listener != nil {
 		// The port was reserved earlier and the bound listener handed to us.
-		s.logger.Infof("gRPC server listening on pre-bound TCP address: %s", s.listener.Addr())
+		s.logger.Info("gRPC server listening on pre-bound TCP address", "address", s.listener.Addr())
 		listeners = append(listeners, s.listener)
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
 			l, err := listen.TCP(ctx, addr)
 			if err != nil {
-				s.logger.Errorf("Failed to listen for gRPC server on TCP address %s with error: %v", addr, err)
+				s.logger.Error("Failed to listen for gRPC server on TCP address", "address", addr, "error", err)
 			} else {
-				s.logger.Infof("gRPC server listening on TCP address: %s", addr)
+				s.logger.Info("gRPC server listening on TCP address", "address", addr)
 				listeners = append(listeners, l)
 			}
 		}
@@ -249,7 +249,7 @@ func (s *server) StartNonBlocking(ctx context.Context) error {
 			internalv1pb.RegisterServiceInvocationServer(server, s.api)
 		case apiServer:
 			runtimev1pb.RegisterDaprServer(server, s.api)
-			s.logger.Infof("Registering workflow engine for gRPC endpoint: %s", listener.Addr())
+			s.logger.Info("Registering workflow engine for gRPC endpoint", "address", listener.Addr())
 			s.workflowEngine.RegisterGrpcServer(server)
 		}
 
@@ -257,7 +257,7 @@ func (s *server) StartNonBlocking(ctx context.Context) error {
 		go func(server *grpcGo.Server, l net.Listener) {
 			defer s.wg.Done()
 			if err := server.Serve(l); err != nil && !errors.Is(err, grpcGo.ErrServerStopped) {
-				s.logger.Fatalf("gRPC serve error: %v", err)
+				s.logger.Fatal("gRPC serve error", logger.Err(err))
 			}
 		}(server, listener)
 	}
@@ -408,17 +408,16 @@ func (s *server) getGRPCAPILoggingMiddlewares() (grpcGo.UnaryServerInterceptor, 
 }
 
 func (s *server) printAPILog(ctx context.Context, method string, duration time.Duration, code grpcCodes.Code) {
-	fields := make(map[string]any, 4)
-	fields["method"] = method
+	attrs := make([]any, 0, 8)
+	attrs = append(attrs, "method", method)
 	if meta, ok := metadata.FromIncomingContext(ctx); ok {
 		if val, ok := meta["user-agent"]; ok && len(val) > 0 {
-			fields["useragent"] = val[0]
+			attrs = append(attrs, "useragent", val[0])
 		}
 	}
 	// Report duration in milliseconds
-	fields["duration"] = duration.Milliseconds()
 	// TODO: fix types
 	//nolint:gosec
-	fields["code"] = int32(code)
-	s.infoLogger.WithFields(fields).Info("gRPC API Called")
+	attrs = append(attrs, "duration", duration.Milliseconds(), "code", int32(code))
+	s.infoLogger.Info("gRPC API Called", attrs...)
 }

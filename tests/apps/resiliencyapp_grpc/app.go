@@ -250,7 +250,7 @@ func main() {
 	/* #nosec */
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", appPort))
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Fatal("failed to listen", "error", err)
 	}
 
 	/* #nosec */
@@ -264,6 +264,6 @@ func main() {
 	log.Println("Client starting...")
 
 	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+		log.Fatal("failed to serve", "error", err)
 	}
 }

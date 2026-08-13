@@ -32,25 +32,25 @@ import (
 	"github.com/dapr/kit/signals"
 )
 
-var log = logger.NewLogger("dapr.placement")
+var log = logger.New("dapr.placement")
 
 func Run() {
 	opts, err := options.New(os.Args[1:])
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
 	// Apply options to all loggers.
 	if e := logger.ApplyOptionsToLoggers(&opts.Logger); e != nil {
-		log.Fatal(e)
+		log.Fatal("fatal error", "error", e)
 	}
 
-	log.Infof("Starting Dapr Placement Service -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
+	log.Info("Starting Dapr Placement Service -- version -- commit", "version", buildinfo.Version(), "commit", buildinfo.Commit())
+	log.Info("Log level set to", "output_level", opts.Logger.OutputLevel)
 
 	healthz := healthz.New()
 	metricsExporter := metrics.New(metrics.Options{
-		Log:           log,
+		Log:           log.Legacy(),
 		Enabled:       opts.Metrics.Enabled(),
 		Namespace:     metrics.DefaultMetricNamespace,
 		Port:          opts.Metrics.Port(),
@@ -59,7 +59,7 @@ func Run() {
 	})
 
 	if e := monitoring.InitMetrics(); e != nil {
-		log.Fatal(e)
+		log.Fatal("fatal error", "error", e)
 	}
 
 	ctx := signals.Context()
@@ -74,7 +74,7 @@ func Run() {
 		Healthz:                 healthz,
 	})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
 	var place *placement.Placement
@@ -103,7 +103,7 @@ func Run() {
 	}
 
 	healthSrv := healthzserver.New(healthzserver.Options{
-		Log:      log,
+		Log:      log.Legacy(),
 		Port:     opts.HealthzPort,
 		Healthz:  healthz,
 		Handlers: handlers,
@@ -141,7 +141,7 @@ func Run() {
 		},
 	).Run(ctx)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error", "error", err)
 	}
 
 	log.Info("Placement service shut down gracefully")

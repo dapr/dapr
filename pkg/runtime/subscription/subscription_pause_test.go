@@ -176,7 +176,7 @@ func newSubscriptionForTest(t *testing.T, comp contribpubsub.PubSub) *Subscripti
 	require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 	sub, err := New(Options{
-		Resiliency: resiliency.New(log),
+		Resiliency: resiliency.New(log.Legacy()),
 		Postman: http.New(http.Options{
 			Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
 		}),

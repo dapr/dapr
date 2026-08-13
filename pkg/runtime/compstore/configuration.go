@@ -14,6 +14,7 @@ limitations under the License.
 package compstore
 
 import (
+	"fmt"
 	"maps"
 
 	"github.com/dapr/components-contrib/configuration"
@@ -21,7 +22,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.compstore")
+var log = logger.New("dapr.runtime.compstore")
 
 func (c *ComponentStore) AddConfiguration(name string, store configuration.Store) {
 	c.lock.Lock()
@@ -105,7 +106,7 @@ func (c *ComponentStore) AddSecretsConfiguration(name string, secretsScope confi
 	c.secretsConfigurations[name] = secretsScope
 	if _, ok := c.secrets[name]; !ok {
 		// best-effort check since secret store might be added later
-		log.Warnf("Secrets configuration added for '%s', but no matching secret store was found", name)
+		log.Warn(fmt.Sprintf("Secrets configuration added for '%s', but no matching secret store was found", name))
 	}
 }
 

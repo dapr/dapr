@@ -39,7 +39,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.scheduler.server")
+var log = logger.New("dapr.scheduler.server")
 
 // Controller is a long-lived k8s controller that must only be created
 // once per process because controller-runtime registers controller names globally in the metrics registry.
@@ -200,7 +200,7 @@ func (s *Server) Run(ctx context.Context) error {
 			err := s.cron.Run(ctx)
 			if ctx.Err() != nil {
 				if err != nil {
-					log.Errorf("Error running scheduler cron: %s", err)
+					log.Error("Error running scheduler cron", "error", err)
 				}
 				return ctx.Err()
 			}
@@ -221,7 +221,7 @@ func (s *Server) Run(ctx context.Context) error {
 		runners = append(runners, s.etcd.Run)
 	}
 
-	mngr := concurrency.NewRunnerCloserManager(log, nil, runners...)
+	mngr := concurrency.NewRunnerCloserManager(log.Legacy(), nil, runners...)
 
 	if s.etcd != nil {
 		if err := mngr.AddCloser(s.etcd); err != nil {
@@ -239,7 +239,7 @@ func (s *Server) runServer(ctx context.Context) error {
 		return fmt.Errorf("could not listen on port %d: %w", s.port, err)
 	}
 
-	log.Infof("Dapr Scheduler listening on: %s:%d", s.listenAddress, s.port)
+	log.Info("Dapr Scheduler listening on", "listen_address", s.listenAddress, "port", s.port)
 
 	srv := grpc.NewServer(
 		s.sec.GRPCServerOptionMTLS(),
@@ -256,7 +256,7 @@ func (s *Server) runServer(ctx context.Context) error {
 
 	return concurrency.NewRunnerManager(
 		func(ctx context.Context) error {
-			log.Infof("Running gRPC server on port %d", s.port)
+			log.Info("Running gRPC server on port", "port", s.port)
 			if err := srv.Serve(listener); err != nil {
 				return fmt.Errorf("failed to serve: %w", err)
 			}
@@ -286,7 +286,7 @@ func (s *Server) runServer(ctx context.Context) error {
 			select {
 			case <-stopped:
 			case <-time.After(gracefulShutdownTimeout):
-				log.Warnf("Graceful shutdown timed out after %s, forcing stop", gracefulShutdownTimeout)
+				log.Warn("Graceful shutdown timed out after, forcing stop", "graceful_shutdown_timeout", gracefulShutdownTimeout)
 				srv.Stop()
 				<-stopped
 			}

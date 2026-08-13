@@ -61,7 +61,7 @@ func (m *errorCodeMetrics) Init(meter view.Meter, id string) error {
 func (m *errorCodeMetrics) RecordErrorCode(ec errorcodes.ErrorCode) {
 	if m.enabled {
 		if ec.Code == "" || ec.Category == "" {
-			log.Warnf("ErrorCode is malformed: Code = %s, Category = %s", ec.Code, ec.Category)
+			log.Warn("ErrorCode is malformed: Code =, Category =", "code", ec.Code, "category", ec.Category)
 			return
 		}
 		_ = stats.RecordWithOptions(

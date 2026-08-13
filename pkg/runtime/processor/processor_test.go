@@ -82,7 +82,7 @@ func newTestProc(setters ...newTestProcOptions) (*Processor, *registry.Registry)
 			Namespace: "test",
 			Mode:      modes.StandaloneMode,
 		}),
-		Resiliency:     resiliency.New(log),
+		Resiliency:     resiliency.New(log.Legacy()),
 		Mode:           modes.StandaloneMode,
 		OperatorClient: nil,
 		GRPC:           nil,

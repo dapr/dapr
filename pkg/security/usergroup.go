@@ -41,7 +41,7 @@ func checkUserIDGroupID(mode modes.DaprMode) error {
 		)
 	}
 
-	log.Infof("Running in Kubernetes environment as user %d", uid)
+	log.Info("Running in Kubernetes environment as user", "uid", uid)
 
 	return nil
 }

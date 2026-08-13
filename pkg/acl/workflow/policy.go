@@ -24,7 +24,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.acl.workflow")
+var log = logger.New("dapr.acl.workflow")
 
 const DeniedMessageBase = "access denied by workflow access policy"
 
@@ -73,7 +73,7 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 			// Defense-in-depth: skip rules with empty callers. The CRD
 			// validates MinItems=1 but standalone mode could bypass validation.
 			if len(rule.Callers) == 0 {
-				log.Warnf("WorkflowAccessPolicy '%s' has a rule with empty callers, skipping (defense-in-depth)", policy.Name)
+				log.Warn("WorkflowAccessPolicy has a rule with empty callers, skipping (defense-in-depth)", "name", policy.Name)
 				continue
 			}
 
@@ -86,11 +86,11 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 
 			for _, wf := range rule.Workflows {
 				if len(wf.Operations) == 0 {
-					log.Warnf("WorkflowAccessPolicy '%s' has a workflow rule with empty operations, skipping (defense-in-depth)", policy.Name)
+					log.Warn("WorkflowAccessPolicy has a workflow rule with empty operations, skipping (defense-in-depth)", "name", policy.Name)
 					continue
 				}
 				if _, err := path.Match(wf.Name, ""); err != nil {
-					log.Warnf("Invalid glob pattern '%s' in WorkflowAccessPolicy '%s', skipping workflow rule", wf.Name, policy.Name)
+					log.Warn("Invalid glob pattern in WorkflowAccessPolicy, skipping workflow rule", "name", wf.Name, "name2", policy.Name)
 					continue
 				}
 
@@ -98,7 +98,7 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 					var requires []wfaclapi.RequiredEvent
 					if len(wf.Requires) > 0 {
 						if op != wfaclapi.WorkflowOperationSchedule {
-							log.Warnf("WorkflowAccessPolicy '%s': requires is only valid when the rule's only operation is schedule, skipping operation '%s' on workflow '%s'", policy.Name, op, wf.Name)
+							log.Warn("WorkflowAccessPolicy: requires is only valid when the rule's only operation is schedule, skipping operation on workflow", "name", policy.Name, "op", op, "name2", wf.Name)
 							continue
 						}
 						requires = wf.Requires
@@ -117,7 +117,7 @@ func Compile(policies []wfaclapi.WorkflowAccessPolicy) *CompiledPolicies {
 
 			for _, act := range rule.Activities {
 				if _, err := path.Match(act.Name, ""); err != nil {
-					log.Warnf("Invalid glob pattern '%s' in WorkflowAccessPolicy '%s', skipping activity rule", act.Name, policy.Name)
+					log.Warn("Invalid glob pattern in WorkflowAccessPolicy, skipping activity rule", "name", act.Name, "name2", policy.Name)
 					continue
 				}
 
@@ -218,7 +218,7 @@ func (cp *CompiledPolicies) SelfCallExempt(appID, callerAppID string, warned *at
 		return false
 	}
 	if !warned.Load() && cp.ListsCaller(appID) && warned.CompareAndSwap(false, true) {
-		log.Warnf("WorkflowAccessPolicy lists this app's own appID '%s' in a rule's Callers — that listing has no effect because same-app calls are always exempt; the policy is a cross-app gate", appID)
+		log.Warn("WorkflowAccessPolicy lists this app's own appID in a rule's Callers — that listing has no effect because same-app calls are always exempt; the policy is a cross-app gate", "app_id", appID)
 	}
 	return true
 }
@@ -287,7 +287,7 @@ func decodeHistoryChunks(history *protos.PropagatedHistory, appIDs map[string]st
 		for _, raw := range chunk.GetRawEvents() {
 			e := &protos.HistoryEvent{}
 			if err := proto.Unmarshal(raw, e); err != nil {
-				log.Warnf("WorkflowAccessPolicy: malformed raw event in chunk (app=%q): %v", chunk.GetAppId(), err)
+				log.Warn("WorkflowAccessPolicy: malformed raw event in chunk (app=)", "app_id", chunk.GetAppId(), "error", err)
 				return nil, false
 			}
 			dc.events = append(dc.events, e)

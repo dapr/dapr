@@ -35,7 +35,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.scheduler.watchhosts")
+var log = logger.New("dapr.runtime.scheduler.watchhosts")
 
 type Options struct {
 	Addresses []string
@@ -68,7 +68,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 	if len(w.allAddrs) == 0 ||
 		(len(w.allAddrs) == 1 && strings.TrimSpace(strings.Trim(w.allAddrs[0], `"'`)) == "") {
 		w.clients.Disable()
-		log.Warnf("No scheduler host addresses provided. Scheduler disabled")
+		log.Warn("No scheduler host addresses provided. Scheduler disabled")
 		w.htarget.Ready()
 		<-ctx.Done()
 
@@ -78,7 +78,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 	for {
 		stream, closeCon, err := w.connSchedulerHosts(ctx)
 		if err != nil {
-			log.Errorf("Failed to connect to scheduler host: %s", err)
+			log.Error("Failed to connect to scheduler host", "error", err)
 
 			select {
 			case <-ctx.Done():
@@ -95,7 +95,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				log.Errorf("Failed to reload scheduler clients, retrying: %s", err)
+				log.Error("Failed to reload scheduler clients, retrying", "error", err)
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -121,7 +121,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			log.Warnf("Scheduler WatchHosts stream error, reconnecting: %s", err)
+			log.Warn("Scheduler WatchHosts stream error, reconnecting", "error", err)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -135,14 +135,14 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 			gotAddrs = append(gotAddrs, host.GetAddress())
 		}
 
-		log.Infof("Connected and received scheduler hosts addresses: %v", gotAddrs)
+		log.Info("Connected and received scheduler hosts addresses", "got_addrs", gotAddrs)
 
 		if err = w.clients.Reload(ctx, gotAddrs); err != nil {
 			closeCon()
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			log.Errorf("Failed to reload scheduler clients, retrying: %s", err)
+			log.Error("Failed to reload scheduler clients, retrying", "error", err)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -168,7 +168,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 func (w *WatchHosts) connSchedulerHosts(ctx context.Context) (schedulerv1pb.Scheduler_WatchHostsClient, context.CancelFunc, error) {
 	//nolint:gosec
 	i := rand.Intn(len(w.allAddrs))
-	log.Debugf("Attempting to connect to scheduler to WatchHosts: %s", w.allAddrs[i])
+	log.Debug("Attempting to connect to scheduler to WatchHosts", "all_addrsi", w.allAddrs[i])
 
 	// This is connecting to a DNS A rec which will return healthy scheduler
 	// hosts.

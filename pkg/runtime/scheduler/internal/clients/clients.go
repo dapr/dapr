@@ -25,7 +25,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.scheduler.clients")
+var log = logger.New("dapr.runtime.scheduler.clients")
 
 // Options contains the configuration options for the Scheduler clients.
 type Options struct {
@@ -69,7 +69,7 @@ func (c *Clients) Reload(ctx context.Context, addresses []string) error {
 	}
 
 	for _, address := range addresses {
-		log.Debugf("Attempting to connect to Scheduler at address: %s", address)
+		log.Debug("Attempting to connect to Scheduler at address", "address", address)
 
 		cl, closeFn, err := client.New(ctx, address, c.security)
 		if err != nil {
@@ -77,7 +77,7 @@ func (c *Clients) Reload(ctx context.Context, addresses []string) error {
 			return errors.New("scheduler client not initialized for address " + address + ": " + err.Error())
 		}
 
-		log.Infof("Scheduler client initialized for address: %s", address)
+		log.Info("Scheduler client initialized for address", "address", address)
 
 		newGen.clients = append(newGen.clients, cl)
 		newGen.closeFns = append(newGen.closeFns, closeFn)

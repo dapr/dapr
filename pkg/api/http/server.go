@@ -52,8 +52,8 @@ import (
 )
 
 var (
-	log     = logger.NewLogger("dapr.runtime.http")
-	infoLog = logger.NewLogger("dapr.runtime.http-info")
+	log     = logger.New("dapr.runtime.http")
+	infoLog = logger.New("dapr.runtime.http-info")
 )
 
 // Server is an interface for the Dapr HTTP server.
@@ -86,7 +86,7 @@ type NewServerOpts struct {
 
 // NewServer returns a new HTTP server.
 func NewServer(opts NewServerOpts) Server {
-	infoLog.SetOutputLevel(logger.LogLevel("info"))
+	infoLog.SetOutputLevel(logger.InfoLevel)
 	return &server{
 		api:         opts.API,
 		config:      opts.Config,
@@ -122,16 +122,16 @@ func (s *server) StartNonBlocking(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		log.Infof("HTTP server listening on UNIX socket: %s", socket)
+		log.Info("HTTP server listening on UNIX socket", "socket", socket)
 		listeners = append(listeners, l)
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
 			l, err := listen.TCP(ctx, addr)
 			if err != nil {
-				log.Debugf("Failed to listen for HTTP server on TCP address %s with error: %v", addr, err)
+				log.Debug("Failed to listen for HTTP server on TCP address", "address", addr, "error", err)
 			} else {
-				log.Infof("HTTP server listening on TCP address: %s", addr)
+				log.Info("HTTP server listening on TCP address", "address", addr)
 				listeners = append(listeners, l)
 			}
 		}
@@ -161,7 +161,7 @@ func (s *server) StartNonBlocking(ctx context.Context) error {
 		go func(l net.Listener) {
 			defer s.wg.Done()
 			if err := srv.Serve(l); err != http.ErrServerClosed {
-				log.Fatal(err)
+				log.Fatal("HTTP server error", logger.Err(err))
 			}
 		}(listener)
 	}
@@ -185,7 +185,7 @@ func (s *server) StartNonBlocking(ctx context.Context) error {
 
 		s.wg.Go(func() {
 			if err := healthServer.ListenAndServe(); err != http.ErrServerClosed {
-				log.Fatal(err)
+				log.Fatal("HTTP server error", logger.Err(err))
 			}
 		})
 	}
@@ -195,9 +195,9 @@ func (s *server) StartNonBlocking(ctx context.Context) error {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.ProfilePort)
 			pl, err := listen.TCP(ctx, addr)
 			if err != nil {
-				log.Debugf("Failed to listen for profiling server on TCP address %s with error: %v", addr, err)
+				log.Debug("Failed to listen for profiling server on TCP address", "address", addr, "error", err)
 			} else {
-				log.Infof("HTTP profiling server listening on: %s", addr)
+				log.Info("HTTP profiling server listening", "address", addr)
 				profilingListeners = append(profilingListeners, pl)
 			}
 		}
@@ -222,7 +222,7 @@ func (s *server) StartNonBlocking(ctx context.Context) error {
 			go func(l net.Listener) {
 				defer s.wg.Done()
 				if err := profServer.Serve(l); err != http.ErrServerClosed {
-					log.Fatal(err)
+					log.Fatal("HTTP server error", logger.Err(err))
 				}
 			}(listener)
 		}
@@ -253,7 +253,7 @@ func (s *server) Close() error {
 	for i, server := range s.servers {
 		go func(i int, srv *http.Server) {
 			defer s.wg.Done()
-			log.Infof("Closing HTTP server %s…", srv.Addr)
+			log.Info("Closing HTTP server", "address", srv.Addr)
 			errs[i] = closeServer(ctx, srv)
 		}(i, server)
 	}
@@ -294,7 +294,7 @@ func (s *server) useMaxBodySize(r chi.Router) {
 		return
 	}
 
-	log.Infof("Enabled max body size HTTP middleware with size %d bytes", s.config.MaxRequestBodySize)
+	log.Info("Enabled max body size HTTP middleware", "size_bytes", s.config.MaxRequestBodySize)
 
 	r.Use(MaxBodySizeMiddleware(int64(s.config.MaxRequestBodySize)))
 }
@@ -328,30 +328,29 @@ func (s *server) useAPILogging(mux chi.Router) {
 				return
 			}
 
-			fields := make(map[string]any, 5)
+			attrs := make([]any, 0, 10)
 
 			// Report duration in milliseconds
-			fields["duration"] = time.Since(start).Milliseconds()
+			attrs = append(attrs, "duration", time.Since(start).Milliseconds())
 
 			if s.config.APILoggingObfuscateURLs {
 				endpointName := endpointData.GetEndpointName()
 				if endpointData.Group != nil && endpointData.Group.MethodName != nil {
 					endpointName = endpointData.Group.MethodName(r)
 				}
-				fields["method"] = endpointName
+				attrs = append(attrs, "method", endpointName)
 			} else {
-				fields["method"] = r.Method + " " + r.URL.Path
+				attrs = append(attrs, "method", r.Method+" "+r.URL.Path)
 			}
 			if userAgent := r.Header.Get("User-Agent"); userAgent != "" {
-				fields["useragent"] = userAgent
+				attrs = append(attrs, "useragent", userAgent)
 			}
 
 			if rw, ok := w.(responsewriter.ResponseWriter); ok {
-				fields["code"] = rw.Status()
-				fields["size"] = rw.Size()
+				attrs = append(attrs, "code", rw.Status(), "size", rw.Size())
 			}
 
-			infoLog.WithFields(fields).Info("HTTP API Called")
+			infoLog.Info("HTTP API Called", attrs...)
 		})
 	})
 }
@@ -403,7 +402,7 @@ func (s *server) unescapeRequestParametersHandler(next http.Handler) http.Handle
 			err := s.unespaceRequestParametersInContext(chiCtx)
 			if err != nil {
 				errMsg := err.Error()
-				log.Debug(errMsg)
+				log.Debug("failed to unescape request parameters", logger.Err(err))
 				http.Error(w, errMsg, http.StatusBadRequest)
 				return
 			}

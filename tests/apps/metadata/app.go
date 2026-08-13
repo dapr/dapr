@@ -280,7 +280,7 @@ func main() {
 		)
 	}
 	if err != nil {
-		log.Fatalf("Failed to establish gRPC connection to Dapr: %v", err)
+		log.Fatal("Failed to establish gRPC connection to Dapr", "error", err)
 	}
 	grpcClient = runtimev1pb.NewDaprClient(conn)
 

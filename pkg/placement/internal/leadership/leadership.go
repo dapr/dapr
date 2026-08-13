@@ -25,7 +25,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/placement/internal/leadership/fsm"
-	"github.com/dapr/dapr/pkg/placement/internal/leadership/logr"
+	"github.com/dapr/dapr/pkg/placement/internal/leadership/hclogadapter"
 	"github.com/dapr/dapr/pkg/placement/internal/leadership/spiffenet"
 	"github.com/dapr/dapr/pkg/placement/peers"
 	"github.com/dapr/dapr/pkg/security"
@@ -89,7 +89,7 @@ func (s *Leadership) Run(ctx context.Context) error {
 		return err
 	}
 
-	loggerAdapter := logr.New()
+	loggerAdapter := hclogadapter.New()
 	raftTransport := raft.NewNetworkTransportWithLogger(spiffenet.New(ctx,
 		spiffenet.Options{
 			Listener: s.sec.NetListenerID(listener, placeID),

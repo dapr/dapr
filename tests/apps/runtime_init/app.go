@@ -44,7 +44,7 @@ func publishMessagesToPubsub(wg *sync.WaitGroup) {
 		m := fmt.Sprintf("message-%d", i)
 		jsonValue, err := json.Marshal(m)
 		if err != nil {
-			log.Fatalf("Error marshalling %s to JSON", m)
+			log.Fatal("Error marshalling to JSON", "m", m)
 		}
 		log.Printf("Publishing to %s", daprPubsubURL)
 		r, err := httpClient.Post(daprPubsubURL, "application/json", bytes.NewBuffer(jsonValue))
@@ -52,7 +52,7 @@ func publishMessagesToPubsub(wg *sync.WaitGroup) {
 			defer r.Body.Close()
 		}
 		if err != nil {
-			log.Fatalf("Error publishing messages to pubsub: %+v", err)
+			log.Fatal("Error publishing messages to pubsub", "error", err)
 		}
 	}
 }
@@ -69,7 +69,7 @@ func publishMessagesToBinding(wg *sync.WaitGroup) {
 			defer r.Body.Close()
 		}
 		if err != nil {
-			log.Fatalf("Error publishing messages to binding: %+v", err)
+			log.Fatal("Error publishing messages to binding", "error", err)
 		}
 	}
 }

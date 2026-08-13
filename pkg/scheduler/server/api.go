@@ -61,9 +61,9 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		err = cron.AddIfNotExists(ctx, serialized.Name(), apiJob)
 	}
 
-	logWithField := log.WithFields(map[string]any{"overwrite": req.GetOverwrite()})
+	logWithField := log.With("overwrite", req.GetOverwrite())
 	if err != nil {
-		logWithField.Errorf("error scheduling job %s: %s", req.GetName(), err)
+		logWithField.Error("error scheduling job", "job", req.GetName(), "error", err)
 		monitoring.RecordJobsCreatedFailedCount(req.GetMetadata())
 		if apierrors.IsJobAlreadyExists(err) {
 			return nil, status.Errorf(codes.AlreadyExists, "%s", err.Error())
@@ -89,7 +89,7 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.DeleteJobRequ
 
 	err = cron.Delete(ctx, job.Name())
 	if err != nil {
-		log.Errorf("error deleting job %s: %s", job.Name(), err)
+		log.Error("error deleting job", "name", job.Name(), "error", err)
 		return nil, err
 	}
 
@@ -110,7 +110,7 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 
 	job, err := cron.Get(ctx, serialized.Name())
 	if err != nil {
-		log.Errorf("error getting job %s: %s", serialized.Name(), err)
+		log.Error("error getting job", "name", serialized.Name(), "error", err)
 		return nil, err
 	}
 
@@ -238,7 +238,7 @@ func (s *Server) DeleteByMetadata(ctx context.Context, req *schedulerv1pb.Delete
 	}
 
 	if err = cron.DeletePrefixes(ctx, prefix); err != nil {
-		log.Errorf("Failed to delete cron jobs for metadata: %s", err)
+		log.Error("Failed to delete cron jobs for metadata", "error", err)
 		return nil, err
 	}
 
@@ -263,7 +263,7 @@ func (s *Server) DeleteByNamePrefix(ctx context.Context, req *schedulerv1pb.Dele
 	}
 
 	if err = cron.DeletePrefixes(ctx, prefix); err != nil {
-		log.Errorf("Failed to delete scheduler job for metadata: %s", err)
+		log.Error("Failed to delete scheduler job for metadata", "error", err)
 		return nil, err
 	}
 

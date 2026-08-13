@@ -451,13 +451,13 @@ func main() {
 	go func() {
 		log.Printf("Scheduler http server listening on :%d", appPortHTTP)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("HTTP server failed: %v", err)
+			log.Fatal("HTTP server failed", "error", err)
 		}
 	}()
 
 	grpcLis, err := net.Listen("tcp", fmt.Sprintf(":%d", appPortGRPC))
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Fatal("failed to listen", "error", err)
 	}
 
 	grpcServer := grpc.NewServer()
@@ -469,7 +469,7 @@ func main() {
 
 	go func() {
 		if err := grpcServer.Serve(grpcLis); err != nil {
-			log.Fatalf("failed to serve: %v", err)
+			log.Fatal("failed to serve", "error", err)
 		}
 	}()
 
@@ -482,7 +482,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := httpServer.Shutdown(ctx); err != nil {
-			log.Fatalf("HTTP server shutdown failed: %v", err)
+			log.Fatal("HTTP server shutdown failed", "error", err)
 		}
 
 		close(shutdownComplete)

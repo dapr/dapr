@@ -30,7 +30,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.processor.pubsub.subscription.streaming")
+var log = logger.New("dapr.runtime.processor.pubsub.subscription.streaming")
 
 type Options struct {
 	Channel pubsub.AdapterStreamer
@@ -70,7 +70,7 @@ func (s *streaming) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) 
 		// TODO: add retry error info
 		return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", msg.CloudEvent[contribpubsub.IDField], rterrors.NewRetriable(nil))
 	case rtv1pb.TopicEventResponse_DROP: //nolint:nosnakecase
-		log.Warnf("DROP status returned from app while processing pub/sub event %v", msg.CloudEvent[contribpubsub.IDField])
+		log.Warn("DROP status returned from app while processing pub/sub event", "event_id", msg.CloudEvent[contribpubsub.IDField])
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Drop)), "", msg.Topic, elapsed)
 
 		return pubsub.ErrMessageDropped

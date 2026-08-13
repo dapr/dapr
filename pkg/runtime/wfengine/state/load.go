@@ -52,8 +52,8 @@ func LoadWorkflowState(ctx context.Context, astate state.Interface, actorID stri
 			return nil, mErr.err
 		}
 		prevETag, havePrev = mErr.etag, true
-		wfLogger.Debugf("workflow '%s': load raced a concurrent save (attempt %d/%d), retrying: %s",
-			actorID, attempt, loadStateMaxAttempts, mErr.err)
+		wfLogger.Debug("workflow load raced a concurrent save, retrying",
+			"actor_id", actorID, "attempt", attempt, "max_attempts", loadStateMaxAttempts, "error", mErr.err)
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()

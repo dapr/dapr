@@ -202,7 +202,7 @@ func (f *factory) Len() int {
 func (f *factory) handleIdleActor(target *app) {
 	ctx, cancel, err := f.placement.Lock(context.Background(), f.actorType)
 	if err != nil {
-		log.Errorf("Failed to lock placement for idle actor deactivation: %s", err)
+		log.Error("Failed to lock placement for idle actor deactivation", "error", err)
 		return
 	}
 	defer cancel(nil)
@@ -210,10 +210,10 @@ func (f *factory) handleIdleActor(target *app) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
-	log.Debugf("Actor %s is idle, deactivating", target.Key())
+	log.Debug("Actor is idle, deactivating", "actor_key", target.Key())
 
 	if err := f.halt(ctx, target); err != nil {
-		log.Errorf("Failed to halt actor %s: %s", target.Key(), err)
+		log.Error("Failed to halt actor", "actor_key", target.Key(), "error", err)
 		return
 	}
 }
@@ -223,7 +223,7 @@ func (f *factory) halt(ctx context.Context, app *app) error {
 
 	diag.DefaultMonitoring.ActorRebalanced(app.Type())
 
-	log.Debugf("Halting actor '%s'", key)
+	log.Debug("Halting actor", "key", key)
 
 	return app.Deactivate(ctx)
 }

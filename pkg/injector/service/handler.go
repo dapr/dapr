@@ -42,7 +42,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if ct := r.Header.Get("Content-Type"); ct != runtime.ContentTypeJSON {
-		log.Errorf("Content-Type=%s, expect %s", ct, runtime.ContentTypeJSON)
+		log.Error("Content-Type=, expect", "ct", ct, "content_type_j_s_o_n", runtime.ContentTypeJSON)
 		http.Error(w, fmt.Sprintf("invalid Content-Type, expected `%s`", runtime.ContentTypeJSON), http.StatusUnsupportedMediaType)
 		return
 	}
@@ -50,13 +50,13 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	ar := admissionv1.AdmissionReview{}
 	_, gvk, err := i.deserializer.Decode(body, nil, &ar)
 	if err != nil {
-		log.Errorf("Can't decode body: %v", err)
+		log.Error("Can't decode body", "error", err)
 		i.writeAdmissionResponse(w, ar, gvk, nil, err)
 		return
 	}
 
 	if ar.Request.Kind.Kind != "Pod" {
-		log.Errorf("invalid kind for review: %s", ar.Request.Kind.Kind)
+		log.Error("invalid kind for review", "kind", ar.Request.Kind.Kind)
 		diagAppID := getAppIDFromRequest(ar.Request)
 		respondWithAllowed(w, ar, gvk)
 		RecordFailedSidecarInjectionCount(diagAppID, "pod_patch")
@@ -70,7 +70,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !i.isAuthorizedUser(ar.Request) {
-		log.Errorf("service account '%s' not on the list of allowed controller accounts", ar.Request.UserInfo.Username)
+		log.Error("service account not on the list of allowed controller accounts", "username", ar.Request.UserInfo.Username)
 		diagAppID := getAppIDFromRequest(ar.Request)
 		respondWithAllowed(w, ar, gvk)
 		RecordFailedSidecarInjectionCount(diagAppID, "pod_patch")
@@ -125,14 +125,14 @@ func (i *injector) writeAdmissionResponse(w http.ResponseWriter, ar admissionv1.
 	respBytes, err := json.Marshal(review)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.Errorf("Sidecar injector failed to inject for app '%s'. Can't serialize response: %s", diagAppID, err)
+		log.Error("Sidecar injector failed to inject for app. Can't serialize response", "app_id", diagAppID, "error", err)
 		RecordFailedSidecarInjectionCount(diagAppID, "response")
 		return
 	}
 
 	w.Header().Set("Content-Type", runtime.ContentTypeJSON)
 	if _, err = w.Write(respBytes); err != nil {
-		log.Errorf("Sidecar injector failed to inject for app '%s'. Failed to write response: %v", diagAppID, err)
+		log.Error("Sidecar injector failed to inject for app. Failed to write response", "app_id", diagAppID, "error", err)
 		RecordFailedSidecarInjectionCount(diagAppID, "write_response")
 		return
 	}
@@ -140,10 +140,10 @@ func (i *injector) writeAdmissionResponse(w http.ResponseWriter, ar admissionv1.
 	// Record injection metrics.
 	switch {
 	case buildErr != nil:
-		log.Errorf("Sidecar injector failed to inject for app '%s'. Error: %s", diagAppID, buildErr)
+		log.Error("Sidecar injector failed to inject for app. Error", "app_id", diagAppID, "error", buildErr)
 		RecordFailedSidecarInjectionCount(diagAppID, "patch")
 	case len(patchOps) > 0:
-		log.Infof("Sidecar injector succeeded injection for app '%s'", diagAppID)
+		log.Info("Sidecar injector succeeded injection for app", "app_id", diagAppID)
 		RecordSuccessfulSidecarInjectionCount(diagAppID)
 	}
 }
@@ -191,7 +191,7 @@ func respondWithAllowed(w http.ResponseWriter, ar admissionv1.AdmissionReview, g
 	}
 	w.Header().Set("Content-Type", runtime.ContentTypeJSON)
 	if _, err = w.Write(respBytes); err != nil {
-		log.Errorf("Failed to write response for non-Dapr pod: %v", err)
+		log.Error("Failed to write response for non-Dapr pod", "error", err)
 	}
 }
 

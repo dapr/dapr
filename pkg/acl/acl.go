@@ -27,7 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/security/spiffe"
 )
 
-var log = logger.NewLogger("dapr.acl")
+var log = logger.New("dapr.acl")
 
 // ParseAccessControlSpec creates an in-memory copy of the Access Control Spec for fast lookup.
 func ParseAccessControlSpec(accessControlSpec *config.AccessControlSpec, isHTTP bool) (*config.AccessControlList, error) {
@@ -36,7 +36,7 @@ func ParseAccessControlSpec(accessControlSpec *config.AccessControlSpec, isHTTP 
 			accessControlSpec.DefaultAction == "" &&
 			len(accessControlSpec.AppPolicies) == 0) {
 		// No ACL has been specified
-		log.Debugf("No Access control policy specified")
+		log.Debug("No Access control policy specified")
 		return nil, nil
 	}
 
@@ -53,7 +53,7 @@ func ParseAccessControlSpec(accessControlSpec *config.AccessControlSpec, isHTTP 
 	if accessControlSpec.DefaultAction == "" {
 		if accessControlSpec.AppPolicies == nil || len(accessControlSpec.AppPolicies) > 0 {
 			// Some app level policies have been specified but not default global action is set. Default to more secure option - Deny
-			log.Warnf("No global default action has been specified. Setting default global action as Deny")
+			log.Warn("No global default action has been specified. Setting default global action as Deny")
 			accessControlList.DefaultAction = config.DenyAccess
 		} else {
 			// An empty ACL has been specified. Set default global action to Allow
@@ -143,13 +143,13 @@ func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb 
 	// Apply access control list filter
 	spiffeID, ok, err := spiffe.FromGRPCContext(ctx)
 	if err != nil {
-		log.Debugf("failed to get SPIFFE ID from gRPC connection context: %v", err)
+		log.Debug("failed to get SPIFFE ID from gRPC connection context", "error", err)
 		return false, err.Error()
 	}
 
 	if !ok {
 		// Apply the default action
-		log.Debugf("Error while reading spiffe id from client cert. applying default global policy action")
+		log.Debug("Error while reading spiffe id from client cert. applying default global policy action")
 	}
 
 	// The operation is expected to be already normalized by the caller

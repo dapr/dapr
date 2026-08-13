@@ -61,7 +61,7 @@ func TestShutdown(t *testing.T) {
 			shutdownCh := make(chan struct{}, 1)
 			exitCh := make(chan int, 1)
 			fakeAPI := New(Options{
-				Logger: testLogger,
+				Logger: testLogger.Legacy(),
 				ShutdownFn: func() {
 					shutdownCh <- struct{}{}
 				},

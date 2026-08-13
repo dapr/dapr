@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/kit/logger"
 )
 
 // Object containing options for the UniversalHTTPHandler method.
@@ -77,7 +78,7 @@ func UniversalHTTPHandler[T proto.Message, U proto.Message](
 			if err != nil {
 				msg := messages.ErrBodyRead.WithFormat(err)
 				respondWithError(w, msg)
-				log.Debug(msg)
+				log.Debug("api call returned error", logger.Err(msg))
 				return
 			}
 
@@ -86,7 +87,7 @@ func UniversalHTTPHandler[T proto.Message, U proto.Message](
 				if err != nil {
 					msg := messages.ErrMalformedRequest.WithFormat(err)
 					respondWithError(w, msg)
-					log.Debug(msg)
+					log.Debug("api call returned error", logger.Err(msg))
 					return
 				}
 			}

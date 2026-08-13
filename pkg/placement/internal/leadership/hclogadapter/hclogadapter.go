@@ -11,77 +11,65 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package logr
+// Package hclogadapter adapts the Dapr logger to hclog.Logger, which is the
+// only logging interface hashicorp/raft accepts.
+package hclogadapter
 
 import (
 	"io"
 	"log"
-	"strings"
+	"log/slog"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/spf13/cast"
 
 	"github.com/dapr/kit/logger"
 )
 
-var logging = logger.NewLogger("dapr.placement.leadership.raft")
+var logging = logger.New("dapr.placement.leadership.raft")
 
 func New() hclog.Logger {
-	return &loggerAdapter{}
+	return &loggerAdapter{log: logging}
 }
 
-// loggerAdapter is the adapter to integrate with dapr logger.
-type loggerAdapter struct{}
-
-func (l *loggerAdapter) printLog(msg string, args ...any) {
-	if len(args) > 0 {
-		fields := strings.Builder{}
-		for i, f := range args {
-			if i%2 == 1 {
-				fields.WriteRune('=')
-			} else {
-				fields.WriteRune(',')
-			}
-			fields.WriteString(cast.ToString(f))
-		}
-		logging.Debug(msg + fields.String())
-		return
-	}
-
-	logging.Debug(msg)
+// loggerAdapter renders raft's records through the structured Dapr logger.
+// hclog already passes a message plus alternating keys and values, so they map
+// straight onto attributes; the previous adapter concatenated them into the
+// message text.
+type loggerAdapter struct {
+	log *logger.Log
 }
 
+// levels maps hclog levels onto Dapr levels. raft's routine chatter has always
+// been emitted at debug in Dapr regardless of hclog level, and that is
+// preserved for warnings and below so log volume does not change; errors now
+// surface at error level instead of being buried at debug.
 func (l *loggerAdapter) Log(level hclog.Level, msg string, args ...any) {
 	switch level {
-	case hclog.Debug:
-		l.printLog(msg, args...)
-	case hclog.Warn:
-		l.printLog(msg, args...)
 	case hclog.Error:
-		l.printLog(msg, args...)
+		l.log.Error(msg, args...)
 	default:
-		l.printLog(msg, args...)
+		l.log.Debug(msg, args...)
 	}
 }
 
 func (l *loggerAdapter) Trace(msg string, args ...any) {
-	l.printLog(msg, args...)
+	l.log.Debug(msg, args...)
 }
 
 func (l *loggerAdapter) Debug(msg string, args ...any) {
-	l.printLog(msg, args...)
+	l.log.Debug(msg, args...)
 }
 
 func (l *loggerAdapter) Info(msg string, args ...any) {
-	l.printLog(msg, args...)
+	l.log.Debug(msg, args...)
 }
 
 func (l *loggerAdapter) Warn(msg string, args ...any) {
-	l.printLog(msg, args...)
+	l.log.Debug(msg, args...)
 }
 
 func (l *loggerAdapter) Error(msg string, args ...any) {
-	l.printLog(msg, args...)
+	l.log.Error(msg, args...)
 }
 
 func (l *loggerAdapter) IsTrace() bool { return false }
@@ -92,17 +80,25 @@ func (l *loggerAdapter) IsInfo() bool { return false }
 
 func (l *loggerAdapter) IsWarn() bool { return false }
 
-func (l *loggerAdapter) IsError() bool { return false }
+func (l *loggerAdapter) IsError() bool { return true }
 
 func (l *loggerAdapter) ImpliedArgs() []any { return []any{} }
 
-func (l *loggerAdapter) With(args ...any) hclog.Logger { return l }
+// With returns an adapter carrying the given attributes on every record,
+// instead of dropping them as the previous implementation did.
+func (l *loggerAdapter) With(args ...any) hclog.Logger {
+	return &loggerAdapter{log: l.log.With(args...)}
+}
 
 func (l *loggerAdapter) Name() string { return "dapr" }
 
-func (l *loggerAdapter) Named(name string) hclog.Logger { return l }
+func (l *loggerAdapter) Named(name string) hclog.Logger {
+	return &loggerAdapter{log: l.log.With("name", name)}
+}
 
-func (l *loggerAdapter) ResetNamed(name string) hclog.Logger { return l }
+func (l *loggerAdapter) ResetNamed(name string) hclog.Logger {
+	return &loggerAdapter{log: logging.With("name", name)}
+}
 
 func (l *loggerAdapter) SetLevel(level hclog.Level) {}
 
@@ -111,7 +107,7 @@ func (l *loggerAdapter) GetLevel() hclog.Level {
 }
 
 func (l *loggerAdapter) StandardLogger(opts *hclog.StandardLoggerOptions) *log.Logger {
-	return log.New(l.StandardWriter(opts), "placement-raft", log.LstdFlags)
+	return slog.NewLogLogger(l.log.Handler(), slog.LevelDebug)
 }
 
 func (l *loggerAdapter) StandardWriter(opts *hclog.StandardLoggerOptions) io.Writer {

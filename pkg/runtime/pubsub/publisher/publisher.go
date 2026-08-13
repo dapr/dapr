@@ -40,7 +40,7 @@ type publisher struct {
 	getpubsubFn GetPubSubFn
 }
 
-var log = logger.NewLogger("dapr.runtime.pubsub.publisher")
+var log = logger.New("dapr.runtime.pubsub.publisher")
 
 func New(opts Options) rtpubsub.Adapter {
 	return &publisher{
@@ -105,7 +105,7 @@ func (p *publisher) BulkPublish(ctx context.Context, req *contribpubsub.BulkPubl
 		return rtpubsub.ApplyBulkPublishResiliency(ctx, req, policyDef, pubsub.Component.(contribpubsub.BulkPublisher), mode)
 	}
 
-	log.Debugf("pubsub %s does not implement the BulkPublish API; falling back to publishing messages individually", req.PubsubName)
+	log.Debug("pubsub does not implement the BulkPublish API; falling back to publishing messages individually", "pubsub", req.PubsubName)
 
 	defaultBulkPublisher := rtpubsub.NewDefaultBulkPublisher(pubsub.Component)
 

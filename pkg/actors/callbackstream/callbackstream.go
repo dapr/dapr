@@ -53,7 +53,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.callbackstream")
+var log = logger.New("dapr.runtime.actors.callbackstream")
 
 // ErrNoConnection is returned when the actor transport tries to send a
 // callback but no app has opened the stream.
@@ -176,7 +176,7 @@ func (m *Manager) Register(ctx context.Context, cfg *config.ApplicationConfig) *
 	m.loop.Enqueue(&eventRegister{conn: conn, done: done})
 	<-done
 
-	log.Debugf("Registered actor callback stream (connID=%d, entities=%v)", conn.ID, cfg.Entities)
+	log.Debug("Registered actor callback stream", "connection_id", conn.ID, "entities", cfg.Entities)
 	return conn
 }
 
@@ -215,7 +215,7 @@ func (m *Manager) Close(conn *Connection, cause error) {
 		// conn.Done().
 
 		m.loop.Enqueue(&eventClose{conn: conn})
-		log.Debugf("Closed actor callback stream (connID=%d): %v", conn.ID, cause)
+		log.Debug("Closed actor callback stream", "connection_id", conn.ID, "error", cause)
 	})
 }
 
@@ -226,12 +226,12 @@ func (m *Manager) Close(conn *Connection, cause error) {
 func (c *Connection) Deliver(msg *runtimev1pb.SubscribeActorEventsRequestAlpha1) {
 	id, ok := requestID(msg)
 	if !ok {
-		log.Warnf("Dropping actor callback response without correlation id: %T", msg.GetRequestType())
+		log.Warn("Dropping actor callback response without correlation id", "get_request_type", msg.GetRequestType())
 		return
 	}
 	v, loaded := c.pending.LoadAndDelete(id)
 	if !loaded {
-		log.Warnf("Dropping actor callback response with unknown id=%s", id)
+		log.Warn("Dropping actor callback response with unknown id=", "id", id)
 		return
 	}
 	ch, _ := v.(chan pendingResult)

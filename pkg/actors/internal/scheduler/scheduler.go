@@ -30,7 +30,7 @@ import (
 	kittime "github.com/dapr/kit/time"
 )
 
-var log = logger.NewLogger("dapr.runtime.actor.reminders.scheduler")
+var log = logger.New("dapr.runtime.actor.reminders.scheduler")
 
 // Interface is the interface for the object that provides reminders backend
 // storage.
@@ -116,7 +116,7 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 
 	_, err = s.client.ScheduleJob(ctx, internalScheduleJobReq)
 	if err != nil {
-		log.Errorf("Error scheduling reminder job %s due to: %s", reminder.Name, err)
+		log.Error("Error scheduling reminder job", "name", reminder.Name, "error", err)
 		return err
 	}
 
@@ -175,7 +175,7 @@ func (s *scheduler) Get(ctx context.Context, req *api.GetReminderRequest) (*api.
 			"namespace": s.namespace,
 			"jobType":   "reminder",
 		}
-		log.Debugf("Error getting reminder job %s due to: %s", req.Name, err)
+		log.Debug("Error getting reminder job", "name", req.Name, "error", err)
 
 		if status, ok := status.FromError(err); ok && status.Code() == codes.NotFound {
 			return nil, nil
@@ -188,7 +188,7 @@ func (s *scheduler) Get(ctx context.Context, req *api.GetReminderRequest) (*api.
 	if job.Job.Ttl != nil {
 		expirationTime, err = time.Parse(time.RFC3339Nano, job.GetJob().GetTtl())
 		if err != nil {
-			log.Errorf("Error parsing expiration time for reminder job %s due to: %s", req.Name, err)
+			log.Error("Error parsing expiration time for reminder job", "name", req.Name, "error", err)
 		}
 	}
 
@@ -223,7 +223,7 @@ func (s *scheduler) Delete(ctx context.Context, req *api.DeleteReminderRequest) 
 
 	_, err := s.client.DeleteJob(ctx, internalDeleteJobReq)
 	if err != nil {
-		log.Errorf("Error deleting reminder job %s due to: %s", req.Name, err)
+		log.Error("Error deleting reminder job", "name", req.Name, "error", err)
 		return err
 	}
 
@@ -247,12 +247,12 @@ func (s *scheduler) DeleteByActorID(ctx context.Context, req *api.DeleteReminder
 		},
 	})
 	if s, ok := status.FromError(err); ok && s.Code() == codes.Unimplemented {
-		log.Warnf("DeleteByMetadata is not implemented in the scheduler service used. Falling back to table scan for deleting reminders for actor %s of type %s", req.ActorID, req.ActorType)
+		log.Warn("DeleteByMetadata is not implemented in the scheduler service used. Falling back to table scan for deleting reminders", "actor_id", req.ActorID, "actor_type", req.ActorType)
 		return nil
 	}
 
 	if err != nil {
-		log.Errorf("Error deleting reminders for actor %s of type %s due to: %s", req.ActorID, req.ActorType, err)
+		log.Error("Error deleting reminders for actor", "actor_id", req.ActorID, "actor_type", req.ActorType, "error", err)
 		return err
 	}
 
@@ -286,7 +286,7 @@ func (s *scheduler) List(ctx context.Context, req *api.ListRemindersRequest) ([]
 	for i, named := range resp.GetJobs() {
 		actor := named.GetMetadata().GetTarget().GetActor()
 		if actor == nil {
-			log.Warnf("Skipping reminder job %s with unsupported target type %s", named.GetName(), named.GetMetadata().GetTarget().String())
+			log.Warn("Skipping reminder job with unsupported target type", "name", named.GetName(), "string", named.GetMetadata().GetTarget().String())
 			continue
 		}
 

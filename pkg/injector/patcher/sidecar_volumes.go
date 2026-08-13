@@ -35,7 +35,7 @@ func (c *SidecarConfig) getVolumeMounts() []corev1.VolumeMount {
 		if podContainsVolume(c.pod, v.Name) {
 			volumeMounts = append(volumeMounts, v)
 		} else {
-			log.Warnf("Volume %s is not present in pod %s, skipping", v.Name, c.pod.GetName())
+			log.Warn("Volume is not present in pod, skipping", "name", v.Name, "name2", c.pod.GetName())
 		}
 	}
 

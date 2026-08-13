@@ -43,7 +43,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.placement")
+var log = logger.New("dapr.runtime.actors.placement")
 
 type Interface interface {
 	Run(context.Context) error
@@ -163,7 +163,7 @@ func (p *placement) Run(ctx context.Context) error {
 		cctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 		defer cancel()
 		if err := p.table.HaltAll(cctx); err != nil {
-			log.Errorf("Failed to halt all actors during placement shutdown: %v", err)
+			log.Error("Failed to halt all actors during placement shutdown", "error", err)
 		}
 	}()
 
@@ -240,7 +240,7 @@ func (p *placement) IsActorHosted(ctx context.Context, actorType, actorID string
 		ActorID:   actorID,
 	})
 	if err != nil {
-		log.Errorf("failed to lookup actor %s/%s: %s", actorType, actorID, err)
+		log.Error("failed to lookup actor /", "actor_type", actorType, "actor_id", actorID, "error", err)
 		return false
 	}
 	cancel(nil)

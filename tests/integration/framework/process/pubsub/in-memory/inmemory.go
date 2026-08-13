@@ -47,7 +47,7 @@ func NewWrappedInMemory(t *testing.T, fopts ...Option) pubsub.PubSub {
 		fopt(&opts)
 	}
 
-	impl := inmemory.New(logger.NewLogger(t.Name() + "_pubsub"))
+	impl := inmemory.New(logger.New(t.Name()+"_pubsub").Legacy())
 	return &WrappedInMemory{
 		PubSub:    impl,
 		features:  opts.features,

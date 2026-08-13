@@ -18,6 +18,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/kit/logger"
 )
 
 var endpointGroupHealthzV1 = &endpoints.EndpointGroup{
@@ -59,7 +60,7 @@ func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 	if !a.healthz.IsReady() {
 		msg := messages.ErrHealthNotReady.WithFormat(a.healthz.GetUnhealthyTargets())
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 
@@ -69,7 +70,7 @@ func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 	if qs.Has("appid") && qs.Get("appid") != a.universal.AppID() {
 		msg := messages.ErrHealthAppIDNotMatch
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 
@@ -80,7 +81,7 @@ func (a *api) onGetOutboundHealthz(w http.ResponseWriter, r *http.Request) {
 	if !a.outboundHealthz.IsReady() {
 		msg := messages.ErrOutboundHealthNotReady
 		respondWithError(w, msg)
-		log.Debug(msg)
+		log.Debug("api call returned error", logger.Err(msg))
 		return
 	}
 

@@ -55,14 +55,14 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 		// generation, while rs has been reset by the engine and only contains
 		// the current generation's events.
 		if dedup.IsTaskAlreadyResolved(e, rs.GetOldEvents(), rs.GetNewEvents()) {
-			log.Debugf("Workflow actor '%s': skipping dispatch of '%s::%d' - resolution already present", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
+			log.Debug("Workflow actor: skipping dispatch of: - resolution already present", "actor_id", o.actorID, "name", e.GetTaskScheduled().GetName(), "get_event_id", e.GetEventId())
 			continue
 		}
 
 		err := o.callActivity(ctx, e, dueTime, outgoingHistory[e.GetEventId()], workflowName)
 		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
-				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
+				log.Warn("Workflow actor: activity invocation: was flagged as a duplicate and will be skipped", "actor_id", o.actorID, "name", e.GetTaskScheduled().GetName(), "get_event_id", e.GetEventId())
 				continue
 			}
 
@@ -77,7 +77,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, ph *protos.PropagatedHistory, workflowName string) error {
 	ts := e.GetTaskScheduled()
 	if ts == nil {
-		log.Warnf("Workflow actor '%s': unable to process task '%v'", o.actorID, e)
+		log.Warn("Workflow actor: unable to process task", "actor_id", o.actorID, "e", e)
 		return nil
 	}
 
@@ -85,7 +85,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	var payload proto.Message = e
 	if ph != nil {
 		if o.signer == nil {
-			log.Warnf("Workflow actor '%s': propagating unsigned workflow history to activity '%s::%d' (signing is not configured; chunks cannot be cryptographically verified by the receiver)", o.actorID, ts.GetName(), e.GetEventId())
+			log.Warn("Workflow actor: propagating unsigned workflow history to activity: (signing is not configured; chunks cannot be cryptographically verified by the receiver)", "actor_id", o.actorID, "name", ts.GetName(), "get_event_id", e.GetEventId())
 		}
 		payload = &protos.ActivityInvocation{
 			HistoryEvent:      e,
@@ -111,7 +111,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 
 	o.activityResultAwaited.Store(true)
 
-	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", o.actorID, activityActorType, targetActorID)
+	log.Debug("Workflow actor: invoking execute method on activity actor ||", "actor_id", o.actorID, "activity_actor_type", activityActorType, "actor_id2", targetActorID)
 
 	_, err = o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest(todo.ExecuteActivityMethod).
@@ -126,7 +126,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		// If the call was denied by a workflow access policy, fail the
 		// activity task immediately rather than retrying.
 		if messages.IsPermissionDenied(err) {
-			log.Errorf("Workflow actor '%s': activity '%s' denied by workflow access policy: %v", o.actorID, ts.GetName(), err)
+			log.Error("Workflow actor: activity denied by workflow access policy", "actor_id", o.actorID, "name", ts.GetName(), "error", err)
 			return o.failActivityACL(ctx, e)
 		}
 

@@ -109,7 +109,7 @@ func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 		// overruns its deadline.
 		innerErr := <-intercept
 		if innerErr != nil {
-			log.Errorf("Failed to init component %s: %s", comp.LogName(), innerErr)
+			log.Error(fmt.Sprintf("Failed to init component %s: %s", comp.LogName(), innerErr))
 			wrapped := rterrors.NewInit(rterrors.InitComponentFailure, comp.LogName(), innerErr)
 			sendResult(ev.Result, wrapped)
 			// A non-ignored init failure is fatal to the runtime. Record it so
@@ -120,7 +120,7 @@ func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 				r.recordFatalInitError(fmt.Errorf("process component %s error: %w", comp.Name, wrapped))
 			}
 		} else {
-			log.Infof("Component loaded: %s", comp.LogName())
+			log.Info("Component loaded: " + comp.LogName())
 			sendResult(ev.Result, nil)
 		}
 		// Always notify the root loop so it can update the in-flight counter

@@ -154,7 +154,7 @@ func (h *SessionHolder) connect(ctx context.Context) (*mcp.ClientSession, error)
 		return nil, fmt.Errorf("failed to build transport for %q: %w", h.server.Name, err)
 	}
 
-	workerLog.Debugf("connecting to MCP server %q", h.server.Name)
+	workerLog.Debug("connecting to MCP server", "name", h.server.Name)
 	c := mcp.NewClient(&mcp.Implementation{Name: mcpClientName, Version: mcpClientVersion}, &mcp.ClientOptions{
 		KeepAlive: keepAliveInterval,
 	})

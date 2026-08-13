@@ -52,7 +52,8 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 	if state == nil {
 		// The assumption is that someone manually deleted the workflow state. This is non-recoverable.
-		log.Warnf("No workflow state found for actor '%s', terminating execution", o.actorID)
+		// Message wording asserted by integration tests (logline); keep interpolated.
+		log.Warn(fmt.Sprintf("No workflow state found for actor '%s', terminating execution", o.actorID))
 		return todo.RunCompletedTrue, nil
 	}
 
@@ -65,7 +66,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 
 		if durableTimer.GetGeneration() < state.Generation {
-			log.Infof("Workflow actor '%s': ignoring durable timer from previous generation '%v'", o.actorID, durableTimer.GetGeneration())
+			log.Info("Workflow actor: ignoring durable timer from previous generation", "actor_id", o.actorID, "get_generation", durableTimer.GetGeneration())
 			return todo.RunCompletedFalse, nil
 		}
 
@@ -115,7 +116,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to reload state on empty-inbox path: %w", err))
 		}
 		if state == nil {
-			log.Warnf("No workflow state found for actor '%s' after reload, terminating execution", o.actorID)
+			log.Warn("No workflow state found for actor after reload, terminating execution", "actor_id", o.actorID)
 			return todo.RunCompletedTrue, nil
 		}
 	}
@@ -141,7 +142,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 				return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to (re)deliver recursive terminate to children on empty-inbox path: %w", terr))
 			}
 		}
-		log.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", o.actorID, reminder.Name)
+		log.Debug("Workflow actor: ignoring run request for reminder because the workflow inbox is empty", "actor_id", o.actorID, "name", reminder.Name)
 		return todo.RunCompletedTrue, nil
 	}
 
@@ -186,7 +187,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		diagnoseStatus = ""
 	}
 	// Request to execute workflow
-	log.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", o.actorID, wi.InstanceID)
+	log.Debug("Workflow actor: scheduling workflow execution with instanceId", "actor_id", o.actorID, "instance_id", wi.InstanceID)
 	// Schedule the workflow execution by signaling the backend
 	// Snapshot o.rstate before the engine runs. The engine shares wi.State
 	// with o.rstate (same pointer) and may overwrite it during ContinueAsNew
@@ -309,12 +310,12 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	o.stripUnmatchedResolutions(state, rs)
 
 	runtimeStatus := runtimestate.RuntimeStatus(rs)
-	log.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", o.actorID, runtimeStatus.String(), wi.InstanceID)
+	log.Debug("Workflow actor: workflow execution returned with status instanceId", "actor_id", o.actorID, "string", runtimeStatus.String(), "instance_id", wi.InstanceID)
 
 	// Increment the generation counter if the workflow used continue-as-new. Subsequent actions below
 	// will use this updated generation value for their duplication execution handling.
 	if rs.GetContinuedAsNew() {
-		log.Debugf("Workflow actor '%s': workflow with instanceId '%s' continued as new", o.actorID, wi.InstanceID)
+		log.Debug("Workflow actor: workflow with instanceId continued as new", "actor_id", o.actorID, "instance_id", wi.InstanceID)
 		state.Generation += 1
 		// The engine carries the propagation chain across CAN by updating
 		// wi.IncomingHistory. Persist any change so the new generation sees
@@ -476,7 +477,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 
 	if runtimestate.IsCompleted(rs) {
-		log.Infof("Workflow Actor '%s': workflow completed with status '%s' workflowName '%s'", o.actorID, rstatus, workflowName)
+		log.Info("Workflow Actor: workflow completed with status workflowName", "actor_id", o.actorID, "rstatus", rstatus, "workflow_name", workflowName)
 		// Create the retention reminder before deleting reminders. If the
 		// scheduler RPC fails (e.g. pod killed mid-call), returning the
 		// error here lets the firing reminder retry the whole completion
@@ -602,7 +603,7 @@ func (o *orchestrator) handleRetention(ctx context.Context, status protos.Orches
 		completedAt = time.Now()
 	}
 
-	log.Debugf("Workflow actor '%s': setting retention reminder for status '%s' with due time '%v'", o.actorID, status.String(), dueTime)
+	log.Debug("Workflow actor: setting retention reminder for status with due time", "actor_id", o.actorID, "string", status.String(), "due_time", dueTime)
 	_, err = o.createRetentionReminder(ctx, retentionReminderName, completedAt.Add(*dueTime))
 	return err
 }
@@ -664,7 +665,7 @@ func (o *orchestrator) stripUnmatchedResolutions(state *wfenginestate.State, rs 
 		filtered := make([]*backend.HistoryEvent, 0, len(events)-1)
 		for _, ev := range events {
 			if !matched(ev) {
-				log.Warnf("Workflow actor '%s': discarding resolution event %T that matches no operation scheduled in persisted history or in this execution (stale event from a previous generation?)", o.actorID, ev.GetEventType())
+				log.Warn("Workflow actor: discarding resolution event that matches no operation scheduled in persisted history or in this execution (stale event from a previous generation?)", "actor_id", o.actorID, "get_event_type", ev.GetEventType())
 				continue
 			}
 			filtered = append(filtered, ev)
@@ -699,25 +700,25 @@ func filterValidInboxEvents(state *wfenginestate.State) []*backend.HistoryEvent 
 		case *protos.HistoryEvent_TaskCompleted:
 			taskID := et.TaskCompleted.GetTaskScheduledId()
 			if _, ok := scheduledTaskIDs[taskID]; !ok {
-				log.Warnf("Dropping injected inbox event: task result for task %d not scheduled in signed history", taskID)
+				log.Warn("Dropping injected inbox event: task result for task not scheduled in signed history", "task_id", taskID)
 				continue
 			}
 		case *protos.HistoryEvent_TaskFailed:
 			taskID := et.TaskFailed.GetTaskScheduledId()
 			if _, ok := scheduledTaskIDs[taskID]; !ok {
-				log.Warnf("Dropping injected inbox event: task failure for task %d not scheduled in signed history", taskID)
+				log.Warn("Dropping injected inbox event: task failure for task not scheduled in signed history", "task_id", taskID)
 				continue
 			}
 		case *protos.HistoryEvent_ChildWorkflowInstanceCompleted:
 			taskID := et.ChildWorkflowInstanceCompleted.GetTaskScheduledId()
 			if _, ok := createdChildIDs[taskID]; !ok {
-				log.Warnf("Dropping injected inbox event: child workflow result for task %d not created in signed history", taskID)
+				log.Warn("Dropping injected inbox event: child workflow result for task not created in signed history", "task_id", taskID)
 				continue
 			}
 		case *protos.HistoryEvent_ChildWorkflowInstanceFailed:
 			taskID := et.ChildWorkflowInstanceFailed.GetTaskScheduledId()
 			if _, ok := createdChildIDs[taskID]; !ok {
-				log.Warnf("Dropping injected inbox event: child workflow failure for task %d not created in signed history", taskID)
+				log.Warn("Dropping injected inbox event: child workflow failure for task not created in signed history", "task_id", taskID)
 				continue
 			}
 		case *protos.HistoryEvent_EventRaised,
@@ -734,7 +735,7 @@ func filterValidInboxEvents(state *wfenginestate.State) []*backend.HistoryEvent 
 			// applier and persisted into the caller's history directly, so it
 			// should never appear in an inbox. If it does, treat it as
 			// injected and drop it.
-			log.Warnf("Dropping injected inbox event: unknown event type %T", et)
+			log.Warn("Dropping injected inbox event: unknown event type", "et", et)
 			continue
 		}
 		valid = append(valid, e)

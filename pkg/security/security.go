@@ -43,7 +43,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.security")
+var log = logger.New("dapr.runtime.security")
 
 // Handler implements middleware for client and server connection security.
 //
@@ -236,7 +236,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 				}
 			case opts.TrustAnchorsFile != nil:
 				trustAnchors = file.From(file.Options{
-					Log:      log,
+					Log:      log.Legacy(),
 					CAPath:   *opts.TrustAnchorsFile,
 					JwksPath: opts.JSONWebKeySetFile,
 				})
@@ -253,7 +253,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 			}
 		}
 		spf = spiffe.New(spiffe.Options{
-			Log:                 log,
+			Log:                 log.Legacy(),
 			RequestSVIDFn:       reqFn,
 			WriteIdentityToFile: opts.WriteIdentityToFile,
 			TrustAnchors:        trustAnchors,

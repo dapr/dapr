@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/kit/logger"
 	kmeta "github.com/dapr/kit/metadata"
 )
 
@@ -54,7 +55,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	component, ok := a.compStore.GetConversation(req.GetName())
 	if !ok {
 		err := messages.ErrConversationNotFound.WithFormat(req.GetName())
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
@@ -67,7 +68,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 
 	if len(req.GetInputs()) == 0 {
 		err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
@@ -75,7 +76,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	scrubber, err = piiscrubber.NewDefaultScrubber()
 	if err != nil {
 		err = messages.ErrConversationMissingInputs.WithFormat(req.GetName())
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return &runtimev1pb.ConversationResponse{}, err //nolint:staticcheck
 	}
 
@@ -86,7 +87,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 			scrubbed, err = scrubber.ScrubTexts([]string{i.GetContent()})
 			if err != nil {
 				err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
-				a.logger.Debug(err)
+				a.logger.Debug("api call returned error", logger.Err(err))
 				return &runtimev1pb.ConversationResponse{}, err //nolint:staticcheck
 			}
 
@@ -132,13 +133,13 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 
 	if err != nil {
 		err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return &runtimev1pb.ConversationResponse{}, err //nolint:staticcheck
 	}
 
 	// handle response
 	response := &runtimev1pb.ConversationResponse{} //nolint:staticcheck
-	a.logger.Debug(response)
+	a.logger.Debug("api call response", "response", logger.Lazy(response.String))
 	if resp != nil {
 		if req.GetContextID() != "" {
 			contextID := req.GetContextID()
@@ -158,7 +159,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 				scrubbed, err = scrubber.ScrubTexts([]string{content})
 				if err != nil {
 					err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
-					a.logger.Debug(err)
+					a.logger.Debug("api call returned error", logger.Err(err))
 					return &runtimev1pb.ConversationResponse{}, err //nolint:staticcheck
 				}
 
@@ -179,13 +180,13 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	component, ok := a.compStore.GetConversation(req.GetName())
 	if !ok {
 		err := messages.ErrConversationNotFound.WithFormat(req.GetName())
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
 	// Log component type for debugging
 	if _, isMistral := component.(*mistral.Mistral); isMistral {
-		a.logger.Debugf("Detected Mistral component: %s", req.GetName())
+		a.logger.Debug("Detected Mistral component", "component", req.GetName())
 	}
 
 	// prepare request
@@ -199,7 +200,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 	if len(req.GetInputs()) == 0 {
 		err = messages.ErrConversationMissingInputs.WithFormat(req.GetName())
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
@@ -213,7 +214,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	scrubber, err = piiscrubber.NewDefaultScrubber()
 	if err != nil {
 		err = messages.ErrConversationMissingInputs.WithFormat(req.GetName())
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return &runtimev1pb.ConversationResponseAlpha2{}, err
 	}
 
@@ -227,7 +228,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 			if message.GetMessageTypes() == nil {
 				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "message type cannot be nil")
-				a.logger.Debug(err)
+				a.logger.Debug("api call returned error", logger.Err(err))
 				return nil, err
 			}
 
@@ -244,7 +245,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						scrubbed, err = scrubber.ScrubTexts([]string{text})
 						if err != nil {
 							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
-							a.logger.Debug(err)
+							a.logger.Debug("api call returned error", logger.Err(err))
 							return &runtimev1pb.ConversationResponseAlpha2{}, err
 						}
 						text = scrubbed[0]
@@ -271,7 +272,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						scrubbed, err = scrubber.ScrubTexts([]string{text})
 						if err != nil {
 							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
-							a.logger.Debug(err)
+							a.logger.Debug("api call returned error", logger.Err(err))
 							return &runtimev1pb.ConversationResponseAlpha2{}, err
 						}
 						text = scrubbed[0]
@@ -296,7 +297,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						scrubbed, err = scrubber.ScrubTexts([]string{text})
 						if err != nil {
 							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
-							a.logger.Debug(err)
+							a.logger.Debug("api call returned error", logger.Err(err))
 							return &runtimev1pb.ConversationResponseAlpha2{}, err
 						}
 						text = scrubbed[0]
@@ -321,7 +322,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						scrubbed, err = scrubber.ScrubTexts([]string{text})
 						if err != nil {
 							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
-							a.logger.Debug(err)
+							a.logger.Debug("api call returned error", logger.Err(err))
 							return &runtimev1pb.ConversationResponseAlpha2{}, err
 						}
 						text = scrubbed[0]
@@ -339,7 +340,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				for _, tool := range msg.OfAssistant.GetToolCalls() {
 					if tool.ToolTypes == nil {
 						err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "tool types cannot be nil")
-						a.logger.Debug(err)
+						a.logger.Debug("api call returned error", logger.Err(err))
 						return nil, err
 					}
 					toolCall := llms.ToolCall{
@@ -375,7 +376,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						scrubbed, err = scrubber.ScrubTexts([]string{text})
 						if err != nil {
 							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
-							a.logger.Debug(err)
+							a.logger.Debug("api call returned error", logger.Err(err))
 							return &runtimev1pb.ConversationResponseAlpha2{}, err
 						}
 						text = scrubbed[0]
@@ -403,7 +404,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 			default:
 				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "unsupported message type")
-				a.logger.Debug(err)
+				a.logger.Debug("api call returned error", logger.Err(err))
 				return nil, err
 			}
 			llmMessages = append(llmMessages, &langchainMsg)
@@ -437,7 +438,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	case "required":
 		if len(tools) == 0 {
 			err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "tool choice must be 'auto', 'none', 'required', or a specific tool name matching the tools available to be used")
-			a.logger.Debug(err)
+			a.logger.Debug("api call returned error", logger.Err(err))
 			return nil, err
 		}
 	default:
@@ -456,7 +457,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 			}
 			if !toolNameFound {
 				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "tool choice selected was not found. Must be 'auto', 'none', 'required', or a specific tool name matching the tools available to be used")
-				a.logger.Debug(err)
+				a.logger.Debug("api call returned error", logger.Err(err))
 				return nil, err
 			}
 		}
@@ -500,13 +501,13 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 	if err != nil {
 		err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return &runtimev1pb.ConversationResponseAlpha2{}, err
 	}
 
 	// handle response
 	response := &runtimev1pb.ConversationResponseAlpha2{}
-	a.logger.Debug(response)
+	a.logger.Debug("api call response", "response", logger.Lazy(response.String))
 	if resp != nil {
 		if req.GetContextId() != "" {
 			contextID := req.GetContextId()
@@ -526,7 +527,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						scrubbed, err = scrubber.ScrubTexts([]string{content})
 						if err != nil {
 							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
-							a.logger.Debug(err)
+							a.logger.Debug("api call returned error", logger.Err(err))
 							return &runtimev1pb.ConversationResponseAlpha2{}, err
 						}
 						content = scrubbed[0]

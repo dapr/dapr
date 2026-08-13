@@ -53,12 +53,13 @@ func IsInitialVersion(version string) bool {
 
 // CheckDeprecated checks if a version is deprecated and logs a warning if it
 // is using information derived from the version set.
-func CheckDeprecated(log logger.Logger, name, version string, versionSet Versioning) {
+func CheckDeprecated(l logger.Logger, name, version string, versionSet Versioning) {
+	log := logger.FromLogger(l)
 	for _, v := range versionSet.Deprecated {
 		if v.Version == version {
-			log.Warnf(
-				"WARNING: state store %[1]s/%[2]s is deprecated and will be removed in a future version, please use %[3]s/%[4]s",
-				name, version, name, versionSet.Preferred.Version)
+			log.Warn(
+				"state store version is deprecated and will be removed in a future version",
+				"name", name, "version", version, "preferred_version", versionSet.Preferred.Version)
 		}
 	}
 }

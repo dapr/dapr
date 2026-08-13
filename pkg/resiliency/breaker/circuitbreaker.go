@@ -75,7 +75,7 @@ func IsErrorPermanent(err error) bool {
 
 // Initialize creates the underlying circuit breaker using the
 // configuration fields.
-func (c *CircuitBreaker) Initialize(log logger.Logger) {
+func (c *CircuitBreaker) Initialize(log *logger.Log) {
 	var tripFn func(counts gobreaker.Counts) bool
 
 	if c.Trip != nil {
@@ -107,7 +107,7 @@ func (c *CircuitBreaker) Initialize(log logger.Logger) {
 		Timeout:     c.Timeout,
 		ReadyToTrip: tripFn,
 		OnStateChange: func(name string, from, to gobreaker.State) {
-			log.Infof("Circuit breaker %q changed state from %s to %s", name, from, to)
+			log.Info("Circuit breaker changed state", "name", name, "from", from, "to", to)
 		},
 	})
 }

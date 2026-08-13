@@ -51,7 +51,7 @@ func (r *Root) httpEndpointLoop(name string) loop.Interface[loops.EventHTTPEndpo
 	ctx := r.runCtx
 	r.httpEndpointsWG.Go(func() {
 		if err := l.Run(ctx); err != nil {
-			log.Errorf("httpendpoint loop %s error: %s", name, err)
+			log.Error("httpendpoint loop error", "name", name, "error", err)
 		}
 		loops.HTTPEndpointFactory.CacheLoop(l)
 	})

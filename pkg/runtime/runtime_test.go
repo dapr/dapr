@@ -109,7 +109,7 @@ func TestNewRuntime(t *testing.T) {
 	r, err := newDaprRuntime(t.Context(), nil, &internalConfig{
 		mode: modes.StandaloneMode,
 		metricsExporter: metrics.New(metrics.Options{
-			Log:       log,
+			Log:       log.Legacy(),
 			Namespace: metrics.DefaultMetricNamespace,
 			Healthz:   healthz.New(),
 		}),
@@ -896,7 +896,7 @@ func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol str
 		schedulerStreams:             3,
 		disableBuiltinK8sSecretStore: false,
 		metricsExporter: metrics.New(metrics.Options{
-			Log:       log,
+			Log:       log.Legacy(),
 			Namespace: metrics.DefaultMetricNamespace,
 			Healthz:   healthz.New(),
 		}),
@@ -1100,7 +1100,7 @@ func TestInitActors(t *testing.T) {
 		r, err := newDaprRuntime(t.Context(), testSecurity(t), &internalConfig{
 			schedulerStreams: 3,
 			metricsExporter: metrics.New(metrics.Options{
-				Log:       log,
+				Log:       log.Legacy(),
 				Namespace: metrics.DefaultMetricNamespace,
 				Healthz:   healthz.New(),
 			}),
@@ -1121,7 +1121,7 @@ func TestInitActors(t *testing.T) {
 	t.Run("the state stores can still be initialized normally", func(t *testing.T) {
 		r, err := newDaprRuntime(t.Context(), testSecurity(t), &internalConfig{
 			metricsExporter: metrics.New(metrics.Options{
-				Log:       log,
+				Log:       log.Legacy(),
 				Namespace: metrics.DefaultMetricNamespace,
 				Healthz:   healthz.New(),
 			}),
@@ -1143,7 +1143,7 @@ func TestInitActors(t *testing.T) {
 	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
 		r, err := newDaprRuntime(t.Context(), testSecurity(t), &internalConfig{
 			metricsExporter: metrics.New(metrics.Options{
-				Log:       log,
+				Log:       log.Legacy(),
 				Namespace: metrics.DefaultMetricNamespace,
 				Healthz:   healthz.New(),
 			}),

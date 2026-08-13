@@ -259,7 +259,7 @@ func SerializeSpanContext(ctx trace.SpanContext) string {
 }
 
 func configureTestTraceExporter(buffer *string) {
-	exporter := testtrace.NewStringExporter(buffer, logger.NewLogger("fakeLogger"))
+	exporter := testtrace.NewStringExporter(buffer, logger.New("fakeLogger").Legacy())
 	exporter.Register("fakeID")
 }
 
@@ -401,13 +401,13 @@ func TestAPIToken(t *testing.T) {
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
 	// Setup Dapr API server
-	log := logger.NewLogger("api")
+	log := logger.New("api")
 	fakeAPI := &api{
 		logger: log,
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
 			Resiliency: resiliency.New(nil),
-			Logger:     log,
+			Logger:     log.Legacy(),
 			Actors: fake.New().WithRouter(func(context.Context) (router.Interface, error) {
 				return nil, messages.ErrActorRuntimeNotFound
 			}),
@@ -616,7 +616,7 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 
 	// Setup Dapr API server
 	fakeAPI := &api{
-		logger: logger.NewLogger("test"),
+		logger: logger.New("test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
 			Resiliency: resiliency.New(nil),
@@ -724,7 +724,7 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 
 	// Setup Dapr API server
 	fakeAPI := &api{
-		logger: logger.NewLogger("test"),
+		logger: logger.New("test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
 			Resiliency: resiliency.New(nil),
@@ -789,9 +789,9 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 
 func TestSecretStoreNotConfigured(t *testing.T) {
 	lis := startDaprAPIServer(t, &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
-			Logger:    logger.NewLogger("grpc.api.test"),
+			Logger:    logger.New("grpc.api.test").Legacy(),
 			AppID:     "fakeAPI",
 			CompStore: compstore.New(),
 		}),
@@ -915,10 +915,10 @@ func TestGetSecret(t *testing.T) {
 
 	// Setup Dapr API server
 	fakeAPI := &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			Resiliency: resiliency.New(nil),
 			CompStore:  compStore,
 		}),
@@ -992,10 +992,10 @@ func TestGetBulkSecret(t *testing.T) {
 
 	// Setup Dapr API server
 	fakeAPI := &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			Resiliency: resiliency.New(nil),
 			CompStore:  compStore,
 		}),
@@ -1030,10 +1030,10 @@ func TestGetBulkSecret(t *testing.T) {
 
 func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 	lis := startDaprAPIServer(t, &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			CompStore:  compstore.New(),
 			Resiliency: resiliency.New(nil),
 		}),
@@ -1113,10 +1113,10 @@ func TestSaveState(t *testing.T) {
 
 	// Setup dapr api server
 	fakeAPI := &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
 		}),
@@ -1273,10 +1273,10 @@ func TestGetState(t *testing.T) {
 
 	// Setup dapr api server
 	fakeAPI := &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
 		}),
@@ -1388,7 +1388,7 @@ func TestGetConfiguration(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddConfiguration("store1", fakeConfigurationStore)
 	fakeAPI := &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
 			CompStore:  compStore,
@@ -1570,7 +1570,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 
 	// Setup dapr api server
 	fakeAPI := &api{
-		logger: logger.NewLogger("test"),
+		logger: logger.New("test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
 			CompStore:  compStore,
@@ -1781,11 +1781,11 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 
 	// Setup dapr api server
 	fakeAPI := &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
 			CompStore:  compStore,
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			Resiliency: resiliency.New(nil),
 		}),
 	}
@@ -1933,11 +1933,11 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 
 	// Setup dapr api server
 	fakeAPI := &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
 			CompStore:  compStore,
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			Resiliency: resiliency.New(nil),
 		}),
 	}
@@ -2012,10 +2012,10 @@ func TestGetBulkState(t *testing.T) {
 
 	// Setup dapr api server
 	fakeAPI := &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
 		}),
@@ -2151,10 +2151,10 @@ func TestDeleteState(t *testing.T) {
 
 	// Setup dapr api server
 	fakeAPI := &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
 		}),
@@ -2262,10 +2262,10 @@ func TestDeleteBulkState(t *testing.T) {
 
 	// Setup dapr api server
 	fakeAPI := &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
 		}),
@@ -2350,7 +2350,7 @@ func TestDeleteBulkState(t *testing.T) {
 
 func TestPublishTopic(t *testing.T) {
 	srv := &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:     "fakeAPI",
 			CompStore: compstore.New(),
@@ -2548,7 +2548,7 @@ func TestPublishTopic(t *testing.T) {
 
 func TestBulkPublish(t *testing.T) {
 	fakeAPI := &api{
-		logger: logger.NewLogger("test"),
+		logger: logger.New("test"),
 		Universal: universal.New(universal.Options{
 			AppID:     "fakeAPI",
 			CompStore: compstore.New(),
@@ -2654,7 +2654,7 @@ func TestBulkPublish(t *testing.T) {
 
 func TestInvokeBinding(t *testing.T) {
 	srv := &api{
-		logger: logger.NewLogger("test"),
+		logger: logger.New("test"),
 		sendToOutputBindingFn: func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			if name == "error-binding" {
 				return nil, errors.New("error invoking binding")
@@ -2689,7 +2689,7 @@ func TestTransactionStateStoreNotConfigured(t *testing.T) {
 	lis := startDaprAPIServer(t, &api{
 		Universal: universal.New(universal.Options{
 			AppID:     "fakeAPI",
-			Logger:    logger.NewLogger("grpc.api.test"),
+			Logger:    logger.New("grpc.api.test").Legacy(),
 			CompStore: compstore.New(),
 		}),
 	}, "")
@@ -2708,7 +2708,7 @@ func TestTransactionStateStoreNotImplemented(t *testing.T) {
 	lis := startDaprAPIServer(t, &api{
 		Universal: universal.New(universal.Options{
 			AppID:     "fakeAPI",
-			Logger:    logger.NewLogger("grpc.api.test"),
+			Logger:    logger.New("grpc.api.test").Legacy(),
 			CompStore: compStore,
 		}),
 	}, "")
@@ -2755,7 +2755,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 	// Setup dapr api server
 	fakeAPI := &api{
 		Universal: universal.New(universal.Options{
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			AppID:      "fakeAPI",
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
@@ -3025,7 +3025,7 @@ func TestQueryState(t *testing.T) {
 	lis := startTestServerAPI(t, &api{
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
 		}),
@@ -3072,7 +3072,7 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 
 	lis := startDaprAPIServer(t, &api{
 		Universal: universal.New(universal.Options{
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
 		}),
@@ -3096,7 +3096,7 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	lis := startDaprAPIServer(t, &api{
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
 		}),
@@ -3163,7 +3163,7 @@ func TestSubscribeConfigurationAPI(t *testing.T) {
 		compStore.AddConfiguration("store1", &mockConfigStore{})
 
 		lis := startDaprAPIServer(t, &api{
-			logger: logger.NewLogger("grpc.api.test"),
+			logger: logger.New("grpc.api.test"),
 			Universal: universal.New(universal.Options{
 				AppID:      "fakeAPI",
 				CompStore:  compStore,
@@ -3298,13 +3298,13 @@ func TestStateAPIWithResiliency(t *testing.T) {
 
 	compStore := compstore.New()
 	compStore.AddStateStore("failStore", failingStore)
-	res := resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency)
+	res := resiliency.FromConfigurations(logger.New("grpc.api.test").Legacy(), testResiliency)
 
 	fakeAPI := &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			CompStore:  compStore,
 			Resiliency: res,
 		}),
@@ -3530,12 +3530,12 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 	compStore.AddConfiguration("failConfig", &failingConfigStore)
 
 	fakeAPI := &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
-			Logger:     logger.NewLogger("grpc.api.test"),
+			Logger:     logger.New("grpc.api.test").Legacy(),
 			CompStore:  compStore,
-			Resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+			Resiliency: resiliency.FromConfigurations(logger.New("grpc.api.test").Legacy(), testResiliency),
 		}),
 	}
 	lis := startDaprAPIServer(t, fakeAPI, "")
@@ -3609,11 +3609,11 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 
 	// Setup Dapr API server
 	fakeAPI := &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
-			Logger:     logger.NewLogger("grpc.api.test"),
-			Resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+			Logger:     logger.New("grpc.api.test").Legacy(),
+			Resiliency: resiliency.FromConfigurations(logger.New("grpc.api.test").Legacy(), testResiliency),
 			CompStore:  compStore,
 		}),
 	}
@@ -3692,10 +3692,10 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 
 	// Setup Dapr API server
 	fakeAPI := &api{
-		logger: logger.NewLogger("grpc.api.test"),
+		logger: logger.New("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
-			Resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+			Resiliency: resiliency.FromConfigurations(logger.New("grpc.api.test").Legacy(), testResiliency),
 		}),
 		directMessaging: failingDirectMessaging,
 	}
@@ -3845,14 +3845,14 @@ func (m *mockConfigStore) Close() error {
 }
 
 func TestTryLock(t *testing.T) {
-	l := logger.NewLogger("fakeLogger")
-	resiliencyConfig := resiliency.FromConfigurations(l, testResiliency)
+	l := logger.New("fakeLogger")
+	resiliencyConfig := resiliency.FromConfigurations(l.Legacy(), testResiliency)
 
 	t.Run("error when lock store not configured", func(t *testing.T) {
 		api := NewAPI(APIOpts{
 			Universal: universal.New(universal.Options{
 				Resiliency: resiliencyConfig,
-				Logger:     l,
+				Logger:     l.Legacy(),
 				CompStore:  compstore.New(),
 			}),
 		})
@@ -3873,7 +3873,7 @@ func TestTryLock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			Universal: universal.New(universal.Options{
 				Resiliency: resiliencyConfig,
-				Logger:     l,
+				Logger:     l.Legacy(),
 				CompStore:  compStore,
 			}),
 		})
@@ -3894,7 +3894,7 @@ func TestTryLock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			Universal: universal.New(universal.Options{
 				Resiliency: resiliencyConfig,
-				Logger:     l,
+				Logger:     l.Legacy(),
 				CompStore:  compStore,
 			}),
 			TracingSpec: config.TracingSpec{},
@@ -3917,7 +3917,7 @@ func TestTryLock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			Universal: universal.New(universal.Options{
 				Resiliency: resiliencyConfig,
-				Logger:     l,
+				Logger:     l.Legacy(),
 				CompStore:  compStore,
 			}),
 			TracingSpec: config.TracingSpec{},
@@ -3942,7 +3942,7 @@ func TestTryLock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			Universal: universal.New(universal.Options{
 				Resiliency: resiliencyConfig,
-				Logger:     l,
+				Logger:     l.Legacy(),
 				CompStore:  compStore,
 			}),
 			TracingSpec: config.TracingSpec{},
@@ -3977,7 +3977,7 @@ func TestTryLock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			Universal: universal.New(universal.Options{
 				Resiliency: resiliencyConfig,
-				Logger:     l,
+				Logger:     l.Legacy(),
 				CompStore:  compStore,
 			}),
 			TracingSpec: config.TracingSpec{},
@@ -3995,14 +3995,14 @@ func TestTryLock(t *testing.T) {
 }
 
 func TestUnlock(t *testing.T) {
-	l := logger.NewLogger("fakeLogger")
-	resiliencyConfig := resiliency.FromConfigurations(l, testResiliency)
+	l := logger.New("fakeLogger")
+	resiliencyConfig := resiliency.FromConfigurations(l.Legacy(), testResiliency)
 
 	t.Run("error when lock store not configured", func(t *testing.T) {
 		api := NewAPI(APIOpts{
 			Universal: universal.New(universal.Options{
 				Resiliency: resiliencyConfig,
-				Logger:     l,
+				Logger:     l.Legacy(),
 				CompStore:  compstore.New(),
 			}),
 			TracingSpec: config.TracingSpec{},
@@ -4024,7 +4024,7 @@ func TestUnlock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			Universal: universal.New(universal.Options{
 				Resiliency: resiliencyConfig,
-				Logger:     l,
+				Logger:     l.Legacy(),
 				CompStore:  compStore,
 			}),
 		})
@@ -4045,7 +4045,7 @@ func TestUnlock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			Universal: universal.New(universal.Options{
 				Resiliency: resiliencyConfig,
-				Logger:     l,
+				Logger:     l.Legacy(),
 				CompStore:  compStore,
 			}),
 		})
@@ -4066,7 +4066,7 @@ func TestUnlock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			Universal: universal.New(universal.Options{
 				Resiliency: resiliencyConfig,
-				Logger:     l,
+				Logger:     l.Legacy(),
 				CompStore:  compStore,
 			}),
 		})
@@ -4098,7 +4098,7 @@ func TestUnlock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			Universal: universal.New(universal.Options{
 				Resiliency: resiliencyConfig,
-				Logger:     l,
+				Logger:     l.Legacy(),
 				CompStore:  compStore,
 			}),
 		})
@@ -4193,7 +4193,7 @@ func TestMetadata(t *testing.T) {
 					},
 				}
 			}),
-			Logger:    logger.NewLogger("grpc.api.test"),
+			Logger:    logger.New("grpc.api.test").Legacy(),
 			CompStore: compStore,
 			GetComponentsCapabilitiesFn: func() map[string][]string {
 				capsMap := make(map[string][]string)

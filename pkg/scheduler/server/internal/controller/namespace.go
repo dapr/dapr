@@ -32,7 +32,7 @@ type namespace struct {
 }
 
 func (n *namespace) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log.Debugf("Reconciling namespace %s", req.Name)
+	log.Debug("Reconciling namespace", "name", req.Name)
 
 	cr, ok := n.ctrl.cron.Load().(cron.Interface)
 	if !ok {
@@ -41,7 +41,7 @@ func (n *namespace) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resul
 
 	cronClient, err := cr.Client(ctx)
 	if err != nil {
-		log.Errorf("Failed to get etcd cron client: %s", err)
+		log.Error("Failed to get etcd cron client", "error", err)
 		return ctrl.Result{}, err
 	}
 
@@ -51,10 +51,10 @@ func (n *namespace) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resul
 		return ctrl.Result{}, err
 	}
 
-	log.Infof("Deleting jobs from deleted namespace %s", req.Name)
+	log.Info("Deleting jobs from deleted namespace", "name", req.Name)
 	err = cronClient.DeletePrefixes(ctx, serialize.PrefixesFromNamespace(req.Name)...)
 	if err != nil {
-		log.Errorf("Failed to delete cron jobs for namespace %s: %s", req.Name, err)
+		log.Error("Failed to delete cron jobs for namespace", "name", req.Name, "error", err)
 		return ctrl.Result{}, err
 	}
 

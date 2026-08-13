@@ -118,7 +118,7 @@ func TestStartReadingFromBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			Resiliency:     resiliency.New(log),
+			Resiliency:     resiliency.New(log.Legacy()),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
@@ -139,7 +139,7 @@ func TestStartReadingFromBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			Resiliency:     resiliency.New(log),
+			Resiliency:     resiliency.New(log.Legacy()),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
@@ -181,7 +181,7 @@ func TestBindingOptionsTimeout(t *testing.T) {
 	t.Run("zero value falls back to default timeout", func(t *testing.T) {
 		b := New(Options{
 			IsHTTP:                   true,
-			Resiliency:               resiliency.New(log),
+			Resiliency:               resiliency.New(log.Legacy()),
 			ComponentStore:           compstore.New(),
 			Meta:                     meta.New(meta.Options{}),
 			AppBindingOptionsTimeout: 0, // should use config.DefaultAppBindingOptionsTimeout
@@ -193,7 +193,7 @@ func TestBindingOptionsTimeout(t *testing.T) {
 		customTimeout := 10 * time.Second
 		b := New(Options{
 			IsHTTP:                   true,
-			Resiliency:               resiliency.New(log),
+			Resiliency:               resiliency.New(log.Legacy()),
 			ComponentStore:           compstore.New(),
 			Meta:                     meta.New(meta.Options{}),
 			AppBindingOptionsTimeout: customTimeout,
@@ -208,7 +208,7 @@ func TestBindingOptionsTimeout(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:                   true,
-			Resiliency:               resiliency.New(log),
+			Resiliency:               resiliency.New(log.Legacy()),
 			ComponentStore:           compstore.New(),
 			Meta:                     meta.New(meta.Options{}),
 			AppBindingOptionsTimeout: probeTimeout,
@@ -280,7 +280,7 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 			})
 			b := New(Options{
 				IsHTTP:         false,
-				Resiliency:     resiliency.New(log),
+				Resiliency:     resiliency.New(log.Legacy()),
 				ComponentStore: compstore.New(),
 				Meta:           meta.New(meta.Options{}),
 				GRPC:           manager.NewManager(sec, modes.StandaloneMode, &manager.AppChannelConfig{Port: port}),
@@ -306,7 +306,7 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			Resiliency:     resiliency.New(log),
+			Resiliency:     resiliency.New(log.Legacy()),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
@@ -350,7 +350,7 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			Resiliency:     resiliency.New(log),
+			Resiliency:     resiliency.New(log.Legacy()),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
@@ -399,7 +399,7 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			Resiliency:     resiliency.New(log),
+			Resiliency:     resiliency.New(log.Legacy()),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
@@ -449,7 +449,7 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			Resiliency:     resiliency.New(log),
+			Resiliency:     resiliency.New(log.Legacy()),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
@@ -502,7 +502,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			Resiliency:     resiliency.New(log),
+			Resiliency:     resiliency.New(log.Legacy()),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
@@ -519,7 +519,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			Resiliency:     resiliency.New(log),
+			Resiliency:     resiliency.New(log.Legacy()),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
@@ -538,7 +538,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			Resiliency:     resiliency.New(log),
+			Resiliency:     resiliency.New(log.Legacy()),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
@@ -558,7 +558,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 func TestBindingTracingHttp(t *testing.T) {
 	b := New(Options{
 		IsHTTP:         true,
-		Resiliency:     resiliency.New(log),
+		Resiliency:     resiliency.New(log.Legacy()),
 		ComponentStore: compstore.New(),
 		Meta:           meta.New(meta.Options{}),
 	})

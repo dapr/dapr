@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging/method"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/kit/logger"
 )
 
 // RejectInternalActorType returns an error when actorType is a Dapr-reserved
@@ -58,21 +59,21 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 		b, err = json.Marshal(b)
 		if err != nil {
 			err = messages.ErrMalformedRequest.WithFormat(err)
-			a.logger.Debug(err)
+			a.logger.Debug("api call returned error", logger.Err(err))
 			return nil, err
 		}
 
 		data, err = anypb.New(wrapperspb.Bytes(b))
 		if err != nil {
 			err = messages.ErrMalformedRequest.WithFormat(err)
-			a.logger.Debug(err)
+			a.logger.Debug("api call returned error", logger.Err(err))
 			return nil, err
 		}
 	}
 
 	if vErr := method.ValidateName(in.GetName()); vErr != nil {
 		vErr = messages.ErrBadRequest.WithFormat(vErr)
-		a.logger.Debug(vErr)
+		a.logger.Debug("api call returned error", logger.Err(vErr))
 		return nil, vErr
 	}
 
@@ -90,7 +91,7 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 	err = timers.Create(ctx, req)
 	if err != nil {
 		err = messages.ErrActorTimerCreate.WithFormat(err)
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 	return nil, nil
@@ -129,27 +130,27 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 		b, err = json.Marshal(b)
 		if err != nil {
 			err = messages.ErrMalformedRequest.WithFormat(err)
-			a.logger.Debug(err)
+			a.logger.Debug("api call returned error", logger.Err(err))
 			return nil, err
 		}
 
 		data, err = anypb.New(wrapperspb.Bytes(b))
 		if err != nil {
 			err = messages.ErrMalformedRequest.WithFormat(err)
-			a.logger.Debug(err)
+			a.logger.Debug("api call returned error", logger.Err(err))
 			return nil, err
 		}
 	}
 
 	if in.GetName() == "" {
 		err = messages.ErrBadRequest.WithFormat("reminder name cannot be empty")
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
 	if vErr := method.ValidateName(in.GetName()); vErr != nil {
 		vErr = messages.ErrBadRequest.WithFormat(vErr)
-		a.logger.Debug(vErr)
+		a.logger.Debug("api call returned error", logger.Err(vErr))
 		return nil, vErr
 	}
 
@@ -169,7 +170,7 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 
 	err = r.Create(ctx, req)
 	if err != nil {
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 
 		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
 			return nil, messages.ErrActorReminderOpActorNotHosted
@@ -204,12 +205,12 @@ func (a *Universal) UnregisterActorReminder(ctx context.Context, in *runtimev1pb
 	err = r.Delete(ctx, req)
 	if err != nil {
 		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
-			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
+			a.logger.Debug("api call returned error", logger.Err(messages.ErrActorReminderOpActorNotHosted))
 			return nil, messages.ErrActorReminderOpActorNotHosted
 		}
 
 		err = messages.ErrActorReminderDelete.WithFormat(err)
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 	return nil, err
@@ -230,7 +231,7 @@ func (a *Universal) GetActorReminder(ctx context.Context, in *runtimev1pb.GetAct
 		ActorType: in.GetActorType(),
 	})
 	if err != nil {
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 
 		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
 			return nil, messages.ErrActorReminderOpActorNotHosted
@@ -287,12 +288,12 @@ func (a *Universal) UnregisterActorRemindersByType(ctx context.Context, in *runt
 	err = r.DeleteByActorID(ctx, req)
 	if err != nil {
 		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
-			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
+			a.logger.Debug("api call returned error", logger.Err(messages.ErrActorReminderOpActorNotHosted))
 			return nil, messages.ErrActorReminderOpActorNotHosted
 		}
 
 		err = messages.ErrActorReminderDelete.WithFormat(err)
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 
@@ -314,11 +315,11 @@ func (a *Universal) ListActorReminders(ctx context.Context, req *runtimev1pb.Lis
 	})
 	if err != nil {
 		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
-			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
+			a.logger.Debug("api call returned error", logger.Err(messages.ErrActorReminderOpActorNotHosted))
 			return nil, messages.ErrActorReminderOpActorNotHosted
 		}
 
-		a.logger.Debug(err)
+		a.logger.Debug("api call returned error", logger.Err(err))
 		return nil, err
 	}
 

@@ -30,7 +30,7 @@ import (
 // intact for forensics. Returns the new (failed) state; the caller is
 // responsible for refreshing any cached views (state, rstate, ometa).
 func (s *Signing) Tombstone(ctx context.Context, actorState state.Interface, opts wfenginestate.Options, prior *wfenginestate.State, cause error) (*wfenginestate.State, error) {
-	log.Warnf("Workflow actor '%s': tampering detected, marking workflow as FAILED: %s", s.ActorID, cause)
+	log.Warn("Workflow actor: tampering detected, marking workflow as FAILED", "actor_id", s.ActorID, "error", cause)
 
 	failed, err := wfenginestate.MarkAsTamperFailed(ctx, actorState, s.ActorID, opts, prior, cause)
 	if err != nil {
@@ -46,13 +46,13 @@ func (s *Signing) Tombstone(ctx context.Context, actorState state.Interface, opt
 // workflow state is left untouched; the tamper marker inserted by
 // Tombstone is what surfaces the FAILED status on subsequent loads.
 func (s *Signing) failSignatureVerification(ctx context.Context) {
-	log.Warnf("Workflow actor '%s': signature verification failed, deleting reminders to stop retries", s.ActorID)
+	log.Warn("Workflow actor: signature verification failed, deleting reminders to stop retries", "actor_id", s.ActorID)
 
 	if err := s.Reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
 		ActorType: s.ActorType,
 		ActorID:   s.ActorID,
 	}); err != nil {
-		log.Errorf("Workflow actor '%s': failed to delete workflow reminders: %s", s.ActorID, err)
+		log.Error("Workflow actor: failed to delete workflow reminders", "actor_id", s.ActorID, "error", err)
 	}
 
 	if err := s.Reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
@@ -60,6 +60,6 @@ func (s *Signing) failSignatureVerification(ctx context.Context) {
 		ActorID:         s.ActorID + "::",
 		MatchIDAsPrefix: true,
 	}); err != nil {
-		log.Errorf("Workflow actor '%s': failed to delete activity reminders: %s", s.ActorID, err)
+		log.Error("Workflow actor: failed to delete activity reminders", "actor_id", s.ActorID, "error", err)
 	}
 }

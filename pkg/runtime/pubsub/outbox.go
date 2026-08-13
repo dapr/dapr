@@ -42,7 +42,7 @@ const (
 	defaultStateScanDelay            = time.Second * 1
 )
 
-var outboxLogger = logger.NewLogger("dapr.outbox")
+var outboxLogger = logger.New("dapr.outbox")
 
 type outboxConfig struct {
 	publishPubSub                 string
@@ -278,7 +278,7 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 	for stateStore, c := range o.outboxStores {
 		outboxPubsub, ok := o.getPubsubFn(c.outboxPubsub)
 		if !ok {
-			outboxLogger.Warnf("could not subscribe to internal outbox topic: outbox pubsub %s not loaded", c.outboxPubsub)
+			outboxLogger.Warn("could not subscribe to internal outbox topic: outbox pubsub not loaded", "pubsub", c.outboxPubsub)
 			continue
 		}
 
@@ -331,12 +331,12 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 			}, bo)
 			if err != nil {
 				if c.outboxDiscardWhenMissingState {
-					outboxLogger.Errorf("failed to publish outbox topic to pubsub %s: %s, discarding message", c.publishPubSub, err)
+					outboxLogger.Error("failed to publish outbox topic to pubsub, discarding message", "pubsub", c.publishPubSub, "error", err)
 					//lint:ignore nilerr dropping message
 					return nil
 				}
 
-				outboxLogger.Errorf("failed to publish outbox topic to pubsub %s: %s, rejecting for later processing", c.publishPubSub, err)
+				outboxLogger.Error("failed to publish outbox topic to pubsub, rejecting for later processing", "pubsub", c.publishPubSub, "error", err)
 
 				return err
 			}
