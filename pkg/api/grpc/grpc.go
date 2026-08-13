@@ -1289,7 +1289,7 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(ctx, in.GetStoreName(), diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		richError := apierrors.Configuration(in.GetStoreName()).GetFailed(req.Keys, err.Error())
+		richError := apierrors.Configuration(in.GetStoreName()).GetFailed(req.Keys, err)
 		apiServerLogger.Debug(richError)
 		return response, richError
 	}

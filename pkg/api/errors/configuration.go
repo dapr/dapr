@@ -68,7 +68,7 @@ func (c *ConfigurationError) StoreNotFound() error {
 
 // GetFailed returns a standardized error for a failed configuration get operation.
 func (c *ConfigurationError) GetFailed(keys []string, err error) error {
-	msg := fmt.Sprintf("error getting configuration with keys=%v from store %s: %s", keys, c.storeName, err)
+	msg := fmt.Sprintf("error getting configuration with keys=%v from store %s: %v", keys, c.storeName, err)
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
@@ -86,7 +86,7 @@ func (c *ConfigurationError) GetFailed(keys []string, err error) error {
 
 // SubscribeFailed returns a standardized error for a failed configuration subscribe operation.
 func (c *ConfigurationError) SubscribeFailed(keys []string, err error) error {
-	msg := fmt.Sprintf("error subscribing to configuration with keys=%v from store %s: %s", keys, c.storeName, err)
+	msg := fmt.Sprintf("error subscribing to configuration with keys=%v from store %s: %v", keys, c.storeName, err)
 	return kiterrors.NewBuilder(
 		codes.InvalidArgument,
 		http.StatusInternalServerError,
@@ -98,43 +98,6 @@ func (c *ConfigurationError) SubscribeFailed(keys []string, err error) error {
 		WithErrorInfo(errorcodes.ConfigurationSubscribe.GrpcCode, map[string]string{
 			"store": c.storeName,
 			"error": err.Error(),
-		}).
-		Build()
-}
-
-// UnsubscribeFailed returns a standardized error for a failed configuration unsubscribe operation.
-func (c *ConfigurationError) UnsubscribeFailed(subscribeID string, err error) error {
-	msg := fmt.Sprintf("error unsubscribing from configuration store %s with id %s: %s", c.storeName, subscribeID, err)
-	return kiterrors.NewBuilder(
-		codes.Internal,
-		http.StatusInternalServerError,
-		msg,
-		errorcodes.ConfigurationUnsubscribe.Code,
-		string(errorcodes.ConfigurationUnsubscribe.Category),
-	).
-		WithResourceInfo(configurationStoreComponentType, c.storeName, "", msg).
-		WithErrorInfo(errorcodes.ConfigurationUnsubscribe.GrpcCode, map[string]string{
-			"store":       c.storeName,
-			"subscribeID": subscribeID,
-			"error":       err.Error(),
-		}).
-		Build()
-}
-
-// UnsubscribeNotFound returns a standardized error when the subscription ID does not exist.
-func (c *ConfigurationError) UnsubscribeNotFound(subscribeID string) error {
-	msg := fmt.Sprintf("error unsubscribing configuration from store %s: subscription %s does not exist", c.storeName, subscribeID)
-	return kiterrors.NewBuilder(
-		codes.NotFound,
-		http.StatusNotFound,
-		msg,
-		errorcodes.ConfigurationUnsubscribe.Code,
-		string(errorcodes.ConfigurationUnsubscribe.Category),
-	).
-		WithResourceInfo(configurationStoreComponentType, c.storeName, "", msg).
-		WithErrorInfo(errorcodes.ConfigurationUnsubscribe.GrpcCode, map[string]string{
-			"store":       c.storeName,
-			"subscribeID": subscribeID,
 		}).
 		Build()
 }

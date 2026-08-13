@@ -706,7 +706,7 @@ func (a *api) getConfigurationStoreWithRequestValidation(w nethttp.ResponseWrite
 		resp := apierrors.Configuration("").StoreNotConfigured()
 		respondWithError(w, resp)
 		log.Debug(resp)
-		return nil, "", errors.New(resp.Message())
+		return nil, "", errors.New(resp.Error())
 	}
 
 	storeName := chi.URLParam(r, storeNameParam)
@@ -716,7 +716,7 @@ func (a *api) getConfigurationStoreWithRequestValidation(w nethttp.ResponseWrite
 		resp := apierrors.Configuration(storeName).StoreNotFound()
 		respondWithError(w, resp)
 		log.Debug(resp)
-		return nil, "", errors.New(resp.Message())
+		return nil, "", errors.New(resp.Error())
 	}
 	return conf, storeName, nil
 }
