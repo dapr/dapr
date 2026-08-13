@@ -46,6 +46,12 @@ func TestMain(m *testing.M) {
 
 	os.Setenv("DAPR_INTEGRATION_LOGS_DIR", dir)
 
+	// These tests are about what the package does, not about where they happen
+	// to be running. CI sets GITHUB_ACTIONS, which switches reports to inline,
+	// so leaving it set would make the suite pass locally and fail on CI. Tests
+	// which care about that behaviour set it themselves.
+	os.Unsetenv("GITHUB_ACTIONS")
+
 	m.Run()
 }
 
