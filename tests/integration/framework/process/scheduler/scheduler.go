@@ -425,10 +425,10 @@ func (s *Scheduler) MetricsWithLabels(t *testing.T, ctx context.Context) *metric
 func (s *Scheduler) ETCDClient(t *testing.T, ctx context.Context) *clientv3.Client {
 	t.Helper()
 
-	client, err := clientv3.New(clientv3.Config{
+	client, err := clientv3.New(client.WithEtcdLogger(t, clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
 		DialTimeout: 40 * time.Second,
-	})
+	}))
 	require.NoError(t, err)
 
 	t.Cleanup(func() {

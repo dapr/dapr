@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -83,7 +84,7 @@ func (r *restart) Run(tt *testing.T, ctx context.Context) {
 		return "", nil
 	})
 
-	client := dworkflow.NewClient(r.daprd.GRPCConn(tt, ctx))
+	client := dworkflow.NewClientWithLogger(r.daprd.GRPCConn(tt, ctx), logger.New(tt))
 	require.NoError(tt, client.StartWorker(ctx, reg))
 
 	id, err := client.ScheduleWorkflow(ctx, "sign-restart")
@@ -99,7 +100,7 @@ func (r *restart) Run(tt *testing.T, ctx context.Context) {
 	r.daprd.Restart(tt, ctx)
 	r.daprd.WaitUntilRunning(tt, ctx)
 
-	client = dworkflow.NewClient(r.daprd.GRPCConn(tt, ctx))
+	client = dworkflow.NewClientWithLogger(r.daprd.GRPCConn(tt, ctx), logger.New(tt))
 	require.NoError(tt, client.StartWorker(ctx, reg))
 
 	// Verify the signature chain is still valid after restart.

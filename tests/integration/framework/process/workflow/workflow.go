@@ -289,13 +289,13 @@ func (w *Workflow) RegistryN(index int) *task.TaskRegistry {
 
 func (w *Workflow) WorkflowClient(t *testing.T, ctx context.Context) *workflow.Client {
 	t.Helper()
-	return workflow.NewClient(w.Dapr().GRPCConn(t, ctx))
+	return workflow.NewClientWithLogger(w.Dapr().GRPCConn(t, ctx), logger.New(t))
 }
 
 func (w *Workflow) WorkflowClientN(t *testing.T, ctx context.Context, index int) *workflow.Client {
 	t.Helper()
 	require.Less(t, index, len(w.daprds), "index out of range")
-	return workflow.NewClient(w.DaprN(index).GRPCConn(t, ctx))
+	return workflow.NewClientWithLogger(w.DaprN(index).GRPCConn(t, ctx), logger.New(t))
 }
 
 func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.TaskHubGrpcClient {

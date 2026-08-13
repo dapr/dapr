@@ -24,6 +24,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 )
 
 var (
@@ -80,7 +82,7 @@ func Reserve(t *testing.T, count int) *Ports {
 
 	resvPLen -= count
 	if count > resvPLen || resvPLen < 20 {
-		t.Logf("reserving %d more ports", blockSize)
+		iowriter.Eventf(t, "reserving %d more ports", blockSize)
 		for i := 0; i < blockSize; i++ {
 			last++
 			if last+i >= portsCeil {

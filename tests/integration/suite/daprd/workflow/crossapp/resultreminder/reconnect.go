@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
@@ -70,8 +71,8 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 	cctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 
-	client1 := dworkflow.NewClient(r.workflow.DaprN(0).GRPCConn(t, cctx))
-	client2 := dworkflow.NewClient(r.workflow.DaprN(1).GRPCConn(t, ctx))
+	client1 := dworkflow.NewClientWithLogger(r.workflow.DaprN(0).GRPCConn(t, cctx), logger.New(t))
+	client2 := dworkflow.NewClientWithLogger(r.workflow.DaprN(1).GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client1.StartWorker(cctx, reg1))
 	require.NoError(t, client2.StartWorker(ctx, reg2))
 
@@ -93,7 +94,7 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 		assert.Truef(c, strings.HasPrefix(list[0], exp), "reminder key should have correct prefid, expected prefix: %s, actual key: %s", exp, list[0])
 	}, time.Second*10, time.Millisecond*10)
 
-	client1 = dworkflow.NewClient(r.workflow.DaprN(0).GRPCConn(t, ctx))
+	client1 = dworkflow.NewClientWithLogger(r.workflow.DaprN(0).GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client1.StartWorker(ctx, reg1))
 
 	meta, err := client1.WaitForWorkflowCompletion(ctx, id)
