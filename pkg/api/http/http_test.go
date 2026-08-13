@@ -44,7 +44,6 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/components-contrib/workflows"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/reminders"
@@ -2587,16 +2586,6 @@ func TestV1Workflow(t *testing.T) {
 
 		apiPath := "v1.0/workflows/dapr/instanceID/terminate"
 
-		wf.WithClient(func() workflows.Workflow {
-			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
-				return &workflows.StateResponse{
-					Workflow: &workflows.WorkflowState{
-						RuntimeStatus: "TERMINATED",
-					},
-				}, nil
-			})
-		})
-
 		resp := fakeServer(t).DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
 
@@ -2631,16 +2620,6 @@ func TestV1Workflow(t *testing.T) {
 
 		apiPath := "v1.0/workflows/dapr/instanceID/pause"
 
-		wf.WithClient(func() workflows.Workflow {
-			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
-				return &workflows.StateResponse{
-					Workflow: &workflows.WorkflowState{
-						RuntimeStatus: "SUSPENDED",
-					},
-				}, nil
-			})
-		})
-
 		resp := fakeServer(t).DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
 
@@ -2672,12 +2651,6 @@ func TestV1Workflow(t *testing.T) {
 	t.Run("Purge with valid API path", func(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'purge' method implemented to simply return nil
-
-		wf.WithClient(func() workflows.Workflow {
-			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
-				return nil, errors.New("this is an error")
-			})
-		})
 
 		apiPath := "v1.0/workflows/dapr/instanceID/purge"
 		resp := fakeServer(t).DoRequest("POST", apiPath, nil, nil)

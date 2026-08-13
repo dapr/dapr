@@ -46,6 +46,29 @@ func (o *orchestrator) handleStream(ctx context.Context,
 		return false, aerr
 	}
 
+	// A one-shot metadata fetch (cross-app GetWorkflowMetadata) must never
+	// park the stream: reply with the current metadata, or a not-found status
+	// when the instance does not exist. Nonexistence is conveyed in the
+	// response status rather than an error because stream errors are treated
+	// as transient and retried by the actor routers on both sides.
+	if v, ok := req.GetMetadata()[todo.MetadataFetchOnly]; ok && len(v.GetValues()) > 0 && v.GetValues()[0] == "true" {
+		if ometa == nil {
+			_, err = stream(&internalsv1pb.InternalInvokeResponse{
+				Status: &internalsv1pb.Status{Code: http.StatusNotFound},
+			})
+			return false, err
+		}
+		arstate, aerr := anypb.New(ometa)
+		if aerr != nil {
+			return false, aerr
+		}
+		_, err = stream(&internalsv1pb.InternalInvokeResponse{
+			Status:  &internalsv1pb.Status{Code: http.StatusOK},
+			Message: &commonv1pb.InvokeResponse{Data: arstate},
+		})
+		return false, err
+	}
+
 	// A caller gating instance ID reuse asks for the whole subtree to be
 	// verified terminal, not just this workflow: recurse into children before
 	// replying. Older daprds never send the flag and older callers are

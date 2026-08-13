@@ -67,9 +67,9 @@ message Job {
   // (calculated from job creation time), or non-repeating ISO8601.
   optional string ttl = 5 [json_name = "ttl"];
 
-  // payload is the serialized job payload that will be sent to the recipient
-  // when the job is triggered.
-  google.protobuf.Any data = 6 [json_name = "data"];
+  // data is the optional serialized job payload that will be sent to the
+  // recipient when the job is triggered.
+  optional google.protobuf.Any data = 6 [json_name = "data"];
 
   // failure_policy is the optional policy for handling job failures.
   optional common.v1.JobFailurePolicy failure_policy = 7 [json_name = "failurePolicy"];
