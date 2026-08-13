@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	wfcommon "github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/backoff"
 	"github.com/dapr/dapr/pkg/components"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/processor/loops"
@@ -181,15 +181,21 @@ func shouldRetryInit(comp compapi.Component) bool {
 // category loop like the original one, with the same per-attempt timeout.
 // Returns the final error and whether the loop was abandoned by shutdown.
 func (r *Root) retryInit(catLoop loop.Interface[loops.EventCategory], comp compapi.Component, timeout time.Duration, firstErr error) (error, bool) {
-	backoff := wfcommon.NewJitterBackoff(initRetryBackoffBase, initRetryBackoffCap)
+	retryBackoff := backoff.NewJitter(initRetryBackoffBase, initRetryBackoffCap)
 	err := firstErr
+	timer := time.NewTimer(0)
+	if !timer.Stop() {
+		<-timer.C
+	}
+	defer timer.Stop()
 	for {
-		delay := backoff.NextBackOff()
+		delay := retryBackoff.NextBackOff()
 		log.Warnf("Retrying init of actor state store %s in %s after error: %s", comp.LogName(), delay, err)
+		timer.Reset(delay)
 		select {
 		case <-r.runCtx.Done():
 			return err, true
-		case <-time.After(delay):
+		case <-timer.C:
 		}
 
 		res := make(chan error, 1)
