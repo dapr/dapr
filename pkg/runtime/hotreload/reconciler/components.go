@@ -120,10 +120,16 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 
 	log.Infof("Adding Component for processing: %s", comp.LogName())
 
-	res := c.proc.AddPendingComponent(ctx, comp)
+	// EarlyResult: the actor state store retries a failed init in place, so
+	// waiting for its final result could starve later component events,
+	// including the fix for this very spec. The first attempt's outcome is
+	// enough here: a failure keeps retrying in the root loop, which kicks the
+	// actor runtime itself when a background retry eventually succeeds.
+	res := c.proc.AddPendingComponentEarlyResult(ctx, comp)
 	if res == nil {
 		return nil
 	}
+
 	select {
 	case <-ctx.Done():
 		return nil
@@ -137,6 +143,10 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 		err = fmt.Errorf("process component %s error: %s", comp.Name, err)
 		if comp.Spec.IgnoreErrors {
 			log.Errorf("Ignoring error processing component: %s", err)
+			return nil
+		}
+		if isMarkedActorStateStore(comp) {
+			log.Errorf("Error initializing actor state store %s, init keeps retrying in the background: %s", comp.Name, err)
 			return nil
 		}
 		log.Warnf("Error processing component, daprd will exit gracefully: %s", err)

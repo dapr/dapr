@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package selfhosted
+package actorstate
 
 import (
 	"context"
@@ -41,16 +41,16 @@ import (
 )
 
 func init() {
-	suite.Register(new(actorstatesecret))
+	suite.Register(new(secret))
 }
 
-type actorstatesecret struct {
+type secret struct {
 	daprd   *daprd.Daprd
 	logline *logline.LogLine
 	resDir  string
 }
 
-func (a *actorstatesecret) Setup(t *testing.T) []framework.Option {
+func (a *secret) Setup(t *testing.T) []framework.Option {
 	sched := scheduler.New(t)
 	place := placement.New(t)
 
@@ -74,7 +74,7 @@ func (a *actorstatesecret) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (a *actorstatesecret) Run(t *testing.T, ctx context.Context) {
+func (a *secret) Run(t *testing.T, ctx context.Context) {
 	a.daprd.WaitUntilRunning(t, ctx)
 
 	reg := task.NewTaskRegistry()

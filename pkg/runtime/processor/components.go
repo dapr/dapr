@@ -39,6 +39,20 @@ func (p *Processor) AddPendingComponent(ctx context.Context, comp compapi.Compon
 	return res
 }
 
+// AddPendingComponentEarlyResult is AddPendingComponent, except Result
+// receives the first init attempt's outcome even when the init keeps
+// retrying in the background (the actor state store). The hot reload
+// reconciler uses this so a retrying init cannot starve later component
+// events, including the one which fixes the failing spec.
+func (p *Processor) AddPendingComponentEarlyResult(ctx context.Context, comp compapi.Component) <-chan error {
+	if p.closed.Load() || ctx.Err() != nil {
+		return nil
+	}
+	res := make(chan error, 1)
+	p.rootLoop.Loop().Enqueue(&loops.Init{Component: comp, Result: res, EarlyResult: true})
+	return res
+}
+
 // Init synchronously initialises a component. If Process is running, the
 // init is routed through the loop hierarchy and waits for the result;
 // otherwise the init runs inline. Tests that drive the processor without

@@ -81,6 +81,12 @@ type Root struct {
 	registerMCPServer   func(ctx context.Context, s mcpserverapi.MCPServer) error
 	unregisterMCPServer func(name string)
 
+	// initRetryCancels tracks in-flight init retry loops by component name
+	// so a newer configuration supersedes them. The desired spec is kept so
+	// a duplicate init of an identical spec is not treated as a stale commit.
+	initRetryCancels map[string]*initRetryEntry
+	initRetryMu      sync.Mutex
+
 	// fatalErr retains the first non-ignored component init failure seen by a
 	// finalizer. Run returns it after the finalizers drain, so a failure that
 	// races with shutdown still propagates out (the runtime's init path masks
@@ -140,6 +146,7 @@ func New(opts Options) *Root {
 		registerMCPServer:   opts.RegisterMCPServer,
 		unregisterMCPServer: opts.UnregisterMCPServer,
 		pendingDependents:   make(map[string][]compapi.Component),
+		initRetryCancels:    make(map[string]*initRetryEntry),
 		mcpServers:          make(map[string]loop.Interface[loops.EventMCPServer]),
 		httpEndpoints:       make(map[string]loop.Interface[loops.EventHTTPEndpoint]),
 	}

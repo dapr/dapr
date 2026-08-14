@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package selfhosted
+package actorstate
 
 import (
 	"context"
@@ -39,17 +39,17 @@ import (
 )
 
 func init() {
-	suite.Register(new(actorstatestalereminder))
+	suite.Register(new(stalereminder))
 }
 
-type actorstatestalereminder struct {
+type stalereminder struct {
 	daprd   *daprd.Daprd
 	sched   *scheduler.Scheduler
 	logline *logline.LogLine
 	resDir  string
 }
 
-func (a *actorstatestalereminder) Setup(t *testing.T) []framework.Option {
+func (a *stalereminder) Setup(t *testing.T) []framework.Option {
 	a.sched = scheduler.New(t)
 	place := placement.New(t)
 
@@ -73,7 +73,7 @@ func (a *actorstatestalereminder) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (a *actorstatestalereminder) Run(t *testing.T, ctx context.Context) {
+func (a *stalereminder) Run(t *testing.T, ctx context.Context) {
 	a.daprd.WaitUntilRunning(t, ctx)
 
 	// Connect a workflow worker before any actor state store exists.
