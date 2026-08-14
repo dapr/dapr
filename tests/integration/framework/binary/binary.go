@@ -57,7 +57,7 @@ func BuildAll(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			build(t, name, options{
 				dir:  rootDir,
-				tags: []string{"allcomponents"},
+				tags: buildTags,
 			})
 			wg.Done()
 		} else {
@@ -65,7 +65,7 @@ func BuildAll(t *testing.T) {
 				defer wg.Done()
 				build(t, name, options{
 					dir:  rootDir,
-					tags: []string{"allcomponents"},
+					tags: buildTags,
 				})
 			}(name)
 		}
