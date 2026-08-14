@@ -415,11 +415,7 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, e *backend.Histor
 }
 
 // GetWorkflowMetadata implements backend.Backend
-func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID, router *protos.TaskRouter) (*backend.WorkflowMetadata, error) {
-	if target := router.GetTargetAppID(); target != "" && target != abe.appID {
-		return nil, errors.New("cross-app workflow metadata reads are not supported by the actors backend")
-	}
-
+func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error) {
 	wstate, err := abe.loadInternalState(ctx, id)
 	if err != nil {
 		return nil, err
@@ -606,12 +602,8 @@ func (abe *Actors) GetWorkflowRuntimeState(ctx context.Context, owi *backend.Wor
 	return runtimeState, nil
 }
 
-func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.InstanceID, taskRouter *protos.TaskRouter, condition func(*backend.WorkflowMetadata) bool) error {
+func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.InstanceID, condition func(*backend.WorkflowMetadata) bool) error {
 	log.Debugf("Actor backend streaming WorkflowRuntimeStatus %s", id)
-
-	if target := taskRouter.GetTargetAppID(); target != "" && target != abe.appID {
-		return errors.New("cross-app workflow status watches are not supported by the actors backend")
-	}
 
 	router, err := abe.actors.Router(ctx)
 	if err != nil {
@@ -651,11 +643,7 @@ func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.Instan
 // workflow actor recursively handles its own subtree and returns the count.
 // Mirrors the "each app handles its own subtree" model that recursive
 // terminate already uses.
-//
-// The recursive flag is only ever set together with a foreign router (the
-// driver walks local descendants itself), so the remote delegation path
-// above already covers it and it needs no separate handling here.
-func (abe *Actors) PurgeWorkflowState(ctx context.Context, id api.InstanceID, router *protos.TaskRouter, recursive bool, force bool) (int, error) {
+func (abe *Actors) PurgeWorkflowState(ctx context.Context, id api.InstanceID, router *protos.TaskRouter, force bool) (int, error) {
 	if err := abe.requireActorStateStore(); err != nil {
 		return 0, err
 	}
