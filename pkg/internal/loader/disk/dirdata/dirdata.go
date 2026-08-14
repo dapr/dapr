@@ -84,7 +84,11 @@ func readDir(dir string) (*DirEntry, error) {
 			// File may have been deleted between the directory listing and
 			// the read (e.g. during a rapid write/delete cycle or shutdown).
 			// Skip it; the next FSWatcher event will re-trigger a scan.
-			if errors.Is(err, fs.ErrNotExist) {
+			//
+			// Windows reports the same race as a delete pending file rather
+			// than a missing one, since the watcher's own handle keeps the
+			// entry in the listing until it closes.
+			if errors.Is(err, fs.ErrNotExist) || isDeletePending(err) {
 				continue
 			}
 			return nil, fmt.Errorf("failed to read file %s: %w", filepath.Join(dir, f.Name()), err)
