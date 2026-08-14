@@ -46,7 +46,7 @@ type canorphan struct {
 }
 
 func (c *canorphan) Setup(t *testing.T) []framework.Option {
-	c.workflow = newClusteredDeployment(t, 2)
+	c.workflow = workflow.NewClustered(t, 2)
 
 	return []framework.Option{
 		framework.WithProcesses(c.workflow),
