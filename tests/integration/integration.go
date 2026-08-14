@@ -52,8 +52,9 @@ func RunIntegrationTests(t *testing.T) {
 
 	require.NoError(t, iowriter.Reset(), "could not prepare the log directory")
 
-	_, err = iowriter.RedirectInProcessLogs()
+	_, restoreLogs, err := iowriter.RedirectInProcessLogs()
 	require.NoError(t, err, "could not redirect in-process logs")
+	t.Cleanup(restoreLogs)
 
 	var binFailed bool
 	t.Run("build binaries", func(t *testing.T) {
