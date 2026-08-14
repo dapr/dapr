@@ -42,6 +42,9 @@ type components struct {
 	// out-of-order create-before-delete rename delivered by an event stream.
 	skippedActorStore     *compapi.Component
 	skippedActorStoreLock sync.Mutex
+
+	// wg tracks the async init-result consumers; see update.
+	wg sync.WaitGroup
 }
 
 func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Component] {
@@ -82,7 +85,15 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 	// the actor state store actually changed. Notifying after both the close
 	// and re-init of an updated component means the actor runtime never
 	// observes the transient store-less state in the middle of an update.
-	defer c.notifyActorStateStoreChanged()()
+	// The async consumer below owns the notification when it takes the
+	// result.
+	notify := c.notifyActorStateStoreChanged()
+	notifyAsync := false
+	defer func() {
+		if !notifyAsync {
+			notify()
+		}
+	}()
 
 	oldComp, exists := c.store.GetComponent(comp.Name)
 	_, _ = c.proc.Secret().ProcessResource(ctx, comp)
@@ -124,6 +135,31 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 	if res == nil {
 		return nil
 	}
+
+	// The actor state store retries its init in place, so its result can
+	// take arbitrarily long. Blocking here would starve later component
+	// events, including the fix for this very spec. Its failures are
+	// superseded-or-abandoned by construction, never fatal.
+	if isMarkedActorStateStore(comp) && !comp.Spec.IgnoreErrors {
+		notifyAsync = true
+		c.wg.Go(func() {
+			defer notify()
+			select {
+			case <-ctx.Done():
+			case err := <-res:
+				if err == nil {
+					log.Infof("Component updated: %s", comp.LogName())
+					if rerr := c.replaySkippedActorStore(ctx); rerr != nil {
+						log.Errorf("Error replaying skipped actor state store: %s", rerr)
+					}
+					return
+				}
+				log.Errorf("Error processing actor state store component %s (superseded or abandoned; not fatal): %s", comp.Name, err)
+			}
+		})
+		return nil
+	}
+
 	select {
 	case <-ctx.Done():
 		return nil

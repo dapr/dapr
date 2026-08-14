@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package selfhosted
+package actorstate
 
 import (
 	"context"
@@ -40,10 +40,10 @@ import (
 )
 
 func init() {
-	suite.Register(new(actorstateupdate))
+	suite.Register(new(update))
 }
 
-type actorstateupdate struct {
+type update struct {
 	daprd            *daprd.Daprd
 	loglineUpdate    *logline.LogLine
 	loglineDuplicate *logline.LogLine
@@ -51,7 +51,7 @@ type actorstateupdate struct {
 	deactivatedCh    chan string
 }
 
-func (a *actorstateupdate) Setup(t *testing.T) []framework.Option {
+func (a *update) Setup(t *testing.T) []framework.Option {
 	a.deactivatedCh = make(chan string, 10)
 
 	handler := chi.NewRouter()
@@ -100,7 +100,7 @@ func (a *actorstateupdate) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (a *actorstateupdate) Run(t *testing.T, ctx context.Context) {
+func (a *update) Run(t *testing.T, ctx context.Context) {
 	a.daprd.WaitUntilRunning(t, ctx)
 
 	httpClient := client.HTTP(t)

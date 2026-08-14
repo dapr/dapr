@@ -16,5 +16,6 @@ package hotreload
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/selfhosted"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/selfhosted/actorstate"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/sighup"
 )

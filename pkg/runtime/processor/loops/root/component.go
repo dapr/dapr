@@ -34,8 +34,48 @@ import (
 // processor's inline (test) init path applies the same default.
 const DefaultComponentInitTimeout = time.Second * 5
 
+// registerInitRetry arms a supersession signal for an init retry loop on
+// name, cancelling any previous loop for the same name.
+func (r *Root) registerInitRetry(name string) chan struct{} {
+	r.initRetryMu.Lock()
+	defer r.initRetryMu.Unlock()
+	if prev, ok := r.initRetryCancels[name]; ok {
+		close(prev)
+	}
+	ch := make(chan struct{})
+	r.initRetryCancels[name] = ch
+	return ch
+}
+
+func (r *Root) unregisterInitRetry(name string, ch chan struct{}) {
+	r.initRetryMu.Lock()
+	defer r.initRetryMu.Unlock()
+	if cur, ok := r.initRetryCancels[name]; ok && cur == ch {
+		delete(r.initRetryCancels, name)
+	}
+}
+
+func (r *Root) cancelInitRetry(name string) {
+	r.initRetryMu.Lock()
+	defer r.initRetryMu.Unlock()
+	if ch, ok := r.initRetryCancels[name]; ok {
+		close(ch)
+		delete(r.initRetryCancels, name)
+	}
+}
+
 func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 	comp := ev.Component
+
+	// A new configuration supersedes any in-flight retry loop for this name.
+	// The signal is armed before the first attempt so a Close or re-create
+	// landing mid-attempt is never lost. Retry attempts bypass this handler.
+	var superseded chan struct{}
+	if shouldRetryInit(comp) {
+		superseded = r.registerInitRetry(comp.Name)
+	} else {
+		r.cancelInitRetry(comp.Name)
+	}
 
 	// Preprocess: resolve secret refs on the component, detect unresolved
 	// secret-store dependencies.
@@ -121,8 +161,17 @@ func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 		// database returns. The caller stays blocked while retrying, so
 		// readiness keeps reporting the degraded state.
 		var abandoned bool
-		if innerErr != nil && shouldRetryInit(comp) {
-			innerErr, abandoned = r.retryInit(catLoop, comp, timeout, innerErr)
+		if superseded != nil {
+			defer r.unregisterInitRetry(comp.Name, superseded)
+		}
+		if innerErr != nil && superseded != nil {
+			select {
+			case <-superseded:
+				innerErr = fmt.Errorf("superseded by a newer component configuration during init retry: %w", innerErr)
+				abandoned = true
+			default:
+				innerErr, abandoned = r.retryInit(catLoop, comp, timeout, innerErr, superseded)
+			}
 		}
 		if innerErr != nil {
 			log.Errorf("Failed to init component %s: %s", comp.LogName(), innerErr)
@@ -177,10 +226,9 @@ func shouldRetryInit(comp compapi.Component) bool {
 }
 
 // retryInit re-attempts a failed component init with jittered backoff until
-// it succeeds or the runtime shuts down. Each attempt goes through the
-// category loop like the original one, with the same per-attempt timeout.
-// Returns the final error and whether the loop was abandoned by shutdown.
-func (r *Root) retryInit(catLoop loop.Interface[loops.EventCategory], comp compapi.Component, timeout time.Duration, firstErr error) (error, bool) {
+// it succeeds, the runtime shuts down, or the configuration is superseded.
+// Returns the final error and whether the loop was abandoned.
+func (r *Root) retryInit(catLoop loop.Interface[loops.EventCategory], comp compapi.Component, timeout time.Duration, firstErr error, superseded <-chan struct{}) (error, bool) {
 	retryBackoff := backoff.NewJitter(initRetryBackoffBase, initRetryBackoffCap)
 	err := firstErr
 	timer := time.NewTimer(0)
@@ -195,6 +243,9 @@ func (r *Root) retryInit(catLoop loop.Interface[loops.EventCategory], comp compa
 		select {
 		case <-r.runCtx.Done():
 			return err, true
+		case <-superseded:
+			log.Infof("Stopping init retry of %s: configuration superseded", comp.LogName())
+			return fmt.Errorf("superseded by a newer component configuration during init retry: %w", err), true
 		case <-timer.C:
 		}
 
@@ -219,6 +270,8 @@ func (r *Root) retryInit(catLoop loop.Interface[loops.EventCategory], comp compa
 
 func (r *Root) handleClose(_ context.Context, ev *loops.Close) {
 	comp := ev.Component
+
+	r.cancelInitRetry(comp.Name)
 	cat := r.category(comp)
 	if cat == "" {
 		sendResult(ev.Result, fmt.Errorf("incorrect type %s", comp.Spec.Type))

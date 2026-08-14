@@ -245,3 +245,79 @@ func TestProcessorNonActorStateStoreInitStillFatal(t *testing.T) {
 		t.Fatal("timed out waiting for the processor to stop")
 	}
 }
+
+// TestProcessorActorStateStoreInitRetrySuperseded: a re-create of the same
+// name supersedes the old retry loop (phase 1), a delete supersedes the
+// successor (phase 2); superseded loops release their caller and are not
+// fatal. One shared processor lifecycle: constructing a processor right
+// after a component close trips a pre-existing kit loop-segment race under
+// -race.
+func TestProcessorActorStateStoreInitRetrySuperseded(t *testing.T) {
+	proc, reg := newTestProc()
+
+	mockStore := new(daprt.MockStateStore)
+	reg.StateStores().RegisterComponent(
+		func(logger.Logger) contribstate.Store { return mockStore },
+		"mockState",
+	)
+	initAttempt := make(chan struct{}, 1)
+	mockStore.On("Init", mock.Anything, mock.Anything).Run(func(mock.Arguments) {
+		select {
+		case initAttempt <- struct{}{}:
+		default:
+		}
+	}).Return(errors.New("connection refused"))
+	mockStore.On("Close").Maybe().Return(nil)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- proc.Process(ctx) }()
+
+	comp := actorStateStoreComp("mystore")
+
+	// Phase 1: re-create supersedes the old loop.
+	oldCh := proc.AddPendingComponent(ctx, comp)
+	require.NotNil(t, oldCh)
+
+	select {
+	case <-initAttempt:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the first init failure")
+	}
+
+	newCh := proc.AddPendingComponent(ctx, comp)
+	require.NotNil(t, newCh)
+
+	select {
+	case err := <-oldCh:
+		require.Error(t, err)
+		require.ErrorContains(t, err, "superseded",
+			"the old configuration's retry must stop when a new configuration arrives")
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the old retry to be superseded")
+	}
+
+	// Phase 2: delete supersedes the surviving loop.
+	require.NoError(t, proc.Close(ctx, comp))
+
+	select {
+	case err := <-newCh:
+		require.Error(t, err)
+		require.ErrorContains(t, err, "superseded",
+			"the pending init must be released as superseded on delete, not left retrying")
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the deleted component's retry to release its caller")
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			require.ErrorIs(t, err, context.Canceled,
+				"a superseded retry must not surface as a fatal init error")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the processor to stop")
+	}
+}

@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package selfhosted
+package actorstate
 
 import (
 	"context"
@@ -45,7 +45,7 @@ import (
 )
 
 func init() {
-	suite.Register(new(actorstate))
+	suite.Register(new(remove))
 }
 
 const actorStateStoreComp = `
@@ -61,17 +61,17 @@ spec:
    value: "true"
 `
 
-// actorstate ensures that removing the actor state store via hot reload shuts
+// remove ensures that removing the actor state store via hot reload shuts
 // down actor hosting in-process - hosted actors are deactivated and the actor
 // and workflow APIs error - and that hosting and the workflow APIs recover
 // when the actor state store is hot reloaded back.
-type actorstate struct {
+type remove struct {
 	daprd         *daprd.Daprd
 	resDir        string
 	deactivatedCh chan string
 }
 
-func (a *actorstate) Setup(t *testing.T) []framework.Option {
+func (a *remove) Setup(t *testing.T) []framework.Option {
 	a.deactivatedCh = make(chan string, 10)
 
 	handler := chi.NewRouter()
@@ -109,7 +109,7 @@ func (a *actorstate) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (a *actorstate) Run(t *testing.T, ctx context.Context) {
+func (a *remove) Run(t *testing.T, ctx context.Context) {
 	a.daprd.WaitUntilRunning(t, ctx)
 
 	httpClient := client.HTTP(t)
