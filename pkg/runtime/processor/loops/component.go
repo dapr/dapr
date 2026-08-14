@@ -33,6 +33,9 @@ type Init struct {
 	Result    chan<- error
 	Internal  bool
 	Timeout   time.Duration
+	// EarlyResult delivers the first init attempt's outcome to Result even
+	// when the init keeps retrying in the background.
+	EarlyResult bool
 }
 
 // Close asks the named instance to close a component. Result receives one

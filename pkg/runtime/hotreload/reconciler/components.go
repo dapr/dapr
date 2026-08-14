@@ -42,9 +42,6 @@ type components struct {
 	// out-of-order create-before-delete rename delivered by an event stream.
 	skippedActorStore     *compapi.Component
 	skippedActorStoreLock sync.Mutex
-
-	// wg tracks the async init-result consumers; see update.
-	wg sync.WaitGroup
 }
 
 func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Component] {
@@ -85,15 +82,7 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 	// the actor state store actually changed. Notifying after both the close
 	// and re-init of an updated component means the actor runtime never
 	// observes the transient store-less state in the middle of an update.
-	// The async consumer below owns the notification when it takes the
-	// result.
-	notify := c.notifyActorStateStoreChanged()
-	notifyAsync := false
-	defer func() {
-		if !notifyAsync {
-			notify()
-		}
-	}()
+	defer c.notifyActorStateStoreChanged()()
 
 	oldComp, exists := c.store.GetComponent(comp.Name)
 	_, _ = c.proc.Secret().ProcessResource(ctx, comp)
@@ -131,32 +120,13 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 
 	log.Infof("Adding Component for processing: %s", comp.LogName())
 
-	res := c.proc.AddPendingComponent(ctx, comp)
+	// EarlyResult: the actor state store retries a failed init in place, so
+	// waiting for its final result could starve later component events,
+	// including the fix for this very spec. The first attempt's outcome is
+	// enough here: a failure keeps retrying in the root loop, which kicks the
+	// actor runtime itself when a background retry eventually succeeds.
+	res := c.proc.AddPendingComponentEarlyResult(ctx, comp)
 	if res == nil {
-		return nil
-	}
-
-	// The actor state store retries its init in place, so its result can
-	// take arbitrarily long. Blocking here would starve later component
-	// events, including the fix for this very spec. Its failures are
-	// superseded-or-abandoned by construction, never fatal.
-	if isMarkedActorStateStore(comp) && !comp.Spec.IgnoreErrors {
-		notifyAsync = true
-		c.wg.Go(func() {
-			defer notify()
-			select {
-			case <-ctx.Done():
-			case err := <-res:
-				if err == nil {
-					log.Infof("Component updated: %s", comp.LogName())
-					if rerr := c.replaySkippedActorStore(ctx); rerr != nil {
-						log.Errorf("Error replaying skipped actor state store: %s", rerr)
-					}
-					return
-				}
-				log.Errorf("Error processing actor state store component %s (superseded or abandoned; not fatal): %s", comp.Name, err)
-			}
-		})
 		return nil
 	}
 
@@ -173,6 +143,10 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 		err = fmt.Errorf("process component %s error: %s", comp.Name, err)
 		if comp.Spec.IgnoreErrors {
 			log.Errorf("Ignoring error processing component: %s", err)
+			return nil
+		}
+		if isMarkedActorStateStore(comp) {
+			log.Errorf("Error initializing actor state store %s, init keeps retrying in the background: %s", comp.Name, err)
 			return nil
 		}
 		log.Warnf("Error processing component, daprd will exit gracefully: %s", err)

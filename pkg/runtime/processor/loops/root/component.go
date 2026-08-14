@@ -170,6 +170,13 @@ func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 				innerErr = fmt.Errorf("superseded by a newer component configuration during init retry: %w", innerErr)
 				abandoned = true
 			default:
+				// An EarlyResult caller (the hot reload reconciler) must not
+				// stay blocked behind the retry loop: hand it the first
+				// attempt's error before retrying.
+				if ev.EarlyResult {
+					sendResult(ev.Result, rterrors.NewInit(rterrors.InitComponentFailure, comp.LogName(), innerErr))
+					ev.Result = nil
+				}
 				innerErr, abandoned = r.retryInit(catLoop, comp, timeout, innerErr, superseded)
 			}
 		}
