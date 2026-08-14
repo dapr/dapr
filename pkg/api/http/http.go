@@ -830,7 +830,7 @@ func (a *api) onSubscribeConfiguration(w nethttp.ResponseWriter, r *nethttp.Requ
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationSubscribe, err == nil, elapsed)
 
 	if err != nil {
-		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()), errorcodes.ConfigurationSubscribe, nethttp.StatusInternalServerError)
+		resp := apierrors.Configuration(storeName).SubscribeFailed(keys, err)
 		respondWithError(w, resp)
 		log.Debug(resp)
 		return
@@ -909,7 +909,7 @@ func (a *api) onGetConfiguration(w nethttp.ResponseWriter, r *nethttp.Request) {
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrConfigurationGet, keys, storeName, err.Error()), errorcodes.ConfigurationGet, nethttp.StatusInternalServerError)
+		resp := apierrors.Configuration(storeName).GetFailed(keys, err)
 		respondWithError(w, resp)
 		log.Debug(resp)
 		return

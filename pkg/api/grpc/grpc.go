@@ -1465,7 +1465,13 @@ func (a *api) unsubscribeConfiguration(ctx context.Context, subscribeID string, 
 
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
 
-	return err
+	if err != nil {
+		richError := apierrors.Configuration(storeName).UnsubscribeFailed(subscribeID, err)
+		apiServerLogger.Debug(richError)
+		return richError
+	}
+
+	return nil
 }
 
 // TODO: Remove this method when the alpha API is removed.

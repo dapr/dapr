@@ -104,6 +104,23 @@ func (c *ConfigurationError) SubscribeFailed(keys []string, err error) error {
 	)
 }
 
+// UnsubscribeFailed returns a standardized error for a failed configuration unsubscribe operation.
+// The gRPC status message is kept identical to the legacy messages.ErrConfigurationUnsubscribe value.
+func (c *ConfigurationError) UnsubscribeFailed(subscribeID string, err error) error {
+	msg := fmt.Sprintf("failed to unsubscribe to configuration request %s: %v", subscribeID, err)
+	return c.build(
+		kiterrors.NewBuilder(
+			codes.Internal,
+			http.StatusInternalServerError,
+			msg,
+			errorcodes.ConfigurationUnsubscribe.Code,
+			string(errorcodes.ConfigurationUnsubscribe.Category),
+		),
+		errorcodes.ConfigurationUnsubscribe.GrpcCode,
+		map[string]string{"subscribeID": subscribeID, "error": err.Error()},
+	)
+}
+
 // build attaches ResourceInfo (unless skipped) and ErrorInfo to the error so the
 // per-method constructors don't repeat the boilerplate (mirrors pkg/api/errors/state.go).
 func (c *ConfigurationError) build(b *kiterrors.ErrorBuilder, errCode string, metadata map[string]string) error {

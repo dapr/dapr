@@ -54,6 +54,7 @@ func TestConfigurationErrorsStandardized(t *testing.T) {
 		{"StoreNotFound", c.StoreNotFound(), codes.InvalidArgument, string(errorcodes.ConfigurationStoreNotFound.GrpcCode)},
 		{"GetFailed", c.GetFailed([]string{"key1"}, dummy), codes.Internal, string(errorcodes.ConfigurationGet.GrpcCode)},
 		{"SubscribeFailed", c.SubscribeFailed([]string{"key1"}, dummy), codes.InvalidArgument, string(errorcodes.ConfigurationSubscribe.GrpcCode)},
+		{"UnsubscribeFailed", c.UnsubscribeFailed("sub-1", dummy), codes.Internal, string(errorcodes.ConfigurationUnsubscribe.GrpcCode)},
 	}
 
 	for _, tc := range tests {
