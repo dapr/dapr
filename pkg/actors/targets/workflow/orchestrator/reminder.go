@@ -23,12 +23,10 @@ import (
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -71,15 +69,8 @@ func (o *orchestrator) createRetentionReminder(ctx context.Context, name string,
 		ActorID:   o.actorID,
 		DueTime:   dueTime,
 		Name:      name,
-		// One shot, retry forever, every second.
-		FailurePolicy: &commonv1pb.JobFailurePolicy{
-			Policy: &commonv1pb.JobFailurePolicy_Constant{
-				Constant: &commonv1pb.JobFailurePolicyConstant{
-					Interval:   durationpb.New(time.Second),
-					MaxRetries: nil,
-				},
-			},
-		},
+		// One shot, retry forever, jittered interval.
+		FailurePolicy: common.RetryForeverPolicy(),
 	})
 }
 
@@ -143,15 +134,8 @@ func (o *orchestrator) buildReminderRequest(reminderName string, data proto.Mess
 		Data:      adata,
 		DueTime:   dueTime,
 		Name:      reminderName,
-		// One shot, retry forever, every second.
-		FailurePolicy: &commonv1pb.JobFailurePolicy{
-			Policy: &commonv1pb.JobFailurePolicy_Constant{
-				Constant: &commonv1pb.JobFailurePolicyConstant{
-					Interval:   durationpb.New(time.Second),
-					MaxRetries: nil,
-				},
-			},
-		},
+		// One shot, retry forever, jittered interval.
+		FailurePolicy:  common.RetryForeverPolicy(),
 		ConcurrencyKey: concurrencyKey,
 	}, nil
 }
