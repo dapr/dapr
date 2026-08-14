@@ -106,32 +106,45 @@ const inProcessLog = "in-process.log"
 // caveat, since there is a single logger behind log.Printf.
 //
 // Set DAPR_INTEGRATION_INPROCESS_LOGS to leave everything on stderr.
-func RedirectInProcessLogs() (string, error) {
+//
+// The returned function restores the previous destinations and closes the file.
+// Callers must run it: Windows refuses to delete a file which is still open, so
+// leaving the handle around breaks the cleanup of any directory holding it.
+func RedirectInProcessLogs() (string, func(), error) {
 	if kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_INPROCESS_LOGS")) {
-		return "", nil
+		return "", func() {}, nil
 	}
 
 	if err := os.MkdirAll(LogDir(), 0o750); err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	path := filepath.Join(LogDir(), inProcessLog)
 
-	// Deliberately left open: it is wanted for the lifetime of the process, and
-	// the process is a test binary that is about to exit anyway.
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
+
+	prev := log.Writer()
 	log.SetOutput(f)
 
 	opts := logger.DefaultOptions()
 	opts.OutputFile = path
 	if err := logger.ApplyOptionsToLoggers(&opts); err != nil {
-		return "", err
+		log.SetOutput(prev)
+		f.Close()
+		return "", nil, err
 	}
 
-	return path, nil
+	return path, func() {
+		log.SetOutput(prev)
+		// Handing the dapr loggers a default options with no output file points
+		// them back at stdout, and closes the file kit opened for them.
+		restore := logger.DefaultOptions()
+		_ = logger.ApplyOptionsToLoggers(&restore)
+		f.Close()
+	}, nil
 }
 
 // inline reports whether reports go to the test output rather than to a file.
