@@ -15,6 +15,7 @@ package root
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ import (
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/backoff"
 	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/processor/loops"
 	procstate "github.com/dapr/dapr/pkg/runtime/processor/state"
@@ -180,6 +182,12 @@ func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 				innerErr, abandoned = r.retryInit(catLoop, comp, timeout, innerErr, superseded)
 			}
 		}
+		// A success which raced a newer spec or a delete has committed a stale
+		// component: roll it back so the newer event converges.
+		if innerErr == nil && superseded != nil && r.rollbackStaleInit(catLoop, comp, superseded) {
+			innerErr = errSupersededInit
+			abandoned = true
+		}
 		if innerErr != nil {
 			log.Errorf("Failed to init component %s: %s", comp.LogName(), innerErr)
 			wrapped := rterrors.NewInit(rterrors.InitComponentFailure, comp.LogName(), innerErr)
@@ -272,7 +280,34 @@ func (r *Root) retryInit(catLoop loop.Interface[loops.EventCategory], comp compa
 		if err == nil {
 			return nil, false
 		}
+		// A stale commit from a superseded attempt can occupy the slot; close
+		// it so the next attempt of this (current) configuration can install.
+		// Guarded on the supersession signal: a superseded loop must never
+		// close the newer component, so it abandons at the top of the loop.
+		if errors.Is(err, compstore.ErrComponentAlreadyExists) {
+			select {
+			case <-superseded:
+			default:
+				log.Warnf("Closing stale component occupying the slot of %s before retrying init", comp.LogName())
+				catLoop.Enqueue(&loops.Close{Component: comp})
+			}
+		}
 	}
+}
+
+var errSupersededInit = errors.New("superseded by a newer component configuration during init")
+
+// rollbackStaleInit closes the just-committed component if its configuration
+// was superseded or deleted while the successful init attempt was in flight.
+func (r *Root) rollbackStaleInit(catLoop loop.Interface[loops.EventCategory], comp compapi.Component, superseded <-chan struct{}) bool {
+	select {
+	case <-superseded:
+	default:
+		return false
+	}
+	log.Warnf("Init of %s succeeded after its configuration was superseded or removed; closing the stale component", comp.LogName())
+	catLoop.Enqueue(&loops.Close{Component: comp})
+	return true
 }
 
 func (r *Root) handleClose(_ context.Context, ev *loops.Close) {

@@ -246,6 +246,136 @@ func TestProcessorNonActorStateStoreInitStillFatal(t *testing.T) {
 	}
 }
 
+// TestProcessorActorStateStoreInitRetryStaleCommitRollback: a retriable init
+// whose success races a newer spec (phase 1) or a delete (phase 2) must not
+// leave the stale component installed: the commit is rolled back and the
+// newest event wins, without a fatal init error.
+func TestProcessorActorStateStoreInitRetryStaleCommitRollback(t *testing.T) {
+	proc, reg := newTestProc()
+
+	mockStore := new(daprt.MockStateStore)
+	reg.StateStores().RegisterComponent(
+		func(logger.Logger) contribstate.Store { return mockStore },
+		"mockState",
+	)
+
+	genOf := func(g string) any {
+		return mock.MatchedBy(func(md contribstate.Metadata) bool {
+			return md.Properties["generation"] == g
+		})
+	}
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	mockStore.On("Init", genOf("1")).Run(func(mock.Arguments) {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		<-release
+	}).Return(nil)
+	mockStore.On("Init", genOf("2")).Return(nil)
+	enteredDel := make(chan struct{}, 1)
+	releaseDel := make(chan struct{})
+	mockStore.On("Init", genOf("d1")).Run(func(mock.Arguments) {
+		select {
+		case enteredDel <- struct{}{}:
+		default:
+		}
+		<-releaseDel
+	}).Return(nil)
+	mockStore.On("Close").Maybe().Return(nil)
+
+	withGen := func(name, g string) componentsapi.Component {
+		comp := actorStateStoreComp(name)
+		comp.Spec.Metadata = append(comp.Spec.Metadata, commonapi.NameValuePair{
+			Name: "generation",
+			Value: commonapi.DynamicValue{
+				JSON: apiextv1.JSON{Raw: []byte(`"` + g + `"`)},
+			},
+		})
+		return comp
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- proc.Process(ctx) }()
+
+	// Phase 1: gen 1 blocks mid-init, gen 2 arrives, then gen 1 succeeds.
+	ch1 := proc.AddPendingComponent(ctx, withGen("mystore", "1"))
+	require.NotNil(t, ch1)
+	select {
+	case <-entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the gen 1 init to start")
+	}
+	ch2 := proc.AddPendingComponent(ctx, withGen("mystore", "2"))
+	require.NotNil(t, ch2)
+	close(release)
+
+	select {
+	case err := <-ch2:
+		require.NoError(t, err, "the newest spec must install")
+	case <-time.After(20 * time.Second):
+		t.Fatal("timed out waiting for the gen 2 init")
+	}
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		comp, ok := proc.compStore.GetComponent("mystore")
+		if !assert.True(c, ok) {
+			return
+		}
+		for _, md := range comp.Spec.Metadata {
+			if md.Name == "generation" {
+				assert.Contains(c, string(md.Value.Raw), "2",
+					"the stale gen 1 commit must not survive")
+			}
+		}
+	}, 10*time.Second, 10*time.Millisecond)
+	select {
+	case err := <-ch1:
+		if err != nil {
+			require.ErrorContains(t, err, "superseded")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the gen 1 result")
+	}
+
+	// Phase 2: the init blocks, a delete lands, then the init succeeds. The
+	// stale commit must be rolled back so the component stays deleted.
+	delComp := withGen("delstore", "d1")
+	chD := proc.AddPendingComponent(ctx, delComp)
+	require.NotNil(t, chD)
+	select {
+	case <-enteredDel:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the delstore init to start")
+	}
+	closeErrCh := make(chan error, 1)
+	go func() { closeErrCh <- proc.Close(ctx, delComp) }()
+	close(releaseDel)
+	select {
+	case err := <-closeErrCh:
+		require.NoError(t, err)
+	case <-time.After(20 * time.Second):
+		t.Fatal("timed out waiting for the delete to complete")
+	}
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, ok := proc.compStore.GetComponent("delstore")
+		assert.False(c, ok, "a deleted component must not be re-created by a stale init success")
+	}, 10*time.Second, 10*time.Millisecond)
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			require.ErrorIs(t, err, context.Canceled,
+				"a rolled-back stale init must not surface as a fatal error")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the processor to stop")
+	}
+}
+
 // TestProcessorActorStateStoreInitRetrySuperseded: a re-create of the same
 // name supersedes the old retry loop (phase 1), a delete supersedes the
 // successor (phase 2); superseded loops release their caller and are not

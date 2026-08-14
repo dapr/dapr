@@ -20,6 +20,10 @@ import (
 	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 )
 
+// ErrComponentAlreadyExists signals an init of a component name which is
+// already installed. Matchable with errors.Is by init retry loops.
+var ErrComponentAlreadyExists = errors.New("already exists")
+
 func (c *ComponentStore) GetComponent(name string) (compsv1alpha1.Component, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -46,7 +50,7 @@ func (c *ComponentStore) AddPendingComponentForCommit(component compsv1alpha1.Co
 	for _, existing := range c.components {
 		if existing.Name == component.Name {
 			c.compPendingLock.Unlock()
-			return fmt.Errorf("component %s already exists", existing.Name)
+			return fmt.Errorf("component %s %w", existing.Name, ErrComponentAlreadyExists)
 		}
 	}
 
