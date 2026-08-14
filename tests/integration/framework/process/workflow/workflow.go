@@ -272,6 +272,23 @@ func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.Task
 	return w.BackendClientN(t, ctx, 0)
 }
 
+// ManagementClient returns a backend client connected to daprd index 0 for
+// control-plane operations only. See ManagementClientN.
+func (w *Workflow) ManagementClient(t *testing.T, ctx context.Context) *client.TaskHubGrpcClient {
+	t.Helper()
+	return w.ManagementClientN(t, ctx, 0)
+}
+
+// ManagementClientN returns a backend client connected to the daprd at the given
+// index for control-plane operations only (scheduling, waiting, raising events,
+// fetching history). It does not start a work-item listener, so it never executes
+// workflows and never advertises any worker capability.
+func (w *Workflow) ManagementClientN(t *testing.T, ctx context.Context, index int) *client.TaskHubGrpcClient {
+	t.Helper()
+	require.Less(t, index, len(w.daprds), "index out of range")
+	return client.NewTaskHubGrpcClient(w.daprds[index].GRPCConn(t, ctx), logger.New(t))
+}
+
 // BackendClient returns a backend client for the specified index
 func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) *client.TaskHubGrpcClient {
 	t.Helper()
