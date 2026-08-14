@@ -39,10 +39,10 @@ func ValidateName(name string) error {
 	return nil
 }
 
-// cleanPath cleans a URL path like path.Clean but preserves a single trailing
+// CleanPath cleans a URL path like path.Clean but preserves a single trailing
 // slash, so that method names ending with "/" are forwarded to the target app
 // unchanged rather than having the slash silently stripped.
-func cleanPath(p string) string {
+func CleanPath(p string) string {
 	if p == "" {
 		return p
 	}
@@ -73,7 +73,7 @@ func NormalizeMethod(method string) (string, error) {
 
 	// Resolve path traversal sequences, preserving a single trailing slash
 	// so that invocation targets like "foo/bar/" are forwarded correctly.
-	cleaned := cleanPath(method)
+	cleaned := CleanPath(method)
 	// A method of "/" is not a valid invocation target; normalize to empty string.
 	if cleaned == "/" {
 		cleaned = ""

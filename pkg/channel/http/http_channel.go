@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -41,6 +40,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messages"
+	invokemethod "github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/middleware"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -559,21 +559,6 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	return rsp, nil
 }
 
-// cleanPath cleans a URL path like path.Clean but preserves a single trailing
-// slash so that method names such as "foo/bar/" are forwarded to the target
-// app unchanged.
-func cleanPath(p string) string {
-	if p == "" {
-		return p
-	}
-	hasTrailing := p[len(p)-1] == '/'
-	cleaned := path.Clean(p)
-	if hasTrailing && cleaned != "/" && cleaned != "." && cleaned != ".." {
-		cleaned += "/"
-	}
-	return cleaned
-}
-
 func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*http.Request, error) {
 	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
 	msg := req.Message()
@@ -582,7 +567,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	// URL. The caller should have already normalized via NormalizeMethod, but
 	// we apply cleanPath here to guarantee no ../ reaches the target app while
 	// preserving any intentional trailing slash in the method path.
-	method := cleanPath(msg.GetMethod())
+	method := invokemethod.CleanPath(msg.GetMethod())
 	if method == "." {
 		method = ""
 	}

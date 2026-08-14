@@ -21,7 +21,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"path"
 	"strings"
 	"sync/atomic"
 
@@ -34,6 +33,7 @@ import (
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
+	invokemethod "github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/sse"
@@ -357,28 +357,13 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// cleanPath cleans a URL path like path.Clean but preserves a single trailing
-// slash so that method names such as "foo/bar/" are forwarded to the target
-// app unchanged.
-func cleanPath(p string) string {
-	if p == "" {
-		return p
-	}
-	hasTrailing := p[len(p)-1] == '/'
-	cleaned := path.Clean(p)
-	if hasTrailing && cleaned != "/" && cleaned != "." && cleaned != ".." {
-		cleaned += "/"
-	}
-	return cleaned
-}
-
 // findTargetIDAndMethod finds ID of the target service and method from the following three places:
 // 1. HTTP header 'dapr-app-id' (path is method)
 // 2. Basic auth header: `http://dapr-app-id:<service-id>@localhost:3500/<method>`
 // 3. URL parameter: `http://localhost:3500/v1.0/invoke/<app-id>/method/<method>`
 func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string, method string) {
 	if appID := headers.Get(consts.DaprAppIDHeader); appID != "" {
-		targetID, method = appID, strings.TrimPrefix(cleanPath(reqPath), "/")
+		targetID, method = appID, strings.TrimPrefix(invokemethod.CleanPath(reqPath), "/")
 		// Delete the header as it should not be passed forward with the request and is only used by the Dapr API
 		headers.Del(consts.DaprAppIDHeader)
 		return targetID, method
@@ -388,7 +373,7 @@ func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string
 		if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(auth, "Basic ")); err == nil {
 			pair := strings.Split(string(s), ":")
 			if len(pair) == 2 && strings.EqualFold(pair[0], consts.DaprAppIDHeader) {
-				return pair[1], strings.TrimPrefix(cleanPath(reqPath), "/")
+				return pair[1], strings.TrimPrefix(invokemethod.CleanPath(reqPath), "/")
 			}
 		}
 	}
@@ -408,7 +393,7 @@ func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string
 		// - `http%3A%2F%2Fexample.com/method/mymethod`
 		if idx = strings.Index(reqPath, "/method/"); idx > 0 {
 			targetID := reqPath[:idx]
-			method := cleanPath(reqPath[(idx + len("/method/")):])
+			method := invokemethod.CleanPath(reqPath[(idx + len("/method/")):])
 			if method == "." {
 				method = ""
 			}
