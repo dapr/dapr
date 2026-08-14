@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -38,7 +38,6 @@ type errors struct {
 }
 
 func (e *errors) Setup(t *testing.T) []framework.Option {
-	// daprd with no configuration store configured.
 	e.daprd = procdaprd.New(t)
 	return []framework.Option{
 		framework.WithProcesses(e.daprd),
@@ -73,10 +72,16 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 		details, ok := data["details"].([]any)
 		require.True(t, ok)
-		require.Len(t, details, 1)
-		d0, ok := details[0].(map[string]any)
-		require.True(t, ok)
-		require.Equal(t, "dapr.io", d0["domain"])
-		require.Equal(t, "DAPR_CONFIGURATION_STORE_NOT_CONFIGURED", d0["reason"])
+		var errInfo map[string]any
+		for _, d := range details {
+			m, ok := d.(map[string]any)
+			require.True(t, ok)
+			if m["@type"] == "type.googleapis.com/google.rpc.ErrorInfo" {
+				errInfo = m
+			}
+		}
+		require.NotNil(t, errInfo, "ErrorInfo should be present")
+		require.Equal(t, "dapr.io", errInfo["domain"])
+		require.Equal(t, "DAPR_CONFIGURATION_STORE_NOT_CONFIGURED", errInfo["reason"])
 	})
 }

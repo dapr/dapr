@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -37,7 +37,6 @@ type errors struct {
 }
 
 func (e *errors) Setup(t *testing.T) []framework.Option {
-	// daprd with no configuration store configured.
 	e.daprd = procdaprd.New(t)
 	return []framework.Option{
 		framework.WithProcesses(e.daprd),
@@ -49,7 +48,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 	client := e.daprd.GRPCClient(t, ctx)
 
-	// Covers apierrors.Configuration("").StoreNotConfigured()
+	// Covers apierrors.Configuration(name).StoreNotConfigured()
 	t.Run("configuration store not configured", func(t *testing.T) {
 		_, err := client.GetConfiguration(ctx, &rtv1.GetConfigurationRequest{
 			StoreName: "mystore",
@@ -62,9 +61,13 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, grpcCodes.FailedPrecondition, s.Code())
 		require.Equal(t, "configuration stores not configured", s.Message())
 
-		require.Len(t, s.Details(), 1)
-		errInfo, ok := s.Details()[0].(*errdetails.ErrorInfo)
-		require.True(t, ok)
+		var errInfo *errdetails.ErrorInfo
+		for _, d := range s.Details() {
+			if ei, ok := d.(*errdetails.ErrorInfo); ok {
+				errInfo = ei
+			}
+		}
+		require.NotNil(t, errInfo, "ErrorInfo should be present")
 		require.Equal(t, "DAPR_CONFIGURATION_STORE_NOT_CONFIGURED", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})

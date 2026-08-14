@@ -1251,7 +1251,7 @@ func stringValueOrEmpty(value *string) string {
 
 func (a *api) getConfigurationStore(name string) (configuration.Store, error) {
 	if a.CompStore().ConfigurationsLen() == 0 {
-		err := apierrors.Configuration("").StoreNotConfigured()
+		err := apierrors.Configuration(name).StoreNotConfigured()
 		return nil, err
 	}
 
