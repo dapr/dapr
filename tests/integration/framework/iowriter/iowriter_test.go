@@ -397,8 +397,9 @@ func TestRedirectInProcessLogs(t *testing.T) {
 		// the one in pkg/security is registered at init.
 		log := logger.NewLogger("test.inprocess.scope")
 
-		path, err := RedirectInProcessLogs()
+		path, restore, err := RedirectInProcessLogs()
 		require.NoError(t, err)
+		t.Cleanup(restore)
 		assert.Equal(t, filepath.Join(dir, inProcessLog), path)
 
 		log.Info("not for the terminal")
@@ -412,8 +413,9 @@ func TestRedirectInProcessLogs(t *testing.T) {
 		dir := t.TempDir()
 		t.Setenv("DAPR_INTEGRATION_LOGS_DIR", dir)
 
-		path, err := RedirectInProcessLogs()
+		path, restore, err := RedirectInProcessLogs()
 		require.NoError(t, err)
+		t.Cleanup(restore)
 
 		// net/http reports things like TLS handshake errors through this logger
 		// whenever a server has no ErrorLog of its own.
@@ -424,12 +426,31 @@ func TestRedirectInProcessLogs(t *testing.T) {
 		assert.Contains(t, string(b), "TLS handshake error")
 	})
 
+	t.Run("should release the file so it can be deleted", func(t *testing.T) {
+		t.Setenv("DAPR_INTEGRATION_LOGS_DIR", t.TempDir())
+
+		path, restore, err := RedirectInProcessLogs()
+		require.NoError(t, err)
+
+		stdlog.Printf("something")
+		restore()
+
+		// Windows refuses to delete a file which is still open, which is what
+		// broke t.TempDir cleanup before restore existed.
+		require.NoError(t, os.Remove(path))
+
+		// Restoring must also stop further output reaching the deleted file.
+		stdlog.Printf("after restore")
+		assert.NoFileExists(t, path)
+	})
+
 	t.Run("should leave logs alone when asked", func(t *testing.T) {
 		t.Setenv("DAPR_INTEGRATION_LOGS_DIR", t.TempDir())
 		t.Setenv("DAPR_INTEGRATION_INPROCESS_LOGS", "true")
 
-		path, err := RedirectInProcessLogs()
+		path, restore, err := RedirectInProcessLogs()
 		require.NoError(t, err)
+		t.Cleanup(restore)
 		assert.Empty(t, path)
 	})
 }
