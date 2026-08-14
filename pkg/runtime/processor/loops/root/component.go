@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/processor/loops"
 	procstate "github.com/dapr/dapr/pkg/runtime/processor/state"
 	"github.com/dapr/kit/events/loop"
@@ -36,48 +37,51 @@ import (
 // processor's inline (test) init path applies the same default.
 const DefaultComponentInitTimeout = time.Second * 5
 
-// registerInitRetry arms a supersession signal for an init retry loop on
-// name, cancelling any previous loop for the same name.
-func (r *Root) registerInitRetry(name string) chan struct{} {
+// initRetryEntry is an armed supersession signal together with the desired
+// spec it was armed for. deleted marks a Close of the component while its
+// init was in flight, distinguishing a delete from a completed successor.
+type initRetryEntry struct {
+	ch      chan struct{}
+	comp    compapi.Component
+	deleted bool
+}
+
+// registerInitRetry arms a supersession signal for an init retry loop on the
+// component's name, cancelling any previous loop for the same name.
+func (r *Root) registerInitRetry(comp compapi.Component) chan struct{} {
 	r.initRetryMu.Lock()
 	defer r.initRetryMu.Unlock()
-	if prev, ok := r.initRetryCancels[name]; ok {
-		close(prev)
+	if prev, ok := r.initRetryCancels[comp.Name]; ok && !prev.deleted {
+		close(prev.ch)
 	}
 	ch := make(chan struct{})
-	r.initRetryCancels[name] = ch
+	r.initRetryCancels[comp.Name] = &initRetryEntry{ch: ch, comp: comp}
 	return ch
 }
 
 func (r *Root) unregisterInitRetry(name string, ch chan struct{}) {
 	r.initRetryMu.Lock()
 	defer r.initRetryMu.Unlock()
-	if cur, ok := r.initRetryCancels[name]; ok && cur == ch {
+	if cur, ok := r.initRetryCancels[name]; ok && cur.ch == ch {
 		delete(r.initRetryCancels, name)
 	}
 }
 
+// cancelInitRetry stops an in-flight init retry loop for name. The entry is
+// kept as a tombstone (cleared by the loop's own unregister, or replaced by
+// a new registration) so the loop's finalizer can tell a delete apart from a
+// completed successor init.
 func (r *Root) cancelInitRetry(name string) {
 	r.initRetryMu.Lock()
 	defer r.initRetryMu.Unlock()
-	if ch, ok := r.initRetryCancels[name]; ok {
-		close(ch)
-		delete(r.initRetryCancels, name)
+	if entry, ok := r.initRetryCancels[name]; ok && !entry.deleted {
+		close(entry.ch)
+		entry.deleted = true
 	}
 }
 
 func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 	comp := ev.Component
-
-	// A new configuration supersedes any in-flight retry loop for this name.
-	// The signal is armed before the first attempt so a Close or re-create
-	// landing mid-attempt is never lost. Retry attempts bypass this handler.
-	var superseded chan struct{}
-	if shouldRetryInit(comp) {
-		superseded = r.registerInitRetry(comp.Name)
-	} else {
-		r.cancelInitRetry(comp.Name)
-	}
 
 	// Preprocess: resolve secret refs on the component, detect unresolved
 	// secret-store dependencies.
@@ -134,6 +138,18 @@ func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 	timeout, err := time.ParseDuration(comp.Spec.InitTimeout)
 	if err != nil || timeout <= 0 {
 		timeout = DefaultComponentInitTimeout
+	}
+
+	// A new configuration supersedes any in-flight retry loop for this name.
+	// The signal is armed before the first attempt so a Close or re-create
+	// landing mid-attempt is never lost, and after secret resolution so the
+	// registered spec is the resolved one (a parked component registers when
+	// it is flushed, not while parked). Retry attempts bypass this handler.
+	var superseded chan struct{}
+	if shouldRetryInit(comp) {
+		superseded = r.registerInitRetry(comp)
+	} else {
+		r.cancelInitRetry(comp.Name)
 	}
 
 	// Intercept the Result so we can flush dependents on a successful secret
@@ -297,12 +313,23 @@ func (r *Root) retryInit(catLoop loop.Interface[loops.EventCategory], comp compa
 
 var errSupersededInit = errors.New("superseded by a newer component configuration during init")
 
-// rollbackStaleInit closes the just-committed component if its configuration
-// was superseded or deleted while the successful init attempt was in flight.
+// rollbackStaleInit closes the just-committed component if it was deleted or
+// superseded by a DIFFERENT spec while the successful init attempt was in
+// flight. A duplicate init of an identical spec (a flushed parked component
+// racing the reconciler's re-create) is not a supersession: the commit
+// matches the desired state and must stay, whether the duplicate is still
+// registered or already completed and unregistered.
 func (r *Root) rollbackStaleInit(catLoop loop.Interface[loops.EventCategory], comp compapi.Component, superseded <-chan struct{}) bool {
 	select {
 	case <-superseded:
 	default:
+		return false
+	}
+	r.initRetryMu.Lock()
+	entry, ok := r.initRetryCancels[comp.Name]
+	stale := ok && (entry.deleted || !differ.AreSame(entry.comp, comp))
+	r.initRetryMu.Unlock()
+	if !stale {
 		return false
 	}
 	log.Warnf("Init of %s succeeded after its configuration was superseded or removed; closing the stale component", comp.LogName())

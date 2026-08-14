@@ -82,8 +82,9 @@ type Root struct {
 	unregisterMCPServer func(name string)
 
 	// initRetryCancels tracks in-flight init retry loops by component name
-	// so a newer configuration supersedes them.
-	initRetryCancels map[string]chan struct{}
+	// so a newer configuration supersedes them. The desired spec is kept so
+	// a duplicate init of an identical spec is not treated as a stale commit.
+	initRetryCancels map[string]*initRetryEntry
 	initRetryMu      sync.Mutex
 
 	// fatalErr retains the first non-ignored component init failure seen by a
@@ -145,7 +146,7 @@ func New(opts Options) *Root {
 		registerMCPServer:   opts.RegisterMCPServer,
 		unregisterMCPServer: opts.UnregisterMCPServer,
 		pendingDependents:   make(map[string][]compapi.Component),
-		initRetryCancels:    make(map[string]chan struct{}),
+		initRetryCancels:    make(map[string]*initRetryEntry),
 		mcpServers:          make(map[string]loop.Interface[loops.EventMCPServer]),
 		httpEndpoints:       make(map[string]loop.Interface[loops.EventHTTPEndpoint]),
 	}

@@ -246,6 +246,73 @@ func TestProcessorNonActorStateStoreInitStillFatal(t *testing.T) {
 	}
 }
 
+// TestProcessorActorStateStoreInitDuplicateIdenticalSpec: two racing inits
+// of an IDENTICAL retriable spec (a flushed parked component racing the hot
+// reload reconciler's re-create) must both succeed and leave the component
+// installed: the duplicate is not a supersession and must not trigger the
+// stale-commit rollback.
+func TestProcessorActorStateStoreInitDuplicateIdenticalSpec(t *testing.T) {
+	proc, reg := newTestProc()
+
+	mockStore := new(daprt.MockStateStore)
+	reg.StateStores().RegisterComponent(
+		func(logger.Logger) contribstate.Store { return mockStore },
+		"mockState",
+	)
+
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	mockStore.On("Init", mock.Anything).Run(func(mock.Arguments) {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		<-release
+	}).Return(nil)
+	mockStore.On("Close").Maybe().Return(nil)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- proc.Process(ctx) }()
+
+	comp := actorStateStoreComp("mystore")
+	ch1 := proc.AddPendingComponent(ctx, comp)
+	require.NotNil(t, ch1)
+	select {
+	case <-entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the first init to start")
+	}
+	ch2 := proc.AddPendingComponent(ctx, comp)
+	require.NotNil(t, ch2)
+	close(release)
+
+	for i, ch := range []<-chan error{ch1, ch2} {
+		select {
+		case err := <-ch:
+			require.NoError(t, err, "init %d of an identical spec must succeed", i+1)
+		case <-time.After(10 * time.Second):
+			t.Fatalf("timed out waiting for init %d", i+1)
+		}
+	}
+	_, ok := proc.compStore.GetComponent("mystore")
+	require.True(t, ok)
+	time.Sleep(time.Second)
+	_, ok = proc.compStore.GetComponent("mystore")
+	assert.True(t, ok, "a duplicate identical init must not roll back the installed component")
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			require.ErrorIs(t, err, context.Canceled)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the processor to stop")
+	}
+}
+
 // TestProcessorActorStateStoreInitRetryStaleCommitRollback: a retriable init
 // whose success races a newer spec (phase 1) or a delete (phase 2) must not
 // leave the stale component installed: the commit is rolled back and the
