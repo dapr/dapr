@@ -920,3 +920,54 @@ func TestNoInvalidTraceContext(t *testing.T) {
 	}
 	testServer.Close()
 }
+
+// TestConstructRequestTrailingSlash verifies that a trailing slash in the
+// method path, along with the query string, is preserved on the outbound
+// request to the target app (regression coverage for #7686).
+func TestConstructRequestTrailingSlash(t *testing.T) {
+	ctx := t.Context()
+
+	t.Run("constructRequest preserves a trailing slash and the query string", func(t *testing.T) {
+		c := Channel{
+			baseAddress: "http://localhost:3000",
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
+			middleware:  httpMiddleware.New().BuildPipelineFromSpec("test", nil),
+		}
+		req := invokev1.NewInvokeMethodRequest("api/events/2024-04-08T00:00:00/").
+			WithHTTPExtension(http.MethodGet, "start=1&end=2")
+		defer req.Close()
+
+		channelReq, err := c.constructRequest(ctx, req, "")
+		require.NoError(t, err)
+		assert.Equal(t, "/api/events/2024-04-08T00:00:00/", channelReq.URL.Path)
+		assert.Equal(t, "start=1&end=2", channelReq.URL.RawQuery)
+	})
+
+	t.Run("outbound request preserves the trailing slash and query string end-to-end", func(t *testing.T) {
+		var gotPath, gotQuery string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotPath = r.URL.Path
+			gotQuery = r.URL.RawQuery
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		c := Channel{
+			baseAddress: server.URL,
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
+			middleware:  httpMiddleware.New().BuildPipelineFromSpec("test", nil),
+		}
+		req := invokev1.NewInvokeMethodRequest("api/events/2024-04-08T00:00:00/").
+			WithHTTPExtension(http.MethodGet, "start=1&end=2")
+		defer req.Close()
+
+		resp, err := c.InvokeMethod(ctx, req, "")
+		require.NoError(t, err)
+		defer resp.Close()
+
+		assert.Equal(t, "/api/events/2024-04-08T00:00:00/", gotPath)
+		assert.Equal(t, "start=1&end=2", gotQuery)
+	})
+}

@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -41,6 +40,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messages"
+	invokemethod "github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/middleware"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -565,8 +565,9 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	verb := msg.GetHttpExtension().GetVerb().String()
 	// Defense-in-depth: resolve path traversal before building the outbound
 	// URL. The caller should have already normalized via NormalizeMethod, but
-	// we apply path.Clean here to guarantee no ../ reaches the target app.
-	method := path.Clean(msg.GetMethod())
+	// we apply cleanPath here to guarantee no ../ reaches the target app while
+	// preserving any intentional trailing slash in the method path.
+	method := invokemethod.CleanPath(msg.GetMethod())
 	if method == "." {
 		method = ""
 	}
