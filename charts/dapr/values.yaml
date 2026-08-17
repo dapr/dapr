@@ -110,10 +110,11 @@ global:
       # placement while any older sidecar is connected, so the cluster keeps
       # a single placement authority throughout the rollout.
       #
-      # Disabling this again redeploys the placement service and the
-      # schedulers stop serving placement. Sidecars resolve their placement
-      # authority once at startup, so restart application pods after changing
-      # this value in either direction.
+      # Enabling this needs no sidecar restarts: once the placement service
+      # stands down, sidecars adopt scheduler placement on their own.
+      # Disabling it again redeploys the placement service, and running
+      # sidecars must be restarted to return to it: they fail closed rather
+      # than switch authority live.
       enabled: false
 
   daprControlPlaneOs: linux

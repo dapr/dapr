@@ -168,8 +168,7 @@ func (s *StandDown) completeFirstObservation() {
 // watch opens one WatchHosts stream and returns true the moment any host
 // signals the cutover, false when the stream fails.
 func (s *StandDown) watch(ctx context.Context, address string, schedulerID spiffeid.ID) bool {
-	//nolint:staticcheck
-	conn, err := grpc.DialContext(ctx, address, s.sec.GRPCDialOptionMTLS(schedulerID))
+	conn, err := grpc.NewClient(address, s.sec.GRPCDialOptionMTLS(schedulerID))
 	if err != nil {
 		return false
 	}
@@ -213,8 +212,7 @@ func (s *StandDown) watch(ctx context.Context, address string, schedulerID spiff
 }
 
 func (s *StandDown) report(ctx context.Context, address string, schedulerID spiffeid.ID, stoodDown bool) bool {
-	//nolint:staticcheck
-	conn, err := grpc.DialContext(ctx, address, s.sec.GRPCDialOptionMTLS(schedulerID))
+	conn, err := grpc.NewClient(address, s.sec.GRPCDialOptionMTLS(schedulerID))
 	if err != nil {
 		return false
 	}

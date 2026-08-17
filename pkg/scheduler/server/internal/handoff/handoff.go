@@ -36,6 +36,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
 	"github.com/dapr/dapr/pkg/security"
@@ -381,16 +382,34 @@ func (h *Handoff) probeReportedAddresses(ctx context.Context) bool {
 	}
 
 	for _, addr := range addrs {
-		dctx, cancel := context.WithTimeout(ctx, time.Second*2)
-		//nolint:staticcheck
-		conn, err := grpc.DialContext(dctx, addr, h.sec.GRPCDialOptionMTLS(placementID), grpc.WithBlock())
-		cancel()
-		if err == nil {
-			conn.Close()
+		if h.probeAddress(ctx, addr, placementID) {
 			return true
 		}
 	}
 	return false
+}
+
+// probeAddress reports whether an identity-verified connection to the
+// address can be established.
+func (h *Handoff) probeAddress(ctx context.Context, addr string, placementID spiffeid.ID) bool {
+	conn, err := grpc.NewClient(addr, h.sec.GRPCDialOptionMTLS(placementID))
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+
+	dctx, cancel := context.WithTimeout(ctx, time.Second*2)
+	defer cancel()
+	conn.Connect()
+	for {
+		state := conn.GetState()
+		if state == connectivity.Ready {
+			return true
+		}
+		if !conn.WaitForStateChange(dctx, state) {
+			return false
+		}
+	}
 }
 
 func (h *Handoff) publishSighting(ctx context.Context, resolved, probed bool, lease clientv3.LeaseID) {
