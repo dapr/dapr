@@ -68,7 +68,7 @@ func (s *stream) recv() error {
 		// failed-Send resolution which already resolved the trigger. Drop
 		// it rather than treating it as a protocol error: closing the
 		// stream would abort every other inflight trigger on it.
-		log.Debugf("Dropping unknown trigger response %d from %s/%s", result.GetId(), s.ns, s.appID)
+		log.Warnf("Dropping unknown trigger response %d from %s/%s", result.GetId(), s.ns, s.appID)
 		return nil
 	}
 
