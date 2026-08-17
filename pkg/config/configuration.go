@@ -68,14 +68,6 @@ const (
 	// history events are signed using the app's X.509 SVID identity,
 	// creating a verifiable chain of signatures. Disabled by default.
 	WorkflowHistorySigning Feature = "WorkflowHistorySigning"
-
-	// SchedulerPlacement moves actor placement into the Scheduler control
-	// plane service. When enabled, daprd connects its placement stream to the
-	// scheduler placement leader instead of the standalone placement service,
-	// and schedulers route actor reminder triggers directly to the actor's
-	// owner host. Requires schedulers running with placement enabled.
-	// Preview feature; disabled by default.
-	SchedulerPlacement Feature = "SchedulerPlacement"
 )
 
 // end feature flags section

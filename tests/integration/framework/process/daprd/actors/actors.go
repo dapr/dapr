@@ -81,17 +81,6 @@ func New(t *testing.T, fopts ...Option) *Actors {
 		opts.placement = placement.New(t)
 	}
 
-	if opts.schedulerPlacement {
-		opts.daprdConfigs = append(opts.daprdConfigs, `apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: schedulerplacement
-spec:
-  features:
-  - name: SchedulerPlacement
-    enabled: true`)
-	}
-
 	handlers := make([]app.Option, 0, len(opts.actorTypeHandlers))
 	for atype, handler := range opts.actorTypeHandlers {
 		handlers = append(handlers, app.WithHandlerFunc("/actors/"+atype+"/", handler))

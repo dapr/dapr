@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
 
 // v2Round tracks a single in-flight v2 dissemination round, keyed by seq.
@@ -33,6 +34,8 @@ type v2Round struct {
 // merges. The startup snapshot is a round with an empty scope covering all
 // types.
 func (d *disseminator) handleOrderV2(ctx context.Context, order *loops.StreamOrder) error {
+	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(order.Order.Op.String())
+
 	seq := order.Order.Version
 
 	log.Debugf("Handling placement order=%s seq=%d scope=%v", order.Order.Op, seq, order.Order.Scope)

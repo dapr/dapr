@@ -30,6 +30,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/healthz"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/placement/authorizer"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/placement/loops"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/placement/loops/namespaces"
@@ -137,6 +138,7 @@ func (p *placement) SetLeader(leader bool) {
 	if p.leader.Swap(leader) != leader {
 		log.Infof("Placement leadership changed: leader=%t", leader)
 	}
+	monitoring.RecordPlacementLeaderStatus(leader)
 
 	p.nsLoop.Enqueue(&loops.SetLeader{Leader: leader})
 }
@@ -169,6 +171,9 @@ func (p *placement) ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorT
 
 	ctx, cancel := context.WithCancelCause(stream.Context())
 	defer cancel(nil)
+
+	monitoring.RecordPlacementStreamsConnected(initial.GetNamespace(), 1)
+	defer monitoring.RecordPlacementStreamsConnected(initial.GetNamespace(), -1)
 
 	p.nsLoop.Enqueue(&loops.ConnAdd{
 		Initial: initial,

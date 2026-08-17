@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
 
 func (d *disseminator) handleLookupRequest(req *loops.LookupRequest) {
@@ -36,6 +37,8 @@ func (d *disseminator) handleReportHost(report *loops.ReportHost) {
 }
 
 func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder) error {
+	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(order.Order.Op.String())
+
 	version := order.Order.Version
 
 	log.Debugf("Handling placement order=%s version=%d", order.Order.Op, version)

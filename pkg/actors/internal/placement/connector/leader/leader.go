@@ -74,6 +74,11 @@ func (l *leader) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 		}
 
 		if addr == "" {
+			// Waiting is deliberate, even while every scheduler is
+			// unreachable, since falling back on unreachability alone could
+			// choose a different placement authority than the rest of the
+			// cluster. Failing closed until restart is what preserves single
+			// activation across a rollback.
 			log.Debug("Waiting for a scheduler placement leader to be advertised")
 			select {
 			case <-ctx.Done():
@@ -89,6 +94,12 @@ func (l *leader) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 		conn, err := grpc.DialContext(ctx, addr, l.gopts...)
 		if err != nil {
 			return nil, err
+		}
+
+		// The leader may have moved while dialling.
+		if current, _, _ := l.leadership.Leader(); current != addr {
+			conn.Close()
+			continue
 		}
 
 		l.lock.Lock()

@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/placement/loops"
 )
 
@@ -66,12 +67,15 @@ func (c *connections) maybeDisseminate() {
 		phase:   schedulerv1pb.Operation_OPERATION_LOCK,
 		members: make(map[uint64]struct{}, len(c.streams)),
 		acked:   make(map[uint64]struct{}, len(c.streams)),
+		started: time.Now(),
 	}
 
+	monitoring.RecordPlacementDissemination(c.namespace)
 	for _, t := range types {
 		c.versions[t]++
 		c.lockedTypes[t] = seq
 		delete(c.pendingTypes, t)
+		monitoring.RecordPlacementTableUpdate(c.namespace, t)
 	}
 
 	c.rounds[seq] = r
@@ -178,6 +182,9 @@ func (c *connections) advanceRounds(seqs []uint64) {
 // is configured the timer is armed so churn which arrived during the round is
 // batched; otherwise any pending types disseminate immediately.
 func (c *connections) completeRound(r *round) {
+	if !r.started.IsZero() {
+		monitoring.RecordPlacementDisseminationLatency(c.namespace, time.Since(r.started))
+	}
 	c.timeoutQ.Dequeue(r.seq)
 	delete(c.rounds, r.seq)
 	for _, t := range r.types {
@@ -230,6 +237,17 @@ func (c *connections) handleTimeout(t *loops.RoundTimeout) {
 			delete(c.lockedTypes, typ)
 		}
 	}
+
+	// Survivors still hold the aborted round's LOCK and timer: send its
+	// UNLOCK so the round closes cleanly, or their timers reset the streams.
+	for idx := range r.members {
+		conn, ok := c.streams[idx]
+		if !ok {
+			continue
+		}
+		conn.loop.Enqueue(&loops.SendUnlock{Seq: t.Seq, Types: r.types})
+	}
+
 	if len(c.streams) > 0 {
 		c.markPending(r.types)
 	}

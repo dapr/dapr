@@ -75,10 +75,10 @@ type Options struct {
 	// LOCK -> UPDATE -> UNLOCK round.
 	DisseminationTimeout time.Duration
 
-	// SchedulerPlacementEnabled connects the placement client to the
-	// scheduler placement leader instead of the standalone placement
-	// service (SchedulerPlacement preview feature). Actors are enabled even
-	// without placement addresses when set.
+	// SchedulerPlacementEnabled means a scheduler address is configured.
+	// Whether placement is actually served by it is the control plane's
+	// decision, read from the WatchHosts advertisement on startup. Actors
+	// are enabled even without placement addresses when set.
 	SchedulerPlacementEnabled bool
 }
 
@@ -170,7 +170,7 @@ func New(opts Options) Interface {
 		(len(opts.PlacementAddresses) == 1 && strings.TrimSpace(strings.Trim(opts.PlacementAddresses[0], `"'`)) == "")
 	if noPlacementAddresses && !opts.SchedulerPlacementEnabled {
 		var err error = messages.ErrActorNoPlacement
-		log.Warnf("Actor runtime disabled: %s. Actors and Workflow APIs will be unavailable. Configure a placement address or enable the SchedulerPlacement preview feature with a scheduler address", err)
+		log.Warnf("Actor runtime disabled: %s. Actors and Workflow APIs will be unavailable. Configure a placement address, or a scheduler address if the scheduler serves actor placement", err)
 		disabled.Store(&err)
 	}
 
@@ -637,15 +637,15 @@ func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
 			}
 		}
 	default:
-		if len(a.placementAddresses) == 0 {
+		if a.disabled.Load() != nil {
 			return &runtimev1pb.ActorRuntime{
 				Placement:     placementDisconnected,
 				RuntimeStatus: runtimev1pb.ActorRuntime_DISABLED,
 			}
-		} else {
-			return &runtimev1pb.ActorRuntime{
-				RuntimeStatus: runtimev1pb.ActorRuntime_INITIALIZING,
-			}
+		}
+
+		return &runtimev1pb.ActorRuntime{
+			RuntimeStatus: runtimev1pb.ActorRuntime_INITIALIZING,
 		}
 	}
 

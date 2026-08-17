@@ -91,10 +91,9 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 		sidecar.PlacementAddress = ""
 	case i.schedulerPlacementEnabled && sidecar.PlacementAddress == "":
 		// Placement is served by the scheduler: no standalone placement
-		// address is patched. Sidecars use placement via the scheduler when
-		// the SchedulerPlacement preview feature is enabled in their
-		// Configuration. The dapr.io/placement-host-address annotation still
-		// wins as a per-app escape hatch.
+		// address is patched, so there is no second placement authority for a
+		// sidecar to reach. The dapr.io/placement-host-address annotation
+		// still wins as a per-app escape hatch.
 		sidecar.ActorsService = ""
 	case sidecar.PlacementAddress == "":
 		// Set configuration for the actors service

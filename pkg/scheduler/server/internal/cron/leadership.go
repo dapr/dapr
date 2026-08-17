@@ -18,12 +18,20 @@ import (
 	"slices"
 	"sync"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/handoff"
 	"github.com/dapr/kit/events/broadcaster"
 )
+
+// connectionPool is the view of the connection pool leadership needs.
+type connectionPool interface {
+	SetSchedulerInfo(count, idx int32)
+	HasPlacementIncapableSidecars() bool
+	HasPlacementCapableSidecars() bool
+}
 
 // leadership processes leadership updates from go-etcd-cron. It unmarshals the
 // host addresses, broadcasts them to WatchHosts subscribers, and pushes the
@@ -33,47 +41,145 @@ import (
 type leadership struct {
 	hostBroadcaster *broadcaster.Broadcaster[[]*schedulerv1pb.Host]
 	lock            *sync.RWMutex
-	currHosts       *[]*schedulerv1pb.Host
+	broadcastHosts  *[]*schedulerv1pb.Host
 	readyCh         chan struct{}
 	ownAddress      string
-	pool            *pool.Pool
+	pool            connectionPool
 	placement       PlacementLeader
+
+	// handoff, when non-nil, is the etcd-replicated handoff state shared by
+	// every scheduler, with this scheduler's local view as the fallback.
+	handoff handoff.Interface
+
+	// lastCronTable is the last leadership table from cron, unstamped, so a
+	// nil-event replay recomputes stamps from the original values. Loop
+	// goroutine only.
+	lastCronTable []*schedulerv1pb.Host
+
+	// advertised latches once placement was advertised to a capable
+	// sidecar, so a stale old sidecar joining later cannot drop every
+	// placement stream. Fallback when handoff is nil.
+	advertised bool
+
+	incapableWarned     bool
+	standDownWaitLogged bool
 }
 
-// Handle processes a single leadership update. Called sequentially by the
-// events/loop for each enqueued event.
+// Handle processes a single leadership update, sequentially per event. A nil
+// event is a capability change from the connection pool: the last table is
+// re-broadcast under the current sidecar capability counts.
 func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
-	if ctx.Err() != nil || anyhosts == nil {
+	if ctx.Err() != nil {
 		//nolint:nilerr
 		return nil
 	}
 
-	hosts := make([]*schedulerv1pb.Host, len(anyhosts))
-	for i, anyhost := range anyhosts {
-		var host schedulerv1pb.Host
-		if err := anyhost.UnmarshalTo(&host); err != nil {
-			return err
+	if anyhosts == nil && h.lastCronTable == nil {
+		return nil
+	}
+
+	if anyhosts != nil {
+		raw := make([]*schedulerv1pb.Host, len(anyhosts))
+		for i, anyhost := range anyhosts {
+			var host schedulerv1pb.Host
+			if err := anyhost.UnmarshalTo(&host); err != nil {
+				return err
+			}
+			raw[i] = &host
 		}
-		hosts[i] = &host
+		h.lastCronTable = raw
+	}
+
+	hosts := make([]*schedulerv1pb.Host, len(h.lastCronTable))
+	for i, host := range h.lastCronTable {
+		hosts[i] = proto.Clone(host).(*schedulerv1pb.Host)
 	}
 
 	count, idx := schedulerPosition(hosts, h.ownAddress)
 	h.pool.SetSchedulerInfo(count, idx)
 
-	// The leader bit is stamped on the hosts here at broadcast time, never in
-	// the go-etcd-cron ReplicaData: the elector treats a replica's stored
-	// data changing under a live lease as a fatal leadership error.
-	leaderAddr := placementLeader(hosts)
+	// The leader bit is stamped here at broadcast time, never in the
+	// go-etcd-cron ReplicaData, since the elector treats stored replica data
+	// changing under a live lease as fatal.
+	gateIncapable := h.pool.HasPlacementIncapableSidecars()
+	gateCapable := h.pool.HasPlacementCapableSidecars()
+	advertised := h.advertised
+	awaitingStandDown := false
+	if h.handoff != nil {
+		gateIncapable = h.handoff.AnyIncapableSidecars()
+		gateCapable = h.handoff.AnyCapableSidecars()
+		advertised = h.handoff.Advertised()
+		awaitingStandDown = h.handoff.PlacementPresent() && !h.handoff.PlacementStoodDown()
+	}
+
+	// Withhold the advertisement while an old sidecar is connected anywhere
+	// in the cluster, or while a present placement service has not confirmed
+	// it stood down, so two placement authorities never serve at once. The
+	// stand-down wait deliberately has no timeout, since a timed-out
+	// advertisement next to a still-serving placement service is a split
+	// brain.
+	gateBlocked := !advertised && gateIncapable
+	withholdPlacement := gateBlocked || awaitingStandDown
+
+	// Withholding after the advertisement became permanent would drop every
+	// placement stream over one stale pod, so warn instead.
+	if advertised && gateIncapable {
+		if !h.incapableWarned {
+			h.incapableWarned = true
+			log.Warn("A sidecar running an older Dapr version connected after actor placement moved to the scheduler. Its actor APIs stall unless it can reach a placement service the control plane cannot detect, such as one under a custom service name or outside the cluster, which would place its actors as a second authority. Upgrade the sidecar, and remove any such placement service.")
+		}
+	} else {
+		h.incapableWarned = false
+	}
+
+	electedAddr := placementLeader(hosts)
+	leaderAddr := electedAddr
+	if withholdPlacement {
+		leaderAddr = ""
+	}
+	if leaderAddr != "" && gateCapable && !advertised {
+		if h.handoff != nil {
+			h.handoff.LatchAdvertised()
+		} else {
+			h.advertised = true
+		}
+	}
+
+	// The elected leader is considered cutover pending while only the
+	// stand-down confirmation blocks the advertisement, which the placement
+	// service takes as its signal to drain and confirm.
+	cutoverPending := awaitingStandDown && !gateBlocked && electedAddr != ""
+
+	if awaitingStandDown && !gateBlocked && !h.standDownWaitLogged {
+		h.standDownWaitLogged = true
+		log.Info("Actor placement cutover is pending, waiting for the standalone placement service to stand down. Upgrading or undeploying the placement service completes the cutover.")
+	} else if !awaitingStandDown {
+		h.standDownWaitLogged = false
+	}
+
 	for _, host := range hosts {
 		host.Leader = host.GetAddress() == leaderAddr && leaderAddr != ""
+		host.PlacementCutoverPending = cutoverPending && host.GetAddress() == electedAddr
+		if withholdPlacement {
+			host.PlacementEnabled = false
+		}
 	}
 
 	if h.placement != nil {
 		h.placement.SetLeader(leaderAddr != "" && leaderAddr == h.ownAddress)
 	}
 
+	// broadcastHosts is what sidecars last received, only Handle writes it. An
+	// identical recomputation is not re-broadcast, since sidecars reload
+	// every scheduler connection per WatchHosts message and that churn
+	// re-triggers this loop.
+	if *h.broadcastHosts != nil && slices.EqualFunc(*h.broadcastHosts, hosts,
+		func(a, b *schedulerv1pb.Host) bool { return proto.Equal(a, b) }) {
+		return nil
+	}
+
 	h.lock.Lock()
-	*h.currHosts = hosts
+	*h.broadcastHosts = hosts
 
 	select {
 	case <-h.readyCh:

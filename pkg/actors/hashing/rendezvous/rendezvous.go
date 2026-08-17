@@ -34,19 +34,33 @@ const separator = "||"
 // Table is an immutable rendezvous hash table over a set of host addresses.
 type Table struct {
 	hosts []string
+	// prefixes[i] is a Digest pre-fed with hosts[i] and the separator.
+	// Lookup streams only the key into a copy of it.
+	prefixes []xxhash.Digest
 }
 
-// New returns a table over the given host addresses. Duplicates are removed;
-// the input slice is not retained.
+// New returns a table over the given host addresses. Duplicates are removed
+// and the input slice is not retained.
 func New(hosts []string) *Table {
 	sorted := slices.Clone(hosts)
 	slices.Sort(sorted)
-	return &Table{hosts: slices.Compact(sorted)}
+	sorted = slices.Compact(sorted)
+
+	prefixes := make([]xxhash.Digest, len(sorted))
+	for i, host := range sorted {
+		prefixes[i].Reset()
+		//nolint:errcheck // Digest.WriteString never returns an error.
+		prefixes[i].WriteString(host)
+		//nolint:errcheck
+		prefixes[i].WriteString(separator)
+	}
+
+	return &Table{hosts: sorted, prefixes: prefixes}
 }
 
 // Lookup returns the host address owning the given key, false when the table
 // has no hosts. The owner is the host with the highest xxhash64 score for the
-// key; score ties break to the lexicographically smaller host address so that
+// key. Score ties break to the lexicographically smaller host address so that
 // every party resolves the same owner.
 func (t *Table) Lookup(key string) (string, bool) {
 	if t == nil || len(t.hosts) == 0 {
@@ -54,16 +68,25 @@ func (t *Table) Lookup(key string) (string, bool) {
 	}
 
 	owner := t.hosts[0]
-	best := score(owner, key)
+	best := t.score(0, key)
 	// hosts are sorted, so on a tie the earlier (smaller) host wins by never
 	// replacing on equal score.
-	for _, host := range t.hosts[1:] {
-		if s := score(host, key); s > best {
-			owner, best = host, s
+	for i := 1; i < len(t.hosts); i++ {
+		if s := t.score(i, key); s > best {
+			owner, best = t.hosts[i], s
 		}
 	}
 
 	return owner, true
+}
+
+// score is xxhash64("<host>||<key>") for hosts[i], resumed from the host's
+// precomputed prefix digest.
+func (t *Table) score(i int, key string) uint64 {
+	d := t.prefixes[i]
+	//nolint:errcheck // Digest.WriteString never returns an error.
+	d.WriteString(key)
+	return d.Sum64()
 }
 
 // Hosts returns the sorted host addresses in the table. The returned slice

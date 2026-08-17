@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/controller"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/handoff"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/placement"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/dapr/pkg/security"
@@ -107,6 +108,7 @@ type Server struct {
 	etcd       etcd.Interface
 	controller *controller.Controller
 	placement  placement.Interface
+	handoff    *handoff.Handoff
 
 	hzAPIServer healthz.Target
 
@@ -165,6 +167,23 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		}
 	}
 
+	var hoff *handoff.Handoff
+	if etcdServer != nil {
+		// In kubernetes a placement service too old to announce itself is
+		// still detected through its service name resolving.
+		var placementDNSName string
+		if opts.Mode == modes.KubernetesMode {
+			placementDNSName = "dapr-placement-server"
+		}
+
+		hoff = handoff.New(handoff.Options{
+			ID:               opts.EtcdName,
+			Etcd:             etcdServer,
+			PlacementDNSName: placementDNSName,
+			Security:         opts.Security,
+		})
+	}
+
 	place := placement.New(placement.Options{
 		Enabled:            opts.PlacementEnabled,
 		ID:                 opts.EtcdName,
@@ -185,6 +204,7 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		BackendConfig: opts.BackendConfig,
 		Workers:       opts.Workers,
 		Placement:     place,
+		Handoff:       hoff,
 	})
 
 	if opts.Controller != nil {
@@ -199,6 +219,7 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		cron:          cron,
 		placement:     place,
 		etcd:          etcdServer,
+		handoff:       hoff,
 		serializer: serialize.New(serialize.Options{
 			Security: opts.Security,
 		}),
@@ -236,6 +257,10 @@ func (s *Server) Run(ctx context.Context) error {
 
 	if s.controller != nil {
 		runners = append(runners, s.controller.Run)
+	}
+
+	if s.handoff != nil {
+		runners = append(runners, s.handoff.Run)
 	}
 
 	if s.etcd != nil {

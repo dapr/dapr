@@ -83,6 +83,13 @@ type ConnCloseStream struct {
 	Error     error
 }
 
+// ConnCloseNamespace is sent by a namespace's connections loop when its last
+// stream is removed, confirming the namespace may be torn down.
+type ConnCloseNamespace struct {
+	*nsbase
+	Namespace string
+}
+
 // Shutdown shuts down a loop and everything below it.
 type Shutdown struct {
 	*nsbase

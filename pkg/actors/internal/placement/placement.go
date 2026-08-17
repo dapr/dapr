@@ -80,11 +80,10 @@ type Options struct {
 	// resets its placement stream and halts hosted actors.
 	DisseminationTimeout time.Duration
 
-	// SchedulerPlacement connects to the scheduler placement leader instead
-	// of the standalone placement service (SchedulerPlacement preview
-	// feature). Addresses may be empty in this mode; when set, they act as
-	// the fallback placement service for scheduler clusters which do not
-	// serve placement.
+	// SchedulerPlacement asks the scheduler whether it serves placement and,
+	// if so, uses it as this sidecar's placement authority. Otherwise the
+	// standalone placement service is used when Addresses are configured.
+	// The choice is made once on startup.
 	SchedulerPlacement bool
 
 	// SchedulerLeadership tracks the scheduler placement leader. Required
@@ -193,9 +192,9 @@ func New(opts Options) (Interface, error) {
 			}), nil
 		}
 
-		// When the standalone placement service is also configured, keep it
-		// as the fallback for scheduler clusters which do not serve
-		// placement.
+		// The placement service is the startup fallback for scheduler
+		// clusters which do not serve placement. It is dropped once an
+		// authority is chosen.
 		if hasAddresses {
 			fconn, ffactory, ferr := v1Setup()
 			if ferr != nil {
@@ -208,7 +207,7 @@ func New(opts Options) (Interface, error) {
 			}
 		}
 
-		log.Info("Actor placement is served by the scheduler control plane (SchedulerPlacement)")
+		log.Info("Scheduler address configured; asking the scheduler whether it serves actor placement")
 	} else {
 		conn, factory, err = v1Setup()
 		if err != nil {

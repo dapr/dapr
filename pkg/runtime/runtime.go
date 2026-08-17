@@ -252,11 +252,10 @@ func newDaprRuntime(ctx context.Context,
 		ComponentContextFn:    resiliencyProvider.ComponentContextDecorator(),
 	})
 
-	schedulerPlacement := globalConfig.IsFeatureEnabled(config.SchedulerPlacement)
-	if schedulerPlacement && !runtimeConfig.SchedulerEnabled() {
-		log.Warn("SchedulerPlacement preview feature is enabled but no scheduler address is configured; falling back to the placement service")
-		schedulerPlacement = false
-	}
+	// Whether the scheduler serves actor placement is the control plane's
+	// decision, advertised on WatchHosts. This sidecar only needs a
+	// scheduler to ask.
+	schedulerPlacement := runtimeConfig.SchedulerEnabled()
 
 	actors := actors.New(actors.Options{
 		AppID:     runtimeConfig.id,
@@ -366,17 +365,27 @@ func newDaprRuntime(ctx context.Context,
 	// Install the wfengine as the processor's internal workflow registrar.
 	processor.SetInProcessWorkflows(wfe)
 
+	var reportedPlacementAddresses []string
+	if strings.HasPrefix(runtimeConfig.actorsService, "placement:") {
+		for _, addr := range strings.Split(strings.TrimPrefix(runtimeConfig.actorsService, "placement:"), ",") {
+			if strings.TrimSpace(addr) != "" {
+				reportedPlacementAddresses = append(reportedPlacementAddresses, addr)
+			}
+		}
+	}
+
 	jobsManager, err := scheduler.New(scheduler.Options{
-		Namespace:        namespace,
-		AppID:            runtimeConfig.id,
-		Channels:         channels,
-		Actors:           actors,
-		Addresses:        runtimeConfig.schedulerAddress,
-		Security:         sec,
-		WFEngine:         wfe,
-		WorkflowSpec:     globalConfig.Spec.WorkflowSpec,
-		Healthz:          runtimeConfig.healthz,
-		SchedulerStreams: runtimeConfig.schedulerStreams,
+		Namespace:          namespace,
+		AppID:              runtimeConfig.id,
+		Channels:           channels,
+		Actors:             actors,
+		Addresses:          runtimeConfig.schedulerAddress,
+		Security:           sec,
+		WFEngine:           wfe,
+		WorkflowSpec:       globalConfig.Spec.WorkflowSpec,
+		Healthz:            runtimeConfig.healthz,
+		SchedulerStreams:   runtimeConfig.schedulerStreams,
+		PlacementAddresses: reportedPlacementAddresses,
 	})
 	if err != nil {
 		return nil, err

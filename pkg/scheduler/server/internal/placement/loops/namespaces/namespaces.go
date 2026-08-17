@@ -81,6 +81,8 @@ func (n *namespaces) Handle(ctx context.Context, event loops.EventNamespace) err
 		n.handleSetLeader(e)
 	case *loops.ConnCloseStream:
 		n.handleCloseStream(e)
+	case *loops.ConnCloseNamespace:
+		n.handleCloseNamespace(e)
 	case *loops.ReportedTypes:
 		n.route(e.Host.GetNamespace(), e)
 	case *loops.Ack:
@@ -147,15 +149,22 @@ func (n *namespaces) handleCloseStream(closeStream *loops.ConnCloseStream) {
 		return
 	}
 
-	connsLoop.connections--
-	connsLoop.loop.Enqueue(closeStream)
-
-	if connsLoop.connections == 0 {
-		delete(n.namespaces, closeStream.Namespace)
-		connsLoop.loop.Close(&loops.Shutdown{
-			Error: closeStream.Error,
-		})
+	if connsLoop.connections > 0 {
+		connsLoop.connections--
 	}
+	connsLoop.loop.Enqueue(closeStream)
+}
+
+// handleCloseNamespace tears down a namespace once its connections loop has
+// confirmed its last stream is gone and no add has arrived since.
+func (n *namespaces) handleCloseNamespace(closeNS *loops.ConnCloseNamespace) {
+	connsLoop, ok := n.namespaces[closeNS.Namespace]
+	if !ok || connsLoop.connections != 0 {
+		return
+	}
+
+	delete(n.namespaces, closeNS.Namespace)
+	connsLoop.loop.Close(new(loops.Shutdown))
 }
 
 func (n *namespaces) route(ns string, event loops.EventConnections) {

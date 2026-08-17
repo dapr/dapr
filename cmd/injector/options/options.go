@@ -62,7 +62,7 @@ func New(origArgs []string) *Options {
 	fs.IntVar(&opts.Port, "port", 4000, "The port used for the injector service")
 	fs.StringVar(&opts.ListenAddress, "listen-address", "", "The listen address for the injector service")
 	fs.BoolVar(&opts.SchedulerEnabled, "scheduler-enabled", true, "Marks if scheduler is enabled in the cluster, and address should be patched on sidecars.")
-	fs.BoolVar(&opts.SchedulerPlacementEnabled, "scheduler-placement-enabled", false, "Marks that the scheduler serves actor placement in the cluster: the standalone placement address is no longer patched on sidecars, which use placement via the scheduler when the SchedulerPlacement preview feature is enabled.")
+	fs.BoolVar(&opts.SchedulerPlacementEnabled, "scheduler-placement-enabled", false, "Marks that the scheduler serves actor placement in the cluster: the standalone placement address is no longer patched on sidecars, which take placement from the scheduler instead.")
 
 	if home := homedir.HomeDir(); home != "" {
 		fs.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")

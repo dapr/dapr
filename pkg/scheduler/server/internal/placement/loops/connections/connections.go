@@ -58,6 +58,9 @@ type round struct {
 	// state via their startup snapshot and subsequent rounds.
 	members map[uint64]struct{}
 
+	// started is when the round began, for the dissemination latency metric.
+	started time.Time
+
 	// acked are the members which acked the current phase.
 	acked map[uint64]struct{}
 }
@@ -212,6 +215,10 @@ func (c *connections) handleCloseStream(closeStream *loops.ConnCloseStream) {
 	affected := c.removeStream(closeStream.StreamIDx, closeStream.Error)
 	c.advanceRounds(affected)
 	c.maybeDisseminate()
+
+	if len(c.streams) == 0 && c.nsLoop != nil {
+		c.nsLoop.Enqueue(&loops.ConnCloseNamespace{Namespace: c.namespace})
+	}
 }
 
 // removeStream tears down a stream, removes its membership, and removes it

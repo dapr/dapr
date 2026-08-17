@@ -33,6 +33,11 @@ on:
         description: "Space-separated list of perf tests to run only"
         required: false
         type: string
+      scheduler_placement:
+        description: "Serve actor placement from the Scheduler (global.scheduler.placement.enabled=true) instead of the standalone placement service"
+        required: false
+        type: boolean
+        default: false
   # Dispatch on external events
   repository_dispatch:
     types: [perf-test]
@@ -455,7 +460,11 @@ jobs:
       - name: Deploy dapr to AKS cluster
         if: env.TEST_PREFIX != ''
         env:
-          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s,dapr_scheduler.securityContext.fsGroup=65532"
+          # scheduler_placement=true runs the identical perf suite with actor
+          # placement served by the Scheduler (rendezvous hashing) instead of
+          # the standalone placement service (consistent hash ring), for
+          # comparing the two placement authorities on unchanged tests.
+          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s,dapr_scheduler.securityContext.fsGroup=65532,global.scheduler.placement.enabled=${{ inputs.scheduler_placement || false }}"
         run: make docker-deploy-k8s
       - name: Deploy test components
         if: env.TEST_PREFIX != ''

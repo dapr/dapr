@@ -84,6 +84,10 @@ type Inflight struct {
 	// v2Entries are the per actor type rendezvous tables installed by the v2
 	// (scheduler placement) protocol via Merge. A process uses either the v1
 	// ring tables or the v2 rendezvous tables, never both.
+	//
+	// Un-synchronized: writes happen only on the loop goroutine, while resolve
+	// is called concurrently by HaltNonHosted's per-factory goroutines. The
+	// read path must stay read-only, or it needs its own synchronization.
 	v2Entries map[string]*rendezvousEntry
 
 	// versionByType are the v2 per actor type table versions, monotonic
@@ -263,10 +267,12 @@ func (i *Inflight) HasTables(types []string) bool {
 	return true
 }
 
-// ResetVersions clears the v2 per type version tracking. Called on stream
-// reconnect: versions are only monotonic within a single stream session and
-// restart at zero when a new placement leader is elected.
-func (i *Inflight) ResetVersions() {
+// ResetSession clears the per-type tables and versions on stream loss: a
+// new session starts from its authoritative snapshot, which carries no
+// tombstones for types deleted while disconnected. In-session removals are
+// tombstones handled by Merge.
+func (i *Inflight) ResetSession() {
+	clear(i.v2Entries)
 	clear(i.versionByType)
 }
 

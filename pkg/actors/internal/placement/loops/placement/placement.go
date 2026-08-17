@@ -58,10 +58,10 @@ type Options struct {
 	// V2 speaks the v2 (scheduler placement) protocol on the stream.
 	V2 bool
 
-	// Fallback, when non-nil, is the v1 placement service connector to
-	// permanently switch to when the scheduler cluster reports it does not
-	// serve placement (old schedulers with the SchedulerPlacement feature
-	// enabled).
+	// Fallback, when non-nil, is the v1 placement service connector to use
+	// when the scheduler cluster reports it does not serve placement. It is
+	// dropped once a placement authority has been chosen, so a sidecar never
+	// changes authority while running.
 	Fallback *Fallback
 
 	ActorTable table.Interface
@@ -159,6 +159,12 @@ func (p *placement) Handle(ctx context.Context, event loops.EventPlace) error {
 
 func (p *placement) handleUpdateTypes(up *loops.UpdateTypes) {
 	p.report.ActorTypes = up.ActorTypes
+
+	// No stream yet. The types go out with the initial report on connect.
+	if p.dissLoop == nil {
+		return
+	}
+
 	p.dissLoop.Enqueue(&loops.ReportHost{
 		Report: p.report.Clone(),
 	})
@@ -191,6 +197,7 @@ func (p *placement) handleLockRequest(req *loops.LockRequest) {
 func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementReconnect) error {
 	var client transport.Transport
 	var err error
+	var unavailableLogged bool
 	for {
 		client, err = p.tryConnect(ctx)
 		if err == nil {
@@ -201,16 +208,34 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 			return ctx.Err()
 		}
 
-		// The scheduler cluster does not serve placement (old schedulers or
-		// placement disabled). Permanently switch to the standalone
-		// placement service when its addresses are configured; otherwise
-		// keep retrying until a capable scheduler appears.
-		if errors.Is(err, leader.ErrSchedulerPlacementUnsupported) && p.fallback != nil {
-			log.Warnf("SchedulerPlacement is enabled but the scheduler cluster does not serve placement; falling back to the placement service")
-			p.connector = p.fallback.Connector
-			p.streamFactory = p.fallback.StreamFactory
-			p.v2 = p.fallback.V2
-			p.fallback = nil
+		// The scheduler cluster does not serve placement. Only reachable
+		// before an authority is chosen: the fallback is cleared on the
+		// first successful connect.
+		if errors.Is(err, leader.ErrSchedulerPlacementUnsupported) {
+			if p.fallback != nil {
+				log.Warn("Scheduler cluster does not serve actor placement; using the placement service")
+				p.connector = p.fallback.Connector
+				p.streamFactory = p.fallback.StreamFactory
+				p.v2 = p.fallback.V2
+				p.fallback = nil
+				continue
+			}
+
+			// Nothing can place actors right now: come up with actor APIs
+			// disconnected and quietly retry until a scheduler serves
+			// placement.
+			if !unavailableLogged {
+				unavailableLogged = true
+				log.Error("Actor placement unavailable: the scheduler does not serve actor placement and no placement service is available to this sidecar. Actor and Workflow APIs will be unavailable until the scheduler serves placement")
+				p.ready.Store(false)
+				p.htarget.Ready()
+			}
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(retry.Jitter(time.Second*3, time.Second)):
+			}
 			continue
 		}
 
@@ -221,6 +246,17 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 			return ctx.Err()
 		case <-time.After(retry.Jitter(time.Second/2, time.Second/4)):
 		}
+	}
+
+	// The authority is chosen once per sidecar lifetime, so a later loss of
+	// the scheduler's advertisement makes this sidecar fail closed rather
+	// than become a second authority. Only a restart re-resolves the
+	// authority, ex: after rolling back to the placement service.
+	if p.fallback != nil {
+		if p.v2 {
+			log.Info("Actor placement is served by the scheduler. The configured placement service address is ignored for the life of this sidecar, restart it to re-resolve the placement authority")
+		}
+		p.fallback = nil
 	}
 
 	if recon.TransientPrior {
@@ -288,9 +324,8 @@ func (p *placement) handleCloseStream(ctx context.Context, closeStream *loops.Co
 	p.wg.Wait()
 	disseminator.LoopFactoryCache.CacheLoop(p.dissLoop)
 
-	// v2 per-type versions are only monotonic within a stream session; a new
-	// stream (potentially to a new leader) restarts them.
-	p.inflight.ResetVersions()
+	// A new stream session starts from its authoritative snapshot.
+	p.inflight.ResetSession()
 
 	if err := p.actorTable.HaltAll(ctx); err != nil {
 		log.Errorf("Failed to halt all actors during placement disconnection: %v", err)
