@@ -211,14 +211,16 @@ func (p *ConnectionPool) DestroyAll() {
 	p.connections = p.connections[:0]
 }
 
-// Purge connections that have been idle for longer than maxConnIdle.
+// Purge connections that have been idle for longer than maxConnIdle,
+// returning the number of connections that were closed.
 // Note that this method should not be called by multiple goroutines at the same time.
-func (p *ConnectionPool) Purge() {
+func (p *ConnectionPool) Purge() int {
 	// Need a write lock as we modify the slice
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
 	n := 0
+	purged := 0
 	for i := 0; i < len(p.connections); i++ {
 		el := p.connections[i]
 
@@ -229,6 +231,7 @@ func (p *ConnectionPool) Purge() {
 			if closer, ok := el.conn.(interface{ Close() error }); ok {
 				_ = closer.Close()
 			}
+			purged++
 			continue
 		}
 
@@ -236,6 +239,7 @@ func (p *ConnectionPool) Purge() {
 		n++
 	}
 	p.connections = p.connections[:n]
+	return purged
 }
 
 // connectionPoolConnection is used by connectionPool to store the connection.
@@ -312,8 +316,10 @@ func (p *RemoteConnectionPool) Destroy(address string, conn grpc.ClientConnInter
 // Purge connections that have been idle for longer than maxConnIdle.
 // Note that this method should not be called by multiple goroutines at the same time.
 func (p *RemoteConnectionPool) Purge() {
-	p.pool.Range(func(_ any, item any) bool {
-		item.(*ConnectionPool).Purge()
+	p.pool.Range(func(address any, item any) bool {
+		if purged := item.(*ConnectionPool).Purge(); purged > 0 {
+			log.Debugf("Purged %d expired gRPC connection(s) to %s", purged, address)
+		}
 		return true
 	})
 }
