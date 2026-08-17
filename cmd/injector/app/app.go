@@ -121,17 +121,16 @@ func Run() {
 	}
 
 	inj, err := service.NewInjector(service.Options{
-		Port:                      opts.Port,
-		ListenAddress:             opts.ListenAddress,
-		AuthUIDs:                  uids,
-		Config:                    cfg,
-		DaprClient:                daprClient,
-		KubeClient:                kubeClient,
-		ControlPlaneNamespace:     security.CurrentNamespace(),
-		ControlPlaneTrustDomain:   cfg.ControlPlaneTrustDomain,
-		Healthz:                   healthz,
-		SchedulerEnabled:          opts.SchedulerEnabled,
-		SchedulerPlacementEnabled: opts.SchedulerPlacementEnabled,
+		Port:                    opts.Port,
+		ListenAddress:           opts.ListenAddress,
+		AuthUIDs:                uids,
+		Config:                  cfg,
+		DaprClient:              daprClient,
+		KubeClient:              kubeClient,
+		ControlPlaneNamespace:   security.CurrentNamespace(),
+		ControlPlaneTrustDomain: cfg.ControlPlaneTrustDomain,
+		Healthz:                 healthz,
+		SchedulerEnabled:        opts.SchedulerEnabled,
 	})
 	if err != nil {
 		log.Fatalf("Error creating injector: %v", err)

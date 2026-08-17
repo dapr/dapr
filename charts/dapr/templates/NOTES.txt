@@ -27,7 +27,8 @@ https://dapr.io
 {{- if eq .Values.global.scheduler.placement.enabled true }}
 
 > Note: Actor placement is served by the Scheduler service (global.scheduler.placement.enabled=true).
-> The standalone placement StatefulSet is NOT deployed and sidecars are not given a placement address.
+> The standalone placement StatefulSet is NOT deployed. Sidecars keep their placement address so
+> they can return to the placement service without restarts if this is ever disabled again.
 >
 > Applications need no configuration for this: each sidecar takes actor placement from
 > whichever authority the control plane advertises, so a cluster never has two.

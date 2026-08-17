@@ -133,7 +133,6 @@ spec:
         - "--healthz-port"
         - {{ .Values.healthzPort | toString | toYaml }}
         - "--scheduler-enabled={{ .Values.global.scheduler.enabled | toString }}"
-        - "--scheduler-placement-enabled={{ .Values.global.scheduler.placement.enabled | toString }}"
         env:
         - name: DAPR_TRUST_ANCHORS_FILE
           value: /var/run/secrets/dapr.io/tls/ca.crt

@@ -98,8 +98,9 @@ global:
     placement:
       # Serves actor placement from the Scheduler service instead of the
       # standalone placement service. When enabled, the placement StatefulSet
-      # is not deployed and sidecars are not given a placement address, so
-      # there is only ever one placement authority in the cluster.
+      # is not deployed. Sidecars keep their placement address, which points
+      # at nothing while placement is undeployed and is what lets them return
+      # to it without restarts on rollback.
       #
       # Applications need no configuration of their own: sidecars take
       # placement from whichever authority the control plane advertises.
@@ -110,11 +111,10 @@ global:
       # placement while any older sidecar is connected, so the cluster keeps
       # a single placement authority throughout the rollout.
       #
-      # Enabling this needs no sidecar restarts: once the placement service
-      # stands down, sidecars adopt scheduler placement on their own.
-      # Disabling it again redeploys the placement service, and running
-      # sidecars must be restarted to return to it: they fail closed rather
-      # than switch authority live.
+      # Toggling this in either direction needs no sidecar restarts: on
+      # enabling, sidecars adopt scheduler placement once the placement
+      # service stands down, and on disabling they return to the redeployed
+      # placement service on their own.
       enabled: false
 
   daprControlPlaneOs: linux

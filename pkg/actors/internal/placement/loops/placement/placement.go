@@ -78,6 +78,15 @@ type Fallback struct {
 	V2            bool
 }
 
+// swapAlt exchanges the active connector with the kept alternative.
+func (p *placement) swapAlt() {
+	p.alt, p.connector, p.streamFactory, p.v2 = &Fallback{
+		Connector:     p.connector,
+		StreamFactory: p.streamFactory,
+		V2:            p.v2,
+	}, p.alt.Connector, p.alt.StreamFactory, p.alt.V2
+}
+
 type placement struct {
 	id        string
 	namespace string
@@ -102,11 +111,10 @@ type placement struct {
 	v2            bool
 	fallback      *Fallback
 
-	// schedulerAlt is kept once the placement service was adopted at
-	// startup, so its later stand-down for scheduler placement is adopted
-	// live. placementAlt holds the placement connector while probing.
-	schedulerAlt *Fallback
-	placementAlt *Fallback
+	// alt is the connector of whichever placement authority is not active,
+	// so an authority handing over is adopted live: every actor was already
+	// halted when the previous stream closed.
+	alt *Fallback
 
 	dissTimeout time.Duration
 
@@ -220,7 +228,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		if errors.Is(err, leader.ErrSchedulerPlacementUnsupported) {
 			if p.fallback != nil {
 				log.Warn("Scheduler cluster does not serve actor placement, using the placement service")
-				p.schedulerAlt = &Fallback{
+				p.alt = &Fallback{
 					Connector:     p.connector,
 					StreamFactory: p.streamFactory,
 					V2:            p.v2,
@@ -232,13 +240,11 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 				continue
 			}
 
-			// A probe of the scheduler found no advertisement: return to
-			// the placement service.
-			if p.placementAlt != nil {
-				p.connector = p.placementAlt.Connector
-				p.streamFactory = p.placementAlt.StreamFactory
-				p.v2 = p.placementAlt.V2
-				p.placementAlt = nil
+			// The cluster no longer serves scheduler placement: try the
+			// placement service. Only this explicit signal defects, a
+			// leaderless scheduler failover blocks in the connector instead.
+			if p.alt != nil {
+				p.swapAlt()
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -267,17 +273,9 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 
 		log.Errorf("Failed to connect to placement service: %s. Retrying...", err)
 
-		// The placement service may have stood down for scheduler placement:
-		// probe the scheduler connector for an advertisement.
-		if p.schedulerAlt != nil && p.placementAlt == nil {
-			p.placementAlt = &Fallback{
-				Connector:     p.connector,
-				StreamFactory: p.streamFactory,
-				V2:            p.v2,
-			}
-			p.connector = p.schedulerAlt.Connector
-			p.streamFactory = p.schedulerAlt.StreamFactory
-			p.v2 = p.schedulerAlt.V2
+		// The active authority may have handed over: probe the other one.
+		if p.alt != nil {
+			p.swapAlt()
 			continue
 		}
 
@@ -288,19 +286,11 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		}
 	}
 
-	// Once connected to the scheduler the choice is final, so a later loss
-	// of the advertisement fails closed rather than becoming a second
-	// authority.
+	// The other authority's connector is kept, so a later handover in
+	// either direction is adopted without a restart.
 	if p.fallback != nil {
-		if p.v2 {
-			log.Info("Actor placement is served by the scheduler. The configured placement service address is ignored for the life of this sidecar, restart it to re-resolve the placement authority")
-		}
+		p.alt = p.fallback
 		p.fallback = nil
-	}
-	if p.placementAlt != nil {
-		log.Info("Actor placement moved to the scheduler and this sidecar adopted it without a restart. The configured placement service address is ignored for the rest of this sidecar's life")
-		p.schedulerAlt = nil
-		p.placementAlt = nil
 	}
 
 	if recon.TransientPrior {

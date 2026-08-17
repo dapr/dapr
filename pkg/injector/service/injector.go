@@ -70,15 +70,14 @@ type Injector interface {
 }
 
 type Options struct {
-	AuthUIDs                  []string
-	Config                    Config
-	DaprClient                scheme.Interface
-	KubeClient                kubernetes.Interface
-	Port                      int
-	ListenAddress             string
-	Healthz                   healthz.Healthz
-	SchedulerEnabled          bool
-	SchedulerPlacementEnabled bool
+	AuthUIDs         []string
+	Config           Config
+	DaprClient       scheme.Interface
+	KubeClient       kubernetes.Interface
+	Port             int
+	ListenAddress    string
+	Healthz          healthz.Healthz
+	SchedulerEnabled bool
 
 	ControlPlaneNamespace   string
 	ControlPlaneTrustDomain string
@@ -92,13 +91,12 @@ type injector struct {
 	daprClient   scheme.Interface
 	authUIDs     []string
 
-	port                      int
-	controlPlaneNamespace     string
-	controlPlaneTrustDomain   string
-	currentTrustAnchors       currentTrustAnchorsFn
-	sentrySPIFFEID            spiffeid.ID
-	schedulerEnabled          bool
-	schedulerPlacementEnabled bool
+	port                    int
+	controlPlaneNamespace   string
+	controlPlaneTrustDomain string
+	currentTrustAnchors     currentTrustAnchorsFn
+	sentrySPIFFEID          spiffeid.ID
+	schedulerEnabled        bool
 
 	htarget              healthz.Target
 	namespaceNameMatcher func(namespace, name string) bool
@@ -155,14 +153,13 @@ func NewInjector(opts Options) (Injector, error) {
 			Handler:           mux,
 			ReadHeaderTimeout: 10 * time.Second,
 		},
-		kubeClient:                opts.KubeClient,
-		daprClient:                opts.DaprClient,
-		authUIDs:                  opts.AuthUIDs,
-		controlPlaneNamespace:     opts.ControlPlaneNamespace,
-		controlPlaneTrustDomain:   opts.ControlPlaneTrustDomain,
-		htarget:                   opts.Healthz.AddTarget("injector-service"),
-		schedulerEnabled:          opts.SchedulerEnabled,
-		schedulerPlacementEnabled: opts.SchedulerPlacementEnabled,
+		kubeClient:              opts.KubeClient,
+		daprClient:              opts.DaprClient,
+		authUIDs:                opts.AuthUIDs,
+		controlPlaneNamespace:   opts.ControlPlaneNamespace,
+		controlPlaneTrustDomain: opts.ControlPlaneTrustDomain,
+		htarget:                 opts.Healthz.AddTarget("injector-service"),
+		schedulerEnabled:        opts.SchedulerEnabled,
 	}
 
 	// All service account entries are matched using glob syntax (*, ?, [...]).
