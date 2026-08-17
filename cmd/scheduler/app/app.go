@@ -82,7 +82,23 @@ func Run() {
 		log.Fatal(err)
 	}
 
-	err = concurrency.NewRunnerManager(
+	// The controller is long-lived and runs at the top level, not inside a
+	// server incarnation: controller-runtime managers cannot be restarted, so
+	// the recreate loop below must not tear it down with a failed server. It
+	// follows each incarnation's cron via SetCron.
+	var ctrl *server.Controller
+	if modes.DaprMode(opts.Mode) == modes.KubernetesMode {
+		var cerr error
+		ctrl, cerr = server.NewController(server.ControllerOptions{
+			KubeConfig: opts.KubeConfig,
+			Healthz:    healthz,
+		})
+		if cerr != nil {
+			log.Fatalf("Fatal error creating scheduler controller: %v", cerr)
+		}
+	}
+
+	runners := []concurrency.Runner{
 		healthzserver.New(healthzserver.Options{
 			Log:     log,
 			Port:    opts.HealthzPort,
@@ -94,17 +110,6 @@ func Run() {
 			secHandler, serr := secProvider.Handler(ctx)
 			if serr != nil {
 				return serr
-			}
-			var ctrl *server.Controller
-			if modes.DaprMode(opts.Mode) == modes.KubernetesMode {
-				var cerr error
-				ctrl, cerr = server.NewController(server.ControllerOptions{
-					KubeConfig: opts.KubeConfig,
-					Healthz:    healthz,
-				})
-				if cerr != nil {
-					return cerr
-				}
 			}
 
 			getServer := func() (*server.Server, error) {
@@ -155,7 +160,12 @@ func Run() {
 				return getServer()
 			})
 		},
-	).Run(ctx)
+	}
+	if ctrl != nil {
+		runners = append(runners, ctrl.Run)
+	}
+
+	err = concurrency.NewRunnerManager(runners...).Run(ctx)
 	if err != nil {
 		log.Fatalf("Fatal error running scheduler: %v", err)
 	}
