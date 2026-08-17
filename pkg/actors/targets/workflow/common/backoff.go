@@ -19,6 +19,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"github.com/dapr/dapr/pkg/backoff"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
@@ -29,35 +30,12 @@ const (
 	RetryBackoffCap  = 2 * time.Second
 )
 
-// JitterBackoff is decorrelated exponential jitter (next = uniform(base,
-// min(cap, prev*3))): under overload, concurrent retries spread out instead of
-// re-colliding on a fixed interval.
-type JitterBackoff struct {
-	base time.Duration
-	cap  time.Duration
-	prev time.Duration
-}
+// JitterBackoff is the decorrelated exponential jitter from pkg/backoff,
+// aliased here for the workflow-internal call sites.
+type JitterBackoff = backoff.Jitter
 
 func NewJitterBackoff(base, cap time.Duration) *JitterBackoff {
-	return &JitterBackoff{
-		base: base,
-		cap:  cap,
-		prev: base,
-	}
-}
-
-func (j *JitterBackoff) Reset() {
-	j.prev = j.base
-}
-
-func (j *JitterBackoff) NextBackOff() time.Duration {
-	hi := min(j.prev*3, j.cap)
-	next := j.base
-	if hi > j.base {
-		next += rand.N(hi - j.base) //nolint:gosec // retry jitter, not security sensitive
-	}
-	j.prev = next
-	return next
+	return backoff.NewJitter(base, cap)
 }
 
 // RetryForeverPolicy returns the failure policy for one-shot workflow
