@@ -82,15 +82,6 @@ spec:
 		daprd.WithAppPort(app.Port(t)),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithResourcesDir(c.dir),
-		daprd.WithConfigManifests(t, `
-apiVersion: dapr.io/v1alpha1
-kind: Configun
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true`),
 	)
 
 	return []framework.Option{

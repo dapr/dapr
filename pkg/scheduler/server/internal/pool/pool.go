@@ -96,3 +96,16 @@ func (p *Pool) Trigger(job *internalsv1pb.JobEvent, fn func(api.TriggerResponseR
 		ResultFn: fn,
 	})
 }
+
+// SetSchedulerInfo publishes the scheduler cluster size and this scheduler's
+// index into the pool. The update fans out through the namespaces loop to
+// every connection loop so concurrency gate shares stay in sync with
+// membership changes.
+func (p *Pool) SetSchedulerInfo(count, idx int32) {
+	<-p.readyCh
+
+	p.nsLoop.Enqueue(&loops.SchedulerInfoUpdate{
+		Count: count,
+		Idx:   idx,
+	})
+}

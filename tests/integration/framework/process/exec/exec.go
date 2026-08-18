@@ -101,6 +101,21 @@ func (e *Exec) Clone(t *testing.T) *Exec {
 	return New(t, e.binPath, e.args, e.fopts...)
 }
 
+// ReplaceArg sets `--<flag>=<value>` on the next Run/Restart, replacing any
+// existing occurrence of that flag. Useful for tests that need to change a
+// daprd flag (e.g. --max-body-size) and then restart.
+func (e *Exec) ReplaceArg(t *testing.T, flag, value string) {
+	t.Helper()
+	prefix := "--" + flag + "="
+	for i, a := range e.args {
+		if strings.HasPrefix(a, prefix) {
+			e.args[i] = prefix + value
+			return
+		}
+	}
+	e.args = append(e.args, prefix+value)
+}
+
 func (e *Exec) Run(t *testing.T, ctx context.Context) {
 	t.Helper()
 
@@ -144,6 +159,22 @@ func (e *Exec) Cleanup(t *testing.T) {
 	}
 
 	kill.Interrupt(t, e.cmd)
+	e.checkExit(t)
+}
+
+// AwaitExit waits for the process to exit on its own and asserts the
+// expected exit code. Unlike Cleanup it does not signal the process,
+// which is important when callers know the process is already terminating
+// (or has terminated) and signaling could fail with "process already
+// finished" on systems that have reaped the PID.
+func (e *Exec) AwaitExit(t *testing.T) {
+	t.Helper()
+	defer func() { e.wg.Wait() }()
+
+	if !e.once.CompareAndSwap(false, true) {
+		return
+	}
+
 	e.checkExit(t)
 }
 

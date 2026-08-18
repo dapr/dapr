@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/config"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
+	"github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -43,7 +44,7 @@ type Proxy interface {
 
 type proxy struct {
 	appID              string
-	appClientFn        func() (grpc.ClientConnInterface, error)
+	appClientFn        func() (grpc.ClientConnInterface, func(bool), error)
 	connectionFactory  messageClientConnection
 	remoteAppFn        func(ctx context.Context, appID string) (remoteApp, error)
 	telemetryFn        func(context.Context) context.Context
@@ -55,7 +56,7 @@ type proxy struct {
 
 // ProxyOpts is the struct with options for NewProxy.
 type ProxyOpts struct {
-	AppClientFn        func() (grpc.ClientConnInterface, error)
+	AppClientFn        func() (grpc.ClientConnInterface, func(bool), error)
 	ConnectionFactory  messageClientConnection
 	AppID              string
 	ACL                *config.AccessControlList
@@ -121,6 +122,13 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	}
 
 	if isLocal {
+		// Normalize the method before ACL evaluation and dispatch.
+		normalizedName, normErr := method.NormalizeMethod(fullName)
+		if normErr != nil {
+			return ctx, nil, nil, nopTeardown, status.Errorf(codes.InvalidArgument, "invalid method: %v", normErr)
+		}
+		fullName = normalizedName
+
 		// proxy locally to the app
 		if p.acl != nil {
 			ok, authError := acl.ApplyAccessControlPolicies(ctx, fullName, common.HTTPExtension_NONE, false, p.acl) //nolint:nosnakecase
@@ -130,7 +138,8 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		}
 
 		var appClient grpc.ClientConnInterface
-		appClient, err = p.appClientFn()
+		var teardown func(bool)
+		appClient, teardown, err = p.appClientFn()
 		if err != nil {
 			return ctx, nil, nil, nopTeardown, err
 		}
@@ -141,7 +150,7 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		if p.appendAppTokenFn != nil {
 			outCtx = p.appendAppTokenFn(outCtx)
 		}
-		return outCtx, appClient.(*grpc.ClientConn), nil, nopTeardown, nil
+		return outCtx, appClient.(*grpc.ClientConn), nil, teardown, nil
 	}
 
 	outCtx := metadata.NewOutgoingContext(ctx, md.Copy())

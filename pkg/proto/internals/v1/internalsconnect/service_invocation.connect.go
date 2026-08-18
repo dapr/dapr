@@ -31,7 +31,7 @@ import (
 // generated with a version of connect newer than the one compiled into your binary. You can fix the
 // problem by either regenerating this code with an older version of connect or updating the connect
 // version compiled into your binary.
-const _ = connect.IsAtLeastVersion0_1_0
+const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// ServiceInvocationName is the fully-qualified name of the ServiceInvocation service.
@@ -95,31 +95,37 @@ type ServiceInvocationClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewServiceInvocationClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ServiceInvocationClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	serviceInvocationMethods := v1.File_dapr_proto_internals_v1_service_invocation_proto.Services().ByName("ServiceInvocation").Methods()
 	return &serviceInvocationClient{
 		callActor: connect.NewClient[v1.InternalInvokeRequest, v1.InternalInvokeResponse](
 			httpClient,
 			baseURL+ServiceInvocationCallActorProcedure,
-			opts...,
+			connect.WithSchema(serviceInvocationMethods.ByName("CallActor")),
+			connect.WithClientOptions(opts...),
 		),
 		callLocal: connect.NewClient[v1.InternalInvokeRequest, v1.InternalInvokeResponse](
 			httpClient,
 			baseURL+ServiceInvocationCallLocalProcedure,
-			opts...,
+			connect.WithSchema(serviceInvocationMethods.ByName("CallLocal")),
+			connect.WithClientOptions(opts...),
 		),
 		callActorReminder: connect.NewClient[v1.Reminder, emptypb.Empty](
 			httpClient,
 			baseURL+ServiceInvocationCallActorReminderProcedure,
-			opts...,
+			connect.WithSchema(serviceInvocationMethods.ByName("CallActorReminder")),
+			connect.WithClientOptions(opts...),
 		),
 		callLocalStream: connect.NewClient[v1.InternalInvokeRequestStream, v1.InternalInvokeResponseStream](
 			httpClient,
 			baseURL+ServiceInvocationCallLocalStreamProcedure,
-			opts...,
+			connect.WithSchema(serviceInvocationMethods.ByName("CallLocalStream")),
+			connect.WithClientOptions(opts...),
 		),
 		callActorStream: connect.NewClient[v1.InternalInvokeRequest, v1.InternalInvokeResponse](
 			httpClient,
 			baseURL+ServiceInvocationCallActorStreamProcedure,
-			opts...,
+			connect.WithSchema(serviceInvocationMethods.ByName("CallActorStream")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -188,30 +194,36 @@ type ServiceInvocationHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewServiceInvocationHandler(svc ServiceInvocationHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	serviceInvocationMethods := v1.File_dapr_proto_internals_v1_service_invocation_proto.Services().ByName("ServiceInvocation").Methods()
 	serviceInvocationCallActorHandler := connect.NewUnaryHandler(
 		ServiceInvocationCallActorProcedure,
 		svc.CallActor,
-		opts...,
+		connect.WithSchema(serviceInvocationMethods.ByName("CallActor")),
+		connect.WithHandlerOptions(opts...),
 	)
 	serviceInvocationCallLocalHandler := connect.NewUnaryHandler(
 		ServiceInvocationCallLocalProcedure,
 		svc.CallLocal,
-		opts...,
+		connect.WithSchema(serviceInvocationMethods.ByName("CallLocal")),
+		connect.WithHandlerOptions(opts...),
 	)
 	serviceInvocationCallActorReminderHandler := connect.NewUnaryHandler(
 		ServiceInvocationCallActorReminderProcedure,
 		svc.CallActorReminder,
-		opts...,
+		connect.WithSchema(serviceInvocationMethods.ByName("CallActorReminder")),
+		connect.WithHandlerOptions(opts...),
 	)
 	serviceInvocationCallLocalStreamHandler := connect.NewBidiStreamHandler(
 		ServiceInvocationCallLocalStreamProcedure,
 		svc.CallLocalStream,
-		opts...,
+		connect.WithSchema(serviceInvocationMethods.ByName("CallLocalStream")),
+		connect.WithHandlerOptions(opts...),
 	)
 	serviceInvocationCallActorStreamHandler := connect.NewServerStreamHandler(
 		ServiceInvocationCallActorStreamProcedure,
 		svc.CallActorStream,
-		opts...,
+		connect.WithSchema(serviceInvocationMethods.ByName("CallActorStream")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.internals.v1.ServiceInvocation/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

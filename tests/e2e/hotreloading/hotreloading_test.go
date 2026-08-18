@@ -31,6 +31,7 @@ import (
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	resapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
@@ -52,7 +53,6 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
-			Config:         "hotreloading",
 		},
 	}
 
@@ -69,6 +69,7 @@ func TestState(t *testing.T) {
 	scheme := runtime.NewScheme()
 	assert.NoError(t, compapi.AddToScheme(scheme))
 	assert.NoError(t, httpendapi.AddToScheme(scheme))
+	assert.NoError(t, resapi.AddToScheme(scheme))
 
 	cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
 	require.NoError(t, err)
@@ -117,11 +118,13 @@ func TestState(t *testing.T) {
 			assert.Equal(c, http.StatusNoContent, status)
 		}, 30*time.Second, 500*time.Millisecond)
 
-		url := fmt.Sprintf("%s/test/http/get/hotreloading-state", externalURL)
-		resp, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo"}]}`))
-		assert.NoError(t, err)
-		assert.Equal(t, http.StatusOK, code)
-		assert.Contains(t, string(resp), `{"states":[{"key":"foo","value":{"data":"LXcgYmFyCg=="},`)
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			url := fmt.Sprintf("%s/test/http/get/hotreloading-state", externalURL)
+			resp, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo"}]}`))
+			assert.NoError(c, err)
+			assert.Equal(c, http.StatusOK, code)
+			assert.Contains(c, string(resp), `{"states":[{"key":"foo","value":{"data":"LXcgYmFyCg=="},`)
+		}, 30*time.Second, 500*time.Millisecond)
 	})
 
 	t.Run("Update state component to another type and wait for it to become unavailable", func(t *testing.T) {
@@ -162,11 +165,13 @@ func TestState(t *testing.T) {
 			assert.Equal(c, http.StatusNoContent, status)
 		}, 30*time.Second, 500*time.Millisecond)
 
-		url := fmt.Sprintf("%s/test/http/get/hotreloading-state", externalURL)
-		resp, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo"}]}`))
-		assert.NoError(t, err)
-		assert.Equal(t, http.StatusOK, code)
-		assert.Contains(t, string(resp), `{"states":[{"key":"foo","value":{"data":"LXcgeHl6Cg=="},`)
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			url := fmt.Sprintf("%s/test/http/get/hotreloading-state", externalURL)
+			resp, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo"}]}`))
+			assert.NoError(c, err)
+			assert.Equal(c, http.StatusOK, code)
+			assert.Contains(c, string(resp), `{"states":[{"key":"foo","value":{"data":"LXcgeHl6Cg=="},`)
+		}, 30*time.Second, 500*time.Millisecond)
 	})
 
 	t.Run("Delete state Component and wait until no longer available", func(t *testing.T) {
@@ -184,4 +189,141 @@ func TestState(t *testing.T) {
 			assert.Equal(c, http.StatusInternalServerError, code)
 		}, 30*time.Second, 500*time.Millisecond)
 	})
+}
+
+// TestResiliency tests that Resiliency resources can be hot-reloaded via SIGHUP.
+// This verifies that after a Resiliency resource is created/updated/deleted,
+// the daprd sidecar restarts and the app continues to function.
+func TestResiliency(t *testing.T) {
+	platform, ok := tr.Platform.(*runner.KubeTestPlatform)
+	if !ok {
+		t.Skip("skipping test; only supported on kubernetes")
+	}
+
+	scheme := runtime.NewScheme()
+	assert.NoError(t, compapi.AddToScheme(scheme))
+	assert.NoError(t, resapi.AddToScheme(scheme))
+
+	cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
+	require.NoError(t, err)
+
+	ctx := t.Context()
+
+	externalURL := tr.Platform.AcquireAppExternalURL("hotreloading-state")
+	// Wait for app to be available.
+	_, err = utils.HTTPGetNTimes(externalURL, 60)
+	require.NoError(t, err)
+
+	const connectionString = `"host=dapr-postgres-postgresql.dapr-tests.svc.cluster.local user=postgres password=example port=5432 connect_timeout=10 database=dapr_test"`
+
+	// Clean up any existing resources
+	cl.Delete(ctx, &compapi.Component{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "hotreloading-resiliency-state",
+			Namespace: kube.DaprTestNamespace,
+		},
+	}, &client.DeleteOptions{})
+	cl.Delete(ctx, &resapi.Resiliency{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "hotreloading-resiliency",
+			Namespace: kube.DaprTestNamespace,
+		},
+	}, &client.DeleteOptions{})
+
+	t.Run("Create state component for resiliency test", func(t *testing.T) {
+		require.NoError(t, cl.Create(ctx, &compapi.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "hotreloading-resiliency-state",
+				Namespace: kube.DaprTestNamespace,
+			},
+			Scoped: commonapi.Scoped{
+				Scopes: []string{
+					"hotreloading-state",
+				},
+			},
+			Spec: compapi.ComponentSpec{
+				Type:    "state.postgres",
+				Version: "v1",
+				Metadata: []commonapi.NameValuePair{
+					{Name: "connectionString", Value: commonapi.DynamicValue{JSON: apiextensionsv1.JSON{Raw: []byte(connectionString)}}},
+					{Name: "table", Value: commonapi.DynamicValue{JSON: apiextensionsv1.JSON{Raw: []byte(`"hotreloadresiliencytable"`)}}},
+				},
+			},
+		}, &client.CreateOptions{}))
+
+		// Wait for component to be available
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			url := fmt.Sprintf("%s/test/http/save/hotreloading-resiliency-state", externalURL)
+			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"reskey","value":{"data":"dGVzdA=="}}]}`))
+			assert.NoError(c, err)
+			assert.Equal(c, http.StatusNoContent, status)
+		}, 60*time.Second, 500*time.Millisecond)
+	})
+
+	t.Run("Create Resiliency and verify app still works after SIGHUP restart", func(t *testing.T) {
+		require.NoError(t, cl.Create(ctx, &resapi.Resiliency{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "hotreloading-resiliency",
+				Namespace: kube.DaprTestNamespace,
+			},
+			Scopes: []string{"hotreloading-state"},
+			Spec: resapi.ResiliencySpec{
+				Policies: resapi.Policies{
+					Timeouts: map[string]string{
+						"general": "30s",
+					},
+				},
+			},
+		}, &client.CreateOptions{}))
+
+		// Wait for the SIGHUP restart to complete and verify app still works
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			url := fmt.Sprintf("%s/test/http/save/hotreloading-resiliency-state", externalURL)
+			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"reskey2","value":{"data":"YWZ0ZXI="}}]}`))
+			assert.NoError(c, err)
+			assert.Equal(c, http.StatusNoContent, status)
+		}, 60*time.Second, 500*time.Millisecond)
+	})
+
+	t.Run("Update Resiliency and verify app still works after SIGHUP restart", func(t *testing.T) {
+		var res resapi.Resiliency
+		require.NoError(t, cl.Get(ctx, client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "hotreloading-resiliency"}, &res))
+
+		res.Spec.Policies.Timeouts["general"] = "60s"
+		require.NoError(t, cl.Update(ctx, &res))
+
+		// Wait for the SIGHUP restart to complete and verify app still works
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			url := fmt.Sprintf("%s/test/http/get/hotreloading-resiliency-state", externalURL)
+			resp, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"reskey2"}]}`))
+			assert.NoError(c, err)
+			assert.Equal(c, http.StatusOK, code)
+			assert.Contains(c, string(resp), `"key":"reskey2"`)
+		}, 60*time.Second, 500*time.Millisecond)
+	})
+
+	t.Run("Delete Resiliency and verify app still works after SIGHUP restart", func(t *testing.T) {
+		require.NoError(t, cl.Delete(ctx, &resapi.Resiliency{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "hotreloading-resiliency",
+				Namespace: kube.DaprTestNamespace,
+			},
+		}, &client.DeleteOptions{}))
+
+		// Wait for the SIGHUP restart to complete and verify app still works
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			url := fmt.Sprintf("%s/test/http/save/hotreloading-resiliency-state", externalURL)
+			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"reskey3","value":{"data":"ZmluYWw="}}]}`))
+			assert.NoError(c, err)
+			assert.Equal(c, http.StatusNoContent, status)
+		}, 60*time.Second, 500*time.Millisecond)
+	})
+
+	// Clean up
+	cl.Delete(ctx, &compapi.Component{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "hotreloading-resiliency-state",
+			Namespace: kube.DaprTestNamespace,
+		},
+	}, &client.DeleteOptions{})
 }

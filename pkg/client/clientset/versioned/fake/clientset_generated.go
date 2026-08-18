@@ -30,6 +30,8 @@ import (
 	fakecomponentsv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/components/v1alpha1/fake"
 	configurationv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/configuration/v1alpha1"
 	fakeconfigurationv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/configuration/v1alpha1/fake"
+	mcpserverv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/mcpserver/v1alpha1"
+	fakemcpserverv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/mcpserver/v1alpha1/fake"
 )
 
 // NewSimpleClientset returns a clientset that will respond with the provided objects.
@@ -87,4 +89,9 @@ func (c *Clientset) ComponentsV1alpha1() componentsv1alpha1.ComponentsV1alpha1In
 // ConfigurationV1alpha1 retrieves the ConfigurationV1alpha1Client
 func (c *Clientset) ConfigurationV1alpha1() configurationv1alpha1.ConfigurationV1alpha1Interface {
 	return &fakeconfigurationv1alpha1.FakeConfigurationV1alpha1{Fake: &c.Fake}
+}
+
+// MCPServerV1alpha1 retrieves the MCPServerV1alpha1Client
+func (c *Clientset) MCPServerV1alpha1() mcpserverv1alpha1.MCPServerV1alpha1Interface {
+	return &fakemcpserverv1alpha1.FakeMCPServerV1alpha1{Fake: &c.Fake}
 }

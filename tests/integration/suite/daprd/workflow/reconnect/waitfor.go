@@ -52,7 +52,7 @@ func (w *waitfor) Run(t *testing.T, ctx context.Context) {
 	w.workflow.WaitUntilRunning(t, ctx)
 
 	var here atomic.Bool
-	w.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	w.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		here.Store(true)
 		return nil, ctx.WaitForSingleEvent("bar", time.Minute).Await(nil)
 	})
@@ -64,7 +64,7 @@ func (w *waitfor) Run(t *testing.T, ctx context.Context) {
 	client2 := client.NewTaskHubGrpcClient(w.workflow.DaprN(1).GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client2.StartWorkItemListener(ctxA, w.workflow.Registry()))
 
-	id, err := client1.ScheduleNewOrchestration(ctx, "foo")
+	id, err := client1.ScheduleNewWorkflow(ctx, "foo")
 	require.NoError(t, err)
 
 	assert.Eventually(t, here.Load, time.Second*10, time.Millisecond*10)
@@ -76,7 +76,7 @@ func (w *waitfor) Run(t *testing.T, ctx context.Context) {
 		errCh <- client1.RaiseEvent(ctx, id, "bar")
 	}()
 
-	_, err = client1.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client1.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	select {

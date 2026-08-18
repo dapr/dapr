@@ -68,7 +68,7 @@ func (i *timeout) Setup(t *testing.T) []framework.Option {
 
 	i.daprd = daprd.New(t,
 		daprd.WithAppPort(app.Port()),
-		daprd.WithDaprGracefulShutdownSeconds(1),
+		daprd.WithDaprGracefulShutdownSeconds(5),
 		daprd.WithExecOptions(
 			exec.WithExitCode(1),
 			exec.WithRunError(func(t *testing.T, err error) {

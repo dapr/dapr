@@ -49,16 +49,16 @@ func (i *input) Setup(t *testing.T) []framework.Option {
 func (i *input) Run(t *testing.T, ctx context.Context) {
 	i.workflow.WaitUntilRunning(t, ctx)
 
-	i.workflow.Registry().AddOrchestratorN("simple-timer", func(ctx *task.OrchestrationContext) (any, error) {
+	i.workflow.Registry().AddWorkflowN("simple-timer", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CreateTimer(time.Second).Await(nil))
 		return nil, nil
 	})
 
 	client := i.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "simple-timer", api.WithInstanceID("abc"))
+	id, err := client.ScheduleNewWorkflow(ctx, "simple-timer", api.WithInstanceID("abc"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	_, err = client.RerunWorkflowFromEvent(ctx, id, 0, api.WithRerunInput("hello"))

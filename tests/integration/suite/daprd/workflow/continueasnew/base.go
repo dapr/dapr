@@ -49,7 +49,7 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 
 	var cont atomic.Bool
 	var called atomic.Int64
-	b.workflow.Registry().AddOrchestratorN("can", func(ctx *task.OrchestrationContext) (any, error) {
+	b.workflow.Registry().AddWorkflowN("can", func(ctx *task.WorkflowContext) (any, error) {
 		defer called.Add(1)
 
 		var input string
@@ -67,12 +67,12 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 	})
 	client := b.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "can",
+	id, err := client.ScheduleNewWorkflow(ctx, "can",
 		api.WithInstanceID("cani"),
 		api.WithInput("first call"),
 	)
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	assert.Equal(t, int64(2), called.Load())

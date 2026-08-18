@@ -28,23 +28,24 @@ type Option func(*options)
 type options struct {
 	execOpts []exec.Option
 
-	id                  string
-	logLevel            string
-	port                int
-	healthzPort         int
-	metricsPort         int
-	initialCluster      string
-	initialClusterPorts []int
-	tlsEnabled          bool
-	sentryAddress       *string
-	trustDomain         *string
-	trustAnchorsFile    *string
-	maxAPILevel         *int
-	minAPILevel         *int
-	metadataEnabled     bool
-	mode                *string
-	namespace           string
-	disseminateTimeout  *time.Duration
+	id                        string
+	logLevel                  string
+	port                      int
+	healthzPort               int
+	metricsPort               int
+	initialCluster            string
+	initialClusterPorts       []int
+	tlsEnabled                bool
+	sentryAddress             *string
+	trustDomain               *string
+	trustAnchorsFile          *string
+	maxAPILevel               *int
+	minAPILevel               *int
+	metadataEnabled           bool
+	mode                      *string
+	namespace                 string
+	disseminateTimeout        *time.Duration
+	disseminateCoalesceWindow *time.Duration
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -155,5 +156,11 @@ func WithNamespace(namespace string) Option {
 func WithDisseminateTimeout(timeout time.Duration) Option {
 	return func(o *options) {
 		o.disseminateTimeout = &timeout
+	}
+}
+
+func WithDisseminateCoalesceWindow(window time.Duration) Option {
+	return func(o *options) {
+		o.disseminateCoalesceWindow = &window
 	}
 }

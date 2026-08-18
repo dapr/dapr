@@ -49,14 +49,24 @@ type namespaces struct {
 	connections map[string]*connectionLoop
 	loop        loop.Interface[loops.EventNS]
 
+	// schedulerCount and schedulerIdx are the latest view of cluster
+	// membership pushed by the leadership loop via SchedulerInfoUpdate.
+	// Accessed only from the namespaces loop goroutine. Defaults to
+	// {count: 1, idx: 0} so the first connection has sane gate shares
+	// before the first leadership event arrives.
+	schedulerCount int32
+	schedulerIdx   int32
+
 	wg sync.WaitGroup
 }
 
 func New(opts Options) loop.Interface[loops.EventNS] {
 	ns := &namespaces{
-		cron:        opts.Cron,
-		cancelPool:  opts.CancelPool,
-		connections: make(map[string]*connectionLoop),
+		cron:           opts.Cron,
+		cancelPool:     opts.CancelPool,
+		connections:    make(map[string]*connectionLoop),
+		schedulerCount: 1,
+		schedulerIdx:   0,
 	}
 
 	ns.loop = loop.New[loops.EventNS](1024).NewLoop(ns)
@@ -69,8 +79,12 @@ func (n *namespaces) Handle(ctx context.Context, event loops.EventNS) error {
 		return n.handleAdd(ctx, e)
 	case *loops.ConnCloseStream:
 		return n.handleCloseStream(e)
+	case *loops.ConnCloseNamespace:
+		return n.handleCloseNamespace(e)
 	case *loops.TriggerRequest:
 		return n.handleTriggerRequest(e)
+	case *loops.SchedulerInfoUpdate:
+		return n.handleSchedulerInfoUpdate(e)
 	case *loops.Shutdown:
 		return n.handleShutdown(e)
 	default:
@@ -101,11 +115,30 @@ func (n *namespaces) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 		}
 
 		n.connections[add.Request.GetNamespace()] = connLoop
+
+		// Seed the new connections loop with the current scheduler view so
+		// its concurrency gates start with correct local shares without
+		// waiting for the next leadership event.
+		loop.Enqueue(&loops.SchedulerInfoUpdate{
+			Count: n.schedulerCount,
+			Idx:   n.schedulerIdx,
+		})
 	}
 
 	connLoop.connections++
 	connLoop.loop.Enqueue(add)
 
+	return nil
+}
+
+// handleSchedulerInfoUpdate caches the latest cluster view and fans it out to
+// every existing connection loop.
+func (n *namespaces) handleSchedulerInfoUpdate(e *loops.SchedulerInfoUpdate) error {
+	n.schedulerCount = e.Count
+	n.schedulerIdx = e.Idx
+	for _, connLoop := range n.connections {
+		connLoop.loop.Enqueue(e)
+	}
 	return nil
 }
 
@@ -116,13 +149,31 @@ func (n *namespaces) handleCloseStream(closeStream *loops.ConnCloseStream) error
 		return nil
 	}
 
-	connLoop.connections--
+	// Guard against a stray duplicate close event: an unguarded decrement can
+	// wrap the counter. Namespace deletion is NOT decided here: the
+	// connections loop owns the authoritative stream set and confirms
+	// emptiness with a ConnCloseNamespace event, so a stray or duplicate
+	// close cannot delete a namespace that still has live streams.
+	if connLoop.connections > 0 {
+		connLoop.connections--
+	}
 	connLoop.loop.Enqueue(closeStream)
 
-	if connLoop.connections == 0 {
-		delete(n.connections, closeStream.Namespace)
-		connLoop.loop.Close(new(loops.Shutdown))
+	return nil
+}
+
+// handleCloseNamespace deletes a namespace once its connections loop has
+// confirmed its last stream is gone AND no add has arrived since (the
+// connection count covers the window between the confirmation being enqueued
+// and processed).
+func (n *namespaces) handleCloseNamespace(closeNS *loops.ConnCloseNamespace) error {
+	connLoop, ok := n.connections[closeNS.Namespace]
+	if !ok || connLoop.connections != 0 {
+		return nil
 	}
+
+	delete(n.connections, closeNS.Namespace)
+	connLoop.loop.Close(new(loops.Shutdown))
 
 	return nil
 }

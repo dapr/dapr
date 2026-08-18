@@ -80,6 +80,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.DisableTokenVolume = !token.HasKubernetesToken()
 	sidecar.KubeClusterDomain = i.config.KubeClusterDomain
 	sidecar.SchedulerEnabled = i.schedulerEnabled
+	sidecar.EnableNativeSidecar = i.config.GetNativeSidecarEnabled()
 
 	// Set addresses for actor services only if it's not explicitly globally disabled
 	// Even if actors are disabled, however, the placement-host-address flag will still be included if explicitly set in the annotation dapr.io/placement-host-address

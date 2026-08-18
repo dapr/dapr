@@ -89,6 +89,10 @@ func (*DeleteJobRequest) AppendSpanAttributes(rpcMethod string, m map[string]str
 	// TODO
 }
 
+func (*DeleteJobsByPrefixRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
 func (*DecryptRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
@@ -138,6 +142,10 @@ func (*GetWorkflowRequest) AppendSpanAttributes(rpcMethod string, m map[string]s
 }
 
 func (*ListActorRemindersRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
+func (*ListJobsRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
 
@@ -206,6 +214,26 @@ func (*SubscribeTopicEventsRequestAlpha1) AppendSpanAttributes(rpcMethod string,
 }
 
 func (*SubscribeTopicEventsRequestAlpha1_InitialRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
+func (*SubscribeActorEventsRequestAlpha1_InitialRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
+func (*SubscribeActorEventsResponseAlpha1_InvokeRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
+func (*SubscribeActorEventsResponseAlpha1_ReminderRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
+func (*SubscribeActorEventsResponseAlpha1_TimerRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
+func (*SubscribeActorEventsResponseAlpha1_DeactivateRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
 

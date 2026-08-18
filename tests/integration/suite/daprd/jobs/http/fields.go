@@ -58,7 +58,7 @@ func (f *fields) Run(t *testing.T, ctx context.Context) {
 	f.scheduler.WaitUntilRunning(t, ctx)
 	f.daprd.WaitUntilRunning(t, ctx)
 
-	f.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/test", strings.NewReader(`{
+	f.daprd.HTTPPost2xx(t, ctx, "/v1.0/jobs/test", strings.NewReader(`{
 "schedule": "@every 1m",
 "repeats": 123,
 "dueTime": "1000s",
@@ -72,7 +72,7 @@ func (f *fields) Run(t *testing.T, ctx context.Context) {
 }
 }`))
 
-	job, err := f.daprd.GRPCClient(t, ctx).GetJobAlpha1(ctx,
+	job, err := f.daprd.GRPCClient(t, ctx).GetJob(ctx,
 		&runtimev1pb.GetJobRequest{Name: "test"},
 	)
 	require.NoError(t, err)

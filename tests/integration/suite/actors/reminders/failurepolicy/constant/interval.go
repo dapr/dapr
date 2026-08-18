@@ -60,6 +60,7 @@ func (i *interval) Setup(t *testing.T) []framework.Option {
 
 func (i *interval) Run(t *testing.T, ctx context.Context) {
 	i.actors.WaitUntilRunning(t, ctx)
+	i.actors.Scheduler().WaitUntilSidecarsConnected(t, ctx, 3)
 
 	_, err := i.actors.GRPCClient(t, ctx).RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: "foo",

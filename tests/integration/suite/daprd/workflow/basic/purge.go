@@ -97,15 +97,15 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("purge", func(t *testing.T) {
 		r := task.NewTaskRegistry()
-		r.AddOrchestratorN("Root", func(ctx *task.OrchestrationContext) (any, error) {
-			ctx.CallSubOrchestrator("L1", task.WithSubOrchestrationInstanceID(string(ctx.ID)+"_L1")).Await(nil)
+		r.AddWorkflowN("Root", func(ctx *task.WorkflowContext) (any, error) {
+			ctx.CallChildWorkflow("L1", task.WithChildWorkflowInstanceID(string(ctx.ID)+"_L1")).Await(nil)
 			return nil, nil
 		})
-		r.AddOrchestratorN("L1", func(ctx *task.OrchestrationContext) (any, error) {
-			ctx.CallSubOrchestrator("L2", task.WithSubOrchestrationInstanceID(string(ctx.ID)+"_L2")).Await(nil)
+		r.AddWorkflowN("L1", func(ctx *task.WorkflowContext) (any, error) {
+			ctx.CallChildWorkflow("L2", task.WithChildWorkflowInstanceID(string(ctx.ID)+"_L2")).Await(nil)
 			return nil, nil
 		})
-		r.AddOrchestratorN("L2", func(ctx *task.OrchestrationContext) (any, error) {
+		r.AddWorkflowN("L2", func(ctx *task.WorkflowContext) (any, error) {
 			ctx.CreateTimer(2 * time.Second).Await(nil)
 			return nil, nil
 		})
@@ -116,7 +116,7 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 		// Run the orchestration, which will block waiting for external events
 		id := api.InstanceID(p.startWorkflow(ctx, t, "Root", ""))
 
-		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
+		metadata, err := backendClient.WaitForWorkflowCompletion(ctx, id)
 		require.NoError(t, err)
 		require.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), metadata.GetRuntimeStatus().String())
 
@@ -124,14 +124,14 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 		p.purgeWorkflow(t, ctx, string(id))
 
 		// Verify that root Orchestration has been purged
-		_, err = backendClient.FetchOrchestrationMetadata(ctx, id)
+		_, err = backendClient.FetchWorkflowMetadata(ctx, id)
 		assert.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
 
 		// Verify that L1 and L2 orchestrations have been purged
-		_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1")
+		_, err = backendClient.FetchWorkflowMetadata(ctx, id+"_L1")
 		require.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
 
-		_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1_L2")
+		_, err = backendClient.FetchWorkflowMetadata(ctx, id+"_L1_L2")
 		require.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
 	})
 }

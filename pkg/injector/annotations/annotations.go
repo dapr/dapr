@@ -69,7 +69,9 @@ const (
 	KeyAppHealthProbeInterval           = "dapr.io/app-health-probe-interval"
 	KeyAppHealthProbeTimeout            = "dapr.io/app-health-probe-timeout"
 	KeyAppHealthThreshold               = "dapr.io/app-health-threshold"
+	KeyAppBindingOptionsTimeout         = "dapr.io/app-binding-options-timeout"
 	KeyPlacementHostAddresses           = "dapr.io/placement-host-address"
+	KeyActorsDisseminateTimeout         = "dapr.io/actors-disseminate-timeout"
 	KeySchedulerHostAddresses           = "dapr.io/scheduler-host-address"
 	KeyPluggableComponents              = "dapr.io/pluggable-components"
 	KeyPluggableComponentsSocketsFolder = "dapr.io/pluggable-components-sockets-folder"
@@ -79,4 +81,5 @@ const (
 	KeySentryRequestJwtAudiences        = "dapr.io/sentry-request-jwt-audiences"
 	KeySidecarSvcAnnotations            = "dapr.io/sidecar-svc-annotations"
 	KeyDisableInitEndpoints             = "dapr.io/disable-init-endpoints"
+	KeyEnableNativeSidecar              = "dapr.io/enable-native-sidecar"
 )

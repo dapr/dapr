@@ -59,59 +59,60 @@ spec:
 func (r *retention) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
-	var runv1 atomic.Bool
-	var runv2 atomic.Bool
+	var runv1, runv2 atomic.Bool
 
-	wf1 := func(ctx *task.OrchestrationContext) (any, error) {
-		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
-			return nil, err
+	makeWF := func(ran *atomic.Bool) task.Workflow {
+		return func(ctx *task.WorkflowContext) (any, error) {
+			if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+				return nil, err
+			}
+			ran.Store(true)
+			return nil, nil
 		}
-		runv1.Store(true)
-		return nil, nil
 	}
 
-	r.workflow.Registry().AddVersionedOrchestratorN("workflow", "v1", true, wf1)
+	require.NoError(t, r.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, makeWF(&runv1)))
 
 	clientCtx, cancelClient := context.WithCancel(ctx)
 	defer cancelClient()
 	client := r.workflow.BackendClient(t, clientCtx)
-	id, err := client.ScheduleNewOrchestration(ctx, "workflow")
+	id, err := client.ScheduleNewWorkflow(ctx, "workflow")
 	require.NoError(t, err)
 
-	wf.WaitForOrchestratorStartedEvent(t, ctx, client, id)
+	wf.WaitForWorkflowStartedEvent(t, ctx, client, id)
 
 	cancelClient()
 	r.workflow.ResetRegistry(t)
 
-	r.workflow.Registry().AddVersionedOrchestratorN("workflow", "v2", true, func(ctx *task.OrchestrationContext) (any, error) {
-		if err = ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
-			return nil, err
-		}
-		runv2.Store(true)
-		return nil, nil
-	})
+	require.NoError(t, r.workflow.Registry().AddVersionedWorkflowN("workflow", "v2", true, makeWF(&runv2)))
 
 	clientCtx, cancelClient = context.WithCancel(ctx)
 	defer cancelClient()
 	client = r.workflow.BackendClient(t, clientCtx)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		require.NoError(c, client.RaiseEvent(ctx, id, "Continue"))
+		assert.NoError(c, client.RaiseEvent(ctx, id, "Continue"))
 	}, 10*time.Second, 10*time.Millisecond)
 
 	wf.WaitForRuntimeStatus(t, ctx, client, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_STALLED)
+	assert.False(t, runv2.Load(), "v2 must not have executed against a v1 workflow instance")
 
 	cancelClient()
+	r.workflow.WaitForNoConnectedWorkers(t, ctx)
 	r.workflow.ResetRegistry(t)
-	r.workflow.Registry().AddVersionedOrchestratorN("workflow", "v1", true, wf1)
+	require.NoError(t, r.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, makeWF(&runv1)))
 
 	clientCtx, cancelClient = context.WithCancel(ctx)
 	defer cancelClient()
 	client = r.workflow.BackendClient(t, clientCtx)
 
+	wf.WaitForRuntimeStatus(t, ctx, client, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED)
+	assert.True(t, runv1.Load(), "v1 must have executed after re-registration")
+	assert.False(t, runv2.Load(), "v2 must never have executed for this v1 instance")
+
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		ids, err := client.ListInstanceIDs(ctx)
-		require.NoError(c, err)
+		assert.NoError(c, err)
 		assert.Empty(c, ids.GetInstanceIds())
 	}, time.Second*10, 10*time.Millisecond)
 }

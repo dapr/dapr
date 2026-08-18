@@ -18,6 +18,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -37,13 +38,26 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
+	"github.com/dapr/kit/logger"
 )
 
 const (
 	// needed to load balance requests for target services with multiple endpoints, ie. multiple instances.
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
 	dialTimeout       = 30 * time.Second
-	maxConnIdle       = 3 * time.Minute
+
+	// appConnectTimeout is the budget gRPC gives a single connection attempt to
+	// the app, covering the TCP connect and the HTTP/2 handshake. This matches
+	// gRPC's own default; it does not bound how long a request waits, which
+	// remains governed by the caller's context.
+	appConnectTimeout = 20 * time.Second
+)
+
+var log = logger.NewLogger("dapr.runtime.grpc.manager")
+
+var (
+	maxConnIdle       = durationFromEnv("DAPR_GRPC_MAX_CONN_IDLE", 3*time.Minute)
+	collectorInterval = durationFromEnv("DAPR_GRPC_CONN_COLLECTOR_INTERVAL", 45*time.Second)
 )
 
 // ConnCreatorFn is a function that returns a gRPC connection
@@ -68,7 +82,6 @@ type Manager struct {
 	channelConfig *AppChannelConfig
 	localConn     *ConnectionPool
 	localConnLock sync.RWMutex
-	appClientConn grpc.ClientConnInterface
 	sec           security.Handler
 	wg            sync.WaitGroup
 	closed        atomic.Bool
@@ -93,15 +106,18 @@ func (g *Manager) GetAppChannel() (channel.AppChannel, error) {
 	g.localConnLock.RLock()
 	defer g.localConnLock.RUnlock()
 
-	conn, err := g.GetAppClient()
-	if err != nil {
-		return nil, err
+	connFn := func() (*grpc.ClientConn, func(bool), error) {
+		conn, teardown, err := g.GetAppClient()
+		if err != nil {
+			return nil, nil, err
+		}
+		return conn.(*grpc.ClientConn), teardown, nil
 	}
 
 	ch := grpcChannel.CreateLocalChannel(
 		g.channelConfig.Port,
 		g.channelConfig.MaxConcurrency,
-		conn.(*grpc.ClientConn),
+		connFn,
 		g.channelConfig.TracingSpec,
 		g.channelConfig.MaxRequestBodySize,
 		g.channelConfig.ReadBufferSize,
@@ -113,22 +129,24 @@ func (g *Manager) GetAppChannel() (channel.AppChannel, error) {
 
 // GetAppClient returns the gRPC connection to the local app.
 // If there's no active connection to the app, it creates one.
-func (g *Manager) GetAppClient() (grpc.ClientConnInterface, error) {
-	if g.appClientConn == nil {
-		c, err := g.defaultLocalConnCreateFn()
-		if err != nil {
-			return nil, err
-		}
-
-		g.appClientConn = c
+func (g *Manager) GetAppClient() (grpc.ClientConnInterface, func(bool), error) {
+	conn, err := g.localConn.Get(g.defaultLocalConnCreateFn)
+	if err != nil {
+		return nil, nopTeardown, err
 	}
 
-	return g.appClientConn, nil
+	return conn, func(destroy bool) {
+		if destroy {
+			g.localConn.Destroy(conn)
+		} else {
+			g.localConn.Release(conn)
+		}
+	}, nil
 }
 
 // SetAppClientConn is used by tests to override the default connection
 func (g *Manager) SetAppClientConn(conn grpc.ClientConnInterface) {
-	g.appClientConn = conn
+	g.localConn.Register(conn)
 }
 
 func (g *Manager) defaultLocalConnCreateFn() (grpc.ClientConnInterface, error) {
@@ -158,7 +176,7 @@ func (g *Manager) createLocalConnection(parentCtx context.Context, port int, ena
 	}
 	opts = append(opts, grpc.WithConnectParams(grpc.ConnectParams{
 		Backoff:           backoff.DefaultConfig,
-		MinConnectTimeout: 1 * time.Second,
+		MinConnectTimeout: appConnectTimeout,
 	}))
 
 	dialPrefix := GetDialAddressPrefix(g.mode)
@@ -243,7 +261,7 @@ func (g *Manager) connTeardownFactory(address string, conn *grpc.ClientConn) fun
 // StartCollector starts a background goroutine that periodically watches for expired connections and purges them.
 func (g *Manager) StartCollector() {
 	g.wg.Go(func() {
-		t := time.NewTicker(45 * time.Second)
+		t := time.NewTicker(collectorInterval)
 		defer t.Stop()
 
 		for {
@@ -282,4 +300,19 @@ func (g *Manager) AddAppTokenToContext(ctx context.Context) context.Context {
 		return md.AppendToOutgoingContext(ctx, securityConsts.APITokenHeader, g.channelConfig.AppAPIToken)
 	}
 	return ctx
+}
+
+func durationFromEnv(name string, def time.Duration) time.Duration {
+	v, ok := os.LookupEnv(name)
+	if !ok {
+		return def
+	}
+
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		log.Warnf("Ignoring invalid duration %q in %s; using default %s", v, name, def)
+		return def
+	}
+
+	return d
 }

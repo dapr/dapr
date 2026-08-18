@@ -26,6 +26,8 @@ import (
 const (
 	// Path for patching containers.
 	PatchPathContainers = "/spec/containers"
+	// Path for patching init containers (used for native sidecars).
+	PatchPathInitContainers = "/spec/initContainers"
 	// Path for patching volumes.
 	PatchPathVolumes = "/spec/volumes"
 	// Path for patching labels.

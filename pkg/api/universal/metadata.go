@@ -109,6 +109,24 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 		}
 	}
 
+	// Workflow access policies
+	wfaclPolicies := a.compStore.ListWorkflowAccessPolicies()
+	registeredWFACLs := make([]*runtimev1pb.MetadataWorkflowAccessPolicy, len(wfaclPolicies))
+	for i, p := range wfaclPolicies {
+		registeredWFACLs[i] = &runtimev1pb.MetadataWorkflowAccessPolicy{
+			Name: p.Name,
+		}
+	}
+
+	// Resiliency resources
+	resiliencies := a.compStore.ListResiliencyResources()
+	registeredResiliencies := make([]*runtimev1pb.MetadataResiliency, len(resiliencies))
+	for i, r := range resiliencies {
+		registeredResiliencies[i] = &runtimev1pb.MetadataResiliency{
+			Name: r.Name,
+		}
+	}
+
 	var sched *runtimev1pb.MetadataScheduler
 	if a.scheduler != nil {
 		if addr := a.scheduler.Addresses(); len(addr) > 0 {
@@ -132,6 +150,8 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 		ActorRuntime:            actorRuntime,
 		Scheduler:               sched,
 		Workflows:               workflowsMetadata,
+		WorkflowAccessPolicies:  registeredWFACLs,
+		Resiliencies:            registeredResiliencies,
 	}, nil
 }
 

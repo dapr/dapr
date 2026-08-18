@@ -45,7 +45,7 @@ func (b *base) Setup(t *testing.T) []framework.Option {
 func (b *base) Run(t *testing.T, ctx context.Context) {
 	b.workflow.WaitUntilRunning(t, ctx)
 
-	b.workflow.Registry().AddOrchestratorN("purge", func(ctx *task.OrchestrationContext) (any, error) {
+	b.workflow.Registry().AddWorkflowN("purge", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("abc").Await(nil))
 		return nil, nil
 	})
@@ -55,7 +55,7 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 
 	client := b.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "purge")
+	id, err := client.ScheduleNewWorkflow(ctx, "purge")
 	require.NoError(t, err)
 
 	db := b.workflow.DB().GetConnection(t)
@@ -65,10 +65,10 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
 	assert.GreaterOrEqual(t, count, 5)
 
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	require.NoError(t, client.PurgeOrchestrationState(ctx, id))
+	require.NoError(t, client.PurgeWorkflowState(ctx, id))
 
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
 	assert.Equal(t, 0, count)

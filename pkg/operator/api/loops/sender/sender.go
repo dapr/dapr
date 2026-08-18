@@ -44,6 +44,19 @@ func New(stream any) (Interface, error) {
 		return &mcpserver{
 			stream: s,
 		}, nil
+	case operatorv1pb.Operator_ConfigurationUpdateServer:
+		return &configuration{
+			stream: s,
+		}, nil
+
+	case operatorv1pb.Operator_ResiliencyUpdateServer:
+		return &resiliency{
+			stream: s,
+		}, nil
+	case operatorv1pb.Operator_WorkflowAccessPolicyUpdateServer:
+		return &workflowAccessPolicy{
+			stream: s,
+		}, nil
 
 	default:
 		return nil, errors.New("unsupported stream type")
@@ -91,5 +104,38 @@ func (m *mcpserver) Send(data []byte, eventType operatorv1pb.ResourceEventType) 
 	return m.stream.Send(&operatorv1pb.MCPServerUpdateEvent{
 		McpServer: data,
 		Type:      eventType,
+	})
+}
+
+type configuration struct {
+	stream operatorv1pb.Operator_ConfigurationUpdateServer
+}
+
+func (c *configuration) Send(data []byte, eventType operatorv1pb.ResourceEventType) error {
+	return c.stream.Send(&operatorv1pb.ConfigurationUpdateEvent{
+		Configuration: data,
+		Type:          eventType,
+	})
+}
+
+type resiliency struct {
+	stream operatorv1pb.Operator_ResiliencyUpdateServer
+}
+
+func (r *resiliency) Send(data []byte, eventType operatorv1pb.ResourceEventType) error {
+	return r.stream.Send(&operatorv1pb.ResiliencyUpdateEvent{
+		Resiliency: data,
+		Type:       eventType,
+	})
+}
+
+type workflowAccessPolicy struct {
+	stream operatorv1pb.Operator_WorkflowAccessPolicyUpdateServer
+}
+
+func (w *workflowAccessPolicy) Send(data []byte, eventType operatorv1pb.ResourceEventType) error {
+	return w.stream.Send(&operatorv1pb.WorkflowAccessPolicyUpdateEvent{
+		Policy: data,
+		Type:   eventType,
 	})
 }

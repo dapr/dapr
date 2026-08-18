@@ -22,44 +22,37 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent, dueTime time.Time) error {
+func (a *activity) createReminder(ctx context.Context, invocation *protos.ActivityInvocation, dueTime time.Time, activityName *string) error {
 	const reminderName = "run-activity"
 	log.Debugf("Activity actor '%s||%s': creating reminder '%s' with dueTime=%s", a.actorType, a.actorID, reminderName, dueTime)
 
-	anydata, err := anypb.New(his)
+	anydata, err := anypb.New(invocation)
 	if err != nil {
 		return err
 	}
 
 	// The activity actor should always create reminders for its own actor type
 	// and ID
-	return a.reminders.Create(ctx, &actorapi.CreateReminderRequest{
+	return common.CreateReminderWithRetry(ctx, a.reminders, &actorapi.CreateReminderRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
-		DueTime:   dueTime.Format(time.RFC3339),
+		DueTime:   dueTime.Format(time.RFC3339Nano),
 		Name:      reminderName,
-		// One shot, retry forever, every second.
-		FailurePolicy: &commonv1pb.JobFailurePolicy{
-			Policy: &commonv1pb.JobFailurePolicy_Constant{
-				Constant: &commonv1pb.JobFailurePolicyConstant{
-					Interval:   durationpb.New(time.Second),
-					MaxRetries: nil,
-				},
-			},
-		},
-		Data: anydata,
+		// One shot, retry forever, jittered interval.
+		FailurePolicy:  common.RetryForeverPolicy(),
+		Data:           anydata,
+		ConcurrencyKey: activityName,
 	})
 }
 
-func (a *activity) createWorkflowResultReminder(ctx context.Context, wfActorType, wfActorID string, result *backend.HistoryEvent) error {
+func (f *factory) createWorkflowResultReminder(ctx context.Context, wfActorType, wfActorID string, result *backend.HistoryEvent) error {
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
 	if err != nil {
@@ -73,20 +66,13 @@ func (a *activity) createWorkflowResultReminder(ctx context.Context, wfActorType
 		return err
 	}
 
-	return a.reminders.Create(ctx, &actorapi.CreateReminderRequest{
+	return common.CreateReminderWithRetry(ctx, f.reminders, &actorapi.CreateReminderRequest{
 		ActorType: wfActorType,
 		ActorID:   wfActorID,
 		DueTime:   "0s",
 		Name:      reminderName,
-		// One shot, retry forever, every second.
-		FailurePolicy: &commonv1pb.JobFailurePolicy{
-			Policy: &commonv1pb.JobFailurePolicy_Constant{
-				Constant: &commonv1pb.JobFailurePolicyConstant{
-					Interval:   durationpb.New(time.Second),
-					MaxRetries: nil,
-				},
-			},
-		},
-		Data: anydata,
+		// One shot, retry forever, jittered interval.
+		FailurePolicy: common.RetryForeverPolicy(),
+		Data:          anydata,
 	})
 }

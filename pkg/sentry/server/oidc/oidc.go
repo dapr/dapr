@@ -154,7 +154,7 @@ func New(opts Options) (*Server, error) {
 			return nil, fmt.Errorf("failed to join path for authorization endpoint: %w", err)
 		}
 
-		log.Infof("Using path prefix %q for OIDC HTTP endpoints", opts.PathPrefix)
+		log.Infof("Using path prefix %q for OIDC HTTP endpoints", *opts.PathPrefix)
 	}
 
 	return &Server{
@@ -201,7 +201,7 @@ func (s *Server) Run(ctx context.Context) error {
 				break
 			}
 
-			log.Warnf("Waiting for TLS certificate and key files to be available: %s, %s", s.tlsCertPath, s.tlsKeyPath)
+			log.Warnf("Waiting for TLS certificate and key files to be available: %v, %v", s.tlsCertPath, s.tlsKeyPath)
 
 			select {
 			case <-time.After(5 * time.Second):
@@ -350,8 +350,15 @@ func (s *Server) handleDiscovery(w http.ResponseWriter, r *http.Request) {
 		discovery = s.discovery.DeepCopy()
 
 		host := r.Host
-		if forwardedHost := r.Header.Get("X-Forwarded-Host"); forwardedHost != "" {
-			host = forwardedHost
+		// Only trust X-Forwarded-Host once the allowed-hosts middleware has
+		// matched it against a concrete entry in the allowlist. A wildcard
+		// allowlist (`*`) lets any host through the middleware, so the header
+		// is still attacker-controlled in that case and would poison the
+		// issuer / jwks_uri (CWE-346).
+		if len(s.allowedHosts) > 0 && !slices.Contains(s.allowedHosts, "*") {
+			if forwardedHost := r.Header.Get("X-Forwarded-Host"); forwardedHost != "" {
+				host = forwardedHost
+			}
 		}
 
 		scheme := r.URL.Scheme

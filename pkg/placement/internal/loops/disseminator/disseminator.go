@@ -46,11 +46,12 @@ var (
 )
 
 type Options struct {
-	NamespaceLoop        loop.Interface[loops.EventNamespace]
-	Namespace            string
-	ReplicationFactor    int64
-	Authorizer           *authorizer.Authorizer
-	DisseminationTimeout time.Duration
+	NamespaceLoop               loop.Interface[loops.EventNamespace]
+	Namespace                   string
+	ReplicationFactor           int64
+	Authorizer                  *authorizer.Authorizer
+	DisseminationTimeout        time.Duration
+	DisseminationCoalesceWindow time.Duration
 }
 
 type streamConn struct {
@@ -68,10 +69,11 @@ type streamConn struct {
 // disseminator is a control loop that creates and manages stream connections,
 // disseminating actor type updates with a 3 stage lock.
 type disseminator struct {
-	nsLoop     loop.Interface[loops.EventNamespace]
-	loop       loop.Interface[loops.EventDisseminator]
-	authorizer *authorizer.Authorizer
-	timeout    time.Duration
+	nsLoop         loop.Interface[loops.EventNamespace]
+	loop           loop.Interface[loops.EventDisseminator]
+	authorizer     *authorizer.Authorizer
+	timeout        time.Duration
+	coalesceWindow time.Duration
 
 	namespace string
 
@@ -83,6 +85,16 @@ type disseminator struct {
 	store     *store.Store
 	streamIDx uint64
 	wg        sync.WaitGroup
+
+	// coalesceTimer is non-nil while the disseminator is in a post-round
+	// coalesce window. While it is set, new ConnAdd / ConnCloseStream
+	// events accumulate into waitingToDisseminate / waitingToDelete instead
+	// of starting a fresh round, so a burst of host registrations or
+	// disconnects within coalesceWindow collapses into a single follow-up
+	// round when the timer fires (CoalesceFire). The first event arriving
+	// in REPORT state with no timer pending still triggers an immediate
+	// round so single-host churn stays responsive.
+	coalesceTimer *time.Timer
 
 	currentOperation     v1pb.HostOperation
 	currentVersion       uint64
@@ -104,7 +116,9 @@ func New(opts Options) loop.Interface[loops.EventDisseminator] {
 	diss.actorConnCount.Store(0)
 	diss.namespace = opts.Namespace
 	diss.timeout = opts.DisseminationTimeout
+	diss.coalesceWindow = opts.DisseminationCoalesceWindow
 	diss.streamsInTargetState = 0
+	diss.coalesceTimer = nil
 
 	diss.waitingToDisseminate = nil
 	diss.waitingToDelete = nil
@@ -134,13 +148,15 @@ func (d *disseminator) Handle(ctx context.Context, event loops.EventDisseminator
 	case *loops.ReportedHost:
 		d.handleReportedHost(ctx, e)
 	case *loops.ConnCloseStream:
-		d.handleCloseStream(e)
+		d.handleCloseStream(ctx, e)
 	case *loops.Shutdown:
 		d.handleShutdown(e)
 	case *loops.DisseminationTimeout:
 		d.handleTimeout(ctx, e)
 	case *loops.NamespaceTableRequest:
 		d.handleTableRequest(e)
+	case *loops.CoalesceFire:
+		d.handleCoalesceFire(ctx)
 	default:
 		panic(fmt.Sprintf("unknown disseminator event type: %T", e))
 	}
@@ -186,8 +202,10 @@ func (d *disseminator) addStream(ctx context.Context, add *loops.ConnAdd) uint64
 
 // handleAdd adds a stream to the namespaced disseminator.
 func (d *disseminator) handleAdd(ctx context.Context, add *loops.ConnAdd) {
-	// If we are currently disseminating a lock, queue this addition.
-	if d.currentOperation != v1pb.HostOperation_REPORT {
+	// If we are currently disseminating a lock OR a post-round coalesce
+	// window is open, queue this addition. CoalesceFire (or the next
+	// UNLOCK) will drain the queue into a single round.
+	if d.currentOperation != v1pb.HostOperation_REPORT || d.coalesceTimer != nil {
 		d.waitingToDisseminate = append(d.waitingToDisseminate, add)
 		return
 	}
@@ -224,9 +242,31 @@ func (d *disseminator) handleAdd(ctx context.Context, add *loops.ConnAdd) {
 	})
 }
 
+// startCoalesceTimer arms a one-shot timer that enqueues CoalesceFire after
+// the configured coalesce window. Idempotent: a no-op if a timer is already
+// armed or coalesceWindow is 0.
+func (d *disseminator) startCoalesceTimer() {
+	if d.coalesceWindow <= 0 || d.coalesceTimer != nil {
+		return
+	}
+	d.coalesceTimer = time.AfterFunc(d.coalesceWindow, func() {
+		d.loop.Enqueue(&loops.CoalesceFire{})
+	})
+}
+
+// stopCoalesceTimer cancels any pending coalesce timer.
+func (d *disseminator) stopCoalesceTimer() {
+	if d.coalesceTimer != nil {
+		d.coalesceTimer.Stop()
+		d.coalesceTimer = nil
+	}
+}
+
 // handleShutdown handles the shutdown of the streams.
 func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 	defer d.wg.Wait()
+
+	d.stopCoalesceTimer()
 
 	for _, s := range d.streams {
 		go func(s *streamConn) {

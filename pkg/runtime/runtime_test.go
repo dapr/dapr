@@ -116,7 +116,7 @@ func TestNewRuntime(t *testing.T) {
 		registry:         registry.New(registry.NewOptions()),
 		healthz:          healthz.New(),
 		schedulerStreams: 3,
-	}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")), nil, nil)
 
 	// assert
 	require.NoError(t, err)
@@ -320,7 +320,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Version: "v1",
 			},
 		})
-		rt.flushOutstandingComponents(t.Context())
+		require.NoError(t, rt.flushOutstandingComponents(t.Context()))
 		assert.True(t, wasCalled)
 
 		// Make sure that the goroutine was restarted and can flush a second time
@@ -342,7 +342,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Version: "v1",
 			},
 		})
-		rt.flushOutstandingComponents(t.Context())
+		require.NoError(t, rt.flushOutstandingComponents(t.Context()))
 		assert.True(t, wasCalled)
 	})
 	t.Run("flushOutstandingComponents blocks for components with outstanding dependanices", func(t *testing.T) {
@@ -448,7 +448,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Version: "v1",
 			},
 		})
-		rt.flushOutstandingComponents(t.Context())
+		require.NoError(t, rt.flushOutstandingComponents(t.Context()))
 		assert.True(t, wasCalled)
 		assert.True(t, wasCalledChild)
 		assert.True(t, wasCalledGrandChild)
@@ -837,7 +837,7 @@ func NewTestDaprRuntimeWithID(t *testing.T, mode modes.DaprMode, id string) (*Da
 	testRuntimeConfig := NewTestDaprRuntimeConfig(t, modes.StandaloneMode, string(protocol.HTTPProtocol), 1024)
 	testRuntimeConfig.id = id
 
-	rt, err := newDaprRuntime(t.Context(), testSecurity(t), testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt, err := newDaprRuntime(t.Context(), testSecurity(t), testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")), nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -852,7 +852,7 @@ func NewTestDaprRuntimeWithID(t *testing.T, mode modes.DaprMode, id string) (*Da
 func NewTestDaprRuntimeWithProtocol(t *testing.T, mode modes.DaprMode, protocol string, appPort int) (*DaprRuntime, error) {
 	testRuntimeConfig := NewTestDaprRuntimeConfig(t, modes.StandaloneMode, protocol, appPort)
 
-	rt, err := newDaprRuntime(t.Context(), testSecurity(t), testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt, err := newDaprRuntime(t.Context(), testSecurity(t), testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")), nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -876,7 +876,7 @@ func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol str
 			Protocol:       protocol.Protocol(appProtocol),
 			Port:           appPort,
 			MaxConcurrency: -1,
-			ChannelAddress: "127.0.0.1",
+			ChannelAddress: DefaultChannelAddress,
 		},
 		mode:                         mode,
 		httpPort:                     DefaultDaprHTTPPort,
@@ -914,6 +914,133 @@ func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol str
 	}
 }
 
+// TestReserveInternalGRPCServerPort verifies that the internal gRPC port is
+// reserved before components are initialized. Otherwise a component's
+// outbound connection (e.g. to Redis) can be assigned this port as an
+// ephemeral source port, causing the internal gRPC server to later fail to
+// bind with "address already in use" (see issue #6023).
+func TestReserveInternalGRPCServerPort(t *testing.T) {
+	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+	require.NoError(t, err)
+
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+	rt.runtimeConfig.internalGRPCListenAddress = DefaultChannelAddress
+	rt.runtimeConfig.internalGRPCPort = port
+
+	require.NoError(t, rt.reserveInternalGRPCServerPort(t.Context()))
+	require.NotNil(t, rt.grpcInternalServerListener)
+	t.Cleanup(func() {
+		require.NoError(t, rt.grpcInternalServerListener.Close())
+	})
+
+	// The reserved listener is bound to the configured port.
+	assert.Equal(t, port, rt.grpcInternalServerListener.Addr().(*net.TCPAddr).Port)
+
+	// The port is now held: nothing else (including an ephemeral source port
+	// picked by a component's outbound connection) can claim it.
+	_, err = net.Listen("tcp", fmt.Sprintf("%s:%d", DefaultChannelAddress, port))
+	require.Error(t, err)
+}
+
+// TestStartGRPCInternalServerReusesReservedListener verifies that the internal
+// gRPC server binds to the listener reserved by reserveInternalGRPCServerPort,
+// rather than trying to bind the port a second time. Binding again would fail
+// because the reserved listener already holds the port (see issue #6023).
+func TestStartGRPCInternalServerReusesReservedListener(t *testing.T) {
+	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+	require.NoError(t, err)
+
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+	rt.runtimeConfig.internalGRPCListenAddress = DefaultChannelAddress
+	rt.runtimeConfig.internalGRPCPort = port
+
+	require.NoError(t, rt.reserveInternalGRPCServerPort(t.Context()))
+
+	require.NoError(t, rt.startGRPCInternalServer(t.Context(), nil))
+	require.NotNil(t, rt.grpcInternalServer)
+	t.Cleanup(func() {
+		require.NoError(t, rt.grpcInternalServer.Close())
+	})
+}
+
+// TestCloseUnstartedInternalGRPCListenerReleasesPort verifies that the port
+// reserved by reserveInternalGRPCServerPort is released when the internal gRPC
+// server is never started (e.g. initRuntime fails before
+// startGRPCInternalServer). Otherwise the reserved port would stay held after
+// init returns (see issue #6023).
+func TestCloseUnstartedInternalGRPCListenerReleasesPort(t *testing.T) {
+	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+	require.NoError(t, err)
+
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+	rt.runtimeConfig.internalGRPCListenAddress = DefaultChannelAddress
+	rt.runtimeConfig.internalGRPCPort = port
+
+	require.NoError(t, rt.reserveInternalGRPCServerPort(t.Context()))
+
+	// The internal gRPC server was never started, so releasing must free the
+	// reserved port.
+	require.NoError(t, rt.closeUnstartedInternalGRPCListener())
+
+	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", DefaultChannelAddress, port))
+	require.NoError(t, err)
+	require.NoError(t, ln.Close())
+}
+
+// TestCloseUnstartedInternalGRPCListenerNoopWhenStarted verifies that once the
+// internal gRPC server has started and owns the listener, releasing the
+// unstarted listener is a no-op that does not disturb the running server.
+func TestCloseUnstartedInternalGRPCListenerNoopWhenStarted(t *testing.T) {
+	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+	require.NoError(t, err)
+
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+	rt.runtimeConfig.internalGRPCListenAddress = DefaultChannelAddress
+	rt.runtimeConfig.internalGRPCPort = port
+
+	require.NoError(t, rt.reserveInternalGRPCServerPort(t.Context()))
+	require.NoError(t, rt.startGRPCInternalServer(t.Context(), nil))
+	t.Cleanup(func() {
+		require.NoError(t, rt.grpcInternalServer.Close())
+	})
+
+	require.NoError(t, rt.closeUnstartedInternalGRPCListener())
+
+	// The running server still holds the port.
+	_, err = net.Listen("tcp", fmt.Sprintf("%s:%d", DefaultChannelAddress, port))
+	require.Error(t, err)
+}
+
+// TestStartGRPCInternalServerBindsWithoutReservation verifies the fallback
+// path used when the internal gRPC port was not reserved ahead of time (for
+// example, reserving it failed during a SIGHUP restart): startGRPCInternalServer
+// binds the port itself rather than requiring a pre-bound listener.
+func TestStartGRPCInternalServerBindsWithoutReservation(t *testing.T) {
+	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+	require.NoError(t, err)
+
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+	rt.runtimeConfig.internalGRPCListenAddress = DefaultChannelAddress
+	rt.runtimeConfig.internalGRPCPort = port
+
+	// No reservation was made, so the server must bind the port itself.
+	require.Nil(t, rt.grpcInternalServerListener)
+	require.NoError(t, rt.startGRPCInternalServer(t.Context(), nil))
+	require.NotNil(t, rt.grpcInternalServer)
+	t.Cleanup(func() {
+		require.NoError(t, rt.grpcInternalServer.Close())
+	})
+
+	// The port is held by the running server.
+	_, err = net.Listen("tcp", fmt.Sprintf("%s:%d", DefaultChannelAddress, port))
+	require.Error(t, err)
+}
+
 func TestGracefulShutdown(t *testing.T) {
 	r, err := NewTestDaprRuntime(t, modes.StandaloneMode)
 	require.NoError(t, err)
@@ -922,12 +1049,12 @@ func TestGracefulShutdown(t *testing.T) {
 
 func TestPodName(t *testing.T) {
 	t.Run("empty podName", func(t *testing.T) {
-		assert.Empty(t, getPodName())
+		assert.Empty(t, os.Getenv("POD_NAME"))
 	})
 
 	t.Run("non-empty podName", func(t *testing.T) {
 		t.Setenv("POD_NAME", "testPodName")
-		assert.Equal(t, "testPodName", getPodName())
+		assert.Equal(t, "testPodName", os.Getenv("POD_NAME"))
 	})
 }
 
@@ -980,7 +1107,7 @@ func TestInitActors(t *testing.T) {
 			mode:     modes.StandaloneMode,
 			registry: registry.New(registry.NewOptions()),
 			healthz:  healthz.New(),
-		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")), nil, nil)
 
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
@@ -1002,7 +1129,7 @@ func TestInitActors(t *testing.T) {
 			registry:         registry.New(registry.NewOptions()),
 			healthz:          healthz.New(),
 			schedulerStreams: 3,
-		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")), nil, nil)
 
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
@@ -1024,7 +1151,7 @@ func TestInitActors(t *testing.T) {
 			registry:         registry.New(registry.NewOptions()),
 			healthz:          healthz.New(),
 			schedulerStreams: 3,
-		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")), nil, nil)
 
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
@@ -1257,6 +1384,7 @@ func TestCloseWithErrors(t *testing.T) {
 	rt.processor.AddPendingComponent(t.Context(), mockPubSubComponent)
 	rt.processor.AddPendingComponent(t.Context(), mockStateComponent)
 	rt.processor.AddPendingComponent(t.Context(), mockSecretsComponent)
+	require.NoError(t, rt.processor.Flush(t.Context()))
 
 	err = rt.runnerCloser.Close()
 	require.Error(t, err)
@@ -1290,7 +1418,7 @@ func TestComponentsCallback(t *testing.T) {
 	var callbackInvoked atomic.Bool
 
 	cfg := NewTestDaprRuntimeConfig(t, modes.StandaloneMode, "http", port)
-	rt, err := newDaprRuntime(t.Context(), testSecurity(t), cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt, err := newDaprRuntime(t.Context(), testSecurity(t), cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")), nil, nil)
 	require.NoError(t, err)
 
 	rt.runtimeConfig.registry = registry.New(registry.NewOptions().WithComponentsCallback(func(components registry.ComponentRegistry) error {
@@ -1879,7 +2007,7 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 }
 
 func runGRPCApp(port int) (func(), error) {
-	serverListener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	serverListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", DefaultChannelAddress, port))
 	if err != nil {
 		return func() {}, err
 	}

@@ -46,7 +46,7 @@ func (a *raise1) Setup(t *testing.T) []framework.Option {
 func (a *raise1) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
-	a.workflow.Registry().AddOrchestratorN("records", func(ctx *task.OrchestrationContext) (any, error) {
+	a.workflow.Registry().AddWorkflowN("records", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.WaitForSingleEvent("event", time.Hour).Await(nil))
 		return nil, nil
 	})
@@ -60,12 +60,12 @@ func (a *raise1) Run(t *testing.T, ctx context.Context) {
 
 	client := a.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "records")
+	id, err := client.ScheduleNewWorkflow(ctx, "records")
 	require.NoError(t, err)
 
 	require.NoError(t, client.RaiseEvent(ctx, id, "event"))
 
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {

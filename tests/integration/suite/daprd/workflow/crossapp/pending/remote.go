@@ -72,7 +72,7 @@ func (r *remote) Setup(t *testing.T) []framework.Option {
 		daprd.WithLogLevel("debug"),
 	)
 
-	r.registry1.AddOrchestratorN("RemoteFirstWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	r.registry1.AddWorkflowN("RemoteFirstWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, err
@@ -108,12 +108,12 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 	client1 := client.NewTaskHubGrpcClient(r.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client1.StartWorkItemListener(ctx, r.registry1))
 
-	id, err := client1.ScheduleNewOrchestration(ctx, "RemoteFirstWorkflow", api.WithInput("hello"))
+	id, err := client1.ScheduleNewWorkflow(ctx, "RemoteFirstWorkflow", api.WithInput("hello"))
 	require.NoError(t, err)
 
-	metadata, err := client1.WaitForOrchestrationStart(ctx, id)
+	metadata, err := client1.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.RuntimeStatus)
+	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.GetRuntimeStatus())
 
 	r.daprd2.Run(t, ctx)
 	t.Cleanup(func() { r.daprd2.Cleanup(t) })
@@ -122,8 +122,8 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 	client2 := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client2.StartWorkItemListener(ctx, r.registry2))
 
-	metadata, err = client1.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+	metadata, err = client1.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
-	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	assert.Equal(t, `"processed: hello"`, metadata.GetOutput().GetValue())
 }

@@ -29,7 +29,8 @@ type options struct {
 	metricsPort   int
 	healthzPort   int
 
-	sidecarImage string
+	sidecarImage           string
+	allowedServiceAccounts *string
 
 	sentry *sentry.Sentry
 }
@@ -82,6 +83,12 @@ func WithHealthzPort(port int) Option {
 func WithSidecarImage(image string) Option {
 	return func(o *options) {
 		o.sidecarImage = image
+	}
+}
+
+func WithAllowedServiceAccounts(accounts string) Option {
+	return func(o *options) {
+		o.allowedServiceAccounts = &accounts
 	}
 }
 

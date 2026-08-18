@@ -19,6 +19,9 @@ import (
 	"strings"
 	"sync"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/tools/cache"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 
@@ -52,6 +55,11 @@ type informer[T meta.Resource] struct {
 
 	idx      uint64
 	watchers map[uint64]*watcher[T]
+	// closed is set once Run is shutting down. After this point WatchUpdates
+	// refuses to register new watchers, so no watcher can be added after Run has
+	// closed the existing ones (which would leak a never-closed channel and hang
+	// the stream handler, and therefore the server's graceful shutdown).
+	closed bool
 
 	log logger.Logger
 }
@@ -77,6 +85,11 @@ func New[T meta.Resource](opts Options) Interface[T] {
 }
 
 func (i *informer[T]) Run(ctx context.Context) error {
+	// Mark shutting down and close all watchers on every exit path, so a
+	// concurrent WatchUpdates can never register a watcher that outlives Run
+	// (which would leak a never-closed channel and hang the stream handler).
+	defer i.shutdown()
+
 	var zero T
 	informer, err := i.cache.GetInformer(ctx, zero.ClientObject())
 	if err != nil {
@@ -85,11 +98,31 @@ func (i *informer[T]) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return nil
 		}
+
+		// If the CRD for this resource type is not installed, log a warning and
+		// run as a no-op rather than crashing the operator. This supports
+		// version-skew scenarios where newer control plane binaries run against a
+		// cluster that doesn't yet have all CRDs.
+		if apimeta.IsNoMatchError(err) {
+			i.log.Warnf("CRD for %s/%s not found, skipping informer: %v", zero.APIVersion(), zero.Kind(), err)
+			<-ctx.Done()
+			return nil
+		}
+
 		return fmt.Errorf("unable to get setup %s informer: %w", zero.Kind(), err)
 	}
 
-	_, err = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj any) {
+	_, err = informer.AddEventHandler(cache.ResourceEventHandlerDetailedFuncs{
+		AddFunc: func(obj any, isInInitialList bool) {
+			// Adds emitted while the informer cache is doing its initial sync
+			// represent resources that already exist. A sidecar that connects
+			// during this window loads that state itself via its own List, so
+			// forwarding these as CREATED events is redundant and, for
+			// SIGHUP-reload resources (e.g. a foreign Configuration), causes a
+			// spurious restart. Only forward genuine post-sync creates.
+			if isInInitialList {
+				return
+			}
 			i.handleEvent(ctx, nil, obj, operatorv1.ResourceEventType_CREATED)
 		},
 		UpdateFunc: func(oldObj, newObj any) {
@@ -100,19 +133,27 @@ func (i *informer[T]) Run(ctx context.Context) error {
 		},
 	})
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
 		return fmt.Errorf("unable to add %s informer event handler: %w", zero.Kind(), err)
 	}
 
 	<-ctx.Done()
 
+	return nil
+}
+
+// shutdown marks the informer as closed and closes every registered watcher's
+// channel. After this, WatchUpdates refuses to register new watchers.
+func (i *informer[T]) shutdown() {
 	i.lock.Lock()
 	defer i.lock.Unlock()
+	i.closed = true
 	for idx, w := range i.watchers {
 		delete(i.watchers, idx)
 		close(w.ch)
 	}
-
-	return nil
 }
 
 func (i *informer[T]) WatchUpdates(ctx context.Context, ns string) (<-chan *Event[T], context.CancelFunc, error) {
@@ -122,10 +163,16 @@ func (i *informer[T]) WatchUpdates(ctx context.Context, ns string) (<-chan *Even
 	}
 
 	ch := make(chan *Event[T], 10)
-	idx := i.idx
-	i.idx++
 
 	i.lock.Lock()
+	// Refuse new watchers once Run is shutting down: Run has already closed the
+	// existing watchers and will not close any registered after this point.
+	if i.closed {
+		i.lock.Unlock()
+		return nil, nil, status.New(codes.Unavailable, "operator is shutting down").Err()
+	}
+	idx := i.idx
+	i.idx++
 	i.watchers[idx] = &watcher[T]{
 		id:  id,
 		ch:  ch,
@@ -144,6 +191,18 @@ func (i *informer[T]) WatchUpdates(ctx context.Context, ns string) (<-chan *Even
 }
 
 func (i *informer[T]) handleEvent(ctx context.Context, oldObj, newObj any, eventType operatorv1.ResourceEventType) {
+	if eventType == operatorv1.ResourceEventType_UPDATED && oldObj != nil {
+		oldMeta, oerr := apimeta.Accessor(oldObj)
+		newMeta, nerr := apimeta.Accessor(newObj)
+		if oerr == nil && nerr == nil &&
+			oldMeta.GetResourceVersion() != "" &&
+			oldMeta.GetResourceVersion() == newMeta.GetResourceVersion() {
+			i.log.Debugf("Ignoring resync event for %s/%s: resourceVersion %s unchanged",
+				newMeta.GetNamespace(), newMeta.GetName(), newMeta.GetResourceVersion())
+			return
+		}
+	}
+
 	newT, ok := i.anyToT(newObj)
 	if !ok {
 		return

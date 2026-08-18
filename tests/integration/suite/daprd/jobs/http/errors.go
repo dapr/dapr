@@ -66,7 +66,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.Empty() job name is empty
 	t.Run("schedule is empty", func(t *testing.T) {
-		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/test", e.daprd.HTTPPort())
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/jobs/test", e.daprd.HTTPPort())
 		payload := `{}`
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
@@ -115,7 +115,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.Empty() job schedule is empty
 	t.Run("schedule job name is empty", func(t *testing.T) {
-		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/ ", e.daprd.HTTPPort())
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/jobs/ ", e.daprd.HTTPPort())
 		payload := `{"schedule": "@daily"}`
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
@@ -163,7 +163,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.SchedulerURLName() where a user specifies the job name in the url and body
 	t.Run("schedule two job names", func(t *testing.T) {
-		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/test", e.daprd.HTTPPort())
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/jobs/test", e.daprd.HTTPPort())
 		payload := `{"name": "test1", "schedule": "test", "repeats": 1}`
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
@@ -210,7 +210,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("delete job not found", func(t *testing.T) {
-		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/notfound", e.daprd.HTTPPort())
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/jobs/notfound", e.daprd.HTTPPort())
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, nil)
 		require.NoError(t, err)
@@ -224,7 +224,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 	// Covers GetJob job not found
 	t.Run("get job not found", func(t *testing.T) {
-		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/notfound", e.daprd.HTTPPort())
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/jobs/notfound", e.daprd.HTTPPort())
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 		require.NoError(t, err)

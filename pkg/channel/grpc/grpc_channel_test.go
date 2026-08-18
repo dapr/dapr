@@ -94,9 +94,10 @@ func TestInvokeMethod(t *testing.T) {
 	conn := createConnection(t)
 	defer closeConnection(t, conn)
 	c := Channel{
-		baseAddress:        "localhost:9998",
-		appCallbackClient:  runtimev1pb.NewAppCallbackClient(conn),
-		conn:               conn,
+		baseAddress: "localhost:9998",
+		connFn: func() (*grpc.ClientConn, func(bool), error) {
+			return conn, func(bool) {}, nil
+		},
 		appMetadataToken:   "token1",
 		maxRequestBodySize: 4 << 20,
 	}
@@ -140,9 +141,10 @@ func TestInvokeMethod(t *testing.T) {
 func TestHealthProbe(t *testing.T) {
 	conn := createConnection(t)
 	c := Channel{
-		baseAddress:        "localhost:9998",
-		appCallbackClient:  runtimev1pb.NewAppCallbackClient(conn),
-		conn:               conn,
+		baseAddress: "localhost:9998",
+		connFn: func() (*grpc.ClientConn, func(bool), error) {
+			return conn, func(bool) {}, nil
+		},
 		appMetadataToken:   "token1",
 		maxRequestBodySize: 4 << 20,
 	}
@@ -174,4 +176,91 @@ func TestHealthProbe(t *testing.T) {
 func TestCreateLocalChannelWithBaseAddress(t *testing.T) {
 	ch := CreateLocalChannel(8080, 1, nil, config.TracingSpec{}, 1024, 1, "my.app", "")
 	assert.Equal(t, "my.app:8080", ch.baseAddress)
+}
+
+func TestConcurrencyLimiterContext(t *testing.T) {
+	t.Run("sendJob acquire respects context cancellation", func(t *testing.T) {
+		c := Channel{ch: make(chan struct{}, 1)}
+		c.ch <- struct{}{}
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := c.TriggerJob(ctx, "job", nil)
+			errCh <- err
+		}()
+
+		select {
+		case err := <-errCh:
+			require.ErrorIs(t, err, context.Canceled)
+		case <-time.After(time.Second * 5):
+			t.Fatal("TriggerJob did not return after context cancellation while the limiter was full")
+		}
+	})
+
+	t.Run("invokeMethodV1 acquire respects context cancellation", func(t *testing.T) {
+		c := Channel{ch: make(chan struct{}, 1)}
+		c.ch <- struct{}{}
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "")
+		defer req.Close()
+
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := c.InvokeMethod(ctx, req, "")
+			errCh <- err
+		}()
+
+		select {
+		case err := <-errCh:
+			require.ErrorIs(t, err, context.Canceled)
+		case <-time.After(time.Second * 5):
+			t.Fatal("InvokeMethod did not return after context cancellation while the limiter was full")
+		}
+	})
+
+	t.Run("invokeMethodV1 releases its slot exactly once", func(t *testing.T) {
+		conn := createConnection(t)
+		defer closeConnection(t, conn)
+		c := Channel{
+			baseAddress: "localhost:9998",
+			connFn: func() (*grpc.ClientConn, func(bool), error) {
+				return conn, func(bool) {}, nil
+			},
+			maxRequestBodySize: 4 << 20,
+			ch:                 make(chan struct{}, 1),
+		}
+
+		for i := range 2 {
+			done := make(chan struct{})
+			go func() {
+				req := invokev1.NewInvokeMethodRequest("method").
+					WithHTTPExtension(http.MethodPost, "")
+				defer req.Close()
+				resp, err := c.InvokeMethod(t.Context(), req, "")
+				assert.NoError(t, err)
+				if resp != nil {
+					resp.Close()
+				}
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(time.Second * 10):
+				t.Fatalf("invocation %d did not return: limiter slot lost to a double release", i+1)
+			}
+		}
+
+		select {
+		case c.ch <- struct{}{}:
+		default:
+			t.Fatal("limiter slot still held after invocations returned")
+		}
+	})
 }

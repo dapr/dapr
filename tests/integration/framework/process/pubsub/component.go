@@ -15,8 +15,14 @@ package pubsub
 
 import (
 	"context"
+	"errors"
 	"io"
+	"sync"
+	"sync/atomic"
 	"testing"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
@@ -29,13 +35,28 @@ type component struct {
 	impl      pubsub.PubSub
 	pmrReqCh  chan<- *compv1pb.PullMessagesRequest
 	pmrRespCh <-chan *compv1pb.PullMessagesResponse
+
+	// paused gates PullMessages from forwarding new messages from
+	// pmrRespCh while the component is paused — faithfully simulating
+	// Kafka's PauseAll semantics for integration tests of the runtime's
+	// pause-and-drain shutdown path.
+	paused        atomic.Bool
+	pauseCalled   atomic.Int64
+	resumeCalled  atomic.Int64
+	pauseStartCh  chan struct{}
+	pauseStartOnc sync.Once
+	// pausable opts in to Pause/Resume; default is non-pausable
+	// (returns codes.Unimplemented), matching most pubsub components.
+	pausable bool
 }
 
 func newComponent(t *testing.T, opts options) *component {
 	return &component{
-		impl:      opts.pubsub,
-		pmrReqCh:  opts.pmrReqCh,
-		pmrRespCh: opts.pmrRespCh,
+		impl:         opts.pubsub,
+		pmrReqCh:     opts.pmrReqCh,
+		pmrRespCh:    opts.pmrRespCh,
+		pauseStartCh: make(chan struct{}),
+		pausable:     opts.pausable,
 	}
 }
 
@@ -90,28 +111,84 @@ func (c *component) PullMessages(req compv1pb.PubSub_PullMessagesServer) error {
 		return err
 	}
 
+	// Recv runs in its own goroutine so acks for already-delivered
+	// messages keep flowing while the Send loop is paused. Per gRPC
+	// docs, Send and Recv on the same stream from separate goroutines
+	// is safe.
+	recvErr := make(chan error, 1)
+	go func() {
+		for {
+			resp, err := req.Recv()
+			if err != nil {
+				recvErr <- err
+				return
+			}
+			select {
+			case c.pmrReqCh <- resp:
+			case <-req.Context().Done():
+				return
+			}
+		}
+	}()
+
+	// Send loop. Once Pause is called pauseStartCh is closed and the
+	// select fires that case immediately, dropping into a paused wait
+	// where no further pmrRespCh messages are forwarded. Selecting on a
+	// channel (rather than re-checking the atomic each iteration)
+	// closes the race where Pause fires after respCh is already set.
 	for {
 		select {
 		case pmr := <-c.pmrRespCh:
 			if err := req.Send(pmr); err != nil {
 				return err
 			}
-
-			resp, err := req.Recv()
-			if err != nil {
-				return err
-			}
-
-			select {
-			case c.pmrReqCh <- resp:
-			case <-req.Context().Done():
-				return nil
-			}
-
+		case <-c.pauseStartCh:
+			return c.waitForStreamEnd(req, recvErr)
+		case err := <-recvErr:
+			return cleanShutdown(err)
 		case <-req.Context().Done():
 			return nil
 		}
 	}
+}
+
+// waitForStreamEnd is the paused state — no more pmrRespCh forwards;
+// just wait for the stream to terminate.
+func (c *component) waitForStreamEnd(req compv1pb.PubSub_PullMessagesServer, recvErr <-chan error) error {
+	select {
+	case err := <-recvErr:
+		return cleanShutdown(err)
+	case <-req.Context().Done():
+		return nil
+	}
+}
+
+// cleanShutdown collapses io.EOF / context.Canceled into a nil return
+// (normal stream end) while letting other errors surface.
+func cleanShutdown(err error) error {
+	if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
+		return nil
+	}
+	return err
+}
+
+func (c *component) Pause(ctx context.Context, req *compv1pb.PauseRequest) (*compv1pb.PauseResponse, error) {
+	c.pauseCalled.Add(1)
+	if !c.pausable {
+		return nil, status.Error(codes.Unimplemented, "pause not implemented")
+	}
+	c.paused.Store(true)
+	c.pauseStartOnc.Do(func() { close(c.pauseStartCh) })
+	return new(compv1pb.PauseResponse), nil
+}
+
+func (c *component) Resume(ctx context.Context, req *compv1pb.ResumeRequest) (*compv1pb.ResumeResponse, error) {
+	c.resumeCalled.Add(1)
+	if !c.pausable {
+		return nil, status.Error(codes.Unimplemented, "resume not implemented")
+	}
+	c.paused.Store(false)
+	return new(compv1pb.ResumeResponse), nil
 }
 
 func (c *component) Ping(ctx context.Context, req *compv1pb.PingRequest) (*compv1pb.PingResponse, error) {

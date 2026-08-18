@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -34,8 +35,6 @@ import (
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/task"
-
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 func init() {
@@ -65,7 +64,7 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 	var drainMode atomic.Bool
 	const totalEvents = 25
 
-	r.workflow.Registry().AddOrchestratorN("raisebatch", func(ctx *task.OrchestrationContext) (any, error) {
+	r.workflow.Registry().AddWorkflowN("raisebatch", func(ctx *task.WorkflowContext) (any, error) {
 		var inc int
 		require.NoError(t, ctx.GetInput(&inc))
 
@@ -77,21 +76,28 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 			return inc + 1, nil
 		}
 
-		ctx.WaitForSingleEvent("incr", -1).Await(nil)
+		var got bool
+		ctx.WaitForSingleEvent("incr", 3*time.Second).Await(&got)
+		if !got {
+			if drainMode.Load() {
+				return inc, nil
+			}
+			ctx.ContinueAsNew(inc, task.WithKeepUnprocessedEvents())
+			return nil, nil
+		}
 		ctx.ContinueAsNew(inc+1, task.WithKeepUnprocessedEvents())
 		return nil, nil
 	})
 
 	client := r.workflow.BackendClient(t, ctx)
-	gclient := r.workflow.GRPCClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "raisebatch",
+	id, err := client.ScheduleNewWorkflow(ctx, "raisebatch",
 		api.WithInstanceID("raisebatchi"),
 		api.WithInput(0),
 	)
 	require.NoError(t, err)
 
-	_, err = client.WaitForOrchestrationStart(ctx, id)
+	_, err = client.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
 
 	appID := r.workflow.Dapr().AppID()
@@ -100,13 +106,11 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 
 	// Force the actor to deactivate by firing a dummy reminder. The reminder
 	// finds an empty inbox and returns RunCompletedTrue, which triggers
-	// deactivation and clears the in-memory cache.
-	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
-		ActorType: actorType,
-		ActorId:   actorID,
-		Name:      "new-event-deactivate",
-		DueTime:   "0s",
-	})
+	// deactivation and clears the in-memory cache. Goes via the scheduler
+	// directly because the daprd RegisterActorReminder API rejects
+	// "dapr.internal.*" actor types.
+	_, err = r.workflow.Scheduler().Client(t, ctx).ScheduleJob(ctx,
+		r.workflow.Scheduler().JobNowActor("new-event-deactivate", "default", appID, actorType, actorID))
 	require.NoError(t, err)
 
 	time.Sleep(2 * time.Second)
@@ -115,18 +119,14 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 	tableName := r.workflow.DB().TableName()
 	writeInboxToDB(t, ctx, db, tableName, appID, actorType, actorID, totalEvents)
 
-	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
-		ActorType: actorType,
-		ActorId:   actorID,
-		Name:      "new-event-batch",
-		DueTime:   "0s",
-	})
+	_, err = r.workflow.Scheduler().Client(t, ctx).ScheduleJob(ctx,
+		r.workflow.Scheduler().JobNowActor("new-event-batch", "default", appID, actorType, actorID))
 	require.NoError(t, err)
 
 	time.Sleep(2 * time.Second)
 	drainMode.Store(true)
 
-	meta, err := client.WaitForOrchestrationCompletion(ctx, id)
+	meta, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	// The workflow should complete. The exact output depends on how many CAN
@@ -142,20 +142,25 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 
 // writeInboxToDB writes n EventRaised events and updated metadata directly
 // into the SQLite state store, using the same base64+is_binary encoding that
-// the Dapr sqlite state component uses.
-func writeInboxToDB(t *testing.T, ctx context.Context, db *sql.DB, tableName, appID, actorType, actorID string, n int) {
+// the Dapr sqlite state component uses. An optional input payload can be set
+// on each event.
+func writeInboxToDB(t *testing.T, ctx context.Context, db *sql.DB, tableName, appID, actorType, actorID string, n int, input ...*wrapperspb.StringValue) {
 	t.Helper()
 
 	keyPrefix := appID + "||" + actorType + "||" + actorID + "||"
 
 	for i := range n {
+		eventRaised := &protos.EventRaisedEvent{
+			Name: "incr",
+		}
+		if len(input) > 0 {
+			eventRaised.Input = input[0]
+		}
 		evt := &protos.HistoryEvent{
 			EventId:   int32(i),
 			Timestamp: timestamppb.Now(),
 			EventType: &protos.HistoryEvent_EventRaised{
-				EventRaised: &protos.EventRaisedEvent{
-					Name: "incr",
-				},
+				EventRaised: eventRaised,
 			},
 		}
 		raw, err := proto.Marshal(evt)
@@ -181,7 +186,7 @@ func writeInboxToDB(t *testing.T, ctx context.Context, db *sql.DB, tableName, ap
 
 	require.True(t, isBin, "expected workflow metadata row %q to be stored as binary", metaKey)
 
-	var meta backend.WorkflowStateMetadata
+	var meta backend.BackendWorkflowStateMetadata
 	raw, derr := base64.StdEncoding.DecodeString(existingVal)
 	require.NoError(t, derr)
 	require.NoError(t, proto.Unmarshal(raw, &meta))

@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -63,7 +63,7 @@ func (w *workflows) Run(t *testing.T, ctx context.Context) {
 	w.workflow.WaitUntilRunning(t, ctx)
 
 	hold := make(chan struct{})
-	w.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	w.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		id1 := ctx.CallActivity("bar")
 		id2 := ctx.CallActivity("bar")
 		return nil, errors.Join(id1.Await(nil), id2.Await(nil))
@@ -75,9 +75,9 @@ func (w *workflows) Run(t *testing.T, ctx context.Context) {
 
 	client := w.workflow.BackendClient(t, ctx)
 
-	_, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("my-id-1"))
+	_, err := client.ScheduleNewWorkflow(ctx, "foo", api.WithInstanceID("my-id-1"))
 	require.NoError(t, err)
-	_, err = client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("my-id-2"))
+	_, err = client.ScheduleNewWorkflow(ctx, "foo", api.WithInstanceID("my-id-2"))
 	require.NoError(t, err)
 
 	t.Cleanup(func() { close(hold) })

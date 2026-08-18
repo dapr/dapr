@@ -27,6 +27,7 @@ import (
 
 	componentsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	mcpserverv1alpha1 "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 )
 
 var (
@@ -36,6 +37,7 @@ var (
 	localSchemeBuilder = runtime.SchemeBuilder{
 		componentsv1alpha1.AddToScheme,
 		configurationv1alpha1.AddToScheme,
+		mcpserverv1alpha1.AddToScheme,
 	}
 )
 

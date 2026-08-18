@@ -110,7 +110,7 @@ func (c *clusters) Run(t *testing.T, ctx context.Context) {
 		}
 	}, time.Second*10, time.Millisecond*10)
 
-	_, err := c.daprdA.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1pb.ScheduleJobRequest{
+	_, err := c.daprdA.GRPCClient(t, ctx).ScheduleJob(ctx, &rtv1pb.ScheduleJobRequest{
 		Job: &rtv1pb.Job{
 			Name:     "job",
 			Schedule: new("@every 1s"),

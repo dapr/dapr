@@ -61,28 +61,28 @@ func (i *invalidappid) Setup(t *testing.T) []framework.Option {
 func (i *invalidappid) Run(t *testing.T, ctx context.Context) {
 	i.workflow.WaitUntilRunning(t, ctx)
 
-	i.workflow.Registry().AddOrchestratorN("InvalidAppWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	i.workflow.Registry().AddWorkflowN("InvalidAppWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
 		}
 
 		var result string
-		err := ctx.CallSubOrchestrator("ProcessData",
-			task.WithSubOrchestratorInput(input),
-			task.WithSubOrchestratorAppID("nonexistent-app")).
+		err := ctx.CallChildWorkflow("ProcessData",
+			task.WithChildWorkflowInput(input),
+			task.WithChildWorkflowAppID("nonexistent-app")).
 			Await(&result)
 		return fmt.Sprintf("Error handled: %v", err), nil
 	})
 
 	client := i.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "InvalidAppWorkflow", api.WithInput("Hello from app0"))
+	id, err := client.ScheduleNewWorkflow(ctx, "InvalidAppWorkflow", api.WithInput("Hello from app0"))
 	require.NoError(t, err)
 
-	metadata, err := client.WaitForOrchestrationStart(ctx, id)
+	metadata, err := client.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.RuntimeStatus)
+	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.GetRuntimeStatus())
 
 	i.actorNotFoundLogLine.EventuallyFoundAll(t)
 }

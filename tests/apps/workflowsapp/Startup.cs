@@ -130,6 +130,25 @@ namespace DaprDemoActor
                     return Task.FromResult($"Alert: {input}");
                 });
 
+                // Simple workflow for access policy e2e tests.
+                options.RegisterWorkflow<string, string>("AllowedWorkflow", implementation: (context, input) =>
+                {
+                    return Task.FromResult("allowed-ok");
+                });
+                options.RegisterWorkflow<string, string>("DeniedWorkflow", implementation: (context, input) =>
+                {
+                    return Task.FromResult("denied-ok");
+                });
+
+                // Long-running workflow for cross-app operations e2e tests:
+                // stays RUNNING until the "Finish" external event arrives and
+                // returns its payload.
+                options.RegisterWorkflow<string, string>("WaitForFinish", implementation: async (context, input) =>
+                {
+                    var result = await context.WaitForExternalEventAsync<string>("Finish");
+                    return result;
+                });
+
             });
 
 

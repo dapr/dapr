@@ -17,6 +17,7 @@ package universal
 
 import (
 	"context"
+	"os"
 	"sync"
 
 	"github.com/dapr/dapr/pkg/actors"
@@ -39,6 +40,7 @@ type Options struct {
 	Resiliency                  resiliency.Provider
 	CompStore                   *compstore.ComponentStore
 	ShutdownFn                  func()
+	ExitFn                      func(int)
 	GetComponentsCapabilitiesFn func() map[string][]string
 	ExtendedMetadata            map[string]string
 	AppConnectionConfig         config.AppConnectionConfig
@@ -56,6 +58,7 @@ type Universal struct {
 	resiliency                  resiliency.Provider
 	compStore                   *compstore.ComponentStore
 	shutdownFn                  func()
+	exitFn                      func(int)
 	getComponentsCapabilitiesFn func() map[string][]string
 	extendedMetadata            map[string]string
 	appConnectionConfig         config.AppConnectionConfig
@@ -68,6 +71,10 @@ type Universal struct {
 }
 
 func New(opts Options) *Universal {
+	exitFn := opts.ExitFn
+	if exitFn == nil {
+		exitFn = os.Exit
+	}
 	return &Universal{
 		appID:                       opts.AppID,
 		namespace:                   opts.Namespace,
@@ -75,6 +82,7 @@ func New(opts Options) *Universal {
 		resiliency:                  opts.Resiliency,
 		compStore:                   opts.CompStore,
 		shutdownFn:                  opts.ShutdownFn,
+		exitFn:                      exitFn,
 		getComponentsCapabilitiesFn: opts.GetComponentsCapabilitiesFn,
 		extendedMetadata:            opts.ExtendedMetadata,
 		appConnectionConfig:         opts.AppConnectionConfig,
@@ -103,6 +111,15 @@ func (a *Universal) CompStore() *compstore.ComponentStore {
 
 func (a *Universal) AppConnectionConfig() config.AppConnectionConfig {
 	return a.appConnectionConfig
+}
+
+// Actors returns the actor runtime. Callers (notably the gRPC API
+// handler for SubscribeActorEventsAlpha1) use it to drive
+// RegisterHosted/UnRegisterHosted imperatively from the stream
+// lifecycle, mirroring how subscriptions go through CompStore and
+// processor.Subscriber().
+func (a *Universal) Actors() actors.Interface {
+	return a.actors
 }
 
 func (a *Universal) ActorRouter(ctx context.Context) (router.Interface, error) {

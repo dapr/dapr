@@ -68,98 +68,98 @@ func (d *delete) Run(t *testing.T, ctx context.Context) {
 	client1 := d.daprd1.GRPCClient(t, ctx)
 	client2 := d.daprd2.GRPCClient(t, ctx)
 
-	resp, err := client1.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err := client1.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Empty(t, resp.GetJobs())
-	_, err = client1.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err = client1.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{Name: "test", Schedule: new("@daily")},
 	})
 	require.NoError(t, err)
-	resp, err = client1.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client1.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Len(t, resp.GetJobs(), 1)
-	resp, err = client2.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client2.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Empty(t, resp.GetJobs())
 
-	_, err = client1.DeleteJobAlpha1(ctx, &rtv1.DeleteJobRequest{
+	_, err = client1.DeleteJob(ctx, &rtv1.DeleteJobRequest{
 		Name: "test",
 	})
 	require.NoError(t, err)
-	resp, err = client1.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client1.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Empty(t, resp.GetJobs())
-	resp, err = client2.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client2.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Empty(t, resp.GetJobs())
 
 	for i := range 5 {
-		_, err = client1.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+		_, err = client1.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 			Job: &rtv1.Job{Name: "abc-" + strconv.Itoa(i), Schedule: new("@daily")},
 		})
 		require.NoError(t, err)
 	}
 	for i := range 5 {
-		_, err = client1.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+		_, err = client1.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 			Job: &rtv1.Job{Name: "helloworld-" + strconv.Itoa(i), Schedule: new("@daily")},
 		})
 		require.NoError(t, err)
 	}
 	for i := range 5 {
-		_, err = client2.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+		_, err = client2.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 			Job: &rtv1.Job{Name: "abc-" + strconv.Itoa(i), Schedule: new("@daily")},
 		})
 		require.NoError(t, err)
 	}
 
-	resp, err = client1.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client1.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Len(t, resp.GetJobs(), 10)
-	resp, err = client2.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client2.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Len(t, resp.GetJobs(), 5)
 
-	_, err = client1.DeleteJobsByPrefixAlpha1(ctx, &rtv1.DeleteJobsByPrefixRequestAlpha1{
+	_, err = client1.DeleteJobsByPrefix(ctx, &rtv1.DeleteJobsByPrefixRequest{
 		NamePrefix: new("abc-"),
 	})
 	require.NoError(t, err)
-	resp, err = client1.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client1.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Len(t, resp.GetJobs(), 5)
-	resp, err = client2.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client2.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Len(t, resp.GetJobs(), 5)
 
-	_, err = client1.DeleteJobsByPrefixAlpha1(ctx, &rtv1.DeleteJobsByPrefixRequestAlpha1{
+	_, err = client1.DeleteJobsByPrefix(ctx, &rtv1.DeleteJobsByPrefixRequest{
 		NamePrefix: nil,
 	})
 	require.NoError(t, err)
-	resp, err = client1.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client1.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Empty(t, resp.GetJobs())
-	resp, err = client2.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client2.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Len(t, resp.GetJobs(), 5)
 
-	_, err = client2.DeleteJobsByPrefixAlpha1(ctx, &rtv1.DeleteJobsByPrefixRequestAlpha1{
+	_, err = client2.DeleteJobsByPrefix(ctx, &rtv1.DeleteJobsByPrefixRequest{
 		NamePrefix: new("helloworld-"),
 	})
 	require.NoError(t, err)
-	resp, err = client1.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client1.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Empty(t, resp.GetJobs())
-	resp, err = client2.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client2.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Len(t, resp.GetJobs(), 5)
 
-	_, err = client2.DeleteJobsByPrefixAlpha1(ctx, &rtv1.DeleteJobsByPrefixRequestAlpha1{
+	_, err = client2.DeleteJobsByPrefix(ctx, &rtv1.DeleteJobsByPrefixRequest{
 		NamePrefix: new("abc-"),
 	})
 	require.NoError(t, err)
-	resp, err = client1.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client1.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Empty(t, resp.GetJobs())
-	resp, err = client2.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
+	resp, err = client2.ListJobs(ctx, new(rtv1.ListJobsRequest))
 	require.NoError(t, err)
 	assert.Empty(t, resp.GetJobs())
 }

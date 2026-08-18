@@ -101,6 +101,11 @@ type (
 		ComponentOutboundPolicy(name string, componentType ComponentType) *PolicyDefinition
 		// ComponentInboundPolicy returns the inbound policy for a component.
 		ComponentInboundPolicy(name string, componentType ComponentType) *PolicyDefinition
+		// ComponentContextDecorator returns the function that decorates the
+		// context of component operations (e.g. attaching the workload's SPIFFE
+		// identity), or nil if none is configured. Use it for component calls
+		// that bypass the policy Runner (e.g. long-lived Subscribe/Read calls).
+		ComponentContextDecorator() ComponentContextFn
 		// BuiltInPolicy are used to replace existing retries in Dapr which may not bind specifically to one of the above categories.
 		BuiltInPolicy(name BuiltInPolicyName) *PolicyDefinition
 		// PolicyDefined returns true if there's policy that applies to the target.
@@ -129,6 +134,11 @@ type (
 		apps       map[string]PolicyNames
 		actors     map[string]ActorPolicies
 		components map[string]ComponentPolicyNames
+
+		// componentCtxFn decorates the context of every component operation
+		// (outbound and inbound). Dapr wires this to attach the workload's
+		// SPIFFE identity. Nil leaves component contexts untouched.
+		componentCtxFn ComponentContextFn
 	}
 
 	// circuitBreakerInstances stores circuit breaker state for components
@@ -321,6 +331,24 @@ func New(log logger.Logger) *Resiliency {
 		actors:     make(map[string]ActorPolicies),
 		components: make(map[string]ComponentPolicyNames),
 	}
+}
+
+// SetComponentContextDecorator sets the function used to decorate the context
+// of component operations (both outbound and inbound). Dapr wires this to
+// attach the workload's SPIFFE identity so components can authenticate to their
+// backing infrastructure. It should be called once during startup, before the
+// provider is used to create runners.
+func (r *Resiliency) SetComponentContextDecorator(fn ComponentContextFn) {
+	r.componentCtxFn = fn
+}
+
+// ComponentContextDecorator returns the configured component context decorator,
+// or nil if none is set.
+func (r *Resiliency) ComponentContextDecorator() ComponentContextFn {
+	if r == nil {
+		return nil
+	}
+	return r.componentCtxFn
 }
 
 // DecodeConfiguration reads in a single resiliency configuration.
@@ -579,7 +607,12 @@ func (r *Resiliency) addMetricsToPolicy(policyDef *PolicyDefinition, target stri
 	if policyDef.cb != nil {
 		diag.DefaultResiliencyMonitoring.PolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, string(policyDef.cb.State()))
 		policyDef.addCBStateChangedMetric = func() {
-			diag.DefaultResiliencyMonitoring.PolicyWithStatusActivated(r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, string(policyDef.cb.State()))
+			state := string(policyDef.cb.State())
+			diag.DefaultResiliencyMonitoring.PolicyWithStatusActivated(r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, state)
+			// Update the cb_state gauge so it reflects the new state immediately,
+			// instead of staying stuck at the state snapshotted when the policy
+			// was instantiated (see issue #10113).
+			diag.DefaultResiliencyMonitoring.RecordCircuitBreakerState(r.name, r.namespace, direction, target, state)
 		}
 	}
 }
@@ -804,8 +837,9 @@ func (r *Resiliency) ActorPostLockPolicy(actorType string, id string) *PolicyDef
 // ComponentOutboundPolicy returns the outbound policy for a component.
 func (r *Resiliency) ComponentOutboundPolicy(name string, componentType ComponentType) *PolicyDefinition {
 	policyDef := &PolicyDefinition{
-		log:  r.log,
-		name: "component[" + name + "] output",
+		log:            r.log,
+		name:           "component[" + name + "] output",
+		componentCtxFn: r.componentCtxFn,
 	}
 	componentPolicies, ok := r.components[name]
 	if ok {
@@ -843,8 +877,9 @@ func (r *Resiliency) ComponentOutboundPolicy(name string, componentType Componen
 // ComponentInboundPolicy returns the inbound policy for a component.
 func (r *Resiliency) ComponentInboundPolicy(name string, componentType ComponentType) *PolicyDefinition {
 	policyDef := &PolicyDefinition{
-		log:  r.log,
-		name: "component[" + name + "] input",
+		log:            r.log,
+		name:           "component[" + name + "] input",
+		componentCtxFn: r.componentCtxFn,
 	}
 	componentPolicies, ok := r.components[name]
 	if ok {
@@ -954,13 +989,56 @@ func (r *Resiliency) getDefaultCircuitBreakerPolicy(policyType PolicyType) strin
 	return ""
 }
 
+// expandedTemplateCache caches expandPolicyTemplate results. Policy types and
+// templates form tiny fixed sets, but the expansion runs on every
+// default-policy lookup (per actor invocation among others), each paying
+// several fmt.Sprintf calls and a slice for static strings.
+// expandedTemplateKey -> *expandedTemplate
+var expandedTemplateCache sync.Map
+
+type expandedTemplateKey struct {
+	policyType PolicyType
+	template   DefaultPolicyTemplate
+}
+
+type expandedTemplate struct {
+	typeTemplates []string
+	topLevel      string
+}
+
+// normalizePolicyType maps pointer receivers to their values so cache key
+// equality never depends on pointer identity: a *ComponentPolicy caller and
+// a ComponentPolicy caller with equal fields share one cache entry.
+func normalizePolicyType(p PolicyType) PolicyType {
+	switch v := p.(type) {
+	case *EndpointPolicy:
+		return *v
+	case *ActorPolicy:
+		return *v
+	case *ComponentPolicy:
+		return *v
+	}
+	return p
+}
+
 func (r *Resiliency) expandPolicyTemplate(policyType PolicyType, template DefaultPolicyTemplate) ([]string, string) {
+	key := expandedTemplateKey{policyType: normalizePolicyType(policyType), template: template}
+	if v, ok := expandedTemplateCache.Load(key); ok {
+		e := v.(*expandedTemplate)
+		return e.typeTemplates, e.topLevel
+	}
+
 	policyLevels := policyType.getPolicyLevels()
 	typeTemplates := make([]string, len(policyLevels))
 	for i, level := range policyLevels {
 		typeTemplates[i] = fmt.Sprintf(string(template), level)
 	}
-	return typeTemplates, fmt.Sprintf(string(template), "")
+	e := &expandedTemplate{
+		typeTemplates: typeTemplates,
+		topLevel:      fmt.Sprintf(string(template), ""),
+	}
+	expandedTemplateCache.Store(key, e)
+	return e.typeTemplates, e.topLevel
 }
 
 // Get returns a cached circuit breaker if one exists.

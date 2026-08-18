@@ -35,6 +35,7 @@ import (
 	resapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subv1api "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subv2api "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/store"
 )
 
@@ -91,12 +92,28 @@ func WithClusterNamespaceListFromStore(t *testing.T, store *store.Store) Option 
 	return handleClusterListResourceFromStore(t, "/api/v1/namespaces", store)
 }
 
+func WithClusterDaprWorkflowAccessPolicyListFromStore(t *testing.T, store *store.Store) Option {
+	return handleClusterListResourceFromStore(t, "/apis/dapr.io/v1alpha1/workflowaccesspolicies", store)
+}
+
 func WithClusterDaprHTTPEndpointList(t *testing.T, endpoints *httpendapi.HTTPEndpointList) Option {
 	return handleClusterListResource(t, "/apis/dapr.io/v1alpha1/httpendpoints", endpoints)
 }
 
 func WithClusterDaprMCPServerList(t *testing.T, mcpservers *mcpapi.MCPServerList) Option {
 	return handleClusterListResource(t, "/apis/dapr.io/v1alpha1/mcpservers", mcpservers)
+}
+
+func WithClusterDaprConfigurationListFromStore(t *testing.T, store *store.Store) Option {
+	return handleClusterListResourceFromStore(t, "/apis/dapr.io/v1alpha1/configurations", store)
+}
+
+func WithClusterDaprHTTPEndpointListFromStore(t *testing.T, store *store.Store) Option {
+	return handleClusterListResourceFromStore(t, "/apis/dapr.io/v1alpha1/httpendpoints", store)
+}
+
+func WithClusterDaprResiliencyListFromStore(t *testing.T, store *store.Store) Option {
+	return handleClusterListResourceFromStore(t, "/apis/dapr.io/v1alpha1/resiliencies", store)
 }
 
 func WithClusterPodList(t *testing.T, pods *corev1.PodList) Option {
@@ -139,6 +156,10 @@ func WithSecretList(t *testing.T, secrets *corev1.SecretList) Option {
 	return handleClusterListResource(t, "/api/v1/secrets", secrets)
 }
 
+func WithClusterSecretListFromStore(t *testing.T, store *store.Store) Option {
+	return handleClusterListResourceFromStore(t, "/api/v1/secrets", store)
+}
+
 func WithDaprResiliencyGet(t *testing.T, ns, name string, res *resapi.Resiliency) Option {
 	return handleGetResource(t, "/apis/dapr.io/v1alpha1", "resiliencies", ns, name, res)
 }
@@ -160,6 +181,7 @@ func WithBaseOperatorAPI(t *testing.T, td spiffeid.TrustDomain, ns string, sentr
 					},
 				},
 			}),
+			WithClusterPodList(t, &corev1.PodList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"}}),
 			WithClusterServiceList(t, &corev1.ServiceList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ServiceList"}}),
 			WithClusterStatefulSetList(t, &appsv1.StatefulSetList{TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "StatefulSetList"}}),
 			WithClusterDeploymentList(t, &appsv1.DeploymentList{TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "DeploymentList"}}),
@@ -167,8 +189,10 @@ func WithBaseOperatorAPI(t *testing.T, td spiffeid.TrustDomain, ns string, sentr
 			WithClusterDaprComponentList(t, &compapi.ComponentList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ComponentList"}}),
 			WithClusterDaprSubscriptionListV2(t, &subv2api.SubscriptionList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v2alpha1", Kind: "SubscriptionList"}}),
 			WithClusterDaprHTTPEndpointList(t, &httpendapi.HTTPEndpointList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "HTTPEndpointList"}}),
+			WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ConfigurationList"}}),
 			WithClusterDaprResiliencyList(t, &resapi.ResiliencyList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ResiliencyList"}}),
 			WithClusterDaprMCPServerList(t, &mcpapi.MCPServerList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "MCPServerList"}}),
+			handleClusterListResource(t, "/apis/dapr.io/v1alpha1/workflowaccesspolicies", &wfaclapi.WorkflowAccessPolicyList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "WorkflowAccessPolicyList"}}),
 			WithClusterNamespaceList(t, &corev1.NamespaceList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "NamespaceList"}}),
 		} {
 			op(o)

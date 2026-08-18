@@ -67,8 +67,9 @@ func (a *allfail) Setup(t *testing.T) []framework.Option {
 func (a *allfail) Run(t *testing.T, ctx context.Context) {
 	a.scheduler.WaitUntilRunning(t, ctx)
 	a.daprd.WaitUntilRunning(t, ctx)
+	a.scheduler.WaitUntilSidecarsConnected(t, ctx, 3)
 
-	_, err := a.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err := a.daprd.GRPCClient(t, ctx).ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:    "test",
 			DueTime: new("0s"),

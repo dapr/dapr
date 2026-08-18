@@ -65,7 +65,7 @@ func (n *nonretriablefailure) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("non-retriable failed job trigger", func(t *testing.T) {
 		body := strings.NewReader(`{"dueTime":"0s","data":"test","failure_policy":{"constant":{"interval":"0s","max_retries":3}}}`)
-		n.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/nonretriablefailure", body)
+		n.daprd.HTTPPost2xx(t, ctx, "/v1.0/jobs/nonretriablefailure", body)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			metrics := n.daprd.Metrics(c, ctx).All()

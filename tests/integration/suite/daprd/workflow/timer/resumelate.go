@@ -46,23 +46,23 @@ func (r *resumelate) Setup(t *testing.T) []framework.Option {
 func (r *resumelate) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
-	r.workflow.Registry().AddOrchestratorN("timer", func(ctx *task.OrchestrationContext) (any, error) {
+	r.workflow.Registry().AddWorkflowN("timer", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, ctx.CreateTimer(time.Second * 8).Await(nil)
 	})
 
 	client := r.workflow.BackendClient(t, ctx)
 
 	start := time.Now()
-	id, err := client.ScheduleNewOrchestration(ctx, "timer")
+	id, err := client.ScheduleNewWorkflow(ctx, "timer")
 	require.NoError(t, err)
 
 	time.Sleep(time.Second * 1)
-	require.NoError(t, client.SuspendOrchestration(ctx, id, "foo"))
+	require.NoError(t, client.SuspendWorkflow(ctx, id, "foo"))
 
 	time.Sleep(time.Second * 10)
-	require.NoError(t, client.ResumeOrchestration(ctx, id, "bar"))
+	require.NoError(t, client.ResumeWorkflow(ctx, id, "bar"))
 
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, time.Since(start).Seconds(), 11.0)
 }

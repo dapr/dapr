@@ -68,7 +68,7 @@ func (n *notfound) Run(t *testing.T, ctx context.Context) {
 	n.scheduler.WaitUntilRunning(t, ctx)
 	n.daprd.WaitUntilRunning(t, ctx)
 
-	_, err := n.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err := n.daprd.GRPCClient(t, ctx).ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:    "test",
 			DueTime: new("0s"),

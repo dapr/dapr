@@ -50,7 +50,7 @@ func (c *callactivity) Run(t *testing.T, ctx context.Context) {
 	c.workflow.WaitUntilRunning(t, ctx)
 
 	// Add orchestrator to app0's registry
-	c.workflow.Registry().AddOrchestratorN("CrossAppWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	c.workflow.Registry().AddWorkflowN("CrossAppWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app0: %w", err)
@@ -80,11 +80,11 @@ func (c *callactivity) Run(t *testing.T, ctx context.Context) {
 	client0 := c.workflow.BackendClient(t, ctx) // app0 (orchestrator)
 	c.workflow.BackendClientN(t, ctx, 1)        // app1 (activity)
 
-	id, err := client0.ScheduleNewOrchestration(ctx, "CrossAppWorkflow", api.WithInput("Hello from app0"))
+	id, err := client0.ScheduleNewWorkflow(ctx, "CrossAppWorkflow", api.WithInput("Hello from app0"))
 	require.NoError(t, err)
 
-	metadata, err := client0.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+	metadata, err := client0.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
-	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	assert.Equal(t, `"Processed by app1: Hello from app0"`, metadata.GetOutput().GetValue())
 }

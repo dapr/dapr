@@ -56,7 +56,7 @@ func (l *largeactivityresult) Run(t *testing.T, ctx context.Context) {
 	const payloadSize = 5 * 1024 * 1024 // 5MB
 	largePayload := strings.Repeat("x", payloadSize)
 
-	l.workflow.Registry().AddOrchestratorN("large-result", func(ctx *task.OrchestrationContext) (any, error) {
+	l.workflow.Registry().AddWorkflowN("large-result", func(ctx *task.WorkflowContext) (any, error) {
 		var result string
 		err := ctx.CallActivity("produce-large-result").Await(&result)
 		return result, err
@@ -68,10 +68,10 @@ func (l *largeactivityresult) Run(t *testing.T, ctx context.Context) {
 
 	client := l.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "large-result")
+	id, err := client.ScheduleNewWorkflow(ctx, "large-result")
 	require.NoError(t, err)
 
-	metadata, err := client.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+	metadata, err := client.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
-	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 }

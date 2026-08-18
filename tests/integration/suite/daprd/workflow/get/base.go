@@ -65,13 +65,13 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 	evs := resp.Events
 	require.Len(t, evs, 3)
 
-	assert.NotNil(t, evs[0].GetOrchestratorStarted())
+	assert.NotNil(t, evs[0].GetWorkflowStarted())
 	assert.Nil(t, evs[0].GetExecutionStarted())
 	assert.NotNil(t, evs[1].GetExecutionStarted())
 	assert.Equal(t, "foo", evs[1].GetExecutionStarted().GetName())
-	assert.Equal(t, "abc", evs[1].GetExecutionStarted().GetOrchestrationInstance().GetInstanceId())
+	assert.Equal(t, "abc", evs[1].GetExecutionStarted().GetWorkflowInstance().GetInstanceId())
 	assert.Equal(t, b.workflow.Dapr().AppID(), evs[1].GetRouter().GetSourceAppID())
 	assert.NotNil(t, evs[2].GetExecutionCompleted())
-	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[2].GetExecutionCompleted().GetOrchestrationStatus().String())
+	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[2].GetExecutionCompleted().GetWorkflowStatus().String())
 	assert.Equal(t, b.workflow.Dapr().AppID(), evs[2].GetRouter().GetSourceAppID())
 }

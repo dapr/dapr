@@ -69,7 +69,6 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		CancelWatch:    cancel,
 		Stream:         stream,
 		Namespace:      in.GetNamespace(),
-		PodName:        in.GetPodName(),
 		KubeClient:     a.Client,
 		ProcessSecrets: processComponentSecrets,
 	})
@@ -109,13 +108,13 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 		c := components.Items[i] // Make a copy since we will refer to this as a reference in this loop.
 		err := processComponentSecrets(ctx, &c, in.GetNamespace(), a.Client)
 		if err != nil {
-			log.Warnf("error processing component %s secrets from pod %s/%s: %s", c.Name, in.GetNamespace(), in.GetPodName(), err)
+			log.Warnf("error processing component %s secrets in namespace %s: %s", c.Name, in.GetNamespace(), err)
 			return &operatorv1pb.ListComponentResponse{}, err
 		}
 
 		b, err := json.Marshal(&c)
 		if err != nil {
-			log.Warnf("error marshalling component %s from pod %s/%s: %s", c.Name, in.GetNamespace(), in.GetPodName(), err)
+			log.Warnf("error marshalling component %s in namespace %s: %s", c.Name, in.GetNamespace(), err)
 			continue
 		}
 		resp.Components = append(resp.GetComponents(), b)

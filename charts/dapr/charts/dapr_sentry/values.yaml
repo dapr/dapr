@@ -65,13 +65,13 @@ oidc:
     keyFile: ""
 
 livenessProbe:
-  initialDelaySeconds: 3
-  periodSeconds: 3
+  initialDelaySeconds: 180
+  periodSeconds: 10
   failureThreshold: 5
 readinessProbe:
-  initialDelaySeconds: 3
-  periodSeconds: 3
-  failureThreshold: 5
+  initialDelaySeconds: 1
+  periodSeconds: 1
+  failureThreshold: 3
 
 debug:
   enabled: false
@@ -82,5 +82,11 @@ runAsNonRoot: true
 resources: {}
 
 extraEnvVars: {}
+
+# Additional command-line arguments to pass to the sentry container.
+# Use this for flags that are not yet exposed as dedicated Helm values, e.g.:
+#   extraArgs:
+#     - "--jwt-ttl=48h"
+extraArgs: []
 
 mode: kubernetes

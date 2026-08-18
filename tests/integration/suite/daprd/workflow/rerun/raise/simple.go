@@ -46,24 +46,24 @@ func (s *simple) Setup(t *testing.T) []framework.Option {
 func (s *simple) Run(t *testing.T, ctx context.Context) {
 	s.workflow.WaitUntilRunning(t, ctx)
 
-	s.workflow.Registry().AddOrchestratorN("simple-event", func(ctx *task.OrchestrationContext) (any, error) {
+	s.workflow.Registry().AddWorkflowN("simple-event", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.WaitForSingleEvent("abc1", time.Hour).Await(nil))
 		return nil, nil
 	})
 
 	client := s.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "simple-event", api.WithInstanceID("abc"))
+	id, err := client.ScheduleNewWorkflow(ctx, "simple-event", api.WithInstanceID("abc"))
 	require.NoError(t, err)
 	time.Sleep(time.Second * 2)
 	require.NoError(t, client.RaiseEvent(ctx, id, "abc1"))
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	newID, err := client.RerunWorkflowFromEvent(ctx, id, 0)
 	time.Sleep(time.Second * 2)
 	require.NoError(t, client.RaiseEvent(ctx, newID, "abc1"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 }

@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
@@ -88,6 +89,12 @@ func (a *apiServer) ListMCPServers(ctx context.Context, in *operatorv1pb.ListMCP
 	if err := a.Client.List(ctx, &list, &client.ListOptions{
 		Namespace: in.GetNamespace(),
 	}); err != nil {
+		// If the MCPServer CRD is not installed, treat as an empty list so
+		// daprd can start in clusters that have not yet applied the CRD.
+		if apimeta.IsNoMatchError(err) {
+			log.Warnf("MCPServer CRD not installed, returning empty list: %s", err)
+			return resp, nil
+		}
 		return nil, fmt.Errorf("error listing MCP servers: %w", err)
 	}
 

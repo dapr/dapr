@@ -24,6 +24,7 @@ type options struct {
 	pubsub    pubsub.PubSub
 	pmrReqCh  chan<- *compv1pb.PullMessagesRequest
 	pmrRespCh <-chan *compv1pb.PullMessagesResponse
+	pausable  bool
 }
 
 func WithSocket(socket *socket.Socket) Option {
@@ -42,5 +43,14 @@ func WithPullMessagesChannel(reqCh chan<- *compv1pb.PullMessagesRequest, resCh <
 	return func(o *options) {
 		o.pmrReqCh = reqCh
 		o.pmrRespCh = resCh
+	}
+}
+
+// WithPausable opts the pluggable server in to the Pause/Resume RPCs.
+// Default is non-pausable (returns codes.Unimplemented), matching the
+// vast majority of pubsub components.
+func WithPausable() Option {
+	return func(o *options) {
+		o.pausable = true
 	}
 }

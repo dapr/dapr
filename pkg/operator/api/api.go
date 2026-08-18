@@ -20,15 +20,19 @@ import (
 	"net"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	"google.golang.org/grpc"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/pkg/operator/api/informer"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/security"
@@ -47,6 +51,7 @@ var log = logger.NewLogger("dapr.operator.api")
 type Options struct {
 	Client        client.Client
 	Cache         cache.Cache
+	PodReader     client.Reader
 	Security      security.Provider
 	Port          int
 	ListenAddress string
@@ -61,14 +66,18 @@ type Server interface {
 type apiServer struct {
 	operatorv1pb.UnimplementedOperatorServer
 	Client        client.Client
+	podReader     client.Reader
 	sec           security.Provider
 	port          string
 	listenAddress string
 
-	compInformer      informer.Interface[componentsapi.Component]
-	subInformer       informer.Interface[subapi.Subscription]
-	endpointInformer  informer.Interface[httpendpointsapi.HTTPEndpoint]
-	mcpServerInformer informer.Interface[mcpserverapi.MCPServer]
+	compInformer       informer.Interface[componentsapi.Component]
+	subInformer        informer.Interface[subapi.Subscription]
+	endpointInformer   informer.Interface[httpendpointsapi.HTTPEndpoint]
+	configInformer     informer.Interface[configurationapi.Configuration]
+	resiliencyInformer informer.Interface[resiliencyapi.Resiliency]
+	mcpServerInformer  informer.Interface[mcpserverapi.MCPServer]
+	policyInformer     informer.Interface[wfaclapi.WorkflowAccessPolicy]
 
 	readyCh chan struct{}
 	running atomic.Bool
@@ -77,8 +86,16 @@ type apiServer struct {
 
 // NewAPIServer returns a new API server.
 func NewAPIServer(opts Options) Server {
+	// Fall back to the (cached) client when no dedicated pod reader is provided,
+	// so the server is safe to construct without the metadata-only optimization.
+	podReader := opts.PodReader
+	if podReader == nil {
+		podReader = opts.Client
+	}
+
 	return &apiServer{
-		Client: opts.Client,
+		Client:    opts.Client,
+		podReader: podReader,
 		compInformer: informer.New[componentsapi.Component](informer.Options{
 			Cache: opts.Cache,
 		}),
@@ -89,6 +106,15 @@ func NewAPIServer(opts Options) Server {
 			Cache: opts.Cache,
 		}),
 		mcpServerInformer: informer.New[mcpserverapi.MCPServer](informer.Options{
+			Cache: opts.Cache,
+		}),
+		configInformer: informer.New[configurationapi.Configuration](informer.Options{
+			Cache: opts.Cache,
+		}),
+		resiliencyInformer: informer.New[resiliencyapi.Resiliency](informer.Options{
+			Cache: opts.Cache,
+		}),
+		policyInformer: informer.New[wfaclapi.WorkflowAccessPolicy](informer.Options{
 			Cache: opts.Cache,
 		}),
 		sec:           opts.Security,
@@ -125,6 +151,9 @@ func (a *apiServer) Run(ctx context.Context) error {
 		a.subInformer.Run,
 		a.endpointInformer.Run,
 		a.mcpServerInformer.Run,
+		a.configInformer.Run,
+		a.resiliencyInformer.Run,
+		a.policyInformer.Run,
 		func(ctx context.Context) error {
 			if err := s.Serve(lis); err != nil {
 				return fmt.Errorf("gRPC server error: %w", err)
@@ -135,7 +164,19 @@ func (a *apiServer) Run(ctx context.Context) error {
 			// Block until context is done
 			<-ctx.Done()
 			a.closed.Store(true)
-			s.GracefulStop()
+			// Stop gracefully, but fall back to a forceful stop if a streaming
+			// handler does not return promptly, so shutdown cannot hang.
+			done := make(chan struct{})
+			go func() {
+				s.GracefulStop()
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				s.Stop()
+				<-done
+			}
 			return nil
 		},
 	).Run(ctx)

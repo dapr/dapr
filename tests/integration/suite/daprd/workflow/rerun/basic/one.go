@@ -48,7 +48,7 @@ func (o *one) Run(t *testing.T, ctx context.Context) {
 	o.workflow.WaitUntilRunning(t, ctx)
 
 	var act atomic.Int64
-	o.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	o.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		for range 5 {
 			require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		}
@@ -60,9 +60,9 @@ func (o *one) Run(t *testing.T, ctx context.Context) {
 	})
 	client := o.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
+	id, err := client.ScheduleNewWorkflow(ctx, "foo", api.WithInstanceID("abc"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, int64(5), act.Load())
 
@@ -72,7 +72,7 @@ func (o *one) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.NotEqual(t, id, newID)
 
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(5), act.Load())
 }

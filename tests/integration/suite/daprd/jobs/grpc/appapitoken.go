@@ -76,7 +76,7 @@ func (a *appapitoken) Run(t *testing.T, ctx context.Context) {
 	client := a.daprd.GRPCClient(t, ctx)
 	data, err := anypb.New(structpb.NewStringValue("test message"))
 	require.NoError(t, err)
-	_, err = client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err = client.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:     "test-job",
 			Schedule: new("@every 1s"),

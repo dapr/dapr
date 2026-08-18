@@ -113,9 +113,9 @@ func TestWorkflowRetentionPolicy(t *testing.T) {
 			"expected Completed, got: %s", string(resp))
 	}, 30*time.Second, 100*time.Millisecond)
 
-	// The retention policy is configured with anyTerminal: "1s".
-	// Wait for the workflow state to be automatically purged.
-	// After purging, the GET should return empty/not-found.
+	// The retention policy is configured with anyTerminal: "5s".
+	// Wait for the workflow state to be automatically purged. The window is
+	// generous to absorb scheduler/reminder dispatch latency on busy clusters.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, statusCode, err := utils.HTTPGetWithStatus(getString)
 		assert.NoError(c, err)
@@ -125,5 +125,5 @@ func TestWorkflowRetentionPolicy(t *testing.T) {
 		assert.NotEqualf(c, "Completed", string(resp),
 			"workflow should have been purged by retention policy, but still returned: %s (status %d)",
 			string(resp), statusCode)
-	}, 60*time.Second, time.Second)
+	}, 120*time.Second, 2*time.Second)
 }

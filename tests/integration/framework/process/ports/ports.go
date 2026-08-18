@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -29,11 +30,30 @@ var (
 	lock     sync.Mutex
 	resvPLen int
 	resvPIx  int
-	last     = 1024
+	last     = portsBase()
 	resvP    []*reservedPort
 )
 
+// portsBase returns the starting port for reservation probing. A test binary
+// re-executed inside an unshare user namespace (where our mapped euid is 0)
+// probes from a high base to avoid colliding with the parent process's
+// reservations on the lower port range.
+func portsBase() int {
+	if os.Geteuid() == 0 {
+		return 40000
+	}
+	return 1024
+}
+
 const blockSize = 500
+
+// portsCeil is the exclusive upper bound for reservation probing. It is kept
+// strictly below the OS ephemeral port range (macOS default 49152-65535) so
+// that held-open reserved listeners never squat on ports the kernel needs to
+// assign for outbound dials. Exhausting the outbound ephemeral pool surfaces
+// as EADDRNOTAVAIL ("can't assign requested address") and was the dominant
+// failure mode on the 3-core macos-14 CI runner.
+const portsCeil = 49000
 
 // Ports reserves network ports, and then frees them when the test is ready to
 // run so a  process can bind to them at runtime.
@@ -63,8 +83,8 @@ func Reserve(t *testing.T, count int) *Ports {
 		t.Logf("reserving %d more ports", blockSize)
 		for i := 0; i < blockSize; i++ {
 			last++
-			if last+i > 65535 {
-				last = 1024
+			if last+i >= portsCeil {
+				last = portsBase()
 			}
 			ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(last))
 			if err != nil {

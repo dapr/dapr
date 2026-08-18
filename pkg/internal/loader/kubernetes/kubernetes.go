@@ -32,5 +32,4 @@ type Options struct {
 	Config    config.KubernetesConfig
 	Client    operatorv1pb.OperatorClient
 	Namespace string
-	PodName   string
 }

@@ -41,6 +41,16 @@ service PubSub {
   rpc PullMessages(stream PullMessagesRequest)
       returns (stream PullMessagesResponse) {}
 
+  // Pause stops the component from delivering new messages to daprd while
+  // keeping existing subscription state alive. Servers MAY return
+  // UNIMPLEMENTED if they do not support pause-and-drain semantics; daprd
+  // will fall back to close-first shutdown in that case. Idempotent.
+  rpc Pause(PauseRequest) returns (PauseResponse) {}
+
+  // Resume reverses a prior Pause. Servers MAY return UNIMPLEMENTED.
+  // Idempotent.
+  rpc Resume(ResumeRequest) returns (ResumeResponse) {}
+
   // Ping the pubsub. Used for liveness porpuses.
   rpc Ping(PingRequest) returns (PingResponse) {}
 }
@@ -129,3 +139,12 @@ message PullMessagesResponse {
   // The message {transient} ID. Its used for ack'ing it later.
   string id = 5;
 }
+
+// reserved for future-proof extensibility
+message PauseRequest {}
+// reserved for future-proof extensibility
+message PauseResponse {}
+// reserved for future-proof extensibility
+message ResumeRequest {}
+// reserved for future-proof extensibility
+message ResumeResponse {}

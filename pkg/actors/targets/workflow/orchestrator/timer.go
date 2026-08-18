@@ -25,10 +25,9 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -45,7 +44,7 @@ func (o *orchestrator) createTimers(ctx context.Context, es []*backend.HistoryEv
 
 // hasUnfiredTimers returns true if the runtime state contains TimerCreated
 // events that do not have a corresponding TimerFired event.
-func hasUnfiredTimers(rs *protos.OrchestrationRuntimeState) bool {
+func hasUnfiredTimers(rs *protos.WorkflowRuntimeState) bool {
 	var created, fired int
 	for _, events := range [2][]*protos.HistoryEvent{
 		(rs.GetOldEvents()),
@@ -69,6 +68,21 @@ func timerReminderName(timerID int32) string {
 	return reminderPrefixTimer + strconv.Itoa(int(timerID))
 }
 
+// eventTimerName extracts the external-event name an event timer guards,
+// or ok=false for timers not associated with a WaitForSingleEvent.
+func eventTimerName(tc *protos.TimerCreatedEvent) (string, bool) {
+	if ee := tc.GetExternalEvent(); ee != nil {
+		return strings.ToUpper(ee.GetName()), true
+	}
+	if tc.Name != nil && tc.GetOrigin() == nil {
+		// TODO: We're doing `Name` matching for backwards compatibility.
+		// By around v1.19 we should only match with
+		// `origin.external_event` and remove the fallback logic.
+		return strings.ToUpper(tc.GetName()), true
+	}
+	return "", false
+}
+
 func (o *orchestrator) createTimer(ctx context.Context, e *backend.HistoryEvent, generation uint64) error {
 	ts := e.GetTimerFired()
 	if ts == nil {
@@ -90,7 +104,7 @@ func (o *orchestrator) createTimer(ctx context.Context, e *backend.HistoryEvent,
 
 func (o *orchestrator) createTimerReminder(ctx context.Context, name string, data proto.Message, start time.Time) error {
 	actorType := o.actorTypeBuilder.Workflow(o.appID)
-	dueTime := start.UTC().Format(time.RFC3339)
+	dueTime := start.UTC().Format(time.RFC3339Nano)
 
 	adata, err := anypb.New(data)
 	if err != nil {
@@ -99,37 +113,31 @@ func (o *orchestrator) createTimerReminder(ctx context.Context, name string, dat
 
 	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, name, dueTime)
 
-	return o.reminders.Create(ctx, &actorapi.CreateReminderRequest{
+	return common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
 		ActorType: actorType,
 		ActorID:   o.actorID,
 		Data:      adata,
 		DueTime:   dueTime,
 		Name:      name,
-		// One shot, retry forever, every second.
-		FailurePolicy: &commonv1pb.JobFailurePolicy{
-			Policy: &commonv1pb.JobFailurePolicy_Constant{
-				Constant: &commonv1pb.JobFailurePolicyConstant{
-					Interval:   durationpb.New(time.Second),
-					MaxRetries: nil,
-				},
-			},
-		},
+		// One shot, retry forever, jittered interval. The timer's due time
+		// is untouched; only the post-failure retry interval is jittered.
+		FailurePolicy: common.RetryForeverPolicy(),
 	})
 }
 
 // deleteCancelledEventTimers scans the workflow history to find timer reminders
 // associated with WaitForSingleEvent calls where the event has been received
 // before the timer fired, and deletes those now-unnecessary timer reminders.
-// 1. Find all TimerCreated events with an origin.external_event or Name set (i.e., event-associated timers)
+// 1. Find all TimerCreated events associated with external events (origin.external_event or legacy Name field)
 // 2. Remove any that have already fired (matching TimerFired events)
-// 3. For each new EventRaised, consume one matching unfired timer (FIFO order)
-// 4. Delete the timer reminders for consumed timers
+// 3. For each EventRaised, consume the oldest matching unfired timer created before it (FIFO order)
+// 4. Delete the timer reminders for timers consumed by new EventRaised events
 //
-// Only EventRaised events in NewEvents are considered as triggers for
-// cancellation, since events in OldEvents were already processed in a
-// previous execution. TimerCreated and TimerFired are scanned across both
-// OldEvents and NewEvents.
-func (o *orchestrator) deleteCancelledEventTimers(ctx context.Context, rs *protos.OrchestrationRuntimeState) error {
+// EventRaised events in OldEvents participate in the pairing — reproducing
+// the cancellations already performed by previous runs — but only timers
+// consumed by EventRaised events in NewEvents trigger deletions. TimerCreated
+// and TimerFired are scanned across both OldEvents and NewEvents.
+func (o *orchestrator) deleteCancelledEventTimers(ctx context.Context, rs *protos.WorkflowRuntimeState) error {
 	newEvents := rs.GetNewEvents()
 
 	// Quick check: if there are no new events that could contain an
@@ -145,63 +153,59 @@ func (o *orchestrator) deleteCancelledEventTimers(ctx context.Context, rs *proto
 		return nil
 	}
 
-	// Build the set of unfired event-associated timers from full history.
-	// pendingEventTimers: event name (uppercase) -> list of timer IDs (creation order)
+	// Each EventRaised consumes the oldest unfired event timer of the same
+	// name created before it, in history order. Old-event pairings reproduce
+	// cancellations done by previous runs; only timers consumed by this run's
+	// new events are deleted. Without the replay, previously cancelled timers
+	// would sit at the head of the FIFO and absorb every new cancellation,
+	// leaking the reminder of the timer actually cancelled this run. The
+	// created-before constraint ensures a timer guarding a still-armed wait
+	// is never consumed ahead of its own event.
 	pendingEventTimers := make(map[string][]int32)
-	firedTimerIDs := make(map[int32]bool)
-
-	for _, events := range [2][]*protos.HistoryEvent{
-		rs.GetOldEvents(),
-		newEvents,
-	} {
-		for _, e := range events {
-			// TODO: We're doing `Name` matching for backwards compatibility.
-			// By around v1.19 we should make it only match with `origin.external_event` and remove the fallback logic.
-			if tc := e.GetTimerCreated(); tc != nil && (tc.GetExternalEvent() != nil || tc.Name != nil) {
-				var name string
-				if ee := tc.GetExternalEvent(); ee != nil {
-					name = ee.GetName()
-				} else {
-					name = tc.GetName()
-				}
-				key := strings.ToUpper(name)
-				pendingEventTimers[key] = append(pendingEventTimers[key], e.GetEventId())
-			} else if tf := e.GetTimerFired(); tf != nil {
-				firedTimerIDs[tf.GetTimerId()] = true
-			}
-		}
-	}
-
-	// Remove already-fired timers from the pending map.
-	for key, timerIDs := range pendingEventTimers {
-		filtered := timerIDs[:0]
-		for _, id := range timerIDs {
-			if !firedTimerIDs[id] {
-				filtered = append(filtered, id)
-			}
-		}
-		if len(filtered) == 0 {
-			delete(pendingEventTimers, key)
-		} else {
-			pendingEventTimers[key] = filtered
-		}
-	}
-
-	// For each new EventRaised, consume one matching unfired timer (FIFO).
+	timerNameByID := make(map[int32]string)
 	var cancelledTimerIDs []int32
-	for _, e := range newEvents {
-		if er := e.GetEventRaised(); er != nil {
-			key := strings.ToUpper(er.GetName())
-			if timerIDs, ok := pendingEventTimers[key]; ok && len(timerIDs) > 0 {
-				cancelledTimerIDs = append(cancelledTimerIDs, timerIDs[0])
-				if len(timerIDs) == 1 {
-					delete(pendingEventTimers, key)
-				} else {
-					pendingEventTimers[key] = timerIDs[1:]
+
+	pair := func(events []*protos.HistoryEvent, collect bool) {
+		for _, e := range events {
+			switch {
+			case e.GetTimerCreated() != nil:
+				if name, ok := eventTimerName(e.GetTimerCreated()); ok {
+					pendingEventTimers[name] = append(pendingEventTimers[name], e.GetEventId())
+					timerNameByID[e.GetEventId()] = name
+				}
+
+			case e.GetTimerFired() != nil:
+				id := e.GetTimerFired().GetTimerId()
+				name, ok := timerNameByID[id]
+				if !ok {
+					continue
+				}
+				delete(timerNameByID, id)
+				ids := pendingEventTimers[name]
+				for i, tid := range ids {
+					if tid == id {
+						pendingEventTimers[name] = append(ids[:i], ids[i+1:]...)
+						break
+					}
+				}
+
+			case e.GetEventRaised() != nil:
+				name := strings.ToUpper(e.GetEventRaised().GetName())
+				ids := pendingEventTimers[name]
+				if len(ids) == 0 {
+					continue
+				}
+				id := ids[0]
+				pendingEventTimers[name] = ids[1:]
+				delete(timerNameByID, id)
+				if collect {
+					cancelledTimerIDs = append(cancelledTimerIDs, id)
 				}
 			}
 		}
 	}
+	pair(rs.GetOldEvents(), false)
+	pair(newEvents, true)
 
 	if len(cancelledTimerIDs) == 0 {
 		return nil

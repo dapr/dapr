@@ -53,8 +53,38 @@ var (
 		"scheduler/trigger_latency",
 		"The total time it takes to trigger a job from the scheduler service.",
 		stats.UnitMilliseconds)
+	concurrencyInflightGauge = stats.Int64(
+		"scheduler/concurrency_inflight",
+		"Current number of in-flight triggers subject to global concurrency limits on this scheduler instance.",
+		stats.UnitDimensionless)
+	concurrencyPendingGauge = stats.Int64(
+		"scheduler/concurrency_pending",
+		"Current number of triggers waiting for a concurrency slot on this scheduler instance.",
+		stats.UnitDimensionless)
+	concurrencyThrottledTotal = stats.Int64(
+		"scheduler/concurrency_throttled_total",
+		"Total number of triggers that were throttled by global concurrency limits.",
+		stats.UnitDimensionless)
+	jobsDeletedTotal = stats.Int64(
+		"scheduler/jobs_deleted_total",
+		"The total number of deleted jobs.",
+		stats.UnitDimensionless)
+	jobsBulkDeletedTotal = stats.Int64(
+		"scheduler/jobs_bulk_deleted_total",
+		"The total number of bulk job deletion operations.",
+		stats.UnitDimensionless)
+	jobsCreatedFailedTotal = stats.Int64(
+		"scheduler/jobs_created_failed_total",
+		"The total number of failed job creation attempts.",
+		stats.UnitDimensionless)
+	sidecarErrorsTotal = stats.Int64(
+		"scheduler/sidecar_errors_total",
+		"The total number of sidecar communication and authorization errors.",
+		stats.UnitDimensionless)
 
-	tagType = tag.MustNewKey("type")
+	tagType           = tag.MustNewKey("type")
+	tagConcurrencyKey = tag.MustNewKey("concurrency_key")
+	tagReason         = tag.MustNewKey("reason")
 )
 
 var tagSidecarsConnected = utils.WithTags(sidecarsConnectedGauge.Name())
@@ -169,6 +199,103 @@ func RecordJobsUndeliveredCount(jobMetadata *schedulerv1pb.JobMetadata) {
 	stats.RecordWithTags(context.Background(), tag, jobsUndeliveredTotal.M(1))
 }
 
+// RecordConcurrencyInflight records the current in-flight count for a
+// concurrency gate on this scheduler instance.
+func RecordConcurrencyInflight(key string, count int64) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(concurrencyInflightGauge.Name(), tagConcurrencyKey, key),
+		concurrencyInflightGauge.M(count),
+	)
+}
+
+// RecordConcurrencyPending records the current pending count for a
+// concurrency gate on this scheduler instance.
+func RecordConcurrencyPending(key string, count int64) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(concurrencyPendingGauge.Name(), tagConcurrencyKey, key),
+		concurrencyPendingGauge.M(count),
+	)
+}
+
+// RecordConcurrencyThrottled records that a trigger was throttled by a
+// concurrency gate.
+func RecordConcurrencyThrottled(key string) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(concurrencyThrottledTotal.Name(), tagConcurrencyKey, key),
+		concurrencyThrottledTotal.M(1),
+	)
+}
+
+var (
+	tagDeletedJob     = utils.WithTags(jobsDeletedTotal.Name(), tagType, "job")
+	tagDeletedActor   = utils.WithTags(jobsDeletedTotal.Name(), tagType, "actor")
+	tagDeletedUnknown = utils.WithTags(jobsDeletedTotal.Name(), tagType, "unknown")
+)
+
+// RecordJobsDeletedCount records the number of jobs deleted from the scheduler service.
+func RecordJobsDeletedCount(jobMetadata *schedulerv1pb.JobMetadata) {
+	var tag []tag.Mutator
+	switch jobMetadata.GetTarget().GetType().(type) {
+	case *schedulerv1pb.JobTargetMetadata_Job:
+		tag = tagDeletedJob
+	case *schedulerv1pb.JobTargetMetadata_Actor:
+		tag = tagDeletedActor
+	default:
+		tag = tagDeletedUnknown
+	}
+
+	stats.RecordWithTags(context.Background(), tag, jobsDeletedTotal.M(1))
+}
+
+var tagBulkDeleted = utils.WithTags(jobsBulkDeletedTotal.Name())
+
+// RecordJobsBulkDeletedCount records a bulk job deletion operation.
+func RecordJobsBulkDeletedCount() {
+	stats.RecordWithTags(context.Background(), tagBulkDeleted, jobsBulkDeletedTotal.M(1))
+}
+
+var (
+	tagCreatedFailedJob     = utils.WithTags(jobsCreatedFailedTotal.Name(), tagType, "job")
+	tagCreatedFailedActor   = utils.WithTags(jobsCreatedFailedTotal.Name(), tagType, "actor")
+	tagCreatedFailedUnknown = utils.WithTags(jobsCreatedFailedTotal.Name(), tagType, "unknown")
+)
+
+// RecordJobsCreatedFailedCount records a failed job creation attempt.
+func RecordJobsCreatedFailedCount(jobMetadata *schedulerv1pb.JobMetadata) {
+	var tag []tag.Mutator
+	switch jobMetadata.GetTarget().GetType().(type) {
+	case *schedulerv1pb.JobTargetMetadata_Job:
+		tag = tagCreatedFailedJob
+	case *schedulerv1pb.JobTargetMetadata_Actor:
+		tag = tagCreatedFailedActor
+	default:
+		tag = tagCreatedFailedUnknown
+	}
+
+	stats.RecordWithTags(context.Background(), tag, jobsCreatedFailedTotal.M(1))
+}
+
+var (
+	tagSidecarErrorSendFailed = utils.WithTags(sidecarErrorsTotal.Name(), tagReason, "send_failed")
+	tagSidecarErrorRecvFailed = utils.WithTags(sidecarErrorsTotal.Name(), tagReason, "recv_failed")
+	tagSidecarErrorAuthFailed = utils.WithTags(sidecarErrorsTotal.Name(), tagReason, "auth_failed")
+)
+
+// RecordSidecarSendError records a sidecar stream send error.
+func RecordSidecarSendError() {
+	stats.RecordWithTags(context.Background(), tagSidecarErrorSendFailed, sidecarErrorsTotal.M(1))
+}
+
+// RecordSidecarRecvError records a sidecar stream receive error.
+func RecordSidecarRecvError() {
+	stats.RecordWithTags(context.Background(), tagSidecarErrorRecvFailed, sidecarErrorsTotal.M(1))
+}
+
+// RecordSidecarAuthError records a sidecar authorization error.
+func RecordSidecarAuthError() {
+	stats.RecordWithTags(context.Background(), tagSidecarErrorAuthFailed, sidecarErrorsTotal.M(1))
+}
+
 // InitMetrics initialize the scheduler service metrics.
 func InitMetrics() error {
 	err := view.Register(
@@ -178,6 +305,13 @@ func InitMetrics() error {
 		utils.NewMeasureView(triggerLatency, []tag.Key{tagType}, view.Distribution(0, 100, 500, 1000, 5000, 10000)),
 		utils.NewMeasureView(jobsFailedTotal, []tag.Key{tagType}, view.Count()),
 		utils.NewMeasureView(jobsUndeliveredTotal, []tag.Key{tagType}, view.Count()),
+		utils.NewMeasureView(concurrencyInflightGauge, []tag.Key{tagConcurrencyKey}, view.LastValue()),
+		utils.NewMeasureView(concurrencyPendingGauge, []tag.Key{tagConcurrencyKey}, view.LastValue()),
+		utils.NewMeasureView(concurrencyThrottledTotal, []tag.Key{tagConcurrencyKey}, view.Count()),
+		utils.NewMeasureView(jobsDeletedTotal, []tag.Key{tagType}, view.Count()),
+		utils.NewMeasureView(jobsBulkDeletedTotal, []tag.Key{}, view.Count()),
+		utils.NewMeasureView(jobsCreatedFailedTotal, []tag.Key{tagType}, view.Count()),
+		utils.NewMeasureView(sidecarErrorsTotal, []tag.Key{tagReason}, view.Count()),
 	)
 
 	return err

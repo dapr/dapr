@@ -258,30 +258,43 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	// Before we handle the error, see if we need to respond in another way
 	// We still want the message so we can log it
 	log.Printf("(%s) subscribeHandler called %s. Message: %s", reqID, r.URL, msg)
-	switch desiredResponse {
-	case respondWithRetry:
-		log.Printf("(%s) Responding with RETRY", reqID)
-		// do not store received messages, respond with success but a retry status
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(appResponse{
-			Message: "retry later",
-			Status:  "RETRY",
-		})
-		return
-	case respondWithError:
-		log.Printf("(%s) Responding with ERROR", reqID)
-		// do not store received messages, respond with error
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	case respondWithInvalidStatus:
-		log.Printf("(%s) Responding with INVALID", reqID)
-		// do not store received messages, respond with success but an invalid status
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(appResponse{
-			Message: "invalid status triggers retry",
-			Status:  "INVALID",
-		})
-		return
+
+	// The dead-letter topic is a terminal sink: a message only lands here
+	// after it has already exhausted retries on its source topic and been
+	// dead-lettered. Always accept and record it, even while the app is
+	// configured to error/retry/return-invalid on its primary topics.
+	// Otherwise the error-mode subscriber rejects the very messages the
+	// dead-letter test is trying to count, and whether the count is
+	// satisfied becomes a race between dead-lettering and the test
+	// flipping the subscriber back to success.
+	isDeadLetter := strings.HasSuffix(r.URL.String(), pubsubDeadLetter)
+
+	if !isDeadLetter {
+		switch desiredResponse {
+		case respondWithRetry:
+			log.Printf("(%s) Responding with RETRY", reqID)
+			// do not store received messages, respond with success but a retry status
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(appResponse{
+				Message: "retry later",
+				Status:  "RETRY",
+			})
+			return
+		case respondWithError:
+			log.Printf("(%s) Responding with ERROR", reqID)
+			// do not store received messages, respond with error
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		case respondWithInvalidStatus:
+			log.Printf("(%s) Responding with INVALID", reqID)
+			// do not store received messages, respond with success but an invalid status
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(appResponse{
+				Message: "invalid status triggers retry",
+				Status:  "INVALID",
+			})
+			return
+		}
 	}
 
 	if err != nil {

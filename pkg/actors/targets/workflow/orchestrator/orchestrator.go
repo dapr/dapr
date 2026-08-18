@@ -23,6 +23,8 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/backend"
@@ -31,7 +33,7 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.actors.targets.orchestrator")
 
-type EventSink func(*backend.OrchestrationMetadata)
+type EventSink func(*backend.WorkflowMetadata)
 
 type orchestrator struct {
 	*factory
@@ -39,8 +41,8 @@ type orchestrator struct {
 	actorID string
 
 	state  *wfenginestate.State
-	rstate *backend.OrchestrationRuntimeState
-	ometa  *backend.OrchestrationMetadata
+	rstate *backend.WorkflowRuntimeState
+	ometa  *backend.WorkflowMetadata
 
 	activityResultAwaited atomic.Bool
 	lock                  *lock.Stallable
@@ -49,6 +51,9 @@ type orchestrator struct {
 
 	streamFns map[int64]*streamFn
 	streamIDx int64
+
+	signing  *signing.Signing
+	messages *messages.Messages
 }
 
 type streamFn struct {
@@ -110,22 +115,26 @@ func (o *orchestrator) InvokeStream(ctx context.Context, req *internalsv1pb.Inte
 // DeactivateActor implements actors.InternalActor
 func (o *orchestrator) Deactivate(ctx context.Context) error {
 	unlock, err := o.lock.ContextLock(ctx)
+	if targeterrors.IsStalled(err) {
+		// The actor is parked in the stall hold; wake it so its invocation
+		// returns and releases the lock, then take the lock to deactivate.
+		o.lock.ReleaseStall()
+		unlock, err = o.lock.ContextLock(ctx)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to deactivate workflow '%s': %w", o.actorID, err)
 	}
 	defer unlock()
 
 	o.table.Delete(o.actorID)
-	o.state = nil
-	o.rstate = nil
-	o.ometa = nil
+	o.invalidateCachedState()
 	o.lock.Close()
 	for _, stream := range o.streamFns {
 		stream.errCh <- targeterrors.NewClosed("deactivated")
 	}
 	clear(o.streamFns)
+	o.signing.Reset()
 	o.wg.Wait()
-	orchestratorCache.Put(o)
 
 	return nil
 }

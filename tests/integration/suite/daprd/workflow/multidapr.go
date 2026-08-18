@@ -85,7 +85,7 @@ func (m *multidapr) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("schedule_workflow_with_multidaprple_daprd_instances", func(t *testing.T) {
 		r := task.NewTaskRegistry()
-		r.AddOrchestratorN("ScheduleWorkflowWithmultidaprpleDaprdInstances", func(ctx *task.OrchestrationContext) (any, error) {
+		r.AddWorkflowN("ScheduleWorkflowWithmultidaprpleDaprdInstances", func(ctx *task.WorkflowContext) (any, error) {
 			var input string
 			if err := ctx.GetInput(&input); err != nil {
 				return nil, err
@@ -106,12 +106,12 @@ func (m *multidapr) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
 		defer cancelTaskhub()
 
-		id, err := backendClient.ScheduleNewOrchestration(ctx, "ScheduleWorkflowWithmultidaprpleDaprdInstances", api.WithInstanceID("Dapr"), api.WithInput("Dapr"))
+		id, err := backendClient.ScheduleNewWorkflow(ctx, "ScheduleWorkflowWithmultidaprpleDaprdInstances", api.WithInstanceID("Dapr"), api.WithInput("Dapr"))
 		require.NoError(t, err)
 
-		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+		metadata, err := backendClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 		assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 	})
 }

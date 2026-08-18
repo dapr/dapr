@@ -49,6 +49,9 @@ service AppCallback {
 
   // Subscribes bulk events from Pubsub
   rpc OnBulkTopicEvent(TopicEventBulkRequest) returns (TopicEventBulkResponse) {}
+
+  // Sends job back to the app's endpoint at trigger time.
+  rpc OnJobEvent (JobEventRequest) returns (JobEventResponse);
 }
 
 // AppCallbackHealthCheck V1 is an optional extension to AppCallback V1 to implement
@@ -66,8 +69,10 @@ service AppCallbackAlpha {
     option deprecated = true;
   }
 
-  // Sends job back to the app's endpoint at trigger time.
-  rpc OnJobEventAlpha1 (JobEventRequest) returns (JobEventResponse);
+  // Deprecated: Sends job back to the app's endpoint at trigger time.
+  rpc OnJobEventAlpha1 (JobEventRequest) returns (JobEventResponse) {
+    option deprecated = true;
+  }
 }
 
 message JobEventRequest {

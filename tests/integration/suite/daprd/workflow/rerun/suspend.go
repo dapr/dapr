@@ -51,7 +51,7 @@ func (s *suspend) Run(t *testing.T, ctx context.Context) {
 
 	var act atomic.Int64
 	waitCh := make(chan struct{})
-	s.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	s.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("wait").Await(nil))
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
@@ -67,10 +67,10 @@ func (s *suspend) Run(t *testing.T, ctx context.Context) {
 
 	client := s.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
+	id, err := client.ScheduleNewWorkflow(ctx, "foo", api.WithInstanceID("abc"))
 	require.NoError(t, err)
-	require.NoError(t, client.SuspendOrchestration(ctx, id, "because"))
-	meta, err := client.FetchOrchestrationMetadata(ctx, id)
+	require.NoError(t, client.SuspendWorkflow(ctx, id, "because"))
+	meta, err := client.FetchWorkflowMetadata(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_SUSPENDED, meta.GetRuntimeStatus())
 	close(waitCh)
@@ -79,14 +79,14 @@ func (s *suspend) Run(t *testing.T, ctx context.Context) {
 	_, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc"), 0)
 	assert.Equal(t, status.Error(codes.InvalidArgument, "'abc' is not in a terminal state"), err)
 
-	require.NoError(t, client.ResumeOrchestration(ctx, id, "because"))
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	require.NoError(t, client.ResumeWorkflow(ctx, id, "because"))
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), act.Load())
 
 	newID, err := client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc"), 0)
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), act.Load())
 }

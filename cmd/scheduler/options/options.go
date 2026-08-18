@@ -62,6 +62,7 @@ type Options struct {
 	EtcdMaxWALs                    uint
 	EtcdBackendBatchLimit          int
 	EtcdBackendBatchInterval       string
+	EtcdMaxTxnOps                  uint
 	EtcdDefragThresholdMB          uint
 	EtcdInitialElectionTickAdvance bool
 	EtcdMetrics                    string
@@ -116,13 +117,14 @@ func New(origArgs []string) (*Options, error) {
 	fs.Uint64Var(&opts.EtcdClientPort, "etcd-client-port", 2379, "Port for etcd client communication")
 	fs.StringVar(&opts.EtcdClientListenAddress, "etcd-client-listen-address", "localhost", "Listen address for etcd client communication")
 	fs.StringVar(&opts.etcdSpaceQuota, "etcd-space-quota", "9.2E", "Space quota for etcd")
-	fs.StringVar(&opts.EtcdCompactionMode, "etcd-compaction-mode", "periodic", "Compaction mode for etcd. Can be 'periodic' or 'revision'")
-	fs.StringVar(&opts.EtcdCompactionRetention, "etcd-compaction-retention", "10m", "Compaction retention for etcd. Can express time  or number of revisions, depending on the value of 'etcd-compaction-mode'")
-	fs.Uint64Var(&opts.EtcdSnapshotCount, "etcd-snapshot-count", 10000, "Number of committed transactions to trigger a snapshot to disk.")
+	fs.StringVar(&opts.EtcdCompactionMode, "etcd-compaction-mode", "revision", "Compaction mode for etcd. Can be 'periodic' or 'revision'")
+	fs.StringVar(&opts.EtcdCompactionRetention, "etcd-compaction-retention", "1000000", "Compaction retention for etcd. Can express time or number of revisions, depending on the value of 'etcd-compaction-mode'")
+	fs.Uint64Var(&opts.EtcdSnapshotCount, "etcd-snapshot-count", 100000, "Number of committed transactions to trigger a snapshot to disk.")
 	fs.UintVar(&opts.EtcdMaxSnapshots, "etcd-max-snapshots", 10, "Maximum number of snapshot files to retain (0 is unlimited).")
 	fs.UintVar(&opts.EtcdMaxWALs, "etcd-max-wals", 10, "Maximum number of write-ahead logs to retain (0 is unlimited).")
-	fs.IntVar(&opts.EtcdBackendBatchLimit, "etcd-backend-batch-limit", 5000, "Maximum operations before committing the backend transaction.")
-	fs.StringVar(&opts.EtcdBackendBatchInterval, "etcd-backend-batch-interval", "50ms", "Maximum time before committing the backend transaction.")
+	fs.IntVar(&opts.EtcdBackendBatchLimit, "etcd-backend-batch-limit", 10000, "Maximum operations before committing the backend transaction.")
+	fs.StringVar(&opts.EtcdBackendBatchInterval, "etcd-backend-batch-interval", "100ms", "Maximum time before committing the backend transaction.")
+	fs.UintVar(&opts.EtcdMaxTxnOps, "etcd-max-txn-ops", 10000, "Maximum number of operations permitted in a single etcd transaction. Workflow fan-out can batch many puts/deletes into one txn, so this is raised well above etcd's default of 128.")
 	fs.UintVar(&opts.EtcdDefragThresholdMB, "etcd-experimental-bootstrap-defrag-threshold-megabytes", 100, "Minimum number of megabytes needed to be freed for etcd to consider running defrag during bootstrap. Needs to be set to non-zero value to take effect.")
 	fs.BoolVar(&opts.EtcdInitialElectionTickAdvance, "etcd-initial-election-tick-advance", false, "Whether to fast-forward initial election ticks on boot for faster election. When it is true, then local member fast-forwards election ticks to speed up “initial” leader election trigger. This benefits the case of larger election ticks. Disabling this would slow down initial bootstrap process for cross datacenter deployments. Make your own tradeoffs by configuring this flag at the cost of slow initial bootstrap.")
 	fs.StringVar(&opts.EtcdMetrics, "etcd-metrics", "basic", "Level of detail for exported metrics, specify ’extensive’ to include histogram metrics.")

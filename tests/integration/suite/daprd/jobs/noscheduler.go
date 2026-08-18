@@ -61,7 +61,7 @@ func (b *noscheduler) Run(t *testing.T, ctx context.Context) {
 			},
 		},
 	}
-	_, err = client.ScheduleJobAlpha1(ctx, req)
+	_, err = client.ScheduleJob(ctx, req)
 	require.Error(t, err)
 
 	_, err = client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))

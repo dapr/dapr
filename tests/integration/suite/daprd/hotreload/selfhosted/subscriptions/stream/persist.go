@@ -43,17 +43,6 @@ type persist struct {
 func (p *persist) Setup(t *testing.T) []framework.Option {
 	p.sub = subscriber.New(t)
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true`), 0o600))
-
 	p.dir = t.TempDir()
 
 	require.NoError(t, os.WriteFile(filepath.Join(p.dir, "pubsub.yaml"), []byte(`
@@ -69,7 +58,6 @@ spec:
 	p.daprd = daprd.New(t,
 		daprd.WithAppPort(p.sub.Port(t)),
 		daprd.WithAppProtocol("grpc"),
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(p.dir),
 	)
 
@@ -96,7 +84,7 @@ spec:
   default: /a
 `), 0o600))
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, p.daprd.GetMetaSubscriptions(t, ctx), 1)
+		assert.Len(c, p.daprd.GetMetaSubscriptions(c, ctx), 1)
 	}, time.Second*5, time.Millisecond*10)
 
 	newReq := func(pubsub, topic string) *rtv1.PublishEventRequest {
@@ -163,7 +151,11 @@ spec:
  routes:
   default: /c
 `), 0o600))
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, p.daprd.GetMetaSubscriptions(t, ctx), 2)
-	}, time.Second*5, time.Millisecond*10)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.ElementsMatch(c, []daprd.MetadataResponsePubsubSubscription{
+			{PubsubName: "mypub", Topic: "a", Rules: []daprd.MetadataResponsePubsubSubscriptionRule{{Path: "/a"}}, Type: rtv1.PubsubSubscriptionType_DECLARATIVE.String()},
+			{PubsubName: "mypub", Topic: "b", Rules: []daprd.MetadataResponsePubsubSubscriptionRule{{Path: "/"}}, Type: rtv1.PubsubSubscriptionType_STREAMING.String()},
+			{PubsubName: "mypub", Topic: "c", Rules: []daprd.MetadataResponsePubsubSubscriptionRule{{Path: "/c"}}, Type: rtv1.PubsubSubscriptionType_DECLARATIVE.String()},
+		}, p.daprd.GetMetaSubscriptions(c, ctx))
+	}, time.Second*10, time.Millisecond*10)
 }

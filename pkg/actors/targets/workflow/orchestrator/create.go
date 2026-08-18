@@ -17,12 +17,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
+	"strings"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
@@ -32,7 +35,6 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 	if err := proto.Unmarshal(request, &createWorkflowInstanceRequest); err != nil {
 		return fmt.Errorf("failed to unmarshal createWorkflowInstanceRequest: %w", err)
 	}
-	reuseIDPolicy := createWorkflowInstanceRequest.GetPolicy()
 
 	startEvent := createWorkflowInstanceRequest.GetStartEvent()
 	if es := startEvent.GetExecutionStarted(); es == nil {
@@ -42,15 +44,15 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 			log.Debugf("Workflow actor '%s': creating workflow '%s' with instanceId '%s'",
 				o.actorID,
 				es.GetName(),
-				es.GetOrchestrationInstance().GetInstanceId(),
+				es.GetWorkflowInstance().GetInstanceId(),
 			)
 		} else {
 			log.Debugf("Workflow actor '%s': creating child workflow '%s' with instanceId '%s' parentWorkflow '%s' parentWorkflowId '%s'",
 				o.actorID,
 				es.GetName(),
-				es.GetOrchestrationInstance().GetInstanceId(),
+				es.GetWorkflowInstance().GetInstanceId(),
 				es.GetParentInstance().GetName(),
-				es.GetParentInstance().GetOrchestrationInstance().GetInstanceId(),
+				es.GetParentInstance().GetWorkflowInstance().GetInstanceId(),
 			)
 		}
 	}
@@ -60,47 +62,34 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 		return err
 	}
 
+	propagatedHistory := createWorkflowInstanceRequest.GetPropagatedHistory()
+
 	// orchestration didn't exist
 	// create a new state entry if one doesn't already exist
 	if state == nil {
 		state = wfenginestate.NewState(wfenginestate.Options{
 			AppID:             o.appID,
+			Namespace:         o.namespace,
 			WorkflowActorType: o.actorType,
 			ActivityActorType: o.activityActorType,
 		})
-		o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
+		o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
 		o.ometa = o.ometaFromState(o.rstate, startEvent.GetExecutionStarted())
-		return o.scheduleWorkflowStart(ctx, startEvent, state)
-	}
 
-	// orchestration already existed: apply reuse id policy
-	rs := o.rstate
-	runtimeStatus := runtimestate.RuntimeStatus(rs)
-	// if target status doesn't match, fall back to original logic, create instance only if previous one is completed
-	if !isStatusMatch(reuseIDPolicy.GetOperationStatus(), runtimeStatus) {
-		return o.createIfCompleted(ctx, rs, state, startEvent)
-	}
-
-	switch reuseIDPolicy.GetAction() {
-	case api.REUSE_ID_ACTION_IGNORE:
-		// Log an warning message and ignore creating new instance
-		log.Warnf("Workflow actor '%s': ignoring request to recreate the current workflow instance", o.actorID)
-		return nil
-	case api.REUSE_ID_ACTION_TERMINATE:
-		// terminate existing instance
-		if err := o.cleanupWorkflowStateInternal(ctx, state, false); err != nil {
-			return fmt.Errorf("failed to terminate existing instance with ID '%s'", o.actorID)
+		if propagatedHistory != nil {
+			if err := o.signing.VerifyAndAbsorbPropagatedHistory(propagatedHistory, state); err != nil {
+				return fmt.Errorf("workflow actor '%s': propagated history verification failed: %w", o.actorID, err)
+			}
+			state.SetIncomingHistory(propagatedHistory)
 		}
-
-		// created a new instance
-		state.Reset()
 		return o.scheduleWorkflowStart(ctx, startEvent, state)
 	}
-	// default Action ERROR, fall back to original logic
-	return o.createIfCompleted(ctx, rs, state, startEvent)
+
+	// orchestration already existed: create instance only if previous one is completed
+	return o.createIfCompleted(ctx, o.rstate, state, startEvent, propagatedHistory)
 }
 
-func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.OrchestrationRuntimeState, state *wfenginestate.State, startEvent *backend.HistoryEvent) error {
+func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.WorkflowRuntimeState, state *wfenginestate.State, startEvent *backend.HistoryEvent, propagatedHistory *protos.PropagatedHistory) error {
 	// We block (re)creation of existing workflows unless they are in a completed state
 	// Or if they still have any pending activity result awaited.
 	if !runtimestate.IsCompleted(rs) {
@@ -109,16 +98,42 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Orches
 		// re-execute and attempt the child creation again.
 		if o.isSameParentCreation(state, startEvent) {
 			log.Debugf("Workflow actor '%s': ignoring duplicate child workflow creation from parent '%s'",
-				o.actorID, startEvent.GetExecutionStarted().GetParentInstance().GetOrchestrationInstance().GetInstanceId())
+				o.actorID, startEvent.GetExecutionStarted().GetParentInstance().GetWorkflowInstance().GetInstanceId())
 			return nil
 		}
-		return fmt.Errorf("an active workflow with ID '%s' already exists", o.actorID)
+		return status.Errorf(codes.AlreadyExists, "an active workflow with ID '%s' already exists", o.actorID)
 	}
+
 	if o.activityResultAwaited.Load() {
 		return fmt.Errorf("a terminated workflow with ID '%s' is already awaiting an activity result", o.actorID)
 	}
+
+	// An ID is reusable only once the previous execution's entire child
+	// workflow tree is terminal: a still-running descendant could deliver
+	// events from the old execution into the new one.
+	if err := o.childrenTerminalCheck(ctx, state); err != nil {
+		// AlreadyExists only for the genuine not-terminal verdict. A failure
+		// to verify (child unreachable, context timeout) is Unavailable so
+		// callers retry rather than treat the ID as taken; reuse stays
+		// blocked either way.
+		code := codes.Unavailable
+		if strings.HasSuffix(err.Error(), api.ErrNotCompleted.Error()) {
+			code = codes.AlreadyExists
+		}
+		return status.Errorf(code, "cannot recreate workflow with ID '%s': %s", o.actorID, err.Error())
+	}
+
 	log.Infof("Workflow actor '%s': workflow was previously completed and is being recreated", o.actorID)
+
 	state.Reset()
+
+	if propagatedHistory != nil {
+		if err := o.signing.VerifyAndAbsorbPropagatedHistory(propagatedHistory, state); err != nil {
+			return fmt.Errorf("workflow actor '%s': propagated history verification failed: %w", o.actorID, err)
+		}
+		state.SetIncomingHistory(propagatedHistory)
+	}
+
 	return o.scheduleWorkflowStart(ctx, startEvent, state)
 }
 
@@ -131,11 +146,16 @@ func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *ba
 	// Schedule a reminder to execute immediately after this operation. The reminder will trigger the actual
 	// workflow execution. This is preferable to using the current thread so that we don't block the client
 	// while the workflow logic is running.
-	if _, err := o.createWorkflowReminder(ctx, reminderPrefixStart, nil, start, o.appID); err != nil {
+	workflowName := startEvent.GetExecutionStarted().GetName()
+	reminderName, err := randomReminderName(reminderPrefixStart)
+	if err != nil {
+		return err
+	}
+	if err := o.createWorkflowReminder(ctx, reminderName, nil, start, o.appID, &workflowName); err != nil {
 		return err
 	}
 	state.AddToInbox(startEvent)
-	if err := o.saveInternalState(ctx, state); err != nil {
+	if err := o.signAndSaveState(ctx, state); err != nil {
 		return err
 	}
 
@@ -153,10 +173,6 @@ func (o *orchestrator) isSameParentCreation(state *wfenginestate.State, startEve
 		return false
 	}
 
-	return existingParent.GetOrchestrationInstance().GetInstanceId() == newParent.GetOrchestrationInstance().GetInstanceId() &&
+	return existingParent.GetWorkflowInstance().GetInstanceId() == newParent.GetWorkflowInstance().GetInstanceId() &&
 		existingParent.GetTaskScheduledId() == newParent.GetTaskScheduledId()
-}
-
-func isStatusMatch(statuses []api.OrchestrationStatus, runtimeStatus api.OrchestrationStatus) bool {
-	return slices.Contains(statuses, runtimeStatus)
 }

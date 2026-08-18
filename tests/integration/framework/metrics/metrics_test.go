@@ -41,7 +41,7 @@ func TestNew(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	metrics := New(t, t.Context(), ts.URL)
+	metrics := New(t, t.Context(), ts.Client(), ts.URL)
 	metricsMap := metrics.All()
 
 	require.NotNil(t, metricsMap)

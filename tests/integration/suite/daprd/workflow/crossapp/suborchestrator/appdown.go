@@ -67,7 +67,7 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 	a.registry2 = task.NewTaskRegistry()
 
 	// App2: Activity that will be called before the app goes down
-	a.registry2.AddOrchestratorN("ProcessData", func(ctx *task.OrchestrationContext) (any, error) {
+	a.registry2.AddWorkflowN("ProcessData", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app2: %w", err)
@@ -102,16 +102,16 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 	)
 
 	// App1: Orchestrator, calls app2
-	a.registry1.AddOrchestratorN("AppDownWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	a.registry1.AddWorkflowN("AppDownWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
 		}
 
 		var result string
-		err := ctx.CallSubOrchestrator("ProcessData",
-			task.WithSubOrchestratorInput(input),
-			task.WithSubOrchestratorAppID(a.daprd2.AppID())).
+		err := ctx.CallChildWorkflow("ProcessData",
+			task.WithChildWorkflowInput(input),
+			task.WithChildWorkflowAppID(a.daprd2.AppID())).
 			Await(&result)
 		if err != nil {
 			return fmt.Sprintf("Error occurred: %v", err), nil
@@ -147,7 +147,7 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	err = client2.StartWorkItemListener(cctx, a.registry2)
 	require.NoError(t, err)
 
-	id, err := client1.ScheduleNewOrchestration(ctx, "AppDownWorkflow", api.WithInput("Hello from app1"))
+	id, err := client1.ScheduleNewWorkflow(ctx, "AppDownWorkflow", api.WithInput("Hello from app1"))
 	require.NoError(t, err)
 
 	// Wait for sub-orchestrator to start
@@ -164,7 +164,7 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	// Expect completion to hang, so timeout
 	waitCtx, waitCancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer waitCancel()
-	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
+	_, err = client1.WaitForWorkflowCompletion(waitCtx, id, api.WithFetchPayloads(true))
 	require.Error(t, err)
 	assert.EqualError(t, err, "context deadline exceeded")
 }

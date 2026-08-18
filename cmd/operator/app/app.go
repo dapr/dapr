@@ -68,6 +68,7 @@ func Run() {
 		APIListenAddress:                    opts.APIListenAddress,
 		WebhookServerPort:                   opts.WebhookServerPort,
 		WebhookServerListenAddress:          opts.WebhookServerListenAddress,
+		CacheSyncPeriod:                     opts.CacheSyncPeriod,
 		Healthz:                             healthz,
 	})
 	if err != nil {

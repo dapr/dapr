@@ -77,7 +77,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 				assert.Equal(t, uint32(3), j.GetRepeats())
 			}},
 		} {
-			postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/%s", o.daprd.HTTPPort(), r.name)
+			postURL := fmt.Sprintf("http://localhost:%d/v1.0/jobs/%s", o.daprd.HTTPPort(), r.name)
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(r.body))
 			require.NoError(t, err)
 			resp, err := httpClient.Do(req)
@@ -88,7 +88,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, resp.Body.Close())
 			assert.Empty(t, string(body))
 
-			job, err := o.daprd.GRPCClient(t, ctx).GetJobAlpha1(ctx,
+			job, err := o.daprd.GRPCClient(t, ctx).GetJob(ctx,
 				&runtimev1pb.GetJobRequest{Name: "overwrite1"},
 			)
 			require.NoError(t, err)
@@ -108,7 +108,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 			{"overwrite2", `{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s"}`, http.StatusConflict},
 			{"overwrite2", `{"schedule": "@daily", "repeats": 3, "overwrite": false, "due_time": "10s", "ttl": "11s"}`, http.StatusConflict},
 		} {
-			postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/%s", o.daprd.HTTPPort(), r.name)
+			postURL := fmt.Sprintf("http://localhost:%d/v1.0/jobs/%s", o.daprd.HTTPPort(), r.name)
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(r.body))
 			require.NoError(t, err)
 			resp, err := httpClient.Do(req)
@@ -118,7 +118,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
 
-			job, err := o.daprd.GRPCClient(t, ctx).GetJobAlpha1(ctx,
+			job, err := o.daprd.GRPCClient(t, ctx).GetJob(ctx,
 				&runtimev1pb.GetJobRequest{Name: "overwrite2"},
 			)
 			require.NoError(t, err)

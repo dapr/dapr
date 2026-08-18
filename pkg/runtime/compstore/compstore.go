@@ -27,12 +27,15 @@ import (
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/components-contrib/workflows"
 	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	mcpserverV1alpha1 "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/durabletask-go/backend"
 )
 
 // ComponentStore is a store of all components which have been configured for the
@@ -51,16 +54,22 @@ type ComponentStore struct {
 	outputBindings          map[string]bindings.OutputBinding
 	locks                   map[string]lock.Store
 	pubSubs                 map[string]*rtpubsub.PubsubItem
-	workflowComponents      map[string]workflows.Workflow
 	workflowBackends        map[string]backend.Backend
 	cryptoProviders         map[string]crypto.SubtleCrypto
 	components              []compsv1alpha1.Component
 	subscriptions           *subscriptions
 	httpEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
 	mcpServers              []mcpserverV1alpha1.MCPServer
+	configurationResources  []configapi.Configuration
+	resiliencyResources     []resiliencyapi.Resiliency
+	workflowAccessPolicies  []wfaclapi.WorkflowAccessPolicy
 	actorStateStore         struct {
 		name  string
 		store state.Store
+		// rev increments on every mutation of the actor state store slot
+		// (set or clear), letting observers detect transitions even when
+		// notifications for a remove+add pair coalesce.
+		rev uint64
 	}
 
 	conversations map[string]conversation.Conversation
@@ -86,7 +95,6 @@ func New() *ComponentStore {
 		outputBindings:          make(map[string]bindings.OutputBinding),
 		locks:                   make(map[string]lock.Store),
 		pubSubs:                 make(map[string]*rtpubsub.PubsubItem),
-		workflowComponents:      make(map[string]workflows.Workflow),
 		workflowBackends:        make(map[string]backend.Backend),
 		cryptoProviders:         make(map[string]crypto.SubtleCrypto),
 		subscriptions: &subscriptions{

@@ -24,6 +24,7 @@ import (
 	"github.com/diagridio/go-etcd-cron/api"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 )
 
 // recvLoop is the main loop for receiving messages from the stream. It
@@ -42,6 +43,7 @@ func (s *stream) recvLoop() {
 		}
 
 		log.Warnf("Error receiving from stream %s/%s: %s", s.ns, s.appID, err)
+		monitoring.RecordSidecarRecvError()
 		return
 	}
 }
@@ -61,7 +63,13 @@ func (s *stream) recv() error {
 
 	inf, ok := s.inflight.LoadAndDelete(result.GetId())
 	if !ok {
-		return errors.New("received unknown trigger response from stream")
+		// A result whose id matches no inflight entry is a duplicate or
+		// stale ack, for example a client retry, or an ack racing the
+		// failed-Send resolution which already resolved the trigger. Drop
+		// it rather than treating it as a protocol error: closing the
+		// stream would abort every other inflight trigger on it.
+		log.Warnf("Dropping unknown trigger response %d from %s/%s", result.GetId(), s.ns, s.appID)
+		return nil
 	}
 
 	switch result.GetStatus() {

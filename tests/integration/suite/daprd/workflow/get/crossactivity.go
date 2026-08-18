@@ -79,7 +79,7 @@ func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
 	require.GreaterOrEqual(t, len(evs), 6,
 		"expected at least 6 events, got %d", len(evs))
 
-	assert.NotNil(t, evs[0].GetOrchestratorStarted())
+	assert.NotNil(t, evs[0].GetWorkflowStarted())
 
 	// Find ExecutionStarted.
 	i := 1
@@ -90,7 +90,7 @@ func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
 	es := evs[i].GetExecutionStarted()
 	assert.NotNil(t, es)
 	assert.Equal(t, "foo", es.GetName())
-	assert.Equal(t, "abc", es.GetOrchestrationInstance().GetInstanceId())
+	assert.Equal(t, "abc", es.GetWorkflowInstance().GetInstanceId())
 	assert.Equal(t, c.workflow.DaprN(0).AppID(), evs[i].GetRouter().GetSourceAppID())
 
 	// Find TaskScheduled.
@@ -121,6 +121,6 @@ func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
 		i++
 	}
 	require.Less(t, i, len(evs), "ExecutionCompleted event not found")
-	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[i].GetExecutionCompleted().GetOrchestrationStatus().String())
+	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[i].GetExecutionCompleted().GetWorkflowStatus().String())
 	assert.Equal(t, c.workflow.Dapr().AppID(), evs[i].GetRouter().GetSourceAppID())
 }

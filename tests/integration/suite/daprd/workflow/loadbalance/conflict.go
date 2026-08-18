@@ -99,7 +99,7 @@ func (c *conflict) Run(t *testing.T, ctx context.Context) {
 
 	regFactory := func(t *testing.T) *task.TaskRegistry {
 		r := task.NewTaskRegistry()
-		require.NoError(t, r.AddOrchestratorN("activity", func(ctx *task.OrchestrationContext) (any, error) {
+		require.NoError(t, r.AddWorkflowN("activity", func(ctx *task.WorkflowContext) (any, error) {
 			require.NoError(t, ctx.CallActivity("abc", task.WithActivityInput("abc")).Await(nil))
 			return nil, nil
 		}))
@@ -134,17 +134,17 @@ func (c *conflict) Run(t *testing.T, ctx context.Context) {
 	const n = 5
 	// create 5 workflows in the clustered deployment
 	for i := range n {
-		wfID, err := clusterClient.ScheduleNewOrchestration(ctx, "activity", api.WithInstanceID(api.InstanceID(fmt.Sprintf("wf-%d", i))))
+		wfID, err := clusterClient.ScheduleNewWorkflow(ctx, "activity", api.WithInstanceID(api.InstanceID(fmt.Sprintf("wf-%d", i))))
 		require.NoError(t, err)
-		_, err = clusterClient.WaitForOrchestrationCompletion(ctx, wfID)
+		_, err = clusterClient.WaitForWorkflowCompletion(ctx, wfID)
 		require.NoError(t, err)
 	}
 
 	// create 5 workflows with the same instance ids in the single daprd
 	for i := range n {
-		wfID, err := singleBackendClient.ScheduleNewOrchestration(ctx, "activity", api.WithInstanceID(api.InstanceID(fmt.Sprintf("wf-%d", i))))
+		wfID, err := singleBackendClient.ScheduleNewWorkflow(ctx, "activity", api.WithInstanceID(api.InstanceID(fmt.Sprintf("wf-%d", i))))
 		require.NoError(t, err)
-		_, err = singleBackendClient.WaitForOrchestrationCompletion(ctx, wfID)
+		_, err = singleBackendClient.WaitForWorkflowCompletion(ctx, wfID)
 		require.NoError(t, err)
 	}
 }

@@ -48,7 +48,7 @@ func (n *nowait) Run(t *testing.T, ctx context.Context) {
 	n.workflow.WaitUntilRunning(t, ctx)
 
 	var executed time.Time
-	n.workflow.Registry().AddOrchestratorN("delay", func(ctx *task.OrchestrationContext) (any, error) {
+	n.workflow.Registry().AddWorkflowN("delay", func(ctx *task.WorkflowContext) (any, error) {
 		if !ctx.IsReplaying {
 			executed = time.Now()
 		}
@@ -58,17 +58,17 @@ func (n *nowait) Run(t *testing.T, ctx context.Context) {
 	client := n.workflow.BackendClient(t, ctx)
 
 	// Ensure workflow actors are warmed.
-	id, err := client.ScheduleNewOrchestration(ctx, "delay")
+	id, err := client.ScheduleNewWorkflow(ctx, "delay")
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	start := time.Now()
 	cctx, cancel := context.WithTimeout(ctx, time.Second*3)
 	t.Cleanup(cancel)
-	id, err = client.ScheduleNewOrchestration(cctx, "delay", api.WithStartTime(start.Add(time.Second*7)))
+	id, err = client.ScheduleNewWorkflow(cctx, "delay", api.WithStartTime(start.Add(time.Second*7)))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.InDelta(t, 7.0, executed.Sub(start).Seconds(), 1.0)
 }

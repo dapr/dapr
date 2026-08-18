@@ -52,7 +52,8 @@ func (w *workflow) Setup(t *testing.T) []framework.Option {
 
 	app := app.New(t)
 
-	w.daprd = daprd.New(t,
+	w.daprd = daprd.New(
+		t,
 		daprd.WithAppPort(app.Port()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppID("myapp"),
@@ -79,7 +80,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	r.AddActivityN("activity_failure", func(ctx task.ActivityContext) (any, error) {
 		return nil, errors.New("failure")
 	})
-	r.AddOrchestratorN("workflow", func(ctx *task.OrchestrationContext) (any, error) {
+	r.AddWorkflowN("workflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, err
@@ -91,15 +92,20 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		}
 		return nil, nil
 	})
+	// waiter blocks on an external event that is never raised, keeping the
+	// workflow running so the test can terminate it.
+	r.AddWorkflowN("waiter", func(ctx *task.WorkflowContext) (any, error) {
+		return nil, ctx.WaitForSingleEvent("never", time.Hour).Await(nil)
+	})
 	taskhubClient := client.NewTaskHubGrpcClient(w.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 	taskhubClient.StartWorkItemListener(ctx, r)
 
 	t.Run("successful workflow execution", func(t *testing.T) {
-		id, err := taskhubClient.ScheduleNewOrchestration(ctx, "workflow", api.WithInput("activity_success"))
+		id, err := taskhubClient.ScheduleNewWorkflow(ctx, "workflow", api.WithInput("activity_success"))
 		require.NoError(t, err)
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 		// Verify metrics
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -113,11 +119,11 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		}, time.Second*5, time.Millisecond*10)
 	})
 	t.Run("failed workflow execution", func(t *testing.T) {
-		id, err := taskhubClient.ScheduleNewOrchestration(ctx, "workflow", api.WithInput("activity_failure"))
+		id, err := taskhubClient.ScheduleNewWorkflow(ctx, "workflow", api.WithInput("activity_failure"))
 		require.NoError(t, err)
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 		// Verify metrics
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -125,6 +131,26 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(c, 2, int(metrics["dapr_runtime_workflow_operation_count|app_id:myapp|namespace:|operation:create_workflow|status:success"]))
 			assert.Equal(c, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:failed|workflow_name:workflow"]))
 			assert.Equal(c, 1, int(metrics["dapr_runtime_workflow_activity_execution_count|activity_name:activity_failure|app_id:myapp|namespace:|status:failed"]))
+		}, time.Second*5, time.Millisecond*10)
+	})
+	t.Run("terminated workflow execution", func(t *testing.T) {
+		id, err := taskhubClient.ScheduleNewWorkflow(ctx, "waiter")
+		require.NoError(t, err)
+		_, err = taskhubClient.WaitForWorkflowStart(ctx, id)
+		require.NoError(t, err)
+
+		require.NoError(t, taskhubClient.TerminateWorkflow(ctx, id))
+		metadata, err := taskhubClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
+		require.NoError(t, err)
+		assert.Equal(t, api.RUNTIME_STATUS_TERMINATED, metadata.GetRuntimeStatus())
+
+		// Verify metrics: a terminated workflow is recorded with its own
+		// status label rather than being bucketed as failed.
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := w.daprd.Metrics(c, ctx).All()
+			assert.Equal(c, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:terminated|workflow_name:waiter"]))
+			assert.Equal(c, 0, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:failed|workflow_name:waiter"]))
+			assert.Equal(c, 0, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:success|workflow_name:waiter"]))
 		}, time.Second*5, time.Millisecond*10)
 	})
 }

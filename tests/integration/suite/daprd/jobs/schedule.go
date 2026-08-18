@@ -58,7 +58,7 @@ func (s *schedule) Run(t *testing.T, ctx context.Context) {
 
 	client := s.daprd.GRPCClient(t, ctx)
 
-	_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+	_, err := client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     "test",
 			Schedule: new("1 2 3 4 5 6"),
