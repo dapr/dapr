@@ -302,6 +302,17 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 	rs = wi.State
 
+	// The engine has mutated the shared runtime state through wi.State. From
+	// here until a save settles cache consistency (signAndSaveState re-primes
+	// the cache on success and invalidates it on failure), every exit must drop
+	// the cache.
+	cacheSettled := false
+	defer func() {
+		if !cacheSettled {
+			o.invalidateCachedState()
+		}
+	}()
+
 	if err = o.handleStalled(ctx, state, rs); err != nil {
 		return todo.RunCompletedFalse, err
 	}
@@ -445,7 +456,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			rs.NewEvents = filtered
 			state.ApplyRuntimeStateChanges(rs)
 			rs.NewEvents = origNewEvents
-			if saveErr := o.signAndSaveState(ctx, state); saveErr != nil {
+			saveErr := o.signAndSaveState(ctx, state)
+			cacheSettled = true
+			if saveErr != nil {
 				return todo.RunCompletedFalse, saveErr
 			}
 			diagnoseStatus = diag.StatusRecoverable
@@ -460,6 +473,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	state.ClearInbox()
 
 	err = o.signAndSaveState(ctx, state)
+	cacheSettled = true
 	if err != nil {
 		return todo.RunCompletedFalse, err
 	}
