@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/counters"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
@@ -55,7 +54,7 @@ func (a *basic) Setup(t *testing.T) []framework.Option {
 		daprd.WithPlacementAddresses(a.place.Address()),
 		daprd.WithInMemoryActorStateStore("statestore"),
 		daprd.WithSchedulerAddresses(a.scheduler.Address()),
-		daprd.WithConfigManifests(t, counters.FastPathFeatureConfig),
+		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 	)
 
 	return []framework.Option{
@@ -101,13 +100,14 @@ func (a *basic) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		janitors, newEvents := counters.JobCounts(t, ctx, a.scheduler)
+		janitors := a.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
+		newEvents := a.scheduler.JobKeyCount(t, ctx, "new-event") - janitors
 		assert.Equal(c, 1, janitors, "exactly one janitor backstop while the instance runs")
 		assert.Zero(c, newEvents, "wake v2 must not create per-event new-event one-shot jobs")
-		assert.GreaterOrEqual(c, counters.LocalActivityStatusCount(t, ctx, a.daprd, "success"), float64(1),
+		assert.GreaterOrEqual(c, a.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:success"), float64(1),
 			"the first activity must have been driven locally")
 	}, time.Second*20, time.Millisecond*50)
-	assert.Zero(t, counters.RunActivityJobCount(t, ctx, a.scheduler),
+	assert.Zero(t, a.scheduler.JobKeyCount(t, ctx, "run-activity"),
 		"activity v2 must not create run-activity one-shot jobs")
 
 	_, err = a.daprd.GRPCClient(t, ctx).RaiseEventWorkflowBeta1(ctx, &rtv1.RaiseEventWorkflowRequest{
@@ -123,13 +123,14 @@ func (a *basic) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, `"Hello, Hello, Dapr!!"`, metadata.GetOutput().GetValue())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		janitors, newEvents := counters.JobCounts(t, ctx, a.scheduler)
+		janitors := a.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
+		newEvents := a.scheduler.JobKeyCount(t, ctx, "new-event") - janitors
 		assert.Zero(c, janitors, "the janitor must be deleted at the terminal turn")
 		assert.Zero(c, newEvents)
-		assert.Zero(c, counters.RunActivityJobCount(t, ctx, a.scheduler))
+		assert.Zero(c, a.scheduler.JobKeyCount(t, ctx, "run-activity"))
 	}, time.Second*60, time.Millisecond*50)
 
-	assert.GreaterOrEqual(t, counters.LocalActivityStatusCount(t, ctx, a.daprd, "success"), float64(2))
-	assert.Zero(t, counters.LocalActivityStatusCount(t, ctx, a.daprd, "janitor_redispatched"),
+	assert.GreaterOrEqual(t, a.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:success"), float64(2))
+	assert.Zero(t, a.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:janitor_redispatched"),
 		"a healthy run must not need janitor re-dispatch")
 }

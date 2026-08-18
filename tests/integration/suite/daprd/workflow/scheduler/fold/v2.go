@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/counters"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
@@ -55,7 +54,7 @@ func (f *v2) Setup(t *testing.T) []framework.Option {
 		daprd.WithPlacementAddresses(f.place.Address()),
 		daprd.WithInMemoryActorStateStore("statestore"),
 		daprd.WithSchedulerAddresses(f.scheduler.Address()),
-		daprd.WithConfigManifests(t, counters.FastPathFeatureConfig),
+		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 	)
 
 	return []framework.Option{
@@ -101,13 +100,14 @@ func (f *v2) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, counters.FoldStatusCount(t, ctx, f.daprd, "folded"), float64(1),
+		assert.GreaterOrEqual(c, f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_count", "status:folded"), float64(1),
 			"the activity completion must have been folded into a turn commit")
-		janitors, newEvents := counters.JobCounts(t, ctx, f.scheduler)
+		janitors := f.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
+		newEvents := f.scheduler.JobKeyCount(t, ctx, "new-event") - janitors
 		assert.Equal(c, 1, janitors)
 		assert.Zero(c, newEvents)
 	}, time.Second*20, time.Millisecond*50)
-	assert.Zero(t, counters.RunActivityJobCount(t, ctx, f.scheduler))
+	assert.Zero(t, f.scheduler.JobKeyCount(t, ctx, "run-activity"))
 
 	_, err = f.daprd.GRPCClient(t, ctx).RaiseEventWorkflowBeta1(ctx, &rtv1.RaiseEventWorkflowRequest{
 		InstanceId:        resp.GetInstanceId(),
@@ -122,15 +122,16 @@ func (f *v2) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, `"Hello, Hello, Dapr!!"`, metadata.GetOutput().GetValue())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, counters.FoldStatusCount(t, ctx, f.daprd, "folded"), float64(2))
+		assert.GreaterOrEqual(c, f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_count", "status:folded"), float64(2))
 	}, time.Second*10, time.Millisecond*50)
-	assert.Zero(t, counters.FoldStatusCount(t, ctx, f.daprd, "fold_nacked"),
+	assert.Zero(t, f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_count", "status:fold_nacked"),
 		"a healthy run must not nack any folded completion")
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		janitors, newEvents := counters.JobCounts(t, ctx, f.scheduler)
+		janitors := f.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
+		newEvents := f.scheduler.JobKeyCount(t, ctx, "new-event") - janitors
 		assert.Zero(c, janitors)
 		assert.Zero(c, newEvents)
-		assert.Zero(c, counters.RunActivityJobCount(t, ctx, f.scheduler))
+		assert.Zero(c, f.scheduler.JobKeyCount(t, ctx, "run-activity"))
 	}, time.Second*60, time.Millisecond*50)
 }

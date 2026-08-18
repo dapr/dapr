@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/counters"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
@@ -56,7 +55,7 @@ func (a *longrun) Setup(t *testing.T) []framework.Option {
 		daprd.WithPlacementAddresses(a.place.Address()),
 		daprd.WithInMemoryActorStateStore("statestore"),
 		daprd.WithSchedulerAddresses(a.scheduler.Address()),
-		daprd.WithConfigManifests(t, counters.FastPathFeatureConfig),
+		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_JANITOR_PERIOD", "1s")),
 	)
 
@@ -104,9 +103,10 @@ func (a *longrun) Run(t *testing.T, ctx context.Context) {
 		"janitor re-dispatches during the run must be absorbed by the in-flight execution, not re-run the app")
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		janitors, newEvents := counters.JobCounts(t, ctx, a.scheduler)
+		janitors := a.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
+		newEvents := a.scheduler.JobKeyCount(t, ctx, "new-event") - janitors
 		assert.Zero(c, janitors)
 		assert.Zero(c, newEvents)
-		assert.Zero(c, counters.RunActivityJobCount(t, ctx, a.scheduler))
+		assert.Zero(c, a.scheduler.JobKeyCount(t, ctx, "run-activity"))
 	}, time.Second*60, time.Millisecond*50)
 }

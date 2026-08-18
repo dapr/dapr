@@ -229,6 +229,22 @@ func WithConfigs(configs ...string) Option {
 	}
 }
 
+// WithFeatureEnabled configures daprd with a Configuration manifest enabling
+// the given preview features.
+func WithFeatureEnabled(t *testing.T, features ...string) Option {
+	manifest := `apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: featureconfig
+spec:
+  features:
+`
+	for _, f := range features {
+		manifest += "  - name: " + f + "\n    enabled: true\n"
+	}
+	return WithConfigManifests(t, manifest)
+}
+
 func WithConfigManifests(t *testing.T, manifests ...string) Option {
 	configs := make([]string, len(manifests))
 	for i, manifest := range manifests {

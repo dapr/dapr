@@ -30,7 +30,6 @@ import (
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/counters"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
@@ -75,7 +74,7 @@ func (a *mixed) Run(t *testing.T, ctx context.Context) {
 			daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_JANITOR_PERIOD", "2s")),
 		}
 		if gateOn {
-			opts = append(opts, daprd.WithConfigManifests(t, counters.FastPathFeatureConfig))
+			opts = append(opts, daprd.WithFeatureEnabled(t, "WorkflowsFastPath"))
 		}
 		return daprd.New(t, opts...)
 	}
@@ -128,10 +127,10 @@ func (a *mixed) Run(t *testing.T, ctx context.Context) {
 		if assert.NoError(c, merr) {
 			assert.Equal(c, "ORCHESTRATION_STATUS_RUNNING", meta.GetRuntimeStatus().String())
 		}
-		janitors, _ := counters.JobCounts(t, ctx, a.scheduler)
+		janitors := a.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
 		assert.Equal(c, 1, janitors)
 	}, time.Second*20, time.Millisecond*50)
-	assert.Zero(t, counters.RunActivityJobCount(t, ctx, a.scheduler))
+	assert.Zero(t, a.scheduler.JobKeyCount(t, ctx, "run-activity"))
 
 	daprd1.Cleanup(t)
 
@@ -154,13 +153,14 @@ func (a *mixed) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	assert.Equal(t, `"recovered-off"`, metadata.GetOutput().GetValue())
 
-	assert.GreaterOrEqual(t, counters.LocalActivityStatusCount(t, ctx, daprd2, "janitor_redispatched"), float64(1),
+	assert.GreaterOrEqual(t, daprd2.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:janitor_redispatched"), float64(1),
 		"the gate-off host must still run the unconditional janitor re-dispatch")
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		janitors, newEvents := counters.JobCounts(t, ctx, a.scheduler)
+		janitors := a.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
+		newEvents := a.scheduler.JobKeyCount(t, ctx, "new-event") - janitors
 		assert.Zero(c, janitors)
 		assert.Zero(c, newEvents)
-		assert.Zero(c, counters.RunActivityJobCount(t, ctx, a.scheduler))
+		assert.Zero(c, a.scheduler.JobKeyCount(t, ctx, "run-activity"))
 	}, time.Second*60, time.Millisecond*50)
 }

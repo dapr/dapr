@@ -30,7 +30,6 @@ import (
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/counters"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
@@ -72,7 +71,7 @@ func (f *restart) Run(t *testing.T, ctx context.Context) {
 			daprd.WithResourceFiles(f.db.GetComponent(t)),
 			daprd.WithPlacementAddresses(f.place.Address()),
 			daprd.WithSchedulerAddresses(f.scheduler.Address()),
-			daprd.WithConfigManifests(t, counters.FastPathFeatureConfig),
+			daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 			daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_JANITOR_PERIOD", "2s")),
 		)
 	}
@@ -125,7 +124,7 @@ func (f *restart) Run(t *testing.T, ctx context.Context) {
 		if assert.NoError(c, merr) {
 			assert.Equal(c, "ORCHESTRATION_STATUS_RUNNING", meta.GetRuntimeStatus().String())
 		}
-		janitors, _ := counters.JobCounts(t, ctx, f.scheduler)
+		janitors := f.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
 		assert.Equal(c, 1, janitors)
 	}, time.Second*20, time.Millisecond*50)
 
@@ -151,15 +150,16 @@ func (f *restart) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, `"recovered"`, metadata.GetOutput().GetValue())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, counters.LocalActivityStatusCount(t, ctx, daprd2, "janitor_redispatched"), float64(1))
-		assert.GreaterOrEqual(c, counters.FoldStatusCount(t, ctx, daprd2, "folded"), float64(1),
+		assert.GreaterOrEqual(c, daprd2.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:janitor_redispatched"), float64(1))
+		assert.GreaterOrEqual(c, daprd2.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_count", "status:folded"), float64(1),
 			"the recovered activity's completion must have been folded on the new owner")
 	}, time.Second*10, time.Millisecond*50)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		janitors, newEvents := counters.JobCounts(t, ctx, f.scheduler)
+		janitors := f.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
+		newEvents := f.scheduler.JobKeyCount(t, ctx, "new-event") - janitors
 		assert.Zero(c, janitors)
 		assert.Zero(c, newEvents)
-		assert.Zero(c, counters.RunActivityJobCount(t, ctx, f.scheduler))
+		assert.Zero(c, f.scheduler.JobKeyCount(t, ctx, "run-activity"))
 	}, time.Second*60, time.Millisecond*50)
 }

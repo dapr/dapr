@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/counters"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
@@ -55,7 +54,7 @@ func (w *basic) Setup(t *testing.T) []framework.Option {
 		daprd.WithPlacementAddresses(w.place.Address()),
 		daprd.WithInMemoryActorStateStore("statestore"),
 		daprd.WithSchedulerAddresses(w.scheduler.Address()),
-		daprd.WithConfigManifests(t, counters.FastPathFeatureConfig),
+		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 	)
 
 	return []framework.Option{
@@ -98,7 +97,8 @@ func (w *basic) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		janitors, newEvents := counters.JobCounts(t, ctx, w.scheduler)
+		janitors := w.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
+		newEvents := w.scheduler.JobKeyCount(t, ctx, "new-event") - janitors
 		assert.Equal(c, 1, janitors, "exactly one janitor backstop while the instance runs")
 		assert.Zero(c, newEvents, "wake v2 must not create per-event new-event one-shot jobs")
 	}, time.Second*20, time.Millisecond*50)
@@ -115,10 +115,11 @@ func (w *basic) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		janitors, newEvents := counters.JobCounts(t, ctx, w.scheduler)
+		janitors := w.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
+		newEvents := w.scheduler.JobKeyCount(t, ctx, "new-event") - janitors
 		assert.Zero(c, janitors, "the janitor must be deleted at the terminal turn")
 		assert.Zero(c, newEvents)
 	}, time.Second*60, time.Millisecond*50)
 
-	assert.GreaterOrEqual(t, counters.LocalWakeStatusCount(t, ctx, w.daprd, "success"), float64(3))
+	assert.GreaterOrEqual(t, w.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:success"), float64(3))
 }

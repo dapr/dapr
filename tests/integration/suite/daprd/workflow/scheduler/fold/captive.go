@@ -29,7 +29,6 @@ import (
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/counters"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
@@ -61,7 +60,7 @@ func (f *captive) Setup(t *testing.T) []framework.Option {
 		daprd.WithResourceFiles(db.GetComponent(t)),
 		daprd.WithPlacementAddresses(f.place.Address()),
 		daprd.WithSchedulerAddresses(f.scheduler.Address()),
-		daprd.WithConfigManifests(t, counters.FastPathFeatureConfig),
+		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_WORKFLOW_JANITOR_PERIOD", "2s",
 			"DAPR_WORKFLOW_TEST_DROP_FOLD_DRIVES", "100",
@@ -108,13 +107,14 @@ func (f *captive) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	assert.Equal(t, `"ok"`, metadata.GetOutput().GetValue())
 
-	assert.GreaterOrEqual(t, counters.LocalWakeStatusCount(t, ctx, f.daprd, "janitor_fold_recovered"), float64(3))
-	assert.GreaterOrEqual(t, counters.FoldStatusCount(t, ctx, f.daprd, "folded"), float64(3))
+	assert.GreaterOrEqual(t, f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:janitor_fold_recovered"), float64(3))
+	assert.GreaterOrEqual(t, f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_count", "status:folded"), float64(3))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		janitors, newEvents := counters.JobCounts(t, ctx, f.scheduler)
+		janitors := f.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
+		newEvents := f.scheduler.JobKeyCount(t, ctx, "new-event") - janitors
 		assert.Zero(c, janitors, "the janitor must be deleted at the terminal turn")
 		assert.Zero(c, newEvents)
-		assert.Zero(c, counters.RunActivityJobCount(t, ctx, f.scheduler))
+		assert.Zero(c, f.scheduler.JobKeyCount(t, ctx, "run-activity"))
 	}, time.Second*60, time.Millisecond*50)
 }

@@ -25,7 +25,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/counters"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -40,7 +39,7 @@ type delayed struct {
 
 func (l *delayed) Setup(t *testing.T) []framework.Option {
 	l.workflow = workflow.New(t,
-		workflow.WithDaprdOptions(0, daprd.WithConfigManifests(t, counters.FastPathFeatureConfig)),
+		workflow.WithDaprdOptions(0, daprd.WithFeatureEnabled(t, "WorkflowsFastPath")),
 	)
 
 	return []framework.Option{

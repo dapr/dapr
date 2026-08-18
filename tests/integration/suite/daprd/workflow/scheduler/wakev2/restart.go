@@ -30,7 +30,6 @@ import (
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/counters"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
@@ -72,7 +71,7 @@ func (w *restart) Run(t *testing.T, ctx context.Context) {
 			daprd.WithResourceFiles(w.db.GetComponent(t)),
 			daprd.WithPlacementAddresses(w.place.Address()),
 			daprd.WithSchedulerAddresses(w.scheduler.Address()),
-			daprd.WithConfigManifests(t, counters.FastPathFeatureConfig),
+			daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 			daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_JANITOR_PERIOD", "2s")),
 		)
 	}
@@ -128,7 +127,8 @@ func (w *restart) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		janitors, newEvents := counters.JobCounts(t, ctx, w.scheduler)
+		janitors := w.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
+		newEvents := w.scheduler.JobKeyCount(t, ctx, "new-event") - janitors
 		assert.Zero(c, janitors)
 		assert.Zero(c, newEvents)
 	}, time.Second*60, time.Millisecond*50)

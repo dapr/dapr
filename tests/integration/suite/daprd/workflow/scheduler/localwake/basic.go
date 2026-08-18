@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/counters"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
@@ -56,7 +55,7 @@ func (l *basic) Setup(t *testing.T) []framework.Option {
 		daprd.WithPlacementAddresses(l.place.Address()),
 		daprd.WithInMemoryActorStateStore("statestore"),
 		daprd.WithSchedulerAddresses(l.scheduler.Address()),
-		daprd.WithConfigManifests(t, counters.FastPathFeatureConfig),
+		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 	)
 
 	return []framework.Option{
@@ -107,7 +106,7 @@ func (l *basic) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	assert.Equal(t, `"Hello, Hello, Dapr!!"`, metadata.GetOutput().GetValue())
 
-	assert.GreaterOrEqual(t, counters.LocalWakeStatusCount(t, ctx, l.daprd, "success"), float64(3),
+	assert.GreaterOrEqual(t, l.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:success"), float64(3),
 		"the start and new-event wake-ups must be driven by the local fast path")
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -174,6 +173,6 @@ func (l *localwakeoff) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 
-	assert.Zero(t, counters.LocalWakeStatusCount(t, ctx, l.daprd, "success"),
+	assert.Zero(t, l.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:success"),
 		"without the feature no wake-up may be driven locally")
 }

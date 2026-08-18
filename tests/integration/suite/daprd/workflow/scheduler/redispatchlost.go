@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/counters"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
@@ -58,7 +57,7 @@ func (r *redispatchlost) Setup(t *testing.T) []framework.Option {
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithInMemoryActorStateStore("statestore"),
 		daprd.WithSchedulerAddresses(r.scheduler.Address()),
-		daprd.WithConfigManifests(t, counters.FastPathFeatureConfig),
+		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_WORKFLOW_JANITOR_PERIOD", "2s",
 			"DAPR_WORKFLOW_TEST_DROP_ACTIVITY_DRIVES", "1000",
@@ -121,13 +120,14 @@ func (r *redispatchlost) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	assert.Equal(t, `"ok"`, metadata.GetOutput().GetValue())
 
-	assert.GreaterOrEqual(t, counters.LocalActivityStatusCount(t, ctx, r.daprd, "janitor_redispatch_escalated"), float64(3))
+	assert.GreaterOrEqual(t, r.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:janitor_redispatch_escalated"), float64(3))
 	assert.Equal(t, int64(3), executions.Load())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		janitors, newEvents := counters.JobCounts(t, ctx, r.scheduler)
+		janitors := r.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
+		newEvents := r.scheduler.JobKeyCount(t, ctx, "new-event") - janitors
 		assert.Zero(c, janitors, "the janitor must be deleted at the terminal turn")
 		assert.Zero(c, newEvents)
-		assert.Zero(c, counters.RunActivityJobCount(t, ctx, r.scheduler))
+		assert.Zero(c, r.scheduler.JobKeyCount(t, ctx, "run-activity"))
 	}, time.Second*60, time.Millisecond*50)
 }

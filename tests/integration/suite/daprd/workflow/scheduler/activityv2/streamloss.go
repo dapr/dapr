@@ -32,7 +32,6 @@ import (
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/counters"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
@@ -64,7 +63,7 @@ func (a *streamloss) Setup(t *testing.T) []framework.Option {
 		daprd.WithResourceFiles(db.GetComponent(t)),
 		daprd.WithPlacementAddresses(a.place.Address()),
 		daprd.WithSchedulerAddresses(a.scheduler.Address()),
-		daprd.WithConfigManifests(t, counters.FastPathFeatureConfig),
+		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_WORKFLOW_JANITOR_PERIOD", "2s",
 		)),
@@ -143,10 +142,10 @@ func (a *streamloss) Run(t *testing.T, ctx context.Context) {
 		if assert.NoError(c, merr) {
 			assert.Equal(c, "ORCHESTRATION_STATUS_RUNNING", meta.GetRuntimeStatus().String())
 		}
-		janitors, _ := counters.JobCounts(t, ctx, a.scheduler)
+		janitors := a.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
 		assert.Equal(c, 1, janitors, "the janitor must be armed before the stream break")
 	}, time.Second*20, time.Millisecond*50)
-	assert.Zero(t, counters.RunActivityJobCount(t, ctx, a.scheduler),
+	assert.Zero(t, a.scheduler.JobKeyCount(t, ctx, "run-activity"),
 		"the in-flight activity must have no durable run-activity job")
 
 	lcancel()
@@ -167,9 +166,10 @@ func (a *streamloss) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, `"recovered"`, metadata.GetOutput().GetValue())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		janitors, newEvents := counters.JobCounts(t, ctx, a.scheduler)
+		janitors := a.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
+		newEvents := a.scheduler.JobKeyCount(t, ctx, "new-event") - janitors
 		assert.Zero(c, janitors)
 		assert.Zero(c, newEvents)
-		assert.Zero(c, counters.RunActivityJobCount(t, ctx, a.scheduler))
+		assert.Zero(c, a.scheduler.JobKeyCount(t, ctx, "run-activity"))
 	}, time.Second*60, time.Millisecond*50)
 }
