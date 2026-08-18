@@ -230,6 +230,12 @@ func (o *orchestrator) startReminderMissing(ctx context.Context, saved *backend.
 		ActorID:   o.actorID,
 	})
 	if err != nil {
+		// The contract is (nil, nil) for a missing reminder, but tolerate a
+		// client surfacing NotFound as an error: treating it as retryable
+		// would strand the pending instance permanently.
+		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+			return true, nil
+		}
 		return false, fmt.Errorf("failed to check for pending start reminder: %w", err)
 	}
 	return rem == nil, nil

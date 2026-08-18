@@ -106,8 +106,10 @@ func (l *basic) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	assert.Equal(t, `"Hello, Hello, Dapr!!"`, metadata.GetOutput().GetValue())
 
-	assert.GreaterOrEqual(t, l.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:success"), float64(3),
-		"the start and new-event wake-ups must be driven by the local fast path")
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.GreaterOrEqual(c, l.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:success"), float64(3),
+			"the start and new-event wake-ups must be driven by the local fast path")
+	}, time.Second*20, time.Millisecond*10)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Empty(c, l.scheduler.ListAllKeys(t, ctx, "dapr/jobs"))

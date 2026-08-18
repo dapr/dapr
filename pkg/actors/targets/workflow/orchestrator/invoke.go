@@ -181,17 +181,26 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 
 	if len(state.Inbox) == 0 {
 		// Mirror the empty-inbox stale-cache guard of runWorkflow: a peer
-		// host may have written an inbox row since this cache was loaded.
-		// Reload before declaring the tick a no-op; costs a read, never a
-		// commit.
-		o.invalidateCachedState()
-		state, _, err = o.loadInternalState(ctx)
-		if err != nil {
-			return err
-		}
-		if state == nil {
-			o.deleteJanitor(ctx)
-			return nil
+		// host may have written an inbox row since this cache was loaded
+		// (a zombie writer racing an activation). Only a store read can see
+		// it, but paying a full state load every period for every idle
+		// instance is the dominant janitor cost, so the probe backs off
+		// exponentially across consecutive no-op fires (1st, 2nd, 4th, 8th,
+		// then every 8th). Recovery of that rare double-failure window
+		// degrades from one period to at most eight; any real activity
+		// resets the cadence.
+		o.janitorIdleFires++
+		n := o.janitorIdleFires
+		if n <= 2 || n == 4 || n%8 == 0 {
+			o.invalidateCachedState()
+			state, _, err = o.loadInternalState(ctx)
+			if err != nil {
+				return err
+			}
+			if state == nil {
+				o.deleteJanitor(ctx)
+				return nil
+			}
 		}
 	}
 
@@ -213,6 +222,7 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 			// completions into its commit even with an empty inbox, restoring
 			// at-most-one-period recovery for captive completions.
 			if len(o.foldPending) > 0 {
+				o.janitorIdleFires = 0
 				diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusJanitorFoldRecovered)
 				return o.runWorkflowFromReminder(ctx, reminder)
 			}
@@ -224,6 +234,7 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 	}
 
 	// Pending inbox with no drive in sight: this fire IS the recovery.
+	o.janitorIdleFires = 0
 	diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusJanitorRecovered)
 	return o.runWorkflowFromReminder(ctx, reminder)
 }

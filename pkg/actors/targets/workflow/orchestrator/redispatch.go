@@ -113,6 +113,14 @@ func (o *orchestrator) redispatchActivities(ctx context.Context, state *wfengine
 	// synchronously: janitor fires hold the turn lock, which guards the map.
 	durable := make(map[int32]bool, len(unresolved))
 	if elide {
+		// Task IDs restart from zero each ContinueAsNew generation: a map
+		// built against an older generation would treat a new task's first
+		// re-dispatch as already-attempted and escalate it straight to the
+		// durable reminder.
+		if o.janitorRedispatchedGen != state.Generation {
+			o.janitorRedispatched = nil
+			o.janitorRedispatchedGen = state.Generation
+		}
 		if o.janitorRedispatched == nil {
 			o.janitorRedispatched = make(map[int32]struct{}, len(unresolved))
 		}

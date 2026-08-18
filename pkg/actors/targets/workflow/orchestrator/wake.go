@@ -182,9 +182,9 @@ func (o *orchestrator) driveLoop(wakeCtx context.Context) {
 
 // escalate creates the durable per-event wake-up reminder after a failed
 // local drive, restoring exactly today's non-fast-path recovery chain. It is
-// detached from wakeCtx (see localDrive) and tracked by escWG, which is
-// waited only at factory close so placement-churn HaltAll latency is
-// unaffected.
+// detached from wakeCtx (see localDrive) and tracked by escWG for tests;
+// production waits it nowhere (the goroutines are rootCtx+timeout bounded),
+// so placement-churn HaltAll latency is unaffected.
 func (o *orchestrator) escalate(info *driveInfo) {
 	o.escLock.Lock()
 	rootCtx := o.rootCtx

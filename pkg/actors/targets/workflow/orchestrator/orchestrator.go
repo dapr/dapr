@@ -63,6 +63,17 @@ type orchestrator struct {
 	// while holding the per-actor turn lock (submit, turn, janitor,
 	// Deactivate all hold it); waiters read their own done channel lock-free.
 	foldPending []*foldEntry
+	// janitorIdleFires counts consecutive no-op janitor fires, driving the
+	// exponential backoff of the stale-cache store probe in runJanitor.
+	// Reset by any recovery action or a normal turn. Guarded by the actor
+	// turn lock like every janitor field.
+	janitorIdleFires int
+
+	// janitorRedispatchedGen is the state generation janitorRedispatched
+	// was built against: a ContinueAsNew generation reuses task IDs from
+	// zero, so a stale map would skip a new task's first local re-dispatch.
+	janitorRedispatchedGen uint64
+
 	// janitorRedispatched records the task IDs of TaskScheduled events the
 	// janitor re-dispatched this residency, so a task still unresolved at the
 	// NEXT fire escalates to the durable run-activity reminder instead of
