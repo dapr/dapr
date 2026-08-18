@@ -21,7 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
@@ -187,15 +186,14 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 	// Request to execute workflow
 	log.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", o.actorID, wi.InstanceID)
-	// Schedule the workflow execution by signaling the backend
-	// Snapshot o.rstate before the engine runs. The engine shares wi.State
-	// with o.rstate (same pointer) and may overwrite it during ContinueAsNew
-	// (*s = *newState in the applier). If the engine fails, we restore the
-	// snapshot so the cached state remains consistent with the store.
-	var rstateSnapshot *backend.WorkflowRuntimeState
-	if o.rstate != nil {
-		rstateSnapshot = proto.Clone(o.rstate).(*backend.WorkflowRuntimeState)
-	}
+	// Schedule the workflow execution by signaling the backend.
+	// The engine shares wi.State with o.rstate (same pointer) and may
+	// overwrite it during ContinueAsNew (*s = *newState in the applier). The
+	// failure paths below therefore invalidate the cached state instead of
+	// restoring a snapshot: they all return recoverable errors, so the
+	// refired reminder reloads durable truth from the store. This avoids
+	// deep-cloning the entire history on every turn for a rollback that
+	// almost never happens.
 
 	// TODO: @joshvanl remove.
 	err = o.scheduler(ctx, wi)
@@ -219,9 +217,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	select {
 	case <-ctx.Done(): // caller is responsible for timeout management
 		// The engine may have partially mutated o.rstate via the shared
-		// wi.State pointer before the context was cancelled. Restore the
-		// snapshot so the cached state stays consistent with the store.
-		o.rstate = rstateSnapshot
+		// wi.State pointer before the context was cancelled. Drop the cache
+		// so the retry reloads from the store.
+		o.invalidateCachedState()
 		diagnoseStatus = diag.StatusRecoverable
 		return todo.RunCompletedFalse, ctx.Err()
 	case completed := <-callback:
@@ -290,11 +288,13 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 				}
 
 				if err = o.signAndSaveState(ctx, state); err != nil {
-					o.rstate = rstateSnapshot
+					// signAndSaveState already invalidated the cache.
 					return todo.RunCompletedFalse, err
 				}
 			} else {
-				o.rstate = rstateSnapshot
+				// Non-CAN abandon: the engine may have mutated the shared
+				// rstate. Drop the cache so the retry reloads from the store.
+				o.invalidateCachedState()
 			}
 			diagnoseStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(todo.ErrExecutionAborted)
