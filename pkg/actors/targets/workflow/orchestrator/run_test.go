@@ -40,14 +40,14 @@ import (
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
-// Test_runWorkflow_stateIsolation verifies that the cached runtime state
-// (o.rstate) is not corrupted when the workflow engine mutates wi.State during
-// execution and then fails. This is the scenario that occurs when the
-// ContinueAsNew tight-loop exceeds MaxContinueAsNewCount: the applier
-// overwrites *wi.State via *s = *newState, and without cloning, o.rstate
-// (which was the same pointer) would be left in a corrupted state that is
-// inconsistent with the persisted store. On retry, the corrupted rstate would
-// cause the workflow to see wrong input, leading to event loss.
+// Test_runWorkflow_stateIsolation verifies that a runtime state corrupted by
+// the workflow engine is never retained when execution fails. The scenario is
+// the ContinueAsNew tight-loop exceeding MaxContinueAsNewCount: the applier
+// overwrites *wi.State via *s = *newState, and o.rstate is the same pointer.
+// The failure path must invalidate the cached state entirely so the retried
+// reminder reloads durable truth from the store instead of running on the
+// corrupted rstate (which would make the workflow see wrong input and lose
+// events).
 func Test_runWorkflow_stateIsolation(t *testing.T) {
 	const instanceID = "test-workflow-1"
 
@@ -156,26 +156,21 @@ func Test_runWorkflow_stateIsolation(t *testing.T) {
 	assert.Equal(t, todo.RunCompletedFalse, completed)
 	require.Error(t, runErr)
 
-	// CRITICAL ASSERTION: o.rstate must NOT have been mutated by the scheduler's
-	// modification of wi.State. Without the proto.Clone fix, o.rstate would
-	// point to the same object as wi.State, so the scheduler's *wi.State =
-	// *newState would corrupt o.rstate.
-	assert.True(t, proto.Equal(originalRstate, o.rstate),
-		"o.rstate should not be mutated after failed execution;\n"+
-			"got StartEvent.Input=%v, want StartEvent.Input=%v",
+	// CRITICAL ASSERTION: the corrupted rstate must not be retained. The
+	// non-CAN abandon path invalidates the whole cached state, so the
+	// retried reminder reloads durable truth from the store rather than
+	// running on the engine-mutated rstate.
+	assert.Nil(t, o.rstate,
+		"cached rstate must be invalidated after failed execution, not retained corrupted (StartEvent.Input=%v)",
 		o.rstate.GetStartEvent().GetInput().GetValue(),
-		originalRstate.GetStartEvent().GetInput().GetValue(),
 	)
+	assert.Nil(t, o.state, "cached state must be invalidated after failed execution")
+	assert.Nil(t, o.ometa, "cached metadata must be invalidated after failed execution")
 
-	assert.Equal(t,
-		originalRstate.GetStartEvent().GetInput().GetValue(),
-		o.rstate.GetStartEvent().GetInput().GetValue(),
-		"workflow input in cached rstate should be unchanged after failed execution",
-	)
-
-	assert.False(t, o.rstate.GetContinuedAsNew(),
-		"ContinuedAsNew should not be set on cached rstate after failed execution",
-	)
+	// The corruption stayed on the abandoned work item, isolated from the
+	// original cached view.
+	assert.False(t, proto.Equal(originalRstate, rstate),
+		"the engine mutation should have landed on the abandoned work item state")
 }
 
 // Test_runWorkflow_canSaveMovesCarryoverToInbox verifies that when CAN

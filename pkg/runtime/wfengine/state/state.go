@@ -146,6 +146,7 @@ type State struct {
 	signaturesAddedCount                    int
 	signaturesRemovedCount                  int
 	incomingHistoryChanged                  bool
+	customStatusChanged                     bool
 }
 
 // TODO: @joshvanl: remove in v1.16
@@ -184,6 +185,9 @@ func (s *State) Reset() {
 	s.signaturesRemovedCount += len(s.Signatures)
 	s.Signatures = nil
 	s.RawSignatures = nil
+	if s.CustomStatus.GetValue() != "" {
+		s.customStatusChanged = true
+	}
 	s.CustomStatus = nil
 	if s.IncomingHistory != nil {
 		s.IncomingHistory = nil
@@ -194,10 +198,11 @@ func (s *State) Reset() {
 
 // ResetChangeTracking resets the change tracking counters. This should be called after a save request.
 func (s *State) ResetChangeTracking() {
-	// A save with any history delta upserts the customStatus key (see
-	// GetSaveRequest), so after a successful save it is now persisted.
-	if s.historyAddedCount > 0 || s.historyRemovedCount > 0 {
+	// Mirrors the customStatus write condition in GetSaveRequest: after a
+	// successful save that carried the key, it is persisted and clean.
+	if (s.historyAddedCount > 0 || s.historyRemovedCount > 0) && (s.customStatusChanged || !s.customStatusPersisted) {
 		s.customStatusPersisted = true
+		s.customStatusChanged = false
 	}
 	// A save with incomingHistoryChanged either upserts or deletes the
 	// propagated-history key; track the resulting persistence state.
@@ -263,7 +268,13 @@ func (s *State) ApplyRuntimeStateChanges(rs *backend.WorkflowRuntimeState) {
 	s.History = append(s.History, newHistoryEvents...)
 	s.historyAddedCount += len(newHistoryEvents)
 
-	s.CustomStatus = rs.GetCustomStatus()
+	// nil and empty CustomStatus persist as the same bytes, so compare by
+	// value: only an actual change dirties the flag.
+	newCustomStatus := rs.GetCustomStatus()
+	if s.CustomStatus.GetValue() != newCustomStatus.GetValue() {
+		s.customStatusChanged = true
+	}
+	s.CustomStatus = newCustomStatus
 }
 
 func (s *State) AddToInbox(e *backend.HistoryEvent) {
@@ -470,9 +481,10 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 	}
 
 	// We update the custom status only when the workflow itself has been updated, and not when
-	// we're saving changes only to the workflow inbox.
-	// CONSIDER: Only save custom status if it has changed. However, need a way to track this.
-	if s.historyAddedCount > 0 || s.historyRemovedCount > 0 {
+	// we're saving changes only to the workflow inbox. Re-writes of an
+	// unchanged status are skipped once the key is persisted; the
+	// customStatusChanged flag is set wherever CustomStatus mutates.
+	if (s.historyAddedCount > 0 || s.historyRemovedCount > 0) && (s.customStatusChanged || !s.customStatusPersisted) {
 		cs := s.CustomStatus
 		if cs == nil {
 			cs = &wrapperspb.StringValue{}
@@ -581,6 +593,18 @@ func (s *State) String() string {
 // events are marshaled with proto.Marshal.
 func (s *State) addHistoryOperations(req *api.TransactionalRequest) error {
 	start := len(s.History) - s.historyAddedCount
+	// All unsigned events this save marshal into one shared slab instead of
+	// one buffer each. The value slices are subslices of the slab; a
+	// mid-append reallocation leaves earlier subslices pointing at the old
+	// backing array, which still holds their bytes, so they stay valid.
+	var slabSize int
+	for i := start; i < len(s.History); i++ {
+		if i-start >= len(s.marshaledNewHistory) {
+			slabSize += proto.Size(s.History[i])
+		}
+	}
+	slab := make([]byte, 0, slabSize)
+	mo := proto.MarshalOptions{}
 	for i := start; i < len(s.History); i++ {
 		var data []byte
 		var err error
@@ -588,10 +612,12 @@ func (s *State) addHistoryOperations(req *api.TransactionalRequest) error {
 		if localIdx < len(s.marshaledNewHistory) {
 			data = s.marshaledNewHistory[localIdx]
 		} else {
-			data, err = proto.Marshal(s.History[i])
+			off := len(slab)
+			slab, err = mo.MarshalAppend(slab, s.History[i])
 			if err != nil {
 				return err
 			}
+			data = slab[off:len(slab):len(slab)]
 		}
 
 		req.Operations = append(req.Operations, api.TransactionalOperation{
@@ -615,8 +641,17 @@ func addStateOperations(req *api.TransactionalRequest, keyPrefix string, events 
 	// TODO: Investigate whether Dapr state stores put limits on batch sizes. It seems some storage
 	//       providers have limits and we need to know if that impacts this algorithm:
 	//       https://learn.microsoft.com/azure/cosmos-db/nosql/transactional-batch#limitations
+	// One shared slab for all added events, as in addHistoryOperations.
+	var slabSize int
 	for i := len(events) - addedCount; i < len(events); i++ {
-		data, err := proto.Marshal(events[i])
+		slabSize += proto.Size(events[i])
+	}
+	slab := make([]byte, 0, slabSize)
+	mo := proto.MarshalOptions{}
+	for i := len(events) - addedCount; i < len(events); i++ {
+		off := len(slab)
+		var err error
+		slab, err = mo.MarshalAppend(slab, events[i])
 		if err != nil {
 			return err
 		}
@@ -624,7 +659,7 @@ func addStateOperations(req *api.TransactionalRequest, keyPrefix string, events 
 		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Upsert,
 			//nolint:gosec
-			Request: api.TransactionalUpsert{Key: getMultiEntryKeyName(keyPrefix, uint64(i)), Value: data},
+			Request: api.TransactionalUpsert{Key: getMultiEntryKeyName(keyPrefix, uint64(i)), Value: slab[off:len(slab):len(slab)]},
 		})
 	}
 
@@ -1279,6 +1314,9 @@ func (s *State) FromWorkflowState(state *protos.BackendWorkflowState) {
 	}
 
 	s.CustomStatus = state.GetCustomStatus()
+	// Full rehydrate: force the next save to persist the custom status
+	// regardless of what the store row currently holds.
+	s.customStatusChanged = true
 	s.Generation = state.GetGeneration()
 }
 
