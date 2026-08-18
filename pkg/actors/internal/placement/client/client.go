@@ -199,10 +199,23 @@ func (c *Client) Run(ctx context.Context) error {
 			return ctx.Err()
 		}
 
-		cancel, err = c.handleReconnect(ctx)
-		if err != nil {
+		for {
+			cancel, err = c.handleReconnect(ctx)
+			if err == nil {
+				break
+			}
+
 			log.Errorf("Failed to reconnect to placement: %s", err)
-			return nil
+
+			if ctx.Err() != nil {
+				return c.table.HaltAll(context.Background())
+			}
+
+			select {
+			case <-time.After(time.Second):
+			case <-ctx.Done():
+				return c.table.HaltAll(context.Background())
+			}
 		}
 	}
 }
@@ -218,10 +231,10 @@ func (c *Client) handleReconnect(ctx context.Context) (context.CancelFunc, error
 	log.Info("Placement stream disconnected")
 
 	if err := c.table.HaltAll(context.Background()); err != nil {
-		return nil, fmt.Errorf("error whilst deactivating all actors when shutting down client: %s", err)
+		log.Errorf("Error deactivating all actors when reconnecting to placement: %s", err)
+	} else {
+		log.Info("Halted all actors on this host")
 	}
-
-	log.Info("Halted all actors on this host")
 
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
