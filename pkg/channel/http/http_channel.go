@@ -249,7 +249,11 @@ func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 	}
 
 	if h.ch != nil {
-		h.ch <- struct{}{}
+		select {
+		case h.ch <- struct{}{}:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 
 	// Emit metric when request is sent
@@ -417,7 +421,17 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	if h.ch != nil {
-		h.ch <- struct{}{}
+		// Acquiring the max-concurrency slot must respect cancellation: a
+		// caller whose context is already dead would otherwise queue on the
+		// limiter forever.
+		select {
+		case h.ch <- struct{}{}:
+		case <-ctx.Done():
+			if reqCancel != nil {
+				reqCancel()
+			}
+			return nil, ctx.Err()
+		}
 	}
 
 	// Emit metric when request is sent
