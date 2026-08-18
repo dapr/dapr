@@ -156,11 +156,12 @@ message WatchJobsRequestInitial {
   // placement owner host instead of load balancing across hosts.
   optional string actor_address = 6;
 
-  // supports_actor_placement marks a daprd which can take actor placement
-  // from the scheduler. Schedulers withhold the placement advertisement while
+  // supports_scheduler_placement marks a daprd which can take actor
+  // placement from the scheduler. Schedulers withhold the placement
+  // advertisement while
   // any connected sidecar lacks it (an older daprd), keeping a mixed-version
   // cluster on a single placement authority.
-  bool supports_actor_placement = 7;
+  bool supports_scheduler_placement = 7;
 
   // placement_addresses are the placement service addresses this daprd was
   // configured with. Schedulers probe them so a placement service outside

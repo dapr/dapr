@@ -29,8 +29,8 @@ import (
 // connectionPool is the view of the connection pool leadership needs.
 type connectionPool interface {
 	SetSchedulerInfo(count, idx int32)
-	HasPlacementIncapableSidecars() bool
-	HasPlacementCapableSidecars() bool
+	HasSchedulerPlacementIncapableSidecars() bool
+	HasSchedulerPlacementCapableSidecars() bool
 }
 
 // leadership processes leadership updates from go-etcd-cron. It unmarshals the
@@ -101,13 +101,13 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 	// The leader bit is stamped here at broadcast time, never in the
 	// go-etcd-cron ReplicaData, since the elector treats stored replica data
 	// changing under a live lease as fatal.
-	gateIncapable := h.pool.HasPlacementIncapableSidecars()
-	gateCapable := h.pool.HasPlacementCapableSidecars()
+	gateIncapable := h.pool.HasSchedulerPlacementIncapableSidecars()
+	gateCapable := h.pool.HasSchedulerPlacementCapableSidecars()
 	advertised := h.advertised
 	awaitingStandDown := false
 	if h.handoff != nil {
-		gateIncapable = h.handoff.AnyIncapableSidecars()
-		gateCapable = h.handoff.AnyCapableSidecars()
+		gateIncapable = h.handoff.AnySchedulerPlacementIncapableSidecars()
+		gateCapable = h.handoff.AnySchedulerPlacementCapableSidecars()
 		advertised = h.handoff.Advertised()
 		awaitingStandDown = h.handoff.PlacementPresent() && !h.handoff.PlacementStoodDown()
 	}

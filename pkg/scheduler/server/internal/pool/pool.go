@@ -34,10 +34,10 @@ var log = logger.NewLogger("dapr.runtime.scheduler.server.pool")
 type Options struct {
 	Cron api.Interface
 
-	// OnPlacementCapabilityChange is called when the number of capable or
+	// OnSchedulerPlacementCapabilityChange is called when the number of capable or
 	// incapable connected sidecars transitions between zero and non-zero.
 	// Consumers re-read the counts when handling.
-	OnPlacementCapabilityChange func()
+	OnSchedulerPlacementCapabilityChange func()
 
 	// OnPlacementAddresses is called with the placement addresses a
 	// connecting sidecar was configured with.
@@ -53,7 +53,7 @@ type Pool struct {
 	readyCh chan struct{}
 
 	// incapable/capable count connected sidecars by whether they reported
-	// supports_actor_placement, for gating and latching the placement
+	// supports_scheduler_placement, for gating and latching the placement
 	// advertisement.
 	capLock                     sync.Mutex
 	incapable                   int
@@ -66,7 +66,7 @@ func New(opts Options) *Pool {
 	return &Pool{
 		readyCh:                     make(chan struct{}),
 		cron:                        opts.Cron,
-		onPlacementCapabilityChange: opts.OnPlacementCapabilityChange,
+		onPlacementCapabilityChange: opts.OnSchedulerPlacementCapabilityChange,
 		onPlacementAddresses:        opts.OnPlacementAddresses,
 	}
 }
@@ -101,7 +101,7 @@ func (p *Pool) AddConnection(req *schedulerv1pb.WatchJobsRequestInitial, stream 
 
 	ctx, cancel := context.WithCancelCause(stream.Context())
 
-	p.trackCapability(ctx, req.GetSupportsActorPlacement())
+	p.trackCapability(ctx, req.GetSupportsSchedulerPlacement())
 
 	if p.onPlacementAddresses != nil && len(req.GetPlacementAddresses()) > 0 {
 		p.onPlacementAddresses(req.GetPlacementAddresses())
@@ -116,7 +116,8 @@ func (p *Pool) AddConnection(req *schedulerv1pb.WatchJobsRequestInitial, stream 
 	return ctx
 }
 
-// trackCapability counts a sidecar connection's placement capability for the
+// trackCapability counts a sidecar connection's scheduler placement
+// capability for the
 // lifetime of its stream, calling the capability callback whenever either
 // count transitions between zero and non-zero.
 func (p *Pool) trackCapability(ctx context.Context, capable bool) {
@@ -160,17 +161,17 @@ func (p *Pool) trackCapability(ctx context.Context, capable bool) {
 	})
 }
 
-// HasPlacementIncapableSidecars reports whether any connected sidecar does
+// HasSchedulerPlacementIncapableSidecars reports whether any connected sidecar does
 // not support scheduler placement.
-func (p *Pool) HasPlacementIncapableSidecars() bool {
+func (p *Pool) HasSchedulerPlacementIncapableSidecars() bool {
 	p.capLock.Lock()
 	defer p.capLock.Unlock()
 	return p.incapable > 0
 }
 
-// HasPlacementCapableSidecars reports whether any connected sidecar supports
+// HasSchedulerPlacementCapableSidecars reports whether any connected sidecar supports
 // scheduler placement.
-func (p *Pool) HasPlacementCapableSidecars() bool {
+func (p *Pool) HasSchedulerPlacementCapableSidecars() bool {
 	p.capLock.Lock()
 	defer p.capLock.Unlock()
 	return p.capable > 0

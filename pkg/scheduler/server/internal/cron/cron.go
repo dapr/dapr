@@ -163,11 +163,11 @@ func (c *cron) Run(ctx context.Context) error {
 		Cron: c.etcdcron,
 		// A nil event re-broadcasts the last leadership table with its
 		// placement fields recomputed under the new capability state.
-		OnPlacementCapabilityChange: func() {
+		OnSchedulerPlacementCapabilityChange: func() {
 			if c.handoff != nil {
 				c.handoff.SetLocalCapabilities(
-					c.connectionPool.HasPlacementIncapableSidecars(),
-					c.connectionPool.HasPlacementCapableSidecars(),
+					c.connectionPool.HasSchedulerPlacementIncapableSidecars(),
+					c.connectionPool.HasSchedulerPlacementCapableSidecars(),
 				)
 			}
 			leaderLoop.Enqueue(nil)

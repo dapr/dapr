@@ -84,8 +84,8 @@ type Interface interface {
 	PlacementPresent() bool
 	PlacementStoodDown() bool
 	Advertised() bool
-	AnyIncapableSidecars() bool
-	AnyCapableSidecars() bool
+	AnySchedulerPlacementIncapableSidecars() bool
+	AnySchedulerPlacementCapableSidecars() bool
 	LatchAdvertised()
 }
 
@@ -512,9 +512,9 @@ func (h *Handoff) Advertised() bool {
 	return h.advertised
 }
 
-// AnyIncapableSidecars reports whether any scheduler in the cluster has a
+// AnySchedulerPlacementIncapableSidecars reports whether any scheduler in the cluster has a
 // connected sidecar which cannot take scheduler placement.
-func (h *Handoff) AnyIncapableSidecars() bool {
+func (h *Handoff) AnySchedulerPlacementIncapableSidecars() bool {
 	h.lock.RLock()
 	defer h.lock.RUnlock()
 	for _, gate := range h.gates {
@@ -525,9 +525,9 @@ func (h *Handoff) AnyIncapableSidecars() bool {
 	return false
 }
 
-// AnyCapableSidecars reports whether any scheduler in the cluster has a
+// AnySchedulerPlacementCapableSidecars reports whether any scheduler in the cluster has a
 // connected sidecar which can take scheduler placement.
-func (h *Handoff) AnyCapableSidecars() bool {
+func (h *Handoff) AnySchedulerPlacementCapableSidecars() bool {
 	h.lock.RLock()
 	defer h.lock.RUnlock()
 	for _, gate := range h.gates {

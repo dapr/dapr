@@ -75,11 +75,11 @@ type fakePool struct {
 }
 
 func (f *fakePool) SetSchedulerInfo(count, idx int32) { f.count, f.idx = count, idx }
-func (f *fakePool) HasPlacementIncapableSidecars() bool {
+func (f *fakePool) HasSchedulerPlacementIncapableSidecars() bool {
 	return f.incapable
 }
 
-func (f *fakePool) HasPlacementCapableSidecars() bool {
+func (f *fakePool) HasSchedulerPlacementCapableSidecars() bool {
 	return f.capable
 }
 
@@ -308,12 +308,12 @@ type fakeHandoff struct {
 	latched int
 }
 
-func (f *fakeHandoff) PlacementPresent() bool     { return f.present }
-func (f *fakeHandoff) PlacementStoodDown() bool   { return f.stoodDown }
-func (f *fakeHandoff) Advertised() bool           { return f.advertised }
-func (f *fakeHandoff) AnyIncapableSidecars() bool { return f.incapable }
-func (f *fakeHandoff) AnyCapableSidecars() bool   { return f.capable }
-func (f *fakeHandoff) LatchAdvertised()           { f.latched++ }
+func (f *fakeHandoff) PlacementPresent() bool                       { return f.present }
+func (f *fakeHandoff) PlacementStoodDown() bool                     { return f.stoodDown }
+func (f *fakeHandoff) Advertised() bool                             { return f.advertised }
+func (f *fakeHandoff) AnySchedulerPlacementIncapableSidecars() bool { return f.incapable }
+func (f *fakeHandoff) AnySchedulerPlacementCapableSidecars() bool   { return f.capable }
+func (f *fakeHandoff) LatchAdvertised()                             { f.latched++ }
 
 func TestLeadershipStandDownHandshake(t *testing.T) {
 	t.Parallel()
