@@ -40,7 +40,7 @@ func eventRaisedEvent(name string) *backend.HistoryEvent {
 func Test_fold_submitHoldsWithoutSave(t *testing.T) {
 	const instanceID = "test-fold-hold"
 	h := newWakeHarness(t, instanceID, true)
-	h.fact.completionsFold = true
+	h.fact.fastPath = true
 	h.primeRunning(t, instanceID, 7)
 
 	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), taskCompletedEvent(7))
@@ -59,7 +59,7 @@ func Test_fold_submitHoldsWithoutSave(t *testing.T) {
 func Test_fold_externalEventKeepsInboxPath(t *testing.T) {
 	const instanceID = "test-fold-external"
 	h := newWakeHarness(t, instanceID, true)
-	h.fact.completionsFold = true
+	h.fact.fastPath = true
 	h.primeRunning(t, instanceID, 7)
 
 	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), eventRaisedEvent("go"))
@@ -72,7 +72,7 @@ func Test_fold_externalEventKeepsInboxPath(t *testing.T) {
 func Test_fold_duplicatePendingDropped(t *testing.T) {
 	const instanceID = "test-fold-dup"
 	h := newWakeHarness(t, instanceID, true)
-	h.fact.completionsFold = true
+	h.fact.fastPath = true
 	h.primeRunning(t, instanceID, 7)
 
 	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), taskCompletedEvent(7))
@@ -90,7 +90,7 @@ func Test_fold_duplicatePendingDropped(t *testing.T) {
 func Test_fold_takeCapAndOrder(t *testing.T) {
 	const instanceID = "test-fold-take"
 	h := newWakeHarness(t, instanceID, true)
-	h.fact.completionsFold = true
+	h.fact.fastPath = true
 	h.primeRunning(t, instanceID, 1)
 
 	total := maxFoldPerTurn + 5
@@ -142,7 +142,7 @@ func Test_fold_ackNackFlush(t *testing.T) {
 
 	const instanceID = "test-fold-flush"
 	h := newWakeHarness(t, instanceID, true)
-	h.fact.completionsFold = true
+	h.fact.fastPath = true
 	h.orch.foldPending = mk(2)
 	h.orch.foldFlush()
 	assert.Empty(t, h.orch.foldPending)

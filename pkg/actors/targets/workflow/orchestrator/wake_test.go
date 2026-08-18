@@ -139,7 +139,7 @@ func newWakeHarness(t *testing.T, instanceID string, fastPath bool) *wakeHarness
 		ActivityActorType: "dapr.internal.default.testapp.activity",
 		ActorTypeBuilder:  common.NewActorTypeBuilder("default"),
 		Actors:            actors,
-		LocalWakeFastPath: fastPath,
+		FastPath:          fastPath,
 	})
 	require.NoError(t, err)
 

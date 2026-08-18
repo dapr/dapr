@@ -93,7 +93,7 @@ func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.Inte
 
 	// The completions fold manages its own lock lifecycle (early release
 	// before waiting on the folding turn's commit; see fold.go).
-	if o.completionsFold && req.GetMessage().GetMethod() == todo.AddWorkflowEventMethod {
+	if o.fastPath && req.GetMessage().GetMethod() == todo.AddWorkflowEventMethod {
 		return o.invokeAddEventFold(ctx, req)
 	}
 

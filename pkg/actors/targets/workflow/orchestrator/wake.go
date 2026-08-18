@@ -73,7 +73,7 @@ type driveInfo struct {
 // wake is scheduled in the future (delayed starts must keep their scheduler
 // due time); callers fall back to the durable per-event reminder path.
 func (o *orchestrator) localDrive(reminderName string, dueTime time.Time, wfName string) {
-	if !o.localWakeFastPath || dueTime.After(time.Now()) {
+	if !o.fastPath || dueTime.After(time.Now()) {
 		return
 	}
 

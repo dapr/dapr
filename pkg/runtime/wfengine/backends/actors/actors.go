@@ -130,9 +130,7 @@ type Actors struct {
 
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
-	workflowsLocalWakeFastPath      bool
-	workflowsLocalActivityFastPath  bool
-	workflowsCompletionsFold        bool
+	workflowsFastPath               bool
 	pendingCompletions              *pending.Pending
 
 	orchestrationWorkItemChan chan *backend.WorkflowWorkItem
@@ -188,9 +186,7 @@ func New(opts Options) (*Actors, error) {
 
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
-		workflowsLocalWakeFastPath:      opts.WorkflowsFastPath,
-		workflowsLocalActivityFastPath:  opts.WorkflowsFastPath,
-		workflowsCompletionsFold:        opts.WorkflowsFastPath,
+		workflowsFastPath:               opts.WorkflowsFastPath,
 		pendingCompletions:              pendingCompletions,
 	}, nil
 }
@@ -214,9 +210,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		Signer:                 abe.signer,
 		MaxRequestBodySize:     abe.maxRequestBodySize,
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
-		LocalWakeFastPath:      abe.workflowsLocalWakeFastPath,
-		LocalActivityFastPath:  abe.workflowsLocalActivityFastPath,
-		CompletionsFold:        abe.workflowsCompletionsFold,
+		FastPath:               abe.workflowsFastPath,
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
@@ -255,7 +249,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		WorkflowAccessPolicies:          abe.workflowAccessPolicies,
 		Signer:                          abe.signer,
 		WorkflowsRemoteActivityReminder: abe.workflowsRemoteActivityReminder,
-		LocalActivityFastPath:           abe.workflowsLocalActivityFastPath,
+		FastPath:                        abe.workflowsFastPath,
 		ExecutionHeld:                   abe.ActivityExecutionHeld,
 	}
 

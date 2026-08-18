@@ -70,25 +70,11 @@ type Options struct {
 	// May be nil when the feature is disabled.
 	WorkflowAccessPolicies *workflowacl.Holder
 
-	// LocalWakeFastPath eagerly drives freshly-armed workflow wake-up
-	// reminders on the arming host, using the scheduler entry only as a
-	// crash backstop (WorkflowsFastPath preview feature).
-	LocalWakeFastPath bool
-
-	// LocalActivityFastPath elides the per-activity run-activity reminder:
-	// activity dispatches carry a metadata certification that this
-	// orchestrator's janitor is armed, and the janitor re-dispatches
-	// unresolved scheduled tasks as the durable re-driver
-	// (WorkflowsFastPath preview feature; requires
-	// LocalWakeFastPath).
-	LocalActivityFastPath bool
-
-	// CompletionsFold holds sender-retried completions in memory and
-	// persists them straight into the folding turn's single state commit,
-	// acking the sender only after that commit
-	// (WorkflowsFastPath preview feature; requires
-	// LocalWakeFastPath).
-	CompletionsFold bool
+	// FastPath gates the WorkflowsFastPath preview feature capabilities as
+	// one unit: the detached local wake drive (wake.go), the
+	// activity-reminder elision with janitor re-dispatch (redispatch.go),
+	// and the in-memory completions fold (fold.go).
+	FastPath bool
 }
 
 type factory struct {
@@ -114,26 +100,18 @@ type factory struct {
 
 	deactivateCh chan *orchestrator
 
-	// localWakeFastPath and the wake* fields drive the detached local wake
+	// fastPath and the wake* fields drive the detached local wake
 	// goroutines (see wake.go). wakeCtx is factory-owned rather than scoped
 	// to the per-stream ctx given to New. HaltAll (which also fires on
 	// placement stream churn, not only shutdown) cancels and drains the
 	// in-flight wakes, then recreates the context for subsequent
 	// activations. wakeLock serializes spawns against that cancel/recreate
 	// cycle so the WaitGroup Add never races the Wait.
-	localWakeFastPath bool
-	wakeLock          sync.Mutex
-	wakeCtx           context.Context
-	wakeCancel        context.CancelFunc
-	wakeWG            sync.WaitGroup
-
-	// localActivityFastPath gates the activity-reminder elision on the
-	// dispatch side (metadata certification in callActivity) and the janitor
-	// re-dispatch of unresolved scheduled tasks (redispatch.go).
-	localActivityFastPath bool
-
-	// completionsFold gates the in-memory completions fold (fold.go).
-	completionsFold bool
+	fastPath   bool
+	wakeLock   sync.Mutex
+	wakeCtx    context.Context
+	wakeCancel context.CancelFunc
+	wakeWG     sync.WaitGroup
 
 	// rootCtx bounds wake-failure escalation goroutines (see wake.go
 	// escalate): unlike wakeCtx it survives HaltAll, because a reminder
@@ -201,9 +179,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		workflowAccessPolicies: opts.WorkflowAccessPolicies,
 		scheduler:              opts.Scheduler,
 		deactivateCh:           deactivateCh,
-		localWakeFastPath:      opts.LocalWakeFastPath,
-		localActivityFastPath:  opts.LocalActivityFastPath && opts.LocalWakeFastPath,
-		completionsFold:        opts.CompletionsFold && opts.LocalWakeFastPath,
+		fastPath:               opts.FastPath,
 		wakeCtx:                wakeCtx,
 		wakeCancel:             wakeCancel,
 		rootCtx:                ctx,

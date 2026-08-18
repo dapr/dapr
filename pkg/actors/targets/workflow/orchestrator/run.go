@@ -142,7 +142,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			}
 		}
 		log.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", o.actorID, reminder.Name)
-		if o.completionsFold && !runtimestate.IsCompleted(o.rstate) {
+		if o.fastPath && !runtimestate.IsCompleted(o.rstate) {
 			// Returning RunCompletedTrue deactivates the actor, and a
 			// concurrent fold submit can append a held completion the moment
 			// this no-op fire releases the lock: the deactivation would then
@@ -331,7 +331,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 				if len(carryover) > 0 {
 					reminderName := events.EventReminderName(reminderPrefixNewEvent, carryover[0])
-					if o.localWakeFastPath {
+					if o.fastPath {
 						// Fast path: janitor + local drive instead of the
 						// durable per-event reminder (falling back to it if
 						// the janitor cannot be ensured). The subsequent
@@ -489,7 +489,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// is provably armed first (durability before the ack, mirroring
 	// driveNewEvent); on janitor failure the dispatch degrades to the durable
 	// run-activity reminder path.
-	elideActivityReminder := o.localActivityFastPath && len(pendingTasks) > 0
+	elideActivityReminder := o.fastPath && len(pendingTasks) > 0
 	if elideActivityReminder {
 		if jerr := o.ensureJanitor(ctx, state); jerr != nil {
 			log.Warnf("Workflow actor '%s': failed to ensure janitor reminder, dispatching activities with durable reminders: %v", o.actorID, jerr)

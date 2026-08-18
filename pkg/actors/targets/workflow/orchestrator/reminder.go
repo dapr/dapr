@@ -128,7 +128,7 @@ var janitorPeriod = common.JanitorPeriod
 // Durability first: if the janitor cannot be ensured, fall back to the
 // durable per-event reminder path.
 func (o *orchestrator) driveNewEvent(ctx context.Context, e *backend.HistoryEvent, state *wfenginestate.State) error {
-	if !o.localWakeFastPath {
+	if !o.fastPath {
 		return o.assertNewEventReminder(ctx, e, state)
 	}
 

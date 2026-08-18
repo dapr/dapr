@@ -80,7 +80,7 @@ func (o *orchestrator) redispatchActivities(ctx context.Context, state *wfengine
 
 	// The janitor that led here just fired, so its backstop is demonstrably
 	// armed: the elision certification only depends on the gate.
-	elide := o.localActivityFastPath
+	elide := o.fastPath
 
 	o.wakeLock.Lock()
 	wakeCtx := o.wakeCtx

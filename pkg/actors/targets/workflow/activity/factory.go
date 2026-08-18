@@ -59,11 +59,9 @@ type Options struct {
 
 	WorkflowsRemoteActivityReminder bool
 
-	// LocalActivityFastPath drives certified activity executions locally
-	// instead of creating the durable run-activity reminder
-	// (WorkflowsFastPath preview feature). Only dispatches
-	// carrying the orchestrator's janitor certification metadata are elided.
-	LocalActivityFastPath bool
+	// FastPath drives certified activity executions locally in place of
+	// their run-activity reminder (WorkflowsFastPath preview feature).
+	FastPath bool
 
 	// ExecutionHeld reports whether the durabletask engine on this host
 	// currently holds a completion registration for the given activity work
@@ -111,17 +109,17 @@ type factory struct {
 	// emitted once per factory lifetime instead of on every self-call.
 	selfCallerWarned atomic.Bool
 
-	// localActivityFastPath and the drive* fields power the detached local
+	// fastPath and the drive* fields power the detached local
 	// activity drives (see drive.go), mirroring the orchestrator factory's
 	// wake machinery: driveCtx is factory-owned, cancelled and drained by
 	// HaltAll (which also fires on placement churn) and then recreated;
 	// driveLock serializes spawns against that cancel/recreate cycle so the
 	// WaitGroup Add never races the Wait.
-	localActivityFastPath bool
-	driveLock             sync.Mutex
-	driveCtx              context.Context
-	driveCancel           context.CancelFunc
-	driveWG               sync.WaitGroup
+	fastPath    bool
+	driveLock   sync.Mutex
+	driveCtx    context.Context
+	driveCancel context.CancelFunc
+	driveWG     sync.WaitGroup
 
 	// rootCtx bounds drive-failure escalation goroutines (see drive.go):
 	// unlike driveCtx it survives HaltAll, because a reminder create is
@@ -163,7 +161,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 	return &factory{
 		appID:                  opts.AppID,
 		actorType:              opts.ActivityActorType,
-		localActivityFastPath:  opts.LocalActivityFastPath,
+		fastPath:               opts.FastPath,
 		executionHeld:          opts.ExecutionHeld,
 		staleClaimAfter:        2 * common.JanitorPeriod(),
 		driveCtx:               driveCtx,

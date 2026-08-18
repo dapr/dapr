@@ -109,15 +109,15 @@ func newDriveHarness(t *testing.T) *driveHarness {
 
 	driveCtx, driveCancel := context.WithCancel(t.Context())
 	h.fact = &factory{
-		appID:                 "testapp",
-		actorType:             "dapr.internal.default.testapp.activity",
-		workflowActorType:     "dapr.internal.default.testapp.workflow",
-		router:                fakeRouter,
-		reminders:             h.sched,
-		localActivityFastPath: true,
-		driveCtx:              driveCtx,
-		driveCancel:           driveCancel,
-		rootCtx:               t.Context(),
+		appID:             "testapp",
+		actorType:         "dapr.internal.default.testapp.activity",
+		workflowActorType: "dapr.internal.default.testapp.workflow",
+		router:            fakeRouter,
+		reminders:         h.sched,
+		fastPath:          true,
+		driveCtx:          driveCtx,
+		driveCancel:       driveCancel,
+		rootCtx:           t.Context(),
 	}
 	return h
 }

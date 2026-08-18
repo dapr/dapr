@@ -75,7 +75,7 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 	// executions (future dueTime) keep the scheduler path so the delay is
 	// honoured; a drive that cannot be armed (factory halting) falls
 	// through to the durable reminder.
-	if a.localActivityFastPath && localDriveCertified(req) && !dueTime.After(time.Now()) {
+	if a.fastPath && localDriveCertified(req) && !dueTime.After(time.Now()) {
 		if a.localDrive(invocation, dueTime, activityName) {
 			return nil, nil
 		}
