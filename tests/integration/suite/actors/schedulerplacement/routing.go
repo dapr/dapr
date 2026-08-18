@@ -75,13 +75,11 @@ func (r *routing) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithAppPort(srv1.Port()),
 		daprd.WithScheduler(r.sched),
-		daprd.WithConfigManifests(t, featureConfig),
 	)
 	r.daprd2 = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithAppPort(srv2.Port()),
 		daprd.WithScheduler(r.sched),
-		daprd.WithConfigManifests(t, featureConfig),
 	)
 
 	return []framework.Option{
@@ -93,6 +91,12 @@ func (r *routing) Run(t *testing.T, ctx context.Context) {
 	r.sched.WaitUntilRunning(t, ctx)
 	r.daprd1.WaitUntilRunning(t, ctx)
 	r.daprd2.WaitUntilRunning(t, ctx)
+
+	// Both daprds' WatchJobs streams must be registered before a 0s reminder
+	// can fire: a trigger during the startup window may land on the
+	// non-owner and be forwarded, and zero forwarding is a steady state
+	// claim.
+	r.sched.WaitUntilSidecarsConnected(t, ctx, 6)
 
 	gclient := r.daprd1.GRPCClient(t, ctx)
 

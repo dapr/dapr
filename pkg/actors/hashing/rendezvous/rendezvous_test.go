@@ -180,3 +180,20 @@ func BenchmarkLookup(b *testing.B) {
 		})
 	}
 }
+
+// BenchmarkNew measures table construction, which runs on the placement
+// leader and on every sidecar for each actor type whose membership changed.
+// Per-type dissemination makes this the hot path on a membership change:
+// where a vnode ring sorts hosts*replicationFactor entries, a rendezvous
+// table sorts one entry per host.
+func BenchmarkNew(b *testing.B) {
+	for _, n := range []int{3, 10, 50, 200, 1000} {
+		b.Run(strconv.Itoa(n)+"-hosts", func(b *testing.B) {
+			hostSet := hosts(n)
+			b.ResetTimer()
+			for b.Loop() {
+				New(hostSet)
+			}
+		})
+	}
+}

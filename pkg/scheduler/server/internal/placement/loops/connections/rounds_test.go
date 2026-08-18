@@ -234,6 +234,18 @@ func TestTimeoutEvictsUnackedAndRestartsRound(t *testing.T) {
 	assert.False(t, fs0.closed)
 	assert.NotContains(t, c.rounds, seqT1, "timed out round must be aborted")
 
+	// The survivor holds the aborted round's LOCK: it must receive that
+	// round's UNLOCK so it releases the lock and its round timer, before the
+	// fresh round's LOCK arrives.
+	var unlocked bool
+	for _, ev := range fs0.sent {
+		if u, ok := ev.(*loops.SendUnlock); ok && u.Seq == seqT1 {
+			unlocked = true
+			assert.Equal(t, []string{"t1"}, u.Types)
+		}
+	}
+	assert.True(t, unlocked, "survivor must receive UNLOCK for the aborted round")
+
 	// A fresh round covering t1 goes to the survivor. t2 stays locked by its
 	// own still in-flight round, with the evicted host's departure pending.
 	next := lastLock(t, fs0)

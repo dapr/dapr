@@ -92,9 +92,9 @@ func WithHandler(pattern string, handler http.HandlerFunc) Option {
 }
 
 // WithSchedulerPlacement serves actor placement from the scheduler instead of
-// the standalone placement service: no placement process is started, the
-// scheduler runs with placement enabled, and daprd enables the
-// SchedulerPlacement preview feature.
+// the standalone placement service: no placement process is started and the
+// scheduler runs with placement enabled. Sidecars need no configuration of
+// their own and take the scheduler's advertisement.
 func WithSchedulerPlacement() Option {
 	return func(o *options) {
 		o.schedulerPlacement = true

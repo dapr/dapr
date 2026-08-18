@@ -37,9 +37,11 @@ func init() {
 	suite.Register(new(fallback))
 }
 
-// fallback tests that a daprd with the SchedulerPlacement feature enabled
-// falls back to the standalone placement service when the scheduler cluster
-// does not serve placement (old scheduler), keeping actors working.
+// fallback tests that a daprd whose scheduler does not serve actor placement
+// uses the standalone placement service instead. This is the path for old
+// schedulers and for clusters which have not turned scheduler placement on,
+// and it is chosen on startup from the scheduler's advertisement rather than
+// from any sidecar side configuration.
 type fallback struct {
 	daprd *daprd.Daprd
 	sched *scheduler.Scheduler
@@ -66,14 +68,13 @@ func (f *fallback) Setup(t *testing.T) []framework.Option {
 	f.sched = scheduler.New(t)
 	f.place = placement.New(t)
 	f.log = logline.New(t, logline.WithStdoutLineContains(
-		"scheduler cluster does not serve placement; falling back to the placement service",
+		"Scheduler cluster does not serve actor placement, using the placement service",
 	))
 	f.daprd = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithScheduler(f.sched),
 		daprd.WithPlacementAddresses(f.place.Address()),
-		daprd.WithConfigManifests(t, featureConfig),
 		daprd.WithLogLineStdout(f.log),
 	)
 

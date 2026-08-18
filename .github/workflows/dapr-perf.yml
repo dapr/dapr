@@ -34,7 +34,7 @@ on:
         required: false
         type: string
       scheduler_placement:
-        description: "Serve actor placement from the Scheduler (global.scheduler.placement.enabled=true) instead of the standalone placement service"
+        description: "After the full suite runs, run the actor and workflow perf tests again with actor placement served by the Scheduler (global.scheduler.placement.enabled), on the same cluster for comparison"
         required: false
         type: boolean
         default: false
@@ -340,10 +340,19 @@ jobs:
             Please check the logs for details on the error.
 
   test-perf:
-    name: Perf tests
+    name: Perf tests (scheduler_placement=${{ matrix.scheduler_placement }})
     needs:
       - build
       - deploy-infrastructure
+    # With the scheduler_placement input checked, a second leg reruns only
+    # the actor and workflow tests, the ones placement affects, with actor
+    # placement served by the Scheduler. Legs run sequentially on the same
+    # cluster so the comparison shares its infrastructure.
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include: ${{ fromJSON((inputs.scheduler_placement == true) && '[{"scheduler_placement":false,"perf_tests":""},{"scheduler_placement":true,"perf_tests":"actor_activation actor_double_activation actor_id_scale actor_reminder actor_timer actor_type_scale workflows"}]' || '[{"scheduler_placement":false,"perf_tests":""}]') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -374,7 +383,9 @@ jobs:
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
-          if [ "${{ inputs.tests }}" != "" ] ; then
+          if [ "${{ matrix.perf_tests }}" != "" ] ; then
+            echo "DAPR_PERF_TEST=${{ matrix.perf_tests }}" >> $GITHUB_ENV
+          elif [ "${{ inputs.tests }}" != "" ] ; then
             echo "DAPR_PERF_TEST=${{ inputs.tests }}" >> $GITHUB_ENV
           fi
         shell: bash
@@ -464,7 +475,7 @@ jobs:
           # placement served by the Scheduler (rendezvous hashing) instead of
           # the standalone placement service (consistent hash ring), for
           # comparing the two placement authorities on unchanged tests.
-          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s,dapr_scheduler.securityContext.fsGroup=65532,global.scheduler.placement.enabled=${{ inputs.scheduler_placement || false }}"
+          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s,dapr_scheduler.securityContext.fsGroup=65532,global.scheduler.placement.enabled=${{ matrix.scheduler_placement }}"
         run: make docker-deploy-k8s
       - name: Deploy test components
         if: env.TEST_PREFIX != ''
@@ -480,20 +491,20 @@ jobs:
         if: always() && env.TEST_PREFIX != ''
         uses: actions/upload-artifact@v4
         with:
-          name: perf_container_logs
+          name: perf_container_logs_scheduler_placement_${{ matrix.scheduler_placement }}
           path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
       - name: Upload test logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: perf_test_logs
+          name: perf_test_logs_scheduler_placement_${{ matrix.scheduler_placement }}
           path: ${{ env.DAPR_TEST_LOG_PATH }}
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
-          name: test_perf.json
+          name: test_perf_scheduler_placement_${{ matrix.scheduler_placement }}.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf*.*
       - name: Generate perf charts
         if: always() && env.TEST_PREFIX != ''

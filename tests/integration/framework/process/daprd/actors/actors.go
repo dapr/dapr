@@ -197,6 +197,8 @@ func (a *Actors) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	return a.daprd.Metrics(t, ctx).All()
 }
 
+// Placement returns the standalone placement process. Nil when the actors
+// were built with WithSchedulerPlacement, which runs no placement process.
 func (a *Actors) Placement() *placement.Placement {
 	return a.place
 }

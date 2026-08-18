@@ -11,18 +11,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package schedulerplacement tests actor placement served by the scheduler
-// (SchedulerPlacement preview feature).
+// Package schedulerplacement tests actor placement served by the scheduler.
+//
+// Whether the scheduler serves placement is a control plane decision, set with
+// --placement-enabled on the scheduler and advertised to sidecars on
+// WatchHosts. Sidecars have no say: there is no per-app opt in, so two
+// sidecars hosting the same actor type can never be talking to two different
+// placement authorities.
 package schedulerplacement
-
-// featureConfig is the daprd Configuration enabling the SchedulerPlacement
-// preview feature.
-const featureConfig = `apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: schedulerplacement
-spec:
-  features:
-  - name: SchedulerPlacement
-    enabled: true
-`

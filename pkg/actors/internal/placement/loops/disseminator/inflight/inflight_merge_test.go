@@ -107,8 +107,33 @@ func TestMerge(t *testing.T) {
 		require.ErrorContains(t, err, "version regression")
 
 		// After a reconnect versions restart; the same lower version is fine.
-		i.ResetVersions()
+		i.ResetSession()
 		_, err = i.Merge(tables(map[string][]string{"t1": {"b:1"}}), map[string]uint64{"t1": 3})
+		require.NoError(t, err)
+	})
+
+	t.Run("session reset drops all tables so a stale type cannot survive reconnect", func(t *testing.T) {
+		t.Parallel()
+		i := New(Options{Hostname: "10.0.0.1", Port: "50002"})
+
+		_, err := i.Merge(tables(map[string][]string{
+			"t1": {"10.0.0.1:50002"},
+			"t2": {"10.0.0.2:50002"},
+		}), map[string]uint64{"t1": 1, "t2": 1})
+		require.NoError(t, err)
+
+		// Stream loss ends the session. The reconnect snapshot contains only
+		// t1: t2 was deleted while disconnected and sends no tombstone, so
+		// only session-scoped state keeps it from surviving.
+		i.ResetSession()
+		_, err = i.Merge(tables(map[string][]string{
+			"t1": {"10.0.0.1:50002"},
+		}), map[string]uint64{"t1": 1})
+		require.NoError(t, err)
+
+		_, err = i.resolve(&api.LookupActorRequest{ActorType: "t2", ActorID: "a"})
+		require.Error(t, err)
+		_, err = i.resolve(&api.LookupActorRequest{ActorType: "t1", ActorID: "a"})
 		require.NoError(t, err)
 	})
 

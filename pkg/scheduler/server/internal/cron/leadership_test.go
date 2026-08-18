@@ -14,11 +14,15 @@ limitations under the License.
 package cron
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/kit/events/broadcaster"
 )
 
 func TestPlacementLeader(t *testing.T) {
@@ -60,4 +64,358 @@ func TestPlacementLeader(t *testing.T) {
 			assert.Equal(t, test.exp, placementLeader(test.hosts))
 		})
 	}
+}
+
+type fakePool struct {
+	incapable bool
+	capable   bool
+
+	count int32
+	idx   int32
+}
+
+func (f *fakePool) SetSchedulerInfo(count, idx int32) { f.count, f.idx = count, idx }
+func (f *fakePool) HasPlacementIncapableSidecars() bool {
+	return f.incapable
+}
+
+func (f *fakePool) HasPlacementCapableSidecars() bool {
+	return f.capable
+}
+
+type fakePlacementLeader struct {
+	leader *bool
+}
+
+func (f *fakePlacementLeader) SetLeader(leader bool) { f.leader = &leader }
+
+func TestLeadershipHandle(t *testing.T) {
+	t.Parallel()
+
+	anyHost := func(t *testing.T, addr string, placement bool) *anypb.Any {
+		t.Helper()
+		a, err := anypb.New(&schedulerv1pb.Host{Address: addr, PlacementEnabled: placement})
+		require.NoError(t, err)
+		return a
+	}
+
+	newLeadership := func(pool *fakePool, place *fakePlacementLeader) (*leadership, chan []*schedulerv1pb.Host) {
+		var lock sync.RWMutex
+		var broadcastHosts []*schedulerv1pb.Host
+		bc := broadcaster.New[[]*schedulerv1pb.Host]()
+		ch := make(chan []*schedulerv1pb.Host, 4)
+		bc.Subscribe(t.Context(), ch)
+		return &leadership{
+			hostBroadcaster: bc,
+			lock:            &lock,
+			broadcastHosts:  &broadcastHosts,
+			readyCh:         make(chan struct{}),
+			ownAddress:      "a:1",
+			pool:            pool,
+			placement:       place,
+		}, ch
+	}
+
+	t.Run("no incapable sidecars advertises the leader and capability", func(t *testing.T) {
+		t.Parallel()
+		pool := new(fakePool)
+		place := new(fakePlacementLeader)
+		l, ch := newLeadership(pool, place)
+
+		require.NoError(t, l.Handle(t.Context(),
+			[]*anypb.Any{anyHost(t, "a:1", true), anyHost(t, "b:1", true)}))
+
+		hosts := <-ch
+		require.Len(t, hosts, 2)
+		assert.True(t, hosts[0].GetLeader())
+		assert.True(t, hosts[0].GetPlacementEnabled())
+		assert.False(t, hosts[1].GetLeader())
+		assert.True(t, hosts[1].GetPlacementEnabled())
+		require.NotNil(t, place.leader)
+		assert.True(t, *place.leader)
+	})
+
+	t.Run("incapable sidecar withholds the leader and masks capability", func(t *testing.T) {
+		t.Parallel()
+		pool := &fakePool{incapable: true}
+		place := new(fakePlacementLeader)
+		l, ch := newLeadership(pool, place)
+
+		require.NoError(t, l.Handle(t.Context(),
+			[]*anypb.Any{anyHost(t, "a:1", true), anyHost(t, "b:1", true)}))
+
+		hosts := <-ch
+		require.Len(t, hosts, 2)
+		for _, host := range hosts {
+			// Sidecars must see a cluster which does not serve placement, so
+			// they use the standalone placement service: one authority.
+			assert.False(t, host.GetLeader())
+			assert.False(t, host.GetPlacementEnabled())
+		}
+		require.NotNil(t, place.leader)
+		assert.False(t, *place.leader)
+	})
+
+	t.Run("nil event re-broadcasts the last table under the new capability state", func(t *testing.T) {
+		t.Parallel()
+		pool := &fakePool{incapable: true}
+		place := new(fakePlacementLeader)
+		l, ch := newLeadership(pool, place)
+
+		require.NoError(t, l.Handle(t.Context(),
+			[]*anypb.Any{anyHost(t, "a:1", true)}))
+		hosts := <-ch
+		assert.False(t, hosts[0].GetLeader())
+
+		// The last incapable sidecar disconnects: the pool signals with a
+		// nil event and the same table is re-broadcast, now advertising
+		// placement.
+		pool.incapable = false
+		require.NoError(t, l.Handle(t.Context(), nil))
+
+		hosts = <-ch
+		require.Len(t, hosts, 1)
+		assert.True(t, hosts[0].GetLeader())
+		assert.True(t, hosts[0].GetPlacementEnabled())
+		require.NotNil(t, place.leader)
+		assert.True(t, *place.leader)
+	})
+
+	t.Run("nil event before any table is a no-op", func(t *testing.T) {
+		t.Parallel()
+		pool := new(fakePool)
+		place := new(fakePlacementLeader)
+		l, ch := newLeadership(pool, place)
+
+		require.NoError(t, l.Handle(t.Context(), nil))
+		select {
+		case hosts := <-ch:
+			t.Fatalf("unexpected broadcast: %v", hosts)
+		default:
+		}
+		assert.Nil(t, place.leader)
+	})
+}
+
+// TestLeadershipAdvertisementPermanence asserts the advertisement cannot be
+// withheld again once placement has been advertised to a capable sidecar: an
+// old sidecar joining a settled cluster must not revoke it and drop every
+// placement stream.
+func TestLeadershipAdvertisementPermanence(t *testing.T) {
+	t.Parallel()
+
+	anyHost := func(t *testing.T, addr string, placement bool) *anypb.Any {
+		t.Helper()
+		a, err := anypb.New(&schedulerv1pb.Host{Address: addr, PlacementEnabled: placement})
+		require.NoError(t, err)
+		return a
+	}
+
+	var lock sync.RWMutex
+	var broadcastHosts []*schedulerv1pb.Host
+	bc := broadcaster.New[[]*schedulerv1pb.Host]()
+	ch := make(chan []*schedulerv1pb.Host, 4)
+	bc.Subscribe(t.Context(), ch)
+	pool := new(fakePool)
+	place := new(fakePlacementLeader)
+	l := &leadership{
+		hostBroadcaster: bc,
+		lock:            &lock,
+		broadcastHosts:  &broadcastHosts,
+		readyCh:         make(chan struct{}),
+		ownAddress:      "a:1",
+		pool:            pool,
+		placement:       place,
+	}
+
+	// Advertising into an empty cluster must NOT become permanent: a
+	// scheduler boots and broadcasts before any sidecar has connected, and
+	// that broadcast is no evidence the cutover happened.
+	require.NoError(t, l.Handle(t.Context(), []*anypb.Any{anyHost(t, "a:1", true)}))
+	hosts := <-ch
+	require.True(t, hosts[0].GetLeader())
+	require.False(t, l.advertised)
+
+	// An old sidecar connects first: the advertisement is withheld.
+	pool.incapable = true
+	require.NoError(t, l.Handle(t.Context(), nil))
+	hosts = <-ch
+	require.False(t, hosts[0].GetLeader())
+	require.False(t, hosts[0].GetPlacementEnabled())
+
+	// The old sidecar leaves and a capable one is connected: the
+	// advertisement resumes and, with real evidence of cutover, becomes
+	// permanent.
+	pool.incapable = false
+	pool.capable = true
+	require.NoError(t, l.Handle(t.Context(), nil))
+	hosts = <-ch
+	require.True(t, hosts[0].GetLeader())
+	require.True(t, l.advertised)
+
+	// A late old sidecar connects: placement stays advertised, so one stale
+	// pod cannot drop every placement stream. Nothing in the table changes,
+	// so nothing is re-broadcast: sidecars reload every scheduler connection
+	// per broadcast, and identical re-broadcasts would feed that churn back
+	// into this loop indefinitely.
+	pool.incapable = true
+	require.NoError(t, l.Handle(t.Context(), nil))
+	select {
+	case hosts = <-ch:
+		t.Fatalf("an unchanged table must not be re-broadcast: %v", hosts)
+	default:
+	}
+	require.NotNil(t, place.leader)
+	assert.True(t, *place.leader)
+}
+
+// TestLeadershipMalformedTableNotReplayed asserts a table which fails to
+// unmarshal is not saved: a later capability signal must be a no-op rather
+// than replaying the malformed table and erroring forever.
+func TestLeadershipMalformedTableNotReplayed(t *testing.T) {
+	t.Parallel()
+
+	var lock sync.RWMutex
+	var broadcastHosts []*schedulerv1pb.Host
+	bc := broadcaster.New[[]*schedulerv1pb.Host]()
+	l := &leadership{
+		hostBroadcaster: bc,
+		lock:            &lock,
+		broadcastHosts:  &broadcastHosts,
+		readyCh:         make(chan struct{}),
+		ownAddress:      "a:1",
+		pool:            new(fakePool),
+		placement:       new(fakePlacementLeader),
+	}
+
+	// A payload of the wrong type fails UnmarshalTo.
+	bad, err := anypb.New(&schedulerv1pb.Job{})
+	require.NoError(t, err)
+	require.Error(t, l.Handle(t.Context(), []*anypb.Any{bad}))
+
+	// The malformed table was not saved: the capability signal is a no-op.
+	require.Nil(t, l.lastCronTable)
+	require.NoError(t, l.Handle(t.Context(), nil))
+}
+
+type fakeHandoff struct {
+	present    bool
+	stoodDown  bool
+	advertised bool
+	incapable  bool
+	capable    bool
+
+	latched int
+}
+
+func (f *fakeHandoff) PlacementPresent() bool     { return f.present }
+func (f *fakeHandoff) PlacementStoodDown() bool   { return f.stoodDown }
+func (f *fakeHandoff) Advertised() bool           { return f.advertised }
+func (f *fakeHandoff) AnyIncapableSidecars() bool { return f.incapable }
+func (f *fakeHandoff) AnyCapableSidecars() bool   { return f.capable }
+func (f *fakeHandoff) LatchAdvertised()           { f.latched++ }
+
+func TestLeadershipStandDownHandshake(t *testing.T) {
+	t.Parallel()
+
+	anyHost := func(t *testing.T, addr string, placement bool) *anypb.Any {
+		t.Helper()
+		a, err := anypb.New(&schedulerv1pb.Host{Address: addr, PlacementEnabled: placement})
+		require.NoError(t, err)
+		return a
+	}
+
+	newLeadership := func(hoff *fakeHandoff) (*leadership, chan []*schedulerv1pb.Host) {
+		var lock sync.RWMutex
+		var broadcastHosts []*schedulerv1pb.Host
+		bc := broadcaster.New[[]*schedulerv1pb.Host]()
+		ch := make(chan []*schedulerv1pb.Host, 4)
+		bc.Subscribe(t.Context(), ch)
+		return &leadership{
+			hostBroadcaster: bc,
+			lock:            &lock,
+			broadcastHosts:  &broadcastHosts,
+			readyCh:         make(chan struct{}),
+			ownAddress:      "a:1",
+			pool:            new(fakePool),
+			handoff:         hoff,
+		}, ch
+	}
+
+	t.Run("announced placement withholds the leader and signals cutover pending", func(t *testing.T) {
+		t.Parallel()
+		hoff := &fakeHandoff{present: true, capable: true}
+		l, ch := newLeadership(hoff)
+		table := []*anypb.Any{anyHost(t, "a:1", true), anyHost(t, "b:1", true)}
+
+		require.NoError(t, l.Handle(t.Context(), table))
+
+		hosts := <-ch
+		require.Len(t, hosts, 2)
+		assert.False(t, hosts[0].GetLeader())
+		assert.False(t, hosts[0].GetPlacementEnabled())
+		assert.True(t, hosts[0].GetPlacementCutoverPending(),
+			"the elected leader must signal the placement service to stand down")
+		assert.False(t, hosts[1].GetPlacementCutoverPending())
+		assert.Zero(t, hoff.latched, "a withheld advertisement must not latch")
+	})
+
+	t.Run("stood down placement lifts the withhold and latches", func(t *testing.T) {
+		t.Parallel()
+		hoff := &fakeHandoff{present: true, stoodDown: true, capable: true}
+		l, ch := newLeadership(hoff)
+		table := []*anypb.Any{anyHost(t, "a:1", true), anyHost(t, "b:1", true)}
+
+		require.NoError(t, l.Handle(t.Context(), table))
+
+		hosts := <-ch
+		require.Len(t, hosts, 2)
+		assert.True(t, hosts[0].GetLeader())
+		assert.True(t, hosts[0].GetPlacementEnabled())
+		assert.False(t, hosts[0].GetPlacementCutoverPending())
+		assert.Equal(t, 1, hoff.latched)
+	})
+
+	t.Run("incapable sidecar anywhere in the cluster withholds before cutover pending", func(t *testing.T) {
+		t.Parallel()
+		hoff := &fakeHandoff{present: true, incapable: true, capable: true}
+		l, ch := newLeadership(hoff)
+		table := []*anypb.Any{anyHost(t, "a:1", true)}
+
+		require.NoError(t, l.Handle(t.Context(), table))
+
+		hosts := <-ch
+		require.Len(t, hosts, 1)
+		assert.False(t, hosts[0].GetLeader())
+		assert.False(t, hosts[0].GetPlacementCutoverPending(),
+			"the placement service must not drain while old sidecars still need it")
+	})
+
+	t.Run("replicated advertised latch survives incapable sidecars", func(t *testing.T) {
+		t.Parallel()
+		hoff := &fakeHandoff{advertised: true, incapable: true, capable: true}
+		l, ch := newLeadership(hoff)
+		table := []*anypb.Any{anyHost(t, "a:1", true)}
+
+		require.NoError(t, l.Handle(t.Context(), table))
+
+		hosts := <-ch
+		require.Len(t, hosts, 1)
+		assert.True(t, hosts[0].GetLeader())
+		assert.True(t, hosts[0].GetPlacementEnabled())
+	})
+
+	t.Run("no placement announced advertises without a handshake", func(t *testing.T) {
+		t.Parallel()
+		hoff := &fakeHandoff{capable: true}
+		l, ch := newLeadership(hoff)
+		table := []*anypb.Any{anyHost(t, "a:1", true)}
+
+		require.NoError(t, l.Handle(t.Context(), table))
+
+		hosts := <-ch
+		require.Len(t, hosts, 1)
+		assert.True(t, hosts[0].GetLeader())
+		assert.False(t, hosts[0].GetPlacementCutoverPending())
+	})
 }

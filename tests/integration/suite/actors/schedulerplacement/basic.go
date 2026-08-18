@@ -67,7 +67,6 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithScheduler(b.sched),
-		daprd.WithConfigManifests(t, featureConfig),
 	)
 
 	return []framework.Option{
