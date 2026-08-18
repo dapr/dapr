@@ -241,10 +241,10 @@ make gen-proto
 ```
 
 **Required tools** (installed via `make init-proto`):
-- `protoc` v25.4
+- `protoc` v34.1
 - `protoc-gen-go` v1.32.0
 - `protoc-gen-go-grpc` v1.3.0
-- `protoc-gen-connect-go` v1.9.1
+- `protoc-gen-connect-go` v1.18.1
 
 > Do **not** manually edit files under `pkg/proto/` — they are auto-generated.
 

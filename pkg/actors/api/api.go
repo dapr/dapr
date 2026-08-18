@@ -123,11 +123,26 @@ type SaveStateRequest struct {
 type StateResponse struct {
 	Data     []byte            `json:"data"`
 	Metadata map[string]string `json:"metadata"`
+
+	// ETag is the state store's row-version token for the returned value, when
+	// the store supports it. Callers that perform optimistic concurrency must
+	// pass it back unchanged on the next TransactionalUpsert/Delete to detect
+	// concurrent writes.
+	ETag *string `json:"etag,omitempty"`
 }
 
-// BulkStateResponse is the response returned from getting an actor state in bulk.
-// It's a map where the key is the key of the state, and the value is the value as byte slice.
-type BulkStateResponse map[string][]byte
+// BulkStateEntry is one entry in a BulkStateResponse. ETag carries the state
+// store's row-version token for the entry when available; callers can use it
+// for optimistic concurrency control on a follow-up write.
+type BulkStateEntry struct {
+	Data []byte  `json:"data"`
+	ETag *string `json:"etag,omitempty"`
+}
+
+// BulkStateResponse is the response returned from getting an actor state in
+// bulk. Keys map to BulkStateEntry values that carry both the bytes and the
+// state store ETag for that key.
+type BulkStateResponse map[string]BulkStateEntry
 
 // TimerResponse is the response object send to an Actor SDK API when a timer fires.
 type TimerResponse struct {

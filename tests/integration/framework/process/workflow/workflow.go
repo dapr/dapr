@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
@@ -38,6 +39,8 @@ type Workflow struct {
 	db           *sqlite.SQLite
 	place        *placement.Placement
 	sched        *scheduler.Scheduler
+	ownsSched    bool
+	sentry       *sentry.Sentry
 	daprds       []*daprd.Daprd
 }
 
@@ -61,7 +64,29 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		sqlite.WithActorStateStore(true),
 		sqlite.WithCreateStateTables(),
 	)
-	place := placement.New(t)
+
+	var sen *sentry.Sentry
+	var placementOpts []placement.Option
+	placementOpts = append(placementOpts, opts.placementOptions...)
+	var schedulerOpts []scheduler.Option
+	schedulerOpts = append(schedulerOpts, opts.schedulerOptions...)
+	if opts.mtls {
+		sen = sentry.New(t)
+		placementOpts = append(placementOpts, placement.WithSentry(t, sen))
+		// Scheduler ID must match the TLS cert DNS names issued by Sentry.
+		schedulerOpts = append(schedulerOpts,
+			scheduler.WithSentry(sen),
+			scheduler.WithID("dapr-scheduler-server-0"),
+		)
+	}
+
+	place := placement.New(t, placementOpts...)
+	sched := opts.schedulerInstance
+	ownsSched := false
+	if sched == nil {
+		sched = scheduler.New(t, schedulerOpts...)
+		ownsSched = true
+	}
 
 	baseDopts := []daprd.Option{
 		daprd.WithPlacementAddresses(place.Address()),
@@ -71,14 +96,45 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		baseDopts = append(baseDopts, daprd.WithResourceFiles(db.GetComponent(t)))
 	}
 
-	sched := scheduler.New(t)
-	baseDopts = append(baseDopts, daprd.WithScheduler(sched))
+	var signingDopts []daprd.Option
+	if sen != nil {
+		baseDopts = append(baseDopts, daprd.WithSentry(t, sen))
+		signingDopts = []daprd.Option{
+			daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: propagation-signing
+spec:
+  features:
+  - name: WorkflowHistorySigning
+    enabled: true
+`),
+		}
+	}
+
+	if opts.schedulerAddress != nil {
+		// Reset so a caller-supplied override (e.g. a proxy in front of the
+		// scheduler) truly replaces any addresses appended by other option
+		// layers, instead of being one entry among many.
+		baseDopts = append(baseDopts, daprd.WithSchedulerAddressesReset(*opts.schedulerAddress))
+	} else {
+		baseDopts = append(baseDopts, daprd.WithScheduler(sched))
+	}
+
+	signingDisabled := make(map[int]bool, len(opts.signingDisabled))
+	for _, idx := range opts.signingDisabled {
+		signingDisabled[idx] = true
+	}
 
 	daprds := make([]*daprd.Daprd, opts.daprds)
 
 	for i := range daprds {
-		dopts := make([]daprd.Option, 0, len(baseDopts))
+		dopts := make([]daprd.Option, 0, len(baseDopts)+len(signingDopts))
 		dopts = append(dopts, baseDopts...)
+
+		if !signingDisabled[i] {
+			dopts = append(dopts, signingDopts...)
+		}
 
 		// Add specific opts for this daprd
 		for _, daprdOpt := range opts.daprdOptions {
@@ -98,7 +154,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	// Apply orchestrators & activities to the registry
 	for _, orch := range opts.orchestrators {
 		if orch.index < len(daprds) {
-			require.NoError(t, registries[orch.index].AddOrchestratorN(orch.name, orch.fn))
+			require.NoError(t, registries[orch.index].AddWorkflowN(orch.name, orch.fn))
 		}
 	}
 	for _, act := range opts.activities {
@@ -112,6 +168,8 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		db:           db,
 		place:        place,
 		sched:        sched,
+		ownsSched:    ownsSched,
+		sentry:       sen,
 		daprds:       daprds,
 	}
 
@@ -124,8 +182,11 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 
 func (w *Workflow) Run(t *testing.T, ctx context.Context) {
 	w.db.Run(t, ctx)
+	if w.sentry != nil {
+		w.sentry.Run(t, ctx)
+	}
 	w.place.Run(t, ctx)
-	if w.sched != nil {
+	if w.ownsSched {
 		w.sched.Run(t, ctx)
 	}
 	for _, daprd := range w.daprds {
@@ -137,10 +198,13 @@ func (w *Workflow) Cleanup(t *testing.T) {
 	for _, daprd := range w.daprds {
 		daprd.Cleanup(t)
 	}
-	if w.sched != nil {
+	if w.ownsSched {
 		w.sched.Cleanup(t)
 	}
 	w.place.Cleanup(t)
+	if w.sentry != nil {
+		w.sentry.Cleanup(t)
+	}
 	w.db.Cleanup(t)
 }
 
@@ -152,6 +216,29 @@ func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	for _, daprd := range w.daprds {
 		daprd.WaitUntilRunning(t, ctx)
 	}
+}
+
+func (w *Workflow) WaitForNoConnectedWorkers(t *testing.T, ctx context.Context) {
+	t.Helper()
+	w.WaitForNoConnectedWorkersN(t, ctx, 0)
+}
+
+func (w *Workflow) WaitForNoConnectedWorkersN(t *testing.T, ctx context.Context, index int) {
+	t.Helper()
+	require.Less(t, index, len(w.daprds), "index out of range")
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		md := w.DaprN(index).GetMetadata(c, ctx)
+		if !assert.NotNil(c, md) {
+			return
+		}
+		// The workflows metadata field is omitted when there are no connected
+		// workers, so a nil value means zero workers (drained).
+		if md.Workflows == nil {
+			return
+		}
+		assert.Zero(c, md.Workflows.ConnectedWorkers)
+	}, time.Second*30, time.Millisecond*10)
 }
 
 func (w *Workflow) ResetRegistry(t *testing.T) {
@@ -194,13 +281,23 @@ func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) 
 	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.RegistryN(index)))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c,
-			len(w.DaprN(index).GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
-		w := w.DaprN(index).GetMetadata(t, ctx).Workflows
-		if assert.NotNil(c, w) {
-			assert.GreaterOrEqual(c, w.ConnectedWorkers, 1)
+		// GetMetadata can return a partially-populated value if the underlying
+		// HTTP request fails or times out (the request runs under a derived
+		// context with its own deadline). Guard each field access so a nil
+		// here causes the Eventually tick to retry rather than panic the
+		// whole test binary.
+		md := w.DaprN(index).GetMetadata(t, ctx)
+		if !assert.NotNil(c, md) {
+			return
 		}
-	}, time.Second*20, time.Millisecond*10)
+		if !assert.NotNil(c, md.ActorRuntime) {
+			return
+		}
+		assert.GreaterOrEqual(c, len(md.ActorRuntime.ActiveActors), 3)
+		if assert.NotNil(c, md.Workflows) {
+			assert.GreaterOrEqual(c, md.Workflows.ConnectedWorkers, 1)
+		}
+	}, time.Second*60, time.Millisecond*10)
 
 	return backendClient
 }
@@ -236,4 +333,12 @@ func (w *Workflow) DB() *sqlite.SQLite {
 
 func (w *Workflow) Scheduler() *scheduler.Scheduler {
 	return w.sched
+}
+
+func (w *Workflow) Sentry() *sentry.Sentry {
+	return w.sentry
+}
+
+func (w *Workflow) Placement() *placement.Placement {
+	return w.place
 }

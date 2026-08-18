@@ -97,6 +97,10 @@ func readRequestBody(r *http.Request) ([]byte, error) {
 
 // isAuthorizedUser checks whether the admission request was made by an
 // authorized service account, UID, or group.
+// NOTE: The name-based path (allowServiceAccountUser) and the UID-based path
+// (authUIDs) intentionally overlap for entries in AllowedServiceAccountInfos
+// and AllowedServiceAccounts. The name-based check fires first and will match
+// these entries; the UID-based check serves as defense-in-depth.
 func (i *injector) isAuthorizedUser(req *admissionv1.AdmissionRequest) bool {
 	return i.allowServiceAccountUser(req.UserInfo.Username) ||
 		utils.Contains(i.authUIDs, req.UserInfo.UID) ||
@@ -219,5 +223,5 @@ func (i *injector) allowServiceAccountUser(reviewRequestUserInfo string) (allowe
 	if len(namespacedNameParts) <= 1 {
 		return false
 	}
-	return i.namespaceNameMatcher.MatchesNamespacedName(namespacedNameParts[0], namespacedNameParts[1])
+	return i.namespaceNameMatcher(namespacedNameParts[0], namespacedNameParts[1])
 }

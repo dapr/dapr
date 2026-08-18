@@ -16,11 +16,13 @@ package scheduler
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/api"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/authz"
+	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/concurrency"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/embed"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/failurepolicy"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/helm"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/kubernetes"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/metrics"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/quorum"
+	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/shutdown"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/staging"
 )

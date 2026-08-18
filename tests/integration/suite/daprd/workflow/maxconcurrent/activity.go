@@ -60,7 +60,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 
 	var inside atomic.Int64
 	doneCh := make(chan struct{})
-	a.workflow.Registry().AddOrchestratorN("max", func(ctx *task.OrchestrationContext) (any, error) {
+	a.workflow.Registry().AddWorkflowN("max", func(ctx *task.WorkflowContext) (any, error) {
 		id1 := ctx.CallActivity("bar")
 		id2 := ctx.CallActivity("bar")
 		id3 := ctx.CallActivity("bar")
@@ -77,7 +77,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 
 	client := a.workflow.BackendClient(t, ctx)
 
-	_, err := client.ScheduleNewOrchestration(ctx, "max", api.WithStartTime(time.Now()))
+	_, err := client.ScheduleNewWorkflow(ctx, "max", api.WithStartTime(time.Now()))
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {

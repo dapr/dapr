@@ -42,8 +42,6 @@ type tracing struct {
 }
 
 func (tr *tracing) Setup(t *testing.T) []framework.Option {
-	os.SkipWindows(t)
-
 	tr.log = log.New()
 
 	config := `

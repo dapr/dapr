@@ -30,7 +30,7 @@ import (
 // generated with a version of connect newer than the one compiled into your binary. You can fix the
 // problem by either regenerating this code with an older version of connect or updating the connect
 // version compiled into your binary.
-const _ = connect.IsAtLeastVersion0_1_0
+const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// CAName is the fully-qualified name of the CA service.
@@ -67,11 +67,13 @@ type CAClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewCAClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) CAClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	cAMethods := v1.File_dapr_proto_sentry_v1_sentry_proto.Services().ByName("CA").Methods()
 	return &cAClient{
 		signCertificate: connect.NewClient[v1.SignCertificateRequest, v1.SignCertificateResponse](
 			httpClient,
 			baseURL+CASignCertificateProcedure,
-			opts...,
+			connect.WithSchema(cAMethods.ByName("SignCertificate")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -101,10 +103,12 @@ type CAHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewCAHandler(svc CAHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	cAMethods := v1.File_dapr_proto_sentry_v1_sentry_proto.Services().ByName("CA").Methods()
 	cASignCertificateHandler := connect.NewUnaryHandler(
 		CASignCertificateProcedure,
 		svc.SignCertificate,
-		opts...,
+		connect.WithSchema(cAMethods.ByName("SignCertificate")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.sentry.v1.CA/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

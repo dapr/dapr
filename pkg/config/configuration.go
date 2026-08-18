@@ -29,7 +29,7 @@ import (
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spf13/cast"
 	"go.opencensus.io/stats/view"
-	yaml "gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
@@ -60,14 +60,14 @@ const (
 	// cross app workflows. Ensures that activities are not retried forever if
 	// the workflow app is not available, and instead queues the result for when
 	// the workflow app is back online. Strongly recommended to always be enabled
-	// if using the same Dapr version on all daprds.
+	// if using the same Dapr version on all daprds. Enabled by default.
 	WorkflowsRemoteActivityReminder Feature = "WorkflowsRemoteActivityReminder"
 
-	// Enables support for the MCPServer first-class resource,
-	// which declares connections to MCP (Model Context Protocol) servers.
-	// When enabled, daprd loads MCPServer manifests at startup,
-	// and makes them available for tool execution via workflow orchestrations.
-	MCPServerResource Feature = "MCPServerResource"
+	// WorkflowHistorySigning enables cryptographic signing of workflow
+	// history. When enabled and mTLS is active, each workflow execution's
+	// history events are signed using the app's X.509 SVID identity,
+	// creating a verifiable chain of signatures. Disabled by default.
+	WorkflowHistorySigning Feature = "WorkflowHistorySigning"
 )
 
 // end feature flags section
@@ -83,7 +83,10 @@ const (
 	ActionPolicyGlobal  = "global"
 )
 
-var defaultFeatures = make(map[Feature]bool)
+var defaultFeatures = map[Feature]bool{
+	HotReload:                       true,
+	WorkflowsRemoteActivityReminder: true,
+}
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
 //
@@ -151,10 +154,30 @@ type WorkflowSpec struct {
 	// If omitted, no maximum will be enforced.
 	MaxConcurrentActivityInvocations int32 `json:"maxConcurrentActivityInvocations,omitempty" yaml:"maxConcurrentActivityInvocations,omitempty"`
 
+	// globalMaxConcurrentWorkflowInvocations is the maximum number of concurrent
+	// workflow invocations across all replicas, enforced by the scheduler.
+	// If omitted, no global maximum will be enforced.
+	GlobalMaxConcurrentWorkflowInvocations *int32 `json:"globalMaxConcurrentWorkflowInvocations,omitempty" yaml:"globalMaxConcurrentWorkflowInvocations,omitempty"`
+	// globalMaxConcurrentActivityInvocations is the maximum number of concurrent
+	// activity invocations across all replicas, enforced by the scheduler.
+	// If omitted, no global maximum will be enforced.
+	GlobalMaxConcurrentActivityInvocations *int32 `json:"globalMaxConcurrentActivityInvocations,omitempty" yaml:"globalMaxConcurrentActivityInvocations,omitempty"`
+
+	// Per-workflow-name concurrency limits enforced globally by the scheduler.
+	WorkflowConcurrencyLimits []NamedConcurrencyLimit `json:"workflowConcurrencyLimits,omitempty" yaml:"workflowConcurrencyLimits,omitempty"`
+	// Per-activity-name concurrency limits enforced globally by the scheduler.
+	ActivityConcurrencyLimits []NamedConcurrencyLimit `json:"activityConcurrencyLimits,omitempty" yaml:"activityConcurrencyLimits,omitempty"`
+
 	// StateRetentionPolicy defines the retention configuration for workflow
 	// state once a workflow reaches a terminal state. If not set, workflow
 	// instances will not be automatically purged.
 	StateRetentionPolicy *WorkflowStateRetentionPolicy `json:"stateRetentionPolicy,omitempty" yaml:"stateRetentionPolicy,omitempty"`
+}
+
+// NamedConcurrencyLimit defines a per-name concurrency limit.
+type NamedConcurrencyLimit struct {
+	Name          *string `json:"name"          yaml:"name"`
+	MaxConcurrent *int32  `json:"maxConcurrent" yaml:"maxConcurrent"`
 }
 
 // WorkflowStateRetentionPolicy defines the retention policy of workflow state
@@ -223,6 +246,20 @@ func (w *WorkflowSpec) GetMaxConcurrentActivityInvocations() *int32 {
 		return nil
 	}
 	return new(w.MaxConcurrentActivityInvocations)
+}
+
+func (w *WorkflowSpec) GetGlobalMaxConcurrentWorkflowInvocations() *int32 {
+	if w == nil || w.GlobalMaxConcurrentWorkflowInvocations == nil || *w.GlobalMaxConcurrentWorkflowInvocations <= 0 {
+		return nil
+	}
+	return w.GlobalMaxConcurrentWorkflowInvocations
+}
+
+func (w *WorkflowSpec) GetGlobalMaxConcurrentActivityInvocations() *int32 {
+	if w == nil || w.GlobalMaxConcurrentActivityInvocations == nil || *w.GlobalMaxConcurrentActivityInvocations <= 0 {
+		return nil
+	}
+	return w.GlobalMaxConcurrentActivityInvocations
 }
 
 type SecretsSpec struct {
@@ -366,8 +403,49 @@ type MetricSpec struct {
 	RecordErrorCodes *bool       `json:"recordErrorCodes,omitempty"  yaml:"recordErrorCodes,omitempty"`
 	HTTP             *MetricHTTP `json:"http,omitempty" yaml:"http,omitempty"`
 	// Latency distribution buckets. If not set, the default buckets are used.
-	LatencyDistributionBuckets *[]int        `json:"latencyDistributionBuckets,omitempty" yaml:"latencyDistributionBuckets,omitempty"`
-	Rules                      []MetricsRule `json:"rules,omitempty" yaml:"rules,omitempty"`
+	LatencyDistributionBuckets *[]int `json:"latencyDistributionBuckets,omitempty" yaml:"latencyDistributionBuckets,omitempty"`
+	// Workflow holds metrics options specific to workflow and activity metrics.
+	Workflow *WorkflowMetrics `json:"workflow,omitempty" yaml:"workflow,omitempty"`
+	Rules    []MetricsRule    `json:"rules,omitempty" yaml:"rules,omitempty"`
+}
+
+// WorkflowMetrics configures metrics options specific to workflows and activities.
+type WorkflowMetrics struct {
+	// LatencyDistributionBuckets overrides the latency distribution buckets used for the
+	// workflow and activity execution latency histograms. If not set or empty, those
+	// histograms fall back to the shared MetricSpec.LatencyDistributionBuckets.
+	LatencyDistributionBuckets *[]int `json:"latencyDistributionBuckets,omitempty" yaml:"latencyDistributionBuckets,omitempty"`
+	// LatencyDistributionUnits is the unit the LatencyDistributionBuckets values are
+	// expressed in (for example "1ms" or "1s"). It defaults to milliseconds. The buckets
+	// are scaled into the milliseconds the histograms are recorded in.
+	LatencyDistributionUnits *time.Duration `json:"latencyDistributionUnits,omitempty" yaml:"latencyDistributionUnits,omitempty"`
+}
+
+// UnmarshalJSON handles the Kubernetes CRD JSON format sent by the operator,
+// where LatencyDistributionUnits is encoded as a metav1.Duration string (for
+// example "1s" or "1ms"). Standalone configuration files parsed via YAML use the
+// YAML unmarshaling path instead, which handles Go duration strings natively.
+func (w *WorkflowMetrics) UnmarshalJSON(data []byte) error {
+	// alias drops WorkflowMetrics's methods to avoid recursing into this
+	// UnmarshalJSON. The embedded *alias decodes every other field normally,
+	// while the shallower LatencyDistributionUnits field shadows the alias's
+	// *time.Duration field so the metav1.Duration string form decodes.
+	type alias WorkflowMetrics
+	aux := &struct {
+		LatencyDistributionUnits *metav1.Duration `json:"latencyDistributionUnits,omitempty"`
+		*alias
+	}{
+		alias: (*alias)(w),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if aux.LatencyDistributionUnits != nil {
+		d := aux.LatencyDistributionUnits.Duration
+		w.LatencyDistributionUnits = &d
+	}
+
+	return nil
 }
 
 // GetEnabled returns true if metrics are enabled.
@@ -404,6 +482,31 @@ func (m MetricSpec) GetLatencyDistribution(log logger.Logger) *view.Aggregation 
 	buckets := make([]float64, len(*m.LatencyDistributionBuckets))
 	for i, v := range *m.LatencyDistributionBuckets {
 		buckets[i] = float64(v)
+	}
+
+	return view.Distribution(buckets...)
+}
+
+// GetWorkflowLatencyDistribution returns the *view.Aggregation to use for workflow
+// latency histograms. When spec.metrics.workflow.latencyDistributionBuckets is set and
+// non-empty it returns a distribution built from those buckets; otherwise it returns
+// defaultDist (the shared latency distribution), making the workflow buckets an
+// optional override that defaults to the shared histogram.
+func (m MetricSpec) GetWorkflowLatencyDistribution(log logger.Logger, defaultDist *view.Aggregation) *view.Aggregation {
+	if m.Workflow == nil || m.Workflow.LatencyDistributionBuckets == nil || len(*m.Workflow.LatencyDistributionBuckets) == 0 {
+		return defaultDist
+	}
+	// Histograms are always recorded in milliseconds, so scale the configured
+	// buckets from their unit (default millisecond) into milliseconds.
+	unit := time.Millisecond
+	if m.Workflow.LatencyDistributionUnits != nil && *m.Workflow.LatencyDistributionUnits > 0 {
+		unit = *m.Workflow.LatencyDistributionUnits
+	}
+	scale := float64(unit) / float64(time.Millisecond)
+	log.Infof("Using custom workflow latency distribution buckets: %v (unit: %s)", *m.Workflow.LatencyDistributionBuckets, unit)
+	buckets := make([]float64, len(*m.Workflow.LatencyDistributionBuckets))
+	for i, v := range *m.Workflow.LatencyDistributionBuckets {
+		buckets[i] = float64(v) * scale
 	}
 
 	return view.Distribution(buckets...)
@@ -622,32 +725,38 @@ func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 }
 
 // LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name.
-func LoadKubernetesConfiguration(config string, namespace string, podName string, operatorClient operatorv1pb.OperatorClient) (*Configuration, error) {
+// Returns the processed Configuration and the raw configapi.Configuration resource.
+func LoadKubernetesConfiguration(config string, namespace string, operatorClient operatorv1pb.OperatorClient) (*Configuration, *configapi.Configuration, error) {
 	resp, err := operatorClient.GetConfiguration(context.Background(), &operatorv1pb.GetConfigurationRequest{
 		Name:      config,
 		Namespace: namespace,
-		PodName:   podName,
 	}, grpcRetry.WithMax(operatorMaxRetries), grpcRetry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	b := resp.GetConfiguration()
 	if len(b) == 0 {
-		return nil, fmt.Errorf("configuration %s not found", config)
+		return nil, nil, fmt.Errorf("configuration %s not found", config)
 	}
 	conf := LoadDefaultConfiguration()
 	if err = json.Unmarshal(b, conf); err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+
+	// Also parse the raw API resource for use by the SIGHUP reconciler.
+	var configResource configapi.Configuration
+	if err = json.Unmarshal(b, &configResource); err != nil {
+		return nil, nil, err
 	}
 
 	err = conf.sortAndValidateSecretsConfiguration()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	conf.sortMetricsSpec()
 	conf.SetDefaultFeatures()
-	return conf, nil
+	return conf, &configResource, nil
 }
 
 // Update configuration from Otlp Environment Variables, if they exist.
@@ -909,6 +1018,10 @@ func (c *Configuration) sortMetricsSpec() {
 
 	if c.Spec.MetricsSpec.LatencyDistributionBuckets != nil {
 		c.Spec.MetricSpec.LatencyDistributionBuckets = c.Spec.MetricsSpec.LatencyDistributionBuckets
+	}
+
+	if c.Spec.MetricsSpec.Workflow != nil {
+		c.Spec.MetricSpec.Workflow = c.Spec.MetricsSpec.Workflow
 	}
 
 	if c.Spec.MetricsSpec.RecordErrorCodes != nil {

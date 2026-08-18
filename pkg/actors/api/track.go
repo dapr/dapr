@@ -29,7 +29,10 @@ type ReminderTrack struct {
 func (r *ReminderTrack) MarshalJSON() ([]byte, error) {
 	type reminderTrackAlias ReminderTrack
 
-	// Custom serializer that encodes times (LastFiredTime) in the RFC3339 format, for backwards-compatibility
+	// Custom serializer that encodes times (LastFiredTime) in the RFC3339Nano
+	// format. RFC3339Nano omits the fractional component when nanos are zero,
+	// so the on-disk representation remains backwards-compatible with prior
+	// whole-second RFC3339 serializations.
 	m := &struct {
 		LastFiredTime string `json:"lastFiredTime,omitempty"`
 		*reminderTrackAlias
@@ -38,7 +41,7 @@ func (r *ReminderTrack) MarshalJSON() ([]byte, error) {
 	}
 
 	if !r.LastFiredTime.IsZero() {
-		m.LastFiredTime = r.LastFiredTime.Format(time.RFC3339)
+		m.LastFiredTime = r.LastFiredTime.Format(time.RFC3339Nano)
 	}
 
 	return json.Marshal(m)
@@ -47,7 +50,9 @@ func (r *ReminderTrack) MarshalJSON() ([]byte, error) {
 func (r *ReminderTrack) UnmarshalJSON(data []byte) error {
 	type reminderTrackAlias ReminderTrack
 
-	// Parse RegisteredTime and ExpirationTime as dates in the RFC3339 format
+	// Parse LastFiredTime as RFC3339Nano. RFC3339Nano accepts both fractional
+	// and non-fractional inputs, so it is backwards-compatible with values
+	// previously serialized as RFC3339.
 	m := &struct {
 		LastFiredTime string `json:"lastFiredTime"`
 		*reminderTrackAlias
@@ -60,11 +65,10 @@ func (r *ReminderTrack) UnmarshalJSON(data []byte) error {
 	}
 
 	if m.LastFiredTime != "" {
-		r.LastFiredTime, err = time.Parse(time.RFC3339, m.LastFiredTime)
+		r.LastFiredTime, err = time.Parse(time.RFC3339Nano, m.LastFiredTime)
 		if err != nil {
 			return fmt.Errorf("failed to parse LastFiredTime: %w", err)
 		}
-		r.LastFiredTime = r.LastFiredTime.Truncate(time.Second)
 	}
 
 	return nil

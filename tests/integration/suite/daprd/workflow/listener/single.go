@@ -71,7 +71,7 @@ func (s *single) Run(t *testing.T, ctx context.Context) {
 	s.daprd2.WaitUntilRunning(t, ctx)
 
 	r := task.NewTaskRegistry()
-	r.AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	r.AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, nil
 	})
 
@@ -80,8 +80,8 @@ func (s *single) Run(t *testing.T, ctx context.Context) {
 
 	client2 := client.NewTaskHubGrpcClient(s.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
 
-	id, err := client2.ScheduleNewOrchestration(ctx, "foo")
+	id, err := client2.ScheduleNewWorkflow(ctx, "foo")
 	require.NoError(t, err)
-	_, err = client2.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client2.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 }

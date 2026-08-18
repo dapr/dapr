@@ -46,7 +46,7 @@ func (a *active) Setup(t *testing.T) []framework.Option {
 func (a *active) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
-	a.workflow.Registry().AddOrchestratorN("active-timer", func(ctx *task.OrchestrationContext) (any, error) {
+	a.workflow.Registry().AddWorkflowN("active-timer", func(ctx *task.WorkflowContext) (any, error) {
 		as1 := ctx.CreateTimer(time.Second * 5)
 		as2 := ctx.CallActivity("bar")
 		require.NoError(t, as2.Await(nil))
@@ -60,13 +60,13 @@ func (a *active) Run(t *testing.T, ctx context.Context) {
 
 	client := a.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "active-timer", api.WithInstanceID("xyz"))
+	id, err := client.ScheduleNewWorkflow(ctx, "active-timer", api.WithInstanceID("xyz"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	newID, err := client.RerunWorkflowFromEvent(ctx, id, 0)
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 }

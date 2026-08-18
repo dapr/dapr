@@ -68,7 +68,7 @@ func (r *repeats) Run(t *testing.T, ctx context.Context) {
 
 	client := r.daprd.GRPCClient(t, ctx)
 
-	_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+	_, err := client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     "test1",
 			Schedule: new("@every 1s"),
@@ -77,7 +77,7 @@ func (r *repeats) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	_, err = client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+	_, err = client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     "test2",
 			Schedule: new("@every 1s"),

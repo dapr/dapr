@@ -117,24 +117,47 @@ func (m *resiliencyMetrics) PolicyWithStatusExecuted(resiliencyName, namespace s
 
 		// Record cb gauge, 4 metrics, one for each cb state, with the active state having a value of 1, otherwise 0
 		if policy == CircuitBreakerPolicy {
-			for _, s := range cbStatuses {
-				if s == status {
-					_ = stats.RecordWithOptions(
-						m.ctx,
-						stats.WithRecorder(m.meter),
-						stats.WithTags(diagUtils.WithTags(m.circuitbreakerState.Name(), append(commonTags, s)...)...),
-						stats.WithMeasurements(m.circuitbreakerState.M(1)),
-					)
-				} else {
-					_ = stats.RecordWithOptions(
-						m.ctx,
-						stats.WithRecorder(m.meter),
-						stats.WithTags(diagUtils.WithTags(m.circuitbreakerState.Name(), append(commonTags, s)...)...),
-						stats.WithMeasurements(m.circuitbreakerState.M(0)),
-					)
-				}
-			}
+			m.recordCircuitBreakerStateGauge(commonTags, status)
 		}
+	}
+}
+
+// RecordCircuitBreakerState updates the cb_state gauge to reflect a circuit
+// breaker's current state. It is used when the state changes during request
+// execution (e.g. half-open -> closed on a successful probe) so the gauge does
+// not stay stuck at the value that was snapshotted when the policy was
+// instantiated.
+func (m *resiliencyMetrics) RecordCircuitBreakerState(resiliencyName, namespace string, flowDirection PolicyFlowDirection, target string, status string) {
+	if m.enabled {
+		commonTags := []any{
+			appIDKey, m.appID,
+			resiliencyNameKey, resiliencyName,
+			policyKey, string(CircuitBreakerPolicy),
+			namespaceKey, namespace,
+			flowDirectionKey, string(flowDirection),
+			targetKey, target,
+			statusKey, // status appended on each recording
+		}
+		m.recordCircuitBreakerStateGauge(commonTags, status)
+	}
+}
+
+// recordCircuitBreakerStateGauge records the cb_state gauge as one series per
+// possible circuit breaker state, setting the active state to 1 and all others
+// to 0. commonTags must end with the statusKey tag key; the status value is
+// appended here for each recorded series.
+func (m *resiliencyMetrics) recordCircuitBreakerStateGauge(commonTags []any, status string) {
+	for _, s := range cbStatuses {
+		value := int64(0)
+		if s == status {
+			value = 1
+		}
+		_ = stats.RecordWithOptions(
+			m.ctx,
+			stats.WithRecorder(m.meter),
+			stats.WithTags(diagUtils.WithTags(m.circuitbreakerState.Name(), append(commonTags, s)...)...),
+			stats.WithMeasurements(m.circuitbreakerState.M(value)),
+		)
 	}
 }
 

@@ -107,7 +107,7 @@ func (a *api) Run(t *testing.T, ctx context.Context) {
 			t.Helper()
 
 			body := strings.NewReader(fmt.Sprintf(`{"dueTime":"0s","data":%s}`, test.data))
-			a.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/"+name, body)
+			a.daprd.HTTPPost2xx(t, ctx, "/v1.0/jobs/"+name, body)
 			select {
 			case data := <-a.dataCh:
 				assert.JSONEq(t, test.exp, string(data))

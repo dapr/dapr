@@ -30,7 +30,7 @@ import (
 // generated with a version of connect newer than the one compiled into your binary. You can fix the
 // problem by either regenerating this code with an older version of connect or updating the connect
 // version compiled into your binary.
-const _ = connect.IsAtLeastVersion0_1_0
+const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// PlacementName is the fully-qualified name of the Placement service.
@@ -65,11 +65,13 @@ type PlacementClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewPlacementClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PlacementClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	placementMethods := v1.File_dapr_proto_placement_v1_placement_proto.Services().ByName("Placement").Methods()
 	return &placementClient{
 		reportDaprStatus: connect.NewClient[v1.Host, v1.PlacementOrder](
 			httpClient,
 			baseURL+PlacementReportDaprStatusProcedure,
-			opts...,
+			connect.WithSchema(placementMethods.ByName("ReportDaprStatus")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -96,10 +98,12 @@ type PlacementHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewPlacementHandler(svc PlacementHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	placementMethods := v1.File_dapr_proto_placement_v1_placement_proto.Services().ByName("Placement").Methods()
 	placementReportDaprStatusHandler := connect.NewBidiStreamHandler(
 		PlacementReportDaprStatusProcedure,
 		svc.ReportDaprStatus,
-		opts...,
+		connect.WithSchema(placementMethods.ByName("ReportDaprStatus")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.placement.v1.Placement/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

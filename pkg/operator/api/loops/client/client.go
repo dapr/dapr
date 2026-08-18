@@ -40,18 +40,21 @@ type Options[T meta.Resource] struct {
 	CancelWatch    context.CancelFunc
 	Stream         sender.Interface
 	Namespace      string
-	PodName        string
 	KubeClient     client.Client
 	ProcessSecrets func(context.Context, *T, string, client.Client) error
+	// Filter, when set, drops any event for which it returns false before it is
+	// enqueued or streamed. Used to forward only the resources that belong to the
+	// connecting app.
+	Filter func(T) bool
 }
 
 type Client[T meta.Resource] struct {
 	eventCh        <-chan *informer.Event[T]
 	cancelWatch    context.CancelFunc
 	namespace      string
-	podName        string
 	kubeClient     client.Client
 	processSecrets func(context.Context, *T, string, client.Client) error
+	filter         func(T) bool
 
 	loop       loop.Interface[loops.EventClient]
 	streamLoop loop.Interface[loops.EventStream]
@@ -62,9 +65,9 @@ func New[T meta.Resource](opts Options[T]) *Client[T] {
 		eventCh:        opts.EventCh,
 		cancelWatch:    opts.CancelWatch,
 		namespace:      opts.Namespace,
-		podName:        opts.PodName,
 		kubeClient:     opts.KubeClient,
 		processSecrets: opts.ProcessSecrets,
+		filter:         opts.Filter,
 		streamLoop: stream.New(stream.Options{
 			Stream: opts.Stream,
 		}),
@@ -98,6 +101,9 @@ func (c *Client[T]) watchEvents(ctx context.Context) error {
 				c.loop.Close(&loops.Shutdown{})
 				return nil
 			}
+			if c.filter != nil && !c.filter(event.Manifest) {
+				continue
+			}
 			c.loop.Enqueue(&loops.ResourceUpdate[T]{
 				Resource:  event.Manifest,
 				EventType: event.Type,
@@ -127,15 +133,15 @@ func (c *Client[T]) handleResourceUpdate(ctx context.Context, e *loops.ResourceU
 
 	if c.processSecrets != nil {
 		if err := c.processSecrets(ctx, &r, c.namespace, c.kubeClient); err != nil {
-			return fmt.Errorf("error processing %s %s secrets from pod %s/%s: %w",
-				r.Kind(), r.GetName(), c.namespace, c.podName, err)
+			return fmt.Errorf("error processing %s %s secrets in namespace %s: %w",
+				r.Kind(), r.GetName(), c.namespace, err)
 		}
 	}
 
 	b, err := json.Marshal(r)
 	if err != nil {
-		return fmt.Errorf("error serializing %s %s from pod %s/%s: %w",
-			r.Kind(), r.GetName(), c.namespace, c.podName, err)
+		return fmt.Errorf("error serializing %s %s in namespace %s: %w",
+			r.Kind(), r.GetName(), c.namespace, err)
 	}
 
 	c.streamLoop.Enqueue(&loops.StreamSend{
@@ -143,7 +149,7 @@ func (c *Client[T]) handleResourceUpdate(ctx context.Context, e *loops.ResourceU
 		EventType: e.EventType,
 	})
 
-	log.Debugf("updated sidecar with %s %s %s from pod %s/%s", r.Kind(), e.EventType.String(), r.GetName(), c.namespace, c.podName)
+	log.Debugf("updated sidecar with %s %s %s in namespace %s", r.Kind(), e.EventType.String(), r.GetName(), c.namespace)
 	return nil
 }
 

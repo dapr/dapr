@@ -19,7 +19,7 @@ import "google/protobuf/any.proto";
 import "dapr/proto/common/v1/common.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
-option java_outer_classname = "DaprProtos";
+option java_outer_classname = "DaprJobsProtos";
 option java_package = "io.dapr.v1";
 option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
 
@@ -67,9 +67,9 @@ message Job {
   // (calculated from job creation time), or non-repeating ISO8601.
   optional string ttl = 5 [json_name = "ttl"];
 
-  // payload is the serialized job payload that will be sent to the recipient
-  // when the job is triggered.
-  google.protobuf.Any data = 6 [json_name = "data"];
+  // data is the optional serialized job payload that will be sent to the
+  // recipient when the job is triggered.
+  optional google.protobuf.Any data = 6 [json_name = "data"];
 
   // failure_policy is the optional policy for handling job failures.
   optional common.v1.JobFailurePolicy failure_policy = 7 [json_name = "failurePolicy"];
@@ -122,12 +122,33 @@ message DeleteJobsByPrefixResponseAlpha1 {
   // Empty
 }
 
+// DeleteJobsByPrefixRequest is the stable message to delete jobs by name prefix.
+message DeleteJobsByPrefixRequest {
+  // name_prefix is the prefix of the job names to delete. If not provided, all
+  // jobs associated with this app ID will be deleted.
+  optional string name_prefix = 1;
+}
+
+message DeleteJobsByPrefixResponse {
+  // Empty
+}
+
 message ListJobsRequestAlpha1 {
   // Empty
 }
 
 // ListJobsResponse is the message response containing the list of jobs.
 message ListJobsResponseAlpha1 {
+  // The list of jobs.
+  repeated Job jobs = 1;
+}
+
+message ListJobsRequest {
+  // Empty
+}
+
+// ListJobsResponse is the stable message response containing the list of jobs.
+message ListJobsResponse {
   // The list of jobs.
   repeated Job jobs = 1;
 }

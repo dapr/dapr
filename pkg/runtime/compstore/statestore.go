@@ -38,6 +38,7 @@ func (c *ComponentStore) AddStateStoreActor(name string, store state.Store) erro
 	c.states[name] = store
 	c.actorStateStore.name = name
 	c.actorStateStore.store = store
+	c.actorStateStore.rev++
 
 	return nil
 }
@@ -65,6 +66,7 @@ func (c *ComponentStore) DeleteStateStore(name string) {
 	if c.actorStateStore.name == name {
 		c.actorStateStore.name = ""
 		c.actorStateStore.store = nil
+		c.actorStateStore.rev++
 	}
 
 	delete(c.states, name)
@@ -78,12 +80,21 @@ func (c *ComponentStore) StateStoresLen() int {
 }
 
 func (c *ComponentStore) GetStateStoreActor() (state.Store, string, bool) {
+	store, name, _, ok := c.GetStateStoreActorWithRevision()
+	return store, name, ok
+}
+
+// GetStateStoreActorWithRevision returns the actor state store along with the
+// revision of the actor state store slot. The revision increments on every
+// set or clear of the slot, so comparing revisions detects transitions
+// (including a remove+add of the same store name).
+func (c *ComponentStore) GetStateStoreActorWithRevision() (state.Store, string, uint64, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
 	if c.actorStateStore.store == nil {
-		return nil, "", false
+		return nil, "", c.actorStateStore.rev, false
 	}
 
-	return c.actorStateStore.store, c.actorStateStore.name, true
+	return c.actorStateStore.store, c.actorStateStore.name, c.actorStateStore.rev, true
 }

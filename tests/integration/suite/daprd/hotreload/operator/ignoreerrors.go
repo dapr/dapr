@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -49,13 +49,6 @@ func (i *ignoreerrors) Setup(t *testing.T) []framework.Option {
 
 	i.operator = operator.New(t,
 		operator.WithSentry(sentry),
-		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
-			return &operatorv1.GetConfigurationResponse{
-				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"features":[{"name":"HotReload","enabled":true}]}}`,
-				),
-			}, nil
-		}),
 	)
 
 	i.logline = logline.New(t,
@@ -68,7 +61,6 @@ func (i *ignoreerrors) Setup(t *testing.T) []framework.Option {
 
 	i.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(i.operator.Address(t)),

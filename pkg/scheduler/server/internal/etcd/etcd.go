@@ -49,6 +49,7 @@ type Options struct {
 	MaxWALs                    uint
 	BackendBatchLimit          int
 	BackendBatchInterval       string
+	MaxTxnOps                  uint
 	DefragThresholdMB          uint
 	InitialElectionTickAdvance bool
 	Metrics                    string

@@ -49,7 +49,7 @@ func (e *terminated) Run(t *testing.T, ctx context.Context) {
 
 	var act atomic.Int64
 	waitCh := make(chan struct{})
-	e.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	e.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("wait").Await(nil))
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
@@ -65,10 +65,10 @@ func (e *terminated) Run(t *testing.T, ctx context.Context) {
 
 	client := e.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
+	id, err := client.ScheduleNewWorkflow(ctx, "foo", api.WithInstanceID("abc"))
 	require.NoError(t, err)
-	require.NoError(t, client.TerminateOrchestration(ctx, id))
-	meta, err := client.FetchOrchestrationMetadata(ctx, id)
+	require.NoError(t, client.TerminateWorkflow(ctx, id))
+	meta, err := client.FetchWorkflowMetadata(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_TERMINATED, meta.GetRuntimeStatus())
 	close(waitCh)
@@ -76,7 +76,7 @@ func (e *terminated) Run(t *testing.T, ctx context.Context) {
 
 	newID, err := client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc"), 0)
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), act.Load())
 }

@@ -73,9 +73,17 @@ func (m *manyreplicas) Run(t *testing.T, ctx context.Context) {
 		streams[i] = s
 	}
 
+	type streamGuard struct {
+		mu     sync.Mutex
+		closed bool
+	}
+
 	var wg sync.WaitGroup
+	guards := make([]*streamGuard, numReplicas)
 	for i, s := range streams {
+		guards[i] = &streamGuard{}
 		wg.Go(func() {
+			g := guards[i]
 			id := "replica-" + strconv.Itoa(i)
 			for {
 				resp, err := s.Recv()
@@ -84,6 +92,11 @@ func (m *manyreplicas) Run(t *testing.T, ctx context.Context) {
 				}
 				op := resp.GetOperation()
 				if op == "lock" || op == "update" || op == "unlock" {
+					g.mu.Lock()
+					if g.closed {
+						g.mu.Unlock()
+						return
+					}
 					_ = s.Send(&v1pb.Host{
 						Name: id, Port: int64(3000 + i),
 						Entities:  []string{"myactor"},
@@ -92,12 +105,12 @@ func (m *manyreplicas) Run(t *testing.T, ctx context.Context) {
 						Operation: hostOpFromString(op),
 						Version:   &resp.Version,
 					})
+					g.mu.Unlock()
 				}
 			}
 		})
 	}
 
-	// All 15 replicas should appear in the placement table.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		table := m.place.PlacementTables(t, ctx)
 		if !assert.NotNil(c, table.Tables["default"]) {
@@ -106,9 +119,11 @@ func (m *manyreplicas) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, table.Tables["default"].Hosts, numReplicas)
 	}, time.Second*30, time.Millisecond*10)
 
-	// Close all streams gracefully.
-	for _, s := range streams {
+	for i, s := range streams {
+		guards[i].mu.Lock()
+		guards[i].closed = true
 		require.NoError(t, s.CloseSend())
+		guards[i].mu.Unlock()
 	}
 	wg.Wait()
 

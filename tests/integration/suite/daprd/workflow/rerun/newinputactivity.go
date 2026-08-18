@@ -48,7 +48,7 @@ func (n *newinputactivity) Run(t *testing.T, ctx context.Context) {
 	n.workflow.WaitUntilRunning(t, ctx)
 
 	var input atomic.Pointer[string]
-	n.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	n.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		var wi string
 		ctx.GetInput(&wi)
 		require.NoError(t, ctx.CallActivity("bar", task.WithActivityInput(wi)).Await(nil))
@@ -62,15 +62,15 @@ func (n *newinputactivity) Run(t *testing.T, ctx context.Context) {
 	})
 	client := n.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"), api.WithInput("helloworld"))
+	id, err := client.ScheduleNewWorkflow(ctx, "foo", api.WithInstanceID("abc"), api.WithInput("helloworld"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, "helloworld", *input.Load())
 
 	newID, err := client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc"), 0, api.WithRerunInput("newinput"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 	assert.Equal(t, "newinput", *input.Load())
 }

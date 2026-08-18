@@ -50,7 +50,7 @@ func (m *multiple) Run(t *testing.T, ctx context.Context) {
 	patches1Found := []bool{}
 	patches2Found := []bool{}
 
-	require.NoError(t, m.workflow.Registry().AddOrchestratorN("multiple", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, m.workflow.Registry().AddWorkflowN("multiple", func(ctx *task.WorkflowContext) (any, error) {
 		currentRun := runNumber.Add(1)
 		if currentRun > 1 {
 			patches1Found = append(patches1Found, ctx.IsPatched("patch1"))
@@ -69,9 +69,9 @@ func (m *multiple) Run(t *testing.T, ctx context.Context) {
 	}))
 
 	client := m.workflow.BackendClient(t, ctx)
-	id, err := client.ScheduleNewOrchestration(ctx, "multiple")
+	id, err := client.ScheduleNewWorkflow(ctx, "multiple")
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	assert.Equal(t, uint32(3), runNumber.Load())

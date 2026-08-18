@@ -20,8 +20,12 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/dapr/components-contrib/workflows"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess"
+	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/durabletask-go/backend"
 )
 
 type Fake struct {
@@ -29,7 +33,7 @@ type Fake struct {
 	initFn               func() error
 	registerGrpcServerFn func(*grpc.Server)
 	waitForReadyFn       func(context.Context) error
-	clientFn             func() workflows.Workflow
+	clientFn             func() backend.TaskHubClient
 	runtimeMetadataFn    func() *runtimev1pb.MetadataWorkflows
 }
 
@@ -39,7 +43,7 @@ func New() *Fake {
 		initFn:               func() error { return nil },
 		registerGrpcServerFn: func(*grpc.Server) {},
 		waitForReadyFn:       func(context.Context) error { return nil },
-		clientFn:             func() workflows.Workflow { return NewClient() },
+		clientFn:             func() backend.TaskHubClient { return NewClient() },
 		runtimeMetadataFn:    func() *runtimev1pb.MetadataWorkflows { return &runtimev1pb.MetadataWorkflows{} },
 	}
 }
@@ -64,7 +68,7 @@ func (f *Fake) WithWaitForReady(waitForReadyFn func(ctx context.Context) error) 
 	return f
 }
 
-func (f *Fake) WithClient(clientFn func() workflows.Workflow) *Fake {
+func (f *Fake) WithClient(clientFn func() backend.TaskHubClient) *Fake {
 	f.clientFn = clientFn
 	return f
 }
@@ -90,7 +94,7 @@ func (f *Fake) WaitForReady(ctx context.Context) error {
 	return f.waitForReadyFn(ctx)
 }
 
-func (f *Fake) Client() workflows.Workflow {
+func (f *Fake) Client() backend.TaskHubClient {
 	return f.clientFn()
 }
 
@@ -98,6 +102,28 @@ func (f *Fake) ActivityActorType() string {
 	return ""
 }
 
+func (f *Fake) WorkflowActorType() string {
+	return ""
+}
+
 func (f *Fake) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {
 	return f.runtimeMetadataFn()
 }
+
+func (f *Fake) ActivateMCPServers(ctx context.Context) error {
+	return nil
+}
+
+func (f *Fake) InProcessExecutor() *inprocess.Executor {
+	return nil
+}
+
+func (f *Fake) EnsureActorsRegistered(_ context.Context) error {
+	return nil
+}
+
+func (f *Fake) RegisterMCPServer(_ context.Context, _ mcpserverapi.MCPServer, _ *compstore.ComponentStore, _ security.Handler) error {
+	return nil
+}
+
+func (f *Fake) UnregisterMCPServer(_ string) {}

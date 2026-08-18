@@ -33,6 +33,7 @@ import (
 
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
+	"github.com/dapr/dapr/pkg/sentry/server/images"
 )
 
 func TestValidate(t *testing.T) {
@@ -59,9 +60,10 @@ func TestValidate(t *testing.T) {
 
 		sentryAudience string
 
-		expTD  spiffeid.TrustDomain
-		expAud []string
-		expErr bool
+		expTD     spiffeid.TrustDomain
+		expAud    []string
+		expErr    bool
+		expImages []images.ContainerImage
 	}{
 		"if pod in different namespace, expect error": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
@@ -1265,6 +1267,54 @@ func TestValidate(t *testing.T) {
 			expTD:  spiffeid.RequireTrustDomainFromString("example.test.dapr.io"),
 			expAud: []string{"custom-audience-1", "custom-audience-2"},
 		},
+		"valid request returns the pod's container images": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			reactor: func(t *testing.T) core.ReactionFunc {
+				return func(action core.Action) (bool, runtime.Object, error) {
+					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
+						Authenticated: true,
+						User: kauthapi.UserInfo{
+							Username: "system:serviceaccount:my-ns:my-sa",
+						},
+					}}, nil
+				}
+			},
+			req: &sentryv1pb.SignCertificateRequest{
+				CertificateSigningRequest: []byte("csr"),
+				Namespace:                 "my-ns",
+				Token:                     newToken(t, "my-ns", "my-pod"),
+				TrustDomain:               "example.test.dapr.io",
+				Id:                        "my-app-id",
+			},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-pod",
+					Namespace: "my-ns",
+					Annotations: map[string]string{
+						"dapr.io/app-id": "my-app-id",
+					},
+				},
+				Spec: corev1.PodSpec{
+					ServiceAccountName: "my-sa",
+					Containers: []corev1.Container{
+						{Name: "daprd", Image: "ghcr.io/dapr/daprd:1.16.0"},
+						{Name: "app", Image: "docker.io/library/myapp:v2"},
+					},
+				},
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{Name: "daprd", ImageID: "ghcr.io/dapr/daprd@sha256:aaa"},
+						{Name: "app", ImageID: "docker.io/library/myapp@sha256:bbb"},
+					},
+				},
+			},
+			expErr: false,
+			expTD:  spiffeid.RequireTrustDomainFromString("public"),
+			expImages: []images.ContainerImage{
+				{Role: images.RoleDaprd, ContainerName: "daprd", Image: "ghcr.io/dapr/daprd:1.16.0", Digest: "sha256:aaa"},
+				{Role: images.RoleApp, ContainerName: "app", Image: "docker.io/library/myapp:v2", Digest: "sha256:bbb"},
+			},
+		},
 	}
 
 	for name, test := range tests {
@@ -1297,6 +1347,124 @@ func TestValidate(t *testing.T) {
 			res, err := k.Validate(t.Context(), test.req)
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
 			assert.Equal(t, test.expTD, res.TrustDomain, "%v", res.TrustDomain)
+			assert.Equal(t, test.expImages, res.ContainerImages)
+		})
+	}
+}
+
+func Test_containerImages(t *testing.T) {
+	always := corev1.ContainerRestartPolicyAlways
+	onceOff := corev1.ContainerRestartPolicy("Never")
+
+	tests := map[string]struct {
+		pod *corev1.Pod
+		exp []images.ContainerImage
+	}{
+		"no containers returns nil": {
+			pod: &corev1.Pod{},
+			exp: nil,
+		},
+		"daprd sidecar and app containers with digests": {
+			pod: &corev1.Pod{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "app", Image: "myapp:v1"},
+						{Name: "daprd", Image: "daprd:1.16.0"},
+					},
+				},
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{Name: "app", ImageID: "docker.io/library/myapp@sha256:bbb"},
+						{Name: "daprd", ImageID: "ghcr.io/dapr/daprd@sha256:aaa"},
+					},
+				},
+			},
+			exp: []images.ContainerImage{
+				{Role: images.RoleApp, ContainerName: "app", Image: "myapp:v1", Digest: "sha256:bbb"},
+				{Role: images.RoleDaprd, ContainerName: "daprd", Image: "daprd:1.16.0", Digest: "sha256:aaa"},
+			},
+		},
+		"daprd as native sidecar init container": {
+			pod: &corev1.Pod{
+				Spec: corev1.PodSpec{
+					InitContainers: []corev1.Container{
+						{Name: "setup", Image: "setup:v1"},
+						{Name: "daprd", Image: "daprd:1.16.0", RestartPolicy: &always},
+					},
+					Containers: []corev1.Container{
+						{Name: "app", Image: "myapp:v1"},
+					},
+				},
+				Status: corev1.PodStatus{
+					InitContainerStatuses: []corev1.ContainerStatus{
+						{Name: "setup", ImageID: "setup@sha256:ccc"},
+						{Name: "daprd", ImageID: "ghcr.io/dapr/daprd@sha256:aaa"},
+					},
+					ContainerStatuses: []corev1.ContainerStatus{
+						{Name: "app", ImageID: "docker.io/library/myapp@sha256:bbb"},
+					},
+				},
+			},
+			exp: []images.ContainerImage{
+				{Role: images.RoleDaprd, ContainerName: "daprd", Image: "daprd:1.16.0", Digest: "sha256:aaa"},
+				{Role: images.RoleApp, ContainerName: "app", Image: "myapp:v1", Digest: "sha256:bbb"},
+			},
+		},
+		"one shot init containers are excluded": {
+			pod: &corev1.Pod{
+				Spec: corev1.PodSpec{
+					InitContainers: []corev1.Container{
+						{Name: "setup", Image: "setup:v1"},
+						{Name: "migrate", Image: "migrate:v1", RestartPolicy: &onceOff},
+					},
+				},
+			},
+			exp: nil,
+		},
+		"missing or empty status leaves digest empty": {
+			pod: &corev1.Pod{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "daprd", Image: "daprd:1.16.0"},
+						{Name: "app", Image: "myapp:v1"},
+					},
+				},
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{Name: "daprd", ImageID: ""},
+					},
+				},
+			},
+			exp: []images.ContainerImage{
+				{Role: images.RoleDaprd, ContainerName: "daprd", Image: "daprd:1.16.0"},
+				{Role: images.RoleApp, ContainerName: "app", Image: "myapp:v1"},
+			},
+		},
+		"imageID without repository prefix is used when digest like": {
+			pod: &corev1.Pod{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "app", Image: "myapp:v1"},
+						{Name: "app2", Image: "other:v1"},
+					},
+				},
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{Name: "app", ImageID: "sha256:ddd"},
+						{Name: "app2", ImageID: "not-a-digest"},
+					},
+				},
+			},
+			exp: []images.ContainerImage{
+				{Role: images.RoleApp, ContainerName: "app", Image: "myapp:v1", Digest: "sha256:ddd"},
+				{Role: images.RoleApp, ContainerName: "app2", Image: "other:v1"},
+			},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, test.exp, containerImages(test.pod))
 		})
 	}
 }

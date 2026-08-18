@@ -67,6 +67,9 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/ExecuteActorStateTransaction",
 		daprRuntimePrefix + "v1.Dapr/InvokeActor",
 	},
+	"actors.v1alpha1": {
+		daprRuntimePrefix + "v1.Dapr/SubscribeActorEventsAlpha1",
+	},
 	"metadata.v1": {
 		daprRuntimePrefix + "v1.Dapr/GetMetadata",
 		daprRuntimePrefix + "v1.Dapr/SetMetadata",
@@ -124,6 +127,13 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/GetJobAlpha1",
 		daprRuntimePrefix + "v1.Dapr/DeleteJobsByPrefixAlpha1",
 		daprRuntimePrefix + "v1.Dapr/ListJobsAlpha1",
+	},
+	"jobs.v1": {
+		daprRuntimePrefix + "v1.Dapr/ScheduleJob",
+		daprRuntimePrefix + "v1.Dapr/DeleteJob",
+		daprRuntimePrefix + "v1.Dapr/GetJob",
+		daprRuntimePrefix + "v1.Dapr/DeleteJobsByPrefix",
+		daprRuntimePrefix + "v1.Dapr/ListJobs",
 	},
 	"shutdown.v1": {
 		daprRuntimePrefix + "v1.Dapr/Shutdown",

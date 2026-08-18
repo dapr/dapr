@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/config"
 	ca_bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/pkg/sentry/server/ca/jwt"
+	"github.com/dapr/dapr/pkg/sentry/server/images"
 	"github.com/dapr/kit/crypto/pem"
 )
 
@@ -367,5 +368,62 @@ func TestSignIdentity(t *testing.T) {
 		assert.Equal(t, "spiffe://example.test.dapr.io/ns/my-test-namespace/my-app-id", clientCert[0].URIs[0].String())
 
 		require.NoError(t, clientCert[0].CheckSignatureFrom(int2Crt))
+
+		_, ok, err := images.FromExtensions(clientCert[0].Extensions)
+		require.NoError(t, err)
+		assert.False(t, ok, "certificate should not contain the container images extension")
+	})
+
+	t.Run("signing identity with container images should embed the extension", func(t *testing.T) {
+		dir := t.TempDir()
+		rootCertPath := filepath.Join(dir, "root.cert")
+		issuerCertPath := filepath.Join(dir, "issuer.cert")
+		issuerKeyPath := filepath.Join(dir, "issuer.key")
+		config := config.Config{
+			RootCertPath:   rootCertPath,
+			IssuerCertPath: issuerCertPath,
+			IssuerKeyPath:  issuerKeyPath,
+		}
+
+		rootPEM, rootCrt, _, rootPK := genCrt(t, "root", nil, nil)
+		int1PEM, int1Crt, int1PKPEM, _ := genCrt(t, "int1", rootCrt, rootPK)
+
+		require.NoError(t, os.WriteFile(rootCertPath, rootPEM, 0o600))
+		require.NoError(t, os.WriteFile(issuerCertPath, int1PEM, 0o600))
+		require.NoError(t, os.WriteFile(issuerKeyPath, int1PKPEM, 0o600))
+
+		ca, err := New(t.Context(), config)
+		require.NoError(t, err)
+
+		clientPK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+
+		imgs := []images.ContainerImage{
+			{Role: images.RoleDaprd, ContainerName: "daprd", Image: "ghcr.io/dapr/daprd:1.16.0", Digest: "sha256:aaa"},
+			{Role: images.RoleApp, ContainerName: "app", Image: "docker.io/library/myapp:v2"},
+		}
+
+		clientCert, err := ca.SignIdentity(t.Context(), &SignRequest{
+			PublicKey:       clientPK.Public(),
+			TrustDomain:     "example.test.dapr.io",
+			Namespace:       "my-test-namespace",
+			AppID:           "my-app-id",
+			ContainerImages: imgs,
+		})
+		require.NoError(t, err)
+
+		require.NoError(t, clientCert[0].CheckSignatureFrom(int1Crt))
+
+		got, ok, err := images.FromExtensions(clientCert[0].Extensions)
+		require.NoError(t, err)
+		require.True(t, ok)
+		assert.Equal(t, imgs, got)
+
+		for _, ext := range clientCert[0].Extensions {
+			if ext.Id.Equal(images.OIDContainerImages) {
+				assert.False(t, ext.Critical)
+			}
+		}
+		assert.Empty(t, clientCert[0].UnhandledCriticalExtensions)
 	})
 }

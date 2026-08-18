@@ -73,7 +73,8 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 					RuntimeVersion:       out.GetRuntimeVersion(),
 					EnabledFeatures:      out.GetEnabledFeatures(),
 					//nolint:protogetter
-					Scheduler: out.Scheduler,
+					Scheduler:  out.Scheduler,
+					MCPServers: out.GetMcpServers(),
 				}
 
 				// Copy the app connection properties into a custom struct
@@ -135,6 +136,9 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 					}
 				}
 
+				res.WorkflowAccessPolicies = out.GetWorkflowAccessPolicies()
+				res.Resiliencies = out.GetResiliencies()
+
 				return res, nil
 			},
 		},
@@ -166,18 +170,21 @@ func (a *api) onPutMetadata() http.HandlerFunc {
 }
 
 type metadataResponse struct {
-	ID                      string                                  `json:"id,omitempty"`
-	RuntimeVersion          string                                  `json:"runtimeVersion,omitempty"`
-	EnabledFeatures         []string                                `json:"enabledFeatures,omitempty"`
-	ActiveActorsCount       []*runtimev1pb.ActiveActorsCount        `json:"actors,omitempty"`
-	RegisteredComponents    []*runtimev1pb.RegisteredComponents     `json:"components,omitempty"`
-	Extended                map[string]string                       `json:"extended,omitempty"`
-	Subscriptions           []metadataResponsePubsubSubscription    `json:"subscriptions,omitempty"`
-	HTTPEndpoints           []*runtimev1pb.MetadataHTTPEndpoint     `json:"httpEndpoints,omitempty"`
-	AppConnectionProperties metadataResponseAppConnectionProperties `json:"appConnectionProperties,omitzero"`
-	ActorRuntime            metadataActorRuntime                    `json:"actorRuntime,omitzero"`
-	Scheduler               *runtimev1pb.MetadataScheduler          `json:"scheduler,omitempty"`
-	Workflows               metadataWorkflows                       `json:"workflows,omitzero"`
+	ID                      string                                      `json:"id,omitempty"`
+	RuntimeVersion          string                                      `json:"runtimeVersion,omitempty"`
+	EnabledFeatures         []string                                    `json:"enabledFeatures,omitempty"`
+	ActiveActorsCount       []*runtimev1pb.ActiveActorsCount            `json:"actors,omitempty"`
+	RegisteredComponents    []*runtimev1pb.RegisteredComponents         `json:"components,omitempty"`
+	Extended                map[string]string                           `json:"extended,omitempty"`
+	Subscriptions           []metadataResponsePubsubSubscription        `json:"subscriptions,omitempty"`
+	HTTPEndpoints           []*runtimev1pb.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
+	AppConnectionProperties metadataResponseAppConnectionProperties     `json:"appConnectionProperties,omitzero"`
+	ActorRuntime            metadataActorRuntime                        `json:"actorRuntime,omitzero"`
+	Scheduler               *runtimev1pb.MetadataScheduler              `json:"scheduler,omitempty"`
+	Workflows               metadataWorkflows                           `json:"workflows,omitzero"`
+	MCPServers              []*runtimev1pb.MetadataMCPServer            `json:"mcpServers,omitempty"`
+	WorkflowAccessPolicies  []*runtimev1pb.MetadataWorkflowAccessPolicy `json:"workflowAccessPolicies,omitempty"`
+	Resiliencies            []*runtimev1pb.MetadataResiliency           `json:"resiliencies,omitempty"`
 }
 
 type metadataWorkflows struct {

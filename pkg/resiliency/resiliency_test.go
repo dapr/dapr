@@ -240,7 +240,7 @@ func TestLoadKubernetesResiliency(t *testing.T) {
 		getOperatorClient(fmt.Sprintf("localhost:%d", port)))
 	assert.NotNil(t, resiliency)
 	assert.Len(t, resiliency, 1)
-	assert.Equal(t, "Resiliency", resiliency[0].Kind)
+	assert.Equal(t, "Resiliency", resiliency[0].Kind())
 	assert.Equal(t, "resiliency", resiliency[0].Name)
 }
 
@@ -249,9 +249,9 @@ func TestLoadStandaloneResiliency(t *testing.T) {
 		configs := LoadLocalResiliency(log, "app1", "./testdata")
 		assert.NotNil(t, configs)
 		assert.Len(t, configs, 2)
-		assert.Equal(t, "Resiliency", configs[0].Kind)
+		assert.Equal(t, "Resiliency", configs[0].Kind())
 		assert.Equal(t, "resiliency", configs[0].Name)
-		assert.Equal(t, "Resiliency", configs[1].Kind)
+		assert.Equal(t, "Resiliency", configs[1].Kind())
 		assert.Equal(t, "resiliency", configs[1].Name)
 	})
 
@@ -547,6 +547,40 @@ func TestDefaultPolicyInterpolation(t *testing.T) {
 	assert.Equal(t, "DefaultComponentOutboundCircuitBreakerPolicy", typePolicies[1])
 	assert.Equal(t, "DefaultComponentCircuitBreakerPolicy", typePolicies[2])
 	assert.Equal(t, "DefaultCircuitBreakerPolicy", topPolicy)
+}
+
+func TestExpandPolicyTemplateCacheKeyPointerIndependence(t *testing.T) {
+	r := FromConfigurations(log)
+
+	// The cache is package-level and shared across the suite (and across
+	// -count reruns), so assertions must be idempotent: no entry counting.
+	// Key equality must not depend on pointer identity: after a pointer
+	// caller populates the cache, the VALUE-keyed lookup must hit the same
+	// entry, and vice versa.
+	byPtr, topPtr := r.expandPolicyTemplate(&ComponentPolicy{componentType: "PtrIndependenceProbe", componentDirection: "Outbound"}, DefaultRetryTemplate)
+	byVal, topVal := r.expandPolicyTemplate(ComponentPolicy{componentType: "PtrIndependenceProbe", componentDirection: "Outbound"}, DefaultRetryTemplate)
+	assert.Equal(t, byPtr, byVal)
+	assert.Equal(t, topPtr, topVal)
+
+	valKey := expandedTemplateKey{policyType: ComponentPolicy{componentType: "PtrIndependenceProbe", componentDirection: "Outbound"}, template: DefaultRetryTemplate}
+	cached, ok := expandedTemplateCache.Load(valKey)
+	require.True(t, ok, "pointer caller must populate the value-normalized key")
+	ptrKey := expandedTemplateKey{policyType: normalizePolicyType(&ComponentPolicy{componentType: "PtrIndependenceProbe", componentDirection: "Outbound"}), template: DefaultRetryTemplate}
+	cachedViaPtr, ok := expandedTemplateCache.Load(ptrKey)
+	require.True(t, ok)
+	assert.Same(t, cached, cachedViaPtr, "pointer and value forms must resolve to one cache entry")
+
+	// A raw pointer key (the pre-fix behavior) must not exist.
+	rawPtrKey := expandedTemplateKey{policyType: &ComponentPolicy{componentType: "PtrIndependenceProbe", componentDirection: "Outbound"}, template: DefaultRetryTemplate}
+	_, ok = expandedTemplateCache.Load(rawPtrKey)
+	assert.False(t, ok, "no pointer-identity keys may be stored")
+
+	// Distinct fields resolve to a distinct entry.
+	r.expandPolicyTemplate(ComponentPolicy{componentType: "PtrIndependenceProbeB", componentDirection: "Inbound"}, DefaultRetryTemplate)
+	otherKey := expandedTemplateKey{policyType: ComponentPolicy{componentType: "PtrIndependenceProbeB", componentDirection: "Inbound"}, template: DefaultRetryTemplate}
+	other, ok := expandedTemplateCache.Load(otherKey)
+	require.True(t, ok)
+	assert.NotSame(t, cached, other)
 }
 
 func TestGetDefaultPolicy(t *testing.T) {

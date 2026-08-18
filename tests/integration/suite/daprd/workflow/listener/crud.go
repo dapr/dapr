@@ -73,10 +73,10 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 	c.daprd2.WaitUntilRunning(t, ctx)
 
 	r := task.NewTaskRegistry()
-	r.AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	r.AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, ctx.CreateTimer(time.Second * 5).Await(nil)
 	})
-	r.AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	r.AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, nil
 	})
 
@@ -85,20 +85,20 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 
 	client2 := client.NewTaskHubGrpcClient(c.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
 
-	_, err := client2.FetchOrchestrationMetadata(ctx, "foobar")
+	_, err := client2.FetchWorkflowMetadata(ctx, "foobar")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no such instance exists")
 
-	id, err := client2.ScheduleNewOrchestration(ctx, "foo")
+	id, err := client2.ScheduleNewWorkflow(ctx, "foo")
 	require.NoError(t, err)
-	_, err = client2.FetchOrchestrationMetadata(ctx, id)
+	_, err = client2.FetchWorkflowMetadata(ctx, id)
 	require.NoError(t, err)
-	require.NoError(t, client2.SuspendOrchestration(ctx, id, "reason"))
-	require.NoError(t, client2.ResumeOrchestration(ctx, id, "reason"))
-	_, err = client2.WaitForOrchestrationCompletion(ctx, id)
+	require.NoError(t, client2.SuspendWorkflow(ctx, id, "reason"))
+	require.NoError(t, client2.ResumeWorkflow(ctx, id, "reason"))
+	_, err = client2.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	id, err = client2.ScheduleNewOrchestration(ctx, "foo")
+	id, err = client2.ScheduleNewWorkflow(ctx, "foo")
 	require.NoError(t, err)
-	require.NoError(t, client2.TerminateOrchestration(ctx, id))
+	require.NoError(t, client2.TerminateWorkflow(ctx, id))
 }

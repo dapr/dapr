@@ -79,7 +79,7 @@ func (n *newinput) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.Len(t, history.Events, 6)
 
-	exp := &protos.SubOrchestrationInstanceCreatedEvent{
+	exp := &protos.ChildWorkflowInstanceCreatedEvent{
 		InstanceId: "hello:0000",
 		Input:      wrapperspb.String(`"a-different-input"`),
 		Name:       "bar",
@@ -88,9 +88,9 @@ func (n *newinput) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 	assert.True(t, proto.Equal(
-		history.Events[2].GetSubOrchestrationInstanceCreated(),
+		history.Events[2].GetChildWorkflowInstanceCreated(),
 		exp,
-	), "%v != %v", exp, history.Events[2].GetSubOrchestrationInstanceCreated())
+	), "%v != %v", exp, history.Events[2].GetChildWorkflowInstanceCreated())
 
 	ids, err := client.ListInstanceIDs(ctx)
 	require.NoError(t, err)

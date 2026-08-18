@@ -48,19 +48,19 @@ func (f *fromchild) Setup(t *testing.T) []framework.Option {
 func (f *fromchild) Run(t *testing.T, ctx context.Context) {
 	f.workflow.WaitUntilRunning(t, ctx)
 
-	f.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
-		require.NoError(t, ctx.CallSubOrchestrator("aaa", task.WithSubOrchestrationInstanceID("def")).Await(nil))
+	f.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
+		require.NoError(t, ctx.CallChildWorkflow("aaa", task.WithChildWorkflowInstanceID("def")).Await(nil))
 		return nil, nil
 	})
-	f.workflow.Registry().AddOrchestratorN("aaa", func(ctx *task.OrchestrationContext) (any, error) {
+	f.workflow.Registry().AddWorkflowN("aaa", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, nil
 	})
 
 	client := f.workflow.BackendClient(t, ctx)
 
-	_, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
+	_, err := client.ScheduleNewWorkflow(ctx, "foo", api.WithInstanceID("abc"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, "abc")
+	_, err = client.WaitForWorkflowCompletion(ctx, "abc")
 	require.NoError(t, err)
 
 	_, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("def"), 0)

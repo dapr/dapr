@@ -75,17 +75,17 @@ func (r *remotethenlocal) Setup(t *testing.T) []framework.Option {
 		daprd.WithLogLevel("debug"),
 	)
 
-	r.registry1.AddOrchestratorN("ParentWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	r.registry1.AddWorkflowN("ParentWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, err
 		}
 
-		remoteTask := ctx.CallSubOrchestrator("RemoteChild",
-			task.WithSubOrchestratorInput(input),
-			task.WithSubOrchestratorAppID(r.daprd2.AppID()))
-		localTask := ctx.CallSubOrchestrator("LocalChild",
-			task.WithSubOrchestratorInput(input))
+		remoteTask := ctx.CallChildWorkflow("RemoteChild",
+			task.WithChildWorkflowInput(input),
+			task.WithChildWorkflowAppID(r.daprd2.AppID()))
+		localTask := ctx.CallChildWorkflow("LocalChild",
+			task.WithChildWorkflowInput(input))
 
 		var remoteResult string
 		if err := remoteTask.Await(&remoteResult); err != nil {
@@ -98,7 +98,7 @@ func (r *remotethenlocal) Setup(t *testing.T) []framework.Option {
 		return remoteResult + "," + localResult, nil
 	})
 
-	r.registry1.AddOrchestratorN("LocalChild", func(ctx *task.OrchestrationContext) (any, error) {
+	r.registry1.AddWorkflowN("LocalChild", func(ctx *task.WorkflowContext) (any, error) {
 		r.localChildCount.Add(1)
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
@@ -107,7 +107,7 @@ func (r *remotethenlocal) Setup(t *testing.T) []framework.Option {
 		return "local:" + input, nil
 	})
 
-	r.registry2.AddOrchestratorN("RemoteChild", func(ctx *task.OrchestrationContext) (any, error) {
+	r.registry2.AddWorkflowN("RemoteChild", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, err
@@ -128,12 +128,12 @@ func (r *remotethenlocal) Run(t *testing.T, ctx context.Context) {
 	client1 := client.NewTaskHubGrpcClient(r.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client1.StartWorkItemListener(ctx, r.registry1))
 
-	id, err := client1.ScheduleNewOrchestration(ctx, "ParentWorkflow", api.WithInput("hello"))
+	id, err := client1.ScheduleNewWorkflow(ctx, "ParentWorkflow", api.WithInput("hello"))
 	require.NoError(t, err)
 
-	metadata, err := client1.WaitForOrchestrationStart(ctx, id)
+	metadata, err := client1.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.RuntimeStatus)
+	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.GetRuntimeStatus())
 
 	r.daprd2.Run(t, ctx)
 	t.Cleanup(func() { r.daprd2.Cleanup(t) })
@@ -142,9 +142,9 @@ func (r *remotethenlocal) Run(t *testing.T, ctx context.Context) {
 	client2 := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client2.StartWorkItemListener(ctx, r.registry2))
 
-	metadata, err = client1.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+	metadata, err = client1.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
-	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	assert.Equal(t, `"remote:hello,local:hello"`, metadata.GetOutput().GetValue())
 	assert.Equal(t, int32(1), r.localChildCount.Load(), "local child workflow should be called exactly once")
 }

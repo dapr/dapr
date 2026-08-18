@@ -47,7 +47,7 @@ func (e *single) Setup(t *testing.T) []framework.Option {
 func (e *single) Run(t *testing.T, ctx context.Context) {
 	e.workflow.WaitUntilRunning(t, ctx)
 
-	require.NoError(t, e.workflow.Registry().AddOrchestratorN("single", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, e.workflow.Registry().AddWorkflowN("single", func(ctx *task.WorkflowContext) (any, error) {
 		err := ctx.CallActivity("FailActivity", task.WithActivityRetryPolicy(&task.RetryPolicy{
 			MaxAttempts:          3,
 			InitialRetryInterval: 10 * time.Millisecond,
@@ -72,10 +72,10 @@ func (e *single) Run(t *testing.T, ctx context.Context) {
 
 	cl := e.workflow.BackendClient(t, ctx)
 
-	id, err := cl.ScheduleNewOrchestration(ctx, "single")
+	id, err := cl.ScheduleNewWorkflow(ctx, "single")
 	require.NoError(t, err)
 
-	_, err = cl.WaitForOrchestrationCompletion(ctx, id)
+	_, err = cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	_, err = uuid.Parse(executionID)

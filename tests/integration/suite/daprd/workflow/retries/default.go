@@ -46,7 +46,7 @@ func (e *defaultretries) Setup(t *testing.T) []framework.Option {
 func (e *defaultretries) Run(t *testing.T, ctx context.Context) {
 	e.workflow.WaitUntilRunning(t, ctx)
 
-	e.workflow.Registry().AddOrchestratorN("defaultretries", func(ctx *task.OrchestrationContext) (any, error) {
+	e.workflow.Registry().AddWorkflowN("defaultretries", func(ctx *task.WorkflowContext) (any, error) {
 		err := ctx.CallActivity("failActivity", task.WithActivityRetryPolicy(&task.RetryPolicy{
 			InitialRetryInterval: 10 * time.Millisecond,
 		})).Await(nil)
@@ -63,11 +63,11 @@ func (e *defaultretries) Run(t *testing.T, ctx context.Context) {
 	})
 
 	cl := e.workflow.BackendClient(t, ctx)
-	id, err := cl.ScheduleNewOrchestration(ctx, "defaultretries")
+	id, err := cl.ScheduleNewWorkflow(ctx, "defaultretries")
 	require.NoError(t, err)
-	_, err = cl.WaitForOrchestrationCompletion(ctx, id)
+	_, err = cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
-	require.NoError(t, cl.TerminateOrchestration(ctx, id))
+	require.NoError(t, cl.TerminateWorkflow(ctx, id))
 
 	require.Equal(t, 1, count)
 }

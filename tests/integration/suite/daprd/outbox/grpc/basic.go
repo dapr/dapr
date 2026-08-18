@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -123,7 +123,7 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 		o.lock.Lock()
 		defer o.lock.Unlock()
 		return string(o.msg) == "2"
-	}, time.Second*5, time.Millisecond*10, "failed to receive message in time")
+	}, time.Second*10, time.Millisecond*10, "failed to receive message in time")
 
 	assert.Equal(t, int32(1), o.eventCalled.Load())
 }

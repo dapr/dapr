@@ -31,7 +31,6 @@ import (
 type subscriptions struct {
 	client    operatorv1pb.OperatorClient
 	namespace string
-	podName   string
 }
 
 // NewSubscriptions returns a new Kubernetes loader.
@@ -39,14 +38,12 @@ func NewSubscriptions(opts Options) loader.Loader[subapi.Subscription] {
 	return &subscriptions{
 		client:    opts.Client,
 		namespace: opts.Namespace,
-		podName:   opts.PodName,
 	}
 }
 
 func (s *subscriptions) Load(ctx context.Context) ([]subapi.Subscription, error) {
 	resp, err := s.client.ListSubscriptionsV2(ctx, &operatorv1pb.ListSubscriptionsRequest{
 		Namespace: s.namespace,
-		PodName:   s.podName,
 	}, grpcretry.WithMax(operatorMaxRetries), grpcretry.WithPerRetryTimeout(operatorCallTimeout))
 
 	// Ignore proto marshal nil errors from older gRPC servers.

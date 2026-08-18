@@ -47,25 +47,25 @@ func (d *defaultToPatched) Run(t *testing.T, ctx context.Context) {
 	d.workflow.WaitUntilRunning(t, ctx)
 
 	patchesFound := []bool{}
-	require.NoError(t, d.workflow.Registry().AddOrchestratorN("defaultpatched", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, d.workflow.Registry().AddWorkflowN("defaultpatched", func(ctx *task.WorkflowContext) (any, error) {
 		patchesFound = append(patchesFound, ctx.IsPatched("patch1"))
 		return nil, nil
 	}))
 
 	client := d.workflow.BackendClient(t, ctx)
-	id, err := client.ScheduleNewOrchestration(ctx, "defaultpatched")
+	id, err := client.ScheduleNewWorkflow(ctx, "defaultpatched")
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	assert.Equal(t, []bool{true}, patchesFound)
 
 	hist, err := client.GetInstanceHistory(ctx, id)
 	require.NoError(t, err)
-	var orchestratorStarted *protos.OrchestratorStartedEvent
+	var orchestratorStarted *protos.WorkflowStartedEvent
 	for _, event := range hist.Events {
-		if event.GetOrchestratorStarted() != nil {
-			orchestratorStarted = event.GetOrchestratorStarted()
+		if event.GetWorkflowStarted() != nil {
+			orchestratorStarted = event.GetWorkflowStarted()
 			break
 		}
 	}

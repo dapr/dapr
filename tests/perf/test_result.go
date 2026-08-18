@@ -58,6 +58,7 @@ type TestResult struct {
 	Exactly  int `json:"Exactly"`
 	RetCodes struct {
 		Num200 int `json:"200"`
+		Num204 int `json:"204"`
 		Num400 int `json:"400"`
 		Num500 int `json:"500"`
 	} `json:"RetCodes"`

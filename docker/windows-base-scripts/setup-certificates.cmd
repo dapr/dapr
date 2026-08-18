@@ -24,14 +24,22 @@ IF NOT EXIST "%CERT_DIR%" (
 
 SET FOUND_CERT=0
 
-CD %CERT_DIR%
-FOR /R %%F IN (*) DO (
-    SET FOUND_CERT=1
-
-    ECHO Adding %%F to the root store
-    certoc.exe -addstore root %%F
+@REM PUSHD/POPD (not CD/"CD -", which is not a cmd.exe builtin) so the path is
+@REM quoted (tolerates spaces) and the previous directory is restored reliably.
+PUSHD "%CERT_DIR%"
+@REM Only attempt to install .pem and .crt files. certoc.exe will silently
+@REM no-op on private keys (e.g. key.pem from a TLS bundle) but it is still
+@REM noisy to invoke and can mask a real failure, so we narrow the glob.
+FOR /R %%F IN (*.pem *.crt) DO (
+    @REM A key.pem dropped in the same dir as cert.pem is a TLS bundle
+    @REM private key; certoc -addstore root would reject it.
+    IF /I NOT "%%~nxF" == "key.pem" (
+        SET FOUND_CERT=1
+        ECHO Adding %%F to the root store
+        certoc.exe -addstore root "%%F"
+    )
 )
-CD -
+POPD
 
 IF %FOUND_CERT% == 0 (
     ECHO No certificates found in %CERT_DIR%, skipping certificate setup

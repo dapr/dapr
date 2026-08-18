@@ -44,7 +44,6 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/components-contrib/workflows"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/reminders"
@@ -802,18 +801,25 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 func TestShutdownEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
-	shutdownCh := make(chan struct{})
+	shutdownCh := make(chan struct{}, 1)
+	exitCh := make(chan int, 1)
 	testAPI := &api{
 		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
+			Logger: logger.NewLogger("test.api.http.shutdown"),
 			ShutdownFn: func() {
-				close(shutdownCh)
+				shutdownCh <- struct{}{}
+			},
+			ExitFn: func(code int) {
+				exitCh <- code
 			},
 		}),
 	}
 
 	fakeServer.StartServer(testAPI.constructShutdownEndpoints(), nil)
 	defer fakeServer.Shutdown()
+
+	const negativeWait = 200 * time.Millisecond
 
 	t.Run("Shutdown successfully - 204", func(t *testing.T) {
 		apiPath := apiVersionV1 + "/shutdown"
@@ -823,7 +829,28 @@ func TestShutdownEndpoints(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("Did not shut down within 1 second")
 		case <-shutdownCh:
-			// All good
+		}
+		select {
+		case code := <-exitCh:
+			t.Fatalf("exit unexpectedly invoked with code %d on graceful path", code)
+		case <-time.After(negativeWait):
+		}
+	})
+
+	t.Run("Force shutdown via header - 204", func(t *testing.T) {
+		apiPath := apiVersionV1 + "/shutdown"
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil, universal.ForceShutdownMetadataKey, "true")
+		assert.Equal(t, 204, resp.StatusCode)
+		select {
+		case <-time.After(2 * time.Second):
+			t.Fatal("Did not force exit within 2 seconds")
+		case code := <-exitCh:
+			assert.Equal(t, 1, code)
+		}
+		select {
+		case <-shutdownCh:
+			t.Fatal("graceful shutdownFn unexpectedly invoked on force path")
+		case <-time.After(negativeWait):
 		}
 	})
 }
@@ -2559,16 +2586,6 @@ func TestV1Workflow(t *testing.T) {
 
 		apiPath := "v1.0/workflows/dapr/instanceID/terminate"
 
-		wf.WithClient(func() workflows.Workflow {
-			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
-				return &workflows.StateResponse{
-					Workflow: &workflows.WorkflowState{
-						RuntimeStatus: "TERMINATED",
-					},
-				}, nil
-			})
-		})
-
 		resp := fakeServer(t).DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
 
@@ -2603,16 +2620,6 @@ func TestV1Workflow(t *testing.T) {
 
 		apiPath := "v1.0/workflows/dapr/instanceID/pause"
 
-		wf.WithClient(func() workflows.Workflow {
-			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
-				return &workflows.StateResponse{
-					Workflow: &workflows.WorkflowState{
-						RuntimeStatus: "SUSPENDED",
-					},
-				}, nil
-			})
-		})
-
 		resp := fakeServer(t).DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
 
@@ -2644,12 +2651,6 @@ func TestV1Workflow(t *testing.T) {
 	t.Run("Purge with valid API path", func(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'purge' method implemented to simply return nil
-
-		wf.WithClient(func() workflows.Workflow {
-			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
-				return nil, errors.New("this is an error")
-			})
-		})
 
 		apiPath := "v1.0/workflows/dapr/instanceID/purge"
 		resp := fakeServer(t).DoRequest("POST", apiPath, nil, nil)
@@ -2864,6 +2865,13 @@ func (f *fakeHTTPServer) StartServer(endpoints []endpoints.Endpoint, opts *fakeH
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return f.ln.DialContext(ctx)
 			},
+			// Each request gets a fresh connection. The service-invocation
+			// resiliency policy may time out an in-flight Invoke and abandon
+			// its goroutine, which can keep touching the connection after the
+			// handler returns. With keep-alive, that poisoned connection would
+			// be reused by the next request and cause spurious "context
+			// canceled" failures.
+			DisableKeepAlives: true,
 		},
 	}
 }
@@ -2923,9 +2931,7 @@ func (f *fakeHTTPServer) doRequest(basicAuth, method, path string, body []byte, 
 		url += urlSb2919.String()
 		url = url[:len(url)-1]
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	r, _ := nethttp.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
+	r, _ := nethttp.NewRequestWithContext(context.Background(), method, url, bytes.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 
 	for i := 0; i < len(headers); i += 2 {

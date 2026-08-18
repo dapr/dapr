@@ -49,16 +49,16 @@ func (n *nonexist) Run(t *testing.T, ctx context.Context) {
 
 	client := n.workflow.BackendClient(t, ctx)
 
-	n.workflow.Registry().AddOrchestratorN("dummy", func(ctx *task.OrchestrationContext) (any, error) {
+	n.workflow.Registry().AddWorkflowN("dummy", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, nil
 	})
 
-	id, err := client.ScheduleNewOrchestration(ctx, "foo")
+	id, err := client.ScheduleNewWorkflow(ctx, "foo")
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		meta, err := client.FetchOrchestrationMetadata(ctx, id)
+		meta, err := client.FetchWorkflowMetadata(ctx, id)
 		require.NoError(t, err)
-		assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(), meta.RuntimeStatus.String())
+		assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(), meta.GetRuntimeStatus().String())
 	}, time.Second*10, time.Millisecond*10)
 }

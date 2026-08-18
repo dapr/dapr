@@ -99,6 +99,30 @@ if $USE_KEYVAULT ; then
     --from-literal="tenant-id=${AzureKeyVaultTenantId}" \
     --from-literal="client-id=${AzureKeyVaultClientId}" \
     --from-literal="client-secret=${AzureKeyVaultClientSecret}"
+
+  # Ensure the test RSA key 'rsakey' exists in the configured Key Vault.
+  # The crypto E2E tests reference this key by name (see
+  # tests/e2e/crypto/crypto_test.go). Creating it here is idempotent: az
+  # keyvault key show returns 0 if the key already exists, otherwise we
+  # create it.
+  if [[ -z "$AZURE_KEY_VAULT_NAME" ]]; then
+    echo "Skipping rsakey bootstrap: AZURE_KEY_VAULT_NAME is not set"
+  else
+    if az keyvault key show \
+        --vault-name "$AZURE_KEY_VAULT_NAME" \
+        --name rsakey \
+        --output none 2>/dev/null ; then
+      echo "rsakey already exists in vault $AZURE_KEY_VAULT_NAME"
+    else
+      echo "Creating rsakey in vault $AZURE_KEY_VAULT_NAME"
+      az keyvault key create \
+        --vault-name "$AZURE_KEY_VAULT_NAME" \
+        --name rsakey \
+        --kty RSA \
+        --size 2048 \
+        --output none
+    fi
+  fi
 else
   echo "NOT configuring Azure Key Vault as crypto provider"
 fi

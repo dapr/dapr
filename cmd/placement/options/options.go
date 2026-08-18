@@ -46,7 +46,8 @@ const (
 	keepAliveTimeoutMin     = 1 * time.Second
 	keepAliveTimeoutMax     = 10 * time.Second
 
-	disseminateTimeoutDefault = 8 * time.Second
+	disseminateTimeoutDefault        = 8 * time.Second
+	disseminateCoalesceWindowDefault = 0 * time.Second
 )
 
 type Options struct {
@@ -74,9 +75,10 @@ type Options struct {
 
 	ReplicationFactor int
 
-	KeepAliveTime      time.Duration
-	KeepAliveTimeout   time.Duration
-	DisseminateTimeout time.Duration
+	KeepAliveTime             time.Duration
+	KeepAliveTimeout          time.Duration
+	DisseminateTimeout        time.Duration
+	DisseminateCoalesceWindow time.Duration
 
 	// Log and metrics configurations
 	Logger  logger.Options
@@ -121,6 +123,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.DurationVar(&opts.KeepAliveTime, "keepalive-time", keepAliveTimeDefault, "sets the interval at which the placement service sends keepalive pings to daprd \non the gRPC stream to check if the connection is still alive. \nLower values will lead to shorter actor rebalancing time in case of pod loss/restart, \nbut higher network traffic during normal operation. \nAccepts values between 1 and 10 seconds")
 	fs.DurationVar(&opts.KeepAliveTimeout, "keepalive-timeout", keepAliveTimeoutDefault, "sets the timeout period for daprd to respond to the placement service's keepalive pings \nbefore the placement service closes the connection. \nLower values will lead to shorter actor rebalancing time in case of pod loss/restart, \nbut higher network traffic during normal operation. \nAccepts values between 1 and 10 seconds")
 	fs.DurationVar(&opts.DisseminateTimeout, "disseminate-timeout", disseminateTimeoutDefault, "sets the period of time in which a dissemination is considered failed if not completed. \nAny daprds which have not responded within this time will be considered non-responsive and kicked. \nHigher values will increase the grace period to complete dissemination in case of network issues, \nbut reduce the chance of skipping daprds which are slow to respond.")
+	fs.DurationVar(&opts.DisseminateCoalesceWindow, "disseminate-coalesce-window", disseminateCoalesceWindowDefault, "if >0, after a dissemination round completes, defer the next round by this window so additional host \nregisters/disconnects arriving inside the window collapse into a single round. \nKeeps cold-start of dissemination responsive (the first event fires immediately) while reducing per-event \ndrain+halt overhead during bulk scale events. Default 0 disables coalescing. Recommended 100-250ms for \nclusters with frequent rapid churn (eg. >50 replica scale-ups).")
 
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
 	fs.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")

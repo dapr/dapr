@@ -72,7 +72,7 @@ func (r *retriablefailure) Run(t *testing.T, ctx context.Context) {
 	data, _ := anypb.New(wrapperspb.Bytes([]byte("hello world")))
 
 	t.Run("retriable failed job trigger", func(t *testing.T) {
-		_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+		_, err := client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
 				Name:    "retriablefailure",
 				DueTime: new("0s"),

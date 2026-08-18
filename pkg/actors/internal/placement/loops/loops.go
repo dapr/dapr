@@ -15,7 +15,7 @@ package loops
 
 import (
 	"context"
-	"strings"
+	"net"
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -50,6 +50,13 @@ type EventLookup interface{ isEventLookup() }
 type PlacementReconnect struct {
 	*placebase
 	ActorTypes *[]string
+	// TransientPrior is true when this reconnect was triggered by a close
+	// that was itself a transient "not a leader" rejection (i.e. routine
+	// placement leadership churn). Consumers use it to demote per-cycle
+	// log lines on the connect path to debug so the rapid back-to-back
+	// reconnects under leader churn don't spam the runtime log. Initial
+	// startup and real failures leave this as false.
+	TransientPrior bool
 }
 
 type UpdateTypes struct {
@@ -94,8 +101,9 @@ type LockRequest struct {
 	*placebase
 	*dissbase
 	*lookupbase
-	Context  context.Context
-	Response chan<- *LockResponse
+	ActorType string
+	Context   context.Context
+	Response  chan<- *LockResponse
 }
 
 type LockResponse struct {
@@ -127,14 +135,24 @@ type SetDrainOngoingCallTimeout struct {
 	Timeout *time.Duration
 }
 
+// SetEntityDrainOngoingCallTimeouts replaces the per-actor-type drain
+// timeouts. nil/empty means "remove all overrides".
+type SetEntityDrainOngoingCallTimeouts struct {
+	*placebase
+	Timeouts map[string]time.Duration
+}
+
 func IsActorLocal(targetActorAddress, hostAddress string, port string) bool {
-	if targetActorAddress == hostAddress+":"+port {
+	if targetActorAddress == net.JoinHostPort(hostAddress, port) {
 		// Easy case when there is a perfect match
 		return true
 	}
 
-	if utils.IsLocalhost(hostAddress) && strings.HasSuffix(targetActorAddress, ":"+port) {
-		return utils.IsLocalhost(targetActorAddress[0 : len(targetActorAddress)-len(port)-1])
+	if utils.IsLocalhost(hostAddress) {
+		tHost, tPort, err := net.SplitHostPort(targetActorAddress)
+		if err == nil && tPort == port {
+			return utils.IsLocalhost(tHost)
+		}
 	}
 
 	return false

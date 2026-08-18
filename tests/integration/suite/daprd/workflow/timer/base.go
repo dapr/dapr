@@ -47,7 +47,7 @@ func (b *base) Setup(t *testing.T) []framework.Option {
 func (b *base) Run(t *testing.T, ctx context.Context) {
 	b.workflow.WaitUntilRunning(t, ctx)
 
-	b.workflow.Registry().AddOrchestratorN("timer", func(ctx *task.OrchestrationContext) (any, error) {
+	b.workflow.Registry().AddWorkflowN("timer", func(ctx *task.WorkflowContext) (any, error) {
 		err := ctx.CreateTimer(time.Second * 7).Await(nil)
 		return nil, err
 	})
@@ -55,9 +55,9 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 	client := b.workflow.BackendClient(t, ctx)
 
 	start := time.Now()
-	id, err := client.ScheduleNewOrchestration(ctx, "timer", api.WithInstanceID("timer"))
+	id, err := client.ScheduleNewWorkflow(ctx, "timer", api.WithInstanceID("timer"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, time.Since(start).Seconds(), 6.0)
 }

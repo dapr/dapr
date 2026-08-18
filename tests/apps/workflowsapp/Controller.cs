@@ -41,9 +41,9 @@ namespace DaprDemoActor
       var inputItem = "paperclips";
       var workflowOptions = new Dictionary<string, string>();
       var startResponse = await daprClient.StartWorkflowAsync(
-              instanceId: instanceID, 
+              instanceId: instanceID,
               workflowComponent: workflowComponent,
-              workflowName: "PlaceOrder",
+              workflowName: workflowName,
               input: inputItem,
               workflowOptions: workflowOptions);
 
@@ -103,6 +103,71 @@ namespace DaprDemoActor
     {
       await daprClient.RaiseWorkflowEventAsync(instanceID, workflowComponent, eventName, eventInput);
       return true;
+    }
+
+    // The endpoints below proxy the sidecar's workflow HTTP API with the
+    // appID query parameter, targeting a workflow instance hosted by another
+    // app. The sidecar's status code and body are returned as-is so tests can
+    // assert both allowed and denied outcomes.
+    static readonly HttpClient httpClient = new HttpClient();
+
+    private async Task<IActionResult> ProxyWorkflowAPI(HttpMethod method, string path, string body = null)
+    {
+      await daprClient.WaitForSidecarAsync();
+      using var request = new HttpRequestMessage(method, httpEndpoint + "/v1.0-beta1/workflows/" + path);
+      if (body != null)
+      {
+        request.Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+      }
+      using var response = await httpClient.SendAsync(request);
+      var responseBody = await response.Content.ReadAsStringAsync();
+      return StatusCode((int)response.StatusCode, responseBody);
+    }
+
+    [HttpPost("CrossAppStartWorkflow/{workflowComponent}/{workflowName}/{instanceID}/{appID}")]
+    public Task<IActionResult> CrossAppStartWorkflow([FromRoute] string workflowComponent, string workflowName, string instanceID, string appID)
+    {
+      return ProxyWorkflowAPI(HttpMethod.Post,
+        $"{workflowComponent}/{workflowName}/start?instanceID={instanceID}&appID={appID}",
+        "\"paperclips\"");
+    }
+
+    [HttpGet("CrossAppGetWorkflow/{workflowComponent}/{instanceID}/{appID}")]
+    public Task<IActionResult> CrossAppGetWorkflow([FromRoute] string workflowComponent, string instanceID, string appID)
+    {
+      return ProxyWorkflowAPI(HttpMethod.Get, $"{workflowComponent}/{instanceID}?appID={appID}");
+    }
+
+    [HttpPost("CrossAppRaiseWorkflowEvent/{workflowComponent}/{instanceID}/{eventName}/{eventInput}/{appID}")]
+    public Task<IActionResult> CrossAppRaiseWorkflowEvent([FromRoute] string workflowComponent, string instanceID, string eventName, string eventInput, string appID)
+    {
+      return ProxyWorkflowAPI(HttpMethod.Post,
+        $"{workflowComponent}/{instanceID}/raiseEvent/{eventName}?appID={appID}",
+        $"\"{eventInput}\"");
+    }
+
+    [HttpPost("CrossAppPauseWorkflow/{workflowComponent}/{instanceID}/{appID}")]
+    public Task<IActionResult> CrossAppPauseWorkflow([FromRoute] string workflowComponent, string instanceID, string appID)
+    {
+      return ProxyWorkflowAPI(HttpMethod.Post, $"{workflowComponent}/{instanceID}/pause?appID={appID}");
+    }
+
+    [HttpPost("CrossAppResumeWorkflow/{workflowComponent}/{instanceID}/{appID}")]
+    public Task<IActionResult> CrossAppResumeWorkflow([FromRoute] string workflowComponent, string instanceID, string appID)
+    {
+      return ProxyWorkflowAPI(HttpMethod.Post, $"{workflowComponent}/{instanceID}/resume?appID={appID}");
+    }
+
+    [HttpPost("CrossAppTerminateWorkflow/{workflowComponent}/{instanceID}/{appID}")]
+    public Task<IActionResult> CrossAppTerminateWorkflow([FromRoute] string workflowComponent, string instanceID, string appID)
+    {
+      return ProxyWorkflowAPI(HttpMethod.Post, $"{workflowComponent}/{instanceID}/terminate?appID={appID}");
+    }
+
+    [HttpPost("CrossAppPurgeWorkflow/{workflowComponent}/{instanceID}/{appID}")]
+    public Task<IActionResult> CrossAppPurgeWorkflow([FromRoute] string workflowComponent, string instanceID, string appID)
+    {
+      return ProxyWorkflowAPI(HttpMethod.Post, $"{workflowComponent}/{instanceID}/purge?appID={appID}");
     }
   }
 }

@@ -44,7 +44,7 @@ func (a *activity) Setup(t *testing.T) []framework.Option {
 func (a *activity) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
-	a.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	a.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, ctx.CallActivity("bar").Await(nil)
 	})
 	a.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
@@ -53,8 +53,8 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 
 	client := a.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "foo")
+	id, err := client.ScheduleNewWorkflow(ctx, "foo")
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 }

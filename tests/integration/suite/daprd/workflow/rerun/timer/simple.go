@@ -47,26 +47,26 @@ func (s *simple) Setup(t *testing.T) []framework.Option {
 func (s *simple) Run(t *testing.T, ctx context.Context) {
 	s.workflow.WaitUntilRunning(t, ctx)
 
-	s.workflow.Registry().AddOrchestratorN("simple-timer", func(ctx *task.OrchestrationContext) (any, error) {
+	s.workflow.Registry().AddWorkflowN("simple-timer", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CreateTimer(time.Second*3).Await(nil))
 		return nil, nil
 	})
 	client := s.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "simple-timer", api.WithInstanceID("abc"))
+	id, err := client.ScheduleNewWorkflow(ctx, "simple-timer", api.WithInstanceID("abc"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	newID, err := client.RerunWorkflowFromEvent(ctx, id, 0)
 	require.NoError(t, err)
 
-	meta, err := client.FetchOrchestrationMetadata(ctx, newID)
+	meta, err := client.FetchWorkflowMetadata(ctx, newID)
 	require.NoError(t, err)
 	assert.Contains(t, []string{
 		api.RUNTIME_STATUS_RUNNING.String(),
 		api.RUNTIME_STATUS_COMPLETED.String(),
 	}, meta.GetRuntimeStatus().String())
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 }

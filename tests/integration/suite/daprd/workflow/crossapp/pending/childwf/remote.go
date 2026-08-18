@@ -72,22 +72,22 @@ func (r *remote) Setup(t *testing.T) []framework.Option {
 		daprd.WithLogLevel("debug"),
 	)
 
-	r.registry1.AddOrchestratorN("ParentWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	r.registry1.AddWorkflowN("ParentWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, err
 		}
 		var result string
-		if err := ctx.CallSubOrchestrator("ChildWorkflow",
-			task.WithSubOrchestratorInput(input),
-			task.WithSubOrchestratorAppID(r.daprd2.AppID())).
+		if err := ctx.CallChildWorkflow("ChildWorkflow",
+			task.WithChildWorkflowInput(input),
+			task.WithChildWorkflowAppID(r.daprd2.AppID())).
 			Await(&result); err != nil {
 			return nil, fmt.Errorf("child workflow failed: %w", err)
 		}
 		return result, nil
 	})
 
-	r.registry2.AddOrchestratorN("ChildWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	r.registry2.AddWorkflowN("ChildWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, err
@@ -108,12 +108,12 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 	client1 := client.NewTaskHubGrpcClient(r.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client1.StartWorkItemListener(ctx, r.registry1))
 
-	id, err := client1.ScheduleNewOrchestration(ctx, "ParentWorkflow", api.WithInput("hello"))
+	id, err := client1.ScheduleNewWorkflow(ctx, "ParentWorkflow", api.WithInput("hello"))
 	require.NoError(t, err)
 
-	metadata, err := client1.WaitForOrchestrationStart(ctx, id)
+	metadata, err := client1.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.RuntimeStatus)
+	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.GetRuntimeStatus())
 
 	r.daprd2.Run(t, ctx)
 	t.Cleanup(func() { r.daprd2.Cleanup(t) })
@@ -122,8 +122,8 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 	client2 := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client2.StartWorkItemListener(ctx, r.registry2))
 
-	metadata, err = client1.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+	metadata, err = client1.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
-	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	assert.Equal(t, `"child:hello"`, metadata.GetOutput().GetValue())
 }

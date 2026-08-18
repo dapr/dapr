@@ -72,7 +72,7 @@ func (a *appapitoken) Run(t *testing.T, ctx context.Context) {
 	a.daprd.WaitUntilRunning(t, ctx)
 
 	httpClient := client.HTTP(t)
-	postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/test-job", a.daprd.HTTPPort())
+	postURL := fmt.Sprintf("http://localhost:%d/v1.0/jobs/test-job", a.daprd.HTTPPort())
 	body := `{"schedule": "@every 1s", "data": {"message": "test"}}`
 	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, postURL, strings.NewReader(body))
 	require.NoError(t, err)

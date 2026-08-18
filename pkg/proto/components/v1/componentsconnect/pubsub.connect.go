@@ -30,7 +30,7 @@ import (
 // generated with a version of connect newer than the one compiled into your binary. You can fix the
 // problem by either regenerating this code with an older version of connect or updating the connect
 // version compiled into your binary.
-const _ = connect.IsAtLeastVersion0_1_0
+const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// PubSubName is the fully-qualified name of the PubSub service.
@@ -55,6 +55,10 @@ const (
 	PubSubBulkPublishProcedure = "/dapr.proto.components.v1.PubSub/BulkPublish"
 	// PubSubPullMessagesProcedure is the fully-qualified name of the PubSub's PullMessages RPC.
 	PubSubPullMessagesProcedure = "/dapr.proto.components.v1.PubSub/PullMessages"
+	// PubSubPauseProcedure is the fully-qualified name of the PubSub's Pause RPC.
+	PubSubPauseProcedure = "/dapr.proto.components.v1.PubSub/Pause"
+	// PubSubResumeProcedure is the fully-qualified name of the PubSub's Resume RPC.
+	PubSubResumeProcedure = "/dapr.proto.components.v1.PubSub/Resume"
 	// PubSubPingProcedure is the fully-qualified name of the PubSub's Ping RPC.
 	PubSubPingProcedure = "/dapr.proto.components.v1.PubSub/Ping"
 )
@@ -75,6 +79,14 @@ type PubSubClient interface {
 	// the stream. The first message MUST contain a `topic` attribute on it that
 	// should be used for the entire streaming pull.
 	PullMessages(context.Context) *connect.BidiStreamForClient[v1.PullMessagesRequest, v1.PullMessagesResponse]
+	// Pause stops the component from delivering new messages to daprd while
+	// keeping existing subscription state alive. Servers MAY return
+	// UNIMPLEMENTED if they do not support pause-and-drain semantics; daprd
+	// will fall back to close-first shutdown in that case. Idempotent.
+	Pause(context.Context, *connect.Request[v1.PauseRequest]) (*connect.Response[v1.PauseResponse], error)
+	// Resume reverses a prior Pause. Servers MAY return UNIMPLEMENTED.
+	// Idempotent.
+	Resume(context.Context, *connect.Request[v1.ResumeRequest]) (*connect.Response[v1.ResumeResponse], error)
 	// Ping the pubsub. Used for liveness porpuses.
 	Ping(context.Context, *connect.Request[v1.PingRequest]) (*connect.Response[v1.PingResponse], error)
 }
@@ -88,36 +100,55 @@ type PubSubClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewPubSubClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PubSubClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	pubSubMethods := v1.File_dapr_proto_components_v1_pubsub_proto.Services().ByName("PubSub").Methods()
 	return &pubSubClient{
 		init: connect.NewClient[v1.PubSubInitRequest, v1.PubSubInitResponse](
 			httpClient,
 			baseURL+PubSubInitProcedure,
-			opts...,
+			connect.WithSchema(pubSubMethods.ByName("Init")),
+			connect.WithClientOptions(opts...),
 		),
 		features: connect.NewClient[v1.FeaturesRequest, v1.FeaturesResponse](
 			httpClient,
 			baseURL+PubSubFeaturesProcedure,
-			opts...,
+			connect.WithSchema(pubSubMethods.ByName("Features")),
+			connect.WithClientOptions(opts...),
 		),
 		publish: connect.NewClient[v1.PublishRequest, v1.PublishResponse](
 			httpClient,
 			baseURL+PubSubPublishProcedure,
-			opts...,
+			connect.WithSchema(pubSubMethods.ByName("Publish")),
+			connect.WithClientOptions(opts...),
 		),
 		bulkPublish: connect.NewClient[v1.BulkPublishRequest, v1.BulkPublishResponse](
 			httpClient,
 			baseURL+PubSubBulkPublishProcedure,
-			opts...,
+			connect.WithSchema(pubSubMethods.ByName("BulkPublish")),
+			connect.WithClientOptions(opts...),
 		),
 		pullMessages: connect.NewClient[v1.PullMessagesRequest, v1.PullMessagesResponse](
 			httpClient,
 			baseURL+PubSubPullMessagesProcedure,
-			opts...,
+			connect.WithSchema(pubSubMethods.ByName("PullMessages")),
+			connect.WithClientOptions(opts...),
+		),
+		pause: connect.NewClient[v1.PauseRequest, v1.PauseResponse](
+			httpClient,
+			baseURL+PubSubPauseProcedure,
+			connect.WithSchema(pubSubMethods.ByName("Pause")),
+			connect.WithClientOptions(opts...),
+		),
+		resume: connect.NewClient[v1.ResumeRequest, v1.ResumeResponse](
+			httpClient,
+			baseURL+PubSubResumeProcedure,
+			connect.WithSchema(pubSubMethods.ByName("Resume")),
+			connect.WithClientOptions(opts...),
 		),
 		ping: connect.NewClient[v1.PingRequest, v1.PingResponse](
 			httpClient,
 			baseURL+PubSubPingProcedure,
-			opts...,
+			connect.WithSchema(pubSubMethods.ByName("Ping")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -129,6 +160,8 @@ type pubSubClient struct {
 	publish      *connect.Client[v1.PublishRequest, v1.PublishResponse]
 	bulkPublish  *connect.Client[v1.BulkPublishRequest, v1.BulkPublishResponse]
 	pullMessages *connect.Client[v1.PullMessagesRequest, v1.PullMessagesResponse]
+	pause        *connect.Client[v1.PauseRequest, v1.PauseResponse]
+	resume       *connect.Client[v1.ResumeRequest, v1.ResumeResponse]
 	ping         *connect.Client[v1.PingRequest, v1.PingResponse]
 }
 
@@ -157,6 +190,16 @@ func (c *pubSubClient) PullMessages(ctx context.Context) *connect.BidiStreamForC
 	return c.pullMessages.CallBidiStream(ctx)
 }
 
+// Pause calls dapr.proto.components.v1.PubSub.Pause.
+func (c *pubSubClient) Pause(ctx context.Context, req *connect.Request[v1.PauseRequest]) (*connect.Response[v1.PauseResponse], error) {
+	return c.pause.CallUnary(ctx, req)
+}
+
+// Resume calls dapr.proto.components.v1.PubSub.Resume.
+func (c *pubSubClient) Resume(ctx context.Context, req *connect.Request[v1.ResumeRequest]) (*connect.Response[v1.ResumeResponse], error) {
+	return c.resume.CallUnary(ctx, req)
+}
+
 // Ping calls dapr.proto.components.v1.PubSub.Ping.
 func (c *pubSubClient) Ping(ctx context.Context, req *connect.Request[v1.PingRequest]) (*connect.Response[v1.PingResponse], error) {
 	return c.ping.CallUnary(ctx, req)
@@ -178,6 +221,14 @@ type PubSubHandler interface {
 	// the stream. The first message MUST contain a `topic` attribute on it that
 	// should be used for the entire streaming pull.
 	PullMessages(context.Context, *connect.BidiStream[v1.PullMessagesRequest, v1.PullMessagesResponse]) error
+	// Pause stops the component from delivering new messages to daprd while
+	// keeping existing subscription state alive. Servers MAY return
+	// UNIMPLEMENTED if they do not support pause-and-drain semantics; daprd
+	// will fall back to close-first shutdown in that case. Idempotent.
+	Pause(context.Context, *connect.Request[v1.PauseRequest]) (*connect.Response[v1.PauseResponse], error)
+	// Resume reverses a prior Pause. Servers MAY return UNIMPLEMENTED.
+	// Idempotent.
+	Resume(context.Context, *connect.Request[v1.ResumeRequest]) (*connect.Response[v1.ResumeResponse], error)
 	// Ping the pubsub. Used for liveness porpuses.
 	Ping(context.Context, *connect.Request[v1.PingRequest]) (*connect.Response[v1.PingResponse], error)
 }
@@ -188,35 +239,54 @@ type PubSubHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewPubSubHandler(svc PubSubHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	pubSubMethods := v1.File_dapr_proto_components_v1_pubsub_proto.Services().ByName("PubSub").Methods()
 	pubSubInitHandler := connect.NewUnaryHandler(
 		PubSubInitProcedure,
 		svc.Init,
-		opts...,
+		connect.WithSchema(pubSubMethods.ByName("Init")),
+		connect.WithHandlerOptions(opts...),
 	)
 	pubSubFeaturesHandler := connect.NewUnaryHandler(
 		PubSubFeaturesProcedure,
 		svc.Features,
-		opts...,
+		connect.WithSchema(pubSubMethods.ByName("Features")),
+		connect.WithHandlerOptions(opts...),
 	)
 	pubSubPublishHandler := connect.NewUnaryHandler(
 		PubSubPublishProcedure,
 		svc.Publish,
-		opts...,
+		connect.WithSchema(pubSubMethods.ByName("Publish")),
+		connect.WithHandlerOptions(opts...),
 	)
 	pubSubBulkPublishHandler := connect.NewUnaryHandler(
 		PubSubBulkPublishProcedure,
 		svc.BulkPublish,
-		opts...,
+		connect.WithSchema(pubSubMethods.ByName("BulkPublish")),
+		connect.WithHandlerOptions(opts...),
 	)
 	pubSubPullMessagesHandler := connect.NewBidiStreamHandler(
 		PubSubPullMessagesProcedure,
 		svc.PullMessages,
-		opts...,
+		connect.WithSchema(pubSubMethods.ByName("PullMessages")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pubSubPauseHandler := connect.NewUnaryHandler(
+		PubSubPauseProcedure,
+		svc.Pause,
+		connect.WithSchema(pubSubMethods.ByName("Pause")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pubSubResumeHandler := connect.NewUnaryHandler(
+		PubSubResumeProcedure,
+		svc.Resume,
+		connect.WithSchema(pubSubMethods.ByName("Resume")),
+		connect.WithHandlerOptions(opts...),
 	)
 	pubSubPingHandler := connect.NewUnaryHandler(
 		PubSubPingProcedure,
 		svc.Ping,
-		opts...,
+		connect.WithSchema(pubSubMethods.ByName("Ping")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.components.v1.PubSub/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -230,6 +300,10 @@ func NewPubSubHandler(svc PubSubHandler, opts ...connect.HandlerOption) (string,
 			pubSubBulkPublishHandler.ServeHTTP(w, r)
 		case PubSubPullMessagesProcedure:
 			pubSubPullMessagesHandler.ServeHTTP(w, r)
+		case PubSubPauseProcedure:
+			pubSubPauseHandler.ServeHTTP(w, r)
+		case PubSubResumeProcedure:
+			pubSubResumeHandler.ServeHTTP(w, r)
 		case PubSubPingProcedure:
 			pubSubPingHandler.ServeHTTP(w, r)
 		default:
@@ -259,6 +333,14 @@ func (UnimplementedPubSubHandler) BulkPublish(context.Context, *connect.Request[
 
 func (UnimplementedPubSubHandler) PullMessages(context.Context, *connect.BidiStream[v1.PullMessagesRequest, v1.PullMessagesResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.components.v1.PubSub.PullMessages is not implemented"))
+}
+
+func (UnimplementedPubSubHandler) Pause(context.Context, *connect.Request[v1.PauseRequest]) (*connect.Response[v1.PauseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.components.v1.PubSub.Pause is not implemented"))
+}
+
+func (UnimplementedPubSubHandler) Resume(context.Context, *connect.Request[v1.ResumeRequest]) (*connect.Response[v1.ResumeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.components.v1.PubSub.Resume is not implemented"))
 }
 
 func (UnimplementedPubSubHandler) Ping(context.Context, *connect.Request[v1.PingRequest]) (*connect.Response[v1.PingResponse], error) {

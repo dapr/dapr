@@ -82,16 +82,16 @@ func (h *history) Run(t *testing.T, ctx context.Context) {
 	require.Len(t, history.Events, 9)
 
 	assert.True(t, proto.Equal(
-		history.Events[3].GetSubOrchestrationInstanceCreated(),
-		&protos.SubOrchestrationInstanceCreatedEvent{
+		history.Events[3].GetChildWorkflowInstanceCreated(),
+		&protos.ChildWorkflowInstanceCreatedEvent{
 			InstanceId: "abc:0000",
 			Name:       "bar",
 		},
 	))
 
 	assert.True(t, proto.Equal(
-		history.Events[5].GetSubOrchestrationInstanceCreated(),
-		&protos.SubOrchestrationInstanceCreatedEvent{
+		history.Events[5].GetChildWorkflowInstanceCreated(),
+		&protos.ChildWorkflowInstanceCreatedEvent{
 			InstanceId: "hello:0001",
 			Name:       "bar",
 			RerunParentInstanceInfo: &protos.RerunParentInstanceInfo{

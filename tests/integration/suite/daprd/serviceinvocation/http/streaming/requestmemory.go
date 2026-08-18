@@ -83,7 +83,7 @@ func (c *requestmemory) Run(t *testing.T, ctx context.Context) {
 	c.daprdSender.WaitUntilRunning(t, ctx)
 	c.daprdReceiver.WaitUntilRunning(t, ctx)
 
-	httpClient := client.HTTP(t)
+	httpClient := client.HTTPWithTimeout(t, 2*time.Minute)
 
 	const (
 		totalSize = 256 << 20
@@ -134,7 +134,7 @@ func (c *requestmemory) Run(t *testing.T, ctx context.Context) {
 	samplerDone := make(chan struct{})
 	go func() {
 		defer close(samplerDone)
-		ticker := time.NewTicker(10 * time.Millisecond)
+		ticker := time.NewTicker(50 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			select {

@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
+	"golang.org/x/net/http2/h2c" //nolint:staticcheck
 )
 
 const (
@@ -55,7 +55,7 @@ func StartServer(port int, appRouter func() http.Handler, allowHTTP2 bool, enabl
 		//nolint:gosec
 		server = &http.Server{
 			Addr:    addr,
-			Handler: h2c.NewHandler(appRouter(), h2s),
+			Handler: h2c.NewHandler(appRouter(), h2s), //nolint:staticcheck
 			ConnState: func(c net.Conn, cs http.ConnState) {
 				if logConnState {
 					log.Printf("ConnState changed: %s -> %s state: %s (HTTP2)", c.RemoteAddr(), c.LocalAddr(), cs)

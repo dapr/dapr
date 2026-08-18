@@ -748,7 +748,6 @@ func TestListScopes(t *testing.T) {
 		api := NewAPIServer(Options{Client: cl}).(*apiServer)
 
 		res, err := api.ListComponents(pki.ClientGRPCCtx(t), &operatorv1pb.ListComponentsRequest{
-			PodName:   "foo",
 			Namespace: "namespace-a",
 		})
 		require.NoError(t, err)
@@ -807,7 +806,6 @@ func TestListsNamespaced(t *testing.T) {
 		api := NewAPIServer(Options{Client: cl}).(*apiServer)
 
 		res, err := api.ListComponents(pki.ClientGRPCCtx(t), &operatorv1pb.ListComponentsRequest{
-			PodName:   "foo",
 			Namespace: "namespace-a",
 		})
 		require.NoError(t, err)
@@ -820,7 +818,6 @@ func TestListsNamespaced(t *testing.T) {
 		assert.Equal(t, "namespace-a", sub.Namespace)
 
 		res, err = api.ListComponents(pki.ClientGRPCCtx(t), &operatorv1pb.ListComponentsRequest{
-			PodName:   "foo",
 			Namespace: "namespace-c",
 		})
 		require.Error(t, err)
@@ -860,7 +857,6 @@ func TestListsNamespaced(t *testing.T) {
 		api := NewAPIServer(Options{Client: client}).(*apiServer)
 
 		res, err := api.ListSubscriptionsV2(pki.ClientGRPCCtx(t), &operatorv1pb.ListSubscriptionsRequest{
-			PodName:   "foo",
 			Namespace: "namespace-a",
 		})
 
@@ -875,7 +871,6 @@ func TestListsNamespaced(t *testing.T) {
 		assert.Equal(t, "namespace-a", sub.Namespace)
 
 		res, err = api.ListSubscriptionsV2(t.Context(), &operatorv1pb.ListSubscriptionsRequest{
-			PodName:   "baz",
 			Namespace: "namespace-c",
 		})
 		require.Error(t, err)

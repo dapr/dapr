@@ -22,6 +22,7 @@ on:
       - master
       - 'release-*'
       - 'feature/*'
+  merge_group:
 
 defaults:
   run:
@@ -129,6 +130,11 @@ jobs:
         echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" >> $GITHUB_ENV
         echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" >> $GITHUB_ENV
 
+        # Pre-create the log dirs so the always() compress/upload steps
+        # don't fail when the job aborts before any logs are written.
+        mkdir -p "$GITHUB_WORKSPACE/container_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" \
+                 "$GITHUB_WORKSPACE/test_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}"
+
     - name: Create KinD Cluster
       uses: helm/kind-action@v1.13.0
       with:
@@ -159,7 +165,7 @@ jobs:
         docker network connect "kind" $REGISTRY_NAME
 
     - name: Setup Helm
-      uses: azure/setup-helm@v1
+      uses: azure/setup-helm@v5
       with:
         version: v3.3.4
 
@@ -181,7 +187,7 @@ jobs:
       run: |
         make build-linux
         make docker-build
-        make docker-push
+        make docker-push-retry
 
     - name: Build and push test apps
       run: |

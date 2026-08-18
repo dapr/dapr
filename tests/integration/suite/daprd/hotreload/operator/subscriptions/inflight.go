@@ -64,19 +64,11 @@ func (i *inflight) Setup(t *testing.T) []framework.Option {
 	sentry := sentry.New(t)
 	i.operator = operator.New(t,
 		operator.WithSentry(sentry),
-		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
-			return &operatorv1.GetConfigurationResponse{
-				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"features":[{"name":"HotReload","enabled":true}]}}`,
-				),
-			}, nil
-		}),
 	)
 
 	i.daprd = daprd.New(t,
 		daprd.WithAppPort(i.sub.Port()),
 		daprd.WithMode("kubernetes"),
-		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(i.operator.Address(t)),

@@ -36,14 +36,14 @@ type uniquestalledevent struct {
 func (r *uniquestalledevent) Setup(t *testing.T) []framework.Option {
 	r.fw = stalled.New(t,
 		stalled.WithInitialReplica("new"),
-		stalled.WithNamedWorkflowReplica("new", func(ctx *task.OrchestrationContext) (any, error) {
+		stalled.WithNamedWorkflowReplica("new", func(ctx *task.WorkflowContext) (any, error) {
 			ctx.IsPatched("patch1")
 			if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
 				return nil, err
 			}
 			return nil, nil
 		}),
-		stalled.WithNamedWorkflowReplica("old", func(ctx *task.OrchestrationContext) (any, error) {
+		stalled.WithNamedWorkflowReplica("old", func(ctx *task.WorkflowContext) (any, error) {
 			if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
 				return nil, err
 			}

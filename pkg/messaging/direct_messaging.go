@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -32,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -66,6 +68,7 @@ type directMessaging struct {
 	resolver            nr.Resolver
 	resolverMulti       nr.ResolverMulti
 	hostAddress         string
+	hostFwdAddr         string
 	hostName            string
 	maxRequestBodySize  int
 	proxy               Proxy
@@ -105,6 +108,12 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) invokev1.DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
 
+	// RFC 7239: IPv6 addresses must be quoted and bracketed in the Forwarded header.
+	hFwdAddr := hAddr
+	if ip := net.ParseIP(hAddr); ip != nil && ip.To4() == nil {
+		hFwdAddr = `"[` + hAddr + `]"`
+	}
+
 	dm := &directMessaging{
 		appID:               opts.AppID,
 		namespace:           opts.Namespace,
@@ -118,6 +127,7 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) invokev1.DirectMessaging {
 		readBufferSize:      opts.ReadBufferSize,
 		resiliency:          opts.Resiliency,
 		hostAddress:         hAddr,
+		hostFwdAddr:         hFwdAddr,
 		hostName:            hName,
 		compStore:           opts.CompStore,
 	}
@@ -151,6 +161,17 @@ func (d *directMessaging) Close() error {
 
 // Invoke takes a message requests and invokes an app, either local or remote.
 func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	// Normalize the method at the service invocation edge: reject forbidden
+	// characters and resolve path traversal. The normalized form is used for
+	// both ACL evaluation and dispatch to the target app.
+	if msg := req.Message(); msg != nil {
+		normalized, normErr := method.NormalizeMethod(msg.GetMethod())
+		if normErr != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid method: %v", normErr)
+		}
+		msg.Method = normalized
+	}
+
 	app, err := d.getRemoteApp(ctx, targetAppID)
 	if err != nil {
 		return nil, err
@@ -256,6 +277,21 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 		return nil, errors.New("cannot invoke local endpoint: app channel not initialized")
 	}
 
+	// A self-invocation bypasses invokeRemote, so stamp the caller/callee
+	// identity headers here too. caller == callee == this app. Any
+	// caller-supplied identity headers are stripped first and re-stamped
+	// unconditionally, mirroring invokeRemote, so an app cannot spoof its own
+	// identity headers on the local leg. The strip is case-insensitive because
+	// HTTP-origin metadata retains the request's original header casing.
+	md := req.Metadata()
+	for k := range md {
+		switch strings.ToLower(k) {
+		case invokev1.CallerIDHeader, invokev1.CallerNamespaceHeader, invokev1.CalleeIDHeader:
+			delete(md, k)
+		}
+	}
+	d.addCallerAndCalleeAppIDHeaderToMetadata(d.namespace, d.appID, d.appID, req)
+
 	return appChannel.InvokeMethod(ctx, req, "")
 }
 
@@ -314,7 +350,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID)
 
 	// Do invoke
-	imr, err := d.invokeRemoteStream(ctx, clientV1, req, appID, opts)
+	imr, teardown, err := d.invokeRemoteStream(ctx, clientV1, req, appID, opts, teardown)
 
 	// Diagnostics
 	if imr != nil {
@@ -354,10 +390,16 @@ func (d *directMessaging) invokeRemoteUnary(ctx context.Context, clientV1 intern
 	return invokev1.InternalInvokeResponse(resp)
 }
 
-func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 internalv1pb.ServiceInvocationClient, req *invokev1.InvokeMethodRequest, appID string, opts []grpc.CallOption) (*invokev1.InvokeMethodResponse, error) {
+// invokeRemoteStream performs the invocation over the given stream and returns the teardown function
+// the caller must invoke to release the underlying connection back to the pool.
+// If the response body is streamed back in a background goroutine (e.g. for SSE-like responses), ownership
+// of teardown is transferred to that goroutine - which releases the connection only once the stream is fully
+// drained - and a no-op is returned instead, so the connection is not prematurely marked idle and purged by
+// the connection pool while it is still actively used to receive data (see dapr/dapr#10291).
+func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 internalv1pb.ServiceInvocationClient, req *invokev1.InvokeMethodRequest, appID string, opts []grpc.CallOption, teardown func(destroy bool)) (*invokev1.InvokeMethodResponse, func(destroy bool), error) {
 	stream, err := clientV1.CallLocalStream(ctx, opts...)
 	if err != nil {
-		return nil, err
+		return nil, teardown, err
 	}
 	buf := invokev1.BufPool.Get().(*[]byte)
 	defer func() {
@@ -388,7 +430,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 	)
 	for {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, teardown, ctx.Err()
 		}
 
 		// First message only - add the request
@@ -405,7 +447,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 			if err == io.EOF {
 				done = true
 			} else if err != nil {
-				return nil, err
+				return nil, teardown, err
 			}
 			if n > 0 {
 				proto.Payload = &commonv1pb.StreamPayload{
@@ -426,7 +468,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 				// The exact error can only be determined by RecvMsg, so if we encounter an EOF error here, just consider the stream done and let RecvMsg handle the error
 				done = true
 			} else if err != nil {
-				return nil, fmt.Errorf("error sending message: %w", err)
+				return nil, teardown, fmt.Errorf("error sending message: %w", err)
 			}
 		}
 
@@ -434,7 +476,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 		if done {
 			err = stream.CloseSend()
 			if err != nil {
-				return nil, fmt.Errorf("failed to close the send direction of the stream: %w", err)
+				return nil, teardown, fmt.Errorf("failed to close the send direction of the stream: %w", err)
 			}
 			break
 		}
@@ -459,21 +501,22 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 			}
 			if req.CanReplay() {
 				log.Warnf("App %s does not support streaming-based service invocation (most likely because it's using an older version of Dapr); falling back to unary calls", appID)
-				return d.invokeRemoteUnary(ctx, clientV1, req, opts)
+				imr, unaryErr := d.invokeRemoteUnary(ctx, clientV1, req, opts)
+				return imr, teardown, unaryErr
 			} else {
 				log.Errorf("App %s does not support streaming-based service invocation (most likely because it's using an older version of Dapr) and the request is not replayable. Please upgrade the Dapr sidecar used by the target app, or use Resiliency policies to add retries", appID)
-				return nil, fmt.Errorf(streamingUnsupportedErr, appID)
+				return nil, teardown, fmt.Errorf(streamingUnsupportedErr, appID)
 			}
 		}
-		return nil, err
+		return nil, teardown, err
 	}
 	if chunk.GetResponse().GetStatus() == nil {
-		return nil, errors.New("response does not contain the required fields in the leading chunk")
+		return nil, teardown, errors.New("response does not contain the required fields in the leading chunk")
 	}
 	pr, pw := io.Pipe()
 	res, err := invokev1.InternalInvokeResponse(chunk.GetResponse())
 	if err != nil {
-		return nil, err
+		return nil, teardown, err
 	}
 	if chunk.GetResponse().GetMessage() != nil {
 		res.WithContentType(chunk.GetResponse().GetMessage().GetContentType())
@@ -481,8 +524,12 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 	}
 	res.WithRawData(pr)
 
-	// Read the response into the stream in the background
+	// Read the response into the stream in the background.
+	// The connection must stay checked-out of the pool for as long as this goroutine is still reading from the
+	// stream, so teardown is only released once this goroutine returns (see dapr/dapr#10291).
 	go func() {
+		defer teardown(false)
+
 		var (
 			expectSeq uint64
 			readSeq   uint64
@@ -526,7 +573,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 		pw.Close()
 	}()
 
-	return res, nil
+	return res, nopTeardown, nil
 }
 
 func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {
@@ -566,13 +613,16 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 		// Add X-Forwarded-For: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For
 		addOrCreate("X-Forwarded-For", d.hostAddress)
 
-		forwardedHeaderValue += "for=" + d.hostAddress + ";by=" + d.hostAddress + ";"
+		forwardedHeaderValue += "for=" + d.hostFwdAddr + ";by=" + d.hostFwdAddr
 	}
 
 	if d.hostName != "" {
 		// Add X-Forwarded-Host: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
 		addOrCreate("X-Forwarded-Host", d.hostName)
 
+		if forwardedHeaderValue != "" {
+			forwardedHeaderValue += ";"
+		}
 		forwardedHeaderValue += "host=" + d.hostName
 	}
 

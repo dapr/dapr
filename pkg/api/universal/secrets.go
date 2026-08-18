@@ -107,7 +107,7 @@ func (a *Universal) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSe
 		if a.isSecretAllowed(in.GetStoreName(), key) {
 			filteredSecrets[key] = v
 		} else {
-			a.logger.Debugf(messages.ErrSecretPermissionDenied.WithFormat(key, in.GetStoreName()).String())
+			a.logger.Debug(messages.ErrSecretPermissionDenied.WithFormat(key, in.GetStoreName()).String())
 		}
 	}
 

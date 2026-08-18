@@ -25,10 +25,12 @@ import (
 
 	"golang.org/x/net/http2"
 
+	"github.com/dapr/dapr/pkg/actors/callbackstream"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	httpendpapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
+	grpcchannel "github.com/dapr/dapr/pkg/channel/grpc"
 	channelhttp "github.com/dapr/dapr/pkg/channel/http"
 	compmiddlehttp "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
@@ -69,6 +71,11 @@ type Options struct {
 
 	GRPC        *manager.Manager
 	AppAPIToken string
+
+	// ActorCallbackStream is the runtime-owned stream manager attached to
+	// the gRPC app channel, if any. Its event loop is driven by the
+	// runtime's RunnerCloserManager.
+	ActorCallbackStream *callbackstream.Manager
 }
 
 type Channels struct {
@@ -81,6 +88,7 @@ type Channels struct {
 	appMiddlware        middleware.HTTP
 	httpClient          *http.Client
 	grpc                *manager.Manager
+	actorCallbackStream *callbackstream.Manager
 
 	appAPIToken     string
 	appChannel      channel.AppChannel
@@ -99,6 +107,7 @@ func New(opts Options) *Channels {
 		maxRequestBodySize:  opts.MaxRequestBodySize,
 		appMiddlware:        opts.AppMiddleware,
 		grpc:                opts.GRPC,
+		actorCallbackStream: opts.ActorCallbackStream,
 		appAPIToken:         opts.AppAPIToken,
 		httpClient:          appHTTPClient(opts.AppConnectionConfig, opts.GlobalConfig, opts.ReadBufferSize),
 		endpChannels:        make(map[string]channel.HTTPEndpointAppChannel),
@@ -144,6 +153,12 @@ func (c *Channels) Refresh() error {
 		if err != nil {
 			return fmt.Errorf("failed to create gRPC app channel: %w", err)
 		}
+		// Inject the runtime-owned actor callback stream manager so the
+		// gRPC API handler and the actor transport can route over the
+		// SubscribeActorEventsAlpha1 stream.
+		if gc, ok := appChannel.(*grpcchannel.Channel); ok && c.actorCallbackStream != nil {
+			gc.SetActorCallbackStream(c.actorCallbackStream)
+		}
 	}
 
 	c.appChannel = appChannel
@@ -158,6 +173,14 @@ func (c *Channels) AppChannel() channel.AppChannel {
 	defer c.lock.RUnlock()
 
 	return c.appChannel
+}
+
+// ActorCallbackStream returns the runtime-owned actor callback stream
+// manager. It is available even when no app channel exists (no app-port
+// configured): apps hosting actors over SubscribeActorEventsAlpha1 dial
+// daprd themselves and do not need to listen on any port.
+func (c *Channels) ActorCallbackStream() *callbackstream.Manager {
+	return c.actorCallbackStream
 }
 
 func (c *Channels) HTTPEndpointsAppChannel() channel.HTTPEndpointAppChannel {

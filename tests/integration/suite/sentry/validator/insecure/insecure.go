@@ -18,6 +18,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
 	"testing"
@@ -194,6 +195,14 @@ func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateRe
 	assert.Empty(t, cert.DNSNames)
 	assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
 	assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
+
+	// The insecure validator has no pod to read, so the container images
+	// extension (OID hardcoded rather than referencing the sentry images
+	// package) must be absent.
+	oidContainerImages := asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 57683, 100, 1}
+	for _, ext := range cert.Extensions {
+		assert.False(t, ext.Id.Equal(oidContainerImages), "container images extension must be absent")
+	}
 
 	// Second block should contain the Sentry CA certificate
 	block, rest = pem.Decode(rest)

@@ -72,15 +72,15 @@ func (a *activities) Run(t *testing.T, ctx context.Context) {
 
 	require.Len(t, evs, 12)
 
-	assert.NotNil(t, evs[0].GetOrchestratorStarted())
+	assert.NotNil(t, evs[0].GetWorkflowStarted())
 	assert.NotNil(t, evs[1].GetExecutionStarted())
 	assert.Equal(t, "foo", evs[1].GetExecutionStarted().GetName())
-	assert.Equal(t, "abc", evs[1].GetExecutionStarted().GetOrchestrationInstance().GetInstanceId())
+	assert.Equal(t, "abc", evs[1].GetExecutionStarted().GetWorkflowInstance().GetInstanceId())
 
 	assert.NotNil(t, evs[2].GetTaskScheduled())
 	assert.Equal(t, "a", evs[2].GetTaskScheduled().GetName())
 	assert.Equal(t, a.workflow.Dapr().AppID(), evs[2].GetRouter().GetSourceAppID())
-	assert.NotNil(t, evs[3].GetOrchestratorStarted())
+	assert.NotNil(t, evs[3].GetWorkflowStarted())
 	assert.NotNil(t, evs[4].GetTaskCompleted())
 	assert.Equal(t, `"1"`, evs[4].GetTaskCompleted().GetResult().GetValue())
 	assert.Equal(t, a.workflow.Dapr().AppID(), evs[4].GetRouter().GetSourceAppID())
@@ -88,7 +88,7 @@ func (a *activities) Run(t *testing.T, ctx context.Context) {
 	assert.NotNil(t, evs[5].GetTaskScheduled())
 	assert.Equal(t, "b", evs[5].GetTaskScheduled().GetName())
 	assert.Equal(t, a.workflow.Dapr().AppID(), evs[5].GetRouter().GetSourceAppID())
-	assert.NotNil(t, evs[6].GetOrchestratorStarted())
+	assert.NotNil(t, evs[6].GetWorkflowStarted())
 	assert.NotNil(t, evs[7].GetTaskCompleted())
 	assert.Equal(t, `"2"`, evs[7].GetTaskCompleted().GetResult().GetValue())
 	assert.Equal(t, a.workflow.Dapr().AppID(), evs[7].GetRouter().GetSourceAppID())
@@ -96,11 +96,11 @@ func (a *activities) Run(t *testing.T, ctx context.Context) {
 	assert.NotNil(t, evs[8].GetTaskScheduled())
 	assert.Equal(t, "c", evs[8].GetTaskScheduled().GetName())
 	assert.Equal(t, a.workflow.Dapr().AppID(), evs[8].GetRouter().GetSourceAppID())
-	assert.NotNil(t, evs[9].GetOrchestratorStarted())
+	assert.NotNil(t, evs[9].GetWorkflowStarted())
 	assert.NotNil(t, evs[10].GetTaskCompleted())
 	assert.Equal(t, `"3"`, evs[10].GetTaskCompleted().GetResult().GetValue())
 	assert.Equal(t, a.workflow.Dapr().AppID(), evs[10].GetRouter().GetSourceAppID())
 
-	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[11].GetExecutionCompleted().GetOrchestrationStatus().String())
+	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[11].GetExecutionCompleted().GetWorkflowStatus().String())
 	assert.Equal(t, a.workflow.Dapr().AppID(), evs[11].GetRouter().GetSourceAppID())
 }

@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -50,17 +50,6 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 	h.bindingChan = [3]chan string{
 		make(chan string, 1), make(chan string, 1), make(chan string, 1),
 	}
-
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true`), 0o600))
 
 	h.resDir = t.TempDir()
 
@@ -112,7 +101,6 @@ spec:
 `), 0o600))
 
 	h.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(h.resDir),
 		daprd.WithAppPort(srv.Port()),
 	)

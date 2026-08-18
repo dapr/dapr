@@ -72,6 +72,31 @@ type ConnCloseStream struct {
 	Namespace string
 }
 
+// ConnCloseNamespace is sent by a namespace's connections loop when its last
+// stream has been removed. The connections loop owns the authoritative stream
+// set, so namespace deletion is driven by this confirmation rather than by
+// per-event counting alone, which a stray or duplicate close event could
+// otherwise corrupt into deleting a namespace that still has live streams.
+type ConnCloseNamespace struct {
+	*nsbase
+	Namespace string
+}
+
+type ConcurrencyRelease struct {
+	*connbase
+	GateKeys []string
+}
+
+// SchedulerInfoUpdate propagates the current scheduler cluster size and this
+// scheduler's index within it, pushed by the leadership loop whenever the host
+// list changes. Flows pool -> namespaces -> every connection loop.
+type SchedulerInfoUpdate struct {
+	*nsbase
+	*connbase
+	Count int32
+	Idx   int32
+}
+
 // Shutdown is the event for shutting down the scheduler loops.
 type Shutdown struct {
 	*nsbase

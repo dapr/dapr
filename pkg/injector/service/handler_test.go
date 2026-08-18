@@ -254,6 +254,44 @@ func TestHandleRequest(t *testing.T) {
 			true,
 		},
 		{
+			"TestSidecarInjectDefaultServiceAccountMatchesByName",
+			admissionv1.AdmissionReview{
+				Request: &admissionv1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						Username: "system:serviceaccount:kube-system:deployment-controller",
+					},
+					Object: runtime.RawExtension{Raw: podBytes},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			true,
+		},
+		{
+			"TestSidecarInjectDefaultServiceAccountNearMissDenied",
+			admissionv1.AdmissionReview{
+				Request: &admissionv1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						Username: "system:serviceaccount:kube-system:deployment-controller-extra",
+					},
+					Object: runtime.RawExtension{Raw: podBytes},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			false,
+		},
+		{
 			"TestSidecarInjectUserInfoNotMatchesServiceAccountPrefix",
 			admissionv1.AdmissionReview{
 				Request: &admissionv1.AdmissionRequest{
@@ -357,6 +395,211 @@ func TestHandleRequest(t *testing.T) {
 
 				assert.Equal(t, tc.expectPatched, len(ar.Response.Patch) > 0)
 			}
+		})
+	}
+}
+
+func TestHandleRequestWithAllowedServiceAccountsByName(t *testing.T) {
+	i, err := NewInjector(Options{
+		Config: Config{
+			SidecarImage:            "test-image",
+			Namespace:               "test-ns",
+			ControlPlaneTrustDomain: "test-trust-domain",
+			AllowedServiceAccounts:  "custom-ns:custom-sa",
+		},
+		DaprClient: fake.NewSimpleClientset(),
+		KubeClient: kubernetesfake.NewSimpleClientset(),
+		Healthz:    healthz.New(),
+	})
+	require.NoError(t, err)
+
+	injector := i.(*injector)
+	injector.currentTrustAnchors = func(context.Context) ([]byte, error) {
+		return nil, nil
+	}
+
+	podBytes, _ := json.Marshal(corev1.Pod{
+		TypeMeta: metav1.TypeMeta{Kind: "Pod", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-app", Namespace: "default",
+			CreationTimestamp: metav1.Time{Time: time.Now()},
+			Labels:            map[string]string{"app": "test-app"},
+			Annotations: map[string]string{
+				"dapr.io/enabled":  "true",
+				"dapr.io/app-id":   "test-app",
+				"dapr.io/app-port": "3000",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "main", Image: "docker.io/app:latest"}},
+		},
+	})
+
+	testCases := []struct {
+		testName      string
+		username      string
+		expectPatched bool
+	}{
+		{
+			"ConfiguredExactServiceAccountAllowed",
+			"system:serviceaccount:custom-ns:custom-sa",
+			true,
+		},
+		{
+			"ConfiguredExactServiceAccountWrongNameDenied",
+			"system:serviceaccount:custom-ns:other-sa",
+			false,
+		},
+		{
+			"ConfiguredExactServiceAccountWrongNamespaceDenied",
+			"system:serviceaccount:other-ns:custom-sa",
+			false,
+		},
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(injector.handleRequest))
+	t.Cleanup(ts.Close)
+
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			review := admissionv1.AdmissionReview{
+				Request: &admissionv1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo:  authenticationv1.UserInfo{Username: tc.username},
+					Object:    runtime.RawExtension{Raw: podBytes},
+				},
+			}
+			requestBytes, err := json.Marshal(review)
+			require.NoError(t, err)
+
+			resp, err := http.Post(ts.URL, runtime.ContentTypeJSON, bytes.NewBuffer(requestBytes))
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+
+			var ar admissionv1.AdmissionReview
+			err = json.Unmarshal(body, &ar)
+			require.NoError(t, err)
+
+			assert.Equal(t, tc.expectPatched, len(ar.Response.Patch) > 0)
+		})
+	}
+}
+
+func TestHandleRequestWithGlobPatterns(t *testing.T) {
+	i, err := NewInjector(Options{
+		Config: Config{
+			SidecarImage:            "test-image",
+			Namespace:               "test-ns",
+			ControlPlaneTrustDomain: "test-trust-domain",
+			AllowedServiceAccounts:  "proj-*:sa-[dt]*,staging-?:*",
+		},
+		DaprClient: fake.NewSimpleClientset(),
+		KubeClient: kubernetesfake.NewSimpleClientset(),
+		Healthz:    healthz.New(),
+	})
+	require.NoError(t, err)
+
+	injector := i.(*injector)
+	injector.currentTrustAnchors = func(context.Context) ([]byte, error) {
+		return nil, nil
+	}
+
+	podBytes, _ := json.Marshal(corev1.Pod{
+		TypeMeta: metav1.TypeMeta{Kind: "Pod", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-app", Namespace: "default",
+			CreationTimestamp: metav1.Time{Time: time.Now()},
+			Labels:            map[string]string{"app": "test-app"},
+			Annotations: map[string]string{
+				"dapr.io/enabled":  "true",
+				"dapr.io/app-id":   "test-app",
+				"dapr.io/app-port": "3000",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "main", Image: "docker.io/app:latest"}},
+		},
+	})
+
+	testCases := []struct {
+		testName      string
+		username      string
+		expectPatched bool
+	}{
+		{
+			"GlobMatchWildcardNamespaceAndCharClass",
+			"system:serviceaccount:proj-alpha:sa-deploy",
+			true,
+		},
+		{
+			"GlobMatchWildcardNamespaceAndCharClassT",
+			"system:serviceaccount:proj-beta:sa-test-runner",
+			true,
+		},
+		{
+			"GlobNoMatchCharClassMismatch",
+			"system:serviceaccount:proj-alpha:sa-xyz",
+			false,
+		},
+		{
+			"GlobMatchSingleCharNamespace",
+			"system:serviceaccount:staging-A:any-sa",
+			true,
+		},
+		{
+			"GlobNoMatchMultiCharNamespace",
+			"system:serviceaccount:staging-AB:any-sa",
+			false,
+		},
+		{
+			"GlobNoMatchWrongNamespace",
+			"system:serviceaccount:other-ns:sa-deploy",
+			false,
+		},
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(injector.handleRequest))
+	t.Cleanup(ts.Close)
+
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			review := admissionv1.AdmissionReview{
+				Request: &admissionv1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo:  authenticationv1.UserInfo{Username: tc.username},
+					Object:    runtime.RawExtension{Raw: podBytes},
+				},
+			}
+			requestBytes, err := json.Marshal(review)
+			require.NoError(t, err)
+
+			resp, err := http.Post(ts.URL, runtime.ContentTypeJSON, bytes.NewBuffer(requestBytes))
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+
+			var ar admissionv1.AdmissionReview
+			err = json.Unmarshal(body, &ar)
+			require.NoError(t, err)
+
+			assert.Equal(t, tc.expectPatched, len(ar.Response.Patch) > 0)
 		})
 	}
 }

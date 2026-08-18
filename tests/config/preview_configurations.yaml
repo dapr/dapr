@@ -36,14 +36,3 @@ spec:
       enabled: true
     - name: NotEnabled
       enabled: false
-
----
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: hotreloading
-spec:
-  features:
-    - name: HotReload
-      enabled: true
-

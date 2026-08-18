@@ -54,20 +54,22 @@ type Options struct {
 	KeepAliveTimeout  time.Duration
 	ReplicationFactor int64
 
-	DisseminateTimeout time.Duration
+	DisseminateTimeout        time.Duration
+	DisseminateCoalesceWindow time.Duration
 }
 
 type Server struct {
-	nodeID             string
-	port               int
-	listenAddress      string
-	leadership         *leadership.Leadership
-	sec                security.Handler
-	htarget            healthz.Target
-	keepAliveTime      time.Duration
-	keepAliveTimeout   time.Duration
-	replicationFactor  int64
-	disseminateTimeout time.Duration
+	nodeID                    string
+	port                      int
+	listenAddress             string
+	leadership                *leadership.Leadership
+	sec                       security.Handler
+	htarget                   healthz.Target
+	keepAliveTime             time.Duration
+	keepAliveTimeout          time.Duration
+	replicationFactor         int64
+	disseminateTimeout        time.Duration
+	disseminateCoalesceWindow time.Duration
 
 	authz *authorizer.Authorizer
 	loop  loop.Interface[loops.EventNamespace]
@@ -89,8 +91,9 @@ func New(opts Options) *Server {
 		authz: authorizer.New(authorizer.Options{
 			Security: opts.Security,
 		}),
-		replicationFactor:  opts.ReplicationFactor,
-		disseminateTimeout: opts.DisseminateTimeout,
+		replicationFactor:         opts.ReplicationFactor,
+		disseminateTimeout:        opts.DisseminateTimeout,
+		disseminateCoalesceWindow: opts.DisseminateCoalesceWindow,
 	}
 }
 
@@ -125,10 +128,11 @@ func (s *Server) Run(ctx context.Context) error {
 
 	ctx, cancel := context.WithCancelCause(ctx)
 	s.loop = namespaces.New(namespaces.Options{
-		CancelPool:           cancel,
-		ReplicationFactor:    s.replicationFactor,
-		Authorizer:           s.authz,
-		DisseminationTimeout: s.disseminateTimeout,
+		CancelPool:                  cancel,
+		ReplicationFactor:           s.replicationFactor,
+		Authorizer:                  s.authz,
+		DisseminationTimeout:        s.disseminateTimeout,
+		DisseminationCoalesceWindow: s.disseminateCoalesceWindow,
 	})
 
 	s.htarget.Ready()

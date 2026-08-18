@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -324,4 +325,34 @@ func TestElapsedSince(t *testing.T) {
 
 	elapsed := ElapsedSince(start)
 	assert.GreaterOrEqual(t, elapsed, float64(1000))
+}
+
+func TestDurationInMilliseconds(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration time.Duration
+		expected float64
+	}{
+		{
+			name:     "sub-millisecond",
+			duration: 500 * time.Microsecond,
+			expected: 0.5,
+		},
+		{
+			name:     "multiple milliseconds",
+			duration: 1500 * time.Microsecond,
+			expected: 1.5,
+		},
+		{
+			name:     "zero",
+			duration: 0,
+			expected: 0,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.InDelta(t, test.expected, durationInMilliseconds(test.duration), 1e-9)
+		})
+	}
 }

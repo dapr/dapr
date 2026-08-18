@@ -49,7 +49,6 @@ Dotnet-SDK - https://github.com/dapr/dotnet-sdk/milestone/tbd
 Js-SDK - https://github.com/dapr/js-sdk/milestone/tbd
 Go-SDK - https://github.com/dapr/go-sdk/milestone/tbd
 Rust-SDK - https://github.com/dapr/rust-sdk/milestone/tbd
-Dashboard - https://github.com/dapr/dashboard/milestone/tbd
 Quickstarts - https://github.com/dapr/quickstarts/milestone/tbd
 
 

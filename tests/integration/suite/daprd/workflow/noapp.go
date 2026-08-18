@@ -59,16 +59,16 @@ func (n *noapp) Run(t *testing.T, ctx context.Context) {
 	registry := task.NewTaskRegistry()
 
 	var called atomic.Bool
-	require.NoError(t, registry.AddOrchestratorN("noapp", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, registry.AddWorkflowN("noapp", func(ctx *task.WorkflowContext) (any, error) {
 		called.Store(true)
 		return nil, nil
 	}))
 	client := client.NewTaskHubGrpcClient(n.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorkItemListener(ctx, registry))
 
-	id, err := client.ScheduleNewOrchestration(ctx, "noapp")
+	id, err := client.ScheduleNewWorkflow(ctx, "noapp")
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	assert.True(t, called.Load())

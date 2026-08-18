@@ -20,11 +20,30 @@ import (
 	"sync/atomic"
 
 	internalloader "github.com/dapr/dapr/pkg/internal/loader"
+	"github.com/dapr/dapr/pkg/internal/loader/disk/dirdata"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
 )
+
+// generationCounter assigns a unique, monotonically increasing Generation to
+// every resource emitted by the disk hot-reload loader. This gives
+// self-hosted mode the same "newer vs older" semantics as Kubernetes'
+// metadata.generation, so the reconciler can reject out-of-order events.
+var generationCounter atomic.Int64
+
+// stampGeneration sets a monotonic Generation on each resource. The concrete
+// types (Component, Subscription, ...) embed metav1.ObjectMeta which exposes
+// SetGeneration via a pointer receiver; we use a generic type assertion so
+// this helper works for every resource type.
+func stampGeneration[T differ.Resource](resources []T) {
+	for i := range resources {
+		if setter, ok := any(&resources[i]).(interface{ SetGeneration(int64) }); ok {
+			setter.SetGeneration(generationCounter.Add(1))
+		}
+	}
+}
 
 // resource is a generic implementation of a disk resource loader. resource
 // will watch and load resources from disk.
@@ -32,7 +51,7 @@ type resource[T differ.Resource] struct {
 	store      store.Store[T]
 	diskLoader internalloader.Loader[T]
 
-	triggerCh chan struct{}
+	triggerCh chan *dirdata.DirData
 	closeCh   chan struct{}
 	closed    atomic.Bool
 	wg        sync.WaitGroup
@@ -51,7 +70,7 @@ func newResource[T differ.Resource](opts resourceOptions[T]) *resource[T] {
 	return &resource[T]{
 		store:      opts.store,
 		diskLoader: opts.loader,
-		triggerCh:  make(chan struct{}, 1),
+		triggerCh:  make(chan *dirdata.DirData, 1),
 		closeCh:    make(chan struct{}),
 		resultCh:   make(chan struct{}, 1),
 	}
@@ -59,10 +78,30 @@ func newResource[T differ.Resource](opts resourceOptions[T]) *resource[T] {
 
 // List returns the current list of resources loaded from disk.
 func (r *resource[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T], error) {
-	remotes, err := r.diskLoader.Load(ctx)
+	return r.list(ctx, nil)
+}
+
+// list returns the current list of resources. If dirData is non-nil, it uses
+// the pre-read file data instead of reading from disk.
+func (r *resource[T]) list(ctx context.Context, dirData *dirdata.DirData) (*differ.LocalRemoteResources[T], error) {
+	var remotes []T
+	var err error
+
+	if dirData != nil {
+		if ddl, ok := r.diskLoader.(dirdata.DirDataLoader[T]); ok {
+			remotes, err = ddl.LoadFromDirData(dirData)
+		} else {
+			remotes, err = r.diskLoader.Load(ctx)
+		}
+	} else {
+		remotes, err = r.diskLoader.Load(ctx)
+	}
+
 	if err != nil {
 		return nil, err
 	}
+
+	stampGeneration(remotes)
 
 	return &differ.LocalRemoteResources[T]{
 		Local:  r.store.List(),
@@ -134,10 +173,17 @@ func (r *resource[T]) sendEvents(ctx context.Context, conn *loader.StreamConn[T]
 	}
 }
 
-// trigger sends a trigger signal to process file changes.
-func (r *resource[T]) trigger(ctx context.Context) error {
+// trigger sends a trigger signal to process file changes. If dirData is
+// non-nil, the pre-read file data is used instead of re-reading files from
+// disk, avoiding file handle contention when multiple resource types are
+// loaded from the same directories.
+func (r *resource[T]) trigger(ctx context.Context, dirData ...*dirdata.DirData) error {
+	var data *dirdata.DirData
+	if len(dirData) > 0 {
+		data = dirData[0]
+	}
 	select {
-	case r.triggerCh <- struct{}{}:
+	case r.triggerCh <- data:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -153,17 +199,18 @@ func (r *resource[T]) run(ctx context.Context) error {
 	}()
 
 	for {
+		var dirData *dirdata.DirData
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-r.closeCh:
 			return nil
-		case <-r.triggerCh:
+		case dirData = <-r.triggerCh:
 		}
 
 		// List the resources which exist locally (those loaded already), and those
 		// which reside as in a resource file on disk.
-		resources, err := r.List(ctx)
+		resources, err := r.list(ctx, dirData)
 		if err != nil {
 			return fmt.Errorf("failed to load resources from disk: %s", err)
 		}

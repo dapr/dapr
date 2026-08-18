@@ -19,6 +19,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -30,6 +32,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
@@ -38,10 +41,12 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/retentioner"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -56,6 +61,7 @@ import (
 	"github.com/dapr/durabletask-go/backend/local"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/logger"
 )
 
@@ -66,7 +72,6 @@ const (
 	ActivityNameLabelKey    = "activity"
 	ExecutorNameLabelKey    = "executor"
 	RetentionerNameLabelKey = "retentioner"
-	ActorTypePrefix         = "dapr.internal."
 )
 
 type Options struct {
@@ -92,6 +97,15 @@ type Options struct {
 	WorkflowsRemoteActivityReminder bool
 
 	RetentionPolicy *config.WorkflowStateRetentionPolicy
+	Signer          *signer.Signer
+
+	// MaxRequestBodySize is the gRPC server max message size in bytes. The
+	// orchestrator uses it to detect and gracefully stall workflows whose
+	// history payload would exceed the GetWorkItems stream limit.
+	MaxRequestBodySize int
+
+	// May be nil when the WorkflowAccessPolicy feature is disabled.
+	WorkflowAccessPolicies *workflowacl.Holder
 }
 
 type Actors struct {
@@ -102,29 +116,47 @@ type Actors struct {
 	retentionerActorType string
 	executorActorType    string
 
-	pendingTasksBackend PendingTasksBackend
-	resiliency          resiliency.Provider
-	actors              actors.Interface
-	eventSink           orchestrator.EventSink
-	compStore           *compstore.ComponentStore
-	retentionPolicy     *config.WorkflowStateRetentionPolicy
+	pendingTasksBackend    PendingTasksBackend
+	resiliency             resiliency.Provider
+	actors                 actors.Interface
+	eventSink              orchestrator.EventSink
+	compStore              *compstore.ComponentStore
+	retentionPolicy        *config.WorkflowStateRetentionPolicy
+	signer                 *signer.Signer
+	maxRequestBodySize     int
+	workflowAccessPolicies *workflowacl.Holder
 
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
+	pendingCompletions              *pending.Pending
 
-	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
+	orchestrationWorkItemChan chan *backend.WorkflowWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
+
+	// lastEventNano is the highest external-event ingestion timestamp (unix
+	// nanoseconds) this backend has issued. It is used to hand out strictly
+	// monotonic, process-unique timestamps to external events so that the
+	// inbox dedup (dedup.IsDuplicateExternalEvent, keyed on event name and
+	// timestamp) can tell two distinct concurrent RaiseEvent calls apart.
+	lastEventNano atomic.Int64
 
 	stopped atomic.Bool
 }
 
-func New(opts Options) *Actors {
+func New(opts Options) (*Actors, error) {
 	var pendingTasksBackend PendingTasksBackend
+	var pendingCompletions *pending.Pending
 	if opts.EnableClusteredDeployment {
-		pendingTasksBackend = NewClusterTasksBackend(ClusterTasksBackendOptions{
+		pendingCompletions = pending.New()
+		var err error
+		pendingTasksBackend, err = NewClusterTasksBackend(ClusterTasksBackendOptions{
 			Actors:            opts.Actors,
 			ExecutorActorType: todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
+			Pending:           pendingCompletions,
 		})
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		pendingTasksBackend = local.NewTasksBackend()
 	}
@@ -140,14 +172,18 @@ func New(opts Options) *Actors {
 		resiliency:                opts.Resiliency,
 		pendingTasksBackend:       pendingTasksBackend,
 		compStore:                 opts.ComponentStore,
-		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
+		orchestrationWorkItemChan: make(chan *backend.WorkflowWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
 		eventSink:                 opts.EventSink,
 		retentionPolicy:           opts.RetentionPolicy,
+		signer:                    opts.Signer,
+		maxRequestBodySize:        opts.MaxRequestBodySize,
+		workflowAccessPolicies:    opts.WorkflowAccessPolicies,
 
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
-	}
+		pendingCompletions:              pendingCompletions,
+	}, nil
 }
 
 func (abe *Actors) RegisterActors(ctx context.Context) error {
@@ -158,14 +194,18 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 
 	actorTypeBuilder := common.NewActorTypeBuilder(abe.namespace)
 	oopts := orchestrator.Options{
-		AppID:              abe.appID,
-		WorkflowActorType:  abe.workflowActorType,
-		ActivityActorType:  abe.activityActorType,
-		Resiliency:         abe.resiliency,
-		Actors:             abe.actors,
-		RetentionActorType: abe.retentionerActorType,
-		RetentionPolicy:    abe.retentionPolicy,
-		Scheduler: func(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+		AppID:                  abe.appID,
+		Namespace:              abe.namespace,
+		WorkflowActorType:      abe.workflowActorType,
+		ActivityActorType:      abe.activityActorType,
+		Resiliency:             abe.resiliency,
+		Actors:                 abe.actors,
+		RetentionActorType:     abe.retentionerActorType,
+		RetentionPolicy:        abe.retentionPolicy,
+		Signer:                 abe.signer,
+		MaxRequestBodySize:     abe.maxRequestBodySize,
+		WorkflowAccessPolicies: abe.workflowAccessPolicies,
+		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
 			select {
@@ -181,6 +221,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 
 	aopts := activity.Options{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		ActivityActorType: abe.activityActorType,
 		WorkflowActorType: abe.workflowActorType,
 		Scheduler: func(ctx context.Context, wi *backend.ActivityWorkItem) error {
@@ -199,6 +240,8 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		},
 		Actors:                          abe.actors,
 		ActorTypeBuilder:                actorTypeBuilder,
+		WorkflowAccessPolicies:          abe.workflowAccessPolicies,
+		Signer:                          abe.signer,
 		WorkflowsRemoteActivityReminder: abe.workflowsRemoteActivityReminder,
 	}
 
@@ -220,6 +263,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		opts.Executor = &executor.Options{
 			ActorType: abe.executorActorType,
 			Actors:    abe.actors,
+			Pending:   abe.pendingCompletions,
 		}
 	}
 
@@ -253,9 +297,44 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 	return table.UnRegisterActorTypes(actorTypes...)
 }
 
+// requireActorStateStore gates the externally driven workflow operations
+// which enter through the actor router. While no actor state store is
+// configured the workflow actor types are not advertised to placement, so
+// routing would retry indefinitely instead of surfacing an error; fail fast
+// with the same error the state-reading paths return. The actor state store
+// can be hot reloaded, so this is evaluated per call.
+func (abe *Actors) requireActorStateStore() error {
+	if _, _, ok := abe.compStore.GetStateStoreActor(); !ok {
+		return messages.ErrActorRuntimeNotFound
+	}
+	return nil
+}
+
+// targetWorkflowActorType resolves the workflow actor type for a router
+// target, returning the local type when the target is empty or this app. The
+// app ID is validated here rather than trusting the caller: requests entering
+// through the durabletask gRPC service (rerun, and the client operations SDKs
+// can call directly) do not pass through the Universal API validation, and the
+// app ID is interpolated into the derived actor type name.
+func (abe *Actors) targetWorkflowActorType(target string) (string, error) {
+	if target == "" || target == abe.appID {
+		return abe.workflowActorType, nil
+	}
+
+	if !common.ValidAppID(target) {
+		return "", messages.ErrInvalidWorkflowAppID.WithFormat(target)
+	}
+
+	return common.NewActorTypeBuilder(abe.namespace).Workflow(target), nil
+}
+
 // RerunWorkflowFromEvent implements backend.Backend and reruns a workflow from
 // a specific event ID.
 func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.RerunWorkflowFromEventRequest) (api.InstanceID, error) {
+	if err := abe.requireActorStateStore(); err != nil {
+		return "", err
+	}
+
 	if len(req.GetSourceInstanceID()) == 0 {
 		return "", status.Error(codes.InvalidArgument, "rerun workflow source instance ID is required")
 	}
@@ -273,13 +352,21 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 		return "", status.Error(codes.InvalidArgument, "rerun workflow instance ID must be different from the original instance ID")
 	}
 
+	// A router targeting another app means the source instance (and therefore
+	// the forked instance) lives on that app: fork on its workflow actor. The
+	// subsequent RerunWorkflowInstance hop is a same-app self-call there.
+	actorType, err := abe.targetWorkflowActorType(req.GetRouter().GetTargetAppID())
+	if err != nil {
+		return "", err
+	}
+
 	requestBytes, err := proto.Marshal(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal RerunWorkflowFromEvent: %w", err)
 	}
 
 	areq := internalsv1pb.NewInternalInvokeRequest(todo.ForkWorkflowHistory).
-		WithActor(abe.workflowActorType, req.GetSourceInstanceID()).
+		WithActor(actorType, req.GetSourceInstanceID()).
 		WithData(requestBytes).
 		WithContentType(invokev1.ProtobufContentType)
 
@@ -296,29 +383,41 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 	return api.InstanceID(req.GetNewInstanceID()), nil
 }
 
-// CreateOrchestrationInstance implements backend.Backend and creates a new workflow instance.
+// CreateWorkflowInstance implements backend.Backend and creates a new workflow instance.
 //
 // Internally, creating a workflow instance also creates a new actor with the same ID. The create
 // request is saved into the actor's "inbox" and then executed via a reminder thread. If the app is
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
-func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent, opts ...backend.OrchestrationIdReusePolicyOptions) error {
+func (abe *Actors) CreateWorkflowInstance(ctx context.Context, e *backend.HistoryEvent) error {
+	if err := abe.requireActorStateStore(); err != nil {
+		return err
+	}
+
 	var workflowInstanceID string
 
 	if es := e.GetExecutionStarted(); es == nil {
 		return errors.New("the history event must be an ExecutionStartedEvent")
-	} else if oi := es.GetOrchestrationInstance(); oi == nil {
+	} else if oi := es.GetWorkflowInstance(); oi == nil {
 		return errors.New("the ExecutionStartedEvent did not contain orchestration instance information")
 	} else {
 		workflowInstanceID = oi.GetInstanceId()
 	}
 
-	policy := &api.OrchestrationIdReusePolicy{}
-	for _, opt := range opts {
-		opt(policy)
+	// Stamp the local app as the source before marshalling, mirroring the
+	// child-workflow path: the target uses SourceAppID for access policy
+	// decisions and for routing completions back to the caller.
+	if r := e.GetRouter(); r != nil && r.GetSourceAppID() == "" {
+		r.SourceAppID = abe.appID
+	}
+
+	// A router targeting another app schedules the workflow on that app's
+	// workflow actor rather than the local one.
+	actorType, err := abe.targetWorkflowActorType(e.GetRouter().GetTargetAppID())
+	if err != nil {
+		return err
 	}
 
 	requestBytes, err := proto.Marshal(&backend.CreateWorkflowInstanceRequest{
-		Policy:     policy,
 		StartEvent: e,
 	})
 	if err != nil {
@@ -329,7 +428,7 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 	// this invocation request. Note that this request goes directly to the actor
 	// runtime.
 	req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
-		WithActor(abe.workflowActorType, workflowInstanceID).
+		WithActor(actorType, workflowInstanceID).
 		WithData(requestBytes).
 		WithContentType(invokev1.ProtobufContentType)
 	start := time.Now()
@@ -367,18 +466,22 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 	return nil
 }
 
-// GetOrchestrationMetadata implements backend.Backend
-func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*backend.OrchestrationMetadata, error) {
-	state, err := abe.loadInternalState(ctx, id)
+// GetWorkflowMetadata implements backend.Backend
+func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID, router *protos.TaskRouter) (*backend.WorkflowMetadata, error) {
+	if target := router.GetTargetAppID(); target != "" && target != abe.appID {
+		return abe.getWorkflowMetadataRemote(ctx, id, target)
+	}
+
+	wstate, err := abe.loadInternalState(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	if state == nil {
+	if wstate == nil {
 		return nil, api.ErrInstanceNotFound
 	}
 
-	rstate := runtimestate.NewOrchestrationRuntimeState(string(id), state.CustomStatus, state.History)
+	rstate := runtimestate.NewWorkflowRuntimeState(string(id), wstate.CustomStatus, wstate.History)
 
 	name, _ := runtimestate.Name(rstate)
 	createdAt, _ := runtimestate.CreatedTime(rstate)
@@ -387,17 +490,80 @@ func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.Instance
 	output, _ := runtimestate.Output(rstate)
 	failureDetuils, _ := runtimestate.FailureDetails(rstate)
 
-	return &backend.OrchestrationMetadata{
+	var startedAt *timestamppb.Timestamp
+	if t := runtimestate.GetStartedTime(rstate); !t.IsZero() {
+		startedAt = timestamppb.New(t)
+	}
+
+	return &backend.WorkflowMetadata{
 		InstanceId:     string(id),
 		Name:           name,
 		RuntimeStatus:  runtimestate.RuntimeStatus(rstate),
 		CreatedAt:      timestamppb.New(createdAt),
+		StartedAt:      startedAt,
 		LastUpdatedAt:  timestamppb.New(lastUpdated),
 		Input:          input,
 		Output:         output,
 		CustomStatus:   rstate.GetCustomStatus(),
 		FailureDetails: failureDetuils,
+		Version:        state.WorkflowVersion(rstate.GetOldEvents()),
 	}, nil
+}
+
+// getWorkflowMetadataRemote fetches metadata for an instance owned by another
+// app via a one-shot WaitForRuntimeStatus stream on its workflow actor. The
+// MetadataFetchOnly flag makes the target reply immediately (or with
+// not-found) instead of parking the stream; an older target daprd ignores the
+// flag and this degrades to waiting for the next status change.
+func (abe *Actors) getWorkflowMetadataRemote(ctx context.Context, id api.InstanceID, targetAppID string) (*backend.WorkflowMetadata, error) {
+	actorType, err := abe.targetWorkflowActorType(targetAppID)
+	if err != nil {
+		return nil, err
+	}
+
+	actorRouter, err := abe.actors.Router(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	req := internalsv1pb.
+		NewInternalInvokeRequest(todo.WaitForRuntimeStatus).
+		WithActor(actorType, string(id)).
+		WithContentType(invokev1.ProtobufContentType).
+		WithMetadata(map[string][]string{
+			todo.MetadataFetchOnly: {"true"},
+		})
+
+	var meta *backend.WorkflowMetadata
+	err = actorRouter.CallStream(ctx, req, func(resp *internalsv1pb.InternalInvokeResponse) (bool, error) {
+		// Nonexistence arrives as a not-found status rather than a stream
+		// error, which the actor routers would retry as transient.
+		if resp.GetStatus().GetCode() == http.StatusNotFound {
+			return true, nil
+		}
+		data := resp.GetMessage().GetData()
+		if data == nil {
+			return false, fmt.Errorf("workflow metadata response from app '%s' has status %d and no payload", targetAppID, resp.GetStatus().GetCode())
+		}
+		var m backend.WorkflowMetadata
+		if perr := data.UnmarshalTo(&m); perr != nil {
+			return false, perr
+		}
+		meta = &m
+		return true, nil
+	})
+	if err != nil {
+		// Actor invocations carry errors as wire strings; normalise not-found
+		// so callers can rely on errors.Is.
+		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
+			return nil, api.ErrInstanceNotFound
+		}
+		return nil, err
+	}
+	if meta == nil {
+		return nil, api.ErrInstanceNotFound
+	}
+	return meta, nil
 }
 
 // AbandonActivityWorkItem implements backend.Backend. It gets called by durabletask-go when there is
@@ -413,9 +579,9 @@ func (*Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.Activity
 	return nil
 }
 
-// AbandonOrchestrationWorkItem implements backend.Backend. It gets called by durabletask-go when there is
+// AbandonWorkflowWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow orchestration execution pipeline.
-func (*Actors) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+func (*Actors) AbandonWorkflowWorkItem(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 	log.Warnf("%s: aborting workflow execution", wi.InstanceID)
 
 	// Sending false signals the waiting workflow actor to abort the workflow execution.
@@ -427,8 +593,34 @@ func (*Actors) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.Orc
 	return nil
 }
 
-// AddNewOrchestrationEvent implements backend.Backend and sends the event e to the workflow actor identified by id.
-func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.InstanceID, e *backend.HistoryEvent) error {
+// AddNewWorkflowEvent implements backend.Backend and sends the event e to the workflow actor identified by id.
+func (abe *Actors) AddNewWorkflowEvent(ctx context.Context, id api.InstanceID, e *backend.HistoryEvent) error {
+	if err := abe.requireActorStateStore(); err != nil {
+		return err
+	}
+
+	// External events (RaiseEvent) are stamped with a wall-clock timestamp by
+	// the caller and deduped downstream by (event name, timestamp). Two
+	// RaiseEvent calls racing on the same wall-clock nanosecond would then be
+	// indistinguishable and one would be wrongly dropped as a redelivery. Give
+	// each external event a strictly monotonic, process-unique ingestion
+	// timestamp here, at the single point where it enters the actor backend, so
+	// distinct events never collide while a genuine redelivery (the same
+	// already-marshalled bytes resent on actor-call retry) keeps its timestamp.
+	if e.GetEventRaised() != nil {
+		e.Timestamp = abe.uniqueEventTimestamp()
+	}
+
+	// If the event carries a router with a foreign target app ID (e.g. a
+	// recursive ExecutionTerminated for a cross-app sub-orchestrator), the
+	// event must reach the workflow actor in that other app rather than the
+	// local one. Otherwise the local actor reports "no such instance" and
+	// retries forever.
+	actorType, err := abe.targetWorkflowActorType(e.GetRouter().GetTargetAppID())
+	if err != nil {
+		return err
+	}
+
 	data, err := proto.Marshal(e)
 	if err != nil {
 		return err
@@ -437,7 +629,7 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
 	req := internalsv1pb.
 		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
-		WithActor(abe.workflowActorType, string(id)).
+		WithActor(actorType, string(id)).
 		WithData(data).
 		WithContentType(invokev1.OctetStreamContentType)
 
@@ -461,6 +653,25 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 	return nil
 }
 
+// uniqueEventTimestamp returns a timestamp that is strictly greater than any
+// previously returned by this backend, so that concurrently ingested external
+// events are never assigned the same value. It clamps to wall-clock time when
+// the clock has advanced and otherwise increments the last issued value by a
+// nanosecond, keeping drift negligible under contention.
+func (abe *Actors) uniqueEventTimestamp() *timestamppb.Timestamp {
+	now := time.Now().UnixNano()
+	for {
+		prev := abe.lastEventNano.Load()
+		next := now
+		if next <= prev {
+			next = prev + 1
+		}
+		if abe.lastEventNano.CompareAndSwap(prev, next) {
+			return timestamppb.New(time.Unix(0, next))
+		}
+	}
+}
+
 // CompleteActivityWorkItem implements backend.Backend
 func (*Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
 	// Sending true signals the waiting activity actor to complete the execution normally.
@@ -468,8 +679,8 @@ func (*Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.Activit
 	return nil
 }
 
-// CompleteOrchestrationWorkItem implements backend.Backend
-func (*Actors) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+// CompleteWorkflowWorkItem implements backend.Backend
+func (*Actors) CompleteWorkflowWorkItem(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 	// Sending true signals the waiting workflow actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil
@@ -485,8 +696,8 @@ func (*Actors) DeleteTaskHub(context.Context) error {
 	return errors.New("not supported")
 }
 
-// GetOrchestrationRuntimeState implements backend.Backend
-func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backend.OrchestrationWorkItem) (*backend.OrchestrationRuntimeState, error) {
+// GetWorkflowRuntimeState implements backend.Backend
+func (abe *Actors) GetWorkflowRuntimeState(ctx context.Context, owi *backend.WorkflowWorkItem) (*backend.WorkflowRuntimeState, error) {
 	state, err := abe.loadInternalState(ctx, owi.InstanceID)
 	if err != nil {
 		return nil, err
@@ -496,13 +707,21 @@ func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backen
 		return nil, api.ErrInstanceNotFound
 	}
 
-	runtimeState := runtimestate.NewOrchestrationRuntimeState(string(owi.InstanceID), state.CustomStatus, state.History)
+	runtimeState := runtimestate.NewWorkflowRuntimeState(string(owi.InstanceID), state.CustomStatus, state.History)
 
 	return runtimeState, nil
 }
 
-func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.InstanceID, condition func(*backend.OrchestrationMetadata) bool) error {
-	log.Debugf("Actor backend streaming OrchestrationRuntimeStatus %s", id)
+func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.InstanceID, taskRouter *protos.TaskRouter, condition func(*backend.WorkflowMetadata) bool) error {
+	log.Debugf("Actor backend streaming WorkflowRuntimeStatus %s", id)
+
+	// A router targeting another app watches that app's workflow actor. This
+	// backs cross-app WaitForWorkflowStart/Completion (e.g. a cross-app
+	// schedule returns only once the instance has started on the target app).
+	actorType, err := abe.targetWorkflowActorType(taskRouter.GetTargetAppID())
+	if err != nil {
+		return err
+	}
 
 	router, err := abe.actors.Router(ctx)
 	if err != nil {
@@ -511,11 +730,11 @@ func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.I
 
 	req := internalsv1pb.
 		NewInternalInvokeRequest(todo.WaitForRuntimeStatus).
-		WithActor(abe.workflowActorType, string(id)).
+		WithActor(actorType, string(id)).
 		WithContentType(invokev1.ProtobufContentType)
 
 	err = router.CallStream(ctx, req, func(resp *internalsv1pb.InternalInvokeResponse) (bool, error) {
-		var meta backend.OrchestrationMetadata
+		var meta backend.WorkflowMetadata
 		perr := resp.GetMessage().GetData().UnmarshalTo(&meta)
 		if perr != nil {
 			log.Errorf("Failed to unmarshal orchestration metadata: %s", perr)
@@ -525,34 +744,127 @@ func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.I
 		return condition(&meta), nil
 	})
 	if err != nil {
+		// Actor invocations carry errors as wire strings; normalise not-found
+		// so callers can rely on errors.Is.
+		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
+			return api.ErrInstanceNotFound
+		}
 		return err
 	}
 
 	return nil
 }
 
-// PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
-func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceID, force bool) error {
+// PurgeWorkflowState implements backend.Backend.
+//
+// When router is nil or targets the local app, this is a single-instance
+// purge of id (recursive is ignored, the driver walks children itself) and
+// returns 1 on success.
+//
+// When router carries a foreign TargetAppID the instance lives on that app,
+// so we delegate via an actor invocation: recursively when recursive is true
+// (always the case for cross-app children reached by the recursive purge
+// driver), the remote daprd's workflow actor handles its own subtree and
+// returns the count. Mirrors the "each app handles its own subtree" model
+// that recursive terminate already uses.
+//
+// The recursive flag is only ever set together with a foreign router (the
+// driver walks local descendants itself), so the remote delegation path
+// above already covers it and it needs no separate handling here.
+func (abe *Actors) PurgeWorkflowState(ctx context.Context, id api.InstanceID, router *protos.TaskRouter, recursive bool, force bool) (int, error) {
+	if err := abe.requireActorStateStore(); err != nil {
+		return 0, err
+	}
+
 	start := time.Now()
 
-	var err error
-	if force {
-		err = abe.purgeWorkflowForce(ctx, id)
-	} else {
-		err = abe.purgeWorkflow(ctx, id)
-	}
+	count, err := abe.purgeWorkflowState(ctx, id, router, recursive, force)
 
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
-		// failed request to PURGE WORKFLOW, record latency and count metrics.
 		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusFailed, elapsed)
-		return err
+		return 0, err
 	}
 
-	// successful request to PURGE WORKFLOW, record latency and count metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusSuccess, elapsed)
+	return count, nil
+}
 
-	return nil
+func (abe *Actors) purgeWorkflowState(ctx context.Context, id api.InstanceID, router *protos.TaskRouter, recursive bool, force bool) (int, error) {
+	if target := router.GetTargetAppID(); target != "" && target != abe.appID {
+		return abe.purgeWorkflowRemote(ctx, id, target, recursive, force)
+	}
+
+	if force {
+		if err := abe.purgeWorkflowForce(ctx, id); err != nil {
+			return 0, err
+		}
+	} else {
+		if err := abe.purgeWorkflow(ctx, id); err != nil {
+			return 0, err
+		}
+	}
+
+	return 1, nil
+}
+
+// purgeWorkflowRemote dispatches a purge actor invocation to the workflow
+// actor on the target app and decodes the count of instances purged.
+func (abe *Actors) purgeWorkflowRemote(ctx context.Context, id api.InstanceID, targetAppID string, recursive bool, force bool) (int, error) {
+	actorType, err := abe.targetWorkflowActorType(targetAppID)
+	if err != nil {
+		return 0, err
+	}
+
+	actorRouter, err := abe.actors.Router(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	if !recursive {
+		// Force purge is a backend-local state store operation that the plain
+		// purge actor method does not implement.
+		if force {
+			return 0, errors.New("cross-app purge does not support force without recursive")
+		}
+		req := internalsv1pb.
+			NewInternalInvokeRequest(todo.PurgeWorkflowStateMethod).
+			WithActor(actorType, string(id))
+		if _, err = actorRouter.Call(ctx, req); err != nil {
+			if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
+				return 0, api.ErrInstanceNotFound
+			}
+			return 0, err
+		}
+		return 1, nil
+	}
+
+	req := internalsv1pb.
+		NewInternalInvokeRequest(todo.RecursivePurgeWorkflowStateMethod).
+		WithActor(actorType, string(id))
+
+	if force {
+		req = req.WithMetadata(map[string][]string{
+			todo.MetadataPurgeForce: {"true"},
+		})
+	}
+
+	resp, err := actorRouter.Call(ctx, req)
+	if err != nil {
+		// Actor invocations carry errors as wire strings, so api.ErrInstanceNotFound
+		// from the remote handler arrives unwrapped. Normalise so callers
+		// (durabletask-go's recursive driver) can rely on errors.Is.
+		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
+			return 0, api.ErrInstanceNotFound
+		}
+		return 0, err
+	}
+
+	respProto := new(protos.PurgeInstancesResponse)
+	if err := proto.Unmarshal(resp.GetMessage().GetData().GetValue(), respProto); err != nil {
+		return 0, fmt.Errorf("failed to decode recursive purge response: %w", err)
+	}
+	return int(respProto.GetDeletedInstanceCount()), nil
 }
 
 // Start implements backend.Backend
@@ -577,27 +889,35 @@ func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*s
 	if err != nil {
 		return nil, err
 	}
+	if astate == nil {
+		return nil, messages.ErrActorRuntimeNotFound
+	}
 
-	// actor id is workflow instance id
-	state, err := state.LoadWorkflowState(ctx, astate, string(id), state.Options{
+	// actor id is workflow instance id. Tamper recovery (appending the
+	// terminal failed event) is the orchestrator actor's responsibility, not
+	// the read path's — readers surface the verification error to clients
+	// and let them detect it.
+	wstate, err := state.LoadWorkflowState(ctx, astate, string(id), state.Options{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
+		Signer:            abe.signer,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	if state == nil {
+	if wstate == nil {
 		// No such state exists in the state store
 		return nil, nil
 	}
 
-	return state, nil
+	return wstate, nil
 }
 
-// NextOrchestrationWorkItem implements backend.Backend
-func (abe *Actors) NextOrchestrationWorkItem(ctx context.Context) (*backend.OrchestrationWorkItem, error) {
+// NextWorkflowWorkItem implements backend.Backend
+func (abe *Actors) NextWorkflowWorkItem(ctx context.Context) (*backend.WorkflowWorkItem, error) {
 	// Wait for the workflow actor to signal us with some work to do
 	select {
 	case wi := <-abe.orchestrationWorkItemChan:
@@ -629,6 +949,10 @@ func (abe *Actors) ActivityActorType() string {
 	return abe.activityActorType
 }
 
+func (abe *Actors) WorkflowActorType() string {
+	return abe.workflowActorType
+}
+
 // CancelActivityTask implements backend.Backend.
 func (abe *Actors) CancelActivityTask(ctx context.Context, instanceID api.InstanceID, taskID int32) error {
 	return abe.callWithBackoff(ctx, func() error {
@@ -636,10 +960,10 @@ func (abe *Actors) CancelActivityTask(ctx context.Context, instanceID api.Instan
 	})
 }
 
-// CancelOrchestratorTask implements backend.Backend.
-func (abe *Actors) CancelOrchestratorTask(ctx context.Context, instanceID api.InstanceID) error {
+// CancelWorkflowTask implements backend.Backend.
+func (abe *Actors) CancelWorkflowTask(ctx context.Context, instanceID api.InstanceID) error {
 	return abe.callWithBackoff(ctx, func() error {
-		return abe.pendingTasksBackend.CancelOrchestratorTask(ctx, instanceID)
+		return abe.pendingTasksBackend.CancelWorkflowTask(ctx, instanceID)
 	})
 }
 
@@ -650,10 +974,10 @@ func (abe *Actors) CompleteActivityTask(ctx context.Context, response *protos.Ac
 	})
 }
 
-// CompleteOrchestratorTask implements backend.Backend.
-func (abe *Actors) CompleteOrchestratorTask(ctx context.Context, response *protos.OrchestratorResponse) error {
+// CompleteWorkflowTask implements backend.Backend.
+func (abe *Actors) CompleteWorkflowTask(ctx context.Context, response *protos.WorkflowResponse) error {
 	return abe.callWithBackoff(ctx, func() error {
-		return abe.pendingTasksBackend.CompleteOrchestratorTask(ctx, response)
+		return abe.pendingTasksBackend.CompleteWorkflowTask(ctx, response)
 	})
 }
 
@@ -689,9 +1013,9 @@ func (abe *Actors) WaitForActivityCompletion(request *protos.ActivityRequest) fu
 	return abe.pendingTasksBackend.WaitForActivityCompletion(request)
 }
 
-// WaitForOrchestratorCompletion implements backend.Backend.
-func (abe *Actors) WaitForOrchestratorCompletion(request *protos.OrchestratorRequest) func(context.Context) (*protos.OrchestratorResponse, error) {
-	return abe.pendingTasksBackend.WaitForOrchestratorCompletion(request)
+// WaitForWorkflowTaskCompletion implements backend.Backend.
+func (abe *Actors) WaitForWorkflowTaskCompletion(request *protos.WorkflowRequest) func(context.Context) (*protos.WorkflowResponse, error) {
+	return abe.pendingTasksBackend.WaitForWorkflowTaskCompletion(request)
 }
 
 func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstanceIDsRequest) (*protos.ListInstanceIDsResponse, error) {
@@ -717,11 +1041,16 @@ func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstan
 	if err != nil {
 		return nil, err
 	}
+	if ss == nil {
+		return nil, messages.ErrActorRuntimeNotFound
+	}
 
 	resp, err := state.LoadWorkflowState(ctx, ss, req.GetInstanceId(), state.Options{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
+		Signer:            abe.signer,
 	})
 	if err != nil {
 		return nil, err
@@ -758,6 +1087,9 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 	astate, err := abe.actors.State(ctx)
 	if err != nil {
 		return err
+	}
+	if astate == nil {
+		return messages.ErrActorRuntimeNotFound
 	}
 
 	s, err := state.LoadWorkflowState(ctx, astate, id.String(), state.Options{

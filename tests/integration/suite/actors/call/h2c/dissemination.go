@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
+	"golang.org/x/net/http2/h2c" //nolint:staticcheck
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
@@ -90,7 +90,7 @@ func (h *dissemination) Setup(t *testing.T) []framework.Option {
 		w.Write([]byte(`{"key":"value"}`))
 	})
 
-	h2cHandler := h2c.NewHandler(handler, &http2.Server{})
+	h2cHandler := h2c.NewHandler(handler, &http2.Server{}) //nolint:staticcheck
 	srv := prochttp.New(t, prochttp.WithHandler(h2cHandler))
 
 	peerHandler := nethttp.NewServeMux()
@@ -109,7 +109,7 @@ func (h *dissemination) Setup(t *testing.T) []framework.Option {
 		w.WriteHeader(nethttp.StatusOK)
 		w.Write([]byte(`{"key":"value"}`))
 	})
-	peerH2cHandler := h2c.NewHandler(peerHandler, &http2.Server{})
+	peerH2cHandler := h2c.NewHandler(peerHandler, &http2.Server{}) //nolint:staticcheck
 	peerSrv := prochttp.New(t, prochttp.WithHandler(peerH2cHandler))
 
 	h.place = placement.New(t)

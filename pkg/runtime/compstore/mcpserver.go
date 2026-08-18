@@ -13,7 +13,9 @@ limitations under the License.
 
 package compstore
 
-import mcpserverv1alpha1 "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+import (
+	mcpserverv1alpha1 "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+)
 
 // GetMCPServer returns the MCPServer with the given name, if it exists.
 func (c *ComponentStore) GetMCPServer(name string) (mcpserverv1alpha1.MCPServer, bool) {

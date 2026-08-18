@@ -62,15 +62,6 @@ spec:
 
 	n.daprd = daprd.New(t,
 		daprd.WithResourcesDir(n.dir),
-		daprd.WithConfigManifests(t, `
-apiVersion: dapr.io/v1alpha1
-kind: Configun
-metadata:
-  name: hotreloading
-spec:
-  features:
-  - name: HotReload
-    enabled: true`),
 	)
 
 	return []framework.Option{

@@ -49,7 +49,7 @@ func (f *fanout) Run(t *testing.T, ctx context.Context) {
 	f.workflow.WaitUntilRunning(t, ctx)
 
 	var act atomic.Int64
-	f.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	f.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		as := make([]task.Task, 5)
 		for i := range 3 {
 			as[i] = ctx.CallActivity("bar")
@@ -72,23 +72,23 @@ func (f *fanout) Run(t *testing.T, ctx context.Context) {
 	})
 	client := f.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
+	id, err := client.ScheduleNewWorkflow(ctx, "foo", api.WithInstanceID("abc"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, int64(8), act.Load())
 
 	act.Store(0)
 	newID, err := client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc"), 3)
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(5), act.Load())
 
 	act.Store(0)
 	newID, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc"), 4)
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, act.Load(), int64(4))
 }

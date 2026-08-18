@@ -210,6 +210,30 @@ func New(t *testing.T, fopts ...Option) *Operator {
 				}
 			}
 		},
+		configurationUpdateFn: func(_ *operatorv1.ConfigurationUpdateRequest, srv operatorv1.Operator_ConfigurationUpdateServer) error {
+			select {
+			case <-srv.Context().Done():
+				return nil
+			case <-o.closech:
+				return errors.New("operator closed")
+			}
+		},
+		httpEndpointUpdateFn: func(_ *operatorv1.HTTPEndpointUpdateRequest, srv operatorv1.Operator_HTTPEndpointUpdateServer) error {
+			select {
+			case <-srv.Context().Done():
+				return nil
+			case <-o.closech:
+				return errors.New("operator closed")
+			}
+		},
+		resiliencyUpdateFn: func(_ *operatorv1.ResiliencyUpdateRequest, srv operatorv1.Operator_ResiliencyUpdateServer) error {
+			select {
+			case <-srv.Context().Done():
+				return nil
+			case <-o.closech:
+				return errors.New("operator closed")
+			}
+		},
 	}
 
 	for _, fopt := range fopts {
@@ -251,18 +275,22 @@ func New(t *testing.T, fopts ...Option) *Operator {
 		}),
 		procgrpc.WithRegister(func(s *grpc.Server) {
 			srv := &server{
-				componentUpdateFn:     opts.componentUpdateFn,
-				getConfigurationFn:    opts.getConfigurationFn,
-				getResiliencyFn:       opts.getResiliencyFn,
-				httpEndpointUpdateFn:  opts.httpEndpointUpdateFn,
-				listComponentsFn:      opts.listComponentsFn,
-				listHTTPEndpointsFn:   opts.listHTTPEndpointsFn,
-				listMCPServersFn:      opts.listMCPServersFn,
-				listResiliencyFn:      opts.listResiliencyFn,
-				listSubscriptionsFn:   opts.listSubscriptionsFn,
-				listSubscriptionsV2Fn: opts.listSubscriptionsV2Fn,
-				mcpServerUpdateFn:     opts.mcpServerUpdateFn,
-				subscriptionUpdateFn:  opts.subscriptionUpdateFn,
+				componentUpdateFn:            opts.componentUpdateFn,
+				configurationUpdateFn:        opts.configurationUpdateFn,
+				getConfigurationFn:           opts.getConfigurationFn,
+				getResiliencyFn:              opts.getResiliencyFn,
+				httpEndpointUpdateFn:         opts.httpEndpointUpdateFn,
+				listComponentsFn:             opts.listComponentsFn,
+				listHTTPEndpointsFn:          opts.listHTTPEndpointsFn,
+				listMCPServersFn:             opts.listMCPServersFn,
+				listResiliencyFn:             opts.listResiliencyFn,
+				listSubscriptionsFn:          opts.listSubscriptionsFn,
+				listSubscriptionsV2Fn:        opts.listSubscriptionsV2Fn,
+				mcpServerUpdateFn:            opts.mcpServerUpdateFn,
+				resiliencyUpdateFn:           opts.resiliencyUpdateFn,
+				subscriptionUpdateFn:         opts.subscriptionUpdateFn,
+				listWorkflowAccessPoliciesFn: opts.listWorkflowAccessPoliciesFn,
+				workflowAccessPolicyUpdateFn: opts.workflowAccessPolicyUpdateFn,
 			}
 
 			operatorv1.RegisterOperatorServer(s, srv)
@@ -358,8 +386,24 @@ func (o *Operator) AddMCPServers(servers ...mcpserverapi.MCPServer) {
 	o.currentMCPServers = append(o.currentMCPServers, servers...)
 }
 
+// SetMCPServers sets the list of installed MCPServers.
+func (o *Operator) SetMCPServers(servers ...mcpserverapi.MCPServer) {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+	o.currentMCPServers = servers
+}
+
 func (o *Operator) MCPServerUpdateEvent(t *testing.T, ctx context.Context, event *MCPServerUpdateEvent) {
 	t.Helper()
+
+	// daprd's watch stream registers asynchronously to its readiness; fanning
+	// out to zero subscribers would silently drop the event.
+	require.Eventually(t, func() bool {
+		o.lock.Lock()
+		defer o.lock.Unlock()
+		return len(o.srvMCPUpdateCh) > 0
+	}, time.Second*10, time.Millisecond*10, "no MCPServerUpdate stream subscribed")
+
 	o.lock.Lock()
 	defer o.lock.Unlock()
 

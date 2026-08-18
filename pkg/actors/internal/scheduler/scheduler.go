@@ -100,8 +100,9 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 			FailurePolicy: reminder.FailurePolicy,
 		},
 		Metadata: &schedulerv1pb.JobMetadata{
-			AppId:     s.appID,
-			Namespace: s.namespace,
+			AppId:          s.appID,
+			Namespace:      s.namespace,
+			ConcurrencyKey: reminder.ConcurrencyKey,
 			Target: &schedulerv1pb.JobTargetMetadata{
 				Type: &schedulerv1pb.JobTargetMetadata_Actor{
 					Actor: &schedulerv1pb.TargetActorReminder{
@@ -185,7 +186,7 @@ func (s *scheduler) Get(ctx context.Context, req *api.GetReminderRequest) (*api.
 
 	var expirationTime time.Time
 	if job.Job.Ttl != nil {
-		expirationTime, err = time.Parse(time.RFC3339, job.GetJob().GetTtl())
+		expirationTime, err = time.Parse(time.RFC3339Nano, job.GetJob().GetTtl())
 		if err != nil {
 			log.Errorf("Error parsing expiration time for reminder job %s due to: %s", req.Name, err)
 		}
