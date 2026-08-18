@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
@@ -83,18 +84,29 @@ func WithTags(name string, opts ...any) []tag.Mutator {
 			continue
 		}
 
-		if len(metricsRules) > 0 {
-			pairs := metricsRules[strings.ReplaceAll(name, "_", "/")+key.Name()]
-
-			for _, p := range pairs {
-				value = p.regex.ReplaceAllString(value, p.replace)
-			}
-		}
-
-		tagMutators = append(tagMutators, tag.Upsert(key, value))
+		tagMutators = append(tagMutators, tag.Upsert(key, NormalizeTagValue(name, key, value)))
 	}
 	return tagMutators
 }
+
+// NormalizeTagValue applies the configured metric rules (regex label
+// rewrites) for the measure and tag key to value, exactly as the per-record
+// WithTags path does.
+func NormalizeTagValue(name string, key tag.Key, value string) string {
+	if len(metricsRules) == 0 {
+		return value
+	}
+	for _, p := range metricsRules[strings.ReplaceAll(name, "_", "/")+key.Name()] {
+		value = p.regex.ReplaceAllString(value, p.replace)
+	}
+	return value
+}
+
+// rulesGeneration counts CreateRulesMap installations. Cached tag maps are
+// keyed and built from rule-normalized values, so any cache built under an
+// older rules generation must be discarded: production installs rules once
+// at startup, so in practice this trips at most once per cache.
+var rulesGeneration atomic.Uint64
 
 // CachedTagMaps caches fully-built *tag.Map values keyed by their varying
 // tag values, so hot-path metric records can call stats.Recorder.Record
@@ -103,31 +115,67 @@ func WithTags(name string, opts ...any) []tag.Mutator {
 // ~18-20 allocations per record down to zero for cached counters.
 //
 // Base tags (typically app_id and namespace, constant for the process) are
-// applied once at construction; metricsRules are resolved at map-build time,
-// matching WithTags semantics. Maps are built lazily, once per distinct
-// value tuple, and cached forever: intended for low-cardinality
-// discriminators (statuses, kinds, bounded method sets). The cardinality of
-// the cache mirrors the cardinality the metric views already accumulate.
+// applied once per rules generation. Cache keys are the RULE-NORMALIZED
+// values, so the cache's cardinality mirrors the exported view's even when
+// a cardinality rule collapses many raw values into one label, and a rules
+// installation after construction rebuilds the base tags and drops stale
+// entries. Intended for low-cardinality exported discriminators (statuses,
+// kinds, bounded method sets).
 type CachedTagMaps struct {
 	measureName string
-	baseCtx     context.Context
-	maps        sync.Map // value-tuple key -> *tag.Map
+	base        []any
+
+	mu      sync.Mutex
+	gen     atomic.Uint64
+	baseCtx atomic.Value // context.Context
+	maps    sync.Map     // normalized value-tuple key -> *tag.Map
 }
 
 // NewCachedTagMaps builds the cache with constant base tag pairs
 // (key1, value1, key2, value2, ...).
 func NewCachedTagMaps(measureName string, base ...any) *CachedTagMaps {
-	ctx, _ := tag.New(context.Background(), WithTags(measureName, base...)...)
-	return &CachedTagMaps{measureName: measureName, baseCtx: ctx}
+	c := &CachedTagMaps{measureName: measureName, base: base}
+	c.rebuild(rulesGeneration.Load())
+	return c
+}
+
+func (c *CachedTagMaps) rebuild(gen uint64) {
+	ctx, _ := tag.New(context.Background(), WithTags(c.measureName, c.base...)...)
+	c.baseCtx.Store(ctx)
+	c.maps.Range(func(k, _ any) bool {
+		c.maps.Delete(k)
+		return true
+	})
+	c.gen.Store(gen)
+}
+
+// baseContext returns the base-tag context for the current rules
+// generation, rebuilding the cache if rules were installed after this
+// cache was constructed.
+func (c *CachedTagMaps) baseContext() context.Context {
+	g := rulesGeneration.Load()
+	if c.gen.Load() != g {
+		c.mu.Lock()
+		if c.gen.Load() != g {
+			c.rebuild(g)
+		}
+		c.mu.Unlock()
+	}
+	return c.baseCtx.Load().(context.Context)
 }
 
 // Get1 returns the cached tag map for one varying tag. Zero allocations on
 // the cached path.
 func (c *CachedTagMaps) Get1(k tag.Key, v string) *tag.Map {
+	base := c.baseContext()
+	v = NormalizeTagValue(c.measureName, k, v)
 	if m, ok := c.maps.Load(v); ok {
 		return m.(*tag.Map)
 	}
-	ctx, _ := tag.New(c.baseCtx, WithTags(c.measureName, k, v)...)
+	ctx := base
+	if v != "" {
+		ctx, _ = tag.New(base, tag.Upsert(k, v))
+	}
 	m := tag.FromContext(ctx)
 	c.maps.Store(v, m)
 	return m
@@ -137,11 +185,21 @@ func (c *CachedTagMaps) Get1(k tag.Key, v string) *tag.Map {
 // concatenation allocates one small string per call; use nested caches if
 // even that matters.
 func (c *CachedTagMaps) Get2(k1 tag.Key, v1 string, k2 tag.Key, v2 string) *tag.Map {
+	base := c.baseContext()
+	v1 = NormalizeTagValue(c.measureName, k1, v1)
+	v2 = NormalizeTagValue(c.measureName, k2, v2)
 	key := v1 + "\x00" + v2
 	if m, ok := c.maps.Load(key); ok {
 		return m.(*tag.Map)
 	}
-	ctx, _ := tag.New(c.baseCtx, WithTags(c.measureName, k1, v1, k2, v2)...)
+	muts := make([]tag.Mutator, 0, 2)
+	if v1 != "" {
+		muts = append(muts, tag.Upsert(k1, v1))
+	}
+	if v2 != "" {
+		muts = append(muts, tag.Upsert(k2, v2))
+	}
+	ctx, _ := tag.New(base, muts...)
 	m := tag.FromContext(ctx)
 	c.maps.Store(key, m)
 	return m
@@ -150,7 +208,7 @@ func (c *CachedTagMaps) Get2(k1 tag.Key, v1 string, k2 tag.Key, v2 string) *tag.
 // Base returns the tag map holding only the constant base tags, for
 // measures with no varying discriminator.
 func (c *CachedTagMaps) Base() *tag.Map {
-	return tag.FromContext(c.baseCtx)
+	return tag.FromContext(c.baseContext())
 }
 
 // CachedInt64Counter records a constant-increment counter through cached
@@ -257,6 +315,7 @@ func AddNewTagKey(views []*view.View, key *tag.Key) []*view.View {
 
 // CreateRulesMap generates a fast lookup map for metrics regex.
 func CreateRulesMap(rules []config.MetricsRule) error {
+	defer rulesGeneration.Add(1)
 	newMetricsRules := make(map[string][]regexPair, len(rules))
 
 	for _, r := range rules {

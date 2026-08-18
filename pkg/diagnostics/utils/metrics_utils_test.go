@@ -14,6 +14,7 @@ limitations under the License.
 package utils
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -101,4 +102,59 @@ func TestCreateRulesMap(t *testing.T) {
 		assert.Equal(t, "TEST", metricsRules["testlabel"][0].replace)
 		assert.NotNil(t, metricsRules["testlabel"][0].regex)
 	})
+}
+
+func TestCachedTagMaps_NormalizedKeysCollapse(t *testing.T) {
+	// A cardinality rule collapsing every workflow name into one label must
+	// collapse the cache the same way: keys are normalized values, so cache
+	// cardinality mirrors the exported view, not the raw input space.
+	require.NoError(t, CreateRulesMap([]config.MetricsRule{{
+		Name: "wf_count",
+		Labels: []config.MetricLabel{{
+			Name:  "workflow",
+			Regex: map[string]string{"other": "wf-.+"},
+		}},
+	}}))
+	t.Cleanup(func() { require.NoError(t, CreateRulesMap(nil)) })
+
+	wfKey := tag.MustNewKey("workflow")
+	c := NewCachedTagMaps("wf_count", tag.MustNewKey("app_id"), "app")
+	for i := range 100 {
+		m := c.Get1(wfKey, fmt.Sprintf("wf-%d", i))
+		v, ok := m.Value(wfKey)
+		require.True(t, ok)
+		assert.Equal(t, "other", v)
+	}
+	entries := 0
+	c.maps.Range(func(_, _ any) bool { entries++; return true })
+	assert.Equal(t, 1, entries, "cache must be keyed by normalized values")
+}
+
+func TestCachedTagMaps_RulesInstalledAfterConstruction(t *testing.T) {
+	// Production InitMetrics installs rules before any cached recorder is
+	// built, but the cache must also self-heal if rules land later: base
+	// tags and cached entries are rebuilt under the new rules generation.
+	require.NoError(t, CreateRulesMap(nil))
+	t.Cleanup(func() { require.NoError(t, CreateRulesMap(nil)) })
+
+	appKey := tag.MustNewKey("app_id")
+	stKey := tag.MustNewKey("status")
+	c := NewCachedTagMaps("wf_count", appKey, "app-1234")
+	m := c.Get1(stKey, "success")
+	v, ok := m.Value(appKey)
+	require.True(t, ok)
+	require.Equal(t, "app-1234", v)
+
+	require.NoError(t, CreateRulesMap([]config.MetricsRule{{
+		Name: "wf_count",
+		Labels: []config.MetricLabel{{
+			Name:  "app_id",
+			Regex: map[string]string{"app": "app-.+"},
+		}},
+	}}))
+
+	m = c.Get1(stKey, "success")
+	v, ok = m.Value(appKey)
+	require.True(t, ok)
+	assert.Equal(t, "app", v, "base tags must be re-normalized under the new rules")
 }
