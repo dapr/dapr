@@ -315,7 +315,6 @@ func AddNewTagKey(views []*view.View, key *tag.Key) []*view.View {
 
 // CreateRulesMap generates a fast lookup map for metrics regex.
 func CreateRulesMap(rules []config.MetricsRule) error {
-	defer rulesGeneration.Add(1)
 	newMetricsRules := make(map[string][]regexPair, len(rules))
 
 	for _, r := range rules {
@@ -344,5 +343,6 @@ func CreateRulesMap(rules []config.MetricsRule) error {
 	}
 
 	metricsRules = newMetricsRules
+	rulesGeneration.Add(1)
 	return nil
 }

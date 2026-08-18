@@ -64,6 +64,7 @@ func TestWithTags(t *testing.T) {
 
 func TestCreateRulesMap(t *testing.T) {
 	t.Run("invalid rule", func(t *testing.T) {
+		genBefore := rulesGeneration.Load()
 		err := CreateRulesMap([]config.MetricsRule{
 			{
 				Name: "test",
@@ -78,9 +79,12 @@ func TestCreateRulesMap(t *testing.T) {
 			},
 		})
 		require.Error(t, err)
+		assert.Equal(t, genBefore, rulesGeneration.Load(),
+			"a failed install must not bump the rules generation")
 	})
 
 	t.Run("valid rule", func(t *testing.T) {
+		genBefore := rulesGeneration.Load()
 		err := CreateRulesMap([]config.MetricsRule{
 			{
 				Name: "test",
@@ -96,6 +100,8 @@ func TestCreateRulesMap(t *testing.T) {
 		})
 
 		require.NoError(t, err)
+		assert.Equal(t, genBefore+1, rulesGeneration.Load(),
+			"a successful install must bump the rules generation")
 		assert.NotNil(t, metricsRules)
 		assert.Len(t, metricsRules, 1)
 		assert.Len(t, metricsRules["testlabel"], 1)
