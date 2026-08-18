@@ -26,6 +26,7 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -35,6 +36,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
 func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
@@ -126,6 +128,11 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 	log.Debugf("Workflow actor '%s': invoking reminder '%s'", o.actorID, reminder.Name)
 
 	switch {
+	// Must precede the new-event prefix arm: the janitor shares the prefix
+	// deliberately (mixed-version routing) but has its own no-op semantics.
+	case reminder.Name == janitorReminderName:
+		return o.runJanitor(ctx, reminder)
+
 	case strings.HasPrefix(reminder.Name, reminderPrefixStart),
 		strings.HasPrefix(reminder.Name, reminderPrefixNewEvent),
 		strings.HasPrefix(reminder.Name, reminderPrefixTimer),
@@ -153,6 +160,72 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 	default:
 		return fmt.Errorf("unable to handle reminder '%s' for workflow actor '%s': unknown reminder type", reminder.Name, o.actorID)
 	}
+}
+
+// runJanitor handles a fire of the per-instance janitor backstop reminder
+// (WorkflowsFastPath). Semantics: self-delete against purged or
+// terminal instances; cheap no-op (WITHOUT deactivating, so idle instances
+// do not thrash the activation cache every period) when the inbox is empty;
+// drive a normal turn when inbox rows are pending, which is the recovery
+// event the janitor exists for.
+func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Reminder) error {
+	state, _, err := o.loadInternalState(ctx)
+	if err != nil {
+		return err
+	}
+
+	if state == nil || runtimestate.IsCompleted(o.rstate) {
+		o.deleteJanitor(ctx)
+		return nil
+	}
+
+	if len(state.Inbox) == 0 {
+		// Mirror the empty-inbox stale-cache guard of runWorkflow: a peer
+		// host may have written an inbox row since this cache was loaded.
+		// Reload before declaring the tick a no-op; costs a read, never a
+		// commit.
+		o.invalidateCachedState()
+		state, _, err = o.loadInternalState(ctx)
+		if err != nil {
+			return err
+		}
+		if state == nil {
+			o.deleteJanitor(ctx)
+			return nil
+		}
+	}
+
+	if len(state.Inbox) == 0 {
+		// No pending inbox rows, but the instance may have in-flight
+		// activities whose only durable re-driver is this janitor (their
+		// run-activity reminder is elided under
+		// WorkflowsFastPath). Stalled workflows are excluded:
+		// re-dispatching would replay the condition that stalled them.
+		if o.rstate.GetStalled() == nil {
+			// Completions held for folding suppress the re-dispatch of their
+			// tasks below, on the assumption their senders are alive and
+			// re-driving. At a placement handoff that assumption breaks both
+			// ways at once: the sender dies with its pod before re-delivering,
+			// and the arming drive of the folding turn is lost (a wakeCtx
+			// cancellation window). The completion is then captive in memory with no
+			// driver at all, and this fire is the only thing that ever runs on
+			// the instance. Drive a turn: runWorkflow folds pending
+			// completions into its commit even with an empty inbox, restoring
+			// at-most-one-period recovery for captive completions.
+			if len(o.foldPending) > 0 {
+				diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusJanitorFoldRecovered)
+				return o.runWorkflowFromReminder(ctx, reminder)
+			}
+			if unresolved := unresolvedScheduledTasks(state, o.foldEvents()); len(unresolved) > 0 {
+				o.redispatchActivities(ctx, state, unresolved)
+			}
+		}
+		return nil
+	}
+
+	// Pending inbox with no drive in sight: this fire IS the recovery.
+	diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusJanitorRecovered)
+	return o.runWorkflowFromReminder(ctx, reminder)
 }
 
 func (o *orchestrator) runWorkflowFromReminder(ctx context.Context, reminder *actorapi.Reminder) error {
