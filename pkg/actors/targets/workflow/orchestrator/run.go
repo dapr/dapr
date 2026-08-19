@@ -21,7 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
@@ -37,8 +36,9 @@ import (
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
-func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Reminder) (todo.RunCompleted, error) {
-	state, _, err := o.loadInternalState(ctx)
+func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Reminder) (completed todo.RunCompleted, err error) {
+	var state *wfenginestate.State
+	state, _, err = o.loadInternalState(ctx)
 	if err != nil {
 		// Treat load failures as recoverable so the reminder is retried.
 		// LoadWorkflowState already separates VerificationError (tombstoned
@@ -99,7 +99,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		state.Inbox = append(state.Inbox, &cascadeEvent)
 	}
 
-	if len(state.Inbox) == 0 && !runtimestate.IsCompleted(o.rstate) {
+	if len(state.Inbox) == 0 && len(o.foldPending) == 0 && !runtimestate.IsCompleted(o.rstate) {
 		// The in-memory cache may be stale: during a placement cluster failure
 		// daprds will roll over the actor, so a peer host may have written a new
 		// inbox event to the store since our cache was last updated. Drop the
@@ -120,7 +120,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 
-	if len(state.Inbox) == 0 {
+	if len(state.Inbox) == 0 && len(o.foldPending) == 0 {
 		// This can happen after multiple events are processed in batches; there
 		// may still be reminders around for some of those already processed
 		// events.
@@ -142,6 +142,15 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			}
 		}
 		log.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", o.actorID, reminder.Name)
+		if o.fastPath && !runtimestate.IsCompleted(o.rstate) {
+			// Returning RunCompletedTrue deactivates the actor, and a
+			// concurrent fold submit can append a held completion the moment
+			// this no-op fire releases the lock: the deactivation would then
+			// flush it into a sender retry (a spurious nack and a retry-long
+			// stall). Keep the running actor resident; the actor runtime's
+			// idle deactivation still bounds its lifetime.
+			return todo.RunCompletedFalse, nil
+		}
 		return todo.RunCompletedTrue, nil
 	}
 
@@ -159,10 +168,38 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 
+	// Take any held completions into this turn (WorkflowsFastPath):
+	// they ride the turn's single Multi into history and their senders are
+	// acked only if that commit happens. Any outcome that does not commit
+	// them nacks the senders back into their retry chains. Overflow beyond
+	// the per-turn cap (and anything submitted after this take) re-arms a
+	// drive so it is folded by a follow-up turn.
+	folded := o.foldTake()
+	foldedCommitted := false
+	defer func() {
+		if foldedCommitted {
+			foldAck(folded)
+		} else {
+			foldNack(folded, err)
+		}
+		if len(o.foldPending) > 0 {
+			p := o.foldPending[0].event
+			o.localDrive(events.EventReminderName(reminderPrefixNewEvent, p), time.Now(), o.getExecutionStartedEvent(state).GetName())
+		}
+	}()
+
 	rs := o.rstate
+	newEvents := state.Inbox
+	if len(folded) > 0 {
+		newEvents = make([]*backend.HistoryEvent, 0, len(state.Inbox)+len(folded))
+		newEvents = append(newEvents, state.Inbox...)
+		for _, f := range folded {
+			newEvents = append(newEvents, f.event)
+		}
+	}
 	wi := &backend.WorkflowWorkItem{
 		InstanceID: api.InstanceID(rs.GetInstanceId()),
-		NewEvents:  state.Inbox,
+		NewEvents:  newEvents,
 		RetryCount: -1, // TODO
 		State:      rs,
 		Properties: make(map[string]any, 1),
@@ -187,15 +224,14 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 	// Request to execute workflow
 	log.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", o.actorID, wi.InstanceID)
-	// Schedule the workflow execution by signaling the backend
-	// Snapshot o.rstate before the engine runs. The engine shares wi.State
-	// with o.rstate (same pointer) and may overwrite it during ContinueAsNew
-	// (*s = *newState in the applier). If the engine fails, we restore the
-	// snapshot so the cached state remains consistent with the store.
-	var rstateSnapshot *backend.WorkflowRuntimeState
-	if o.rstate != nil {
-		rstateSnapshot = proto.Clone(o.rstate).(*backend.WorkflowRuntimeState)
-	}
+	// Schedule the workflow execution by signaling the backend.
+	// The engine shares wi.State with o.rstate (same pointer) and may
+	// overwrite it during ContinueAsNew (*s = *newState in the applier). The
+	// failure paths below therefore invalidate the cached state instead of
+	// restoring a snapshot: they all return recoverable errors, so the
+	// refired reminder reloads durable truth from the store. This avoids
+	// deep-cloning the entire history on every turn for a rollback that
+	// almost never happens.
 
 	// TODO: @joshvanl remove.
 	err = o.scheduler(ctx, wi)
@@ -219,9 +255,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	select {
 	case <-ctx.Done(): // caller is responsible for timeout management
 		// The engine may have partially mutated o.rstate via the shared
-		// wi.State pointer before the context was cancelled. Restore the
-		// snapshot so the cached state stays consistent with the store.
-		o.rstate = rstateSnapshot
+		// wi.State pointer before the context was cancelled. Drop the cache
+		// so the retry reloads from the store.
+		o.invalidateCachedState()
 		diagnoseStatus = diag.StatusRecoverable
 		return todo.RunCompletedFalse, ctx.Err()
 	case completed := <-callback:
@@ -281,26 +317,69 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 					state.SetIncomingHistory(wi.IncomingHistory)
 				}
 
-				if len(carryover) > 0 {
-					reminderName := events.EventReminderName(reminderPrefixNewEvent, carryover[0])
-					if err = o.createWorkflowReminder(ctx, reminderName, nil, time.Now(), o.appID, &workflowName); err != nil {
-						o.invalidateCachedState()
-						return todo.RunCompletedFalse, err
-					}
-				}
-
+				// Save the carryover BEFORE creating its wake-up reminder,
+				// mirroring AddWorkflowEvent: a reminder created first can
+				// fire remotely against un-saved state, ack SUCCESS and be
+				// deleted, stranding the carryover once the save commits.
 				if err = o.signAndSaveState(ctx, state); err != nil {
-					o.rstate = rstateSnapshot
+					// signAndSaveState already invalidated the cache.
 					return todo.RunCompletedFalse, err
 				}
+				// The CAN save persisted the effect of every consumed event,
+				// including folded completions: their senders are acked.
+				foldedCommitted = true
+
+				if len(carryover) > 0 {
+					reminderName := events.EventReminderName(reminderPrefixNewEvent, carryover[0])
+					if o.fastPath {
+						// Fast path: janitor + local drive instead of the
+						// durable per-event reminder (falling back to it if
+						// the janitor cannot be ensured). The subsequent
+						// recoverable ErrExecutionAborted return also
+						// propagates to the wake goroutine driving THIS
+						// turn, whose escalation then re-arms a durable
+						// reminder for the original event; that re-arm is
+						// redundant with this drive but idempotent and
+						// self-cleaning (empty-inbox ack).
+						if jerr := o.ensureJanitor(ctx, state); jerr != nil {
+							if err = o.createWorkflowReminder(ctx, reminderName, nil, time.Now(), o.appID, &workflowName); err != nil {
+								return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
+							}
+						}
+						o.localDrive(reminderName, time.Now(), workflowName)
+					} else {
+						if err = o.createWorkflowReminder(ctx, reminderName, nil, time.Now(), o.appID, &workflowName); err != nil {
+							// The carryover is already durable in the inbox; a
+							// recoverable error FAILs this reminder invocation, so
+							// the driving reminder refires and the reloaded state
+							// re-runs the new generation normally. The cache is
+							// consistent with the store post-save, so it is not
+							// invalidated.
+							return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
+						}
+					}
+				}
 			} else {
-				o.rstate = rstateSnapshot
+				// Non-CAN abandon: the engine may have mutated the shared
+				// rstate. Drop the cache so the retry reloads from the store.
+				o.invalidateCachedState()
 			}
 			diagnoseStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(todo.ErrExecutionAborted)
 		}
 	}
 	rs = wi.State
+
+	// The engine has mutated the shared runtime state through wi.State. From
+	// here until a save settles cache consistency (signAndSaveState re-primes
+	// the cache on success and invalidates it on failure), every exit must drop
+	// the cache.
+	cacheSettled := false
+	defer func() {
+		if !cacheSettled {
+			o.invalidateCachedState()
+		}
+	}()
 
 	if err = o.handleStalled(ctx, state, rs); err != nil {
 		return todo.RunCompletedFalse, err
@@ -405,8 +484,19 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 
-	// Dispatch activities and messages, collecting failures.
-	activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory)
+	// Dispatch activities and messages, collecting failures. Activity
+	// dispatches certify the reminder elision only when the janitor backstop
+	// is provably armed first (durability before the ack, mirroring
+	// driveNewEvent); on janitor failure the dispatch degrades to the durable
+	// run-activity reminder path.
+	elideActivityReminder := o.fastPath && len(pendingTasks) > 0
+	if elideActivityReminder {
+		if jerr := o.ensureJanitor(ctx, state); jerr != nil {
+			log.Warnf("Workflow actor '%s': failed to ensure janitor reminder, dispatching activities with durable reminders: %v", o.actorID, jerr)
+			elideActivityReminder = false
+		}
+	}
+	activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory, elideActivityReminder)
 	addResult := o.messages.CallAddEventStateMessage(ctx, addWorkflows)
 	createResult := o.messages.CallCreateWorkflowStateMessage(ctx, createWorkflows, rs.GetNewEvents())
 
@@ -445,7 +535,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			rs.NewEvents = filtered
 			state.ApplyRuntimeStateChanges(rs)
 			rs.NewEvents = origNewEvents
-			if saveErr := o.signAndSaveState(ctx, state); saveErr != nil {
+			saveErr := o.signAndSaveState(ctx, state)
+			cacheSettled = true
+			if saveErr != nil {
 				return todo.RunCompletedFalse, saveErr
 			}
 			diagnoseStatus = diag.StatusRecoverable
@@ -460,9 +552,13 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	state.ClearInbox()
 
 	err = o.signAndSaveState(ctx, state)
+	cacheSettled = true
 	if err != nil {
 		return todo.RunCompletedFalse, err
 	}
+	// The turn's single Multi is durable: folded completions are now in
+	// history and their senders are acked (see the deferred fold handling).
+	foldedCommitted = true
 
 	rstatus := runtimestate.RuntimeStatus(rs)
 	if diagnoseStatus != "" {
@@ -495,6 +591,15 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			if err = o.deleteAllReminders(ctx); err != nil {
 				return todo.RunCompletedFalse, err
 			}
+		} else if o.fastPath || o.janitorAsserted.Load() {
+			// The repeating janitor does not self-clean on ack like the
+			// one-shot reminders; remove it explicitly. janitorAsserted is
+			// per-activation, so a janitor armed by a previous activation
+			// would otherwise be skipped here; under the gate the delete is
+			// attempted regardless (NotFound tolerated). Best-effort: a
+			// missed delete self-deletes on its next fire against the
+			// terminal state, and purge sweeps it on any binary version.
+			o.deleteJanitor(ctx)
 		}
 		return todo.RunCompletedTrue, nil
 	}
