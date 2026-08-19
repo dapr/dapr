@@ -87,10 +87,15 @@ type placement struct {
 	hashTable         *hashing.ConsistentHashTables
 	virtualNodesCache *hashing.VirtualNodesCache
 
-	lock          *lock.OuterCancel
-	lockVersion   atomic.Uint64
-	updateVersion atomic.Uint64
-	operationLock *fifo.Mutex
+	lock           *lock.OuterCancel
+	lockVersion    atomic.Uint64
+	updateVersion  atomic.Uint64
+	lockGeneration atomic.Uint64
+	operationLock  *fifo.Mutex
+
+	// unlockFailsafeTimeout is how long to wait for a dissemination unlock
+	// order before force releasing the actor table lock.
+	unlockFailsafeTimeout time.Duration
 
 	tableUnlock context.CancelFunc
 
@@ -133,18 +138,19 @@ func New(opts Options) (Interface, error) {
 		hashTable: &hashing.ConsistentHashTables{
 			Entries: make(map[string]*hashing.Consistent),
 		},
-		reminders:     opts.Reminders,
-		appID:         opts.AppID,
-		port:          strconv.Itoa(opts.Port),
-		namespace:     opts.Namespace,
-		hostname:      opts.Hostname,
-		operationLock: fifo.New(),
-		apiLevel:      opts.APILevel,
-		scheduler:     opts.Scheduler,
-		htarget:       opts.Healthz.AddTarget("internal-placement-service"),
-		lock:          lock,
-		closedCh:      make(chan struct{}),
-		readyCh:       make(chan struct{}),
+		reminders:             opts.Reminders,
+		appID:                 opts.AppID,
+		port:                  strconv.Itoa(opts.Port),
+		namespace:             opts.Namespace,
+		hostname:              opts.Hostname,
+		operationLock:         fifo.New(),
+		apiLevel:              opts.APILevel,
+		scheduler:             opts.Scheduler,
+		htarget:               opts.Healthz.AddTarget("internal-placement-service"),
+		lock:                  lock,
+		closedCh:              make(chan struct{}),
+		readyCh:               make(chan struct{}),
+		unlockFailsafeTimeout: time.Second * 15,
 	}, nil
 }
 
@@ -276,32 +282,33 @@ func (p *placement) Lock(ctx context.Context) (context.Context, context.CancelFu
 }
 
 func (p *placement) handleLockOperation(ctx context.Context) {
-	lockVersion := p.lockVersion.Add(1)
+	p.lockVersion.Add(1)
 
 	if p.tableUnlock != nil {
 		return
 	}
 
+	generation := p.lockGeneration.Add(1)
 	p.tableUnlock = p.lock.Lock()
 
 	clear(p.hashTable.Entries)
 
-	// If we don't receive an unlock in 15 seconds, unlock the table.
+	// If we don't receive an unlock in time, unlock the table. The failsafe
+	// keys on the lock generation rather than the lock/unlock counters so
+	// that no counter desync can prevent it from releasing a held lock.
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
 		select {
 		case <-ctx.Done():
-		case <-time.After(time.Second * 15):
+		case <-time.After(p.unlockFailsafeTimeout):
 			p.operationLock.Lock()
 			defer p.operationLock.Unlock()
-			if p.updateVersion.Load() < lockVersion {
-				p.updateVersion.Store(lockVersion)
+			if p.lockGeneration.Load() == generation && p.tableUnlock != nil {
+				p.updateVersion.Store(p.lockVersion.Load())
 				clear(p.hashTable.Entries)
-				if p.tableUnlock != nil {
-					p.tableUnlock()
-					p.tableUnlock = nil
-				}
+				p.tableUnlock()
+				p.tableUnlock = nil
 			}
 		}
 	}()
@@ -350,7 +357,16 @@ func (p *placement) IsActorHosted(ctx context.Context, actorType, actorID string
 }
 
 func (p *placement) handleUnlockOperation(ctx context.Context) {
-	if p.updateVersion.Add(1) != p.lockVersion.Load() {
+	update := p.updateVersion.Add(1)
+	lock := p.lockVersion.Load()
+	if update > lock {
+		// An unlock arrived with no paired lock, for example after the
+		// failsafe already released the round, or when joining a stream mid
+		// round. Resync the counters so future rounds pair correctly.
+		p.updateVersion.Store(lock)
+		update = lock
+	}
+	if update != lock || p.tableUnlock == nil {
 		return
 	}
 
