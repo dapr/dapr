@@ -29,11 +29,11 @@ import (
 type activityExecutions struct {
 	lock      sync.Mutex
 	held      map[string]int
-	resolvers map[string]func()
+	resolvers map[string]*func()
 }
 
 func newActivityExecutions() *activityExecutions {
-	return &activityExecutions{held: make(map[string]int), resolvers: make(map[string]func())}
+	return &activityExecutions{held: make(map[string]int), resolvers: make(map[string]*func())}
 }
 
 func activityExecutionKey(instanceID string, taskID int32) string {
@@ -68,21 +68,24 @@ func (a *activityExecutions) heldFor(instanceID string, taskID int32) bool {
 
 func (a *activityExecutions) registerResolver(instanceID string, taskID int32, resolve func()) func() {
 	key := activityExecutionKey(instanceID, taskID)
+	entry := &resolve
 	a.lock.Lock()
-	a.resolvers[key] = resolve
+	a.resolvers[key] = entry
 	a.lock.Unlock()
 	return func() {
 		a.lock.Lock()
-		delete(a.resolvers, key)
+		if a.resolvers[key] == entry {
+			delete(a.resolvers, key)
+		}
 		a.lock.Unlock()
 	}
 }
 
 func (a *activityExecutions) resolve(key string) {
 	a.lock.Lock()
-	fn := a.resolvers[key]
+	entry := a.resolvers[key]
 	a.lock.Unlock()
-	if fn != nil {
-		fn()
+	if entry != nil {
+		(*entry)()
 	}
 }

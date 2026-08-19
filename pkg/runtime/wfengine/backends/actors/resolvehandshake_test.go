@@ -142,6 +142,21 @@ func Test_activityCompletionHandshake(t *testing.T) {
 		unregister2()
 	})
 
+	t.Run("a stale owner's unregister must not delete the fresh owner's resolver", func(t *testing.T) {
+		t.Parallel()
+		a := newActivityExecutions()
+		var fresh int
+		staleUnregister := a.registerResolver("wf1", 8, func() {})
+		a.registerResolver("wf1", 8, func() { fresh++ })
+
+		// The evicted owner settles late and unregisters: the fresh owner's
+		// registration must survive, or the eviction window reopens for the
+		// healthy execution.
+		staleUnregister()
+		a.resolve(activityExecutionKey("wf1", 8))
+		assert.Equal(t, 1, fresh, "the fresh registration must survive a stale unregister")
+	})
+
 	t.Run("waiter never resolves without a wait error even when nothing registered", func(t *testing.T) {
 		t.Parallel()
 		fake := &fakePendingBackend{deliver: make(chan *protos.ActivityResponse, 1)}

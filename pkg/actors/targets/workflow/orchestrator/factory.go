@@ -373,7 +373,7 @@ func (f *factory) deactivate(orchestrator *orchestrator) {
 
 	select {
 	case f.deactivateCh <- orchestrator:
-	default:
+	case <-f.deactivateCtx.Done():
 	}
 }
 
