@@ -106,6 +106,8 @@ func (a *basic) Run(t *testing.T, ctx context.Context) {
 		assert.Zero(c, newEvents, "wake v2 must not create per-event new-event one-shot jobs")
 		assert.GreaterOrEqual(c, a.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:success"), float64(1),
 			"the first activity must have been driven locally")
+		assert.GreaterOrEqual(c, a.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_drive_latency_count", "status:success"), float64(1),
+			"every local activity drive must record its latency")
 	}, time.Second*20, time.Millisecond*50)
 	assert.Zero(t, a.scheduler.JobKeyCount(t, ctx, "run-activity"),
 		"activity v2 must not create run-activity one-shot jobs")

@@ -109,6 +109,8 @@ func (l *basic) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, l.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:success"), float64(3),
 			"the start and new-event wake-ups must be driven by the local fast path")
+		assert.GreaterOrEqual(c, l.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_drive_latency_count", "status:success"), float64(3),
+			"every local drive must record its latency")
 	}, time.Second*20, time.Millisecond*10)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {

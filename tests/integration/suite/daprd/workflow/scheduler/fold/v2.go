@@ -123,6 +123,8 @@ func (f *v2) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_count", "status:folded"), float64(2))
+		assert.GreaterOrEqual(c, f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_wait_latency_count"), float64(2),
+			"every folded completion must record its commit wait")
 	}, time.Second*10, time.Millisecond*50)
 	assert.Zero(t, f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_count", "status:fold_nacked"),
 		"a healthy run must not nack any folded completion")

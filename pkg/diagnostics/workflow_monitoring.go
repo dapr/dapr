@@ -201,10 +201,6 @@ type workflowMetrics struct {
 	// invocation kind (method/reminder/stream). Splits observed invocation
 	// latency into lock queueing vs turn body.
 	lockWaitLatency *stats.Float64Measure
-	appID           string
-	enabled         bool
-	namespace       string
-	meter           stats.Recorder
 
 	// Cached recorders for hot-path records (built in Init): direct
 	// meter.Record through prebuilt tag maps instead of the
