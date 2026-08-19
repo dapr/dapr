@@ -28,6 +28,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
@@ -38,6 +39,9 @@ func init() {
 }
 
 type defaultmax struct {
+	place *defaultmax
+	sched *defaultmax
+
 	app1     *actors.Actors
 	app2     *actors.Actors
 	called   slice.Slice[string]
@@ -45,7 +49,7 @@ type defaultmax struct {
 	holdCall chan struct{}
 }
 
-func (d *defaultmax) Setup(t *testing.T) []framework.Option {
+func (d *defaultmax) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 	d.called = slice.New[string]()
 	d.holdCall = make(chan struct{})
 	d.rid = atomic.Pointer[string]{}
@@ -61,12 +65,12 @@ func (d *defaultmax) Setup(t *testing.T) []framework.Option {
 		<-d.holdCall
 	}
 
-	d.app1 = actors.New(t,
+	d.app1 = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("abc", "efg"),
 		actors.WithActorTypeHandler("abc", handler),
 		actors.WithActorTypeHandler("efg", handler),
 		actors.WithReentry(true),
-	)
+	}, extra...)...)
 
 	d.app2 = actors.New(t,
 		actors.WithActorTypes("abc", "efg"),
@@ -76,12 +80,25 @@ func (d *defaultmax) Setup(t *testing.T) []framework.Option {
 		actors.WithReentry(true),
 	)
 
+	return []process.Interface{d.app1, d.app2}
+}
+
+func (d *defaultmax) Setup(t *testing.T) []framework.Option {
+	d.place, d.sched = new(defaultmax), new(defaultmax)
+	procs := d.place.setup(t)
+	procs = append(procs, d.sched.setup(t, actors.WithSchedulerPlacement())...)
+
 	return []framework.Option{
-		framework.WithProcesses(d.app1, d.app2),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (d *defaultmax) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { d.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { d.sched.run(t, ctx) })
+}
+
+func (d *defaultmax) run(t *testing.T, ctx context.Context) {
 	d.app1.WaitUntilRunning(t, ctx)
 	d.app2.WaitUntilRunning(t, ctx)
 

@@ -25,6 +25,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -34,6 +35,9 @@ func init() {
 }
 
 type expire struct {
+	place *expire
+	sched *expire
+
 	app1 *actors.Actors
 	app2 *actors.Actors
 
@@ -42,7 +46,7 @@ type expire struct {
 	waitOnCall    chan struct{}
 }
 
-func (e *expire) Setup(t *testing.T) []framework.Option {
+func (e *expire) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 	e.waitOnCall = make(chan struct{})
 
 	handler := func(_ nethttp.ResponseWriter, r *nethttp.Request) {
@@ -55,11 +59,11 @@ func (e *expire) Setup(t *testing.T) []framework.Option {
 		}
 	}
 
-	e.app1 = actors.New(t,
+	e.app1 = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", handler),
 		actors.WithDrainOngoingCallTimeout(time.Second),
-	)
+	}, extra...)...)
 
 	e.app2 = actors.New(t,
 		actors.WithPeerActor(e.app1),
@@ -68,12 +72,25 @@ func (e *expire) Setup(t *testing.T) []framework.Option {
 		actors.WithDrainOngoingCallTimeout(time.Second),
 	)
 
+	return []process.Interface{e.app1}
+}
+
+func (e *expire) Setup(t *testing.T) []framework.Option {
+	e.place, e.sched = new(expire), new(expire)
+	procs := e.place.setup(t)
+	procs = append(procs, e.sched.setup(t, actors.WithSchedulerPlacement())...)
+
 	return []framework.Option{
-		framework.WithProcesses(e.app1),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (e *expire) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { e.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { e.sched.run(t, ctx) })
+}
+
+func (e *expire) run(t *testing.T, ctx context.Context) {
 	e.app1.WaitUntilRunning(t, ctx)
 
 	errCh := make(chan error, 1)

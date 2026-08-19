@@ -25,6 +25,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -34,13 +35,16 @@ func init() {
 }
 
 type onexit struct {
+	place *onexit
+	sched *onexit
+
 	app       *actors.Actors
 	calledABC atomic.Int64
 	calledDEF atomic.Bool
 	calledXYZ atomic.Bool
 }
 
-func (o *onexit) Setup(t *testing.T) []framework.Option {
+func (o *onexit) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping test on Windows as is not compatible")
 	}
@@ -55,7 +59,7 @@ func (o *onexit) Setup(t *testing.T) []framework.Option {
 		assert.False(t, o.calledXYZ.Load())
 	})
 
-	o.app = actors.New(t,
+	o.app = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("abc", "def", "xyz"),
 		actors.WithActorTypeHandler("abc", func(_ http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodDelete {
@@ -69,14 +73,27 @@ func (o *onexit) Setup(t *testing.T) []framework.Option {
 				return
 			}
 		}),
-	)
+	}, extra...)...)
+
+	return []process.Interface{o.app}
+}
+
+func (o *onexit) Setup(t *testing.T) []framework.Option {
+	o.place, o.sched = new(onexit), new(onexit)
+	procs := o.place.setup(t)
+	procs = append(procs, o.sched.setup(t, actors.WithSchedulerPlacement())...)
 
 	return []framework.Option{
-		framework.WithProcesses(o.app),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (o *onexit) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { o.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { o.sched.run(t, ctx) })
+}
+
+func (o *onexit) run(t *testing.T, ctx context.Context) {
 	o.app.WaitUntilRunning(t, ctx)
 
 	_, err := o.app.GRPCClient(t, ctx).InvokeActor(ctx, &rtv1.InvokeActorRequest{

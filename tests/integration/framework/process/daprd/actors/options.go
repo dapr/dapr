@@ -110,7 +110,13 @@ func WithSharedControlPlane() Option {
 func WithPeerActor(actor *Actors) Option {
 	return func(o *options) {
 		WithDB(actor.DB())(o)
-		WithPlacement(actor.Placement())(o)
+		// A scheduler placement peer shares the scheduler and runs no
+		// placement service.
+		if actor.Placement() != nil {
+			WithPlacement(actor.Placement())(o)
+		} else {
+			WithSchedulerPlacement()(o)
+		}
 		WithScheduler(actor.Scheduler())(o)
 		WithSharedControlPlane()(o)
 	}

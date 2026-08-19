@@ -28,6 +28,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -37,20 +38,36 @@ func init() {
 }
 
 type overwrite struct {
+	place *overwrite
+	sched *overwrite
+
 	actors *actors.Actors
 }
 
-func (o *overwrite) Setup(t *testing.T) []framework.Option {
-	o.actors = actors.New(t,
+func (o *overwrite) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+	o.actors = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("abc", "foo"),
-	)
+	}, extra...)...)
+
+	return []process.Interface{o.actors}
+}
+
+func (o *overwrite) Setup(t *testing.T) []framework.Option {
+	o.place, o.sched = new(overwrite), new(overwrite)
+	procs := o.place.setup(t)
+	procs = append(procs, o.sched.setup(t, actors.WithSchedulerPlacement())...)
 
 	return []framework.Option{
-		framework.WithProcesses(o.actors),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (o *overwrite) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { o.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { o.sched.run(t, ctx) })
+}
+
+func (o *overwrite) run(t *testing.T, ctx context.Context) {
 	o.actors.WaitUntilRunning(t, ctx)
 
 	t.Run("grpc", func(t *testing.T) {

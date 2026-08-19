@@ -25,6 +25,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -34,13 +35,16 @@ func init() {
 }
 
 type data struct {
+	place *data
+	sched *data
+
 	actors *actors.Actors
 	got    chan string
 }
 
-func (d *data) Setup(t *testing.T) []framework.Option {
+func (d *data) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 	d.got = make(chan string, 1)
-	d.actors = actors.New(t,
+	d.actors = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("foo"),
 		actors.WithActorTypeHandler("foo", func(_ http.ResponseWriter, req *http.Request) {
 			if req.Method == http.MethodDelete {
@@ -50,14 +54,27 @@ func (d *data) Setup(t *testing.T) []framework.Option {
 			assert.NoError(t, err)
 			d.got <- string(got)
 		}),
-	)
+	}, extra...)...)
+
+	return []process.Interface{d.actors}
+}
+
+func (d *data) Setup(t *testing.T) []framework.Option {
+	d.place, d.sched = new(data), new(data)
+	procs := d.place.setup(t)
+	procs = append(procs, d.sched.setup(t, actors.WithSchedulerPlacement())...)
 
 	return []framework.Option{
-		framework.WithProcesses(d.actors),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (d *data) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { d.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { d.sched.run(t, ctx) })
+}
+
+func (d *data) run(t *testing.T, ctx context.Context) {
 	d.actors.WaitUntilRunning(t, ctx)
 
 	_, err := d.actors.GRPCClient(t, ctx).RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{

@@ -25,6 +25,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -34,6 +35,9 @@ func init() {
 }
 
 type grpc struct {
+	place *grpc
+	sched *grpc
+
 	app1 *actors.Actors
 	app2 *actors.Actors
 
@@ -42,7 +46,7 @@ type grpc struct {
 	returnedFromCall atomic.Bool
 }
 
-func (g *grpc) Setup(t *testing.T) []framework.Option {
+func (g *grpc) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 	g.waitOnCall = make(chan struct{})
 
 	ff := func(_ nethttp.ResponseWriter, r *nethttp.Request) {
@@ -55,10 +59,10 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		}
 	}
 
-	g.app1 = actors.New(t,
+	g.app1 = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", ff),
-	)
+	}, extra...)...)
 
 	g.app2 = actors.New(t,
 		actors.WithPeerActor(g.app1),
@@ -66,12 +70,25 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		actors.WithActorTypeHandler("abc", ff),
 	)
 
+	return []process.Interface{g.app1}
+}
+
+func (g *grpc) Setup(t *testing.T) []framework.Option {
+	g.place, g.sched = new(grpc), new(grpc)
+	procs := g.place.setup(t)
+	procs = append(procs, g.sched.setup(t, actors.WithSchedulerPlacement())...)
+
 	return []framework.Option{
-		framework.WithProcesses(g.app1),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (g *grpc) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { g.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { g.sched.run(t, ctx) })
+}
+
+func (g *grpc) run(t *testing.T, ctx context.Context) {
 	g.app1.WaitUntilRunning(t, ctx)
 
 	errCh := make(chan error, 1)

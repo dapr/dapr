@@ -26,6 +26,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -35,6 +36,9 @@ func init() {
 }
 
 type down struct {
+	place *down
+	sched *down
+
 	app1 *actors.Actors
 	app2 *actors.Actors
 	app3 *actors.Actors
@@ -42,16 +46,16 @@ type down struct {
 	called atomic.Int32
 }
 
-func (d *down) Setup(t *testing.T) []framework.Option {
+func (d *down) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 	ff := func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 		d.called.Add(1)
 		time.Sleep(time.Second / 4)
 	}
 
-	d.app1 = actors.New(t,
+	d.app1 = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", ff),
-	)
+	}, extra...)...)
 
 	d.app2 = actors.New(t,
 		actors.WithPeerActor(d.app1),
@@ -63,12 +67,25 @@ func (d *down) Setup(t *testing.T) []framework.Option {
 		actors.WithPeerActor(d.app1),
 	)
 
+	return []process.Interface{d.app1, d.app2, d.app3}
+}
+
+func (d *down) Setup(t *testing.T) []framework.Option {
+	d.place, d.sched = new(down), new(down)
+	procs := d.place.setup(t)
+	procs = append(procs, d.sched.setup(t, actors.WithSchedulerPlacement())...)
+
 	return []framework.Option{
-		framework.WithProcesses(d.app1, d.app2, d.app3),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (d *down) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { d.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { d.sched.run(t, ctx) })
+}
+
+func (d *down) run(t *testing.T, ctx context.Context) {
 	d.app1.WaitUntilRunning(t, ctx)
 	d.app2.WaitUntilRunning(t, ctx)
 	d.app3.WaitUntilRunning(t, ctx)

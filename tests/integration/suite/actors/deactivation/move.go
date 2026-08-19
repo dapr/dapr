@@ -26,6 +26,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
@@ -36,28 +37,44 @@ func init() {
 }
 
 type move struct {
+	place *move
+	sched *move
+
 	app    *actors.Actors
 	called slice.Slice[string]
 }
 
-func (m *move) Setup(t *testing.T) []framework.Option {
+func (m *move) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 	m.called = slice.String()
 
-	m.app = actors.New(t,
+	m.app = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(_ http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodDelete {
 				m.called.Append(r.URL.Path)
 			}
 		}),
-	)
+	}, extra...)...)
+
+	return []process.Interface{m.app}
+}
+
+func (m *move) Setup(t *testing.T) []framework.Option {
+	m.place, m.sched = new(move), new(move)
+	procs := m.place.setup(t)
+	procs = append(procs, m.sched.setup(t, actors.WithSchedulerPlacement())...)
 
 	return []framework.Option{
-		framework.WithProcesses(m.app),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (m *move) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { m.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { m.sched.run(t, ctx) })
+}
+
+func (m *move) run(t *testing.T, ctx context.Context) {
 	m.app.WaitUntilRunning(t, ctx)
 
 	for i := range 100 {
