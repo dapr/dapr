@@ -34,8 +34,14 @@ const (
 	ExecuteActivityMethod             = "Execute"
 
 	MetadataActivityReminderDueTime = "dueTime"
-	MetadataPurgeRetentionCall      = "PurgeRetentionCall"
-	MetadataPurgeForce              = "PurgeForce"
+	// MetadataActivityLocalDrive certifies to the activity host that the
+	// dispatching orchestrator has its janitor backstop armed, so the host
+	// may elide the durable run-activity reminder and drive the execution
+	// locally (WorkflowsFastPath). Absent or unrecognised, the
+	// durable reminder path is used.
+	MetadataActivityLocalDrive = "localDrive"
+	MetadataPurgeRetentionCall = "PurgeRetentionCall"
+	MetadataPurgeForce         = "PurgeForce"
 	// Set on a WaitForRuntimeStatus call to request that a terminal workflow
 	// also verify all of its child workflows, recursively, are terminal
 	// before replying. Ignored by daprds that predate the flag.

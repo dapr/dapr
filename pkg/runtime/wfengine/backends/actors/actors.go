@@ -95,6 +95,7 @@ type Options struct {
 	// the workflow app is back online. Strongly recommended to always be enabled
 	// if using the same Dapr version on all daprds.
 	WorkflowsRemoteActivityReminder bool
+	WorkflowsFastPath               bool
 
 	RetentionPolicy *config.WorkflowStateRetentionPolicy
 	Signer          *signer.Signer
@@ -117,6 +118,7 @@ type Actors struct {
 	executorActorType    string
 
 	pendingTasksBackend    PendingTasksBackend
+	activityExecs          *activityExecutions
 	resiliency             resiliency.Provider
 	actors                 actors.Interface
 	eventSink              orchestrator.EventSink
@@ -128,6 +130,7 @@ type Actors struct {
 
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
+	workflowsFastPath               bool
 	pendingCompletions              *pending.Pending
 
 	orchestrationWorkItemChan chan *backend.WorkflowWorkItem
@@ -171,6 +174,7 @@ func New(opts Options) (*Actors, error) {
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
 		pendingTasksBackend:       pendingTasksBackend,
+		activityExecs:             newActivityExecutions(),
 		compStore:                 opts.ComponentStore,
 		orchestrationWorkItemChan: make(chan *backend.WorkflowWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
@@ -182,6 +186,7 @@ func New(opts Options) (*Actors, error) {
 
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
+		workflowsFastPath:               opts.WorkflowsFastPath,
 		pendingCompletions:              pendingCompletions,
 	}, nil
 }
@@ -205,6 +210,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		Signer:                 abe.signer,
 		MaxRequestBodySize:     abe.maxRequestBodySize,
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
+		FastPath:               abe.workflowsFastPath,
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
@@ -243,6 +249,8 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		WorkflowAccessPolicies:          abe.workflowAccessPolicies,
 		Signer:                          abe.signer,
 		WorkflowsRemoteActivityReminder: abe.workflowsRemoteActivityReminder,
+		FastPath:                        abe.workflowsFastPath,
+		ExecutionHeld:                   abe.ActivityExecutionHeld,
 	}
 
 	opts := workflow.Options{
@@ -1008,14 +1016,33 @@ func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
 		), ctx))
 }
 
-// WaitForActivityCompletion implements backend.Backend.
+// WaitForActivityCompletion implements backend.Backend. The registration is
+// mirrored into activityExecs so the activity target's stale-claim eviction
+// can see the work item as engine-held for the duration of the wait.
 func (abe *Actors) WaitForActivityCompletion(request *protos.ActivityRequest) func(context.Context) (*protos.ActivityResponse, error) {
-	return abe.pendingTasksBackend.WaitForActivityCompletion(request)
+	wait := abe.pendingTasksBackend.WaitForActivityCompletion(request)
+	key := activityExecutionKey(request.GetWorkflowInstance().GetInstanceId(), request.GetTaskId())
+	return func(ctx context.Context) (*protos.ActivityResponse, error) {
+		// Register inside the wait so the held-liveness lifetime matches the
+		// actual wait: durabletask can abandon a work item without ever
+		// invoking the waiter, and a construction-time registration would
+		// then leak, blinding stale-claim eviction for this key forever.
+		release := abe.activityExecs.add(key)
+		defer release()
+		return wait(ctx)
+	}
 }
 
 // WaitForWorkflowTaskCompletion implements backend.Backend.
 func (abe *Actors) WaitForWorkflowTaskCompletion(request *protos.WorkflowRequest) func(context.Context) (*protos.WorkflowResponse, error) {
 	return abe.pendingTasksBackend.WaitForWorkflowTaskCompletion(request)
+}
+
+// ActivityExecutionHeld reports whether the engine on this host currently
+// holds a completion registration for the given activity work item; wired
+// into the activity target as its stale-claim liveness oracle.
+func (abe *Actors) ActivityExecutionHeld(instanceID string, taskID int32) bool {
+	return abe.activityExecs.heldFor(instanceID, taskID)
 }
 
 func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstanceIDsRequest) (*protos.ListInstanceIDsResponse, error) {
