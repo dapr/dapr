@@ -15,15 +15,17 @@ package inflight
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 // Call tracks a single in-flight activity execution.
 type Call struct {
-	done    chan struct{}
-	once    sync.Once
-	err     error
-	created time.Time
+	resolving atomic.Bool
+	done      chan struct{}
+	once      sync.Once
+	err       error
+	created   time.Time
 }
 
 func newCall() *Call {
@@ -34,6 +36,20 @@ func newCall() *Call {
 // eviction check (see the activity target's claim).
 func (c *Call) Age() time.Duration {
 	return time.Since(c.created)
+}
+
+// BeginResolve marks the call as resolving: its engine work item has
+// completed and the result is being published into the parent workflow.
+// The engine's held registration is released at completion, so without this
+// phase the publish window (which contends on the parent's turn lock) would
+// read as not-held and a stale-claim check could evict a healthy execution.
+func (c *Call) BeginResolve() {
+	c.resolving.Store(true)
+}
+
+// Resolving reports whether the call has entered the resolve phase.
+func (c *Call) Resolving() bool {
+	return c.resolving.Load()
 }
 
 // Settled reports whether Finish has been called.

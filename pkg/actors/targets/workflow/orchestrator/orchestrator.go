@@ -57,6 +57,17 @@ type orchestrator struct {
 	// and its escalation.
 	driveNotify  chan struct{}
 	driveRunning atomic.Bool
+
+	// lastActive is the UnixNano of the most recent turn-lock acquisition,
+	// stamped for the factory idle reaper. Also stamped at creation so a fresh
+	// actor is never reaped before its first turn.
+	lastActive atomic.Int64
+	// lastProgress is the UnixNano of the most recent durable state commit
+	// (stamped in signAndSaveState). Zero on a fresh activation, so an actor
+	// recreated after a crash reads as stalled and the durable backstops
+	// recover it. INVARIANT: never stamped by the janitor fire or by lock
+	// traffic; it distinguishes "alive and progressing" from "being polled".
+	lastProgress atomic.Int64
 	driveInfo    atomic.Pointer[driveInfo]
 	// foldPending holds sender-retried completions awaiting their folding
 	// turn (WorkflowsFastPath; see fold.go). INVARIANT: only touched
@@ -132,9 +143,13 @@ func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Re
 }
 
 // contextLockMeasured acquires the per-actor turn lock and records the wait
-// as the lock_wait histogram, splitting observed invocation latency into
-// queueing vs turn body.
+// as the lock_wait histogram (sampled 1-in-16), splitting observed
+// invocation latency into queueing vs turn body.
 func (o *orchestrator) contextLockMeasured(ctx context.Context, kind string) (context.CancelFunc, error) {
+	o.lastActive.Store(time.Now().UnixNano())
+	if o.lockWaitSample.Add(1)%16 != 0 {
+		return o.lock.ContextLock(ctx)
+	}
 	start := time.Now()
 	unlock, err := o.lock.ContextLock(ctx)
 	elapsed := float64(time.Since(start)) / float64(time.Millisecond)

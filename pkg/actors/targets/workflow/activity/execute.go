@@ -34,7 +34,7 @@ import (
 var errStaleClaimEvicted = wferrors.NewRecoverable(errors.New(
 	"in-flight activity claim evicted as stale (its work item is no longer held by the engine); re-executing"))
 
-func (a *activity) executeActivity(ctx context.Context, name string, invocation *protos.ActivityInvocation) error {
+func (a *activity) executeActivity(ctx context.Context, name string, invocation *protos.ActivityInvocation, skipLock bool) error {
 	taskEvent := invocation.GetHistoryEvent()
 	activityName := ""
 	if ts := taskEvent.GetTaskScheduled(); ts != nil {
@@ -62,7 +62,10 @@ func (a *activity) executeActivity(ctx context.Context, name string, invocation 
 
 	key := inflight.Key(a.actorID, taskEvent)
 	for {
-		call, owner := a.claim(key, workflowID, taskEvent.GetEventId())
+		call, owner, err := a.claim(ctx, key, workflowID, taskEvent.GetEventId(), skipLock)
+		if err != nil {
+			return err
+		}
 		if owner {
 			return a.runOwned(ctx, key, call, name, activityName, workflowID, taskEvent, invocation)
 		}
@@ -76,6 +79,16 @@ func (a *activity) executeActivity(ctx context.Context, name string, invocation 
 		// can turn stale AFTER followers arrive (the owner's work item lost
 		// mid-wait), and claim() only evicts at claim time.
 		log.Debugf("Activity actor '%s': following in-flight execution of '%s'", a.actorID, name)
+		if a.staleClaimAfter <= 0 {
+			// No eviction grace configured (test harnesses): park without
+			// the staleness recheck.
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-call.Done():
+				return call.Err()
+			}
+		}
 		stale := false
 		ticker := time.NewTicker(a.staleClaimAfter)
 		for !stale {
@@ -97,12 +110,29 @@ func (a *activity) executeActivity(ctx context.Context, name string, invocation 
 	}
 }
 
-// claim acquires the inflight entry for key, evicting a stale claim first.
-func (a *activity) claim(key, workflowID string, taskID int32) (*inflight.Call, bool) {
+// claim acquires the inflight entry for key, taking the actor lock for the
+// claim only unless the caller asked to skip it.
+// The lock MUST NOT extend past the claim: the segments that follow are the
+// app roundtrip (arbitrary length) and the result delivery into the parent
+// workflow (contends on the parent's turn lock), and holding the per-actor
+// lock across either parks Execute dispatches mesh-wide behind slow parent
+// turns. Neither segment needs the actor's serialization: the inflight entry
+// dedups duplicate arrivals (they join as followers, locked or not), and a
+// crash mid-execution is recovered by the parent janitor re-dispatching the
+// unresolved TaskScheduled event.
+func (a *activity) claim(ctx context.Context, key, workflowID string, taskID int32, skipLock bool) (*inflight.Call, bool, error) {
+	if !skipLock {
+		unlock, err := a.lock.ContextLock(ctx)
+		if err != nil {
+			return nil, false, err
+		}
+		defer unlock()
+	}
+
 	for {
 		call, owner := a.inflight.Acquire(key)
 		if owner || !a.staleClaim(call, workflowID, taskID) {
-			return call, owner
+			return call, owner, nil
 		}
 
 		// The claim belongs to a dead execution: its work item left the
@@ -122,7 +152,11 @@ func (a *activity) claim(key, workflowID string, taskID int32) (*inflight.Call, 
 }
 
 // staleClaim reports whether an inflight claim is provably dead: unsettled,
-// older than the stale grace, and with no engine-held work item for it. A
+// not resolving, older than the stale grace, and with no engine-held work
+// item for it. The resolving phase covers the gap between the engine
+// releasing its held registration (work item completed) and the result
+// publish settling the call: the publish contends on the parent workflow's
+// turn lock and must never read as stale. A
 // live execution of any length keeps its completion registration in the
 // engine, so it is never stale regardless of age (long-running activities
 // are not re-executed). The grace is two janitor periods: it must exceed the
@@ -133,7 +167,7 @@ func (a *activity) claim(key, workflowID string, taskID int32) (*inflight.Call, 
 // degrades to a duplicate execution absorbed by the orchestrator's dedup
 // (at-least-once, the same guarantee the durable reminder path provides).
 func (a *activity) staleClaim(call *inflight.Call, workflowID string, taskID int32) bool {
-	if call.Settled() || call.Age() < a.staleClaimAfter {
+	if call.Settled() || call.Resolving() || call.Age() < a.staleClaimAfter {
 		return false
 	}
 	return a.executionHeld != nil && !a.executionHeld(workflowID, taskID)

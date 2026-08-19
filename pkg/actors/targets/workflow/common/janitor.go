@@ -28,16 +28,21 @@ var log = logger.NewLogger("dapr.runtime.actors.targets.workflow.common")
 // in-flight activity whose local drive AND escalation were both lost.
 const defaultJanitorPeriod = 20 * time.Second
 
-// JanitorPeriod resolves the janitor repeat interval once per process. The
-// DAPR_WORKFLOW_JANITOR_PERIOD environment variable override exists for
-// integration tests that exercise janitor-driven recovery without waiting
-// the production interval; it is not a supported production knob.
-var JanitorPeriod = sync.OnceValue(func() time.Duration {
-	if v := os.Getenv("DAPR_WORKFLOW_JANITOR_PERIOD"); v != "" {
+// EnvDurationOr returns the positive duration parsed from the named
+// environment variable, or def. The env overrides exist for integration
+// tests that exercise time-driven behavior without waiting production
+// intervals; they are not supported production knobs.
+func EnvDurationOr(name string, def time.Duration) time.Duration {
+	if v := os.Getenv(name); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			return d
 		}
-		log.Warnf("Ignoring invalid DAPR_WORKFLOW_JANITOR_PERIOD %q", v)
+		log.Warnf("Ignoring invalid %s %q", name, v)
 	}
-	return defaultJanitorPeriod
+	return def
+}
+
+// JanitorPeriod resolves the janitor repeat interval once per process.
+var JanitorPeriod = sync.OnceValue(func() time.Duration {
+	return EnvDurationOr("DAPR_WORKFLOW_JANITOR_PERIOD", defaultJanitorPeriod)
 })

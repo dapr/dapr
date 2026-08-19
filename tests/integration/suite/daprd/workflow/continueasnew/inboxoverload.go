@@ -19,6 +19,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -104,25 +105,30 @@ func (i *inboxoverload) Run(t *testing.T, ctx context.Context) {
 	actorType := "dapr.internal.default." + appID + ".workflow"
 	actorID := "inboxoverloadi"
 
-	// Inject the deactivation reminder via the scheduler directly: the
-	// daprd RegisterActorReminder API rejects "dapr.internal.*" actor
-	// types because they are reserved for the workflow runtime.
 	_, err = i.workflow.Scheduler().Client(t, ctx).ScheduleJob(ctx,
 		i.workflow.Scheduler().JobNowActor("new-event-deactivate", "default", appID, actorType, actorID))
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		meta := i.workflow.Dapr().GetMetadata(c, ctx)
-		if !assert.NotNil(c, meta.ActorRuntime) {
-			return
-		}
-		for _, a := range meta.ActorRuntime.ActiveActors {
-			if a.Type == actorType {
-				assert.Zero(c, a.Count, "workflow actor %q still has %d active instance(s)", actorType, a.Count)
-				return
+		var count int
+		for _, key := range i.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs") {
+			if strings.Contains(key, "new-event-deactivate") {
+				count++
 			}
 		}
+		assert.Zero(c, count, "the injected empty-inbox reminder must be acked and deleted")
 	}, 10*time.Second, 50*time.Millisecond)
+
+	// The new residency contract: the live workflow remains active after
+	// the empty-inbox ack.
+	dmeta := i.workflow.Dapr().GetMetadata(t, ctx)
+	if dmeta.ActorRuntime != nil {
+		for _, a := range dmeta.ActorRuntime.ActiveActors {
+			if a.Type == actorType {
+				require.Equal(t, 1, a.Count, "live workflow actor %q must stay resident after an empty-inbox ack", actorType)
+			}
+		}
+	}
 
 	db := i.workflow.DB().GetConnection(t)
 	tableName := i.workflow.DB().TableName()
@@ -140,9 +146,9 @@ func (i *inboxoverload) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*30, 10*time.Millisecond)
 	drainMode.Store(true)
 
-	meta, err := client.WaitForWorkflowCompletion(ctx, id)
+	wmeta, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
-	require.NotNil(t, meta.GetOutput())
+	require.NotNil(t, wmeta.GetOutput())
 
 	mu.Lock()
 	defer mu.Unlock()
