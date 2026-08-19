@@ -132,10 +132,24 @@ type workflowMetrics struct {
 	// routes; sustained wait_watch indicates broken co-location (e.g.
 	// placement churn or legacy-format reminders).
 	completionRouteCount *stats.Int64Measure
-	appID                string
-	enabled              bool
-	namespace            string
-	meter                stats.Recorder
+	// Cached recorders for hot-path records (built in Init): direct
+	// meter.Record through prebuilt tag maps instead of the
+	// RecordWithOptions allocation chain. One recorder per measure so
+	// per-measure metric rules resolve exactly as before.
+	workflowOperationCountC   *diagUtils.CachedInt64Counter
+	workflowOperationLatencyC *diagUtils.CachedFloat64Recorder
+	workflowExecutionCountC   *diagUtils.CachedInt64Counter
+	workflowExecutionLatencyC *diagUtils.CachedFloat64Recorder
+	schedulingLatencyC        *diagUtils.CachedFloat64Recorder
+	activityExecutionCountC   *diagUtils.CachedInt64Counter
+	activityExecutionLatencyC *diagUtils.CachedFloat64Recorder
+	activityOperationCountC   *diagUtils.CachedInt64Counter
+	activityOperationLatencyC *diagUtils.CachedFloat64Recorder
+
+	appID     string
+	enabled   bool
+	namespace string
+	meter     stats.Recorder
 }
 
 func newWorkflowMetrics() *workflowMetrics {
@@ -218,7 +232,18 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 	w.namespace = namespace
 	w.meter = meter
 
-	return meter.Register(
+	base := []any{appIDKey, appID, namespaceKey, namespace}
+	w.workflowOperationCountC = diagUtils.NewCachedInt64Counter(meter, w.workflowOperationCount, base...)
+	w.workflowOperationLatencyC = diagUtils.NewCachedFloat64Recorder(meter, w.workflowOperationLatency, base...)
+	w.workflowExecutionCountC = diagUtils.NewCachedInt64Counter(meter, w.workflowExecutionCount, base...)
+	w.workflowExecutionLatencyC = diagUtils.NewCachedFloat64Recorder(meter, w.workflowExecutionLatency, base...)
+	w.schedulingLatencyC = diagUtils.NewCachedFloat64Recorder(meter, w.workflowSchedulingLatency, base...)
+	w.activityExecutionCountC = diagUtils.NewCachedInt64Counter(meter, w.activityExecutionCount, base...)
+	w.activityExecutionLatencyC = diagUtils.NewCachedFloat64Recorder(meter, w.activityExecutionLatency, base...)
+	w.activityOperationCountC = diagUtils.NewCachedInt64Counter(meter, w.activityOperationCount, base...)
+	w.activityOperationLatencyC = diagUtils.NewCachedFloat64Recorder(meter, w.activityOperationLatency, base...)
+
+	err := meter.Register(
 		diagUtils.NewMeasureView(w.workflowOperationCount, []tag.Key{appIDKey, namespaceKey, operationKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowOperationLatency, []tag.Key{appIDKey, namespaceKey, operationKey, statusKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.workflowExecutionCount, []tag.Key{appIDKey, namespaceKey, workflowNameKey, statusKey}, view.Count()),
@@ -235,6 +260,11 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 		diagUtils.NewMeasureView(w.workflowPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, payloadRatioDistribution),
 		diagUtils.NewMeasureView(w.activityPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey, activityNameKey}, payloadRatioDistribution),
 		diagUtils.NewMeasureView(w.completionRouteCount, []tag.Key{appIDKey, namespaceKey, taskTypeKey, completionRouteKey}, view.Count()))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // WorkflowOperationEvent records total number of Successful/Failed workflow Operations requests. It also records latency for those requests.
@@ -243,10 +273,10 @@ func (w *workflowMetrics) WorkflowOperationEvent(ctx context.Context, operation,
 		return
 	}
 
-	stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.workflowOperationCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, operationKey, operation, statusKey, status)...), stats.WithMeasurements(w.workflowOperationCount.M(1)))
+	w.workflowOperationCountC.Record2(operationKey, operation, statusKey, status)
 
 	if elapsed > 0 {
-		stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.workflowOperationLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, operationKey, operation, statusKey, status)...), stats.WithMeasurements(w.workflowOperationLatency.M(elapsed)))
+		w.workflowOperationLatencyC.Record2(operationKey, operation, statusKey, status, elapsed)
 	}
 }
 
@@ -257,7 +287,7 @@ func (w *workflowMetrics) WorkflowExecutionEvent(ctx context.Context, workflowNa
 		return
 	}
 
-	stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.workflowExecutionCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName, statusKey, status)...), stats.WithMeasurements(w.workflowExecutionCount.M(1)))
+	w.workflowExecutionCountC.Record2(workflowNameKey, workflowName, statusKey, status)
 }
 
 func (w *workflowMetrics) WorkflowExecutionLatency(ctx context.Context, workflowName, status string, elapsed float64) {
@@ -266,7 +296,7 @@ func (w *workflowMetrics) WorkflowExecutionLatency(ctx context.Context, workflow
 	}
 
 	if elapsed > 0 {
-		stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.workflowExecutionLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName, statusKey, status)...), stats.WithMeasurements(w.workflowExecutionLatency.M(elapsed)))
+		w.workflowExecutionLatencyC.Record2(workflowNameKey, workflowName, statusKey, status, elapsed)
 	}
 }
 
@@ -276,7 +306,7 @@ func (w *workflowMetrics) WorkflowSchedulingLatency(ctx context.Context, workflo
 	}
 
 	if elapsed > 0 {
-		stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.workflowSchedulingLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName)...), stats.WithMeasurements(w.workflowSchedulingLatency.M(elapsed)))
+		w.schedulingLatencyC.Record1(workflowNameKey, workflowName, elapsed)
 	}
 }
 
@@ -286,10 +316,10 @@ func (w *workflowMetrics) ActivityExecutionEvent(ctx context.Context, activityNa
 		return
 	}
 
-	stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.activityExecutionCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, activityNameKey, activityName, statusKey, status)...), stats.WithMeasurements(w.activityExecutionCount.M(1)))
+	w.activityExecutionCountC.Record2(activityNameKey, activityName, statusKey, status)
 
 	if elapsed > 0 {
-		stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.activityExecutionLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, activityNameKey, activityName, statusKey, status)...), stats.WithMeasurements(w.activityExecutionLatency.M(elapsed)))
+		w.activityExecutionLatencyC.Record2(activityNameKey, activityName, statusKey, status, elapsed)
 	}
 }
 
@@ -299,10 +329,10 @@ func (w *workflowMetrics) ActivityOperationEvent(ctx context.Context, activityNa
 		return
 	}
 
-	stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.activityOperationCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, activityNameKey, activityName, statusKey, status)...), stats.WithMeasurements(w.activityOperationCount.M(1)))
+	w.activityOperationCountC.Record2(activityNameKey, activityName, statusKey, status)
 
 	if elapsed > 0 {
-		stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.activityOperationLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, activityNameKey, activityName, statusKey, status)...), stats.WithMeasurements(w.activityOperationLatency.M(elapsed)))
+		w.activityOperationLatencyC.Record2(activityNameKey, activityName, statusKey, status, elapsed)
 	}
 }
 
