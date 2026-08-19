@@ -376,10 +376,14 @@ func Test_hysteresisSignals(t *testing.T) {
 	assert.False(t, o.redispatchSuppressed(),
 		"a fresh activation must never suppress the janitor re-dispatch")
 
-	// A durable commit makes both signals fresh.
+	// A durable commit refreshes progress (the escalation signal), but must
+	// NOT suppress the re-dispatch pass: sibling activities or external
+	// events can keep committing forever while one activity host is dead,
+	// so instance-wide progress proves nothing about a given task.
 	o.lastProgress.Store(time.Now().UnixNano())
 	assert.True(t, o.progressWithin(janitorPeriod()))
-	assert.True(t, o.redispatchSuppressed())
+	assert.False(t, o.redispatchSuppressed(),
+		"instance progress must not gate task re-dispatch")
 
 	// A running drive loop suppresses regardless of commit age.
 	o.lastProgress.Store(0)

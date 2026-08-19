@@ -33,16 +33,16 @@ import (
 // fresh execution.
 const redispatchCallTimeout = 30 * time.Second
 
-// redispatchSuppressed reports whether the janitor should skip the re-dispatch
-// check this fire: a running drive loop or a durable commit within the last
-// janitor period is positive evidence the instance is alive, and its in-flight
-// activities are then covered by their live executions. lastActive is
-// deliberately NOT consulted: the janitor fire itself stamps it on the way in,
-// so lock traffic cannot tell progress from polling. Suppression adds at most
-// one period to the recovery latency of an activity-host crash. A
-// freshly-activated actor has zero lastProgress and never suppresses.
+// redispatchSuppressed defers the re-dispatch pass only while a drive is
+// mid-flight on THIS instance: its commit may resolve tasks momentarily, and
+// the deferral is bounded (the drive ends and the next fire re-checks).
+// Instance-wide progress is deliberately NOT a suppression signal: sibling
+// activities or external events can keep committing forever while one
+// activity host is dead, and per-task liveness is what the re-dispatch
+// itself probes (a live execution on the target host absorbs it as a
+// follower; only a lost one re-executes).
 func (o *orchestrator) redispatchSuppressed() bool {
-	return o.driveRunning.Load() || o.progressWithin(janitorPeriod())
+	return o.driveRunning.Load()
 }
 
 // redispatchActivities re-dispatches TaskScheduled events whose resolution

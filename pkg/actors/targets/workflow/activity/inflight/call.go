@@ -21,11 +21,11 @@ import (
 
 // Call tracks a single in-flight activity execution.
 type Call struct {
-	resolving atomic.Bool
-	done      chan struct{}
-	once      sync.Once
-	err       error
-	created   time.Time
+	phase   atomic.Int32
+	done    chan struct{}
+	once    sync.Once
+	err     error
+	created time.Time
 }
 
 func newCall() *Call {
@@ -38,18 +38,37 @@ func (c *Call) Age() time.Duration {
 	return time.Since(c.created)
 }
 
-// BeginResolve marks the call as resolving: its engine work item has
-// completed and the result is being published into the parent workflow.
-// The engine's held registration is released at completion, so without this
-// phase the publish window (which contends on the parent's turn lock) would
-// read as not-held and a stale-claim check could evict a healthy execution.
-func (c *Call) BeginResolve() {
-	c.resolving.Store(true)
+// Call phases: a call starts executing; the owner moves it to resolving when
+// its engine work item completes and the result publish begins; a stale-claim
+// check moves it to evicted. Resolve and evict both CAS out of executing, so
+// exactly one transition wins: an eviction can never land mid-publish, and a
+// resolve can never resurrect an evicted call.
+const (
+	phaseExecuting = int32(iota)
+	phaseResolving
+	phaseEvicted
+)
+
+// BeginResolve moves the call from executing to resolving: its engine work
+// item has completed and the result is being published into the parent
+// workflow. The engine's held registration is released at completion, so
+// without this phase the publish window (which contends on the parent's
+// turn lock) would read as not-held and a stale-claim check could evict a
+// healthy execution. Returns false if an eviction won the race first.
+func (c *Call) BeginResolve() bool {
+	return c.phase.CompareAndSwap(phaseExecuting, phaseResolving)
+}
+
+// TryEvict moves the call from executing to evicted. Returns false if the
+// call is resolving (or already evicted): the caller must then treat the
+// claim as live.
+func (c *Call) TryEvict() bool {
+	return c.phase.CompareAndSwap(phaseExecuting, phaseEvicted)
 }
 
 // Resolving reports whether the call has entered the resolve phase.
 func (c *Call) Resolving() bool {
-	return c.resolving.Load()
+	return c.phase.Load() == phaseResolving
 }
 
 // Settled reports whether Finish has been called.

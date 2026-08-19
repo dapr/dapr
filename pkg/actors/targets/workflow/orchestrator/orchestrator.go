@@ -146,14 +146,21 @@ func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Re
 // as the lock_wait histogram (sampled 1-in-16), splitting observed
 // invocation latency into queueing vs turn body.
 func (o *orchestrator) contextLockMeasured(ctx context.Context, kind string) (context.CancelFunc, error) {
-	o.lastActive.Store(time.Now().UnixNano())
 	if o.lockWaitSample.Add(1)%16 != 0 {
-		return o.lock.ContextLock(ctx)
+		unlock, err := o.lock.ContextLock(ctx)
+		if err == nil {
+			// Only a successful acquisition is residency: a waiter that
+			// times out or is cancelled took no turn, and stamping it would
+			// let failed waiters keep an idle actor resident.
+			o.lastActive.Store(time.Now().UnixNano())
+		}
+		return unlock, err
 	}
 	start := time.Now()
 	unlock, err := o.lock.ContextLock(ctx)
 	elapsed := float64(time.Since(start)) / float64(time.Millisecond)
 	if err == nil {
+		o.lastActive.Store(time.Now().UnixNano())
 		diag.DefaultWorkflowMonitoring.WorkflowLockWait(ctx, kind, elapsed)
 	}
 	return unlock, err

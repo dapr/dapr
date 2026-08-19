@@ -122,13 +122,15 @@ func (i *inboxoverload) Run(t *testing.T, ctx context.Context) {
 	// The new residency contract: the live workflow remains active after
 	// the empty-inbox ack.
 	dmeta := i.workflow.Dapr().GetMetadata(t, ctx)
-	if dmeta.ActorRuntime != nil {
-		for _, a := range dmeta.ActorRuntime.ActiveActors {
-			if a.Type == actorType {
-				require.Equal(t, 1, a.Count, "live workflow actor %q must stay resident after an empty-inbox ack", actorType)
-			}
+	require.NotNil(t, dmeta.ActorRuntime)
+	found := false
+	for _, a := range dmeta.ActorRuntime.ActiveActors {
+		if a.Type == actorType {
+			found = true
+			require.Equal(t, 1, a.Count, "live workflow actor %q must stay resident after an empty-inbox ack", actorType)
 		}
 	}
+	require.True(t, found, "workflow actor type %q must be active; absence means it was deactivated", actorType)
 
 	db := i.workflow.DB().GetConnection(t)
 	tableName := i.workflow.DB().TableName()

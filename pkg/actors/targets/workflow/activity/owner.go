@@ -94,7 +94,10 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 		go a.watchAndPublish(ctx, a.actorID, key, call, callback, wi, taskEvent, name, activityName, workflowID, start)
 		return ctx.Err()
 	case completed := <-callback:
-		call.BeginResolve()
+		// A lost race here means an eviction already finished the call and a
+		// fresh execution is running; publish anyway, the orchestrator's
+		// duplicate-completion dedup absorbs whichever copy arrives second.
+		_ = call.BeginResolve()
 		execErr := a.publishResult(ctx, a.actorID, completed, wi, taskEvent, name, activityName, workflowID, start)
 		call.Finish(execErr)
 		// On success, cache the outcome briefly so a cron retry that arrived

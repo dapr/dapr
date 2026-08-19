@@ -53,7 +53,10 @@ func (f *factory) watchAndPublish(origCtx context.Context, actorID, key string, 
 	completed := <-callback
 	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(origCtx), detachedPublishTimeout)
 	defer cancel()
-	call.BeginResolve()
+	// A lost race here means an eviction already finished the call and a
+	// fresh execution is running; publish anyway, the orchestrator's
+	// duplicate-completion dedup absorbs whichever copy arrives second.
+	_ = call.BeginResolve()
 	execErr := f.publishResult(pubCtx, actorID, completed, wi, taskEvent, name, activityName, workflowID, start)
 	call.Finish(execErr)
 	// Cache the outcome for follower retries only on success; on error,

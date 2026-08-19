@@ -144,6 +144,11 @@ func (a *activity) claim(ctx context.Context, key, workflowID string, taskID int
 		// parked followers into their retry chains, and a completion of the
 		// evicted execution arriving late is dropped by the orchestrator's
 		// duplicate-completion dedup.
+		if !call.TryEvict() {
+			// The owner entered resolve between the staleness read and here:
+			// the execution is publishing its result and must not be evicted.
+			return call, owner, nil
+		}
 		call.Finish(errStaleClaimEvicted)
 		a.inflight.Release(key, call)
 		log.Warnf("Activity actor '%s': evicted a stale in-flight claim (no engine-held work item after %s); re-executing", a.actorID, call.Age())
