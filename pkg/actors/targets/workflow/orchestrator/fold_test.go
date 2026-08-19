@@ -69,7 +69,7 @@ func Test_fold_externalEventKeepsInboxPath(t *testing.T) {
 	assert.Empty(t, h.orch.foldPending)
 }
 
-func Test_fold_duplicatePendingDropped(t *testing.T) {
+func Test_fold_duplicatePendingJoins(t *testing.T) {
 	const instanceID = "test-fold-dup"
 	h := newWakeHarness(t, instanceID, true)
 	h.fact.fastPath = true
@@ -80,10 +80,12 @@ func Test_fold_duplicatePendingDropped(t *testing.T) {
 	require.NotNil(t, entry)
 
 	// A redelivery of the same completion while the first is pending must
-	// dedup against the pending set, not double-hold.
+	// join the pending entry (waiting on the same commit), never be acked
+	// early and never double-held: an early ack would stop the retry chain
+	// while the completion exists only in memory.
 	entry2, err := h.orch.addWorkflowEventMaybeFold(t.Context(), taskCompletedEvent(7))
 	require.NoError(t, err)
-	assert.Nil(t, entry2, "duplicate completion must be dropped via the pending set")
+	require.Same(t, entry, entry2, "a retry must join the pending entry")
 	assert.Len(t, h.orch.foldPending, 1)
 }
 
@@ -96,8 +98,8 @@ func Test_fold_takeCapAndOrder(t *testing.T) {
 	total := maxFoldPerTurn + 5
 	for i := range total {
 		h.orch.foldPending = append(h.orch.foldPending, &foldEntry{
-			event: taskCompletedEvent(int32(i + 10)),
-			done:  make(chan error, 1),
+			event:     taskCompletedEvent(int32(i + 10)),
+			committed: make(chan struct{}),
 		})
 	}
 
@@ -115,21 +117,26 @@ func Test_fold_ackNackFlush(t *testing.T) {
 	mk := func(n int) []*foldEntry {
 		out := make([]*foldEntry, n)
 		for i := range out {
-			out[i] = &foldEntry{event: taskCompletedEvent(int32(i)), done: make(chan error, 1)}
+			out[i] = &foldEntry{event: taskCompletedEvent(int32(i)), committed: make(chan struct{})}
 		}
 		return out
+	}
+
+	wait := func(e *foldEntry) error {
+		<-e.committed
+		return e.err
 	}
 
 	acked := mk(3)
 	foldAck(acked)
 	for _, e := range acked {
-		require.NoError(t, <-e.done)
+		require.NoError(t, wait(e))
 	}
 
 	nacked := mk(2)
 	foldNack(nacked, errors.New("turn failed"))
 	for _, e := range nacked {
-		err := <-e.done
+		err := wait(e)
 		require.Error(t, err)
 		assert.True(t, wferrors.IsRecoverable(err), "nacks must be recoverable so the sender retries")
 	}
@@ -138,7 +145,18 @@ func Test_fold_ackNackFlush(t *testing.T) {
 	// returning nil).
 	nacked2 := mk(1)
 	foldNack(nacked2, nil)
-	assert.True(t, wferrors.IsRecoverable(<-nacked2[0].done))
+	assert.True(t, wferrors.IsRecoverable(wait(nacked2[0])))
+
+	// Broadcast: a retry that joined a pending entry observes the same
+	// resolution as the original submitter.
+	joined := mk(1)
+	obs := make(chan error, 2)
+	for range 2 {
+		go func() { obs <- wait(joined[0]) }()
+	}
+	foldAck(joined)
+	require.NoError(t, <-obs)
+	require.NoError(t, <-obs)
 
 	const instanceID = "test-fold-flush"
 	h := newWakeHarness(t, instanceID, true)

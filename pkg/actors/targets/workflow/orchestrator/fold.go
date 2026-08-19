@@ -51,12 +51,16 @@ const maxFoldPerTurn = 128
 const foldWaitTimeout = 2 * time.Minute
 
 // foldEntry is one sender-retried completion held in memory awaiting its
-// folding turn. done is buffered-1 and receives exactly one signal: nil
-// after the turn's commit persisted the event into history, or the error to
-// return to the sender (whose retry is the durability).
+// folding turn. committed is closed exactly once when the entry resolves,
+// with err set first: nil after the turn's commit persisted the event into
+// history, or the error to return to the senders (whose retries are the
+// durability). Broadcast semantics: the original submitter AND any retry
+// that found the entry already pending all wait on the same resolution; a
+// retry acked before the commit would stop the only durable re-driver.
 type foldEntry struct {
-	event *backend.HistoryEvent
-	done  chan error
+	event     *backend.HistoryEvent
+	err       error
+	committed chan struct{}
 }
 
 // invokeAddEventFold is the WorkflowsFastPath entry point for
@@ -79,16 +83,20 @@ func (o *orchestrator) invokeAddEventFold(ctx context.Context, req *internalsv1p
 		return nil, fmt.Errorf("failed to unmarshal AddWorkflowEvent HistoryEvent: %w", err)
 	}
 
-	if err := o.checkAccessPolicy(ctx, req.GetMessage().GetMethod(), req.GetMessage().GetData().GetValue(), &ev, nil, req.GetMetadata()); err != nil {
-		return nil, err
-	}
-
 	unlock, err := o.contextLockMeasured(ctx, "method")
 	if err != nil {
 		return nil, fmt.Errorf("failed to invoke method for workflow '%s': %w", o.actorID, err)
 	}
 	unlockOnce := sync.OnceFunc(unlock)
 	defer unlockOnce()
+
+	// Under the lock, like the normal handleInvoke path: the policy check
+	// reads mutable cached workflow state, and authorizing before the lock
+	// could approve a completion against an execution that a concurrent
+	// turn replaces before this one applies.
+	if err = o.checkAccessPolicy(ctx, req.GetMessage().GetMethod(), req.GetMessage().GetData().GetValue(), &ev, nil, req.GetMetadata()); err != nil {
+		return nil, err
+	}
 
 	entry, err := o.addWorkflowEventMaybeFold(ctx, &ev)
 	if err != nil {
@@ -111,7 +119,8 @@ func (o *orchestrator) invokeAddEventFold(ctx context.Context, req *internalsv1p
 		case <-time.After(foldWaitTimeout):
 			diag.DefaultWorkflowMonitoring.WorkflowCompletionsFold(context.Background(), diag.StatusFoldNacked)
 			return nil, wferrors.NewRecoverable(fmt.Errorf("workflow actor '%s': timed out waiting for the folding turn to commit", o.actorID))
-		case err = <-entry.done:
+		case <-entry.committed:
+			err = entry.err
 			diag.DefaultWorkflowMonitoring.WorkflowCompletionsFoldWait(context.Background(), float64(time.Since(start))/float64(time.Millisecond))
 			if err != nil {
 				return nil, err
@@ -147,9 +156,20 @@ func (o *orchestrator) addWorkflowEventMaybeFold(ctx context.Context, e *backend
 
 	// Duplicates: same handling as the inbox path, but the pending set is a
 	// third place a completion can legitimately already live.
-	if dedup.IsDuplicateCompletion(e, state.History, state.Inbox) || o.foldHasCompletion(e) {
-		log.Debugf("Workflow actor '%s': dropping duplicate completion (history/inbox/pending); re-driving the wake-up", o.actorID)
+	if dedup.IsDuplicateCompletion(e, state.History, state.Inbox) {
+		log.Debugf("Workflow actor '%s': dropping duplicate completion (history/inbox); re-driving the wake-up", o.actorID)
 		return nil, o.driveNewEvent(ctx, e, state)
+	}
+	if pending := o.foldPendingEntry(e); pending != nil {
+		// A retry of a completion that is still only held in memory must
+		// NOT be acked yet: the retry chain is the durability until the
+		// folding turn commits. Re-drive the wake (the retry usually means
+		// the prior arm was lost) and join the pending entry's resolution.
+		log.Debugf("Workflow actor '%s': joining retry to the pending fold entry; re-driving the wake-up", o.actorID)
+		if err := o.driveNewEvent(ctx, e, state); err != nil {
+			return nil, err
+		}
+		return pending, nil
 	}
 
 	// Same attestation gate as the inbox path: verify against the signed
@@ -166,7 +186,7 @@ func (o *orchestrator) addWorkflowEventMaybeFold(ctx context.Context, e *backend
 // the actor lock held. The caller must wait on the returned entry after
 // releasing the lock.
 func (o *orchestrator) foldSubmit(ctx context.Context, e *backend.HistoryEvent, state *wfenginestate.State) *foldEntry {
-	entry := &foldEntry{event: e, done: make(chan error, 1)}
+	entry := &foldEntry{event: e, committed: make(chan struct{})}
 	o.foldPending = append(o.foldPending, entry)
 
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
@@ -224,19 +244,19 @@ func dropFoldDriveForTest() bool {
 	return droppedFoldDrives.Add(1) <= budget
 }
 
-// foldHasCompletion reports whether a completion with the same resolution
-// key is already held. Lock held by caller.
-func (o *orchestrator) foldHasCompletion(e *backend.HistoryEvent) bool {
+// foldPendingEntry returns the held entry with the same resolution key as
+// e, or nil. Lock held by caller.
+func (o *orchestrator) foldPendingEntry(e *backend.HistoryEvent) *foldEntry {
 	kind, id, ok := dtdedup.Of(e)
 	if !ok {
-		return false
+		return nil
 	}
 	for _, p := range o.foldPending {
 		if k2, id2, ok2 := dtdedup.Of(p.event); ok2 && k2 == kind && id2 == id {
-			return true
+			return p
 		}
 	}
-	return false
+	return nil
 }
 
 // foldTake removes and returns up to maxFoldPerTurn held completions for the
@@ -271,7 +291,7 @@ func (o *orchestrator) foldEvents() []*backend.HistoryEvent {
 // their event succeeded.
 func foldAck(taken []*foldEntry) {
 	for _, p := range taken {
-		p.done <- nil
+		close(p.committed)
 	}
 }
 
@@ -287,7 +307,8 @@ func foldNack(taken []*foldEntry, err error) {
 	}
 	nerr := wferrors.NewRecoverable(fmt.Errorf("completion was not committed, redeliver: %w", err))
 	for _, p := range taken {
-		p.done <- nerr
+		p.err = nerr
+		close(p.committed)
 		diag.DefaultWorkflowMonitoring.WorkflowCompletionsFold(context.Background(), diag.StatusFoldNacked)
 	}
 }
@@ -301,7 +322,8 @@ func (o *orchestrator) foldFlush() {
 	}
 	err := targeterrors.NewClosed("deactivated")
 	for _, p := range o.foldPending {
-		p.done <- err
+		p.err = err
+		close(p.committed)
 		diag.DefaultWorkflowMonitoring.WorkflowCompletionsFold(context.Background(), diag.StatusFoldNacked)
 	}
 	o.foldPending = nil

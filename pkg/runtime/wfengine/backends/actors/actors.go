@@ -1020,9 +1020,14 @@ func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
 // mirrored into activityExecs so the activity target's stale-claim eviction
 // can see the work item as engine-held for the duration of the wait.
 func (abe *Actors) WaitForActivityCompletion(request *protos.ActivityRequest) func(context.Context) (*protos.ActivityResponse, error) {
-	release := abe.activityExecs.add(activityExecutionKey(request.GetWorkflowInstance().GetInstanceId(), request.GetTaskId()))
 	wait := abe.pendingTasksBackend.WaitForActivityCompletion(request)
+	key := activityExecutionKey(request.GetWorkflowInstance().GetInstanceId(), request.GetTaskId())
 	return func(ctx context.Context) (*protos.ActivityResponse, error) {
+		// Register inside the wait so the held-liveness lifetime matches the
+		// actual wait: durabletask can abandon a work item without ever
+		// invoking the waiter, and a construction-time registration would
+		// then leak, blinding stale-claim eviction for this key forever.
+		release := abe.activityExecs.add(key)
 		defer release()
 		return wait(ctx)
 	}
