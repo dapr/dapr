@@ -28,11 +28,11 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-// inflightCacheTTL keeps the cached outcome of a finished activity around for
+// InflightCacheTTL keeps the cached outcome of a finished activity around for
 // this long so cron retries that arrive after the owner has finished (or are
 // still in flight when the owner finishes) become followers and ack SUCCESS
 // without dispatching a duplicate WorkItem to the SDK.
-const inflightCacheTTL = 60 * time.Second
+const InflightCacheTTL = 60 * time.Second
 
 // runOwned drives a single activity execution from WorkItem dispatch through
 // to publishing the result back to the workflow actor. It is invoked by
@@ -102,7 +102,7 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 		// subsequent cron retries become fresh owners and can re-attempt
 		// rather than reading the cached failure for the full TTL window.
 		if execErr == nil {
-			a.inflight.ReleaseAfter(key, call, inflightCacheTTL)
+			a.inflight.ReleaseAfter(key, call, InflightCacheTTL)
 		} else {
 			a.inflight.Release(key, call)
 		}

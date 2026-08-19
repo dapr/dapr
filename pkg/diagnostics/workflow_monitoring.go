@@ -34,8 +34,46 @@ var (
 )
 
 const (
-	StatusSuccess     = "success"
-	StatusFailed      = "failed"
+	StatusSuccess = "success"
+	StatusFailed  = "failed"
+	// Local-wake fast path outcomes beyond success/failed: a failed drive
+	// escalated to a durable reminder (or that escalation itself failed,
+	// leaving the janitor as the net), and a janitor fire that found and
+	// drove a pending inbox (the recovery event; ~0 in healthy steady state).
+	StatusEscalated        = "escalated"
+	StatusEscalateFailed   = "escalate_failed"
+	StatusEscalateSkipped  = "escalate_skipped_shutdown"
+	StatusJanitorRecovered = "janitor_recovered"
+	// A janitor fire found completions held for folding with no live driver
+	// (their arming drive was lost and their senders stopped re-delivering,
+	// e.g. died with their pod at a placement handoff) and drove a turn to
+	// commit them; the rescue event of the captive-fold stranding class
+	// (~0 in healthy steady state).
+	StatusJanitorFoldRecovered = "janitor_fold_recovered"
+	// Local-activity fast path janitor re-dispatch outcomes: an unresolved
+	// TaskScheduled event was re-dispatched (the recovery event; ~0 in
+	// healthy steady state), found busy executing (benign), or the
+	// re-dispatch call failed (the next janitor period retries).
+	StatusJanitorRedispatched     = "janitor_redispatched"
+	StatusJanitorRedispatchBusy   = "janitor_redispatch_busy"
+	StatusJanitorRedispatchFailed = "janitor_redispatch_failed"
+	// A janitor re-dispatch was accepted in an earlier period but its task is
+	// still unresolved: acceptance only certifies that the target host armed
+	// a detached local drive, so the arm is presumed lost and the re-dispatch
+	// was escalated to the durable run-activity reminder the fast path elided
+	// (a placement-handoff loss window). The durable rescue event; ~0 in
+	// healthy steady state.
+	StatusJanitorRedispatchEscalated = "janitor_redispatch_escalated"
+	// An activity arrival found the in-flight claim held by a dead execution
+	// (no engine-held work item after the stale grace) and evicted it so the
+	// arrival re-executes; the rescue event of the janitor-livelock class
+	// (~0 in healthy steady state).
+	StatusClaimEvicted = "claim_evicted"
+	// Completions-fold outcomes: a sender-retried completion committed
+	// inside its folding turn (folded), or was nacked back into the
+	// sender's retry chain (turn failure, timeout, deactivation).
+	StatusFolded      = "folded"
+	StatusFoldNacked  = "fold_nacked"
 	StatusTerminated  = "terminated"
 	StatusRecoverable = "recoverable"
 	CreateWorkflow    = "create_workflow"
@@ -132,6 +170,38 @@ type workflowMetrics struct {
 	// routes; sustained wait_watch indicates broken co-location (e.g.
 	// placement churn or legacy-format reminders).
 	completionRouteCount *stats.Int64Measure
+	// localWakeDriveLatency records the time from a local drive being queued
+	// to its turn invocation returning, under the WorkflowsFastPath
+	// preview feature. Localizes where fixed-rate latency is spent when the
+	// scheduler trigger leg is elided.
+	localWakeDriveLatency *stats.Float64Measure
+	// localWakeCount records workflow wake-up reminders driven locally under
+	// the WorkflowsFastPath preview feature, tagged by status
+	// (success = turn ran locally and backstop deletion was attempted;
+	// failed = the scheduler backstop drives the turn instead).
+	localWakeCount *stats.Int64Measure
+	// localActivityDriveLatency records the duration of one locally-driven
+	// activity execution attempt (arming to the execution call returning,
+	// including the app call), under the WorkflowsFastPath
+	// preview feature.
+	localActivityDriveLatency *stats.Float64Measure
+	// localActivityCount records activity executions driven locally under
+	// the WorkflowsFastPath preview feature, tagged by status
+	// (success/failed drives, escalations to the durable reminder, and
+	// janitor re-dispatch outcomes).
+	localActivityCount *stats.Int64Measure
+	// completionsFoldCount records sender-retried completions handled by the
+	// WorkflowsFastPath preview feature, by outcome.
+	completionsFoldCount *stats.Int64Measure
+	// completionsFoldWait records how long a folding submit waited for its
+	// turn to commit (the sender-visible added latency of the fold).
+	completionsFoldWait *stats.Float64Measure
+	// lockWaitLatency records the time a workflow orchestrator invocation
+	// spends queued on the per-actor turn lock before it starts, tagged by
+	// invocation kind (method/reminder/stream). Splits observed invocation
+	// latency into lock queueing vs turn body.
+	lockWaitLatency *stats.Float64Measure
+
 	// Cached recorders for hot-path records (built in Init): direct
 	// meter.Record through prebuilt tag maps instead of the
 	// RecordWithOptions allocation chain. One recorder per measure so
@@ -218,6 +288,34 @@ func newWorkflowMetrics() *workflowMetrics {
 			"runtime/workflow/completion/route/count",
 			"The number of pending-task completions routed under clustered deployment, by task type and route.",
 			stats.UnitDimensionless),
+		localWakeCount: stats.Int64(
+			"runtime/workflow/local_wake/count",
+			"The number of workflow wake-up reminders driven locally by the WorkflowsFastPath preview feature, by status.",
+			stats.UnitDimensionless),
+		localWakeDriveLatency: stats.Float64(
+			"runtime/workflow/local_wake/drive_latency",
+			"The latency of locally-driven workflow wake-ups, from queueing the drive to the turn invocation returning.",
+			stats.UnitMilliseconds),
+		localActivityCount: stats.Int64(
+			"runtime/workflow/local_activity/count",
+			"The number of activity executions driven locally by the WorkflowsFastPath preview feature, by status.",
+			stats.UnitDimensionless),
+		localActivityDriveLatency: stats.Float64(
+			"runtime/workflow/local_activity/drive_latency",
+			"The latency of one locally-driven activity execution attempt, including the app call.",
+			stats.UnitMilliseconds),
+		completionsFoldCount: stats.Int64(
+			"runtime/workflow/completions_fold/count",
+			"The number of sender-retried completions handled by the WorkflowsFastPath preview feature, by outcome.",
+			stats.UnitDimensionless),
+		completionsFoldWait: stats.Float64(
+			"runtime/workflow/completions_fold/wait_latency",
+			"The time a folding completion submit waited for its turn to commit.",
+			stats.UnitMilliseconds),
+		lockWaitLatency: stats.Float64(
+			"runtime/workflow/lock_wait",
+			"The time a workflow orchestrator invocation spends queued on the per-actor turn lock, by invocation kind.",
+			stats.UnitMilliseconds),
 	}
 }
 
@@ -253,17 +351,45 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 		diagUtils.NewMeasureView(w.activityExecutionLatency, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, workflowLatencyDistribution),
 		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey, statusKey}, workflowLatencyDistribution),
 		diagUtils.NewMeasureView(w.workflowSchedulingLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, latencyDistribution),
+		diagUtils.NewMeasureView(w.localWakeDriveLatency, []tag.Key{appIDKey, namespaceKey, statusKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.attestationGeneratedCount, []tag.Key{appIDKey, namespaceKey, attestationKindKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.attestationVerifiedCount, []tag.Key{appIDKey, namespaceKey, attestationKindKey, attestationResultKey}, view.Count()),
 		diagUtils.NewMeasureView(w.attestationVerifyLatency, []tag.Key{appIDKey, namespaceKey, attestationKindKey, attestationResultKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.attestationCertCacheCount, []tag.Key{appIDKey, namespaceKey, certCacheOutcomeKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, payloadRatioDistribution),
 		diagUtils.NewMeasureView(w.activityPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey, activityNameKey}, payloadRatioDistribution),
-		diagUtils.NewMeasureView(w.completionRouteCount, []tag.Key{appIDKey, namespaceKey, taskTypeKey, completionRouteKey}, view.Count()))
+		diagUtils.NewMeasureView(w.completionRouteCount, []tag.Key{appIDKey, namespaceKey, taskTypeKey, completionRouteKey}, view.Count()),
+		// Sum of per-event 1s, not Count: identical exposition (cumulative
+		// int64 exports as a Prometheus counter either way), but Sum lets
+		// Init pre-record the rescue-evidence statuses at zero below, which
+		// Count cannot (a zero record still counts).
+		diagUtils.NewMeasureView(w.localWakeCount, []tag.Key{appIDKey, namespaceKey, statusKey}, view.Sum()),
+		diagUtils.NewMeasureView(w.localActivityCount, []tag.Key{appIDKey, namespaceKey, statusKey}, view.Sum()),
+		diagUtils.NewMeasureView(w.localActivityDriveLatency, []tag.Key{appIDKey, namespaceKey, statusKey}, latencyDistribution),
+		diagUtils.NewMeasureView(w.lockWaitLatency, []tag.Key{appIDKey, namespaceKey, operationKey}, latencyDistribution),
+		diagUtils.NewMeasureView(w.completionsFoldCount, []tag.Key{appIDKey, namespaceKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(w.completionsFoldWait, []tag.Key{appIDKey, namespaceKey}, latencyDistribution))
 	if err != nil {
 		return err
 	}
 
+	// Pre-record the rescue-evidence series at zero. They are the
+	// ~0-in-healthy-steady-state counters the recovery gates read, and with
+	// lazy registration an absent series is indistinguishable from a rescue
+	// path that never fired. Their views aggregate by Sum, so the zero
+	// record registers the series without changing its value.
+	for _, s := range []string{StatusJanitorRecovered, StatusJanitorFoldRecovered} {
+		stats.RecordWithOptions(context.Background(),
+			stats.WithRecorder(w.meter),
+			stats.WithTags(diagUtils.WithTags(w.localWakeCount.Name(), appIDKey, appID, namespaceKey, namespace, statusKey, s)...),
+			stats.WithMeasurements(w.localWakeCount.M(0)))
+	}
+	for _, s := range []string{StatusJanitorRedispatched, StatusJanitorRedispatchEscalated, StatusClaimEvicted} {
+		stats.RecordWithOptions(context.Background(),
+			stats.WithRecorder(w.meter),
+			stats.WithTags(diagUtils.WithTags(w.localActivityCount.Name(), appIDKey, appID, namespaceKey, namespace, statusKey, s)...),
+			stats.WithMeasurements(w.localActivityCount.M(0)))
+	}
 	return nil
 }
 
@@ -403,6 +529,90 @@ func (w *workflowMetrics) ActivityPayloadSizeRatio(ctx context.Context, workflow
 		stats.WithRecorder(w.meter),
 		stats.WithTags(diagUtils.WithTags(w.activityPayloadSizeRatio.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName, activityNameKey, activityName)...),
 		stats.WithMeasurements(w.activityPayloadSizeRatio.M(ratio)))
+}
+
+// WorkflowLocalWakeDrive records the duration of one locally-driven wake
+// (queue to turn-invocation return), by outcome status.
+func (w *workflowMetrics) WorkflowLocalWakeDrive(ctx context.Context, status string, elapsed float64) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.localWakeDriveLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, statusKey, status)...),
+		stats.WithMeasurements(w.localWakeDriveLatency.M(elapsed)))
+}
+
+// WorkflowLocalWake records a workflow wake-up reminder driven locally under
+// the WorkflowsFastPath preview feature, by status.
+func (w *workflowMetrics) WorkflowLocalWake(ctx context.Context, status string) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.localWakeCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, statusKey, status)...),
+		stats.WithMeasurements(w.localWakeCount.M(1)))
+}
+
+// WorkflowLocalActivityDrive records the duration of one locally-driven
+// activity execution attempt (including the app call), by outcome status.
+func (w *workflowMetrics) WorkflowLocalActivityDrive(ctx context.Context, status string, elapsed float64) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.localActivityDriveLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, statusKey, status)...),
+		stats.WithMeasurements(w.localActivityDriveLatency.M(elapsed)))
+}
+
+// WorkflowLocalActivity records an activity execution driven locally under
+// the WorkflowsFastPath preview feature, by status.
+func (w *workflowMetrics) WorkflowLocalActivity(ctx context.Context, status string) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.localActivityCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, statusKey, status)...),
+		stats.WithMeasurements(w.localActivityCount.M(1)))
+}
+
+// WorkflowLockWait records the time an orchestrator invocation spent queued
+// on the per-actor turn lock, by invocation kind (method/reminder/stream).
+func (w *workflowMetrics) WorkflowLockWait(ctx context.Context, kind string, elapsed float64) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.lockWaitLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, operationKey, kind)...),
+		stats.WithMeasurements(w.lockWaitLatency.M(elapsed)))
+}
+
+// WorkflowCompletionsFold records a sender-retried completion handled under
+// the WorkflowsFastPath preview feature, by outcome.
+func (w *workflowMetrics) WorkflowCompletionsFold(ctx context.Context, status string) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.completionsFoldCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, statusKey, status)...),
+		stats.WithMeasurements(w.completionsFoldCount.M(1)))
+}
+
+// WorkflowCompletionsFoldWait records the sender-visible wait of one folding
+// completion submit.
+func (w *workflowMetrics) WorkflowCompletionsFoldWait(ctx context.Context, elapsed float64) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.completionsFoldWait.Name(), appIDKey, w.appID, namespaceKey, w.namespace)...),
+		stats.WithMeasurements(w.completionsFoldWait.M(elapsed)))
 }
 
 // WorkflowCompletionRoute records how a pending-task completion was routed
