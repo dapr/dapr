@@ -40,7 +40,7 @@ type activity struct {
 }
 
 func (a *activity) Setup(t *testing.T) []framework.Option {
-	a.workflow = newClusteredDeployment(t, 2)
+	a.workflow = workflow.NewClustered(t, 2)
 
 	return []framework.Option{
 		framework.WithProcesses(a.workflow),

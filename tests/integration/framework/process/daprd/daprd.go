@@ -119,6 +119,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.appPort != nil {
 		args = append(args, "--app-port="+strconv.Itoa(*opts.appPort))
 	}
+	if opts.appMaxConcurrency != nil {
+		args = append(args, "--app-max-concurrency="+strconv.Itoa(*opts.appMaxConcurrency))
+	}
 	if opts.appHealthCheckPath != "" {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
 	}

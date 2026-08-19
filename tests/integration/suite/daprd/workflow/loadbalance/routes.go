@@ -50,7 +50,7 @@ type routes struct {
 }
 
 func (r *routes) Setup(t *testing.T) []framework.Option {
-	r.workflow = newClusteredDeployment(t, 2)
+	r.workflow = workflow.NewClustered(t, 2)
 
 	return []framework.Option{
 		framework.WithProcesses(r.workflow),

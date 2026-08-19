@@ -401,7 +401,7 @@ func newGetWorkflowAPI(metadata *backend.WorkflowMetadata, metadataErr error) *U
 		logger:     logger.NewLogger("test"),
 		resiliency: resiliency.New(nil),
 		workflowEngine: fake.New().WithClient(func() backend.TaskHubClient {
-			return fake.NewClient().WithFetchWorkflowMetadata(func(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error) {
+			return fake.NewClient().WithFetchWorkflowMetadata(func(ctx context.Context, id api.InstanceID, opts ...api.FetchWorkflowMetadataOptions) (*backend.WorkflowMetadata, error) {
 				return metadata, metadataErr
 			})
 		}),

@@ -275,6 +275,9 @@ func (a *api) onStartWorkflowHandler() http.HandlerFunc {
 				in.WorkflowName = chi.URLParam(r, workflowName)
 				in.WorkflowComponent = chi.URLParam(r, workflowComponent)
 				in.InstanceId = r.URL.Query().Get(instanceID)
+				if appID := r.URL.Query().Get(workflowAppID); appID != "" {
+					in.AppId = &appID
+				}
 
 				// We accept the HTTP request body as the input to the workflow
 				// without making any assumptions about its format.
@@ -309,11 +312,7 @@ func (a *api) onTerminateWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.TerminateWorkflow,
 		UniversalHTTPHandlerOpts[*runtimev1pb.TerminateWorkflowRequest, *emptypb.Empty]{
-			InModifier: func(r *http.Request, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowRequest, error) {
-				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
-				in.SetInstanceId(chi.URLParam(r, instanceID))
-				return in, nil
-			},
+			InModifier:        workflowInModifier[*runtimev1pb.TerminateWorkflowRequest],
 			SuccessStatusCode: http.StatusAccepted,
 		})
 }
@@ -329,6 +328,9 @@ func (a *api) onRaiseEventWorkflowHandler() http.HandlerFunc {
 				in.InstanceId = chi.URLParam(r, instanceID)
 				in.WorkflowComponent = chi.URLParam(r, workflowComponent)
 				in.EventName = chi.URLParam(r, eventName)
+				if appID := r.URL.Query().Get(workflowAppID); appID != "" {
+					in.AppId = &appID
+				}
 
 				// We accept the HTTP request body as the payload of the workflow event
 				// without making any assumptions about its format.
@@ -367,18 +369,16 @@ func (a *api) onPurgeWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.PurgeWorkflow,
 		UniversalHTTPHandlerOpts[*runtimev1pb.PurgeWorkflowRequest, *emptypb.Empty]{
-			InModifier: func(r *http.Request, in *runtimev1pb.PurgeWorkflowRequest) (*runtimev1pb.PurgeWorkflowRequest, error) {
-				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
-				in.SetInstanceId(chi.URLParam(r, instanceID))
-				return in, nil
-			},
+			InModifier:        workflowInModifier[*runtimev1pb.PurgeWorkflowRequest],
 			SuccessStatusCode: http.StatusAccepted,
 		})
 }
 
-// Shared InModifier method for all universal handlers for workflows that adds the "WorkflowComponent" and "InstanceId" properties
+// Shared InModifier method for all universal handlers for workflows that adds
+// the "WorkflowComponent", "InstanceId" and "AppId" properties
 func workflowInModifier[T runtimev1pb.WorkflowRequests](r *http.Request, in T) (T, error) {
 	in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
 	in.SetInstanceId(chi.URLParam(r, instanceID))
+	in.SetAppId(r.URL.Query().Get(workflowAppID))
 	return in, nil
 }

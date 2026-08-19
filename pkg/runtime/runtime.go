@@ -1286,9 +1286,8 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		return rterrors.NewInit(rterrors.InitFailure, "actors", err)
 	}
 
-	actorStateStoreName, ok := a.processor.State().ActorStateStoreName()
-	if !ok {
-		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
+	if _, ok := a.processor.State().ActorStateStoreName(); !ok {
+		log.Info("actors: state store is not configured - actor state and workflow operations will be unavailable until an actor state store component is loaded")
 	}
 
 	// Override host address if the internal gRPC listen address is localhost.
@@ -1302,7 +1301,6 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 
 	if err := a.actors.Init(actors.InitOptions{
 		Hostname:          hostAddress,
-		StateStoreName:    actorStateStoreName,
 		GRPC:              a.grpc,
 		SchedulerClient:   a.jobsManager.Client(),
 		SchedulerReloader: a.jobsManager,
