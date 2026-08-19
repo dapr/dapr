@@ -98,6 +98,18 @@ func (r *routing) Run(t *testing.T, ctx context.Context) {
 	// claim.
 	r.sched.WaitUntilSidecarsConnected(t, ctx, 6)
 
+	// Both actor hosts must be in the placement table before a 0s reminder
+	// fires, or every reminder lands on the first host.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		var streams float64
+		for k, v := range r.sched.Metrics(c, ctx).All() {
+			if strings.HasPrefix(k, "dapr_scheduler_placement_streams_connected") {
+				streams += v
+			}
+		}
+		assert.InDelta(c, float64(2), streams, 0)
+	}, time.Second*20, time.Millisecond*10)
+
 	gclient := r.daprd1.GRPCClient(t, ctx)
 
 	const numReminders = 50

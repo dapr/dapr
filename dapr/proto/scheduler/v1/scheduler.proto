@@ -340,10 +340,10 @@ message Host {
   // cluster serves placement.
   bool leader = 2;
 
-  // placement_enabled is true when this scheduler host is capable of serving
+  // scheduler_placement_enabled is true when this scheduler host can serve
   // placement (started with placement enabled). Used to elect the placement
   // leader among capable hosts only, keeping mixed-version clusters safe.
-  bool placement_enabled = 3;
+  bool scheduler_placement_enabled = 3;
 
   // placement_cutover_pending is true on the elected placement leader while
   // the advertisement waits for a standalone placement service to confirm

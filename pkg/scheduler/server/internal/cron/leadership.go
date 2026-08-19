@@ -114,12 +114,19 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 
 	// Withhold the advertisement while an old sidecar is connected anywhere
 	// in the cluster, or while a present placement service has not confirmed
-	// it stood down, so two placement authorities never serve at once. The
-	// stand-down wait deliberately has no timeout, since a timed-out
-	// advertisement next to a still-serving placement service is a split
-	// brain.
+	// it stood down, so two placement authorities never serve at once.
 	gateBlocked := !advertised && gateIncapable
-	withholdPlacement := gateBlocked || awaitingStandDown
+	// No scheduler placement leader is advertised while the gate holds,
+	// the placement service has not stood down, or no capable sidecar
+	// exists to advertise to. Only the leader bit waits for that last
+	// reason, so a booting sidecar reads capable-but-leaderless and waits
+	// for its own registration, not no-placement-served.
+	awaitingLeadership := gateBlocked || awaitingStandDown || !gateCapable
+	// The placement service is still the authority while the gate holds or
+	// the stand-down is unconfirmed, so the capability bit is masked too:
+	// sidecars use the placement service rather than wait, and the cluster
+	// keeps a single placement authority.
+	placementServiceAuthority := gateBlocked || awaitingStandDown
 
 	// Withholding after the advertisement became permanent would drop every
 	// placement stream over one stale pod, so warn instead.
@@ -134,10 +141,13 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 
 	electedAddr := placementLeader(hosts)
 	leaderAddr := electedAddr
-	if withholdPlacement {
+	if awaitingLeadership {
 		leaderAddr = ""
 	}
-	if leaderAddr != "" && gateCapable && !advertised {
+	// The latch waits for a sidecar to take a placement stream, so a
+	// broadcast racing another scheduler's gate entry stays revocable.
+	if leaderAddr != "" && gateCapable && !advertised &&
+		h.placement != nil && h.placement.HasPlacementStreams() {
 		if h.handoff != nil {
 			h.handoff.LatchAdvertised()
 		} else {
@@ -148,7 +158,7 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 	// The elected leader is considered cutover pending while only the
 	// stand-down confirmation blocks the advertisement, which the placement
 	// service takes as its signal to drain and confirm.
-	cutoverPending := awaitingStandDown && !gateBlocked && electedAddr != ""
+	cutoverPending := awaitingStandDown && !gateBlocked && gateCapable && electedAddr != ""
 
 	if awaitingStandDown && !gateBlocked && !h.standDownWaitLogged {
 		h.standDownWaitLogged = true
@@ -160,8 +170,8 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 	for _, host := range hosts {
 		host.Leader = host.GetAddress() == leaderAddr && leaderAddr != ""
 		host.PlacementCutoverPending = cutoverPending && host.GetAddress() == electedAddr
-		if withholdPlacement {
-			host.PlacementEnabled = false
+		if placementServiceAuthority {
+			host.SchedulerPlacementEnabled = false
 		}
 	}
 
@@ -169,10 +179,8 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 		h.placement.SetLeader(leaderAddr != "" && leaderAddr == h.ownAddress)
 	}
 
-	// broadcastHosts is what sidecars last received, only Handle writes it. An
-	// identical recomputation is not re-broadcast, since sidecars reload
-	// every scheduler connection per WatchHosts message and that churn
-	// re-triggers this loop.
+	// An identical recomputation is not re-broadcast: sidecars reload every
+	// connection per broadcast and that churn re-triggers this loop.
 	if *h.broadcastHosts != nil && slices.EqualFunc(*h.broadcastHosts, hosts,
 		func(a, b *schedulerv1pb.Host) bool { return proto.Equal(a, b) }) {
 		return nil
@@ -194,15 +202,12 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 	return nil
 }
 
-// placementLeader returns the address of the placement leader: the first host
-// in address-sorted order which is capable of serving placement. Returns ""
-// when no host is capable, in which case no leader is advertised. Filtering on
-// the capability bit keeps mixed-version and mixed-flag clusters safe: a
-// scheduler without placement support (or with it disabled) is never elected.
+// placementLeader returns the first address-sorted host which can serve
+// placement, or "" when none can.
 func placementLeader(hosts []*schedulerv1pb.Host) string {
 	leader := ""
 	for _, host := range hosts {
-		if !host.GetPlacementEnabled() {
+		if !host.GetSchedulerPlacementEnabled() {
 			continue
 		}
 		if leader == "" || host.GetAddress() < leader {

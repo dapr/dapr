@@ -54,6 +54,9 @@ type WatchHosts struct {
 	clients    *clients.Clients
 	leadership *leadership.Leadership
 
+	// lastAddrs dedups reloads
+	lastAddrs []string
+
 	loop loop.Interface[loops.EventHost]
 }
 
@@ -170,20 +173,25 @@ func (w *WatchHosts) handleHosts(ctx context.Context, resp *schedulerv1pb.WatchH
 		if host.GetLeader() {
 			leader = host.GetAddress()
 		}
-		if host.GetPlacementEnabled() {
+		if host.GetSchedulerPlacementEnabled() {
 			capable = true
 		}
 	}
 
 	log.Infof("Received scheduler hosts addresses: %v (placement leader %q)", gotAddrs, leader)
 
-	if err := w.clients.Reload(ctx, gotAddrs); err != nil {
-		return err
-	}
+	// Reloading on an identical list would cycle every scheduler stream,
+	// and that churn re-broadcasts back into this loop.
+	if !slices.Equal(gotAddrs, w.lastAddrs) {
+		if err := w.clients.Reload(ctx, gotAddrs); err != nil {
+			return err
+		}
 
-	w.loop.Enqueue(&loops.ReloadClients{
-		Addresses: gotAddrs,
-	})
+		w.loop.Enqueue(&loops.ReloadClients{
+			Addresses: gotAddrs,
+		})
+		w.lastAddrs = gotAddrs
+	}
 
 	if w.leadership != nil {
 		if !capable && len(gotAddrs) > 0 {

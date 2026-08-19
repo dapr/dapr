@@ -66,6 +66,10 @@ type Interface interface {
 	// from new streams on the next leadership grant.
 	SetLeader(leader bool)
 
+	// HasPlacementStreams reports whether any sidecar currently takes
+	// placement from this scheduler.
+	HasPlacementStreams() bool
+
 	// ReportActorTypes serves a single daprd placement stream.
 	ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorTypesServer) error
 }
@@ -101,6 +105,7 @@ type placement struct {
 
 	leader  atomic.Bool
 	running atomic.Bool
+	streams atomic.Int64
 }
 
 func (p *placement) Run(ctx context.Context) error {
@@ -143,6 +148,12 @@ func (p *placement) SetLeader(leader bool) {
 	p.nsLoop.Enqueue(&loops.SetLeader{Leader: leader})
 }
 
+// HasPlacementStreams reports whether any sidecar currently takes placement
+// from this scheduler.
+func (p *placement) HasPlacementStreams() bool {
+	return p.streams.Load() > 0
+}
+
 func (p *placement) ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorTypesServer) error {
 	if !p.enabled {
 		return status.Error(codes.Unimplemented, "placement is not enabled on this scheduler")
@@ -173,7 +184,11 @@ func (p *placement) ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorT
 	defer cancel(nil)
 
 	monitoring.RecordPlacementStreamsConnected(initial.GetNamespace(), 1)
-	defer monitoring.RecordPlacementStreamsConnected(initial.GetNamespace(), -1)
+	p.streams.Add(1)
+	defer func() {
+		p.streams.Add(-1)
+		monitoring.RecordPlacementStreamsConnected(initial.GetNamespace(), -1)
+	}()
 
 	p.nsLoop.Enqueue(&loops.ConnAdd{
 		Initial: initial,

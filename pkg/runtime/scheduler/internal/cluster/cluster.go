@@ -105,7 +105,7 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 				// Lets schedulers gate the placement advertisement on every
 				// connected sidecar being able to follow it.
 				SupportsSchedulerPlacement: true,
-				PlacementAddresses:     c.placementAddresses,
+				PlacementAddresses:         c.placementAddresses,
 			},
 		},
 	}

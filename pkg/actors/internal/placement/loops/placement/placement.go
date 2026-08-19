@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/connector"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/connector/leader"
@@ -55,8 +57,8 @@ type Options struct {
 	// selecting the wire protocol (v1 placement service, v2 scheduler).
 	StreamFactory func(ctx context.Context, conn *grpc.ClientConn) (transport.Transport, error)
 
-	// V2 speaks the v2 (scheduler placement) protocol on the stream.
-	V2 bool
+	// SchedulerPlacement selects the v2 wire protocol on the stream.
+	SchedulerPlacement bool
 
 	// Fallback, when non-nil, is the v1 placement service connector to use
 	// when the scheduler cluster reports it does not serve placement. It is
@@ -75,16 +77,19 @@ type Options struct {
 type Fallback struct {
 	Connector     connector.Interface
 	StreamFactory func(ctx context.Context, conn *grpc.ClientConn) (transport.Transport, error)
-	V2            bool
+
+	// SchedulerPlacement marks the connector for scheduler-served
+	// placement, which speaks the v2 wire protocol.
+	SchedulerPlacement bool
 }
 
 // swapAlt exchanges the active connector with the kept alternative.
 func (p *placement) swapAlt() {
-	p.alt, p.connector, p.streamFactory, p.v2 = &Fallback{
-		Connector:     p.connector,
-		StreamFactory: p.streamFactory,
-		V2:            p.v2,
-	}, p.alt.Connector, p.alt.StreamFactory, p.alt.V2
+	p.alt, p.connector, p.streamFactory, p.schedulerPlacement = &Fallback{
+		Connector:          p.connector,
+		StreamFactory:      p.streamFactory,
+		SchedulerPlacement: p.schedulerPlacement,
+	}, p.alt.Connector, p.alt.StreamFactory, p.alt.SchedulerPlacement
 }
 
 type placement struct {
@@ -105,11 +110,11 @@ type placement struct {
 
 	idx uint64
 
-	dissLoop      loop.Interface[loops.EventDiss]
-	report        *loops.Report
-	streamFactory func(ctx context.Context, conn *grpc.ClientConn) (transport.Transport, error)
-	v2            bool
-	fallback      *Fallback
+	dissLoop           loop.Interface[loops.EventDiss]
+	report             *loops.Report
+	streamFactory      func(ctx context.Context, conn *grpc.ClientConn) (transport.Transport, error)
+	schedulerPlacement bool
+	fallback           *Fallback
 
 	// alt is the connector of whichever placement authority is not active,
 	// so an authority handing over is adopted live: every actor was already
@@ -123,15 +128,15 @@ type placement struct {
 
 func New(opts Options) loop.Interface[loops.EventPlace] {
 	place := &placement{
-		id:            opts.ID,
-		ready:         opts.Ready,
-		namespace:     opts.Namespace,
-		connector:     opts.Connector,
-		report:        opts.InitialReport,
-		streamFactory: opts.StreamFactory,
-		v2:            opts.V2,
-		fallback:      opts.Fallback,
-		htarget:       opts.Healthz.AddTarget("internal-placement-service"),
+		id:                 opts.ID,
+		ready:              opts.Ready,
+		namespace:          opts.Namespace,
+		connector:          opts.Connector,
+		report:             opts.InitialReport,
+		streamFactory:      opts.StreamFactory,
+		schedulerPlacement: opts.SchedulerPlacement,
+		fallback:           opts.Fallback,
+		htarget:            opts.Healthz.AddTarget("internal-placement-service"),
 		inflight: inflight.New(inflight.Options{
 			Hostname: opts.Hostname,
 			Port:     opts.Port,
@@ -229,13 +234,13 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 			if p.fallback != nil {
 				log.Warn("Scheduler cluster does not serve actor placement, using the placement service")
 				p.alt = &Fallback{
-					Connector:     p.connector,
-					StreamFactory: p.streamFactory,
-					V2:            p.v2,
+					Connector:          p.connector,
+					StreamFactory:      p.streamFactory,
+					SchedulerPlacement: p.schedulerPlacement,
 				}
 				p.connector = p.fallback.Connector
 				p.streamFactory = p.fallback.StreamFactory
-				p.v2 = p.fallback.V2
+				p.schedulerPlacement = p.fallback.SchedulerPlacement
 				p.fallback = nil
 				continue
 			}
@@ -266,7 +271,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(retry.Jitter(time.Second*3, time.Second)):
+			case <-time.After(retry.Jitter(time.Millisecond*300, time.Millisecond*150)):
 			}
 			continue
 		}
@@ -313,7 +318,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		HTarget:              p.htarget,
 		DisseminationTimeout: p.dissTimeout,
 		Ready:                p.ready,
-		V2:                   p.v2,
+		SchedulerPlacement:   p.schedulerPlacement,
 	})
 
 	p.wg.Go(func() {
@@ -380,6 +385,21 @@ func (p *placement) handleCloseStream(ctx context.Context, closeStream *loops.Co
 	} else {
 		log.Infof("Placement stream closed: %v. Reconnecting...", closeStream.Error)
 	}
+
+	// A refusal arrives on the first receive rather than at connect, so it
+	// lands here as a stream close. Probe the other authority and back off
+	// once per cycle, or the close-and-reconnect cycle spins with no pause.
+	if status.Code(closeStream.Error) == codes.FailedPrecondition {
+		if p.alt != nil {
+			p.swapAlt()
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(retry.Jitter(time.Second/2, time.Second/4)):
+		}
+	}
+
 	return p.handleReconnect(ctx, &loops.PlacementReconnect{TransientPrior: transient})
 }
 

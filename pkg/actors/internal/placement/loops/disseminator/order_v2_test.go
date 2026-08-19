@@ -43,7 +43,7 @@ func newTestDisseminatorV2(t *testing.T) *disseminator {
 	t.Helper()
 
 	diss, _, _ := newTestDisseminator(t)
-	diss.v2 = true
+	diss.schedulerPlacement = true
 	diss.v2Rounds = make(map[uint64]*v2Round)
 
 	return diss

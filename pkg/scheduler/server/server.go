@@ -196,8 +196,8 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 	cron := cron.New(cron.Options{
 		ID: opts.EtcdName,
 		Host: &schedulerv1pb.Host{
-			Address:          broadcastAddr,
-			PlacementEnabled: opts.PlacementEnabled,
+			Address:                   broadcastAddr,
+			SchedulerPlacementEnabled: opts.PlacementEnabled,
 		},
 		Etcd:          etcdServer,
 		Backend:       opts.Backend,

@@ -56,9 +56,9 @@ type Options struct {
 	Namespace string
 	ID        string
 
-	// V2 speaks the v2 (scheduler placement) protocol: seq-keyed rounds
+	// SchedulerPlacement speaks the v2 protocol: seq-keyed rounds
 	// scoped to actor types with partial table merges.
-	V2 bool
+	SchedulerPlacement bool
 }
 
 type disseminator struct {
@@ -92,7 +92,7 @@ type disseminator struct {
 	roundChangedTypes map[string]struct{}
 
 	// v2 speaks the v2 (scheduler placement) protocol.
-	v2 bool
+	schedulerPlacement bool
 
 	// v2Rounds are the in-flight v2 dissemination rounds, keyed by seq.
 	v2Rounds map[uint64]*v2Round
@@ -110,7 +110,7 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 	diss.currentVersion = 0
 	diss.timeoutVersion = 0
 	diss.roundChangedTypes = make(map[string]struct{})
-	diss.v2 = opts.V2
+	diss.schedulerPlacement = opts.SchedulerPlacement
 	diss.v2Rounds = make(map[uint64]*v2Round)
 	diss.healthTarget = opts.HTarget
 	diss.ready = opts.Ready
@@ -148,7 +148,7 @@ func (d *disseminator) Handle(ctx context.Context, event loops.EventDiss) error 
 	case *loops.ReportHost:
 		d.handleReportHost(e)
 	case *loops.StreamOrder:
-		if d.v2 {
+		if d.schedulerPlacement {
 			return d.handleOrderV2(ctx, e)
 		}
 		return d.handleOrder(ctx, e)
@@ -175,7 +175,7 @@ func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 }
 
 func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.DisseminationTimeout) {
-	if d.v2 {
+	if d.schedulerPlacement {
 		// v2 timeouts are keyed by round seq; only in-flight rounds count.
 		if _, ok := d.v2Rounds[timeout.Version]; !ok {
 			return

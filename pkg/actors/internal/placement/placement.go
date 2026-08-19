@@ -201,9 +201,9 @@ func New(opts Options) (Interface, error) {
 				return nil, ferr
 			}
 			fallback = &loopsplacement.Fallback{
-				Connector:     fconn,
-				StreamFactory: ffactory,
-				V2:            false,
+				Connector:          fconn,
+				StreamFactory:      ffactory,
+				SchedulerPlacement: false,
 			}
 		}
 
@@ -238,7 +238,7 @@ func New(opts Options) (Interface, error) {
 				Namespace: opts.Namespace,
 			},
 			StreamFactory:        factory,
-			V2:                   opts.SchedulerPlacement,
+			SchedulerPlacement:   opts.SchedulerPlacement,
 			Fallback:             fallback,
 			DisseminationTimeout: opts.DisseminationTimeout,
 		}),

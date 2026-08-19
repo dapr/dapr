@@ -48,6 +48,7 @@ const BackendEtcd = etcdcron.BackendEtcd
 // leadership table.
 type PlacementLeader interface {
 	SetLeader(leader bool)
+	HasPlacementStreams() bool
 }
 
 type Options struct {
