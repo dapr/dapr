@@ -251,6 +251,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		WorkflowsRemoteActivityReminder: abe.workflowsRemoteActivityReminder,
 		FastPath:                        abe.workflowsFastPath,
 		ExecutionHeld:                   abe.ActivityExecutionHeld,
+		RegisterResolver:                abe.RegisterActivityResolver,
 	}
 
 	opts := workflow.Options{
@@ -1029,7 +1030,16 @@ func (abe *Actors) WaitForActivityCompletion(request *protos.ActivityRequest) fu
 		// then leak, blinding stale-claim eviction for this key forever.
 		release := abe.activityExecs.add(key)
 		defer release()
-		return wait(ctx)
+		resp, err := wait(ctx)
+		if err == nil {
+			// Handshake with the owner execution: mark its call resolving
+			// BEFORE the deferred release drops the held registration. The
+			// callback channel to the owner is a separate scheduling hop,
+			// and in that gap a stale-claim check would otherwise see
+			// not-held + not-resolving and evict a healthy execution.
+			abe.activityExecs.resolve(key)
+		}
+		return resp, err
 	}
 }
 
@@ -1041,6 +1051,12 @@ func (abe *Actors) WaitForWorkflowTaskCompletion(request *protos.WorkflowRequest
 // ActivityExecutionHeld reports whether the engine on this host currently
 // holds a completion registration for the given activity work item; wired
 // into the activity target as its stale-claim liveness oracle.
+// RegisterActivityResolver wires the owner execution's resolve hook into
+// the completion waiter's pre-release handshake; see registerResolver.
+func (abe *Actors) RegisterActivityResolver(instanceID string, taskID int32, resolve func()) func() {
+	return abe.activityExecs.registerResolver(instanceID, taskID, resolve)
+}
+
 func (abe *Actors) ActivityExecutionHeld(instanceID string, taskID int32) bool {
 	return abe.activityExecs.heldFor(instanceID, taskID)
 }

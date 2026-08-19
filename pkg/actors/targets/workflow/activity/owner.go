@@ -58,6 +58,10 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 	//       introduce some kind of heartbeat protocol to help identify such cases.
 	callback := make(chan bool, 1)
 	wi.Properties[todo.CallbackChannelProperty] = callback
+	unregister := func() {}
+	if a.registerResolver != nil {
+		unregister = a.registerResolver(workflowID, taskEvent.GetEventId(), func() { call.BeginResolve() })
+	}
 	log.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", a.actorID, name, wi.InstanceID)
 	start := time.Now()
 	err := a.scheduler(ctx, wi)
@@ -66,12 +70,14 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 	if errors.Is(err, context.DeadlineExceeded) {
 		diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusRecoverable, elapsed)
 		wfErr := wferrors.NewRecoverable(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
+		unregister()
 		a.inflight.Release(key, call)
 		call.Finish(wfErr)
 		return wfErr
 	} else if err != nil {
 		diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusRecoverable, elapsed)
 		wfErr := wferrors.NewRecoverable(fmt.Errorf("failed to schedule an activity execution: %w", err))
+		unregister()
 		a.inflight.Release(key, call)
 		call.Finish(wfErr)
 		return wfErr
@@ -91,7 +97,7 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 		// Snapshot the actorID since the *activity may be recycled
 		// (HaltAll/HaltNonHosted) before the watcher finishes; everything
 		// else the watcher uses is factory-level read-only state or args.
-		go a.watchAndPublish(ctx, a.actorID, key, call, callback, wi, taskEvent, name, activityName, workflowID, start)
+		go a.watchAndPublish(ctx, a.actorID, key, call, unregister, callback, wi, taskEvent, name, activityName, workflowID, start)
 		return ctx.Err()
 	case completed := <-callback:
 		// A lost race here means an eviction already finished the call and a
@@ -100,6 +106,7 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 		_ = call.BeginResolve()
 		execErr := a.publishResult(ctx, a.actorID, completed, wi, taskEvent, name, activityName, workflowID, start)
 		call.Finish(execErr)
+		unregister()
 		// On success, cache the outcome briefly so a cron retry that arrived
 		// while we were running becomes a follower and acks SUCCESS without
 		// dispatching a duplicate WorkItem. On error, release immediately so

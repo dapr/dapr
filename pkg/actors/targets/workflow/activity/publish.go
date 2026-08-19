@@ -49,7 +49,7 @@ const detachedPublishTimeout = 30 * time.Second
 // cancellation but keep trace context and values via context.WithoutCancel,
 // then apply a fresh detachedPublishTimeout deadline so a misbehaving
 // downstream cannot block this goroutine indefinitely.
-func (f *factory) watchAndPublish(origCtx context.Context, actorID, key string, call *inflight.Call, callback chan bool, wi *backend.ActivityWorkItem, taskEvent *backend.HistoryEvent, name, activityName, workflowID string, start time.Time) {
+func (f *factory) watchAndPublish(origCtx context.Context, actorID, key string, call *inflight.Call, unregister func(), callback chan bool, wi *backend.ActivityWorkItem, taskEvent *backend.HistoryEvent, name, activityName, workflowID string, start time.Time) {
 	completed := <-callback
 	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(origCtx), detachedPublishTimeout)
 	defer cancel()
@@ -59,6 +59,7 @@ func (f *factory) watchAndPublish(origCtx context.Context, actorID, key string, 
 	_ = call.BeginResolve()
 	execErr := f.publishResult(pubCtx, actorID, completed, wi, taskEvent, name, activityName, workflowID, start)
 	call.Finish(execErr)
+	unregister()
 	// Cache the outcome for follower retries only on success; on error,
 	// release immediately so subsequent cron retries become fresh owners
 	// and can re-attempt rather than seeing the cached failure for the
