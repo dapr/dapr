@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"path"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -69,12 +70,14 @@ func (m *move) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 	}
 
-	var newAppCalled string
+	// Written by the app's HTTP handler goroutine and read by the test below.
+	var newAppCalled atomic.Pointer[string]
 	newApp := actors.New(t,
 		actors.WithPeerActor(m.app),
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(_ http.ResponseWriter, r *http.Request) {
-			newAppCalled = r.URL.Path
+			called := r.URL.Path
+			newAppCalled.Store(&called)
 		}),
 	)
 
@@ -94,6 +97,8 @@ func (m *move) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, "/actors/abc/"+act+"/method/foo", newAppCalled)
+	called := newAppCalled.Load()
+	require.NotNil(t, called, "new app was never called")
+	assert.Equal(t, "/actors/abc/"+act+"/method/foo", *called)
 	newApp.Cleanup(t)
 }
