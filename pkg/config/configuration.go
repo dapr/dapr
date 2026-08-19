@@ -68,6 +68,22 @@ const (
 	// history events are signed using the app's X.509 SVID identity,
 	// creating a verifiable chain of signatures. Disabled by default.
 	WorkflowHistorySigning Feature = "WorkflowHistorySigning"
+
+	// WorkflowsFastPath enables the workflow scheduler fast-path stack:
+	// wake-ups drive eagerly on the arming host instead of creating a
+	// per-event scheduler reminder (durability moves to a per-instance
+	// repeating janitor backstop plus on-failure escalation to the durable
+	// per-event reminder; delayed starts keep their scheduler due time);
+	// activities certified by that janitor run locally without their
+	// run-activity reminder, with crash recovery via janitor re-dispatch;
+	// and sender-retried completion events fold straight into the next
+	// turn's single state commit, acked only after that commit, with the
+	// sender's retry as the durability (external raised events keep the
+	// durable inbox path). Each leg removes scheduler job commits and
+	// trigger round trips from the workflow hot path. At-least-once
+	// execution is unchanged throughout. Preview feature; disabled by
+	// default.
+	WorkflowsFastPath Feature = "WorkflowsFastPath"
 )
 
 // end feature flags section

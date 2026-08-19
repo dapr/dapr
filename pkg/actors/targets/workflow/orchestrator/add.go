@@ -67,8 +67,8 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// firing twice during pod migration) would pin the workflow in a replay/spin
 	// loop.
 	if dedup.IsDuplicateCompletion(e, state.History, state.Inbox) {
-		log.Debugf("Workflow actor '%s': dropping duplicate completion event already present in history/inbox; re-asserting wake-up reminder so the inbox row is not stranded", o.actorID)
-		return o.assertNewEventReminder(ctx, e, state)
+		log.Debugf("Workflow actor '%s': dropping duplicate completion event already present in history/inbox; re-driving the wake-up so the inbox row is not stranded", o.actorID)
+		return o.driveNewEvent(ctx, e, state)
 	}
 
 	// Drop redelivered external events the same way: a RaiseEvent re-sent to
@@ -81,45 +81,23 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// (Actors.uniqueEventTimestamp), so they fall through to be appended
 	// normally even when raced onto the same wall-clock nanosecond.
 	if dedup.IsDuplicateExternalEvent(e, state.History, state.Inbox) {
-		log.Debugf("Workflow actor '%s': dropping duplicate external event already present in history/inbox; re-asserting wake-up reminder so the inbox row is not stranded", o.actorID)
-		return o.assertNewEventReminder(ctx, e, state)
+		log.Debugf("Workflow actor '%s': dropping duplicate external event already present in history/inbox; re-driving the wake-up so the inbox row is not stranded", o.actorID)
+		return o.driveNewEvent(ctx, e, state)
 	}
 
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
 		o.activityResultAwaited.CompareAndSwap(true, false)
 	}
 
-	// Verify any attestation on the incoming event against the signed history
-	// and Sentry trust anchors, then absorb the signer certificate into the
-	// ext-sigcert table and strip the companion cert from the event so the
-	// stored form is cert-free. On any verification failure the workflow is
-	// tombstoned. No-op when signing is disabled. Locally-authored synthetic
-	// failures (policy denials, occupied-ID rejections) are exempt: they have
-	// no attestation by design.
-	if !o.isLocalSyntheticFailure(e) {
-		if verr := o.signing.VerifyInboxAttestation(ctx, state, e); verr != nil {
-			log.Warnf("Workflow actor '%s': attestation verification failed, tombstoning workflow: %s", o.actorID, verr)
-			opts := wfenginestate.Options{
-				AppID:             o.appID,
-				Namespace:         o.namespace,
-				WorkflowActorType: o.actorType,
-				ActivityActorType: o.activityActorType,
-				Signer:            o.signer,
-			}
-			if _, _, terr := o.tombstoneTamperedState(ctx, opts, state, verr); terr != nil {
-				return terr
-			}
-			// Return ErrInstanceNotFound rather than the verification
-			// error so the activity actor on the sender side recognizes
-			// the workflow as gone and stops re-executing the activity.
-			// The reason for tombstoning is preserved in the workflow's
-			// FailureDetails (errorType=DAPR_WORKFLOW_HISTORY_TAMPERED,
-			// errorMessage=verr.Error()) for callers polling metadata.
-			return api.ErrInstanceNotFound
-		}
+	if err := o.verifyAndAbsorbAttestation(ctx, state, e); err != nil {
+		return err
 	}
 
-	// Save the inbox event BEFORE creating the wake-up reminder. The
+	// Save the inbox event BEFORE arming its wake-up (durable reminder or
+	// local drive; see driveNewEvent). Under the WorkflowsFastPath
+	// preview the recovery chain after this save is: local drive; on drive
+	// failure, escalation to the durable per-event reminder; and behind
+	// both, the per-instance janitor reminder (<= 1 period). The
 	// reminder's dueTime is anchored at the workflow's start timestamp
 	// (state.History[0].Timestamp), which is in the past, so the scheduler
 	// fires it immediately on Create. Under placement rebalance the firing
@@ -149,9 +127,41 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 		return err
 	}
 
-	if err := o.assertNewEventReminder(ctx, e, state); err != nil {
+	if err := o.driveNewEvent(ctx, e, state); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// verifyAndAbsorbAttestation verifies any attestation on the incoming event
+// against the signed history and Sentry trust anchors, then absorbs the
+// signer certificate into the ext-sigcert table and strips the companion
+// cert from the event so the stored form is cert-free. On any verification
+// failure the workflow is tombstoned and ErrInstanceNotFound is returned so
+// the activity actor on the sender side recognizes the workflow as gone and
+// stops re-executing (the tombstoning reason is preserved in the workflow's
+// FailureDetails). No-op when signing is disabled. Locally-authored
+// synthetic failures (policy denials, occupied-ID rejections) are exempt:
+// they have no attestation by design.
+func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wfenginestate.State, e *backend.HistoryEvent) error {
+	if o.isLocalSyntheticFailure(e) {
+		return nil
+	}
+	verr := o.signing.VerifyInboxAttestation(ctx, state, e)
+	if verr == nil {
+		return nil
+	}
+	log.Warnf("Workflow actor '%s': attestation verification failed, tombstoning workflow: %s", o.actorID, verr)
+	opts := wfenginestate.Options{
+		AppID:             o.appID,
+		Namespace:         o.namespace,
+		WorkflowActorType: o.actorType,
+		ActivityActorType: o.activityActorType,
+		Signer:            o.signer,
+	}
+	if _, _, terr := o.tombstoneTamperedState(ctx, opts, state, verr); terr != nil {
+		return terr
+	}
+	return api.ErrInstanceNotFound
 }

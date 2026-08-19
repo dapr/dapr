@@ -867,7 +867,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 	// Parse responses. If metadata declares N inbox or history entries but
 	// the bulk GET returns nil Data for any of them, return an error so the
 	// caller can retry the load. Silently skipping was the previous
-	// behavior, but under state-store chaos (transient read failures) it
+	// behavior, but under transient state-store read failures it
 	// produces a workflow runtime state with truncated history; durabletask
 	// then reports name=(unknown)/events=0 and the workflow strands on the
 	// next save, which clobbers the metadata HistoryLength.
