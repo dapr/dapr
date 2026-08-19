@@ -49,10 +49,10 @@ require (
 	github.com/spiffe/go-spiffe/v2 v2.6.0
 	github.com/stretchr/testify v1.11.1
 	github.com/tmc/langchaingo v0.1.15-0.20251029190607-e35755df7084
-	go.etcd.io/etcd/api/v3 v3.5.30
-	go.etcd.io/etcd/client/pkg/v3 v3.5.30
-	go.etcd.io/etcd/client/v3 v3.5.30
-	go.etcd.io/etcd/server/v3 v3.5.30
+	go.etcd.io/etcd/api/v3 v3.5.33
+	go.etcd.io/etcd/client/pkg/v3 v3.5.33
+	go.etcd.io/etcd/client/v3 v3.5.33
+	go.etcd.io/etcd/server/v3 v3.5.33
 	go.mongodb.org/mongo-driver v1.17.7
 	go.opencensus.io v0.24.0
 	go.opentelemetry.io/otel v1.44.0
@@ -161,7 +161,7 @@ require (
 	github.com/aliyun/credentials-go v1.1.2 // indirect
 	github.com/aliyunmq/mq-http-go-sdk v1.0.3 // indirect
 	github.com/alphadose/haxmap v1.4.0 // indirect
-	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/anshal21/go-worker v1.1.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/apache/dubbo-getty v1.4.9-0.20220610060150-8af010f3f3dc // indirect
@@ -435,7 +435,7 @@ require (
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20220101234140-673ab2c3ae75 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/fasthttp v1.53.0 // indirect
+	github.com/valyala/fasthttp v1.70.0 // indirect
 	github.com/vmware/vmware-go-kcl-v2 v1.0.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
@@ -451,9 +451,9 @@ require (
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.etcd.io/bbolt v1.4.0 // indirect
-	go.etcd.io/etcd/client/v2 v2.305.30 // indirect
-	go.etcd.io/etcd/pkg/v3 v3.5.30 // indirect
-	go.etcd.io/etcd/raft/v3 v3.5.30 // indirect
+	go.etcd.io/etcd/client/v2 v2.305.33 // indirect
+	go.etcd.io/etcd/pkg/v3 v3.5.33 // indirect
+	go.etcd.io/etcd/raft/v3 v3.5.33 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.43.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.60.0 // indirect

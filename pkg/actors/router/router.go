@@ -144,7 +144,7 @@ func (r *router) CallReminder(ctx context.Context, req *api.Reminder) error {
 	ctx, cancel := r.withContext(ctx)
 	defer cancel()
 
-	if req.SkipLock {
+	if req.SkipLock || req.SkipRetries {
 		return r.callReminder(ctx, req)
 	}
 
