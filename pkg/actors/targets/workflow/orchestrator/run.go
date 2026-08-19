@@ -591,9 +591,12 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			if err = o.deleteAllReminders(ctx); err != nil {
 				return todo.RunCompletedFalse, err
 			}
-		} else if o.janitorAsserted.Load() {
+		} else if o.fastPath || o.janitorAsserted.Load() {
 			// The repeating janitor does not self-clean on ack like the
-			// one-shot reminders; remove it explicitly. Best-effort: a
+			// one-shot reminders; remove it explicitly. janitorAsserted is
+			// per-activation, so a janitor armed by a previous activation
+			// would otherwise be skipped here; under the gate the delete is
+			// attempted regardless (NotFound tolerated). Best-effort: a
 			// missed delete self-deletes on its next fire against the
 			// terminal state, and purge sweeps it on any binary version.
 			o.deleteJanitor(ctx)

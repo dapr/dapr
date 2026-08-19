@@ -191,6 +191,10 @@ func (o *orchestrator) ensureJanitor(ctx context.Context, state *wfenginestate.S
 // residency), or an older binary may already have swept it via
 // DeleteByActorID.
 func (o *orchestrator) deleteJanitor(ctx context.Context) {
+	// Clear the flag first: a failed delete then reads as un-asserted, and
+	// every fallback (the fastPath completion-path delete, terminal
+	// self-delete, purge sweep) tolerates the reminder still existing.
+	o.janitorAsserted.Store(false)
 	if err := o.reminders.Delete(ctx, &actorapi.DeleteReminderRequest{
 		Name:      janitorReminderName,
 		ActorType: o.actorTypeBuilder.Workflow(o.appID),

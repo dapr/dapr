@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
@@ -60,24 +61,40 @@ func (a *activity) executeActivity(ctx context.Context, name string, invocation 
 	}
 
 	key := inflight.Key(a.actorID, taskEvent)
-	call, owner := a.claim(key, workflowID, taskEvent.GetEventId())
-	if !owner {
+	for {
+		call, owner := a.claim(key, workflowID, taskEvent.GetEventId())
+		if owner {
+			return a.runOwned(ctx, key, call, name, activityName, workflowID, taskEvent, invocation)
+		}
+
 		// A previous reminder for this activity scheduling is already in
 		// flight (or just finished and its outcome is still cached). Wait
 		// for its result and surface the same outcome so the scheduler's
 		// retry can be acked without dispatching the activity to the SDK
 		// again. The owner is responsible for posting the result to the
-		// workflow actor.
+		// workflow actor. Staleness is re-checked while parked: the claim
+		// can turn stale AFTER followers arrive (the owner's work item lost
+		// mid-wait), and claim() only evicts at claim time.
 		log.Debugf("Activity actor '%s': following in-flight execution of '%s'", a.actorID, name)
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-call.Done():
-			return call.Err()
+		stale := false
+		ticker := time.NewTicker(a.staleClaimAfter)
+		for !stale {
+			select {
+			case <-ctx.Done():
+				ticker.Stop()
+				return ctx.Err()
+			case <-call.Done():
+				ticker.Stop()
+				return call.Err()
+			case <-ticker.C:
+				stale = a.staleClaim(call, workflowID, taskEvent.GetEventId())
+			}
 		}
+		ticker.Stop()
+		// Loop back into claim(): it evicts the stale entry (unblocking
+		// every parked follower into their retry chains) and re-contends
+		// for ownership, so this arrival can re-execute as a fresh owner.
 	}
-
-	return a.runOwned(ctx, key, call, name, activityName, workflowID, taskEvent, invocation)
 }
 
 // claim acquires the inflight entry for key, evicting a stale claim first.
