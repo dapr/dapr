@@ -36,11 +36,12 @@ const InflightCacheTTL = 60 * time.Second
 
 // runOwned drives a single activity execution from WorkItem dispatch through
 // to publishing the result back to the workflow actor. It is invoked by
-// exactly one reminder per activity actor at a time (the owner). On caller
-// ctx cancellation it hands off to a background watcher so the WorkItem
-// already in the durabletask queue still has its result published; the
-// owner returns ctx.Err() so the actor framework can release its lock and
-// preserve turn-based semantics.
+// exactly one reminder per inflight key at a time (the owner), and runs
+// outside the actor lock: the inflight entry claimed in executeActivity is
+// the execution guard. On caller ctx cancellation it hands off to a
+// background watcher so the WorkItem already in the durabletask queue still
+// has its result published; the owner returns ctx.Err() so the caller can
+// surface the cancellation.
 func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call, name, activityName, workflowID string, taskEvent *backend.HistoryEvent, invocation *protos.ActivityInvocation) error {
 	wi := &backend.ActivityWorkItem{
 		SequenceNumber:  int64(taskEvent.GetEventId()),
@@ -57,6 +58,10 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 	//       introduce some kind of heartbeat protocol to help identify such cases.
 	callback := make(chan bool, 1)
 	wi.Properties[todo.CallbackChannelProperty] = callback
+	unregister := func() {}
+	if a.registerResolver != nil {
+		unregister = a.registerResolver(workflowID, taskEvent.GetEventId(), func() { call.BeginResolve() })
+	}
 	log.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", a.actorID, name, wi.InstanceID)
 	start := time.Now()
 	err := a.scheduler(ctx, wi)
@@ -65,12 +70,14 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 	if errors.Is(err, context.DeadlineExceeded) {
 		diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusRecoverable, elapsed)
 		wfErr := wferrors.NewRecoverable(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
+		unregister()
 		a.inflight.Release(key, call)
 		call.Finish(wfErr)
 		return wfErr
 	} else if err != nil {
 		diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusRecoverable, elapsed)
 		wfErr := wferrors.NewRecoverable(fmt.Errorf("failed to schedule an activity execution: %w", err))
+		unregister()
 		a.inflight.Release(key, call)
 		call.Finish(wfErr)
 		return wfErr
@@ -82,20 +89,24 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 	// the actor framework is signalling cancel because the app went
 	// unhealthy), hand off to a background watcher so the WorkItem already
 	// in the durabletask queue still has its eventual result published and
-	// the inflight entry is finalised. Returning ctx.Err() here releases the
-	// actor lock so cron retries can become followers and observe the
-	// watcher's outcome via call.Done.
+	// the inflight entry is finalised. Cron retries arriving meanwhile become
+	// followers and observe the watcher's outcome via call.Done.
 	start = time.Now()
 	select {
 	case <-ctx.Done():
 		// Snapshot the actorID since the *activity may be recycled
 		// (HaltAll/HaltNonHosted) before the watcher finishes; everything
 		// else the watcher uses is factory-level read-only state or args.
-		go a.watchAndPublish(ctx, a.actorID, key, call, callback, wi, taskEvent, name, activityName, workflowID, start)
+		go a.watchAndPublish(ctx, a.actorID, key, call, unregister, callback, wi, taskEvent, name, activityName, workflowID, start)
 		return ctx.Err()
 	case completed := <-callback:
+		// A lost race here means an eviction already finished the call and a
+		// fresh execution is running; publish anyway, the orchestrator's
+		// duplicate-completion dedup absorbs whichever copy arrives second.
+		_ = call.BeginResolve()
 		execErr := a.publishResult(ctx, a.actorID, completed, wi, taskEvent, name, activityName, workflowID, start)
 		call.Finish(execErr)
+		unregister()
 		// On success, cache the outcome briefly so a cron retry that arrived
 		// while we were running becomes a follower and acks SUCCESS without
 		// dispatching a duplicate WorkItem. On error, release immediately so

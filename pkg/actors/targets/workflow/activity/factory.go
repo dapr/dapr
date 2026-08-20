@@ -70,6 +70,12 @@ type Options struct {
 	// claim uses it to tell a live in-flight execution from one whose work
 	// item was lost (see staleClaim). Nil disables eviction.
 	ExecutionHeld func(workflowInstanceID string, taskID int32) bool
+
+	// RegisterResolver registers the owner execution's resolve hook with the
+	// engine's completion waiter, which invokes it before releasing the held
+	// registration (the stale-claim handshake). Nil when the engine backend
+	// does not support it; the resolve then happens on callback receipt.
+	RegisterResolver func(workflowInstanceID string, taskID int32, resolve func()) func()
 }
 
 type factory struct {
@@ -96,8 +102,9 @@ type factory struct {
 	// executionHeld and staleClaimAfter power the stale-claim eviction in
 	// claim (see execute.go). staleClaimAfter is a field only so unit tests
 	// can compress the grace; it is set once in New.
-	executionHeld   func(workflowInstanceID string, taskID int32) bool
-	staleClaimAfter time.Duration
+	executionHeld    func(workflowInstanceID string, taskID int32) bool
+	registerResolver func(workflowInstanceID string, taskID int32, resolve func()) func()
+	staleClaimAfter  time.Duration
 
 	// inflight tracks activity executions whose WorkItem is currently in
 	// the durabletask queue or being processed by the SDK. Keyed by the
@@ -163,6 +170,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		actorType:              opts.ActivityActorType,
 		fastPath:               opts.FastPath,
 		executionHeld:          opts.ExecutionHeld,
+		registerResolver:       opts.RegisterResolver,
 		staleClaimAfter:        2 * common.JanitorPeriod(),
 		driveCtx:               driveCtx,
 		driveCancel:            driveCancel,
