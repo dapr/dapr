@@ -61,10 +61,6 @@ func (t *timers) Create(ctx context.Context, req *api.CreateTimerRequest) error 
 		return fmt.Errorf("can't create timer for actor %s: actor type not registered", req.ActorKey())
 	}
 
-	if err := t.checkLocal(ctx, req.ActorType, req.ActorID); err != nil {
-		return err
-	}
-
 	reminder, err := req.NewReminder(t.clock.Now())
 	if err != nil {
 		return err
@@ -72,33 +68,43 @@ func (t *timers) Create(ctx context.Context, req *api.CreateTimerRequest) error 
 
 	reminder.IsTimer = true
 
-	return t.storage.Create(ctx, reminder)
+	cctx, cancel, err := t.claimLocal(ctx, req.ActorType, req.ActorID)
+	if err != nil {
+		return err
+	}
+	defer cancel(nil)
+
+	return t.storage.Create(cctx, reminder)
 }
 
 func (t *timers) Delete(ctx context.Context, req *api.DeleteTimerRequest) error {
-	if err := t.checkLocal(ctx, req.ActorType, req.ActorID); err != nil {
+	cctx, cancel, err := t.claimLocal(ctx, req.ActorType, req.ActorID)
+	if err != nil {
 		return err
 	}
+	defer cancel(nil)
 
-	t.storage.Delete(ctx, req.Key())
+	t.storage.Delete(cctx, req.Key())
 	return nil
 }
 
-// Ownership can move between this check and the storage operation; the timer
-// sweep on ownership loss bounds how long such a timer can outlive it.
-func (t *timers) checkLocal(ctx context.Context, actorType, actorID string) error {
-	lar, _, cancel, err := t.placement.LookupActor(ctx, &api.LookupActorRequest{
+// claimLocal holds the placement claim until released by the caller:
+// dissemination drains in-flight claims before installing a new table and
+// sweeping timers, so the ownership answer stays valid through the storage
+// operation.
+func (t *timers) claimLocal(ctx context.Context, actorType, actorID string) (context.Context, context.CancelCauseFunc, error) {
+	lar, cctx, cancel, err := t.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	cancel(nil)
 
 	if !lar.Local {
-		return ErrTimerActorNotOwned
+		cancel(nil)
+		return nil, nil, ErrTimerActorNotOwned
 	}
 
-	return nil
+	return cctx, cancel, nil
 }

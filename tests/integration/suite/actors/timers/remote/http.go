@@ -106,6 +106,25 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		return resp.StatusCode
 	}
 
+	probe := func(c *assert.CollectT, addr string) int {
+		url := fmt.Sprintf("http://%s/v1.0/actors/abc/probe/timers/foo", addr)
+		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, strings.NewReader(body))
+		require.NoError(c, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(c, err)
+		require.NoError(c, resp.Body.Close())
+		return resp.StatusCode
+	}
+
+	// Wait until both hosts agree on the placement table before requiring
+	// exactly one owner per actor.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		code1 := probe(c, h.app1.Daprd().HTTPAddress())
+		code2 := probe(c, h.app2.Daprd().HTTPAddress())
+		assert.NotEqual(c, code1 == nethttp.StatusNoContent, code2 == nethttp.StatusNoContent)
+		assert.ElementsMatch(c, []int{nethttp.StatusNoContent, nethttp.StatusForbidden}, []int{code1, code2})
+	}, time.Second*10, time.Millisecond*10)
+
 	owner1, owner2 := "", ""
 	for i := 0; owner1 == "" || owner2 == ""; i++ {
 		require.Less(t, i, 100, "actor IDs never hashed to both hosts")

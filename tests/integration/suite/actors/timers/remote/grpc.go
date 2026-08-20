@@ -94,6 +94,14 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		return err
 	}
 
+	// Wait until both hosts agree on the placement table before requiring
+	// exactly one owner per actor.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		err1 := register(client1, "probe")
+		err2 := register(client2, "probe")
+		assert.NotEqual(c, err1 == nil, err2 == nil)
+	}, time.Second*10, time.Millisecond*10)
+
 	owner1, owner2 := "", ""
 	for i := 0; owner1 == "" || owner2 == ""; i++ {
 		require.Less(t, i, 100, "actor IDs never hashed to both hosts")
