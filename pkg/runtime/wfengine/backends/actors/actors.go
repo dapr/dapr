@@ -143,8 +143,24 @@ type Actors struct {
 	// timestamp) can tell two distinct concurrent RaiseEvent calls apart.
 	lastEventNano atomic.Int64
 
+	// droppedCompletions counts the completion deliveries swallowed by the
+	// test-only DAPR_WORKFLOW_TEST_DROP_ACTIVITY_COMPLETIONS injection.
+	droppedCompletions atomic.Int64
+
+	// duplicatedTurnCompletions counts the workflow-turn completions
+	// re-delivered by the test-only
+	// DAPR_WORKFLOW_TEST_DUPLICATE_TURN_COMPLETIONS injection.
+	duplicatedTurnCompletions atomic.Int64
+
 	stopped atomic.Bool
 }
+
+// The completion-callback assertion is what flips the durabletask worker's
+// canExecuteAsync gate.
+var (
+	_ backend.Backend                   = (*Actors)(nil)
+	_ backend.CompletionCallbackBackend = (*Actors)(nil)
+)
 
 func New(opts Options) (*Actors, error) {
 	var pendingTasksBackend PendingTasksBackend
@@ -397,10 +413,12 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 // Internally, creating a workflow instance also creates a new actor with the same ID. The create
 // request is saved into the actor's "inbox" and then executed via a reminder thread. If the app is
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
-func (abe *Actors) CreateWorkflowInstance(ctx context.Context, e *backend.HistoryEvent) error {
+func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.CreateWorkflowInstanceRequest) error {
 	if err := abe.requireActorStateStore(); err != nil {
 		return err
 	}
+
+	e := req.GetStartEvent()
 
 	var workflowInstanceID string
 
@@ -426,9 +444,9 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, e *backend.Histor
 		return err
 	}
 
-	requestBytes, err := proto.Marshal(&backend.CreateWorkflowInstanceRequest{
-		StartEvent: e,
-	})
+	// Forward the whole request so the instance ID reuse policy survives the
+	// hop to the workflow actor.
+	requestBytes, err := proto.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("failed to marshal CreateWorkflowInstanceRequest: %w", err)
 	}
@@ -436,7 +454,7 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, e *backend.Histor
 	// Invoke the well-known workflow actor directly, which will be created by
 	// this invocation request. Note that this request goes directly to the actor
 	// runtime.
-	req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
+	ireq := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
 		WithActor(actorType, workflowInstanceID).
 		WithData(requestBytes).
 		WithContentType(invokev1.ProtobufContentType)
@@ -448,7 +466,7 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, e *backend.Histor
 	}
 
 	err = backoff.Retry(func() error {
-		_, eerr := router.Call(ctx, req)
+		_, eerr := router.Call(ctx, ireq)
 
 		status, ok := status.FromError(eerr)
 		if ok && (status.Code() == codes.FailedPrecondition ||
@@ -985,9 +1003,13 @@ func (abe *Actors) CompleteActivityTask(ctx context.Context, response *protos.Ac
 
 // CompleteWorkflowTask implements backend.Backend.
 func (abe *Actors) CompleteWorkflowTask(ctx context.Context, response *protos.WorkflowResponse) error {
-	return abe.callWithBackoff(ctx, func() error {
+	err := abe.callWithBackoff(ctx, func() error {
 		return abe.pendingTasksBackend.CompleteWorkflowTask(ctx, response)
 	})
+	if err == nil {
+		abe.maybeDuplicateTurnCompletionForTest(response)
+	}
+	return err
 }
 
 func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
@@ -1048,6 +1070,28 @@ func (abe *Actors) WaitForWorkflowTaskCompletion(request *protos.WorkflowRequest
 	return abe.pendingTasksBackend.WaitForWorkflowTaskCompletion(request)
 }
 
+// OnActivityCompletion implements backend.CompletionCallbackBackend, flipping
+// the durabletask worker onto its event-driven completion path: the app
+// roundtrip no longer parks a waiter goroutine per in-flight work item. The
+// registration is mirrored into activityExecs (released on delivery or
+// deregistration) so the activity target's stale-claim eviction can tell a
+// live execution from a lost work item.
+func (abe *Actors) OnActivityCompletion(request *protos.ActivityRequest, cb func(*protos.ActivityResponse, error)) func() {
+	release := abe.activityExecs.add(activityExecutionKey(request.GetWorkflowInstance().GetInstanceId(), request.GetTaskId()))
+	dereg := abe.pendingTasksBackend.OnActivityCompletion(request, func(resp *protos.ActivityResponse, err error) {
+		release()
+		if abe.dropActivityCompletionForTest() {
+			log.Warnf("TEST INJECTION: dropping activity completion delivery for instance '%s' task %d", request.GetWorkflowInstance().GetInstanceId(), request.GetTaskId())
+			return
+		}
+		cb(resp, err)
+	})
+	return func() {
+		release()
+		dereg()
+	}
+}
+
 // ActivityExecutionHeld reports whether the engine on this host currently
 // holds a completion registration for the given activity work item; wired
 // into the activity target as its stale-claim liveness oracle.
@@ -1059,6 +1103,38 @@ func (abe *Actors) RegisterActivityResolver(instanceID string, taskID int32, res
 
 func (abe *Actors) ActivityExecutionHeld(instanceID string, taskID int32) bool {
 	return abe.activityExecs.heldFor(instanceID, taskID)
+}
+
+func (abe *Actors) dropActivityCompletionForTest() bool {
+	budget := testDropActivityCompletions()
+	if budget == 0 {
+		return false
+	}
+	return abe.droppedCompletions.Add(1) <= budget
+}
+
+// maybeDuplicateTurnCompletionForTest re-delivers the given workflow-turn
+// completion once, after a short delay, when the test-only
+// DAPR_WORKFLOW_TEST_DUPLICATE_TURN_COMPLETIONS budget allows. See
+// testDuplicateTurnCompletions.
+func (abe *Actors) maybeDuplicateTurnCompletionForTest(response *protos.WorkflowResponse) {
+	budget := testDuplicateTurnCompletions()
+	if budget == 0 || abe.duplicatedTurnCompletions.Add(1) > budget {
+		return
+	}
+	dup := proto.Clone(response).(*protos.WorkflowResponse)
+	log.Warnf("TEST INJECTION: re-delivering workflow turn completion for instance '%s'", dup.GetInstanceId())
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		if err := abe.pendingTasksBackend.CompleteWorkflowTask(context.Background(), dup); err != nil {
+			log.Warnf("TEST INJECTION: duplicate turn completion delivery failed: %v", err)
+		}
+	}()
+}
+
+// OnWorkflowTaskCompletion implements backend.CompletionCallbackBackend.
+func (abe *Actors) OnWorkflowTaskCompletion(request *protos.WorkflowRequest, cb func(*protos.WorkflowResponse, error)) func() {
+	return abe.pendingTasksBackend.OnWorkflowTaskCompletion(request, cb)
 }
 
 func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstanceIDsRequest) (*protos.ListInstanceIDsResponse, error) {

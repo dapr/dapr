@@ -77,6 +77,12 @@ const (
 	// arrival re-executes; the rescue event of the janitor-livelock class
 	// (~0 in healthy steady state).
 	StatusClaimEvicted = "claim_evicted"
+	// A turn's workflow response re-created an operation that already exists in
+	// committed history: the response was computed from older history (a stale
+	// or duplicate completion delivery adopted across turns) and the turn was
+	// rejected for retry instead of committing a wedged state (the
+	// janitor-livelock stranding source; ~0 in healthy steady state).
+	StatusStaleTurnRejected = "stale_turn_rejected"
 	// Completions-fold outcomes: a sender-retried completion committed
 	// inside its folding turn (folded), or was nacked back into the
 	// sender's retry chain (turn failure, timeout, deactivation).

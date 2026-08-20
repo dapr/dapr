@@ -17,6 +17,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/durabletask-go/api/protos"
+	"github.com/dapr/durabletask-go/backend/local"
 )
 
 func Test_activityExecutions(t *testing.T) {
@@ -48,4 +52,45 @@ func Test_activityExecutions(t *testing.T) {
 	release3()
 	release3()
 	assert.False(t, a.heldFor("wf1", 3))
+}
+
+// Test_onActivityCompletionMirrorsHeld verifies the registration mirror the
+// stale-claim eviction oracle relies on: an activity work item reads as held
+// exactly while its completion registration is outstanding.
+func Test_onActivityCompletionMirrorsHeld(t *testing.T) {
+	t.Parallel()
+
+	abe := &Actors{
+		pendingTasksBackend: local.NewTasksBackend(),
+		activityExecs:       newActivityExecutions(),
+	}
+
+	req := &protos.ActivityRequest{
+		WorkflowInstance: &protos.WorkflowInstance{InstanceId: "wf1"},
+		TaskId:           3,
+	}
+
+	delivered := make(chan *protos.ActivityResponse, 1)
+	dereg := abe.OnActivityCompletion(req, func(resp *protos.ActivityResponse, err error) {
+		delivered <- resp
+	})
+	assert.True(t, abe.ActivityExecutionHeld("wf1", 3))
+
+	// Delivery releases the registration and reaches the callback.
+	require.NoError(t, abe.CompleteActivityTask(t.Context(), &protos.ActivityResponse{InstanceId: "wf1", TaskId: 3}))
+	assert.False(t, abe.ActivityExecutionHeld("wf1", 3))
+	select {
+	case resp := <-delivered:
+		assert.Equal(t, "wf1", resp.GetInstanceId())
+	default:
+		t.Fatal("the completion must reach the callback")
+	}
+
+	// Deregistration alone also releases.
+	dereg2 := abe.OnActivityCompletion(req, func(*protos.ActivityResponse, error) {})
+	assert.True(t, abe.ActivityExecutionHeld("wf1", 3))
+	dereg2()
+	assert.False(t, abe.ActivityExecutionHeld("wf1", 3))
+
+	dereg()
 }
