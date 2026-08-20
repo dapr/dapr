@@ -352,7 +352,7 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        include: ${{ fromJSON((inputs.scheduler_placement == true) && '[{"scheduler_placement":false,"perf_tests":""},{"scheduler_placement":true,"perf_tests":"actor_activation actor_double_activation actor_id_scale actor_reminder actor_timer actor_type_scale workflows"}]' || '[{"scheduler_placement":false,"perf_tests":""}]') }}
+        include: ${{ fromJSON((inputs.scheduler_placement == true || contains(github.event.client_payload.args, 'scheduler-placement')) && '[{"scheduler_placement":false,"perf_tests":""},{"scheduler_placement":true,"perf_tests":"actor_activation actor_double_activation actor_id_scale actor_reminder actor_timer actor_type_scale workflows"}]' || '[{"scheduler_placement":false,"perf_tests":""}]') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -403,9 +403,19 @@ jobs:
           script: |
             const testPayload = context.payload.client_payload;
             if (testPayload && testPayload.command == "ok-to-perf") {
+              // The scheduler-placement keyword picks the second matrix leg,
+              // it is not a test name.
+              const args = (testPayload.args || '').split(/\s+/)
+                .filter((a) => a && a != 'scheduler-placement').join(' ')
+              // An explicit test list from the comment applies to both legs,
+              // otherwise the scheduler placement leg runs its default actor
+              // and workflow set.
+              const matrixTests = `${{ matrix.perf_tests }}`
               let selectedTestsEnvVar = ""
-              if (testPayload?.args) {
-                selectedTestsEnvVar = `DAPR_PERF_TEST=${testPayload.args}\n`
+              if (args) {
+                selectedTestsEnvVar = `DAPR_PERF_TEST=${args}\n`
+              } else if (matrixTests) {
+                selectedTestsEnvVar = `DAPR_PERF_TEST=${matrixTests}\n`
               }
               var fs = require('fs');
               // Set environment variables
