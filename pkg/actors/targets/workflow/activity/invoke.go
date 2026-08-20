@@ -152,7 +152,7 @@ func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Remind
 		return errors.New("activity reminder missing history event")
 	}
 
-	err := a.executeActivity(ctx, reminder.Name, &invocation)
+	err := a.executeActivity(ctx, reminder.Name, &invocation, reminder.SkipLock)
 
 	// Returning nil signals that we want the execution to be retried in the next
 	// period interval

@@ -40,10 +40,14 @@ const (
 	// escalated to a durable reminder (or that escalation itself failed,
 	// leaving the janitor as the net), and a janitor fire that found and
 	// drove a pending inbox (the recovery event; ~0 in healthy steady state).
-	StatusEscalated        = "escalated"
-	StatusEscalateFailed   = "escalate_failed"
-	StatusEscalateSkipped  = "escalate_skipped_shutdown"
-	StatusJanitorRecovered = "janitor_recovered"
+	StatusEscalated       = "escalated"
+	StatusEscalateFailed  = "escalate_failed"
+	StatusEscalateSkipped = "escalate_skipped_shutdown"
+	// A failed drive against an instance that shows recent life was NOT
+	// escalated to a durable reminder: the janitor covers it within one
+	// period instead of the scheduler re-driving a merely-slow actor.
+	StatusEscalateSuppressed = "escalate_suppressed"
+	StatusJanitorRecovered   = "janitor_recovered"
 	// A janitor fire found completions held for folding with no live driver
 	// (their arming drive was lost and their senders stopped re-delivering,
 	// e.g. died with their pod at a placement handoff) and drove a turn to
@@ -64,11 +68,21 @@ const (
 	// (a placement-handoff loss window). The durable rescue event; ~0 in
 	// healthy steady state.
 	StatusJanitorRedispatchEscalated = "janitor_redispatch_escalated"
+	// The janitor skipped the re-dispatch check because the instance showed
+	// recent progress (fresh durable commit or a running drive loop); the
+	// next period re-checks.
+	StatusJanitorRedispatchSuppressed = "janitor_redispatch_suppressed"
 	// An activity arrival found the in-flight claim held by a dead execution
 	// (no engine-held work item after the stale grace) and evicted it so the
 	// arrival re-executes; the rescue event of the janitor-livelock class
 	// (~0 in healthy steady state).
 	StatusClaimEvicted = "claim_evicted"
+	// A turn's workflow response re-created an operation that already exists in
+	// committed history: the response was computed from older history (a stale
+	// or duplicate completion delivery adopted across turns) and the turn was
+	// rejected for retry instead of committing a wedged state (the
+	// janitor-livelock stranding source; ~0 in healthy steady state).
+	StatusStaleTurnRejected = "stale_turn_rejected"
 	// Completions-fold outcomes: a sender-retried completion committed
 	// inside its folding turn (folded), or was nacked back into the
 	// sender's retry chain (turn failure, timeout, deactivation).
@@ -378,7 +392,7 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 	// lazy registration an absent series is indistinguishable from a rescue
 	// path that never fired. Their views aggregate by Sum, so the zero
 	// record registers the series without changing its value.
-	for _, s := range []string{StatusJanitorRecovered, StatusJanitorFoldRecovered} {
+	for _, s := range []string{StatusJanitorRecovered, StatusJanitorFoldRecovered, StatusStaleTurnRejected} {
 		stats.RecordWithOptions(context.Background(),
 			stats.WithRecorder(w.meter),
 			stats.WithTags(diagUtils.WithTags(w.localWakeCount.Name(), appIDKey, appID, namespaceKey, namespace, statusKey, s)...),

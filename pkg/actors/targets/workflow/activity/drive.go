@@ -48,8 +48,9 @@ const (
 // MUST fall back to creating the durable reminder.
 //
 // The drive is detached: the arming Execute invocation holds the activity
-// actor lock the execution needs, and the execution can run for an arbitrary
-// length of time while the orchestrator's dispatch must unblock immediately.
+// actor lock the execution's claim needs, and the execution can run for an
+// arbitrary length of time while the orchestrator's dispatch must unblock
+// immediately.
 // It is scoped to the factory drive context, drained in HaltAll. Delivering
 // the execution through router.CallReminder re-enters the normal
 // InvokeReminder path, so locking, inflight dedup, error classification and
@@ -131,8 +132,9 @@ func (f *factory) driveActivity(driveCtx context.Context, actorID string, invoca
 
 	// SkipRetries: this drive owns its recovery (bounded local retries, then
 	// escalation to the durable reminder), so the router's blind 1s-backoff
-	// retries would only delay it. SkipLock stays false: the execution must
-	// hold the activity actor lock like any reminder fire.
+	// retries would only delay it. SkipLock stays false: the execution claim
+	// takes the activity actor lock like any locked reminder fire, and the
+	// lock is released before the app roundtrip (see claim in execute.go).
 	reminder := &actorapi.Reminder{
 		Name:        activityReminderName,
 		ActorType:   f.actorType,
