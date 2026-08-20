@@ -171,7 +171,7 @@ func (i *issuer) Generate(ctx context.Context, req *Request) (string, error) {
 	signOpt := jwt.WithKey(i.signKey.Algorithm(), i.signKey)
 	if req.Type != nil && *req.Type != "" {
 		hdrs := jws.NewHeaders()
-		if err := hdrs.Set(jws.TypeKey, *req.Type); err != nil {
+		if err = hdrs.Set(jws.TypeKey, *req.Type); err != nil {
 			return "", fmt.Errorf("error setting JWT typ header: %w", err)
 		}
 		signOpt = jwt.WithKey(i.signKey.Algorithm(), i.signKey, jws.WithProtectedHeaders(hdrs))
