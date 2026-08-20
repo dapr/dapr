@@ -60,7 +60,7 @@ func (f *factory) watchAndPublish(origCtx context.Context, actorID, key string, 
 	// and can re-attempt rather than seeing the cached failure for the
 	// full TTL window.
 	if execErr == nil {
-		f.inflight.ReleaseAfter(key, call, inflightCacheTTL)
+		f.inflight.ReleaseAfter(key, call, InflightCacheTTL)
 	} else {
 		f.inflight.Release(key, call)
 	}
