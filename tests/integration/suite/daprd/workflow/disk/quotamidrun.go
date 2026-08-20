@@ -88,22 +88,30 @@ func (m *quotamidrun) Run(t *testing.T, ctx context.Context) {
 
 	sched.FillQuota(t, ctx, "quota-mid/")
 
-	httpClient := client.HTTP(t)
-	healthzURL := fmt.Sprintf("http://127.0.0.1:%d/healthz", sched.HealthzPort())
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthzURL, nil)
-		if !assert.NoError(c, err) {
-			return
-		}
-		resp, err := httpClient.Do(req)
-		if resp != nil {
-			resp.Body.Close()
-		}
-		if err != nil {
-			return
-		}
-		assert.NotEqual(c, http.StatusOK, resp.StatusCode)
-	}, 15*time.Second, 50*time.Millisecond)
+	// Under WorkflowsFastPath the workflow drives activity and new-event
+	// wake-ups locally, so the scheduler carries no per-event job churn whose
+	// failing etcd writes would surface the exhausted quota on its healthz
+	// within the window. The kill below still applies in both modes: timers
+	// remain durable scheduler jobs, so the workflow cannot progress past its
+	// next timer once the scheduler is gone.
+	if !m.wf.FastPath() {
+		httpClient := client.HTTP(t)
+		healthzURL := fmt.Sprintf("http://127.0.0.1:%d/healthz", sched.HealthzPort())
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthzURL, nil)
+			if !assert.NoError(c, err) {
+				return
+			}
+			resp, err := httpClient.Do(req)
+			if resp != nil {
+				resp.Body.Close()
+			}
+			if err != nil {
+				return
+			}
+			assert.NotEqual(c, http.StatusOK, resp.StatusCode)
+		}, 15*time.Second, 50*time.Millisecond)
+	}
 
 	sched.Kill(t)
 

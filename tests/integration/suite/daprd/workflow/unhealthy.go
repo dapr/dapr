@@ -48,6 +48,10 @@ type unhealthy struct {
 }
 
 func (u *unhealthy) Setup(t *testing.T) []framework.Option {
+	if workflow.FastPathFromEnv() {
+		t.Skip("WorkflowsFastPath runs certified activities via detached local drives instead of scheduler-delivered run-activity reminders, so the app-unhealthy scheduler stream teardown no longer cancels in-flight executions and the awaited log line is never emitted")
+	}
+
 	u.appHealth.Store(true)
 
 	handler := http.NewServeMux()

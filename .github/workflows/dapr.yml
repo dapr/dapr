@@ -279,13 +279,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [clustered]
+        mode: [clustered, fastpath]
     env:
       GOOS: linux
       GOARCH: amd64
       GOPROXY: "https://proxy.golang.org"
       TEST_OUTPUT_FILE_PREFIX: "test_report_wf_${{ matrix.mode }}"
       DAPR_INTEGRATION_WORKFLOW_CLUSTERED: ${{ matrix.mode == 'clustered' && 'true' || '' }}
+      DAPR_INTEGRATION_WORKFLOW_FASTPATH: ${{ matrix.mode == 'fastpath' && 'true' || '' }}
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v6
