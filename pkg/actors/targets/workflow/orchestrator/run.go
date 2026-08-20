@@ -330,6 +330,13 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 				// including folded completions: their senders are acked.
 				foldedCommitted = true
 
+				// The save above durably committed the consumed
+				// ExecutionStarted, so the pending start one-shot is a no-op
+				// here exactly as on the normal commit path below: elide it.
+				if esHistoryEvent != nil && o.fastPath {
+					o.deleteStartReminder(esHistoryEvent)
+				}
+
 				if len(carryover) > 0 {
 					reminderName := events.EventReminderName(reminderPrefixNewEvent, carryover[0])
 					if o.fastPath {

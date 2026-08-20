@@ -84,6 +84,17 @@ func (s *startelide) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, reg.AddWorkflowN("Quick", func(c *task.WorkflowContext) (any, error) {
 		return "done", nil
 	}))
+	require.NoError(t, reg.AddWorkflowN("Spin", func(c *task.WorkflowContext) (any, error) {
+		var n int
+		if err := c.GetInput(&n); err != nil {
+			return nil, err
+		}
+		if n < 30 {
+			c.ContinueAsNew(n + 1)
+			return nil, nil
+		}
+		return "spun", nil
+	}))
 
 	backendClient := client.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, backendClient.StartWorkItemListener(ctx, reg))
@@ -119,6 +130,22 @@ func (s *startelide) Run(t *testing.T, ctx context.Context) {
 	meta, err = backendClient.WaitForWorkflowCompletion(ctx, api.InstanceID(resp.GetInstanceId()))
 	require.NoError(t, err)
 	assert.True(t, api.WorkflowMetadataIsComplete(meta))
+
+	// A first turn ending in the engine's abandoned-CAN save path (30 CANs
+	// against the tight-loop cap of 20) must elide the start entry too, and
+	// still without a single scheduler trigger.
+	spinID, err := backendClient.ScheduleNewWorkflow(ctx, "Spin",
+		api.WithInstanceID("spin"), api.WithInput(0))
+	require.NoError(t, err)
+	meta, err = backendClient.WaitForWorkflowCompletion(ctx, spinID)
+	require.NoError(t, err)
+	assert.True(t, api.WorkflowMetadataIsComplete(meta))
+	assert.Equal(t, `"spun"`, meta.GetOutput().GetValue())
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Zero(c, s.scheduler.JobKeyCount(t, ctx, "||start-es-"))
+	}, time.Second*10, time.Millisecond*50)
+	assert.Zero(t, triggered(),
+		"the CAN-abandon commit path must elide without a scheduler trigger cycle")
 
 	// A delayed start must keep its entry until the due time: the elision
 	// only runs after the first turn commits.
