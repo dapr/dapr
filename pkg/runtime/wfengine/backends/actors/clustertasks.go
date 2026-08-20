@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
@@ -192,6 +193,88 @@ func (be *ClusterTasksBackend) WaitForWorkflowTaskCompletion(req *protos.Workflo
 		}
 		return &resp, nil
 	}
+}
+
+// OnActivityCompletion implements backend.CompletionCallbackBackend.
+func (be *ClusterTasksBackend) OnActivityCompletion(req *protos.ActivityRequest, cb func(*protos.ActivityResponse, error)) func() {
+	key := common.ActivityActorID(
+		req.GetWorkflowInstance().GetInstanceId(),
+		req.GetTaskId(),
+	)
+
+	return be.onCompletion(executor.TaskTypeActivity, key,
+		func() proto.Message { return new(protos.ActivityResponse) },
+		func(m proto.Message, err error) {
+			if err != nil {
+				cb(nil, err)
+				return
+			}
+			cb(m.(*protos.ActivityResponse), nil)
+		})
+}
+
+// OnWorkflowTaskCompletion implements backend.CompletionCallbackBackend.
+func (be *ClusterTasksBackend) OnWorkflowTaskCompletion(req *protos.WorkflowRequest, cb func(*protos.WorkflowResponse, error)) func() {
+	return be.onCompletion(executor.TaskTypeWorkflow, req.GetInstanceId(),
+		func() proto.Message { return new(protos.WorkflowResponse) },
+		func(m proto.Message, err error) {
+			if err != nil {
+				cb(nil, err)
+				return
+			}
+			cb(m.(*protos.WorkflowResponse), nil)
+		})
+}
+
+// onCompletionClaimTimeout bounds the registration-time placement lookup and
+// parked-completion claim of onCompletion, which run without a caller context.
+// On expiry the callback settles with the error and the work item is
+// abandoned; the durable retry converges.
+const onCompletionClaimTimeout = 30 * time.Second
+
+func (be *ClusterTasksBackend) onCompletion(taskType, key string, newMsg func() proto.Message, cb func(proto.Message, error)) func() {
+	deliver := func(res pending.Result) {
+		if res.Cancelled {
+			cb(nil, api.ErrTaskCancelled)
+			return
+		}
+		m := newMsg()
+		cb(m, proto.Unmarshal(res.Data, m))
+	}
+
+	deregister := be.pending.RegisterCallback(executor.PendingKey(taskType, key), deliver)
+
+	ctx, cancel := context.WithTimeout(context.Background(), onCompletionClaimTimeout)
+	defer cancel()
+
+	if be.executorLocal(ctx, key) {
+		diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteWaitLocal)
+
+		// Drain a parked stale payload WITHOUT consuming the registration:
+		// the claim's payload is (at best) a superseded attempt's, and the
+		// genuine completion still needs the armed callback.
+		m := newMsg()
+		if done, err := be.claimParked(ctx, taskType, key, m); done || err != nil {
+			cb(m, err)
+		}
+		return deregister
+	}
+
+	// Non-local executor: the pending registration cannot be fed, so replace
+	// it with the watch stream. A delivery that raced the registration has
+	// already invoked cb; the watch just delivers again and the arbiter
+	// picks the winner.
+	deregister()
+
+	diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteWaitWatch)
+
+	wctx, wcancel := context.WithCancel(context.Background())
+	go func() {
+		defer wcancel()
+		m := newMsg()
+		cb(m, be.watchCompletion(wctx, taskType, key, m))
+	}()
+	return wcancel
 }
 
 // waitForCompletion returns a function that registers a waiter for key in

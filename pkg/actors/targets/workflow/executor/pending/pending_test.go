@@ -114,6 +114,136 @@ func Test_staleDeregisterDoesNotRemoveNewWaiter(t *testing.T) {
 	assert.True(t, p.Deliver("a/1", []byte("result")))
 }
 
+func Test_registerCallbackDeliver(t *testing.T) {
+	t.Parallel()
+
+	p := New()
+	var got *Result
+	dereg := p.RegisterCallback("a/1", func(res Result) {
+		got = &res
+	})
+	t.Cleanup(dereg)
+
+	require.True(t, p.Deliver("a/1", []byte("result")))
+	require.NotNil(t, got, "callback must run before Deliver returns")
+	assert.Equal(t, []byte("result"), got.Data)
+	assert.False(t, got.Cancelled)
+	assert.Equal(t, 1, p.Len(), "a callback registration must stay armed across deliveries")
+
+	// The consumer can discard a delivery as stale (completion-token guard)
+	// and keep waiting: a later delivery must reach the same callback.
+	require.True(t, p.Deliver("a/1", []byte("second")))
+	assert.Equal(t, []byte("second"), got.Data)
+
+	dereg()
+	assert.Equal(t, 0, p.Len())
+	assert.False(t, p.Deliver("a/1", []byte("third")), "a deregistered callback must not fire")
+	assert.Equal(t, []byte("second"), got.Data)
+}
+
+func Test_registerCallbackCancel(t *testing.T) {
+	t.Parallel()
+
+	p := New()
+	var got *Result
+	dereg := p.RegisterCallback("a/1", func(res Result) {
+		got = &res
+	})
+	t.Cleanup(dereg)
+
+	require.True(t, p.Cancel("a/1"))
+	require.NotNil(t, got)
+	assert.True(t, got.Cancelled)
+	assert.Equal(t, 1, p.Len(), "cancellation delivers but only deregister removes")
+}
+
+func Test_callbackDeliverDeferred(t *testing.T) {
+	t.Parallel()
+
+	p := New()
+	var got *Result
+	dereg := p.RegisterCallback("a/1", func(res Result) {
+		got = &res
+	})
+	t.Cleanup(dereg)
+
+	run, ok := p.DeliverDeferred("a/1", []byte("result"))
+	require.True(t, ok)
+	require.NotNil(t, run, "callback waiter delivery must be returned as a thunk")
+	assert.Nil(t, got, "callback must not run before the thunk")
+	assert.Equal(t, 1, p.Len(), "the registration stays armed for later deliveries")
+
+	run()
+	require.NotNil(t, got)
+	assert.Equal(t, []byte("result"), got.Data)
+}
+
+func Test_channelDeliverDeferred(t *testing.T) {
+	t.Parallel()
+
+	p := New()
+	ch, dereg := p.Register("a/1")
+	t.Cleanup(dereg)
+
+	run, ok := p.DeliverDeferred("a/1", []byte("result"))
+	require.True(t, ok)
+	assert.Nil(t, run, "channel waiter delivery completes in place")
+	assert.Equal(t, []byte("result"), (<-ch).Data)
+}
+
+func Test_registerCallbackReplacesAndCancelsPrevious(t *testing.T) {
+	t.Parallel()
+
+	p := New()
+	var got *Result
+	_ = p.RegisterCallback("a/1", func(res Result) {
+		got = &res
+	})
+	ch, dereg := p.Register("a/1")
+	t.Cleanup(dereg)
+
+	require.NotNil(t, got, "superseded callback waiter must be cancelled on the registering goroutine")
+	assert.True(t, got.Cancelled)
+
+	require.True(t, p.Deliver("a/1", []byte("result")))
+	assert.Equal(t, []byte("result"), (<-ch).Data)
+}
+
+func Test_callbackDeregisterPreventsDelivery(t *testing.T) {
+	t.Parallel()
+
+	p := New()
+	fired := false
+	dereg := p.RegisterCallback("a/1", func(Result) {
+		fired = true
+	})
+	dereg()
+
+	assert.False(t, p.Deliver("a/1", []byte("result")))
+	assert.False(t, fired)
+	assert.Equal(t, 0, p.Len())
+}
+
+func Test_callbackReentrantRegister(t *testing.T) {
+	t.Parallel()
+
+	p := New()
+	var inner *Result
+	dereg := p.RegisterCallback("a/1", func(Result) {
+		// The delivering goroutine re-enters the registry, as a work item
+		// continuation dispatching the next turn does.
+		p.RegisterCallback("a/2", func(res Result) {
+			inner = &res
+		})
+	})
+	t.Cleanup(dereg)
+
+	require.True(t, p.Deliver("a/1", []byte("x")))
+	require.True(t, p.Deliver("a/2", []byte("y")))
+	require.NotNil(t, inner)
+	assert.Equal(t, []byte("y"), inner.Data)
+}
+
 func Test_concurrent(t *testing.T) {
 	t.Parallel()
 
