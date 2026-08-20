@@ -169,7 +169,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 	wakeCtx, wakeCancel := context.WithCancel(context.Background())
 
 	reaperScanInterval := common.EnvDurationOr("DAPR_WORKFLOW_REAPER_SCAN_INTERVAL", 5*time.Second)
-	reaperIdleTTL := common.EnvDurationOr("DAPR_WORKFLOW_REAPER_IDLE_TTL", max(common.JanitorPeriod()/2, 5*time.Second))
+	reaperIdleTTL := common.EnvDurationOr("DAPR_WORKFLOW_REAPER_IDLE_TTL", max(2*common.JanitorPeriod(), time.Minute))
 
 	f := &factory{
 		appID:                  opts.AppID,
@@ -394,7 +394,7 @@ func (f *factory) reapIdle(ctx context.Context) {
 			}
 			// driveRunning actors are mid-drive by definition; their lastActive is
 			// refreshed on the next lock acquisition.
-			if o.lastActive.Load() < cutoff && !o.driveRunning.Load() {
+			if o.lastActive.Load() < cutoff && !o.driveRunning.Load() && o.inTurn.Load() == 0 {
 				log.Debugf("Workflow actor '%s': reaping idle actor", o.actorID)
 				f.deactivate(o)
 			}

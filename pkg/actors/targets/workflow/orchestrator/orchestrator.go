@@ -62,6 +62,11 @@ type orchestrator struct {
 	// stamped for the factory idle reaper. Also stamped at creation so a fresh
 	// actor is never reaped before its first turn.
 	lastActive atomic.Int64
+	// inTurn counts currently-held turn locks (0 or 1 plus queued stream
+	// claims): the reaper must never deactivate an actor mid-turn, and
+	// lastActive alone cannot show that once a turn (an app roundtrip of
+	// arbitrary length) outlives the idle TTL.
+	inTurn atomic.Int32
 	// lastProgress is the UnixNano of the most recent durable state commit
 	// (stamped in signAndSaveState). Zero on a fresh activation, so an actor
 	// recreated after a crash reads as stalled and the durable backstops
@@ -148,22 +153,32 @@ func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Re
 func (o *orchestrator) contextLockMeasured(ctx context.Context, kind string) (context.CancelFunc, error) {
 	if o.lockWaitSample.Add(1)%16 != 0 {
 		unlock, err := o.lock.ContextLock(ctx)
-		if err == nil {
-			// Only a successful acquisition is residency: a waiter that
-			// times out or is cancelled took no turn, and stamping it would
-			// let failed waiters keep an idle actor resident.
-			o.lastActive.Store(time.Now().UnixNano())
+		if err != nil {
+			return unlock, err
 		}
-		return unlock, err
+		return o.turnHeld(unlock), nil
 	}
 	start := time.Now()
 	unlock, err := o.lock.ContextLock(ctx)
 	elapsed := float64(time.Since(start)) / float64(time.Millisecond)
-	if err == nil {
-		o.lastActive.Store(time.Now().UnixNano())
-		diag.DefaultWorkflowMonitoring.WorkflowLockWait(ctx, kind, elapsed)
+	if err != nil {
+		return unlock, err
 	}
-	return unlock, err
+	diag.DefaultWorkflowMonitoring.WorkflowLockWait(ctx, kind, elapsed)
+	return o.turnHeld(unlock), nil
+}
+
+func (o *orchestrator) turnHeld(unlock context.CancelFunc) context.CancelFunc {
+	o.lastActive.Store(time.Now().UnixNano())
+	o.inTurn.Add(1)
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			o.lastActive.Store(time.Now().UnixNano())
+			o.inTurn.Add(-1)
+		})
+		unlock()
+	}
 }
 
 // InvokeTimer implements actors.InternalActor
