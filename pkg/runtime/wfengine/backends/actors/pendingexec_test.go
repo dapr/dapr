@@ -70,15 +70,23 @@ func Test_onActivityCompletionMirrorsHeld(t *testing.T) {
 		TaskId:           3,
 	}
 
-	delivered := make(chan *protos.ActivityResponse, 1)
+	var resolved int
+	unregister := abe.RegisterActivityResolver("wf1", 3, func() { resolved++ })
+	defer unregister()
+
+	delivered := make(chan *protos.ActivityResponse, 2)
 	dereg := abe.OnActivityCompletion(req, func(resp *protos.ActivityResponse, err error) {
 		delivered <- resp
 	})
 	assert.True(t, abe.ActivityExecutionHeld("wf1", 3))
 
-	// Delivery releases the registration and reaches the callback.
+	// A delivery reaches the callback, runs the owner's resolve handshake,
+	// and does NOT release: the registration stays armed (a stale-token
+	// delivery is discarded downstream with the arbiter still waiting), so
+	// held-liveness must survive every delivery.
 	require.NoError(t, abe.CompleteActivityTask(t.Context(), &protos.ActivityResponse{InstanceId: "wf1", TaskId: 3}))
-	assert.False(t, abe.ActivityExecutionHeld("wf1", 3))
+	assert.True(t, abe.ActivityExecutionHeld("wf1", 3))
+	assert.Equal(t, 1, resolved)
 	select {
 	case resp := <-delivered:
 		assert.Equal(t, "wf1", resp.GetInstanceId())
@@ -86,11 +94,12 @@ func Test_onActivityCompletionMirrorsHeld(t *testing.T) {
 		t.Fatal("the completion must reach the callback")
 	}
 
-	// Deregistration alone also releases.
-	dereg2 := abe.OnActivityCompletion(req, func(*protos.ActivityResponse, error) {})
+	// A redelivery reaches the same registration and still does not release.
+	require.NoError(t, abe.CompleteActivityTask(t.Context(), &protos.ActivityResponse{InstanceId: "wf1", TaskId: 3}))
 	assert.True(t, abe.ActivityExecutionHeld("wf1", 3))
-	dereg2()
-	assert.False(t, abe.ActivityExecutionHeld("wf1", 3))
+	assert.Equal(t, 2, resolved)
 
+	// Only the settlement/deregistration closure releases.
 	dereg()
+	assert.False(t, abe.ActivityExecutionHeld("wf1", 3))
 }

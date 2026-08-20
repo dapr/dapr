@@ -1073,16 +1073,37 @@ func (abe *Actors) WaitForWorkflowTaskCompletion(request *protos.WorkflowRequest
 // OnActivityCompletion implements backend.CompletionCallbackBackend, flipping
 // the durabletask worker onto its event-driven completion path: the app
 // roundtrip no longer parks a waiter goroutine per in-flight work item. The
-// registration is mirrored into activityExecs (released on delivery or
-// deregistration) so the activity target's stale-claim eviction can tell a
-// live execution from a lost work item.
+// registration is mirrored into activityExecs so the activity target's
+// stale-claim eviction can tell a live execution from a lost work item. The
+// callback contract keeps registrations armed across deliveries (a stale
+// completion token is discarded downstream and the arbiter keeps waiting),
+// so held must NOT be released per delivery: it is released only by the
+// returned closure, which durabletask invokes exactly once at settlement
+// (accepted delivery or abandonment), keeping held-liveness congruent with
+// the armed registration.
 func (abe *Actors) OnActivityCompletion(request *protos.ActivityRequest, cb func(*protos.ActivityResponse, error)) func() {
-	release := abe.activityExecs.add(activityExecutionKey(request.GetWorkflowInstance().GetInstanceId(), request.GetTaskId()))
+	key := activityExecutionKey(request.GetWorkflowInstance().GetInstanceId(), request.GetTaskId())
+	release := abe.activityExecs.add(key)
 	dereg := abe.pendingTasksBackend.OnActivityCompletion(request, func(resp *protos.ActivityResponse, err error) {
-		release()
 		if abe.dropActivityCompletionForTest() {
+			// The injection models the engine losing the work item (host
+			// death, registration gone), so the held mirror must drop with
+			// it: stale-claim eviction is exactly the rescue under test.
+			release()
 			log.Warnf("TEST INJECTION: dropping activity completion delivery for instance '%s' task %d", request.GetWorkflowInstance().GetInstanceId(), request.GetTaskId())
 			return
+		}
+		if err == nil {
+			// Handshake with the owner execution before this delivery can
+			// settle the registration (settlement releases held): mark the
+			// owner call resolving so the gap between release and the
+			// owner's own callback hop cannot be misread as a stale claim.
+			// A discarded stale delivery resolves early, which is benign:
+			// held stays true while the registration remains armed. Error
+			// deliveries must not resolve: no owner callback follows, and
+			// a resolving mark would suppress the eviction that unsticks a
+			// genuinely lost execution.
+			abe.activityExecs.resolve(key)
 		}
 		cb(resp, err)
 	})

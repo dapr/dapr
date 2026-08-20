@@ -41,8 +41,8 @@ func init() {
 	suite.Register(new(churnstrand))
 }
 
-// churnstrand drops turn completions across rolling daprd restarts and
-// requires every workflow to complete once a stable host remains.
+// churnstrand duplicates turn completions while task listeners churn across
+// hosts and requires every workflow to complete once a stable listener remains.
 type churnstrand struct {
 	workflow *workflow.Workflow
 }
