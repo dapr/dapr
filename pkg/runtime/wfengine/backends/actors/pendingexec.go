@@ -27,12 +27,13 @@ import (
 // it to tell a live long-running execution (never evicted) from one whose
 // work item was lost without ever resolving (the janitor-livelock class).
 type activityExecutions struct {
-	lock sync.Mutex
-	held map[string]int
+	lock      sync.Mutex
+	held      map[string]int
+	resolvers map[string]*func()
 }
 
 func newActivityExecutions() *activityExecutions {
-	return &activityExecutions{held: make(map[string]int)}
+	return &activityExecutions{held: make(map[string]int), resolvers: make(map[string]*func())}
 }
 
 func activityExecutionKey(instanceID string, taskID int32) string {
@@ -63,4 +64,28 @@ func (a *activityExecutions) heldFor(instanceID string, taskID int32) bool {
 	a.lock.Lock()
 	defer a.lock.Unlock()
 	return a.held[activityExecutionKey(instanceID, taskID)] > 0
+}
+
+func (a *activityExecutions) registerResolver(instanceID string, taskID int32, resolve func()) func() {
+	key := activityExecutionKey(instanceID, taskID)
+	entry := &resolve
+	a.lock.Lock()
+	a.resolvers[key] = entry
+	a.lock.Unlock()
+	return func() {
+		a.lock.Lock()
+		if a.resolvers[key] == entry {
+			delete(a.resolvers, key)
+		}
+		a.lock.Unlock()
+	}
+}
+
+func (a *activityExecutions) resolve(key string) {
+	a.lock.Lock()
+	entry := a.resolvers[key]
+	a.lock.Unlock()
+	if entry != nil {
+		(*entry)()
+	}
 }

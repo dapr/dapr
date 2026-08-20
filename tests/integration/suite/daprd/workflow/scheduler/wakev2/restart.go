@@ -125,6 +125,8 @@ func (w *restart) Run(t *testing.T, ctx context.Context) {
 	metadata, err := client2.WaitForWorkflowCompletion(wctx, api.InstanceID(resp.GetInstanceId()))
 	require.NoError(t, err)
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
+	assert.Positive(t, daprd2.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:janitor_recovered"),
+		"the restart recovery must be attributed to the janitor")
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		janitors := w.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
