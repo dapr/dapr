@@ -152,7 +152,7 @@ func Test_localDrive_successNoReminder(t *testing.T) {
 	assert.Equal(t, activityReminderName, call.Name)
 	assert.Equal(t, "wf::3", call.ActorID)
 	assert.True(t, call.SkipRetries, "the drive owns its recovery; the router's blind retries must be skipped")
-	assert.False(t, call.SkipLock, "the execution must hold the activity actor lock")
+	assert.False(t, call.SkipLock, "the execution claim must take the activity actor lock")
 	assert.NotNil(t, call.Data, "the invocation must ride on the synthetic reminder")
 
 	assert.Empty(t, h.sched.snapshotCreates(), "a successful drive must not create any reminder")

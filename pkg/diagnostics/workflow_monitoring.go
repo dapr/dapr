@@ -40,10 +40,14 @@ const (
 	// escalated to a durable reminder (or that escalation itself failed,
 	// leaving the janitor as the net), and a janitor fire that found and
 	// drove a pending inbox (the recovery event; ~0 in healthy steady state).
-	StatusEscalated        = "escalated"
-	StatusEscalateFailed   = "escalate_failed"
-	StatusEscalateSkipped  = "escalate_skipped_shutdown"
-	StatusJanitorRecovered = "janitor_recovered"
+	StatusEscalated       = "escalated"
+	StatusEscalateFailed  = "escalate_failed"
+	StatusEscalateSkipped = "escalate_skipped_shutdown"
+	// A failed drive against an instance that shows recent life was NOT
+	// escalated to a durable reminder: the janitor covers it within one
+	// period instead of the scheduler re-driving a merely-slow actor.
+	StatusEscalateSuppressed = "escalate_suppressed"
+	StatusJanitorRecovered   = "janitor_recovered"
 	// A janitor fire found completions held for folding with no live driver
 	// (their arming drive was lost and their senders stopped re-delivering,
 	// e.g. died with their pod at a placement handoff) and drove a turn to
@@ -64,6 +68,10 @@ const (
 	// (a placement-handoff loss window). The durable rescue event; ~0 in
 	// healthy steady state.
 	StatusJanitorRedispatchEscalated = "janitor_redispatch_escalated"
+	// The janitor skipped the re-dispatch check because the instance showed
+	// recent progress (fresh durable commit or a running drive loop); the
+	// next period re-checks.
+	StatusJanitorRedispatchSuppressed = "janitor_redispatch_suppressed"
 	// An activity arrival found the in-flight claim held by a dead execution
 	// (no engine-held work item after the stale grace) and evicted it so the
 	// arrival re-executes; the rescue event of the janitor-livelock class
