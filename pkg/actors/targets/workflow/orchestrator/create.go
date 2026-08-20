@@ -88,10 +88,11 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 	}
 
 	// orchestration already existed: create instance only if previous one is completed
-	return o.createIfCompleted(ctx, o.rstate, state, startEvent, propagatedHistory)
+	return o.createIfCompleted(ctx, o.rstate, state, startEvent, propagatedHistory,
+		createWorkflowInstanceRequest.GetEnforceUniqueInstanceId())
 }
 
-func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.WorkflowRuntimeState, state *wfenginestate.State, startEvent *backend.HistoryEvent, propagatedHistory *protos.PropagatedHistory) error {
+func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.WorkflowRuntimeState, state *wfenginestate.State, startEvent *backend.HistoryEvent, propagatedHistory *protos.PropagatedHistory, enforceUnique bool) error {
 	// We block (re)creation of existing workflows unless they are in a completed state
 	// Or if they still have any pending activity result awaited.
 	if !runtimestate.IsCompleted(rs) {
@@ -142,6 +143,14 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		}
 
 		return status.Errorf(codes.AlreadyExists, "an active workflow with ID '%s' already exists", o.actorID)
+	}
+
+	// The create asked for instance ID uniqueness: a completed instance blocks
+	// recreation just like an active one. The recovery paths above stay honoured
+	// regardless, as they are idempotent retries of the same create, not new
+	// creates.
+	if enforceUnique {
+		return status.Errorf(codes.AlreadyExists, "a workflow with ID '%s' already exists and the create enforces instance ID uniqueness", o.actorID)
 	}
 
 	if o.activityResultAwaited.Load() {

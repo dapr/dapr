@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"strconv"
 	"strings"
 	"time"
 
@@ -387,6 +388,22 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	compactPatches(rs)
 	o.stripUnmatchedResolutions(state, rs)
 
+	// Reject a turn whose response provably came from a stale or duplicate
+	// completion delivery  BEFORE any side effect.
+	// The rejection is recoverable, so the driving reminder or wake retries the
+	// turn; the retry re-registers its rendezvous, drains any displaced parked
+	// response, and converges on the real one. ContinueAsNew turns are exempt:
+	// the generation's history was replaced and IDs restart.
+	if !rs.GetContinuedAsNew() {
+		if kind, id, stale := staleTurnDuplicate(state, rs); stale {
+			log.Warnf("Workflow actor '%s': rejecting turn whose response re-creates committed %s operation '%d' (stale completion delivery adopted across turns); retrying the turn", o.actorID, kind, id)
+			diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusStaleTurnRejected)
+			o.invalidateCachedState()
+			diagnoseStatus = diag.StatusRecoverable
+			return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("turn response re-creates committed %s operation %d; stale completion delivery rejected", kind, id))
+		}
+	}
+
 	runtimeStatus := runtimestate.RuntimeStatus(rs)
 	log.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", o.actorID, runtimeStatus.String(), wi.InstanceID)
 
@@ -710,6 +727,47 @@ func (o *orchestrator) handleRetention(ctx context.Context, status protos.Orches
 	log.Debugf("Workflow actor '%s': setting retention reminder for status '%s' with due time '%v'", o.actorID, status.String(), dueTime)
 	_, err = o.createRetentionReminder(ctx, retentionReminderName, completedAt.Add(*dueTime))
 	return err
+}
+
+// staleTurnDuplicate reports whether rs.NewEvents re-creates an operation
+// (task, timer, or child workflow) whose creation event already exists in the
+// committed history with the same event ID.
+func staleTurnDuplicate(state *wfenginestate.State, rs *backend.WorkflowRuntimeState) (string, int32, bool) {
+	kindOf := func(e *backend.HistoryEvent) string {
+		switch {
+		case e.GetTaskScheduled() != nil:
+			return "task"
+		case e.GetTimerCreated() != nil:
+			return "timer"
+		case e.GetChildWorkflowInstanceCreated() != nil:
+			return "child"
+		default:
+			return ""
+		}
+	}
+
+	created := make(map[string]struct{})
+	var have bool
+	for _, e := range rs.GetNewEvents() {
+		if k := kindOf(e); k != "" {
+			created[k+"/"+strconv.FormatInt(int64(e.GetEventId()), 10)] = struct{}{}
+			have = true
+		}
+	}
+	if !have {
+		return "", 0, false
+	}
+
+	for _, e := range state.History {
+		k := kindOf(e)
+		if k == "" {
+			continue
+		}
+		if _, ok := created[k+"/"+strconv.FormatInt(int64(e.GetEventId()), 10)]; ok {
+			return k, e.GetEventId(), true
+		}
+	}
+	return "", 0, false
 }
 
 // stripUnmatchedResolutions removes from rs.NewEvents any task or child
