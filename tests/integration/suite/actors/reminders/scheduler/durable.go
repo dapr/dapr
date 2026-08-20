@@ -114,6 +114,12 @@ func (d *durable) Run(t *testing.T, ctx context.Context) {
 
 	d.daprd1.Cleanup(t)
 
+	// Reminders still owed a repeat must be delivered again by the new host.
+	pre := make(map[string]int)
+	for _, name := range d.triggered.Slice() {
+		pre[name]++
+	}
+
 	d.daprd2.Run(t, ctx)
 	t.Cleanup(func() { d.daprd2.Cleanup(t) })
 	d.daprd2.WaitUntilRunning(t, ctx)
@@ -124,7 +130,11 @@ func (d *durable) Run(t *testing.T, ctx context.Context) {
 			counts[name]++
 		}
 		for i := range 20 {
-			assert.GreaterOrEqual(c, counts[strconv.Itoa(i)], 2)
+			name := strconv.Itoa(i)
+			assert.GreaterOrEqual(c, counts[name], 2)
+			if pre[name] < 2 {
+				assert.Greater(c, counts[name], pre[name], "reminder %s must fire on the new host", name)
+			}
 		}
 	}, time.Second*20, time.Millisecond*10)
 }
