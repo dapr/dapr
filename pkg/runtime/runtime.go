@@ -367,8 +367,8 @@ func newDaprRuntime(ctx context.Context,
 	processor.SetInProcessWorkflows(wfe)
 
 	var reportedPlacementAddresses []string
-	if strings.HasPrefix(runtimeConfig.actorsService, "placement:") {
-		for _, addr := range strings.Split(strings.TrimPrefix(runtimeConfig.actorsService, "placement:"), ",") {
+	if addrs, ok := strings.CutPrefix(runtimeConfig.actorsService, "placement:"); ok {
+		for addr := range strings.SplitSeq(addrs, ",") {
 			if strings.TrimSpace(addr) != "" {
 				reportedPlacementAddresses = append(reportedPlacementAddresses, addr)
 			}

@@ -91,10 +91,10 @@ func (r *rebalance) Setup(t *testing.T) []framework.Option {
 		srvs[i] = prochttp.New(t, prochttp.WithHandler(handler))
 	}
 
-	for i := range r.daprds {
+	for i, srv := range srvs {
 		r.daprds[i] = daprd.New(t,
 			daprd.WithInMemoryActorStateStore("mystore"),
-			daprd.WithAppPort(srvs[i].Port()),
+			daprd.WithAppPort(srv.Port()),
 			daprd.WithScheduler(sched),
 		)
 	}
