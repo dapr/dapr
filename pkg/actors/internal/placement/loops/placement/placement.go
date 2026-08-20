@@ -281,7 +281,6 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		// The active authority may have handed over: probe the other one.
 		if p.alt != nil {
 			p.swapAlt()
-			continue
 		}
 
 		select {

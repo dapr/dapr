@@ -172,11 +172,12 @@ func TestHandleCloseStreamRefusalProbesAlt(t *testing.T) {
 	assert.Equal(t, "scheduler", p.connector.Address(),
 		"a refused stream must probe the other authority next")
 
-	// A non-refusal close keeps the active connector.
+	// A non-refusal close does not swap the connector. The canceled
+	// context stops the handling before the reconnect loop probes.
 	p.idx = 2
 	p.dissLoop = loopfake.New[loops.EventDiss]()
-	ctx2, cancel2 := context.WithTimeout(t.Context(), time.Millisecond*50)
-	t.Cleanup(cancel2)
+	ctx2, cancel2 := context.WithCancel(t.Context())
+	cancel2()
 	err = p.handleCloseStream(ctx2, &loops.ConnCloseStream{
 		IDx:   2,
 		Error: errors.New("connection reset"),
