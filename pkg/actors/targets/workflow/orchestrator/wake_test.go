@@ -18,6 +18,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -36,6 +37,7 @@ import (
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
+	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -55,7 +57,8 @@ type wakeHarness struct {
 	createErrFor    map[string]error
 	reminderGate    chan struct{} // when non-nil, CallReminder blocks on it (or ctx)
 
-	calls []*actorapi.Reminder
+	attempts atomic.Int64 // CallReminder invocations, successful or not
+	calls    []*actorapi.Reminder
 
 	fact *factory
 	orch *orchestrator
@@ -104,6 +107,7 @@ func newWakeHarness(t *testing.T, instanceID string, fastPath bool) *wakeHarness
 		})
 
 	fakeRouter := routerfake.New().WithCallReminderFn(func(ctx context.Context, rem *actorapi.Reminder) error {
+		h.attempts.Add(1)
 		if h.reminderGate != nil {
 			select {
 			case <-h.reminderGate:
@@ -292,16 +296,107 @@ func Test_localWake_callReminderErrorKeepsBackstop(t *testing.T) {
 
 	h := newWakeHarness(t, instanceID, true)
 	h.callReminderErr = errors.New("wake failed")
+	h.reminderGate = make(chan struct{})
 	h.primeRunning(t, instanceID, 7)
 
 	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
 
-	// v2: a failed drive ESCALATES to the durable per-event reminder so
-	// recovery is ~1s via the scheduler instead of a janitor period.
+	// Park the drive on the gate, then age both life signals so the failure
+	// resolves as stalled: escalation must fire without in-place retries.
+	stale := time.Now().Add(-time.Minute).UnixNano()
+	h.orch.lastActive.Store(stale)
+	h.orch.lastProgress.Store(stale)
+	close(h.reminderGate)
+
+	// v2: a failed drive against a stalled instance ESCALATES to the durable
+	// per-event reminder so recovery is ~1s via the scheduler instead of a
+	// janitor period.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, []string{"save", "create:new-event-janitor", "create:new-event-tc-7"}, h.snapshotOps())
 	}, time.Second*5, time.Millisecond*5,
-		"a failed local drive must escalate to the durable per-event reminder")
+		"a failed local drive against a stalled instance must escalate to the durable per-event reminder")
+}
+
+func Test_localWake_failureAliveSuppressesEscalation(t *testing.T) {
+	const instanceID = "test-wake-suppress"
+
+	h := newWakeHarness(t, instanceID, true)
+	// Compress the retry schedule and stretch the alive window so the
+	// retries exhaust quickly while the instance still reads alive.
+	h.fact.driveRetryBackoffs = []time.Duration{time.Millisecond * 5, time.Millisecond * 5, time.Millisecond * 5}
+	h.fact.driveAliveWindow = time.Minute
+	h.callReminderErr = errors.New("wake failed")
+	h.primeRunning(t, instanceID, 7)
+
+	// The save inside addWorkflowEvent stamps lastProgress, so the instance
+	// reads alive for the whole (compressed) retry schedule: the failure
+	// must exhaust the retries and then be handed to the janitor, never
+	// escalated to a durable reminder.
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, int64(4), h.attempts.Load(), "the initial attempt plus every in-place retry must run")
+		assert.False(c, h.orch.driveRunning.Load(), "the drive loop must wind down after suppression")
+	}, time.Second*5, time.Millisecond*5)
+
+	time.Sleep(time.Millisecond * 100)
+	assert.Equal(t, []string{"save", "create:new-event-janitor"}, h.snapshotOps(),
+		"a failed drive against a live instance must not create the durable per-event reminder")
+}
+
+func Test_localWake_closedActorEscalatesDespiteFreshness(t *testing.T) {
+	const instanceID = "test-wake-closed"
+
+	h := newWakeHarness(t, instanceID, true)
+	h.callReminderErr = targeterrors.NewClosed("test")
+	h.primeRunning(t, instanceID, 7)
+
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+
+	// A closed actor is the migration/teardown path: the drive is lost, not
+	// slow, and the host-agnostic durable create must fire immediately even
+	// though lastProgress was stamped by the save moments ago.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, []string{"save", "create:new-event-janitor", "create:new-event-tc-7"}, h.snapshotOps())
+	}, time.Second*5, time.Millisecond*5,
+		"a closed-actor drive failure must escalate without retries or suppression")
+}
+
+func Test_hysteresisSignals(t *testing.T) {
+	const instanceID = "test-hysteresis-signals"
+
+	h := newWakeHarness(t, instanceID, true)
+	o := h.orch
+
+	// Fresh activation: lastActive is stamped, lastProgress is deliberately
+	// zero, so the actor is alive for escalation purposes but shows no
+	// progress to the janitor gate.
+	assert.True(t, o.aliveWithin(time.Second*3))
+	assert.False(t, o.progressWithin(janitorPeriod()))
+	assert.False(t, o.redispatchSuppressed(),
+		"a fresh activation must never suppress the janitor re-dispatch")
+
+	// A durable commit refreshes progress (the escalation signal), but must
+	// NOT suppress the re-dispatch pass: sibling activities or external
+	// events can keep committing forever while one activity host is dead,
+	// so instance-wide progress proves nothing about a given task.
+	o.lastProgress.Store(time.Now().UnixNano())
+	assert.True(t, o.progressWithin(janitorPeriod()))
+	assert.False(t, o.redispatchSuppressed(),
+		"instance progress must not gate task re-dispatch")
+
+	// A running drive loop suppresses regardless of commit age.
+	o.lastProgress.Store(0)
+	o.driveRunning.Store(true)
+	assert.True(t, o.redispatchSuppressed())
+	o.driveRunning.Store(false)
+
+	// Both signals stale: stalled on every axis.
+	stale := time.Now().Add(-time.Minute).UnixNano()
+	o.lastActive.Store(stale)
+	o.lastProgress.Store(stale)
+	assert.False(t, o.aliveWithin(time.Second*3))
+	assert.False(t, o.redispatchSuppressed())
 }
 
 func Test_localWake_janitorOncePerResidency(t *testing.T) {
