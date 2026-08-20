@@ -100,7 +100,7 @@ func (p *Pool) AddConnection(req *schedulerv1pb.WatchJobsRequestInitial, stream 
 	<-p.readyCh
 
 	ctx, cancel := context.WithCancelCause(stream.Context())
-	
+
 	if p.onPlacementAddresses != nil && len(req.GetPlacementAddresses()) > 0 {
 		p.onPlacementAddresses(req.GetPlacementAddresses())
 	}

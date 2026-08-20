@@ -33,9 +33,15 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	dtdedup "github.com/dapr/durabletask-go/backend/runtimestate/dedup"
 )
 
-func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, outgoingHistory map[int32]*protos.PropagatedHistory) messages.DispatchResult {
+// callActivities dispatches the pending TaskScheduled events. elide is the
+// caller's certification that the janitor backstop is armed, allowing target
+// hosts running the WorkflowsFastPath preview to skip the
+// durable run-activity reminder; callers that cannot certify it (gate off,
+// janitor create failed) pass false.
+func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, outgoingHistory map[int32]*protos.PropagatedHistory, elide bool) messages.DispatchResult {
 	var dueTime time.Time
 	if len(state.History) > 0 {
 		dueTime = state.History[0].GetTimestamp().AsTime()
@@ -59,7 +65,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 			continue
 		}
 
-		err := o.callActivity(ctx, e, dueTime, outgoingHistory[e.GetEventId()], workflowName)
+		err := o.callActivity(ctx, e, dueTime, outgoingHistory[e.GetEventId()], workflowName, elide)
 		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
 				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
@@ -74,7 +80,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 	return result
 }
 
-func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, ph *protos.PropagatedHistory, workflowName string) error {
+func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, ph *protos.PropagatedHistory, workflowName string, elide bool) error {
 	ts := e.GetTaskScheduled()
 	if ts == nil {
 		log.Warnf("Workflow actor '%s': unable to process task '%v'", o.actorID, e)
@@ -113,12 +119,17 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 
 	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", o.actorID, activityActorType, targetActorID)
 
+	meta := map[string][]string{
+		todo.MetadataActivityReminderDueTime: {strconv.FormatInt(dueTime.UnixMilli(), 10)},
+	}
+	if elide {
+		meta[todo.MetadataActivityLocalDrive] = []string{"true"}
+	}
+
 	_, err = o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest(todo.ExecuteActivityMethod).
 		WithActor(activityActorType, targetActorID).
-		WithMetadata(map[string][]string{
-			todo.MetadataActivityReminderDueTime: {strconv.FormatInt(dueTime.UnixMilli(), 10)},
-		}).
+		WithMetadata(meta).
 		WithData(invocationData).
 		WithContentType(invokev1.ProtobufContentType),
 	)
@@ -164,4 +175,38 @@ func (o *orchestrator) failActivityACL(ctx context.Context, e *backend.HistoryEv
 
 func buildActivityActorID(workflowID string, taskID int32) string {
 	return common.ActivityActorID(workflowID, taskID)
+}
+
+// unresolvedScheduledTasks returns the TaskScheduled events in state.History
+// that have no TaskCompleted/TaskFailed resolution in History or Inbox. These
+// are activities whose dispatch was committed but whose outcome has not been
+// observed; the janitor re-dispatches them as the durable re-driver for
+// in-flight activities (which, under WorkflowsFastPath, have no
+// run-activity reminder of their own). Timers and child workflows use
+// different event kinds and cannot appear here; ContinueAsNew rewrites
+// history per generation, so stale previous-generation events cannot either.
+func unresolvedScheduledTasks(state *wfenginestate.State, pending []*backend.HistoryEvent) []*backend.HistoryEvent {
+	resolved := make(map[int32]struct{})
+	collect := func(events []*backend.HistoryEvent) {
+		for _, e := range events {
+			if kind, id, ok := dtdedup.Of(e); ok && kind == dtdedup.KindTask {
+				resolved[id] = struct{}{}
+			}
+		}
+	}
+	collect(state.History)
+	collect(state.Inbox)
+	collect(pending)
+
+	var unresolved []*backend.HistoryEvent
+	for _, e := range state.History {
+		if e.GetTaskScheduled() == nil {
+			continue
+		}
+		if _, ok := resolved[e.GetEventId()]; ok {
+			continue
+		}
+		unresolved = append(unresolved, e)
+	}
+	return unresolved
 }

@@ -272,6 +272,74 @@ func TestLeadershipAdvertisementPermanence(t *testing.T) {
 	assert.True(t, *place.leader)
 }
 
+// TestLeadershipAdvertisementSurvivesCapableDip asserts an advertised
+// leader is not withdrawn when the capable sidecar count transiently drops
+// to zero. Sidecars re-establish their jobs streams when their target types
+// change, and a withdrawn leader would make every sidecar drop its
+// placement stream and halt its actors.
+func TestLeadershipAdvertisementSurvivesCapableDip(t *testing.T) {
+	t.Parallel()
+
+	anyHost := func(t *testing.T, addr string, placement bool) *anypb.Any {
+		t.Helper()
+		a, err := anypb.New(&schedulerv1pb.Host{Address: addr, SchedulerPlacementEnabled: placement})
+		require.NoError(t, err)
+		return a
+	}
+
+	var lock sync.RWMutex
+	var broadcastHosts []*schedulerv1pb.Host
+	bc := broadcaster.New[[]*schedulerv1pb.Host]()
+	ch := make(chan []*schedulerv1pb.Host, 4)
+	bc.Subscribe(t.Context(), ch)
+	pool := new(fakePool)
+	place := new(fakePlacementLeader)
+	l := &leadership{
+		hostBroadcaster: bc,
+		lock:            &lock,
+		broadcastHosts:  &broadcastHosts,
+		readyCh:         make(chan struct{}),
+		ownAddress:      "a:1",
+		pool:            pool,
+		placement:       place,
+	}
+
+	// Before the first advertisement, no capable sidecar means no leader.
+	require.NoError(t, l.Handle(t.Context(), []*anypb.Any{anyHost(t, "a:1", true)}))
+	hosts := <-ch
+	require.False(t, hosts[0].GetLeader())
+	require.False(t, l.advertised)
+
+	// A capable sidecar connects and takes a placement stream: advertised.
+	pool.capable = true
+	place.hasStreams = true
+	require.NoError(t, l.Handle(t.Context(), nil))
+	hosts = <-ch
+	require.True(t, hosts[0].GetLeader())
+	require.True(t, l.advertised)
+
+	// The sidecar re-establishes its jobs streams: the capable count dips
+	// to zero, and the leader must stay advertised, with the unchanged
+	// table not re-broadcast.
+	pool.capable = false
+	require.NoError(t, l.Handle(t.Context(), nil))
+	select {
+	case hosts = <-ch:
+		t.Fatalf("an unchanged table must not be re-broadcast: %v", hosts)
+	default:
+	}
+	require.True(t, l.advertised)
+
+	// The streams return: still advertised, still no re-broadcast.
+	pool.capable = true
+	require.NoError(t, l.Handle(t.Context(), nil))
+	select {
+	case hosts = <-ch:
+		t.Fatalf("an unchanged table must not be re-broadcast: %v", hosts)
+	default:
+	}
+}
+
 // TestLeadershipMalformedTableNotReplayed asserts a table which fails to
 // unmarshal is not saved: a later capability signal must be a no-op rather
 // than replaying the malformed table and erroring forever.

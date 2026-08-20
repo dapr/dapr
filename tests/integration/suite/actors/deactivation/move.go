@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"path"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -86,12 +87,12 @@ func (m *move) run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 	}
 
-	var newAppCalled string
+	var newAppCalled atomic.Value
 	newApp := actors.New(t,
 		actors.WithPeerActor(m.app),
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(_ http.ResponseWriter, r *http.Request) {
-			newAppCalled = r.URL.Path
+			newAppCalled.Store(r.URL.Path)
 		}),
 	)
 
@@ -111,6 +112,9 @@ func (m *move) run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, "/actors/abc/"+act+"/method/foo", newAppCalled)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		called, _ := newAppCalled.Load().(string)
+		assert.Equal(c, "/actors/abc/"+act+"/method/foo", called)
+	}, time.Second*10, time.Millisecond*10)
 	newApp.Cleanup(t)
 }

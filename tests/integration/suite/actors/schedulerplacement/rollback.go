@@ -177,7 +177,7 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 				leader += v
 			}
 		}
-		assert.Equal(c, float64(1), leader)
+		assert.Equal(c, 1, int(leader))
 	}, time.Second*10, time.Millisecond*50)
 
 	invokedBefore := r.invoked.Load()

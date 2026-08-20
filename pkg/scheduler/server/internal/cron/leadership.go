@@ -120,8 +120,11 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 	// the placement service has not stood down, or no capable sidecar
 	// exists to advertise to. Only the leader bit waits for that last
 	// reason, so a booting sidecar reads capable-but-leaderless and waits
-	// for its own registration, not no-placement-served.
-	awaitingLeadership := gateBlocked || awaitingStandDown || !gateCapable
+	// for its own registration, not no-placement-served. Once advertised,
+	// the leader stays advertised while no capable sidecar is connected.
+	// Sidecars briefly reconnect their jobs streams when their target types
+	// change, and a withdrawn leader halts every actor.
+	awaitingLeadership := gateBlocked || awaitingStandDown || (!advertised && !gateCapable)
 	// The placement service is still the authority while the gate holds or
 	// the stand-down is unconfirmed, so the capability bit is masked too:
 	// sidecars use the placement service rather than wait, and the cluster

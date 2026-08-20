@@ -15,6 +15,7 @@ package schedulerplacement
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"strconv"
 	"strings"
@@ -130,9 +131,7 @@ func (r *rebalance) Run(t *testing.T, ctx context.Context) {
 
 	r.lock.Lock()
 	before := make(map[string]int, len(ids))
-	for id, host := range r.servedOn {
-		before[id] = host
-	}
+	maps.Copy(before, r.servedOn)
 	r.lock.Unlock()
 
 	// The third host joins. Fresh probe IDs spreading over all three hosts
@@ -157,9 +156,7 @@ func (r *rebalance) Run(t *testing.T, ctx context.Context) {
 	}
 	r.lock.Lock()
 	after := make(map[string]int, len(ids))
-	for id, host := range r.servedOn {
-		after[id] = host
-	}
+	maps.Copy(after, r.servedOn)
 	deleted := make(map[string]map[int]struct{}, len(r.deletedOn))
 	for id, hosts := range r.deletedOn {
 		cp := make(map[int]struct{}, len(hosts))

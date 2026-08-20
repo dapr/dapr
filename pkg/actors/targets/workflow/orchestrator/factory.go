@@ -18,6 +18,7 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
@@ -69,6 +70,12 @@ type Options struct {
 
 	// May be nil when the feature is disabled.
 	WorkflowAccessPolicies *workflowacl.Holder
+
+	// FastPath gates the WorkflowsFastPath preview feature capabilities as
+	// one unit: the detached local wake drive (wake.go), the
+	// activity-reminder elision with janitor re-dispatch (redispatch.go),
+	// and the in-memory completions fold (fold.go).
+	FastPath bool
 }
 
 type factory struct {
@@ -92,7 +99,41 @@ type factory struct {
 
 	scheduler todo.WorkflowScheduler
 
-	deactivateCh chan *orchestrator
+	deactivateCh  chan *orchestrator
+	deactivateCtx context.Context
+
+	// fastPath and the wake* fields drive the detached local wake goroutines
+	// (see wake.go). wakeCtx is factory-owned rather than scoped to the
+	// per-stream ctx given to New. HaltAll (which also fires on placement stream
+	// churn, not only shutdown) cancels and drains the in-flight wakes, then
+	// recreates the context for subsequent activations. wakeLock serializes
+	// spawns against that cancel/recreate cycle so the WaitGroup Add never races
+	// the Wait.
+	fastPath   bool
+	wakeLock   sync.Mutex
+	wakeCtx    context.Context
+	wakeCancel context.CancelFunc
+	wakeWG     sync.WaitGroup
+
+	// Escalation hysteresis schedule. Set once in New, before any drive loop can
+	// read them; fields only so unit tests can compress the schedule per
+	// factory. A nil driveRetryBackoffs selects the default jittered schedule .
+	driveRetryBackoffs []time.Duration
+	driveAliveWindow   time.Duration
+
+	bgWG sync.WaitGroup
+
+	// lockWaitSample drives 1-in-16 sampling of the lock_wait histogram: it
+	// advances on every orchestrator invocation of this factory and the
+	// distribution is what matters, not every observation.
+	lockWaitSample atomic.Uint64
+
+	reaperScanInterval time.Duration
+	reaperIdleTTL      time.Duration
+
+	rootCtx context.Context
+	escLock sync.Mutex
+	escWG   sync.WaitGroup
 
 	table sync.Map
 	lock  sync.Mutex
@@ -123,14 +164,14 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
-	deactivateCh := make(chan *orchestrator, 100)
-	go func() {
-		for orchestrator := range deactivateCh {
-			orchestrator.Deactivate(ctx)
-		}
-	}()
+	deactivateCh := make(chan *orchestrator, 1024)
 
-	return &factory{
+	wakeCtx, wakeCancel := context.WithCancel(context.Background())
+
+	reaperScanInterval := common.EnvDurationOr("DAPR_WORKFLOW_REAPER_SCAN_INTERVAL", 5*time.Second)
+	reaperIdleTTL := common.EnvDurationOr("DAPR_WORKFLOW_REAPER_IDLE_TTL", max(2*common.JanitorPeriod(), time.Minute))
+
+	f := &factory{
 		appID:                  opts.AppID,
 		namespace:              opts.Namespace,
 		actorType:              opts.WorkflowActorType,
@@ -149,7 +190,37 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		workflowAccessPolicies: opts.WorkflowAccessPolicies,
 		scheduler:              opts.Scheduler,
 		deactivateCh:           deactivateCh,
-	}, nil
+		fastPath:               opts.FastPath,
+		reaperScanInterval:     reaperScanInterval,
+		reaperIdleTTL:          reaperIdleTTL,
+		deactivateCtx:          ctx,
+		wakeCtx:                wakeCtx,
+		wakeCancel:             wakeCancel,
+		driveAliveWindow:       defaultDriveAliveWindow,
+		rootCtx:                ctx,
+	}
+
+	// The worker pool and reaper are factory-lifetime: they exit when the
+	// engine's context dies and are joined by the final HaltAll, so engine
+	// close leaks no goroutines.
+	for range 8 {
+		f.bgWG.Go(func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case orchestrator := <-deactivateCh:
+					orchestrator.Deactivate(ctx)
+				}
+			}
+		})
+	}
+
+	f.bgWG.Go(func() {
+		f.reapIdle(ctx)
+	})
+
+	return f, nil
 }
 
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
@@ -168,6 +239,16 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 	or.factory = f
 	or.actorID = actorID
 	or.closed.Store(false)
+	or.lastActive.Store(time.Now().UnixNano())
+
+	// Deliberately zero, not now: progress must only ever mean a durable commit
+	// by THIS residency, so a just-activated actor (e.g. the new owner after a
+	// crash) reads as stalled and the janitor recovers it.
+	or.lastProgress.Store(0)
+	or.janitorAsserted.Store(false)
+	or.janitorRedispatched = nil
+	or.driveRunning.Store(false)
+	or.driveNotify = make(chan struct{}, 1)
 	or.lock.Init()
 
 	if or.streamFns == nil {
@@ -211,6 +292,14 @@ func (f *factory) HaltAll(ctx context.Context) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
+	// Cancel detached local wake goroutines BEFORE deactivating: a wake
+	// goroutine parked on an actor lock is released by the deactivation, and
+	// the cancelled wakeCtx stops it from doing further work. Wait for them
+	// only after the deactivation loop so neither side deadlocks.
+	f.wakeLock.Lock()
+	f.wakeCancel()
+	f.wakeLock.Unlock()
+
 	var wg sync.WaitGroup
 	errs := slice.New[error]()
 
@@ -224,6 +313,15 @@ func (f *factory) HaltAll(ctx context.Context) error {
 	})
 
 	wg.Wait()
+	f.wakeWG.Wait()
+
+	f.wakeLock.Lock()
+	f.wakeCtx, f.wakeCancel = context.WithCancel(context.Background())
+	f.wakeLock.Unlock()
+
+	if f.rootCtx.Err() != nil {
+		f.bgWG.Wait()
+	}
 
 	return errors.Join(errs.Slice()...)
 }
@@ -272,5 +370,35 @@ func (f *factory) deactivate(orchestrator *orchestrator) {
 	if !orchestrator.closed.CompareAndSwap(false, true) {
 		return
 	}
-	f.deactivateCh <- orchestrator
+
+	select {
+	case f.deactivateCh <- orchestrator:
+	case <-f.deactivateCtx.Done():
+	}
+}
+
+func (f *factory) reapIdle(ctx context.Context) {
+	t := time.NewTicker(f.reaperScanInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		cutoff := time.Now().Add(-f.reaperIdleTTL).UnixNano()
+		f.table.Range(func(_, v any) bool {
+			o, ok := v.(*orchestrator)
+			if !ok {
+				return true
+			}
+			// driveRunning actors are mid-drive by definition; their lastActive is
+			// refreshed on the next lock acquisition.
+			if o.lastActive.Load() < cutoff && !o.driveRunning.Load() && o.inTurn.Load() == 0 {
+				log.Debugf("Workflow actor '%s': reaping idle actor", o.actorID)
+				f.deactivate(o)
+			}
+			return true
+		})
+	}
 }

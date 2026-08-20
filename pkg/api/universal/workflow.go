@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -60,8 +61,17 @@ func (a *Universal) GetWorkflow(ctx context.Context, in *runtimev1pb.GetWorkflow
 		a.logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
+	targetAppID, err := a.targetAppID(in.GetAppId())
+	if err != nil {
+		a.logger.Debug(err)
+		return &runtimev1pb.GetWorkflowResponse{}, err
+	}
 
-	metadata, err := a.workflowEngine.Client().FetchWorkflowMetadata(ctx, api.InstanceID(in.GetInstanceId()))
+	var opts []api.FetchWorkflowMetadataOptions
+	if targetAppID != "" {
+		opts = append(opts, api.WithFetchAppID(targetAppID))
+	}
+	metadata, err := a.workflowEngine.Client().FetchWorkflowMetadata(ctx, api.InstanceID(in.GetInstanceId()), opts...)
 	if err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			err = nil
@@ -135,13 +145,21 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 		a.logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
+	targetAppID, err := a.targetAppID(in.GetAppId())
+	if err != nil {
+		a.logger.Debug(err)
+		return &runtimev1pb.StartWorkflowResponse{}, err
+	}
 
-	opts := make([]api.NewWorkflowOptions, 0, 3)
+	opts := make([]api.NewWorkflowOptions, 0, 4)
 	opts = append(opts,
 		api.WithInstanceID(api.InstanceID(in.GetInstanceId())),
 		// Inputs are expected to be unprocessed string values (e.g. JSON text).
 		api.WithRawInput(wrapperspb.String(string(in.GetInput()))),
 	)
+	if targetAppID != "" {
+		opts = append(opts, api.WithAppID(targetAppID))
+	}
 
 	// Start time is optional and must be in the RFC3339 format (e.g. 2009-11-10T23:00:00Z).
 	if startTimeRFC3339, ok := in.GetOptions()["dapr.workflow.start_time"]; ok {
@@ -187,7 +205,17 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 		return emptyResponse, err
 	}
 
-	if err := a.workflowEngine.Client().TerminateWorkflow(ctx, api.InstanceID(in.GetInstanceId()), api.WithRecursiveTerminate(true)); err != nil {
+	targetAppID, err := a.targetAppID(in.GetAppId())
+	if err != nil {
+		a.logger.Debug(err)
+		return emptyResponse, err
+	}
+
+	opts := []api.TerminateOptions{api.WithRecursiveTerminate(true)}
+	if targetAppID != "" {
+		opts = append(opts, api.WithTerminateAppID(targetAppID))
+	}
+	if err := a.workflowEngine.Client().TerminateWorkflow(ctx, api.InstanceID(in.GetInstanceId()), opts...); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId())
 		} else {
@@ -218,9 +246,18 @@ func (a *Universal) RaiseEventWorkflow(ctx context.Context, in *runtimev1pb.Rais
 		return emptyResponse, err
 	}
 
+	targetAppID, err := a.targetAppID(in.GetAppId())
+	if err != nil {
+		a.logger.Debug(err)
+		return emptyResponse, err
+	}
+
 	// Event data is optional; when set, it is expected to be an unprocessed
 	// string value (e.g. JSON text).
 	var opts []api.RaiseEventOptions
+	if targetAppID != "" {
+		opts = append(opts, api.WithRaiseEventAppID(targetAppID))
+	}
 	if in.GetEventData() != nil {
 		opts = append(opts, api.WithRawEventData(wrapperspb.String(string(in.GetEventData()))))
 	}
@@ -245,7 +282,17 @@ func (a *Universal) PauseWorkflow(ctx context.Context, in *runtimev1pb.PauseWork
 		return emptyResponse, err
 	}
 
-	if err := a.workflowEngine.Client().SuspendWorkflow(ctx, api.InstanceID(in.GetInstanceId()), ""); err != nil {
+	targetAppID, err := a.targetAppID(in.GetAppId())
+	if err != nil {
+		a.logger.Debug(err)
+		return emptyResponse, err
+	}
+
+	var opts []api.SuspendOptions
+	if targetAppID != "" {
+		opts = append(opts, api.WithSuspendAppID(targetAppID))
+	}
+	if err := a.workflowEngine.Client().SuspendWorkflow(ctx, api.InstanceID(in.GetInstanceId()), "", opts...); err != nil {
 		err = messages.ErrPauseWorkflow.WithFormat(in.GetInstanceId(),
 			fmt.Errorf("failed to pause workflow %s: %w", in.GetInstanceId(), err))
 		a.logger.Debug(err)
@@ -266,7 +313,17 @@ func (a *Universal) ResumeWorkflow(ctx context.Context, in *runtimev1pb.ResumeWo
 		return emptyResponse, err
 	}
 
-	if err := a.workflowEngine.Client().ResumeWorkflow(ctx, api.InstanceID(in.GetInstanceId()), ""); err != nil {
+	targetAppID, err := a.targetAppID(in.GetAppId())
+	if err != nil {
+		a.logger.Debug(err)
+		return emptyResponse, err
+	}
+
+	var opts []api.ResumeOptions
+	if targetAppID != "" {
+		opts = append(opts, api.WithResumeAppID(targetAppID))
+	}
+	if err := a.workflowEngine.Client().ResumeWorkflow(ctx, api.InstanceID(in.GetInstanceId()), "", opts...); err != nil {
 		err = messages.ErrResumeWorkflow.WithFormat(in.GetInstanceId(),
 			fmt.Errorf("failed to resume workflow %s: %w", in.GetInstanceId(), err))
 		a.logger.Debug(err)
@@ -287,7 +344,17 @@ func (a *Universal) PurgeWorkflow(ctx context.Context, in *runtimev1pb.PurgeWork
 		return emptyResponse, err
 	}
 
-	if err := a.workflowEngine.Client().PurgeWorkflowState(ctx, api.InstanceID(in.GetInstanceId()), api.WithRecursivePurge(true)); err != nil {
+	targetAppID, err := a.targetAppID(in.GetAppId())
+	if err != nil {
+		a.logger.Debug(err)
+		return emptyResponse, err
+	}
+
+	opts := []api.PurgeOptions{api.WithRecursivePurge(true)}
+	if targetAppID != "" {
+		opts = append(opts, api.WithPurgeAppID(targetAppID))
+	}
+	if err := a.workflowEngine.Client().PurgeWorkflowState(ctx, api.InstanceID(in.GetInstanceId()), opts...); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId())
 		} else {
@@ -383,6 +450,22 @@ func (a *Universal) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.Re
 // Deprecated: Use PurgeWorkflow instead.
 func (a *Universal) PurgeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.PurgeWorkflowRequest) (*emptypb.Empty, error) {
 	return a.PurgeWorkflow(ctx, in)
+}
+
+// targetAppID validates the optional app ID of a workflow request and returns
+// the value to set on the component request. An empty app ID or the local app
+// ID means a local operation and returns empty. The character set is
+// restricted like instance IDs, in particular rejecting '.' so a caller
+// cannot smuggle extra segments into the derived actor type name
+// "dapr.internal.<namespace>.<appID>.workflow".
+func (a *Universal) targetAppID(appID string) (string, error) {
+	if appID == "" || appID == a.AppID() {
+		return "", nil
+	}
+	if !common.ValidAppID(appID) {
+		return "", messages.ErrInvalidWorkflowAppID.WithFormat(appID)
+	}
+	return appID, nil
 }
 
 func (a *Universal) validateInstanceID(instanceID string, isCreate bool) error {

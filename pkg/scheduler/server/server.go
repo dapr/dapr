@@ -106,7 +106,6 @@ type Server struct {
 	serializer *serialize.Serializer
 	cron       cron.Interface
 	etcd       etcd.Interface
-	controller *controller.Controller
 	placement  placement.Interface
 	handoff    *handoff.Handoff
 
@@ -215,7 +214,6 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		port:          opts.Port,
 		listenAddress: opts.ListenAddress,
 		sec:           opts.Security,
-		controller:    opts.Controller,
 		cron:          cron,
 		placement:     place,
 		etcd:          etcdServer,
@@ -253,10 +251,6 @@ func (s *Server) Run(ctx context.Context) error {
 			close(s.closeCh)
 			return nil
 		},
-	}
-
-	if s.controller != nil {
-		runners = append(runners, s.controller.Run)
 	}
 
 	if s.handoff != nil {

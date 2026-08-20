@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,6 +42,7 @@ type options struct {
 	appID                      string
 	namespace                  *string
 	appPort                    *int
+	appMaxConcurrency          *int
 	grpcPort                   int
 	httpPort                   int
 	internalGRPCPort           int
@@ -115,6 +117,12 @@ func WithAppPort(port int) Option {
 func WithAppProtocol(protocol string) Option {
 	return func(o *options) {
 		o.appProtocol = protocol
+	}
+}
+
+func WithAppMaxConcurrency(maxConcurrency int) Option {
+	return func(o *options) {
+		o.appMaxConcurrency = &maxConcurrency
 	}
 }
 
@@ -220,6 +228,23 @@ func WithConfigs(configs ...string) Option {
 	return func(o *options) {
 		o.configs = append(o.configs, configs...)
 	}
+}
+
+// WithFeatureEnabled configures daprd with a Configuration manifest enabling
+// the given preview features.
+func WithFeatureEnabled(t *testing.T, features ...string) Option {
+	var sb strings.Builder
+	sb.WriteString(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: featureconfig
+spec:
+  features:
+`)
+	for _, f := range features {
+		sb.WriteString("  - name: " + f + "\n    enabled: true\n")
+	}
+	return WithConfigManifests(t, sb.String())
 }
 
 func WithConfigManifests(t *testing.T, manifests ...string) Option {
