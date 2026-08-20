@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,13 +47,16 @@ func (u *uptodate) Run(t *testing.T, ctx context.Context) {
 	rootDir := binary.RootDir(t)
 	chartDir := filepath.Join(rootDir, "charts", "dapr", "crds")
 
+	genCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
 	args := []string{
 		"crd:crdVersions=v1",
 		"paths=github.com/dapr/dapr/pkg/apis/...",
 		"output:stdout",
 	}
 	//nolint:gosec
-	cmd := exec.CommandContext(ctx, binary.EnvValue("controllergen"), args...)
+	cmd := exec.CommandContext(genCtx, binary.EnvValue("controllergen"), args...)
 	cmd.Dir = rootDir
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

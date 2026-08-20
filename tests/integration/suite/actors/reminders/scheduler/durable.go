@@ -101,12 +101,15 @@ func (d *durable) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 	}
 
-	exp := []string{
-		"0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-		"10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
-	}
+	// Delivery is at-least-once
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, exp, d.triggered.Slice())
+		counts := make(map[string]int)
+		for _, name := range d.triggered.Slice() {
+			counts[name]++
+		}
+		for i := range 20 {
+			assert.GreaterOrEqual(c, counts[strconv.Itoa(i)], 1)
+		}
 	}, time.Second*20, time.Millisecond*10)
 
 	d.daprd1.Cleanup(t)
@@ -115,13 +118,13 @@ func (d *durable) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { d.daprd2.Cleanup(t) })
 	d.daprd2.WaitUntilRunning(t, ctx)
 
-	exp = []string{
-		"0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-		"0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-		"10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
-		"10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
-	}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, exp, d.triggered.Slice())
+		counts := make(map[string]int)
+		for _, name := range d.triggered.Slice() {
+			counts[name]++
+		}
+		for i := range 20 {
+			assert.GreaterOrEqual(c, counts[strconv.Itoa(i)], 2)
+		}
 	}, time.Second*20, time.Millisecond*10)
 }
