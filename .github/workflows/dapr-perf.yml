@@ -383,10 +383,10 @@ jobs:
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
-          if [ "${{ matrix.perf_tests }}" != "" ] ; then
-            echo "DAPR_PERF_TEST=${{ matrix.perf_tests }}" >> $GITHUB_ENV
-          elif [ "${{ inputs.tests }}" != "" ] ; then
+          if [ "${{ inputs.tests }}" != "" ] ; then
             echo "DAPR_PERF_TEST=${{ inputs.tests }}" >> $GITHUB_ENV
+          elif [ "${{ matrix.perf_tests }}" != "" ] ; then
+            echo "DAPR_PERF_TEST=${{ matrix.perf_tests }}" >> $GITHUB_ENV
           fi
         shell: bash
       - name: Set up for scheduled test
