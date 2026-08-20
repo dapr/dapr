@@ -14,13 +14,18 @@ limitations under the License.
 package inmemory
 
 import (
+	"context"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/utils/clock"
 
+	"github.com/dapr/dapr/pkg/actors/api"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 )
 
@@ -68,4 +73,102 @@ func TestUpdateActiveTimersCountConcurrentSameType(t *testing.T) {
 	wg.Wait()
 
 	assert.Equal(t, int64(increments), i.GetActiveTimersCount("actor-type"))
+}
+
+func TestDeleteFuncRemovesMatchingActors(t *testing.T) {
+	store := New(Options{Router: routerfake.New()})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	im, ok := store.(*inmemory)
+	require.True(t, ok)
+
+	future := clock.RealClock{}.Now().Add(time.Hour)
+	ctx := context.Background()
+	moved1 := newNamedTimer(t, "moved", "one", "", future)
+	moved2 := newNamedTimer(t, "moved", "two", "", future)
+	kept := newNamedTimer(t, "kept", "one", "", future)
+	require.NoError(t, store.Create(ctx, moved1))
+	require.NoError(t, store.Create(ctx, moved2))
+	require.NoError(t, store.Create(ctx, kept))
+	require.Equal(t, int64(3), im.GetActiveTimersCount(kept.ActorType))
+
+	store.DeleteFunc(ctx, func(actorType, actorID string) bool {
+		assert.Equal(t, kept.ActorType, actorType)
+		return actorID == "moved"
+	})
+
+	assert.Equal(t, int64(1), im.GetActiveTimersCount(kept.ActorType))
+	_, ok = im.activeTimers.Load(moved1.Key())
+	assert.False(t, ok)
+	_, ok = im.activeTimers.Load(moved2.Key())
+	assert.False(t, ok)
+	_, ok = im.activeTimers.Load(kept.Key())
+	assert.True(t, ok)
+	_, _, exists := stateSnapshot(im, moved1.ActorKey())
+	assert.False(t, exists, "deleted actor's state was not reaped")
+	_, _, exists = stateSnapshot(im, kept.ActorKey())
+	assert.True(t, exists)
+}
+
+func TestDeleteFuncNoMatch(t *testing.T) {
+	store := New(Options{Router: routerfake.New()})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	im, ok := store.(*inmemory)
+	require.True(t, ok)
+
+	future := clock.RealClock{}.Now().Add(time.Hour)
+	ctx := context.Background()
+	timer := newTimer(t, "abc", "", future)
+	require.NoError(t, store.Create(ctx, timer))
+
+	store.DeleteFunc(ctx, func(string, string) bool { return false })
+
+	assert.Equal(t, int64(1), im.GetActiveTimersCount(timer.ActorType))
+	_, ok = im.activeTimers.Load(timer.Key())
+	assert.True(t, ok)
+}
+
+func TestDeleteFuncSuppressesParkedFire(t *testing.T) {
+	slowStarted := make(chan struct{})
+	release := make(chan struct{})
+	var victimFired atomic.Bool
+
+	router := routerfake.New().WithCallReminderFn(
+		func(ctx context.Context, r *api.Reminder) error {
+			switch r.Name {
+			case "slow":
+				close(slowStarted)
+				<-release
+			case "victim":
+				victimFired.Store(true)
+			}
+			return nil
+		},
+	)
+
+	store := New(Options{Router: router})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	im, ok := store.(*inmemory)
+	require.True(t, ok)
+
+	now := clock.RealClock{}.Now()
+	ctx := context.Background()
+	require.NoError(t, store.Create(ctx, newNamedTimer(t, "x", "slow", "", now)))
+	<-slowStarted
+
+	victim := newNamedTimer(t, "x", "victim", "", now)
+	require.NoError(t, store.Create(ctx, victim))
+
+	require.Eventually(t, func() bool {
+		_, pending, _ := stateSnapshot(im, victim.ActorKey())
+		return pending == 2
+	}, 5*time.Second, time.Millisecond, "victim fire was never routed to the actor loop")
+
+	store.DeleteFunc(ctx, func(_, actorID string) bool { return actorID == "x" })
+	close(release)
+
+	require.Eventually(t, func() bool {
+		_, _, exists := stateSnapshot(im, victim.ActorKey())
+		return !exists
+	}, 5*time.Second, time.Millisecond)
+	assert.False(t, victimFired.Load(), "a swept parked fire executed its callback")
 }

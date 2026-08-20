@@ -41,7 +41,10 @@ import (
 	diagutils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/kit/logger"
 )
+
+var log = logger.NewLogger("dapr.runtime.actors.router")
 
 type Interface interface {
 	Run(ctx context.Context) error
@@ -196,6 +199,13 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 	}
 
 	if !lar.Local {
+		// Ownership moved while the fire was in flight and the timer is being
+		// deleted with it.
+		if req.IsTimer {
+			log.Debugf("Dropping timer %s: actor is no longer hosted on this instance", req.Key())
+			return nil
+		}
+
 		if req.IsRemote {
 			return backoff.Permanent(errors.New("remote actor moved"))
 		}

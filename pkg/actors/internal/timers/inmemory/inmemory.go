@@ -358,6 +358,24 @@ func (i *inmemory) Delete(_ context.Context, timerKey string) {
 	}
 }
 
+func (i *inmemory) DeleteFunc(_ context.Context, fn func(actorType, actorID string) bool) {
+	i.queueLock.Lock()
+	defer i.queueLock.Unlock()
+
+	i.activeTimers.Range(func(key, reminderAny any) bool {
+		reminder := reminderAny.(*api.Reminder)
+		if !fn(reminder.ActorType, reminder.ActorID) {
+			return true
+		}
+		log.Debugf("Deleting timer for no longer hosted actor: %s", reminder.Key())
+		i.activeTimers.Delete(key)
+		i.processor.Dequeue(reminder.Key())
+		i.updateActiveTimersCount(reminder.ActorType, -1)
+		i.updateActorTimers(reminder.ActorKey(), -1)
+		return true
+	})
+}
+
 func (i *inmemory) updateActiveTimersCount(actorType string, inc int64) {
 	i.activeTimersCountLock.RLock()
 	count, ok := i.activeTimersCount[actorType]
