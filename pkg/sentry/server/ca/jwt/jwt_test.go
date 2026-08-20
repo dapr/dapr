@@ -25,6 +25,7 @@ import (
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
@@ -254,6 +255,58 @@ func TestIssuer_Generate(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestIssuer_GenerateTypeHeader verifies the JWS "typ" protected header:
+// Request.Type sets it (explicit typing, RFC 8725 §3.11 / RFC 9068), and an
+// empty Type leaves jwx's default of "JWT".
+func TestIssuer_GenerateTypeHeader(t *testing.T) {
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	signKey, err := jwk.FromRaw(signingKey)
+	require.NoError(t, err)
+	require.NoError(t, signKey.Set(jwk.KeyIDKey, "test-key-id"))
+	require.NoError(t, signKey.Set(jwk.AlgorithmKey, jwa.ES256))
+
+	jwks := jwk.NewSet()
+	require.NoError(t, jwks.AddKey(signKey))
+
+	issuer, err := New(IssuerOptions{SignKey: signKey, JWKS: jwks})
+	require.NoError(t, err)
+
+	baseRequest := func() *Request {
+		return &Request{
+			TrustDomain: spiffeid.RequireTrustDomainFromString("example.com"),
+			Audiences:   []string{"example.com"},
+			Namespace:   "default",
+			AppID:       "test-app",
+			TTL:         time.Hour,
+		}
+	}
+
+	// headerType parses the signed JWS and returns its "typ" protected header.
+	headerType := func(t *testing.T, token string) string {
+		t.Helper()
+		msg, err := jws.Parse([]byte(token))
+		require.NoError(t, err)
+		require.Len(t, msg.Signatures(), 1)
+		return msg.Signatures()[0].ProtectedHeaders().Type()
+	}
+
+	t.Run("custom type is written to the typ header", func(t *testing.T) {
+		req := baseRequest()
+		req.Type = "at+jwt"
+		token, err := issuer.Generate(t.Context(), req)
+		require.NoError(t, err)
+		assert.Equal(t, "at+jwt", headerType(t, token))
+	})
+
+	t.Run("empty type defaults to JWT", func(t *testing.T) {
+		token, err := issuer.Generate(t.Context(), baseRequest())
+		require.NoError(t, err)
+		assert.Equal(t, "JWT", headerType(t, token))
+	})
 }
 
 // TestJWTIssuerWithBundleGeneration tests that JWT keys are properly generated
