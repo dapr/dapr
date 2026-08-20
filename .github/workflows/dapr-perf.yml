@@ -501,20 +501,20 @@ jobs:
         if: always() && env.TEST_PREFIX != ''
         uses: actions/upload-artifact@v4
         with:
-          name: perf_container_logs_scheduler_placement_${{ matrix.scheduler_placement }}
+          name: perf_container_logs${{ matrix.scheduler_placement && '_scheduler_placement' || '' }}
           path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
       - name: Upload test logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: perf_test_logs_scheduler_placement_${{ matrix.scheduler_placement }}
+          name: perf_test_logs${{ matrix.scheduler_placement && '_scheduler_placement' || '' }}
           path: ${{ env.DAPR_TEST_LOG_PATH }}
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
-          name: test_perf_scheduler_placement_${{ matrix.scheduler_placement }}.json
+          name: test_perf${{ matrix.scheduler_placement && '_scheduler_placement' || '' }}.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf*.*
       - name: Generate perf charts
         if: always() && env.TEST_PREFIX != ''
