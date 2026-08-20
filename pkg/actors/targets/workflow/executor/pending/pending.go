@@ -33,14 +33,22 @@ type Result struct {
 	Cancelled bool
 }
 
+// waiter is a single registration: either a channel the result is sent on, or
+// a callback invoked with it on the delivering goroutine. Exactly one of ch
+// and cb is set.
+type waiter struct {
+	ch chan Result
+	cb func(Result)
+}
+
 type Pending struct {
 	mu sync.Mutex
-	m  map[string]chan Result
+	m  map[string]*waiter
 }
 
 func New() *Pending {
 	return &Pending{
-		m: make(map[string]chan Result),
+		m: make(map[string]*waiter),
 	}
 }
 
@@ -49,18 +57,47 @@ func New() *Pending {
 // waiter registered under the same key (a superseded execution attempt) is
 // cancelled and replaced.
 func (p *Pending) Register(key string) (<-chan Result, func()) {
-	ch := make(chan Result, 1)
+	w := &waiter{ch: make(chan Result, 1)}
+	p.register(key, w)
+	return w.ch, p.deregisterFunc(key, w)
+}
 
+// RegisterCallback adds a callback waiter for the given execution key and
+// returns a deregister function. The callback runs on the goroutine
+// delivering the completion or cancellation, never with the registry lock
+// held. Unlike a channel waiter, a callback registration STAYS ARMED across
+// deliveries and is removed only by its deregister function (or by being
+// superseded): the consumer may discard a delivery as stale (durabletask's
+// completion-token guard) and keep waiting, so consuming the registration on
+// delivery would strand the genuine completion with nowhere to land. The
+// callback may therefore run more than once; the consumer's arbiter settles
+// exactly one delivery. A superseded callback waiter's cancellation runs on
+// the registering goroutine.
+func (p *Pending) RegisterCallback(key string, cb func(Result)) func() {
+	w := &waiter{cb: cb}
+	p.register(key, w)
+	return p.deregisterFunc(key, w)
+}
+
+func (p *Pending) register(key string, w *waiter) {
 	p.mu.Lock()
-	if old, ok := p.m[key]; ok {
-		old <- Result{Cancelled: true}
+	old := p.m[key]
+	if old != nil && old.cb == nil {
+		old.ch <- Result{Cancelled: true}
+		old = nil
 	}
-	p.m[key] = ch
+	p.m[key] = w
 	p.mu.Unlock()
 
-	return ch, func() {
+	if old != nil {
+		old.cb(Result{Cancelled: true})
+	}
+}
+
+func (p *Pending) deregisterFunc(key string, w *waiter) func() {
+	return func() {
 		p.mu.Lock()
-		if cur, ok := p.m[key]; ok && cur == ch {
+		if cur, ok := p.m[key]; ok && cur == w {
 			delete(p.m, key)
 		}
 		p.mu.Unlock()
@@ -68,29 +105,62 @@ func (p *Pending) Register(key string) (<-chan Result, func()) {
 }
 
 // Deliver hands a completion to the waiter registered for key, reporting
-// whether a waiter was present. The waiter is deregistered on delivery.
+// whether a waiter was present. A channel waiter is deregistered on
+// delivery; a callback waiter stays registered (see RegisterCallback) and
+// its callback runs on the calling goroutine before Deliver returns.
 func (p *Pending) Deliver(key string, data []byte) bool {
-	return p.deliver(key, Result{Data: data})
+	run, ok := p.DeliverDeferred(key, data)
+	if run != nil {
+		run()
+	}
+	return ok
 }
 
 // Cancel cancels the waiter registered for key, reporting whether a waiter
-// was present. The waiter is deregistered on delivery.
+// was present, with the same deregistration semantics as Deliver.
 func (p *Pending) Cancel(key string) bool {
-	return p.deliver(key, Result{Cancelled: true})
+	run, ok := p.CancelDeferred(key)
+	if run != nil {
+		run()
+	}
+	return ok
 }
 
-func (p *Pending) deliver(key string, res Result) bool {
+// DeliverDeferred is Deliver for callers holding their own locks: a channel
+// waiter is completed in place (run is nil), while a callback waiter's
+// invocation is returned as run for the caller to execute after releasing
+// them.
+func (p *Pending) DeliverDeferred(key string, data []byte) (run func(), ok bool) {
+	return p.take(key, Result{Data: data})
+}
+
+// CancelDeferred is Cancel with the DeliverDeferred contract.
+func (p *Pending) CancelDeferred(key string) (run func(), ok bool) {
+	return p.take(key, Result{Cancelled: true})
+}
+
+// take delivers res to the waiter for key. A channel waiter is removed and
+// sent to under the lock, preserving the invariant that after a deregister
+// returns nothing more can land on the channel. A callback waiter stays
+// registered (see RegisterCallback) and its invocation is handed back as a
+// thunk so it never runs under the registry lock (the continuation it
+// carries can re-enter this registry or the caller's locks).
+func (p *Pending) take(key string, res Result) (func(), bool) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	ch, ok := p.m[key]
+	w, ok := p.m[key]
 	if !ok {
-		return false
+		p.mu.Unlock()
+		return nil, false
 	}
-	ch <- res
-	delete(p.m, key)
+	if w.cb == nil {
+		delete(p.m, key)
+		w.ch <- res
+		p.mu.Unlock()
+		return nil, true
+	}
+	p.mu.Unlock()
 
-	return true
+	return func() { w.cb(res) }, true
 }
 
 func (p *Pending) Len() int {
