@@ -13,17 +13,37 @@ limitations under the License.
 
 package inflight
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 // Call tracks a single in-flight activity execution.
 type Call struct {
-	done chan struct{}
-	once sync.Once
-	err  error
+	done    chan struct{}
+	once    sync.Once
+	err     error
+	created time.Time
 }
 
 func newCall() *Call {
-	return &Call{done: make(chan struct{})}
+	return &Call{done: make(chan struct{}), created: time.Now()}
+}
+
+// Age returns how long ago this call was claimed. Used by the stale-claim
+// eviction check (see the activity target's claim).
+func (c *Call) Age() time.Duration {
+	return time.Since(c.created)
+}
+
+// Settled reports whether Finish has been called.
+func (c *Call) Settled() bool {
+	select {
+	case <-c.done:
+		return true
+	default:
+		return false
+	}
 }
 
 // Done returns a channel that is closed when Finish has been called. After
