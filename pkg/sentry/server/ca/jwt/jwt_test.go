@@ -296,7 +296,8 @@ func TestIssuer_GenerateTypeHeader(t *testing.T) {
 
 	t.Run("custom type is written to the typ header", func(t *testing.T) {
 		req := baseRequest()
-		req.Type = "at+jwt"
+		typ := "at+jwt"
+		req.Type = &typ
 		token, err := issuer.Generate(t.Context(), req)
 		require.NoError(t, err)
 		assert.Equal(t, "at+jwt", headerType(t, token))

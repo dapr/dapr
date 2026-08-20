@@ -57,11 +57,11 @@ type Request struct {
 	// TTL is the time-to-live for the token in seconds
 	TTL time.Duration
 
-	// Type, when set, is written to the JWS "typ" header (RFC 7515) to enable
+	// Type, when non-nil, is written to the JWS "typ" header (RFC 7515) to enable
 	// explicit typing per RFC 8725 §3.11 — as RFC 9068 does with "at+jwt". A
 	// verifier can then require a specific media type, so a token minted for one
-	// purpose is not accepted in another. Empty leaves jwx's default "JWT".
-	Type string
+	// purpose is not accepted in another. Nil (or empty) leaves jwx's default "JWT".
+	Type *string
 }
 
 type Issuer interface {
@@ -169,9 +169,9 @@ func (i *issuer) Generate(ctx context.Context, req *Request) (string, error) {
 	}
 
 	signOpt := jwt.WithKey(i.signKey.Algorithm(), i.signKey)
-	if req.Type != "" {
+	if req.Type != nil && *req.Type != "" {
 		hdrs := jws.NewHeaders()
-		if err := hdrs.Set(jws.TypeKey, req.Type); err != nil {
+		if err := hdrs.Set(jws.TypeKey, *req.Type); err != nil {
 			return "", fmt.Errorf("error setting JWT typ header: %w", err)
 		}
 		signOpt = jwt.WithKey(i.signKey.Algorithm(), i.signKey, jws.WithProtectedHeaders(hdrs))
