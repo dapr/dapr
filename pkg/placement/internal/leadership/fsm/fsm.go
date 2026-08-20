@@ -55,6 +55,8 @@ func (f *FSM) Snapshot() (raft.FSMSnapshot, error) {
 
 func (f *FSM) Restore(old io.ReadCloser) error {
 	defer old.Close()
+	// The snapshot is authoritative: state not in it must not survive.
+	f.stoodDown.Store(false)
 	data, err := io.ReadAll(old)
 	if err != nil {
 		return err

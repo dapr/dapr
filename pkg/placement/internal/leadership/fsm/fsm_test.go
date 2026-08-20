@@ -76,4 +76,14 @@ func TestSnapshotRestore(t *testing.T) {
 		require.NoError(t, restored.Restore(io.NopCloser(strings.NewReader(sink.String()))))
 		assert.False(t, restored.StoodDown())
 	})
+
+	t.Run("restore replaces earlier stood down state", func(t *testing.T) {
+		t.Parallel()
+		f := New()
+		f.Apply(&raft.Log{Data: StandDownCommand})
+		require.True(t, f.StoodDown())
+
+		require.NoError(t, f.Restore(io.NopCloser(strings.NewReader(""))))
+		assert.False(t, f.StoodDown(), "the snapshot is authoritative")
+	})
 }
