@@ -14,6 +14,7 @@ limitations under the License.
 package actors
 
 import (
+	"os"
 	"strconv"
 	"sync"
 )
@@ -89,3 +90,41 @@ func (a *activityExecutions) resolve(key string) {
 		(*entry)()
 	}
 }
+
+// testDuplicateTurnCompletions is a test-only fault injection: the first N
+// workflow-turn completions are re-delivered once after a short delay,
+// modeling a retried executor-actor forward whose first attempt landed but
+// whose ack was lost. Not a supported production knob.
+var testDuplicateTurnCompletions = sync.OnceValue(func() int64 {
+	v := os.Getenv("DAPR_WORKFLOW_TEST_DUPLICATE_TURN_COMPLETIONS")
+	if v == "" {
+		return 0
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n < 0 {
+		log.Warnf("Ignoring invalid DAPR_WORKFLOW_TEST_DUPLICATE_TURN_COMPLETIONS %q", v)
+		return 0
+	}
+	return n
+})
+
+// testDropActivityCompletions is a test-only fault injection: the first N
+// activity completion deliveries are silently swallowed after their
+// registration is released, reproducing a completion lost between the app's
+// ack and the waiting execution (a gateway or scheduler stream break, a
+// failed cancellation delivery). The waiting owner then parks forever on a
+// callback that never fires while the engine has forgotten the work item:
+// exactly the stranded-activity condition the janitor rescue exists for.
+// Not a supported production knob.
+var testDropActivityCompletions = sync.OnceValue(func() int64 {
+	v := os.Getenv("DAPR_WORKFLOW_TEST_DROP_ACTIVITY_COMPLETIONS")
+	if v == "" {
+		return 0
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n < 0 {
+		log.Warnf("Ignoring invalid DAPR_WORKFLOW_TEST_DROP_ACTIVITY_COMPLETIONS %q", v)
+		return 0
+	}
+	return n
+})
