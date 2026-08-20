@@ -38,8 +38,8 @@ https://dapr.io
 > APIs stall until the pod is upgraded. No actor state is lost.
 > Schedulers additionally withhold serving placement while any connected sidecar runs an
 > older Dapr version, and start serving automatically once the last one disconnects. This
-> guarantees a single placement authority during the rollout; it does not keep actors
+> guarantees a single placement authority during the rollout. It does not keep actors
 > available on older sidecars.
-> Sidecars already running when this is enabled keep their current placement authority
-> until they are restarted.
+> Sidecars already running adopt scheduler placement on their own once the placement
+> service stands down: no restarts are needed in either direction.
 {{- end }}
