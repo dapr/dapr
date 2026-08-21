@@ -28,24 +28,15 @@ import (
 func NewClustered(t *testing.T, daprds int, extraDaprdOpts ...daprd.Option) *Workflow {
 	t.Helper()
 
-	wopts := make([]Option, 0, 1+daprds)
-	wopts = append(wopts, WithDaprds(daprds))
-	config := `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-    name: workflowsclustereddeployment
-spec:
-    features:
-    - name: WorkflowsClusteredDeployment
-      enabled: true
-`
 	uid, err := uuid.NewRandom()
 	require.NoError(t, err)
 	appID := uid.String()
 
+	wopts := make([]Option, 0, 2+daprds)
+	wopts = append(wopts, WithDaprds(daprds), WithClusteredDeployment(true))
+
 	for i := range daprds {
-		dopts := append([]daprd.Option{daprd.WithAppID(appID), daprd.WithConfigManifests(t, config)}, extraDaprdOpts...)
+		dopts := append([]daprd.Option{daprd.WithAppID(appID)}, extraDaprdOpts...)
 		wopts = append(wopts, WithDaprdOptions(i, dopts...))
 	}
 	return New(t, wopts...)
