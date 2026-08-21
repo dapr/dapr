@@ -103,10 +103,11 @@ func Run() {
 	}
 
 	healthSrv := healthzserver.New(healthzserver.Options{
-		Log:      log,
-		Port:     opts.HealthzPort,
-		Healthz:  healthz,
-		Handlers: handlers,
+		Log:           log,
+		ListenAddress: opts.HealthzListenAddress,
+		Port:          opts.HealthzPort,
+		Healthz:       healthz,
+		Handlers:      handlers,
 	})
 
 	err = concurrency.NewRunnerManager(
