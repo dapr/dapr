@@ -50,7 +50,11 @@ const (
 	keyStoodDown  = "dapr/placement-handoff/stood-down"
 	keyAdvertised = "dapr/placement-handoff/advertised"
 	gatePrefix    = "dapr/placement-handoff/gate/"
-	addrPrefix    = "dapr/placement-handoff/addr/"
+
+	// probeConcurrency bounds parallel probes, and probeBudget the time one
+	// detection refresh spends probing in total.
+	probeConcurrency = 4
+	probeBudget      = time.Second * 5
 
 	// sightingPrefix keys each scheduler's current sighting of a serving
 	// placement service, with the detectors which saw it as the value.
@@ -97,14 +101,18 @@ type Handoff struct {
 	lookupHost func(context.Context, string) ([]string, error)
 	sec        security.Handler
 
-	lock          sync.RWMutex
-	present       bool
-	stoodDown     bool
-	advertised    bool
-	gates         map[string]gateEntry
-	sightings     map[string]bool
-	reportedAddrs map[string]bool
-	detectMisses  int
+	lock         sync.RWMutex
+	present      bool
+	stoodDown    bool
+	advertised   bool
+	gates        map[string]gateEntry
+	sightings    map[string]bool
+	detectMisses int
+	// lastSighting is the sighting last published, so an unchanged result
+	// is not rewritten every refresh.
+	lastSighting string
+
+	placementAddresses func() []string
 
 	readyCh chan struct{}
 	client  *clientv3.Client
@@ -117,9 +125,8 @@ type Handoff struct {
 
 	latchCh chan struct{}
 
-	pendingAddrLock sync.Mutex
-	pendingAddrs    []string
-	reportAddrCh    chan struct{}
+	// detectCh requests an immediate detection refresh, non-blocking.
+	detectCh chan struct{}
 }
 
 type gateEntry struct {
@@ -129,18 +136,17 @@ type gateEntry struct {
 
 func New(opts Options) *Handoff {
 	return &Handoff{
-		id:            opts.ID,
-		etcd:          opts.Etcd,
-		dnsName:       opts.PlacementDNSName,
-		lookupHost:    net.DefaultResolver.LookupHost,
-		sec:           opts.Security,
-		gates:         make(map[string]gateEntry),
-		sightings:     make(map[string]bool),
-		reportedAddrs: make(map[string]bool),
-		readyCh:       make(chan struct{}),
-		localGateCh:   make(chan struct{}, 1),
-		latchCh:       make(chan struct{}, 1),
-		reportAddrCh:  make(chan struct{}, 1),
+		id:          opts.ID,
+		etcd:        opts.Etcd,
+		dnsName:     opts.PlacementDNSName,
+		lookupHost:  net.DefaultResolver.LookupHost,
+		sec:         opts.Security,
+		gates:       make(map[string]gateEntry),
+		sightings:   make(map[string]bool),
+		readyCh:     make(chan struct{}),
+		localGateCh: make(chan struct{}, 1),
+		latchCh:     make(chan struct{}, 1),
+		detectCh:    make(chan struct{}, 1),
 	}
 }
 
@@ -181,36 +187,20 @@ func (h *Handoff) Run(ctx context.Context) error {
 	watchCh := client.Watch(ctx, "dapr/placement-handoff/",
 		clientv3.WithPrefix(), clientv3.WithRev(resp.Header.Revision+1))
 
-	detectTicker := time.NewTicker(time.Second * 10)
-	defer detectTicker.Stop()
-	h.refreshDetection(ctx, lease.ID)
+	// Detection probes network addresses, so it runs off the state loop:
+	// gate and watch processing never wait on a probe.
+	var wg sync.WaitGroup
+	detectCtx, detectCancel := context.WithCancel(ctx)
+	defer wg.Wait()
+	defer detectCancel()
+	wg.Go(func() {
+		h.runDetection(detectCtx, lease.ID)
+	})
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-
-		case <-detectTicker.C:
-			h.refreshDetection(ctx, lease.ID)
-
-		case <-h.reportAddrCh:
-			h.pendingAddrLock.Lock()
-			pending := h.pendingAddrs
-			h.pendingAddrs = nil
-			h.pendingAddrLock.Unlock()
-			h.lock.Lock()
-			for _, addr := range pending {
-				h.reportedAddrs[addr] = true
-			}
-			h.lock.Unlock()
-			for _, addr := range pending {
-				if _, err := client.Put(ctx, addrPrefix+addr, "reported"); err != nil {
-					log.Errorf("Failed to persist reported placement address: %s", err)
-				}
-			}
-			// Probing right away keeps the withhold decision ahead of the
-			// first sidecar acting on the advertisement.
-			h.refreshDetection(ctx, lease.ID)
 
 		case _, ok := <-keepalive:
 			if !ok {
@@ -292,13 +282,6 @@ func (h *Handoff) applyKV(key, value string, deleted bool) {
 			return
 		}
 		h.sightings[id] = true
-	case strings.HasPrefix(key, addrPrefix):
-		addr := strings.TrimPrefix(key, addrPrefix)
-		if deleted {
-			delete(h.reportedAddrs, addr)
-			return
-		}
-		h.reportedAddrs[addr] = true
 	}
 }
 
@@ -315,6 +298,34 @@ func (h *Handoff) requestGatePublish() {
 	select {
 	case h.localGateCh <- struct{}{}:
 	default:
+	}
+}
+
+// runDetection refreshes the placement detection periodically and on
+// request.
+func (h *Handoff) runDetection(ctx context.Context, lease clientv3.LeaseID) {
+	// A new lease starts with no published sighting.
+	h.lock.Lock()
+	h.lastSighting = ""
+	h.lock.Unlock()
+
+	ticker := time.NewTicker(time.Second * 10)
+	defer ticker.Stop()
+	h.refreshDetection(ctx, lease)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case <-ticker.C:
+			h.refreshDetection(ctx, lease)
+
+		case <-h.detectCh:
+			// Probing right away keeps the withhold decision ahead of the
+			// first sidecar acting on the advertisement.
+			h.refreshDetection(ctx, lease)
+		}
 	}
 }
 
@@ -363,13 +374,13 @@ func (h *Handoff) resolveDNS(ctx context.Context) bool {
 // well-known service name is still detected while it serves.
 func (h *Handoff) probeReportedAddresses(ctx context.Context) bool {
 	h.lock.RLock()
-	addrs := make([]string, 0, len(h.reportedAddrs))
-	for addr := range h.reportedAddrs {
-		addrs = append(addrs, addr)
-	}
+	source := h.placementAddresses
 	h.lock.RUnlock()
-
-	if len(addrs) == 0 || h.sec == nil {
+	if source == nil || h.sec == nil {
+		return false
+	}
+	addrs := source()
+	if len(addrs) == 0 {
 		return false
 	}
 
@@ -381,12 +392,35 @@ func (h *Handoff) probeReportedAddresses(ctx context.Context) bool {
 		return false
 	}
 
+	pctx, cancel := context.WithTimeout(ctx, probeBudget)
+	defer cancel()
+	sem := make(chan struct{}, probeConcurrency)
+	found := make(chan struct{}, 1)
+	var wg sync.WaitGroup
 	for _, addr := range addrs {
-		if h.probeAddress(ctx, addr, placementID) {
-			return true
-		}
+		wg.Go(func() {
+			select {
+			case sem <- struct{}{}:
+			case <-pctx.Done():
+				return
+			}
+			defer func() { <-sem }()
+			if h.probeAddress(pctx, addr, placementID) {
+				select {
+				case found <- struct{}{}:
+				default:
+				}
+				cancel()
+			}
+		})
 	}
-	return false
+	wg.Wait()
+	select {
+	case <-found:
+		return true
+	default:
+		return false
+	}
 }
 
 // probeAddress reports whether an identity-verified connection to the
@@ -413,14 +447,29 @@ func (h *Handoff) probeAddress(ctx context.Context, addr string, placementID spi
 }
 
 func (h *Handoff) publishSighting(ctx context.Context, resolved, probed bool, lease clientv3.LeaseID) {
-	var err error
+	sighting := ""
 	if resolved || probed {
-		_, err = h.client.Put(ctx, sightingPrefix+h.id, encodeSighting(resolved, probed), clientv3.WithLease(lease))
+		sighting = encodeSighting(resolved, probed)
+	}
+	h.lock.Lock()
+	unchanged := sighting == h.lastSighting
+	h.lastSighting = sighting
+	h.lock.Unlock()
+	if unchanged {
+		return
+	}
+
+	var err error
+	if sighting != "" {
+		_, err = h.client.Put(ctx, sightingPrefix+h.id, sighting, clientv3.WithLease(lease))
 	} else {
 		_, err = h.client.Delete(ctx, sightingPrefix+h.id)
 	}
 	if err != nil {
 		log.Errorf("Failed to update the placement service sighting: %s", err)
+		h.lock.Lock()
+		h.lastSighting = ""
+		h.lock.Unlock()
 	}
 }
 
@@ -435,26 +484,20 @@ func encodeSighting(resolved, probed bool) string {
 	return strings.Join(parts, " ")
 }
 
-// ReportPlacementAddresses persists placement addresses a sidecar was
-// configured with, so they can be probed. Non-blocking.
-func (h *Handoff) ReportPlacementAddresses(addresses []string) {
-	h.lock.RLock()
-	var fresh []string
-	for _, addr := range addresses {
-		if addr != "" && !h.reportedAddrs[addr] {
-			fresh = append(fresh, addr)
-		}
-	}
-	h.lock.RUnlock()
-	if len(fresh) == 0 {
-		return
-	}
+// SetPlacementAddresses registers the source of the placement addresses the
+// connected sidecars were configured with, probed to detect a placement
+// service.
+func (h *Handoff) SetPlacementAddresses(fn func() []string) {
+	h.lock.Lock()
+	h.placementAddresses = fn
+	h.lock.Unlock()
+}
 
-	h.pendingAddrLock.Lock()
-	h.pendingAddrs = append(h.pendingAddrs, fresh...)
-	h.pendingAddrLock.Unlock()
+// RequestDetection refreshes the placement detection right away, as the
+// reported placement addresses changed. Non-blocking.
+func (h *Handoff) RequestDetection() {
 	select {
-	case h.reportAddrCh <- struct{}{}:
+	case h.detectCh <- struct{}{}:
 	default:
 	}
 }

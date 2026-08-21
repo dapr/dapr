@@ -173,9 +173,9 @@ func (c *cron) Run(ctx context.Context) error {
 			}
 			leaderLoop.Enqueue(nil)
 		},
-		OnPlacementAddresses: func(addresses []string) {
+		OnPlacementAddressesChange: func() {
 			if c.handoff != nil {
-				c.handoff.ReportPlacementAddresses(addresses)
+				c.handoff.RequestDetection()
 			}
 		},
 	})
@@ -183,6 +183,7 @@ func (c *cron) Run(ctx context.Context) error {
 	var hoff handoff.Interface
 	if c.handoff != nil {
 		hoff = c.handoff
+		c.handoff.SetPlacementAddresses(c.connectionPool.PlacementAddresses)
 		c.handoff.SetOnChange(func() {
 			leaderLoop.Enqueue(nil)
 		})
