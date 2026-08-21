@@ -693,7 +693,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		if ok {
 			err = kerr.GRPCStatus().Err()
 		} else {
-			err = apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.StateGet, fmt.Sprintf(messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error()))
+			err = apierrors.StateStore(in.GetStoreName()).Get(in.GetKey(), err.Error())
 		}
 
 		a.logger.Debug(err)
@@ -706,7 +706,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	if encryption.EncryptedStateStore(in.GetStoreName()) {
 		val, err := encryption.TryDecryptValue(in.GetStoreName(), getResponse.Data)
 		if err != nil {
-			err = apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.StateGet, fmt.Sprintf(messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error()))
+			err = apierrors.StateStore(in.GetStoreName()).Get(in.GetKey(), err.Error())
 			a.logger.Debug(err)
 			return &runtimev1pb.GetStateResponse{}, err
 		}
