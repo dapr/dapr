@@ -41,6 +41,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/security"
+	secConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/signals"
 
@@ -143,12 +144,22 @@ func runWithContext(ctx context.Context, opts *options.Options) error {
 		WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry).
 		WithConversations(conversationLoader.DefaultRegistry)
 
+	//nolint:staticcheck
+	if opts.TrustAnchorsFile != nil && len(os.Getenv(secConsts.TrustAnchorsEnvVar)) > 0 {
+		//nolint:staticcheck
+		log.Warnf("Ignoring deprecated environment variable %q since a trust anchors file is configured", secConsts.TrustAnchorsEnvVar)
+	} else if len(opts.TrustAnchors) > 0 {
+		//nolint:staticcheck
+		log.Warnf("Environment variable %q is deprecated; use --trust-anchors-file or %q so trust anchor changes are picked up without a restart", secConsts.TrustAnchorsEnvVar, secConsts.TrustAnchorsFileEnvVar)
+	}
+
 	healthz := healthz.New()
 	secProvider, err := security.New(ctx, security.Options{
 		SentryAddress:           opts.SentryAddress,
 		ControlPlaneTrustDomain: opts.ControlPlaneTrustDomain,
 		ControlPlaneNamespace:   opts.ControlPlaneNamespace,
 		TrustAnchors:            opts.TrustAnchors,
+		TrustAnchorsFile:        opts.TrustAnchorsFile,
 		AppID:                   opts.AppID,
 		MTLSEnabled:             opts.EnableMTLS,
 		Mode:                    modes.DaprMode(opts.Mode),

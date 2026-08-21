@@ -55,14 +55,9 @@ func (k *kube) get(ctx context.Context) (bundle.Bundle, error) {
 
 	generateX509 := !hasRootCert || !hasIssuerCert || !hasIssuerKey
 
-	// Also check if the ConfigMap is in sync
 	configMap, err := k.client.CoreV1().ConfigMaps(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
 	if err != nil {
 		return bundle.Bundle{}, err
-	}
-
-	if configMapRootCert, ok := configMap.Data[filepath.Base(k.config.RootCertPath)]; !ok || (hasRootCert && configMapRootCert != string(trustAnchors)) {
-		generateX509 = true
 	}
 
 	// Create a bundle if certificates are available
@@ -71,6 +66,41 @@ func (k *kube) get(ctx context.Context) (bundle.Bundle, error) {
 		bndle.X509, err = verifyX509Bundle(trustAnchors, issChainPEM, issKeyPEM)
 		if err != nil {
 			return bundle.Bundle{}, fmt.Errorf("failed to verify CA bundle: %w", err)
+		}
+
+		// Read the pending issuer pair written during CA renewal, if any.
+		// Either both keys exist, or neither: a single key indicates a torn
+		// renewal write which needs manual remediation.
+		nextChainPEM, hasNextCert := secret.Data[filepath.Base(k.config.NextIssuerCertPath)]
+		nextKeyPEM, hasNextKey := secret.Data[filepath.Base(k.config.NextIssuerKeyPath)]
+		if hasNextCert != hasNextKey {
+			return bundle.Bundle{}, fmt.Errorf("only one of the pending issuer credentials %q and %q exists in secret %q; remove the orphan key or restore the missing one", filepath.Base(k.config.NextIssuerCertPath), filepath.Base(k.config.NextIssuerKeyPath), TrustBundleK8sName)
+		}
+		if hasNextCert && hasNextKey {
+			if err = attachNextIssuer(bndle.X509, nextChainPEM, nextKeyPEM); err != nil {
+				return bundle.Bundle{}, err
+			}
+		}
+
+		// The Secret is the source of truth: it has been verified against the
+		// issuer key. If the ConfigMap's public trust anchors are out of sync
+		// (stale after a crash between the Secret and ConfigMap updates, or
+		// externally modified), heal the ConfigMap rather than regenerating
+		// the entire CA.
+		equal, aerr := anchorsEqual([]byte(configMap.Data[filepath.Base(k.config.RootCertPath)]), trustAnchors)
+		if aerr != nil || !equal {
+			if aerr != nil {
+				log.Warnf("Trust bundle ConfigMap %q contains invalid trust anchors; healing from Secret: %s", TrustBundleK8sName, aerr)
+			} else {
+				log.Warnf("Trust bundle ConfigMap %q is out of sync with the Secret; healing", TrustBundleK8sName)
+			}
+			if configMap.Data == nil {
+				configMap.Data = make(map[string]string)
+			}
+			configMap.Data[filepath.Base(k.config.RootCertPath)] = string(trustAnchors)
+			if _, uerr := k.client.CoreV1().ConfigMaps(k.namespace).Update(ctx, configMap, metav1.UpdateOptions{}); uerr != nil {
+				return bundle.Bundle{}, fmt.Errorf("failed to heal trust bundle configmap: %w", uerr)
+			}
 		}
 	}
 
@@ -118,6 +148,16 @@ func (k *kube) store(ctx context.Context, bundle bundle.Bundle) error {
 	secret.Data[filepath.Base(k.config.RootCertPath)] = bundle.X509.TrustAnchors
 	secret.Data[filepath.Base(k.config.IssuerCertPath)] = bundle.X509.IssChainPEM
 	secret.Data[filepath.Base(k.config.IssuerKeyPath)] = bundle.X509.IssKeyPEM
+
+	// Add the pending issuer pair written during CA renewal, or remove it once
+	// promoted.
+	if bundle.X509.NextIssChainPEM != nil {
+		secret.Data[filepath.Base(k.config.NextIssuerCertPath)] = bundle.X509.NextIssChainPEM
+		secret.Data[filepath.Base(k.config.NextIssuerKeyPath)] = bundle.X509.NextIssKeyPEM
+	} else {
+		delete(secret.Data, filepath.Base(k.config.NextIssuerCertPath))
+		delete(secret.Data, filepath.Base(k.config.NextIssuerKeyPath))
+	}
 
 	// Add JWT related data if available
 	if bundle.JWT != nil {

@@ -6,6 +6,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/rest"
@@ -40,11 +41,19 @@ var (
 // to limit what items end up in the cache. The following is removed/clear from the resources:
 // - pods -> managed fields, status (we care for spec to find out containers, the rests are set to empty)
 // - deploy/sts -> template.spec, status, managedfields (we only care about template/metadata except for injector deployment)
-func GetFilteredCache(namespace string, podSelector labels.Selector, syncPeriod *time.Duration) cache.NewCacheFunc {
+func GetFilteredCache(namespace string, podSelector labels.Selector, trustAnchorsConfigMapName string, syncPeriod *time.Duration) cache.NewCacheFunc {
 	return func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
 		// The only pods we are interested are in watchdog. we don't need to
 		// list/watch pods that we are almost sure have dapr sidecar already.
 		opts.ByObject = getTransformerFunctions(podSelector)
+		// The trust distribution controller watches ConfigMaps metadata-only,
+		// cluster wide. Restrict the informer to the single distributed ConfigMap
+		// name so the cache does not hold every ConfigMap in the cluster.
+		if trustAnchorsConfigMapName != "" {
+			opts.ByObject[&corev1.ConfigMap{}] = cache.ByObject{
+				Field: fields.OneTermEqualSelector("metadata.name", trustAnchorsConfigMapName),
+			}
+		}
 		if len(namespace) > 0 {
 			opts.DefaultNamespaces = map[string]cache.Config{
 				namespace: {},
