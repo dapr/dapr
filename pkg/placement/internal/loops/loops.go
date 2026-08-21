@@ -103,6 +103,36 @@ type Shutdown struct {
 	Error error
 }
 
+// StandDown drains every placement stream without terminating the loop, so
+// the server stays up to refuse new streams with a reason. Each namespace
+// disseminates a final empty table before its streams close, and Done runs
+// once every namespace has finished.
+type StandDown struct {
+	*nsbase
+	Error error
+	Done  func()
+}
+
+// StandUp revokes a StandDown after the schedulers stopped serving
+// placement, so new streams are accepted again.
+type StandUp struct {
+	*nsbase
+}
+
+// Drain instructs a disseminator to run a final round with an empty table
+// so every connected sidecar halts its actors, then close its streams and
+// report DrainComplete.
+type Drain struct {
+	*dissbase
+	Error error
+}
+
+// DrainComplete reports that a namespace's disseminator finished draining.
+type DrainComplete struct {
+	*nsbase
+	Namespace string
+}
+
 type DisseminationTimeout struct {
 	*dissbase
 	Version uint64

@@ -24,6 +24,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
@@ -34,16 +35,19 @@ func init() {
 }
 
 type global struct {
+	place *global
+	sched *global
+
 	app    *actors.Actors
 	called slice.Slice[string]
 }
 
-func (g *global) Setup(t *testing.T) []framework.Option {
+func (g *global) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 	g.called = slice.String()
 
-	g.app = actors.New(t,
+	g.app = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("abc", "def", "xyz"),
-		actors.WithActorIdleTimeout(2*time.Second),
+		actors.WithActorIdleTimeout(2 * time.Second),
 		actors.WithActorTypeHandler("abc", func(_ http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodDelete {
 				g.called.Append(r.URL.Path)
@@ -56,14 +60,27 @@ func (g *global) Setup(t *testing.T) []framework.Option {
 				return
 			}
 		}),
-	)
+	}, extra...)...)
+
+	return []process.Interface{g.app}
+}
+
+func (g *global) Setup(t *testing.T) []framework.Option {
+	g.place, g.sched = new(global), new(global)
+	procs := g.place.setup(t)
+	procs = append(procs, g.sched.setup(t, actors.WithSchedulerPlacement())...)
 
 	return []framework.Option{
-		framework.WithProcesses(g.app),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (g *global) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { g.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { g.sched.run(t, ctx) })
+}
+
+func (g *global) run(t *testing.T, ctx context.Context) {
 	g.app.WaitUntilRunning(t, ctx)
 
 	_, err := g.app.GRPCClient(t, ctx).InvokeActor(ctx, &rtv1.InvokeActorRequest{

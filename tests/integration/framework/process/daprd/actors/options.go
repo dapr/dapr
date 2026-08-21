@@ -44,6 +44,7 @@ type options struct {
 	resources               []string
 	maxBodySize             *string
 	daprdOpts               []daprd.Option
+	schedulerPlacement      bool
 }
 
 func WithDB(db *sqlite.SQLite) Option {
@@ -90,6 +91,16 @@ func WithHandler(pattern string, handler http.HandlerFunc) Option {
 	}
 }
 
+// WithSchedulerPlacement serves actor placement from the scheduler instead of
+// the standalone placement service: no placement process is started and the
+// scheduler runs with placement enabled. Sidecars need no configuration of
+// their own and take the scheduler's advertisement.
+func WithSchedulerPlacement() Option {
+	return func(o *options) {
+		o.schedulerPlacement = true
+	}
+}
+
 func WithSharedControlPlane() Option {
 	return func(o *options) {
 		o.sharedControlPlane = true
@@ -99,7 +110,13 @@ func WithSharedControlPlane() Option {
 func WithPeerActor(actor *Actors) Option {
 	return func(o *options) {
 		WithDB(actor.DB())(o)
-		WithPlacement(actor.Placement())(o)
+		// A scheduler placement peer shares the scheduler and runs no
+		// placement service.
+		if actor.Placement() != nil {
+			WithPlacement(actor.Placement())(o)
+		} else {
+			WithSchedulerPlacement()(o)
+		}
 		WithScheduler(actor.Scheduler())(o)
 		WithSharedControlPlane()(o)
 	}

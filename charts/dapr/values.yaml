@@ -95,6 +95,27 @@ global:
   scheduler:
     # Enables scheduler functionality in the cluster
     enabled: true
+    placement:
+      # Serves actor placement from the Scheduler service instead of the
+      # standalone placement service. When enabled, the placement StatefulSet
+      # is not deployed. Sidecars keep their placement address, which points
+      # at nothing while placement is undeployed and is what lets them return
+      # to it without restarts on rollback.
+      #
+      # Applications need no configuration of their own: sidecars take
+      # placement from whichever authority the control plane advertises.
+      # Enable this only once every sidecar runs a Dapr version which supports
+      # it: older sidecars can only use the placement service, so with it
+      # undeployed their Actor and Workflow APIs stall until the pod is
+      # upgraded. No actor state is lost. Schedulers also withhold serving
+      # placement while any older sidecar is connected, so the cluster keeps
+      # a single placement authority throughout the rollout.
+      #
+      # Toggling this in either direction needs no sidecar restarts: on
+      # enabling, sidecars adopt scheduler placement once the placement
+      # service stands down, and on disabling they return to the redeployed
+      # placement service on their own.
+      enabled: false
 
   daprControlPlaneOs: linux
   labels: {}

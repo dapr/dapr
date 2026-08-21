@@ -29,6 +29,7 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
+	"github.com/dapr/dapr/pkg/security/spiffe"
 )
 
 func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
@@ -158,10 +159,10 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 		}
 
 		// Recover the reminder/job name by trimming the known key prefix built
-		// from the metadata. The cron key is "<etcdNamespace>/jobs/<composed>";
-		// names cannot contain '/', so the segment after the final '/' is the
-		// composed name. Trimming the metadata prefix off it then yields the
-		// reminder/job name unambiguously, even when the name or actor id
+		// from the metadata. The cron key is "<etcdNamespace>/jobs/<composed>"
+		// and names cannot contain '/', so the segment after the final '/' is
+		// the composed name. Trimming the metadata prefix off it then yields
+		// the reminder/job name unambiguously, even when the name or actor id
 		// contains "||".
 		prefix, err := serialize.PrefixFromMetadata(&meta)
 		if err != nil {
@@ -218,6 +219,58 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 // updates the sidecars upon changes.
 func (s *Server) WatchHosts(_ *schedulerv1pb.WatchHostsRequest, stream schedulerv1pb.Scheduler_WatchHostsServer) error {
 	return s.cron.HostsWatch(stream)
+}
+
+// ReportActorTypes serves per-actor-type placement orders to sidecars. Only
+// available when this scheduler serves placement and is the current placement
+// leader.
+func (s *Server) ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorTypesServer) error {
+	return s.placement.ReportActorTypes(stream)
+}
+
+// ReportPlacementService persists a standalone placement service's announce
+// or stand-down confirmation.
+func (s *Server) ReportPlacementService(ctx context.Context, req *schedulerv1pb.ReportPlacementServiceRequest) (*schedulerv1pb.ReportPlacementServiceResponse, error) {
+	if s.handoff == nil {
+		return nil, status.Error(codes.Unimplemented, "placement handoff requires the etcd backend")
+	}
+
+	if err := s.authzPlacementService(ctx); err != nil {
+		return nil, err
+	}
+
+	var err error
+	if req.GetStoodDown() {
+		log.Info("Standalone placement service confirmed it stood down")
+		err = s.handoff.ConfirmStoodDown(ctx)
+	} else {
+		log.Info("Standalone placement service announced itself")
+		err = s.handoff.Announce(ctx)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return new(schedulerv1pb.ReportPlacementServiceResponse), nil
+}
+
+// authzPlacementService requires the caller to be the control plane
+// placement service.
+func (s *Server) authzPlacementService(ctx context.Context) error {
+	if !s.sec.MTLSEnabled() {
+		return nil
+	}
+
+	id, ok, err := spiffe.FromGRPCContext(ctx)
+	if err != nil || !ok {
+		return status.Error(codes.Unauthenticated, "failed to get identity from context")
+	}
+
+	if id.Namespace() != s.sec.ControlPlaneNamespace() || id.AppID() != "dapr-placement" {
+		return status.Error(codes.PermissionDenied, "only the placement service may report placement service state")
+	}
+
+	return nil
 }
 
 // DeleteByMetadata deletes all jobs matching the provided metadata.

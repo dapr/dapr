@@ -26,6 +26,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
@@ -36,16 +37,19 @@ func init() {
 }
 
 type http struct {
+	place *http
+	sched *http
+
 	app      *actors.Actors
 	called   slice.Slice[string]
 	holdCall chan struct{}
 }
 
-func (h *http) Setup(t *testing.T) []framework.Option {
+func (h *http) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 	h.called = slice.New[string]()
 	h.holdCall = make(chan struct{})
 
-	h.app = actors.New(t,
+	h.app = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 			if r.Method == nethttp.MethodDelete {
@@ -54,13 +58,26 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 			h.called.Append(r.URL.Path)
 			<-h.holdCall
 		}),
-	)
+	}, extra...)...)
+	return []process.Interface{h.app}
+}
+
+func (h *http) Setup(t *testing.T) []framework.Option {
+	h.place, h.sched = new(http), new(http)
+	procs := h.place.setup(t)
+	procs = append(procs, h.sched.setup(t, actors.WithSchedulerPlacement())...)
+
 	return []framework.Option{
-		framework.WithProcesses(h.app),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (h *http) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { h.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { h.sched.run(t, ctx) })
+}
+
+func (h *http) run(t *testing.T, ctx context.Context) {
 	h.app.WaitUntilRunning(t, ctx)
 
 	client := client.HTTP(t)

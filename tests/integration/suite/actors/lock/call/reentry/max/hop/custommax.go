@@ -28,6 +28,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
@@ -38,6 +39,9 @@ func init() {
 }
 
 type custommax struct {
+	place *custommax
+	sched *custommax
+
 	app1     *actors.Actors
 	app2     *actors.Actors
 	called   slice.Slice[string]
@@ -45,7 +49,7 @@ type custommax struct {
 	holdCall chan struct{}
 }
 
-func (c *custommax) Setup(t *testing.T) []framework.Option {
+func (c *custommax) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 	c.called = slice.New[string]()
 	c.holdCall = make(chan struct{})
 	c.rid = atomic.Pointer[string]{}
@@ -61,13 +65,13 @@ func (c *custommax) Setup(t *testing.T) []framework.Option {
 		<-c.holdCall
 	}
 
-	c.app1 = actors.New(t,
+	c.app1 = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("abc", "efg"),
 		actors.WithActorTypeHandler("abc", handler),
 		actors.WithActorTypeHandler("efg", handler),
 		actors.WithReentry(true),
 		actors.WithReentryMaxDepth(23),
-	)
+	}, extra...)...)
 
 	c.app2 = actors.New(t,
 		actors.WithActorTypes("abc", "efg"),
@@ -78,12 +82,25 @@ func (c *custommax) Setup(t *testing.T) []framework.Option {
 		actors.WithPeerActor(c.app1),
 	)
 
+	return []process.Interface{c.app1, c.app2}
+}
+
+func (c *custommax) Setup(t *testing.T) []framework.Option {
+	c.place, c.sched = new(custommax), new(custommax)
+	procs := c.place.setup(t)
+	procs = append(procs, c.sched.setup(t, actors.WithSchedulerPlacement())...)
+
 	return []framework.Option{
-		framework.WithProcesses(c.app1, c.app2),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (c *custommax) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { c.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { c.sched.run(t, ctx) })
+}
+
+func (c *custommax) run(t *testing.T, ctx context.Context) {
 	c.app1.WaitUntilRunning(t, ctx)
 	c.app2.WaitUntilRunning(t, ctx)
 

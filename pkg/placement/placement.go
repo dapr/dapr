@@ -38,6 +38,7 @@ type Options struct {
 
 	DisseminateTimeout        time.Duration
 	DisseminateCoalesceWindow time.Duration
+	SchedulerAddresses        []string
 
 	Peers []peers.PeerInfo
 }
@@ -70,6 +71,7 @@ func New(opts Options) (*Placement, error) {
 		ReplicationFactor:         opts.ReplicationFactor,
 		DisseminateTimeout:        opts.DisseminateTimeout,
 		DisseminateCoalesceWindow: opts.DisseminateCoalesceWindow,
+		SchedulerAddresses:        opts.SchedulerAddresses,
 	})
 
 	return &Placement{

@@ -25,6 +25,7 @@ import (
 
 	schedulerv1 "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -34,23 +35,23 @@ func init() {
 }
 
 type staging struct {
+	place *staging
+	sched *staging
+
 	actors1 *actors.Actors
 	actors2 *actors.Actors
 	got     atomic.Int64
 }
 
-func (s *staging) Setup(t *testing.T) []framework.Option {
-	s.actors1 = actors.New(t,
+func (s *staging) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+	s.actors1 = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("foo"),
 		actors.WithActorTypeHandler("foo", func(_ http.ResponseWriter, req *http.Request) {
 			assert.Fail(t, "unexpected foo call")
 		}),
-	)
+	}, extra...)...)
 	s.actors2 = actors.New(t,
-		actors.WithDB(s.actors1.DB()),
-		actors.WithPlacement(s.actors1.Placement()),
-		actors.WithScheduler(s.actors1.Scheduler()),
-		actors.WithSharedControlPlane(),
+		actors.WithPeerActor(s.actors1),
 		actors.WithActorTypes("bar"),
 		actors.WithActorTypeHandler("bar", func(_ http.ResponseWriter, req *http.Request) {
 			if req.Method == http.MethodDelete {
@@ -60,12 +61,25 @@ func (s *staging) Setup(t *testing.T) []framework.Option {
 		}),
 	)
 
+	return []process.Interface{s.actors1}
+}
+
+func (s *staging) Setup(t *testing.T) []framework.Option {
+	s.place, s.sched = new(staging), new(staging)
+	procs := s.place.setup(t)
+	procs = append(procs, s.sched.setup(t, actors.WithSchedulerPlacement())...)
+
 	return []framework.Option{
-		framework.WithProcesses(s.actors1),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (s *staging) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { s.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { s.sched.run(t, ctx) })
+}
+
+func (s *staging) run(t *testing.T, ctx context.Context) {
 	s.actors1.WaitUntilRunning(t, ctx)
 
 	_, err := s.actors1.Scheduler().Client(t, ctx).ScheduleJob(ctx, &schedulerv1.ScheduleJobRequest{

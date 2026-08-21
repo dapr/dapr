@@ -26,6 +26,7 @@ import (
 	corev1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
@@ -36,14 +37,17 @@ func init() {
 }
 
 type maxretries struct {
+	place *maxretries
+	sched *maxretries
+
 	actors    *actors.Actors
 	triggered slice.Slice[string]
 }
 
-func (m *maxretries) Setup(t *testing.T) []framework.Option {
+func (m *maxretries) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 	m.triggered = slice.String()
 
-	m.actors = actors.New(t,
+	m.actors = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("foo"),
 		actors.WithActorTypeHandler("foo", func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodPut {
@@ -51,14 +55,27 @@ func (m *maxretries) Setup(t *testing.T) []framework.Option {
 				w.WriteHeader(http.StatusInternalServerError)
 			}
 		}),
-	)
+	}, extra...)...)
+
+	return []process.Interface{m.actors}
+}
+
+func (m *maxretries) Setup(t *testing.T) []framework.Option {
+	m.place, m.sched = new(maxretries), new(maxretries)
+	procs := m.place.setup(t)
+	procs = append(procs, m.sched.setup(t, actors.WithSchedulerPlacement())...)
 
 	return []framework.Option{
-		framework.WithProcesses(m.actors),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (m *maxretries) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { m.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { m.sched.run(t, ctx) })
+}
+
+func (m *maxretries) run(t *testing.T, ctx context.Context) {
 	m.actors.WaitUntilRunning(t, ctx)
 
 	_, err := m.actors.GRPCClient(t, ctx).RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{

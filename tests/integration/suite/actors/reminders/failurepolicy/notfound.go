@@ -25,6 +25,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
@@ -35,14 +36,17 @@ func init() {
 }
 
 type notfound struct {
+	place *notfound
+	sched *notfound
+
 	actors    *actors.Actors
 	triggered slice.Slice[string]
 }
 
-func (n *notfound) Setup(t *testing.T) []framework.Option {
+func (n *notfound) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 	n.triggered = slice.String()
 
-	n.actors = actors.New(t,
+	n.actors = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("foo"),
 		actors.WithActorTypeHandler("foo", func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodPut {
@@ -50,14 +54,27 @@ func (n *notfound) Setup(t *testing.T) []framework.Option {
 				n.triggered.Append(r.URL.Path)
 			}
 		}),
-	)
+	}, extra...)...)
+
+	return []process.Interface{n.actors}
+}
+
+func (n *notfound) Setup(t *testing.T) []framework.Option {
+	n.place, n.sched = new(notfound), new(notfound)
+	procs := n.place.setup(t)
+	procs = append(procs, n.sched.setup(t, actors.WithSchedulerPlacement())...)
 
 	return []framework.Option{
-		framework.WithProcesses(n.actors),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (n *notfound) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { n.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { n.sched.run(t, ctx) })
+}
+
+func (n *notfound) run(t *testing.T, ctx context.Context) {
 	n.actors.WaitUntilRunning(t, ctx)
 
 	_, err := n.actors.GRPCClient(t, ctx).RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{

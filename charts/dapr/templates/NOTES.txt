@@ -24,3 +24,22 @@ https://dapr.io
 >
 > --set dapr_scheduler.securityContext.fsGroup=65532
 {{- end }}
+{{- if eq .Values.global.scheduler.placement.enabled true }}
+
+> Note: Actor placement is served by the Scheduler service (global.scheduler.placement.enabled=true).
+> The standalone placement StatefulSet is NOT deployed. Sidecars keep their placement address so
+> they can return to the placement service without restarts if this is ever disabled again.
+>
+> Applications need no configuration for this: each sidecar takes actor placement from
+> whichever authority the control plane advertises, so a cluster never has two.
+>
+> Complete your Dapr version rollout BEFORE enabling this. Sidecars running an older Dapr
+> version can only use the placement service: with it undeployed, their Actor and Workflow
+> APIs stall until the pod is upgraded. No actor state is lost.
+> Schedulers additionally withhold serving placement while any connected sidecar runs an
+> older Dapr version, and start serving automatically once the last one disconnects. This
+> guarantees a single placement authority during the rollout. It does not keep actors
+> available on older sidecars.
+> Sidecars already running adopt scheduler placement on their own once the placement
+> service stands down: no restarts are needed in either direction.
+{{- end }}

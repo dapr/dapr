@@ -23,6 +23,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -32,20 +33,36 @@ func init() {
 }
 
 type list struct {
+	place *list
+	sched *list
+
 	actors *actors.Actors
 }
 
-func (l *list) Setup(t *testing.T) []framework.Option {
-	l.actors = actors.New(t,
+func (l *list) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+	l.actors = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("foo", "bar"),
-	)
+	}, extra...)...)
+
+	return []process.Interface{l.actors}
+}
+
+func (l *list) Setup(t *testing.T) []framework.Option {
+	l.place, l.sched = new(list), new(list)
+	procs := l.place.setup(t)
+	procs = append(procs, l.sched.setup(t, actors.WithSchedulerPlacement())...)
 
 	return []framework.Option{
-		framework.WithProcesses(l.actors),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (l *list) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { l.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { l.sched.run(t, ctx) })
+}
+
+func (l *list) run(t *testing.T, ctx context.Context) {
 	l.actors.WaitUntilRunning(t, ctx)
 
 	client := l.actors.Daprd().GRPCClient(t, ctx)

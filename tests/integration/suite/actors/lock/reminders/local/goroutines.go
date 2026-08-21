@@ -26,6 +26,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -35,25 +36,41 @@ func init() {
 }
 
 type goroutines struct {
+	place *goroutines
+	sched *goroutines
+
 	app    *actors.Actors
 	called atomic.Int64
 }
 
-func (g *goroutines) Setup(t *testing.T) []framework.Option {
-	g.app = actors.New(t,
+func (g *goroutines) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+	g.app = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(nethttp.ResponseWriter, *nethttp.Request) {
 			g.called.Add(1)
 		}),
 		actors.WithActorIdleTimeout(time.Second),
-	)
+	}, extra...)...)
+
+	return []process.Interface{g.app}
+}
+
+func (g *goroutines) Setup(t *testing.T) []framework.Option {
+	g.place, g.sched = new(goroutines), new(goroutines)
+	procs := g.place.setup(t)
+	procs = append(procs, g.sched.setup(t, actors.WithSchedulerPlacement())...)
 
 	return []framework.Option{
-		framework.WithProcesses(g.app),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (g *goroutines) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { g.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { g.sched.run(t, ctx) })
+}
+
+func (g *goroutines) run(t *testing.T, ctx context.Context) {
 	g.app.WaitUntilRunning(t, ctx)
 
 	client := g.app.GRPCClient(t, ctx)

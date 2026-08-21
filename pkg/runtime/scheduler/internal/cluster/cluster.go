@@ -31,11 +31,13 @@ import (
 var log = logger.NewLogger("dapr.runtime.scheduler.cluster")
 
 type Options struct {
-	Namespace    string
-	AppID        string
-	AppTarget    bool
-	ActorTypes   []string
-	WorkflowSpec *config.WorkflowSpec
+	Namespace          string
+	AppID              string
+	AppTarget          bool
+	ActorTypes         []string
+	ActorAddress       string
+	WorkflowSpec       *config.WorkflowSpec
+	PlacementAddresses []string
 
 	Clients  []schedulerv1pb.SchedulerClient
 	Actors   actors.Interface
@@ -45,11 +47,13 @@ type Options struct {
 
 // Cluster manages connections to multiple schedulers.
 type Cluster struct {
-	namespace    string
-	appID        string
-	appTarget    bool
-	actorTypes   []string
-	workflowSpec *config.WorkflowSpec
+	namespace          string
+	appID              string
+	appTarget          bool
+	actorTypes         []string
+	actorAddress       string
+	workflowSpec       *config.WorkflowSpec
+	placementAddresses []string
 
 	clients  []schedulerv1pb.SchedulerClient
 	actors   actors.Interface
@@ -59,15 +63,17 @@ type Cluster struct {
 
 func New(opts Options) *Cluster {
 	return &Cluster{
-		namespace:    opts.Namespace,
-		appID:        opts.AppID,
-		appTarget:    opts.AppTarget,
-		actorTypes:   opts.ActorTypes,
-		workflowSpec: opts.WorkflowSpec,
-		clients:      opts.Clients,
-		actors:       opts.Actors,
-		channels:     opts.Channels,
-		wfengine:     opts.WFEngine,
+		namespace:          opts.Namespace,
+		appID:              opts.AppID,
+		appTarget:          opts.AppTarget,
+		actorTypes:         opts.ActorTypes,
+		actorAddress:       opts.ActorAddress,
+		workflowSpec:       opts.WorkflowSpec,
+		placementAddresses: opts.PlacementAddresses,
+		clients:            opts.Clients,
+		actors:             opts.Actors,
+		channels:           opts.Channels,
+		wfengine:           opts.WFEngine,
 	}
 }
 
@@ -96,6 +102,10 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 			Initial: &schedulerv1pb.WatchJobsRequestInitial{
 				AppId:     c.appID,
 				Namespace: c.namespace,
+				// Lets schedulers gate the placement advertisement on every
+				// connected sidecar being able to follow it.
+				SupportsSchedulerPlacement: true,
+				PlacementAddresses:         c.placementAddresses,
 			},
 		},
 	}
@@ -108,6 +118,9 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 	if len(c.actorTypes) > 0 {
 		acceptJobTypes = append(acceptJobTypes, schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_ACTOR_REMINDER)
 		req.GetInitial().ActorTypes = c.actorTypes
+		if c.actorAddress != "" {
+			req.GetInitial().ActorAddress = &c.actorAddress
+		}
 	}
 
 	req.GetInitial().AcceptJobTypes = acceptJobTypes

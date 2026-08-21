@@ -28,6 +28,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -39,11 +40,14 @@ func init() {
 // responsebody tests that actor method invocations correctly forward the
 // response body and that Content-Length matches the actual body.
 type responsebody struct {
+	place *responsebody
+	sched *responsebody
+
 	local  *actors.Actors
 	remote *actors.Actors
 }
 
-func (r *responsebody) Setup(t *testing.T) []framework.Option {
+func (r *responsebody) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 	handler := func(w nethttp.ResponseWriter, req *nethttp.Request) {
 		// The method name is the last path segment:
 		// /actors/{type}/{id}/method/{method}
@@ -95,20 +99,33 @@ func (r *responsebody) Setup(t *testing.T) []framework.Option {
 		}
 	}
 
-	r.local = actors.New(t,
+	r.local = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("rbtest"),
 		actors.WithActorTypeHandler("rbtest", handler),
-	)
+	}, extra...)...)
 	r.remote = actors.New(t,
 		actors.WithPeerActor(r.local),
 	)
 
+	return []process.Interface{r.local, r.remote}
+}
+
+func (r *responsebody) Setup(t *testing.T) []framework.Option {
+	r.place, r.sched = new(responsebody), new(responsebody)
+	procs := r.place.setup(t)
+	procs = append(procs, r.sched.setup(t, actors.WithSchedulerPlacement())...)
+
 	return []framework.Option{
-		framework.WithProcesses(r.local, r.remote),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (r *responsebody) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { r.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { r.sched.run(t, ctx) })
+}
+
+func (r *responsebody) run(t *testing.T, ctx context.Context) {
 	r.local.WaitUntilRunning(t, ctx)
 	r.remote.WaitUntilRunning(t, ctx)
 

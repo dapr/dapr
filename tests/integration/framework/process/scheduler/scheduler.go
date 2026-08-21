@@ -156,6 +156,15 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	if opts.embed != nil {
 		args = append(args, "--etcd-embed="+strconv.FormatBool(*opts.embed))
 	}
+	if opts.placementEnabled != nil {
+		args = append(args, "--placement-enabled="+strconv.FormatBool(*opts.placementEnabled))
+	}
+	if opts.placementDisseminateTimeout != nil {
+		args = append(args, "--placement-disseminate-timeout="+opts.placementDisseminateTimeout.String())
+	}
+	if opts.placementDisseminateCoalesceWindow != nil {
+		args = append(args, "--placement-disseminate-coalesce-window="+opts.placementDisseminateCoalesceWindow.String())
+	}
 	if opts.clientEndpoints != nil {
 		args = append(args, `--etcd-client-endpoints=`+strings.Join(*opts.clientEndpoints, ","))
 	}

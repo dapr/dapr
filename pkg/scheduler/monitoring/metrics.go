@@ -15,6 +15,7 @@ package monitoring
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -81,11 +82,104 @@ var (
 		"scheduler/sidecar_errors_total",
 		"The total number of sidecar communication and authorization errors.",
 		stats.UnitDimensionless)
+	placementLeaderGauge = stats.Int64(
+		"scheduler/placement_leader",
+		"Whether this scheduler is the current actor placement leader (1) or not (0).",
+		stats.UnitDimensionless)
+	placementStreamsGauge = stats.Int64(
+		"scheduler/placement_streams_connected",
+		"The number of daprd placement streams connected to this scheduler, by namespace.",
+		stats.UnitDimensionless)
+	placementDisseminationsTotal = stats.Int64(
+		"scheduler/placement_disseminations_total",
+		"The total number of placement dissemination rounds started, by namespace.",
+		stats.UnitDimensionless)
+	placementDisseminationLatency = stats.Float64(
+		"scheduler/placement_dissemination_latency",
+		"The time from a placement dissemination round starting to it completing, by namespace.",
+		stats.UnitMilliseconds)
+	placementTableUpdatesTotal = stats.Int64(
+		"scheduler/placement_table_updates_total",
+		"The total number of per actor type placement table rebuilds disseminated, by namespace and actor type.",
+		stats.UnitDimensionless)
+	placementIncapableSidecarsGauge = stats.Int64(
+		"scheduler/placement_incapable_sidecars",
+		"The number of connected sidecars running a Dapr version which cannot use scheduler placement. Non-zero after cutover means those sidecars' actors may be placed by a still-running standalone placement service: alert on it.",
+		stats.UnitDimensionless)
 
 	tagType           = tag.MustNewKey("type")
 	tagConcurrencyKey = tag.MustNewKey("concurrency_key")
 	tagReason         = tag.MustNewKey("reason")
+	tagNamespace      = tag.MustNewKey("namespace")
+	tagActorType      = tag.MustNewKey("actor_type")
 )
+
+var (
+	tagPlacementLeader = utils.WithTags(placementLeaderGauge.Name())
+
+	// placementStreamCounts tracks the current stream count per namespace so
+	// the gauge can be recorded as an absolute value.
+	placementStreamsLock   sync.Mutex
+	placementStreamsCounts = make(map[string]int64)
+)
+
+// RecordPlacementLeaderStatus records whether this scheduler is the current
+// placement leader.
+func RecordPlacementLeaderStatus(leader bool) {
+	var v int64
+	if leader {
+		v = 1
+	}
+	stats.RecordWithTags(context.Background(), tagPlacementLeader, placementLeaderGauge.M(v))
+}
+
+// RecordPlacementStreamsConnected records a daprd placement stream connecting
+// (+1) or disconnecting (-1) for the given namespace.
+func RecordPlacementStreamsConnected(namespace string, delta int64) {
+	placementStreamsLock.Lock()
+	placementStreamsCounts[namespace] += delta
+	current := placementStreamsCounts[namespace]
+	if current <= 0 {
+		delete(placementStreamsCounts, namespace)
+	}
+	placementStreamsLock.Unlock()
+
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(placementStreamsGauge.Name(), tagNamespace, namespace),
+		placementStreamsGauge.M(current))
+}
+
+// RecordPlacementDissemination records a placement dissemination round
+// starting for the given namespace.
+func RecordPlacementDissemination(namespace string) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(placementDisseminationsTotal.Name(), tagNamespace, namespace),
+		placementDisseminationsTotal.M(1))
+}
+
+// RecordPlacementDisseminationLatency records the duration of a completed
+// placement dissemination round for the given namespace.
+func RecordPlacementDisseminationLatency(namespace string, elapsed time.Duration) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(placementDisseminationLatency.Name(), tagNamespace, namespace),
+		placementDisseminationLatency.M(float64(elapsed.Milliseconds())))
+}
+
+// RecordPlacementIncapableSidecars records the current number of connected
+// sidecars which cannot use scheduler placement.
+func RecordPlacementIncapableSidecars(current int64) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(placementIncapableSidecarsGauge.Name()),
+		placementIncapableSidecarsGauge.M(current))
+}
+
+// RecordPlacementTableUpdate records a per actor type placement table rebuild
+// being disseminated.
+func RecordPlacementTableUpdate(namespace, actorType string) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(placementTableUpdatesTotal.Name(), tagNamespace, namespace, tagActorType, actorType),
+		placementTableUpdatesTotal.M(1))
+}
 
 var tagSidecarsConnected = utils.WithTags(sidecarsConnectedGauge.Name())
 
@@ -312,6 +406,12 @@ func InitMetrics() error {
 		utils.NewMeasureView(jobsBulkDeletedTotal, []tag.Key{}, view.Count()),
 		utils.NewMeasureView(jobsCreatedFailedTotal, []tag.Key{tagType}, view.Count()),
 		utils.NewMeasureView(sidecarErrorsTotal, []tag.Key{tagReason}, view.Count()),
+		utils.NewMeasureView(placementLeaderGauge, []tag.Key{}, view.LastValue()),
+		utils.NewMeasureView(placementStreamsGauge, []tag.Key{tagNamespace}, view.LastValue()),
+		utils.NewMeasureView(placementDisseminationsTotal, []tag.Key{tagNamespace}, view.Count()),
+		utils.NewMeasureView(placementDisseminationLatency, []tag.Key{tagNamespace}, view.Distribution(0, 10, 100, 500, 1000, 5000, 10000)),
+		utils.NewMeasureView(placementTableUpdatesTotal, []tag.Key{tagNamespace, tagActorType}, view.Count()),
+		utils.NewMeasureView(placementIncapableSidecarsGauge, []tag.Key{}, view.LastValue()),
 	)
 
 	return err

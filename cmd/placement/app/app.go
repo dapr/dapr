@@ -132,6 +132,7 @@ func Run() {
 				Peers:                     opts.RaftPeers,
 				DisseminateTimeout:        opts.DisseminateTimeout,
 				DisseminateCoalesceWindow: opts.DisseminateCoalesceWindow,
+				SchedulerAddresses:        opts.SchedulerAddresses,
 			})
 			if serr != nil {
 				return serr

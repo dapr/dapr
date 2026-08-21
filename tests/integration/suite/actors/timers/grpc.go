@@ -26,6 +26,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -35,12 +36,15 @@ func init() {
 }
 
 type grpc struct {
+	place *grpc
+	sched *grpc
+
 	app    *actors.Actors
 	called atomic.Int64
 }
 
-func (g *grpc) Setup(t *testing.T) []framework.Option {
-	g.app = actors.New(t,
+func (g *grpc) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+	g.app = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("abc", "efg"),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 			defer g.called.Add(1)
@@ -54,14 +58,27 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 			assert.NoError(t, err)
 			assert.JSONEq(t, `{"data":"aGVsbG8=","callback":"","dueTime":"0s","period":"10s"}`, string(b))
 		}),
-	)
+	}, extra...)...)
+
+	return []process.Interface{g.app}
+}
+
+func (g *grpc) Setup(t *testing.T) []framework.Option {
+	g.place, g.sched = new(grpc), new(grpc)
+	procs := g.place.setup(t)
+	procs = append(procs, g.sched.setup(t, actors.WithSchedulerPlacement())...)
 
 	return []framework.Option{
-		framework.WithProcesses(g.app),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (g *grpc) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { g.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { g.sched.run(t, ctx) })
+}
+
+func (g *grpc) run(t *testing.T, ctx context.Context) {
 	g.app.WaitUntilRunning(t, ctx)
 
 	client := g.app.Daprd().GRPCClient(t, ctx)

@@ -27,6 +27,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -39,14 +40,17 @@ func init() {
 // the /actors/{type}/{id}/method/ prefix to reach non-actor endpoints on
 // the app.
 type actorACL struct {
+	place *actorACL
+	sched *actorACL
+
 	app *actors.Actors
 
 	secretHits atomic.Int64
 	rootHits   atomic.Int64
 }
 
-func (a *actorACL) Setup(t *testing.T) []framework.Option {
-	a.app = actors.New(t,
+func (a *actorACL) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+	a.app = actors.New(t, append([]actors.Option{
 		actors.WithActorTypes("mytype"),
 		actors.WithActorTypeHandler("mytype", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 			w.Write([]byte("actor:" + r.URL.Path))
@@ -61,16 +65,31 @@ func (a *actorACL) Setup(t *testing.T) []framework.Option {
 			}
 			a.rootHits.Add(1)
 		}),
-	)
+	}, extra...)...)
+
+	return []process.Interface{a.app}
+}
+
+func (a *actorACL) Setup(t *testing.T) []framework.Option {
+	a.place, a.sched = new(actorACL), new(actorACL)
+	procs := a.place.setup(t)
+	procs = append(procs, a.sched.setup(t, actors.WithSchedulerPlacement())...)
 
 	return []framework.Option{
-		framework.WithProcesses(a.app),
+		framework.WithProcesses(procs...),
 	}
 }
 
 func (a *actorACL) Run(t *testing.T, ctx context.Context) {
+	t.Run("placement", func(t *testing.T) { a.place.run(t, ctx) })
+	t.Run("scheduler", func(t *testing.T) { a.sched.run(t, ctx) })
+}
+
+func (a *actorACL) run(t *testing.T, ctx context.Context) {
 	a.app.WaitUntilRunning(t, ctx)
-	a.app.Placement().WaitUntilRunning(t, ctx)
+	if a.app.Placement() != nil {
+		a.app.Placement().WaitUntilRunning(t, ctx)
+	}
 
 	grpcClient := a.app.GRPCClient(t, ctx)
 	httpClient := client.HTTP(t)
