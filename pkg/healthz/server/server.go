@@ -16,9 +16,9 @@ package server
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/dapr/dapr/pkg/healthz"
@@ -92,7 +92,7 @@ func New(opts Options) *Server {
 
 // Start starts a net/http server with a healthz endpoint.
 func (s *Server) Start(ctx context.Context) error {
-	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.listenAddress, s.port))
+	ln, err := net.Listen("tcp", net.JoinHostPort(s.listenAddress, strconv.Itoa(s.port)))
 	if err != nil {
 		return err
 	}

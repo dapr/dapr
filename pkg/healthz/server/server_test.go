@@ -46,8 +46,11 @@ func TestListenAddressIsHonored(t *testing.T) {
 	go func() { errCh <- srv.Start(ctx) }()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		//nolint:noctx
-		resp, rerr := http.Get(fmt.Sprintf("http://127.0.0.1:%d/healthz", port))
+		req, rerr := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/healthz", port), nil)
+		if !assert.NoError(c, rerr) {
+			return
+		}
+		resp, rerr := http.DefaultClient.Do(req)
 		if !assert.NoError(c, rerr) {
 			return
 		}
