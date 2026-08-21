@@ -257,6 +257,14 @@ func (s *Server) Run(ctx context.Context) error {
 
 	if s.handoff != nil {
 		runners = append(runners, s.handoff.Run)
+	} else if s.etcd != nil {
+		runners = append(runners, func(ctx context.Context) error {
+			if err := handoff.ClearCutoverState(ctx, s.etcd); err != nil {
+				return err
+			}
+			<-ctx.Done()
+			return ctx.Err()
+		})
 	}
 
 	if s.etcd != nil {

@@ -1,3 +1,6 @@
+{{- if and (eq .Values.global.scheduler.placement.enabled true) (ne .Values.global.scheduler.enabled true) }}
+{{- fail "global.scheduler.placement.enabled requires global.scheduler.enabled: no service would serve actor placement" }}
+{{- end }}
 {{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") (ne .Values.global.scheduler.placement.enabled true) }}
 apiVersion: apps/v1
 kind: StatefulSet

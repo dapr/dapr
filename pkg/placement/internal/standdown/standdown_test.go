@@ -164,3 +164,42 @@ func TestRollbackStandsUp(t *testing.T) {
 	require.Eventually(t, s.Active, time.Second*10, time.Millisecond*10)
 	assert.Equal(t, 2, downs)
 }
+
+// TestInheritedStandDownStandsUp asserts a stand-down inherited from the
+// raft log is revoked once the schedulers stop serving placement.
+func TestInheritedStandDownStandsUp(t *testing.T) {
+	t.Parallel()
+
+	hosts := make(chan []*schedulerv1pb.Host, 1)
+	sched := schedulerfake.New(t).WithWatchHosts(func(_ *schedulerv1pb.WatchHostsRequest, stream schedulerv1pb.Scheduler_WatchHostsServer) error {
+		for {
+			select {
+			case <-stream.Context().Done():
+				return stream.Context().Err()
+			case h := <-hosts:
+				if err := stream.Send(&schedulerv1pb.WatchHostsResponse{Hosts: h}); err != nil {
+					return err
+				}
+			}
+		}
+	})
+
+	var ups int
+	s := New(Options{
+		Addresses: []string{sched.Address()},
+		Security: fake.New().WithGRPCDialOptionMTLSFn(func(spiffeid.ID) grpc.DialOption {
+			return grpc.WithTransportCredentials(insecure.NewCredentials())
+		}),
+		OnStandUp: func() { ups++ },
+	})
+	s.Inherit()
+	require.True(t, s.Active())
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	go s.Run(ctx)
+
+	hosts <- []*schedulerv1pb.Host{{Address: "a:1"}}
+	require.Eventually(t, func() bool { return !s.Active() }, time.Second*10, time.Millisecond*10)
+	assert.Equal(t, 1, ups)
+}

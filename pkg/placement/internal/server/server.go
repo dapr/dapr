@@ -186,6 +186,7 @@ func (s *Server) Run(ctx context.Context) error {
 			}
 			if stood {
 				s.standingDown.Store(true)
+				s.standdown.Inherit()
 				s.loop.Enqueue(&loops.StandDown{
 					Error: standDownErr(),
 					Done:  func() {},

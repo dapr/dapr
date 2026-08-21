@@ -111,7 +111,7 @@ func (h *hashingTopology) record(actorID string, host int) {
 	h.activatedOn[actorID][host] = struct{}{}
 }
 
-// reset starts a new activation epoch, so assertions after a membership
+// reset starts a new activation record, so assertions after a membership
 // change are not polluted by activations legitimately made before it.
 func (h *hashingTopology) reset() {
 	h.lock.Lock()
@@ -309,7 +309,7 @@ func (h *hashingTopology) run(t *testing.T, ctx context.Context) {
 			assert.Len(c, owners, 3)
 		}, time.Second*20, time.Millisecond*100)
 
-		// New epoch: every actor again resolves identically and activates
+		// New record: every actor again resolves identically and activates
 		// on one host, and unmoved actors stay where they were.
 		h.reset()
 		for _, id := range ids {

@@ -226,6 +226,19 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 		assert.Zero(c, leader)
 	}, time.Second*10, time.Millisecond*50)
 
+	// The rolled back scheduler cleared the cutover state: the next cutover
+	// runs the handshake and the gate again.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		etcdClient := r.schedRolledBack.ETCDClient(t, ctx)
+		for _, key := range []string{"dapr/placement-handoff/stood-down", "dapr/placement-handoff/advertised"} {
+			resp, gerr := etcdClient.Get(ctx, key)
+			if !assert.NoError(c, gerr) {
+				return
+			}
+			assert.Zerof(c, resp.Count, "%s must be cleared by the rollback", key)
+		}
+	}, time.Second*10, time.Millisecond*50)
+
 	// The sidecar's own accounting agrees: the actor is active on this host.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		active := 0

@@ -460,8 +460,8 @@ func (h *Handoff) ReportPlacementAddresses(addresses []string) {
 }
 
 // Announce persists that a placement service exists. It also clears any
-// previous stand-down confirmation, since a serving placement service means
-// a future cutover must run the handshake again.
+// previous stand-down confirmation and advertisement latch, since a serving
+// placement service means a future cutover must run the handshake again.
 func (h *Handoff) Announce(ctx context.Context) error {
 	select {
 	case <-h.readyCh:
@@ -471,6 +471,24 @@ func (h *Handoff) Announce(ctx context.Context) error {
 	_, err := h.client.Txn(ctx).Then(
 		clientv3.OpPut(keyPresent, "true"),
 		clientv3.OpDelete(keyStoodDown),
+		clientv3.OpDelete(keyAdvertised),
+	).Commit()
+	return err
+}
+
+// ClearCutoverState clears the stand-down confirmation and advertisement
+// latch, so a scheduler starting without placement enabled leaves no state
+// from an earlier cutover behind: after a rollback the next cutover must run
+// the handshake and the gate again. Without an earlier cutover there is
+// nothing to clear.
+func ClearCutoverState(ctx context.Context, e etcd.Interface) error {
+	client, err := e.Client(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = client.Txn(ctx).Then(
+		clientv3.OpDelete(keyStoodDown),
+		clientv3.OpDelete(keyAdvertised),
 	).Commit()
 	return err
 }

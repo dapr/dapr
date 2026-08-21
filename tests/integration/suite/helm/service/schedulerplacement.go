@@ -42,6 +42,7 @@ type schedulerplacement struct {
 	schedulerOn  *helm.Helm
 	chartOn      *helm.Helm
 	chartOff     *helm.Helm
+	chartNoSched *helm.Helm
 }
 
 func (s *schedulerplacement) Setup(t *testing.T) []framework.Option {
@@ -56,9 +57,13 @@ func (s *schedulerplacement) Setup(t *testing.T) []framework.Option {
 		helm.WithValues("global.scheduler.placement.enabled=true"),
 	)
 	s.chartOff = helm.New(t)
+	s.chartNoSched = helm.New(t,
+		helm.WithValues("global.scheduler.placement.enabled=true", "global.scheduler.enabled=false"),
+		helm.WithExpectFailure(),
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.schedulerOff, s.schedulerOn, s.chartOn, s.chartOff),
+		framework.WithProcesses(s.schedulerOff, s.schedulerOn, s.chartOn, s.chartOff, s.chartNoSched),
 	}
 }
 
@@ -102,6 +107,13 @@ func (s *schedulerplacement) Run(t *testing.T, ctx context.Context) {
 		bs, err := io.ReadAll(s.chartOn.Stdout(t))
 		require.NoError(t, err)
 		assert.NotContains(t, string(bs), "dapr_placement_statefulset")
+	})
+
+	t.Run("the value without a scheduler is rejected", func(t *testing.T) {
+		// No service would serve actor placement.
+		bs, err := io.ReadAll(s.chartNoSched.Stderr(t))
+		require.NoError(t, err)
+		assert.Contains(t, string(bs), "global.scheduler.placement.enabled requires global.scheduler.enabled")
 	})
 
 	t.Run("placement derives the scheduler address itself", func(t *testing.T) {

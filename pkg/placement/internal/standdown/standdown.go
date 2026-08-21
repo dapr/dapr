@@ -87,6 +87,12 @@ func (s *StandDown) Active() bool {
 	return s.active.Load()
 }
 
+// Inherit records a stand-down committed before this process served, so a
+// rollback revokes it like one this watcher observed.
+func (s *StandDown) Inherit() {
+	s.active.Store(true)
+}
+
 // FirstObservation is closed once the first watch attempt completed.
 func (s *StandDown) FirstObservation() <-chan struct{} {
 	return s.firstObservation

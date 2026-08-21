@@ -215,13 +215,10 @@ func (s *Leadership) CommitServe(ctx context.Context) error {
 	return ra.Apply(fsm.ServeCommand, time.Second*10).Error()
 }
 
-// StoodDown reports whether a stand-down has been committed. On a leader it
-// first runs a raft barrier, so a newly elected leader has applied its whole
-// log before the answer is trusted.
+// StoodDown reports whether a stand-down has been committed. It first runs
+// a raft barrier, so a newly elected leader has applied its whole log,
+// including a later revocation, before the answer is trusted.
 func (s *Leadership) StoodDown(ctx context.Context) (bool, error) {
-	if s.fsm.StoodDown() {
-		return true, nil
-	}
 	ra := s.raft.Load()
 	if ra == nil {
 		return false, errors.New("raft is not running")
