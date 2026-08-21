@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,13 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package sentry
+package kubernetes
 
-import (
-	_ "github.com/dapr/dapr/tests/integration/suite/sentry/helm"
-	_ "github.com/dapr/dapr/tests/integration/suite/sentry/metrics"
-	_ "github.com/dapr/dapr/tests/integration/suite/sentry/oidc"
-	_ "github.com/dapr/dapr/tests/integration/suite/sentry/rotation"
-	_ "github.com/dapr/dapr/tests/integration/suite/sentry/usergroup"
-	_ "github.com/dapr/dapr/tests/integration/suite/sentry/validator"
-)
+// trustDomain is the trust domain used by all scenarios in this package.
+const trustDomain = "integration.test.dapr.io"

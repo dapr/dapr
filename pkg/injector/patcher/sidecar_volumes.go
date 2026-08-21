@@ -66,6 +66,31 @@ func (c *SidecarConfig) getUnixDomainSocketVolumeMount() (vol corev1.Volume, dap
 	return
 }
 
+// getTrustBundleVolume returns a volume that mounts the dapr-trust-bundle ConfigMap.
+// Mounting as a volume (rather than using the DAPR_TRUST_ANCHORS env var alone) lets
+// Kubernetes propagate ConfigMap updates to running pods automatically, which is
+// required for live trust anchor distribution during root CA rotation.
+// The volume is deliberately not optional: daprd chooses between the mounted
+// file and the static DAPR_TRUST_ANCHORS env var at startup, so a pod that
+// started without the file would silently run on static trust anchors and
+// break when rotation switches signing. Blocking pod startup until the
+// ConfigMap exists fails closed instead — the pod object (and its
+// sidecar-injected label) is created regardless, which triggers the
+// operator's trust bundle sync to create the ConfigMap, after which kubelet
+// mounts the volume and the pod starts.
+func (c *SidecarConfig) getTrustBundleVolume() corev1.Volume {
+	return corev1.Volume{
+		Name: injectorConsts.TrustBundleVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: injectorConsts.TrustBundleVolumeName,
+				},
+			},
+		},
+	}
+}
+
 // getTokenVolume returns the volume projection for the Kubernetes service account.
 // Requests a new projected volume with a service account token for our specific audience.
 func (c *SidecarConfig) getTokenVolume() corev1.Volume {
@@ -137,6 +162,15 @@ func podContainsVolume(pod *corev1.Pod, name string) bool {
 		}
 	}
 	return false
+}
+
+func podGetVolume(pod *corev1.Pod, name string) *corev1.Volume {
+	for i := range pod.Spec.Volumes {
+		if pod.Spec.Volumes[i].Name == name {
+			return &pod.Spec.Volumes[i]
+		}
+	}
+	return nil
 }
 
 // parseVolumeMountsString parses the annotation and returns volume mounts.
