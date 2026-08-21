@@ -71,6 +71,7 @@ type receivedMessagesResponse struct {
 	ReceivedByTopicA          []string `json:"pubsub-a-topic"`
 	ReceivedByTopicB          []string `json:"pubsub-b-topic"`
 	ReceivedByTopicC          []string `json:"pubsub-c-topic"`
+	ReceivedCloudEventIDs     []string `json:"cloudevent-ids"`
 	ReceivedByTopicJob        []string `json:"pubsub-job-topic"`
 	ReceivedByTopicRaw        []string `json:"pubsub-raw-topic"`
 	ReceivedByTopicDead       []string `json:"pubsub-dead-topic"`
@@ -112,6 +113,7 @@ var (
 	receivedMessagesA            sets.Set[string]
 	receivedMessagesB            sets.Set[string]
 	receivedMessagesC            sets.Set[string]
+	receivedCloudEventIDs        sets.Set[string]
 	receivedMessagesJob          sets.Set[string]
 	receivedMessagesRaw          sets.Set[string]
 	receivedMessagesDead         sets.Set[string]
@@ -207,7 +209,7 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 	json.NewEncoder(w).Encode(t)
 }
 
-func readMessageBody(reqID string, r *http.Request) (msg string, err error) {
+func readMessageBody(reqID string, r *http.Request) (msg string, cloudEventID string, err error) {
 	defer r.Body.Close()
 
 	var body []byte
@@ -223,12 +225,12 @@ func readMessageBody(reqID string, r *http.Request) (msg string, err error) {
 	}
 
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	msg, err = extractMessage(reqID, body)
+	msg, cloudEventID, err = extractMessage(reqID, body)
 	if err != nil {
-		return "", fmt.Errorf("error from extractMessage: %w", err)
+		return "", "", fmt.Errorf("error from extractMessage: %w", err)
 	}
 
 	// Raw data does not have content-type, so it is handled as-is.
@@ -244,7 +246,7 @@ func readMessageBody(reqID string, r *http.Request) (msg string, err error) {
 		}
 	}
 
-	return msg, nil
+	return msg, cloudEventID, nil
 }
 
 func subscribeHandler(w http.ResponseWriter, r *http.Request) {
@@ -253,7 +255,7 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		reqID = uuid.New().String()
 	}
 
-	msg, err := readMessageBody(reqID, r)
+	msg, cloudEventID, err := readMessageBody(reqID, r)
 
 	// Before we handle the error, see if we need to respond in another way
 	// We still want the message so we can log it
@@ -312,10 +314,13 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	defer lock.Unlock()
 	if strings.HasSuffix(r.URL.String(), pubsubA) && !receivedMessagesA.Has(msg) {
 		receivedMessagesA.Insert(msg)
+		receivedCloudEventIDs.Insert(cloudEventID)
 	} else if strings.HasSuffix(r.URL.String(), pubsubB) && !receivedMessagesB.Has(msg) {
 		receivedMessagesB.Insert(msg)
+		receivedCloudEventIDs.Insert(cloudEventID)
 	} else if strings.HasSuffix(r.URL.String(), pubsubC) && !receivedMessagesC.Has(msg) {
 		receivedMessagesC.Insert(msg)
+		receivedCloudEventIDs.Insert(cloudEventID)
 	} else if strings.HasSuffix(r.URL.String(), pubsubJob) && !receivedMessagesJob.Has(msg) {
 		receivedMessagesJob.Insert(msg)
 	} else if strings.HasSuffix(r.URL.String(), pubsubRaw) && !receivedMessagesRaw.Has(msg) {
@@ -372,33 +377,34 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func extractMessage(reqID string, body []byte) (string, error) {
+func extractMessage(reqID string, body []byte) (string, string, error) {
 	log.Printf("(%s) extractMessage() called with body=%s", reqID, string(body))
 
 	m := make(map[string]any)
 	err := json.Unmarshal(body, &m)
 	if err != nil {
 		log.Printf("(%s) Could not unmarshal: %v", reqID, err)
-		return "", err
+		return "", "", err
 	}
 
 	if m["data_base64"] != nil {
 		b, err := base64.StdEncoding.DecodeString(m["data_base64"].(string))
 		if err != nil {
 			log.Printf("(%s) Could not base64 decode: %v", reqID, err)
-			return "", err
+			return "", "", err
 		}
 
 		msg := string(b)
 		log.Printf("(%s) output from base64='%s'", reqID, msg)
-		return msg, nil
+		return msg, "", nil
 	}
 
 	msg := m["data"].(string)
+	cloudEventID := m["id"].(string)
 	pubsubName := m["pubsubname"].(string)
-	log.Printf("(%s) pubsub='%s' output='%s'", reqID, pubsubName, msg)
+	log.Printf("(%s) pubsub='%s' output='%s' cloudevent-id='%s'", reqID, pubsubName, msg, cloudEventID)
 
-	return msg, nil
+	return msg, cloudEventID, nil
 }
 
 func unique(slice []string) []string {
@@ -424,6 +430,7 @@ func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
 		ReceivedByTopicA:          unique(sets.List(receivedMessagesA)),
 		ReceivedByTopicB:          unique(sets.List(receivedMessagesB)),
 		ReceivedByTopicC:          unique(sets.List(receivedMessagesC)),
+		ReceivedCloudEventIDs:     unique(sets.List(receivedCloudEventIDs)),
 		ReceivedByTopicJob:        unique(sets.List(receivedMessagesJob)),
 		ReceivedByTopicRaw:        unique(sets.List(receivedMessagesRaw)),
 		ReceivedByTopicDead:       unique(sets.List(receivedMessagesDead)),
@@ -465,6 +472,7 @@ func initializeSets() {
 	receivedMessagesA = sets.New[string]()
 	receivedMessagesB = sets.New[string]()
 	receivedMessagesC = sets.New[string]()
+	receivedCloudEventIDs = sets.New[string]()
 	receivedMessagesJob = sets.New[string]()
 	receivedMessagesRaw = sets.New[string]()
 	receivedMessagesDead = sets.New[string]()
