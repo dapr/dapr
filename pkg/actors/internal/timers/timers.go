@@ -24,4 +24,5 @@ type Storage interface {
 	io.Closer
 	Create(ctx context.Context, reminder *api.Reminder) error
 	Delete(ctx context.Context, timerKey string)
+	DeleteFunc(ctx context.Context, fn func(actorType, actorID string) bool)
 }
