@@ -166,8 +166,10 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		}
 	}
 
+	// The handoff orchestrates the placement authority handover, so only a
+	// scheduler which serves placement runs it, and its etcd lease.
 	var hoff *handoff.Handoff
-	if etcdServer != nil {
+	if opts.PlacementEnabled && etcdServer != nil {
 		// In kubernetes a placement service too old to announce itself is
 		// still detected through its service name resolving.
 		var placementDNSName string
@@ -288,6 +290,12 @@ func (s *Server) runServer(ctx context.Context) error {
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			Time:    time.Second * 3,
 			Timeout: time.Second * 5,
+		}),
+		// The placement service pings its WatchHosts connection to detect a
+		// scheduler which died mid-stream.
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             time.Second * 5,
+			PermitWithoutStream: true,
 		}),
 	)
 	schedulerv1pb.RegisterSchedulerServer(srv, s)

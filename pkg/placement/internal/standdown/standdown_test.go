@@ -15,6 +15,7 @@ package standdown
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
@@ -71,4 +72,41 @@ func TestUnreachableSchedulersKeepServing(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.False(t, s.Active())
 	assert.False(t, called)
+}
+
+// TestHungSchedulerCompletesFirstObservation asserts a scheduler which
+// accepts the connection but never answers does not block serving: the
+// first observation completes on its timeout.
+func TestHungSchedulerCompletesFirstObservation(t *testing.T) {
+	t.Parallel()
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { lis.Close() })
+	go func() {
+		for {
+			conn, aerr := lis.Accept()
+			if aerr != nil {
+				return
+			}
+			// Hold the connection open without ever answering.
+			t.Cleanup(func() { conn.Close() })
+		}
+	}()
+
+	s := New(Options{
+		Addresses: []string{lis.Addr().String()},
+		Security:  fake.New(),
+	})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	go s.Run(ctx)
+
+	select {
+	case <-s.FirstObservation():
+	case <-time.After(firstObservationTimeout + time.Second*5):
+		require.Fail(t, "a hung scheduler watch must not block the first observation")
+	}
+	assert.False(t, s.Active())
 }

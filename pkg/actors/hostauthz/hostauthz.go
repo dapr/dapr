@@ -74,7 +74,7 @@ func Authorize(ctx context.Context, sec security.Handler, r Report) error {
 			if len(split) < 4 || split[2] != r.Namespace || split[3] != r.AppID {
 				return status.Errorf(
 					codes.PermissionDenied,
-					"actor type %s is not allowed for app ID %s in namespace %s",
+					"entity %s is not allowed for app ID %s in namespace %s",
 					actorType, r.AppID, r.Namespace,
 				)
 			}

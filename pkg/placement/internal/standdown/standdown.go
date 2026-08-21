@@ -28,6 +28,7 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/retry"
@@ -36,6 +37,10 @@ import (
 )
 
 var log = logger.NewLogger("dapr.placement.standdown")
+
+// firstObservationTimeout bounds the first observation, so a watch hung on
+// a dead connection does not block serving.
+const firstObservationTimeout = time.Second * 10
 
 type Options struct {
 	// Addresses are the scheduler addresses to watch. Empty disables the
@@ -99,6 +104,9 @@ func (s *StandDown) Run(ctx context.Context) error {
 	}
 
 	log.Infof("Watching schedulers %v for a placement leader advertisement", s.addresses)
+
+	timer := time.AfterFunc(firstObservationTimeout, s.completeFirstObservation)
+	defer timer.Stop()
 
 	for i := 0; ; i++ {
 		if s.watch(ctx, s.addresses[i%len(s.addresses)], schedulerID) {
@@ -168,7 +176,14 @@ func (s *StandDown) completeFirstObservation() {
 // watch opens one WatchHosts stream and returns true the moment any host
 // signals the cutover, false when the stream fails.
 func (s *StandDown) watch(ctx context.Context, address string, schedulerID spiffeid.ID) bool {
-	conn, err := grpc.NewClient(address, s.sec.GRPCDialOptionMTLS(schedulerID))
+	// Keepalives detect a scheduler which died mid-stream.
+	conn, err := grpc.NewClient(address,
+		s.sec.GRPCDialOptionMTLS(schedulerID),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:    time.Second * 10,
+			Timeout: time.Second * 5,
+		}),
+	)
 	if err != nil {
 		return false
 	}
