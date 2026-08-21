@@ -58,18 +58,18 @@ func TestMain(m *testing.M) {
 			AppName:           appName,
 			DaprEnabled:       true,
 			ImageName:         "perf-workflowsapp",
-			Replicas:          1,
+			Replicas:          2,
 			IngressEnabled:    true,
 			IngressPort:       3000,
 			MetricsEnabled:    true,
-			DaprCPULimit:      "1.0",
-			DaprCPURequest:    "0.5",
-			DaprMemoryLimit:   "2Gi",
-			DaprMemoryRequest: "1Gi",
-			AppCPULimit:       "2.0",
-			AppCPURequest:     "1.0",
-			AppMemoryLimit:    "2Gi",
-			AppMemoryRequest:  "1Gi",
+			DaprCPULimit:      "2.0",
+			DaprCPURequest:    "1.0",
+			DaprMemoryLimit:   "4Gi",
+			DaprMemoryRequest: "2Gi",
+			AppCPULimit:       "4.0",
+			AppCPURequest:     "2.0",
+			AppMemoryLimit:    "4Gi",
+			AppMemoryRequest:  "2Gi",
 			AppPort:           3000,
 		},
 	}
@@ -82,6 +82,7 @@ func runk6test(t *testing.T, config K6RunConfig) *loadtest.K6RunnerMetricsSummar
 	k6Test := loadtest.NewK6(
 		"./test.js",
 		loadtest.WithParallelism(1),
+		loadtest.WithMemoryLimits("256Mi", "512Mi", "512Mi", "2Gi"),
 		// loadtest.EnableLog(), // uncomment this to enable k6 logs, this however breaks reporting, only for debugging.
 		loadtest.WithRunnerEnvVar("TARGET_URL", config.TARGET_URL),
 		loadtest.WithRunnerEnvVar("SCENARIO", config.SCENARIO),
@@ -229,6 +230,16 @@ func TestDelayWorkflowsAtScale(t *testing.T) {
 	workflowName := "delay_wf"
 	inputs := []string{"5000"}           // delay in milliseconds (5s)
 	scenarios := []string{"t_500_10000"} // t_workflowCount_iterations
+	rateChecks := [][]string{{"rate==1"}}
+	testWorkflow(t, workflowName, appName, inputs, scenarios, rateChecks, true, false)
+}
+
+// TestBurstWorkflowCreation simulates a burst of workflow creations
+// to test scheduler resilience under sudden spikes.
+func TestBurstWorkflowCreation(t *testing.T) {
+	workflowName := "delay_wf"
+	inputs := []string{"1000"}            // delay in milliseconds (1s)
+	scenarios := []string{"t_1000_1000"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1"}}
 	testWorkflow(t, workflowName, appName, inputs, scenarios, rateChecks, true, false)
 }
