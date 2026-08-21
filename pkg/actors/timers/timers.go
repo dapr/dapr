@@ -89,9 +89,8 @@ func (t *timers) Delete(ctx context.Context, req *api.DeleteTimerRequest) error 
 }
 
 // claimLocal holds the placement claim until released by the caller:
-// dissemination drains in-flight claims before installing a new table and
-// sweeping timers, so the ownership answer stays valid through the storage
-// operation.
+// dissemination drains in-flight claims before sweeping timers, so the
+// ownership answer stays valid through the storage operation.
 func (t *timers) claimLocal(ctx context.Context, actorType, actorID string) (context.Context, context.CancelCauseFunc, error) {
 	lar, cctx, cancel, err := t.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: actorType,

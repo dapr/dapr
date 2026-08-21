@@ -21,11 +21,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/actors/api"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 )
 
@@ -125,6 +127,52 @@ func TestDeleteFuncNoMatch(t *testing.T) {
 	assert.Equal(t, int64(1), im.GetActiveTimersCount(timer.ActorType))
 	_, ok = im.activeTimers.Load(timer.Key())
 	assert.True(t, ok)
+}
+
+func TestCreateCancelledContext(t *testing.T) {
+	store := New(Options{Router: routerfake.New()})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	im, ok := store.(*inmemory)
+	require.True(t, ok)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	timer := newTimer(t, "abc", "", clock.RealClock{}.Now().Add(time.Hour))
+	require.ErrorIs(t, store.Create(ctx, timer), context.Canceled)
+
+	_, ok = im.activeTimers.Load(timer.Key())
+	assert.False(t, ok)
+	assert.Equal(t, int64(0), im.GetActiveTimersCount(timer.ActorType))
+}
+
+func TestNotLocalFireDeletesTimer(t *testing.T) {
+	var calls atomic.Int64
+	router := routerfake.New().WithCallReminderFn(
+		func(context.Context, *api.Reminder) error {
+			calls.Add(1)
+			return backoff.Permanent(actorerrors.ErrTimerFireNotLocal)
+		},
+	)
+
+	store := New(Options{Router: router})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	im, ok := store.(*inmemory)
+	require.True(t, ok)
+
+	timer := newTimer(t, "abc", "1s", clock.RealClock{}.Now())
+	require.NoError(t, store.Create(context.Background(), timer))
+
+	require.Eventually(t, func() bool { return calls.Load() == 1 }, 5*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool {
+		_, _, exists := stateSnapshot(im, timer.ActorKey())
+		return !exists
+	}, 5*time.Second, time.Millisecond, "dropped timer's state was not reaped")
+
+	_, ok = im.activeTimers.Load(timer.Key())
+	assert.False(t, ok, "dropped timer must be removed, not rescheduled")
+	assert.Equal(t, int64(0), im.GetActiveTimersCount(timer.ActorType))
+	time.Sleep(50 * time.Millisecond)
+	assert.Equal(t, int64(1), calls.Load(), "dropped timer must not fire again")
 }
 
 func TestDeleteFuncSuppressesParkedFire(t *testing.T) {

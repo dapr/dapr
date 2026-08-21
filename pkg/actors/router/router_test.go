@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/actors/api"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
 	"github.com/dapr/dapr/pkg/actors/router"
 	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
@@ -48,7 +49,7 @@ func TestCallReminderNonLocalTimerDropped(t *testing.T) {
 		Name:      "tick",
 		IsTimer:   true,
 	})
-	require.NoError(t, err)
+	require.ErrorIs(t, err, actorerrors.ErrTimerFireNotLocal)
 	assert.Equal(t, 1, lookups)
 }
 

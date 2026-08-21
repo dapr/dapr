@@ -203,7 +203,7 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 		// deleted with it.
 		if req.IsTimer {
 			log.Debugf("Dropping timer %s: actor is no longer hosted on this instance", req.Key())
-			return nil
+			return backoff.Permanent(actorerrors.ErrTimerFireNotLocal)
 		}
 
 		if req.IsRemote {
