@@ -470,7 +470,9 @@ jobs:
         if: env.TEST_PREFIX != ''
         run: |
           az aks get-credentials -n "${{ env.TEST_CLUSTER }}" -g "${{ env.TEST_RESOURCE_GROUP }}"
-          kubectl create namespace ${{ env.DAPR_NAMESPACE }}
+          # The scheduler placement leg reuses the cluster, so the namespace
+          # may already exist.
+          kubectl create namespace ${{ env.DAPR_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
         shell: bash
       - name: Preparing AKS cluster for test
         if: env.TEST_PREFIX != ''
