@@ -77,6 +77,15 @@ func TestSnapshotRestore(t *testing.T) {
 		assert.False(t, restored.StoodDown())
 	})
 
+	t.Run("serve revokes a committed stand down", func(t *testing.T) {
+		t.Parallel()
+		f := New()
+		f.Apply(&raft.Log{Data: StandDownCommand})
+		require.True(t, f.StoodDown())
+		f.Apply(&raft.Log{Data: ServeCommand})
+		assert.False(t, f.StoodDown())
+	})
+
 	t.Run("restore replaces earlier stood down state", func(t *testing.T) {
 		t.Parallel()
 		f := New()

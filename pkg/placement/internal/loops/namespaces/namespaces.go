@@ -89,6 +89,9 @@ func (n *namespaces) Handle(ctx context.Context, event loops.EventNamespace) err
 		return n.handleShutdown(e)
 	case *loops.StandDown:
 		return n.handleStandDown(e)
+	case *loops.StandUp:
+		n.standDown = nil
+		n.drainPending = 0
 	case *loops.DrainComplete:
 		return n.handleDrainComplete(e)
 	case *loops.StateTableRequest:

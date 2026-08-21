@@ -51,7 +51,6 @@ type rollback struct {
 	schedPlacement  *scheduler.Scheduler
 	schedRolledBack *scheduler.Scheduler
 	place           *placement.Placement
-	placeRestarted  *placement.Placement
 
 	invoked atomic.Int64
 }
@@ -88,13 +87,6 @@ func (r *rollback) Setup(t *testing.T) []framework.Option {
 		scheduler.WithEtcdClientPort(r.schedPlacement.EtcdClientPort()),
 		scheduler.WithInitialCluster(r.schedPlacement.InitialCluster()),
 		scheduler.WithDataDir(r.schedPlacement.DataDir()),
-	)
-
-	// The restarted placement service reuses the original address, standing
-	// in for the control plane restart which completes the rollback.
-	r.placeRestarted = placement.New(t,
-		placement.WithPort(r.place.Port()),
-		placement.WithSchedulerAddresses(r.schedPlacement.Address()),
 	)
 
 	r.daprd = daprd.New(t,
@@ -183,15 +175,12 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 	invokedBefore := r.invoked.Load()
 
 	// Roll back the control plane: the scheduler returns with placement
-	// disabled and the placement service returns serving.
+	// disabled. The stood-down placement service is not restarted, it
+	// observes that no scheduler serves placement and serves again.
 	r.schedPlacement.Cleanup(t)
-	r.place.Cleanup(t)
 	r.schedRolledBack.Run(t, ctx)
 	t.Cleanup(func() { r.schedRolledBack.Cleanup(t) })
 	r.schedRolledBack.WaitUntilRunning(t, ctx)
-	r.placeRestarted.Run(t, ctx)
-	t.Cleanup(func() { r.placeRestarted.Cleanup(t) })
-	r.placeRestarted.WaitUntilRunning(t, ctx)
 
 	// The running sidecar adopts the serving placement service without a
 	// restart: the rolled back scheduler reports no placement served, and
@@ -216,7 +205,7 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 	// back whole.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		var runtimes float64
-		for k, v := range r.placeRestarted.Metrics(c, ctx).All() {
+		for k, v := range r.place.Metrics(c, ctx).All() {
 			if strings.HasPrefix(k, "dapr_placement_runtimes_total") {
 				runtimes += v
 			}

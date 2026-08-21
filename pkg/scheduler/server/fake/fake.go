@@ -29,7 +29,8 @@ import (
 )
 
 type Fake struct {
-	client schedulerv1pb.SchedulerClient
+	client  schedulerv1pb.SchedulerClient
+	address string
 
 	scheduleJobFn        func(context.Context, *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error)
 	deleteJobFn          func(context.Context, *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error)
@@ -106,12 +107,18 @@ func New(t *testing.T) *Fake {
 	)
 	require.NoError(t, err)
 	f.client = schedulerv1pb.NewSchedulerClient(client)
+	f.address = lis.Addr().String()
 
 	return f
 }
 
 func (f *Fake) Client() schedulerv1pb.SchedulerClient {
 	return f.client
+}
+
+// Address returns the address the fake server listens on.
+func (f *Fake) Address() string {
+	return f.address
 }
 
 func (f *Fake) WithScheduleJob(fn func(context.Context, *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error)) *Fake {

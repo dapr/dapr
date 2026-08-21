@@ -48,15 +48,18 @@ type Options struct {
 	Addresses []string
 	Security  security.Handler
 
-	// OnStandDown is called exactly once, when a scheduler first signals
-	// the cutover.
+	// OnStandDown is called when a scheduler signals the cutover.
 	OnStandDown func()
+	// OnStandUp is called when the schedulers stop serving placement after
+	// a stand-down, as on a rollback.
+	OnStandUp func()
 }
 
 type StandDown struct {
 	addresses   []string
 	sec         security.Handler
 	onStandDown func()
+	onStandUp   func()
 
 	active    atomic.Bool
 	announced atomic.Bool
@@ -74,6 +77,7 @@ func New(opts Options) *StandDown {
 		addresses:        opts.Addresses,
 		sec:              opts.Security,
 		onStandDown:      opts.OnStandDown,
+		onStandUp:        opts.OnStandUp,
 		firstObservation: make(chan struct{}),
 	}
 }
@@ -88,9 +92,10 @@ func (s *StandDown) FirstObservation() <-chan struct{} {
 	return s.firstObservation
 }
 
-// Run watches the schedulers until one signals the cutover, then stands
-// down. Unreachable schedulers are retried, placement keeps serving until a
-// cutover is actually observed.
+// Run watches the schedulers for the cutover signal and stands down on it.
+// The watch continues after the stand-down: a rollback shows as no scheduler
+// serving placement, and the stand-down is revoked. Unreachable schedulers
+// are retried, placement keeps serving until a cutover is actually observed.
 func (s *StandDown) Run(ctx context.Context) error {
 	if len(s.addresses) == 0 {
 		s.completeFirstObservation()
@@ -109,15 +114,7 @@ func (s *StandDown) Run(ctx context.Context) error {
 	defer timer.Stop()
 
 	for i := 0; ; i++ {
-		if s.watch(ctx, s.addresses[i%len(s.addresses)], schedulerID) {
-			s.active.Store(true)
-			log.Warn("A scheduler signalled the actor placement cutover: this placement service is standing down. Sidecars too old for scheduler placement will be refused: upgrade them. Rolling back requires restarting the placement service after disabling placement on the schedulers.")
-			if s.onStandDown != nil {
-				s.onStandDown()
-			}
-			<-ctx.Done()
-			return ctx.Err()
-		}
+		s.watch(ctx, s.addresses[i%len(s.addresses)], schedulerID)
 		s.completeFirstObservation()
 
 		if ctx.Err() != nil {
@@ -173,9 +170,9 @@ func (s *StandDown) completeFirstObservation() {
 	})
 }
 
-// watch opens one WatchHosts stream and returns true the moment any host
-// signals the cutover, false when the stream fails.
-func (s *StandDown) watch(ctx context.Context, address string, schedulerID spiffeid.ID) bool {
+// watch opens one WatchHosts stream and applies every response until the
+// stream fails.
+func (s *StandDown) watch(ctx context.Context, address string, schedulerID spiffeid.ID) {
 	// Keepalives detect a scheduler which died mid-stream.
 	conn, err := grpc.NewClient(address,
 		s.sec.GRPCDialOptionMTLS(schedulerID),
@@ -185,7 +182,7 @@ func (s *StandDown) watch(ctx context.Context, address string, schedulerID spiff
 		}),
 	)
 	if err != nil {
-		return false
+		return
 	}
 	defer conn.Close()
 
@@ -193,22 +190,44 @@ func (s *StandDown) watch(ctx context.Context, address string, schedulerID spiff
 	stream, err := client.WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
 	if err != nil {
 		log.Debugf("Failed to watch scheduler hosts on %s: %s", address, err)
-		return false
+		return
 	}
 
 	for {
 		resp, err := stream.Recv()
 		if err != nil {
 			log.Debugf("Scheduler WatchHosts stream to %s ended: %s", address, err)
-			return false
+			return
 		}
 
+		cutover, serves := false, false
 		for _, host := range resp.GetHosts() {
-			if host.GetLeader() || host.GetPlacementCutoverPending() {
-				return true
+			cutover = cutover || host.GetLeader() || host.GetPlacementCutoverPending()
+			serves = serves || host.GetSchedulerPlacementEnabled()
+		}
+
+		switch {
+		case cutover && !s.active.Load():
+			s.active.Store(true)
+			log.Warn("A scheduler signalled the actor placement cutover: this placement service is standing down. Sidecars too old for scheduler placement will be refused: upgrade them.")
+			if s.onStandDown != nil {
+				s.onStandDown()
+			}
+		case !serves && len(resp.GetHosts()) > 0 && s.active.Load():
+			// The schedulers rolled back: none serves placement, so the
+			// stand-down no longer binds.
+			s.active.Store(false)
+			s.announced.Store(false)
+			log.Warn("The schedulers no longer serve actor placement: this placement service is serving again.")
+			if s.onStandUp != nil {
+				s.onStandUp()
 			}
 		}
 		s.completeFirstObservation()
+
+		if s.active.Load() {
+			continue
+		}
 
 		// Announce only after a response showing no cutover, since a
 		// placement service about to stand down must not clear the

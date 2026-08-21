@@ -113,6 +113,12 @@ type StandDown struct {
 	Done  func()
 }
 
+// StandUp revokes a StandDown after the schedulers stopped serving
+// placement, so new streams are accepted again.
+type StandUp struct {
+	*nsbase
+}
+
 // Drain instructs a disseminator to run a final round with an empty table
 // so every connected sidecar halts its actors, then close its streams and
 // report DrainComplete.

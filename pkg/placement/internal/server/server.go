@@ -162,6 +162,11 @@ func (s *Server) Run(ctx context.Context) error {
 				},
 			})
 		},
+		OnStandUp: func() {
+			s.standingDown.Store(false)
+			s.loop.Enqueue(new(loops.StandUp))
+			go s.commitServe(ctx)
+		},
 	})
 
 	return concurrency.NewRunnerManager(
@@ -280,6 +285,27 @@ func (s *Server) commitAndConfirmStandDown(ctx context.Context) {
 	}
 
 	s.standdown.Confirm(ctx)
+}
+
+// commitServe replicates the revoked stand-down so a later leader does not
+// inherit it. Leader only.
+func (s *Server) commitServe(ctx context.Context) {
+	if !s.isLeader.Load() {
+		return
+	}
+
+	for {
+		err := s.leadership.CommitServe(ctx)
+		if err == nil {
+			return
+		}
+		log.Errorf("Failed to commit the revoked stand-down to the raft log, retrying: %s", err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Second):
+		}
+	}
 }
 
 func standDownErr() error {

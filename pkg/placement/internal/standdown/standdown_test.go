@@ -19,9 +19,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	schedulerfake "github.com/dapr/dapr/pkg/scheduler/server/fake"
 	"github.com/dapr/dapr/pkg/security/fake"
 )
 
@@ -109,4 +114,53 @@ func TestHungSchedulerCompletesFirstObservation(t *testing.T) {
 		require.Fail(t, "a hung scheduler watch must not block the first observation")
 	}
 	assert.False(t, s.Active())
+}
+
+// TestRollbackStandsUp asserts a stand-down is revoked once the schedulers
+// stop serving placement, as on a rollback.
+func TestRollbackStandsUp(t *testing.T) {
+	t.Parallel()
+
+	hosts := make(chan []*schedulerv1pb.Host, 4)
+	sched := schedulerfake.New(t).WithWatchHosts(func(_ *schedulerv1pb.WatchHostsRequest, stream schedulerv1pb.Scheduler_WatchHostsServer) error {
+		for {
+			select {
+			case <-stream.Context().Done():
+				return stream.Context().Err()
+			case h := <-hosts:
+				if err := stream.Send(&schedulerv1pb.WatchHostsResponse{Hosts: h}); err != nil {
+					return err
+				}
+			}
+		}
+	})
+
+	var downs, ups int
+	s := New(Options{
+		Addresses: []string{sched.Address()},
+		Security: fake.New().WithGRPCDialOptionMTLSFn(func(spiffeid.ID) grpc.DialOption {
+			return grpc.WithTransportCredentials(insecure.NewCredentials())
+		}),
+		OnStandDown: func() { downs++ },
+		OnStandUp:   func() { ups++ },
+	})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	go s.Run(ctx)
+
+	// A scheduler advertises the placement leader: stand down.
+	hosts <- []*schedulerv1pb.Host{{Address: "a:1", SchedulerPlacementEnabled: true, Leader: true}}
+	require.Eventually(t, s.Active, time.Second*10, time.Millisecond*10)
+	assert.Equal(t, 1, downs)
+
+	// The schedulers rolled back, none serves placement: stand up.
+	hosts <- []*schedulerv1pb.Host{{Address: "a:1"}}
+	require.Eventually(t, func() bool { return !s.Active() }, time.Second*10, time.Millisecond*10)
+	assert.Equal(t, 1, ups)
+
+	// The cutover happens again: stand down again.
+	hosts <- []*schedulerv1pb.Host{{Address: "a:1", SchedulerPlacementEnabled: true, Leader: true}}
+	require.Eventually(t, s.Active, time.Second*10, time.Millisecond*10)
+	assert.Equal(t, 2, downs)
 }

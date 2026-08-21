@@ -29,6 +29,10 @@ import (
 // drained every placement stream.
 var StandDownCommand = []byte("stand-down")
 
+// ServeCommand is the raft log entry committed by the leader when the
+// schedulers stopped serving placement after a stand-down.
+var ServeCommand = []byte("serve")
+
 type FSM struct {
 	stoodDown atomic.Bool
 }
@@ -43,8 +47,11 @@ func (f *FSM) StoodDown() bool {
 }
 
 func (f *FSM) Apply(log *raft.Log) any {
-	if bytes.Equal(log.Data, StandDownCommand) {
+	switch {
+	case bytes.Equal(log.Data, StandDownCommand):
 		f.stoodDown.Store(true)
+	case bytes.Equal(log.Data, ServeCommand):
+		f.stoodDown.Store(false)
 	}
 	return true
 }

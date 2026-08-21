@@ -205,6 +205,16 @@ func (s *Leadership) CommitStandDown(ctx context.Context) error {
 	return ra.Apply(fsm.StandDownCommand, time.Second*10).Error()
 }
 
+// CommitServe replicates the revocation of a stand-down through the raft
+// log. Leader only.
+func (s *Leadership) CommitServe(ctx context.Context) error {
+	ra := s.raft.Load()
+	if ra == nil {
+		return errors.New("raft is not running")
+	}
+	return ra.Apply(fsm.ServeCommand, time.Second*10).Error()
+}
+
 // StoodDown reports whether a stand-down has been committed. On a leader it
 // first runs a raft barrier, so a newly elected leader has applied its whole
 // log before the answer is trusted.
