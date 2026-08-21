@@ -546,6 +546,15 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 		}
 
 		for key, val := range incomingMD {
+			// Binary gRPC transport metadata (keys ending in "-bin") carries
+			// arbitrary bytes that are not representable as component metadata:
+			// grpc-go has already decoded the Base64 value, so copying it into
+			// the string metadata of the output binding corrupts bindings that
+			// sanitize headers or require valid UTF-8 (e.g. Azure Blob Storage
+			// signature mismatches, Service Bus AMQP UTF-8 failures).
+			if strings.HasSuffix(key, "-bin") {
+				continue
+			}
 			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
 			// Not to overwrite the existing metadata
 			// But if the key is traceparent or tracestate, we allow overwrite the existing metadata.
