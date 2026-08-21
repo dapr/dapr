@@ -23,6 +23,7 @@ import (
 	"io"
 	"net"
 	nethttp "net/http"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -4179,6 +4180,208 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		t.Cleanup(htarget.NotReady)
 		resp := fakeServer(t).DoRequest("GET", apiPath, nil, map[string]string{"appid": appID})
 		assert.Equal(t, 204, resp.StatusCode)
+	})
+
+	t.Run("Healthz - not-ready before ever ready stays quiet, warns once per streak after a regression", func(t *testing.T) {
+		apiPath := "v1.0/healthz"
+		testAPI.healthzEverReady.Store(false)
+		testAPI.healthzNotReadyLogged.Store(false)
+		htarget.NotReady()
+		t.Cleanup(htarget.NotReady)
+
+		var buf bytes.Buffer
+		log.SetOutput(&buf)
+		t.Cleanup(func() { log.SetOutput(os.Stdout) })
+
+		server := fakeServer(t)
+
+		// A target that has never been ready is a normal startup, not a regression: stay quiet.
+		resp := server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.False(t, testAPI.healthzNotReadyLogged.Load(), "flag should not be set before the target has ever been ready")
+		assert.NotContains(t, buf.String(), "level=warning", "must not warn before the target has ever been ready")
+
+		// First readiness: this is not a "recovery", so it should not claim one.
+		buf.Reset()
+		htarget.Ready()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.NotContains(t, buf.String(), "dapr is ready again", "should not claim recovery on first-ever readiness")
+
+		// A regression after having been ready warns exactly once for the new streak.
+		buf.Reset()
+		htarget.NotReady()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.True(t, testAPI.healthzNotReadyLogged.Load(), "flag should be set after the first not-ready poll following a ready state")
+		assert.Equal(t, 1, strings.Count(buf.String(), "level=warning"), "should warn exactly once for the new not-ready streak")
+		assert.Contains(t, buf.String(), "dapr is not ready", "warn log should carry the human-readable message")
+
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.True(t, testAPI.healthzNotReadyLogged.Load(), "flag should remain set across repeated not-ready polls")
+		assert.Equal(t, 1, strings.Count(buf.String(), "level=warning"), "repeated not-ready polls in the same streak should not warn again")
+
+		buf.Reset()
+		htarget.Ready()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.False(t, testAPI.healthzNotReadyLogged.Load(), "flag should reset once dapr becomes ready again")
+		assert.Contains(t, buf.String(), "dapr is ready again")
+
+		buf.Reset()
+		htarget.NotReady()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.True(t, testAPI.healthzNotReadyLogged.Load(), "flag should be set again on a new not-ready streak")
+		assert.Equal(t, 1, strings.Count(buf.String(), "level=warning"), "new streak should warn again")
+	})
+
+	t.Run("Healthz - a not-ready streak that never reaches ready escalates to warn once it persists past the threshold", func(t *testing.T) {
+		apiPath := "v1.0/healthz"
+		testAPI.healthzEverReady.Store(false)
+		testAPI.healthzNotReadyLogged.Store(false)
+		testAPI.healthzNotReadySince.Store(0)
+		htarget.NotReady()
+		t.Cleanup(htarget.NotReady)
+
+		var buf bytes.Buffer
+		log.SetOutput(&buf)
+		t.Cleanup(func() { log.SetOutput(os.Stdout) })
+
+		server := fakeServer(t)
+
+		// Within the threshold, a never-ready target stays quiet.
+		resp := server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.False(t, testAPI.healthzNotReadyLogged.Load(), "flag should not be set while within the threshold")
+		assert.NotContains(t, buf.String(), "level=warning", "must not warn while within the threshold")
+
+		// Simulate the streak having persisted past the threshold.
+		testAPI.healthzNotReadySince.Store(time.Now().Add(-notReadyWarnThreshold - time.Second).UnixNano())
+
+		buf.Reset()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.True(t, testAPI.healthzNotReadyLogged.Load(), "flag should be set once the streak persists past the threshold")
+		assert.Equal(t, 1, strings.Count(buf.String(), "level=warning"), "should warn exactly once the threshold is crossed")
+
+		buf.Reset()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 0, strings.Count(buf.String(), "level=warning"), "repeated not-ready polls in the same streak should not warn again")
+	})
+}
+
+func TestV1OutboundHealthzEndpoint(t *testing.T) {
+	outboundHealthz := healthz.New()
+	otarget := outboundHealthz.AddTarget("outbound-test-target")
+	testAPI := &api{
+		outboundHealthz: outboundHealthz,
+	}
+
+	fakeServer := func(t *testing.T) *fakeHTTPServer {
+		f := newFakeHTTPServer()
+		t.Cleanup(f.Shutdown)
+		f.StartServer(testAPI.constructHealthzEndpoints(), nil)
+		return f
+	}
+
+	apiPath := "v1.0/healthz/outbound"
+
+	t.Run("Outbound healthz - 500 when not ready", func(t *testing.T) {
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+	})
+
+	t.Run("Outbound healthz - 204 when ready", func(t *testing.T) {
+		otarget.Ready()
+		t.Cleanup(otarget.NotReady)
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 204, resp.StatusCode)
+	})
+
+	t.Run("Outbound healthz - not-ready before ever ready stays quiet, warns once per streak after a regression", func(t *testing.T) {
+		testAPI.outboundEverReady.Store(false)
+		testAPI.outboundNotReadyLogged.Store(false)
+		otarget.NotReady()
+		t.Cleanup(otarget.NotReady)
+
+		var buf bytes.Buffer
+		log.SetOutput(&buf)
+		t.Cleanup(func() { log.SetOutput(os.Stdout) })
+
+		server := fakeServer(t)
+
+		// A target that has never been ready is a normal startup, not a regression: stay quiet.
+		resp := server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.False(t, testAPI.outboundNotReadyLogged.Load(), "flag should not be set before the target has ever been ready")
+		assert.NotContains(t, buf.String(), "level=warning", "must not warn before the target has ever been ready")
+
+		buf.Reset()
+		otarget.Ready()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.NotContains(t, buf.String(), "dapr outbound is ready again", "should not claim recovery on first-ever readiness")
+
+		buf.Reset()
+		otarget.NotReady()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.True(t, testAPI.outboundNotReadyLogged.Load(), "flag should be set after the first not-ready poll following a ready state")
+		assert.Equal(t, 1, strings.Count(buf.String(), "level=warning"), "should warn exactly once for the new not-ready streak")
+		assert.Contains(t, buf.String(), "dapr outbound is not ready", "warn log should carry the human-readable message")
+		assert.Contains(t, buf.String(), "outbound-test-target", "warn log should name the unhealthy target")
+
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.True(t, testAPI.outboundNotReadyLogged.Load(), "flag should remain set across repeated not-ready polls")
+		assert.Equal(t, 1, strings.Count(buf.String(), "level=warning"), "repeated not-ready polls in the same streak should not warn again")
+
+		buf.Reset()
+		otarget.Ready()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.False(t, testAPI.outboundNotReadyLogged.Load(), "flag should reset once dapr becomes ready again")
+		assert.Contains(t, buf.String(), "dapr outbound is ready again")
+	})
+
+	t.Run("Outbound healthz - a not-ready streak that never reaches ready escalates to warn once it persists past the threshold", func(t *testing.T) {
+		testAPI.outboundEverReady.Store(false)
+		testAPI.outboundNotReadyLogged.Store(false)
+		testAPI.outboundNotReadySince.Store(0)
+		otarget.NotReady()
+		t.Cleanup(otarget.NotReady)
+
+		var buf bytes.Buffer
+		log.SetOutput(&buf)
+		t.Cleanup(func() { log.SetOutput(os.Stdout) })
+
+		server := fakeServer(t)
+
+		// Within the threshold, a never-ready target stays quiet. This is the common
+		// case in a default k8s deployment, since only /v1.0/healthz is polled by the
+		// injector's readiness probe, not this endpoint.
+		resp := server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.False(t, testAPI.outboundNotReadyLogged.Load(), "flag should not be set while within the threshold")
+		assert.NotContains(t, buf.String(), "level=warning", "must not warn while within the threshold")
+
+		// Simulate the streak having persisted past the threshold, e.g. via `daprd wait`
+		// or a custom probe polling this endpoint.
+		testAPI.outboundNotReadySince.Store(time.Now().Add(-notReadyWarnThreshold - time.Second).UnixNano())
+
+		buf.Reset()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.True(t, testAPI.outboundNotReadyLogged.Load(), "flag should be set once the streak persists past the threshold")
+		assert.Equal(t, 1, strings.Count(buf.String(), "level=warning"), "should warn exactly once the threshold is crossed")
+
+		buf.Reset()
+		resp = server.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 0, strings.Count(buf.String(), "level=warning"), "repeated not-ready polls in the same streak should not warn again")
 	})
 }
 
