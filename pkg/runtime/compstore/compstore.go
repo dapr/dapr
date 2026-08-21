@@ -17,6 +17,9 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/dapr/durabletask-go/backend"
+
+	"github.com/dapr/components-contrib/binarystore"
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/conversation"
@@ -71,6 +74,8 @@ type ComponentStore struct {
 
 	conversations map[string]conversation.Conversation
 
+	binaryStores map[string]binarystore.BinaryStore
+
 	compPendingLock sync.Mutex
 	compPending     *compsv1alpha1.Component
 
@@ -97,5 +102,6 @@ func New() *ComponentStore {
 			streams:      make(map[string][]*DeclarativeSubscription),
 		},
 		conversations: make(map[string]conversation.Conversation),
+		binaryStores:  make(map[string]binarystore.BinaryStore),
 	}
 }

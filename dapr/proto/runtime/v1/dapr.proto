@@ -31,6 +31,7 @@ import "dapr/proto/runtime/v1/crypto.proto";
 import "dapr/proto/runtime/v1/workflow.proto";
 import "dapr/proto/runtime/v1/jobs.proto";
 import "dapr/proto/runtime/v1/ai.proto";
+import "dapr/proto/runtime/v1/binarystore.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprProtos";
@@ -285,6 +286,16 @@ service Dapr {
 
   // Converse with a LLM service via alpha2 api
   rpc ConverseAlpha2(ConversationRequestAlpha2) returns (ConversationResponseAlpha2) {}
+
+  // Stores a binary file using a streaming request. The first message must
+  // contain the options; subsequent messages carry the file content as chunks.
+  rpc SetBinaryFileAlpha1(stream SetBinaryFileRequest) returns (SetBinaryFileResponse) {}
+
+  // Retrieves a binary file as a stream of chunks.
+  rpc GetBinaryFileAlpha1(GetBinaryFileRequest) returns (stream GetBinaryFileResponse) {}
+
+  // Deletes a binary file.
+  rpc DeleteBinaryFileAlpha1(DeleteBinaryFileRequest) returns (DeleteBinaryFileResponse) {}
 }
 
 // ShutdownRequest is the request for Shutdown.

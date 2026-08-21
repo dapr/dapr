@@ -143,4 +143,13 @@ var (
 	ErrConversationInvalidParams = APIError{"failed conversing with component %s: invalid params: %s", errorcodes.ConversationInvalidParms, http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrConversationInvoke        = APIError{"failed conversing with component %s: %s", errorcodes.ConversationInvoke, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrConversationMissingInputs = APIError{"failed conversing with component %s: missing inputs in request", errorcodes.ConversationMissingInputs, http.StatusBadRequest, grpcCodes.InvalidArgument}
+
+	// Binary Store
+	ErrBinaryStoreNotFound     = APIError{"failed finding binary store component %s", errorcodes.BinaryStoreNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrBinaryStoreNameMissing  = APIError{"file name is required", errorcodes.CommonBadRequest, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrBinaryStoreSet          = APIError{"failed storing binary file %q in component %s: %s", errorcodes.BinaryStoreSet, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrBinaryStoreGet          = APIError{"failed retrieving binary file %q from component %s: %s", errorcodes.BinaryStoreGet, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrBinaryStoreDelete       = APIError{"failed deleting binary file %q from component %s: %s", errorcodes.BinaryStoreDelete, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrBinaryStoreFileNotFound = APIError{"binary file %q not found in component %s", errorcodes.BinaryStoreFileNotFound, http.StatusNotFound, grpcCodes.NotFound}
+	ErrBinaryStoreFileExists   = APIError{"binary file %q already exists in component %s", errorcodes.BinaryStoreFileExists, http.StatusConflict, grpcCodes.AlreadyExists}
 )

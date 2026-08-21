@@ -49,6 +49,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
+	"github.com/dapr/dapr/pkg/runtime/processor/binarystore"
 	"github.com/dapr/dapr/pkg/runtime/processor/binding"
 	"github.com/dapr/dapr/pkg/runtime/processor/configuration"
 	"github.com/dapr/dapr/pkg/runtime/processor/conversation"
@@ -258,27 +259,62 @@ func New(opts Options) *Processor {
 		reporter = opts.Reporter
 	}
 
-	p := &Processor{
-		appID:          opts.ID,
-		kubernetesMode: opts.Mode == modes.KubernetesMode,
-		compStore:      opts.ComponentStore,
-		security:       opts.Security,
-		reporter:       reporter,
-		actors:         opts.Actors,
-		state:          stateProc,
-		secret:         secretProc,
-		binding:        bindingProc,
-		subscriber:     subscriberProc,
-		inlineManagers: map[components.Category]inlineManager{
-			components.CategoryBindings:       bindingProc,
-			components.CategoryConfiguration:  confProc,
-			components.CategoryCryptoProvider: cryptoProc,
-			components.CategoryLock:           lockProc,
-			components.CategoryMiddleware:     middleProc,
-			components.CategoryPubSub:         pubsubProc,
-			components.CategorySecretStore:    secretProc,
-			components.CategoryStateStore:     stateProc,
-			components.CategoryConversation:   convProc,
+	return &Processor{
+		appID:                      opts.ID,
+		pendingHTTPEndpoints:       make(chan httpendpointsapi.HTTPEndpoint),
+		pendingMCPServers:          make(chan mcpserverapi.MCPServer),
+		pendingComponents:          make(chan componentsapi.Component),
+		pendingComponentDependents: make(map[string][]componentsapi.Component),
+		subErrCh:                   make(chan error),
+		closedCh:                   make(chan struct{}),
+		compStore:                  opts.ComponentStore,
+		state:                      state,
+		binding:                    binding,
+		secret:                     secret,
+		security:                   opts.Security,
+		subscriber:                 subscriber,
+		reporter:                   reporter,
+		managers: map[components.Category]manager{
+			components.CategoryBindings: binding,
+			components.CategoryConfiguration: configuration.New(configuration.Options{
+				Registry:       opts.Registry.Configurations(),
+				ComponentStore: opts.ComponentStore,
+				Meta:           opts.Meta,
+			}),
+			components.CategoryCryptoProvider: crypto.New(crypto.Options{
+				Registry:       opts.Registry.Crypto(),
+				ComponentStore: opts.ComponentStore,
+				Meta:           opts.Meta,
+			}),
+			components.CategoryLock: lock.New(lock.Options{
+				Registry:       opts.Registry.Locks(),
+				ComponentStore: opts.ComponentStore,
+				Meta:           opts.Meta,
+			}),
+			components.CategoryPubSub: pubsub.New(pubsub.Options{
+				AppID:          opts.ID,
+				Registry:       opts.Registry.PubSubs(),
+				Meta:           opts.Meta,
+				ComponentStore: opts.ComponentStore,
+				Subscriber:     subscriber,
+			}),
+			components.CategorySecretStore: secret,
+			components.CategoryStateStore:  state,
+			components.CategoryMiddleware: middleware.New(middleware.Options{
+				Meta:         opts.Meta,
+				RegistryHTTP: opts.Registry.HTTPMiddlewares(),
+				HTTP:         opts.MiddlewareHTTP,
+			}),
+			components.CategoryConversation: conversation.New(conversation.Options{
+				Meta:     opts.Meta,
+				Registry: opts.Registry.Conversations(),
+				Store:    opts.ComponentStore,
+			}),
+			components.CategoryBinaryStore: binarystore.New(binarystore.Options{
+				Meta:     opts.Meta,
+				Registry: opts.Registry.BinaryStores(),
+				Store:    opts.ComponentStore,
+			}),
 		},
 	}
 
