@@ -144,10 +144,15 @@ func Test_activityCompletionHandshake(t *testing.T) {
 		t.Parallel()
 		fake := &fakePendingBackend{}
 		abe := &Actors{pendingTasksBackend: fake, activityExecs: newActivityExecutions()}
+		called := false
 		var gotErr error
-		dereg := abe.OnActivityCompletion(activityRequest("wf1", 8), func(_ *protos.ActivityResponse, err error) { gotErr = err })
+		dereg := abe.OnActivityCompletion(activityRequest("wf1", 8), func(_ *protos.ActivityResponse, err error) {
+			called = true
+			gotErr = err
+		})
 		defer dereg()
 		fake.cb(&protos.ActivityResponse{TaskId: 8}, nil)
+		require.True(t, called, "completion callback was not invoked")
 		require.NoError(t, gotErr)
 	})
 }
