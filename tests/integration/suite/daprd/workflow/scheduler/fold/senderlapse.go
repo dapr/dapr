@@ -36,18 +36,16 @@ import (
 )
 
 func init() {
-	suite.Register(new(captive))
+	suite.Register(new(senderlapse))
 }
 
-// captive strands a fold-held completion with no driver and asserts the
-// janitor's recovery turn commits it.
-type captive struct {
+type senderlapse struct {
 	daprd     *daprd.Daprd
 	place     *placement.Placement
 	scheduler *procscheduler.Scheduler
 }
 
-func (f *captive) Setup(t *testing.T) []framework.Option {
+func (f *senderlapse) Setup(t *testing.T) []framework.Option {
 	f.place = placement.New(t)
 	f.scheduler = procscheduler.New(t)
 	db := sqlite.New(t,
@@ -64,6 +62,7 @@ func (f *captive) Setup(t *testing.T) []framework.Option {
 		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_WORKFLOW_JANITOR_PERIOD", "2s",
 			"DAPR_WORKFLOW_TEST_DROP_FOLD_DRIVES", "100",
+			"DAPR_WORKFLOW_FOLD_WAIT_TIMEOUT", "200ms",
 		)),
 	)
 
@@ -72,7 +71,7 @@ func (f *captive) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (f *captive) Run(t *testing.T, ctx context.Context) {
+func (f *senderlapse) Run(t *testing.T, ctx context.Context) {
 	f.scheduler.WaitUntilRunning(t, ctx)
 	f.place.WaitUntilRunning(t, ctx)
 	f.daprd.WaitUntilRunning(t, ctx)
@@ -103,18 +102,17 @@ func (f *captive) Run(t *testing.T, ctx context.Context) {
 	wctx, cancel := context.WithTimeout(ctx, time.Second*45)
 	defer cancel()
 	metadata, err := cl.WaitForWorkflowCompletion(wctx, api.InstanceID(resp.GetInstanceId()))
-	require.NoError(t, err, "workflow stranded on a captive fold-held completion (janitor never drove the folding turn)")
+	require.NoError(t, err, "workflow stranded despite sender retries and janitor recovery")
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	assert.Equal(t, `"ok"`, metadata.GetOutput().GetValue())
 
-	assert.GreaterOrEqual(t, f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:janitor_fold_recovered"), float64(1),
-		"at least one captive completion must be recovered by a janitor-driven turn")
-
 	folded := f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_count", "status:folded")
 	nacked := f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_count", "status:fold_nacked")
-	assert.GreaterOrEqual(t, folded, float64(2))
+	assert.GreaterOrEqual(t, folded, float64(2),
+		"non-terminal captive entries must fold: any committing turn takes them first")
 	assert.LessOrEqual(t, folded, float64(3), "folded is commit-attributed: at most one record per completion")
-	assert.GreaterOrEqual(t, folded+nacked, float64(3), "every captive completion must resolve as folded or nacked")
+	assert.GreaterOrEqual(t, nacked, float64(3),
+		"every completion's first submit must lapse at the shortened fold wait")
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		janitors := f.scheduler.JobKeyCount(t, ctx, "new-event-janitor")
