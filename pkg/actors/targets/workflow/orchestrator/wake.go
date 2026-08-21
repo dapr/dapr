@@ -108,7 +108,9 @@ type driveInfo struct {
 // MUST be called only after BOTH the state save AND a durable re-driver are
 // in place: either the per-instance janitor reminder (ensureJanitor) or a
 // durable one-shot reminder created by the caller (assertStartReminder keeps
-// its scheduler entry for delayed starts and pending-start recovery).
+// its scheduler entry for delayed starts and pending-start recovery; it is
+// elided best-effort once the first turn durably commits, see
+// deleteStartReminder).
 //
 // Wakes are delivered through a per-instance DRIVE LOOP: localDrive posts a
 // notification (buffered-1 channel: pending notifications coalesce, mirroring
