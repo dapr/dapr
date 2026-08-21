@@ -353,12 +353,17 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 		opts = append(opts, s.grpcServerOpts...)
 	}
 
-	// TODO: fix types
-	//nolint:gosec
+	// MaxRequestBodySize and ReadBufferSize are both already in bytes, so no
+	// unit conversion is needed here. ReadBufferSize is round-trip checked
+	// before the narrowing conversion for MaxHeaderListSize.
+	maxHeaderListSize := uint32(s.config.ReadBufferSize) //nolint:gosec // round-trip checked below
+	if int64(maxHeaderListSize) != int64(s.config.ReadBufferSize) {
+		return nil, fmt.Errorf("read buffer size %d is out of range for gRPC max header list size", s.config.ReadBufferSize)
+	}
 	opts = append(opts,
 		grpcGo.MaxRecvMsgSize(s.config.MaxRequestBodySize),
 		grpcGo.MaxSendMsgSize(s.config.MaxRequestBodySize),
-		grpcGo.MaxHeaderListSize(uint32(s.config.ReadBufferSize<<10)),
+		grpcGo.MaxHeaderListSize(maxHeaderListSize),
 	)
 
 	if s.sec == nil {
@@ -417,8 +422,8 @@ func (s *server) printAPILog(ctx context.Context, method string, duration time.D
 	}
 	// Report duration in milliseconds
 	fields["duration"] = duration.Milliseconds()
-	// TODO: fix types
-	//nolint:gosec
-	fields["code"] = int32(code)
+	// grpcCodes.Code is a small, well-known enum (currently 0-16), so the
+	// narrowing conversion to int32 for the log field cannot overflow.
+	fields["code"] = int32(code) //nolint:gosec // bounded enum, see comment above
 	s.infoLogger.WithFields(fields).Info("gRPC API Called")
 }
