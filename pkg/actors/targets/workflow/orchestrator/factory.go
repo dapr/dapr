@@ -131,6 +131,8 @@ type factory struct {
 	reaperScanInterval time.Duration
 	reaperIdleTTL      time.Duration
 
+	foldWaitTimeout time.Duration
+
 	rootCtx context.Context
 	escLock sync.Mutex
 	escWG   sync.WaitGroup
@@ -170,6 +172,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 
 	reaperScanInterval := common.EnvDurationOr("DAPR_WORKFLOW_REAPER_SCAN_INTERVAL", 5*time.Second)
 	reaperIdleTTL := common.EnvDurationOr("DAPR_WORKFLOW_REAPER_IDLE_TTL", max(2*common.JanitorPeriod(), time.Minute))
+	foldWaitTimeout := common.EnvDurationOr("DAPR_WORKFLOW_FOLD_WAIT_TIMEOUT", 2*time.Minute)
 
 	f := &factory{
 		appID:                  opts.AppID,
@@ -187,6 +190,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		retentionPolicy:        opts.RetentionPolicy,
 		signer:                 opts.Signer,
 		maxRequestBodySize:     opts.MaxRequestBodySize,
+		foldWaitTimeout:        foldWaitTimeout,
 		workflowAccessPolicies: opts.WorkflowAccessPolicies,
 		scheduler:              opts.Scheduler,
 		deactivateCh:           deactivateCh,
