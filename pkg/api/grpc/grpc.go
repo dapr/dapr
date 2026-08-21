@@ -191,6 +191,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	data := body
 	span := diagUtils.SpanFromContext(ctx)
 	traceID, traceState := diag.TraceIDAndStateFromSpan(span)
+	baggage := otelbaggage.FromContext(ctx).String()
 	md := maps.Clone(in.GetMetadata())
 	if !rawPayload {
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
@@ -200,6 +201,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			Data:            body,
 			TraceID:         traceID,
 			TraceState:      traceState,
+			Baggage:         baggage,
 			Pubsub:          in.GetPubsubName(),
 		}, in.GetMetadata())
 		if err != nil {
@@ -224,6 +226,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	} else {
 		md[pubsub.TraceIDField] = traceID
 		md[pubsub.TraceStateField] = traceState
+		if baggage != "" {
+			md[diagConsts.BaggageHeader] = baggage
+		}
 	}
 
 	req := pubsub.PublishRequest{
@@ -430,6 +435,7 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 				Data:            entries[i].Event,
 				TraceID:         traceID,
 				TraceState:      traceState,
+				Baggage:         otelbaggage.FromContext(ctx).String(),
 				Pubsub:          pubsubName,
 			}, entries[i].Metadata)
 			if err != nil {
@@ -451,6 +457,17 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 				apiServerLogger.Debug(nerr)
 				closeChildSpans(ctx, nerr)
 				return &runtimev1pb.BulkPublishResponse{}, nerr
+			}
+		}
+	}
+	if rawPayload {
+		baggage := otelbaggage.FromContext(ctx)
+		if baggage.Len() > 0 {
+			for i := range entries {
+				if entries[i].Metadata == nil {
+					entries[i].Metadata = map[string]string{}
+				}
+				entries[i].Metadata[diagConsts.BaggageHeader] = baggage.String()
 			}
 		}
 	}

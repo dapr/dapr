@@ -24,12 +24,14 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	grpclib "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -200,6 +202,9 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		if iTraceID != nil {
 			if traceID, ok := iTraceID.(string); ok {
 				sc, _ := diag.SpanContextFromW3CString(traceID)
+				if traceState, ok := cloudEvent[contribpubsub.TraceStateField].(string); ok && traceState != "" {
+					sc = sc.WithTraceState(*diag.TraceStateFromW3CString(traceState))
+				}
 
 				// no ops if trace is off
 				var span trace.Span
@@ -213,6 +218,10 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 			} else {
 				log.Warnf("ignored non-string traceid value: %v", iTraceID)
 			}
+		}
+
+		if baggageString, ok := cloudEvent[diagConsts.BaggageHeader].(string); ok && baggageString != "" {
+			ctx = grpcMetadata.AppendToOutgoingContext(ctx, diagConsts.BaggageHeader, baggageString)
 		}
 	}
 

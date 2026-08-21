@@ -1138,6 +1138,7 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 	if !rawPayload {
 		span := diagUtils.SpanFromContext(r.Context())
 		traceID, traceState := diag.TraceIDAndStateFromSpan(span)
+		baggage := otelBaggage.FromContext(r.Context()).String()
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			Source:          a.universal.AppID(),
 			Topic:           topic,
@@ -1145,6 +1146,7 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 			Data:            body,
 			TraceID:         traceID,
 			TraceState:      traceState,
+			Baggage:         baggage,
 			Pubsub:          pubsubName,
 		}, metadata)
 		if err != nil {
@@ -1169,6 +1171,8 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 			log.Debug(nerr)
 			return
 		}
+	} else if baggage := otelBaggage.FromContext(r.Context()); baggage.Len() > 0 {
+		metadata[diagConsts.BaggageHeader] = baggage.String()
 	}
 
 	req := pubsub.PublishRequest{
@@ -1303,6 +1307,7 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 				Data:            entries[i].Event,
 				TraceID:         traceID,
 				TraceState:      traceState,
+				Baggage:         otelBaggage.FromContext(r.Context()).String(),
 				Pubsub:          pubsubName,
 			}, entries[i].Metadata)
 			if err != nil {
@@ -1334,6 +1339,8 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 				return
 			}
 		}
+	} else if baggage := otelBaggage.FromContext(r.Context()); baggage.Len() > 0 {
+		metadata[diagConsts.BaggageHeader] = baggage.String()
 	}
 
 	req := pubsub.BulkPublishRequest{
