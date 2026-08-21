@@ -33,6 +33,11 @@ on:
         description: "Space-separated list of perf tests to run only"
         required: false
         type: string
+      scheduler_placement:
+        description: "After the full suite runs, run the actor and workflow perf tests again with actor placement served by the Scheduler (global.scheduler.placement.enabled), on the same cluster for comparison"
+        required: false
+        type: boolean
+        default: false
   # Dispatch on external events
   repository_dispatch:
     types: [perf-test]
@@ -335,10 +340,19 @@ jobs:
             Please check the logs for details on the error.
 
   test-perf:
-    name: Perf tests
+    name: Perf tests (scheduler_placement=${{ matrix.scheduler_placement }})
     needs:
       - build
       - deploy-infrastructure
+    # With the scheduler_placement input checked, a second leg reruns only
+    # the actor and workflow tests, the ones placement affects, with actor
+    # placement served by the Scheduler. Legs run sequentially on the same
+    # cluster so the comparison shares its infrastructure.
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include: ${{ fromJSON((inputs.scheduler_placement == true || contains(github.event.client_payload.args, 'scheduler-placement')) && '[{"scheduler_placement":false,"perf_tests":""},{"scheduler_placement":true,"perf_tests":"actor_activation actor_double_activation actor_id_scale actor_reminder actor_timer actor_type_scale workflows"}]' || '[{"scheduler_placement":false,"perf_tests":""}]') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -371,6 +385,8 @@ jobs:
           echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
           if [ "${{ inputs.tests }}" != "" ] ; then
             echo "DAPR_PERF_TEST=${{ inputs.tests }}" >> $GITHUB_ENV
+          elif [ "${{ matrix.perf_tests }}" != "" ] ; then
+            echo "DAPR_PERF_TEST=${{ matrix.perf_tests }}" >> $GITHUB_ENV
           fi
         shell: bash
       - name: Set up for scheduled test
@@ -387,9 +403,19 @@ jobs:
           script: |
             const testPayload = context.payload.client_payload;
             if (testPayload && testPayload.command == "ok-to-perf") {
+              // The scheduler-placement keyword picks the second matrix leg,
+              // it is not a test name.
+              const args = (testPayload.args || '').split(/\s+/)
+                .filter((a) => a && a != 'scheduler-placement').join(' ')
+              // An explicit test list from the comment applies to both legs,
+              // otherwise the scheduler placement leg runs its default actor
+              // and workflow set.
+              const matrixTests = `${{ matrix.perf_tests }}`
               let selectedTestsEnvVar = ""
-              if (testPayload?.args) {
-                selectedTestsEnvVar = `DAPR_PERF_TEST=${testPayload.args}\n`
+              if (args) {
+                selectedTestsEnvVar = `DAPR_PERF_TEST=${args}\n`
+              } else if (matrixTests) {
+                selectedTestsEnvVar = `DAPR_PERF_TEST=${matrixTests}\n`
               }
               var fs = require('fs');
               // Set environment variables
@@ -455,7 +481,11 @@ jobs:
       - name: Deploy dapr to AKS cluster
         if: env.TEST_PREFIX != ''
         env:
-          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s,dapr_scheduler.securityContext.fsGroup=65532"
+          # scheduler_placement=true runs the identical perf suite with actor
+          # placement served by the Scheduler (rendezvous hashing) instead of
+          # the standalone placement service (consistent hash ring), for
+          # comparing the two placement authorities on unchanged tests.
+          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s,dapr_scheduler.securityContext.fsGroup=65532,global.scheduler.placement.enabled=${{ matrix.scheduler_placement }}"
         run: make docker-deploy-k8s
       - name: Deploy test components
         if: env.TEST_PREFIX != ''
@@ -471,20 +501,20 @@ jobs:
         if: always() && env.TEST_PREFIX != ''
         uses: actions/upload-artifact@v4
         with:
-          name: perf_container_logs
+          name: perf_container_logs${{ matrix.scheduler_placement && '_scheduler_placement' || '' }}
           path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
       - name: Upload test logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: perf_test_logs
+          name: perf_test_logs${{ matrix.scheduler_placement && '_scheduler_placement' || '' }}
           path: ${{ env.DAPR_TEST_LOG_PATH }}
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
-          name: test_perf.json
+          name: test_perf${{ matrix.scheduler_placement && '_scheduler_placement' || '' }}.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf*.*
       - name: Generate perf charts
         if: always() && env.TEST_PREFIX != ''

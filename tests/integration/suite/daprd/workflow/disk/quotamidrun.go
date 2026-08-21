@@ -54,7 +54,12 @@ func (m *quotamidrun) Setup(t *testing.T) []framework.Option {
 			return nil, nil
 		}),
 		workflow.WithAddOrchestrator(t, "multiTimerFlow", func(ctx *task.WorkflowContext) (any, error) {
-			for range 5 {
+			// Enough iterations that timer jobs keep churning for the whole
+			// test: the healthz flip needs an armed timer job to straddle the
+			// quota-hit instant (its fire-side write is what the scheduler
+			// sees fail), and a workflow that completes before a slow fill
+			// finishes would leave healthz reporting 200 forever.
+			for range 300 {
 				if err := ctx.CreateTimer(time.Second).Await(nil); err != nil {
 					return nil, err
 				}
