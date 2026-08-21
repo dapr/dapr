@@ -125,7 +125,7 @@ func (d *disseminator) advancePhase(ctx context.Context) {
 	case v1pb.HostOperation_UNLOCK:
 		d.currentOperation = v1pb.HostOperation_REPORT
 		d.streamsInTargetState = 0
-		d.timeoutQ.Dequeue(d.currentVersion)
+		d.timeoutTimer.Dequeue(d.currentVersion)
 		log.Debugf("Dissemination of version %d in %s complete (via stream close)", d.currentVersion, d.namespace)
 
 		// Always arm the coalesce timer after a round completes when coalesceWindow > 0,
@@ -196,7 +196,7 @@ func (d *disseminator) processWaitingDisseminate(ctx context.Context, forceRound
 	}
 
 	d.currentVersion++
-	d.timeoutQ.Enqueue(d.currentVersion)
+	d.timeoutTimer.Enqueue(d.currentVersion)
 	d.currentOperation = v1pb.HostOperation_LOCK
 	d.streamsInTargetState = 0
 
@@ -252,7 +252,7 @@ func (d *disseminator) processWaitingDeletes() {
 	d.waitingToDelete = nil
 
 	d.currentVersion++
-	d.timeoutQ.Enqueue(d.currentVersion)
+	d.timeoutTimer.Enqueue(d.currentVersion)
 	d.currentOperation = v1pb.HostOperation_LOCK
 	d.streamsInTargetState = 0
 
