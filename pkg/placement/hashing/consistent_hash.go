@@ -24,7 +24,6 @@ package hashing
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"maps"
 	"math"
 	"slices"
@@ -291,7 +290,7 @@ func (c *Consistent) GetLeast(key string) (string, error) {
 	idx := c.search(h)
 
 	i := idx
-	for {
+	for range len(c.hosts) {
 		host := c.hosts[c.sortedSet[i]]
 		if c.loadOK(host) {
 			return host, nil
@@ -301,6 +300,8 @@ func (c *Consistent) GetLeast(key string) (string, error) {
 			i = 0
 		}
 	}
+
+	return "", ErrNoHosts
 }
 
 func (c *Consistent) search(key uint64) int {
@@ -334,6 +335,9 @@ func (c *Consistent) Inc(host string) {
 	c.Lock()
 	defer c.Unlock()
 
+	if _, ok := c.loadMap[host]; !ok {
+		return
+	}
 	atomic.AddInt64(&c.loadMap[host].Load, 1)
 	atomic.AddInt64(&c.totalLoad, 1)
 }
@@ -395,6 +399,9 @@ func (c *Consistent) GetLoads() map[string]int64 {
 // for more info:
 // https://research.googleblog.com/2017/04/consistent-hashing-with-bounded-loads.html
 func (c *Consistent) MaxLoad() int64 {
+	if len(c.loadMap) == 0 {
+		return 1
+	}
 	if c.totalLoad == 0 {
 		c.totalLoad = 1
 	}
@@ -422,7 +429,7 @@ func (c *Consistent) loadOK(host string) bool {
 
 	bhost, ok := c.loadMap[host]
 	if !ok {
-		panic(fmt.Sprintf("given host(%s) not in loadsMap", bhost.Name))
+		return false
 	}
 
 	if float64(bhost.Load)+1 <= avgLoadPerNode {
