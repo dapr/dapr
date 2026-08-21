@@ -1288,6 +1288,11 @@ func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, 
 		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["Daprtest-Response-2"][0])
 	_ = assert.NotEmpty(t, responseHeaders["Daprtest-Response-Multi"]) &&
 		assert.Equal(t, []string{"DaprTest-Response-Multi-1", "DaprTest-Response-Multi-2"}, responseHeaders["Daprtest-Response-Multi"])
+	_ = assert.NotEmpty(t, responseHeaders["Set-Cookie"]) &&
+		assert.Equal(t, []string{
+			"cookie1=value1; Path=/",
+			"cookie2=value2; Path=/",
+		}, responseHeaders["Set-Cookie"])
 	_ = assert.NotEmpty(t, responseHeaders["Traceparent"]) &&
 		assert.NotNil(t, responseHeaders["Traceparent"][0])
 }
