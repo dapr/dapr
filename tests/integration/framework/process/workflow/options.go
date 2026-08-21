@@ -46,6 +46,7 @@ type options struct {
 	skipDB          bool
 	mtls            bool
 	signingDisabled []int
+	clustered       *bool
 
 	orchestrators     []orchestratorConfig
 	activities        []activityConfig
@@ -126,6 +127,15 @@ func WithMTLS(t *testing.T) Option {
 func WithSigningDisabledN(index int) Option {
 	return func(o *options) {
 		o.signingDisabled = append(o.signingDisabled, index)
+	}
+}
+
+// WithClusteredDeployment explicitly enables or disables the
+// WorkflowsClusteredDeployment feature flag on every daprd in the workflow,
+// overriding the DAPR_INTEGRATION_WORKFLOW_CLUSTERED environment variable.
+func WithClusteredDeployment(enabled bool) Option {
+	return func(o *options) {
+		o.clustered = &enabled
 	}
 }
 
