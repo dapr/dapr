@@ -45,11 +45,6 @@ import (
 // unboundedly. Overflow stays pending and the taking turn re-drives.
 const maxFoldPerTurn = 128
 
-// foldWaitTimeout bounds how long a folding submit waits for its turn to
-// commit before nacking the sender into its retry loop. Generous: the wait
-// covers actor lock queueing plus a full turn including the app round trip.
-const foldWaitTimeout = 2 * time.Minute
-
 // foldEntry is one sender-retried completion held in memory awaiting its
 // folding turn. committed is closed exactly once when the entry resolves,
 // with err set first: nil after the turn's commit persisted the event into
@@ -116,7 +111,7 @@ func (o *orchestrator) invokeAddEventFold(ctx context.Context, req *internalsv1p
 			// flushed at deactivation.
 			diag.DefaultWorkflowMonitoring.WorkflowCompletionsFold(context.Background(), diag.StatusFoldNacked)
 			return nil, ctx.Err()
-		case <-time.After(foldWaitTimeout):
+		case <-time.After(o.foldWaitTimeout):
 			diag.DefaultWorkflowMonitoring.WorkflowCompletionsFold(context.Background(), diag.StatusFoldNacked)
 			return nil, wferrors.NewRecoverable(fmt.Errorf("workflow actor '%s': timed out waiting for the folding turn to commit", o.actorID))
 		case <-entry.committed:
@@ -125,7 +120,6 @@ func (o *orchestrator) invokeAddEventFold(ctx context.Context, req *internalsv1p
 			if err != nil {
 				return nil, err
 			}
-			diag.DefaultWorkflowMonitoring.WorkflowCompletionsFold(context.Background(), diag.StatusFolded)
 		}
 	}
 
@@ -288,10 +282,16 @@ func (o *orchestrator) foldEvents() []*backend.HistoryEvent {
 }
 
 // foldAck signals the taken entries' senders that the commit containing
-// their event succeeded.
+// their event succeeded, and records the folded outcome. The record lives
+// here, on the commit side, not with a waiter: a sender whose invocation
+// timed out before the folding turn committed is no longer waiting (its
+// redelivery is absorbed as a duplicate), and a retry that joined a pending
+// entry waits alongside the original, so waiter-side attribution both
+// undercounts and overcounts. Every committed entry folds exactly once.
 func foldAck(taken []*foldEntry) {
 	for _, p := range taken {
 		close(p.committed)
+		diag.DefaultWorkflowMonitoring.WorkflowCompletionsFold(context.Background(), diag.StatusFolded)
 	}
 }
 

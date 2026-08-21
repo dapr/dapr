@@ -303,3 +303,36 @@ func (o *orchestrator) deleteAllReminders(ctx context.Context) error {
 
 	return nil
 }
+
+// deleteStartReminder removes the pending start one-shot from the scheduler
+// once the turn that consumed the ExecutionStarted event has durably
+// committed.
+func (o *orchestrator) deleteStartReminder(startEvent *backend.HistoryEvent) {
+	name := events.EventReminderName(reminderPrefixStart, startEvent)
+
+	o.escLock.Lock()
+	rootCtx := o.rootCtx
+	if rootCtx.Err() != nil {
+		o.escLock.Unlock()
+		return
+	}
+	o.escWG.Add(1)
+	o.escLock.Unlock()
+
+	go func() {
+		defer o.escWG.Done()
+
+		ctx, cancel := context.WithTimeout(rootCtx, escalateTimeout)
+		defer cancel()
+
+		if err := o.reminders.Delete(ctx, &actorapi.DeleteReminderRequest{
+			Name:      name,
+			ActorType: o.actorTypeBuilder.Workflow(o.appID),
+			ActorID:   o.actorID,
+		}); err != nil {
+			if s, ok := grpcstatus.FromError(err); !ok || s.Code() != codes.NotFound {
+				log.Debugf("Workflow actor '%s': failed to delete pending start reminder '%s' (it will fire as a no-op): %v", o.actorID, name, err)
+			}
+		}
+	}()
+}
