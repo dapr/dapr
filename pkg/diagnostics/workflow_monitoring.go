@@ -89,6 +89,7 @@ const (
 	StatusFolded      = "folded"
 	StatusFoldNacked  = "fold_nacked"
 	StatusTerminated  = "terminated"
+	StatusCanceled    = "canceled"
 	StatusRecoverable = "recoverable"
 	CreateWorkflow    = "create_workflow"
 	GetWorkflow       = "get_workflow"

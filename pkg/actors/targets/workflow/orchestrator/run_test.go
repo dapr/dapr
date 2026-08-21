@@ -597,7 +597,7 @@ func Test_executionStatusForRuntimeStatus(t *testing.T) {
 		{"completed", api.RUNTIME_STATUS_COMPLETED, diag.StatusSuccess},
 		{"terminated", api.RUNTIME_STATUS_TERMINATED, diag.StatusTerminated},
 		{"failed", api.RUNTIME_STATUS_FAILED, diag.StatusFailed},
-		{"canceled falls back to failed", api.RUNTIME_STATUS_CANCELED, diag.StatusFailed},
+		{"canceled", api.RUNTIME_STATUS_CANCELED, diag.StatusCanceled},
 	}
 
 	for _, tt := range tests {
