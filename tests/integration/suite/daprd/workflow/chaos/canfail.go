@@ -49,6 +49,10 @@ type canfail struct {
 }
 
 func (c *canfail) Setup(t *testing.T) []framework.Option {
+	if workflow.FastPathFromEnv() {
+		t.Skip("WorkflowsFastPath drives the activity-result wake-up locally and never issues the per-event ScheduleJob this test arms a failure on")
+	}
+
 	c.scheduler = scheduler.New(t)
 	c.proxy = proxy.New(t, c.scheduler)
 

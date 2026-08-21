@@ -76,11 +76,16 @@ func (w *restart) Run(t *testing.T, ctx context.Context) {
 		)
 	}
 
+	// gate holds the completion turn hostage on daprd1 so the kill always
+	// wins the race against the fast-path drive; it is closed only once
+	// daprd1 is dead, making the lost wake (and janitor recovery) deterministic.
+	gate := make(chan struct{})
 	registry := task.NewTaskRegistry()
 	require.NoError(t, registry.AddWorkflowN("WaitForGo", func(c *task.WorkflowContext) (any, error) {
 		if err := c.WaitForSingleEvent("go", time.Minute*3).Await(new([]byte)); err != nil {
 			return nil, err
 		}
+		<-gate
 		return "done", nil
 	}))
 
@@ -125,6 +130,7 @@ func (w *restart) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 	daprd1.Cleanup(t)
+	close(gate)
 
 	daprd2 := newDaprd()
 	daprd2.Run(t, ctx)

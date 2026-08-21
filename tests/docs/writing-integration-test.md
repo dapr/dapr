@@ -51,6 +51,13 @@ mode. Tests can override this per workflow with
 on `workflow.ClusteredDeployment()`. CI runs the workflow suite in this mode as
 a leg of the `integration-tests-workflow-modes` matrix job.
 
+Setting `DAPR_INTEGRATION_WORKFLOW_FASTPATH=true` does the same for the
+`WorkflowsFastPath` preview feature, with `workflow.WithFastPath(bool)` as the
+per-test override and `workflow.FastPath()` for mode-specific assertions; it
+is the `fastpath` leg of the same matrix job. The mode variables compose: all
+harness-driven feature flags land in the single feature manifest the
+framework builds per daprd.
+
 ## Adding a new test
 
 To add a new test scenario, either create a new subject directory in

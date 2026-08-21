@@ -60,6 +60,10 @@ type savefirst struct {
 func (s *savefirst) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
+	if workflow.FastPathFromEnv() {
+		t.Skip("WorkflowsFastPath folds activity results into the turn commit, so the inbox-save fault injection premise no longer holds; the chaos scenario needs a redesign against the fold path")
+	}
+
 	s.store = fault.New(t)
 
 	sock := socket.New(t)
