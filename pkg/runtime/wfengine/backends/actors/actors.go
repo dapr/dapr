@@ -474,7 +474,7 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 		}
 
 		return backoff.Permanent(eerr)
-	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
+	}, backoff.WithContext(common.NewJitterBackoff(common.RetryBackoffBase, common.RetryBackoffCap), ctx))
 
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
