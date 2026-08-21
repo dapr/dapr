@@ -31,18 +31,22 @@ type Handler struct {
 }
 
 type Options struct {
-	Healthz  healthz.Healthz
-	Port     int
-	Log      logger.Logger
-	Handlers []Handler
+	Healthz healthz.Healthz
+	// ListenAddress is the address the server listens on. Empty means all
+	// interfaces.
+	ListenAddress string
+	Port          int
+	Log           logger.Logger
+	Handlers      []Handler
 }
 
 // Server is a healthz server.
 type Server struct {
-	log     logger.Logger
-	mux     http.Handler
-	port    int
-	htarget healthz.Target
+	log           logger.Logger
+	mux           http.Handler
+	listenAddress string
+	port          int
+	htarget       healthz.Target
 }
 
 // New returns a new healthz server.
@@ -78,16 +82,17 @@ func New(opts Options) *Server {
 	}
 
 	return &Server{
-		log:     opts.Log,
-		port:    opts.Port,
-		mux:     mux,
-		htarget: opts.Healthz.AddTarget("healthz-server"),
+		log:           opts.Log,
+		listenAddress: opts.ListenAddress,
+		port:          opts.Port,
+		mux:           mux,
+		htarget:       opts.Healthz.AddTarget("healthz-server"),
 	}
 }
 
 // Start starts a net/http server with a healthz endpoint.
 func (s *Server) Start(ctx context.Context) error {
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
+	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.listenAddress, s.port))
 	if err != nil {
 		return err
 	}
