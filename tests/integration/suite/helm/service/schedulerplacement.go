@@ -43,6 +43,8 @@ type schedulerplacement struct {
 	chartOn      *helm.Helm
 	chartOff     *helm.Helm
 	chartNoSched *helm.Helm
+	chartNoActor *helm.Helm
+	chartCustom  *helm.Helm
 }
 
 func (s *schedulerplacement) Setup(t *testing.T) []framework.Option {
@@ -62,8 +64,18 @@ func (s *schedulerplacement) Setup(t *testing.T) []framework.Option {
 		helm.WithExpectFailure(),
 	)
 
+	s.chartNoActor = helm.New(t,
+		helm.WithValues("global.scheduler.placement.enabled=true", "global.actors.enabled=false"),
+		helm.WithExpectFailure(),
+	)
+	s.chartCustom = helm.New(t,
+		helm.WithValues("global.scheduler.placement.enabled=true", "global.actors.serviceName=scheduler"),
+		helm.WithExpectFailure(),
+	)
+
 	return []framework.Option{
-		framework.WithProcesses(s.schedulerOff, s.schedulerOn, s.chartOn, s.chartOff, s.chartNoSched),
+		framework.WithProcesses(s.schedulerOff, s.schedulerOn, s.chartOn, s.chartOff,
+			s.chartNoSched, s.chartNoActor, s.chartCustom),
 	}
 }
 
@@ -114,6 +126,18 @@ func (s *schedulerplacement) Run(t *testing.T, ctx context.Context) {
 		bs, err := io.ReadAll(s.chartNoSched.Stderr(t))
 		require.NoError(t, err)
 		assert.Contains(t, string(bs), "global.scheduler.placement.enabled requires global.scheduler.enabled")
+	})
+
+	t.Run("the value without actors is rejected", func(t *testing.T) {
+		bs, err := io.ReadAll(s.chartNoActor.Stderr(t))
+		require.NoError(t, err)
+		assert.Contains(t, string(bs), "global.scheduler.placement.enabled requires global.actors.enabled")
+	})
+
+	t.Run("the value with another actor service is rejected", func(t *testing.T) {
+		bs, err := io.ReadAll(s.chartCustom.Stderr(t))
+		require.NoError(t, err)
+		assert.Contains(t, string(bs), "global.scheduler.placement.enabled requires global.actors.serviceName=placement")
 	})
 
 	t.Run("placement derives the scheduler address itself", func(t *testing.T) {

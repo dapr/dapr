@@ -192,7 +192,7 @@ func TestInheritedStandDownStandsUp(t *testing.T) {
 		}),
 		OnStandUp: func() { ups++ },
 	})
-	s.Inherit()
+	require.True(t, s.Inherit())
 	require.True(t, s.Active())
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -202,4 +202,39 @@ func TestInheritedStandDownStandsUp(t *testing.T) {
 	hosts <- []*schedulerv1pb.Host{{Address: "a:1"}}
 	require.Eventually(t, func() bool { return !s.Active() }, time.Second*10, time.Millisecond*10)
 	assert.Equal(t, 1, ups)
+}
+
+// TestInheritAfterRollbackObservation asserts a stand-down inherited after
+// the schedulers were already observed not serving placement is refused, so
+// the caller revokes it rather than standing down with no way back.
+func TestInheritAfterRollbackObservation(t *testing.T) {
+	t.Parallel()
+
+	sched := schedulerfake.New(t).WithWatchHosts(func(_ *schedulerv1pb.WatchHostsRequest, stream schedulerv1pb.Scheduler_WatchHostsServer) error {
+		if err := stream.Send(&schedulerv1pb.WatchHostsResponse{Hosts: []*schedulerv1pb.Host{{Address: "a:1"}}}); err != nil {
+			return err
+		}
+		<-stream.Context().Done()
+		return stream.Context().Err()
+	})
+
+	s := New(Options{
+		Addresses: []string{sched.Address()},
+		Security: fake.New().WithGRPCDialOptionMTLSFn(func(spiffeid.ID) grpc.DialOption {
+			return grpc.WithTransportCredentials(insecure.NewCredentials())
+		}),
+	})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	go s.Run(ctx)
+
+	select {
+	case <-s.FirstObservation():
+	case <-time.After(time.Second * 10):
+		require.Fail(t, "no observation")
+	}
+
+	assert.False(t, s.Inherit())
+	assert.False(t, s.Active())
 }

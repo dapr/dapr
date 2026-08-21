@@ -184,15 +184,17 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) {
 	c.streams[streamIDx] = &streamConn{loop: streamLoop}
 
 	changed := c.store.Set(streamIDx, add.Initial)
+	c.markPending(changed)
 
-	// Push the current full table to the new stream so it can route actor
-	// invocations immediately, outside of any cluster wide round. The
-	// sidecar is not ready until it has a table entry for every actor type
-	// it hosts, which arrives either here or via the round its own report
-	// triggers below.
+	// Push the disseminated tables to the new stream so it can route actor
+	// invocations immediately, outside of any cluster wide round. Only types
+	// with no pending or in-flight change are pushed, as every other sidecar
+	// holds exactly those tables: a newer table on the newcomer alone could
+	// place one actor on two hosts. The rest, including the newcomer's own
+	// types, arrive through the round its report triggers below, which
+	// locks every sidecar together.
 	c.sendSnapshot(streamIDx)
 
-	c.markPending(changed)
 	c.maybeDisseminate()
 }
 
@@ -290,8 +292,15 @@ func (c *connections) sendSnapshot(streamIDx uint64) {
 	c.oneshots[seq] = streamIDx
 
 	versions := make(map[string]uint64, len(c.versions))
-	types := c.store.Types()
-	for _, t := range types {
+	var types []string
+	for _, t := range c.store.Types() {
+		if _, pending := c.pendingTypes[t]; pending {
+			continue
+		}
+		if _, locked := c.lockedTypes[t]; locked {
+			continue
+		}
+		types = append(types, t)
 		versions[t] = c.versions[t]
 	}
 

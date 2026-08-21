@@ -184,9 +184,14 @@ func (s *Server) Run(ctx context.Context) error {
 			if serr != nil {
 				return serr
 			}
+			// The stand-down is stale when the schedulers were already
+			// observed not serving placement: it is revoked instead.
+			inherited := false
 			if stood {
+				inherited = s.standdown.Inherit()
+			}
+			if inherited {
 				s.standingDown.Store(true)
-				s.standdown.Inherit()
 				s.loop.Enqueue(&loops.StandDown{
 					Error: standDownErr(),
 					Done:  func() {},
@@ -199,10 +204,12 @@ func (s *Server) Run(ctx context.Context) error {
 			monitoring.RecordRaftPlacementLeaderStatus(true)
 
 			switch {
-			case stood:
+			case inherited:
 				// The previous leader may have died before the confirmation
 				// was delivered.
 				go s.standdown.Confirm(ctx)
+			case stood:
+				go s.commitServe(ctx)
 			case s.standingDown.Load():
 				// The watcher stood this pod down before it had leadership,
 				// so the commit and confirmation could not happen then.

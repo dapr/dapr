@@ -64,6 +64,13 @@ type StandDown struct {
 	active    atomic.Bool
 	announced atomic.Bool
 
+	// mu serializes stand-down transitions with the latest observation:
+	// observed is set once a scheduler answered, serves records whether
+	// that answer showed a scheduler serving placement.
+	mu       sync.Mutex
+	observed bool
+	serves   bool
+
 	// firstObservation is closed after the first watch attempt completes,
 	// so a placement service restarting after a cutover cannot serve before
 	// one look at the advertisement. Failure closes it too, since an
@@ -88,9 +95,17 @@ func (s *StandDown) Active() bool {
 }
 
 // Inherit records a stand-down committed before this process served, so a
-// rollback revokes it like one this watcher observed.
-func (s *StandDown) Inherit() {
+// rollback revokes it like one this watcher observed. It returns false when
+// the schedulers were already observed not serving placement: the stand-down
+// is stale and the caller revokes it instead.
+func (s *StandDown) Inherit() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.observed && !s.serves {
+		return false
+	}
 	s.active.Store(true)
+	return true
 }
 
 // FirstObservation is closed once the first watch attempt completed.
@@ -212,22 +227,26 @@ func (s *StandDown) watch(ctx context.Context, address string, schedulerID spiff
 			serves = serves || host.GetSchedulerPlacementEnabled()
 		}
 
+		s.mu.Lock()
+		s.observed = true
+		s.serves = serves
+		var transition func()
 		switch {
 		case cutover && !s.active.Load():
 			s.active.Store(true)
+			transition = s.onStandDown
 			log.Warn("A scheduler signalled the actor placement cutover: this placement service is standing down. Sidecars too old for scheduler placement will be refused: upgrade them.")
-			if s.onStandDown != nil {
-				s.onStandDown()
-			}
 		case !serves && len(resp.GetHosts()) > 0 && s.active.Load():
 			// The schedulers rolled back: none serves placement, so the
 			// stand-down no longer binds.
 			s.active.Store(false)
 			s.announced.Store(false)
+			transition = s.onStandUp
 			log.Warn("The schedulers no longer serve actor placement: this placement service is serving again.")
-			if s.onStandUp != nil {
-				s.onStandUp()
-			}
+		}
+		s.mu.Unlock()
+		if transition != nil {
+			transition()
 		}
 		s.completeFirstObservation()
 

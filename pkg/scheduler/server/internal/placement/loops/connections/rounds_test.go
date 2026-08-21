@@ -286,3 +286,36 @@ func TestOneshotAcksAreNotRoundAcks(t *testing.T) {
 	assert.Empty(t, c.oneshots)
 	assert.Empty(t, c.rounds)
 }
+
+// TestSnapshotExcludesUndisseminatedTypes asserts a join snapshot carries
+// only types every sidecar already holds: a type locked by an in-flight
+// round or pending a round is left to that round, so the newcomer never
+// routes on a table nobody else has.
+func TestSnapshotExcludesUndisseminatedTypes(t *testing.T) {
+	t.Parallel()
+
+	c := newTest(t)
+	c.addFakeStream(0)
+
+	// stable is fully disseminated, inflight is locked by a round, pending
+	// is changed but waiting for one.
+	c.report(0, "stable")
+	c.ack(0, 1, schedulerv1pb.Operation_OPERATION_LOCK)
+	c.ack(0, 1, schedulerv1pb.Operation_OPERATION_UPDATE)
+	c.ack(0, 1, schedulerv1pb.Operation_OPERATION_UNLOCK)
+	require.Empty(t, c.lockedTypes)
+
+	c.report(0, "stable", "inflight")
+	require.Contains(t, c.lockedTypes, "inflight")
+	c.pendingTypes["pending"] = struct{}{}
+
+	fs := c.addFakeStream(1)
+	c.sendSnapshot(1)
+
+	require.NotEmpty(t, fs.sent)
+	snap, ok := fs.sent[len(fs.sent)-1].(*loops.SendSnapshot)
+	require.True(t, ok, "expected SendSnapshot, got %T", fs.sent[len(fs.sent)-1])
+	assert.Contains(t, snap.Versions, "stable")
+	assert.NotContains(t, snap.Versions, "inflight")
+	assert.NotContains(t, snap.Versions, "pending")
+}
