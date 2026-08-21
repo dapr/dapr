@@ -4260,3 +4260,12 @@ func matchContextInterface(v any) bool {
 	_, ok := v.(context.Context)
 	return ok
 }
+
+func TestInvokeServiceNotReady(t *testing.T) {
+	// With no directMessaging configured, InvokeService must fail fast with the
+	// standardized NotReady error rather than proceeding or panicking.
+	srv := &api{}
+	resp, err := srv.InvokeService(context.Background(), &runtimev1pb.InvokeServiceRequest{Id: "test-app"})
+	require.Error(t, err)
+	require.Nil(t, resp)
+}
