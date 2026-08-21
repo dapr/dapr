@@ -103,7 +103,7 @@ func (w *workflows) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	assert.ElementsMatch(t, []*daprd.MetadataActorRuntimeActiveActor{
+	expected := []*daprd.MetadataActorRuntimeActiveActor{
 		{
 			Type:  "dapr.internal.default." + w.workflow.Dapr().AppID() + ".workflow",
 			Count: 2,
@@ -124,5 +124,12 @@ func (w *workflows) Run(t *testing.T, ctx context.Context) {
 			Type:  "myothertype",
 			Count: 1,
 		},
-	}, w.workflow.Dapr().GetMetaActorRuntime(t, ctx).ActiveActors)
+	}
+	if w.workflow.ClusteredDeployment() {
+		expected = append(expected, &daprd.MetadataActorRuntimeActiveActor{
+			Type:  "dapr.internal.default." + w.workflow.Dapr().AppID() + ".executor",
+			Count: 0,
+		})
+	}
+	assert.ElementsMatch(t, expected, w.workflow.Dapr().GetMetaActorRuntime(t, ctx).ActiveActors)
 }
