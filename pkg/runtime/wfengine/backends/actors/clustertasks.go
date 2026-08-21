@@ -166,35 +166,6 @@ func (be *ClusterTasksBackend) cancelTask(ctx context.Context, taskType, key str
 	return err
 }
 
-func (be *ClusterTasksBackend) WaitForActivityCompletion(req *protos.ActivityRequest) func(context.Context) (*protos.ActivityResponse, error) {
-	key := common.ActivityActorID(
-		req.GetWorkflowInstance().GetInstanceId(),
-		req.GetTaskId(),
-	)
-
-	wait := be.waitForCompletion(executor.TaskTypeActivity, key)
-
-	return func(ctx context.Context) (*protos.ActivityResponse, error) {
-		var resp protos.ActivityResponse
-		if err := wait(ctx, &resp); err != nil {
-			return nil, err
-		}
-		return &resp, nil
-	}
-}
-
-func (be *ClusterTasksBackend) WaitForWorkflowTaskCompletion(req *protos.WorkflowRequest) func(context.Context) (*protos.WorkflowResponse, error) {
-	wait := be.waitForCompletion(executor.TaskTypeWorkflow, req.GetInstanceId())
-
-	return func(ctx context.Context) (*protos.WorkflowResponse, error) {
-		var resp protos.WorkflowResponse
-		if err := wait(ctx, &resp); err != nil {
-			return nil, err
-		}
-		return &resp, nil
-	}
-}
-
 // OnActivityCompletion implements backend.CompletionCallbackBackend.
 func (be *ClusterTasksBackend) OnActivityCompletion(req *protos.ActivityRequest, cb func(*protos.ActivityResponse, error)) func() {
 	key := common.ActivityActorID(
@@ -275,78 +246,6 @@ func (be *ClusterTasksBackend) onCompletion(taskType, key string, newMsg func() 
 		cb(m, be.watchCompletion(wctx, taskType, key, m))
 	}()
 	return wcancel
-}
-
-// waitForCompletion returns a function that registers a waiter for key in
-// the process-local pending map and blocks until the completion is
-// delivered. Registration happens when the returned function is invoked, not
-// when it is constructed: durabletask may abandon the work item between
-// constructing the waiter and invoking it (context cancellation during
-// dispatch), and an entry registered eagerly would leak and swallow a later
-// completion for the same key. The window this opens (a completion reported
-// before the returned function runs) is real: the work item is dispatched
-// before the returned function runs, so a fast application round trip can
-// report the completion first. Such a completion parks on the co-located
-// executor actor and is drained by the claim call made right after
-// registration on the wait_local path below.
-//
-// The pending map is only consulted by completions arriving on this daprd or
-// forwarded here by the executor actor, so blocking on it is only correct
-// when placement resolves the executor actor for key to this host. That is
-// the steady state by construction (the executor actor ID equals the
-// waiter's actor ID); when it does not hold, the waiter deregisters and falls
-// back to a watch stream on the executor actor, wherever it is placed.
-func (be *ClusterTasksBackend) waitForCompletion(taskType, key string) func(context.Context, proto.Message) error {
-	return func(ctx context.Context, resp proto.Message) error {
-		waitCh, deregister := be.pending.Register(executor.PendingKey(taskType, key))
-		defer deregister()
-
-		if be.executorLocal(ctx, key) {
-			diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteWaitLocal)
-
-			// The completion RPC can win the race with the Register above:
-			// finding no waiter, it parks the payload on the co-located
-			// executor actor, which the pending map never consults, and the
-			// select below would block forever (the durable reminder retry
-			// cannot redispatch, because the reminder invocation is this
-			// blocked call chain). Register-then-claim pairs with the
-			// executor actor's deliver-then-park so whichever order the race
-			// resolves in, one side observes the other. A claim error is
-			// returned rather than waited out: the work item is abandoned and
-			// the durable retry converges.
-			if done, err := be.claimParked(ctx, taskType, key, resp); done || err != nil {
-				return err
-			}
-
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case res := <-waitCh:
-				if res.Cancelled {
-					return api.ErrTaskCancelled
-				}
-				return proto.Unmarshal(res.Data, resp)
-			}
-		}
-
-		// A completion may already have been delivered into the local map
-		// between registration and this fallback decision; deregister
-		// (delivery and deregistration are serialized, so nothing can be
-		// delivered afterwards) and drain before watching.
-		deregister()
-		select {
-		case res := <-waitCh:
-			if res.Cancelled {
-				return api.ErrTaskCancelled
-			}
-			return proto.Unmarshal(res.Data, resp)
-		default:
-		}
-
-		diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteWaitWatch)
-
-		return be.watchCompletion(ctx, taskType, key, resp)
-	}
 }
 
 // claimParked drains a completion or cancellation for key that was parked on
