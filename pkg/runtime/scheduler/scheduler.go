@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
@@ -56,6 +57,11 @@ type Scheduler struct {
 	client     client.Interface
 
 	currentActorTypes *[]string
+
+	// mu guards access to currentActorTypes, which is written by StartApp/
+	// StopApp (app-health goroutine) and read/dereferenced by ReloadActorTypes
+	// (placement disseminator goroutine). See dapr/dapr#10352.
+	mu sync.RWMutex
 }
 
 func New(opts Options) (*Scheduler, error) {
@@ -116,14 +122,18 @@ func (s *Scheduler) Run(ctx context.Context) error {
 }
 
 func (s *Scheduler) StartApp() {
+	s.mu.Lock()
 	s.currentActorTypes = nil
+	s.mu.Unlock()
 	s.connector.Enqueue(&loops.Reconnect{
 		AppTarget: new(true),
 	})
 }
 
 func (s *Scheduler) StopApp() {
+	s.mu.Lock()
 	s.currentActorTypes = nil
+	s.mu.Unlock()
 	s.connector.Enqueue(&loops.Reconnect{
 		AppTarget: new(false),
 	})
@@ -132,11 +142,16 @@ func (s *Scheduler) StopApp() {
 func (s *Scheduler) ReloadActorTypes(actorTypes []string) {
 	slices.Sort(actorTypes)
 
-	if s.currentActorTypes != nil && slices.Equal(*s.currentActorTypes, actorTypes) {
+	s.mu.RLock()
+	equal := s.currentActorTypes != nil && slices.Equal(*s.currentActorTypes, actorTypes)
+	s.mu.RUnlock()
+	if equal {
 		return
 	}
 
+	s.mu.Lock()
 	s.currentActorTypes = new(actorTypes)
+	s.mu.Unlock()
 	s.connector.Enqueue(&loops.Reconnect{
 		ActorTypes: new(actorTypes),
 	})
