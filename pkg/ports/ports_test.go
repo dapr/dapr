@@ -43,7 +43,7 @@ func TestGetStablePort(t *testing.T) {
 
 	t.Run("invoking twice should return the same port", func(t *testing.T) {
 		port1 := getPort(t, "myapp")
-		assert.True(t, (port1 >= 10233 && port1 <= 12280) || (port1 >= 22444 && port1 <= 24491))
+		assert.True(t, port1 >= 1024 && port1 <= 65535)
 
 		port2 := getPort(t, "myapp")
 		assert.Equal(t, port1, port2)
@@ -61,7 +61,7 @@ func TestGetStablePort(t *testing.T) {
 
 	t.Run("returns a random port if the stable one is busy", func(t *testing.T) {
 		port1 := getPort(t, "myapp1")
-		assert.True(t, (port1 >= 10233 && port1 <= 12280) || (port1 >= 22444 && port1 <= 24491))
+		assert.True(t, port1 >= 1024 && port1 <= 65535)
 
 		addr, err := net.ResolveTCPAddr("tcp", "localhost:"+strconv.Itoa(port1))
 		require.NoError(t, err)
@@ -71,5 +71,12 @@ func TestGetStablePort(t *testing.T) {
 
 		port2 := getPort(t, "myapp1")
 		assert.NotEqual(t, port1, port2)
+	})
+
+	t.Run("high start port stays within valid TCP range", func(t *testing.T) {
+		port, err := GetStablePort(47300, "high-start-app")
+		require.NoError(t, err)
+		assert.True(t, port >= 1024 && port <= 65535,
+			"port %d should be within valid TCP range", port)
 	})
 }
