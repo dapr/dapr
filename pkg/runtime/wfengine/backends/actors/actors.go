@@ -155,12 +155,7 @@ type Actors struct {
 	stopped atomic.Bool
 }
 
-// The completion-callback assertion is what flips the durabletask worker's
-// canExecuteAsync gate.
-var (
-	_ backend.Backend                   = (*Actors)(nil)
-	_ backend.CompletionCallbackBackend = (*Actors)(nil)
-)
+var _ backend.Backend = (*Actors)(nil)
 
 func New(opts Options) (*Actors, error) {
 	var pendingTasksBackend PendingTasksBackend
@@ -479,7 +474,7 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 		}
 
 		return backoff.Permanent(eerr)
-	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
+	}, backoff.WithContext(common.NewJitterBackoff(common.RetryBackoffBase, common.RetryBackoffCap), ctx))
 
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
@@ -1037,37 +1032,6 @@ func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
 			backoff.WithMaxInterval(3*time.Second),
 			backoff.WithRandomizationFactor(0.3),
 		), ctx))
-}
-
-// WaitForActivityCompletion implements backend.Backend. The registration is
-// mirrored into activityExecs so the activity target's stale-claim eviction
-// can see the work item as engine-held for the duration of the wait.
-func (abe *Actors) WaitForActivityCompletion(request *protos.ActivityRequest) func(context.Context) (*protos.ActivityResponse, error) {
-	wait := abe.pendingTasksBackend.WaitForActivityCompletion(request)
-	key := activityExecutionKey(request.GetWorkflowInstance().GetInstanceId(), request.GetTaskId())
-	return func(ctx context.Context) (*protos.ActivityResponse, error) {
-		// Register inside the wait so the held-liveness lifetime matches the
-		// actual wait: durabletask can abandon a work item without ever
-		// invoking the waiter, and a construction-time registration would
-		// then leak, blinding stale-claim eviction for this key forever.
-		release := abe.activityExecs.add(key)
-		defer release()
-		resp, err := wait(ctx)
-		if err == nil {
-			// Handshake with the owner execution: mark its call resolving
-			// BEFORE the deferred release drops the held registration. The
-			// callback channel to the owner is a separate scheduling hop,
-			// and in that gap a stale-claim check would otherwise see
-			// not-held + not-resolving and evict a healthy execution.
-			abe.activityExecs.resolve(key)
-		}
-		return resp, err
-	}
-}
-
-// WaitForWorkflowTaskCompletion implements backend.Backend.
-func (abe *Actors) WaitForWorkflowTaskCompletion(request *protos.WorkflowRequest) func(context.Context) (*protos.WorkflowResponse, error) {
-	return abe.pendingTasksBackend.WaitForWorkflowTaskCompletion(request)
 }
 
 // OnActivityCompletion implements backend.CompletionCallbackBackend, flipping

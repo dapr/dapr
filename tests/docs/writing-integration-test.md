@@ -43,6 +43,14 @@ logs to always be printed with the environment variable
 
 You can override the directory that is used to read the CRD definitions that are served by the Kubernetes process with the environment variable `DAPR_INTEGRATION_CRD_DIRECTORY`.
 
+Setting `DAPR_INTEGRATION_WORKFLOW_CLUSTERED=true` enables the
+`WorkflowsClusteredDeployment` preview feature on every daprd built by the
+workflow test framework, running the workflow suite in clustered deployment
+mode. Tests can override this per workflow with
+`workflow.WithClusteredDeployment(bool)`, and branch mode-specific assertions
+on `workflow.ClusteredDeployment()`. CI runs the workflow suite in this mode as
+a leg of the `integration-tests-workflow-modes` matrix job.
+
 ## Adding a new test
 
 To add a new test scenario, either create a new subject directory in
