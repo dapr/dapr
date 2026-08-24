@@ -36,12 +36,15 @@ type reminderCreator interface {
 const reminderCreateMaxElapsedTime = time.Minute
 
 // CreateReminderWithRetry calls reminders.Create with bounded exponential
-// backoff. Only transient gRPC errors are retried (e.g. scheduler pod
-// failover surfacing as Unavailable); permanent errors such as etcd
-// "database space exceeded" (ResourceExhausted) or invalid arguments are
-// returned to the caller immediately. Without that distinction a permanent
-// failure would burn the entire retry budget before surfacing the original
-// error, masking the real cause and tripping caller deadlines.
+// backoff. Every error is retried except a context error or a
+// clearly-permanent request error (see isPermanentCreateError). The create is
+// often the only signal that will ever advance durable state committed just
+// before it (a workflow's start, timer, or activity reminder), so dropping an
+// unrecognised-but-transient error strands that state forever: the scheduler
+// surfaces its shutdown errors ("cron is closed") and etcd errors as plain
+// errors that cross the wire as Unknown, and no allowlist of codes can
+// anticipate every such case. A genuinely permanent error outside the
+// denylist costs at most the bounded budget before surfacing.
 func CreateReminderWithRetry(ctx context.Context, r reminderCreator, req *actorapi.CreateReminderRequest) error {
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = 100 * time.Millisecond
@@ -53,31 +56,11 @@ func CreateReminderWithRetry(ctx context.Context, r reminderCreator, req *actora
 			return backoff.Permanent(err)
 		}
 		err := r.Create(ctx, req)
-		if err != nil && !isTransientCreateError(err) {
+		if err != nil && isPermanentCreateError(err) {
 			return backoff.Permanent(err)
 		}
 		return err
 	}, backoff.WithContext(bo, ctx))
-}
-
-// isTransientCreateError reports whether a reminder Create error should be
-// retried. The retry exists to mask short scheduler-pod failovers, where
-// the gRPC client surfaces Unavailable (connection lost) or DeadlineExceeded
-// (per-call timeout) for the brief window before a new pod accepts the
-// connection. Anything outside that allowlist (ResourceExhausted, invalid
-// argument, permission denied, etc.) is a server-side decision that
-// retrying will not change, so we surface it immediately.
-func isTransientCreateError(err error) bool {
-	s, ok := status.FromError(err)
-	if !ok {
-		return false
-	}
-	switch s.Code() {
-	case codes.Unavailable, codes.DeadlineExceeded:
-		return true
-	default:
-		return false
-	}
 }
 
 // CreateReminderWithRetryForever calls reminders.Create and retries on every
@@ -105,8 +88,9 @@ func CreateReminderWithRetryForever(ctx context.Context, r reminderCreator, req 
 // isPermanentCreateError reports whether a reminder Create error is a
 // client-side mistake that retrying can never fix (malformed request, missing
 // auth, unimplemented method). Everything else: Unavailable, DeadlineExceeded,
-// Internal, Aborted, Unknown, ResourceExhausted (transient etcd pressure),
-// etc. is treated as retryable by CreateReminderWithRetryForever, because the
+// Internal, Aborted, ResourceExhausted, and notably Unknown (the code carried
+// by the scheduler's plain-error returns, including cron shutdown and etcd
+// errors), is treated as retryable by both retry helpers, because the
 // scheduler may recover and the create is an idempotent overwrite-by-name.
 func isPermanentCreateError(err error) bool {
 	s, ok := status.FromError(err)
