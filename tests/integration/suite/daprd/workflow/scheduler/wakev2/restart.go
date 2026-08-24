@@ -124,7 +124,7 @@ func (w *restart) Run(t *testing.T, ctx context.Context) {
 		EventName:         "go",
 	})
 	require.NoError(t, err)
-	daprd1.Cleanup(t)
+	daprd1.Kill(t)
 
 	daprd2 := newDaprd()
 	daprd2.Run(t, ctx)

@@ -21,35 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_registerDeliver(t *testing.T) {
-	t.Parallel()
-
-	p := New()
-	ch, dereg := p.Register("a/1")
-	t.Cleanup(dereg)
-
-	require.True(t, p.Deliver("a/1", []byte("result")))
-
-	res := <-ch
-	assert.Equal(t, []byte("result"), res.Data)
-	assert.False(t, res.Cancelled)
-	assert.Equal(t, 0, p.Len())
-}
-
-func Test_registerCancel(t *testing.T) {
-	t.Parallel()
-
-	p := New()
-	ch, dereg := p.Register("a/1")
-	t.Cleanup(dereg)
-
-	require.True(t, p.Cancel("a/1"))
-
-	res := <-ch
-	assert.True(t, res.Cancelled)
-	assert.Equal(t, 0, p.Len())
-}
-
 func Test_deliverNoWaiter(t *testing.T) {
 	t.Parallel()
 
@@ -58,56 +29,31 @@ func Test_deliverNoWaiter(t *testing.T) {
 	assert.False(t, p.Cancel("a/1"))
 }
 
-func Test_deliverAfterDeregister(t *testing.T) {
-	t.Parallel()
-
-	p := New()
-	_, dereg := p.Register("a/1")
-	dereg()
-
-	assert.False(t, p.Deliver("a/1", []byte("result")))
-	assert.Equal(t, 0, p.Len())
-}
-
-func Test_duplicateDeliver(t *testing.T) {
-	t.Parallel()
-
-	p := New()
-	ch, dereg := p.Register("a/1")
-	t.Cleanup(dereg)
-
-	require.True(t, p.Deliver("a/1", []byte("first")))
-	assert.False(t, p.Deliver("a/1", []byte("second")))
-
-	res := <-ch
-	assert.Equal(t, []byte("first"), res.Data)
-}
-
 func Test_registerReplacesAndCancelsPrevious(t *testing.T) {
 	t.Parallel()
 
 	p := New()
-	ch1, dereg1 := p.Register("a/1")
-	ch2, dereg2 := p.Register("a/1")
+	var first, second *Result
+	dereg1 := p.RegisterCallback("a/1", func(res Result) { first = &res })
+	dereg2 := p.RegisterCallback("a/1", func(res Result) { second = &res })
 	t.Cleanup(dereg1)
 	t.Cleanup(dereg2)
 
-	res := <-ch1
-	assert.True(t, res.Cancelled, "superseded waiter must be cancelled")
+	require.NotNil(t, first)
+	assert.True(t, first.Cancelled, "superseded waiter must be cancelled")
 
 	require.True(t, p.Deliver("a/1", []byte("result")))
-	res = <-ch2
-	assert.Equal(t, []byte("result"), res.Data)
+	require.NotNil(t, second)
+	assert.Equal(t, []byte("result"), second.Data)
 }
 
 func Test_staleDeregisterDoesNotRemoveNewWaiter(t *testing.T) {
 	t.Parallel()
 
 	p := New()
-	ch1, dereg1 := p.Register("a/1")
-	_, dereg2 := p.Register("a/1")
+	dereg1 := p.RegisterCallback("a/1", func(Result) {})
+	dereg2 := p.RegisterCallback("a/1", func(Result) {})
 	t.Cleanup(dereg2)
-	<-ch1
 
 	dereg1()
 	assert.Equal(t, 1, p.Len(), "stale deregister must not remove the new waiter")
@@ -178,19 +124,6 @@ func Test_callbackDeliverDeferred(t *testing.T) {
 	assert.Equal(t, []byte("result"), got.Data)
 }
 
-func Test_channelDeliverDeferred(t *testing.T) {
-	t.Parallel()
-
-	p := New()
-	ch, dereg := p.Register("a/1")
-	t.Cleanup(dereg)
-
-	run, ok := p.DeliverDeferred("a/1", []byte("result"))
-	require.True(t, ok)
-	assert.Nil(t, run, "channel waiter delivery completes in place")
-	assert.Equal(t, []byte("result"), (<-ch).Data)
-}
-
 func Test_registerCallbackReplacesAndCancelsPrevious(t *testing.T) {
 	t.Parallel()
 
@@ -199,14 +132,16 @@ func Test_registerCallbackReplacesAndCancelsPrevious(t *testing.T) {
 	_ = p.RegisterCallback("a/1", func(res Result) {
 		got = &res
 	})
-	ch, dereg := p.Register("a/1")
+	var second *Result
+	dereg := p.RegisterCallback("a/1", func(res Result) { second = &res })
 	t.Cleanup(dereg)
 
 	require.NotNil(t, got, "superseded callback waiter must be cancelled on the registering goroutine")
 	assert.True(t, got.Cancelled)
 
 	require.True(t, p.Deliver("a/1", []byte("result")))
-	assert.Equal(t, []byte("result"), (<-ch).Data)
+	require.NotNil(t, second)
+	assert.Equal(t, []byte("result"), second.Data)
 }
 
 func Test_callbackDeregisterPreventsDelivery(t *testing.T) {
@@ -253,7 +188,13 @@ func Test_concurrent(t *testing.T) {
 	for i := range 100 {
 		wg.Add(2)
 		key := string(rune('a'+i%26)) + "/" + string(rune('0'+i%10))
-		ch, dereg := p.Register(key)
+		delivered := make(chan struct{}, 1)
+		dereg := p.RegisterCallback(key, func(Result) {
+			select {
+			case delivered <- struct{}{}:
+			default:
+			}
+		})
 		go func() {
 			defer wg.Done()
 			p.Deliver(key, []byte("x"))
@@ -261,7 +202,7 @@ func Test_concurrent(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			defer dereg()
-			<-ch
+			<-delivered
 		}()
 	}
 	wg.Wait()
