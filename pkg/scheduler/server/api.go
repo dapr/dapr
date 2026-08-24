@@ -22,6 +22,7 @@ import (
 	apierrors "github.com/diagridio/go-etcd-cron/api/errors"
 
 	"github.com/diagridio/go-etcd-cron/api"
+	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -67,6 +68,13 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		monitoring.RecordJobsCreatedFailedCount(req.GetMetadata())
 		if apierrors.IsJobAlreadyExists(err) {
 			return nil, status.Errorf(codes.AlreadyExists, "%s", err.Error())
+		}
+		// The etcd client's NOSPACE error does not implement GRPCStatus, so
+		// returning it as-is crosses the wire as Unknown, indistinguishable
+		// from transient failures like cron shutdown. Restore the code etcd
+		// itself uses so clients can classify quota exhaustion as permanent.
+		if errors.Is(err, rpctypes.ErrNoSpace) || errors.Is(err, rpctypes.ErrGRPCNoSpace) {
+			return nil, status.Errorf(codes.ResourceExhausted, "%s", err.Error())
 		}
 
 		return nil, err
