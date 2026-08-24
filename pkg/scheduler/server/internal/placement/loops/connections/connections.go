@@ -190,10 +190,11 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) {
 	// invocations immediately, outside of any cluster wide round. Only types
 	// with no pending or in-flight change are pushed, as every other sidecar
 	// holds exactly those tables: a newer table on the newcomer alone could
-	// place one actor on two hosts. The rest, including the newcomer's own
-	// types, arrive through the round its report triggers below, which
-	// locks every sidecar together.
-	c.sendSnapshot(streamIDx)
+	// place one actor on two hosts. Pending types reach it through their
+	// coming round. Types locked by an in-flight round, which fixed its
+	// members before this stream joined, are marked pending so a follow-up
+	// round delivers them.
+	c.markPending(c.sendSnapshot(streamIDx))
 
 	c.maybeDisseminate()
 }
@@ -282,22 +283,25 @@ func (c *connections) handleShutdown(shutdown *loops.Shutdown) {
 	c.timeoutQ.Close()
 }
 
-func (c *connections) sendSnapshot(streamIDx uint64) {
+// sendSnapshot pushes the disseminated tables to one stream and returns the
+// types it skipped because an in-flight round holds them.
+func (c *connections) sendSnapshot(streamIDx uint64) []string {
 	conn, ok := c.streams[streamIDx]
 	if !ok {
-		return
+		return nil
 	}
 
 	seq := c.nextSeq()
 	c.oneshots[seq] = streamIDx
 
 	versions := make(map[string]uint64, len(c.versions))
-	var types []string
+	var types, locked []string
 	for _, t := range c.store.Types() {
 		if _, pending := c.pendingTypes[t]; pending {
 			continue
 		}
-		if _, locked := c.lockedTypes[t]; locked {
+		if _, inflight := c.lockedTypes[t]; inflight {
+			locked = append(locked, t)
 			continue
 		}
 		types = append(types, t)
@@ -309,6 +313,7 @@ func (c *connections) sendSnapshot(streamIDx uint64) {
 		Versions: versions,
 		Tables:   c.store.Tables(types),
 	})
+	return locked
 }
 
 func (c *connections) nextSeq() uint64 {

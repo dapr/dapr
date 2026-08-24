@@ -16,6 +16,7 @@ package schedulerplacement
 import (
 	"context"
 	"net/http"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -39,7 +40,9 @@ func init() {
 // schedulerPlacementStream is a raw ReportActorTypes stream used as a
 // controllable scheduler placement client. It reports as an actor host and a
 // background loop acks every placement order, until withholdAcks makes it go
-// silent mid-round.
+// silent for the rounds covering t2type, its own type. Rounds for other
+// types are still acked, as the scheduler may disseminate them to a new
+// stream at any time.
 type schedulerPlacementStream struct {
 	stream       schedulerv1pb.Scheduler_ReportActorTypesClient
 	orders       chan *schedulerv1pb.PlacementOrder
@@ -67,10 +70,11 @@ func newSchedulerPlacementStream(t *testing.T, ctx context.Context, sched *sched
 		for {
 			order, rerr := stream.Recv()
 			if rerr != nil {
+				t.Logf("scheduler placement stream ended: %v", rerr)
 				close(p.orders)
 				return
 			}
-			if !p.withholdAcks.Load() {
+			if !p.withholdAcks.Load() || !slices.Contains(order.GetActorTypes(), "t2type") {
 				//nolint:errcheck
 				stream.Send(&schedulerv1pb.ReportActorTypesRequest{
 					Msg: &schedulerv1pb.ReportActorTypesRequest_Ack{

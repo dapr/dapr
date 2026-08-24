@@ -111,6 +111,12 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 		advertised = h.handoff.Advertised()
 		awaitingStandDown = h.handoff.PlacementPresent() && !h.handoff.PlacementStoodDown()
 	}
+	// Only sidecars that take placement from the scheduler open placement
+	// streams, so a live stream keeps the gate capable while that sidecar's
+	// jobs streams reconnect for a target type change.
+	if h.placement != nil && h.placement.HasPlacementStreams() {
+		gateCapable = true
+	}
 
 	// Withhold the advertisement while an old sidecar is connected anywhere
 	// in the cluster, or while a present placement service has not confirmed

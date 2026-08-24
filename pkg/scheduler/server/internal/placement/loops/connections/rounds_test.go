@@ -310,7 +310,7 @@ func TestSnapshotExcludesUndisseminatedTypes(t *testing.T) {
 	c.pendingTypes["pending"] = struct{}{}
 
 	fs := c.addFakeStream(1)
-	c.sendSnapshot(1)
+	skipped := c.sendSnapshot(1)
 
 	require.NotEmpty(t, fs.sent)
 	snap, ok := fs.sent[len(fs.sent)-1].(*loops.SendSnapshot)
@@ -318,4 +318,8 @@ func TestSnapshotExcludesUndisseminatedTypes(t *testing.T) {
 	assert.Contains(t, snap.Versions, "stable")
 	assert.NotContains(t, snap.Versions, "inflight")
 	assert.NotContains(t, snap.Versions, "pending")
+
+	// The in-flight round fixed its members before the newcomer joined, so
+	// the type it holds must be delivered by a follow-up round.
+	assert.Equal(t, []string{"inflight"}, skipped)
 }
