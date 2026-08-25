@@ -76,10 +76,15 @@ func Test_CreateReminderWithRetry(t *testing.T) {
 			wantErr:   false,
 			wantCalls: 3,
 		},
-		"resource exhausted is retried": {
+		// etcd surfaces a full storage quota (NOSPACE) as ResourceExhausted;
+		// it only clears with operator intervention, so the bounded helper
+		// surfaces it immediately rather than masking it behind the caller's
+		// deadline (the forever helper still retries it as transient etcd
+		// pressure).
+		"resource exhausted is permanent": {
 			err:       status.Error(codes.ResourceExhausted, "quota"),
-			wantErr:   false,
-			wantCalls: 3,
+			wantErr:   true,
+			wantCalls: 1,
 		},
 		"invalid argument is permanent": {
 			err:       status.Error(codes.InvalidArgument, "bad request"),
@@ -117,4 +122,13 @@ func Test_CreateReminderWithRetry(t *testing.T) {
 			assert.Equal(t, test.wantCalls, creator.calls)
 		})
 	}
+}
+
+func Test_CreateReminderWithRetryForever_ResourceExhausted(t *testing.T) {
+	t.Parallel()
+
+	req := &actorapi.CreateReminderRequest{Name: "start-es-1", ActorType: "wf", ActorID: "id"}
+	creator := &failNCreator{n: 2, err: status.Error(codes.ResourceExhausted, "quota")}
+	require.NoError(t, CreateReminderWithRetryForever(t.Context(), creator, req))
+	assert.Equal(t, 3, creator.calls)
 }
