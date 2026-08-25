@@ -96,11 +96,19 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		// This happens when the parent's runWorkflow created the child workflow
 		// successfully but crashed before persisting its own state, causing it to
 		// re-execute and attempt the child creation again.
-		if o.isSameParentCreation(state, startEvent) {
+		sameParent, parentExecMismatch := o.isSameParentCreation(state, startEvent)
+		if sameParent {
 			log.Debugf("Workflow actor '%s': ignoring duplicate child workflow creation from parent '%s'",
 				o.actorID, startEvent.GetExecutionStarted().GetParentInstance().GetWorkflowInstance().GetInstanceId())
 			return nil
 		}
+
+		if parentExecMismatch {
+			return status.Errorf(codes.AlreadyExists,
+				"an active workflow with ID '%s' already exists: it was created by a previous execution of parent workflow '%s' (e.g. before a ContinueAsNew); child workflow instance IDs must be unique across parent executions",
+				o.actorID, startEvent.GetExecutionStarted().GetParentInstance().GetWorkflowInstance().GetInstanceId())
+		}
+
 		return status.Errorf(codes.AlreadyExists, "an active workflow with ID '%s' already exists", o.actorID)
 	}
 
@@ -162,17 +170,43 @@ func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *ba
 	return nil
 }
 
-func (o *orchestrator) isSameParentCreation(state *wfenginestate.State, startEvent *backend.HistoryEvent) bool {
+// isSameParentCreation reports whether the incoming child creation is a
+// crash-replay duplicate of the creation that produced the existing state.
+// parentExecMismatch is true when the parent lineage and task slot match but
+// the parent's ExecutionId differs: the parent continued-as-new (or was
+// recreated) and scheduled a child whose instance ID collides with a live
+// child of a previous execution. That is a genuinely new creation, not a
+// replay, and must not be silently deduplicated.
+func (o *orchestrator) isSameParentCreation(state *wfenginestate.State, startEvent *backend.HistoryEvent) (sameCreation bool, parentExecMismatch bool) {
 	newParent := startEvent.GetExecutionStarted().GetParentInstance()
 	if newParent == nil {
-		return false
+		return false, false
 	}
 
 	existingParent := o.getExecutionStartedEvent(state).GetParentInstance()
 	if existingParent == nil {
-		return false
+		return false, false
 	}
 
-	return existingParent.GetWorkflowInstance().GetInstanceId() == newParent.GetWorkflowInstance().GetInstanceId() &&
-		existingParent.GetTaskScheduledId() == newParent.GetTaskScheduledId()
+	if existingParent.GetWorkflowInstance().GetInstanceId() != newParent.GetWorkflowInstance().GetInstanceId() ||
+		existingParent.GetTaskScheduledId() != newParent.GetTaskScheduledId() {
+		return false, false
+	}
+
+	if !sameParentExecution(existingParent, newParent) {
+		return false, true
+	}
+
+	return true, false
+}
+
+// sameParentExecution reports whether two parent references could belong to
+// the same parent execution. A nil ExecutionId on EITHER side (older
+// persisted state, rerun-path creations that omit it) conservatively returns
+// true, preserving crash-replay dedup. Only both-set-and-different returns
+// false.
+func sameParentExecution(existing, incoming *protos.ParentInstanceInfo) bool {
+	a := existing.GetWorkflowInstance().GetExecutionId()
+	b := incoming.GetWorkflowInstance().GetExecutionId()
+	return a == nil || b == nil || a.GetValue() == b.GetValue()
 }
