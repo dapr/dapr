@@ -194,9 +194,10 @@ func Test_addWorkflowEvent_dedupReAssertsReminder(t *testing.T) {
 }
 
 // Test_addWorkflowEvent_unknownTaskIDDroppedNotTombstoned pins the signing
-// behavior for completions whose scheduling event is absent from history
-// (straggler after ContinueAsNew, or a rolled-back save): the event must be
-// dropped with ErrInstanceNotFound, NOT tombstone the workflow as tampered.
+// behavior for a completion that fails verification while the durable state
+// is gone (the fake store is empty): dropped with ErrInstanceNotFound, no
+// tombstone, nothing persisted. The sentinel classification itself is pinned
+// by the signing package unit tests and the canstraggler integration test.
 func Test_addWorkflowEvent_unknownTaskIDDroppedNotTombstoned(t *testing.T) {
 	const instanceID = "test-unknown-task-wf"
 
