@@ -15,8 +15,12 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
+
+	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
@@ -45,11 +49,11 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// On a tombstoned workflow (cold-store load tamper or attestation
 	// verification failure - identified by the unsigned tamper marker at
 	// the end of history) reject inbound activity / child-workflow
-	// completion events with ErrInstanceNotFound. The activity actor
-	// treats ErrInstanceNotFound as terminal and stops re-delivering, so
-	// we don't loop the parent's actor lock against a workflow that will
-	// never accept the result. Other event types (RaiseEvent, terminate,
-	// etc.) still flow through.
+	// completion events with ErrInstanceNotFound. The activity actor and
+	// the child workflow's completion dispatch treat ErrInstanceNotFound
+	// as terminal and stop re-delivering, so we don't loop the parent's
+	// actor lock against a workflow that will never accept the result.
+	// Other event types (RaiseEvent, terminate, etc.) still flow through.
 	isCompletion := e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil ||
 		e.GetChildWorkflowInstanceCompleted() != nil || e.GetChildWorkflowInstanceFailed() != nil
 	if isCompletion && state.HasTamperMarker() {
@@ -135,15 +139,12 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 }
 
 // verifyAndAbsorbAttestation verifies any attestation on the incoming event
-// against the signed history and Sentry trust anchors, then absorbs the
-// signer certificate into the ext-sigcert table and strips the companion
-// cert from the event so the stored form is cert-free. On any verification
-// failure the workflow is tombstoned and ErrInstanceNotFound is returned so
-// the activity actor on the sender side recognizes the workflow as gone and
-// stops re-executing (the tombstoning reason is preserved in the workflow's
-// FailureDetails). No-op when signing is disabled. Locally-authored
-// synthetic failures (policy denials, occupied-ID rejections) are exempt:
-// they have no attestation by design.
+// against the signed history and Sentry trust anchors, absorbs the signer
+// certificate into the ext-sigcert table, and strips it from the event.
+// Unmatched completions are dropped; genuine verification failures tombstone
+// the workflow. Both return ErrInstanceNotFound so the sender stops
+// re-delivering. No-op when signing is disabled; locally-authored synthetic
+// failures are exempt (no attestation by design).
 func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wfenginestate.State, e *backend.HistoryEvent) error {
 	if o.isLocalSyntheticFailure(e) {
 		return nil
@@ -152,7 +153,11 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 	if verr == nil {
 		return nil
 	}
-	log.Warnf("Workflow actor '%s': attestation verification failed, tombstoning workflow: %s", o.actorID, verr)
+
+	// Re-verify against durable state before acting: a stale cache can make a
+	// legitimate completion look tampered or unmatched, and the unknown-id
+	// drop below is terminal for the sender. Verify a clone so nothing is
+	// observably mutated on success.
 	opts := wfenginestate.Options{
 		AppID:             o.appID,
 		Namespace:         o.namespace,
@@ -160,6 +165,25 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 		ActivityActorType: o.activityActorType,
 		Signer:            o.signer,
 	}
+	if fresh, lerr := wfenginestate.LoadWorkflowState(ctx, o.actorState, o.actorID, opts); lerr == nil && fresh != nil {
+		clone, _ := proto.Clone(e).(*backend.HistoryEvent)
+		if clone != nil && o.signing.VerifyInboxAttestation(ctx, fresh, clone) == nil {
+			log.Warnf("Workflow actor '%s': attestation verification failed against cached state but passed against durable state; refreshing cache and asking the sender to retry: %s", o.actorID, verr)
+			o.invalidateCachedState()
+			return verr
+		}
+	}
+
+	// Not tampering: ContinueAsNew resets history and a rolled-back save can
+	// retract a scheduling row, so drop the unmatched completion like the
+	// unsigned path does (stripUnmatchedResolutions). Nothing is persisted,
+	// so a forged completion gains an attacker nothing.
+	if errors.Is(verr, signing.ErrUnknownTaskScheduledID) {
+		log.Warnf("Workflow actor '%s': dropping completion with no matching scheduled task in signed history: %s", o.actorID, verr)
+		return api.ErrInstanceNotFound
+	}
+
+	log.Warnf("Workflow actor '%s': attestation verification failed, tombstoning workflow: %s", o.actorID, verr)
 	if _, _, terr := o.tombstoneTamperedState(ctx, opts, state, verr); terr != nil {
 		return terr
 	}
