@@ -261,6 +261,12 @@ func Test_fold_executionIDMismatchKeepsInboxPath(t *testing.T) {
 	entry, err = h.orch.addWorkflowEventMaybeFold(t.Context(), match)
 	require.NoError(t, err)
 	assert.NotNil(t, entry, "a matching execution id folds as usual")
+
+	absent := taskCompletedEvent(42)
+	absent.GetTaskCompleted().TaskExecutionId = "exec-A"
+	entry, err = h.orch.addWorkflowEventMaybeFold(t.Context(), absent)
+	require.NoError(t, err)
+	assert.Nil(t, entry, "an execution-id-carrying completion with no scheduling event is unmatched and must not fold")
 }
 
 // The payload stall guard must count folded completions.

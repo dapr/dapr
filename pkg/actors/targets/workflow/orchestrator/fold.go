@@ -330,7 +330,10 @@ func (o *orchestrator) foldExecutionMatches(e *backend.HistoryEvent, state *wfen
 		return true
 	}
 	scheduled := state.FindHistoryEventByID(taskID).GetTaskScheduled()
-	if scheduled == nil || scheduled.GetTaskExecutionId() == "" {
+	if scheduled == nil {
+		return false
+	}
+	if scheduled.GetTaskExecutionId() == "" {
 		return true
 	}
 	return scheduled.GetTaskExecutionId() == execID
