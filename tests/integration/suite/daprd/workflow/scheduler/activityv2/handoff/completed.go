@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
@@ -68,7 +69,9 @@ func (a *completed) Setup(t *testing.T) []framework.Option {
 func (a *completed) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
-	const instances = 4
+	// Each of N actors stays put with probability ~1/3; the record gate
+	// below requires at least one to move.
+	const instances = 6
 
 	var executions atomic.Int64
 	started := make(chan struct{}, instances)
@@ -146,6 +149,14 @@ func (a *completed) Run(t *testing.T, ctx context.Context) {
 			assert.GreaterOrEqual(c, table.Version, startVersion+uint64(i+1))
 		}, time.Second*15, time.Millisecond*10)
 	}
+
+	// The rebalance must have moved at least one in-flight actor before the
+	// bodies finish, or normal same-host completion would satisfy every
+	// assertion below without a guard or recovery arrival ever existing.
+	require.Eventually(t, func() bool {
+		return wf.CountClaimRecords(t, ctx, a.workflow.DB()) >= 1
+	}, time.Second*15, time.Millisecond*50,
+		"placement churn over in-flight activities must write execution-claim records")
 
 	// One to two janitor fires land on the new owners, then the old host
 	// finishes: the results flow through the detached watcher while the

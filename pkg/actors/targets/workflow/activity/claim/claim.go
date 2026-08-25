@@ -162,18 +162,18 @@ func (g *Guards) guard(ctx context.Context, actorID, taskKey string, call *infli
 			// Process shutdown: the execution dies with this host, so the
 			// record only stalls the new owner. Best-effort delete; a lost
 			// delete goes stale within the grace anyway.
-			g.delete(context.WithoutCancel(ctx), actorID)
+			g.deleteOwned(context.WithoutCancel(ctx), actorID, taskKey)
 			return
 		case <-call.Done():
 			if call.Err() != nil {
-				g.delete(ctx, actorID)
+				g.deleteOwned(ctx, actorID, taskKey)
 				return
 			}
 			g.write(ctx, actorID, taskKey, true)
 			select {
 			case <-ctx.Done():
 			case <-time.After(g.opts.Retention):
-				g.delete(ctx, actorID)
+				g.deleteOwned(ctx, actorID, taskKey)
 			}
 			return
 		case <-ticker.C:
@@ -182,10 +182,26 @@ func (g *Guards) guard(ctx context.Context, actorID, taskKey string, call *infli
 	}
 }
 
+// deleteOwned deletes the record only while it still carries taskKey: a
+// newer scheduling's guard may have overwritten the shared row, and deleting
+// that would unprotect a live execution. The delete is ETag-conditional so a
+// write landing between the read and the delete also keeps the newer row.
+func (g *Guards) deleteOwned(ctx context.Context, actorID, taskKey string) {
+	rec, etag, err := g.read(ctx, actorID)
+	if err != nil {
+		log.Warnf("Activity actor '%s': failed to read the execution-claim record before deleting; leaving it to go stale: %v", actorID, err)
+		return
+	}
+	if rec == nil || rec.TaskKey != taskKey {
+		return
+	}
+	g.delete(ctx, actorID, etag)
+}
+
 // Check classifies the record for a fresh-owner recovery arrival about to
 // execute taskKey.
 func (g *Guards) Check(ctx context.Context, actorID, taskKey string) (Outcome, error) {
-	rec, err := g.read(ctx, actorID)
+	rec, etag, err := g.read(ctx, actorID)
 	if err != nil {
 		return Defer, err
 	}
@@ -196,8 +212,11 @@ func (g *Guards) Check(ctx context.Context, actorID, taskKey string) (Outcome, e
 	if rec.TaskKey != taskKey {
 		// Another scheduling's record: ignore it, and reap it when its
 		// guard host is dead so an old run's row cannot leak forever.
-		if stale {
-			g.delete(ctx, actorID)
+		if stale && g.delete(ctx, actorID, etag) != nil {
+			// The row changed under the read (a guard heartbeat won the
+			// race): defer so the retry re-observes it. Not an error, a
+			// classification.
+			return Defer, nil //nolint:nilerr
 		}
 		return Proceed, nil
 	}
@@ -207,8 +226,14 @@ func (g *Guards) Check(ctx context.Context, actorID, taskKey string) (Outcome, e
 	if !stale {
 		return Defer, nil
 	}
-	// The guarding host stopped heartbeating: it is dead, reclaim.
-	g.delete(ctx, actorID)
+	// The guarding host stopped heartbeating: it is dead, reclaim. The
+	// ETag-conditional delete closes the read/delete race: a heartbeat
+	// landing in between fails the delete, and the arrival defers instead
+	// of duplicating the revived execution.
+	if g.delete(ctx, actorID, etag) != nil {
+		// Reclaim lost the race; classify as live rather than error.
+		return Defer, nil //nolint:nilerr
+	}
 	return Proceed, nil
 }
 
@@ -235,7 +260,9 @@ func (g *Guards) write(ctx context.Context, actorID, taskKey string, completed b
 	}
 }
 
-func (g *Guards) delete(ctx context.Context, actorID string) {
+// delete removes the record, conditional on etag when the read that observed
+// it returned one, so a concurrent overwrite is kept rather than destroyed.
+func (g *Guards) delete(ctx context.Context, actorID string, etag *string) error {
 	octx, cancel := context.WithTimeout(ctx, opTimeout)
 	defer cancel()
 	err := g.opts.State.TransactionalStateOperation(octx, true, &actorsapi.TransactionalRequest{
@@ -243,29 +270,30 @@ func (g *Guards) delete(ctx context.Context, actorID string) {
 		ActorID:   actorID,
 		Operations: []actorsapi.TransactionalOperation{{
 			Operation: actorsapi.Delete,
-			Request:   actorsapi.TransactionalDelete{Key: recordStateKey},
+			Request:   actorsapi.TransactionalDelete{Key: recordStateKey, ETag: etag},
 		}},
 	}, false)
 	if err != nil {
 		log.Warnf("Activity actor '%s': failed to delete the execution-claim record: %v", actorID, err)
 	}
+	return err
 }
 
-func (g *Guards) read(ctx context.Context, actorID string) (*Record, error) {
+func (g *Guards) read(ctx context.Context, actorID string) (*Record, *string, error) {
 	res, err := g.opts.State.Get(ctx, &actorsapi.GetStateRequest{
 		ActorType: g.opts.ActorType,
 		ActorID:   actorID,
 		Key:       recordStateKey,
 	}, false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if res == nil || len(res.Data) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	var rec Record
 	if err := json.Unmarshal(res.Data, &rec); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &rec, nil
+	return &rec, res.ETag, nil
 }

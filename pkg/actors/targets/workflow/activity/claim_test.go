@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -37,14 +38,16 @@ import (
 )
 
 // recordStore backs the state fake with an in-memory execution-claim record
-// table keyed by activity actor ID.
+// table keyed by activity actor ID, with first-write-wins ETag semantics so
+// the conditional deletes in claim are exercised for real.
 type recordStore struct {
 	lock sync.Mutex
 	data map[string][]byte
+	etag map[string]int
 }
 
 func newRecordStore() *recordStore {
-	return &recordStore{data: make(map[string][]byte)}
+	return &recordStore{data: make(map[string][]byte), etag: make(map[string]int)}
 }
 
 func (s *recordStore) fake() *statefake.Fake {
@@ -56,7 +59,8 @@ func (s *recordStore) fake() *statefake.Fake {
 			if !ok {
 				return &actorsapi.StateResponse{}, nil
 			}
-			return &actorsapi.StateResponse{Data: b}, nil
+			etag := strconv.Itoa(s.etag[req.ActorID])
+			return &actorsapi.StateResponse{Data: b, ETag: &etag}, nil
 		}).
 		WithTransactionalStateOperationFn(func(_ context.Context, _ bool, req *actorsapi.TransactionalRequest, _ bool) error {
 			s.lock.Lock()
@@ -69,7 +73,11 @@ func (s *recordStore) fake() *statefake.Fake {
 						return err
 					}
 					s.data[req.ActorID] = b
+					s.etag[req.ActorID]++
 				case actorsapi.TransactionalDelete:
+					if r.ETag != nil && *r.ETag != strconv.Itoa(s.etag[req.ActorID]) {
+						return errors.New("etag mismatch")
+					}
 					delete(s.data, req.ActorID)
 				}
 			}
@@ -97,6 +105,7 @@ func (s *recordStore) set(t *testing.T, actorID string, rec claim.Record) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.data[actorID] = b
+	s.etag[actorID]++
 }
 
 func newClaimHarness(t *testing.T) (*factory, *recordStore, chan *backend.ActivityWorkItem) {
@@ -293,6 +302,41 @@ func Test_claimGuard_lifecycle(t *testing.T) {
 		call.Finish(nil)
 	})
 
+	t.Run("retention delete spares a newer generation's record", func(t *testing.T) {
+		t.Parallel()
+		f, store, _ := newClaimHarness(t)
+		f.claims = claim.New(claim.Options{
+			ActorType:      f.actorType,
+			State:          store.fake(),
+			HeartbeatEvery: time.Millisecond * 10,
+			// Long enough to overwrite the row before the delete leg runs.
+			Retention:  time.Second,
+			StaleAfter: time.Hour,
+		})
+
+		call, owner := f.inflight.Acquire(key)
+		require.True(t, owner)
+		f.GetOrCreate(actorID)
+		haltNothingHosted(t, f)
+
+		call.Finish(nil)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			rec, ok := store.get(t, actorID)
+			if assert.True(c, ok) {
+				assert.True(c, rec.Completed)
+			}
+		}, time.Second*5, time.Millisecond*5)
+
+		// A newer scheduling generation of the same actor takes the row
+		// while the old guard sits out its retention.
+		store.set(t, actorID, claim.Record{TaskKey: actorID + "::gen2", HeartbeatMs: time.Now().UnixMilli()})
+		f.claims.Wait()
+
+		rec, ok := store.get(t, actorID)
+		require.True(t, ok, "the old guard's retention delete must not destroy the newer generation's live claim")
+		assert.Equal(t, actorID+"::gen2", rec.TaskKey)
+	})
+
 	t.Run("repeated halts spawn a single guard per task key", func(t *testing.T) {
 		t.Parallel()
 		f, store, _ := newClaimHarness(t)
@@ -397,6 +441,31 @@ func Test_checkClaimRecord(t *testing.T) {
 		assert.Equal(t, claim.Proceed, outcome)
 		_, ok := store.get(t, actorID)
 		assert.False(t, ok, "a stale record is dead weight and must be reclaimed")
+	})
+
+	t.Run("failed reclaim delete defers instead of proceeding", func(t *testing.T) {
+		// A heartbeat landing between the stale read and the conditional
+		// delete fails the delete: the arrival must defer, not duplicate the
+		// revived execution.
+		t.Parallel()
+		f, _, _ := newClaimHarness(t)
+		b, err := json.Marshal(claim.Record{TaskKey: key, HeartbeatMs: time.Now().Add(-time.Second).UnixMilli()})
+		require.NoError(t, err)
+		etag := "1"
+		f.claims = claim.New(claim.Options{
+			ActorType: f.actorType,
+			State: statefake.New().
+				WithGetFn(func(context.Context, *actorsapi.GetStateRequest, bool) (*actorsapi.StateResponse, error) {
+					return &actorsapi.StateResponse{Data: b, ETag: &etag}, nil
+				}).
+				WithTransactionalStateOperationFn(func(context.Context, bool, *actorsapi.TransactionalRequest, bool) error {
+					return errors.New("etag mismatch")
+				}),
+			StaleAfter: time.Millisecond,
+		})
+		outcome, err := f.claims.Check(t.Context(), actorID, key)
+		require.NoError(t, err)
+		assert.Equal(t, claim.Defer, outcome)
 	})
 
 	t.Run("read error surfaces", func(t *testing.T) {

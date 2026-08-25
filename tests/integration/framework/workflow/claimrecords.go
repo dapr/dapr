@@ -15,6 +15,7 @@ package workflow
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -33,4 +34,32 @@ func CountClaimRecords(t *testing.T, ctx context.Context, db *sqlite.SQLite) int
 		"%||execution-claim",
 	).Scan(&count))
 	return count
+}
+
+// AuditClaimWrites installs sqlite triggers that append every execution-claim
+// insert or update on the state table to an audit table, inside the writer's
+// own transaction: unlike polling, a record written and deleted again in any
+// window cannot go unseen. Returns a reader for the number of writes audited.
+func AuditClaimWrites(t *testing.T, ctx context.Context, db *sqlite.SQLite) func() int {
+	t.Helper()
+	conn := db.GetConnection(t)
+	_, err := conn.ExecContext(ctx,
+		"CREATE TABLE IF NOT EXISTS claim_write_audit (key TEXT NOT NULL)")
+	require.NoError(t, err)
+	for _, trig := range [...]struct{ name, event string }{
+		{"claim_write_audit_ins", "INSERT"},
+		{"claim_write_audit_upd", "UPDATE"},
+	} {
+		_, err = conn.ExecContext(ctx, fmt.Sprintf(
+			"CREATE TRIGGER IF NOT EXISTS %s AFTER %s ON %s WHEN NEW.key LIKE '%%||execution-claim' "+
+				"BEGIN INSERT INTO claim_write_audit (key) VALUES (NEW.key); END",
+			trig.name, trig.event, db.TableName()))
+		require.NoError(t, err)
+	}
+	return func() int {
+		var count int
+		require.NoError(t, conn.QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM claim_write_audit").Scan(&count))
+		return count
+	}
 }

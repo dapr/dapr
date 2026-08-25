@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
@@ -69,8 +70,9 @@ func (a *basic) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
 	// Several concurrently blocked activities so at least one actor moves
-	// when the joiners rebalance the placement.
-	const instances = 4
+	// when the joiners rebalance the placement: each of N actors stays put
+	// with probability ~1/3, and the record gate below requires movement.
+	const instances = 6
 
 	var executions atomic.Int64
 	started := make(chan struct{}, instances)
@@ -154,6 +156,13 @@ func (a *basic) Run(t *testing.T, ctx context.Context) {
 				"placement table version must advance for each new daprd")
 		}, time.Second*15, time.Millisecond*10)
 	}
+
+	// The rebalance must have moved at least one in-flight actor, or the
+	// exactly-once assertion below would pass without exercising the guard.
+	require.Eventually(t, func() bool {
+		return wf.CountClaimRecords(t, ctx, a.workflow.DB()) >= 1
+	}, time.Second*15, time.Millisecond*50,
+		"placement churn over in-flight activities must write execution-claim records")
 
 	// Hold the handoff window open across several janitor periods so the
 	// re-dispatch (and its second-fire durable-reminder escalation) lands on

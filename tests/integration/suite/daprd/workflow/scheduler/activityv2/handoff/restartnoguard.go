@@ -59,33 +59,10 @@ func (a *restartnoguard) Setup(t *testing.T) []framework.Option {
 func (a *restartnoguard) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
-	// Poll the state store for execution-claim rows across the whole run,
-	// including the shutdown window. No require inside: this runs off the
-	// test goroutine.
-	conn := a.workflow.DB().GetConnection(t)
-	var recordSighted atomic.Bool
-	pollDone := make(chan struct{})
-	pollCtx, pollCancel := context.WithCancel(ctx)
-	t.Cleanup(func() { pollCancel(); <-pollDone })
-	go func() {
-		defer close(pollDone)
-		ticker := time.NewTicker(time.Millisecond * 100)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-pollCtx.Done():
-				return
-			case <-ticker.C:
-				var count int
-				if err := conn.QueryRowContext(pollCtx,
-					"SELECT COUNT(*) FROM "+a.workflow.DB().TableName()+" WHERE key LIKE ?",
-					"%||execution-claim",
-				).Scan(&count); err == nil && count > 0 {
-					recordSighted.Store(true)
-				}
-			}
-		}
-	}()
+	// Audit triggers record every execution-claim write inside the writer's
+	// own transaction, so a record written and deleted again during the
+	// shutdown window cannot slip between poll samples.
+	claimWrites := wf.AuditClaimWrites(t, ctx, a.workflow.DB())
 
 	var restarted atomic.Bool
 	block := make(chan struct{})
@@ -136,9 +113,7 @@ func (a *restartnoguard) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	assert.Equal(t, `"recovered"`, metadata.GetOutput().GetValue())
 
-	pollCancel()
-	<-pollDone
-	assert.False(t, recordSighted.Load(),
+	assert.Zero(t, claimWrites(),
 		"a graceful shutdown must never write an execution-claim record")
 	assert.Zero(t, wf.CountClaimRecords(t, ctx, a.workflow.DB()))
 }

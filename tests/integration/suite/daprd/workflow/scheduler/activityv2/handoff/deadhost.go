@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
@@ -87,7 +88,9 @@ func (a *deadhost) Run(t *testing.T, ctx context.Context) {
 	a.scheduler.WaitUntilRunning(t, ctx)
 	a.place.WaitUntilRunning(t, ctx)
 
-	const instances = 4
+	// Each of N actors stays put with probability ~1/3; the record gate
+	// below requires at least one to move.
+	const instances = 6
 
 	var executions atomic.Int64
 	started := make(chan struct{}, instances)
@@ -172,9 +175,13 @@ func (a *deadhost) Run(t *testing.T, ctx context.Context) {
 		}, time.Second*15, time.Millisecond*10)
 	}
 
-	// Let guards spawn and heartbeat for the moved actors, then kill the
-	// victim without any shutdown handling: records freeze mid-heartbeat.
-	time.Sleep(time.Millisecond * 1500)
+	// The rebalance must have moved at least one in-flight actor and its
+	// guard must have written a record; only then does killing the victim
+	// freeze a claim mid-heartbeat and exercise the stale-reclaim path.
+	require.Eventually(t, func() bool {
+		return wf.CountClaimRecords(t, ctx, a.db) >= 1
+	}, time.Second*15, time.Millisecond*50,
+		"placement churn over in-flight activities must write execution-claim records")
 	a.victim.Kill(t)
 
 	survivor := a.joiners[len(a.joiners)-1]
