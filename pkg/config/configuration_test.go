@@ -972,4 +972,18 @@ func TestHasSchedulerConcurrencyLimits(t *testing.T) {
 	require.True(t, (&WorkflowSpec{
 		ActivityConcurrencyLimits: []NamedConcurrencyLimit{{Name: &name, MaxConcurrent: i32(1)}},
 	}).HasSchedulerConcurrencyLimits())
+
+	// Entries the scheduler ignores must not disable the fast path.
+	require.False(t, (&WorkflowSpec{
+		WorkflowConcurrencyLimits: []NamedConcurrencyLimit{{MaxConcurrent: i32(1)}},
+	}).HasSchedulerConcurrencyLimits(), "nil name is not enforced")
+	require.False(t, (&WorkflowSpec{
+		WorkflowConcurrencyLimits: []NamedConcurrencyLimit{{Name: &name}},
+	}).HasSchedulerConcurrencyLimits(), "nil max is not enforced")
+	require.False(t, (&WorkflowSpec{
+		ActivityConcurrencyLimits: []NamedConcurrencyLimit{{Name: &name, MaxConcurrent: i32(0)}},
+	}).HasSchedulerConcurrencyLimits(), "non-positive max is not enforced")
+	require.True(t, (&WorkflowSpec{
+		WorkflowConcurrencyLimits: []NamedConcurrencyLimit{{MaxConcurrent: i32(1)}, {Name: &name, MaxConcurrent: i32(1)}},
+	}).HasSchedulerConcurrencyLimits(), "one enforced entry among ignored ones counts")
 }

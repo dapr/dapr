@@ -287,10 +287,21 @@ func (w *WorkflowSpec) HasSchedulerConcurrencyLimits() bool {
 	if w == nil {
 		return false
 	}
-	return w.GetGlobalMaxConcurrentWorkflowInvocations() != nil ||
-		w.GetGlobalMaxConcurrentActivityInvocations() != nil ||
-		len(w.WorkflowConcurrencyLimits) > 0 ||
-		len(w.ActivityConcurrencyLimits) > 0
+	if w.GetGlobalMaxConcurrentWorkflowInvocations() != nil ||
+		w.GetGlobalMaxConcurrentActivityInvocations() != nil {
+		return true
+	}
+	// Only entries the scheduler actually enforces count (mirrors
+	// cluster.buildConcurrencyLimits).
+	enforced := func(ls []NamedConcurrencyLimit) bool {
+		for _, l := range ls {
+			if l.Name != nil && l.MaxConcurrent != nil && *l.MaxConcurrent > 0 {
+				return true
+			}
+		}
+		return false
+	}
+	return enforced(w.WorkflowConcurrencyLimits) || enforced(w.ActivityConcurrencyLimits)
 }
 
 type SecretsSpec struct {
