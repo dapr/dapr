@@ -51,6 +51,7 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors/pendingtracker"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state/list"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -117,7 +118,7 @@ type Actors struct {
 	retentionerActorType string
 	executorActorType    string
 
-	pendingTasksBackend    PendingTasksBackend
+	pendingTasksBackend    *pendingtracker.Tracker
 	activityExecs          *activityExecutions
 	resiliency             resiliency.Provider
 	actors                 actors.Interface
@@ -175,6 +176,10 @@ func New(opts Options) (*Actors, error) {
 		pendingTasksBackend = local.NewTasksBackend()
 	}
 
+	// Wrapped so pending completions can be cancelled while no executor is
+	// connected; see the pendingtracker package.
+	trackedPendingTasksBackend := pendingtracker.New(pendingTasksBackend)
+
 	return &Actors{
 		appID:                     opts.AppID,
 		namespace:                 opts.Namespace,
@@ -184,7 +189,7 @@ func New(opts Options) (*Actors, error) {
 		retentionerActorType:      todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + RetentionerNameLabelKey,
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
-		pendingTasksBackend:       pendingTasksBackend,
+		pendingTasksBackend:       trackedPendingTasksBackend,
 		activityExecs:             newActivityExecutions(),
 		compStore:                 opts.ComponentStore,
 		orchestrationWorkItemChan: make(chan *backend.WorkflowWorkItem, 1),
@@ -973,6 +978,10 @@ func (abe *Actors) ActivityActorType() string {
 
 func (abe *Actors) WorkflowActorType() string {
 	return abe.workflowActorType
+}
+
+func (abe *Actors) SetExecutorAvailable(available bool) {
+	abe.pendingTasksBackend.SetExecutorAvailable(available)
 }
 
 // CancelActivityTask implements backend.Backend.
