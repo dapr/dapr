@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -175,6 +176,17 @@ func (f *factory) driveActivity(driveCtx context.Context, actorID string, invoca
 			continue
 		}
 		break
+	}
+
+	// A churn-aborted drive with a live claim has not lost the work: the
+	// detached publish watcher delivers it. Escalating would plant a
+	// reminder that can duplicate the body on a new placement owner; skip,
+	// the janitor re-dispatch covers a lost delivery.
+	key := inflight.Key(actorID, invocation.GetHistoryEvent())
+	if call, ok := f.inflight.Peek(key); ok && !call.Settled() {
+		log.Infof("Activity actor '%s': local drive aborted but its execution claim is live; skipping the durable-reminder escalation", actorID)
+		diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusEscalateSkipped)
+		return
 	}
 
 	log.Warnf("Activity actor '%s': local drive failed; escalating to a durable run-activity reminder: %v", actorID, err)

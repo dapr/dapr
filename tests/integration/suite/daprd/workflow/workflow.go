@@ -47,6 +47,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/reuseid"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/activityv2"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/activityv2/handoff"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/fold"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/localwake"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/wakev2"
