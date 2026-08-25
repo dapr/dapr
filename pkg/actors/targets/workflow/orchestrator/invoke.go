@@ -175,7 +175,17 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 		return err
 	}
 
-	if state == nil || runtimestate.IsCompleted(o.rstate) {
+	if state == nil {
+		o.deleteJanitor(ctx)
+		return nil
+	}
+
+	if runtimestate.IsCompleted(o.rstate) {
+		// Re-assert retention before self-deleting: the janitor owns
+		// recovery of a retention create lost after a terminal commit.
+		if rerr := o.handleRetention(ctx, runtimestate.RuntimeStatus(o.rstate)); rerr != nil {
+			return fmt.Errorf("failed to (re)create retention reminder on janitor terminal path: %w", rerr)
+		}
 		o.deleteJanitor(ctx)
 		return nil
 	}
