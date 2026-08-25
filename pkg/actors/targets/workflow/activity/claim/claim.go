@@ -19,15 +19,11 @@ limitations under the License.
 package claim
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"sync"
 	"time"
 
-	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/state"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/kit/logger"
 )
@@ -66,6 +62,10 @@ const (
 )
 
 // Record is the persisted shape of the execution-claim state row.
+// HeartbeatMs is the writer's clock and readers never compare it against
+// their own: staleness is judged by observing the value unchanged for
+// StaleAfter on the reader's clock (see observeStale), so cross-host clock
+// skew cannot reclaim a live execution.
 type Record struct {
 	TaskKey     string `json:"taskKey"`
 	HeartbeatMs int64  `json:"heartbeatMs"`
@@ -82,8 +82,8 @@ type Options struct {
 	// Retention keeps a Completed record readable before deletion, the
 	// durable analogue of the in-memory inflight cache TTL.
 	Retention time.Duration
-	// StaleAfter is the grace after the last heartbeat before a record
-	// reads as dead and the new owner reclaims.
+	// StaleAfter is how long a reader must observe an unchanged heartbeat
+	// value before the record reads as dead and the new owner reclaims.
 	StaleAfter time.Duration
 }
 
@@ -94,206 +94,23 @@ type Guards struct {
 	lock   sync.Mutex
 	active map[string]struct{}
 	wg     sync.WaitGroup
+
+	// observed tracks, per actor, when this reader first saw the record's
+	// current heartbeat value; see observeStale.
+	obsLock  sync.Mutex
+	observed map[string]*observation
+}
+
+// observation is one reader-side staleness watch: firstSeen anchors the
+// StaleAfter window for the recorded heartbeat value, lastSeen bounds the
+// map (entries not refreshed within twice the grace are pruned).
+type observation struct {
+	taskKey     string
+	heartbeatMs int64
+	firstSeen   time.Time
+	lastSeen    time.Time
 }
 
 func New(opts Options) *Guards {
 	return &Guards{opts: opts}
-}
-
-// Spawn writes the record synchronously and starts one heartbeat goroutine
-// per task key (deduped; rootCtx-bounded, waitgroup-accounted). The
-// synchronous write runs within HaltNonHosted's UPDATE phase, so the record
-// is durable before UNLOCK admits the first recovery arrival.
-func (g *Guards) Spawn(ctx, rootCtx context.Context, actorID, taskKey string, call *inflight.Call) {
-	g.lock.Lock()
-	if rootCtx.Err() != nil {
-		g.lock.Unlock()
-		return
-	}
-	if g.active == nil {
-		g.active = make(map[string]struct{})
-	}
-	if _, ok := g.active[taskKey]; ok {
-		g.lock.Unlock()
-		return
-	}
-	g.active[taskKey] = struct{}{}
-	g.wg.Add(1)
-	g.lock.Unlock()
-
-	log.Infof("Activity actor '%s': guarding its in-flight execution claim across placement churn", actorID)
-
-	g.write(ctx, actorID, taskKey, false)
-
-	go func() {
-		defer func() {
-			g.lock.Lock()
-			delete(g.active, taskKey)
-			g.lock.Unlock()
-			g.wg.Done()
-		}()
-		g.guard(rootCtx, actorID, taskKey, call)
-	}()
-}
-
-// Wait blocks until all guard goroutines have exited.
-func (g *Guards) Wait() {
-	g.wg.Wait()
-}
-
-// Active returns the number of running guards.
-func (g *Guards) Active() int {
-	g.lock.Lock()
-	defer g.lock.Unlock()
-	return len(g.active)
-}
-
-// guard heartbeats the already-written record every HeartbeatEvery until the
-// local execution settles: clean finish marks Completed and retains the
-// record for Retention before deleting; a failed finish deletes immediately;
-// a dead host goes stale. Stale and deleted both mean the new owner
-// re-executes.
-func (g *Guards) guard(ctx context.Context, actorID, taskKey string, call *inflight.Call) {
-	ticker := time.NewTicker(g.opts.HeartbeatEvery)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			// Process shutdown: the execution dies with this host, so the
-			// record only stalls the new owner. Best-effort delete; a lost
-			// delete goes stale within the grace anyway.
-			g.deleteOwned(context.WithoutCancel(ctx), actorID, taskKey)
-			return
-		case <-call.Done():
-			if call.Err() != nil {
-				g.deleteOwned(ctx, actorID, taskKey)
-				return
-			}
-			g.write(ctx, actorID, taskKey, true)
-			select {
-			case <-ctx.Done():
-			case <-time.After(g.opts.Retention):
-				g.deleteOwned(ctx, actorID, taskKey)
-			}
-			return
-		case <-ticker.C:
-			g.write(ctx, actorID, taskKey, false)
-		}
-	}
-}
-
-// deleteOwned deletes the record only while it still carries taskKey: a
-// newer scheduling's guard may have overwritten the shared row, and deleting
-// that would unprotect a live execution. The delete is ETag-conditional so a
-// write landing between the read and the delete also keeps the newer row.
-func (g *Guards) deleteOwned(ctx context.Context, actorID, taskKey string) {
-	rec, etag, err := g.read(ctx, actorID)
-	if err != nil {
-		log.Warnf("Activity actor '%s': failed to read the execution-claim record before deleting; leaving it to go stale: %v", actorID, err)
-		return
-	}
-	if rec == nil || rec.TaskKey != taskKey {
-		return
-	}
-	g.delete(ctx, actorID, etag)
-}
-
-// Check classifies the record for a fresh-owner recovery arrival about to
-// execute taskKey.
-func (g *Guards) Check(ctx context.Context, actorID, taskKey string) (Outcome, error) {
-	rec, etag, err := g.read(ctx, actorID)
-	if err != nil {
-		return Defer, err
-	}
-	if rec == nil {
-		return Proceed, nil
-	}
-	stale := time.Since(time.UnixMilli(rec.HeartbeatMs)) >= g.opts.StaleAfter
-	if rec.TaskKey != taskKey {
-		// Another scheduling's record: ignore it, and reap it when its
-		// guard host is dead so an old run's row cannot leak forever.
-		if stale && g.delete(ctx, actorID, etag) != nil {
-			// The row changed under the read (a guard heartbeat won the
-			// race): defer so the retry re-observes it. Not an error, a
-			// classification.
-			return Defer, nil //nolint:nilerr
-		}
-		return Proceed, nil
-	}
-	if rec.Completed {
-		return Completed, nil
-	}
-	if !stale {
-		return Defer, nil
-	}
-	// The guarding host stopped heartbeating: it is dead, reclaim. The
-	// ETag-conditional delete closes the read/delete race: a heartbeat
-	// landing in between fails the delete, and the arrival defers instead
-	// of duplicating the revived execution.
-	if g.delete(ctx, actorID, etag) != nil {
-		// Reclaim lost the race; classify as live rather than error.
-		return Defer, nil //nolint:nilerr
-	}
-	return Proceed, nil
-}
-
-func (g *Guards) write(ctx context.Context, actorID, taskKey string, completed bool) {
-	octx, cancel := context.WithTimeout(ctx, opTimeout)
-	defer cancel()
-	err := g.opts.State.TransactionalStateOperation(octx, true, &actorsapi.TransactionalRequest{
-		ActorType: g.opts.ActorType,
-		ActorID:   actorID,
-		Operations: []actorsapi.TransactionalOperation{{
-			Operation: actorsapi.Upsert,
-			Request: actorsapi.TransactionalUpsert{
-				Key: recordStateKey,
-				Value: Record{
-					TaskKey:     taskKey,
-					HeartbeatMs: time.Now().UnixMilli(),
-					Completed:   completed,
-				},
-			},
-		}},
-	}, false)
-	if err != nil {
-		log.Warnf("Activity actor '%s': failed to write the execution-claim record; recovery degrades to at-least-once for this handoff: %v", actorID, err)
-	}
-}
-
-// delete removes the record, conditional on etag when the read that observed
-// it returned one, so a concurrent overwrite is kept rather than destroyed.
-func (g *Guards) delete(ctx context.Context, actorID string, etag *string) error {
-	octx, cancel := context.WithTimeout(ctx, opTimeout)
-	defer cancel()
-	err := g.opts.State.TransactionalStateOperation(octx, true, &actorsapi.TransactionalRequest{
-		ActorType: g.opts.ActorType,
-		ActorID:   actorID,
-		Operations: []actorsapi.TransactionalOperation{{
-			Operation: actorsapi.Delete,
-			Request:   actorsapi.TransactionalDelete{Key: recordStateKey, ETag: etag},
-		}},
-	}, false)
-	if err != nil {
-		log.Warnf("Activity actor '%s': failed to delete the execution-claim record: %v", actorID, err)
-	}
-	return err
-}
-
-func (g *Guards) read(ctx context.Context, actorID string) (*Record, *string, error) {
-	res, err := g.opts.State.Get(ctx, &actorsapi.GetStateRequest{
-		ActorType: g.opts.ActorType,
-		ActorID:   actorID,
-		Key:       recordStateKey,
-	}, false)
-	if err != nil {
-		return nil, nil, err
-	}
-	if res == nil || len(res.Data) == 0 {
-		return nil, nil, nil
-	}
-	var rec Record
-	if err := json.Unmarshal(res.Data, &rec); err != nil {
-		return nil, nil, err
-	}
-	return &rec, res.ETag, nil
 }

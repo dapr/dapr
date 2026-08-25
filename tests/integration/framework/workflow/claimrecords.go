@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -34,6 +35,33 @@ func CountClaimRecords(t *testing.T, ctx context.Context, db *sqlite.SQLite) int
 		"%||execution-claim",
 	).Scan(&count))
 	return count
+}
+
+// EnsureClaimRecords blocks until at least one execution-claim record exists.
+// Guards only spawn when a dissemination moves an in-flight activity actor,
+// and per churn round every actor can stay put, so on an empty round the next
+// extend closure runs (schedule another batch of blocked instances, then join
+// one more daprd to churn placement again) before re-polling. The closures
+// bound the retries; running out of them fails the test.
+func EnsureClaimRecords(t *testing.T, ctx context.Context, db *sqlite.SQLite, extends []func()) {
+	t.Helper()
+	for {
+		deadline := time.Now().Add(time.Second * 10)
+		for time.Now().Before(deadline) {
+			if CountClaimRecords(t, ctx, db) >= 1 {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				require.Fail(t, "context done while waiting for an execution-claim record")
+			case <-time.After(time.Millisecond * 50):
+			}
+		}
+		require.NotEmpty(t, extends,
+			"no execution-claim record appeared after every churn round: placement churn over in-flight activities must write records")
+		extends[0]()
+		extends = extends[1:]
+	}
 }
 
 // AuditClaimWrites installs sqlite triggers that append every execution-claim

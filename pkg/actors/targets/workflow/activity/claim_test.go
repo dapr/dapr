@@ -406,13 +406,22 @@ func Test_checkClaimRecord(t *testing.T) {
 		f.claims = claim.New(claim.Options{
 			ActorType:  f.actorType,
 			State:      store.fake(),
-			StaleAfter: time.Millisecond,
+			StaleAfter: time.Millisecond * 50,
 		})
 		store.set(t, actorID, claim.Record{TaskKey: actorID + "::oldrun", HeartbeatMs: time.Now().Add(-time.Second).UnixMilli()})
+		// First sighting only opens the observation window; the other
+		// scheduling's record does not block this taskKey.
 		outcome, err := f.claims.Check(t.Context(), actorID, key)
 		require.NoError(t, err)
 		assert.Equal(t, claim.Proceed, outcome)
 		_, ok := store.get(t, actorID)
+		assert.True(t, ok, "the record cannot read dead on a single observation")
+
+		time.Sleep(time.Millisecond * 75)
+		outcome, err = f.claims.Check(t.Context(), actorID, key)
+		require.NoError(t, err)
+		assert.Equal(t, claim.Proceed, outcome)
+		_, ok = store.get(t, actorID)
 		assert.False(t, ok, "a dead old-run record must not leak")
 	})
 
@@ -433,14 +442,85 @@ func Test_checkClaimRecord(t *testing.T) {
 		f.claims = claim.New(claim.Options{
 			ActorType:  f.actorType,
 			State:      store.fake(),
-			StaleAfter: time.Millisecond,
+			StaleAfter: time.Millisecond * 50,
 		})
 		store.set(t, actorID, claim.Record{TaskKey: key, HeartbeatMs: time.Now().Add(-time.Second).UnixMilli()})
 		outcome, err := f.claims.Check(t.Context(), actorID, key)
 		require.NoError(t, err)
+		assert.Equal(t, claim.Defer, outcome, "a single observation cannot read stale")
+
+		time.Sleep(time.Millisecond * 75)
+		outcome, err = f.claims.Check(t.Context(), actorID, key)
+		require.NoError(t, err)
 		assert.Equal(t, claim.Proceed, outcome)
 		_, ok := store.get(t, actorID)
 		assert.False(t, ok, "a stale record is dead weight and must be reclaimed")
+	})
+
+	t.Run("skewed past heartbeat is not insta-reclaimed", func(t *testing.T) {
+		// The writer's clock ran far behind: the raw timestamp is over the
+		// grace on arrival, but only reader-side observation may declare it
+		// dead. A frozen value still reclaims after the grace.
+		t.Parallel()
+		f, store, _ := newClaimHarness(t)
+		f.claims = claim.New(claim.Options{
+			ActorType:  f.actorType,
+			State:      store.fake(),
+			StaleAfter: time.Millisecond * 50,
+		})
+		store.set(t, actorID, claim.Record{TaskKey: key, HeartbeatMs: time.Now().Add(-time.Hour).UnixMilli()})
+		outcome, err := f.claims.Check(t.Context(), actorID, key)
+		require.NoError(t, err)
+		assert.Equal(t, claim.Defer, outcome, "cross-host clock skew must not reclaim a live execution")
+
+		time.Sleep(time.Millisecond * 75)
+		outcome, err = f.claims.Check(t.Context(), actorID, key)
+		require.NoError(t, err)
+		assert.Equal(t, claim.Proceed, outcome, "a value frozen past the grace is dead regardless of skew")
+	})
+
+	t.Run("skewed future heartbeat defers and later reclaims", func(t *testing.T) {
+		t.Parallel()
+		f, store, _ := newClaimHarness(t)
+		f.claims = claim.New(claim.Options{
+			ActorType:  f.actorType,
+			State:      store.fake(),
+			StaleAfter: time.Millisecond * 50,
+		})
+		store.set(t, actorID, claim.Record{TaskKey: key, HeartbeatMs: time.Now().Add(time.Hour).UnixMilli()})
+		outcome, err := f.claims.Check(t.Context(), actorID, key)
+		require.NoError(t, err)
+		assert.Equal(t, claim.Defer, outcome)
+
+		time.Sleep(time.Millisecond * 75)
+		outcome, err = f.claims.Check(t.Context(), actorID, key)
+		require.NoError(t, err)
+		assert.Equal(t, claim.Proceed, outcome, "a frozen future timestamp must not shield a dead guard forever")
+	})
+
+	t.Run("heartbeat change resets the observation window", func(t *testing.T) {
+		t.Parallel()
+		f, store, _ := newClaimHarness(t)
+		f.claims = claim.New(claim.Options{
+			ActorType:  f.actorType,
+			State:      store.fake(),
+			StaleAfter: time.Millisecond * 50,
+		})
+		store.set(t, actorID, claim.Record{TaskKey: key, HeartbeatMs: 1})
+		outcome, err := f.claims.Check(t.Context(), actorID, key)
+		require.NoError(t, err)
+		assert.Equal(t, claim.Defer, outcome)
+
+		time.Sleep(time.Millisecond * 75)
+		store.set(t, actorID, claim.Record{TaskKey: key, HeartbeatMs: 2})
+		outcome, err = f.claims.Check(t.Context(), actorID, key)
+		require.NoError(t, err)
+		assert.Equal(t, claim.Defer, outcome, "a changed heartbeat proves the guard lives; the window must restart")
+
+		time.Sleep(time.Millisecond * 75)
+		outcome, err = f.claims.Check(t.Context(), actorID, key)
+		require.NoError(t, err)
+		assert.Equal(t, claim.Proceed, outcome)
 	})
 
 	t.Run("failed reclaim delete defers instead of proceeding", func(t *testing.T) {
@@ -461,9 +541,14 @@ func Test_checkClaimRecord(t *testing.T) {
 				WithTransactionalStateOperationFn(func(context.Context, bool, *actorsapi.TransactionalRequest, bool) error {
 					return errors.New("etag mismatch")
 				}),
-			StaleAfter: time.Millisecond,
+			StaleAfter: time.Millisecond * 50,
 		})
 		outcome, err := f.claims.Check(t.Context(), actorID, key)
+		require.NoError(t, err)
+		assert.Equal(t, claim.Defer, outcome)
+
+		time.Sleep(time.Millisecond * 75)
+		outcome, err = f.claims.Check(t.Context(), actorID, key)
 		require.NoError(t, err)
 		assert.Equal(t, claim.Defer, outcome)
 	})
@@ -526,12 +611,20 @@ func Test_executeActivity_recoveryGate(t *testing.T) {
 		t.Parallel()
 		f, store, scheduled := newClaimHarness(t)
 		f.claims = claim.New(claim.Options{
-			ActorType: f.actorType,
-			State:     store.fake(),
+			ActorType:  f.actorType,
+			State:      store.fake(),
+			StaleAfter: time.Millisecond * 50,
 		})
 		store.set(t, actorID, claim.Record{TaskKey: actorID, HeartbeatMs: time.Now().Add(-time.Hour).UnixMilli()})
 
 		a := f.GetOrCreate(actorID).(*activity)
+
+		// The first arrival opens the observation window and defers; the
+		// retry past the grace observes the frozen value and reclaims.
+		err := a.executeActivity(t.Context(), activityReminderName, testInvocation(), false, true)
+		require.ErrorIs(t, err, claim.ErrHeldElsewhere)
+		time.Sleep(time.Millisecond * 75)
+
 		ownerErr := make(chan error, 1)
 		go func() {
 			ownerErr <- a.executeActivity(t.Context(), activityReminderName, testInvocation(), false, true)

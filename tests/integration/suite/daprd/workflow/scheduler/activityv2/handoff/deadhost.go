@@ -50,6 +50,10 @@ type deadhost struct {
 	db        *sqlite.SQLite
 	victim    *daprd.Daprd
 	joiners   [2]*daprd.Daprd
+	// churners join one at a time, each after another batch of blocked
+	// instances, only when a churn round moved no in-flight actor and the
+	// record gate is still unsatisfied.
+	churners [3]*daprd.Daprd
 }
 
 func (a *deadhost) Setup(t *testing.T) []framework.Option {
@@ -72,11 +76,14 @@ func (a *deadhost) Setup(t *testing.T) []framework.Option {
 			daprd.WithWorkflowJanitorPeriod(t, time.Second),
 		)
 	}
-	// Victim and joiners start mid-run (the victim is killed, the joiners
-	// trigger the rebalance): deliberately not in WithProcesses.
+	// Victim, joiners and churners start mid-run (the victim is killed, the
+	// others trigger rebalances): deliberately not in WithProcesses.
 	a.victim = newDaprd()
 	for i := range a.joiners {
 		a.joiners[i] = newDaprd()
+	}
+	for i := range a.churners {
+		a.churners[i] = newDaprd()
 	}
 
 	return []framework.Option{
@@ -88,12 +95,12 @@ func (a *deadhost) Run(t *testing.T, ctx context.Context) {
 	a.scheduler.WaitUntilRunning(t, ctx)
 	a.place.WaitUntilRunning(t, ctx)
 
-	// Each of N actors stays put with probability ~1/3; the record gate
-	// below requires at least one to move.
+	// Blocked activities per churn round; whether any of their actors moves
+	// is probabilistic, the record gate below retries with another batch and
+	// churner until one has. The initial batch all blocks on the victim.
 	const instances = 6
 
 	var executions atomic.Int64
-	started := make(chan struct{}, instances)
 
 	newWorkflow := func(r *task.TaskRegistry) {
 		require.NoError(t, r.AddWorkflowN("HandoffDeadHost", func(c *task.WorkflowContext) (any, error) {
@@ -110,10 +117,6 @@ func (a *deadhost) Run(t *testing.T, ctx context.Context) {
 	newWorkflow(victimRegistry)
 	require.NoError(t, victimRegistry.AddActivityN("Slow", func(c task.ActivityContext) (any, error) {
 		executions.Add(1)
-		select {
-		case started <- struct{}{}:
-		default:
-		}
 		<-c.Context().Done()
 		return nil, c.Context().Err()
 	}))
@@ -136,52 +139,63 @@ func (a *deadhost) Run(t *testing.T, ctx context.Context) {
 	victimClient := client.NewTaskHubGrpcClient(a.victim.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, victimClient.StartWorkItemListener(ctx, victimRegistry))
 
-	ids := make([]string, instances)
-	for i := range ids {
-		resp, err := a.victim.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
-			WorkflowComponent: "dapr",
-			WorkflowName:      "HandoffDeadHost",
-		})
-		require.NoError(t, err)
-		ids[i] = resp.GetInstanceId()
-	}
-
-	for range instances {
-		select {
-		case <-started:
-		case <-time.After(time.Second * 30):
-			require.Fail(t, "timed out waiting for every activity body to start executing")
+	var ids []string
+	start := func(n int) {
+		t.Helper()
+		for range n {
+			resp, err := a.victim.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
+				WorkflowComponent: "dapr",
+				WorkflowName:      "HandoffDeadHost",
+			})
+			require.NoError(t, err)
+			ids = append(ids, resp.GetInstanceId())
 		}
+		// A body dispatched to the victim counts on entry then blocks; one
+		// dispatched to a survivor counts on its immediate completion.
+		require.Eventually(t, func() bool {
+			return executions.Load() >= int64(len(ids))
+		}, time.Second*30, time.Millisecond*10,
+			"every scheduled activity body must have started executing")
 	}
-	require.Equal(t, int64(instances), executions.Load())
+	start(instances)
 
-	startVersion := a.place.PlacementTables(t, ctx).Tables["default"].Version
+	version := a.place.PlacementTables(t, ctx).Tables["default"].Version
+	join := func(d *daprd.Daprd) {
+		t.Helper()
+		d.Run(t, ctx)
+		t.Cleanup(func() { d.Cleanup(t) })
+		d.WaitUntilRunning(t, ctx)
 
-	for i, joiner := range a.joiners {
-		joiner.Run(t, ctx)
-		t.Cleanup(func() { joiner.Cleanup(t) })
-		joiner.WaitUntilRunning(t, ctx)
-
-		joinerClient := client.NewTaskHubGrpcClient(joiner.GRPCConn(t, ctx), backend.DefaultLogger())
+		joinerClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), backend.DefaultLogger())
 		require.NoError(t, joinerClient.StartWorkItemListener(ctx, newSurvivorRegistry()))
 
+		version++
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			table := a.place.PlacementTables(t, ctx).Tables["default"]
 			if !assert.NotNil(c, table) {
 				return
 			}
-			//nolint:gosec
-			assert.GreaterOrEqual(c, table.Version, startVersion+uint64(i+1))
+			assert.GreaterOrEqual(c, table.Version, version)
 		}, time.Second*15, time.Millisecond*10)
+	}
+
+	for _, joiner := range a.joiners {
+		join(joiner)
 	}
 
 	// The rebalance must have moved at least one in-flight actor and its
 	// guard must have written a record; only then does killing the victim
 	// freeze a claim mid-heartbeat and exercise the stale-reclaim path.
-	require.Eventually(t, func() bool {
-		return wf.CountClaimRecords(t, ctx, a.db) >= 1
-	}, time.Second*15, time.Millisecond*50,
-		"placement churn over in-flight activities must write execution-claim records")
+	// All-stay is possible per round, so each rescue round blocks another
+	// batch and churns again.
+	extends := make([]func(), 0, len(a.churners))
+	for _, churner := range a.churners {
+		extends = append(extends, func() {
+			start(instances)
+			join(churner)
+		})
+	}
+	wf.EnsureClaimRecords(t, ctx, a.db, extends)
 	a.victim.Kill(t)
 
 	survivor := a.joiners[len(a.joiners)-1]
@@ -194,6 +208,8 @@ func (a *deadhost) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, `"recovered"`, metadata.GetOutput().GetValue())
 	}
 
-	assert.GreaterOrEqual(t, executions.Load(), int64(2*instances),
+	// The initial batch all blocked on the victim and died with it, so each
+	// of those bodies executed twice; later batches at least once each.
+	assert.GreaterOrEqual(t, executions.Load(), int64(len(ids)+instances),
 		"every body killed with its host must have been re-executed by a survivor")
 }

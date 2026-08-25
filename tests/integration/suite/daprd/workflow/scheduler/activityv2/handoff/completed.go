@@ -41,6 +41,10 @@ func init() {
 type completed struct {
 	workflow *workflow.Workflow
 	joiners  [2]*daprd.Daprd
+	// churners join one at a time, each after another batch of blocked
+	// instances, only when a churn round moved no in-flight actor and the
+	// record gate is still unsatisfied.
+	churners [3]*daprd.Daprd
 }
 
 func (a *completed) Setup(t *testing.T) []framework.Option {
@@ -52,13 +56,19 @@ func (a *completed) Setup(t *testing.T) []framework.Option {
 
 	// The joiners trigger the mid-run placement rebalance: deliberately not
 	// in WithProcesses, Run starts them at the churn moment.
-	for i := range a.joiners {
-		a.joiners[i] = daprd.New(t, append([]daprd.Option{
+	newDaprd := func() *daprd.Daprd {
+		return daprd.New(t, append([]daprd.Option{
 			daprd.WithAppID(a.workflow.Dapr().AppID()),
 			daprd.WithResourceFiles(a.workflow.DB().GetComponent(t)),
 			daprd.WithPlacementAddresses(a.workflow.Placement().Address()),
 			daprd.WithSchedulerAddresses(a.workflow.Scheduler().Address()),
 		}, fp...)...)
+	}
+	for i := range a.joiners {
+		a.joiners[i] = newDaprd()
+	}
+	for i := range a.churners {
+		a.churners[i] = newDaprd()
 	}
 
 	return []framework.Option{
@@ -69,12 +79,12 @@ func (a *completed) Setup(t *testing.T) []framework.Option {
 func (a *completed) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
-	// Each of N actors stays put with probability ~1/3; the record gate
-	// below requires at least one to move.
-	const instances = 6
+	// Concurrently blocked activities per churn round; whether any of their
+	// actors moves is probabilistic, the record gate below retries with
+	// another batch and churner until one has.
+	const batch = 6
 
 	var executions atomic.Int64
-	started := make(chan struct{}, instances)
 	release := make(chan struct{})
 	t.Cleanup(func() {
 		select {
@@ -94,10 +104,6 @@ func (a *completed) Run(t *testing.T, ctx context.Context) {
 	actFn := func(c task.ActivityContext) (any, error) {
 		executions.Add(1)
 		select {
-		case started <- struct{}{}:
-		default:
-		}
-		select {
 		case <-release:
 			return "slow-done", nil
 		case <-c.Context().Done():
@@ -109,54 +115,63 @@ func (a *completed) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, a.workflow.Registry().AddActivityN("Slow", actFn))
 	client1 := a.workflow.BackendClient(t, ctx)
 
-	ids := make([]string, instances)
-	for i := range ids {
-		resp, err := a.workflow.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
-			WorkflowComponent: "dapr",
-			WorkflowName:      "HandoffCompleted",
-		})
-		require.NoError(t, err)
-		ids[i] = resp.GetInstanceId()
-	}
-
-	for range instances {
-		select {
-		case <-started:
-		case <-time.After(time.Second * 30):
-			require.Fail(t, "timed out waiting for every activity body to start executing")
+	var ids []string
+	start := func(n int) {
+		t.Helper()
+		for range n {
+			resp, err := a.workflow.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
+				WorkflowComponent: "dapr",
+				WorkflowName:      "HandoffCompleted",
+			})
+			require.NoError(t, err)
+			ids = append(ids, resp.GetInstanceId())
 		}
+		require.Eventually(t, func() bool {
+			return executions.Load() >= int64(len(ids))
+		}, time.Second*30, time.Millisecond*10,
+			"every scheduled activity body must be mid-execution before the churn")
 	}
+	start(batch)
 
-	startVersion := a.workflow.Placement().PlacementTables(t, ctx).Tables["default"].Version
-
-	for i, joiner := range a.joiners {
-		joiner.Run(t, ctx)
-		t.Cleanup(func() { joiner.Cleanup(t) })
-		joiner.WaitUntilRunning(t, ctx)
+	version := a.workflow.Placement().PlacementTables(t, ctx).Tables["default"].Version
+	join := func(d *daprd.Daprd) {
+		t.Helper()
+		d.Run(t, ctx)
+		t.Cleanup(func() { d.Cleanup(t) })
+		d.WaitUntilRunning(t, ctx)
 
 		registry := task.NewTaskRegistry()
 		require.NoError(t, registry.AddWorkflowN("HandoffCompleted", wfFn))
 		require.NoError(t, registry.AddActivityN("Slow", actFn))
-		joinerClient := client.NewTaskHubGrpcClient(joiner.GRPCConn(t, ctx), backend.DefaultLogger())
+		joinerClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), backend.DefaultLogger())
 		require.NoError(t, joinerClient.StartWorkItemListener(ctx, registry))
 
+		version++
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			table := a.workflow.Placement().PlacementTables(t, ctx).Tables["default"]
 			if !assert.NotNil(c, table) {
 				return
 			}
-			//nolint:gosec
-			assert.GreaterOrEqual(c, table.Version, startVersion+uint64(i+1))
+			assert.GreaterOrEqual(c, table.Version, version)
 		}, time.Second*15, time.Millisecond*10)
 	}
 
-	// The rebalance must have moved at least one in-flight actor before the
-	// bodies finish, or normal same-host completion would satisfy every
-	// assertion below without a guard or recovery arrival ever existing.
-	require.Eventually(t, func() bool {
-		return wf.CountClaimRecords(t, ctx, a.workflow.DB()) >= 1
-	}, time.Second*15, time.Millisecond*50,
-		"placement churn over in-flight activities must write execution-claim records")
+	for _, joiner := range a.joiners {
+		join(joiner)
+	}
+
+	// At least one in-flight actor must move before the bodies finish, or
+	// normal same-host completion would satisfy every assertion below without
+	// a guard or recovery arrival ever existing. All-stay is possible per
+	// round, so each rescue round blocks another batch and churns again.
+	extends := make([]func(), 0, len(a.churners))
+	for _, churner := range a.churners {
+		extends = append(extends, func() {
+			start(batch)
+			join(churner)
+		})
+	}
+	wf.EnsureClaimRecords(t, ctx, a.workflow.DB(), extends)
 
 	// One to two janitor fires land on the new owners, then the old host
 	// finishes: the results flow through the detached watcher while the
@@ -172,7 +187,7 @@ func (a *completed) Run(t *testing.T, ctx context.Context) {
 			"the old host's result must reach the workflow across the handoff")
 	}
 
-	assert.Equal(t, int64(instances), executions.Load(),
+	assert.Equal(t, int64(len(ids)), executions.Load(),
 		"a recovery arrival racing the old host's completion must ack, not re-execute")
 
 	// Every recovery vector must settle: a deferred or escalated arrival that
