@@ -15,12 +15,14 @@ package orchestrator
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -99,18 +101,19 @@ func Test_fold_takeCapAndOrder(t *testing.T) {
 	for i := range total {
 		h.orch.foldPending = append(h.orch.foldPending, &foldEntry{
 			event:     taskCompletedEvent(int32(i + 10)),
+			gen:       1,
 			committed: make(chan struct{}),
 		})
 	}
 
-	taken := h.orch.foldTake()
+	taken := h.orch.foldTake(1)
 	assert.Len(t, taken, maxFoldPerTurn, "one turn folds at most maxFoldPerTurn completions")
 	assert.Len(t, h.orch.foldPending, 5, "overflow stays pending")
 	assert.Equal(t, int32(10), taken[0].event.GetTaskCompleted().GetTaskScheduledId(), "arrival order preserved")
 
-	rest := h.orch.foldTake()
+	rest := h.orch.foldTake(1)
 	assert.Len(t, rest, 5)
-	assert.Empty(t, h.orch.foldTake())
+	assert.Empty(t, h.orch.foldTake(1))
 }
 
 func Test_fold_ackNackFlush(t *testing.T) {
@@ -177,4 +180,102 @@ func Test_fold_unresolvedTreatsPendingAsResolved(t *testing.T) {
 	require.Len(t, unresolved, 1)
 	assert.Equal(t, int32(2), unresolved[0].GetEventId(),
 		"a completion held for folding must suppress janitor re-dispatch of its task")
+}
+
+func childCompletedEvent(scheduled int32) *backend.HistoryEvent {
+	return &protos.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{
+			ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{
+				TaskScheduledId: scheduled,
+				Result:          wrapperspb.String(`"done"`),
+			},
+		},
+	}
+}
+
+// Child completions must not fold (lock-cycle risk); they take the durable
+// inbox path.
+func Test_fold_childCompletionKeepsInboxPath(t *testing.T) {
+	const instanceID = "test-fold-child"
+	h := newWakeHarness(t, instanceID, true)
+	h.fact.fastPath = true
+	h.primeRunning(t, instanceID, 7)
+
+	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), childCompletedEvent(7))
+	require.NoError(t, err)
+	assert.Nil(t, entry, "child completions must not be held for folding")
+	assert.Contains(t, h.snapshotOps(), "save", "the inbox path must commit")
+	assert.Empty(t, h.orch.foldPending)
+}
+
+// Stale-generation entries are dropped-and-acked at take.
+func Test_fold_takeDropsStaleGeneration(t *testing.T) {
+	const instanceID = "test-fold-stalegen"
+	h := newWakeHarness(t, instanceID, true)
+	h.fact.fastPath = true
+	h.primeRunning(t, instanceID, 7)
+
+	stale := &foldEntry{event: taskCompletedEvent(10), gen: 1, committed: make(chan struct{})}
+	fresh := &foldEntry{event: taskCompletedEvent(11), gen: 2, committed: make(chan struct{})}
+	h.orch.foldPending = []*foldEntry{stale, fresh}
+
+	taken := h.orch.foldTake(2)
+	require.Len(t, taken, 1)
+	assert.Same(t, fresh, taken[0], "only current-generation entries may be taken")
+
+	select {
+	case <-stale.committed:
+		require.NoError(t, stale.err, "the stale entry is acked (acceptance-and-drop), not nacked into a retry loop")
+	default:
+		t.Fatal("the stale entry must be resolved at take")
+	}
+	assert.Empty(t, h.orch.foldPending)
+}
+
+// A TaskExecutionId mismatch marks a straggler; it must not fold.
+func Test_fold_executionIDMismatchKeepsInboxPath(t *testing.T) {
+	const instanceID = "test-fold-execid"
+	h := newWakeHarness(t, instanceID, true)
+	h.fact.fastPath = true
+	h.primeRunning(t, instanceID, 7)
+	h.orch.state.History[1].GetTaskScheduled().TaskExecutionId = "exec-A"
+	h.orch.state.AddToHistory(&protos.HistoryEvent{
+		EventId:   8,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_TaskScheduled{
+			TaskScheduled: &protos.TaskScheduledEvent{Name: "act", TaskExecutionId: "exec-A"},
+		},
+	})
+
+	mismatch := taskCompletedEvent(7)
+	mismatch.GetTaskCompleted().TaskExecutionId = "exec-B"
+	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), mismatch)
+	require.NoError(t, err)
+	assert.Nil(t, entry, "a mismatched execution id must not fold")
+	assert.Empty(t, h.orch.foldPending)
+
+	match := taskCompletedEvent(8)
+	match.GetTaskCompleted().TaskExecutionId = "exec-A"
+	entry, err = h.orch.addWorkflowEventMaybeFold(t.Context(), match)
+	require.NoError(t, err)
+	assert.NotNil(t, entry, "a matching execution id folds as usual")
+}
+
+// The payload stall guard must count folded completions.
+func Test_workflowPayloadOversize_includesFoldedBytes(t *testing.T) {
+	const instanceID = "test-fold-payload"
+	h := newWakeHarness(t, instanceID, true)
+	h.fact.fastPath = true
+	h.primeRunning(t, instanceID, 7)
+	h.orch.maxRequestBodySize = 2048
+
+	_, _, oversize := h.orch.workflowPayloadOversize(t.Context(), h.orch.state, nil, "wf")
+	require.False(t, oversize, "the primed state alone is well under the threshold")
+
+	big := taskCompletedEvent(7)
+	big.GetTaskCompleted().Result = wrapperspb.String(strings.Repeat("x", 4096))
+	_, _, oversize = h.orch.workflowPayloadOversize(t.Context(), h.orch.state, []*backend.HistoryEvent{big}, "wf")
+	assert.True(t, oversize, "folded completions must count toward the stall threshold")
 }
