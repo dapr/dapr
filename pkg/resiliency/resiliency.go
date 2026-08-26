@@ -634,7 +634,9 @@ func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefiniti
 		if policyNames.CircuitBreaker != "" {
 			template, ok := r.circuitBreakers[policyNames.CircuitBreaker]
 			if ok {
+				r.serviceCBsMu.RLock()
 				cache, ok := r.serviceCBs[app]
+				r.serviceCBsMu.RUnlock()
 				if ok {
 					policyDef.cb, ok = cache.Get(endpoint)
 					if !ok || policyDef.cb == nil {
@@ -768,7 +770,9 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 		if policyNames.CircuitBreaker != "" {
 			template, ok := r.circuitBreakers[policyNames.CircuitBreaker]
 			if ok {
+				r.actorCBsCachesMu.RLock()
 				cache, ok := r.actorCBCaches[actorType]
+				r.actorCBsCachesMu.RUnlock()
 				if ok {
 					var key string
 					if policyNames.CircuitBreakerScope == ActorCircuitBreakerScopeType {
