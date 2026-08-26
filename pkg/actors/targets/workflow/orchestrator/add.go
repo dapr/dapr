@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	staterrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -170,6 +171,21 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 	}
 	fresh, lerr := wfenginestate.LoadWorkflowState(ctx, o.actorState, o.actorID, opts)
 	if lerr != nil {
+		// A verification failure from the durable load is independent
+		// confirmation of tampering, not a transient condition: tombstone
+		// rather than retry forever.
+		var verifyErr *staterrors.VerificationError
+		if errors.As(lerr, &verifyErr) {
+			log.Warnf("Workflow actor '%s': durable state failed verification while classifying an attestation failure, tombstoning workflow: %s", o.actorID, lerr)
+			condemned := fresh
+			if condemned == nil {
+				condemned = state
+			}
+			if _, _, terr := o.tombstoneTamperedState(ctx, opts, condemned, lerr); terr != nil {
+				return terr
+			}
+			return api.ErrInstanceNotFound
+		}
 		return wferrors.NewRecoverable(fmt.Errorf("failed to reload state to classify attestation failure (%s): %w", verr, lerr))
 	}
 	if fresh == nil {
