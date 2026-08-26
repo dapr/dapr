@@ -50,6 +50,11 @@ var buildTags = []string{
 	// secretKeyRef entries are resolved on. Never set for released daprd
 	// flavors.
 	"secretstores_spiffeprobe",
+	// bindings_metadataprobe compiles in an integration-test-only output
+	// binding that echoes the request metadata it receives, letting a test
+	// assert which metadata daprd forwards to a component. Never set for
+	// released daprd flavors.
+	"bindings_metadataprobe",
 }
 
 func BuildAll(t *testing.T) {
