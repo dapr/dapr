@@ -116,7 +116,7 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 
 	_, err = s.client.ScheduleJob(ctx, internalScheduleJobReq)
 	if err != nil {
-		log.Errorf("Error scheduling reminder job %s due to: %s", reminder.Name, err)
+		log.Errorf("Error scheduling reminder job %s for actor type '%s' with ID '%s' due to: %s", reminder.Name, reminder.ActorType, reminder.ActorID, err)
 		return err
 	}
 

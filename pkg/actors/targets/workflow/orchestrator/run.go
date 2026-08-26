@@ -175,7 +175,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// them nacks the senders back into their retry chains. Overflow beyond
 	// the per-turn cap (and anything submitted after this take) re-arms a
 	// drive so it is folded by a follow-up turn.
-	folded := o.foldTake()
+	folded := o.foldTake(state.Generation)
 	foldedCommitted := false
 	defer func() {
 		if foldedCommitted {
@@ -209,7 +209,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	wi.IncomingHistory = state.IncomingHistory
 
 	workflowName := o.getExecutionStartedEvent(state).GetName()
-	if reason, description, oversize := o.workflowPayloadOversize(ctx, state, workflowName); oversize {
+	if reason, description, oversize := o.workflowPayloadOversize(ctx, state, foldedEvents(folded), workflowName); oversize {
+		// foldedCommitted stays false: the deferred handler nacks the folded
+		// senders back into their retry chains.
 		return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs, reason, description)
 	}
 	// Executing workflow code is a one-way operation. We must wait for the app code to report its completion, which
