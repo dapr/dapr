@@ -45,6 +45,16 @@ var buildTags = []string{
 	// reports whether the SPIFFE identity reached the component operation
 	// context. Never set for released daprd flavors.
 	"state_spiffeprobe",
+	// secretstores_spiffeprobe compiles in an integration-test-only secret
+	// store that reports whether the SPIFFE identity reached the context that
+	// secretKeyRef entries are resolved on. Never set for released daprd
+	// flavors.
+	"secretstores_spiffeprobe",
+	// bindings_metadataprobe compiles in an integration-test-only output
+	// binding that echoes the request metadata it receives, letting a test
+	// assert which metadata daprd forwards to a component. Never set for
+	// released daprd flavors.
+	"bindings_metadataprobe",
 }
 
 func BuildAll(t *testing.T) {
