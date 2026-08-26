@@ -15,6 +15,8 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -27,11 +29,14 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/fake"
+	actorreminders "github.com/dapr/dapr/pkg/actors/reminders"
 	remindersfake "github.com/dapr/dapr/pkg/actors/reminders/fake"
+	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
@@ -40,14 +45,14 @@ import (
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
-// Test_runWorkflow_stateIsolation verifies that the cached runtime state
-// (o.rstate) is not corrupted when the workflow engine mutates wi.State during
-// execution and then fails. This is the scenario that occurs when the
-// ContinueAsNew tight-loop exceeds MaxContinueAsNewCount: the applier
-// overwrites *wi.State via *s = *newState, and without cloning, o.rstate
-// (which was the same pointer) would be left in a corrupted state that is
-// inconsistent with the persisted store. On retry, the corrupted rstate would
-// cause the workflow to see wrong input, leading to event loss.
+// Test_runWorkflow_stateIsolation verifies that a runtime state corrupted by
+// the workflow engine is never retained when execution fails. The scenario is
+// the ContinueAsNew tight-loop exceeding MaxContinueAsNewCount: the applier
+// overwrites *wi.State via *s = *newState, and o.rstate is the same pointer.
+// The failure path must invalidate the cached state entirely so the retried
+// reminder reloads durable truth from the store instead of running on the
+// corrupted rstate (which would make the workflow see wrong input and lose
+// events).
 func Test_runWorkflow_stateIsolation(t *testing.T) {
 	const instanceID = "test-workflow-1"
 
@@ -156,26 +161,21 @@ func Test_runWorkflow_stateIsolation(t *testing.T) {
 	assert.Equal(t, todo.RunCompletedFalse, completed)
 	require.Error(t, runErr)
 
-	// CRITICAL ASSERTION: o.rstate must NOT have been mutated by the scheduler's
-	// modification of wi.State. Without the proto.Clone fix, o.rstate would
-	// point to the same object as wi.State, so the scheduler's *wi.State =
-	// *newState would corrupt o.rstate.
-	assert.True(t, proto.Equal(originalRstate, o.rstate),
-		"o.rstate should not be mutated after failed execution;\n"+
-			"got StartEvent.Input=%v, want StartEvent.Input=%v",
+	// CRITICAL ASSERTION: the corrupted rstate must not be retained. The
+	// non-CAN abandon path invalidates the whole cached state, so the
+	// retried reminder reloads durable truth from the store rather than
+	// running on the engine-mutated rstate.
+	assert.Nil(t, o.rstate,
+		"cached rstate must be invalidated after failed execution, not retained corrupted (StartEvent.Input=%v)",
 		o.rstate.GetStartEvent().GetInput().GetValue(),
-		originalRstate.GetStartEvent().GetInput().GetValue(),
 	)
+	assert.Nil(t, o.state, "cached state must be invalidated after failed execution")
+	assert.Nil(t, o.ometa, "cached metadata must be invalidated after failed execution")
 
-	assert.Equal(t,
-		originalRstate.GetStartEvent().GetInput().GetValue(),
-		o.rstate.GetStartEvent().GetInput().GetValue(),
-		"workflow input in cached rstate should be unchanged after failed execution",
-	)
-
-	assert.False(t, o.rstate.GetContinuedAsNew(),
-		"ContinuedAsNew should not be set on cached rstate after failed execution",
-	)
+	// The corruption stayed on the abandoned work item, isolated from the
+	// original cached view.
+	assert.False(t, proto.Equal(originalRstate, rstate),
+		"the engine mutation should have landed on the abandoned work item state")
 }
 
 // Test_runWorkflow_canSaveMovesCarryoverToInbox verifies that when CAN
@@ -732,4 +732,180 @@ func TestFilterValidInboxEvents_MixedValidAndInvalid(t *testing.T) {
 	result := filterValidInboxEvents(state)
 	// task 1 valid, task 999 dropped, child 5 valid, event raised kept
 	assert.Len(t, result, 3)
+}
+
+// Test_runWorkflow_canCarryoverSavesBeforeReminderCreate pins the
+// save-before-create ordering of the ContinueAsNew carryover path: creating
+// the wake-up reminder before the save lets it fire remotely against un-saved
+// state, ack SUCCESS and be deleted, stranding the carryover once the save
+// commits.
+func Test_runWorkflow_canCarryoverSavesBeforeReminderCreate(t *testing.T) {
+	t.Parallel()
+
+	newCanOrchestrator := func(t *testing.T, ops *[]string, lock *sync.Mutex, createErr error) *orchestrator {
+		t.Helper()
+
+		const instanceID = "test-can-order"
+
+		startEvent := &protos.HistoryEvent{
+			EventId:   -1,
+			Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_ExecutionStarted{
+				ExecutionStarted: &protos.ExecutionStartedEvent{
+					Name:  "TestWorkflow",
+					Input: wrapperspb.String(`0`),
+					WorkflowInstance: &protos.WorkflowInstance{
+						InstanceId: instanceID,
+					},
+				},
+			},
+		}
+
+		history := []*backend.HistoryEvent{
+			{
+				EventId: -1, Timestamp: timestamppb.Now(),
+				EventType: &protos.HistoryEvent_WorkflowStarted{
+					WorkflowStarted: &protos.WorkflowStartedEvent{},
+				},
+			},
+			startEvent,
+		}
+
+		inbox := make([]*backend.HistoryEvent, 3)
+		for i := range inbox {
+			inbox[i] = &protos.HistoryEvent{
+				EventId:   int32(i),
+				Timestamp: timestamppb.Now(),
+				EventType: &protos.HistoryEvent_EventRaised{
+					EventRaised: &protos.EventRaisedEvent{Name: "incr"},
+				},
+			}
+		}
+
+		wfState := wfenginestate.NewState(wfenginestate.Options{
+			AppID:             "testapp",
+			WorkflowActorType: "workflow",
+			ActivityActorType: "activity",
+		})
+		for _, e := range inbox {
+			wfState.AddToInbox(e)
+		}
+		for _, e := range history {
+			wfState.AddToHistory(e)
+		}
+
+		canState := &protos.WorkflowRuntimeState{
+			InstanceId:     instanceID,
+			ContinuedAsNew: true,
+			StartEvent: &protos.ExecutionStartedEvent{
+				Name:  "TestWorkflow",
+				Input: wrapperspb.String(`2`),
+				WorkflowInstance: &protos.WorkflowInstance{
+					InstanceId: instanceID,
+				},
+			},
+			OldEvents: []*protos.HistoryEvent{},
+			NewEvents: append([]*protos.HistoryEvent{
+				{
+					EventId: -1, Timestamp: timestamppb.Now(),
+					EventType: &protos.HistoryEvent_WorkflowStarted{
+						WorkflowStarted: &protos.WorkflowStartedEvent{},
+					},
+				},
+			}, inbox[2:]...),
+		}
+
+		scheduler := func(_ context.Context, wi *backend.WorkflowWorkItem) error {
+			proto.Reset(wi.State)
+			proto.Merge(wi.State, canState)
+			wi.Properties[todo.CallbackChannelProperty].(chan bool) <- false
+			return nil
+		}
+
+		fakeRems := remindersfake.New().
+			WithCreate(func(_ context.Context, req *actorapi.CreateReminderRequest) error {
+				lock.Lock()
+				defer lock.Unlock()
+				if createErr != nil {
+					return createErr
+				}
+				*ops = append(*ops, "create:"+req.Name)
+				return nil
+			})
+
+		fakeState := statefake.New().
+			WithTransactionalStateOperationFn(func(context.Context, bool, *actorapi.TransactionalRequest, bool) error {
+				lock.Lock()
+				defer lock.Unlock()
+				*ops = append(*ops, "save")
+				return nil
+			})
+
+		fact, err := New(t.Context(), Options{
+			AppID:             "testapp",
+			WorkflowActorType: "workflow",
+			ActivityActorType: "activity",
+			Scheduler:         scheduler,
+			ActorTypeBuilder:  common.NewActorTypeBuilder("default"),
+			Actors: fake.New().
+				WithReminders(func(context.Context) (actorreminders.Interface, error) {
+					return fakeRems, nil
+				}).
+				WithState(func(context.Context) (actorstate.Interface, error) {
+					return fakeState, nil
+				}),
+		})
+		require.NoError(t, err)
+
+		o := fact.GetOrCreate(instanceID).(*orchestrator)
+		o.state = wfState
+		o.rstate = runtimestate.NewWorkflowRuntimeState(instanceID, nil, history)
+		o.ometa = o.ometaFromState(o.rstate, startEvent.GetExecutionStarted())
+
+		return o
+	}
+
+	t.Run("save happens before the carryover reminder create", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			lock sync.Mutex
+			ops  []string
+		)
+		o := newCanOrchestrator(t, &ops, &lock, nil)
+
+		completed, runErr := o.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-test"})
+		assert.Equal(t, todo.RunCompletedFalse, completed)
+		require.Error(t, runErr)
+
+		lock.Lock()
+		defer lock.Unlock()
+		require.Len(t, ops, 2)
+		assert.Equal(t, "save", ops[0])
+		assert.True(t, strings.HasPrefix(ops[1], "create:new-event-"),
+			"the carryover wake-up reminder must be created after the save, got %q", ops[1])
+	})
+
+	t.Run("reminder create failure is recoverable and keeps the cache", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			lock sync.Mutex
+			ops  []string
+		)
+		o := newCanOrchestrator(t, &ops, &lock, errors.New("scheduler exploded"))
+
+		completed, runErr := o.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-test"})
+		assert.Equal(t, todo.RunCompletedFalse, completed)
+		require.Error(t, runErr)
+		assert.True(t, wferrors.IsRecoverable(runErr),
+			"a create failure after the save must be recoverable so the driving reminder refires")
+
+		lock.Lock()
+		defer lock.Unlock()
+		assert.Equal(t, []string{"save"}, ops, "the save must have happened before the failed create")
+
+		require.NotNil(t, o.state, "the cache must not be invalidated: it is consistent with the store post-save")
+		assert.Len(t, o.state.Inbox, 1, "the carryover must be durable in the inbox")
+	})
 }

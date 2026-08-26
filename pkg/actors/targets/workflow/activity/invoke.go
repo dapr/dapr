@@ -66,8 +66,32 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 		return nil, fmt.Errorf("failed to decode activity invocation: %w", err)
 	}
 
+	// Fast path: when the dispatching orchestrator certifies its janitor
+	// backstop is armed (metadata) and this host runs the preview, drive
+	// the execution locally instead of creating the durable run-activity
+	// reminder, eliding its job upsert/delete commit pair and the scheduler
+	// trigger round trip. Recovery for a crashed in-flight execution moves
+	// to the certifying orchestrator's janitor re-dispatch. Delayed
+	// executions (future dueTime) keep the scheduler path so the delay is
+	// honoured; a drive that cannot be armed (factory halting) falls
+	// through to the durable reminder.
+	if a.fastPath && localDriveCertified(req) && !dueTime.After(time.Now()) {
+		if a.localDrive(invocation, dueTime, activityName) {
+			return nil, nil
+		}
+	}
+
 	// The actual execution is triggered by a reminder
 	return nil, a.createReminder(ctx, invocation, dueTime, activityName)
+}
+
+// localDriveCertified reports whether the dispatching orchestrator attached
+// the janitor-armed certification to this Execute call. Without it the
+// durable reminder must be kept: the orchestrator may be an older or
+// gate-off binary with no janitor watching this activity.
+func localDriveCertified(req *internalsv1pb.InternalInvokeRequest) bool {
+	v, ok := req.GetMetadata()[todo.MetadataActivityLocalDrive]
+	return ok && len(v.GetValues()) > 0 && v.GetValues()[0] == "true"
 }
 
 // decodeActivityInvocation parses an activity invocation payload. New
@@ -128,7 +152,7 @@ func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Remind
 		return errors.New("activity reminder missing history event")
 	}
 
-	err := a.executeActivity(ctx, reminder.Name, &invocation)
+	err := a.executeActivity(ctx, reminder.Name, &invocation, reminder.SkipLock)
 
 	// Returning nil signals that we want the execution to be retried in the next
 	// period interval

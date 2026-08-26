@@ -95,6 +95,7 @@ type Options struct {
 	// the workflow app is back online. Strongly recommended to always be enabled
 	// if using the same Dapr version on all daprds.
 	WorkflowsRemoteActivityReminder bool
+	WorkflowsFastPath               bool
 
 	RetentionPolicy *config.WorkflowStateRetentionPolicy
 	Signer          *signer.Signer
@@ -117,6 +118,7 @@ type Actors struct {
 	executorActorType    string
 
 	pendingTasksBackend    PendingTasksBackend
+	activityExecs          *activityExecutions
 	resiliency             resiliency.Provider
 	actors                 actors.Interface
 	eventSink              orchestrator.EventSink
@@ -128,6 +130,7 @@ type Actors struct {
 
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
+	workflowsFastPath               bool
 	pendingCompletions              *pending.Pending
 
 	orchestrationWorkItemChan chan *backend.WorkflowWorkItem
@@ -140,8 +143,19 @@ type Actors struct {
 	// timestamp) can tell two distinct concurrent RaiseEvent calls apart.
 	lastEventNano atomic.Int64
 
+	// droppedCompletions counts the completion deliveries swallowed by the
+	// test-only DAPR_WORKFLOW_TEST_DROP_ACTIVITY_COMPLETIONS injection.
+	droppedCompletions atomic.Int64
+
+	// duplicatedTurnCompletions counts the workflow-turn completions
+	// re-delivered by the test-only
+	// DAPR_WORKFLOW_TEST_DUPLICATE_TURN_COMPLETIONS injection.
+	duplicatedTurnCompletions atomic.Int64
+
 	stopped atomic.Bool
 }
+
+var _ backend.Backend = (*Actors)(nil)
 
 func New(opts Options) (*Actors, error) {
 	var pendingTasksBackend PendingTasksBackend
@@ -171,6 +185,7 @@ func New(opts Options) (*Actors, error) {
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
 		pendingTasksBackend:       pendingTasksBackend,
+		activityExecs:             newActivityExecutions(),
 		compStore:                 opts.ComponentStore,
 		orchestrationWorkItemChan: make(chan *backend.WorkflowWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
@@ -182,6 +197,7 @@ func New(opts Options) (*Actors, error) {
 
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
+		workflowsFastPath:               opts.WorkflowsFastPath,
 		pendingCompletions:              pendingCompletions,
 	}, nil
 }
@@ -205,6 +221,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		Signer:                 abe.signer,
 		MaxRequestBodySize:     abe.maxRequestBodySize,
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
+		FastPath:               abe.workflowsFastPath,
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
@@ -243,6 +260,9 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		WorkflowAccessPolicies:          abe.workflowAccessPolicies,
 		Signer:                          abe.signer,
 		WorkflowsRemoteActivityReminder: abe.workflowsRemoteActivityReminder,
+		FastPath:                        abe.workflowsFastPath,
+		ExecutionHeld:                   abe.ActivityExecutionHeld,
+		RegisterResolver:                abe.RegisterActivityResolver,
 	}
 
 	opts := workflow.Options{
@@ -388,10 +408,12 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 // Internally, creating a workflow instance also creates a new actor with the same ID. The create
 // request is saved into the actor's "inbox" and then executed via a reminder thread. If the app is
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
-func (abe *Actors) CreateWorkflowInstance(ctx context.Context, e *backend.HistoryEvent) error {
+func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.CreateWorkflowInstanceRequest) error {
 	if err := abe.requireActorStateStore(); err != nil {
 		return err
 	}
+
+	e := req.GetStartEvent()
 
 	var workflowInstanceID string
 
@@ -417,9 +439,9 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, e *backend.Histor
 		return err
 	}
 
-	requestBytes, err := proto.Marshal(&backend.CreateWorkflowInstanceRequest{
-		StartEvent: e,
-	})
+	// Forward the whole request so the instance ID reuse policy survives the
+	// hop to the workflow actor.
+	requestBytes, err := proto.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("failed to marshal CreateWorkflowInstanceRequest: %w", err)
 	}
@@ -427,7 +449,7 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, e *backend.Histor
 	// Invoke the well-known workflow actor directly, which will be created by
 	// this invocation request. Note that this request goes directly to the actor
 	// runtime.
-	req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
+	ireq := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
 		WithActor(actorType, workflowInstanceID).
 		WithData(requestBytes).
 		WithContentType(invokev1.ProtobufContentType)
@@ -439,7 +461,7 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, e *backend.Histor
 	}
 
 	err = backoff.Retry(func() error {
-		_, eerr := router.Call(ctx, req)
+		_, eerr := router.Call(ctx, ireq)
 
 		status, ok := status.FromError(eerr)
 		if ok && (status.Code() == codes.FailedPrecondition ||
@@ -452,7 +474,7 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, e *backend.Histor
 		}
 
 		return backoff.Permanent(eerr)
-	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
+	}, backoff.WithContext(common.NewJitterBackoff(common.RetryBackoffBase, common.RetryBackoffCap), ctx))
 
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
@@ -976,9 +998,13 @@ func (abe *Actors) CompleteActivityTask(ctx context.Context, response *protos.Ac
 
 // CompleteWorkflowTask implements backend.Backend.
 func (abe *Actors) CompleteWorkflowTask(ctx context.Context, response *protos.WorkflowResponse) error {
-	return abe.callWithBackoff(ctx, func() error {
+	err := abe.callWithBackoff(ctx, func() error {
 		return abe.pendingTasksBackend.CompleteWorkflowTask(ctx, response)
 	})
+	if err == nil {
+		abe.maybeDuplicateTurnCompletionForTest(response)
+	}
+	return err
 }
 
 func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
@@ -1008,14 +1034,92 @@ func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
 		), ctx))
 }
 
-// WaitForActivityCompletion implements backend.Backend.
-func (abe *Actors) WaitForActivityCompletion(request *protos.ActivityRequest) func(context.Context) (*protos.ActivityResponse, error) {
-	return abe.pendingTasksBackend.WaitForActivityCompletion(request)
+// OnActivityCompletion implements backend.CompletionCallbackBackend, flipping
+// the durabletask worker onto its event-driven completion path: the app
+// roundtrip no longer parks a waiter goroutine per in-flight work item. The
+// registration is mirrored into activityExecs so the activity target's
+// stale-claim eviction can tell a live execution from a lost work item. The
+// callback contract keeps registrations armed across deliveries (a stale
+// completion token is discarded downstream and the arbiter keeps waiting),
+// so held must NOT be released per delivery: it is released only by the
+// returned closure, which durabletask invokes exactly once at settlement
+// (accepted delivery or abandonment), keeping held-liveness congruent with
+// the armed registration.
+func (abe *Actors) OnActivityCompletion(request *protos.ActivityRequest, cb func(*protos.ActivityResponse, error)) func() {
+	key := activityExecutionKey(request.GetWorkflowInstance().GetInstanceId(), request.GetTaskId())
+	release := abe.activityExecs.add(key)
+	dereg := abe.pendingTasksBackend.OnActivityCompletion(request, func(resp *protos.ActivityResponse, err error) {
+		if abe.dropActivityCompletionForTest() {
+			// The injection models the engine losing the work item (host
+			// death, registration gone), so the held mirror must drop with
+			// it: stale-claim eviction is exactly the rescue under test.
+			release()
+			log.Warnf("TEST INJECTION: dropping activity completion delivery for instance '%s' task %d", request.GetWorkflowInstance().GetInstanceId(), request.GetTaskId())
+			return
+		}
+		if err == nil {
+			// Handshake with the owner execution before this delivery can
+			// settle the registration (settlement releases held): mark the
+			// owner call resolving so the gap between release and the
+			// owner's own callback hop cannot be misread as a stale claim.
+			// A discarded stale delivery resolves early, which is benign:
+			// held stays true while the registration remains armed. Error
+			// deliveries must not resolve: no owner callback follows, and
+			// a resolving mark would suppress the eviction that unsticks a
+			// genuinely lost execution.
+			abe.activityExecs.resolve(key)
+		}
+		cb(resp, err)
+	})
+	return func() {
+		release()
+		dereg()
+	}
 }
 
-// WaitForWorkflowTaskCompletion implements backend.Backend.
-func (abe *Actors) WaitForWorkflowTaskCompletion(request *protos.WorkflowRequest) func(context.Context) (*protos.WorkflowResponse, error) {
-	return abe.pendingTasksBackend.WaitForWorkflowTaskCompletion(request)
+// ActivityExecutionHeld reports whether the engine on this host currently
+// holds a completion registration for the given activity work item; wired
+// into the activity target as its stale-claim liveness oracle.
+// RegisterActivityResolver wires the owner execution's resolve hook into
+// the completion waiter's pre-release handshake; see registerResolver.
+func (abe *Actors) RegisterActivityResolver(instanceID string, taskID int32, resolve func()) func() {
+	return abe.activityExecs.registerResolver(instanceID, taskID, resolve)
+}
+
+func (abe *Actors) ActivityExecutionHeld(instanceID string, taskID int32) bool {
+	return abe.activityExecs.heldFor(instanceID, taskID)
+}
+
+func (abe *Actors) dropActivityCompletionForTest() bool {
+	budget := testDropActivityCompletions()
+	if budget == 0 {
+		return false
+	}
+	return abe.droppedCompletions.Add(1) <= budget
+}
+
+// maybeDuplicateTurnCompletionForTest re-delivers the given workflow-turn
+// completion once, after a short delay, when the test-only
+// DAPR_WORKFLOW_TEST_DUPLICATE_TURN_COMPLETIONS budget allows. See
+// testDuplicateTurnCompletions.
+func (abe *Actors) maybeDuplicateTurnCompletionForTest(response *protos.WorkflowResponse) {
+	budget := testDuplicateTurnCompletions()
+	if budget == 0 || abe.duplicatedTurnCompletions.Add(1) > budget {
+		return
+	}
+	dup := proto.Clone(response).(*protos.WorkflowResponse)
+	log.Warnf("TEST INJECTION: re-delivering workflow turn completion for instance '%s'", dup.GetInstanceId())
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		if err := abe.pendingTasksBackend.CompleteWorkflowTask(context.Background(), dup); err != nil {
+			log.Warnf("TEST INJECTION: duplicate turn completion delivery failed: %v", err)
+		}
+	}()
+}
+
+// OnWorkflowTaskCompletion implements backend.CompletionCallbackBackend.
+func (abe *Actors) OnWorkflowTaskCompletion(request *protos.WorkflowRequest, cb func(*protos.WorkflowResponse, error)) func() {
+	return abe.pendingTasksBackend.OnWorkflowTaskCompletion(request, cb)
 }
 
 func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstanceIDsRequest) (*protos.ListInstanceIDsResponse, error) {
