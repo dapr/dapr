@@ -21,6 +21,8 @@ import (
 
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend/local"
+
+	"github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors/pendingtracker"
 )
 
 func Test_activityExecutions(t *testing.T) {
@@ -61,7 +63,7 @@ func Test_onActivityCompletionMirrorsHeld(t *testing.T) {
 	t.Parallel()
 
 	abe := &Actors{
-		pendingTasksBackend: local.NewTasksBackend(),
+		pendingTasksBackend: pendingtracker.New(local.NewTasksBackend()),
 		activityExecs:       newActivityExecutions(),
 	}
 
