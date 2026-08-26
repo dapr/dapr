@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/placement/internal/leadership"
 	"github.com/dapr/dapr/pkg/placement/internal/loops"
 	"github.com/dapr/dapr/pkg/placement/internal/loops/namespaces"
+	"github.com/dapr/dapr/pkg/placement/internal/standdown"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
@@ -56,6 +57,10 @@ type Options struct {
 
 	DisseminateTimeout        time.Duration
 	DisseminateCoalesceWindow time.Duration
+
+	// SchedulerAddresses, when set, are watched for a scheduler placement
+	// leader advertisement, on which this placement service stands down.
+	SchedulerAddresses []string
 }
 
 type Server struct {
@@ -70,12 +75,15 @@ type Server struct {
 	replicationFactor         int64
 	disseminateTimeout        time.Duration
 	disseminateCoalesceWindow time.Duration
+	schedulerAddresses        []string
 
-	authz *authorizer.Authorizer
-	loop  loop.Interface[loops.EventNamespace]
+	authz     *authorizer.Authorizer
+	loop      loop.Interface[loops.EventNamespace]
+	standdown *standdown.StandDown
 
-	isLeader atomic.Bool
-	shutdown atomic.Bool
+	isLeader     atomic.Bool
+	shutdown     atomic.Bool
+	standingDown atomic.Bool
 }
 
 func New(opts Options) *Server {
@@ -94,6 +102,7 @@ func New(opts Options) *Server {
 		replicationFactor:         opts.ReplicationFactor,
 		disseminateTimeout:        opts.DisseminateTimeout,
 		disseminateCoalesceWindow: opts.DisseminateCoalesceWindow,
+		schedulerAddresses:        opts.SchedulerAddresses,
 	}
 }
 
@@ -137,7 +146,31 @@ func (s *Server) Run(ctx context.Context) error {
 
 	s.htarget.Ready()
 
+	// Stands the placement service down once a scheduler signals the actor
+	// placement cutover, so a cluster never has two placement authorities.
+	// Streams are drained with a final empty table, then the leader commits
+	// the stand-down through raft and confirms it to the schedulers.
+	s.standdown = standdown.New(standdown.Options{
+		Addresses: s.schedulerAddresses,
+		Security:  s.sec,
+		OnStandDown: func() {
+			s.standingDown.Store(true)
+			s.loop.Enqueue(&loops.StandDown{
+				Error: standDownErr(),
+				Done: func() {
+					go s.commitAndConfirmStandDown(ctx)
+				},
+			})
+		},
+		OnStandUp: func() {
+			s.standingDown.Store(false)
+			s.loop.Enqueue(new(loops.StandUp))
+			go s.commitServe(ctx)
+		},
+	})
+
 	return concurrency.NewRunnerManager(
+		s.standdown.Run,
 		s.loop.Run,
 		func(ctx context.Context) error {
 			log.Infof("Node id=%s is waiting for leadership", s.nodeID)
@@ -145,10 +178,43 @@ func (s *Server) Run(ctx context.Context) error {
 				return lerr
 			}
 
+			// A committed stand-down outlives the leader which drained
+			// the streams, so inherit it before serving a single stream.
+			stood, serr := s.leadership.StoodDown(ctx)
+			if serr != nil {
+				return serr
+			}
+			// The stand-down is stale when the schedulers were already
+			// observed not serving placement: it is revoked instead.
+			inherited := false
+			if stood {
+				inherited = s.standdown.Inherit()
+			}
+			if inherited {
+				s.standingDown.Store(true)
+				s.loop.Enqueue(&loops.StandDown{
+					Error: standDownErr(),
+					Done:  func() {},
+				})
+			}
+
 			log.Infof("Node id=%s has acquired leadership", s.nodeID)
 			s.isLeader.Store(true)
 			monitoring.RecordPlacementLeaderStatus(true)
 			monitoring.RecordRaftPlacementLeaderStatus(true)
+
+			switch {
+			case inherited:
+				// The previous leader may have died before the confirmation
+				// was delivered.
+				go s.standdown.Confirm(ctx)
+			case stood:
+				go s.commitServe(ctx)
+			case s.standingDown.Load():
+				// The watcher stood this pod down before it had leadership,
+				// so the commit and confirmation could not happen then.
+				go s.commitAndConfirmStandDown(ctx)
+			}
 
 			<-ctx.Done()
 			return ctx.Err()
@@ -204,7 +270,75 @@ func (s *Server) StatePlacementTables(ctx context.Context) (*v1pb.StatePlacement
 	return proto.Clone(got).(*v1pb.StatePlacementTables), nil
 }
 
+// commitAndConfirmStandDown makes the completed stand-down durable and
+// reports it to the schedulers. Leader only, since a follower confirming
+// before the leader drained would let the schedulers advertise next to a
+// still-serving placement leader.
+func (s *Server) commitAndConfirmStandDown(ctx context.Context) {
+	if !s.isLeader.Load() {
+		return
+	}
+
+	for {
+		err := s.leadership.CommitStandDown(ctx)
+		if err == nil {
+			break
+		}
+		log.Errorf("Failed to commit the stand-down to the raft log, retrying: %s", err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Second):
+		}
+	}
+
+	s.standdown.Confirm(ctx)
+}
+
+// commitServe replicates the revoked stand-down so a later leader does not
+// inherit it. Leader only.
+func (s *Server) commitServe(ctx context.Context) {
+	if !s.isLeader.Load() {
+		return
+	}
+
+	for {
+		err := s.leadership.CommitServe(ctx)
+		if err == nil {
+			return
+		}
+		log.Errorf("Failed to commit the revoked stand-down to the raft log, retrying: %s", err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Second):
+		}
+	}
+}
+
+func standDownErr() error {
+	return status.Error(
+		codes.FailedPrecondition,
+		"actor placement is served by the scheduler control plane and this placement service is standing down. Upgrade this sidecar to a Dapr version supporting scheduler placement",
+	)
+}
+
 func (s *Server) ReportDaprStatus(stream v1pb.Placement_ReportDaprStatusServer) error {
+	// Serving waits for the watcher's first observation of the scheduler
+	// cluster, so a placement service restarting after a cutover checks
+	// whether the schedulers advertise placement before it serves. An
+	// unreachable scheduler cluster completes the observation too,
+	// placement fails open.
+	select {
+	case <-s.standdown.FirstObservation():
+	case <-stream.Context().Done():
+		return stream.Context().Err()
+	}
+
+	if s.standingDown.Load() {
+		return standDownErr()
+	}
+
 	if !s.isLeader.Load() {
 		return status.Errorf(
 			codes.FailedPrecondition,

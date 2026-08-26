@@ -53,6 +53,11 @@ func (d *disseminator) handleReportedHost(ctx context.Context, report *loops.Rep
 
 	switch op {
 	case v1pb.HostOperation_REPORT:
+		// A report arriving mid-drain must not repopulate the emptied store
+		// or start a fresh round: the drain round is the final one.
+		if d.draining {
+			return
+		}
 		d.doReport(report.StreamIDx, report.Host)
 
 	case v1pb.HostOperation_LOCK:
@@ -167,6 +172,12 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 	if d.streamsInTargetState == len(d.streams) {
 		d.currentOperation = v1pb.HostOperation_REPORT
 		d.streamsInTargetState = 0
+
+		if d.draining {
+			log.Debugf("Drain round of version %d in %s complete", d.currentVersion, d.namespace)
+			d.finishDrain()
+			return
+		}
 
 		d.timeoutQ.Dequeue(d.currentVersion)
 		log.Debugf("Dissemination of version %d in %s complete", d.currentVersion, d.namespace)

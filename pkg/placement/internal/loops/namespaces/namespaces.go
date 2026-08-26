@@ -55,6 +55,11 @@ type namespaces struct {
 	loop          loop.Interface[loops.EventNamespace]
 	authorizer    *authorizer.Authorizer
 
+	// standDown is non-nil once a stand-down began, refusing new
+	// connections and running Done when the last namespace drains.
+	standDown    *loops.StandDown
+	drainPending int
+
 	wg sync.WaitGroup
 }
 
@@ -82,6 +87,12 @@ func (n *namespaces) Handle(ctx context.Context, event loops.EventNamespace) err
 		return n.handleReportedHost(e)
 	case *loops.Shutdown:
 		return n.handleShutdown(e)
+	case *loops.StandDown:
+		return n.handleStandDown(e)
+	case *loops.StandUp:
+		n.handleStandUp()
+	case *loops.DrainComplete:
+		return n.handleDrainComplete(e)
 	case *loops.StateTableRequest:
 		n.handleStatePlacement(e)
 	default:
@@ -92,6 +103,11 @@ func (n *namespaces) Handle(ctx context.Context, event loops.EventNamespace) err
 }
 
 func (n *namespaces) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
+	if n.standDown != nil {
+		add.Cancel(n.standDown.Error)
+		return nil
+	}
+
 	ns := add.InitialHost.GetNamespace()
 
 	dissLoop, ok := n.disseminators[ns]
@@ -137,7 +153,8 @@ func (n *namespaces) handleCloseStream(closeStream *loops.ConnCloseStream) error
 	dissLoop.connections--
 	dissLoop.loop.Enqueue(closeStream)
 
-	if dissLoop.connections == 0 {
+	// During a drain the disseminator's DrainComplete owns its closure.
+	if dissLoop.connections == 0 && n.standDown == nil {
 		delete(n.disseminators, closeStream.Namespace)
 		dissLoop.loop.Close(&loops.Shutdown{
 			Error: closeStream.Error,
@@ -160,7 +177,70 @@ func (n *namespaces) handleReportedHost(report *loops.ReportedHost) error {
 	return nil
 }
 
-// handleShutdown handles the shutdown of the connections.
+// handleStandDown starts draining every namespace while the loop keeps
+// running, so the server stays up to refuse new streams with a reason.
+func (n *namespaces) handleStandDown(sd *loops.StandDown) error {
+	if n.standDown != nil {
+		return nil
+	}
+	n.standDown = sd
+
+	n.drainPending = len(n.disseminators)
+	if n.drainPending == 0 {
+		sd.Done()
+		return nil
+	}
+
+	for _, conn := range n.disseminators {
+		conn.loop.Enqueue(&loops.Drain{Error: sd.Error})
+	}
+
+	return nil
+}
+
+// handleStandUp revokes the stand-down. Disseminators still mid-drain have
+// kicked their hosts already, so they are closed now: a reconnecting host
+// gets a fresh disseminator, and a late DrainComplete finds nothing to
+// complete.
+func (n *namespaces) handleStandUp() {
+	if n.standDown != nil {
+		for ns, conn := range n.disseminators {
+			delete(n.disseminators, ns)
+			conn.loop.Close(&loops.Shutdown{Error: n.standDown.Error})
+			disseminator.LoopFactory.CacheLoop(conn.loop)
+		}
+	}
+	n.standDown = nil
+	n.drainPending = 0
+}
+
+// handleDrainComplete closes a drained namespace's disseminator,
+// completing the stand-down when it is the last.
+func (n *namespaces) handleDrainComplete(dc *loops.DrainComplete) error {
+	if n.standDown == nil {
+		// A stand-up revoked the drain before this completion arrived.
+		return nil
+	}
+
+	dissLoop, ok := n.disseminators[dc.Namespace]
+	if !ok {
+		return nil
+	}
+
+	delete(n.disseminators, dc.Namespace)
+	dissLoop.loop.Close(&loops.Shutdown{
+		Error: n.standDown.Error,
+	})
+	disseminator.LoopFactory.CacheLoop(dissLoop.loop)
+
+	n.drainPending--
+	if n.drainPending == 0 {
+		n.standDown.Done()
+	}
+
+	return nil
+}
+
 func (n *namespaces) handleShutdown(shutdown *loops.Shutdown) error {
 	defer n.wg.Wait()
 

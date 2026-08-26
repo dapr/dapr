@@ -30,6 +30,7 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/handoff"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/kit/concurrency"
@@ -65,6 +66,10 @@ type Options struct {
 	// Placement, when non-nil, is notified whether this scheduler is the
 	// current placement leader on every leadership table change.
 	Placement PlacementLeader
+
+	// Handoff, when non-nil, replicates the placement handoff facts through
+	// etcd, with this scheduler's connection pool as the fallback.
+	Handoff *handoff.Handoff
 }
 
 // Interface manages the cron framework, exposing a client to schedule jobs.
@@ -88,6 +93,7 @@ type cron struct {
 
 	host            *schedulerv1pb.Host
 	placement       PlacementLeader
+	handoff         *handoff.Handoff
 	connectionPool  *pool.Pool
 	etcdcron        api.Interface
 	hostBroadcaster *broadcaster.Broadcaster[[]*schedulerv1pb.Host]
@@ -107,6 +113,7 @@ func New(opts Options) Interface {
 		id:              opts.ID,
 		host:            opts.Host,
 		placement:       opts.Placement,
+		handoff:         opts.Handoff,
 		hostBroadcaster: broadcaster.New[[]*schedulerv1pb.Host](),
 		workers:         opts.Workers,
 		readyCh:         make(chan struct{}),
@@ -158,9 +165,29 @@ func (c *cron) Run(ctx context.Context) error {
 		// A nil event re-broadcasts the last leadership table with its
 		// placement fields recomputed under the new capability state.
 		OnSchedulerPlacementCapabilityChange: func() {
+			if c.handoff != nil {
+				c.handoff.SetLocalCapabilities(
+					c.connectionPool.HasSchedulerPlacementIncapableSidecars(),
+					c.connectionPool.HasSchedulerPlacementCapableSidecars(),
+				)
+			}
 			leaderLoop.Enqueue(nil)
 		},
+		OnPlacementAddressesChange: func() {
+			if c.handoff != nil {
+				c.handoff.RequestDetection()
+			}
+		},
 	})
+
+	var hoff handoff.Interface
+	if c.handoff != nil {
+		hoff = c.handoff
+		c.handoff.SetPlacementAddresses(c.connectionPool.PlacementAddresses)
+		c.handoff.SetOnChange(func() {
+			leaderLoop.Enqueue(nil)
+		})
+	}
 
 	// Use a loop to process leadership updates. The loop's Enqueue is
 	// non-blocking, which prevents the go-etcd-cron wleaderCh send from
@@ -176,6 +203,7 @@ func (c *cron) Run(ctx context.Context) error {
 		ownAddress:      c.host.GetAddress(),
 		pool:            c.connectionPool,
 		placement:       c.placement,
+		handoff:         hoff,
 	})
 
 	return concurrency.NewRunnerManager(
