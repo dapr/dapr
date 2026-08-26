@@ -720,7 +720,7 @@ func Test_gateJanitorRedispatch(t *testing.T) {
 		f.claims = claim.New(claim.Options{
 			ActorType:  f.actorType,
 			State:      store.fake(),
-			StaleAfter: time.Millisecond,
+			StaleAfter: time.Millisecond * 50,
 		})
 		// A restart inside the retention window leaves this row behind; the
 		// guard cannot delete it again.
@@ -735,8 +735,9 @@ func Test_gateJanitorRedispatch(t *testing.T) {
 		_, ok := store.get(t, actorID)
 		assert.True(t, ok, "a fresh completed row is retained for in-flight recovery arrivals")
 
-		// A later read past the grace still acks and reaps the row.
-		time.Sleep(5 * time.Millisecond)
+		// A later read past the grace (but inside the 2x prune window, so the
+		// observation survives) still acks and reaps the row.
+		time.Sleep(75 * time.Millisecond)
 		handled, err = a.gateJanitorRedispatch(t.Context(), testInvocation())
 		assert.True(t, handled)
 		require.NoError(t, err)
