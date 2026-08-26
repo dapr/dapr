@@ -144,6 +144,15 @@ func New(opts Options) (Interface, error) {
 		return nil, errors.New("WorkflowHistorySigning feature flag is enabled but mTLS is not configured; workflow history signing requires mTLS to be active")
 	}
 
+	// Scheduler-enforced concurrency limits gate per job delivery, which
+	// the fast path's local drives bypass: fall back to durable reminders
+	// when limits are configured.
+	fastPath := opts.WorkflowsFastPath
+	if fastPath && opts.Spec.HasSchedulerConcurrencyLimits() {
+		log.Info("WorkflowsFastPath is enabled but scheduler-enforced workflow concurrency limits are configured; disabling the fast path so the limits are enforced")
+		fastPath = false
+	}
+
 	// If no backend was initialized by the manager, create a backend backed by actors
 	abackend, err := backendactors.New(backendactors.Options{
 		AppID:                  opts.AppID,
@@ -159,7 +168,7 @@ func New(opts Options) (Interface, error) {
 
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
-		WorkflowsFastPath:               opts.WorkflowsFastPath,
+		WorkflowsFastPath:               fastPath,
 	})
 	if err != nil {
 		return nil, err
