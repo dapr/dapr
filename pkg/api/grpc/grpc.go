@@ -546,6 +546,10 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 		}
 
 		for key, val := range incomingMD {
+			// Binary gRPC metadata cannot be represented in string component metadata
+			if strings.HasSuffix(key, "-bin") {
+				continue
+			}
 			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
 			// Not to overwrite the existing metadata
 			// But if the key is traceparent or tracestate, we allow overwrite the existing metadata.
