@@ -138,29 +138,3 @@ func TestValidateFlags(t *testing.T) {
 		})
 	}
 }
-
-func TestSchedulerAddresses(t *testing.T) {
-	t.Run("standalone mode has no default", func(t *testing.T) {
-		opts, err := New([]string{})
-		require.NoError(t, err)
-		assert.Empty(t, opts.SchedulerAddresses)
-	})
-
-	t.Run("kubernetes mode derives the scheduler service", func(t *testing.T) {
-		opts, err := New([]string{"--mode=kubernetes"})
-		require.NoError(t, err)
-		assert.Equal(t, []string{"dapr-scheduler-server-a.default.svc:443"}, opts.SchedulerAddresses)
-	})
-
-	t.Run("explicit addresses override the derivation", func(t *testing.T) {
-		opts, err := New([]string{"--mode=kubernetes", "--scheduler-address=1.2.3.4:50006"})
-		require.NoError(t, err)
-		assert.Equal(t, []string{"1.2.3.4:50006"}, opts.SchedulerAddresses)
-	})
-
-	t.Run("explicit empty value disables the watcher", func(t *testing.T) {
-		opts, err := New([]string{"--mode=kubernetes", "--scheduler-address="})
-		require.NoError(t, err)
-		assert.Empty(t, opts.SchedulerAddresses)
-	})
-}

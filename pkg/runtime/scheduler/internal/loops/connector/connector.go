@@ -39,18 +39,15 @@ type Options struct {
 	Actors   actors.Interface
 	Channels *channels.Channels
 	WFEngine wfengine.Interface
-
-	PlacementAddresses []string
 }
 
 type connector struct {
-	namespace          string
-	appID              string
-	workflowSpec       *config.WorkflowSpec
-	actors             actors.Interface
-	channels           *channels.Channels
-	wfEngine           wfengine.Interface
-	placementAddresses []string
+	namespace    string
+	appID        string
+	workflowSpec *config.WorkflowSpec
+	actors       actors.Interface
+	channels     *channels.Channels
+	wfEngine     wfengine.Interface
 
 	currentAppRunning   bool
 	currentActorTypes   []string
@@ -63,13 +60,12 @@ type connector struct {
 
 func New(opts Options) loop.Interface[loops.EventConn] {
 	return loop.New[loops.EventConn](1024).NewLoop(&connector{
-		namespace:          opts.Namespace,
-		appID:              opts.AppID,
-		workflowSpec:       opts.WorkflowSpec,
-		actors:             opts.Actors,
-		channels:           opts.Channels,
-		wfEngine:           opts.WFEngine,
-		placementAddresses: opts.PlacementAddresses,
+		namespace:    opts.Namespace,
+		appID:        opts.AppID,
+		workflowSpec: opts.WorkflowSpec,
+		actors:       opts.Actors,
+		channels:     opts.Channels,
+		wfEngine:     opts.WFEngine,
 	})
 }
 
@@ -143,13 +139,12 @@ func (c *connector) maybeClientConnect(ctx context.Context) {
 	}
 
 	cluster := cluster.New(cluster.Options{
-		Namespace:          c.namespace,
-		AppID:              c.appID,
-		WorkflowSpec:       c.workflowSpec,
-		Actors:             c.actors,
-		Channels:           c.channels,
-		WFEngine:           c.wfEngine,
-		PlacementAddresses: c.placementAddresses,
+		Namespace:    c.namespace,
+		AppID:        c.appID,
+		WorkflowSpec: c.workflowSpec,
+		Actors:       c.actors,
+		Channels:     c.channels,
+		WFEngine:     c.wfEngine,
 
 		AppTarget:    c.currentAppRunning,
 		ActorTypes:   c.currentActorTypes,

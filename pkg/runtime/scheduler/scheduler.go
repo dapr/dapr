@@ -47,11 +47,6 @@ type Options struct {
 	Security         security.Handler
 	Healthz          healthz.Healthz
 	SchedulerStreams uint
-
-	// PlacementAddresses are the placement service addresses this daprd was
-	// configured with, reported to the schedulers so they can detect a
-	// placement service outside the well-known service name.
-	PlacementAddresses []string
 }
 
 // Scheduler manages the connection to the cluster of schedulers.
@@ -67,13 +62,12 @@ type Scheduler struct {
 
 func New(opts Options) (*Scheduler, error) {
 	connector := connector.New(connector.Options{
-		Namespace:          opts.Namespace,
-		AppID:              opts.AppID,
-		WorkflowSpec:       opts.WorkflowSpec,
-		Actors:             opts.Actors,
-		Channels:           opts.Channels,
-		WFEngine:           opts.WFEngine,
-		PlacementAddresses: opts.PlacementAddresses,
+		Namespace:    opts.Namespace,
+		AppID:        opts.AppID,
+		WorkflowSpec: opts.WorkflowSpec,
+		Actors:       opts.Actors,
+		Channels:     opts.Channels,
+		WFEngine:     opts.WFEngine,
 	})
 
 	if opts.SchedulerStreams < 1 {

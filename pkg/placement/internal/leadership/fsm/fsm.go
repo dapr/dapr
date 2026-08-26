@@ -11,82 +11,38 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package fsm carries the placement raft cluster's single replicated fact -
-// whether this placement service has stood down in favor of scheduler
-// placement. A leader elected after a failover then inherits the refusal
-// from the log instead of racing its own scheduler watcher.
 package fsm
 
 import (
-	"bytes"
 	"io"
-	"sync/atomic"
 
 	"github.com/hashicorp/raft"
 )
 
-// StandDownCommand is the raft log entry committed by the leader once it has
-// drained every placement stream.
-var StandDownCommand = []byte("stand-down")
+type noop struct{}
 
-// ServeCommand is the raft log entry committed by the leader when the
-// schedulers stopped serving placement after a stand-down.
-var ServeCommand = []byte("serve")
-
-type FSM struct {
-	stoodDown atomic.Bool
+func New() raft.FSM {
+	return new(noop)
 }
 
-func New() *FSM {
-	return new(FSM)
-}
-
-// StoodDown reports whether a stand-down entry has been applied.
-func (f *FSM) StoodDown() bool {
-	return f.stoodDown.Load()
-}
-
-func (f *FSM) Apply(log *raft.Log) any {
-	switch {
-	case bytes.Equal(log.Data, StandDownCommand):
-		f.stoodDown.Store(true)
-	case bytes.Equal(log.Data, ServeCommand):
-		f.stoodDown.Store(false)
-	}
+func (*noop) Apply(log *raft.Log) any {
 	return true
 }
 
-func (f *FSM) Snapshot() (raft.FSMSnapshot, error) {
-	return &snapshot{stoodDown: f.stoodDown.Load()}, nil
+func (*noop) Snapshot() (raft.FSMSnapshot, error) {
+	return new(snapshot), nil
 }
 
-func (f *FSM) Restore(old io.ReadCloser) error {
-	defer old.Close()
-	// The snapshot is authoritative: state not in it must not survive.
-	f.stoodDown.Store(false)
-	data, err := io.ReadAll(old)
-	if err != nil {
-		return err
-	}
-	if bytes.Equal(data, StandDownCommand) {
-		f.stoodDown.Store(true)
-	}
+// Restore streams in the snapshot and replaces the current state store with a
+// new one based on the snapshot if all goes OK during the restore.
+func (*noop) Restore(old io.ReadCloser) error {
 	return nil
 }
 
-type snapshot struct {
-	stoodDown bool
-}
+type snapshot struct{}
 
-func (s *snapshot) Persist(sink raft.SnapshotSink) error {
-	if s.stoodDown {
-		if _, err := sink.Write(StandDownCommand); err != nil {
-			//nolint:errcheck
-			sink.Cancel()
-			return err
-		}
-	}
-	return sink.Close()
+func (s *snapshot) Persist(raft.SnapshotSink) error {
+	return nil
 }
 
 func (s *snapshot) Release() {}

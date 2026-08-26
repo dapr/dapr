@@ -41,8 +41,6 @@ type Fake struct {
 	deleteByMetadataFn   func(ctx context.Context, req *schedulerv1pb.DeleteByMetadataRequest) (*schedulerv1pb.DeleteByMetadataResponse, error)
 	deleteByNamePrefixFn func(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error)
 	reportActorTypesFn   func(schedulerv1pb.Scheduler_ReportActorTypesServer) error
-
-	reportPlacementServiceFn func(schedulerv1pb.Scheduler_ReportPlacementServiceServer) error
 }
 
 func New(t *testing.T) *Fake {
@@ -78,16 +76,6 @@ func New(t *testing.T) *Fake {
 		},
 		reportActorTypesFn: func(schedulerv1pb.Scheduler_ReportActorTypesServer) error {
 			return status.Error(codes.Unimplemented, "placement is not enabled on this scheduler")
-		},
-		reportPlacementServiceFn: func(stream schedulerv1pb.Scheduler_ReportPlacementServiceServer) error {
-			for {
-				if _, rerr := stream.Recv(); rerr != nil {
-					return rerr
-				}
-				if serr := stream.Send(new(schedulerv1pb.ReportPlacementServiceResponse)); serr != nil {
-					return serr
-				}
-			}
 		},
 	}
 
@@ -198,15 +186,6 @@ func (f *Fake) DeleteByMetadata(ctx context.Context, req *schedulerv1pb.DeleteBy
 
 func (f *Fake) DeleteByNamePrefix(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error) {
 	return f.deleteByNamePrefixFn(ctx, req)
-}
-
-func (f *Fake) ReportPlacementService(stream schedulerv1pb.Scheduler_ReportPlacementServiceServer) error {
-	return f.reportPlacementServiceFn(stream)
-}
-
-func (f *Fake) WithReportPlacementService(fn func(schedulerv1pb.Scheduler_ReportPlacementServiceServer) error) *Fake {
-	f.reportPlacementServiceFn = fn
-	return f
 }
 
 func (f *Fake) WithReportActorTypes(fn func(schedulerv1pb.Scheduler_ReportActorTypesServer) error) *Fake {

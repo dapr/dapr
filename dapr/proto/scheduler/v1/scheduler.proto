@@ -37,12 +37,6 @@ service Scheduler {
   // placement, and FailedPrecondition when this scheduler is not the
   // placement leader.
   rpc ReportActorTypes(stream ReportActorTypesRequest) returns (stream PlacementOrder) {}
-  // ReportPlacementService is used by a standalone placement service to
-  // announce that it exists or to confirm it stood down. Once a placement
-  // service announced itself, the placement leader advertisement is
-  // withheld until the stand-down confirmation arrives, so the cluster
-  // never has two placement authorities serving at once.
-  rpc ReportPlacementService(stream ReportPlacementServiceRequest) returns (stream ReportPlacementServiceResponse) {}
 }
 
 message Job {
@@ -163,11 +157,6 @@ message WatchJobsRequestInitial {
   // cluster on a single placement authority.
   bool supports_scheduler_placement = 7;
 
-  // placement_addresses are the placement service addresses this daprd was
-  // configured with. Schedulers probe them so a placement service outside
-  // the well-known service name still withholds the placement leader
-  // advertisement until it stands down.
-  repeated string placement_addresses = 8;
 }
 
 // ConcurrencyLimit defines a global concurrency limit enforced by the
@@ -312,19 +301,6 @@ message ListJobsResponse {
 // Scheduler and watch for hosts.
 message WatchHostsRequest {}
 
-// ReportPlacementServiceRequest reports the state of a standalone placement
-// service. Every placement replica holds one long-lived stream per
-// scheduler: a live stream is the placement service's presence, and each
-// message reports its current state.
-message ReportPlacementServiceRequest {
-  // stood_down is false while the placement service serves placement
-  // streams, and true once it drained them and refuses new ones.
-  bool stood_down = 1;
-}
-
-// ReportPlacementServiceResponse acknowledges one state report.
-message ReportPlacementServiceResponse {}
-
 // WatchHostsResponse is the response message to convey the details of a host.
 message WatchHostsResponse {
   // hosts is the list of current active scheduler hosts in the cluster.
@@ -346,12 +322,6 @@ message Host {
   // placement (started with placement enabled). Used to elect the placement
   // leader among capable hosts only, keeping mixed-version clusters safe.
   bool scheduler_placement_enabled = 3;
-
-  // placement_cutover_pending is true on the elected placement leader while
-  // the advertisement waits for a standalone placement service to confirm
-  // it stood down. The placement service takes it as the signal to drain
-  // its streams and confirm.
-  bool placement_cutover_pending = 4;
 }
 
 // DeleteByMetadataRequest is the message used by the daprd sidecar to delete jobs by metadata.
