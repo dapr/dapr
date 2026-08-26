@@ -11,68 +11,43 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package handoff replicates the facts deciding the actor placement
-// authority handoff through etcd, so every scheduler acts on the same state
-// and the facts survive restarts and leader changes:
+// Package handoff tracks the facts deciding the actor placement authority
+// handoff, all derived from live connections so they rebuild whenever the
+// connections do:
 //
-//   - present: a placement service exists, withholding the placement leader
-//     advertisement until stood-down.
-//   - stood-down: the placement service drained its streams and permanently
-//     refuses new ones, signaling the use of scheduler placement.
-//   - advertised: the advertisement became permanent, so an old sidecar
-//     connecting later cannot withhold it again.
-//   - gate/<scheduler-id>: which sidecar capabilities are connected to each
-//     scheduler, leased so a dead scheduler's entry expires.
+//   - presence: every placement replica holds a stream to every scheduler,
+//     reporting whether it serves or stood down. A live stream is the
+//     placement service's presence.
+//   - detection: the well-known service name and sidecar-reported placement
+//     addresses are probed, so a placement service too old to report itself
+//     still withholds the advertisement.
+//   - gate: which sidecar capabilities are connected to this scheduler.
+//     Sidecars connect to every scheduler, so the local view converges on
+//     the cluster view.
 package handoff
 
 import (
 	"context"
 	"net"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 
-	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
 	"github.com/dapr/dapr/pkg/security"
-	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.scheduler.server.handoff")
-
 const (
-	keyPresent    = "dapr/placement-handoff/present"
-	keyStoodDown  = "dapr/placement-handoff/stood-down"
-	keyAdvertised = "dapr/placement-handoff/advertised"
-	gatePrefix    = "dapr/placement-handoff/gate/"
-
 	// probeConcurrency bounds parallel probes, and probeBudget the time one
 	// detection refresh spends probing in total.
 	probeConcurrency = 4
 	probeBudget      = time.Second * 5
-
-	// sightingPrefix keys each scheduler's current sighting of a serving
-	// placement service, with the detectors which saw it as the value.
-	sightingPrefix = "dapr/placement-handoff/sighting/"
-
-	gateLeaseTTLSeconds = 10
-
-	// dnsClearMisses is how many consecutive polls sighting nothing, with
-	// no other scheduler sighting anything either, clear a stale placement
-	// announcement.
-	dnsClearMisses = 3
 )
 
 type Options struct {
-	// ID is this scheduler's name, keying its gate entry.
-	ID   string
-	Etcd etcd.Interface
-
 	// PlacementDNSName, when set, is resolved periodically to detect a
 	// deployed placement service even one too old to announce itself. Empty
 	// disables the check.
@@ -85,6 +60,10 @@ type Options struct {
 
 // Interface is the view of the handoff state consumed by leadership.
 type Interface interface {
+	// Ready reports whether the first placement detection completed. A
+	// freshly started scheduler must not advertise until it has checked
+	// once for a placement service.
+	Ready() bool
 	PlacementPresent() bool
 	PlacementStoodDown() bool
 	Advertised() bool
@@ -94,161 +73,96 @@ type Interface interface {
 }
 
 type Handoff struct {
-	id         string
-	etcd       etcd.Interface
-	onChange   atomic.Pointer[func()]
 	dnsName    string
 	lookupHost func(context.Context, string) ([]string, error)
 	sec        security.Handler
+	onChange   atomic.Pointer[func()]
 
-	lock         sync.RWMutex
-	present      bool
-	stoodDown    bool
-	advertised   bool
-	gates        map[string]gateEntry
-	sightings    map[string]bool
-	detectMisses int
-	// lastSighting is the sighting last published, so an unchanged result
-	// is not rewritten every refresh.
-	lastSighting string
+	lock sync.RWMutex
+	// streams records the placement service streams connected to this
+	// scheduler, keyed by registration, with whether each reported standing
+	// down.
+	streams      map[uint64]bool
+	nextStreamID uint64
+	// detected is set while the detection sights a placement service which
+	// has no stream, matching a placement service too old to report itself.
+	detected bool
+	// reqGen counts detection requests and doneGen the requests answered by
+	// a completed refresh: while they differ, a just-reported placement
+	// address is unprobed and treated as a present placement service.
+	reqGen  uint64
+	doneGen uint64
+	// advertised latches the advertisement so a brief capable dip does not
+	// withdraw it. A serving placement service resets it.
+	advertised bool
+	incapable  bool
+	capable    bool
 
 	placementAddresses func() []string
 
-	readyCh chan struct{}
-	client  *clientv3.Client
-
-	// localGateCh signals the run loop to publish the latest local
-	// capability state, so callers never block.
-	localGateLock sync.Mutex
-	localGate     gateEntry
-	localGateCh   chan struct{}
-
-	latchCh chan struct{}
+	// ready is closed after the first detection refresh, bounding the
+	// window in which a restarted scheduler has not yet looked for a
+	// placement service.
+	ready     chan struct{}
+	readyOnce sync.Once
 
 	// detectCh requests an immediate detection refresh, non-blocking.
 	detectCh chan struct{}
 }
 
-type gateEntry struct {
-	incapable bool
-	capable   bool
-}
-
 func New(opts Options) *Handoff {
 	return &Handoff{
-		id:          opts.ID,
-		etcd:        opts.Etcd,
-		dnsName:     opts.PlacementDNSName,
-		lookupHost:  net.DefaultResolver.LookupHost,
-		sec:         opts.Security,
-		gates:       make(map[string]gateEntry),
-		sightings:   make(map[string]bool),
-		readyCh:     make(chan struct{}),
-		localGateCh: make(chan struct{}, 1),
-		latchCh:     make(chan struct{}, 1),
-		detectCh:    make(chan struct{}, 1),
+		dnsName:    opts.PlacementDNSName,
+		lookupHost: net.DefaultResolver.LookupHost,
+		sec:        opts.Security,
+		streams:    make(map[uint64]bool),
+		ready:      make(chan struct{}),
+		detectCh:   make(chan struct{}, 1),
 	}
 }
 
+// Run drives the placement detection until the context ends.
 func (h *Handoff) Run(ctx context.Context) error {
-	client, err := h.etcd.Client(ctx)
-	if err != nil {
-		return err
-	}
-	h.client = client
+	ticker := time.NewTicker(time.Second * 10)
+	defer ticker.Stop()
 
-	resp, err := client.Get(ctx, "dapr/placement-handoff/", clientv3.WithPrefix())
-	if err != nil {
-		return err
-	}
-	h.lock.Lock()
-	for _, kv := range resp.Kvs {
-		h.applyKV(string(kv.Key), string(kv.Value), false)
-	}
-	h.lock.Unlock()
-	close(h.readyCh)
-	h.fireOnChange()
-
-	lease, err := client.Grant(ctx, gateLeaseTTLSeconds)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		revokeCtx, cancel := context.WithTimeout(context.Background(), time.Second*3)
-		defer cancel()
-		//nolint:errcheck
-		client.Revoke(revokeCtx, lease.ID)
-	}()
-	keepalive, err := client.KeepAlive(ctx, lease.ID)
-	if err != nil {
-		return err
-	}
-
-	watchCh := client.Watch(ctx, "dapr/placement-handoff/",
-		clientv3.WithPrefix(), clientv3.WithRev(resp.Header.Revision+1))
-
-	// Detection probes network addresses, so it runs off the state loop:
-	// gate and watch processing never wait on a probe.
-	var wg sync.WaitGroup
-	detectCtx, detectCancel := context.WithCancel(ctx)
-	defer wg.Wait()
-	defer detectCancel()
-	wg.Go(func() {
-		h.runDetection(detectCtx, lease.ID)
-	})
+	h.refreshDetection(ctx)
+	h.completeReady()
 
 	for {
 		select {
 		case <-ctx.Done():
+			h.completeReady()
 			return ctx.Err()
 
-		case _, ok := <-keepalive:
-			if !ok {
-				// The gate entry expires with the lease, matching a scheduler
-				// which died outright.
-				return ctx.Err()
-			}
+		case <-ticker.C:
+			h.refreshDetection(ctx)
 
-		case wresp, ok := <-watchCh:
-			if !ok {
-				return ctx.Err()
-			}
-			if wresp.Err() != nil {
-				return wresp.Err()
-			}
-			h.lock.Lock()
-			for _, ev := range wresp.Events {
-				h.applyKV(string(ev.Kv.Key), string(ev.Kv.Value), ev.Type == clientv3.EventTypeDelete)
-			}
-			h.lock.Unlock()
-			h.fireOnChange()
-
-		case <-h.localGateCh:
-			h.localGateLock.Lock()
-			entry := h.localGate
-			h.localGateLock.Unlock()
-			if _, err := client.Put(ctx, gatePrefix+h.id, encodeGate(entry), clientv3.WithLease(lease.ID)); err != nil {
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				log.Errorf("Failed to publish sidecar capability state: %s", err)
-				h.requestGatePublish()
-			}
-
-		case <-h.latchCh:
-			if _, err := client.Put(ctx, keyAdvertised, "true"); err != nil {
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				log.Errorf("Failed to persist the placement advertisement latch: %s", err)
-				h.LatchAdvertised()
-			}
+		case <-h.detectCh:
+			// Probing right away keeps the withhold decision ahead of the
+			// first sidecar acting on the advertisement.
+			h.refreshDetection(ctx)
 		}
 	}
 }
 
-// SetOnChange registers the callback fired after any replicated fact
-// changes.
+func (h *Handoff) completeReady() {
+	h.readyOnce.Do(func() {
+		close(h.ready)
+	})
+}
+
+// Ready reports whether the first placement detection completed.
+func (h *Handoff) Ready() bool {
+	select {
+	case <-h.ready:
+		return true
+	default:
+		return false
+	}
+}
+
+// SetOnChange registers the callback fired after any handoff fact changes.
 func (h *Handoff) SetOnChange(fn func()) {
 	h.onChange.Store(&fn)
 }
@@ -259,103 +173,73 @@ func (h *Handoff) fireOnChange() {
 	}
 }
 
-// applyKV updates the cached state for one key. Caller holds the write lock.
-func (h *Handoff) applyKV(key, value string, deleted bool) {
-	switch {
-	case key == keyPresent:
-		h.present = !deleted
-	case key == keyStoodDown:
-		h.stoodDown = !deleted
-	case key == keyAdvertised:
-		h.advertised = !deleted
-	case strings.HasPrefix(key, gatePrefix):
-		id := strings.TrimPrefix(key, gatePrefix)
-		if deleted {
-			delete(h.gates, id)
-			return
-		}
-		h.gates[id] = decodeGate(value)
-	case strings.HasPrefix(key, sightingPrefix):
-		id := strings.TrimPrefix(key, sightingPrefix)
-		if deleted {
-			delete(h.sightings, id)
-			return
-		}
-		h.sightings[id] = true
-	}
-}
-
-// SetLocalCapabilities publishes which sidecar capabilities are connected
-// to this scheduler, non-blocking with the latest state winning.
-func (h *Handoff) SetLocalCapabilities(incapable, capable bool) {
-	h.localGateLock.Lock()
-	h.localGate = gateEntry{incapable: incapable, capable: capable}
-	h.localGateLock.Unlock()
-	h.requestGatePublish()
-}
-
-func (h *Handoff) requestGatePublish() {
-	select {
-	case h.localGateCh <- struct{}{}:
-	default:
-	}
-}
-
-// runDetection refreshes the placement detection periodically and on
-// request.
-func (h *Handoff) runDetection(ctx context.Context, lease clientv3.LeaseID) {
-	// A new lease starts with no published sighting.
+// AddPlacementStream registers one placement service stream with its first
+// reported state, returning the registration to update and remove it with.
+func (h *Handoff) AddPlacementStream(stoodDown bool) uint64 {
 	h.lock.Lock()
-	h.lastSighting = ""
-	h.lock.Unlock()
-
-	ticker := time.NewTicker(time.Second * 10)
-	defer ticker.Stop()
-	h.refreshDetection(ctx, lease)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-
-		case <-ticker.C:
-			h.refreshDetection(ctx, lease)
-
-		case <-h.detectCh:
-			// Probing right away keeps the withhold decision ahead of the
-			// first sidecar acting on the advertisement.
-			h.refreshDetection(ctx, lease)
-		}
+	h.nextStreamID++
+	id := h.nextStreamID
+	h.streams[id] = stoodDown
+	if !stoodDown {
+		// A serving placement service resets any previous cutover, so the
+		// next one runs the handshake again.
+		h.advertised = false
 	}
+	h.lock.Unlock()
+	h.fireOnChange()
+	return id
 }
 
-// refreshDetection looks for a deployed placement service the schedulers
-// were not told about, through the well-known service name and by probing
-// sidecar-reported placement addresses with the placement identity. The
-// sightings replicate through etcd so every scheduler acts on the same
-// view. Once nothing has been sighted for several polls, a stale
-// announcement from a placement service removed without standing down is
-// cleared so the cutover can proceed.
-func (h *Handoff) refreshDetection(ctx context.Context, lease clientv3.LeaseID) {
+// SetPlacementStreamState updates one placement stream's reported state.
+func (h *Handoff) SetPlacementStreamState(id uint64, stoodDown bool) {
+	h.lock.Lock()
+	h.streams[id] = stoodDown
+	if !stoodDown {
+		h.advertised = false
+	}
+	h.lock.Unlock()
+	h.fireOnChange()
+}
+
+// RemovePlacementStream removes one placement stream. A placement service
+// which died or was undeployed disappears with its streams.
+func (h *Handoff) RemovePlacementStream(id uint64) {
+	h.lock.Lock()
+	delete(h.streams, id)
+	h.lock.Unlock()
+	h.fireOnChange()
+}
+
+// SetLocalCapabilities records which sidecar capabilities are connected to
+// this scheduler.
+func (h *Handoff) SetLocalCapabilities(incapable, capable bool) {
+	h.lock.Lock()
+	h.incapable = incapable
+	h.capable = capable
+	h.lock.Unlock()
+	h.fireOnChange()
+}
+
+// refreshDetection looks for a placement service the schedulers were not
+// told about, through the well-known service name and by probing
+// sidecar-reported placement addresses with the placement identity. A
+// placement service reporting itself needs no detection, so a sighting only
+// matters while no stream exists.
+func (h *Handoff) refreshDetection(ctx context.Context) {
+	h.lock.RLock()
+	gen := h.reqGen
+	h.lock.RUnlock()
+
 	resolved := h.resolveDNS(ctx)
 	probed := h.probeReportedAddresses(ctx)
 
 	h.lock.Lock()
-	if resolved || probed {
-		h.detectMisses = 0
-	} else {
-		h.detectMisses++
-	}
-	clearStale := h.present && h.detectMisses >= dnsClearMisses && len(h.sightings) == 0
+	changed := h.detected != (resolved || probed) || h.doneGen != gen
+	h.detected = resolved || probed
+	h.doneGen = gen
 	h.lock.Unlock()
-
-	h.publishSighting(ctx, resolved, probed, lease)
-
-	if clearStale {
-		log.Info("No placement service is deployed, clearing the stale announcement of one removed without standing down. The actor placement cutover can proceed.")
-		if _, err := h.client.Delete(ctx, keyPresent); err != nil {
-			log.Errorf("Failed to clear the stale placement announcement: %s", err)
-		}
+	if changed {
+		h.fireOnChange()
 	}
 }
 
@@ -446,44 +330,6 @@ func (h *Handoff) probeAddress(ctx context.Context, addr string, placementID spi
 	}
 }
 
-func (h *Handoff) publishSighting(ctx context.Context, resolved, probed bool, lease clientv3.LeaseID) {
-	sighting := ""
-	if resolved || probed {
-		sighting = encodeSighting(resolved, probed)
-	}
-	h.lock.Lock()
-	unchanged := sighting == h.lastSighting
-	h.lastSighting = sighting
-	h.lock.Unlock()
-	if unchanged {
-		return
-	}
-
-	var err error
-	if sighting != "" {
-		_, err = h.client.Put(ctx, sightingPrefix+h.id, sighting, clientv3.WithLease(lease))
-	} else {
-		_, err = h.client.Delete(ctx, sightingPrefix+h.id)
-	}
-	if err != nil {
-		log.Errorf("Failed to update the placement service sighting: %s", err)
-		h.lock.Lock()
-		h.lastSighting = ""
-		h.lock.Unlock()
-	}
-}
-
-func encodeSighting(resolved, probed bool) string {
-	var parts []string
-	if resolved {
-		parts = append(parts, "dns")
-	}
-	if probed {
-		parts = append(parts, "probe")
-	}
-	return strings.Join(parts, " ")
-}
-
 // SetPlacementAddresses registers the source of the placement addresses the
 // connected sidecars were configured with, probed to detect a placement
 // service.
@@ -494,77 +340,51 @@ func (h *Handoff) SetPlacementAddresses(fn func() []string) {
 }
 
 // RequestDetection refreshes the placement detection right away, as the
-// reported placement addresses changed. Non-blocking.
+// reported placement addresses changed. A placement service is treated as
+// present until the refresh completes. Non-blocking.
 func (h *Handoff) RequestDetection() {
+	h.lock.Lock()
+	h.reqGen++
+	h.lock.Unlock()
 	select {
 	case h.detectCh <- struct{}{}:
 	default:
 	}
+	h.fireOnChange()
 }
 
-// Announce persists that a placement service exists. It also clears any
-// previous stand-down confirmation and advertisement latch, since a serving
-// placement service means a future cutover must run the handshake again.
-func (h *Handoff) Announce(ctx context.Context) error {
-	select {
-	case <-h.readyCh:
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	_, err := h.client.Txn(ctx).Then(
-		clientv3.OpPut(keyPresent, "true"),
-		clientv3.OpDelete(keyStoodDown),
-		clientv3.OpDelete(keyAdvertised),
-	).Commit()
-	return err
-}
-
-// ClearCutoverState clears the stand-down confirmation and advertisement
-// latch, so a scheduler starting without placement enabled leaves no state
-// from an earlier cutover behind: after a rollback the next cutover must run
-// the handshake and the gate again. Without an earlier cutover there is
-// nothing to clear.
-func ClearCutoverState(ctx context.Context, e etcd.Interface) error {
-	client, err := e.Client(ctx)
-	if err != nil {
-		return err
-	}
-	_, err = client.Txn(ctx).Then(
-		clientv3.OpDelete(keyStoodDown),
-		clientv3.OpDelete(keyAdvertised),
-	).Commit()
-	return err
-}
-
-// ConfirmStoodDown persists the completed stand-down.
-func (h *Handoff) ConfirmStoodDown(ctx context.Context) error {
-	select {
-	case <-h.readyCh:
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	_, err := h.client.Put(ctx, keyStoodDown, "true")
-	return err
-}
-
-// LatchAdvertised persists the advertisement latch.
+// LatchAdvertised records that the advertisement was made with a capable
+// sidecar connected.
 func (h *Handoff) LatchAdvertised() {
-	select {
-	case h.latchCh <- struct{}{}:
-	default:
-	}
+	h.lock.Lock()
+	h.advertised = true
+	h.lock.Unlock()
 }
 
+// PlacementPresent reports whether a placement service exists: one holds a
+// stream to this scheduler, the detection sights one, or a detection of
+// just-reported placement addresses is still in flight.
 func (h *Handoff) PlacementPresent() bool {
 	h.lock.RLock()
 	defer h.lock.RUnlock()
-	return h.present || len(h.sightings) > 0
+	return len(h.streams) > 0 || h.detected || h.reqGen != h.doneGen
 }
 
+// PlacementStoodDown reports whether the placement service drained: streams
+// exist and none reports serving. Streams override the detection, since a
+// stood-down placement service still accepts the probe's connections.
 func (h *Handoff) PlacementStoodDown() bool {
 	h.lock.RLock()
 	defer h.lock.RUnlock()
-	return h.stoodDown
+	if len(h.streams) == 0 {
+		return false
+	}
+	for _, stoodDown := range h.streams {
+		if !stoodDown {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *Handoff) Advertised() bool {
@@ -573,52 +393,20 @@ func (h *Handoff) Advertised() bool {
 	return h.advertised
 }
 
-// AnySchedulerPlacementIncapableSidecars reports whether any scheduler in the cluster has a
-// connected sidecar which cannot take scheduler placement.
+// AnySchedulerPlacementIncapableSidecars reports whether this scheduler has
+// a connected sidecar which cannot take scheduler placement. Sidecars
+// connect to every scheduler, so the local view converges on the cluster
+// view.
 func (h *Handoff) AnySchedulerPlacementIncapableSidecars() bool {
 	h.lock.RLock()
 	defer h.lock.RUnlock()
-	for _, gate := range h.gates {
-		if gate.incapable {
-			return true
-		}
-	}
-	return false
+	return h.incapable
 }
 
-// AnySchedulerPlacementCapableSidecars reports whether any scheduler in the cluster has a
+// AnySchedulerPlacementCapableSidecars reports whether this scheduler has a
 // connected sidecar which can take scheduler placement.
 func (h *Handoff) AnySchedulerPlacementCapableSidecars() bool {
 	h.lock.RLock()
 	defer h.lock.RUnlock()
-	for _, gate := range h.gates {
-		if gate.capable {
-			return true
-		}
-	}
-	return false
-}
-
-func encodeGate(g gateEntry) string {
-	var parts []string
-	if g.incapable {
-		parts = append(parts, "incapable")
-	}
-	if g.capable {
-		parts = append(parts, "capable")
-	}
-	return strings.Join(parts, " ")
-}
-
-func decodeGate(value string) gateEntry {
-	var g gateEntry
-	for part := range strings.SplitSeq(value, " ") {
-		switch part {
-		case "incapable":
-			g.incapable = true
-		case "capable":
-			g.capable = true
-		}
-	}
-	return g
+	return h.capable
 }

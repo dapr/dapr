@@ -26,7 +26,6 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
@@ -37,19 +36,16 @@ func init() {
 }
 
 type failthird struct {
-	place *failthird
-	sched *failthird
-
 	actors    *actors.Actors
 	triggered slice.Slice[string]
 	respErr   atomic.Bool
 }
 
-func (f *failthird) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+func (f *failthird) Setup(t *testing.T) []framework.Option {
 	f.triggered = slice.String()
 	f.respErr.Store(true)
 
-	f.actors = actors.New(t, append([]actors.Option{
+	f.actors = actors.New(t,
 		actors.WithActorTypes("helloworld"),
 		actors.WithActorTypeHandler("helloworld", func(w http.ResponseWriter, req *http.Request) {
 			defer f.triggered.Append(path.Base(req.URL.Path))
@@ -57,27 +53,14 @@ func (f *failthird) setup(t *testing.T, extra ...actors.Option) []process.Interf
 				w.WriteHeader(http.StatusInternalServerError)
 			}
 		}),
-	}, extra...)...)
-
-	return []process.Interface{f.actors}
-}
-
-func (f *failthird) Setup(t *testing.T) []framework.Option {
-	f.place, f.sched = new(failthird), new(failthird)
-	procs := f.place.setup(t)
-	procs = append(procs, f.sched.setup(t, actors.WithSchedulerPlacement())...)
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(f.actors),
 	}
 }
 
 func (f *failthird) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { f.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { f.sched.run(t, ctx) })
-}
-
-func (f *failthird) run(t *testing.T, ctx context.Context) {
 	f.actors.WaitUntilRunning(t, ctx)
 
 	_, err := f.actors.GRPCClient(t, ctx).RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{

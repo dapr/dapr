@@ -27,7 +27,6 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -37,9 +36,6 @@ func init() {
 }
 
 type maxbodysize struct {
-	place *maxbodysize
-	sched *maxbodysize
-
 	actors1 *actors.Actors
 	actors2 *actors.Actors
 
@@ -47,14 +43,14 @@ type maxbodysize struct {
 	called2 atomic.Bool
 }
 
-func (m *maxbodysize) setup(t *testing.T, extra ...actors.Option) []process.Interface {
-	m.actors1 = actors.New(t, append([]actors.Option{
+func (m *maxbodysize) Setup(t *testing.T) []framework.Option {
+	m.actors1 = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithMaxBodySize("1k"),
 		actors.WithActorTypeHandler("abc", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 			m.called1.Store(true)
 		}),
-	}, extra...)...)
+	)
 	m.actors2 = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithPeerActor(m.actors1),
@@ -64,25 +60,12 @@ func (m *maxbodysize) setup(t *testing.T, extra ...actors.Option) []process.Inte
 		}),
 	)
 
-	return []process.Interface{m.actors1, m.actors2}
-}
-
-func (m *maxbodysize) Setup(t *testing.T) []framework.Option {
-	m.place, m.sched = new(maxbodysize), new(maxbodysize)
-	procs := m.place.setup(t)
-	procs = append(procs, m.sched.setup(t, actors.WithSchedulerPlacement())...)
-
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(m.actors1, m.actors2),
 	}
 }
 
 func (m *maxbodysize) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { m.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { m.sched.run(t, ctx) })
-}
-
-func (m *maxbodysize) run(t *testing.T, ctx context.Context) {
 	m.actors1.WaitUntilRunning(t, ctx)
 	m.actors2.WaitUntilRunning(t, ctx)
 

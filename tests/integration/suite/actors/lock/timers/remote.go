@@ -26,7 +26,6 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -36,20 +35,17 @@ func init() {
 }
 
 type remote struct {
-	place *remote
-	sched *remote
-
 	app1     *actors.Actors
 	app2     *actors.Actors
 	called   atomic.Int64
 	holdCall chan struct{}
 }
 
-func (r *remote) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+func (r *remote) Setup(t *testing.T) []framework.Option {
 	r.holdCall = make(chan struct{})
 	r.called.Store(0)
 
-	r.app1 = actors.New(t, append([]actors.Option{
+	r.app1 = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, req *nethttp.Request) {
 			if req.Method == nethttp.MethodDelete {
@@ -60,7 +56,7 @@ func (r *remote) setup(t *testing.T, extra ...actors.Option) []process.Interface
 			}
 			<-r.holdCall
 		}),
-	}, extra...)...)
+	)
 
 	r.app2 = actors.New(t,
 		actors.WithActorTypes("abc"),
@@ -69,25 +65,12 @@ func (r *remote) setup(t *testing.T, extra ...actors.Option) []process.Interface
 		}),
 	)
 
-	return []process.Interface{r.app1, r.app2}
-}
-
-func (r *remote) Setup(t *testing.T) []framework.Option {
-	r.place, r.sched = new(remote), new(remote)
-	procs := r.place.setup(t)
-	procs = append(procs, r.sched.setup(t, actors.WithSchedulerPlacement())...)
-
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(r.app1, r.app2),
 	}
 }
 
 func (r *remote) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { r.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { r.sched.run(t, ctx) })
-}
-
-func (r *remote) run(t *testing.T, ctx context.Context) {
 	r.app1.WaitUntilRunning(t, ctx)
 	r.app2.WaitUntilRunning(t, ctx)
 

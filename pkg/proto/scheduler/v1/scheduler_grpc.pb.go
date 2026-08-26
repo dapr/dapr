@@ -68,7 +68,7 @@ type SchedulerClient interface {
 	// service announced itself, the placement leader advertisement is
 	// withheld until the stand-down confirmation arrives, so the cluster
 	// never has two placement authorities serving at once.
-	ReportPlacementService(ctx context.Context, in *ReportPlacementServiceRequest, opts ...grpc.CallOption) (*ReportPlacementServiceResponse, error)
+	ReportPlacementService(ctx context.Context, opts ...grpc.CallOption) (Scheduler_ReportPlacementServiceClient, error)
 }
 
 type schedulerClient struct {
@@ -227,13 +227,35 @@ func (x *schedulerReportActorTypesClient) Recv() (*PlacementOrder, error) {
 	return m, nil
 }
 
-func (c *schedulerClient) ReportPlacementService(ctx context.Context, in *ReportPlacementServiceRequest, opts ...grpc.CallOption) (*ReportPlacementServiceResponse, error) {
-	out := new(ReportPlacementServiceResponse)
-	err := c.cc.Invoke(ctx, Scheduler_ReportPlacementService_FullMethodName, in, out, opts...)
+func (c *schedulerClient) ReportPlacementService(ctx context.Context, opts ...grpc.CallOption) (Scheduler_ReportPlacementServiceClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Scheduler_ServiceDesc.Streams[3], Scheduler_ReportPlacementService_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &schedulerReportPlacementServiceClient{stream}
+	return x, nil
+}
+
+type Scheduler_ReportPlacementServiceClient interface {
+	Send(*ReportPlacementServiceRequest) error
+	Recv() (*ReportPlacementServiceResponse, error)
+	grpc.ClientStream
+}
+
+type schedulerReportPlacementServiceClient struct {
+	grpc.ClientStream
+}
+
+func (x *schedulerReportPlacementServiceClient) Send(m *ReportPlacementServiceRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *schedulerReportPlacementServiceClient) Recv() (*ReportPlacementServiceResponse, error) {
+	m := new(ReportPlacementServiceResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // SchedulerServer is the server API for Scheduler service.
@@ -273,7 +295,7 @@ type SchedulerServer interface {
 	// service announced itself, the placement leader advertisement is
 	// withheld until the stand-down confirmation arrives, so the cluster
 	// never has two placement authorities serving at once.
-	ReportPlacementService(context.Context, *ReportPlacementServiceRequest) (*ReportPlacementServiceResponse, error)
+	ReportPlacementService(Scheduler_ReportPlacementServiceServer) error
 }
 
 // UnimplementedSchedulerServer should be embedded to have forward compatible implementations.
@@ -307,8 +329,8 @@ func (UnimplementedSchedulerServer) DeleteByNamePrefix(context.Context, *DeleteB
 func (UnimplementedSchedulerServer) ReportActorTypes(Scheduler_ReportActorTypesServer) error {
 	return status.Errorf(codes.Unimplemented, "method ReportActorTypes not implemented")
 }
-func (UnimplementedSchedulerServer) ReportPlacementService(context.Context, *ReportPlacementServiceRequest) (*ReportPlacementServiceResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ReportPlacementService not implemented")
+func (UnimplementedSchedulerServer) ReportPlacementService(Scheduler_ReportPlacementServiceServer) error {
+	return status.Errorf(codes.Unimplemented, "method ReportPlacementService not implemented")
 }
 
 // UnsafeSchedulerServer may be embedded to opt out of forward compatibility for this service.
@@ -503,22 +525,30 @@ func (x *schedulerReportActorTypesServer) Recv() (*ReportActorTypesRequest, erro
 	return m, nil
 }
 
-func _Scheduler_ReportPlacementService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ReportPlacementServiceRequest)
-	if err := dec(in); err != nil {
+func _Scheduler_ReportPlacementService_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(SchedulerServer).ReportPlacementService(&schedulerReportPlacementServiceServer{stream})
+}
+
+type Scheduler_ReportPlacementServiceServer interface {
+	Send(*ReportPlacementServiceResponse) error
+	Recv() (*ReportPlacementServiceRequest, error)
+	grpc.ServerStream
+}
+
+type schedulerReportPlacementServiceServer struct {
+	grpc.ServerStream
+}
+
+func (x *schedulerReportPlacementServiceServer) Send(m *ReportPlacementServiceResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *schedulerReportPlacementServiceServer) Recv() (*ReportPlacementServiceRequest, error) {
+	m := new(ReportPlacementServiceRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(SchedulerServer).ReportPlacementService(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Scheduler_ReportPlacementService_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SchedulerServer).ReportPlacementService(ctx, req.(*ReportPlacementServiceRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return m, nil
 }
 
 // Scheduler_ServiceDesc is the grpc.ServiceDesc for Scheduler service.
@@ -552,10 +582,6 @@ var Scheduler_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "DeleteByNamePrefix",
 			Handler:    _Scheduler_DeleteByNamePrefix_Handler,
 		},
-		{
-			MethodName: "ReportPlacementService",
-			Handler:    _Scheduler_ReportPlacementService_Handler,
-		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -572,6 +598,12 @@ var Scheduler_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "ReportActorTypes",
 			Handler:       _Scheduler_ReportActorTypes_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "ReportPlacementService",
+			Handler:       _Scheduler_ReportPlacementService_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},

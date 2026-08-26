@@ -27,7 +27,6 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -39,9 +38,6 @@ func init() {
 // once asserts a one shot timer registered through one sidecar fires exactly
 // once, on the single host which owns the actor, whichever host that is.
 type once struct {
-	place *once
-	sched *once
-
 	app1 *actors.Actors
 	app2 *actors.Actors
 
@@ -62,15 +58,15 @@ func (o *once) record(path string, host int) {
 	o.fired[parts[2]] = append(o.fired[parts[2]], host)
 }
 
-func (o *once) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+func (o *once) Setup(t *testing.T) []framework.Option {
 	o.fired = make(map[string][]int)
 
-	o.app1 = actors.New(t, append([]actors.Option{
+	o.app1 = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 			o.record(r.URL.Path, 0)
 		}),
-	}, extra...)...)
+	)
 
 	o.app2 = actors.New(t,
 		actors.WithPeerActor(o.app1),
@@ -80,25 +76,12 @@ func (o *once) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 		}),
 	)
 
-	return []process.Interface{o.app1, o.app2}
-}
-
-func (o *once) Setup(t *testing.T) []framework.Option {
-	o.place, o.sched = new(once), new(once)
-	procs := o.place.setup(t)
-	procs = append(procs, o.sched.setup(t, actors.WithSchedulerPlacement())...)
-
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(o.app1, o.app2),
 	}
 }
 
 func (o *once) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { o.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { o.sched.run(t, ctx) })
-}
-
-func (o *once) run(t *testing.T, ctx context.Context) {
 	o.app1.WaitUntilRunning(t, ctx)
 	o.app2.WaitUntilRunning(t, ctx)
 

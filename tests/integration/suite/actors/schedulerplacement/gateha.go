@@ -34,10 +34,10 @@ func init() {
 	suite.Register(new(gateha))
 }
 
-// gateha asserts the capability gate is replicated: an old sidecar connected
-// to one scheduler withholds the placement advertisement on every scheduler
-// in the cluster, so no scheduler ever advertises a different authority than
-// its peers.
+// gateha asserts an old sidecar does not withhold the placement
+// advertisement in an HA cluster: with no placement service visible nothing
+// can serve it. The old sidecar is counted, and each scheduler advertises
+// once a capable sidecar connects to it.
 type gateha struct {
 	schedulers [3]*scheduler.Scheduler
 }
@@ -73,8 +73,9 @@ func (g *gateha) Run(t *testing.T, ctx context.Context) {
 		sched.WaitUntilRunning(t, ctx)
 	}
 
-	// An old sidecar on scheduler 1 engages the gate, observed replicated
-	// on every scheduler before the capable sidecar connects.
+	// An old sidecar on scheduler 1 is counted, but the schedulers keep
+	// advertising their placement capability: with no placement service
+	// visible, nothing could serve it.
 	oldCtx, oldCancel := context.WithCancel(ctx)
 	t.Cleanup(oldCancel)
 	g.schedulers[1].WatchJobsSuccess(t, oldCtx, &schedulerv1pb.WatchJobsRequestInitial{
@@ -82,7 +83,12 @@ func (g *gateha) Run(t *testing.T, ctx context.Context) {
 		Namespace: "default",
 	})
 
-	masked := func(sched *scheduler.Scheduler) bool {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		all := g.schedulers[1].Metrics(c, ctx).All()
+		assert.Equal(c, 1, int(all["dapr_scheduler_placement_incapable_sidecars"]))
+	}, time.Second*20, time.Millisecond*50)
+
+	schedulerPlacementEnabled := func(sched *scheduler.Scheduler) bool {
 		stream, err := sched.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
 		if err != nil {
 			return false
@@ -94,7 +100,7 @@ func (g *gateha) Run(t *testing.T, ctx context.Context) {
 			return false
 		}
 		for _, host := range resp.GetHosts() {
-			if host.GetSchedulerPlacementEnabled() {
+			if !host.GetSchedulerPlacementEnabled() {
 				return false
 			}
 		}
@@ -102,12 +108,12 @@ func (g *gateha) Run(t *testing.T, ctx context.Context) {
 	}
 	for _, sched := range g.schedulers {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.True(c, masked(sched), "the gate must replicate to every scheduler")
+			assert.True(c, schedulerPlacementEnabled(sched), "an old sidecar must not hide the scheduler placement capability")
 		}, time.Second*20, time.Millisecond*50)
 	}
 
-	// A capable sidecar on scheduler 0 makes the cluster eligible to
-	// advertise, and the replicated gate must withhold it everywhere.
+	// A capable sidecar on scheduler 0 makes it advertise the leader, old
+	// sidecar or not.
 	g.schedulers[0].WatchJobsSuccess(t, ctx, &schedulerv1pb.WatchJobsRequestInitial{
 		AppId:                      "new-sidecar",
 		Namespace:                  "default",
@@ -133,14 +139,22 @@ func (g *gateha) Run(t *testing.T, ctx context.Context) {
 		return false
 	}
 
-	assert.Never(t, func() bool {
-		return leaderOn(g.schedulers[2])
-	}, time.Second*5, time.Millisecond*500,
-		"an old sidecar on one scheduler must withhold the advertisement on all of them")
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.True(c, leaderOn(g.schedulers[0]),
+			"an old sidecar elsewhere must not withhold the advertisement")
+	}, time.Second*20, time.Millisecond*50)
 
-	// The old sidecar disconnects: every scheduler advertises the same
-	// single leader.
+	// The other schedulers have no capable sidecar of their own yet, so
+	// they stay leaderless. Once one connects to each, every scheduler
+	// advertises.
 	oldCancel()
+	for _, sched := range []*scheduler.Scheduler{g.schedulers[1], g.schedulers[2]} {
+		sched.WatchJobsSuccess(t, ctx, &schedulerv1pb.WatchJobsRequestInitial{
+			AppId:                      "new-sidecar-2",
+			Namespace:                  "default",
+			SupportsSchedulerPlacement: true,
+		})
+	}
 	for _, sched := range g.schedulers {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.True(c, leaderOn(sched))

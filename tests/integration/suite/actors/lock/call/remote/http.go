@@ -27,7 +27,6 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -37,19 +36,16 @@ func init() {
 }
 
 type http struct {
-	place *http
-	sched *http
-
 	app1     *actors.Actors
 	app2     *actors.Actors
 	called   atomic.Int64
 	holdCall chan struct{}
 }
 
-func (h *http) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+func (h *http) Setup(t *testing.T) []framework.Option {
 	h.holdCall = make(chan struct{})
 
-	h.app1 = actors.New(t, append([]actors.Option{
+	h.app1 = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 			if r.Method == nethttp.MethodDelete {
@@ -60,7 +56,7 @@ func (h *http) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 			}
 			<-h.holdCall
 		}),
-	}, extra...)...)
+	)
 
 	h.app2 = actors.New(t,
 		actors.WithActorTypes("abc"),
@@ -68,25 +64,12 @@ func (h *http) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 		actors.WithActorTypeHandler("abc", func(nethttp.ResponseWriter, *nethttp.Request) {}),
 	)
 
-	return []process.Interface{h.app1, h.app2}
-}
-
-func (h *http) Setup(t *testing.T) []framework.Option {
-	h.place, h.sched = new(http), new(http)
-	procs := h.place.setup(t)
-	procs = append(procs, h.sched.setup(t, actors.WithSchedulerPlacement())...)
-
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(h.app1, h.app2),
 	}
 }
 
 func (h *http) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { h.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { h.sched.run(t, ctx) })
-}
-
-func (h *http) run(t *testing.T, ctx context.Context) {
 	h.app1.WaitUntilRunning(t, ctx)
 	h.app2.WaitUntilRunning(t, ctx)
 

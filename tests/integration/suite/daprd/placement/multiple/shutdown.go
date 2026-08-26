@@ -36,13 +36,16 @@ type shutdown struct {
 
 func (s *shutdown) Setup(t *testing.T) []framework.Option {
 	actor1 := dactors.New(t,
+		dactors.WithPlacementService(),
 		dactors.WithActorTypes("mytype"),
 	)
 	actor2 := dactors.New(t,
+		dactors.WithPlacementService(),
 		dactors.WithActorTypes("mytype"),
 		dactors.WithPeerActor(actor1),
 	)
 	actor3 := dactors.New(t,
+		dactors.WithPlacementService(),
 		dactors.WithActorTypes("mytype"),
 		dactors.WithPeerActor(actor1),
 	)

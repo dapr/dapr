@@ -15,6 +15,7 @@ package connections
 
 import (
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,8 +30,9 @@ import (
 )
 
 type fakeStream struct {
-	sent   []loops.EventStream
-	closed bool
+	sent []loops.EventStream
+	// closed is set from the asynchronous stream loop close.
+	closed atomic.Bool
 }
 
 func newTest(t *testing.T) *connections {
@@ -59,7 +61,7 @@ func (c *connections) addFakeStream(idx uint64) *fakeStream {
 	c.streams[idx] = &streamConn{
 		loop: loopfake.New[loops.EventStream]().
 			WithEnqueue(func(e loops.EventStream) { fs.sent = append(fs.sent, e) }).
-			WithClose(func(loops.EventStream) { fs.closed = true }),
+			WithClose(func(loops.EventStream) { fs.closed.Store(true) }),
 	}
 	if idx >= c.streamIDx {
 		c.streamIDx = idx + 1
@@ -206,7 +208,7 @@ func TestStreamCloseAdvancesRound(t *testing.T) {
 	c.ack(1, seq, schedulerv1pb.Operation_OPERATION_LOCK)
 	c.handleCloseStream(&loops.ConnCloseStream{StreamIDx: 0, Namespace: "ns"})
 
-	assert.True(t, fs0.closed)
+	assert.Eventually(t, fs0.closed.Load, time.Second, time.Millisecond)
 	_, ok := fs1.sent[len(fs1.sent)-1].(*loops.SendUpdate)
 	require.True(t, ok, "round should advance to UPDATE after closing the unacked member")
 
@@ -230,8 +232,8 @@ func TestTimeoutEvictsUnackedAndRestartsRound(t *testing.T) {
 	c.ack(0, seqT1, schedulerv1pb.Operation_OPERATION_LOCK)
 	c.handleTimeout(&loops.RoundTimeout{Seq: seqT1})
 
-	assert.True(t, fs1.closed, "unacked stream must be evicted")
-	assert.False(t, fs0.closed)
+	assert.Eventually(t, fs1.closed.Load, time.Second, time.Millisecond, "unacked stream must be evicted")
+	assert.False(t, fs0.closed.Load())
 	assert.NotContains(t, c.rounds, seqT1, "timed out round must be aborted")
 
 	// The survivor holds the aborted round's LOCK: it must receive that

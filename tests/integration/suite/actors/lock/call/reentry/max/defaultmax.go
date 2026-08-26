@@ -27,7 +27,6 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
@@ -38,16 +37,13 @@ func init() {
 }
 
 type defaultmax struct {
-	place *defaultmax
-	sched *defaultmax
-
 	app      *actors.Actors
 	called   slice.Slice[string]
 	rid      atomic.Pointer[string]
 	holdCall chan struct{}
 }
 
-func (d *defaultmax) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+func (d *defaultmax) Setup(t *testing.T) []framework.Option {
 	d.called = slice.New[string]()
 	d.holdCall = make(chan struct{})
 
@@ -62,30 +58,17 @@ func (d *defaultmax) setup(t *testing.T, extra ...actors.Option) []process.Inter
 		<-d.holdCall
 	}
 
-	d.app = actors.New(t, append([]actors.Option{
+	d.app = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", handler),
 		actors.WithReentry(true),
-	}, extra...)...)
-	return []process.Interface{d.app}
-}
-
-func (d *defaultmax) Setup(t *testing.T) []framework.Option {
-	d.place, d.sched = new(defaultmax), new(defaultmax)
-	procs := d.place.setup(t)
-	procs = append(procs, d.sched.setup(t, actors.WithSchedulerPlacement())...)
-
+	)
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(d.app),
 	}
 }
 
 func (d *defaultmax) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { d.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { d.sched.run(t, ctx) })
-}
-
-func (d *defaultmax) run(t *testing.T, ctx context.Context) {
 	d.app.WaitUntilRunning(t, ctx)
 
 	client := d.app.GRPCClient(t, ctx)

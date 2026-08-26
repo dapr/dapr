@@ -94,7 +94,7 @@ type SchedulerClient interface {
 	// service announced itself, the placement leader advertisement is
 	// withheld until the stand-down confirmation arrives, so the cluster
 	// never has two placement authorities serving at once.
-	ReportPlacementService(context.Context, *connect.Request[v1.ReportPlacementServiceRequest]) (*connect.Response[v1.ReportPlacementServiceResponse], error)
+	ReportPlacementService(context.Context) *connect.BidiStreamForClient[v1.ReportPlacementServiceRequest, v1.ReportPlacementServiceResponse]
 }
 
 // NewSchedulerClient constructs a client for the dapr.proto.scheduler.v1.Scheduler service. By
@@ -231,8 +231,8 @@ func (c *schedulerClient) ReportActorTypes(ctx context.Context) *connect.BidiStr
 }
 
 // ReportPlacementService calls dapr.proto.scheduler.v1.Scheduler.ReportPlacementService.
-func (c *schedulerClient) ReportPlacementService(ctx context.Context, req *connect.Request[v1.ReportPlacementServiceRequest]) (*connect.Response[v1.ReportPlacementServiceResponse], error) {
-	return c.reportPlacementService.CallUnary(ctx, req)
+func (c *schedulerClient) ReportPlacementService(ctx context.Context) *connect.BidiStreamForClient[v1.ReportPlacementServiceRequest, v1.ReportPlacementServiceResponse] {
+	return c.reportPlacementService.CallBidiStream(ctx)
 }
 
 // SchedulerHandler is an implementation of the dapr.proto.scheduler.v1.Scheduler service.
@@ -270,7 +270,7 @@ type SchedulerHandler interface {
 	// service announced itself, the placement leader advertisement is
 	// withheld until the stand-down confirmation arrives, so the cluster
 	// never has two placement authorities serving at once.
-	ReportPlacementService(context.Context, *connect.Request[v1.ReportPlacementServiceRequest]) (*connect.Response[v1.ReportPlacementServiceResponse], error)
+	ReportPlacementService(context.Context, *connect.BidiStream[v1.ReportPlacementServiceRequest, v1.ReportPlacementServiceResponse]) error
 }
 
 // NewSchedulerHandler builds an HTTP handler from the service implementation. It returns the path
@@ -334,7 +334,7 @@ func NewSchedulerHandler(svc SchedulerHandler, opts ...connect.HandlerOption) (s
 		connect.WithSchema(schedulerMethods.ByName("ReportActorTypes")),
 		connect.WithHandlerOptions(opts...),
 	)
-	schedulerReportPlacementServiceHandler := connect.NewUnaryHandler(
+	schedulerReportPlacementServiceHandler := connect.NewBidiStreamHandler(
 		SchedulerReportPlacementServiceProcedure,
 		svc.ReportPlacementService,
 		connect.WithSchema(schedulerMethods.ByName("ReportPlacementService")),
@@ -407,6 +407,6 @@ func (UnimplementedSchedulerHandler) ReportActorTypes(context.Context, *connect.
 	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.scheduler.v1.Scheduler.ReportActorTypes is not implemented"))
 }
 
-func (UnimplementedSchedulerHandler) ReportPlacementService(context.Context, *connect.Request[v1.ReportPlacementServiceRequest]) (*connect.Response[v1.ReportPlacementServiceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.scheduler.v1.Scheduler.ReportPlacementService is not implemented"))
+func (UnimplementedSchedulerHandler) ReportPlacementService(context.Context, *connect.BidiStream[v1.ReportPlacementServiceRequest, v1.ReportPlacementServiceResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.scheduler.v1.Scheduler.ReportPlacementService is not implemented"))
 }

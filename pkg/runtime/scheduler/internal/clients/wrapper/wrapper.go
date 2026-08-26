@@ -47,18 +47,18 @@ func (w *wrapper) Addresses() []string {
 
 // ReportPlacementService exists to satisfy the generated client interface,
 // only the standalone placement service calls it.
-func (w *wrapper) ReportPlacementService(ctx context.Context, req *v1pb.ReportPlacementServiceRequest, opts ...grpc.CallOption) (*v1pb.ReportPlacementServiceResponse, error) {
-	var resp *v1pb.ReportPlacementServiceResponse
+func (w *wrapper) ReportPlacementService(ctx context.Context, opts ...grpc.CallOption) (v1pb.Scheduler_ReportPlacementServiceClient, error) {
+	var stream v1pb.Scheduler_ReportPlacementServiceClient
 
 	err := w.call(ctx, func(client v1pb.SchedulerClient) error {
 		var err error
 
-		resp, err = client.ReportPlacementService(ctx, req, opts...)
+		stream, err = client.ReportPlacementService(ctx, opts...)
 
 		return err
 	})
 
-	return resp, err
+	return stream, err
 }
 
 func (w *wrapper) DeleteJob(ctx context.Context, req *v1pb.DeleteJobRequest, opts ...grpc.CallOption) (*v1pb.DeleteJobResponse, error) {

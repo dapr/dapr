@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -31,6 +32,8 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+
+	kitstrings "github.com/dapr/kit/strings"
 )
 
 type Actors struct {
@@ -65,6 +68,13 @@ func New(t *testing.T, fopts ...Option) *Actors {
 	}
 	for _, fopt := range fopts {
 		fopt(&opts)
+	}
+
+	// Tests which pick a topology, or drive the placement service, keep
+	// their choice.
+	if SchedulerPlacementFromEnv() &&
+		!opts.placementService && opts.placement == nil && !opts.schedulerPlacement {
+		opts.schedulerPlacement = true
 	}
 
 	if opts.scheduler == nil {
@@ -217,4 +227,11 @@ func (a *Actors) AppID() string {
 
 func (a *Actors) DB() *sqlite.SQLite {
 	return a.db
+}
+
+// SchedulerPlacementFromEnv reports whether
+// DAPR_INTEGRATION_SCHEDULER_PLACEMENT is set truthy, which has the
+// scheduler serve actor placement for every harness built by this package.
+func SchedulerPlacementFromEnv() bool {
+	return kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_SCHEDULER_PLACEMENT"))
 }

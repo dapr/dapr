@@ -27,7 +27,6 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
@@ -38,16 +37,13 @@ func init() {
 }
 
 type grpc struct {
-	place *grpc
-	sched *grpc
-
 	app      *actors.Actors
 	called   slice.Slice[string]
 	rid      atomic.Pointer[string]
 	holdCall chan struct{}
 }
 
-func (g *grpc) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+func (g *grpc) Setup(t *testing.T) []framework.Option {
 	g.called = slice.New[string]()
 	g.holdCall = make(chan struct{})
 
@@ -62,7 +58,7 @@ func (g *grpc) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 		<-g.holdCall
 	}
 
-	g.app = actors.New(t, append([]actors.Option{
+	g.app = actors.New(t,
 		actors.WithActorTypes("abc", "efg", "xyz"),
 		actors.WithActorTypeHandler("abc", handler),
 		actors.WithActorTypeHandler("efg", handler),
@@ -76,26 +72,13 @@ func (g *grpc) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 			actors.WithEntityConfigEntities("xyz"),
 			actors.WithEntityConfigReentrancy(true, new(uint32(12))),
 		),
-	}, extra...)...)
-	return []process.Interface{g.app}
-}
-
-func (g *grpc) Setup(t *testing.T) []framework.Option {
-	g.place, g.sched = new(grpc), new(grpc)
-	procs := g.place.setup(t)
-	procs = append(procs, g.sched.setup(t, actors.WithSchedulerPlacement())...)
-
+	)
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(g.app),
 	}
 }
 
 func (g *grpc) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { g.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { g.sched.run(t, ctx) })
-}
-
-func (g *grpc) run(t *testing.T, ctx context.Context) {
 	g.app.WaitUntilRunning(t, ctx)
 
 	client := g.app.GRPCClient(t, ctx)

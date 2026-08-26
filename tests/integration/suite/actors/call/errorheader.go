@@ -27,7 +27,6 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -38,15 +37,12 @@ func init() {
 }
 
 type errorheader struct {
-	place *errorheader
-	sched *errorheader
-
 	app1 *actors.Actors
 	app2 *actors.Actors
 }
 
-func (e *errorheader) setup(t *testing.T, extra ...actors.Option) []process.Interface {
-	e.app1 = actors.New(t, extra...)
+func (e *errorheader) Setup(t *testing.T) []framework.Option {
+	e.app1 = actors.New(t)
 
 	e.app2 = actors.New(t,
 		actors.WithPeerActor(e.app1),
@@ -60,25 +56,12 @@ func (e *errorheader) setup(t *testing.T, extra ...actors.Option) []process.Inte
 		}),
 	)
 
-	return []process.Interface{e.app1, e.app2}
-}
-
-func (e *errorheader) Setup(t *testing.T) []framework.Option {
-	e.place, e.sched = new(errorheader), new(errorheader)
-	procs := e.place.setup(t)
-	procs = append(procs, e.sched.setup(t, actors.WithSchedulerPlacement())...)
-
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(e.app1, e.app2),
 	}
 }
 
 func (e *errorheader) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { e.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { e.sched.run(t, ctx) })
-}
-
-func (e *errorheader) run(t *testing.T, ctx context.Context) {
 	e.app1.WaitUntilRunning(t, ctx)
 	e.app2.WaitUntilRunning(t, ctx)
 

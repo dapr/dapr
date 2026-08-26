@@ -24,7 +24,6 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -34,37 +33,21 @@ func init() {
 }
 
 type badmethod struct {
-	place *badmethod
-	sched *badmethod
-
 	actors *actors.Actors
 }
 
-func (b *badmethod) setup(t *testing.T, extra ...actors.Option) []process.Interface {
-	b.actors = actors.New(t, append([]actors.Option{
+func (b *badmethod) Setup(t *testing.T) []framework.Option {
+	b.actors = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithHandler("/actors/abc/ii", func(w nethttp.ResponseWriter, r *nethttp.Request) {}),
-	}, extra...)...)
-
-	return []process.Interface{b.actors}
-}
-
-func (b *badmethod) Setup(t *testing.T) []framework.Option {
-	b.place, b.sched = new(badmethod), new(badmethod)
-	procs := b.place.setup(t)
-	procs = append(procs, b.sched.setup(t, actors.WithSchedulerPlacement())...)
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(b.actors),
 	}
 }
 
 func (b *badmethod) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { b.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { b.sched.run(t, ctx) })
-}
-
-func (b *badmethod) run(t *testing.T, ctx context.Context) {
 	b.actors.WaitUntilRunning(t, ctx)
 
 	url := fmt.Sprintf("http://%s/v1.0/actors/abc/ii/method/foo", b.actors.Daprd().HTTPAddress())

@@ -25,7 +25,6 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -35,9 +34,6 @@ func init() {
 }
 
 type defaultTimeout struct {
-	place *defaultTimeout
-	sched *defaultTimeout
-
 	app1 *actors.Actors
 	app2 *actors.Actors
 
@@ -46,7 +42,7 @@ type defaultTimeout struct {
 	waitOnCall    chan struct{}
 }
 
-func (d *defaultTimeout) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+func (d *defaultTimeout) Setup(t *testing.T) []framework.Option {
 	d.waitOnCall = make(chan struct{})
 
 	handler := func(_ nethttp.ResponseWriter, r *nethttp.Request) {
@@ -59,10 +55,10 @@ func (d *defaultTimeout) setup(t *testing.T, extra ...actors.Option) []process.I
 		}
 	}
 
-	d.app1 = actors.New(t, append([]actors.Option{
+	d.app1 = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", handler),
-	}, extra...)...)
+	)
 
 	d.app2 = actors.New(t,
 		actors.WithPeerActor(d.app1),
@@ -70,25 +66,12 @@ func (d *defaultTimeout) setup(t *testing.T, extra ...actors.Option) []process.I
 		actors.WithActorTypeHandler("abc", handler),
 	)
 
-	return []process.Interface{d.app1}
-}
-
-func (d *defaultTimeout) Setup(t *testing.T) []framework.Option {
-	d.place, d.sched = new(defaultTimeout), new(defaultTimeout)
-	procs := d.place.setup(t)
-	procs = append(procs, d.sched.setup(t, actors.WithSchedulerPlacement())...)
-
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(d.app1),
 	}
 }
 
 func (d *defaultTimeout) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { d.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { d.sched.run(t, ctx) })
-}
-
-func (d *defaultTimeout) run(t *testing.T, ctx context.Context) {
 	d.app1.WaitUntilRunning(t, ctx)
 
 	errCh := make(chan error, 1)

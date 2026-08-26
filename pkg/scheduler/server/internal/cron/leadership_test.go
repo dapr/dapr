@@ -139,7 +139,28 @@ func TestLeadershipHandle(t *testing.T) {
 		assert.True(t, *place.leader)
 	})
 
-	t.Run("incapable sidecar withholds the leader and masks capability", func(t *testing.T) {
+	t.Run("incapable sidecar alone does not withhold or mask", func(t *testing.T) {
+		t.Parallel()
+		// No placement service is visible, so nothing can serve the old
+		// sidecar: withholding would only halt the capable sidecars' actors
+		// too. The advertisement proceeds and the old sidecar is warned
+		// about.
+		pool := &fakePool{incapable: true, capable: true}
+		place := new(fakePlacementLeader)
+		l, ch := newLeadership(pool, place)
+
+		require.NoError(t, l.Handle(t.Context(),
+			[]*anypb.Any{anyHost(t, "a:1", true), anyHost(t, "b:1", true)}))
+
+		hosts := <-ch
+		require.Len(t, hosts, 2)
+		assert.True(t, hosts[0].GetLeader())
+		assert.True(t, hosts[0].GetSchedulerPlacementEnabled())
+		require.NotNil(t, place.leader)
+		assert.True(t, *place.leader)
+	})
+
+	t.Run("no capable sidecar withholds the leader but keeps capability", func(t *testing.T) {
 		t.Parallel()
 		pool := &fakePool{incapable: true}
 		place := new(fakePlacementLeader)
@@ -151,10 +172,11 @@ func TestLeadershipHandle(t *testing.T) {
 		hosts := <-ch
 		require.Len(t, hosts, 2)
 		for _, host := range hosts {
-			// Sidecars must see a cluster which does not serve placement, so
-			// they use the standalone placement service: one authority.
+			// The leader waits for a capable sidecar to advertise to, but
+			// the capability bit stays so a booting sidecar reads
+			// capable-but-leaderless and waits for its own registration.
 			assert.False(t, host.GetLeader())
-			assert.False(t, host.GetSchedulerPlacementEnabled())
+			assert.True(t, host.GetSchedulerPlacementEnabled())
 		}
 		require.NotNil(t, place.leader)
 		assert.False(t, *place.leader)
@@ -162,7 +184,7 @@ func TestLeadershipHandle(t *testing.T) {
 
 	t.Run("nil event re-broadcasts the last table under the new capability state", func(t *testing.T) {
 		t.Parallel()
-		pool := &fakePool{incapable: true, capable: true}
+		pool := new(fakePool)
 		place := new(fakePlacementLeader)
 		l, ch := newLeadership(pool, place)
 
@@ -171,10 +193,10 @@ func TestLeadershipHandle(t *testing.T) {
 		hosts := <-ch
 		assert.False(t, hosts[0].GetLeader())
 
-		// The last incapable sidecar disconnects: the pool signals with a
-		// nil event and the same table is re-broadcast, now advertising
+		// The first capable sidecar connects: the pool signals with a nil
+		// event and the same table is re-broadcast, now advertising
 		// placement.
-		pool.incapable = false
+		pool.capable = true
 		require.NoError(t, l.Handle(t.Context(), nil))
 
 		hosts = <-ch
@@ -241,26 +263,8 @@ func TestLeadershipAdvertisementPermanence(t *testing.T) {
 	require.True(t, hosts[0].GetSchedulerPlacementEnabled())
 	require.False(t, l.advertised)
 
-	// An old sidecar connects first: the gate masks the capability too.
-	pool.incapable = true
-	require.NoError(t, l.Handle(t.Context(), nil))
-	hosts = <-ch
-	require.False(t, hosts[0].GetLeader())
-	require.False(t, hosts[0].GetSchedulerPlacementEnabled())
-
-	// The old sidecar leaves, a capable sidecar is connected, and one has
-	// taken a placement stream: the advertisement resumes and, with real
-	// evidence of cutover, becomes permanent.
-	pool.incapable = false
-	pool.capable = true
-	place.hasStreams = true
-	require.NoError(t, l.Handle(t.Context(), nil))
-	hosts = <-ch
-	require.True(t, hosts[0].GetLeader())
-	require.True(t, l.advertised)
-
-	// A late old sidecar connects: placement stays advertised and the
-	// unchanged table is not re-broadcast.
+	// An old sidecar connects first: with no placement service visible it
+	// changes nothing, so the unchanged table is not re-broadcast.
 	pool.incapable = true
 	require.NoError(t, l.Handle(t.Context(), nil))
 	select {
@@ -268,6 +272,16 @@ func TestLeadershipAdvertisementPermanence(t *testing.T) {
 		t.Fatalf("an unchanged table must not be re-broadcast: %v", hosts)
 	default:
 	}
+
+	// A capable sidecar connects and takes a placement stream: the
+	// advertisement proceeds despite the old sidecar and, with real
+	// evidence of cutover, becomes permanent.
+	pool.capable = true
+	place.hasStreams = true
+	require.NoError(t, l.Handle(t.Context(), nil))
+	hosts = <-ch
+	require.True(t, hosts[0].GetLeader())
+	require.True(t, l.advertised)
 	require.NotNil(t, place.leader)
 	assert.True(t, *place.leader)
 }
@@ -375,10 +389,12 @@ type fakeHandoff struct {
 	advertised bool
 	incapable  bool
 	capable    bool
+	notReady   bool
 
 	latched int
 }
 
+func (f *fakeHandoff) Ready() bool                                  { return !f.notReady }
 func (f *fakeHandoff) PlacementPresent() bool                       { return f.present }
 func (f *fakeHandoff) PlacementStoodDown() bool                     { return f.stoodDown }
 func (f *fakeHandoff) Advertised() bool                             { return f.advertised }

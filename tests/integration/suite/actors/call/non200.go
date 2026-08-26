@@ -30,7 +30,6 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -40,46 +39,30 @@ func init() {
 }
 
 type non200 struct {
-	place *non200
-	sched *non200
-
 	actors1 *actors.Actors
 	actors2 *actors.Actors
 	called  atomic.Int64
 }
 
-func (n *non200) setup(t *testing.T, extra ...actors.Option) []process.Interface {
-	n.actors1 = actors.New(t, append([]actors.Option{
+func (n *non200) Setup(t *testing.T) []framework.Option {
+	n.actors1 = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(w nethttp.ResponseWriter, _ *nethttp.Request) {
 			n.called.Add(1)
 			w.WriteHeader(nethttp.StatusInternalServerError)
 			w.Write([]byte("custom error"))
 		}),
-	}, extra...)...)
+	)
 	n.actors2 = actors.New(t,
 		actors.WithPeerActor(n.actors1),
 	)
 
-	return []process.Interface{n.actors1, n.actors2}
-}
-
-func (n *non200) Setup(t *testing.T) []framework.Option {
-	n.place, n.sched = new(non200), new(non200)
-	procs := n.place.setup(t)
-	procs = append(procs, n.sched.setup(t, actors.WithSchedulerPlacement())...)
-
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(n.actors1, n.actors2),
 	}
 }
 
 func (n *non200) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { n.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { n.sched.run(t, ctx) })
-}
-
-func (n *non200) run(t *testing.T, ctx context.Context) {
 	n.actors1.WaitUntilRunning(t, ctx)
 	n.actors2.WaitUntilRunning(t, ctx)
 

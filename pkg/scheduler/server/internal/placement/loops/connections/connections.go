@@ -67,6 +67,9 @@ type round struct {
 
 type streamConn struct {
 	loop loop.Interface[loops.EventStream]
+	// cancel aborts the stream's RPC, unblocking a Send stuck on a slow
+	// sidecar so closing the stream loop cannot block this loop.
+	cancel context.CancelCauseFunc
 }
 
 type connections struct {
@@ -181,7 +184,7 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) {
 		}
 	})
 
-	c.streams[streamIDx] = &streamConn{loop: streamLoop}
+	c.streams[streamIDx] = &streamConn{loop: streamLoop, cancel: add.Cancel}
 
 	changed := c.store.Set(streamIDx, add.Initial)
 	c.markPending(changed)
@@ -234,7 +237,13 @@ func (c *connections) removeStream(streamIDx uint64, err error) []uint64 {
 	}
 
 	delete(c.streams, streamIDx)
-	conn.loop.Close(&loops.StreamShutdown{Error: err})
+	// Cancel the RPC before closing the loop: a sidecar which stopped
+	// reading blocks Send, and a blocked stream loop would block this
+	// close.
+	if conn.cancel != nil {
+		conn.cancel(err)
+	}
+	go conn.loop.Close(&loops.StreamShutdown{Error: err})
 
 	c.markPending(c.store.Delete(streamIDx))
 
@@ -271,6 +280,9 @@ func (c *connections) handleShutdown(shutdown *loops.Shutdown) {
 	c.stopCoalesceTimer()
 
 	for _, conn := range c.streams {
+		if conn.cancel != nil {
+			conn.cancel(shutdown.Error)
+		}
 		go conn.loop.Close(&loops.StreamShutdown{Error: shutdown.Error})
 	}
 

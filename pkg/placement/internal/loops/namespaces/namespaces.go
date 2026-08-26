@@ -90,8 +90,7 @@ func (n *namespaces) Handle(ctx context.Context, event loops.EventNamespace) err
 	case *loops.StandDown:
 		return n.handleStandDown(e)
 	case *loops.StandUp:
-		n.standDown = nil
-		n.drainPending = 0
+		n.handleStandUp()
 	case *loops.DrainComplete:
 		return n.handleDrainComplete(e)
 	case *loops.StateTableRequest:
@@ -199,9 +198,30 @@ func (n *namespaces) handleStandDown(sd *loops.StandDown) error {
 	return nil
 }
 
+// handleStandUp revokes the stand-down. Disseminators still mid-drain have
+// kicked their hosts already, so they are closed now: a reconnecting host
+// gets a fresh disseminator, and a late DrainComplete finds nothing to
+// complete.
+func (n *namespaces) handleStandUp() {
+	if n.standDown != nil {
+		for ns, conn := range n.disseminators {
+			delete(n.disseminators, ns)
+			conn.loop.Close(&loops.Shutdown{Error: n.standDown.Error})
+			disseminator.LoopFactory.CacheLoop(conn.loop)
+		}
+	}
+	n.standDown = nil
+	n.drainPending = 0
+}
+
 // handleDrainComplete closes a drained namespace's disseminator,
 // completing the stand-down when it is the last.
 func (n *namespaces) handleDrainComplete(dc *loops.DrainComplete) error {
+	if n.standDown == nil {
+		// A stand-up revoked the drain before this completion arrived.
+		return nil
+	}
+
 	dissLoop, ok := n.disseminators[dc.Namespace]
 	if !ok {
 		return nil

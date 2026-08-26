@@ -228,30 +228,47 @@ func (s *Server) ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorType
 	return s.placement.ReportActorTypes(stream)
 }
 
-// ReportPlacementService persists a standalone placement service's announce
-// or stand-down confirmation.
-func (s *Server) ReportPlacementService(ctx context.Context, req *schedulerv1pb.ReportPlacementServiceRequest) (*schedulerv1pb.ReportPlacementServiceResponse, error) {
+// ReportPlacementService tracks one placement replica's state for the life
+// of its stream: a live stream is its presence, each message reports
+// whether it serves or stood down, and each report is acknowledged.
+func (s *Server) ReportPlacementService(stream schedulerv1pb.Scheduler_ReportPlacementServiceServer) error {
 	if s.handoff == nil {
-		return nil, status.Error(codes.Unimplemented, "placement handoff requires the etcd backend")
+		return status.Error(codes.Unimplemented, "placement is not enabled on this scheduler")
 	}
 
-	if err := s.authzPlacementService(ctx); err != nil {
-		return nil, err
+	if err := s.authzPlacementService(stream.Context()); err != nil {
+		return err
 	}
 
-	var err error
-	if req.GetStoodDown() {
-		log.Info("Standalone placement service confirmed it stood down")
-		err = s.handoff.ConfirmStoodDown(ctx)
-	} else {
-		log.Info("Standalone placement service announced itself")
-		err = s.handoff.Announce(ctx)
-	}
+	req, err := stream.Recv()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return new(schedulerv1pb.ReportPlacementServiceResponse), nil
+	id := s.handoff.AddPlacementStream(req.GetStoodDown())
+	defer s.handoff.RemovePlacementStream(id)
+	s.logPlacementReport(req.GetStoodDown())
+
+	for {
+		if serr := stream.Send(new(schedulerv1pb.ReportPlacementServiceResponse)); serr != nil {
+			return serr
+		}
+
+		req, err = stream.Recv()
+		if err != nil {
+			return err
+		}
+		s.handoff.SetPlacementStreamState(id, req.GetStoodDown())
+		s.logPlacementReport(req.GetStoodDown())
+	}
+}
+
+func (s *Server) logPlacementReport(stoodDown bool) {
+	if stoodDown {
+		log.Info("Placement service reported it stood down")
+	} else {
+		log.Info("Placement service reported it is serving")
+	}
 }
 
 // authzPlacementService requires the caller to be the control plane

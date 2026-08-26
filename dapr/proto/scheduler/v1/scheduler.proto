@@ -42,7 +42,7 @@ service Scheduler {
   // service announced itself, the placement leader advertisement is
   // withheld until the stand-down confirmation arrives, so the cluster
   // never has two placement authorities serving at once.
-  rpc ReportPlacementService(ReportPlacementServiceRequest) returns (ReportPlacementServiceResponse) {}
+  rpc ReportPlacementService(stream ReportPlacementServiceRequest) returns (stream ReportPlacementServiceResponse) {}
 }
 
 message Job {
@@ -313,14 +313,16 @@ message ListJobsResponse {
 message WatchHostsRequest {}
 
 // ReportPlacementServiceRequest reports the state of a standalone placement
-// service to the scheduler cluster.
+// service. Every placement replica holds one long-lived stream per
+// scheduler: a live stream is the placement service's presence, and each
+// message reports its current state.
 message ReportPlacementServiceRequest {
-  // stood_down is false to announce the placement service's presence, and
-  // true to confirm it drained every placement stream and permanently
-  // refuses new ones.
+  // stood_down is false while the placement service serves placement
+  // streams, and true once it drained them and refuses new ones.
   bool stood_down = 1;
 }
 
+// ReportPlacementServiceResponse acknowledges one state report.
 message ReportPlacementServiceResponse {}
 
 // WatchHostsResponse is the response message to convey the details of a host.

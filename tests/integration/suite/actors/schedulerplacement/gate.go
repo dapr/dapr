@@ -97,7 +97,7 @@ func (g *gate) Run(t *testing.T, ctx context.Context) {
 
 	// assertAdvertised checks whether any scheduler host advertises placement
 	// capability and leadership on WatchHosts.
-	assertAdvertised := func(t *testing.T, exp bool) {
+	assertAdvertised := func(t *testing.T, exp, expLeader bool) {
 		t.Helper()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			stream, err := g.sched.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
@@ -115,13 +115,14 @@ func (g *gate) Run(t *testing.T, ctx context.Context) {
 				leader = leader || host.GetLeader()
 			}
 			assert.Equal(c, exp, capable)
-			assert.Equal(c, exp, leader)
+			assert.Equal(c, expLeader, leader)
 		}, time.Second*20, time.Millisecond*10)
 	}
 
-	// The scheduler withholds the placement advertisement while the old
+	// The old sidecar does not mask the placement capability: nothing
+	// visible could serve it. The leader is withheld only while no capable
 	// sidecar is connected.
-	assertAdvertised(t, false)
+	assertAdvertised(t, true, false)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		all := g.sched.Metrics(c, ctx).All()
 		assert.Equal(c, 1, int(all["dapr_scheduler_placement_incapable_sidecars"]))
@@ -155,9 +156,10 @@ func (g *gate) Run(t *testing.T, ctx context.Context) {
 	}
 	assert.Zero(t, streamsUnderGate)
 
-	// The gate must hold while the old sidecar is connected, regardless of
-	// the capable daprd having connected since.
-	assertAdvertised(t, false)
+	// The daprd reported its placement address and the probe sighted the
+	// serving placement service: the advertisement is withheld and the
+	// capability masked, so placement stays the single authority.
+	assertAdvertised(t, false, false)
 
 	// The old sidecar disconnects: the gate lifts, but the daprd reported
 	// its placement address and the placement service still serves there, so
@@ -186,7 +188,7 @@ func (g *gate) Run(t *testing.T, ctx context.Context) {
 	// The placement service is torn down: with nothing serving placement the
 	// advertisement appears on its own.
 	g.place.Cleanup(t)
-	assertAdvertised(t, true)
+	assertAdvertised(t, true, true)
 
 	// The running daprd adopts scheduler placement on its own, no restart
 	// needed, and actors keep working.
@@ -234,7 +236,7 @@ func (g *gate) Run(t *testing.T, ctx context.Context) {
 	}
 
 	// Placement stays advertised and actors keep working.
-	assertAdvertised(t, true)
+	assertAdvertised(t, true, true)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		_, ierr := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 			ActorType: "myactortype",

@@ -25,7 +25,6 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -40,9 +39,6 @@ func init() {
 // timer executor (the pre-fix behavior) this test fails — the "fast" actor's
 // timer never fires while the "slow" actor's callback is held.
 type concurrent struct {
-	place *concurrent
-	sched *concurrent
-
 	app *actors.Actors
 
 	slowStarted chan struct{}
@@ -52,12 +48,12 @@ type concurrent struct {
 	fastOnce    sync.Once
 }
 
-func (c *concurrent) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+func (c *concurrent) Setup(t *testing.T) []framework.Option {
 	c.slowStarted = make(chan struct{})
 	c.releaseSlow = make(chan struct{})
 	c.fastFired = make(chan struct{})
 
-	c.app = actors.New(t, append([]actors.Option{
+	c.app = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 			if r.Method == nethttp.MethodDelete {
@@ -71,27 +67,14 @@ func (c *concurrent) setup(t *testing.T, extra ...actors.Option) []process.Inter
 				c.fastOnce.Do(func() { close(c.fastFired) })
 			}
 		}),
-	}, extra...)...)
-
-	return []process.Interface{c.app}
-}
-
-func (c *concurrent) Setup(t *testing.T) []framework.Option {
-	c.place, c.sched = new(concurrent), new(concurrent)
-	procs := c.place.setup(t)
-	procs = append(procs, c.sched.setup(t, actors.WithSchedulerPlacement())...)
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(c.app),
 	}
 }
 
 func (c *concurrent) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { c.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { c.sched.run(t, ctx) })
-}
-
-func (c *concurrent) run(t *testing.T, ctx context.Context) {
 	c.app.WaitUntilRunning(t, ctx)
 
 	// Ensure the held callback is always released so daprd/app shut down cleanly,

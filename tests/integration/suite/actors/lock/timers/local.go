@@ -25,7 +25,6 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -35,18 +34,15 @@ func init() {
 }
 
 type local struct {
-	place *local
-	sched *local
-
 	app      *actors.Actors
 	called   atomic.Int64
 	holdCall chan struct{}
 }
 
-func (l *local) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+func (l *local) Setup(t *testing.T) []framework.Option {
 	l.holdCall = make(chan struct{})
 
-	l.app = actors.New(t, append([]actors.Option{
+	l.app = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 			if r.Method == nethttp.MethodDelete {
@@ -55,27 +51,14 @@ func (l *local) setup(t *testing.T, extra ...actors.Option) []process.Interface 
 			l.called.Add(1)
 			<-l.holdCall
 		}),
-	}, extra...)...)
-
-	return []process.Interface{l.app}
-}
-
-func (l *local) Setup(t *testing.T) []framework.Option {
-	l.place, l.sched = new(local), new(local)
-	procs := l.place.setup(t)
-	procs = append(procs, l.sched.setup(t, actors.WithSchedulerPlacement())...)
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(l.app),
 	}
 }
 
 func (l *local) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { l.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { l.sched.run(t, ctx) })
-}
-
-func (l *local) run(t *testing.T, ctx context.Context) {
 	l.app.WaitUntilRunning(t, ctx)
 
 	client := l.app.GRPCClient(t, ctx)

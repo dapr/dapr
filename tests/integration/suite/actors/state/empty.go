@@ -25,7 +25,6 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -35,38 +34,22 @@ func init() {
 }
 
 type empty struct {
-	place *empty
-	sched *empty
-
 	app *actors.Actors
 }
 
-func (e *empty) setup(t *testing.T, extra ...actors.Option) []process.Interface {
-	e.app = actors.New(t, append([]actors.Option{
+func (e *empty) Setup(t *testing.T) []framework.Option {
+	e.app = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(nethttp.ResponseWriter, *nethttp.Request) {
 		}),
-	}, extra...)...)
-
-	return []process.Interface{e.app}
-}
-
-func (e *empty) Setup(t *testing.T) []framework.Option {
-	e.place, e.sched = new(empty), new(empty)
-	procs := e.place.setup(t)
-	procs = append(procs, e.sched.setup(t, actors.WithSchedulerPlacement())...)
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(e.app),
 	}
 }
 
 func (e *empty) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { e.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { e.sched.run(t, ctx) })
-}
-
-func (e *empty) run(t *testing.T, ctx context.Context) {
 	e.app.WaitUntilRunning(t, ctx)
 
 	client := client.HTTP(t)

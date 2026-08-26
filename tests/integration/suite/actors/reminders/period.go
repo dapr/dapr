@@ -26,7 +26,6 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -36,16 +35,13 @@ func init() {
 }
 
 type period struct {
-	place *period
-	sched *period
-
 	actors *actors.Actors
 	count  atomic.Int64
 }
 
-func (p *period) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+func (p *period) Setup(t *testing.T) []framework.Option {
 	p.count.Store(0)
-	p.actors = actors.New(t, append([]actors.Option{
+	p.actors = actors.New(t,
 		actors.WithActorTypes("foo"),
 		actors.WithActorTypeHandler("foo", func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodDelete {
@@ -53,7 +49,7 @@ func (p *period) setup(t *testing.T, extra ...actors.Option) []process.Interface
 			}
 			p.count.Add(1)
 		}),
-	}, extra...)...)
+	)
 	actors2 := actors.New(t,
 		actors.WithActorTypes("foo"),
 		actors.WithActorTypeHandler("foo", func(w http.ResponseWriter, r *http.Request) {
@@ -65,25 +61,12 @@ func (p *period) setup(t *testing.T, extra ...actors.Option) []process.Interface
 		actors.WithPeerActor(p.actors),
 	)
 
-	return []process.Interface{actors2, p.actors}
-}
-
-func (p *period) Setup(t *testing.T) []framework.Option {
-	p.place, p.sched = new(period), new(period)
-	procs := p.place.setup(t)
-	procs = append(procs, p.sched.setup(t, actors.WithSchedulerPlacement())...)
-
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(actors2, p.actors),
 	}
 }
 
 func (p *period) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { p.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { p.sched.run(t, ctx) })
-}
-
-func (p *period) run(t *testing.T, ctx context.Context) {
 	p.actors.WaitUntilRunning(t, ctx)
 
 	client := client.HTTP(t)

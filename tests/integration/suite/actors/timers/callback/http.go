@@ -28,7 +28,6 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -38,16 +37,13 @@ func init() {
 }
 
 type http struct {
-	place *http
-	sched *http
-
 	app          *actors.Actors
 	called       atomic.Int64
 	deactivating atomic.Bool
 }
 
-func (h *http) setup(t *testing.T, extra ...actors.Option) []process.Interface {
-	h.app = actors.New(t, append([]actors.Option{
+func (h *http) Setup(t *testing.T) []framework.Option {
+	h.app = actors.New(t,
 		actors.WithActorTypes("abc", "efg"),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 			if h.deactivating.Load() {
@@ -65,27 +61,14 @@ func (h *http) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 				assert.JSONEq(t, `{"data":"hello","callback":"mycallback","dueTime":"0s","period":"10s"}`, string(b))
 			}
 		}),
-	}, extra...)...)
-
-	return []process.Interface{h.app}
-}
-
-func (h *http) Setup(t *testing.T) []framework.Option {
-	h.place, h.sched = new(http), new(http)
-	procs := h.place.setup(t)
-	procs = append(procs, h.sched.setup(t, actors.WithSchedulerPlacement())...)
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(h.app),
 	}
 }
 
 func (h *http) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { h.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { h.sched.run(t, ctx) })
-}
-
-func (h *http) run(t *testing.T, ctx context.Context) {
 	h.app.WaitUntilRunning(t, ctx)
 
 	t.Cleanup(func() { h.deactivating.Store(true) })

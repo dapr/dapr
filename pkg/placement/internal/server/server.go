@@ -325,9 +325,10 @@ func standDownErr() error {
 
 func (s *Server) ReportDaprStatus(stream v1pb.Placement_ReportDaprStatusServer) error {
 	// Serving waits for the watcher's first observation of the scheduler
-	// cluster, so a placement service restarting after a cutover cannot
-	// serve before one look at the advertisement. An unreachable scheduler
-	// cluster completes the observation too, placement fails open.
+	// cluster, so a placement service restarting after a cutover checks
+	// whether the schedulers advertise placement before it serves. An
+	// unreachable scheduler cluster completes the observation too,
+	// placement fails open.
 	select {
 	case <-s.standdown.FirstObservation():
 	case <-stream.Context().Done():

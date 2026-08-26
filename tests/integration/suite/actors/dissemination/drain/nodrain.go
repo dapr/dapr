@@ -25,7 +25,6 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -35,9 +34,6 @@ func init() {
 }
 
 type nodrain struct {
-	place *nodrain
-	sched *nodrain
-
 	app1 *actors.Actors
 	app2 *actors.Actors
 
@@ -46,7 +42,7 @@ type nodrain struct {
 	waitOnCall    chan struct{}
 }
 
-func (n *nodrain) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+func (n *nodrain) Setup(t *testing.T) []framework.Option {
 	n.waitOnCall = make(chan struct{})
 
 	handler := func(_ nethttp.ResponseWriter, r *nethttp.Request) {
@@ -59,12 +55,12 @@ func (n *nodrain) setup(t *testing.T, extra ...actors.Option) []process.Interfac
 		}
 	}
 
-	n.app1 = actors.New(t, append([]actors.Option{
+	n.app1 = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", handler),
 		actors.WithDrainRebalancedActors(false),
 		actors.WithDrainOngoingCallTimeout(time.Minute), // Long timeout that should be ignored
-	}, extra...)...)
+	)
 
 	n.app2 = actors.New(t,
 		actors.WithPeerActor(n.app1),
@@ -74,25 +70,12 @@ func (n *nodrain) setup(t *testing.T, extra ...actors.Option) []process.Interfac
 		actors.WithDrainOngoingCallTimeout(time.Minute),
 	)
 
-	return []process.Interface{n.app1}
-}
-
-func (n *nodrain) Setup(t *testing.T) []framework.Option {
-	n.place, n.sched = new(nodrain), new(nodrain)
-	procs := n.place.setup(t)
-	procs = append(procs, n.sched.setup(t, actors.WithSchedulerPlacement())...)
-
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(n.app1),
 	}
 }
 
 func (n *nodrain) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { n.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { n.sched.run(t, ctx) })
-}
-
-func (n *nodrain) run(t *testing.T, ctx context.Context) {
 	n.app1.WaitUntilRunning(t, ctx)
 
 	errCh := make(chan error, 1)

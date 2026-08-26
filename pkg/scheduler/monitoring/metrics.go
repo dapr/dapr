@@ -104,7 +104,7 @@ var (
 		stats.UnitDimensionless)
 	placementIncapableSidecarsGauge = stats.Int64(
 		"scheduler/placement_incapable_sidecars",
-		"The number of connected sidecars running a Dapr version which cannot use scheduler placement. Non-zero after cutover means those sidecars' actors may be placed by a still-running standalone placement service: alert on it.",
+		"The number of connected sidecars running a Dapr version which cannot use scheduler placement. Non-zero after cutover means those sidecars' actors may be placed by a still-running placement service: alert on it.",
 		stats.UnitDimensionless)
 
 	tagType           = tag.MustNewKey("type")

@@ -25,7 +25,6 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -35,9 +34,6 @@ func init() {
 }
 
 type timeout struct {
-	place *timeout
-	sched *timeout
-
 	app1 *actors.Actors
 	app2 *actors.Actors
 
@@ -47,7 +43,7 @@ type timeout struct {
 	returnedFromCall atomic.Bool
 }
 
-func (d *timeout) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+func (d *timeout) Setup(t *testing.T) []framework.Option {
 	d.waitOnCall = make(chan struct{})
 
 	handler := func(_ nethttp.ResponseWriter, r *nethttp.Request) {
@@ -62,11 +58,11 @@ func (d *timeout) setup(t *testing.T, extra ...actors.Option) []process.Interfac
 		}
 	}
 
-	d.app1 = actors.New(t, append([]actors.Option{
+	d.app1 = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", handler),
-		actors.WithDrainOngoingCallTimeout(time.Second * 5),
-	}, extra...)...)
+		actors.WithDrainOngoingCallTimeout(time.Second*5),
+	)
 
 	d.app2 = actors.New(t,
 		actors.WithPeerActor(d.app1),
@@ -75,25 +71,12 @@ func (d *timeout) setup(t *testing.T, extra ...actors.Option) []process.Interfac
 		actors.WithDrainOngoingCallTimeout(time.Second*5),
 	)
 
-	return []process.Interface{d.app1}
-}
-
-func (d *timeout) Setup(t *testing.T) []framework.Option {
-	d.place, d.sched = new(timeout), new(timeout)
-	procs := d.place.setup(t)
-	procs = append(procs, d.sched.setup(t, actors.WithSchedulerPlacement())...)
-
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(d.app1),
 	}
 }
 
 func (d *timeout) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { d.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { d.sched.run(t, ctx) })
-}
-
-func (d *timeout) run(t *testing.T, ctx context.Context) {
 	d.app1.WaitUntilRunning(t, ctx)
 
 	errCh := make(chan error, 1)

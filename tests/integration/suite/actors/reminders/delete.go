@@ -23,7 +23,6 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -33,36 +32,20 @@ func init() {
 }
 
 type delete struct {
-	place *delete
-	sched *delete
-
 	actors *actors.Actors
 }
 
-func (d *delete) setup(t *testing.T, extra ...actors.Option) []process.Interface {
-	d.actors = actors.New(t, append([]actors.Option{
-		actors.WithActorTypes("foo", "bar"),
-	}, extra...)...)
-
-	return []process.Interface{d.actors}
-}
-
 func (d *delete) Setup(t *testing.T) []framework.Option {
-	d.place, d.sched = new(delete), new(delete)
-	procs := d.place.setup(t)
-	procs = append(procs, d.sched.setup(t, actors.WithSchedulerPlacement())...)
+	d.actors = actors.New(t,
+		actors.WithActorTypes("foo", "bar"),
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(d.actors),
 	}
 }
 
 func (d *delete) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { d.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { d.sched.run(t, ctx) })
-}
-
-func (d *delete) run(t *testing.T, ctx context.Context) {
 	d.actors.WaitUntilRunning(t, ctx)
 
 	client := d.actors.Daprd().GRPCClient(t, ctx)

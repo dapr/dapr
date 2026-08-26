@@ -26,7 +26,6 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
@@ -37,9 +36,6 @@ func init() {
 }
 
 type up struct {
-	place *up
-	sched *up
-
 	app1 *actors.Actors
 	app2 *actors.Actors
 
@@ -47,11 +43,11 @@ type up struct {
 	inDelete   slice.Slice[string]
 }
 
-func (u *up) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+func (u *up) Setup(t *testing.T) []framework.Option {
 	u.holdInDown = make(chan struct{})
 	u.inDelete = slice.String()
 
-	u.app1 = actors.New(t, append([]actors.Option{
+	u.app1 = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc",
 			func(_ nethttp.ResponseWriter, r *nethttp.Request) {
@@ -60,7 +56,7 @@ func (u *up) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 					<-u.holdInDown
 				}
 			}),
-	}, extra...)...)
+	)
 
 	u.app2 = actors.New(t,
 		actors.WithPeerActor(u.app1),
@@ -70,25 +66,12 @@ func (u *up) setup(t *testing.T, extra ...actors.Option) []process.Interface {
 		),
 	)
 
-	return []process.Interface{u.app1}
-}
-
-func (u *up) Setup(t *testing.T) []framework.Option {
-	u.place, u.sched = new(up), new(up)
-	procs := u.place.setup(t)
-	procs = append(procs, u.sched.setup(t, actors.WithSchedulerPlacement())...)
-
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(u.app1),
 	}
 }
 
 func (u *up) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { u.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { u.sched.run(t, ctx) })
-}
-
-func (u *up) run(t *testing.T, ctx context.Context) {
 	u.app1.WaitUntilRunning(t, ctx)
 
 	client := u.app1.GRPCClient(t, ctx)

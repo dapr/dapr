@@ -24,7 +24,6 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
@@ -35,19 +34,16 @@ func init() {
 }
 
 type pertype struct {
-	place *pertype
-	sched *pertype
-
 	app    *actors.Actors
 	called slice.Slice[string]
 }
 
-func (p *pertype) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+func (p *pertype) Setup(t *testing.T) []framework.Option {
 	p.called = slice.String()
 
-	p.app = actors.New(t, append([]actors.Option{
+	p.app = actors.New(t,
 		actors.WithActorTypes("abc", "def", "xyz"),
-		actors.WithActorIdleTimeout(1 * time.Second),
+		actors.WithActorIdleTimeout(1*time.Second),
 		actors.WithEntityConfig(
 			actors.WithEntityConfigEntities("abc"),
 			actors.WithEntityConfigActorIdleTimeout(4*time.Second),
@@ -64,27 +60,14 @@ func (p *pertype) setup(t *testing.T, extra ...actors.Option) []process.Interfac
 				return
 			}
 		}),
-	}, extra...)...)
-
-	return []process.Interface{p.app}
-}
-
-func (p *pertype) Setup(t *testing.T) []framework.Option {
-	p.place, p.sched = new(pertype), new(pertype)
-	procs := p.place.setup(t)
-	procs = append(procs, p.sched.setup(t, actors.WithSchedulerPlacement())...)
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(p.app),
 	}
 }
 
 func (p *pertype) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { p.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { p.sched.run(t, ctx) })
-}
-
-func (p *pertype) run(t *testing.T, ctx context.Context) {
 	p.app.WaitUntilRunning(t, ctx)
 
 	_, err := p.app.GRPCClient(t, ctx).InvokeActor(ctx, &rtv1.InvokeActorRequest{

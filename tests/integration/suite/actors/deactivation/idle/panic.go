@@ -26,7 +26,6 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -36,23 +35,20 @@ func init() {
 }
 
 type ppanic struct {
-	place *ppanic
-	sched *ppanic
-
 	app1 *actors.Actors
 	app2 *actors.Actors
 
 	calls atomic.Int64
 }
 
-func (p *ppanic) setup(t *testing.T, extra ...actors.Option) []process.Interface {
-	p.app1 = actors.New(t, append([]actors.Option{
+func (p *ppanic) Setup(t *testing.T) []framework.Option {
+	p.app1 = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorIdleTimeout(time.Nanosecond),
 		actors.WithActorTypeHandler("abc", func(_ http.ResponseWriter, r *http.Request) {
 			p.calls.Add(1)
 		}),
-	}, extra...)...)
+	)
 	p.app2 = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorIdleTimeout(time.Nanosecond),
@@ -62,25 +58,12 @@ func (p *ppanic) setup(t *testing.T, extra ...actors.Option) []process.Interface
 		actors.WithPeerActor(p.app1),
 	)
 
-	return []process.Interface{p.app1, p.app2}
-}
-
-func (p *ppanic) Setup(t *testing.T) []framework.Option {
-	p.place, p.sched = new(ppanic), new(ppanic)
-	procs := p.place.setup(t)
-	procs = append(procs, p.sched.setup(t, actors.WithSchedulerPlacement())...)
-
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(p.app1, p.app2),
 	}
 }
 
 func (p *ppanic) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { p.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { p.sched.run(t, ctx) })
-}
-
-func (p *ppanic) run(t *testing.T, ctx context.Context) {
 	p.app1.WaitUntilRunning(t, ctx)
 	p.app2.WaitUntilRunning(t, ctx)
 

@@ -45,6 +45,7 @@ type options struct {
 	maxBodySize             *string
 	daprdOpts               []daprd.Option
 	schedulerPlacement      bool
+	placementService        bool
 }
 
 func WithDB(db *sqlite.SQLite) Option {
@@ -98,6 +99,14 @@ func WithHandler(pattern string, handler http.HandlerFunc) Option {
 func WithSchedulerPlacement() Option {
 	return func(o *options) {
 		o.schedulerPlacement = true
+	}
+}
+
+// WithPlacementService pins actor placement to the placement service,
+// overriding DAPR_INTEGRATION_SCHEDULER_PLACEMENT.
+func WithPlacementService() Option {
+	return func(o *options) {
+		o.placementService = true
 	}
 }
 

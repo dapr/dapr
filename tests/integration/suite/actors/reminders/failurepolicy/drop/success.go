@@ -26,7 +26,6 @@ import (
 	corev1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -36,17 +35,14 @@ func init() {
 }
 
 type success struct {
-	place *success
-	sched *success
-
 	actors    *actors.Actors
 	triggered chan string
 }
 
-func (f *success) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+func (f *success) Setup(t *testing.T) []framework.Option {
 	f.triggered = make(chan string, 10)
 
-	f.actors = actors.New(t, append([]actors.Option{
+	f.actors = actors.New(t,
 		actors.WithActorTypes("foo"),
 		actors.WithActorTypeHandler("foo", func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodPut {
@@ -54,27 +50,14 @@ func (f *success) setup(t *testing.T, extra ...actors.Option) []process.Interfac
 				w.WriteHeader(http.StatusOK)
 			}
 		}),
-	}, extra...)...)
-
-	return []process.Interface{f.actors}
-}
-
-func (f *success) Setup(t *testing.T) []framework.Option {
-	f.place, f.sched = new(success), new(success)
-	procs := f.place.setup(t)
-	procs = append(procs, f.sched.setup(t, actors.WithSchedulerPlacement())...)
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(f.actors),
 	}
 }
 
 func (f *success) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { f.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { f.sched.run(t, ctx) })
-}
-
-func (f *success) run(t *testing.T, ctx context.Context) {
 	f.actors.WaitUntilRunning(t, ctx)
 	f.actors.Scheduler().WaitUntilSidecarsConnected(t, ctx, 3)
 

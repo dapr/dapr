@@ -167,9 +167,10 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 	}
 
 	// The handoff orchestrates the placement authority handover, so only a
-	// scheduler which serves placement runs it, and its etcd lease.
+	// scheduler which serves placement runs it. Its state is derived from
+	// live connections, so it runs on every backend.
 	var hoff *handoff.Handoff
-	if opts.PlacementEnabled && etcdServer != nil {
+	if opts.PlacementEnabled {
 		// In kubernetes a placement service too old to announce itself is
 		// still detected through its service name resolving.
 		var placementDNSName string
@@ -178,8 +179,6 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		}
 
 		hoff = handoff.New(handoff.Options{
-			ID:               opts.EtcdName,
-			Etcd:             etcdServer,
 			PlacementDNSName: placementDNSName,
 			Security:         opts.Security,
 		})
@@ -257,14 +256,6 @@ func (s *Server) Run(ctx context.Context) error {
 
 	if s.handoff != nil {
 		runners = append(runners, s.handoff.Run)
-	} else if s.etcd != nil {
-		runners = append(runners, func(ctx context.Context) error {
-			if err := handoff.ClearCutoverState(ctx, s.etcd); err != nil {
-				return err
-			}
-			<-ctx.Done()
-			return ctx.Err()
-		})
 	}
 
 	if s.etcd != nil {

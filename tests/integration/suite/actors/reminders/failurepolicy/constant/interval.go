@@ -27,7 +27,6 @@ import (
 	corev1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -37,17 +36,14 @@ func init() {
 }
 
 type interval struct {
-	place *interval
-	sched *interval
-
 	actors    *actors.Actors
 	triggered chan string
 }
 
-func (i *interval) setup(t *testing.T, extra ...actors.Option) []process.Interface {
+func (i *interval) Setup(t *testing.T) []framework.Option {
 	i.triggered = make(chan string, 10)
 
-	i.actors = actors.New(t, append([]actors.Option{
+	i.actors = actors.New(t,
 		actors.WithActorTypes("foo"),
 		actors.WithActorTypeHandler("foo", func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodPut {
@@ -55,27 +51,14 @@ func (i *interval) setup(t *testing.T, extra ...actors.Option) []process.Interfa
 				w.WriteHeader(http.StatusInternalServerError)
 			}
 		}),
-	}, extra...)...)
-
-	return []process.Interface{i.actors}
-}
-
-func (i *interval) Setup(t *testing.T) []framework.Option {
-	i.place, i.sched = new(interval), new(interval)
-	procs := i.place.setup(t)
-	procs = append(procs, i.sched.setup(t, actors.WithSchedulerPlacement())...)
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(i.actors),
 	}
 }
 
 func (i *interval) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { i.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { i.sched.run(t, ctx) })
-}
-
-func (i *interval) run(t *testing.T, ctx context.Context) {
 	i.actors.WaitUntilRunning(t, ctx)
 	i.actors.Scheduler().WaitUntilSidecarsConnected(t, ctx, 3)
 

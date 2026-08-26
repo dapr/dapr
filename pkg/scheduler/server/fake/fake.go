@@ -42,7 +42,7 @@ type Fake struct {
 	deleteByNamePrefixFn func(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error)
 	reportActorTypesFn   func(schedulerv1pb.Scheduler_ReportActorTypesServer) error
 
-	reportPlacementServiceFn func(context.Context, *schedulerv1pb.ReportPlacementServiceRequest) (*schedulerv1pb.ReportPlacementServiceResponse, error)
+	reportPlacementServiceFn func(schedulerv1pb.Scheduler_ReportPlacementServiceServer) error
 }
 
 func New(t *testing.T) *Fake {
@@ -79,8 +79,15 @@ func New(t *testing.T) *Fake {
 		reportActorTypesFn: func(schedulerv1pb.Scheduler_ReportActorTypesServer) error {
 			return status.Error(codes.Unimplemented, "placement is not enabled on this scheduler")
 		},
-		reportPlacementServiceFn: func(context.Context, *schedulerv1pb.ReportPlacementServiceRequest) (*schedulerv1pb.ReportPlacementServiceResponse, error) {
-			return new(schedulerv1pb.ReportPlacementServiceResponse), nil
+		reportPlacementServiceFn: func(stream schedulerv1pb.Scheduler_ReportPlacementServiceServer) error {
+			for {
+				if _, rerr := stream.Recv(); rerr != nil {
+					return rerr
+				}
+				if serr := stream.Send(new(schedulerv1pb.ReportPlacementServiceResponse)); serr != nil {
+					return serr
+				}
+			}
 		},
 	}
 
@@ -193,11 +200,11 @@ func (f *Fake) DeleteByNamePrefix(ctx context.Context, req *schedulerv1pb.Delete
 	return f.deleteByNamePrefixFn(ctx, req)
 }
 
-func (f *Fake) ReportPlacementService(ctx context.Context, req *schedulerv1pb.ReportPlacementServiceRequest) (*schedulerv1pb.ReportPlacementServiceResponse, error) {
-	return f.reportPlacementServiceFn(ctx, req)
+func (f *Fake) ReportPlacementService(stream schedulerv1pb.Scheduler_ReportPlacementServiceServer) error {
+	return f.reportPlacementServiceFn(stream)
 }
 
-func (f *Fake) WithReportPlacementService(fn func(context.Context, *schedulerv1pb.ReportPlacementServiceRequest) (*schedulerv1pb.ReportPlacementServiceResponse, error)) *Fake {
+func (f *Fake) WithReportPlacementService(fn func(schedulerv1pb.Scheduler_ReportPlacementServiceServer) error) *Fake {
 	f.reportPlacementServiceFn = fn
 	return f
 }

@@ -29,7 +29,6 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -39,17 +38,14 @@ func init() {
 }
 
 type methodinjection struct {
-	place *methodinjection
-	sched *methodinjection
-
 	app *actors.Actors
 
 	mu      sync.Mutex
 	lastURL string
 }
 
-func (m *methodinjection) setup(t *testing.T, extra ...actors.Option) []process.Interface {
-	m.app = actors.New(t, append([]actors.Option{
+func (m *methodinjection) Setup(t *testing.T) []framework.Option {
+	m.app = actors.New(t,
 		actors.WithActorTypes("mytype"),
 		actors.WithActorTypeHandler("mytype", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 			m.mu.Lock()
@@ -57,27 +53,14 @@ func (m *methodinjection) setup(t *testing.T, extra ...actors.Option) []process.
 			m.mu.Unlock()
 			w.Write([]byte(r.URL.Path + "|" + r.URL.RawQuery))
 		}),
-	}, extra...)...)
-
-	return []process.Interface{m.app}
-}
-
-func (m *methodinjection) Setup(t *testing.T) []framework.Option {
-	m.place, m.sched = new(methodinjection), new(methodinjection)
-	procs := m.place.setup(t)
-	procs = append(procs, m.sched.setup(t, actors.WithSchedulerPlacement())...)
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(m.app),
 	}
 }
 
 func (m *methodinjection) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { m.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { m.sched.run(t, ctx) })
-}
-
-func (m *methodinjection) run(t *testing.T, ctx context.Context) {
 	m.app.WaitUntilRunning(t, ctx)
 
 	grpcClient := m.app.GRPCClient(t, ctx)

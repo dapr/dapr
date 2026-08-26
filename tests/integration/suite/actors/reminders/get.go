@@ -32,7 +32,6 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -42,37 +41,21 @@ func init() {
 }
 
 type get struct {
-	place *get
-	sched *get
-
 	actors *actors.Actors
 }
 
-func (g *get) setup(t *testing.T, extra ...actors.Option) []process.Interface {
-	g.actors = actors.New(t, append([]actors.Option{
+func (g *get) Setup(t *testing.T) []framework.Option {
+	g.actors = actors.New(t,
 		actors.WithActorTypes("foo"),
 		actors.WithActorTypeHandler("foo", func(http.ResponseWriter, *http.Request) {}),
-	}, extra...)...)
-
-	return []process.Interface{g.actors}
-}
-
-func (g *get) Setup(t *testing.T) []framework.Option {
-	g.place, g.sched = new(get), new(get)
-	procs := g.place.setup(t)
-	procs = append(procs, g.sched.setup(t, actors.WithSchedulerPlacement())...)
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(g.actors),
 	}
 }
 
 func (g *get) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { g.place.run(t, ctx) })
-	t.Run("scheduler", func(t *testing.T) { g.sched.run(t, ctx) })
-}
-
-func (g *get) run(t *testing.T, ctx context.Context) {
 	g.actors.WaitUntilRunning(t, ctx)
 
 	client := client.HTTP(t)
