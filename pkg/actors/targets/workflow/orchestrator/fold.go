@@ -53,7 +53,11 @@ const maxFoldPerTurn = 128
 // that found the entry already pending all wait on the same resolution; a
 // retry acked before the commit would stop the only durable re-driver.
 type foldEntry struct {
-	event     *backend.HistoryEvent
+	event *backend.HistoryEvent
+	// gen is state.Generation at submit time; foldTake drops-and-acks
+	// entries from a previous generation (ContinueAsNew resets event ids,
+	// so kind+id matching across generations is invalid).
+	gen       uint64
 	err       error
 	committed chan struct{}
 }
@@ -138,13 +142,20 @@ func (o *orchestrator) addWorkflowEventMaybeFold(ctx context.Context, e *backend
 		return nil, err
 	}
 
-	// Fold only sender-retried completions against a healthy, running
-	// instance; every other shape takes today's durable inbox path, which
-	// also owns all rejection semantics (purged, tombstoned, stalled,
-	// duplicates).
-	isCompletion := e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil ||
-		e.GetChildWorkflowInstanceCompleted() != nil || e.GetChildWorkflowInstanceFailed() != nil
-	if state == nil || !isCompletion || state.HasTamperMarker() || o.rstate.GetStalled() != nil {
+	// Fold only sender-retried ACTIVITY completions against a healthy,
+	// running instance; everything else takes the durable inbox path, which
+	// owns all rejection semantics. Child completions must not fold: the
+	// child publishes while holding its own turn lock, which can deadlock
+	// against a parent turn dispatching back into the same child.
+	foldable := e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil
+	if state == nil || !foldable || state.HasTamperMarker() || o.rstate.GetStalled() != nil {
+		return nil, o.addWorkflowEvent(ctx, e)
+	}
+
+	// A TaskExecutionId mismatch marks a straggler from a previous execution
+	// (ids reset on ContinueAsNew); the inbox path owns straggler semantics.
+	if !o.foldExecutionMatches(e, state) {
+		log.Debugf("Workflow actor '%s': completion's task execution id does not match current history; taking the durable inbox path", o.actorID)
 		return nil, o.addWorkflowEvent(ctx, e)
 	}
 
@@ -180,7 +191,7 @@ func (o *orchestrator) addWorkflowEventMaybeFold(ctx context.Context, e *backend
 // the actor lock held. The caller must wait on the returned entry after
 // releasing the lock.
 func (o *orchestrator) foldSubmit(ctx context.Context, e *backend.HistoryEvent, state *wfenginestate.State) *foldEntry {
-	entry := &foldEntry{event: e, committed: make(chan struct{})}
+	entry := &foldEntry{event: e, gen: state.Generation, committed: make(chan struct{})}
 	o.foldPending = append(o.foldPending, entry)
 
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
@@ -254,8 +265,26 @@ func (o *orchestrator) foldPendingEntry(e *backend.HistoryEvent) *foldEntry {
 }
 
 // foldTake removes and returns up to maxFoldPerTurn held completions for the
-// running turn. Lock held by caller (the turn).
-func (o *orchestrator) foldTake() []*foldEntry {
+// running turn, dropping-and-acking stale-generation entries on the way
+// (acceptance-and-drop, like the stale durable-timer drop). Lock held by
+// caller (the turn).
+func (o *orchestrator) foldTake(currentGen uint64) []*foldEntry {
+	if len(o.foldPending) == 0 {
+		return nil
+	}
+
+	kept := o.foldPending[:0]
+	for _, p := range o.foldPending {
+		if p.gen != currentGen {
+			log.Infof("Workflow actor '%s': dropping held completion from previous generation %d (current %d)", o.actorID, p.gen, currentGen)
+			close(p.committed)
+			diag.DefaultWorkflowMonitoring.WorkflowCompletionsFold(context.Background(), diag.StatusFolded)
+			continue
+		}
+		kept = append(kept, p)
+	}
+	o.foldPending = kept
+
 	n := len(o.foldPending)
 	if n == 0 {
 		return nil
@@ -266,6 +295,48 @@ func (o *orchestrator) foldTake() []*foldEntry {
 	taken := o.foldPending[:n:n]
 	o.foldPending = o.foldPending[n:]
 	return taken
+}
+
+// foldedEvents projects taken entries onto their events, for the payload
+// guard's merged-size accounting.
+func foldedEvents(taken []*foldEntry) []*backend.HistoryEvent {
+	if len(taken) == 0 {
+		return nil
+	}
+	events := make([]*backend.HistoryEvent, len(taken))
+	for i, p := range taken {
+		events[i] = p.event
+	}
+	return events
+}
+
+// foldExecutionMatches reports whether a completion's TaskExecutionId agrees
+// with the scheduling event at its task id; empty ids on either side are
+// tolerated (older SDKs, synthetic events).
+func (o *orchestrator) foldExecutionMatches(e *backend.HistoryEvent, state *wfenginestate.State) bool {
+	var taskID int32
+	var execID string
+	switch {
+	case e.GetTaskCompleted() != nil:
+		taskID = e.GetTaskCompleted().GetTaskScheduledId()
+		execID = e.GetTaskCompleted().GetTaskExecutionId()
+	case e.GetTaskFailed() != nil:
+		taskID = e.GetTaskFailed().GetTaskScheduledId()
+		execID = e.GetTaskFailed().GetTaskExecutionId()
+	default:
+		return true
+	}
+	if execID == "" {
+		return true
+	}
+	scheduled := state.FindHistoryEventByID(taskID).GetTaskScheduled()
+	if scheduled == nil {
+		return false
+	}
+	if scheduled.GetTaskExecutionId() == "" {
+		return true
+	}
+	return scheduled.GetTaskExecutionId() == execID
 }
 
 // foldEvents returns the held events (for merging into a work item or for

@@ -126,6 +126,12 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		meta[todo.MetadataActivityLocalDrive] = []string{"true"}
 	}
 
+	if o.fastPath {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, redispatchCallTimeout)
+		defer cancel()
+	}
+
 	_, err = o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest(todo.ExecuteActivityMethod).
 		WithActor(activityActorType, targetActorID).
