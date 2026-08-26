@@ -81,8 +81,10 @@ const (
 	// sender's retry as the durability (external raised events keep the
 	// durable inbox path). Each leg removes scheduler job commits and
 	// trigger round trips from the workflow hot path. At-least-once
-	// execution is unchanged throughout. Preview feature; disabled by
-	// default.
+	// execution is unchanged throughout. With scheduler-enforced workflow
+	// concurrency limits configured the fast path disables itself: the
+	// limits gate per job delivery, which local drives bypass. Preview
+	// feature; disabled by default.
 	WorkflowsFastPath Feature = "WorkflowsFastPath"
 )
 
@@ -276,6 +278,30 @@ func (w *WorkflowSpec) GetGlobalMaxConcurrentActivityInvocations() *int32 {
 		return nil
 	}
 	return w.GlobalMaxConcurrentActivityInvocations
+}
+
+// HasSchedulerConcurrencyLimits reports whether any scheduler-enforced
+// concurrency limit is configured (global caps or per-name lists); the
+// worker-enforced per-host caps are excluded.
+func (w *WorkflowSpec) HasSchedulerConcurrencyLimits() bool {
+	if w == nil {
+		return false
+	}
+	if w.GetGlobalMaxConcurrentWorkflowInvocations() != nil ||
+		w.GetGlobalMaxConcurrentActivityInvocations() != nil {
+		return true
+	}
+	// Only entries the scheduler actually enforces count (mirrors
+	// cluster.buildConcurrencyLimits).
+	enforced := func(ls []NamedConcurrencyLimit) bool {
+		for _, l := range ls {
+			if l.Name != nil && l.MaxConcurrent != nil && *l.MaxConcurrent > 0 {
+				return true
+			}
+		}
+		return false
+	}
+	return enforced(w.WorkflowConcurrencyLimits) || enforced(w.ActivityConcurrencyLimits)
 }
 
 type SecretsSpec struct {
