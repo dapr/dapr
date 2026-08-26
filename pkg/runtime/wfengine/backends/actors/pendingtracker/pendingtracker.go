@@ -73,21 +73,30 @@ func New(inner Backend) *Tracker {
 
 // SetExecutorAvailable flips executor connectivity. Flipping to false sweeps
 // and cancels every currently pending task: with no executor connected,
-// nothing can ever complete them.
+// nothing can ever complete them. The sweep returns only once every cancel
+// has settled (cancelled, completed under the race, or timed out), so the
+// caller's subsequent unregister HaltAll does not wait on a turn whose
+// cancellation is still in flight.
 func (t *Tracker) SetExecutorAvailable(available bool) {
 	t.available.Store(available)
 	if available {
 		return
 	}
 
+	var wg sync.WaitGroup
 	t.workflows.Range(func(key, _ any) bool {
-		t.cancelWorkflow(key.(string))
+		wg.Go(func() {
+			t.cancelWorkflow(key.(string))
+		})
 		return true
 	})
 	t.activities.Range(func(_, value any) bool {
-		t.cancelActivity(value.(*activityKey))
+		wg.Go(func() {
+			t.cancelActivity(value.(*activityKey))
+		})
 		return true
 	})
+	wg.Wait()
 }
 
 // OnWorkflowTaskCompletion implements Backend. Registrations made while no
@@ -134,21 +143,67 @@ func (t *Tracker) OnActivityCompletion(req *protos.ActivityRequest, cb func(*pro
 	}
 }
 
-// cancelWorkflow cancels one pending workflow task. Errors are expected when
-// a completion or an earlier cancel raced the sweep and are safe to drop: the
-// executor's delivery arbiter accepts a single settlement per dispatch.
 func (t *Tracker) cancelWorkflow(instanceID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), cancelTimeout)
-	defer cancel()
-	if err := t.CancelWorkflowTask(ctx, api.InstanceID(instanceID)); err != nil {
-		log.Debugf("No pending workflow task to cancel for instance '%s': %v", instanceID, err)
-	}
+	t.cancelWithRetry(
+		func(ctx context.Context) error {
+			return t.CancelWorkflowTask(ctx, api.InstanceID(instanceID))
+		},
+		func() bool {
+			_, ok := t.workflows.Load(instanceID)
+			return ok
+		},
+		"workflow task for instance '"+instanceID+"'",
+	)
 }
 
 func (t *Tracker) cancelActivity(ak *activityKey) {
+	key := backend.GetActivityExecutionKey(ak.instanceID, ak.taskID)
+	t.cancelWithRetry(
+		func(ctx context.Context) error {
+			return t.CancelActivityTask(ctx, api.InstanceID(ak.instanceID), ak.taskID)
+		},
+		func() bool {
+			_, ok := t.activities.Load(key)
+			return ok
+		},
+		"activity task '"+key+"'",
+	)
+}
+
+// cancelWithRetry drives one cancellation to a settled outcome within
+// cancelTimeout. An error with the registration already gone is the benign
+// completion race (the executor's delivery arbiter accepted another
+// settlement) and is dropped. An error with the registration still live can
+// be a transient failure of the cluster backend's non-local fall-through (a
+// watch-path waiter is cancelled via a remote executor-actor call), and is
+// retried: giving up would leave the turn parked and recreate the unregister
+// deadlock this package exists to break. An executor reconnecting mid-retry
+// stops the retry, since the completion can then be delivered normally.
+func (t *Tracker) cancelWithRetry(cancelTask func(context.Context) error, registered func() bool, desc string) {
 	ctx, cancel := context.WithTimeout(context.Background(), cancelTimeout)
 	defer cancel()
-	if err := t.CancelActivityTask(ctx, api.InstanceID(ak.instanceID), ak.taskID); err != nil {
-		log.Debugf("No pending activity task to cancel for instance '%s' task %d: %v", ak.instanceID, ak.taskID, err)
+
+	backoff := 50 * time.Millisecond
+	for {
+		err := cancelTask(ctx)
+		if err == nil {
+			return
+		}
+		if !registered() {
+			log.Debugf("No pending %s to cancel: %v", desc, err)
+			return
+		}
+		if t.available.Load() {
+			log.Debugf("An executor reconnected while cancelling the pending %s; leaving it to complete: %v", desc, err)
+			return
+		}
+		select {
+		case <-ctx.Done():
+			log.Warnf("Failed to cancel the pending %s within %s; its completion stays parked until an executor reconnects: %v",
+				desc, cancelTimeout, err)
+			return
+		case <-time.After(backoff):
+			backoff = min(backoff*2, time.Second)
+		}
 	}
 }

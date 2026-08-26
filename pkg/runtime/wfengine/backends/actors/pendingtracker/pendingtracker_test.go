@@ -16,7 +16,11 @@ limitations under the License.
 package pendingtracker
 
 import (
+	"context"
+	"errors"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,6 +29,32 @@ import (
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend/local"
 )
+
+// flakyBackend fails the first n cancel calls with a transient error before
+// delegating, mimicking the cluster backend's remote fall-through failing.
+type flakyBackend struct {
+	Backend
+	wfFails  atomic.Int32
+	wfCalls  atomic.Int32
+	actFails atomic.Int32
+	actCalls atomic.Int32
+}
+
+func (f *flakyBackend) CancelWorkflowTask(ctx context.Context, id api.InstanceID) error {
+	f.wfCalls.Add(1)
+	if f.wfFails.Add(-1) >= 0 {
+		return errors.New("transient cancel failure")
+	}
+	return f.Backend.CancelWorkflowTask(ctx, id)
+}
+
+func (f *flakyBackend) CancelActivityTask(ctx context.Context, id api.InstanceID, taskID int32) error {
+	f.actCalls.Add(1)
+	if f.actFails.Add(-1) >= 0 {
+		return errors.New("transient cancel failure")
+	}
+	return f.Backend.CancelActivityTask(ctx, id, taskID)
+}
 
 func wfReq(iid string) *protos.WorkflowRequest {
 	return &protos.WorkflowRequest{InstanceId: iid}
@@ -114,6 +144,88 @@ func Test_DeregisteredEntriesAreNotCancelled(t *testing.T) {
 
 	tr.SetExecutorAvailable(false)
 	assert.Zero(t, wfCalls)
+}
+
+func Test_SweepRetriesTransientCancelFailures(t *testing.T) {
+	t.Parallel()
+
+	flaky := &flakyBackend{Backend: local.NewTasksBackend()}
+	flaky.wfFails.Store(2)
+	flaky.actFails.Store(2)
+	tr := New(flaky)
+
+	var wfErr, actErr error
+	tr.OnWorkflowTaskCompletion(wfReq("wf1"), func(_ *protos.WorkflowResponse, err error) {
+		wfErr = err
+	})
+	tr.OnActivityCompletion(actReq("wf1", 7), func(_ *protos.ActivityResponse, err error) {
+		actErr = err
+	})
+
+	tr.SetExecutorAvailable(false)
+
+	require.ErrorIs(t, wfErr, api.ErrTaskCancelled,
+		"a transient cancel failure must be retried, not dropped: an uncancelled turn wedges the unregister HaltAll")
+	require.ErrorIs(t, actErr, api.ErrTaskCancelled)
+	assert.Equal(t, int32(3), flaky.wfCalls.Load())
+	assert.Equal(t, int32(3), flaky.actCalls.Load())
+}
+
+func Test_CancelErrorWithDeregisteredEntryIsNotRetried(t *testing.T) {
+	t.Parallel()
+
+	// The cancel error coincides with the waiter settling (completion won the
+	// arbiter): the deregister removes the tracking entry, so the sweep must
+	// treat the error as the benign race and stop after one attempt.
+	inner := local.NewTasksBackend()
+	var dereg func()
+	var calls atomic.Int32
+	tr := New(&deregOnCancelBackend{Backend: inner, calls: &calls, dereg: &dereg})
+
+	dereg = tr.OnWorkflowTaskCompletion(wfReq("wf1"), func(*protos.WorkflowResponse, error) {})
+
+	tr.SetExecutorAvailable(false)
+	assert.Equal(t, int32(1), calls.Load())
+}
+
+// deregOnCancelBackend errors every cancel and deregisters the waiter inside
+// the first one, simulating a completion racing the sweep.
+type deregOnCancelBackend struct {
+	Backend
+	calls *atomic.Int32
+	dereg *func()
+}
+
+func (d *deregOnCancelBackend) CancelWorkflowTask(context.Context, api.InstanceID) error {
+	if d.calls.Add(1) == 1 {
+		(*d.dereg)()
+	}
+	return errors.New("cancel failed")
+}
+
+func Test_RetryStopsWhenExecutorReconnects(t *testing.T) {
+	t.Parallel()
+
+	flaky := &flakyBackend{Backend: local.NewTasksBackend()}
+	flaky.wfFails.Store(1 << 30)
+	tr := New(flaky)
+
+	tr.OnWorkflowTaskCompletion(wfReq("wf1"), func(*protos.WorkflowResponse, error) {})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		tr.SetExecutorAvailable(false)
+	}()
+
+	time.Sleep(time.Millisecond * 120)
+	tr.SetExecutorAvailable(true)
+
+	select {
+	case <-done:
+	case <-time.After(time.Second * 5):
+		t.Fatal("the sweep must stop retrying once an executor reconnects")
+	}
 }
 
 func Test_SupersededDeregisterKeepsNewRegistrationTracked(t *testing.T) {
