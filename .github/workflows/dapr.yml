@@ -298,7 +298,7 @@ jobs:
       - name: Run workflow suite in ${{ matrix.mode }} mode
         # The scheduler-placement mode runs the actor suites too: the same
         # tests prove both placement authorities.
-        run: make test-integration-parallel ARGS="-focus ${{ matrix.mode == 'scheduler-placement' && '^actors|^daprd/workflow' || 'workflow' }}"
+        run: make test-integration-parallel ARGS="-focus '${{ matrix.mode == 'scheduler-placement' && '^actors|^daprd/workflow' || 'workflow' }}'"
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"
