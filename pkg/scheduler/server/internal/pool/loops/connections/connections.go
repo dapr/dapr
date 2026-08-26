@@ -328,37 +328,50 @@ func (c *connections) handleConcurrencyRelease(rel *loops.ConcurrencyRelease) {
 // drainPending scans the pending queue to find a trigger that can acquire all
 // required gates. This avoids head-of-line blocking when the first pending
 // trigger is blocked on a different gate than the one that just released.
+// Requests skipped by the scan are returned to the front of the queue in
+// their original order, so an elder trigger is never rotated behind fresher
+// arrivals.
 func (c *connections) drainPending(key string, gate *concurrencyGate) {
-	defer monitoring.RecordConcurrencyPending(key, int64(gate.pendingLen()))
+	defer func() {
+		monitoring.RecordConcurrencyPending(key, int64(gate.pendingLen()))
+	}()
 
 	n := gate.pendingLen()
+	var skipped []*loops.TriggerRequest
 	for range n {
 		next := gate.dequeue()
 		if next == nil {
-			return
+			break
 		}
 
-		if c.tryDispatchPending(next) {
-			return
+		dispatched, consumed := c.tryDispatchPending(next)
+		if !consumed {
+			skipped = append(skipped, next)
+		}
+		if dispatched {
+			break
 		}
 	}
+
+	gate.requeueFront(skipped)
 }
 
-// tryDispatchPending attempts to dispatch a single pending trigger. On gate
-// acquisition failure it re-queues the request (or fails it if the queue is
-// full) and releases any partially-acquired gates via defer. Returns true iff
-// the trigger was dispatched.
-func (c *connections) tryDispatchPending(next *loops.TriggerRequest) bool {
+// tryDispatchPending attempts to dispatch a single pending trigger. Returns
+// dispatched=true iff the trigger was handed to a stream loop, and
+// consumed=true when the caller no longer owns the request (dispatched, or
+// resolved undeliverable). On gate acquisition failure the request stays with
+// the caller to requeue at its original position, and partially-acquired
+// gates are released via defer.
+func (c *connections) tryDispatchPending(next *loops.TriggerRequest) (dispatched, consumed bool) {
 	streamLoop, ok := c.getStreamLoop(next.Job.GetMetadata())
 	if !ok {
 		next.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
-		return false
+		return false, true
 	}
 
 	gateKeys := c.gateKeysForTrigger(next)
 
 	var acquired []string
-	dispatched := false
 	defer func() {
 		if !dispatched {
 			c.releaseGates(acquired)
@@ -368,16 +381,11 @@ func (c *connections) tryDispatchPending(next *loops.TriggerRequest) bool {
 	var gotAll bool
 	acquired, gotAll = c.acquireGates(gateKeys)
 	if !gotAll {
-		primaryGate := c.concurrencyGates[gateKeys[0]]
-		if !primaryGate.enqueue(next) {
-			next.ResultFn(api.TriggerResponseResult_FAILED)
-		}
-		return false
+		return false, false
 	}
 
 	c.dispatchWithGates(streamLoop, next, gateKeys)
-	dispatched = true
-	return true
+	return true, true
 }
 
 // handleCloseStream handles a close stream request.

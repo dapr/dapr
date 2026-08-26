@@ -183,9 +183,10 @@ func Run() {
 		}
 		return concurrency.NewRunnerManager(
 			healthzserver.New(healthzserver.Options{
-				Log:     log,
-				Port:    opts.HealthzPort,
-				Healthz: healthz,
+				Log:           log,
+				ListenAddress: opts.HealthzListenAddress,
+				Port:          opts.HealthzPort,
+				Healthz:       healthz,
 			}).Start,
 			metricsExporter.Start,
 			sentry.Start,

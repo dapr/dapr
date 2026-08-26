@@ -114,10 +114,13 @@ func (s *stream) Handle(ctx context.Context, event loops.EventStream) error {
 
 	if err != nil {
 		log.Errorf("Error handling stream event %T on %s: %v", event, s.addr, err)
-		s.nsLoop.Enqueue(&loops.ConnCloseStream{
-			StreamIDx: s.idx,
-			Namespace: s.ns,
-		})
+		// Cancel the stream context rather than enqueueing a ConnCloseStream
+		// directly. recvLoop unwinds on the cancellation and reports the close,
+		// making it the single emission point. Enqueueing here as well would
+		// deliver two ConnCloseStream events for the same connection,
+		// underflowing the namespace connection counter and tearing down the
+		// disseminator while healthy streams are still attached.
+		s.cancel(err)
 	}
 
 	return nil

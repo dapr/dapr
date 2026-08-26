@@ -83,6 +83,7 @@ var (
 	WorkflowInstanceIDNotFound        = ErrorCode{"ERR_INSTANCE_ID_NOT_FOUND", "", CategoryWorkflow}        // Workflow instance ID not found
 	WorkflowInstanceIDProvidedMissing = ErrorCode{"ERR_INSTANCE_ID_PROVIDED_MISSING", "", CategoryWorkflow} // Missing workflow instance ID
 	WorkflowInstanceIDTooLong         = ErrorCode{"ERR_INSTANCE_ID_TOO_LONG", "", CategoryWorkflow}         // Workflow instance ID too long
+	WorkflowAppIDInvalid              = ErrorCode{"ERR_WORKFLOW_APP_ID_INVALID", "", CategoryWorkflow}      // Invalid workflow app ID. (Only alphanumeric, dash and underscore characters are allowed)
 
 	// ### State management API
 	StateTransaction                   = ErrorCode{"ERR_STATE_TRANSACTION", "", CategoryState}                                                 // Error in state transaction
