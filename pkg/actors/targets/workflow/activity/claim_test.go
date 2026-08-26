@@ -714,6 +714,36 @@ func Test_gateJanitorRedispatch(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("stale completed record is reaped while acking", func(t *testing.T) {
+		t.Parallel()
+		f, store, _ := newClaimHarness(t)
+		f.claims = claim.New(claim.Options{
+			ActorType:  f.actorType,
+			State:      store.fake(),
+			StaleAfter: time.Millisecond,
+		})
+		// A restart inside the retention window leaves this row behind; the
+		// guard cannot delete it again.
+		store.set(t, actorID, claim.Record{TaskKey: actorID, HeartbeatMs: 12345, Completed: true})
+
+		a := f.GetOrCreate(actorID).(*activity)
+
+		// First read opens the reader-side observation window and acks.
+		handled, err := a.gateJanitorRedispatch(t.Context(), testInvocation())
+		assert.True(t, handled)
+		require.NoError(t, err)
+		_, ok := store.get(t, actorID)
+		assert.True(t, ok, "a fresh completed row is retained for in-flight recovery arrivals")
+
+		// A later read past the grace still acks and reaps the row.
+		time.Sleep(5 * time.Millisecond)
+		handled, err = a.gateJanitorRedispatch(t.Context(), testInvocation())
+		assert.True(t, handled)
+		require.NoError(t, err)
+		_, ok = store.get(t, actorID)
+		assert.False(t, ok, "a stale completed row must not linger forever")
+	})
+
 	t.Run("missing record proceeds", func(t *testing.T) {
 		t.Parallel()
 		f, _, _ := newClaimHarness(t)

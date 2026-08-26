@@ -45,7 +45,15 @@ func (g *Guards) Check(ctx context.Context, actorID, taskKey string) (Outcome, e
 		return Proceed, nil
 	}
 	if rec.Completed {
-		g.forget(actorID)
+		// Ack without executing; the result was already published. Reap the
+		// row once it reads stale (a restart inside the retention window
+		// leaves it behind: the guard's retention delete cannot run again),
+		// best effort, so it does not linger for good.
+		if stale {
+			if g.delete(ctx, actorID, etag) == nil {
+				g.forget(actorID)
+			}
+		}
 		return Completed, nil
 	}
 	if !stale {

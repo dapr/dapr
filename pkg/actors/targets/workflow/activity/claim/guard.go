@@ -92,6 +92,9 @@ func (g *Guards) guard(ctx context.Context, actorID, taskKey string, call *infli
 			g.write(ctx, actorID, taskKey, true)
 			select {
 			case <-ctx.Done():
+				// Shutdown mid-retention: keep the Completed row so recovery
+				// arrivals on the new owner ack instead of re-executing the
+				// published body; gate reads reap it once it goes stale.
 			case <-time.After(g.opts.Retention):
 				g.deleteOwned(ctx, actorID, taskKey)
 			}
