@@ -111,9 +111,10 @@ func (c *canfail) Run(t *testing.T, ctx context.Context) {
 	}
 
 	failedCh := make(chan struct{})
-	// codes.Internal is non-transient so daprd's CreateReminderWithRetry
-	// does not mask it; the orchestrator's error path runs.
-	c.proxy.ArmFailures(proxy.MethodScheduleJob, 1, codes.Internal, failedCh)
+	// codes.InvalidArgument is a permanent create error so daprd's
+	// CreateReminderWithRetry does not mask it; the orchestrator's error
+	// path runs.
+	c.proxy.ArmFailures(proxy.MethodScheduleJob, 1, codes.InvalidArgument, failedCh)
 
 	close(releaseActivity)
 

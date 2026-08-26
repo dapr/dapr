@@ -67,3 +67,5 @@ scopes:
 - workflowsapp-retention
 - wfacl-caller
 - wfacl-target
+- wfxapp-caller
+- wfxapp-target

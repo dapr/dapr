@@ -54,23 +54,11 @@ func (r *remotestream) Setup(t *testing.T) []framework.Option {
 	require.NoError(t, err)
 	appID := uid.String()
 
-	config := `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-    name: workflowsclustereddeployment
-spec:
-    features:
-    - name: WorkflowsClusteredDeployment
-      enabled: true
-`
-
-	wopts := make([]workflow.Option, 0, 3)
-	wopts = append(wopts, workflow.WithDaprds(2))
+	wopts := make([]workflow.Option, 0, 4)
+	wopts = append(wopts, workflow.WithDaprds(2), workflow.WithClusteredDeployment(true))
 	for i := range 2 {
 		wopts = append(wopts, workflow.WithDaprdOptions(i,
 			daprd.WithAppID(appID),
-			daprd.WithConfigManifests(t, config),
 		))
 	}
 

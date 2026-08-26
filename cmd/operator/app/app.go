@@ -79,9 +79,10 @@ func Run() {
 		metricsExporter.Start,
 		op.Start,
 		server.New(server.Options{
-			Log:     log,
-			Port:    opts.HealthzPort,
-			Healthz: healthz,
+			Log:           log,
+			ListenAddress: opts.HealthzListenAddress,
+			Port:          opts.HealthzPort,
+			Healthz:       healthz,
 		}).Start,
 	).Run(ctx)
 	if err != nil {

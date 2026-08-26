@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -98,6 +99,11 @@ func (s *triggerstall) Run(t *testing.T, ctx context.Context) {
 
 	triggerCh := make(chan *schedulerv1.WatchJobsResponse, 100)
 
+	var watchMu sync.Mutex
+	var watchErrs []error
+	watchersDead := make(chan struct{})
+	liveWatchers := int64(3)
+
 	for _, sched := range []*scheduler.Scheduler{s.scheduler1, s.scheduler2, s.scheduler3} {
 		//nolint:staticcheck
 		conn, err := grpc.DialContext(watchCtx, sched.Address(),
@@ -125,6 +131,13 @@ func (s *triggerstall) Run(t *testing.T, ctx context.Context) {
 			for {
 				resp, err := w.Recv()
 				if err != nil {
+					watchMu.Lock()
+					watchErrs = append(watchErrs, err)
+					liveWatchers--
+					if liveWatchers == 0 {
+						close(watchersDead)
+					}
+					watchMu.Unlock()
 					return
 				}
 				select {
@@ -173,6 +186,15 @@ func (s *triggerstall) Run(t *testing.T, ctx context.Context) {
 	select {
 	case job := <-triggerCh:
 		t.Logf("Trigger after recovery: %s", job.GetName())
+	case <-watchersDead:
+		watchMu.Lock()
+		errs := watchErrs
+		watchMu.Unlock()
+		require.Fail(t, "all watch streams died; no trigger can ever arrive", "%v", errs)
+	case <-time.After(3 * time.Minute):
+		t.Logf("Leadership keys: %v",
+			s.scheduler1.ListAllKeys(t, context.Background(), "dapr/leadership"))
+		require.Fail(t, "No triggers after quorum change within bound")
 	case <-ctx.Done():
 		t.Logf("Leadership keys: %v",
 			s.scheduler1.ListAllKeys(t, context.Background(), "dapr/leadership"))
