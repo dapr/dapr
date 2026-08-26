@@ -2673,7 +2673,7 @@ func TestInvokeBinding(t *testing.T) {
 	_, err = client.InvokeBinding(t.Context(), &runtimev1pb.InvokeBindingRequest{Name: "error-binding"})
 	assert.Equal(t, codes.Internal, status.Code(err))
 
-	ctx := grpcMetadata.AppendToOutgoingContext(t.Context(), "traceparent", "Test", "userMetadata", "overwrited", "additional", "val2")
+	ctx := grpcMetadata.AppendToOutgoingContext(t.Context(), "traceparent", "Test", "userMetadata", "overwrited", "additional", "val2", "grpc-trace-bin", string([]byte{0x94, 0x80, 0x09}))
 	resp, err := client.InvokeBinding(ctx, &runtimev1pb.InvokeBindingRequest{Metadata: map[string]string{"userMetadata": "val1"}})
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -2683,6 +2683,10 @@ func TestInvokeBinding(t *testing.T) {
 	assert.Equal(t, "val1", resp.GetMetadata()["userMetadata"])
 	assert.Contains(t, resp.GetMetadata(), "additional")
 	assert.Equal(t, "val2", resp.GetMetadata()["additional"])
+	// Binary gRPC metadata (grpc-trace-bin) must not be forwarded to
+	// output binding metadata — the raw bytes corrupt string metadata.
+	assert.NotContains(t, resp.GetMetadata(), "grpc-trace-bin")
+	assert.NotContains(t, resp.GetMetadata(), "dapr-grpc-trace-bin")
 }
 
 func TestTransactionStateStoreNotConfigured(t *testing.T) {
