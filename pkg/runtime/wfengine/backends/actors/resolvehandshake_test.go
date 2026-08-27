@@ -21,6 +21,8 @@ import (
 
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
+
+	"github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors/pendingtracker"
 )
 
 // fakePendingBackend hands the registered completion callback back to the
@@ -53,7 +55,7 @@ func Test_activityCompletionHandshake(t *testing.T) {
 	t.Run("resolver runs while the registration is still held", func(t *testing.T) {
 		t.Parallel()
 		fake := &fakePendingBackend{}
-		abe := &Actors{pendingTasksBackend: fake, activityExecs: newActivityExecutions()}
+		abe := &Actors{pendingTasksBackend: pendingtracker.New(fake), activityExecs: newActivityExecutions()}
 
 		heldAtResolve := make(chan bool, 1)
 		unregister := abe.RegisterActivityResolver("wf1", 3, func() {
@@ -80,7 +82,7 @@ func Test_activityCompletionHandshake(t *testing.T) {
 	t.Run("error paths do not resolve, keeping the execution evictable", func(t *testing.T) {
 		t.Parallel()
 		fake := &fakePendingBackend{}
-		abe := &Actors{pendingTasksBackend: fake, activityExecs: newActivityExecutions()}
+		abe := &Actors{pendingTasksBackend: pendingtracker.New(fake), activityExecs: newActivityExecutions()}
 
 		resolved := false
 		unregister := abe.RegisterActivityResolver("wf1", 4, func() { resolved = true })
@@ -143,7 +145,7 @@ func Test_activityCompletionHandshake(t *testing.T) {
 	t.Run("delivery with no resolver registered is a no-op resolve", func(t *testing.T) {
 		t.Parallel()
 		fake := &fakePendingBackend{}
-		abe := &Actors{pendingTasksBackend: fake, activityExecs: newActivityExecutions()}
+		abe := &Actors{pendingTasksBackend: pendingtracker.New(fake), activityExecs: newActivityExecutions()}
 		called := false
 		var gotErr error
 		dereg := abe.OnActivityCompletion(activityRequest("wf1", 8), func(_ *protos.ActivityResponse, err error) {
