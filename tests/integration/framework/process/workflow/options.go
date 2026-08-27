@@ -45,6 +45,7 @@ type options struct {
 	daprds          int
 	skipDB          bool
 	mtls            bool
+	signing         bool
 	signingDisabled []int
 	clustered       *bool
 
@@ -121,9 +122,23 @@ func WithMTLS(t *testing.T) Option {
 	}
 }
 
+// WithHistorySigning enables the WorkflowHistorySigning feature flag on
+// every daprd in the workflow. History signing needs the Sentry-issued
+// workload identity for its attestation and signing keys, so this also
+// enables the mTLS setup of WithMTLS. Prefer this over WithMTLS in tests
+// that are about signing behavior, so the intent is explicit at the call
+// site.
+func WithHistorySigning(t *testing.T) Option {
+	t.Helper()
+	return func(o *options) {
+		o.signing = true
+		o.mtls = true
+	}
+}
+
 // WithSigningDisabledN excludes the daprd at the given index from having
 // the WorkflowHistorySigning feature flag set. Has no effect without
-// WithMTLS.
+// WithMTLS or WithHistorySigning.
 func WithSigningDisabledN(index int) Option {
 	return func(o *options) {
 		o.signingDisabled = append(o.signingDisabled, index)
