@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -31,6 +32,23 @@ const workflowACLDeniedMsg = "access denied by workflow access policy"
 // preLoadedMeta lets callers that have already loaded the actor's metadata
 // (e.g. handleStream which needs ometa for the response anyway) skip the
 // state load inside the access check. Pass nil to load on demand.
+// isLocalSyntheticFailure reports whether e is a failure event this app authored
+// itself (a WorkflowAccessPolicy denial or an occupied-instance-ID rejection)
+// rather than a completion received over the wire. Such events carry no
+// attestation by design, so they must not be checked against one. A remote
+// completion carries the sender's appID and is unaffected.
+func (o *orchestrator) isLocalSyntheticFailure(e *backend.HistoryEvent) bool {
+	if e.GetRouter().GetSourceAppID() != o.appID {
+		return false
+	}
+	fd := e.GetChildWorkflowInstanceFailed().GetFailureDetails()
+	if fd == nil {
+		fd = e.GetTaskFailed().GetFailureDetails()
+	}
+	et := fd.GetErrorType()
+	return et == messages.ErrorTypeAccessPolicyDenied || et == messages.ErrorTypeAlreadyExists
+}
+
 func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, data []byte, parsedAddEvent *backend.HistoryEvent, preLoadedMeta *backend.WorkflowMetadata, md map[string]*internalsv1pb.ListStringValue) error {
 	if o.workflowAccessPolicies == nil {
 		return nil

@@ -50,6 +50,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	staterrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state/list"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/dapr/utils"
@@ -943,11 +944,21 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 
 	s, err := state.LoadWorkflowState(ctx, astate, id.String(), state.Options{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
+		Signer:            abe.signer,
 	})
 	if err != nil {
-		return err
+		// Force purge is the escape hatch for instances that cannot be
+		// handled normally, which includes tampered or misconfigured signed
+		// state: purge the loaded rows anyway rather than refusing.
+		var verifyErr *staterrors.VerificationError
+		var configErr *staterrors.ConfigurationError
+		if s == nil || (!errors.As(err, &verifyErr) && !errors.As(err, &configErr)) {
+			return err
+		}
+		log.Warnf("Force purging workflow '%s' whose state failed signature verification or signing configuration checks: %v", id.String(), err)
 	}
 
 	req, err := s.GetPurgeRequest(id.String())
