@@ -145,6 +145,18 @@ func (m *Messages) callStateMessage(ctx context.Context, msg proto.Message, hist
 		WithData(b).
 		WithContentType(invokev1.ProtobufContentType),
 	); err != nil {
+		// ErrInstanceNotFound means the parent deliberately dropped the
+		// completion (purged, tombstoned, or an unmatched straggler after
+		// ContinueAsNew): terminal, since retrying redelivers forever and a
+		// late redelivery can hit a reused task id and be misread as
+		// tampering.
+		if historyEvent != nil &&
+			(historyEvent.GetChildWorkflowInstanceCompleted() != nil || historyEvent.GetChildWorkflowInstanceFailed() != nil) &&
+			IsInstanceNotFound(err) {
+			log.Warnf("Workflow actor '%s': parent workflow '%s' dropped this child's completion event; not retrying: %v", m.ActorID, target, err)
+			return nil
+		}
+
 		// If the call was denied by a workflow access policy or the target
 		// instance ID is already taken by another workflow, fail the child
 		// orchestration immediately rather than retrying. Only do this when
