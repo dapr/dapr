@@ -384,7 +384,13 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 		}
 	}
 
-	var span trace.Span
+	extensions, extensionsErr := ExtractCloudEventExtensions(cloudEvent)
+	if extensionsErr != nil {
+		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
+		return ctx, nil, nil, extensionsErr
+	}
+
+	envelope.Extensions = extensions
 
 	iTraceID := cloudEvent[contribpubsub.TraceParentField]
 	if iTraceID == nil {
@@ -404,21 +410,15 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 		}
 	}
 
+	// The span is started only once every error path has been cleared, so the
+	// caller is never handed back an error alongside a span it cannot end.
 	spanName := "pubsub/" + msg.Topic
 	// no ops if trace is off; empty sc produces a new root span
-	ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, tracingSpec)
+	ctx, span := diag.StartInternalCallbackSpan(ctx, spanName, sc, tracingSpec)
 	// span is nil if tracing is disabled (sampling rate is 0)
 	if span != nil {
 		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 	}
-
-	extensions, extensionsErr := ExtractCloudEventExtensions(cloudEvent)
-	if extensionsErr != nil {
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
-		return ctx, nil, nil, extensionsErr
-	}
-
-	envelope.Extensions = extensions
 
 	return ctx, envelope, span, nil
 }
