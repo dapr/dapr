@@ -90,7 +90,9 @@ func (r *retention) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, client.RaiseEvent(ctx, api.InstanceID(instanceID), "release"))
 	_, err = client.WaitForWorkflowCompletion(ctx, instanceID)
 	require.NoError(t, err)
-	require.NotEmpty(t, retentionJobs(), "run 1 should have queued a retention reminder")
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.NotEmpty(c, retentionJobs(), "run 1 should have queued a retention reminder")
+	}, time.Second*10, time.Millisecond*10)
 
 	_, err = client.ScheduleNewWorkflow(ctx, "foo", api.WithInstanceID(instanceID))
 	require.NoError(t, err)
@@ -109,7 +111,12 @@ func (r *retention) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, instanceID)
 	require.NoError(t, err)
 
-	require.NotEmpty(t, retentionJobs(), "run 2 should have queued its own retention reminder")
+	// The completion is streamed to the client before the retention
+	// reminder's scheduler commit lands, so the job may trail the
+	// completion by a few milliseconds.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.NotEmpty(c, retentionJobs(), "run 2 should have queued its own retention reminder")
+	}, time.Second*10, time.Millisecond*10)
 	require.Positive(t, rowCount(), "run 2 must not be purged before its own retention window elapses")
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
