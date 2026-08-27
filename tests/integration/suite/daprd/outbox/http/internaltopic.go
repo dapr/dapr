@@ -54,7 +54,9 @@ func (o *internalTopic) Setup(t *testing.T) []framework.Option {
 			defer r.Body.Close()
 			b, err := io.ReadAll(r.Body)
 			if err != nil {
-				t.Fatal(err)
+				t.Error(err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
 			}
 
 			msg.Store(b)
@@ -156,11 +158,11 @@ func (o *internalTopic) Run(t *testing.T, ctx context.Context) {
 		req, err = http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%v/getValue", o.daprd.AppPort(t)), nil)
 		assert.NoError(c, err)
 		resp, err = httpClient.Do(req)
-		assert.NoError(c, err)
-		t.Cleanup(func() {
-			assert.NoError(t, resp.Body.Close())
-		})
+		if !assert.NoError(c, err) {
+			return
+		}
 		body, err = io.ReadAll(resp.Body)
+		assert.NoError(c, resp.Body.Close())
 		assert.NoError(c, err)
 
 		var ce map[string]string

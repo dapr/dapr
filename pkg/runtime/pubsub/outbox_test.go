@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1236,17 +1237,14 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 
 		internalCalledCh := make(chan struct{})
 		externalCalledCh := make(chan struct{})
-		var closed bool
+		var internalOnce, externalOnce sync.Once
 
 		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			switch pr.Topic {
 			case customInternalTopic:
-				close(internalCalledCh)
+				internalOnce.Do(func() { close(internalCalledCh) })
 			case "1":
-				if !closed {
-					close(externalCalledCh)
-					closed = true
-				}
+				externalOnce.Do(func() { close(externalCalledCh) })
 			}
 
 			return psMock.Publish(ctx, pr)
