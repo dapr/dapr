@@ -74,6 +74,11 @@ type orchestrator struct {
 	// traffic; it distinguishes "alive and progressing" from "being polled".
 	lastProgress atomic.Int64
 	driveInfo    atomic.Pointer[driveInfo]
+	// wakeEpoch counts durable turn commits; escalate suppresses wakes armed
+	// before the latest commit (their durable reminder would be a stray).
+	// Bumped only at the turn-commit sites in runWorkflow; never reset
+	// (monotonic avoids ABA with a pre-halt escalation).
+	wakeEpoch atomic.Uint64
 	// foldPending holds sender-retried completions awaiting their folding
 	// turn (WorkflowsFastPath; see fold.go). INVARIANT: only touched
 	// while holding the per-actor turn lock (submit, turn, janitor,

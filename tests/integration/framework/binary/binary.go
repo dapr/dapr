@@ -106,6 +106,9 @@ func BuildAll(t *testing.T) {
 	wg.Wait()
 
 	require.False(t, t.Failed())
+
+	generateCRDs(t)
+	require.False(t, t.Failed())
 }
 
 func RootDir(t *testing.T) string {
@@ -132,15 +135,7 @@ func build(t *testing.T, name string, opts options) {
 	if _, ok := os.LookupEnv(EnvKey(name)); !ok {
 		t.Logf("%q not set, building %q binary", EnvKey(name), name)
 
-		// Use a consistent temp dir for the binary so that the binary is cached on
-		// subsequent runs.
-		var tmpdir string
-		if runtime.GOOS == "darwin" {
-			tmpdir = "/tmp"
-		} else {
-			tmpdir = os.TempDir()
-		}
-		binPath := filepath.Join(tmpdir, "dapr_integration_tests/"+name)
+		binPath := filepath.Join(tmpDir(), "dapr_integration_tests/"+name)
 		if runtime.GOOS == "windows" {
 			binPath += ".exe"
 		}
@@ -191,4 +186,11 @@ func EnvValue(name string) string {
 
 func EnvKey(name string) string {
 	return fmt.Sprintf("DAPR_INTEGRATION_%s_PATH", strings.ToUpper(name))
+}
+
+func tmpDir() string {
+	if runtime.GOOS == "darwin" {
+		return "/tmp"
+	}
+	return os.TempDir()
 }
