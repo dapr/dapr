@@ -14,7 +14,6 @@ limitations under the License.
 package api
 
 import (
-	"strings"
 	"time"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -36,6 +35,13 @@ const (
 
 var log = logger.NewLogger("dapr.runtime.actor.config")
 
+// EntityDrainConfig is per-actor-type drain configuration; nil fields fall
+// back to the global settings.
+type EntityDrainConfig struct {
+	Timeout               *time.Duration
+	DrainRebalancedActors *bool
+}
+
 // Remap of config.EntityConfig.
 type EntityConfig struct {
 	Entities                   []string
@@ -47,10 +53,9 @@ type EntityConfig struct {
 }
 
 // TranslateEntityConfig converts a user-defined configuration into a
-// domain-specific EntityConfig. disseminationTimeout is the daprd-side
-// placement dissemination timeout used to clamp the per-entity drain
-// timeout via ClampDrainOngoingCallTimeout; pass <= 0 to disable clamping.
-func TranslateEntityConfig(appConfig config.EntityConfig, disseminationTimeout time.Duration) EntityConfig {
+// domain-specific EntityConfig. Drain timeouts are stored raw; clamping
+// happens at drain time.
+func TranslateEntityConfig(appConfig config.EntityConfig) EntityConfig {
 	domainConfig := EntityConfig{
 		Entities:                   appConfig.Entities,
 		ActorIdleTimeout:           DefaultIdleTimeout,
@@ -73,8 +78,7 @@ func TranslateEntityConfig(appConfig config.EntityConfig, disseminationTimeout t
 		if err != nil {
 			log.Warnf("Invalid drain ongoing call timeout value %s, using default value %s", appConfig.DrainOngoingCallTimeout, DefaultOngoingCallTimeout)
 		} else {
-			clamped := ClampDrainOngoingCallTimeout(drainCallDuration, disseminationTimeout, "entities="+joinEntities(appConfig.Entities))
-			domainConfig.DrainOngoingCallTimeout = &clamped
+			domainConfig.DrainOngoingCallTimeout = &drainCallDuration
 		}
 	}
 
@@ -86,29 +90,14 @@ func TranslateEntityConfig(appConfig config.EntityConfig, disseminationTimeout t
 	return domainConfig
 }
 
-// ClampDrainOngoingCallTimeout returns drain unchanged when it is shorter
-// than the placement dissemination timeout. If drain is greater than or
-// equal to disseminationTimeout, it logs a warning and returns
-// disseminationTimeout * drainTimeoutBudgetRatio, floored at
-// DefaultOngoingCallTimeout. This prevents a long drain from holding a
-// placement LOCK -> UPDATE -> UNLOCK round past the dissemination
-// timeout, which would reset the placement stream.
-//
-// disseminationTimeout <= 0 disables the clamp.
-func ClampDrainOngoingCallTimeout(drain, disseminationTimeout time.Duration, source string) time.Duration {
-	if disseminationTimeout <= 0 || drain < disseminationTimeout {
-		return drain
+// ClampDrainOngoingCallTimeout bounds drain to budget *
+// drainTimeoutBudgetRatio, floored at DefaultOngoingCallTimeout, reporting
+// whether clamping occurred. Drain below budget passes through; budget <= 0
+// disables the clamp.
+func ClampDrainOngoingCallTimeout(drain, budget time.Duration) (time.Duration, bool) {
+	if budget <= 0 || drain < budget {
+		return drain, false
 	}
 
-	clamped := max(time.Duration(float64(disseminationTimeout)*drainTimeoutBudgetRatio), DefaultOngoingCallTimeout)
-	log.Warnf("drainOngoingCallTimeout (%s) for %s meets or exceeds the dissemination timeout (%s); clamping to %s to avoid blocking placement dissemination",
-		drain, source, disseminationTimeout, clamped)
-	return clamped
-}
-
-func joinEntities(entities []string) string {
-	if len(entities) == 0 {
-		return "<none>"
-	}
-	return strings.Join(entities, ",")
+	return max(time.Duration(float64(budget)*drainTimeoutBudgetRatio), DefaultOngoingCallTimeout), true
 }

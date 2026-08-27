@@ -20,6 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/connector"
@@ -90,8 +92,9 @@ func New(opts Options) loop.Interface[loops.EventPlace] {
 		host:      opts.InitialHost,
 		htarget:   opts.Healthz.AddTarget("internal-placement-service"),
 		inflight: inflight.New(inflight.Options{
-			Hostname: opts.Hostname,
-			Port:     opts.Port,
+			Hostname:             opts.Hostname,
+			Port:                 opts.Port,
+			DisseminationTimeout: opts.DisseminationTimeout,
 		}),
 		actorTable:  opts.ActorTable,
 		scheduler:   opts.Scheduler,
@@ -117,8 +120,8 @@ func (p *placement) Handle(ctx context.Context, event loops.EventPlace) error {
 		p.handleUpdateTypes(e)
 	case *loops.SetDrainOngoingCallTimeout:
 		p.handleSetDrainOngoingCallTimeout(e)
-	case *loops.SetEntityDrainOngoingCallTimeouts:
-		p.inflight.SetEntityDrainOngoingCallTimeouts(e.Timeouts)
+	case *loops.SetEntityDrainConfigs:
+		p.inflight.SetEntityDrainConfigs(e.Configs)
 	case *loops.Shutdown:
 		p.handleShutdown(e)
 	default:
@@ -287,10 +290,36 @@ func (p *placement) tryConnect(ctx context.Context) (v1pb.Placement_ReportDaprSt
 		return nil, fmt.Errorf("failed to connect to placement service: %w", err)
 	}
 
-	client, err := v1pb.NewPlacementClient(conn).ReportDaprStatus(ctx)
+	pclient := v1pb.NewPlacementClient(conn)
+
+	if err = p.fetchPlacementConfig(ctx, pclient); err != nil {
+		return nil, err
+	}
+
+	client, err := pclient.ReportDaprStatus(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open stream to placement service: %w", err)
 	}
 
 	return client, nil
+}
+
+func (p *placement) fetchPlacementConfig(ctx context.Context, client v1pb.PlacementClient) error {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
+	defer cancel()
+
+	resp, err := client.Config(ctx, new(v1pb.ConfigRequest))
+	if err != nil {
+		if status.Code(err) == codes.Unimplemented {
+			log.Debugf("Placement service does not implement the Config RPC; using the local dissemination timeout for drain clamping")
+			return nil
+		}
+		return fmt.Errorf("failed to fetch placement service config: %w", err)
+	}
+
+	if dt := resp.GetDisseminateTimeout(); dt != nil {
+		p.inflight.SetAdvertisedDisseminateTimeout(dt.AsDuration())
+	}
+
+	return nil
 }

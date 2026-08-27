@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -14,11 +14,21 @@ limitations under the License.
 package placement
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/placement/authz"
-	_ "github.com/dapr/dapr/tests/integration/suite/placement/config"
-	_ "github.com/dapr/dapr/tests/integration/suite/placement/dissemination"
-	_ "github.com/dapr/dapr/tests/integration/suite/placement/helm"
-	_ "github.com/dapr/dapr/tests/integration/suite/placement/metrics"
-	_ "github.com/dapr/dapr/tests/integration/suite/placement/quorum"
-	_ "github.com/dapr/dapr/tests/integration/suite/placement/timeout"
+	"time"
 )
+
+// Option is a function that configures the process.
+type Option func(*options)
+
+type options struct {
+	disseminateTimeout time.Duration
+}
+
+// WithDisseminateTimeout enables the Config RPC, advertising the given
+// dissemination timeout. When not set, Config returns Unimplemented,
+// simulating a placement server that predates the RPC.
+func WithDisseminateTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		o.disseminateTimeout = timeout
+	}
+}
