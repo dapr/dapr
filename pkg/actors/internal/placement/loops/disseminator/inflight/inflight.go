@@ -351,6 +351,15 @@ func (i *Inflight) SetAdvertisedDisseminateTimeout(timeout time.Duration) {
 	log.Infof("Placement advertised a dissemination timeout of %s; actor drain timeouts are clamped against a budget of %s", timeout, i.drainBudget())
 }
 
+// ClearAdvertisedDisseminateTimeout removes the advertised dissemination
+// timeout, for example after reconnecting to a placement service that does
+// not advertise one.
+func (i *Inflight) ClearAdvertisedDisseminateTimeout() {
+	if i.advertisedDissTimeout.Swap(nil) != nil {
+		log.Infof("Cleared placement-advertised dissemination timeout; actor drain timeouts are clamped against a budget of %s", i.drainBudget())
+	}
+}
+
 // drainBudget returns the smaller of daprd's own and placement's advertised
 // dissemination timeout.
 func (i *Inflight) drainBudget() time.Duration {

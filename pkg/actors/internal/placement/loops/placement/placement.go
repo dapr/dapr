@@ -293,11 +293,17 @@ func (p *placement) tryConnect(ctx context.Context) (v1pb.Placement_ReportDaprSt
 	pclient := v1pb.NewPlacementClient(conn)
 
 	if err = p.fetchPlacementConfig(ctx, pclient); err != nil {
+		if cerr := conn.Close(); cerr != nil {
+			log.Debugf("Failed to close placement connection: %s", cerr)
+		}
 		return nil, err
 	}
 
 	client, err := pclient.ReportDaprStatus(ctx)
 	if err != nil {
+		if cerr := conn.Close(); cerr != nil {
+			log.Debugf("Failed to close placement connection: %s", cerr)
+		}
 		return nil, fmt.Errorf("failed to open stream to placement service: %w", err)
 	}
 
@@ -312,6 +318,7 @@ func (p *placement) fetchPlacementConfig(ctx context.Context, client v1pb.Placem
 	if err != nil {
 		if status.Code(err) == codes.Unimplemented {
 			log.Debugf("Placement service does not implement the Config RPC; using the local dissemination timeout for drain clamping")
+			p.inflight.ClearAdvertisedDisseminateTimeout()
 			return nil
 		}
 		return fmt.Errorf("failed to fetch placement service config: %w", err)
@@ -319,6 +326,8 @@ func (p *placement) fetchPlacementConfig(ctx context.Context, client v1pb.Placem
 
 	if dt := resp.GetDisseminateTimeout(); dt != nil {
 		p.inflight.SetAdvertisedDisseminateTimeout(dt.AsDuration())
+	} else {
+		p.inflight.ClearAdvertisedDisseminateTimeout()
 	}
 
 	return nil

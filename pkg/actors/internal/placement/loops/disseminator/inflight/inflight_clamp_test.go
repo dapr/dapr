@@ -50,6 +50,20 @@ func TestDrainBudget(t *testing.T) {
 		assert.Equal(t, 8*time.Second, i.drainBudget())
 	})
 
+	t.Run("clearing restores daprd's own timeout as the budget", func(t *testing.T) {
+		i := New(Options{Hostname: "h", Port: "1", DisseminationTimeout: 30 * time.Second})
+		i.SetAdvertisedDisseminateTimeout(8 * time.Second)
+		require.Equal(t, 8*time.Second, i.drainBudget())
+
+		i.ClearAdvertisedDisseminateTimeout()
+		assert.Nil(t, i.advertisedDissTimeout.Load())
+		assert.Equal(t, 30*time.Second, i.drainBudget())
+
+		// Clearing when already clear is a no-op.
+		i.ClearAdvertisedDisseminateTimeout()
+		assert.Equal(t, 30*time.Second, i.drainBudget())
+	})
+
 	t.Run("non-positive advertised values are ignored", func(t *testing.T) {
 		i := New(Options{Hostname: "h", Port: "1", DisseminationTimeout: 30 * time.Second})
 		i.SetAdvertisedDisseminateTimeout(0)
