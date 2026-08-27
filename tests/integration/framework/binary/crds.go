@@ -50,8 +50,11 @@ func generateCRDs(t *testing.T) {
 	cmd.Dir = RootDir(t)
 	cmd.Stdout = &stdout
 	cmd.Stderr = ioerr
-	assert.NoError(t, cmd.Run())
+	err := cmd.Run()
 	assert.NoError(t, ioerr.Close())
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	assert.NoError(t, os.MkdirAll(filepath.Dir(outPath), 0o700))
 	assert.NoError(t, os.WriteFile(outPath, stdout.Bytes(), 0o600))
