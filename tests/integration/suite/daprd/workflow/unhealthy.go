@@ -121,6 +121,14 @@ func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 	u.appHealth.Store(false)
 	assert.Eventually(t, u.sentUnhealthySignal.Load, time.Second*10, time.Millisecond*10)
 
+	// Gate the release on daprd's own transition, not the app-side 503: the
+	// probe result takes milliseconds to propagate, and activities released
+	// early complete their execution waits before the halt cancels them,
+	// so the expected cancellation never happens.
+	assert.Eventually(t, func() bool {
+		return strings.Contains(string(u.logline.StdoutBuffer()), "App entered un-healthy status")
+	}, time.Second*10, time.Millisecond*10)
+
 	close(releaseCh)
 
 	u.logline.EventuallyFoundAll(t)
