@@ -138,8 +138,8 @@ def test_diff(arr_old, arr_new, label, test='ttest'):
 
         print(f"Passed! Did not find statistically significant increase in {label}.")
     elif test == 'tp75_plus_margin':
-        ratio = float(getenv("LIMIT_HEAP_P75_RATIO", 1.10))
-        delta_mb = float(getenv("LIMIT_DELTA_HEAP_MB", 5))
+        ratio = getenv_float("LIMIT_HEAP_P75_RATIO", 1.10)
+        delta_mb = getenv_float("LIMIT_DELTA_HEAP_MB", 5)
         limit = p75_old * ratio + delta_mb
         if p75_new > limit:
             print(f"Warning! Found significant increase in {label}: p75 {p75_new:.2f} exceeds limit {limit:.2f}.")
@@ -166,6 +166,13 @@ def getenv(key, default):
     if not v or v == "":
         return default
     return v
+
+def getenv_float(key, default):
+    v = getenv(key, default)
+    try:
+        return float(v)
+    except ValueError:
+        raise Exception(f"{key} must be a number, got {v!r}")
 
 if __name__ == "__main__":
     goos=getenv("GOOS", "linux")
