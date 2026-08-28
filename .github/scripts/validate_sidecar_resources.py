@@ -137,15 +137,15 @@ def test_diff(arr_old, arr_new, label, test='ttest'):
             return True
 
         print(f"Passed! Did not find statistically significant increase in {label}.")
-    elif test == 'tp75_plus_10percent':
-        # Memory measurement has enough variation that the t-test is too strict.
-        # So, we created this custom comparison to avoid false positives.
-        # Picking 10% as a good enough margin observed by various runs with the same binary.
-        if p75_new > p75_old * 1.10:
-            print(f"Warning! Found significant increase in {label}.")
+    elif test == 'tp75_plus_margin':
+        ratio = float(getenv("LIMIT_HEAP_P75_RATIO", 1.10))
+        delta_mb = float(getenv("LIMIT_DELTA_HEAP_MB", 5))
+        limit = p75_old * ratio + delta_mb
+        if p75_new > limit:
+            print(f"Warning! Found significant increase in {label}: p75 {p75_new:.2f} exceeds limit {limit:.2f}.")
             return True
 
-        print(f"Passed! Did not find significant increase in {label}.")
+        print(f"Passed! Did not find significant increase in {label}: p75 {p75_new:.2f} within limit {limit:.2f}.")
 
     return False
 
@@ -178,7 +178,7 @@ if __name__ == "__main__":
     memory_data_new = run_sidecar(new_binary, "treatment")
     memory_data_old = run_sidecar(old_binary, "control")
 
-    memory_diff = test_diff(memory_data_old, memory_data_new, "Go heap in-use (in MB)", "tp75_plus_10percent")
+    memory_diff = test_diff(memory_data_old, memory_data_new, "Go heap in-use (in MB)", "tp75_plus_margin")
 
     if binary_size_diff or memory_diff:
         raise Exception("Found significant differences.")
