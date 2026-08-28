@@ -312,6 +312,15 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 			}
 		}
 		if rErr != nil {
+			// A dead request context is not an internal daprd failure:
+			// preserve its gRPC classification (DeadlineExceeded/Canceled)
+			// so the caller observes the same code whether its own deadline
+			// timer or this reply wins the race. The blanket Internal wrap
+			// below would otherwise misclassify e.g. an app-channel
+			// concurrency-limiter acquire aborted by the caller's deadline.
+			if errors.Is(rErr, context.DeadlineExceeded) || errors.Is(rErr, context.Canceled) {
+				return rResp, status.FromContextError(rErr).Err()
+			}
 			return rResp, messages.ErrDirectInvoke.WithFormat(in.GetId(), rErr)
 		}
 
