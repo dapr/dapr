@@ -37,6 +37,7 @@ import (
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/table"
+	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
@@ -761,26 +762,46 @@ func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.Instan
 		WithActor(actorType, string(id)).
 		WithContentType(invokev1.ProtobufContentType)
 
-	err = router.CallStream(ctx, req, func(resp *internalsv1pb.InternalInvokeResponse) (bool, error) {
-		var meta backend.WorkflowMetadata
-		perr := resp.GetMessage().GetData().UnmarshalTo(&meta)
-		if perr != nil {
-			log.Errorf("Failed to unmarshal orchestration metadata: %s", perr)
-			return false, perr
-		}
+	wait := time.Millisecond * 500
+	for {
+		err = router.CallStream(ctx, req, func(resp *internalsv1pb.InternalInvokeResponse) (bool, error) {
+			var meta backend.WorkflowMetadata
+			perr := resp.GetMessage().GetData().UnmarshalTo(&meta)
+			if perr != nil {
+				log.Errorf("Failed to unmarshal orchestration metadata: %s", perr)
+				return false, perr
+			}
 
-		return condition(&meta), nil
-	})
-	if err != nil {
+			return condition(&meta), nil
+		})
+		switch {
+		case err == nil:
+			return nil
 		// Actor invocations carry errors as wire strings; normalise not-found
 		// so callers can rely on errors.Is.
-		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
+		case strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()):
 			return api.ErrInstanceNotFound
+		case !targeterrors.IsStalled(err):
+			return err
 		}
-		return err
-	}
 
-	return nil
+		// A stalled actor rejects stream registrations while the stall turn
+		// parks holding the turn lock, but the instance is quiescent and its
+		// status readable from the store. A condition the instance already
+		// reached must resolve (a schedule's wait-for-start racing a fast
+		// stall); otherwise re-register with backoff until the stall clears.
+		if meta, merr := abe.GetWorkflowMetadata(ctx, id, taskRouter); merr == nil && condition(meta) {
+			return nil
+		}
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+		wait = min(wait*2, time.Second*5)
+	}
 }
 
 // PurgeWorkflowState implements backend.Backend.
