@@ -101,9 +101,16 @@ type orchestrator struct {
 	// re-arming the unverifiable local drive (see redispatchActivities).
 	// INVARIANT: only touched by janitor fires, which hold the turn lock.
 	janitorRedispatched map[int32]struct{}
-	lock                *lock.Stallable
-	closed              atomic.Bool
-	wg                  sync.WaitGroup
+
+	// janitorEscalated records the task IDs whose re-dispatch escalated to
+	// the durable run-activity reminder this residency, so the turn that
+	// commits the task's completion can reap the reminder (the completion's
+	// own execution never knew it existed; see reapEscalatedCompletions).
+	// Same guard and generation scope as janitorRedispatched.
+	janitorEscalated map[int32]struct{}
+	lock             *lock.Stallable
+	closed           atomic.Bool
+	wg               sync.WaitGroup
 
 	streamFns map[int64]*streamFn
 	streamIDx int64
