@@ -159,7 +159,7 @@ func (o *orchestrator) redispatchActivities(ctx context.Context, state *wfengine
 		defer o.wakeWG.Done()
 		for _, e := range unresolved {
 			cctx, cancel := context.WithTimeout(wakeCtx, redispatchCallTimeout)
-			cerr := o.callActivity(cctx, e, dueTime, phs[e.GetEventId()], wfName, elide && !durable[e.GetEventId()])
+			cerr := o.callActivity(cctx, e, dueTime, phs[e.GetEventId()], wfName, elide && !durable[e.GetEventId()], true)
 			cancel()
 			switch {
 			case cerr == nil && durable[e.GetEventId()]:
