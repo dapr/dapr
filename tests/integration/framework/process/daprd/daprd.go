@@ -573,6 +573,17 @@ func (d *Daprd) Restart(t *testing.T, ctx context.Context) {
 	d.exec.Run(t, ctx)
 }
 
+// RestartGraceful is Restart with an interrupt and exit wait instead of a hard
+// kill, for tests that need the shutdown path (actor HaltAll, drains) to run
+// before the new process starts.
+func (d *Daprd) RestartGraceful(t *testing.T, ctx context.Context) {
+	t.Helper()
+	clone := d.exec.Clone(t)
+	d.exec.Cleanup(t)
+	d.exec = clone
+	d.exec.Run(t, ctx)
+}
+
 // ReplaceArg sets `--<flag>=<value>` on the daprd command line for the next
 // Run/Restart, replacing any existing occurrence of that flag. Existing args
 // remain in place, so this is safe to call between Kill and Restart.
