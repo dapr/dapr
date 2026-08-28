@@ -608,7 +608,7 @@ jobs:
         with:
           #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_e2e.json
-          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
+          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e*
       - name: Update PR comment for success
         if: success() && env.PR_NUMBER != '' && env.SKIP_E2E != 'true'
         uses: artursouza/sticky-pull-request-comment@v2.2.0

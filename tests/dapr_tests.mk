@@ -343,17 +343,38 @@ push-kind-perf-app-all: $(PUSH_KIND_PERF_APPS_TARGETS)
 .PHONY: test-deps
 test-deps:
 	# The desire here is to download this test dependency without polluting go.mod
-	command -v gotestsum || go install gotest.tools/gotestsum@latest
+	command -v gotestsum || go install gotest.tools/gotestsum@v1.13.0
+
+# Packages that must not run concurrently with the rest of the e2e suite:
+# - hotreloading creates and updates resources in the shared test namespace
+#   whose hot reload restarts every daprd sidecar in that namespace
+# - scheduler deletes a scheduler control plane pod, which actor reminders,
+#   jobs and workflows in other packages depend on
+# - job consumes pubsub topics shared with the pubsub packages and asserts on
+#   exact delivery counts
+DAPR_E2E_SERIAL_PACKAGES ?= hotreloading scheduler job
+
+# Compile the e2e test binaries without running them, so that a later
+# test-e2e-all gets a warm build cache. -exec=true builds and links each test
+# binary but replaces its execution with /bin/true, so no TestMain runs and
+# nothing is deployed.
+.PHONY: build-e2e-tests
+build-e2e-tests:
+	GOOS=$(TARGET_OS_LOCAL) go test -tags=e2e -exec=true -count=1 -p 4 ./tests/e2e/...
+
+E2E_TEST_ENV_VARS := DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP)
 
 # start all e2e tests
 test-e2e-all: check-e2e-env test-deps
-	# Note: we can set -p 2 to run two tests apps at a time, because today we do not share state between
-	# tests. In the future, if we add any tests that modify global state (such as dapr config), we'll
-	# have to be sure and run them after the main test suite, so as not to alter the state of a running
-	# test
-	# Note2: use env variable DAPR_E2E_TEST to pick one e2e test to run.
+	# The packages in DAPR_E2E_SERIAL_PACKAGES share cluster-wide state with the
+	# rest of the suite, so they run in a second, fully serial pass. Everything
+	# else runs at -p 3. Both passes always run; the target fails if either did.
+	# Note: use env variable DAPR_E2E_TEST to pick one e2e test to run.
      ifeq ($(DAPR_E2E_TEST),)
-	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 20m -p 2 -count=1 -v -tags=e2e ./tests/e2e/$(DAPR_E2E_TEST)/...
+	ret=0; \
+	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 20m -p 3 -count=1 -v -tags=e2e $$(go list -tags=e2e ./tests/e2e/... | grep -vE "/tests/e2e/($$(echo $(DAPR_E2E_SERIAL_PACKAGES) | tr ' ' '|'))$$") || ret=$$?; \
+	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e_serial.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e_serial.xml --format standard-quiet -- -timeout 20m -p 1 -count=1 -v -tags=e2e $(addprefix ./tests/e2e/,$(DAPR_E2E_SERIAL_PACKAGES)) || ret=$$?; \
+	exit $$ret
      else
 	for app in $(DAPR_E2E_TEST); do \
 		DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 20m -p 2 -count=1 -v -tags=e2e ./tests/e2e/$$app/...; \

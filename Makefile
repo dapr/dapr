@@ -105,7 +105,9 @@ ifeq ($(TARGET_OS_LOCAL),windows)
 else
 	BUILD_TOOLS_BIN ?= build-tools
 	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
-	RUN_BUILD_TOOLS ?= cd .build-tools; GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) go run .
+	# Use the binary produced by compile-build-tools when present; `go run`
+	# re-links the tool on every invocation, which adds up over 48 test apps
+	RUN_BUILD_TOOLS ?= cd .build-tools; GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) $(if $(wildcard $(BUILD_TOOLS)),./$(BUILD_TOOLS_BIN),go run .)
 endif
 
 # Default docker container and e2e test target.
