@@ -39,7 +39,10 @@ import (
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/config"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
@@ -55,7 +58,8 @@ type wakeHarness struct {
 	callReminderErr error
 	deleteErr       error
 	createErrFor    map[string]error
-	reminderGate    chan struct{} // when non-nil, CallReminder blocks on it (or ctx)
+	createGateFor   map[string]chan struct{} // when set, Create for that name blocks on the gate
+	reminderGate    chan struct{}            // when non-nil, CallReminder blocks on it (or ctx)
 
 	attempts atomic.Int64 // CallReminder invocations, successful or not
 	calls    []*actorapi.Reminder
@@ -78,6 +82,11 @@ func newWakeHarness(t *testing.T, instanceID string, fastPath bool) *wakeHarness
 	fakeRems := remindersfake.New().
 		WithCreate(func(_ context.Context, req *actorapi.CreateReminderRequest) error {
 			h.lock.Lock()
+			if gate, ok := h.createGateFor[req.Name]; ok {
+				h.lock.Unlock()
+				<-gate
+				h.lock.Lock()
+			}
 			defer h.lock.Unlock()
 			if err, ok := h.createErrFor[req.Name]; ok {
 				return err
@@ -557,4 +566,143 @@ func Test_localWake_driveLoopLosslessUnderConcurrency(t *testing.T) {
 	}, time.Second*5, time.Millisecond*5)
 
 	require.NoError(t, h.fact.HaltAll(t.Context()))
+}
+
+// A wake whose turn has already durably committed (epoch advanced) must not
+// escalate: the commit drained the inbox, so the durable reminder would be a
+// stray one-shot with a past dueTime firing against a committed instance.
+func Test_escalate_staleEpochSuppressed(t *testing.T) {
+	const instanceID = "test-wake-stale-epoch"
+
+	h := newWakeHarness(t, instanceID, true)
+	h.callReminderErr = errors.New("wake failed")
+	h.reminderGate = make(chan struct{})
+	h.primeRunning(t, instanceID, 7)
+
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+
+	// A turn commits while the drive is parked on the gate.
+	h.orch.wakeEpoch.Add(1)
+
+	// Age both life signals so the failure resolves as stalled, which is the
+	// path that would have escalated before the epoch check.
+	stale := time.Now().Add(-time.Minute).UnixNano()
+	h.orch.lastActive.Store(stale)
+	h.orch.lastProgress.Store(stale)
+	close(h.reminderGate)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.False(c, h.orch.driveRunning.Load(), "the drive loop must wind down")
+	}, time.Second*5, time.Millisecond*5)
+
+	time.Sleep(time.Millisecond * 100)
+	assert.Equal(t, []string{"save", "create:new-event-janitor"}, h.snapshotOps(),
+		"a stale-epoch escalation must not create the durable per-event reminder")
+}
+
+// If the escalation's create is already in flight when the turn commits, the
+// created reminder is a stray: the escalation goroutine must notice the epoch
+// advance after its create succeeds and delete the reminder again.
+func Test_escalate_createAfterCommitCompensated(t *testing.T) {
+	const instanceID = "test-wake-compensate"
+
+	h := newWakeHarness(t, instanceID, true)
+	h.primeRunning(t, instanceID, 7)
+
+	// The escalation's pre-check passes (epoch matches at entry), then a turn
+	// commits while the create is still in flight: gate the create so the
+	// epoch bump deterministically lands before the create succeeds.
+	createGate := make(chan struct{})
+	h.lock.Lock()
+	h.createGateFor = map[string]chan struct{}{"new-event-tc-7": createGate}
+	h.lock.Unlock()
+
+	h.orch.escalate(&driveInfo{
+		reminderName: "new-event-tc-7",
+		dueTime:      time.Now(),
+		wfName:       "TestWorkflow",
+		epoch:        h.orch.wakeEpoch.Load(),
+	})
+
+	h.orch.wakeEpoch.Add(1)
+	close(createGate)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		ops := h.snapshotOps()
+		createIdx, deleteIdx := -1, -1
+		for i, op := range ops {
+			switch op {
+			case "create:new-event-tc-7":
+				createIdx = i
+			case "delete:new-event-tc-7":
+				deleteIdx = i
+			}
+		}
+		if assert.GreaterOrEqual(c, createIdx, 0, "the in-flight escalation create must land") {
+			assert.Greater(c, deleteIdx, createIdx,
+				"the stray reminder must be deleted after the epoch advance is observed")
+		}
+	}, time.Second*10, time.Millisecond*5)
+}
+
+// A terminal cached runtime state paired with a pending ExecutionStarted in
+// the durable view is an impossible pairing in any consistent snapshot; the
+// turn must not run from it (the engine would drop the work item and the
+// follow-up save would resurrect the instance as PENDING with no name).
+func Test_runWorkflow_terminalRstateWithPendingStartRecoverable(t *testing.T) {
+	const instanceID = "test-inconsistent-pairing"
+
+	h := newWakeHarness(t, instanceID, true)
+	h.primeRunning(t, instanceID, 7)
+
+	// Rebuild the cached pairing: state holds ONLY a pending start in the
+	// inbox (empty history), while rstate claims the instance completed.
+	wfState := wfenginestate.NewState(wfenginestate.Options{
+		AppID:             "testapp",
+		Namespace:         "default",
+		WorkflowActorType: "dapr.internal.default.testapp.workflow",
+		ActivityActorType: "dapr.internal.default.testapp.activity",
+	})
+	wfState.AddToInbox(&protos.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ExecutionStarted{
+			ExecutionStarted: &protos.ExecutionStartedEvent{
+				Name:             "TestWorkflow",
+				WorkflowInstance: &protos.WorkflowInstance{InstanceId: instanceID},
+			},
+		},
+	})
+	h.orch.state = wfState
+	h.orch.rstate.CompletedEvent = &protos.ExecutionCompletedEvent{
+		WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED,
+	}
+
+	completed, runErr := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "start-es-1"})
+	require.Error(t, runErr)
+	assert.True(t, wferrors.IsRecoverable(runErr), "the guard must hand recovery to the re-fire")
+	assert.Equal(t, todo.RunCompletedFalse, completed)
+	assert.Nil(t, h.orch.state, "the stale cache must be invalidated")
+	assert.NotContains(t, h.snapshotOps(), "save",
+		"the inconsistent pairing must not produce any state save")
+}
+
+// With stale escalations suppressed by the wake epoch, the janitor's terminal
+// self-delete is the recovery path for a lost retention create: it must
+// re-assert retention (idempotent, deterministic name) before self-deleting.
+func Test_janitor_terminalReassertsRetention(t *testing.T) {
+	const instanceID = "test-janitor-retention"
+
+	h := newWakeHarness(t, instanceID, true)
+	h.primeRunning(t, instanceID, 7)
+	ttl := time.Hour
+	h.orch.retentionPolicy = &config.WorkflowStateRetentionPolicy{AnyTerminal: &ttl}
+	h.orch.rstate.CompletedEvent = &protos.ExecutionCompletedEvent{
+		WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED,
+	}
+
+	require.NoError(t, h.orch.runJanitor(t.Context(), &actorapi.Reminder{Name: janitorReminderName}))
+	ops := h.snapshotOps()
+	assert.Contains(t, ops, "create:retention")
+	assert.Contains(t, ops, "delete:new-event-janitor")
 }
