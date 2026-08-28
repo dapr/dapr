@@ -818,6 +818,8 @@ func TestInvokeServiceContextErrorClassification(t *testing.T) {
 	}{
 		{"deadline exceeded", fmt.Errorf("limiter acquire: %w", context.DeadlineExceeded), codes.DeadlineExceeded},
 		{"canceled", fmt.Errorf("limiter acquire: %w", context.Canceled), codes.Canceled},
+		{"remote deadline status", status.Error(codes.DeadlineExceeded, "remote hop deadline"), codes.DeadlineExceeded},
+		{"remote canceled status", status.Error(codes.Canceled, "remote hop canceled"), codes.Canceled},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -321,6 +321,11 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 			if errors.Is(rErr, context.DeadlineExceeded) || errors.Is(rErr, context.Canceled) {
 				return rResp, status.FromContextError(rErr).Err()
 			}
+			// A remote hop returns the same conditions as already-classified
+			// status errors rather than context sentinels: pass them through.
+			if c := status.Code(rErr); c == codes.DeadlineExceeded || c == codes.Canceled {
+				return rResp, rErr
+			}
 			return rResp, messages.ErrDirectInvoke.WithFormat(in.GetId(), rErr)
 		}
 
