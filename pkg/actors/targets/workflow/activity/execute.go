@@ -21,6 +21,7 @@ import (
 	"time"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/claim"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
@@ -34,7 +35,11 @@ import (
 var errStaleClaimEvicted = wferrors.NewRecoverable(errors.New(
 	"in-flight activity claim evicted as stale (its work item is no longer held by the engine); re-executing"))
 
-func (a *activity) executeActivity(ctx context.Context, name string, invocation *protos.ActivityInvocation, skipLock bool) error {
+// executeActivity runs one activity delivery. gated marks a recovery
+// arrival (scheduler-fired reminder under the fast path): a fresh owner
+// consults the durable execution-claim record first (see claimrecord.go) so
+// a body still live on the previous owner is deferred to, not duplicated.
+func (a *activity) executeActivity(ctx context.Context, name string, invocation *protos.ActivityInvocation, skipLock, gated bool) error {
 	taskEvent := invocation.GetHistoryEvent()
 	activityName := ""
 	if ts := taskEvent.GetTaskScheduled(); ts != nil {
@@ -67,6 +72,12 @@ func (a *activity) executeActivity(ctx context.Context, name string, invocation 
 			return err
 		}
 		if owner {
+			if gated {
+				proceed, gerr := a.gateFreshOwner(ctx, key, call)
+				if !proceed {
+					return gerr
+				}
+			}
 			return a.runOwned(ctx, key, call, name, activityName, workflowID, taskEvent, invocation)
 		}
 
@@ -187,4 +198,31 @@ func (f *factory) actorNotReachable(ctx context.Context, wfActorType, workflowID
 		cancel(nil)
 	}
 	return errors.Is(err, messages.ErrActorNoAddress)
+}
+
+// gateFreshOwner runs the claim-record gate for a fresh-owner recovery
+// arrival. False means the claim was settled and released with the surfaced
+// error (nil = completed ack).
+func (a *activity) gateFreshOwner(ctx context.Context, key string, call *inflight.Call) (bool, error) {
+	outcome, err := a.claims.Check(ctx, a.actorID, key)
+	if err != nil {
+		werr := wferrors.NewRecoverable(fmt.Errorf("failed to read the execution-claim record: %w", err))
+		call.Finish(werr)
+		a.inflight.Release(key, call)
+		return false, werr
+	}
+	switch outcome {
+	case claim.Defer:
+		log.Infof("Activity actor '%s': execution claim is live on another host; deferring", a.actorID)
+		call.Finish(claim.ErrHeldElsewhere)
+		a.inflight.Release(key, call)
+		return false, claim.ErrHeldElsewhere
+	case claim.Completed:
+		log.Infof("Activity actor '%s': execution completed on its previous host; acking without re-executing", a.actorID)
+		call.Finish(nil)
+		a.inflight.ReleaseAfter(key, call, InflightCacheTTL)
+		return false, nil
+	default:
+		return true, nil
+	}
 }
