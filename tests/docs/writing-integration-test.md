@@ -195,5 +195,18 @@ Finally, include your integration test directory with a blank identifier to
 You may need to extend the framework options to suit your test scenario. These
 are defined in `tests/integration/framework`.
 
+Anything in your test that takes a logger should be given `logger.New(t)` from
+`tests/integration/framework/iowriter/logger`, so its output is captured with
+the rest of the test's rather than printed to the terminal. This matters most
+for workflow clients:
+
+```go
+client.NewTaskHubGrpcClient(daprd.GRPCConn(t, ctx), logger.New(t))
+dworkflow.NewClientWithLogger(daprd.GRPCConn(t, ctx), logger.New(t))
+```
+
+`backend.DefaultLogger()` writes straight to stderr and cannot be redirected
+afterwards, so a lint rule rejects it.
+
 Take a look at `tests/integration/suite/ports/ports.go` as a "hello world"
 example to base your test on.

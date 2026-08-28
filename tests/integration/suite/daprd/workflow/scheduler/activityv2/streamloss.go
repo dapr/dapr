@@ -26,6 +26,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -33,7 +34,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -115,7 +115,7 @@ func (a *streamloss) Run(t *testing.T, ctx context.Context) {
 
 	lctx, lcancel := context.WithCancel(ctx)
 	t.Cleanup(lcancel)
-	client1 := client.NewTaskHubGrpcClient(conn1, backend.DefaultLogger())
+	client1 := client.NewTaskHubGrpcClient(conn1, logger.New(t))
 	require.NoError(t, client1.StartWorkItemListener(lctx, newRegistry(func(task.ActivityContext) (any, error) {
 		select {
 		case started <- struct{}{}:
@@ -153,7 +153,7 @@ func (a *streamloss) Run(t *testing.T, ctx context.Context) {
 
 	conn2 := dial()
 	t.Cleanup(func() { _ = conn2.Close() })
-	client2 := client.NewTaskHubGrpcClient(conn2, backend.DefaultLogger())
+	client2 := client.NewTaskHubGrpcClient(conn2, logger.New(t))
 	require.NoError(t, client2.StartWorkItemListener(ctx, newRegistry(func(task.ActivityContext) (any, error) {
 		return "recovered", nil
 	})))
