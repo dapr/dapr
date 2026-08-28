@@ -58,24 +58,60 @@ func Test_reapEscalatedCompletions(t *testing.T) {
 	t.Parallel()
 	const instanceID = "wf-reap-completion"
 
-	t.Run("a committed completion reaps its escalated reminder", func(t *testing.T) {
+	t.Run("a committed resolution reaps its escalated reminder", func(t *testing.T) {
 		t.Parallel()
 		h := newWakeHarness(t, instanceID, true)
 		h.primeRunning(t, instanceID, 7)
-		h.orch.janitorEscalated = map[int32]struct{}{7: {}}
+		h.orch.janitorRedispatchedGen = h.orch.state.Generation
+		h.orch.janitorEscalated = map[int32]*backend.HistoryEvent{7: h.orch.state.History[1]}
+		h.orch.state.AddToHistory(taskCompletedEvent(7))
 
-		h.orch.reapEscalatedCompletions([]*backend.HistoryEvent{taskCompletedEvent(7)})
+		h.orch.reapEscalatedCompletions(h.orch.state)
 		assert.Empty(t, h.orch.janitorEscalated, "a reaped task must not be reaped again")
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Contains(c, h.snapshotOps(), "delete:run-activity")
 		}, time.Second*5, time.Millisecond*5)
 	})
 
-	t.Run("a cross-app completion reaps on the remote activity actor type", func(t *testing.T) {
+	t.Run("an unresolved task keeps its mark and reminder", func(t *testing.T) {
 		t.Parallel()
 		h := newWakeHarness(t, instanceID, true)
 		h.primeRunning(t, instanceID, 7)
-		h.orch.janitorEscalated = map[int32]struct{}{7: {}}
+		h.orch.janitorRedispatchedGen = h.orch.state.Generation
+		h.orch.janitorEscalated = map[int32]*backend.HistoryEvent{7: h.orch.state.History[1]}
+
+		h.orch.reapEscalatedCompletions(h.orch.state)
+		assert.Len(t, h.orch.janitorEscalated, 1)
+		assert.NotContains(t, h.snapshotOps(), "delete:run-activity")
+	})
+
+	t.Run("a generation change voids the marks without reaping", func(t *testing.T) {
+		t.Parallel()
+		h := newWakeHarness(t, instanceID, true)
+		h.primeRunning(t, instanceID, 7)
+		h.orch.janitorRedispatchedGen = h.orch.state.Generation
+		h.orch.janitorEscalated = map[int32]*backend.HistoryEvent{7: h.orch.state.History[1]}
+		h.orch.state.AddToHistory(taskCompletedEvent(7))
+		h.orch.state.Generation++
+
+		h.orch.reapEscalatedCompletions(h.orch.state)
+		assert.Empty(t, h.orch.janitorEscalated,
+			"stale-generation marks are void: their reminder identity is shared with the new generation")
+		assert.NotContains(t, h.snapshotOps(), "delete:run-activity",
+			"a stale-generation mark must not delete a reminder the new generation may own")
+	})
+
+	t.Run("a cross-app resolution reaps on the remote activity actor type", func(t *testing.T) {
+		t.Parallel()
+		h := newWakeHarness(t, instanceID, true)
+		h.primeRunning(t, instanceID, 7)
+
+		target := "otherapp"
+		scheduled := h.orch.state.History[1]
+		scheduled.Router = &protos.TaskRouter{SourceAppID: "testapp", TargetAppID: &target}
+		h.orch.janitorRedispatchedGen = h.orch.state.Generation
+		h.orch.janitorEscalated = map[int32]*backend.HistoryEvent{7: scheduled}
+		h.orch.state.AddToHistory(taskCompletedEvent(7))
 
 		reqCh := make(chan *actorapi.DeleteReminderRequest, 1)
 		h.fact.reminders = remindersfake.New().WithDelete(func(_ context.Context, req *actorapi.DeleteReminderRequest) error {
@@ -83,9 +119,7 @@ func Test_reapEscalatedCompletions(t *testing.T) {
 			return nil
 		})
 
-		completion := taskCompletedEvent(7)
-		completion.Router = &protos.TaskRouter{SourceAppID: "otherapp"}
-		h.orch.reapEscalatedCompletions([]*backend.HistoryEvent{completion})
+		h.orch.reapEscalatedCompletions(h.orch.state)
 
 		select {
 		case req := <-reqCh:
@@ -96,16 +130,5 @@ func Test_reapEscalatedCompletions(t *testing.T) {
 		case <-time.After(time.Second * 5):
 			require.Fail(t, "the reap delete never reached the reminder store")
 		}
-	})
-
-	t.Run("completions of unescalated tasks are ignored", func(t *testing.T) {
-		t.Parallel()
-		h := newWakeHarness(t, instanceID, true)
-		h.primeRunning(t, instanceID, 7)
-		h.orch.janitorEscalated = map[int32]struct{}{9: {}}
-
-		h.orch.reapEscalatedCompletions([]*backend.HistoryEvent{taskCompletedEvent(7)})
-		assert.Len(t, h.orch.janitorEscalated, 1)
-		assert.NotContains(t, h.snapshotOps(), "delete:run-activity")
 	})
 }

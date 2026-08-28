@@ -145,4 +145,7 @@ func (e *failed) Run(t *testing.T, ctx context.Context) {
 		assert.Zero(c, e.workflow.Scheduler().JobKeyCount(t, ctx, "run-activity"),
 			"no run-activity reminder may outlive its workflow")
 	}, time.Second*30, time.Millisecond*10)
+
+	assert.Equal(t, int64(batch), executions.Load(),
+		"every failing body must run exactly once; a reaped reminder cannot fire")
 }

@@ -21,6 +21,7 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
@@ -68,29 +69,37 @@ func (o *orchestrator) reapResolvedEscalation(ctx context.Context, e *backend.Hi
 }
 
 // reapEscalatedCompletions reaps the durable run-activity reminder of every
-// escalated task whose completion the turn just committed: the completion's
-// execution predates the escalation, so nothing else deletes the reminder and
-// its fire would re-run the body on a cold host. Runs under the turn lock,
+// escalated task the just-committed turn resolved, judged against the
+// committed state rather than the turn's incoming events: a stale completion
+// (e.g. a prior generation's) must not reap a live reminder, and the
+// reminder identity (workflow ID and task ID) carries no generation. Marks
+// from a previous generation are voided rather than reaped for the same
+// reason: a delete could race the new generation's re-dispatch of the same
+// task ID, and a leaked stale fire self-cleans (its completion is dropped
+// as stale and the ack deletes the reminder). Runs under the turn lock,
 // after the commit is durable.
-func (o *orchestrator) reapEscalatedCompletions(events []*backend.HistoryEvent) {
+func (o *orchestrator) reapEscalatedCompletions(state *wfenginestate.State) {
 	if len(o.janitorEscalated) == 0 {
 		return
 	}
-	for _, e := range events {
-		var id int32
-		switch {
-		case e.GetTaskCompleted() != nil:
-			id = e.GetTaskCompleted().GetTaskScheduledId()
-		case e.GetTaskFailed() != nil:
-			id = e.GetTaskFailed().GetTaskScheduledId()
-		default:
-			continue
-		}
-		if _, ok := o.janitorEscalated[id]; !ok {
+	if o.janitorRedispatchedGen != state.Generation {
+		o.janitorEscalated = nil
+		return
+	}
+	unresolved := make(map[int32]struct{})
+	for _, u := range unresolvedScheduledTasks(state, o.foldEvents()) {
+		unresolved[u.GetEventId()] = struct{}{}
+	}
+	for id, e := range o.janitorEscalated {
+		if _, still := unresolved[id]; still {
 			continue
 		}
 		delete(o.janitorEscalated, id)
-		o.reapEscalatedReminder(e.GetRouter().GetSourceAppID(), id)
+		appID := ""
+		if router := e.GetRouter(); router != nil && router.TargetAppID != nil {
+			appID = router.GetTargetAppID()
+		}
+		o.reapEscalatedReminder(appID, id)
 	}
 }
 

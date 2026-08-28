@@ -102,12 +102,13 @@ type orchestrator struct {
 	// INVARIANT: only touched by janitor fires, which hold the turn lock.
 	janitorRedispatched map[int32]struct{}
 
-	// janitorEscalated records the task IDs whose re-dispatch escalated to
-	// the durable run-activity reminder this residency, so the turn that
-	// commits the task's completion can reap the reminder (the completion's
-	// own execution never knew it existed; see reapEscalatedCompletions).
-	// Same guard and generation scope as janitorRedispatched.
-	janitorEscalated map[int32]struct{}
+	// janitorEscalated records, per task ID, the TaskScheduled event whose
+	// re-dispatch escalated to the durable run-activity reminder this
+	// residency, so the turn that commits the task's resolution can reap the
+	// reminder (the resolving execution never knew it existed; see
+	// reapEscalatedCompletions). Same guard and generation scope as
+	// janitorRedispatched.
+	janitorEscalated map[int32]*backend.HistoryEvent
 	lock             *lock.Stallable
 	closed           atomic.Bool
 	wg               sync.WaitGroup

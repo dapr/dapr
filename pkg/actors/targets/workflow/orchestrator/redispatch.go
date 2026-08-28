@@ -144,9 +144,9 @@ func (o *orchestrator) redispatchActivities(ctx context.Context, state *wfengine
 			if _, ok := o.janitorRedispatched[id]; ok {
 				durable[id] = true
 				if o.janitorEscalated == nil {
-					o.janitorEscalated = make(map[int32]struct{})
+					o.janitorEscalated = make(map[int32]*backend.HistoryEvent)
 				}
-				o.janitorEscalated[id] = struct{}{}
+				o.janitorEscalated[id] = e
 			} else {
 				o.janitorRedispatched[id] = struct{}{}
 			}
