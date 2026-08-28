@@ -634,8 +634,10 @@ func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefiniti
 		if policyNames.CircuitBreaker != "" {
 			template, ok := r.circuitBreakers[policyNames.CircuitBreaker]
 			if ok {
-				cache, ok := r.serviceCBs[app]
-				if ok {
+				cache, err := r.getServiceCBCache(app)
+				if err != nil {
+					r.log.Errorf("Failed to get CB cache for %s: %v", app, err)
+				} else {
 					policyDef.cb, ok = cache.Get(endpoint)
 					if !ok || policyDef.cb == nil {
 						policyDef.cb = newCB(endpoint, template, r.log)
@@ -768,8 +770,10 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 		if policyNames.CircuitBreaker != "" {
 			template, ok := r.circuitBreakers[policyNames.CircuitBreaker]
 			if ok {
-				cache, ok := r.actorCBCaches[actorType]
-				if ok {
+				cache, err := r.getActorCBCache(actorType)
+				if err != nil {
+					r.log.Errorf("Failed to get actor CB cache for %s: %v", actorType, err)
+				} else {
 					var key string
 					if policyNames.CircuitBreakerScope == ActorCircuitBreakerScopeType {
 						key = actorType
