@@ -42,6 +42,13 @@ func (a *activity) createReminder(ctx context.Context, invocation *protos.Activi
 // rather than the *activity because the drive-failure escalation path may
 // outlive the actor object (HaltAll recycles it).
 func (f *factory) createActivityReminder(ctx context.Context, actorID string, invocation *protos.ActivityInvocation, dueTime time.Time, activityName *string) error {
+	// Clamp a past dueTime to now: the scheduler paces failure retries from
+	// the scheduled time, so a stale dueTime replays the whole elapsed
+	// backlog as a burst on every failed trigger.
+	if now := time.Now(); dueTime.Before(now) {
+		dueTime = now
+	}
+
 	log.Debugf("Activity actor '%s||%s': creating reminder '%s' with dueTime=%s", f.actorType, actorID, activityReminderName, dueTime)
 
 	anydata, err := anypb.New(invocation)
