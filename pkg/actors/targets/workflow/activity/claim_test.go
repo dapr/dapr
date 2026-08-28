@@ -108,6 +108,18 @@ func (s *recordStore) set(t *testing.T, actorID string, rec claim.Record) {
 	s.etag[actorID]++
 }
 
+// checkUntil polls Check every 75ms until it returns want: a single sleep
+// between reads races the 2x observation prune window on slow runners.
+func checkUntil(t *testing.T, g *claim.Guards, actorID, key string, want claim.Outcome, msgAndArgs ...any) {
+	t.Helper()
+	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+		outcome, err := g.Check(t.Context(), actorID, key)
+		if assert.NoError(col, err) {
+			assert.Equal(col, want, outcome)
+		}
+	}, time.Second*5, time.Millisecond*75, msgAndArgs...)
+}
+
 func newClaimHarness(t *testing.T) (*factory, *recordStore, chan *backend.ActivityWorkItem) {
 	t.Helper()
 	store := newRecordStore()
@@ -417,12 +429,14 @@ func Test_checkClaimRecord(t *testing.T) {
 		_, ok := store.get(t, actorID)
 		assert.True(t, ok, "the record cannot read dead on a single observation")
 
-		time.Sleep(time.Millisecond * 75)
-		outcome, err = f.claims.Check(t.Context(), actorID, key)
-		require.NoError(t, err)
-		assert.Equal(t, claim.Proceed, outcome)
-		_, ok = store.get(t, actorID)
-		assert.False(t, ok, "a dead old-run record must not leak")
+		assert.EventuallyWithT(t, func(col *assert.CollectT) {
+			outcome, err := f.claims.Check(t.Context(), actorID, key)
+			if assert.NoError(col, err) {
+				assert.Equal(col, claim.Proceed, outcome)
+			}
+			_, ok := store.get(t, actorID)
+			assert.False(col, ok, "a dead old-run record must not leak")
+		}, time.Second*5, time.Millisecond*75)
 	})
 
 	t.Run("live record from another scheduling is ignored but kept", func(t *testing.T) {
@@ -449,12 +463,14 @@ func Test_checkClaimRecord(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, claim.Defer, outcome, "a single observation cannot read stale")
 
-		time.Sleep(time.Millisecond * 75)
-		outcome, err = f.claims.Check(t.Context(), actorID, key)
-		require.NoError(t, err)
-		assert.Equal(t, claim.Proceed, outcome)
-		_, ok := store.get(t, actorID)
-		assert.False(t, ok, "a stale record is dead weight and must be reclaimed")
+		assert.EventuallyWithT(t, func(col *assert.CollectT) {
+			outcome, err := f.claims.Check(t.Context(), actorID, key)
+			if assert.NoError(col, err) {
+				assert.Equal(col, claim.Proceed, outcome)
+			}
+			_, ok := store.get(t, actorID)
+			assert.False(col, ok, "a stale record is dead weight and must be reclaimed")
+		}, time.Second*5, time.Millisecond*75)
 	})
 
 	t.Run("skewed past heartbeat is not insta-reclaimed", func(t *testing.T) {
@@ -473,10 +489,7 @@ func Test_checkClaimRecord(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, claim.Defer, outcome, "cross-host clock skew must not reclaim a live execution")
 
-		time.Sleep(time.Millisecond * 75)
-		outcome, err = f.claims.Check(t.Context(), actorID, key)
-		require.NoError(t, err)
-		assert.Equal(t, claim.Proceed, outcome, "a value frozen past the grace is dead regardless of skew")
+		checkUntil(t, f.claims, actorID, key, claim.Proceed, "a value frozen past the grace is dead regardless of skew")
 	})
 
 	t.Run("skewed future heartbeat defers and later reclaims", func(t *testing.T) {
@@ -492,10 +505,7 @@ func Test_checkClaimRecord(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, claim.Defer, outcome)
 
-		time.Sleep(time.Millisecond * 75)
-		outcome, err = f.claims.Check(t.Context(), actorID, key)
-		require.NoError(t, err)
-		assert.Equal(t, claim.Proceed, outcome, "a frozen future timestamp must not shield a dead guard forever")
+		checkUntil(t, f.claims, actorID, key, claim.Proceed, "a frozen future timestamp must not shield a dead guard forever")
 	})
 
 	t.Run("heartbeat change resets the observation window", func(t *testing.T) {
@@ -517,10 +527,7 @@ func Test_checkClaimRecord(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, claim.Defer, outcome, "a changed heartbeat proves the guard lives; the window must restart")
 
-		time.Sleep(time.Millisecond * 75)
-		outcome, err = f.claims.Check(t.Context(), actorID, key)
-		require.NoError(t, err)
-		assert.Equal(t, claim.Proceed, outcome)
+		checkUntil(t, f.claims, actorID, key, claim.Proceed)
 	})
 
 	t.Run("failed reclaim delete defers instead of proceeding", func(t *testing.T) {
@@ -619,15 +626,28 @@ func Test_executeActivity_recoveryGate(t *testing.T) {
 
 		a := f.GetOrCreate(actorID).(*activity)
 
-		// The first arrival opens the observation window and defers; the
-		// retry past the grace observes the frozen value and reclaims.
+		// The first arrival opens the observation window and defers; a
+		// later retry observes the frozen value and reclaims. Arrivals are
+		// retried in a loop like real recovery arrivals: a single sleep
+		// must land between StaleAfter and the 2x prune window, a margin a
+		// loaded runner can miss.
 		err := a.executeActivity(t.Context(), activityReminderName, testInvocation(), false, true)
 		require.ErrorIs(t, err, claim.ErrHeldElsewhere)
-		time.Sleep(time.Millisecond * 75)
 
 		ownerErr := make(chan error, 1)
 		go func() {
-			ownerErr <- a.executeActivity(t.Context(), activityReminderName, testInvocation(), false, true)
+			for {
+				err := a.executeActivity(t.Context(), activityReminderName, testInvocation(), false, true)
+				if !errors.Is(err, claim.ErrHeldElsewhere) {
+					ownerErr <- err
+					return
+				}
+				select {
+				case <-t.Context().Done():
+					return
+				case <-time.After(time.Millisecond * 75):
+				}
+			}
 		}()
 
 		var wi *backend.ActivityWorkItem
@@ -735,14 +755,16 @@ func Test_gateJanitorRedispatch(t *testing.T) {
 		_, ok := store.get(t, actorID)
 		assert.True(t, ok, "a fresh completed row is retained for in-flight recovery arrivals")
 
-		// A later read past the grace (but inside the 2x prune window, so the
-		// observation survives) still acks and reaps the row.
-		time.Sleep(75 * time.Millisecond)
-		handled, err = a.gateJanitorRedispatch(t.Context(), testInvocation())
-		assert.True(t, handled)
-		require.NoError(t, err)
-		_, ok = store.get(t, actorID)
-		assert.False(t, ok, "a stale completed row must not linger forever")
+		// Later reads past the grace still ack and reap the row; reads are
+		// paced so consecutive observations land inside the prune window.
+		assert.EventuallyWithT(t, func(col *assert.CollectT) {
+			handled, err = a.gateJanitorRedispatch(t.Context(), testInvocation())
+			assert.True(col, handled)
+			if assert.NoError(col, err) {
+				_, ok := store.get(t, actorID)
+				assert.False(col, ok, "a stale completed row must not linger forever")
+			}
+		}, time.Second*5, time.Millisecond*75)
 	})
 
 	t.Run("missing record proceeds", func(t *testing.T) {
