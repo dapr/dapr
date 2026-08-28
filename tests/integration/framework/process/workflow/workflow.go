@@ -343,9 +343,6 @@ func (w *Workflow) GRPCClientN(t *testing.T, ctx context.Context, index int) rtv
 	return w.daprds[index].GRPCClient(t, ctx)
 }
 
-// ClusteredDeployment reports whether every daprd in this workflow runs with
-// the WorkflowsClusteredDeployment feature flag enabled. Tests use this to
-// branch assertions which differ between the two modes.
 func baseFeatureList(clustered bool) []string {
 	features := make([]string, 0, 1)
 	if clustered {
@@ -354,10 +351,11 @@ func baseFeatureList(clustered bool) []string {
 	return features
 }
 
-// FeatureOptions returns the feature manifest option matching this harness's
-// daprds. Tests spawning extra daprds into the cluster must apply it so the
-// extras run the same workflow feature set (daprd's config merge makes the
-// last spec.features list win, so all features must land in one manifest).
+// FeatureOptions returns the feature manifest option for extra daprds a test
+// adds to this harness's cluster. Only cluster-wide features are covered:
+// WorkflowHistorySigning is per-daprd and needs the harness's sentry wiring
+// besides the flag. daprd's config merge makes the last spec.features list
+// win, so all features must land in one manifest.
 func (w *Workflow) FeatureOptions(t *testing.T) []daprd.Option {
 	features := baseFeatureList(w.clustered)
 	if len(features) == 0 {
@@ -366,6 +364,9 @@ func (w *Workflow) FeatureOptions(t *testing.T) []daprd.Option {
 	return []daprd.Option{daprd.WithFeatureEnabled(t, features...)}
 }
 
+// ClusteredDeployment reports whether every daprd in this workflow runs with
+// the WorkflowsClusteredDeployment feature flag enabled. Tests use this to
+// branch assertions which differ between the two modes.
 func (w *Workflow) ClusteredDeployment() bool {
 	return w.clustered
 }
