@@ -83,6 +83,7 @@ type Options struct {
 
 	EnableClusteredDeployment       bool
 	WorkflowsRemoteActivityReminder bool
+	WorkflowsFastPath               bool
 	WorkflowHistorySigning          bool
 
 	// MaxRequestBodySize is the gRPC server max message size in bytes. The
@@ -143,6 +144,15 @@ func New(opts Options) (Interface, error) {
 		return nil, errors.New("WorkflowHistorySigning feature flag is enabled but mTLS is not configured; workflow history signing requires mTLS to be active")
 	}
 
+	// Scheduler-enforced concurrency limits gate per job delivery, which
+	// the fast path's local drives bypass: fall back to durable reminders
+	// when limits are configured.
+	fastPath := opts.WorkflowsFastPath
+	if fastPath && opts.Spec.HasSchedulerConcurrencyLimits() {
+		log.Info("WorkflowsFastPath is enabled but scheduler-enforced workflow concurrency limits are configured; disabling the fast path so the limits are enforced")
+		fastPath = false
+	}
+
 	// If no backend was initialized by the manager, create a backend backed by actors
 	abackend, err := backendactors.New(backendactors.Options{
 		AppID:                  opts.AppID,
@@ -158,6 +168,7 @@ func New(opts Options) (Interface, error) {
 
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
+		WorkflowsFastPath:               fastPath,
 	})
 	if err != nil {
 		return nil, err
@@ -185,6 +196,10 @@ func New(opts Options) (Interface, error) {
 		wfe.actorRegLock.Lock()
 		defer wfe.actorRegLock.Unlock()
 		if wfe.mcpRegistrationCount.Add(-1) == 0 && wfe.getWorkItemsCount.Load() == 0 && wfe.actorsRegistered {
+			// Cancel parked work-item completions BEFORE unregistering:
+			// UnRegisterActors' HaltAll waits on the actor turn locks those
+			// completions hold, and with no executor nothing can deliver them.
+			wfe.syncExecutorAvailable()
 			err := abackend.UnRegisterActors(context.Background())
 			wfe.actorsRegistered = false
 			if err != nil {
@@ -194,43 +209,8 @@ func New(opts Options) (Interface, error) {
 	})
 
 	grpcExec, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
-		backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
-			wfe.actorRegLock.Lock()
-			defer wfe.actorRegLock.Unlock()
-
-			wfe.getWorkItemsCount.Add(1)
-			if !wfe.actorsRegistered {
-				log.Debug("Registering workflow actors")
-				if err := abackend.RegisterActors(ctx); err != nil {
-					wfe.getWorkItemsCount.Add(-1)
-					return err
-				}
-				wfe.actorsRegistered = true
-			}
-
-			return nil
-		}),
-		backend.WithOnGetWorkItemsDisconnectCallback(func(ctx context.Context) error {
-			wfe.actorRegLock.Lock()
-			defer wfe.actorRegLock.Unlock()
-
-			if ctx.Err() != nil {
-				ctx = context.Background()
-			}
-
-			if wfe.getWorkItemsCount.Add(-1) == 0 && wfe.mcpRegistrationCount.Load() == 0 && wfe.actorsRegistered {
-				log.Debug("Unregistering workflow actors")
-				// Reset unconditionally: UnRegisterActors removes types from the
-				// table before HaltAll, so an error here still means they're gone.
-				err := abackend.UnRegisterActors(ctx)
-				wfe.actorsRegistered = false
-				if err != nil {
-					return err
-				}
-			}
-
-			return nil
-		}),
+		backend.WithOnGetWorkItemsConnectionCallback(wfe.onWorkItemConnection),
+		backend.WithOnGetWorkItemsDisconnectCallback(wfe.onWorkItemDisconnection),
 		backend.WithStreamSendTimeout(time.Second*10),
 		backend.WithStreamShutdownChannel(wfe.streamShutdownCh),
 	)
@@ -283,15 +263,77 @@ func (wfe *engine) EnsureActorsRegistered(ctx context.Context) error {
 	defer wfe.actorRegLock.Unlock()
 
 	wfe.mcpRegistrationCount.Add(1)
+	wfe.syncExecutorAvailable()
 	if !wfe.actorsRegistered {
 		log.Debug("Registering workflow actors for internal workflows")
 		if err := wfe.backend.RegisterActors(ctx); err != nil {
 			wfe.mcpRegistrationCount.Add(-1)
+			wfe.syncExecutorAvailable()
 			return err
 		}
 		wfe.actorsRegistered = true
 	}
 	return nil
+}
+
+func (wfe *engine) onWorkItemConnection(ctx context.Context) error {
+	wfe.actorRegLock.Lock()
+	defer wfe.actorRegLock.Unlock()
+
+	wfe.getWorkItemsCount.Add(1)
+	wfe.syncExecutorAvailable()
+	if !wfe.actorsRegistered {
+		log.Debug("Registering workflow actors")
+		if err := wfe.backend.RegisterActors(ctx); err != nil {
+			// No compensating decrement: the executor invokes the paired
+			// disconnect callback also when this callback errors, and a
+			// second decrement would drift the count negative for good.
+			return err
+		}
+		wfe.actorsRegistered = true
+	}
+
+	return nil
+}
+
+func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
+	wfe.actorRegLock.Lock()
+	defer wfe.actorRegLock.Unlock()
+
+	if ctx.Err() != nil {
+		ctx = context.Background()
+	}
+
+	last := wfe.getWorkItemsCount.Add(-1) == 0 && wfe.mcpRegistrationCount.Load() == 0
+	if last {
+		// Cancel parked work-item completions BEFORE unregistering:
+		// UnRegisterActors' HaltAll waits on the actor turn locks
+		// those completions hold, and with no executor connected
+		// nothing can ever deliver them. A turn racing in after the
+		// sweep is cancelled at registration by the tracker.
+		wfe.syncExecutorAvailable()
+	}
+
+	if last && wfe.actorsRegistered {
+		log.Debug("Unregistering workflow actors")
+		// Reset unconditionally: UnRegisterActors removes types from the
+		// table before HaltAll, so an error here still means they're gone.
+		err := wfe.backend.UnRegisterActors(ctx)
+		wfe.actorsRegistered = false
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// syncExecutorAvailable pushes current executor connectivity to the backend's
+// pending-tasks tracker. Must be called with actorRegLock held. Flipping to
+// unavailable cancels every parked work-item completion (see pendingTracker
+// in the actors backend).
+func (wfe *engine) syncExecutorAvailable() {
+	wfe.backend.SetExecutorAvailable(wfe.getWorkItemsCount.Load() > 0 || wfe.mcpRegistrationCount.Load() > 0)
 }
 
 // RegisterMCPServer installs workflows and ensures actors are registered.
@@ -323,6 +365,8 @@ func (wfe *engine) UnregisterMCPServer(serverName string) {
 	defer wfe.actorRegLock.Unlock()
 
 	if wfe.mcpRegistrationCount.Add(-1) == 0 && wfe.getWorkItemsCount.Load() == 0 && wfe.actorsRegistered {
+		// Sweep parked completions before HaltAll; see the disconnect callback.
+		wfe.syncExecutorAvailable()
 		log.Debug("Unregistering workflow actors")
 		err := wfe.backend.UnRegisterActors(context.Background())
 		wfe.actorsRegistered = false

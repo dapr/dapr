@@ -14,7 +14,10 @@ limitations under the License.
 package activity
 
 import (
+	"context"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,6 +25,8 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -203,4 +208,137 @@ func Test_ReminderPayload_NilPropagation(t *testing.T) {
 	require.NotNil(t, decoded.GetHistoryEvent())
 	assert.Equal(t, "plainActivity", decoded.GetHistoryEvent().GetTaskScheduled().GetName())
 	assert.Nil(t, decoded.GetPropagatedHistory(), "nil propagation should remain nil after round-trip")
+}
+
+// captureScheduler is a scheduler.Interface stub that records every
+// CreateReminderRequest so tests can assert on the failure policy.
+type captureScheduler struct {
+	mu      sync.Mutex
+	creates []*actorapi.CreateReminderRequest
+}
+
+func (c *captureScheduler) Close() error { return nil }
+
+func (c *captureScheduler) Get(context.Context, *actorapi.GetReminderRequest) (*actorapi.Reminder, error) {
+	return nil, nil
+}
+
+func (c *captureScheduler) Create(_ context.Context, req *actorapi.CreateReminderRequest) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.creates = append(c.creates, req)
+	return nil
+}
+
+func (c *captureScheduler) Delete(context.Context, *actorapi.DeleteReminderRequest) error {
+	return nil
+}
+
+func (c *captureScheduler) DeleteByActorID(context.Context, *actorapi.DeleteRemindersByActorIDRequest) error {
+	return nil
+}
+
+func (c *captureScheduler) List(context.Context, *actorapi.ListRemindersRequest) ([]*actorapi.Reminder, error) {
+	return nil, nil
+}
+
+// Test_reminderRetryPoliciesAreJittered pins the retry failure policy on the
+// activity and activity-result reminder create paths: retry forever with a
+// jittered interval drawn from [RetryBackoffBase, RetryBackoffCap), not a
+// constant 1s that retries every failed reminder in the fleet in lockstep.
+func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
+	t.Parallel()
+
+	sched := &captureScheduler{}
+	f := &factory{
+		actorType:         "dapr.internal.default.testapp.activity",
+		workflowActorType: "dapr.internal.default.testapp.workflow",
+		reminders:         sched,
+	}
+
+	a := newActivity()
+	a.factory = f
+	a.actorID = "activity-1"
+
+	invocation := &protos.ActivityInvocation{
+		HistoryEvent: &protos.HistoryEvent{
+			EventId: 1,
+			EventType: &protos.HistoryEvent_TaskScheduled{
+				TaskScheduled: &protos.TaskScheduledEvent{Name: "act"},
+			},
+		},
+	}
+	require.NoError(t, a.createReminder(t.Context(), invocation, time.Now(), nil))
+
+	result := &backend.HistoryEvent{
+		EventId: -1,
+		EventType: &protos.HistoryEvent_TaskCompleted{
+			TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 1},
+		},
+	}
+	require.NoError(t, f.createWorkflowResultReminder(t.Context(), f.workflowActorType, "wf-1", result))
+
+	// Repeated creates so the decorrelation assertion below has enough draws.
+	for range 50 {
+		require.NoError(t, a.createReminder(t.Context(), invocation, time.Now(), nil))
+	}
+
+	sched.mu.Lock()
+	defer sched.mu.Unlock()
+	require.Len(t, sched.creates, 52)
+
+	seen := make(map[time.Duration]struct{})
+	for _, req := range sched.creates {
+		constant := req.FailurePolicy.GetConstant()
+		require.NotNil(t, constant)
+		assert.Nil(t, constant.MaxRetries)
+
+		interval := constant.GetInterval().AsDuration()
+		assert.GreaterOrEqual(t, interval, common.RetryBackoffBase)
+		assert.Less(t, interval, common.RetryBackoffCap)
+		seen[interval] = struct{}{}
+	}
+
+	// Draws must actually decorrelate across creates.
+	assert.Greater(t, len(seen), 1)
+}
+
+// Test_createReminderClampsPastDueTime: a past dueTime would replay the
+// elapsed backlog as a retry burst on every failed trigger.
+func Test_createReminderClampsPastDueTime(t *testing.T) {
+	t.Parallel()
+
+	sched := &captureScheduler{}
+	f := &factory{
+		actorType: "dapr.internal.default.testapp.activity",
+		reminders: sched,
+	}
+
+	invocation := &protos.ActivityInvocation{
+		HistoryEvent: &protos.HistoryEvent{
+			EventId: 1,
+			EventType: &protos.HistoryEvent_TaskScheduled{
+				TaskScheduled: &protos.TaskScheduledEvent{Name: "act"},
+			},
+		},
+	}
+
+	start := time.Now()
+	require.NoError(t, f.createActivityReminder(t.Context(), "activity-1", invocation, start.Add(-time.Hour), nil))
+
+	future := start.Add(time.Hour)
+	require.NoError(t, f.createActivityReminder(t.Context(), "activity-1", invocation, future, nil))
+
+	sched.mu.Lock()
+	defer sched.mu.Unlock()
+	require.Len(t, sched.creates, 2)
+
+	clamped, err := time.Parse(time.RFC3339Nano, sched.creates[0].DueTime)
+	require.NoError(t, err)
+	assert.False(t, clamped.Before(start), "a past dueTime must be clamped to the create time")
+	assert.False(t, clamped.After(time.Now()))
+
+	kept, err := time.Parse(time.RFC3339Nano, sched.creates[1].DueTime)
+	require.NoError(t, err)
+	assert.True(t, kept.Equal(future), "a future dueTime must be preserved so delays are honoured")
 }

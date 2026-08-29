@@ -2673,16 +2673,31 @@ func TestInvokeBinding(t *testing.T) {
 	_, err = client.InvokeBinding(t.Context(), &runtimev1pb.InvokeBindingRequest{Name: "error-binding"})
 	assert.Equal(t, codes.Internal, status.Code(err))
 
-	ctx := grpcMetadata.AppendToOutgoingContext(t.Context(), "traceparent", "Test", "userMetadata", "overwrited", "additional", "val2")
+	binVal := string([]byte{0x00, 0x09, 0xde, 0xad})
+	ctx := grpcMetadata.AppendToOutgoingContext(t.Context(),
+		"traceparent", "Test",
+		"tracestate", "key=value",
+		"baggage", "k1=v1",
+		"userMetadata", "overwrited",
+		"additional", "val2",
+		"grpc-trace-bin", binVal,
+		"foo-bin", binVal,
+	)
 	resp, err := client.InvokeBinding(ctx, &runtimev1pb.InvokeBindingRequest{Metadata: map[string]string{"userMetadata": "val1"}})
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Contains(t, resp.GetMetadata(), "traceparent")
 	assert.Equal(t, "Test", resp.GetMetadata()["traceparent"])
+	assert.Equal(t, "key=value", resp.GetMetadata()["tracestate"])
+	assert.Equal(t, "k1=v1", resp.GetMetadata()["baggage"])
 	assert.Contains(t, resp.GetMetadata(), "userMetadata")
 	assert.Equal(t, "val1", resp.GetMetadata()["userMetadata"])
 	assert.Contains(t, resp.GetMetadata(), "additional")
 	assert.Equal(t, "val2", resp.GetMetadata()["additional"])
+	// Binary gRPC metadata must not be forwarded to output binding metadata
+	assert.NotContains(t, resp.GetMetadata(), "grpc-trace-bin")
+	assert.NotContains(t, resp.GetMetadata(), "dapr-grpc-trace-bin")
+	assert.NotContains(t, resp.GetMetadata(), "foo-bin")
 }
 
 func TestTransactionStateStoreNotConfigured(t *testing.T) {

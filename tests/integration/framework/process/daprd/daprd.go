@@ -119,6 +119,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.appPort != nil {
 		args = append(args, "--app-port="+strconv.Itoa(*opts.appPort))
 	}
+	if opts.appMaxConcurrency != nil {
+		args = append(args, "--app-max-concurrency="+strconv.Itoa(*opts.appMaxConcurrency))
+	}
 	if opts.appHealthCheckPath != "" {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
 	}
@@ -566,6 +569,17 @@ func (d *Daprd) Restart(t *testing.T, ctx context.Context) {
 	t.Helper()
 	clone := d.exec.Clone(t)
 	d.exec.Kill(t)
+	d.exec = clone
+	d.exec.Run(t, ctx)
+}
+
+// RestartGraceful is Restart with an interrupt and exit wait instead of a hard
+// kill, for tests that need the shutdown path (actor HaltAll, drains) to run
+// before the new process starts.
+func (d *Daprd) RestartGraceful(t *testing.T, ctx context.Context) {
+	t.Helper()
+	clone := d.exec.Clone(t)
+	d.exec.Cleanup(t)
 	d.exec = clone
 	d.exec.Run(t, ctx)
 }

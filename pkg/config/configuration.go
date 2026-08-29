@@ -68,6 +68,24 @@ const (
 	// history events are signed using the app's X.509 SVID identity,
 	// creating a verifiable chain of signatures. Disabled by default.
 	WorkflowHistorySigning Feature = "WorkflowHistorySigning"
+
+	// WorkflowsFastPath enables the workflow scheduler fast-path stack:
+	// wake-ups drive eagerly on the arming host instead of creating a
+	// per-event scheduler reminder (durability moves to a per-instance
+	// repeating janitor backstop plus on-failure escalation to the durable
+	// per-event reminder; delayed starts keep their scheduler due time);
+	// activities certified by that janitor run locally without their
+	// run-activity reminder, with crash recovery via janitor re-dispatch;
+	// and sender-retried completion events fold straight into the next
+	// turn's single state commit, acked only after that commit, with the
+	// sender's retry as the durability (external raised events keep the
+	// durable inbox path). Each leg removes scheduler job commits and
+	// trigger round trips from the workflow hot path. At-least-once
+	// execution is unchanged throughout. With scheduler-enforced workflow
+	// concurrency limits configured the fast path disables itself: the
+	// limits gate per job delivery, which local drives bypass. Preview
+	// feature; disabled by default.
+	WorkflowsFastPath Feature = "WorkflowsFastPath"
 )
 
 // end feature flags section
@@ -260,6 +278,30 @@ func (w *WorkflowSpec) GetGlobalMaxConcurrentActivityInvocations() *int32 {
 		return nil
 	}
 	return w.GlobalMaxConcurrentActivityInvocations
+}
+
+// HasSchedulerConcurrencyLimits reports whether any scheduler-enforced
+// concurrency limit is configured (global caps or per-name lists); the
+// worker-enforced per-host caps are excluded.
+func (w *WorkflowSpec) HasSchedulerConcurrencyLimits() bool {
+	if w == nil {
+		return false
+	}
+	if w.GetGlobalMaxConcurrentWorkflowInvocations() != nil ||
+		w.GetGlobalMaxConcurrentActivityInvocations() != nil {
+		return true
+	}
+	// Only entries the scheduler actually enforces count (mirrors
+	// cluster.buildConcurrencyLimits).
+	enforced := func(ls []NamedConcurrencyLimit) bool {
+		for _, l := range ls {
+			if l.Name != nil && l.MaxConcurrent != nil && *l.MaxConcurrent > 0 {
+				return true
+			}
+		}
+		return false
+	}
+	return enforced(w.WorkflowConcurrencyLimits) || enforced(w.ActivityConcurrencyLimits)
 }
 
 type SecretsSpec struct {

@@ -15,8 +15,10 @@ package activity
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
@@ -26,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/claim"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
@@ -57,6 +60,24 @@ type Options struct {
 	WorkflowAccessPolicies *workflowacl.Holder
 
 	WorkflowsRemoteActivityReminder bool
+
+	// FastPath drives certified activity executions locally in place of
+	// their run-activity reminder (WorkflowsFastPath preview feature).
+	FastPath bool
+
+	// ExecutionHeld reports whether the durabletask engine on this host
+	// currently holds a completion registration for the given activity work
+	// item, i.e. the work item is dispatched (or awaiting the app) and its
+	// completion or abandonment is still owed. The stale-claim eviction in
+	// claim uses it to tell a live in-flight execution from one whose work
+	// item was lost (see staleClaim). Nil disables eviction.
+	ExecutionHeld func(workflowInstanceID string, taskID int32) bool
+
+	// RegisterResolver registers the owner execution's resolve hook with the
+	// engine's completion waiter, which invokes it before releasing the held
+	// registration (the stale-claim handshake). Nil when the engine backend
+	// does not support it; the resolve then happens on callback receipt.
+	RegisterResolver func(workflowInstanceID string, taskID int32, resolve func()) func()
 }
 
 type factory struct {
@@ -80,6 +101,13 @@ type factory struct {
 	table sync.Map
 	lock  sync.Mutex
 
+	// executionHeld and staleClaimAfter power the stale-claim eviction in
+	// claim (see execute.go). staleClaimAfter is a field only so unit tests
+	// can compress the grace; it is set once in New.
+	executionHeld    func(workflowInstanceID string, taskID int32) bool
+	registerResolver func(workflowInstanceID string, taskID int32, resolve func()) func()
+	staleClaimAfter  time.Duration
+
 	// inflight tracks activity executions whose WorkItem is currently in
 	// the durabletask queue or being processed by the SDK. Keyed by the
 	// composite (activity actor ID, TaskExecutionId) value produced by
@@ -89,6 +117,30 @@ type factory struct {
 	// selfCallerWarned ensures the "policy lists own appID" warning is only
 	// emitted once per factory lifetime instead of on every self-call.
 	selfCallerWarned atomic.Bool
+
+	// fastPath and the drive* fields power the detached local
+	// activity drives (see drive.go), mirroring the orchestrator factory's
+	// wake machinery: driveCtx is factory-owned, cancelled and drained by
+	// HaltAll (which also fires on placement churn) and then recreated;
+	// driveLock serializes spawns against that cancel/recreate cycle so the
+	// WaitGroup Add never races the Wait.
+	fastPath    bool
+	driveLock   sync.Mutex
+	driveCtx    context.Context
+	driveCancel context.CancelFunc
+	driveWG     sync.WaitGroup
+
+	// rootCtx bounds drive-failure escalation goroutines (see drive.go):
+	// unlike driveCtx it survives HaltAll, because a reminder create is
+	// host-agnostic and must be able to complete during the placement churn
+	// that cancels driveCtx.
+	rootCtx context.Context
+	escLock sync.Mutex
+	escWG   sync.WaitGroup
+
+	// claims owns the durable execution-claim guards and gate (see the
+	// claim subpackage).
+	claims *claim.Guards
 }
 
 func New(ctx context.Context, opts Options) (targets.Factory, error) {
@@ -117,9 +169,32 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
+	driveCtx, driveCancel := context.WithCancel(context.Background())
+
+	claimRetention := common.EnvDurationOr(
+		"DAPR_WORKFLOW_ACTIVITY_CLAIM_RETENTION",
+		InflightCacheTTL,
+	)
+
 	return &factory{
-		appID:                  opts.AppID,
-		actorType:              opts.ActivityActorType,
+		appID:            opts.AppID,
+		actorType:        opts.ActivityActorType,
+		fastPath:         opts.FastPath,
+		executionHeld:    opts.ExecutionHeld,
+		registerResolver: opts.RegisterResolver,
+		staleClaimAfter:  2 * common.JanitorPeriod(),
+		claims: claim.New(claim.Options{
+			ActorType: opts.ActivityActorType,
+			State:     state,
+			// Half-period beats give a live guard three misses, not one,
+			// before its record reads stale under load.
+			HeartbeatEvery: common.JanitorPeriod() / 2,
+			Retention:      claimRetention,
+			StaleAfter:     2 * common.JanitorPeriod(),
+		}),
+		driveCtx:               driveCtx,
+		driveCancel:            driveCancel,
+		rootCtx:                ctx,
 		router:                 router,
 		reminders:              sreminders,
 		scheduler:              opts.Scheduler,
@@ -154,11 +229,30 @@ func (f *factory) HaltAll(ctx context.Context) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
+	// Cancel detached local activity drives BEFORE deactivating: a drive
+	// parked on an activity actor lock aborts on the cancelled context, and
+	// one mid-execution hands its in-flight WorkItem to the detached
+	// publish watcher (runOwned) before returning. Wait for them only after
+	// the deactivation loop so neither side deadlocks.
+	f.driveLock.Lock()
+	f.driveCancel()
+	f.driveLock.Unlock()
+
 	f.table.Range(func(key, val any) bool {
 		val.(*activity).Deactivate(ctx)
 		return true
 	})
 	f.table.Clear()
+
+	f.driveWG.Wait()
+
+	// HaltAll also fires on placement disconnection, after which this
+	// factory keeps serving new activations: recreate the drive context so
+	// the fast path survives the churn.
+	f.driveLock.Lock()
+	f.driveCtx, f.driveCancel = context.WithCancel(context.Background())
+	f.driveLock.Unlock()
+
 	return nil
 }
 
@@ -171,6 +265,7 @@ func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorReq
 			ActorType: f.actorType,
 			ActorID:   key.(string),
 		}) {
+			f.spawnClaimGuards(ctx, key.(string))
 			val.(*activity).Deactivate(ctx)
 			f.table.Delete(key)
 		}
@@ -188,4 +283,25 @@ func (f *factory) Len() int {
 	var count int
 	f.table.Range(func(_, _ any) bool { count++; return true })
 	return count
+}
+
+// spawnClaimGuards spawns a claim guard for every unsettled in-flight claim
+// of actorID, from HaltNonHosted (placement churn). Deliberately NOT from
+// HaltAll: at shutdown the execution dies with the process and a record
+// would only delay the new owner by the staleness grace.
+func (f *factory) spawnClaimGuards(ctx context.Context, actorID string) {
+	if !f.fastPath {
+		return
+	}
+	prefix := actorID + "::"
+	f.inflight.Range(func(key string, call *inflight.Call) bool {
+		if key != actorID && !strings.HasPrefix(key, prefix) {
+			return true
+		}
+		if call.Settled() {
+			return true
+		}
+		f.claims.Spawn(ctx, f.rootCtx, actorID, key, call)
+		return true
+	})
 }

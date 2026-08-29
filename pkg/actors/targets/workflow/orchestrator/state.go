@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -169,6 +170,10 @@ func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestat
 		o.invalidateCachedState()
 		return err
 	}
+	// A durable commit is the progress signal the wake-escalation and
+	// janitor-redispatch hysteresis keys on. Unlike lastActive it is never
+	// stamped by mere lock traffic or by the janitor fire itself.
+	o.lastProgress.Store(time.Now().UnixNano())
 	return nil
 }
 

@@ -41,7 +41,10 @@ import (
 	diagutils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/kit/logger"
 )
+
+var log = logger.NewLogger("dapr.runtime.actors.router")
 
 type Interface interface {
 	Run(ctx context.Context) error
@@ -144,7 +147,7 @@ func (r *router) CallReminder(ctx context.Context, req *api.Reminder) error {
 	ctx, cancel := r.withContext(ctx)
 	defer cancel()
 
-	if req.SkipLock {
+	if req.SkipLock || req.SkipRetries {
 		return r.callReminder(ctx, req)
 	}
 
@@ -196,6 +199,13 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 	}
 
 	if !lar.Local {
+		// Ownership moved while the fire was in flight and the timer is being
+		// deleted with it.
+		if req.IsTimer {
+			log.Debugf("Dropping timer %s: actor is no longer hosted on this instance", req.Key())
+			return backoff.Permanent(actorerrors.ErrTimerFireNotLocal)
+		}
+
 		if req.IsRemote {
 			return backoff.Permanent(errors.New("remote actor moved"))
 		}
@@ -365,12 +375,36 @@ func (r *router) callStream(ctx context.Context,
 			return backoff.Permanent(errors.New("remote actor moved"))
 		}
 
-		return r.callRemoteActorStream(ctx, lar, req, stream)
+		err = r.callRemoteActorStream(ctx, lar, req, stream)
+		if err == nil || errors.Is(err, io.EOF) || ctx.Err() != nil {
+			return err
+		}
+
+		// Mirror the unary call classification: only placement churn is
+		// transient. Application errors from the target (e.g. access policy
+		// denials, not-found) must not be retried.
+		s, ok := status.FromError(err)
+		if ok {
+			if s.Code() == codes.Unavailable ||
+				(s.Code() == codes.Internal &&
+					(s.Message() == "error invoke actor method: remote actor moved" ||
+						strings.HasSuffix(s.Message(), ": placement is disseminating"))) {
+				return err
+			}
+		}
+		return backoff.Permanent(err)
 	}
 
 	r.stampLocalCallerIdentity(req)
 
-	return r.callLocalActorStream(ctx, req, stream)
+	err = r.callLocalActorStream(ctx, req, stream)
+	// Don't return permanent errors because of dissemination: a closed target
+	// (actor deactivated or moved) and context cancellation stay retryable,
+	// mirroring the unary callActor local path.
+	if err == nil || errors.Is(err, io.EOF) || ctx.Err() != nil || targetserrors.IsClosed(err) {
+		return err
+	}
+	return backoff.Permanent(err)
 }
 
 func (r *router) callLocalActorStream(ctx context.Context,
