@@ -435,10 +435,28 @@ func (k6 *K6) waitForDeletion() error {
 	})
 }
 
+// operatorKickAfter is how long a K6 resource may sit without jobs before
+// the k6-operator is restarted. The v0.0.8 operator reconciles with a single
+// worker which waits inside the reconcile, so a wait that cannot complete,
+// ex: on a test whose jobs were already deleted, starves every later test
+// for up to the wait timeout, which scales with the test duration.
+const operatorKickAfter = 3 * time.Minute
+
 // waitForCompletion for the tests until it finish.
 func (k6 *K6) waitForCompletion() error {
+	start := time.Now()
+	kicked := false
 	return k6.waitUntilJobsState(func(jobList *batchv1.JobList, err error) bool {
-		if err != nil || jobList == nil || len(jobList.Items) < k6.parallelism {
+		if err != nil || jobList == nil {
+			return false
+		}
+
+		if len(jobList.Items) == 0 && !kicked && time.Since(start) > operatorKickAfter {
+			kicked = true
+			k6.kickOperator()
+		}
+
+		if len(jobList.Items) < k6.parallelism {
 			return false
 		}
 
@@ -450,6 +468,19 @@ func (k6 *K6) waitForCompletion() error {
 
 		return true
 	})
+}
+
+// kickOperator restarts the k6-operator by deleting its pods, so a fresh
+// reconcile worker picks up the K6 resource it never acted on.
+func (k6 *K6) kickOperator() {
+	const operatorNamespace = "k6-operator-system"
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	log.Printf("k6 %q has no jobs after %s, restarting the k6-operator", k6.name, operatorKickAfter)
+	err := k6.kubeClient.CoreV1().Pods(operatorNamespace).DeleteCollection(ctx, v1.DeleteOptions{}, v1.ListOptions{})
+	if err != nil {
+		log.Printf("restarting the k6-operator: %v", err)
+	}
 }
 
 // dumpDiagnostics logs the K6 resource, its jobs and pods, recent namespace
@@ -532,15 +563,39 @@ func (k6 *K6) dumpOperatorState(ctx context.Context) {
 	}
 }
 
-// Dispose deletes the test resource.
+// Dispose deletes the test resource once the k6-operator has finished acting
+// on it. Deleting earlier removes the jobs the operator is still polling for,
+// stranding its only reconcile worker until a timeout which can outlast every
+// later test.
 func (k6 *K6) Dispose() error {
 	if k6.k6Client == nil {
 		return nil
 	}
+	k6.waitOperatorFinished()
 	if err := k6.k6Client.Delete(k6.ctx, k6.name, v1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 	return k6.waitForDeletion()
+}
+
+// waitOperatorFinished waits until the operator marks the test resource
+// finished, or two minutes: after a completed test the operator needs at most
+// one more 30 second poll tick, while an operator which is stuck or never
+// acted cannot be waited out.
+func (k6 *K6) waitOperatorFinished() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	//nolint:errcheck
+	wait.PollUntilContextCancel(ctx, 5*time.Second, true, func(ctx context.Context) (bool, error) {
+		cr, err := k6.k6Client.Get(ctx, k6.name)
+		if apierrors.IsNotFound(err) {
+			return true, nil
+		}
+		if err != nil {
+			return false, nil
+		}
+		return cr.Status.Stage == "finished", nil
+	})
 }
 
 type K6Opt = func(*K6)
