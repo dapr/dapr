@@ -435,28 +435,10 @@ func (k6 *K6) waitForDeletion() error {
 	})
 }
 
-// operatorKickAfter is how long a K6 resource may sit without jobs before
-// the k6-operator is restarted. The v0.0.8 operator reconciles with a single
-// worker which waits inside the reconcile, so a wait that cannot complete,
-// ex: on a test whose jobs were already deleted, starves every later test
-// for up to the wait timeout, which scales with the test duration.
-const operatorKickAfter = 3 * time.Minute
-
 // waitForCompletion for the tests until it finish.
 func (k6 *K6) waitForCompletion() error {
-	start := time.Now()
-	kicked := false
 	return k6.waitUntilJobsState(func(jobList *batchv1.JobList, err error) bool {
-		if err != nil || jobList == nil {
-			return false
-		}
-
-		if len(jobList.Items) == 0 && !kicked && time.Since(start) > operatorKickAfter {
-			kicked = true
-			k6.kickOperator()
-		}
-
-		if len(jobList.Items) < k6.parallelism {
+		if err != nil || jobList == nil || len(jobList.Items) < k6.parallelism {
 			return false
 		}
 
@@ -468,19 +450,6 @@ func (k6 *K6) waitForCompletion() error {
 
 		return true
 	})
-}
-
-// kickOperator restarts the k6-operator by deleting its pods, so a fresh
-// reconcile worker picks up the K6 resource it never acted on.
-func (k6 *K6) kickOperator() {
-	const operatorNamespace = "k6-operator-system"
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	log.Printf("k6 %q has no jobs after %s, restarting the k6-operator", k6.name, operatorKickAfter)
-	err := k6.kubeClient.CoreV1().Pods(operatorNamespace).DeleteCollection(ctx, v1.DeleteOptions{}, v1.ListOptions{})
-	if err != nil {
-		log.Printf("restarting the k6-operator: %v", err)
-	}
 }
 
 // dumpDiagnostics logs the K6 resource, its jobs and pods, recent namespace
