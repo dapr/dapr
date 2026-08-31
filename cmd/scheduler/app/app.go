@@ -149,6 +149,8 @@ func Run() {
 					EtcdClientPassword:  opts.EtcdClientPassword,
 
 					Workers: opts.Workers,
+
+					PlacementEnabled: opts.PlacementEnabled,
 				})
 				if serr != nil {
 					return nil, serr
