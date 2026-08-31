@@ -9,6 +9,7 @@ require (
 	github.com/aavaz-ai/pii-scrubber v0.0.0-20220812094047-3fa450ab6973
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
+	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/dapr/components-contrib v1.18.4
@@ -216,7 +217,6 @@ require (
 	github.com/camunda/zeebe/clients/go/v8 v8.5.25 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
-	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chebyrash/promise v0.0.0-20230709133807-42ec49ba1459 // indirect
 	github.com/cinience/go_rocketmq v0.0.2 // indirect
 	github.com/clbanning/mxj/v2 v2.5.6 // indirect
