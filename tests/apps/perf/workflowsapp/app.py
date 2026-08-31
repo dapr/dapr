@@ -191,7 +191,6 @@ def run_workflow(run_id):
             instance_id = start_resp.instance_id
         except DaprInternalError as e:
             print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] error starting workflow: {e.message}")
-            return f"error starting workflow: {e.message}", 500
 
         sleep(0.5)
 
