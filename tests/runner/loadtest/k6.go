@@ -561,7 +561,8 @@ func (k6 *K6) waitOperatorFinished() {
 			return true, nil
 		}
 		if err != nil {
-			return false, nil
+			// A transient Get error retries until the two minute ceiling.
+			return false, nil //nolint:nilerr
 		}
 		return cr.Status.Stage == "finished", nil
 	})
