@@ -247,7 +247,7 @@ func (s *StandDown) reconcileManagers(ctx context.Context, hostAddrs []string, s
 		if _, ok := s.managers[addr]; ok {
 			continue
 		}
-		mctx, cancel := context.WithCancel(ctx) //nolint:gosec
+		mctx, cancel := context.WithCancel(ctx)
 		s.managers[addr] = cancel
 		s.managersWG.Go(func() {
 			s.manage(mctx, addr, schedulerID)
