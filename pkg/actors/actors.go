@@ -215,6 +215,7 @@ func (a *actors) Init(opts InitOptions) error {
 	a.table = table.New(table.Options{
 		ReentrancyStore: a.reentrancyStore,
 		StartSuspended:  !a.hostingActive,
+		Timers:          func() internaltimers.Storage { return a.timerStorage },
 	})
 
 	a.scheduler = scheduler.New(scheduler.Options{
@@ -275,8 +276,9 @@ func (a *actors) Init(opts InitOptions) error {
 		Router: a.router,
 	})
 	a.timers = timers.New(timers.Options{
-		Storage: a.timerStorage,
-		Table:   a.table,
+		Storage:   a.timerStorage,
+		Table:     a.table,
+		Placement: a.placement,
 	})
 
 	return nil

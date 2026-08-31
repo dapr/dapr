@@ -190,7 +190,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		dopts = append(dopts, baseDopts...)
 
 		features := baseFeatures
-		if sen != nil && !signingDisabled[i] {
+		if sen != nil && (opts.signing || opts.mtls) && !signingDisabled[i] {
 			features = append(features[:len(features):len(features)], "WorkflowHistorySigning")
 		}
 		if len(features) > 0 {
