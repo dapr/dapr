@@ -591,9 +591,8 @@ type WatchJobsRequestInitial struct {
 	ActorAddress *string `protobuf:"bytes,6,opt,name=actor_address,json=actorAddress,proto3,oneof" json:"actor_address,omitempty"`
 	// supports_scheduler_placement marks a daprd which can take actor
 	// placement from the scheduler. Schedulers withhold the placement
-	// advertisement while
-	// any connected sidecar lacks it (an older daprd), keeping a mixed-version
-	// cluster on a single placement authority.
+	// advertisement while any connected sidecar lacks it (an older daprd),
+	// keeping a mixed-version cluster on a single placement authority.
 	SupportsSchedulerPlacement bool `protobuf:"varint,7,opt,name=supports_scheduler_placement,json=supportsSchedulerPlacement,proto3" json:"supports_scheduler_placement,omitempty"`
 }
 
