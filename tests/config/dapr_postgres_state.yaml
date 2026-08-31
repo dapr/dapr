@@ -34,5 +34,3 @@ scopes:
   - disabledmetric
   - perf-workflowsapp
   - perf-workflowsapp-actors
-  - perf-workflowsapp-scaled
-  - perf-workflowsapp-scaled-actors
