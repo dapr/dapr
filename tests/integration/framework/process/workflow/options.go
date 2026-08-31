@@ -56,8 +56,6 @@ type options struct {
 	placementOptions  []placement.Option
 	schedulerInstance *scheduler.Scheduler
 	schedulerAddress  *string
-
-	schedulerPlacement *bool
 }
 
 func WithAddOrchestrator(t *testing.T, name string, or func(*task.WorkflowContext) (any, error)) Option {
@@ -150,24 +148,6 @@ func WithSigningDisabledN(index int) Option {
 // WithClusteredDeployment explicitly enables or disables the
 // WorkflowsClusteredDeployment feature flag on every daprd in the workflow,
 // overriding the DAPR_INTEGRATION_WORKFLOW_CLUSTERED environment variable.
-// WithSchedulerPlacement serves actor placement from the scheduler: no
-// placement process runs.
-func WithSchedulerPlacement() Option {
-	return func(o *options) {
-		enabled := true
-		o.schedulerPlacement = &enabled
-	}
-}
-
-// WithPlacementService pins actor placement to the placement service,
-// overriding DAPR_INTEGRATION_SCHEDULER_PLACEMENT.
-func WithPlacementService() Option {
-	return func(o *options) {
-		disabled := false
-		o.schedulerPlacement = &disabled
-	}
-}
-
 func WithClusteredDeployment(enabled bool) Option {
 	return func(o *options) {
 		o.clustered = &enabled

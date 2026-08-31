@@ -19,7 +19,7 @@ import (
 	"sync"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
-	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream/transport"
+	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
 )
@@ -34,13 +34,13 @@ var (
 )
 
 type Options struct {
-	Channel       transport.Transport
+	Channel       v1pb.Placement_ReportDaprStatusClient
 	PlacementLoop loop.Interface[loops.EventPlace]
 	IDx           uint64
 }
 
 type stream struct {
-	channel   transport.Transport
+	channel   v1pb.Placement_ReportDaprStatusClient
 	placeLoop loop.Interface[loops.EventPlace]
 	idx       uint64
 
@@ -91,10 +91,7 @@ func (s *stream) Handle(ctx context.Context, event loops.EventStream) error {
 }
 
 func (s *stream) handleSend(e *loops.StreamSend) error {
-	if e.Report != nil {
-		return s.channel.SendReport(e.Report)
-	}
-	return s.channel.SendAck(e.Ack)
+	return s.channel.Send(e.Host)
 }
 
 func (s *stream) handleShutdown(e *loops.Shutdown) {

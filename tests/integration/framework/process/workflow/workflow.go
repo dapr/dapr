@@ -57,15 +57,6 @@ func ClusteredDeploymentFromEnv() bool {
 	return kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_WORKFLOW_CLUSTERED"))
 }
 
-// SchedulerPlacementFromEnv reports whether
-// DAPR_INTEGRATION_SCHEDULER_PLACEMENT is set truthy, which has the
-// scheduler serve actor placement for every harness built by this package.
-// Tests which pick a topology, or drive the placement service, keep their
-// choice.
-func SchedulerPlacementFromEnv() bool {
-	return kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_SCHEDULER_PLACEMENT"))
-}
-
 type Workflow struct {
 	taskregistry []*task.TaskRegistry
 	db           *sqlite.SQLite
@@ -75,8 +66,6 @@ type Workflow struct {
 	sentry       *sentry.Sentry
 	daprds       []*daprd.Daprd
 	clustered    bool
-
-	schedulerPlacement bool
 }
 
 func New(t *testing.T, fopts ...Option) *Workflow {
@@ -100,17 +89,6 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		clustered = *opts.clustered
 	}
 
-	schedulerPlacement := SchedulerPlacementFromEnv()
-	// A test which tunes the placement service, brings its own scheduler,
-	// or overrides the scheduler address exercises that topology: the
-	// authority swap does not apply.
-	if len(opts.placementOptions) > 0 || opts.schedulerInstance != nil || opts.schedulerAddress != nil {
-		schedulerPlacement = false
-	}
-	if opts.schedulerPlacement != nil {
-		schedulerPlacement = *opts.schedulerPlacement
-	}
-
 	db := sqlite.New(t,
 		sqlite.WithActorStateStore(true),
 		sqlite.WithCreateStateTables(),
@@ -131,14 +109,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		)
 	}
 
-	// No standalone placement process runs when placement is served by the
-	// scheduler: sidecars take the scheduler's advertisement.
-	var place *placement.Placement
-	if !schedulerPlacement {
-		place = placement.New(t, placementOpts...)
-	} else {
-		schedulerOpts = append(schedulerOpts, scheduler.WithPlacementEnabled(true))
-	}
+	place := placement.New(t, placementOpts...)
 	sched := opts.schedulerInstance
 	ownsSched := false
 	if sched == nil {
@@ -146,9 +117,8 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		ownsSched = true
 	}
 
-	baseDopts := []daprd.Option{}
-	if place != nil {
-		baseDopts = append(baseDopts, daprd.WithPlacementAddresses(place.Address()))
+	baseDopts := []daprd.Option{
+		daprd.WithPlacementAddresses(place.Address()),
 	}
 
 	if !opts.skipDB {
@@ -233,8 +203,6 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		sentry:       sen,
 		daprds:       daprds,
 		clustered:    clustered,
-
-		schedulerPlacement: schedulerPlacement,
 	}
 
 	for i := range workflow.taskregistry {
@@ -249,9 +217,7 @@ func (w *Workflow) Run(t *testing.T, ctx context.Context) {
 	if w.sentry != nil {
 		w.sentry.Run(t, ctx)
 	}
-	if w.place != nil {
-		w.place.Run(t, ctx)
-	}
+	w.place.Run(t, ctx)
 	if w.ownsSched {
 		w.sched.Run(t, ctx)
 	}
@@ -267,9 +233,7 @@ func (w *Workflow) Cleanup(t *testing.T) {
 	if w.ownsSched {
 		w.sched.Cleanup(t)
 	}
-	if w.place != nil {
-		w.place.Cleanup(t)
-	}
+	w.place.Cleanup(t)
 	if w.sentry != nil {
 		w.sentry.Cleanup(t)
 	}
@@ -277,9 +241,7 @@ func (w *Workflow) Cleanup(t *testing.T) {
 }
 
 func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	if w.place != nil {
-		w.place.WaitUntilRunning(t, ctx)
-	}
+	w.place.WaitUntilRunning(t, ctx)
 	if w.sched != nil {
 		w.sched.WaitUntilRunning(t, ctx)
 	}
@@ -387,12 +349,6 @@ func (w *Workflow) GRPCClientN(t *testing.T, ctx context.Context, index int) rtv
 // ClusteredDeployment reports whether every daprd in this workflow runs with
 // the WorkflowsClusteredDeployment feature flag enabled. Tests use this to
 // branch assertions which differ between the two modes.
-// SchedulerPlacement reports whether the scheduler serves actor placement
-// for this harness, in which case Placement returns nil.
-func (w *Workflow) SchedulerPlacement() bool {
-	return w.schedulerPlacement
-}
-
 func (w *Workflow) ClusteredDeployment() bool {
 	return w.clustered
 }

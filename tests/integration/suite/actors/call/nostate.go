@@ -38,7 +38,6 @@ type nostate struct {
 
 func (n *nostate) Setup(t *testing.T) []framework.Option {
 	n.actors = actors.New(t,
-		actors.WithPlacementService(),
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(nethttp.ResponseWriter, *nethttp.Request) {}),
 	)

@@ -41,11 +41,9 @@ type workflow struct {
 
 func (w *workflow) Setup(t *testing.T) []framework.Option {
 	w.actors1 = dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("mytype"),
 	)
 	w.actors2 = dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("mytype"),
 		dactors.WithPeerActor(w.actors1),
 	)

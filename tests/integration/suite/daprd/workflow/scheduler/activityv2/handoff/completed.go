@@ -52,7 +52,7 @@ func (a *completed) Setup(t *testing.T) []framework.Option {
 		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 		daprd.WithWorkflowJanitorPeriod(t, time.Second),
 	}
-	a.workflow = workflow.New(t, workflow.WithPlacementService(), workflow.WithDaprdOptions(0, fp...))
+	a.workflow = workflow.New(t, workflow.WithDaprdOptions(0, fp...))
 
 	// The joiners trigger the mid-run placement rebalance: deliberately not
 	// in WithProcesses, Run starts them at the churn moment.

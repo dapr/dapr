@@ -85,11 +85,10 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	// Set addresses for actor services only if it's not explicitly globally disabled
 	// Even if actors are disabled, however, the placement-host-address flag will still be included if explicitly set in the annotation dapr.io/placement-host-address
 	// So, if the annotation is already set, we accept that and also use placement for actors services
-	switch {
-	case !i.config.GetActorsEnabled():
+	if !i.config.GetActorsEnabled() {
 		sidecar.ActorsService = ""
 		sidecar.PlacementAddress = ""
-	case sidecar.PlacementAddress == "":
+	} else if sidecar.PlacementAddress == "" {
 		// Set configuration for the actors service
 		actorsSvcName, actorsSvc := i.config.GetActorsService()
 		actorsSvcAddr := actorsSvc.Address(i.config.Namespace, i.config.KubeClusterDomain)
@@ -103,7 +102,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 			// Set the actors-service CLI flag with "<name>:<address>"
 			sidecar.ActorsService = actorsSvcName + ":" + actorsSvcAddr
 		}
-	default:
+	} else {
 		// If we are using placement forcefully, do not set "ActorsService"
 		sidecar.ActorsService = ""
 	}

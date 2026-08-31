@@ -47,7 +47,6 @@ func (m *multiplereplicas) Setup(t *testing.T) []framework.Option {
 	)
 
 	actor1 := dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("myactor"),
 		dactors.WithPlacement(m.place),
 		dactors.WithActorTypeHandler("myactor", func(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +54,6 @@ func (m *multiplereplicas) Setup(t *testing.T) []framework.Option {
 		}),
 	)
 	actor2 := dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("myactor"),
 		dactors.WithPeerActor(actor1),
 		dactors.WithActorTypeHandler("myactor", func(w http.ResponseWriter, r *http.Request) {

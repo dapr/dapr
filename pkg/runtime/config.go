@@ -187,12 +187,7 @@ type internalConfig struct {
 }
 
 func (i internalConfig) SchedulerEnabled() bool {
-	for _, addr := range i.schedulerAddress {
-		if len(strings.TrimSpace(strings.Trim(addr, `"'`))) > 0 {
-			return true
-		}
-	}
-	return false
+	return len(i.schedulerAddress) > 0
 }
 
 // FromConfig creates a new Dapr Runtime from a configuration.

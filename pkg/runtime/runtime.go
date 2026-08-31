@@ -252,27 +252,21 @@ func newDaprRuntime(ctx context.Context,
 		ComponentContextFn:    resiliencyProvider.ComponentContextDecorator(),
 	})
 
-	// Whether the scheduler serves actor placement is the control plane's
-	// decision, advertised on WatchHosts. This sidecar only needs a
-	// scheduler to ask.
-	schedulerPlacement := runtimeConfig.SchedulerEnabled()
-
 	actors := actors.New(actors.Options{
 		AppID:     runtimeConfig.id,
 		Namespace: namespace,
 		Port:      runtimeConfig.internalGRPCPort,
 		// TODO: @joshvanl
-		PlacementAddresses:        strings.Split(strings.TrimPrefix(runtimeConfig.actorsService, "placement:"), ","),
-		HealthEndpoint:            channels.AppHTTPEndpoint(),
-		Resiliency:                resiliencyProvider,
-		Security:                  sec,
-		Healthz:                   runtimeConfig.healthz,
-		CompStore:                 compStore,
-		StateTTLEnabled:           globalConfig.IsFeatureEnabled(config.ActorStateTTL),
-		MaxRequestBodySize:        runtimeConfig.maxRequestBodySize,
-		Mode:                      runtimeConfig.mode,
-		DisseminationTimeout:      runtimeConfig.actorsDisseminationTimeout,
-		SchedulerPlacementEnabled: schedulerPlacement,
+		PlacementAddresses:   strings.Split(strings.TrimPrefix(runtimeConfig.actorsService, "placement:"), ","),
+		HealthEndpoint:       channels.AppHTTPEndpoint(),
+		Resiliency:           resiliencyProvider,
+		Security:             sec,
+		Healthz:              runtimeConfig.healthz,
+		CompStore:            compStore,
+		StateTTLEnabled:      globalConfig.IsFeatureEnabled(config.ActorStateTTL),
+		MaxRequestBodySize:   runtimeConfig.maxRequestBodySize,
+		Mode:                 runtimeConfig.mode,
+		DisseminationTimeout: runtimeConfig.actorsDisseminationTimeout,
 	})
 	inProcessExec := inprocess.NewExecutor()
 
@@ -281,7 +275,7 @@ func newDaprRuntime(ctx context.Context,
 		Namespace:                       namespace,
 		IsHTTP:                          runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
 		ProgrammaticSubscriptionEnabled: !utils.Contains(runtimeConfig.disableInitEndpoints, DisableSubscribeInitEndpoint),
-		ActorsEnabled:                   len(runtimeConfig.actorsService) > 0 || schedulerPlacement,
+		ActorsEnabled:                   len(runtimeConfig.actorsService) > 0,
 		Actors:                          actors,
 		Registry:                        runtimeConfig.registry,
 		ComponentStore:                  compStore,
@@ -1306,17 +1300,11 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		hostAddress = a.runtimeConfig.internalGRPCListenAddress
 	}
 
-	// Report the actor host:port on WatchJobs streams, byte identical to the
-	// address reported on the placement stream, so schedulers can route
-	// actor reminder triggers directly to the placement owner host.
-	a.jobsManager.SetActorAddress(net.JoinHostPort(hostAddress, strconv.Itoa(a.runtimeConfig.internalGRPCPort)))
-
 	if err := a.actors.Init(actors.InitOptions{
-		Hostname:            hostAddress,
-		GRPC:                a.grpc,
-		SchedulerClient:     a.jobsManager.Client(),
-		SchedulerReloader:   a.jobsManager,
-		SchedulerLeadership: a.jobsManager.Leadership(),
+		Hostname:          hostAddress,
+		GRPC:              a.grpc,
+		SchedulerClient:   a.jobsManager.Client(),
+		SchedulerReloader: a.jobsManager,
 	}); err != nil {
 		return err
 	}

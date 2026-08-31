@@ -36,11 +36,9 @@ type basic struct {
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
 	actor1 := dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("myactor"),
 	)
 	actor2 := dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("myactor"),
 		dactors.WithPeerActor(actor1),
 	)

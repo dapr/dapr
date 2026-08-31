@@ -47,7 +47,6 @@ func (d *disstimeout) Setup(t *testing.T) []framework.Option {
 	)
 
 	d.actors = dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("myactor"),
 		dactors.WithPlacement(d.place),
 		dactors.WithActorTypeHandler("myactor", func(w http.ResponseWriter, r *http.Request) {
