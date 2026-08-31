@@ -152,9 +152,8 @@ message WatchJobsRequestInitial {
 
   // supports_scheduler_placement marks a daprd which can take actor
   // placement from the scheduler. Schedulers withhold the placement
-  // advertisement while
-  // any connected sidecar lacks it (an older daprd), keeping a mixed-version
-  // cluster on a single placement authority.
+  // advertisement while any connected sidecar lacks it (an older daprd),
+  // keeping a mixed-version cluster on a single placement authority.
   bool supports_scheduler_placement = 7;
 
 }
