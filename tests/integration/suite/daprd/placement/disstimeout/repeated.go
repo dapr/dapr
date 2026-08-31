@@ -51,6 +51,7 @@ func (r *repeated) Setup(t *testing.T) []framework.Option {
 	)
 
 	r.actors = dactors.New(t,
+		dactors.WithPlacementService(),
 		dactors.WithActorTypes("myactor"),
 		dactors.WithPlacement(r.place),
 		dactors.WithActorTypeHandler("myactor", func(w http.ResponseWriter, r *http.Request) {

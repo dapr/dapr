@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/clients"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/leadership"
 	"github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/events/loop"
@@ -38,29 +39,35 @@ import (
 var log = logger.NewLogger("dapr.runtime.scheduler.watchhosts")
 
 type Options struct {
-	Addresses []string
-	Healthz   healthz.Healthz
-	Security  security.Handler
-	Clients   *clients.Clients
-	HostLoop  loop.Interface[loops.EventHost]
+	Addresses  []string
+	Healthz    healthz.Healthz
+	Security   security.Handler
+	Clients    *clients.Clients
+	HostLoop   loop.Interface[loops.EventHost]
+	Leadership *leadership.Leadership
 }
 
 type WatchHosts struct {
-	allAddrs []string
-	htarget  healthz.Target
-	security security.Handler
-	clients  *clients.Clients
+	allAddrs   []string
+	htarget    healthz.Target
+	security   security.Handler
+	clients    *clients.Clients
+	leadership *leadership.Leadership
+
+	// lastAddrs dedups reloads
+	lastAddrs []string
 
 	loop loop.Interface[loops.EventHost]
 }
 
 func New(opts Options) *WatchHosts {
 	return &WatchHosts{
-		htarget:  opts.Healthz.AddTarget("scheduler-watch-hosts"),
-		allAddrs: opts.Addresses,
-		security: opts.Security,
-		clients:  opts.Clients,
-		loop:     opts.HostLoop,
+		htarget:    opts.Healthz.AddTarget("scheduler-watch-hosts"),
+		allAddrs:   opts.Addresses,
+		security:   opts.Security,
+		clients:    opts.Clients,
+		loop:       opts.HostLoop,
+		leadership: opts.Leadership,
 	}
 }
 
@@ -106,6 +113,9 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 
 			// Ignore unimplemented error code as we are talking to an old server.
 			// TODO: @joshvanl: remove special case in v1.16.
+			if w.leadership != nil {
+				w.leadership.SetUnsupported()
+			}
 			w.loop.Enqueue(&loops.ReloadClients{
 				Addresses: slices.Clone(w.allAddrs),
 			})
@@ -116,53 +126,85 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 			return nil
 		}
 
-		if err != nil {
-			closeCon()
-			if ctx.Err() != nil {
-				return ctx.Err()
+		// Keep receiving on the stream: the scheduler re-broadcasts the host
+		// list on every membership or placement leadership change.
+		for {
+			if err != nil {
+				closeCon()
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				log.Warnf("Scheduler WatchHosts stream error, reconnecting: %s", err)
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(time.Second):
+				}
+				break
 			}
-			log.Warnf("Scheduler WatchHosts stream error, reconnecting: %s", err)
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(time.Second):
-				continue
+
+			if err = w.handleHosts(ctx, resp); err != nil {
+				closeCon()
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				log.Errorf("Failed to reload scheduler clients, retrying: %s", err)
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(retry.Jitter(time.Second, time.Second/2)):
+				}
+				break
 			}
+
+			w.htarget.Ready()
+
+			resp, err = stream.Recv()
 		}
+	}
+}
 
-		gotAddrs := make([]string, 0, len(resp.GetHosts()))
-		for _, host := range resp.GetHosts() {
-			gotAddrs = append(gotAddrs, host.GetAddress())
+func (w *WatchHosts) handleHosts(ctx context.Context, resp *schedulerv1pb.WatchHostsResponse) error {
+	gotAddrs := make([]string, 0, len(resp.GetHosts()))
+	leader := ""
+	capable := false
+	for _, host := range resp.GetHosts() {
+		gotAddrs = append(gotAddrs, host.GetAddress())
+		if host.GetLeader() {
+			leader = host.GetAddress()
 		}
+		if host.GetSchedulerPlacementEnabled() {
+			capable = true
+		}
+	}
 
-		log.Infof("Connected and received scheduler hosts addresses: %v", gotAddrs)
+	log.Infof("Received scheduler hosts addresses: %v (placement leader %q)", gotAddrs, leader)
 
-		if err = w.clients.Reload(ctx, gotAddrs); err != nil {
-			closeCon()
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			log.Errorf("Failed to reload scheduler clients, retrying: %s", err)
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(retry.Jitter(time.Second, time.Second/2)):
-				continue
-			}
+	// Reloading on an identical list would cycle every scheduler stream,
+	// and that churn re-broadcasts back into this loop.
+	if !slices.Equal(gotAddrs, w.lastAddrs) {
+		if err := w.clients.Reload(ctx, gotAddrs); err != nil {
+			return err
 		}
 
 		w.loop.Enqueue(&loops.ReloadClients{
 			Addresses: gotAddrs,
 		})
+		w.lastAddrs = gotAddrs
+	}
 
-		w.htarget.Ready()
-		stream.Recv()
-		closeCon()
-
-		if err = ctx.Err(); err != nil {
-			return err
+	if w.leadership != nil {
+		if !capable && len(gotAddrs) > 0 {
+			// No scheduler host in the cluster serves placement: either old
+			// schedulers or placement disabled everywhere. Consumers fall
+			// back to the standalone placement service.
+			w.leadership.SetUnsupported()
+		} else {
+			w.leadership.Set(leader)
 		}
 	}
+
+	return nil
 }
 
 func (w *WatchHosts) connSchedulerHosts(ctx context.Context) (schedulerv1pb.Scheduler_WatchHostsClient, context.CancelFunc, error) {
