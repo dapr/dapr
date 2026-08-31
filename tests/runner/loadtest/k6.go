@@ -21,6 +21,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -315,6 +316,7 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 	}
 
 	if err = k6.waitForCompletion(); err != nil {
+		k6.dumpDiagnostics()
 		return err
 	}
 	return k6.streamLogs()
@@ -433,10 +435,28 @@ func (k6 *K6) waitForDeletion() error {
 	})
 }
 
+// operatorKickAfter is how long a K6 resource may sit without jobs before
+// the k6-operator is restarted. The v0.0.8 operator reconciles with a single
+// worker which waits inside the reconcile, so a wait that cannot complete,
+// ex: on a test whose jobs were already deleted, starves every later test
+// for up to the wait timeout, which scales with the test duration.
+const operatorKickAfter = 3 * time.Minute
+
 // waitForCompletion for the tests until it finish.
 func (k6 *K6) waitForCompletion() error {
+	start := time.Now()
+	kicked := false
 	return k6.waitUntilJobsState(func(jobList *batchv1.JobList, err error) bool {
-		if err != nil || jobList == nil || len(jobList.Items) < k6.parallelism {
+		if err != nil || jobList == nil {
+			return false
+		}
+
+		if len(jobList.Items) == 0 && !kicked && time.Since(start) > operatorKickAfter {
+			kicked = true
+			k6.kickOperator()
+		}
+
+		if len(jobList.Items) < k6.parallelism {
 			return false
 		}
 
@@ -450,15 +470,132 @@ func (k6 *K6) waitForCompletion() error {
 	})
 }
 
-// Dispose deletes the test resource.
+// kickOperator restarts the k6-operator by deleting its pods, so a fresh
+// reconcile worker picks up the K6 resource it never acted on.
+func (k6 *K6) kickOperator() {
+	const operatorNamespace = "k6-operator-system"
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	log.Printf("k6 %q has no jobs after %s, restarting the k6-operator", k6.name, operatorKickAfter)
+	err := k6.kubeClient.CoreV1().Pods(operatorNamespace).DeleteCollection(ctx, v1.DeleteOptions{}, v1.ListOptions{})
+	if err != nil {
+		log.Printf("restarting the k6-operator: %v", err)
+	}
+}
+
+// dumpDiagnostics logs the K6 resource, its jobs and pods, recent namespace
+// events, and the k6-operator manager logs after a k6 run fails to reach the
+// expected state. Everything is best-effort.
+func (k6 *K6) dumpDiagnostics() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	if cr, err := k6.k6Client.Get(ctx, k6.name); err != nil {
+		log.Printf("k6 diagnostics: get %q: %v", k6.name, err)
+	} else if raw, jerr := json.Marshal(cr); jerr != nil {
+		log.Printf("k6 diagnostics: marshal %q: %v", k6.name, jerr)
+	} else {
+		log.Printf("k6 diagnostics: resource %q: %s", k6.name, raw)
+	}
+
+	crSelector := "k6_cr=" + k6.name
+	if jobs, err := k6.kubeClient.BatchV1().Jobs(k6.namespace).List(ctx, v1.ListOptions{LabelSelector: crSelector}); err != nil {
+		log.Printf("k6 diagnostics: list jobs: %v", err)
+	} else {
+		log.Printf("k6 diagnostics: %d jobs labeled %s", len(jobs.Items), crSelector)
+		for _, job := range jobs.Items {
+			log.Printf("k6 diagnostics: job %s active=%d succeeded=%d failed=%d", job.Name, job.Status.Active, job.Status.Succeeded, job.Status.Failed)
+		}
+	}
+
+	if pods, err := k6.kubeClient.CoreV1().Pods(k6.namespace).List(ctx, v1.ListOptions{LabelSelector: crSelector}); err != nil {
+		log.Printf("k6 diagnostics: list pods: %v", err)
+	} else {
+		log.Printf("k6 diagnostics: %d pods labeled %s", len(pods.Items), crSelector)
+		for _, pod := range pods.Items {
+			raw, _ := json.Marshal(pod.Status)
+			log.Printf("k6 diagnostics: pod %s status: %s", pod.Name, raw)
+		}
+	}
+
+	if events, err := k6.kubeClient.CoreV1().Events(k6.namespace).List(ctx, v1.ListOptions{}); err != nil {
+		log.Printf("k6 diagnostics: list events: %v", err)
+	} else {
+		items := events.Items
+		sort.Slice(items, func(i, j int) bool {
+			return items[i].LastTimestamp.Before(&items[j].LastTimestamp)
+		})
+		if len(items) > 60 {
+			items = items[len(items)-60:]
+		}
+		for _, ev := range items {
+			log.Printf("k6 diagnostics: event %s %s %s/%s: %s", ev.LastTimestamp.Format(time.RFC3339), ev.Reason, ev.InvolvedObject.Kind, ev.InvolvedObject.Name, ev.Message)
+		}
+	}
+
+	k6.dumpOperatorState(ctx)
+}
+
+// dumpOperatorState logs the k6-operator pod statuses and manager logs.
+func (k6 *K6) dumpOperatorState(ctx context.Context) {
+	const operatorNamespace = "k6-operator-system"
+	pods, err := k6.kubeClient.CoreV1().Pods(operatorNamespace).List(ctx, v1.ListOptions{})
+	if err != nil {
+		log.Printf("k6 diagnostics: list operator pods: %v", err)
+		return
+	}
+	tail := int64(300)
+	for _, pod := range pods.Items {
+		raw, _ := json.Marshal(pod.Status)
+		log.Printf("k6 diagnostics: operator pod %s status: %s", pod.Name, raw)
+		stream, serr := k6.kubeClient.CoreV1().Pods(operatorNamespace).GetLogs(pod.Name, &corev1.PodLogOptions{Container: "manager", TailLines: &tail}).Stream(ctx)
+		if serr != nil {
+			log.Printf("k6 diagnostics: logs for %s: %v", pod.Name, serr)
+			continue
+		}
+		logs, rerr := io.ReadAll(stream)
+		stream.Close()
+		if rerr != nil {
+			log.Printf("k6 diagnostics: read logs for %s: %v", pod.Name, rerr)
+			continue
+		}
+		log.Printf("k6 diagnostics: operator pod %s manager logs:\n%s", pod.Name, logs)
+	}
+}
+
+// Dispose deletes the test resource once the k6-operator has finished acting
+// on it. Deleting earlier removes the jobs the operator is still polling for,
+// stranding its only reconcile worker until a timeout which can outlast every
+// later test.
 func (k6 *K6) Dispose() error {
 	if k6.k6Client == nil {
 		return nil
 	}
+	k6.waitOperatorFinished()
 	if err := k6.k6Client.Delete(k6.ctx, k6.name, v1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 	return k6.waitForDeletion()
+}
+
+// waitOperatorFinished waits until the operator marks the test resource
+// finished, or two minutes: after a completed test the operator needs at most
+// one more 30 second poll tick, while an operator which is stuck or never
+// acted cannot be waited out.
+func (k6 *K6) waitOperatorFinished() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	//nolint:errcheck
+	wait.PollUntilContextCancel(ctx, 5*time.Second, true, func(ctx context.Context) (bool, error) {
+		cr, err := k6.k6Client.Get(ctx, k6.name)
+		if apierrors.IsNotFound(err) {
+			return true, nil
+		}
+		if err != nil {
+			return false, nil
+		}
+		return cr.Status.Stage == "finished", nil
+	})
 }
 
 type K6Opt = func(*K6)
