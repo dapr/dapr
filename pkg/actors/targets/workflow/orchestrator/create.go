@@ -182,8 +182,9 @@ func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *ba
 	// a reminder created first can fire on another host before the save
 	// commits, ack SUCCESS off the empty inbox and be deleted, stranding the
 	// workflow once the save lands. Saving first makes the failure
-	// recoverable: a failed reminder create surfaces to the caller, and a
-	// create retry re-asserts it by deterministic name from the saved event.
+	// recoverable: the reminder create retries until the caller's context
+	// dies, and a create retry re-asserts it by deterministic name from the
+	// saved event.
 	state.AddToInbox(startEvent)
 	if err := o.signAndSaveState(ctx, state); err != nil {
 		return err
