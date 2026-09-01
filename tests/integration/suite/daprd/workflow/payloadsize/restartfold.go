@@ -33,20 +33,25 @@ import (
 )
 
 func init() {
-	suite.Register(new(restartresume))
+	suite.Register(new(restartresumefold))
 }
 
-// restartresume verifies that a workflow stalled with PAYLOAD_SIZE_EXCEEDED
-// resumes and runs to completion after the operator restarts daprd with a
-// larger --max-body-size.
-type restartresume struct {
+// restartresumefold verifies a PAYLOAD_SIZE_EXCEEDED stall whose completions
+// arrived through the WorkflowsFastPath fold path recovers after daprd
+// restarts with a larger --max-body-size: the stalling turn persists the
+// folded completions to the durable inbox (a nacked fold dies with the
+// sender's process), and the janitor re-drives the turn once the limit allows.
+type restartresumefold struct {
 	workflow *workflow.Workflow
 }
 
-func (r *restartresume) Setup(t *testing.T) []framework.Option {
+func (r *restartresumefold) Setup(t *testing.T) []framework.Option {
 	r.workflow = workflow.New(t,
 		workflow.WithDaprdOptions(0,
 			daprd.WithMaxBodySize("1Mi"),
+			daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
+			// Post-restart recovery of the stalled instance rides the janitor; the
+			// default 20s period eats the 45s case budget.
 			daprd.WithWorkflowJanitorPeriod(t, time.Millisecond*500),
 		),
 	)
@@ -55,7 +60,7 @@ func (r *restartresume) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (r *restartresume) Run(t *testing.T, ctx context.Context) {
+func (r *restartresumefold) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
 	const chunkSize = 250 * 1024
@@ -75,7 +80,7 @@ func (r *restartresume) Run(t *testing.T, ctx context.Context) {
 		return chunk, nil
 	})
 
-	id := api.InstanceID("workflow-resume")
+	id := api.InstanceID("workflow-resume-fold")
 	preClient := r.workflow.BackendClient(t, ctx)
 	_, err := preClient.ScheduleNewWorkflow(ctx, "growing-history", api.WithInstanceID(id))
 	require.NoError(t, err)
@@ -84,11 +89,11 @@ func (r *restartresume) Run(t *testing.T, ctx context.Context) {
 
 	stalled := wf.GetLastHistoryEventOfType[protos.HistoryEvent_ExecutionStalled](t, ctx, preClient, id)
 	require.NotNil(t, stalled)
-	require.Equal(t, "PAYLOAD_SIZE_EXCEEDED", stalled.GetExecutionStalled().GetReason().String())
+	require.Equal(t, protos.StalledReason_PAYLOAD_SIZE_EXCEEDED, stalled.GetExecutionStalled().GetReason())
 
-	// Restart daprd with a larger max-body-size. The new threshold is well above
-	// the workflow's accumulated history, so the precheck no longer fires when
-	// the workflow actor reactivates.
+	// Restarting immediately kills the folded completion's sender with the
+	// process: only the durable inbox row written by the stalling turn can
+	// resolve the outstanding activity afterwards.
 	r.workflow.Dapr().ReplaceArg(t, "max-body-size", "16Mi")
 	r.workflow.Dapr().Restart(t, ctx)
 
