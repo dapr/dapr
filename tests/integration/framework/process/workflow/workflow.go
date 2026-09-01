@@ -148,13 +148,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	// features replaces every earlier feature list. All harness-driven
 	// features must therefore land in a single manifest per daprd; it is
 	// built in the per-daprd loop below because signing is per-daprd.
-	baseFeatures := make([]string, 0, 2)
-	if clustered {
-		baseFeatures = append(baseFeatures, "WorkflowsClusteredDeployment")
-	}
-	if fastPath {
-		baseFeatures = append(baseFeatures, "WorkflowsFastPath")
-	}
+	baseFeatures := baseFeatureList(clustered, fastPath)
 
 	if opts.schedulerAddress != nil {
 		// Reset so a caller-supplied override (e.g. a proxy in front of the
@@ -364,10 +358,13 @@ func (w *Workflow) GRPCClientN(t *testing.T, ctx context.Context, index int) rtv
 	return w.daprds[index].GRPCClient(t, ctx)
 }
 
-func baseFeatureList(clustered bool) []string {
-	features := make([]string, 0, 1)
+func baseFeatureList(clustered, fastPath bool) []string {
+	features := make([]string, 0, 2)
 	if clustered {
 		features = append(features, "WorkflowsClusteredDeployment")
+	}
+	if fastPath {
+		features = append(features, "WorkflowsFastPath")
 	}
 	return features
 }
@@ -378,7 +375,7 @@ func baseFeatureList(clustered bool) []string {
 // besides the flag. daprd's config merge makes the last spec.features list
 // win, so all features must land in one manifest.
 func (w *Workflow) FeatureOptions(t *testing.T) []daprd.Option {
-	features := baseFeatureList(w.clustered)
+	features := baseFeatureList(w.clustered, w.fastPath)
 	if len(features) == 0 {
 		return nil
 	}
