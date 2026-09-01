@@ -14,9 +14,13 @@ limitations under the License.
 package orchestrator
 
 import (
+	"context"
 	"errors"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +28,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -267,6 +275,63 @@ func Test_fold_executionIDMismatchKeepsInboxPath(t *testing.T) {
 	entry, err = h.orch.addWorkflowEventMaybeFold(t.Context(), absent)
 	require.NoError(t, err)
 	assert.Nil(t, entry, "an execution-id-carrying completion with no scheduling event is unmatched and must not fold")
+}
+
+// A turn stalling on payload size must persist taken folded completions to
+// the durable inbox and ack their senders: a nacked fold dies with the
+// sender's process, leaving the stall unrecoverable once a restart lifts
+// the limit.
+func Test_runWorkflow_oversizeStallPersistsFoldedToInbox(t *testing.T) {
+	t.Parallel()
+	const instanceID = "wf-stall-fold"
+	h := newWakeHarness(t, instanceID, true)
+	h.fact.fastPath = true
+	h.primeRunning(t, instanceID, 7)
+	h.orch.maxRequestBodySize = 2048
+
+	var lock sync.Mutex
+	var saved []string
+	h.orch.actorState = statefake.New().
+		WithGetFn(func(context.Context, *actorapi.GetStateRequest, bool) (*actorapi.StateResponse, error) {
+			return &actorapi.StateResponse{}, nil
+		}).
+		WithTransactionalStateOperationFn(func(_ context.Context, _ bool, req *actorapi.TransactionalRequest, _ bool) error {
+			lock.Lock()
+			defer lock.Unlock()
+			for _, op := range req.Operations {
+				if u, ok := op.Request.(actorapi.TransactionalUpsert); ok {
+					saved = append(saved, u.Key)
+				}
+			}
+			return nil
+		})
+
+	big := taskCompletedEvent(7)
+	big.GetTaskCompleted().Result = wrapperspb.String(strings.Repeat("x", 4096))
+	entry := &foldEntry{event: big, gen: h.orch.state.Generation, committed: make(chan struct{})}
+	h.orch.foldPending = append(h.orch.foldPending, entry)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	var completed todo.RunCompleted
+	runErr := make(chan error, 1)
+	go func() {
+		var err error
+		completed, err = h.orch.runWorkflow(ctx, &actorapi.Reminder{Name: "new-event-x"})
+		runErr <- err
+	}()
+
+	require.Eventually(t, func() bool {
+		lock.Lock()
+		defer lock.Unlock()
+		return slices.ContainsFunc(saved, func(k string) bool { return strings.HasPrefix(k, "inbox") })
+	}, time.Second*5, time.Millisecond*10,
+		"the folded completion must be durably in the inbox before the stall hold")
+
+	cancel()
+	require.ErrorIs(t, <-runErr, api.ErrStalled)
+	assert.Equal(t, todo.RunCompletedFalse, completed)
+	<-entry.committed
+	require.NoError(t, entry.err, "the sender must be acked: its completion is durable in the inbox")
 }
 
 // The payload stall guard must count folded completions.
