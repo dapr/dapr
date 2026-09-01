@@ -219,8 +219,25 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	workflowName := o.getExecutionStartedEvent(state).GetName()
 	if reason, description, oversize := o.workflowPayloadOversize(ctx, state, foldedEvents(folded), workflowName); oversize {
-		// foldedCommitted stays false: the deferred handler nacks the folded
-		// senders back into their retry chains.
+		// Persist taken completions into the durable inbox before stalling:
+		// a nacked fold dies with its sender's process, leaving the stall
+		// unrecoverable once a restart lifts the limit (the janitor skips
+		// stalled instances and the durable run-activity reminder was
+		// elided). The inbox write is a state-store Multi, not an app call,
+		// so the body limit does not apply; the janitor's pending-inbox arm
+		// re-runs this turn each period and proceeds once the limit allows.
+		if len(folded) > 0 {
+			for _, f := range folded {
+				state.AddToInbox(f.event)
+			}
+			if serr := o.signAndSaveState(ctx, state); serr != nil {
+				return todo.RunCompletedFalse, serr
+			}
+			if jerr := o.ensureJanitor(ctx, state); jerr != nil {
+				return todo.RunCompletedFalse, jerr
+			}
+			foldedCommitted = true
+		}
 		return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs, reason, description)
 	}
 	// Executing workflow code is a one-way operation. We must wait for the app code to report its completion, which
@@ -340,6 +357,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 				// The CAN save persisted the effect of every consumed event,
 				// including folded completions: their senders are acked.
 				foldedCommitted = true
+
+				// The generation bumped: void the escalation marks rather
+				// than reap them (see reapEscalatedCompletions).
+				o.reapEscalatedCompletions(state)
 
 				// Bump before the elide so a stale escalation cannot
 				// recreate the reminder.
@@ -579,6 +600,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			if saveErr != nil {
 				return todo.RunCompletedFalse, saveErr
 			}
+			o.reapEscalatedCompletions(state)
 			diagnoseStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
 		}
@@ -602,6 +624,8 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// Bump before the elide so a stale escalation cannot recreate the
 	// reminder.
 	o.wakeEpoch.Add(1)
+
+	o.reapEscalatedCompletions(state)
 
 	// This turn consumed the ExecutionStarted event and its commit above is
 	// durable, so the pending start one-shot can only ever fire as a no-op:
