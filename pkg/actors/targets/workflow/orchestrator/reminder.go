@@ -83,6 +83,23 @@ func (o *orchestrator) createRetentionReminder(ctx context.Context, name string,
 	})
 }
 
+// assertStartReminder creates (or overwrites by name) the deterministic
+// start wake-up reminder (start-es-<unixnano>, from the event timestamp).
+// Callers re-driving a saved instance must pass the SAVED inbox event: a
+// client retry regenerates the incoming event's timestamp. A bounded create
+// is safe here because any create retry re-asserts via the pending-start
+// path.
+func (o *orchestrator) assertStartReminder(ctx context.Context, startEvent *backend.HistoryEvent) error {
+	start := startEvent.GetTimestamp().AsTime()
+	if ts := startEvent.GetExecutionStarted().GetScheduledStartTimestamp(); ts != nil {
+		start = ts.AsTime()
+	}
+
+	workflowName := startEvent.GetExecutionStarted().GetName()
+	reminderName := events.EventReminderName(reminderPrefixStart, startEvent)
+	return o.createWorkflowReminder(ctx, reminderName, nil, start, o.appID, &workflowName)
+}
+
 // assertNewEventReminder creates (or overwrites by name) the deterministic
 // new-event wake-up reminder for the workflow actor that holds e in its inbox.
 func (o *orchestrator) assertNewEventReminder(ctx context.Context, e *backend.HistoryEvent, state *wfenginestate.State) error {
