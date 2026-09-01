@@ -1089,7 +1089,7 @@ func (c *daprClient) ConverseAlpha2(ctx context.Context, in *ConversationRequest
 }
 
 func (c *daprClient) SetBinaryFileAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_SetBinaryFileAlpha1Client, error) {
-	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[5], Dapr_SetBinaryFileAlpha1_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[6], Dapr_SetBinaryFileAlpha1_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1123,7 +1123,7 @@ func (x *daprSetBinaryFileAlpha1Client) CloseAndRecv() (*SetBinaryFileResponse, 
 }
 
 func (c *daprClient) GetBinaryFileAlpha1(ctx context.Context, in *GetBinaryFileRequest, opts ...grpc.CallOption) (Dapr_GetBinaryFileAlpha1Client, error) {
-	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[6], Dapr_GetBinaryFileAlpha1_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[7], Dapr_GetBinaryFileAlpha1_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
