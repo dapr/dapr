@@ -390,21 +390,41 @@ else
 TEST_ADDITIONAL_TAGS:=
 endif
 
+# Process logs are written to one file per failed test (see
+# tests/docs/writing-integration-test.md), so what reaches the terminal is the
+# assertion, a pointer to that file, and a summary of failures at the end.
+#
+# --format testname prints one line per test, and the output of failed tests
+# only. Under GitHub Actions gotestsum upgrades it to the github-actions format,
+# which additionally collapses each test's output into a log group.
+GOTESTSUM_INTEGRATION_FLAGS := \
+	--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
+	--junitfile $(TEST_OUTPUT_FILE_PREFIX)_integration.xml \
+	--format testname
+
 .PHONY: test-integration
 test-integration: test-deps
 		CGO_ENABLED=1 gotestsum \
-			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
-			--format testname \
+			$(GOTESTSUM_INTEGRATION_FLAGS) \
 			-- \
 			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=false $(ARGS)
 
 .PHONY: test-integration-parallel
 test-integration-parallel: test-deps
 		CGO_ENABLED=1 gotestsum \
-			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
-			--format testname \
+			$(GOTESTSUM_INTEGRATION_FLAGS) \
 			-- \
 			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=true $(ARGS)
+
+# Local runs. Prints a live dot per test rather than a line, so a full suite run
+# fits on one screen. Pass a focus regex with FOCUS, e.g.
+#   make test-integration-dots FOCUS=actors/reminders
+.PHONY: test-integration-dots
+test-integration-dots: test-deps
+		CGO_ENABLED=1 gotestsum \
+			--format dots-v2 \
+			-- \
+			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=true -focus="$(or $(FOCUS),.*)" $(ARGS)
 
 ################################################################################
 # Target: lint                                                                 #

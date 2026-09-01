@@ -35,6 +35,7 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 )
 
 // Option is a function that configures the process.
@@ -85,7 +86,7 @@ func New(t *testing.T, fopts ...Option) *SQLite {
 }
 
 func (s *SQLite) Run(t *testing.T, ctx context.Context) {
-	t.Logf("Storing SQLite database at %s", s.dbPath)
+	iowriter.Eventf(t, "storing SQLite database at %s", s.dbPath)
 
 	s.runOnce.Do(func() {
 		for _, migration := range s.migrations {

@@ -39,6 +39,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
@@ -360,7 +361,7 @@ func (s *Sentry) DialGRPC(t *testing.T, ctx context.Context, sentryID string) *g
 			}
 
 			// Log the error but don't fail the test if connection is already closed
-			t.Logf("Warning: gRPC connection close error (may be already closed): %v", err)
+			iowriter.Eventf(t, "gRPC connection close error (may be already closed): %v", err)
 		}
 	})
 

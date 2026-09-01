@@ -22,13 +22,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -81,7 +81,7 @@ func (m *multidapr) Run(t *testing.T, ctx context.Context) {
 
 	d := m.daprds[0] // use the first Dapr instance to call
 
-	backendClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), backend.DefaultLogger())
+	backendClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), logger.New(t))
 
 	t.Run("schedule_workflow_with_multidaprple_daprd_instances", func(t *testing.T) {
 		r := task.NewTaskRegistry()

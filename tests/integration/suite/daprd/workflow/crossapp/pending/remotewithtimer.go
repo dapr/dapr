@@ -23,13 +23,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -111,7 +111,7 @@ func (r *remotewithtimer) Run(t *testing.T, ctx context.Context) {
 	r.place.WaitUntilRunning(t, ctx)
 	r.daprd1.WaitUntilRunning(t, ctx)
 
-	client1 := client.NewTaskHubGrpcClient(r.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
+	client1 := client.NewTaskHubGrpcClient(r.daprd1.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client1.StartWorkItemListener(ctx, r.registry1))
 
 	id, err := client1.ScheduleNewWorkflow(ctx, "TimerThenRemoteWorkflow", api.WithInput("hello"))
@@ -125,7 +125,7 @@ func (r *remotewithtimer) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { r.daprd2.Cleanup(t) })
 	r.daprd2.WaitUntilRunning(t, ctx)
 
-	client2 := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
+	client2 := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client2.StartWorkItemListener(ctx, r.registry2))
 
 	metadata, err = client1.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))

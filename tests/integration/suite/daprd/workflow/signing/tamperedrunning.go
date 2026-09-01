@@ -24,6 +24,7 @@ import (
 
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -93,7 +94,7 @@ func (tr *tamperedrunning) Run(tt *testing.T, ctx context.Context) {
 		return payload, nil
 	})
 
-	client := dworkflow.NewClient(tr.daprd.GRPCConn(tt, ctx))
+	client := dworkflow.NewClientWithLogger(tr.daprd.GRPCConn(tt, ctx), logger.New(tt))
 	require.NoError(tt, client.StartWorker(ctx, reg))
 
 	id, err := client.ScheduleWorkflow(ctx, "sign-tamper-running")
@@ -120,7 +121,7 @@ func (tr *tamperedrunning) Run(tt *testing.T, ctx context.Context) {
 	tr.daprd.Restart(tt, ctx)
 	tr.daprd.WaitUntilRunning(tt, ctx)
 
-	client = dworkflow.NewClient(tr.daprd.GRPCConn(tt, ctx))
+	client = dworkflow.NewClientWithLogger(tr.daprd.GRPCConn(tt, ctx), logger.New(tt))
 	require.NoError(tt, client.StartWorker(ctx, reg))
 
 	// Trigger the orchestrator actor by raising the event the workflow is

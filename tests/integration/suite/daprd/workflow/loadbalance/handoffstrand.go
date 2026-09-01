@@ -29,10 +29,10 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fgrpc "github.com/dapr/dapr/tests/integration/framework/grpc"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -143,7 +143,7 @@ func (h *handoffstrand) Run(t *testing.T, ctx context.Context) {
 	conns1 := dialAll()
 	lctx, lcancel := context.WithCancel(ctx)
 	cl1 := client.NewTaskHubGrpcClient(fgrpc.LoadBalance(t,
-		conns1[0], conns1[1], conns1[2]), backend.DefaultLogger())
+		conns1[0], conns1[1], conns1[2]), logger.New(t))
 	require.NoError(t, cl1.StartWorkItemListener(lctx, newRegistry()))
 	waitForCohort(15)
 
@@ -161,7 +161,7 @@ func (h *handoffstrand) Run(t *testing.T, ctx context.Context) {
 		}
 	})
 	cl2 := client.NewTaskHubGrpcClient(fgrpc.LoadBalance(t,
-		conns2[0], conns2[1], conns2[2]), backend.DefaultLogger())
+		conns2[0], conns2[1], conns2[2]), logger.New(t))
 	require.NoError(t, cl2.StartWorkItemListener(ctx, newRegistry()))
 
 	mu.Lock()
