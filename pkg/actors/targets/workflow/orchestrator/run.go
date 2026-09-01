@@ -358,6 +358,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 				// including folded completions: their senders are acked.
 				foldedCommitted = true
 
+				// The generation bumped: void the escalation marks rather
+				// than reap them (see reapEscalatedCompletions).
+				o.reapEscalatedCompletions(state)
+
 				// Bump before the elide so a stale escalation cannot
 				// recreate the reminder.
 				o.wakeEpoch.Add(1)
@@ -596,6 +600,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			if saveErr != nil {
 				return todo.RunCompletedFalse, saveErr
 			}
+			o.reapEscalatedCompletions(state)
 			diagnoseStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
 		}
@@ -619,6 +624,8 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// Bump before the elide so a stale escalation cannot recreate the
 	// reminder.
 	o.wakeEpoch.Add(1)
+
+	o.reapEscalatedCompletions(state)
 
 	// This turn consumed the ExecutionStarted event and its commit above is
 	// durable, so the pending start one-shot can only ever fire as a no-op:
