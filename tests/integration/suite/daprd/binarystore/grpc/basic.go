@@ -66,14 +66,18 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			Options: &rtv1.SetBinaryFileRequestOptions{
-				ComponentName: "mystore",
-				FileName:      "hello.bin",
-				Overwrite:     true,
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Options{
+				Options: &rtv1.SetBinaryFileRequestOptions{
+					ComponentName: "mystore",
+					FileName:      "hello.bin",
+					Overwrite:     true,
+				},
 			},
 		}))
 		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			Payload: &commonv1pb.StreamPayload{Data: []byte("hello world"), Seq: 0},
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Payload{
+				Payload: &commonv1pb.StreamPayload{Data: []byte("hello world"), Seq: 0},
+			},
 		}))
 		_, err = stream.CloseAndRecv()
 		require.NoError(t, err)
@@ -101,14 +105,18 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		stream, err := client.SetBinaryFileAlpha1(ctx)
 		require.NoError(t, err)
 		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			Options: &rtv1.SetBinaryFileRequestOptions{
-				ComponentName: "mystore",
-				FileName:      "hello.bin",
-				Overwrite:     false,
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Options{
+				Options: &rtv1.SetBinaryFileRequestOptions{
+					ComponentName: "mystore",
+					FileName:      "hello.bin",
+					Overwrite:     false,
+				},
 			},
 		}))
 		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			Payload: &commonv1pb.StreamPayload{Data: []byte("second"), Seq: 0},
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Payload{
+				Payload: &commonv1pb.StreamPayload{Data: []byte("second"), Seq: 0},
+			},
 		}))
 		_, err = stream.CloseAndRecv()
 		require.Error(t, err)
@@ -134,14 +142,18 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		stream, err := client.SetBinaryFileAlpha1(ctx)
 		require.NoError(t, err)
 		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			Options: &rtv1.SetBinaryFileRequestOptions{
-				ComponentName: "mystore",
-				FileName:      "temp.bin",
-				Overwrite:     true,
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Options{
+				Options: &rtv1.SetBinaryFileRequestOptions{
+					ComponentName: "mystore",
+					FileName:      "temp.bin",
+					Overwrite:     true,
+				},
 			},
 		}))
 		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			Payload: &commonv1pb.StreamPayload{Data: []byte("temp"), Seq: 0},
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Payload{
+				Payload: &commonv1pb.StreamPayload{Data: []byte("temp"), Seq: 0},
+			},
 		}))
 		_, err = stream.CloseAndRecv()
 		require.NoError(t, err)

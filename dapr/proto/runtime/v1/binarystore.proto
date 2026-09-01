@@ -28,10 +28,12 @@ import "dapr/proto/common/v1/common.proto";
 // The first message in the stream must contain the options; subsequent
 // messages carry chunks of the binary file content via payload.
 message SetBinaryFileRequest {
-  // Request details. Must be present in the first message only.
-  SetBinaryFileRequestOptions options = 1;
-  // Chunk of data of arbitrary size.
-  common.v1.StreamPayload payload = 2;
+  oneof set_binary_file_request_type {
+    // Request details. Must be present in the first message only.
+    SetBinaryFileRequestOptions options = 1;
+    // Chunk of data of arbitrary size.
+    common.v1.StreamPayload payload = 2;
+  }
 }
 
 // SetBinaryFileRequestOptions contains options for the first message in the

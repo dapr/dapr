@@ -862,17 +862,20 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 		setBinaryFileAlpha1: connect.NewClient[v1.SetBinaryFileRequest, v1.SetBinaryFileResponse](
 			httpClient,
 			baseURL+DaprSetBinaryFileAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("SetBinaryFileAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		getBinaryFileAlpha1: connect.NewClient[v1.GetBinaryFileRequest, v1.GetBinaryFileResponse](
 			httpClient,
 			baseURL+DaprGetBinaryFileAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("GetBinaryFileAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		deleteBinaryFileAlpha1: connect.NewClient[v1.DeleteBinaryFileRequest, v1.DeleteBinaryFileResponse](
 			httpClient,
 			baseURL+DaprDeleteBinaryFileAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("DeleteBinaryFileAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -1985,17 +1988,20 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 	daprSetBinaryFileAlpha1Handler := connect.NewClientStreamHandler(
 		DaprSetBinaryFileAlpha1Procedure,
 		svc.SetBinaryFileAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("SetBinaryFileAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprGetBinaryFileAlpha1Handler := connect.NewServerStreamHandler(
 		DaprGetBinaryFileAlpha1Procedure,
 		svc.GetBinaryFileAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("GetBinaryFileAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprDeleteBinaryFileAlpha1Handler := connect.NewUnaryHandler(
 		DaprDeleteBinaryFileAlpha1Procedure,
 		svc.DeleteBinaryFileAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("DeleteBinaryFileAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.runtime.v1.Dapr/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
