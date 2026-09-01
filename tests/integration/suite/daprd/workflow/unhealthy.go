@@ -125,9 +125,12 @@ func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 	u.appHealth.Store(false)
 	assert.Eventually(t, u.sentUnhealthySignal.Load, time.Second*10, time.Millisecond*10)
 
-	close(releaseCh)
-
+	// The halt cancels the parked execution waits directly, so wait for the
+	// cancellation before releasing the handlers; released early, the
+	// activities complete their waits before the cancel fires.
 	u.logline.EventuallyFoundAll(t)
+
+	close(releaseCh)
 
 	for i := range n {
 		assert.GreaterOrEqual(t, 1, strings.Count(
