@@ -58,6 +58,11 @@ const (
 	MetadataFetchOnly = "MetadataFetchOnly"
 
 	ActorTypePrefix = "dapr.internal."
+
+	// ActivityReminderName is the per-activity-actor execution reminder name.
+	// Shared so the orchestrator can reap an escalated reminder whose task
+	// resolved while the escalation create was in flight.
+	ActivityReminderName = "run-activity"
 )
 
 var (

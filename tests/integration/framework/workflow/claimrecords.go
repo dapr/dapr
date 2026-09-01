@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
@@ -30,10 +31,15 @@ import (
 func CountClaimRecords(t *testing.T, ctx context.Context, db *sqlite.SQLite) int {
 	t.Helper()
 	var count int
-	require.NoError(t, db.GetConnection(t).QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM "+db.TableName()+" WHERE key LIKE ?",
-		"%||execution-claim",
-	).Scan(&count))
+	// The query shares the store with running daprds; a write transaction
+	// can hold the file lock past the connection's busy timeout under load,
+	// so transient SQLITE_BUSY reads retry rather than fail the test.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.NoError(c, db.GetConnection(t).QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM "+db.TableName()+" WHERE key LIKE ?",
+			"%||execution-claim",
+		).Scan(&count))
+	}, time.Second*20, time.Millisecond*100)
 	return count
 }
 
