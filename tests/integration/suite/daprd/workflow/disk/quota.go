@@ -72,21 +72,17 @@ func (q *quota) Run(t *testing.T, ctx context.Context) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "database space exceeded")
 
-	// The create saves state first, then retries the start-reminder create
-	// until the caller's context dies, so under a full quota the schedule call
-	// blocks instead of surfacing the etcd error.
+	// State saves first; the start-reminder create surfaces the quota error.
 	const wfID = "quota-wf"
 	cl := q.wf.BackendClient(t, ctx)
-	blockedCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	_, err = cl.ScheduleNewWorkflow(blockedCtx, "timerFlow", api.WithInstanceID(wfID))
-	cancel()
+	_, err = cl.ScheduleNewWorkflow(ctx, "timerFlow", api.WithInstanceID(wfID))
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "context deadline exceeded")
+	require.Contains(t, err.Error(), "database space exceeded")
 
 	sched.RecoverQuota(t, ctx, "quota-test/")
 
 	// Retrying the same instance ID lands in the pending-start path, which
-	// re-asserts the reminder from the state saved by the blocked create.
+	// re-asserts the reminder from the state saved by the failed create.
 	id, err := cl.ScheduleNewWorkflow(ctx, "timerFlow", api.WithInstanceID(wfID))
 	require.NoError(t, err)
 	meta, err := cl.WaitForWorkflowCompletion(ctx, id)

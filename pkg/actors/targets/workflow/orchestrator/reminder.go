@@ -86,11 +86,10 @@ func (o *orchestrator) createRetentionReminder(ctx context.Context, name string,
 // assertStartReminder creates (or overwrites by name) the deterministic
 // start wake-up reminder (start-es-<unixnano>, from the event timestamp).
 // Callers re-driving a saved instance must pass the SAVED inbox event: a
-// client retry regenerates the incoming event's timestamp. The create
-// retries until the caller's context dies: the state is already saved, and
-// SDKs generate a fresh instance ID per schedule call, so a bounded give-up
-// would strand a persisted instance that only a same-ID retry could ever
-// re-drive via the pending-start path.
+// client retry regenerates the incoming event's timestamp. Transient create
+// errors retry until the caller's context dies (SDKs regenerate instance
+// IDs, so a bounded give-up strands the saved instance); permanent errors,
+// including a full scheduler quota, surface immediately.
 func (o *orchestrator) assertStartReminder(ctx context.Context, startEvent *backend.HistoryEvent) error {
 	start := startEvent.GetTimestamp().AsTime()
 	if ts := startEvent.GetExecutionStarted().GetScheduledStartTimestamp(); ts != nil {
