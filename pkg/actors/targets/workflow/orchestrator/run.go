@@ -30,6 +30,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	staterrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -100,16 +101,17 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		state.Inbox = append(state.Inbox, &cascadeEvent)
 	}
 
-	if len(state.Inbox) == 0 && len(o.foldPending) == 0 && !runtimestate.IsCompleted(o.rstate) {
+	if len(state.Inbox) == 0 && len(o.foldPending) == 0 {
 		// The in-memory cache may be stale: during a placement cluster failure
 		// daprds will roll over the actor, so a peer host may have written a new
 		// inbox event to the store since our cache was last updated. Drop the
 		// cache and reload from the store before declaring this a no-op. Acking
 		// SUCCESS off a stale empty inbox would tell the scheduler to delete the
 		// job and strand the workflow on the durable event that's actually sitting
-		// in the store. Skip when the cached rstate is terminal: a finished
-		// workflow can't gain new inbox events, and the empty inbox below is just
-		// the retention-recovery path.
+		// in the store. A terminal cached rstate is reloaded too: on
+		// instance-ID reuse the store may already hold the new generation's
+		// pending start, and acking off the stale cache would delete its
+		// reminder.
 		o.invalidateCachedState()
 		state, _, err = o.loadInternalState(ctx)
 		if err != nil {
@@ -176,6 +178,27 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		log.Warnf("Workflow actor '%s': cached runtime state is terminal but the durable view holds a pending start (history len %d); reloading before running", o.actorID, len(state.History))
 		o.invalidateCachedState()
 		return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("workflow actor '%s': inconsistent cached state (terminal runtime state with pending start), reloaded", o.actorID))
+	}
+
+	// Events but no ExecutionStarted anywhere: the committed start was lost
+	// and the instance would report PENDING forever while its work is
+	// silently dropped. Reclassify against durable truth first (the cache
+	// may trail a peer host's committed start), then fail terminally.
+	if esHistoryEvent == nil && len(state.History) == 0 {
+		o.invalidateCachedState()
+		state, _, err = o.loadInternalState(ctx)
+		if err != nil {
+			return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to reload state to classify unstartable inbox: %w", err))
+		}
+		if state == nil {
+			log.Warnf("No workflow state found for actor '%s' after reload, terminating execution", o.actorID)
+			return todo.RunCompletedTrue, nil
+		}
+		if isUnstartableState(state) {
+			return o.failUnstartableWorkflow(ctx, state)
+		}
+		// Startable after all: retry against the reloaded view.
+		return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("workflow actor '%s': cached state held events with no ExecutionStarted but the durable state is startable; reloaded", o.actorID))
 	}
 
 	// Take any held completions into this turn (WorkflowsFastPath):
@@ -968,4 +991,69 @@ func filterValidInboxEvents(state *wfenginestate.State) []*backend.HistoryEvent 
 	}
 
 	return valid
+}
+
+// isUnstartableState reports whether the durable state can never progress:
+// inbox events with an empty history and no pending ExecutionStarted. The
+// shape only arises when the committed start was lost.
+func isUnstartableState(state *wfenginestate.State) bool {
+	if len(state.Inbox) == 0 || len(state.History) != 0 {
+		return false
+	}
+	for _, e := range state.Inbox {
+		if e.GetExecutionStarted() != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// failUnstartableWorkflow commits a FAILED completion describing the dropped
+// inbox events, drains the inbox, and acks the driving reminder so
+// redelivery stops.
+func (o *orchestrator) failUnstartableWorkflow(ctx context.Context, state *wfenginestate.State) (todo.RunCompleted, error) {
+	kinds := make([]string, 0, len(state.Inbox))
+	for _, e := range state.Inbox {
+		kinds = append(kinds, fmt.Sprintf("%T", e.GetEventType()))
+	}
+	msg := fmt.Sprintf("workflow instance holds %d inbox event(s) (%s) but an empty history and no pending ExecutionStarted; the committed start event was lost and the instance can never progress",
+		len(state.Inbox), strings.Join(kinds, ", "))
+	log.Errorf("Workflow actor '%s': %s; failing the workflow instance", o.actorID, msg)
+	diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusUnstartableFailed)
+
+	// RuntimeStatus reports PENDING whenever the start event is missing,
+	// so a synthetic ExecutionStarted must precede the FAILED completion
+	// for it to surface. The original start is lost; only the ID is known.
+	state.AddToHistory(&backend.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ExecutionStarted{
+			ExecutionStarted: &protos.ExecutionStartedEvent{
+				WorkflowInstance: &protos.WorkflowInstance{
+					InstanceId: o.actorID,
+				},
+			},
+		},
+	})
+	state.AddToHistory(&backend.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ExecutionCompleted{
+			ExecutionCompleted: &protos.ExecutionCompletedEvent{
+				WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED,
+				FailureDetails: &protos.TaskFailureDetails{
+					ErrorType:    staterrors.ErrorTypeUnstartableState,
+					ErrorMessage: msg,
+				},
+			},
+		},
+	})
+	state.ClearInbox()
+	if err := o.signAndSaveState(ctx, state); err != nil {
+		return todo.RunCompletedFalse, err
+	}
+	if err := o.handleRetention(ctx, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED); err != nil {
+		return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
+	}
+	return todo.RunCompletedTrue, nil
 }
