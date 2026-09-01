@@ -31,6 +31,12 @@ func (w *Workflow) WorkflowActorType(index int) string {
 	return "dapr.internal.default." + w.daprds[index].AppID() + ".workflow"
 }
 
+// ActivityActorType returns the activity actor type registered by the daprd
+// at the given index (default namespace).
+func (w *Workflow) ActivityActorType(index int) string {
+	return "dapr.internal.default." + w.daprds[index].AppID() + ".activity"
+}
+
 // WriteWorkflowState writes a fabricated durable workflow state for the given
 // instance straight into the SQLite actor state store: the history and inbox
 // event rows plus the metadata row describing them, in the exact key layout

@@ -1019,7 +1019,6 @@ func (o *orchestrator) failUnstartableWorkflow(ctx context.Context, state *wfeng
 	msg := fmt.Sprintf("workflow instance holds %d inbox event(s) (%s) but an empty history and no pending ExecutionStarted; the committed start event was lost and the instance can never progress",
 		len(state.Inbox), strings.Join(kinds, ", "))
 	log.Errorf("Workflow actor '%s': %s; failing the workflow instance", o.actorID, msg)
-	diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusUnstartableFailed)
 
 	// RuntimeStatus reports PENDING whenever the start event is missing,
 	// so a synthetic ExecutionStarted must precede the FAILED completion
@@ -1052,6 +1051,7 @@ func (o *orchestrator) failUnstartableWorkflow(ctx context.Context, state *wfeng
 	if err := o.signAndSaveState(ctx, state); err != nil {
 		return todo.RunCompletedFalse, err
 	}
+	diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusUnstartableFailed)
 	if err := o.handleRetention(ctx, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED); err != nil {
 		return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
 	}

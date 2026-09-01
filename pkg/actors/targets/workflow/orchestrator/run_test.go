@@ -35,6 +35,7 @@ import (
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -1103,6 +1104,50 @@ func Test_runWorkflow_emptyInboxStaleTerminalCacheReloads(t *testing.T) {
 // ExecutionCompleted(FAILED) with failure details is committed, the inbox is
 // cleared, the retention reminder is created, and the driving reminder is
 // consumed so redelivery stops.
+// With history signing enabled, the unstartable shape must reach the
+// terminal-FAILED classification, not the inbox-tamper tombstone: with no
+// signed history there is no attestation to violate, and the tombstone
+// appends a completion without a start event, leaving the status PENDING.
+func Test_runWorkflow_unstartableStateFailsTerminallyWithSigning(t *testing.T) {
+	t.Parallel()
+
+	const instanceID = "wf-unstartable-signed"
+
+	inbox := []*backend.HistoryEvent{{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_TaskCompleted{
+			TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 2},
+		},
+	}}
+
+	h := newWakeHarness(t, instanceID, true)
+	h.fact.fastPath = true
+	h.fact.signer = testAddSigner(t)
+	h.orch.signing = &signing.Signing{
+		Signer:            h.fact.signer,
+		Namespace:         "default",
+		ActorID:           instanceID,
+		ActorType:         h.fact.actorType,
+		ActivityActorType: h.fact.activityActorType,
+		Reminders:         h.fact.reminders,
+	}
+	h.orch.actorState = fakeStoreServingState(t, 0, nil, inbox)
+	h.orch.state = nil
+
+	completed, err := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-x"})
+	require.NoError(t, err)
+	assert.Equal(t, todo.RunCompletedTrue, completed)
+
+	require.NotNil(t, h.orch.rstate)
+	assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, runtimestate.RuntimeStatus(h.orch.rstate))
+	fd, ferr := runtimestate.FailureDetails(h.orch.rstate)
+	require.NoError(t, ferr, "failure details must surface")
+	assert.Equal(t, staterrors.ErrorTypeUnstartableState, fd.GetErrorType(),
+		"the shape must classify as unstartable, not tampered")
+	assert.Empty(t, h.orch.state.Inbox)
+}
+
 func Test_runWorkflow_unstartableStateFailsTerminally(t *testing.T) {
 	t.Parallel()
 
