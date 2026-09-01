@@ -352,6 +352,8 @@ test-deps:
 #   jobs and workflows in other packages depend on
 # - job consumes pubsub topics shared with the pubsub packages and asserts on
 #   exact delivery counts
+# Names must be plain directory names: they are joined into a grep -E
+# alternation in test-e2e-all, so regex metacharacters would mis-match.
 DAPR_E2E_SERIAL_PACKAGES ?= hotreloading scheduler job
 
 # Compile the e2e test binaries without running them, so that a later

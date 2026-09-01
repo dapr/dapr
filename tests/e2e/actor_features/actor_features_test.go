@@ -42,6 +42,7 @@ const (
 	timerName                             = "myTimer"                            // Timer name.
 	numHealthChecks                       = 60                                   // Number of get calls before starting tests.
 	secondsToCheckTimerAndReminderResult  = 20                                   // How much time to wait to make sure the result is in logs.
+	singleFireQuietWindow                 = 5 * time.Second                      // Quiet hold after a single-fire reminder so an erroneous second fire is caught.
 	secondsBetweenChecksForActorFailover  = 5                                    // How much time to wait to make sure the result is in logs.
 	minimumCallsForTimerAndReminderResult = 10                                   // How many calls to timer or reminder should be at minimum.
 	actorsToCheckRebalance                = 30                                   // How many actors to create in the rebalance check test.
@@ -355,7 +356,7 @@ func TestActorFeatures(t *testing.T) {
 			}
 			assert.GreaterOrEqual(c, countActorAction(logs, actorID, reminderName), 1)
 		}, secondsToCheckTimerAndReminderResult*time.Second, time.Second, "reminder did not fire")
-		time.Sleep(5 * time.Second)
+		time.Sleep(singleFireQuietWindow)
 
 		// Reset reminder
 		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
