@@ -448,3 +448,15 @@ func WithPlacement(placement *placement.Placement) Option {
 		o.placementAddresses = append(o.placementAddresses, placement.Address())
 	}
 }
+
+// WithWorkflowJanitorPeriod sets the WorkflowsFastPath janitor backstop
+// period for this daprd.
+func WithWorkflowJanitorPeriod(t *testing.T, d time.Duration) Option {
+	return WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_JANITOR_PERIOD", d.String()))
+}
+
+// WithWorkflowClaimRetention sets how long a Completed execution-claim
+// record is retained before its guard deletes it.
+func WithWorkflowClaimRetention(t *testing.T, d time.Duration) Option {
+	return WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_ACTIVITY_CLAIM_RETENTION", d.String()))
+}
