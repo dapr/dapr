@@ -45,6 +45,7 @@ type foldpublish struct {
 
 func (u *foldpublish) Setup(t *testing.T) []framework.Option {
 	u.workflow = workflow.New(t,
+		workflow.WithSigning(false),
 		workflow.WithDaprdOptions(0,
 			daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 		),
