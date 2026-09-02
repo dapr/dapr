@@ -401,7 +401,12 @@ func TestK6(t *testing.T) {
 		called := 0
 		jobs.jobsResultF = func() *batchv1.JobList {
 			called++
-			if called == 2 {
+			// The first call comes from Dispose waiting for deletion and must
+			// see no jobs; every later call comes from waitForCompletion and
+			// must see the succeeded job. Returning the success only on one
+			// exact call count would turn any extra poll into a hang until
+			// the test binary timeout instead of a failure.
+			if called >= 2 {
 				return &batchv1.JobList{
 					Items: []batchv1.Job{{
 						Status: batchv1.JobStatus{
