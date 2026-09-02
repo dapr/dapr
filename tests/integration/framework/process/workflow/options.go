@@ -48,6 +48,7 @@ type options struct {
 	signing         bool
 	signingDisabled []int
 	clustered       *bool
+	fastPath        *bool
 
 	orchestrators     []orchestratorConfig
 	activities        []activityConfig
@@ -151,6 +152,15 @@ func WithSigningDisabledN(index int) Option {
 func WithClusteredDeployment(enabled bool) Option {
 	return func(o *options) {
 		o.clustered = &enabled
+	}
+}
+
+// WithFastPath explicitly enables or disables the WorkflowsFastPath feature
+// flag on every daprd in the workflow, overriding the
+// DAPR_INTEGRATION_WORKFLOW_FASTPATH environment variable.
+func WithFastPath(enabled bool) Option {
+	return func(o *options) {
+		o.fastPath = &enabled
 	}
 }
 
