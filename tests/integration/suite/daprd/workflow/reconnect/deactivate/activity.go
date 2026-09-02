@@ -24,6 +24,8 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -43,7 +45,14 @@ type activity struct {
 
 func (a *activity) Setup(t *testing.T) []framework.Option {
 	a.waitCh = make(chan struct{})
-	a.workflow = workflow.New(t)
+	// Under WorkflowsFastPath recovery after the worker reconnect is driven by
+	// the janitor reminder, so shrink its period below the completion timeout.
+	// The variable is unused in default mode.
+	a.workflow = workflow.New(t,
+		workflow.WithDaprdOptions(0, daprd.WithExecOptions(exec.WithEnvVars(t,
+			"DAPR_WORKFLOW_JANITOR_PERIOD", "2s",
+		))),
+	)
 
 	return []framework.Option{
 		framework.WithProcesses(a.workflow),

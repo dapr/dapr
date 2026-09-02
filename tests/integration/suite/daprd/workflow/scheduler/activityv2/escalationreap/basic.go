@@ -45,7 +45,10 @@ func init() {
 // re-runs the body on a cold host.
 type basic struct {
 	workflow *workflow.Workflow
-	joiner   *daprd.Daprd
+	// joiners trigger placement rebalances; one joins up front and the rest
+	// join one at a time only while no escalation has landed, since a churn
+	// round can move no in-flight actor at all.
+	joiners [3]*daprd.Daprd
 }
 
 func (e *basic) Setup(t *testing.T) []framework.Option {
@@ -55,12 +58,14 @@ func (e *basic) Setup(t *testing.T) []framework.Option {
 	}
 	e.workflow = workflow.New(t, workflow.WithDaprdOptions(0, fp...))
 
-	e.joiner = daprd.New(t, append([]daprd.Option{
-		daprd.WithAppID(e.workflow.Dapr().AppID()),
-		daprd.WithResourceFiles(e.workflow.DB().GetComponent(t)),
-		daprd.WithPlacementAddresses(e.workflow.Placement().Address()),
-		daprd.WithSchedulerAddresses(e.workflow.Scheduler().Address()),
-	}, fp...)...)
+	for i := range e.joiners {
+		e.joiners[i] = daprd.New(t, append([]daprd.Option{
+			daprd.WithAppID(e.workflow.Dapr().AppID()),
+			daprd.WithResourceFiles(e.workflow.DB().GetComponent(t)),
+			daprd.WithPlacementAddresses(e.workflow.Placement().Address()),
+			daprd.WithSchedulerAddresses(e.workflow.Scheduler().Address()),
+		}, fp...)...)
+	}
 
 	return []framework.Option{
 		framework.WithProcesses(e.workflow),
@@ -71,6 +76,7 @@ func (e *basic) Run(t *testing.T, ctx context.Context) {
 	e.workflow.WaitUntilRunning(t, ctx)
 
 	const batch = 6
+	const bodiesPerWorkflow = 1
 
 	var executions atomic.Int64
 	release := make(chan struct{})
@@ -99,37 +105,62 @@ func (e *basic) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, e.workflow.Registry().AddActivityN("Slow", actFn))
 	client1 := e.workflow.BackendClient(t, ctx)
 
-	ids := make([]string, 0, batch)
-	for range batch {
-		resp, err := e.workflow.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
-			WorkflowComponent: "dapr",
-			WorkflowName:      "EscalationReap",
-		})
-		require.NoError(t, err)
-		ids = append(ids, resp.GetInstanceId())
+	var ids []string
+	start := func() {
+		t.Helper()
+		for range batch {
+			resp, err := e.workflow.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
+				WorkflowComponent: "dapr",
+				WorkflowName:      "EscalationReap",
+			})
+			require.NoError(t, err)
+			ids = append(ids, resp.GetInstanceId())
+		}
+		require.Eventually(t, func() bool {
+			return executions.Load() >= int64(len(ids)*bodiesPerWorkflow)
+		}, time.Second*30, time.Millisecond*10,
+			"every activity body must be mid-execution before the churn")
 	}
-	require.Eventually(t, func() bool {
-		return executions.Load() >= int64(batch)
-	}, time.Second*30, time.Millisecond*10,
-		"every activity body must be mid-execution before the churn")
+	start()
 
-	e.joiner.Run(t, ctx)
-	t.Cleanup(func() { e.joiner.Cleanup(t) })
-	e.joiner.WaitUntilRunning(t, ctx)
+	var joined []*daprd.Daprd
+	join := func(d *daprd.Daprd) {
+		t.Helper()
+		d.Run(t, ctx)
+		t.Cleanup(func() { d.Cleanup(t) })
+		d.WaitUntilRunning(t, ctx)
 
-	registry := task.NewTaskRegistry()
-	require.NoError(t, registry.AddWorkflowN("EscalationReap", wfFn))
-	require.NoError(t, registry.AddActivityN("Slow", actFn))
-	joinerClient := client.NewTaskHubGrpcClient(e.joiner.GRPCConn(t, ctx), backend.DefaultLogger())
-	require.NoError(t, joinerClient.StartWorkItemListener(ctx, registry))
+		registry := task.NewTaskRegistry()
+		require.NoError(t, registry.AddWorkflowN("EscalationReap", wfFn))
+		require.NoError(t, registry.AddActivityN("Slow", actFn))
+		joinerClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), backend.DefaultLogger())
+		require.NoError(t, joinerClient.StartWorkItemListener(ctx, registry))
+		joined = append(joined, d)
+	}
+	join(e.joiners[0])
 
 	sumBoth := func(status string) float64 {
-		return e.workflow.Dapr().Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:"+status) +
-			e.joiner.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:"+status)
+		sum := e.workflow.Dapr().Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:"+status)
+		for _, d := range joined {
+			sum += d.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:"+status)
+		}
+		return sum
 	}
-	require.Eventually(t, func() bool {
-		return sumBoth("janitor_redispatch_escalated") >= 1
-	}, time.Second*30, time.Millisecond*50,
+	// Whether a churn round moves any in-flight actor is probabilistic; when
+	// none moved, block another batch and churn again with the next joiner.
+	escalated := func() bool { return sumBoth("janitor_redispatch_escalated") >= 1 }
+	for _, churner := range e.joiners[1:] {
+		deadline := time.Now().Add(time.Second * 10)
+		for !escalated() && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond * 50)
+		}
+		if escalated() {
+			break
+		}
+		start()
+		join(churner)
+	}
+	require.Eventually(t, escalated, time.Second*10, time.Millisecond*50,
 		"the janitor must escalate at least one unresolved activity to its durable reminder")
 
 	close(release)
@@ -145,6 +176,6 @@ func (e *basic) Run(t *testing.T, ctx context.Context) {
 			"no run-activity reminder may outlive its workflow")
 	}, time.Second*30, time.Millisecond*50)
 
-	assert.Equal(t, int64(batch), executions.Load(),
+	assert.Equal(t, int64(len(ids)), executions.Load(),
 		"every activity body must run exactly once; a reaped reminder cannot fire")
 }
