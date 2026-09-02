@@ -132,6 +132,55 @@ func verifyX509Bundle(trustAnchors, issChainPEM, issKeyPEM []byte) (*bundle.X509
 	}, nil
 }
 
+// anchorsEqual reports whether two PEM bundles contain the same set of
+// certificates, regardless of order or PEM comments.
+func anchorsEqual(a, b []byte) (bool, error) {
+	certsA, err := pem.DecodePEMCertificates(a)
+	if err != nil {
+		return false, err
+	}
+	certsB, err := pem.DecodePEMCertificates(b)
+	if err != nil {
+		return false, err
+	}
+	if len(certsA) != len(certsB) {
+		return false, nil
+	}
+
+	counts := make(map[string]int, len(certsA))
+	for _, cert := range certsA {
+		counts[string(cert.Raw)]++
+	}
+	for _, cert := range certsB {
+		counts[string(cert.Raw)]--
+	}
+	for _, count := range counts {
+		if count != 0 {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+// attachNextIssuer verifies the pending issuer pair written during CA renewal
+// against the bundle's full trust anchor set and populates the bundle's Next
+// fields. An invalid pending pair is a hard error: silently discarding it
+// would cause renewal to run again and append yet another trust anchor.
+func attachNextIssuer(x509Bundle *bundle.X509, nextChainPEM, nextKeyPEM []byte) error {
+	next, err := verifyX509Bundle(x509Bundle.TrustAnchors, nextChainPEM, nextKeyPEM)
+	if err != nil {
+		return fmt.Errorf("failed to verify pending issuer bundle: %w", err)
+	}
+
+	x509Bundle.NextIssChainPEM = next.IssChainPEM
+	x509Bundle.NextIssKeyPEM = next.IssKeyPEM
+	x509Bundle.NextIssChain = next.IssChain
+	x509Bundle.NextIssKey = next.IssKey
+
+	return nil
+}
+
 // loadJWTSigningKey loads a JWT signing key from PEM format.
 func loadJWTSigningKey(keyPEM []byte) (crypto.Signer, error) {
 	privateKey, err := pem.DecodePEMPrivateKey(keyPEM)

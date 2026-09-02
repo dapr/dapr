@@ -387,3 +387,45 @@ func TestDisableInitEndpoints(t *testing.T) {
 		assert.Empty(t, opts.DisableInitEndpoints)
 	})
 }
+
+func TestTrustAnchors(t *testing.T) {
+	t.Run("flag takes priority over both environment variables", func(t *testing.T) {
+		t.Setenv("DAPR_TRUST_ANCHORS_FILE", "/env/ca.crt")
+		t.Setenv("DAPR_TRUST_ANCHORS", "pem-data")
+		opts, err := New([]string{"--trust-anchors-file", "/flag/ca.crt"})
+		require.NoError(t, err)
+		require.NotNil(t, opts.TrustAnchorsFile)
+		assert.Equal(t, "/flag/ca.crt", *opts.TrustAnchorsFile)
+		assert.Empty(t, opts.TrustAnchors)
+	})
+
+	t.Run("file environment variable takes priority over legacy PEM environment variable", func(t *testing.T) {
+		t.Setenv("DAPR_TRUST_ANCHORS_FILE", "/env/ca.crt")
+		t.Setenv("DAPR_TRUST_ANCHORS", "pem-data")
+		opts, err := New(nil)
+		require.NoError(t, err)
+		require.NotNil(t, opts.TrustAnchorsFile)
+		assert.Equal(t, "/env/ca.crt", *opts.TrustAnchorsFile)
+		assert.Empty(t, opts.TrustAnchors)
+	})
+
+	t.Run("legacy PEM environment variable still works", func(t *testing.T) {
+		t.Setenv("DAPR_TRUST_ANCHORS", "pem-data")
+		opts, err := New(nil)
+		require.NoError(t, err)
+		assert.Nil(t, opts.TrustAnchorsFile)
+		assert.Equal(t, []byte("pem-data"), opts.TrustAnchors)
+	})
+
+	t.Run("explicitly empty flag is rejected", func(t *testing.T) {
+		_, err := New([]string{"--trust-anchors-file", ""})
+		require.ErrorContains(t, err, "'trust-anchors-file' option cannot be empty")
+	})
+
+	t.Run("nothing set leaves both empty", func(t *testing.T) {
+		opts, err := New(nil)
+		require.NoError(t, err)
+		assert.Nil(t, opts.TrustAnchorsFile)
+		assert.Empty(t, opts.TrustAnchors)
+	})
+}

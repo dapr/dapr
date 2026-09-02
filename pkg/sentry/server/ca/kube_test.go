@@ -15,6 +15,7 @@ package ca
 
 import (
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
@@ -31,6 +32,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/sentry/config"
 	ca_bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
+	"github.com/dapr/kit/ptr"
 )
 
 func TestKube_get(t *testing.T) {
@@ -56,6 +58,9 @@ func TestKube_get(t *testing.T) {
 		cm        *corev1.ConfigMap
 		expBundle ca_bundle.Bundle
 		expErr    bool
+		// expHealedCACrt, when set, asserts the ConfigMap ca.crt was healed to
+		// this value from the Secret.
+		expHealedCACrt *string
 	}{
 		"if secret doesn't exist, expect error": {
 			sec: nil,
@@ -148,7 +153,7 @@ func TestKube_get(t *testing.T) {
 			expBundle: ca_bundle.Bundle{},
 			expErr:    false,
 		},
-		"if configmap doesn't include ca.crt, expect to generate x509": {
+		"if configmap doesn't include ca.crt, expect heal without regeneration": {
 			sec: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "dapr-trust-bundle",
@@ -167,10 +172,19 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{},
 			},
-			expBundle: ca_bundle.Bundle{},
-			expErr:    false,
+			expBundle: ca_bundle.Bundle{
+				X509: &ca_bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
+			},
+			expErr:         false,
+			expHealedCACrt: ptr.Of(string(rootPEM)),
 		},
-		"if trust anchors do not match, expect not to generate x509": {
+		"if trust anchors do not match, expect heal without regeneration": {
 			sec: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "dapr-trust-bundle",
@@ -189,8 +203,17 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM) + "\n" + string(rootPEM2)},
 			},
-			expBundle: ca_bundle.Bundle{},
-			expErr:    false,
+			expBundle: ca_bundle.Bundle{
+				X509: &ca_bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
+			},
+			expErr:         false,
+			expHealedCACrt: ptr.Of(string(rootPEM)),
 		},
 		"if bundle fails to verify x509, expect error": {
 			sec: &corev1.Secret{
@@ -529,6 +552,16 @@ func TestKube_get(t *testing.T) {
 			bundle, err := k.get(t.Context())
 			assert.Equal(t, test.expErr, err != nil, "expected error: %v, but got %v", test.expErr, err)
 			bundlesEqual(t, test.expBundle, bundle)
+
+			if test.expHealedCACrt != nil {
+				cm, cerr := fakeclient.CoreV1().ConfigMaps("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+				require.NoError(t, cerr)
+				assert.Equal(t, *test.expHealedCACrt, cm.Data["ca.crt"])
+				// The Secret must be untouched: healing never regenerates.
+				sec, serr := fakeclient.CoreV1().Secrets("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+				require.NoError(t, serr)
+				assert.Equal(t, test.sec.Data, sec.Data)
+			}
 		})
 	}
 }
@@ -547,4 +580,131 @@ func bundlesEqual(t *testing.T, expected, actual ca_bundle.Bundle) {
 		}
 	}
 	assert.Equal(t, expected.JWT, actual.JWT)
+}
+
+func TestKube_nextIssuer(t *testing.T) {
+	genRenewed := func(t *testing.T) *ca_bundle.X509 {
+		t.Helper()
+		_, rootKey, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		existing, err := ca_bundle.GenerateX509(ca_bundle.OptionsX509{
+			X509RootKey: rootKey, TrustDomain: "test.example.com",
+		})
+		require.NoError(t, err)
+		_, newRootKey, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		renewed, err := ca_bundle.RenewX509(ca_bundle.OptionsRenewX509{
+			Existing: existing, X509RootKey: newRootKey, TrustDomain: "test.example.com",
+		})
+		require.NoError(t, err)
+		return renewed
+	}
+
+	newKube := func(t *testing.T, objects ...runtime.Object) *kube {
+		t.Helper()
+		return &kube{
+			client: fake.NewSimpleClientset(objects...),
+			config: config.Config{
+				RootCertPath:       "ca.crt",
+				IssuerCertPath:     "issuer.crt",
+				IssuerKeyPath:      "issuer.key",
+				NextIssuerCertPath: "issuer.next.crt",
+				NextIssuerKeyPath:  "issuer.next.key",
+			},
+			namespace: "dapr-system-test",
+		}
+	}
+
+	emptyObjects := func() []runtime.Object {
+		return []runtime.Object{
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"}},
+		}
+	}
+
+	t.Run("round trip with pending issuer pair, secret and configmap in sync", func(t *testing.T) {
+		k := newKube(t, emptyObjects()...)
+		renewed := genRenewed(t)
+		require.NoError(t, k.store(t.Context(), ca_bundle.Bundle{X509: renewed}))
+
+		sec, err := k.client.CoreV1().Secrets("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, renewed.NextIssChainPEM, sec.Data["issuer.next.crt"])
+		assert.Equal(t, renewed.NextIssKeyPEM, sec.Data["issuer.next.key"])
+
+		cm, err := k.client.CoreV1().ConfigMaps("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, string(renewed.TrustAnchors), cm.Data["ca.crt"])
+
+		got, err := k.get(t.Context())
+		require.NoError(t, err)
+		require.NotNil(t, got.X509)
+		assert.Equal(t, renewed.IssChainPEM, got.X509.IssChainPEM)
+		assert.Equal(t, renewed.NextIssChainPEM, got.X509.NextIssChainPEM)
+		assert.Equal(t, renewed.NextIssKeyPEM, got.X509.NextIssKeyPEM)
+	})
+
+	t.Run("promotion removes the pending secret keys", func(t *testing.T) {
+		k := newKube(t, emptyObjects()...)
+		renewed := genRenewed(t)
+		require.NoError(t, k.store(t.Context(), ca_bundle.Bundle{X509: renewed}))
+
+		promoted := &ca_bundle.X509{
+			TrustAnchors: renewed.TrustAnchors,
+			IssChainPEM:  renewed.NextIssChainPEM,
+			IssKeyPEM:    renewed.NextIssKeyPEM,
+			IssChain:     renewed.NextIssChain,
+			IssKey:       renewed.NextIssKey,
+		}
+		require.NoError(t, k.store(t.Context(), ca_bundle.Bundle{X509: promoted}))
+
+		sec, err := k.client.CoreV1().Secrets("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.NotContains(t, sec.Data, "issuer.next.crt")
+		assert.NotContains(t, sec.Data, "issuer.next.key")
+
+		got, err := k.get(t.Context())
+		require.NoError(t, err)
+		require.NotNil(t, got.X509)
+		assert.Equal(t, promoted.IssChainPEM, got.X509.IssChainPEM)
+		assert.Nil(t, got.X509.NextIssChainPEM)
+	})
+
+	t.Run("only one pending secret key is a hard error", func(t *testing.T) {
+		k := newKube(t, emptyObjects()...)
+		renewed := genRenewed(t)
+		require.NoError(t, k.store(t.Context(), ca_bundle.Bundle{X509: renewed}))
+
+		sec, err := k.client.CoreV1().Secrets("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		delete(sec.Data, "issuer.next.key")
+		_, err = k.client.CoreV1().Secrets("dapr-system-test").Update(t.Context(), sec, metav1.UpdateOptions{})
+		require.NoError(t, err)
+
+		_, err = k.get(t.Context())
+		require.ErrorContains(t, err, "only one of the pending issuer credentials")
+	})
+
+	t.Run("stale configmap during pending state is healed, not regenerated", func(t *testing.T) {
+		k := newKube(t, emptyObjects()...)
+		renewed := genRenewed(t)
+		require.NoError(t, k.store(t.Context(), ca_bundle.Bundle{X509: renewed}))
+
+		// Roll the ConfigMap back to only the old anchor, simulating a crash
+		// between the Secret and ConfigMap updates.
+		cm, err := k.client.CoreV1().ConfigMaps("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		cm.Data["ca.crt"] = string(renewed.TrustAnchors[:len(renewed.TrustAnchors)/2])
+		_, err = k.client.CoreV1().ConfigMaps("dapr-system-test").Update(t.Context(), cm, metav1.UpdateOptions{})
+		require.NoError(t, err)
+
+		got, err := k.get(t.Context())
+		require.NoError(t, err)
+		require.NotNil(t, got.X509, "must not regenerate")
+		assert.Equal(t, renewed.IssKeyPEM, got.X509.IssKeyPEM, "issuer key must be untouched")
+
+		cm, err = k.client.CoreV1().ConfigMaps("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, string(renewed.TrustAnchors), cm.Data["ca.crt"])
+	})
 }

@@ -50,6 +50,22 @@ var (
 		"sentry/issuercert/expiry_timestamp",
 		"The unix timestamp, in seconds, when issuer/root cert will expire.",
 		stats.UnitDimensionless)
+	caRenewalTotal = stats.Int64(
+		"sentry/ca/renewal_total",
+		"The number of automatic CA renewals, appending a new trust anchor and pending issuer.",
+		stats.UnitDimensionless)
+	caSwitchoverTotal = stats.Int64(
+		"sentry/ca/switchover_total",
+		"The number of CA signing key switchovers to a renewed issuer.",
+		stats.UnitDimensionless)
+	caRenewalPending = stats.Int64(
+		"sentry/ca/renewal_pending",
+		"Whether a renewed CA is pending switchover (1) or not (0).",
+		stats.UnitDimensionless)
+	caSwitchoverTimestamp = stats.Int64(
+		"sentry/ca/switchover_timestamp",
+		"The unix timestamp, in seconds, when the pending renewed issuer will be used for signing. Zero when no renewal is pending.",
+		stats.UnitDimensionless)
 
 	// Metrics Tags.
 	failedReasonKey = tag.MustNewKey("reason")
@@ -89,6 +105,30 @@ func IssuerCertChanged() {
 	stats.Record(context.Background(), issuerCertChangedTotal.M(1))
 }
 
+// CARenewed counts automatic CA renewals.
+func CARenewed() {
+	stats.Record(context.Background(), caRenewalTotal.M(1))
+}
+
+// CASwitchover counts switchovers of the signing key to a renewed issuer.
+func CASwitchover() {
+	stats.Record(context.Background(), caSwitchoverTotal.M(1))
+}
+
+// CAPending records whether a renewed CA is pending switchover, and when the
+// switchover will happen.
+func CAPending(pending bool, switchAt time.Time) {
+	var pendingVal, switchAtVal int64
+	if pending {
+		pendingVal = 1
+		switchAtVal = switchAt.Unix()
+	}
+	stats.Record(context.Background(),
+		caRenewalPending.M(pendingVal),
+		caSwitchoverTimestamp.M(switchAtVal),
+	)
+}
+
 // InitMetrics initializes metrics.
 func InitMetrics() error {
 	return view.Register(
@@ -98,5 +138,9 @@ func InitMetrics() error {
 		diagUtils.NewMeasureView(serverTLSCertIssueFailedTotal, []tag.Key{failedReasonKey}, view.Count()),
 		diagUtils.NewMeasureView(issuerCertChangedTotal, noKeys, view.Count()),
 		diagUtils.NewMeasureView(issuerCertExpiryTimestamp, noKeys, view.LastValue()),
+		diagUtils.NewMeasureView(caRenewalTotal, noKeys, view.Count()),
+		diagUtils.NewMeasureView(caSwitchoverTotal, noKeys, view.Count()),
+		diagUtils.NewMeasureView(caRenewalPending, noKeys, view.LastValue()),
+		diagUtils.NewMeasureView(caSwitchoverTimestamp, noKeys, view.LastValue()),
 	)
 }

@@ -56,6 +56,17 @@ rules:
   - apiGroups: ["dapr.io"]
     resources: ["components", "configurations", "subscriptions", "resiliencies", "httpendpoints", "mcpservers", "workflowaccesspolicies"]
     verbs: [ "get", "list", "watch"]
+{{- if .Values.global.trustDistribution.enabled }}
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+# Distributes the trust anchors ConfigMap into every namespace. The informer
+# is restricted to the single ConfigMap name with a field selector, which RBAC
+# cannot express, hence the cluster wide list/watch.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update"]
+{{- end }}
 {{- end }}
 {{- if .Values.global.argoRolloutServiceReconciler.enabled }}
   - apiGroups: ["argoproj.io"]
