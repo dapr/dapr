@@ -164,10 +164,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	// features replaces every earlier feature list. All harness-driven
 	// features must therefore land in a single manifest per daprd; it is
 	// built in the per-daprd loop below because signing is per-daprd.
-	baseFeatures := make([]string, 0, 1)
-	if clustered {
-		baseFeatures = append(baseFeatures, "WorkflowsClusteredDeployment")
-	}
+	baseFeatures := baseFeatureList(clustered)
 
 	if opts.schedulerAddress != nil {
 		// Reset so a caller-supplied override (e.g. a proxy in front of the
@@ -382,6 +379,27 @@ func (w *Workflow) GRPCClientN(t *testing.T, ctx context.Context, index int) rtv
 	t.Helper()
 	require.Less(t, index, len(w.daprds), "index out of range")
 	return w.daprds[index].GRPCClient(t, ctx)
+}
+
+func baseFeatureList(clustered bool) []string {
+	features := make([]string, 0, 1)
+	if clustered {
+		features = append(features, "WorkflowsClusteredDeployment")
+	}
+	return features
+}
+
+// FeatureOptions returns the feature manifest option for extra daprds a test
+// adds to this harness's cluster. Only cluster-wide features are covered:
+// WorkflowHistorySigning is per-daprd and needs the harness's sentry wiring
+// besides the flag. daprd's config merge makes the last spec.features list
+// win, so all features must land in one manifest.
+func (w *Workflow) FeatureOptions(t *testing.T) []daprd.Option {
+	features := baseFeatureList(w.clustered)
+	if len(features) == 0 {
+		return nil
+	}
+	return []daprd.Option{daprd.WithFeatureEnabled(t, features...)}
 }
 
 // ClusteredDeployment reports whether every daprd in this workflow runs with

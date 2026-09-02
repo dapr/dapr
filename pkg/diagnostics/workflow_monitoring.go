@@ -72,6 +72,12 @@ const (
 	// recent progress (fresh durable commit or a running drive loop); the
 	// next period re-checks.
 	StatusJanitorRedispatchSuppressed = "janitor_redispatch_suppressed"
+	// An escalated run-activity reminder was deleted because its task
+	// resolved: the resolving execution predates the escalation and cannot
+	// delete a reminder it never knew existed, so the escalating and
+	// committing turns reap it (see reapEscalatedReminder). Without the
+	// reap, the fire re-runs the body on a cold host.
+	StatusJanitorEscalationReaped = "janitor_escalation_reaped"
 	// An activity arrival found the in-flight claim held by a dead execution
 	// (no engine-held work item after the stale grace) and evicted it so the
 	// arrival re-executes; the rescue event of the janitor-livelock class
@@ -398,7 +404,7 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 			stats.WithTags(diagUtils.WithTags(w.localWakeCount.Name(), appIDKey, appID, namespaceKey, namespace, statusKey, s)...),
 			stats.WithMeasurements(w.localWakeCount.M(0)))
 	}
-	for _, s := range []string{StatusJanitorRedispatched, StatusJanitorRedispatchEscalated, StatusClaimEvicted} {
+	for _, s := range []string{StatusJanitorRedispatched, StatusJanitorRedispatchEscalated, StatusJanitorEscalationReaped, StatusClaimEvicted} {
 		stats.RecordWithOptions(context.Background(),
 			stats.WithRecorder(w.meter),
 			stats.WithTags(diagUtils.WithTags(w.localActivityCount.Name(), appIDKey, appID, namespaceKey, namespace, statusKey, s)...),
