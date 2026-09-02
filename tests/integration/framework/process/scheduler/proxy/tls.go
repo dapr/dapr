@@ -18,12 +18,15 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
+	"fmt"
 	"math/big"
 	"net/url"
 	"testing"
 	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/credentials"
 
@@ -73,10 +76,8 @@ func WithSentry(t *testing.T, sen *sentry.Sentry, namespace, appID string) Optio
 	// daprd validates the scheduler server against the control-plane SPIFFE
 	// identity spiffe://<td>/ns/default/dapr-scheduler; the DNS SAN mirrors
 	// the conventional scheduler ID for hostname based verifiers.
-	serverLeaf := mint(
-		spiffeid.RequireFromSegments(td, "ns", "default", "dapr-scheduler"),
-		[]string{"dapr-scheduler-server-0"},
-	)
+	schedulerID := spiffeid.RequireFromSegments(td, "ns", "default", "dapr-scheduler")
+	serverLeaf := mint(schedulerID, []string{"dapr-scheduler-server-0"})
 	clientLeaf := mint(
 		spiffeid.RequireFromSegments(td, "ns", namespace, appID),
 		nil,
@@ -92,12 +93,49 @@ func WithSentry(t *testing.T, sen *sentry.Sentry, namespace, appID string) Optio
 		p.upstreamTLS = &tls.Config{
 			MinVersion:   tls.VersionTLS12,
 			Certificates: []tls.Certificate{clientLeaf},
-			// The upstream scheduler presents a SPIFFE SVID, which standard
-			// TLS verification rejects (no hostname oriented EKU chain). The
-			// proxy owns both loopback endpoints in-test, so skip server
-			// verification while still presenting our client SVID.
+			// The upstream scheduler presents a SPIFFE SVID with no hostname,
+			// so hostname verification is skipped and the chain and identity
+			// are verified explicitly instead.
 			//nolint:gosec
 			InsecureSkipVerify: true,
+			VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+				return verifySPIFFEPeer(rawCerts, pool, schedulerID)
+			},
 		}
 	}
+}
+
+// verifySPIFFEPeer checks the peer's chain against roots and that its leaf
+// carries exactly the expected SPIFFE ID.
+func verifySPIFFEPeer(rawCerts [][]byte, roots *x509.CertPool, expected spiffeid.ID) error {
+	if len(rawCerts) == 0 {
+		return errors.New("peer presented no certificate")
+	}
+	leaf, err := x509.ParseCertificate(rawCerts[0])
+	if err != nil {
+		return err
+	}
+	intermediates := x509.NewCertPool()
+	for _, raw := range rawCerts[1:] {
+		c, cerr := x509.ParseCertificate(raw)
+		if cerr != nil {
+			return cerr
+		}
+		intermediates.AddCert(c)
+	}
+	if _, verr := leaf.Verify(x509.VerifyOptions{
+		Roots:         roots,
+		Intermediates: intermediates,
+		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+	}); verr != nil {
+		return verr
+	}
+	id, err := x509svid.IDFromCert(leaf)
+	if err != nil {
+		return err
+	}
+	if id != expected {
+		return fmt.Errorf("unexpected peer identity %q, want %q", id, expected)
+	}
+	return nil
 }
