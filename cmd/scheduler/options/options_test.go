@@ -63,7 +63,7 @@ func TestNew(t *testing.T) {
 
 	t.Run("placement-enabled sets PlacementEnabled", func(t *testing.T) {
 		opts, err := New([]string{
-			"--placement-enabled=true",
+			"--experimental-placement-enabled=true",
 		})
 		require.NoError(t, err)
 		require.True(t, opts.PlacementEnabled)

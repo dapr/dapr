@@ -104,7 +104,7 @@ global:
       # it: older sidecars can only use the placement service, so with it
       # undeployed their Actor and Workflow APIs stall until the pod is
       # upgraded. No actor state is lost.
-      enabled: false
+      experimental: false
 
   daprControlPlaneOs: linux
   labels: {}

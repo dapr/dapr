@@ -112,7 +112,7 @@ func New(origArgs []string) (*Options, error) {
 
 	fs.StringVar(&opts.ID, "id", "dapr-scheduler-server-0", "Scheduler server ID")
 
-	fs.BoolVar(&opts.PlacementEnabled, "placement-enabled", false, "When enabled, this scheduler serves actor placement to daprd sidecars, replacing the standalone placement service. All scheduler replicas in the cluster must set the same value.")
+	fs.BoolVar(&opts.PlacementEnabled, "experimental-placement-enabled", false, "When enabled, this scheduler serves actor placement to daprd sidecars, replacing the standalone placement service. All scheduler replicas in the cluster must set the same value.")
 
 	fs.BoolVar(&opts.EtcdEmbed, "etcd-embed", true, "When enabled, the Etcd database will be embedded in the scheduler server. If false, the scheduler will connect to an external Etcd cluster using the --etcd-client-endpoints flag.")
 
