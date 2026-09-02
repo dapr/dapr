@@ -408,15 +408,17 @@ func baseFeatureList(clustered, fastPath bool) []string {
 }
 
 // JoinOptions returns the options an extra daprd needs to join this
-// harness's cluster in the same modes: the feature flags and, in signing
-// mode, the Sentry wiring.
+// harness's cluster in the same modes: the feature flags and, under mTLS,
+// the Sentry wiring.
 func (w *Workflow) JoinOptions(t *testing.T) []daprd.Option {
 	t.Helper()
 	features := baseFeatureList(w.clustered, w.fastPath)
 	var opts []daprd.Option
+	if w.sentry != nil {
+		opts = append(opts, daprd.WithSentry(t, w.sentry))
+	}
 	if w.signing {
 		features = append(features, "WorkflowHistorySigning")
-		opts = append(opts, daprd.WithSentry(t, w.sentry))
 	}
 	if len(features) > 0 {
 		opts = append(opts, daprd.WithFeatureEnabled(t, features...))

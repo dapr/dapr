@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -33,6 +34,7 @@ func init() {
 
 type harnessoptout struct {
 	workflow *workflow.Workflow
+	joiner   *daprd.Daprd
 }
 
 func (h *harnessoptout) Setup(t *testing.T) []framework.Option {
@@ -40,17 +42,26 @@ func (h *harnessoptout) Setup(t *testing.T) []framework.Option {
 		workflow.WithMTLS(t),
 		workflow.WithSigning(false),
 	)
+	h.joiner = daprd.New(t, append([]daprd.Option{
+		daprd.WithAppID(h.workflow.Dapr().AppID()),
+		daprd.WithResourceFiles(h.workflow.DB().GetComponent(t)),
+		daprd.WithPlacementAddresses(h.workflow.Placement().Address()),
+		daprd.WithSchedulerAddresses(h.workflow.Scheduler().Address()),
+	}, h.workflow.JoinOptions(t)...)...)
 	return []framework.Option{
-		framework.WithProcesses(h.workflow),
+		framework.WithProcesses(h.workflow, h.joiner),
 	}
 }
 
 func (h *harnessoptout) Run(t *testing.T, ctx context.Context) {
 	h.workflow.WaitUntilRunning(t, ctx)
+	h.joiner.WaitUntilRunning(t, ctx)
 
 	assert.False(t, h.workflow.Signing())
 	assert.NotNil(t, h.workflow.Sentry(), "opting out of signing must keep the requested mTLS")
-	assert.NotContains(t, h.workflow.Dapr().GetMetaEnabledFeatures(t, ctx), "WorkflowHistorySigning")
+	for _, d := range []*daprd.Daprd{h.workflow.Dapr(), h.joiner} {
+		assert.NotContains(t, d.GetMetaEnabledFeatures(t, ctx), "WorkflowHistorySigning")
+	}
 
 	require.NoError(t, h.workflow.Registry().AddWorkflowN("wf", func(*task.WorkflowContext) (any, error) {
 		return "ok", nil
