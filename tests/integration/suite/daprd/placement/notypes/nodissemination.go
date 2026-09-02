@@ -39,7 +39,7 @@ type nodissemination struct {
 }
 
 func (n *nodissemination) Setup(t *testing.T) []framework.Option {
-	n.actors1 = actors.New(t)
+	n.actors1 = actors.New(t, actors.WithPlacementService())
 	n.actors2 = actors.New(t, actors.WithPeerActor(n.actors1))
 	n.actors3 = actors.New(t, actors.WithPeerActor(n.actors1))
 

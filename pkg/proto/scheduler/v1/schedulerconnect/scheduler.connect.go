@@ -51,6 +51,12 @@ const (
 	// SchedulerDeleteByNamePrefixProcedure is the fully-qualified name of the Scheduler's
 	// DeleteByNamePrefix RPC.
 	SchedulerDeleteByNamePrefixProcedure = "/dapr.proto.scheduler.v1.Scheduler/DeleteByNamePrefix"
+	// SchedulerReportActorTypesProcedure is the fully-qualified name of the Scheduler's
+	// ReportActorTypes RPC.
+	SchedulerReportActorTypesProcedure = "/dapr.proto.scheduler.v1.Scheduler/ReportActorTypes"
+	// SchedulerReportPlacementServiceProcedure is the fully-qualified name of the Scheduler's
+	// ReportPlacementService RPC.
+	SchedulerReportPlacementServiceProcedure = "/dapr.proto.scheduler.v1.Scheduler/ReportPlacementService"
 )
 
 // SchedulerClient is a client for the dapr.proto.scheduler.v1.Scheduler service.
@@ -76,6 +82,19 @@ type SchedulerClient interface {
 	// DeleteByNamePrefix is used by the daprd sidecar to delete jobs by name
 	// prefix. An empty prefix deletes all jobs from the target.
 	DeleteByNamePrefix(context.Context, *connect.Request[v1.DeleteByNamePrefixRequest]) (*connect.Response[v1.DeleteByNamePrefixResponse], error)
+	// ReportActorTypes is used by the daprd sidecar to report its presence and
+	// hosted actor types, and to receive per-actor-type placement orders
+	// (lock/update/unlock) in return. Only served by the current scheduler
+	// placement leader. Returns Unimplemented when the scheduler does not serve
+	// placement, and FailedPrecondition when this scheduler is not the
+	// placement leader.
+	ReportActorTypes(context.Context) *connect.BidiStreamForClient[v1.ReportActorTypesRequest, v1.PlacementOrder]
+	// ReportPlacementService is used by a standalone placement service to
+	// announce that it exists or to confirm it stood down. Once a placement
+	// service announced itself, the placement leader advertisement is
+	// withheld until the stand-down confirmation arrives, so the cluster
+	// never has two placement authorities serving at once.
+	ReportPlacementService(context.Context) *connect.BidiStreamForClient[v1.ReportPlacementServiceRequest, v1.ReportPlacementServiceResponse]
 }
 
 // NewSchedulerClient constructs a client for the dapr.proto.scheduler.v1.Scheduler service. By
@@ -137,19 +156,33 @@ func NewSchedulerClient(httpClient connect.HTTPClient, baseURL string, opts ...c
 			connect.WithSchema(schedulerMethods.ByName("DeleteByNamePrefix")),
 			connect.WithClientOptions(opts...),
 		),
+		reportActorTypes: connect.NewClient[v1.ReportActorTypesRequest, v1.PlacementOrder](
+			httpClient,
+			baseURL+SchedulerReportActorTypesProcedure,
+			connect.WithSchema(schedulerMethods.ByName("ReportActorTypes")),
+			connect.WithClientOptions(opts...),
+		),
+		reportPlacementService: connect.NewClient[v1.ReportPlacementServiceRequest, v1.ReportPlacementServiceResponse](
+			httpClient,
+			baseURL+SchedulerReportPlacementServiceProcedure,
+			connect.WithSchema(schedulerMethods.ByName("ReportPlacementService")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // schedulerClient implements SchedulerClient.
 type schedulerClient struct {
-	scheduleJob        *connect.Client[v1.ScheduleJobRequest, v1.ScheduleJobResponse]
-	getJob             *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
-	deleteJob          *connect.Client[v1.DeleteJobRequest, v1.DeleteJobResponse]
-	watchJobs          *connect.Client[v1.WatchJobsRequest, v1.WatchJobsResponse]
-	listJobs           *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
-	watchHosts         *connect.Client[v1.WatchHostsRequest, v1.WatchHostsResponse]
-	deleteByMetadata   *connect.Client[v1.DeleteByMetadataRequest, v1.DeleteByMetadataResponse]
-	deleteByNamePrefix *connect.Client[v1.DeleteByNamePrefixRequest, v1.DeleteByNamePrefixResponse]
+	scheduleJob            *connect.Client[v1.ScheduleJobRequest, v1.ScheduleJobResponse]
+	getJob                 *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
+	deleteJob              *connect.Client[v1.DeleteJobRequest, v1.DeleteJobResponse]
+	watchJobs              *connect.Client[v1.WatchJobsRequest, v1.WatchJobsResponse]
+	listJobs               *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
+	watchHosts             *connect.Client[v1.WatchHostsRequest, v1.WatchHostsResponse]
+	deleteByMetadata       *connect.Client[v1.DeleteByMetadataRequest, v1.DeleteByMetadataResponse]
+	deleteByNamePrefix     *connect.Client[v1.DeleteByNamePrefixRequest, v1.DeleteByNamePrefixResponse]
+	reportActorTypes       *connect.Client[v1.ReportActorTypesRequest, v1.PlacementOrder]
+	reportPlacementService *connect.Client[v1.ReportPlacementServiceRequest, v1.ReportPlacementServiceResponse]
 }
 
 // ScheduleJob calls dapr.proto.scheduler.v1.Scheduler.ScheduleJob.
@@ -192,6 +225,16 @@ func (c *schedulerClient) DeleteByNamePrefix(ctx context.Context, req *connect.R
 	return c.deleteByNamePrefix.CallUnary(ctx, req)
 }
 
+// ReportActorTypes calls dapr.proto.scheduler.v1.Scheduler.ReportActorTypes.
+func (c *schedulerClient) ReportActorTypes(ctx context.Context) *connect.BidiStreamForClient[v1.ReportActorTypesRequest, v1.PlacementOrder] {
+	return c.reportActorTypes.CallBidiStream(ctx)
+}
+
+// ReportPlacementService calls dapr.proto.scheduler.v1.Scheduler.ReportPlacementService.
+func (c *schedulerClient) ReportPlacementService(ctx context.Context) *connect.BidiStreamForClient[v1.ReportPlacementServiceRequest, v1.ReportPlacementServiceResponse] {
+	return c.reportPlacementService.CallBidiStream(ctx)
+}
+
 // SchedulerHandler is an implementation of the dapr.proto.scheduler.v1.Scheduler service.
 type SchedulerHandler interface {
 	// ScheduleJob is used by the daprd sidecar to schedule a job.
@@ -215,6 +258,19 @@ type SchedulerHandler interface {
 	// DeleteByNamePrefix is used by the daprd sidecar to delete jobs by name
 	// prefix. An empty prefix deletes all jobs from the target.
 	DeleteByNamePrefix(context.Context, *connect.Request[v1.DeleteByNamePrefixRequest]) (*connect.Response[v1.DeleteByNamePrefixResponse], error)
+	// ReportActorTypes is used by the daprd sidecar to report its presence and
+	// hosted actor types, and to receive per-actor-type placement orders
+	// (lock/update/unlock) in return. Only served by the current scheduler
+	// placement leader. Returns Unimplemented when the scheduler does not serve
+	// placement, and FailedPrecondition when this scheduler is not the
+	// placement leader.
+	ReportActorTypes(context.Context, *connect.BidiStream[v1.ReportActorTypesRequest, v1.PlacementOrder]) error
+	// ReportPlacementService is used by a standalone placement service to
+	// announce that it exists or to confirm it stood down. Once a placement
+	// service announced itself, the placement leader advertisement is
+	// withheld until the stand-down confirmation arrives, so the cluster
+	// never has two placement authorities serving at once.
+	ReportPlacementService(context.Context, *connect.BidiStream[v1.ReportPlacementServiceRequest, v1.ReportPlacementServiceResponse]) error
 }
 
 // NewSchedulerHandler builds an HTTP handler from the service implementation. It returns the path
@@ -272,6 +328,18 @@ func NewSchedulerHandler(svc SchedulerHandler, opts ...connect.HandlerOption) (s
 		connect.WithSchema(schedulerMethods.ByName("DeleteByNamePrefix")),
 		connect.WithHandlerOptions(opts...),
 	)
+	schedulerReportActorTypesHandler := connect.NewBidiStreamHandler(
+		SchedulerReportActorTypesProcedure,
+		svc.ReportActorTypes,
+		connect.WithSchema(schedulerMethods.ByName("ReportActorTypes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	schedulerReportPlacementServiceHandler := connect.NewBidiStreamHandler(
+		SchedulerReportPlacementServiceProcedure,
+		svc.ReportPlacementService,
+		connect.WithSchema(schedulerMethods.ByName("ReportPlacementService")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/dapr.proto.scheduler.v1.Scheduler/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SchedulerScheduleJobProcedure:
@@ -290,6 +358,10 @@ func NewSchedulerHandler(svc SchedulerHandler, opts ...connect.HandlerOption) (s
 			schedulerDeleteByMetadataHandler.ServeHTTP(w, r)
 		case SchedulerDeleteByNamePrefixProcedure:
 			schedulerDeleteByNamePrefixHandler.ServeHTTP(w, r)
+		case SchedulerReportActorTypesProcedure:
+			schedulerReportActorTypesHandler.ServeHTTP(w, r)
+		case SchedulerReportPlacementServiceProcedure:
+			schedulerReportPlacementServiceHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -329,4 +401,12 @@ func (UnimplementedSchedulerHandler) DeleteByMetadata(context.Context, *connect.
 
 func (UnimplementedSchedulerHandler) DeleteByNamePrefix(context.Context, *connect.Request[v1.DeleteByNamePrefixRequest]) (*connect.Response[v1.DeleteByNamePrefixResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.scheduler.v1.Scheduler.DeleteByNamePrefix is not implemented"))
+}
+
+func (UnimplementedSchedulerHandler) ReportActorTypes(context.Context, *connect.BidiStream[v1.ReportActorTypesRequest, v1.PlacementOrder]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.scheduler.v1.Scheduler.ReportActorTypes is not implemented"))
+}
+
+func (UnimplementedSchedulerHandler) ReportPlacementService(context.Context, *connect.BidiStream[v1.ReportPlacementServiceRequest, v1.ReportPlacementServiceResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.scheduler.v1.Scheduler.ReportPlacementService is not implemented"))
 }

@@ -21,13 +21,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
 type Fake struct {
-	client schedulerv1pb.SchedulerClient
+	client  schedulerv1pb.SchedulerClient
+	address string
 
 	scheduleJobFn        func(context.Context, *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error)
 	deleteJobFn          func(context.Context, *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error)
@@ -37,6 +40,9 @@ type Fake struct {
 	watchJobsFn          func(schedulerv1pb.Scheduler_WatchJobsServer) error
 	deleteByMetadataFn   func(ctx context.Context, req *schedulerv1pb.DeleteByMetadataRequest) (*schedulerv1pb.DeleteByMetadataResponse, error)
 	deleteByNamePrefixFn func(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error)
+	reportActorTypesFn   func(schedulerv1pb.Scheduler_ReportActorTypesServer) error
+
+	reportPlacementServiceFn func(schedulerv1pb.Scheduler_ReportPlacementServiceServer) error
 }
 
 func New(t *testing.T) *Fake {
@@ -70,6 +76,19 @@ func New(t *testing.T) *Fake {
 		deleteByNamePrefixFn: func(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error) {
 			return nil, nil
 		},
+		reportActorTypesFn: func(schedulerv1pb.Scheduler_ReportActorTypesServer) error {
+			return status.Error(codes.Unimplemented, "placement is not enabled on this scheduler")
+		},
+		reportPlacementServiceFn: func(stream schedulerv1pb.Scheduler_ReportPlacementServiceServer) error {
+			for {
+				if _, rerr := stream.Recv(); rerr != nil {
+					return rerr
+				}
+				if serr := stream.Send(new(schedulerv1pb.ReportPlacementServiceResponse)); serr != nil {
+					return serr
+				}
+			}
+		},
 	}
 
 	server := grpc.NewServer()
@@ -95,12 +114,18 @@ func New(t *testing.T) *Fake {
 	)
 	require.NoError(t, err)
 	f.client = schedulerv1pb.NewSchedulerClient(client)
+	f.address = lis.Addr().String()
 
 	return f
 }
 
 func (f *Fake) Client() schedulerv1pb.SchedulerClient {
 	return f.client
+}
+
+// Address returns the address the fake server listens on.
+func (f *Fake) Address() string {
+	return f.address
 }
 
 func (f *Fake) WithScheduleJob(fn func(context.Context, *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error)) *Fake {
@@ -173,4 +198,22 @@ func (f *Fake) DeleteByMetadata(ctx context.Context, req *schedulerv1pb.DeleteBy
 
 func (f *Fake) DeleteByNamePrefix(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error) {
 	return f.deleteByNamePrefixFn(ctx, req)
+}
+
+func (f *Fake) ReportPlacementService(stream schedulerv1pb.Scheduler_ReportPlacementServiceServer) error {
+	return f.reportPlacementServiceFn(stream)
+}
+
+func (f *Fake) WithReportPlacementService(fn func(schedulerv1pb.Scheduler_ReportPlacementServiceServer) error) *Fake {
+	f.reportPlacementServiceFn = fn
+	return f
+}
+
+func (f *Fake) WithReportActorTypes(fn func(schedulerv1pb.Scheduler_ReportActorTypesServer) error) *Fake {
+	f.reportActorTypesFn = fn
+	return f
+}
+
+func (f *Fake) ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorTypesServer) error {
+	return f.reportActorTypesFn(stream)
 }

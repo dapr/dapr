@@ -47,10 +47,7 @@ func (s *staging) Setup(t *testing.T) []framework.Option {
 		}),
 	)
 	s.actors2 = actors.New(t,
-		actors.WithDB(s.actors1.DB()),
-		actors.WithPlacement(s.actors1.Placement()),
-		actors.WithScheduler(s.actors1.Scheduler()),
-		actors.WithSharedControlPlane(),
+		actors.WithPeerActor(s.actors1),
 		actors.WithActorTypes("bar"),
 		actors.WithActorTypeHandler("bar", func(_ http.ResponseWriter, req *http.Request) {
 			if req.Method == http.MethodDelete {

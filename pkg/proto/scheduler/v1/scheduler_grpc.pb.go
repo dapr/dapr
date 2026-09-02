@@ -19,14 +19,16 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	Scheduler_ScheduleJob_FullMethodName        = "/dapr.proto.scheduler.v1.Scheduler/ScheduleJob"
-	Scheduler_GetJob_FullMethodName             = "/dapr.proto.scheduler.v1.Scheduler/GetJob"
-	Scheduler_DeleteJob_FullMethodName          = "/dapr.proto.scheduler.v1.Scheduler/DeleteJob"
-	Scheduler_WatchJobs_FullMethodName          = "/dapr.proto.scheduler.v1.Scheduler/WatchJobs"
-	Scheduler_ListJobs_FullMethodName           = "/dapr.proto.scheduler.v1.Scheduler/ListJobs"
-	Scheduler_WatchHosts_FullMethodName         = "/dapr.proto.scheduler.v1.Scheduler/WatchHosts"
-	Scheduler_DeleteByMetadata_FullMethodName   = "/dapr.proto.scheduler.v1.Scheduler/DeleteByMetadata"
-	Scheduler_DeleteByNamePrefix_FullMethodName = "/dapr.proto.scheduler.v1.Scheduler/DeleteByNamePrefix"
+	Scheduler_ScheduleJob_FullMethodName            = "/dapr.proto.scheduler.v1.Scheduler/ScheduleJob"
+	Scheduler_GetJob_FullMethodName                 = "/dapr.proto.scheduler.v1.Scheduler/GetJob"
+	Scheduler_DeleteJob_FullMethodName              = "/dapr.proto.scheduler.v1.Scheduler/DeleteJob"
+	Scheduler_WatchJobs_FullMethodName              = "/dapr.proto.scheduler.v1.Scheduler/WatchJobs"
+	Scheduler_ListJobs_FullMethodName               = "/dapr.proto.scheduler.v1.Scheduler/ListJobs"
+	Scheduler_WatchHosts_FullMethodName             = "/dapr.proto.scheduler.v1.Scheduler/WatchHosts"
+	Scheduler_DeleteByMetadata_FullMethodName       = "/dapr.proto.scheduler.v1.Scheduler/DeleteByMetadata"
+	Scheduler_DeleteByNamePrefix_FullMethodName     = "/dapr.proto.scheduler.v1.Scheduler/DeleteByNamePrefix"
+	Scheduler_ReportActorTypes_FullMethodName       = "/dapr.proto.scheduler.v1.Scheduler/ReportActorTypes"
+	Scheduler_ReportPlacementService_FullMethodName = "/dapr.proto.scheduler.v1.Scheduler/ReportPlacementService"
 )
 
 // SchedulerClient is the client API for Scheduler service.
@@ -54,6 +56,19 @@ type SchedulerClient interface {
 	// DeleteByNamePrefix is used by the daprd sidecar to delete jobs by name
 	// prefix. An empty prefix deletes all jobs from the target.
 	DeleteByNamePrefix(ctx context.Context, in *DeleteByNamePrefixRequest, opts ...grpc.CallOption) (*DeleteByNamePrefixResponse, error)
+	// ReportActorTypes is used by the daprd sidecar to report its presence and
+	// hosted actor types, and to receive per-actor-type placement orders
+	// (lock/update/unlock) in return. Only served by the current scheduler
+	// placement leader. Returns Unimplemented when the scheduler does not serve
+	// placement, and FailedPrecondition when this scheduler is not the
+	// placement leader.
+	ReportActorTypes(ctx context.Context, opts ...grpc.CallOption) (Scheduler_ReportActorTypesClient, error)
+	// ReportPlacementService is used by a standalone placement service to
+	// announce that it exists or to confirm it stood down. Once a placement
+	// service announced itself, the placement leader advertisement is
+	// withheld until the stand-down confirmation arrives, so the cluster
+	// never has two placement authorities serving at once.
+	ReportPlacementService(ctx context.Context, opts ...grpc.CallOption) (Scheduler_ReportPlacementServiceClient, error)
 }
 
 type schedulerClient struct {
@@ -181,6 +196,68 @@ func (c *schedulerClient) DeleteByNamePrefix(ctx context.Context, in *DeleteByNa
 	return out, nil
 }
 
+func (c *schedulerClient) ReportActorTypes(ctx context.Context, opts ...grpc.CallOption) (Scheduler_ReportActorTypesClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Scheduler_ServiceDesc.Streams[2], Scheduler_ReportActorTypes_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &schedulerReportActorTypesClient{stream}
+	return x, nil
+}
+
+type Scheduler_ReportActorTypesClient interface {
+	Send(*ReportActorTypesRequest) error
+	Recv() (*PlacementOrder, error)
+	grpc.ClientStream
+}
+
+type schedulerReportActorTypesClient struct {
+	grpc.ClientStream
+}
+
+func (x *schedulerReportActorTypesClient) Send(m *ReportActorTypesRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *schedulerReportActorTypesClient) Recv() (*PlacementOrder, error) {
+	m := new(PlacementOrder)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *schedulerClient) ReportPlacementService(ctx context.Context, opts ...grpc.CallOption) (Scheduler_ReportPlacementServiceClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Scheduler_ServiceDesc.Streams[3], Scheduler_ReportPlacementService_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &schedulerReportPlacementServiceClient{stream}
+	return x, nil
+}
+
+type Scheduler_ReportPlacementServiceClient interface {
+	Send(*ReportPlacementServiceRequest) error
+	Recv() (*ReportPlacementServiceResponse, error)
+	grpc.ClientStream
+}
+
+type schedulerReportPlacementServiceClient struct {
+	grpc.ClientStream
+}
+
+func (x *schedulerReportPlacementServiceClient) Send(m *ReportPlacementServiceRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *schedulerReportPlacementServiceClient) Recv() (*ReportPlacementServiceResponse, error) {
+	m := new(ReportPlacementServiceResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // SchedulerServer is the server API for Scheduler service.
 // All implementations should embed UnimplementedSchedulerServer
 // for forward compatibility
@@ -206,6 +283,19 @@ type SchedulerServer interface {
 	// DeleteByNamePrefix is used by the daprd sidecar to delete jobs by name
 	// prefix. An empty prefix deletes all jobs from the target.
 	DeleteByNamePrefix(context.Context, *DeleteByNamePrefixRequest) (*DeleteByNamePrefixResponse, error)
+	// ReportActorTypes is used by the daprd sidecar to report its presence and
+	// hosted actor types, and to receive per-actor-type placement orders
+	// (lock/update/unlock) in return. Only served by the current scheduler
+	// placement leader. Returns Unimplemented when the scheduler does not serve
+	// placement, and FailedPrecondition when this scheduler is not the
+	// placement leader.
+	ReportActorTypes(Scheduler_ReportActorTypesServer) error
+	// ReportPlacementService is used by a standalone placement service to
+	// announce that it exists or to confirm it stood down. Once a placement
+	// service announced itself, the placement leader advertisement is
+	// withheld until the stand-down confirmation arrives, so the cluster
+	// never has two placement authorities serving at once.
+	ReportPlacementService(Scheduler_ReportPlacementServiceServer) error
 }
 
 // UnimplementedSchedulerServer should be embedded to have forward compatible implementations.
@@ -235,6 +325,12 @@ func (UnimplementedSchedulerServer) DeleteByMetadata(context.Context, *DeleteByM
 }
 func (UnimplementedSchedulerServer) DeleteByNamePrefix(context.Context, *DeleteByNamePrefixRequest) (*DeleteByNamePrefixResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteByNamePrefix not implemented")
+}
+func (UnimplementedSchedulerServer) ReportActorTypes(Scheduler_ReportActorTypesServer) error {
+	return status.Errorf(codes.Unimplemented, "method ReportActorTypes not implemented")
+}
+func (UnimplementedSchedulerServer) ReportPlacementService(Scheduler_ReportPlacementServiceServer) error {
+	return status.Errorf(codes.Unimplemented, "method ReportPlacementService not implemented")
 }
 
 // UnsafeSchedulerServer may be embedded to opt out of forward compatibility for this service.
@@ -403,6 +499,58 @@ func _Scheduler_DeleteByNamePrefix_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Scheduler_ReportActorTypes_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(SchedulerServer).ReportActorTypes(&schedulerReportActorTypesServer{stream})
+}
+
+type Scheduler_ReportActorTypesServer interface {
+	Send(*PlacementOrder) error
+	Recv() (*ReportActorTypesRequest, error)
+	grpc.ServerStream
+}
+
+type schedulerReportActorTypesServer struct {
+	grpc.ServerStream
+}
+
+func (x *schedulerReportActorTypesServer) Send(m *PlacementOrder) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *schedulerReportActorTypesServer) Recv() (*ReportActorTypesRequest, error) {
+	m := new(ReportActorTypesRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _Scheduler_ReportPlacementService_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(SchedulerServer).ReportPlacementService(&schedulerReportPlacementServiceServer{stream})
+}
+
+type Scheduler_ReportPlacementServiceServer interface {
+	Send(*ReportPlacementServiceResponse) error
+	Recv() (*ReportPlacementServiceRequest, error)
+	grpc.ServerStream
+}
+
+type schedulerReportPlacementServiceServer struct {
+	grpc.ServerStream
+}
+
+func (x *schedulerReportPlacementServiceServer) Send(m *ReportPlacementServiceResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *schedulerReportPlacementServiceServer) Recv() (*ReportPlacementServiceRequest, error) {
+	m := new(ReportPlacementServiceRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // Scheduler_ServiceDesc is the grpc.ServiceDesc for Scheduler service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -446,6 +594,18 @@ var Scheduler_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "WatchHosts",
 			Handler:       _Scheduler_WatchHosts_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "ReportActorTypes",
+			Handler:       _Scheduler_ReportActorTypes_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "ReportPlacementService",
+			Handler:       _Scheduler_ReportPlacementService_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "dapr/proto/scheduler/v1/scheduler.proto",

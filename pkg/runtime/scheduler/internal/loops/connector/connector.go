@@ -39,32 +39,37 @@ type Options struct {
 	Actors   actors.Interface
 	Channels *channels.Channels
 	WFEngine wfengine.Interface
+
+	PlacementAddresses []string
 }
 
 type connector struct {
-	namespace    string
-	appID        string
-	workflowSpec *config.WorkflowSpec
-	actors       actors.Interface
-	channels     *channels.Channels
-	wfEngine     wfengine.Interface
+	namespace          string
+	appID              string
+	workflowSpec       *config.WorkflowSpec
+	actors             actors.Interface
+	channels           *channels.Channels
+	wfEngine           wfengine.Interface
+	placementAddresses []string
 
-	currentAppRunning bool
-	currentActorTypes []string
-	clients           []schedulerv1pb.SchedulerClient
-	closeConns        []context.CancelFunc
+	currentAppRunning   bool
+	currentActorTypes   []string
+	currentActorAddress string
+	clients             []schedulerv1pb.SchedulerClient
+	closeConns          []context.CancelFunc
 
 	closeCluster context.CancelFunc
 }
 
 func New(opts Options) loop.Interface[loops.EventConn] {
 	return loop.New[loops.EventConn](1024).NewLoop(&connector{
-		namespace:    opts.Namespace,
-		appID:        opts.AppID,
-		workflowSpec: opts.WorkflowSpec,
-		actors:       opts.Actors,
-		channels:     opts.Channels,
-		wfEngine:     opts.WFEngine,
+		namespace:          opts.Namespace,
+		appID:              opts.AppID,
+		workflowSpec:       opts.WorkflowSpec,
+		actors:             opts.Actors,
+		channels:           opts.Channels,
+		wfEngine:           opts.WFEngine,
+		placementAddresses: opts.PlacementAddresses,
 	})
 }
 
@@ -110,6 +115,10 @@ func (c *connector) handleReconnect(ctx context.Context, e *loops.Reconnect) {
 		c.currentActorTypes = *e.ActorTypes
 	}
 
+	if e.ActorAddress != nil {
+		c.currentActorAddress = *e.ActorAddress
+	}
+
 	c.maybeClientConnect(ctx)
 }
 
@@ -134,16 +143,18 @@ func (c *connector) maybeClientConnect(ctx context.Context) {
 	}
 
 	cluster := cluster.New(cluster.Options{
-		Namespace:    c.namespace,
-		AppID:        c.appID,
-		WorkflowSpec: c.workflowSpec,
-		Actors:       c.actors,
-		Channels:     c.channels,
-		WFEngine:     c.wfEngine,
+		Namespace:          c.namespace,
+		AppID:              c.appID,
+		WorkflowSpec:       c.workflowSpec,
+		Actors:             c.actors,
+		Channels:           c.channels,
+		WFEngine:           c.wfEngine,
+		PlacementAddresses: c.placementAddresses,
 
-		AppTarget:  c.currentAppRunning,
-		ActorTypes: c.currentActorTypes,
-		Clients:    c.clients,
+		AppTarget:    c.currentAppRunning,
+		ActorTypes:   c.currentActorTypes,
+		ActorAddress: c.currentActorAddress,
+		Clients:      c.clients,
 	})
 
 	ctx, cancel := context.WithCancel(ctx)
