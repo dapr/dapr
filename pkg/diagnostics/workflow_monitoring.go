@@ -89,6 +89,10 @@ const (
 	// rejected for retry instead of committing a wedged state (the
 	// janitor-livelock stranding source; ~0 in healthy steady state).
 	StatusStaleTurnRejected = "stale_turn_rejected"
+	// An instance whose durable state can never progress (its committed
+	// start was lost) was terminally FAILED instead of silently dropping
+	// its work; ~0 in healthy steady state.
+	StatusUnstartableFailed = "unstartable_failed"
 	// Completions-fold outcomes: a sender-retried completion committed
 	// inside its folding turn (folded), or was nacked back into the
 	// sender's retry chain (turn failure, timeout, deactivation).
@@ -398,7 +402,7 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 	// lazy registration an absent series is indistinguishable from a rescue
 	// path that never fired. Their views aggregate by Sum, so the zero
 	// record registers the series without changing its value.
-	for _, s := range []string{StatusJanitorRecovered, StatusJanitorFoldRecovered, StatusStaleTurnRejected} {
+	for _, s := range []string{StatusJanitorRecovered, StatusJanitorFoldRecovered, StatusStaleTurnRejected, StatusUnstartableFailed} {
 		stats.RecordWithOptions(context.Background(),
 			stats.WithRecorder(w.meter),
 			stats.WithTags(diagUtils.WithTags(w.localWakeCount.Name(), appIDKey, appID, namespaceKey, namespace, statusKey, s)...),
