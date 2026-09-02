@@ -25,6 +25,7 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -32,7 +33,7 @@ import (
 // activityReminderName is the constant name of the per-activity-actor
 // execution reminder. One reminder per actor: retries and the drive-failure
 // escalation collapse onto a single scheduler entry (overwrite-by-name).
-const activityReminderName = "run-activity"
+const activityReminderName = todo.ActivityReminderName
 
 func (a *activity) createReminder(ctx context.Context, invocation *protos.ActivityInvocation, dueTime time.Time, activityName *string) error {
 	return a.createActivityReminder(ctx, a.actorID, invocation, dueTime, activityName)
