@@ -35,8 +35,11 @@ func init() {
 }
 
 // quota fills the scheduler's embedded etcd past its storage quota before the
-// workflow starts. Asserts the scheduler RPC and workflow-engine layers
-// surface the error, then reclaims quota and runs the workflow to completion.
+// workflow starts. Asserts the scheduler RPC surfaces the error and the
+// workflow create blocks on the start-reminder create (state is saved first,
+// the reminder create retries until the caller's context dies), then reclaims
+// quota and re-drives the same instance to completion via the pending-start
+// path.
 type quota struct {
 	wf *workflow.Workflow
 }
@@ -69,14 +72,18 @@ func (q *quota) Run(t *testing.T, ctx context.Context) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "database space exceeded")
 
+	// State saves first; the start-reminder create surfaces the quota error.
+	const wfID = "quota-wf"
 	cl := q.wf.BackendClient(t, ctx)
-	_, err = cl.ScheduleNewWorkflow(ctx, "timerFlow")
+	_, err = cl.ScheduleNewWorkflow(ctx, "timerFlow", api.WithInstanceID(wfID))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "database space exceeded")
 
 	sched.RecoverQuota(t, ctx, "quota-test/")
 
-	id, err := cl.ScheduleNewWorkflow(ctx, "timerFlow")
+	// Retrying the same instance ID lands in the pending-start path, which
+	// re-asserts the reminder from the state saved by the failed create.
+	id, err := cl.ScheduleNewWorkflow(ctx, "timerFlow", api.WithInstanceID(wfID))
 	require.NoError(t, err)
 	meta, err := cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)

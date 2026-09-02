@@ -23,6 +23,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -93,6 +95,8 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 	// We block (re)creation of existing workflows unless they are in a completed state
 	// Or if they still have any pending activity result awaited.
 	if !runtimestate.IsCompleted(rs) {
+		pending := pendingStartEvent(state)
+
 		// This happens when the parent's runWorkflow created the child workflow
 		// successfully but crashed before persisting its own state, causing it to
 		// re-execute and attempt the child creation again.
@@ -100,7 +104,35 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		if sameParent {
 			log.Debugf("Workflow actor '%s': ignoring duplicate child workflow creation from parent '%s'",
 				o.actorID, startEvent.GetExecutionStarted().GetParentInstance().GetWorkflowInstance().GetInstanceId())
+			// A child that saved but never armed its start reminder has no
+			// other driver: re-assert from the saved event.
+			if pending != nil {
+				missing, err := o.startReminderMissing(ctx, pending)
+				if err != nil {
+					return err
+				}
+				if missing {
+					return o.assertStartReminder(ctx, pending)
+				}
+			}
 			return nil
+		}
+
+		// A saved-but-never-run instance with no armed start reminder is
+		// stranded: retries of the same logical create re-assert it from the
+		// SAVED event (the incoming one has a regenerated timestamp). The
+		// reminder-missing check keeps healthy duplicate creates failing
+		// with AlreadyExists, since a duplicate always observes the first
+		// create's reminder.
+		if pending != nil && isSameLogicalStart(pending.GetExecutionStarted(), startEvent.GetExecutionStarted()) {
+			missing, err := o.startReminderMissing(ctx, pending)
+			if err != nil {
+				return err
+			}
+			if missing {
+				log.Infof("Workflow actor '%s': re-driving pending start for saved-but-never-run workflow", o.actorID)
+				return o.assertStartReminder(ctx, pending)
+			}
 		}
 
 		if parentExecMismatch {
@@ -146,28 +178,92 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 }
 
 func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *backend.HistoryEvent, state *wfenginestate.State) error {
-	start := startEvent.GetTimestamp().AsTime()
-	if ts := startEvent.GetExecutionStarted().GetScheduledStartTimestamp(); ts != nil {
-		start = ts.AsTime()
-	}
-
-	// Schedule a reminder to execute immediately after this operation. The reminder will trigger the actual
-	// workflow execution. This is preferable to using the current thread so that we don't block the client
-	// while the workflow logic is running.
-	workflowName := startEvent.GetExecutionStarted().GetName()
-	reminderName, err := randomReminderName(reminderPrefixStart)
-	if err != nil {
-		return err
-	}
-	if err := o.createWorkflowReminder(ctx, reminderName, nil, start, o.appID, &workflowName); err != nil {
-		return err
-	}
+	// Save BEFORE creating the wake-up reminder, mirroring AddWorkflowEvent:
+	// a reminder created first can fire on another host before the save
+	// commits, ack SUCCESS off the empty inbox and be deleted, stranding the
+	// workflow once the save lands. Saving first makes the failure
+	// recoverable: the reminder create retries until the caller's context
+	// dies, and a create retry re-asserts it by deterministic name from the
+	// saved event.
 	state.AddToInbox(startEvent)
 	if err := o.signAndSaveState(ctx, state); err != nil {
 		return err
 	}
 
+	return o.assertStartReminder(ctx, startEvent)
+}
+
+// pendingStartEvent returns the ExecutionStarted inbox event of a saved but
+// never-run workflow (empty history), or nil. Other inbox rows (pre-start
+// RaiseEvent) are ignored.
+func pendingStartEvent(state *wfenginestate.State) *backend.HistoryEvent {
+	if len(state.History) > 0 {
+		return nil
+	}
+	for _, e := range state.Inbox {
+		if e.GetExecutionStarted() != nil {
+			return e
+		}
+	}
 	return nil
+}
+
+// startReminderMissing reports whether the pending start's wake-up reminder
+// is absent from the scheduler; Get errors surface as retryable.
+func (o *orchestrator) startReminderMissing(ctx context.Context, saved *backend.HistoryEvent) (bool, error) {
+	rem, err := o.reminders.Get(ctx, &actorapi.GetReminderRequest{
+		Name:      events.EventReminderName(reminderPrefixStart, saved),
+		ActorType: o.actorTypeBuilder.Workflow(o.appID),
+		ActorID:   o.actorID,
+	})
+	if err != nil {
+		// Missing is contractually (nil, nil), but tolerate NotFound-as-error.
+		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to check for pending start reminder: %w", err)
+	}
+	return rem == nil, nil
+}
+
+// isSameLogicalStart reports whether the incoming ExecutionStarted describes
+// the same logical creation as the saved pending one, ignoring per-attempt
+// volatile fields (Timestamp, own ExecutionId, trace context). The parent's
+// ExecutionId is not volatile and is compared when present on both sides.
+func isSameLogicalStart(saved, incoming *protos.ExecutionStartedEvent) bool {
+	if saved.GetName() != incoming.GetName() {
+		return false
+	}
+
+	if saved.GetVersion().GetValue() != incoming.GetVersion().GetValue() {
+		return false
+	}
+
+	if saved.GetInput().GetValue() != incoming.GetInput().GetValue() {
+		return false
+	}
+
+	savedTS, incomingTS := saved.GetScheduledStartTimestamp(), incoming.GetScheduledStartTimestamp()
+	if (savedTS == nil) != (incomingTS == nil) {
+		return false
+	}
+	if savedTS != nil && !savedTS.AsTime().Equal(incomingTS.AsTime()) {
+		return false
+	}
+
+	savedParent, incomingParent := saved.GetParentInstance(), incoming.GetParentInstance()
+	if (savedParent == nil) != (incomingParent == nil) {
+		return false
+	}
+	if savedParent != nil {
+		if savedParent.GetWorkflowInstance().GetInstanceId() != incomingParent.GetWorkflowInstance().GetInstanceId() ||
+			savedParent.GetTaskScheduledId() != incomingParent.GetTaskScheduledId() ||
+			!sameParentExecution(savedParent, incomingParent) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // isSameParentCreation reports whether the incoming child creation is a
