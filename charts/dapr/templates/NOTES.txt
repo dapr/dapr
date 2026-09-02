@@ -24,9 +24,9 @@ https://dapr.io
 >
 > --set dapr_scheduler.securityContext.fsGroup=65532
 {{- end }}
-{{- if eq .Values.global.scheduler.placement.experimental true }}
+{{- if eq .Values.global.scheduler.placement.enabled true }}
 
-> Note: Actor placement is served by the Scheduler service (global.scheduler.placement.experimental=true).
+> Note: Actor placement is served by the Scheduler service (global.scheduler.placement.enabled=true).
 > The standalone placement StatefulSet is NOT deployed.
 >
 > Complete your Dapr version rollout BEFORE enabling this. Sidecars running an older Dapr

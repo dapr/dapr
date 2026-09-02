@@ -33,8 +33,8 @@ func init() {
 	suite.Register(new(schedulerplacement))
 }
 
-// schedulerplacement asserts global.scheduler.placement.experimental is the one
-// switch: it moves the scheduler's --experimental-placement-enabled flag and the placement
+// schedulerplacement asserts global.scheduler.placement.enabled is the one
+// switch: it moves the scheduler's --placement-enabled flag and the placement
 // StatefulSet together, so the chart can never deploy two placement
 // authorities.
 type schedulerplacement struct {
@@ -52,24 +52,24 @@ func (s *schedulerplacement) Setup(t *testing.T) []framework.Option {
 		helm.WithShowOnlySchedulerSTS(),
 	)
 	s.schedulerOn = helm.New(t,
-		helm.WithValues("global.scheduler.placement.experimental=true"),
+		helm.WithValues("global.scheduler.placement.enabled=true"),
 		helm.WithShowOnlySchedulerSTS(),
 	)
 	s.chartOn = helm.New(t,
-		helm.WithValues("global.scheduler.placement.experimental=true"),
+		helm.WithValues("global.scheduler.placement.enabled=true"),
 	)
 	s.chartOff = helm.New(t)
 	s.chartNoSched = helm.New(t,
-		helm.WithValues("global.scheduler.placement.experimental=true", "global.scheduler.enabled=false"),
+		helm.WithValues("global.scheduler.placement.enabled=true", "global.scheduler.enabled=false"),
 		helm.WithExpectFailure(),
 	)
 
 	s.chartNoActor = helm.New(t,
-		helm.WithValues("global.scheduler.placement.experimental=true", "global.actors.enabled=false"),
+		helm.WithValues("global.scheduler.placement.enabled=true", "global.actors.enabled=false"),
 		helm.WithExpectFailure(),
 	)
 	s.chartCustom = helm.New(t,
-		helm.WithValues("global.scheduler.placement.experimental=true", "global.actors.serviceName=scheduler"),
+		helm.WithValues("global.scheduler.placement.enabled=true", "global.actors.serviceName=scheduler"),
 		helm.WithExpectFailure(),
 	)
 
@@ -101,12 +101,12 @@ func (s *schedulerplacement) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("default has placement disabled on the scheduler", func(t *testing.T) {
 		args := schedulerArgs(t, s.schedulerOff)
-		assert.True(t, hasArg(args, "--experimental-placement-enabled=false"), "scheduler args: %v", args)
+		assert.True(t, hasArg(args, "--placement-enabled=false"), "scheduler args: %v", args)
 	})
 
 	t.Run("enabling the value enables it on the scheduler", func(t *testing.T) {
 		args := schedulerArgs(t, s.schedulerOn)
-		assert.True(t, hasArg(args, "--experimental-placement-enabled=true"), "scheduler args: %v", args)
+		assert.True(t, hasArg(args, "--placement-enabled=true"), "scheduler args: %v", args)
 	})
 
 	t.Run("default deploys the placement statefulset", func(t *testing.T) {
@@ -125,19 +125,19 @@ func (s *schedulerplacement) Run(t *testing.T, ctx context.Context) {
 		// No service would serve actor placement.
 		bs, err := io.ReadAll(s.chartNoSched.Stderr(t))
 		require.NoError(t, err)
-		assert.Contains(t, string(bs), "global.scheduler.placement.experimental requires global.scheduler.enabled")
+		assert.Contains(t, string(bs), "global.scheduler.placement.enabled requires global.scheduler.enabled")
 	})
 
 	t.Run("the value without actors is rejected", func(t *testing.T) {
 		bs, err := io.ReadAll(s.chartNoActor.Stderr(t))
 		require.NoError(t, err)
-		assert.Contains(t, string(bs), "global.scheduler.placement.experimental requires global.actors.enabled")
+		assert.Contains(t, string(bs), "global.scheduler.placement.enabled requires global.actors.enabled")
 	})
 
 	t.Run("the value with another actor service is rejected", func(t *testing.T) {
 		bs, err := io.ReadAll(s.chartCustom.Stderr(t))
 		require.NoError(t, err)
-		assert.Contains(t, string(bs), "global.scheduler.placement.experimental requires global.actors.serviceName=placement")
+		assert.Contains(t, string(bs), "global.scheduler.placement.enabled requires global.actors.serviceName=placement")
 	})
 
 	t.Run("placement derives the scheduler address itself", func(t *testing.T) {
