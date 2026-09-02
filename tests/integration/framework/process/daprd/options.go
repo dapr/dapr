@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -57,6 +56,7 @@ type options struct {
 	resourceFiles              []string
 	resourceDirs               []string
 	configs                    []string
+	features                   []string
 	placementAddresses         []string
 	logLevel                   string
 	mode                       string
@@ -230,21 +230,14 @@ func WithConfigs(configs ...string) Option {
 	}
 }
 
-// WithFeatureEnabled configures daprd with a Configuration manifest enabling
-// the given preview features.
+// WithFeatureEnabled enables the given preview features. Calls accumulate
+// into one Configuration manifest, because daprd keeps only the last
+// spec.features list it loads.
 func WithFeatureEnabled(t *testing.T, features ...string) Option {
-	var sb strings.Builder
-	sb.WriteString(`apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: featureconfig
-spec:
-  features:
-`)
-	for _, f := range features {
-		sb.WriteString("  - name: " + f + "\n    enabled: true\n")
+	t.Helper()
+	return func(o *options) {
+		o.features = append(o.features, features...)
 	}
-	return WithConfigManifests(t, sb.String())
 }
 
 func WithConfigManifests(t *testing.T, manifests ...string) Option {

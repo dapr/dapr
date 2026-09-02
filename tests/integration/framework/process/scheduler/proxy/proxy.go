@@ -15,6 +15,7 @@ package proxy
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"io"
 	"net"
@@ -27,6 +28,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
@@ -58,6 +60,11 @@ type Proxy struct {
 	upstream *grpc.ClientConn
 	client   schedulerv1pb.SchedulerClient
 
+	// serverCreds and upstreamTLS are set by WithSentry to interpose on an
+	// mTLS control plane; nil means plaintext on both legs.
+	serverCreds credentials.TransportCredentials
+	upstreamTLS *tls.Config
+
 	runOnce  sync.Once
 	done     chan struct{}
 	serveErr chan error
@@ -79,12 +86,12 @@ type armConfig struct {
 // framework process ordering. daprd should be configured with
 // daprd.WithSchedulerAddresses(proxy.Address()) instead of pointing at the
 // scheduler directly.
-func New(t *testing.T, sched *scheduler.Scheduler) *Proxy {
+func New(t *testing.T, sched *scheduler.Scheduler, fopts ...Option) *Proxy {
 	t.Helper()
 	lis := ports.Reserve(t, 1).Listener(t)
 	tcp, ok := lis.Addr().(*net.TCPAddr)
 	require.True(t, ok)
-	return &Proxy{
+	p := &Proxy{
 		sched:    sched,
 		port:     tcp.Port,
 		listener: lis,
@@ -92,6 +99,10 @@ func New(t *testing.T, sched *scheduler.Scheduler) *Proxy {
 		done:     make(chan struct{}),
 		serveErr: make(chan error, 1),
 	}
+	for _, fopt := range fopts {
+		fopt(p)
+	}
+	return p
 }
 
 // waitReady blocks until conn is Ready, returning false if the connection is
@@ -117,8 +128,12 @@ func (p *Proxy) Run(t *testing.T, ctx context.Context) {
 	p.runOnce.Do(func() {
 		p.sched.WaitUntilRunning(t, ctx)
 
+		upstreamCreds := insecure.NewCredentials()
+		if p.upstreamTLS != nil {
+			upstreamCreds = credentials.NewTLS(p.upstreamTLS.Clone())
+		}
 		conn, err := grpc.NewClient(p.sched.Address(),
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithTransportCredentials(upstreamCreds),
 		)
 		require.NoError(t, err)
 		if !waitReady(ctx, conn) {
@@ -132,7 +147,11 @@ func (p *Proxy) Run(t *testing.T, ctx context.Context) {
 		p.upstream = conn
 		p.client = schedulerv1pb.NewSchedulerClient(conn)
 
-		p.grpcSrv = grpc.NewServer()
+		if p.serverCreds != nil {
+			p.grpcSrv = grpc.NewServer(grpc.Creds(p.serverCreds))
+		} else {
+			p.grpcSrv = grpc.NewServer()
+		}
 		schedulerv1pb.RegisterSchedulerServer(p.grpcSrv, p)
 
 		go func() {

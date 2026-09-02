@@ -38,7 +38,10 @@ type skipresolved struct {
 }
 
 func (sr *skipresolved) Setup(t *testing.T) []framework.Option {
-	sr.workflow = workflow.New(t)
+	sr.workflow = workflow.New(t,
+		// Signing mode opt-out: removing a history event breaks the signature chain by design.
+		workflow.WithSigning(false),
+	)
 	return []framework.Option{
 		framework.WithProcesses(sr.workflow),
 	}
