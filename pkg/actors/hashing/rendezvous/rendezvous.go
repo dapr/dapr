@@ -89,13 +89,12 @@ func (t *Table) score(i int, key string) uint64 {
 	return d.Sum64()
 }
 
-// Hosts returns the sorted host addresses in the table. The returned slice
-// must not be mutated.
+// Hosts returns a copy of the sorted host addresses in the table.
 func (t *Table) Hosts() []string {
 	if t == nil {
 		return nil
 	}
-	return t.hosts
+	return slices.Clone(t.hosts)
 }
 
 // Equal returns whether both tables are over the same host set.
