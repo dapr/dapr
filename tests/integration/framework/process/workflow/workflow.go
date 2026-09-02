@@ -114,14 +114,16 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		fastPath = *opts.fastPath
 	}
 
-	signing := SigningFromEnv()
+	if opts.sentryInstance != nil {
+		opts.mtls = true
+	}
+	// mTLS implies signing unless a test opts out explicitly; opting out
+	// disables the feature only and leaves the requested mTLS in place.
+	signing := SigningFromEnv() || opts.mtls
 	if opts.signing != nil {
 		signing = *opts.signing
 	}
 	if signing {
-		opts.mtls = true
-	}
-	if opts.sentryInstance != nil {
 		opts.mtls = true
 	}
 	// A caller-supplied scheduler cannot be given Sentry credentials
@@ -205,7 +207,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		dopts = append(dopts, baseDopts...)
 
 		features := baseFeatures
-		if sen != nil && (signing || opts.mtls) && !signingDisabled[i] {
+		if sen != nil && signing && !signingDisabled[i] {
 			features = append(features[:len(features):len(features)], "WorkflowHistorySigning")
 		}
 		if len(features) > 0 {
@@ -250,7 +252,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		daprds:       daprds,
 		clustered:    clustered,
 		fastPath:     fastPath,
-		signing:      opts.mtls,
+		signing:      signing,
 	}
 
 	for i := range workflow.taskregistry {
