@@ -62,7 +62,7 @@ func (e *fanout) Setup(t *testing.T) []framework.Option {
 			daprd.WithResourceFiles(e.workflow.DB().GetComponent(t)),
 			daprd.WithPlacementAddresses(e.workflow.Placement().Address()),
 			daprd.WithSchedulerAddresses(e.workflow.Scheduler().Address()),
-		}, fp...)...)
+		}, append(fp, e.workflow.JoinOptions(t)...)...)...)
 	}
 
 	return []framework.Option{
