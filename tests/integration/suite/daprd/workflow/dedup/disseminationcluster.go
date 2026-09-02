@@ -109,6 +109,10 @@ func (d *disseminationcluster) Run(t *testing.T, ctx context.Context) {
 
 		assert.Contains(t, extra.GetMetaEnabledFeatures(t, ctx), "WorkflowsClusteredDeployment",
 			"extras must join with the harness feature set")
+		if d.workflow.FastPath() {
+			assert.Contains(t, extra.GetMetaEnabledFeatures(t, ctx), "WorkflowsFastPath",
+				"extras must join with the harness feature set or the claim gate is compiled out")
+		}
 
 		registry := task.NewTaskRegistry()
 		require.NoError(t, registry.AddWorkflowN("dedup-disseminationcluster", workflowFn))
