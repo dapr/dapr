@@ -31,10 +31,12 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
+	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
 func eventRaisedEvent(name string) *backend.HistoryEvent {
@@ -64,6 +66,29 @@ func Test_fold_submitHoldsWithoutSave(t *testing.T) {
 	}
 	assert.Len(t, h.orch.foldPending, 1)
 	assert.Empty(t, h.orch.state.Inbox, "the event must not touch the durable inbox")
+}
+
+func Test_fold_emptyHistoryKeepsInboxPath(t *testing.T) {
+	const instanceID = "test-fold-empty-history"
+	h := newWakeHarness(t, instanceID, true)
+	h.fact.fastPath = true
+	h.primeRunning(t, instanceID, 7)
+	h.orch.state = wfenginestate.NewState(wfenginestate.Options{
+		AppID:             "testapp",
+		Namespace:         "default",
+		WorkflowActorType: "dapr.internal.default.testapp.workflow",
+		ActivityActorType: "dapr.internal.default.testapp.activity",
+	})
+	h.orch.rstate = runtimestate.NewWorkflowRuntimeState(instanceID, nil, nil)
+
+	// A completion against an empty history must not be held: a fold entry
+	// would pin its sender against a state only the unstartable
+	// classification can settle.
+	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), taskCompletedEvent(7))
+	require.NoError(t, err)
+	assert.Nil(t, entry)
+	assert.Empty(t, h.orch.foldPending)
+	assert.Len(t, h.orch.state.Inbox, 1, "the completion must take the durable inbox path")
 }
 
 func Test_fold_externalEventKeepsInboxPath(t *testing.T) {

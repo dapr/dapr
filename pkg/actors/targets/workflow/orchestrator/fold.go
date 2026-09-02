@@ -148,7 +148,10 @@ func (o *orchestrator) addWorkflowEventMaybeFold(ctx context.Context, e *backend
 	// child publishes while holding its own turn lock, which can deadlock
 	// against a parent turn dispatching back into the same child.
 	foldable := e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil
-	if state == nil || !foldable || state.HasTamperMarker() || o.rstate.GetStalled() != nil {
+	if state == nil || !foldable || state.HasTamperMarker() || o.rstate.GetStalled() != nil || len(state.History) == 0 {
+		// An empty history is never a healthy running instance: no activity
+		// was legitimately scheduled, and a held fold entry would pin its
+		// sender against a state the unstartable classification must settle.
 		return nil, o.addWorkflowEvent(ctx, e)
 	}
 
