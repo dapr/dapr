@@ -170,8 +170,8 @@ func WithFastPath(enabled bool) Option {
 // WithSigning explicitly enables or disables workflow history signing mode
 // (mTLS with a Sentry plus the WorkflowHistorySigning feature flag),
 // overriding the DAPR_INTEGRATION_WORKFLOW_SIGNING environment variable.
-// WithSigning(false) does not strip mTLS from tests that request it via
-// WithMTLS.
+// WithSigning(false) disables the feature flag only: mTLS requested via
+// WithMTLS or WithSentryInstance stays on.
 func WithSigning(enabled bool) Option {
 	return func(o *options) {
 		o.signing = &enabled
