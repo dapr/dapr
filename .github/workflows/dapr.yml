@@ -217,7 +217,6 @@ jobs:
 
   integration-tests:
     name: Integration tests
-    needs: lint
     runs-on: "${{ matrix.os }}"
     permissions:
       contents: read
@@ -271,7 +270,6 @@ jobs:
         run: make test-integration-parallel
   integration-tests-workflow-modes:
     name: "Integration tests (workflow${{ matrix.clustered && ' clustered' || '' }}${{ matrix.fastpath && ' fastpath' || '' }}${{ matrix.signing && ' signing' || '' }} mode)"
-    needs: lint
     runs-on: ubuntu-latest
     permissions:
       contents: read
