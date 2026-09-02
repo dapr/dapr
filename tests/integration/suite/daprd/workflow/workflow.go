@@ -62,5 +62,6 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/terminate/batched"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/timer"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/tracing"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/unstartable"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/versioning"
 )
