@@ -378,8 +378,15 @@ func (c *cmdE2EPerf) buildDockerImage(cachedImage string) error {
 		e.Stdout = os.Stdout
 		e.Stderr = os.Stderr
 		err = e.Run()
-		// If there's an error, we probably didn't have permissions to push to the registry, so we can just ignore that
 		if err != nil {
+			// The dedicated cache-population workflow sets DAPR_CACHE_REQUIRED
+			// so a failed push fails the run instead of leaving the cache
+			// silently incomplete. Everywhere else the push is best-effort:
+			// the run probably lacks permissions on the registry.
+			if os.Getenv("DAPR_CACHE_REQUIRED") == "true" {
+				fmt.Println("Failed to push to the cache registry:", err)
+				return err
+			}
 			fmt.Println("Failed to push to the cache registry; ignored")
 		}
 	}
@@ -550,6 +557,33 @@ func (c *cmdE2EPerf) getHashDir() (string, error) {
 				files = append(files, checksum)
 			}
 		}
+	}
+
+	// Also hash shared build inputs that live outside the app's folder, so
+	// that changing them invalidates the cached image. Apps without their own
+	// Dockerfile are compiled on the host and packaged with the shared
+	// Dockerfile, so that file is an input; if such an app also has no go.mod
+	// of its own it is built against the root module, so the root go.mod and
+	// go.sum are inputs too. Apps with their own Dockerfile handle all their
+	// build inputs inside their folder, which is already hashed.
+	shared := []string{}
+	if _, err := os.Stat(filepath.Join(basePath, c.flags.Dockerfile)); err != nil {
+		if c.cmdType == "perf" {
+			shared = append(shared, filepath.Join(c.getAppDir(), "..", "Dockerfile"))
+		} else {
+			shared = append(shared, filepath.Join(c.getAppDir(), c.flags.Dockerfile))
+		}
+		if _, err := os.Stat(filepath.Join(basePath, "go.mod")); err != nil {
+			rootDir := filepath.Join(c.flags.AppDir, "..", "..")
+			shared = append(shared, filepath.Join(rootDir, "go.mod"), filepath.Join(rootDir, "go.sum"))
+		}
+	}
+	for _, f := range shared {
+		checksum, err := hashEntryForFile(f, filepath.Join("_shared", filepath.Base(f)))
+		if err != nil {
+			continue
+		}
+		files = append(files, checksum)
 	}
 
 	// Sort files to have a consistent order, then compute the checksum of that slice (getting the first 10 chars only)

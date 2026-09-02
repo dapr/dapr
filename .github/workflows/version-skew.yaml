@@ -431,7 +431,7 @@ jobs:
 
     - name: Build and push test apps
       run: |
-        cd latest-release && make compile-build-tools && make -j 6 build-push-e2e-app-all
+        cd latest-release && make compile-build-tools && make -j 6 USE_BUILD_TOOLS_BIN=true build-push-e2e-app-all
 
     - name: Setup Dapr - control-plane master
       if: matrix.mode == 'control-plane-master'

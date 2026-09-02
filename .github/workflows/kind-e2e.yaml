@@ -207,7 +207,7 @@ jobs:
       # copy from the cache into the local KinD registry.
       run: |
         make compile-build-tools
-        make -j 6 build-push-e2e-app-all
+        make -j 6 USE_BUILD_TOOLS_BIN=true build-push-e2e-app-all
 
     - name: Setup Dapr
       run: |

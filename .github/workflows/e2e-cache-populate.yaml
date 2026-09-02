@@ -51,6 +51,9 @@ jobs:
       DAPR_REGISTRY: localhost:5000/dapr
       DAPR_TAG: dev
       DAPR_CACHE_REGISTRY: "ghcr.io/dapr/e2e-cache"
+      # A failed cache push fails this run: this workflow exists to publish
+      # the cache, so finishing green without publishing would be misleading.
+      DAPR_CACHE_REQUIRED: "true"
     steps:
     - name: Check out code
       uses: actions/checkout@v6
@@ -75,4 +78,4 @@ jobs:
     - name: Build and push test apps
       run: |
         make compile-build-tools
-        make -j 6 build-push-e2e-app-all
+        make -j 6 USE_BUILD_TOOLS_BIN=true build-push-e2e-app-all
