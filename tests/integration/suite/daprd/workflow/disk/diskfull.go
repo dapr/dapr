@@ -74,17 +74,32 @@ func (d *diskfull) Run(t *testing.T, ctx context.Context) {
 
 	d.wf.WaitUntilRunning(t, ctx)
 
-	padPath := filepath.Join(d.mount, "pad")
-	fwos.FillDisk(t, padPath)
-
 	sched := d.wf.Scheduler()
-	defCtx, cancelDef := context.WithTimeout(ctx, 5*time.Second)
-	_, err := sched.ETCDClient(t, ctx).Defragment(defCtx,
-		"127.0.0.1:"+strconv.Itoa(sched.EtcdClientPort()))
-	cancelDef()
-	require.Error(t, err, "defragment must fail on full disk")
 
-	require.NoError(t, os.Remove(padPath))
+	// etcd reclaims space concurrently (WAL segment pruning, snapshot
+	// cleanup), so a single fill can be undone between the fill and the
+	// defragment call. Re-fill and retry until the defragment observes the
+	// full disk.
+	var pads []string
+	var defragErr error
+	for i := range 5 {
+		pad := filepath.Join(d.mount, "pad-"+strconv.Itoa(i))
+		fwos.FillDisk(t, pad)
+		pads = append(pads, pad)
+
+		defCtx, cancelDef := context.WithTimeout(ctx, 5*time.Second)
+		_, defragErr = sched.ETCDClient(t, ctx).Defragment(defCtx,
+			"127.0.0.1:"+strconv.Itoa(sched.EtcdClientPort()))
+		cancelDef()
+		if defragErr != nil {
+			break
+		}
+	}
+	require.Error(t, defragErr, "defragment must fail on full disk")
+
+	for _, pad := range pads {
+		require.NoError(t, os.Remove(pad))
+	}
 
 	sched.Restart(t, ctx)
 	sched.WaitUntilRunning(t, ctx)
