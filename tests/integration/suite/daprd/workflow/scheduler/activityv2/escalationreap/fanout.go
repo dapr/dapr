@@ -37,15 +37,16 @@ func init() {
 	suite.Register(new(fanout))
 }
 
-// escalationreap verifies the durable run-activity reminder armed by a janitor
-// escalation is reaped once its task resolves. The escalation can only land
-// during a handoff window (the dissemination cancels the in-flight execution's
-// wait and frees the activity actor lock), and the resolving execution
-// predates the escalation, so nothing else deletes the reminder and its fire
-// re-runs the body on a cold host.
+// fanout verifies the reap settles several escalations on one instance: a
+// fan-out of blocked activities escalates multiple task IDs on the same
+// orchestrator, and the turns committing their completions must reap every
+// marked reminder, leaving the body count exact.
 type fanout struct {
 	workflow *workflow.Workflow
-	joiner   *daprd.Daprd
+	// joiners trigger placement rebalances; one joins up front and the rest
+	// join one at a time only while no escalation has landed, since a churn
+	// round can move no in-flight actor at all.
+	joiners [3]*daprd.Daprd
 }
 
 func (e *fanout) Setup(t *testing.T) []framework.Option {
@@ -55,12 +56,14 @@ func (e *fanout) Setup(t *testing.T) []framework.Option {
 	}
 	e.workflow = workflow.New(t, workflow.WithDaprdOptions(0, fp...))
 
-	e.joiner = daprd.New(t, append([]daprd.Option{
-		daprd.WithAppID(e.workflow.Dapr().AppID()),
-		daprd.WithResourceFiles(e.workflow.DB().GetComponent(t)),
-		daprd.WithPlacementAddresses(e.workflow.Placement().Address()),
-		daprd.WithSchedulerAddresses(e.workflow.Scheduler().Address()),
-	}, fp...)...)
+	for i := range e.joiners {
+		e.joiners[i] = daprd.New(t, append([]daprd.Option{
+			daprd.WithAppID(e.workflow.Dapr().AppID()),
+			daprd.WithResourceFiles(e.workflow.DB().GetComponent(t)),
+			daprd.WithPlacementAddresses(e.workflow.Placement().Address()),
+			daprd.WithSchedulerAddresses(e.workflow.Scheduler().Address()),
+		}, fp...)...)
+	}
 
 	return []framework.Option{
 		framework.WithProcesses(e.workflow),
@@ -72,6 +75,7 @@ func (e *fanout) Run(t *testing.T, ctx context.Context) {
 
 	const batch = 2
 	const fanout = 4
+	const bodiesPerWorkflow = fanout
 
 	var executions atomic.Int64
 	release := make(chan struct{})
@@ -109,37 +113,62 @@ func (e *fanout) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, e.workflow.Registry().AddActivityN("Slow", actFn))
 	client1 := e.workflow.BackendClient(t, ctx)
 
-	ids := make([]string, 0, batch)
-	for range batch {
-		resp, err := e.workflow.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
-			WorkflowComponent: "dapr",
-			WorkflowName:      "EscalationReapFanout",
-		})
-		require.NoError(t, err)
-		ids = append(ids, resp.GetInstanceId())
+	var ids []string
+	start := func() {
+		t.Helper()
+		for range batch {
+			resp, err := e.workflow.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
+				WorkflowComponent: "dapr",
+				WorkflowName:      "EscalationReapFanout",
+			})
+			require.NoError(t, err)
+			ids = append(ids, resp.GetInstanceId())
+		}
+		require.Eventually(t, func() bool {
+			return executions.Load() >= int64(len(ids)*bodiesPerWorkflow)
+		}, time.Second*30, time.Millisecond*10,
+			"every activity body must be mid-execution before the churn")
 	}
-	require.Eventually(t, func() bool {
-		return executions.Load() >= int64(batch*fanout)
-	}, time.Second*30, time.Millisecond*10,
-		"every activity body must be mid-execution before the churn")
+	start()
 
-	e.joiner.Run(t, ctx)
-	t.Cleanup(func() { e.joiner.Cleanup(t) })
-	e.joiner.WaitUntilRunning(t, ctx)
+	var joined []*daprd.Daprd
+	join := func(d *daprd.Daprd) {
+		t.Helper()
+		d.Run(t, ctx)
+		t.Cleanup(func() { d.Cleanup(t) })
+		d.WaitUntilRunning(t, ctx)
 
-	registry := task.NewTaskRegistry()
-	require.NoError(t, registry.AddWorkflowN("EscalationReapFanout", wfFn))
-	require.NoError(t, registry.AddActivityN("Slow", actFn))
-	joinerClient := client.NewTaskHubGrpcClient(e.joiner.GRPCConn(t, ctx), backend.DefaultLogger())
-	require.NoError(t, joinerClient.StartWorkItemListener(ctx, registry))
+		registry := task.NewTaskRegistry()
+		require.NoError(t, registry.AddWorkflowN("EscalationReapFanout", wfFn))
+		require.NoError(t, registry.AddActivityN("Slow", actFn))
+		joinerClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), backend.DefaultLogger())
+		require.NoError(t, joinerClient.StartWorkItemListener(ctx, registry))
+		joined = append(joined, d)
+	}
+	join(e.joiners[0])
 
 	sumBoth := func(status string) float64 {
-		return e.workflow.Dapr().Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:"+status) +
-			e.joiner.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:"+status)
+		sum := e.workflow.Dapr().Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:"+status)
+		for _, d := range joined {
+			sum += d.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:"+status)
+		}
+		return sum
 	}
-	require.Eventually(t, func() bool {
-		return sumBoth("janitor_redispatch_escalated") >= 1
-	}, time.Second*30, time.Millisecond*10,
+	// Whether a churn round moves any in-flight actor is probabilistic; when
+	// none moved, block another batch and churn again with the next joiner.
+	escalated := func() bool { return sumBoth("janitor_redispatch_escalated") >= 1 }
+	for _, churner := range e.joiners[1:] {
+		deadline := time.Now().Add(time.Second * 10)
+		for !escalated() && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond * 50)
+		}
+		if escalated() {
+			break
+		}
+		start()
+		join(churner)
+	}
+	require.Eventually(t, escalated, time.Second*10, time.Millisecond*50,
 		"the janitor must escalate at least one unresolved activity to its durable reminder")
 
 	close(release)
@@ -154,8 +183,8 @@ func (e *fanout) Run(t *testing.T, ctx context.Context) {
 			"every escalated task of the fan-out must be reaped, not only the first")
 		assert.Zero(c, e.workflow.Scheduler().JobKeyCount(t, ctx, "run-activity"),
 			"no run-activity reminder may outlive its workflow")
-	}, time.Second*30, time.Millisecond*10)
+	}, time.Second*30, time.Millisecond*50)
 
-	assert.Equal(t, int64(batch*fanout), executions.Load(),
+	assert.Equal(t, int64(len(ids)*fanout), executions.Load(),
 		"every activity body must run exactly once; a reaped reminder cannot fire")
 }
