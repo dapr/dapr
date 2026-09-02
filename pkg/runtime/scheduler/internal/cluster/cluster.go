@@ -35,6 +35,7 @@ type Options struct {
 	AppID        string
 	AppTarget    bool
 	ActorTypes   []string
+	ActorAddress string
 	WorkflowSpec *config.WorkflowSpec
 
 	Clients  []schedulerv1pb.SchedulerClient
@@ -49,6 +50,7 @@ type Cluster struct {
 	appID        string
 	appTarget    bool
 	actorTypes   []string
+	actorAddress string
 	workflowSpec *config.WorkflowSpec
 
 	clients  []schedulerv1pb.SchedulerClient
@@ -63,6 +65,7 @@ func New(opts Options) *Cluster {
 		appID:        opts.AppID,
 		appTarget:    opts.AppTarget,
 		actorTypes:   opts.ActorTypes,
+		actorAddress: opts.ActorAddress,
 		workflowSpec: opts.WorkflowSpec,
 		clients:      opts.Clients,
 		actors:       opts.Actors,
@@ -96,6 +99,9 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 			Initial: &schedulerv1pb.WatchJobsRequestInitial{
 				AppId:     c.appID,
 				Namespace: c.namespace,
+				// Lets schedulers gate the placement advertisement on every
+				// connected sidecar being able to follow it.
+				SupportsSchedulerPlacement: true,
 			},
 		},
 	}
@@ -108,6 +114,9 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 	if len(c.actorTypes) > 0 {
 		acceptJobTypes = append(acceptJobTypes, schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_ACTOR_REMINDER)
 		req.GetInitial().ActorTypes = c.actorTypes
+		if c.actorAddress != "" {
+			req.GetInitial().ActorAddress = &c.actorAddress
+		}
 	}
 
 	req.GetInitial().AcceptJobTypes = acceptJobTypes

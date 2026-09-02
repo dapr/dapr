@@ -49,10 +49,11 @@ type connector struct {
 	channels     *channels.Channels
 	wfEngine     wfengine.Interface
 
-	currentAppRunning bool
-	currentActorTypes []string
-	clients           []schedulerv1pb.SchedulerClient
-	closeConns        []context.CancelFunc
+	currentAppRunning   bool
+	currentActorTypes   []string
+	currentActorAddress string
+	clients             []schedulerv1pb.SchedulerClient
+	closeConns          []context.CancelFunc
 
 	closeCluster context.CancelFunc
 }
@@ -110,6 +111,10 @@ func (c *connector) handleReconnect(ctx context.Context, e *loops.Reconnect) {
 		c.currentActorTypes = *e.ActorTypes
 	}
 
+	if e.ActorAddress != nil {
+		c.currentActorAddress = *e.ActorAddress
+	}
+
 	c.maybeClientConnect(ctx)
 }
 
@@ -141,9 +146,10 @@ func (c *connector) maybeClientConnect(ctx context.Context) {
 		Channels:     c.channels,
 		WFEngine:     c.wfEngine,
 
-		AppTarget:  c.currentAppRunning,
-		ActorTypes: c.currentActorTypes,
-		Clients:    c.clients,
+		AppTarget:    c.currentAppRunning,
+		ActorTypes:   c.currentActorTypes,
+		ActorAddress: c.currentActorAddress,
+		Clients:      c.clients,
 	})
 
 	ctx, cancel := context.WithCancel(ctx)

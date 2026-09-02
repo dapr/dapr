@@ -15,11 +15,13 @@ package pool
 
 import (
 	"context"
+	"sync"
 
 	"github.com/diagridio/go-etcd-cron/api"
 
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/namespaces"
 	"github.com/dapr/kit/concurrency"
@@ -31,6 +33,11 @@ var log = logger.NewLogger("dapr.runtime.scheduler.server.pool")
 
 type Options struct {
 	Cron api.Interface
+
+	// OnSchedulerPlacementCapabilityChange is called when the number of capable or
+	// incapable connected sidecars transitions between zero and non-zero.
+	// Consumers re-read the counts when handling.
+	OnSchedulerPlacementCapabilityChange func()
 }
 
 // Pool represents a connection pool for namespace/appID separation of sidecars
@@ -40,12 +47,21 @@ type Pool struct {
 
 	nsLoop  loop.Interface[loops.EventNS]
 	readyCh chan struct{}
+
+	// incapable/capable count connected sidecars by whether they reported
+	// supports_scheduler_placement, for gating and latching the placement
+	// advertisement.
+	capLock                     sync.Mutex
+	incapable                   int
+	capable                     int
+	onPlacementCapabilityChange func()
 }
 
 func New(opts Options) *Pool {
 	return &Pool{
-		readyCh: make(chan struct{}),
-		cron:    opts.Cron,
+		readyCh:                     make(chan struct{}),
+		cron:                        opts.Cron,
+		onPlacementCapabilityChange: opts.OnSchedulerPlacementCapabilityChange,
 	}
 }
 
@@ -78,6 +94,9 @@ func (p *Pool) AddConnection(req *schedulerv1pb.WatchJobsRequestInitial, stream 
 	<-p.readyCh
 
 	ctx, cancel := context.WithCancelCause(stream.Context())
+
+	p.trackCapability(ctx, req.GetSupportsSchedulerPlacement())
+
 	p.nsLoop.Enqueue(&loops.ConnAdd{
 		Request: req,
 		Channel: stream,
@@ -85,6 +104,67 @@ func (p *Pool) AddConnection(req *schedulerv1pb.WatchJobsRequestInitial, stream 
 	})
 
 	return ctx
+}
+
+// trackCapability counts a sidecar connection's scheduler placement
+// capability for the
+// lifetime of its stream, calling the capability callback whenever either
+// count transitions between zero and non-zero.
+func (p *Pool) trackCapability(ctx context.Context, capable bool) {
+	count := &p.incapable
+	if capable {
+		count = &p.capable
+	}
+
+	p.capLock.Lock()
+	*count++
+	// 0 -> 1: first of this kind connected. First incapable withholds the
+	// placement advertisement, first capable makes it permanent.
+	transition := *count == 1
+	incapableNow := p.incapable
+	p.capLock.Unlock()
+
+	if !capable {
+		monitoring.RecordPlacementIncapableSidecars(int64(incapableNow))
+	}
+
+	if transition && p.onPlacementCapabilityChange != nil {
+		p.onPlacementCapabilityChange()
+	}
+
+	context.AfterFunc(ctx, func() {
+		p.capLock.Lock()
+		*count--
+		// 1 -> 0: the last sidecar of this kind disconnected. The last
+		// incapable one leaving lets the placement advertisement resume.
+		transition := *count == 0
+		incapableNow := p.incapable
+		p.capLock.Unlock()
+
+		if !capable {
+			monitoring.RecordPlacementIncapableSidecars(int64(incapableNow))
+		}
+
+		if transition && p.onPlacementCapabilityChange != nil {
+			p.onPlacementCapabilityChange()
+		}
+	})
+}
+
+// HasSchedulerPlacementIncapableSidecars reports whether any connected sidecar does
+// not support scheduler placement.
+func (p *Pool) HasSchedulerPlacementIncapableSidecars() bool {
+	p.capLock.Lock()
+	defer p.capLock.Unlock()
+	return p.incapable > 0
+}
+
+// HasSchedulerPlacementCapableSidecars reports whether any connected sidecar supports
+// scheduler placement.
+func (p *Pool) HasSchedulerPlacementCapableSidecars() bool {
+	p.capLock.Lock()
+	defer p.capLock.Unlock()
+	return p.capable > 0
 }
 
 // Trigger triggers a job event to the pool. It returns a response result.
