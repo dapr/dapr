@@ -17,6 +17,9 @@ import (
 	"context"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
+
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
@@ -98,6 +101,8 @@ type driveInfo struct {
 	reminderName string
 	dueTime      time.Time
 	wfName       string
+	// epoch is o.wakeEpoch at arming time (see wakeEpoch).
+	epoch uint64
 }
 
 // localDrive eagerly drives a wake-up on this host instead of creating a
@@ -108,7 +113,9 @@ type driveInfo struct {
 // MUST be called only after BOTH the state save AND a durable re-driver are
 // in place: either the per-instance janitor reminder (ensureJanitor) or a
 // durable one-shot reminder created by the caller (assertStartReminder keeps
-// its scheduler entry for delayed starts and pending-start recovery).
+// its scheduler entry for delayed starts and pending-start recovery; it is
+// elided best-effort once the first turn durably commits, see
+// deleteStartReminder).
 //
 // Wakes are delivered through a per-instance DRIVE LOOP: localDrive posts a
 // notification (buffered-1 channel: pending notifications coalesce, mirroring
@@ -141,7 +148,7 @@ func (o *orchestrator) localDrive(reminderName string, dueTime time.Time, wfName
 		return
 	}
 
-	o.driveInfo.Store(&driveInfo{reminderName: reminderName, dueTime: dueTime, wfName: wfName})
+	o.driveInfo.Store(&driveInfo{reminderName: reminderName, dueTime: dueTime, wfName: wfName, epoch: o.wakeEpoch.Load()})
 
 	// Post the wake. A full buffer means a notification is already pending
 	// and this wake coalesces into it: the pending drive's turn runs after
@@ -289,6 +296,14 @@ func (o *orchestrator) escalate(info *driveInfo) {
 		diag.DefaultWorkflowMonitoring.WorkflowLocalWake(context.Background(), diag.StatusEscalateSkipped)
 		return
 	}
+	if o.wakeEpoch.Load() != info.epoch {
+		o.escLock.Unlock()
+		// A turn committed since this wake was armed: a reminder for it
+		// would be a stray.
+		log.Debugf("Workflow actor '%s': suppressing stale escalation of wake '%s' (a turn committed since it was armed)", o.actorID, info.reminderName)
+		diag.DefaultWorkflowMonitoring.WorkflowLocalWake(context.Background(), diag.StatusEscalateSuppressed)
+		return
+	}
 	o.escWG.Add(1)
 	o.escLock.Unlock()
 
@@ -306,6 +321,20 @@ func (o *orchestrator) escalate(info *driveInfo) {
 			return
 		}
 		diag.DefaultWorkflowMonitoring.WorkflowLocalWake(context.Background(), diag.StatusEscalated)
+
+		// A commit raced the create: delete the stray, best effort.
+		// NotFound is the normal case.
+		if o.wakeEpoch.Load() != info.epoch {
+			if err := o.reminders.Delete(ctx, &actorapi.DeleteReminderRequest{
+				Name:      info.reminderName,
+				ActorType: o.actorTypeBuilder.Workflow(o.appID),
+				ActorID:   o.actorID,
+			}); err != nil {
+				if s, ok := grpcstatus.FromError(err); !ok || s.Code() != codes.NotFound {
+					log.Debugf("Workflow actor '%s': failed to delete stray escalated wake '%s' (it will fire as a no-op): %v", o.actorID, info.reminderName, err)
+				}
+			}
+		}
 	}()
 }
 

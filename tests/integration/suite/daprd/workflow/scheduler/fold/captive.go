@@ -107,8 +107,16 @@ func (f *captive) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	assert.Equal(t, `"ok"`, metadata.GetOutput().GetValue())
 
-	assert.GreaterOrEqual(t, f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:janitor_fold_recovered"), float64(3))
-	assert.GreaterOrEqual(t, f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_count", "status:folded"), float64(3))
+	assert.GreaterOrEqual(t, f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:janitor_fold_recovered"), float64(1),
+		"at least one captive completion must be recovered by a janitor-driven turn")
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		folded := f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_count", "status:folded")
+		nacked := f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_count", "status:fold_nacked")
+		assert.GreaterOrEqual(c, folded, float64(2))
+		assert.LessOrEqual(c, folded, float64(3), "folded is commit-attributed: at most one record per completion")
+		assert.GreaterOrEqual(c, folded+nacked, float64(3), "every captive completion must resolve as folded or nacked")
+	}, time.Second*10, time.Millisecond*50)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		janitors := f.scheduler.JobKeyCount(t, ctx, "new-event-janitor")

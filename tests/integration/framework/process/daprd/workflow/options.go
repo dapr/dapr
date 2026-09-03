@@ -24,7 +24,27 @@ import (
 type Option func(*options)
 
 type options struct {
-	registry *task.TaskRegistry
+	registry  *task.TaskRegistry
+	clustered *bool
+	fastPath  *bool
+}
+
+// WithFastPath explicitly enables or disables the WorkflowsFastPath feature
+// flag on the underlying daprd, overriding the
+// DAPR_INTEGRATION_WORKFLOW_FASTPATH environment variable.
+func WithFastPath(enabled bool) Option {
+	return func(o *options) {
+		o.fastPath = &enabled
+	}
+}
+
+// WithClusteredDeployment explicitly enables or disables the
+// WorkflowsClusteredDeployment feature flag on the underlying daprd,
+// overriding the DAPR_INTEGRATION_WORKFLOW_CLUSTERED environment variable.
+func WithClusteredDeployment(enabled bool) Option {
+	return func(o *options) {
+		o.clustered = &enabled
+	}
 }
 
 func WithAddWorkflowN(t *testing.T, name string, or func(*task.WorkflowContext) (any, error)) Option {

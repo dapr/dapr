@@ -37,6 +37,7 @@ import (
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/table"
+	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
@@ -51,7 +52,9 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors/pendingtracker"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	staterrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state/list"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/dapr/utils"
@@ -117,7 +120,7 @@ type Actors struct {
 	retentionerActorType string
 	executorActorType    string
 
-	pendingTasksBackend    PendingTasksBackend
+	pendingTasksBackend    *pendingtracker.Tracker
 	activityExecs          *activityExecutions
 	resiliency             resiliency.Provider
 	actors                 actors.Interface
@@ -155,12 +158,7 @@ type Actors struct {
 	stopped atomic.Bool
 }
 
-// The completion-callback assertion is what flips the durabletask worker's
-// canExecuteAsync gate.
-var (
-	_ backend.Backend                   = (*Actors)(nil)
-	_ backend.CompletionCallbackBackend = (*Actors)(nil)
-)
+var _ backend.Backend = (*Actors)(nil)
 
 func New(opts Options) (*Actors, error) {
 	var pendingTasksBackend PendingTasksBackend
@@ -180,6 +178,10 @@ func New(opts Options) (*Actors, error) {
 		pendingTasksBackend = local.NewTasksBackend()
 	}
 
+	// Wrapped so pending completions can be cancelled while no executor is
+	// connected; see the pendingtracker package.
+	trackedPendingTasksBackend := pendingtracker.New(pendingTasksBackend)
+
 	return &Actors{
 		appID:                     opts.AppID,
 		namespace:                 opts.Namespace,
@@ -189,7 +191,7 @@ func New(opts Options) (*Actors, error) {
 		retentionerActorType:      todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + RetentionerNameLabelKey,
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
-		pendingTasksBackend:       pendingTasksBackend,
+		pendingTasksBackend:       trackedPendingTasksBackend,
 		activityExecs:             newActivityExecutions(),
 		compStore:                 opts.ComponentStore,
 		orchestrationWorkItemChan: make(chan *backend.WorkflowWorkItem, 1),
@@ -479,7 +481,7 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 		}
 
 		return backoff.Permanent(eerr)
-	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
+	}, backoff.WithContext(common.NewJitterBackoff(common.RetryBackoffBase, common.RetryBackoffCap), ctx))
 
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
@@ -760,26 +762,46 @@ func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.Instan
 		WithActor(actorType, string(id)).
 		WithContentType(invokev1.ProtobufContentType)
 
-	err = router.CallStream(ctx, req, func(resp *internalsv1pb.InternalInvokeResponse) (bool, error) {
-		var meta backend.WorkflowMetadata
-		perr := resp.GetMessage().GetData().UnmarshalTo(&meta)
-		if perr != nil {
-			log.Errorf("Failed to unmarshal orchestration metadata: %s", perr)
-			return false, perr
-		}
+	wait := time.Millisecond * 500
+	for {
+		err = router.CallStream(ctx, req, func(resp *internalsv1pb.InternalInvokeResponse) (bool, error) {
+			var meta backend.WorkflowMetadata
+			perr := resp.GetMessage().GetData().UnmarshalTo(&meta)
+			if perr != nil {
+				log.Errorf("Failed to unmarshal orchestration metadata: %s", perr)
+				return false, perr
+			}
 
-		return condition(&meta), nil
-	})
-	if err != nil {
+			return condition(&meta), nil
+		})
+		switch {
+		case err == nil:
+			return nil
 		// Actor invocations carry errors as wire strings; normalise not-found
 		// so callers can rely on errors.Is.
-		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
+		case strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()):
 			return api.ErrInstanceNotFound
+		case !targeterrors.IsStalled(err):
+			return err
 		}
-		return err
-	}
 
-	return nil
+		// A stalled actor rejects stream registrations while the stall turn
+		// parks holding the turn lock, but the instance is quiescent and its
+		// status readable from the store. A condition the instance already
+		// reached must resolve (a schedule's wait-for-start racing a fast
+		// stall); otherwise re-register with backoff until the stall clears.
+		if meta, merr := abe.GetWorkflowMetadata(ctx, id, taskRouter); merr == nil && condition(meta) {
+			return nil
+		}
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+		wait = min(wait*2, time.Second*5)
+	}
 }
 
 // PurgeWorkflowState implements backend.Backend.
@@ -980,6 +1002,10 @@ func (abe *Actors) WorkflowActorType() string {
 	return abe.workflowActorType
 }
 
+func (abe *Actors) SetExecutorAvailable(available bool) {
+	abe.pendingTasksBackend.SetExecutorAvailable(available)
+}
+
 // CancelActivityTask implements backend.Backend.
 func (abe *Actors) CancelActivityTask(ctx context.Context, instanceID api.InstanceID, taskID int32) error {
 	return abe.callWithBackoff(ctx, func() error {
@@ -1037,37 +1063,6 @@ func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
 			backoff.WithMaxInterval(3*time.Second),
 			backoff.WithRandomizationFactor(0.3),
 		), ctx))
-}
-
-// WaitForActivityCompletion implements backend.Backend. The registration is
-// mirrored into activityExecs so the activity target's stale-claim eviction
-// can see the work item as engine-held for the duration of the wait.
-func (abe *Actors) WaitForActivityCompletion(request *protos.ActivityRequest) func(context.Context) (*protos.ActivityResponse, error) {
-	wait := abe.pendingTasksBackend.WaitForActivityCompletion(request)
-	key := activityExecutionKey(request.GetWorkflowInstance().GetInstanceId(), request.GetTaskId())
-	return func(ctx context.Context) (*protos.ActivityResponse, error) {
-		// Register inside the wait so the held-liveness lifetime matches the
-		// actual wait: durabletask can abandon a work item without ever
-		// invoking the waiter, and a construction-time registration would
-		// then leak, blinding stale-claim eviction for this key forever.
-		release := abe.activityExecs.add(key)
-		defer release()
-		resp, err := wait(ctx)
-		if err == nil {
-			// Handshake with the owner execution: mark its call resolving
-			// BEFORE the deferred release drops the held registration. The
-			// callback channel to the owner is a separate scheduling hop,
-			// and in that gap a stale-claim check would otherwise see
-			// not-held + not-resolving and evict a healthy execution.
-			abe.activityExecs.resolve(key)
-		}
-		return resp, err
-	}
-}
-
-// WaitForWorkflowTaskCompletion implements backend.Backend.
-func (abe *Actors) WaitForWorkflowTaskCompletion(request *protos.WorkflowRequest) func(context.Context) (*protos.WorkflowResponse, error) {
-	return abe.pendingTasksBackend.WaitForWorkflowTaskCompletion(request)
 }
 
 // OnActivityCompletion implements backend.CompletionCallbackBackend, flipping
@@ -1234,11 +1229,21 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 
 	s, err := state.LoadWorkflowState(ctx, astate, id.String(), state.Options{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
+		Signer:            abe.signer,
 	})
 	if err != nil {
-		return err
+		// Force purge is the escape hatch for instances that cannot be
+		// handled normally, which includes tampered or misconfigured signed
+		// state: purge the loaded rows anyway rather than refusing.
+		var verifyErr *staterrors.VerificationError
+		var configErr *staterrors.ConfigurationError
+		if s == nil || (!errors.As(err, &verifyErr) && !errors.As(err, &configErr)) {
+			return err
+		}
+		log.Warnf("Force purging workflow '%s' whose state failed signature verification or signing configuration checks: %v", id.String(), err)
 	}
 
 	req, err := s.GetPurgeRequest(id.String())
