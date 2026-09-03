@@ -15,6 +15,7 @@ package orchestrator
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/fake"
+	"github.com/dapr/dapr/pkg/actors/reminders"
 	remindersfake "github.com/dapr/dapr/pkg/actors/reminders/fake"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
@@ -184,8 +186,12 @@ func Test_runWorkflow_stateIsolation(t *testing.T) {
 // event delivery on retry: without the move, the retry would pass all
 // original inbox events as NewEvents alongside the carryover OldEvents,
 // causing the workflow to see and process duplicate events.
-func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
-	const instanceID = "test-can-carryover"
+// abandonedCANRun drives runWorkflow with a scheduler that overwrites the
+// work item state with canState (a continued-as-new runtime state) and then
+// abandons the work item, returning the orchestrator and every reminder
+// Create request issued. inbox is the consumed inbox of the abandoned turn.
+func abandonedCANRun(t *testing.T, instanceID string, inbox []*backend.HistoryEvent, canState *protos.WorkflowRuntimeState) (*orchestrator, []*actorapi.CreateReminderRequest) {
+	t.Helper()
 
 	startEvent := &protos.HistoryEvent{
 		EventId:   -1,
@@ -200,7 +206,6 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 			},
 		},
 	}
-
 	history := []*backend.HistoryEvent{
 		{
 			EventId: -1, Timestamp: timestamppb.Now(),
@@ -209,19 +214,6 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 			},
 		},
 		startEvent,
-	}
-
-	inbox := make([]*backend.HistoryEvent, 5)
-	for i := range inbox {
-		inbox[i] = &protos.HistoryEvent{
-			EventId:   int32(i),
-			Timestamp: timestamppb.Now(),
-			EventType: &protos.HistoryEvent_EventRaised{
-				EventRaised: &protos.EventRaisedEvent{
-					Name: "incr",
-				},
-			},
-		}
 	}
 
 	state := wfenginestate.NewState(wfenginestate.Options{
@@ -235,16 +227,62 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 	for _, e := range history {
 		state.AddToHistory(e)
 	}
-
 	rstate := runtimestate.NewWorkflowRuntimeState(instanceID, nil, history)
 
-	carryover := inbox[3:]
-	canState := &protos.WorkflowRuntimeState{
+	scheduler := func(_ context.Context, wi *backend.WorkflowWorkItem) error {
+		proto.Reset(wi.State)
+		proto.Merge(wi.State, canState)
+		wi.Properties[todo.CallbackChannelProperty].(chan bool) <- false
+		return nil
+	}
+
+	var (
+		mu         sync.Mutex
+		gotCreates []*actorapi.CreateReminderRequest
+	)
+	remFake := remindersfake.New().WithCreate(func(_ context.Context, req *actorapi.CreateReminderRequest) error {
+		mu.Lock()
+		defer mu.Unlock()
+		gotCreates = append(gotCreates, req)
+		return nil
+	})
+
+	fact, err := New(t.Context(), Options{
+		AppID:             "testapp",
+		WorkflowActorType: "workflow",
+		ActivityActorType: "activity",
+		Scheduler:         scheduler,
+		ActorTypeBuilder:  common.NewActorTypeBuilder("default"),
+		Actors: fake.New().WithReminders(func(context.Context) (reminders.Interface, error) {
+			return remFake, nil
+		}),
+	})
+	require.NoError(t, err)
+
+	o := fact.GetOrCreate(instanceID).(*orchestrator)
+	o.state = state
+	o.rstate = rstate
+	o.ometa = o.ometaFromState(rstate, startEvent.GetExecutionStarted())
+
+	reminder := &actorapi.Reminder{Name: "new-event-test"}
+	generation := state.Generation
+	completed, runErr := o.runWorkflow(t.Context(), reminder)
+	assert.Equal(t, generation+1, o.state.Generation)
+	assert.Equal(t, todo.RunCompletedFalse, completed)
+	require.Error(t, runErr)
+
+	mu.Lock()
+	defer mu.Unlock()
+	return o, gotCreates
+}
+
+func canRuntimeState(instanceID, input string, extra ...*protos.HistoryEvent) *protos.WorkflowRuntimeState {
+	return &protos.WorkflowRuntimeState{
 		InstanceId:     instanceID,
 		ContinuedAsNew: true,
 		StartEvent: &protos.ExecutionStartedEvent{
 			Name:  "TestWorkflow",
-			Input: wrapperspb.String(`3`),
+			Input: wrapperspb.String(input),
 			WorkflowInstance: &protos.WorkflowInstance{
 				InstanceId: instanceID,
 			},
@@ -263,60 +301,94 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 				EventType: &protos.HistoryEvent_ExecutionStarted{
 					ExecutionStarted: &protos.ExecutionStartedEvent{
 						Name:  "TestWorkflow",
-						Input: wrapperspb.String(`3`),
+						Input: wrapperspb.String(input),
 						WorkflowInstance: &protos.WorkflowInstance{
 							InstanceId: instanceID,
 						},
 					},
 				},
 			},
-		}, carryover...),
+		}, extra...),
 	}
+}
 
-	scheduler := func(_ context.Context, wi *backend.WorkflowWorkItem) error {
-		proto.Reset(wi.State)
-		proto.Merge(wi.State, canState)
-		wi.Properties[todo.CallbackChannelProperty].(chan bool) <- false
-		return nil
-	}
+// Test_runWorkflow_canSaveMovesCarryoverToInbox verifies that when the
+// engine abandons a work item after continuing-as-new, the newest generation
+// is persisted as a pending start: its ExecutionStarted leads the inbox,
+// followed by the carryover EventRaised events, history is empty, and a
+// start reminder drives the retry. The consumed inbox is discarded.
+func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
+	const instanceID = "test-can-carryover"
 
-	fact, err := New(t.Context(), Options{
-		AppID:             "testapp",
-		WorkflowActorType: "workflow",
-		ActivityActorType: "activity",
-		Scheduler:         scheduler,
-		ActorTypeBuilder:  common.NewActorTypeBuilder("default"),
-		Actors:            fake.New(),
-	})
-	require.NoError(t, err)
-
-	o := fact.GetOrCreate(instanceID).(*orchestrator)
-	o.state = state
-	o.rstate = rstate
-	o.ometa = o.ometaFromState(rstate, startEvent.GetExecutionStarted())
-
-	reminder := &actorapi.Reminder{Name: "new-event-test"}
-	completed, runErr := o.runWorkflow(t.Context(), reminder)
-
-	assert.Equal(t, todo.RunCompletedFalse, completed)
-	require.Error(t, runErr)
-
-	assert.Len(t, o.state.Inbox, len(carryover))
-
-	for _, e := range o.state.History {
-		assert.Nil(t, e.GetEventRaised())
-	}
-
-	hasExecutionStarted := false
-	for _, e := range o.state.History {
-		if e.GetExecutionStarted() != nil {
-			hasExecutionStarted = true
-			break
+	inbox := make([]*backend.HistoryEvent, 5)
+	for i := range inbox {
+		inbox[i] = &protos.HistoryEvent{
+			EventId:   int32(i),
+			Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_EventRaised{
+				EventRaised: &protos.EventRaisedEvent{
+					Name: "incr",
+				},
+			},
 		}
 	}
-	assert.True(t, hasExecutionStarted)
+	carryover := inbox[3:]
 
-	assert.Equal(t, `3`, o.rstate.GetStartEvent().GetInput().GetValue())
+	o, creates := abandonedCANRun(t, instanceID, inbox, canRuntimeState(instanceID, `3`, carryover...))
+
+	require.Len(t, o.state.Inbox, len(carryover)+1)
+	assert.Equal(t, `3`, o.state.Inbox[0].GetExecutionStarted().GetInput().GetValue())
+	for i, e := range carryover {
+		assert.NotNil(t, o.state.Inbox[i+1].GetEventRaised())
+		assert.Equal(t, e.GetEventId(), o.state.Inbox[i+1].GetEventId())
+	}
+	assert.Empty(t, o.state.History)
+
+	require.Len(t, creates, 1)
+	assert.True(t, strings.HasPrefix(creates[0].Name, reminderPrefixStart), creates[0].Name)
+	assert.Equal(t, instanceID, creates[0].ActorID)
+}
+
+// Test_runWorkflow_canAbandonWithoutCarryoverDiscardsConsumedInbox verifies
+// that the consumed inbox of an abandoned continued-as-new turn is not
+// re-delivered into the new generation even when there is no carryover: the
+// previous generation's resolutions would otherwise land ahead of operations
+// of the new generation that reuse their event IDs.
+func Test_runWorkflow_canAbandonWithoutCarryoverDiscardsConsumedInbox(t *testing.T) {
+	const instanceID = "test-can-no-carryover"
+
+	inbox := []*backend.HistoryEvent{
+		{
+			EventId:   -1,
+			Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_TimerFired{
+				TimerFired: &protos.TimerFiredEvent{TimerId: 1},
+			},
+		},
+		{
+			EventId:   -1,
+			Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{
+				ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{
+					TaskScheduledId: 0,
+				},
+			},
+		},
+	}
+
+	o, creates := abandonedCANRun(t, instanceID, inbox, canRuntimeState(instanceID, `1`))
+
+	require.Len(t, o.state.Inbox, 1)
+	assert.Equal(t, `1`, o.state.Inbox[0].GetExecutionStarted().GetInput().GetValue())
+	assert.Empty(t, o.state.History)
+	assert.Empty(t, o.rstate.GetOldEvents())
+
+	names := make([]string, 0, len(creates))
+	for _, c := range creates {
+		names = append(names, c.Name)
+	}
+	require.Len(t, creates, 1, "%v", names)
+	assert.True(t, strings.HasPrefix(creates[0].Name, reminderPrefixStart), creates[0].Name)
 }
 
 // Test_runWorkflow_emptyInboxTerminalCreatesRetentionReminder verifies the

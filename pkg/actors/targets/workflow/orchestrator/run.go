@@ -25,7 +25,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -227,49 +226,58 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	case completed := <-callback:
 		if !completed {
 			// The engine abandoned this work item (e.g. MaxContinueAsNewCount
-			// exceeded). The engine's ContinueAsNew tight-loop may have
-			// overwritten o.rstate via the shared wi.State pointer
-			// (*s = *newState in the applier). If CAN progress was made,
-			// persist it to the state store so it survives actor
-			// deactivation. Carryover events (unprocessed EventRaised
-			// events from the CAN state) are moved to the Inbox so they
-			// become NewEvents on retry. The stale inbox (which contained
-			// ALL original events including those already consumed) is
-			// replaced to prevent duplicate event delivery.
+			// exceeded, or the execution result was lost). The engine's
+			// ContinueAsNew tight-loop may have overwritten o.rstate via the
+			// shared wi.State pointer (*s = *newState in the applier). If CAN
+			// progress was made, persist the newest generation as a pending
+			// start, exactly like a fresh creation: empty history, its
+			// ExecutionStarted in the inbox followed by any carryover
+			// (unprocessed EventRaised events from the CAN state), and a start
+			// reminder to drive it. The consumed inbox is discarded: it holds
+			// the previous generation's events, and re-delivering those into
+			// the new generation lets a stale resolution be persisted ahead of
+			// an operation of the new generation that reuses its event ID.
+			// Keeping the generation's ExecutionStarted in history instead
+			// would leave the retry with an empty inbox and nothing to run.
 			// If no CAN progress was made (non-CAN failure), restore the
 			// pre-engine snapshot so the cached state stays consistent.
 			if wi.State.GetContinuedAsNew() {
-				// Separate carryover EventRaised events from the CAN
-				// execution events (WorkflowStarted, ExecutionStarted).
-				// Carryover events must go into the Inbox so they become
-				// NewEvents on retry. If they stay in History (as
-				// OldEvents) alongside the original Inbox events
-				// (NewEvents), the engine would buffer both sets and the
-				// workflow would process duplicate events.
 				canNewEvents := wi.State.GetNewEvents()
-				filtered := make([]*backend.HistoryEvent, 0, len(canNewEvents))
+				var startEvent *backend.HistoryEvent
 				var carryover []*backend.HistoryEvent
 				for _, e := range canNewEvents {
-					if e.GetEventRaised() != nil {
+					switch {
+					case e.GetExecutionStarted() != nil:
+						startEvent = e
+					case e.GetEventRaised() != nil:
 						carryover = append(carryover, e)
-					} else {
-						filtered = append(filtered, e)
 					}
 				}
-
-				// Temporarily swap NewEvents so ApplyRuntimeStateChanges
-				// only writes the CAN execution events to History.
-				if len(carryover) > 0 {
-					wi.State.NewEvents = filtered
-					state.ApplyRuntimeStateChanges(wi.State)
-					wi.State.NewEvents = canNewEvents
-
-					state.ClearInbox()
-					for _, e := range carryover {
-						state.AddToInbox(e)
+				if startEvent == nil && wi.State.GetStartEvent() != nil {
+					startEvent = &protos.HistoryEvent{
+						EventId:   -1,
+						Timestamp: timestamppb.Now(),
+						EventType: &protos.HistoryEvent_ExecutionStarted{
+							ExecutionStarted: wi.State.GetStartEvent(),
+						},
 					}
-				} else {
-					state.ApplyRuntimeStateChanges(wi.State)
+				}
+				if startEvent == nil {
+					o.rstate = rstateSnapshot
+					return todo.RunCompletedFalse, errors.New("continued-as-new runtime state has no ExecutionStarted event")
+				}
+
+				// Apply the CAN reset (history, certificates, signatures)
+				// without writing any of the new generation's events to
+				// history: they are re-created when the pending start runs.
+				wi.State.NewEvents = nil
+				state.ApplyRuntimeStateChanges(wi.State)
+				wi.State.NewEvents = canNewEvents
+
+				state.ClearInbox()
+				state.AddToInbox(startEvent)
+				for _, e := range carryover {
+					state.AddToInbox(e)
 				}
 
 				state.Generation++
@@ -281,16 +289,15 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 					state.SetIncomingHistory(wi.IncomingHistory)
 				}
 
-				if len(carryover) > 0 {
-					reminderName := events.EventReminderName(reminderPrefixNewEvent, carryover[0])
-					if err = o.createWorkflowReminder(ctx, reminderName, nil, time.Now(), o.appID, &workflowName); err != nil {
-						o.invalidateCachedState()
-						return todo.RunCompletedFalse, err
-					}
-				}
-
+				// Save BEFORE creating the wake-up reminder, mirroring
+				// scheduleWorkflowStart: a reminder created first can fire on
+				// another host before the save commits, ack SUCCESS off the
+				// old state and be deleted, stranding the pending start.
 				if err = o.signAndSaveState(ctx, state); err != nil {
 					o.rstate = rstateSnapshot
+					return todo.RunCompletedFalse, err
+				}
+				if err = o.assertStartReminder(ctx, startEvent); err != nil {
 					return todo.RunCompletedFalse, err
 				}
 			} else {
