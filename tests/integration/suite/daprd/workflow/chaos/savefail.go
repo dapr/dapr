@@ -69,6 +69,10 @@ func (s *savefail) Setup(t *testing.T) []framework.Option {
 	)
 
 	s.workflow = workflow.New(t,
+		// Keep the signing feature off in signing mode: the armed store fault
+		// rolls back signed rows mid-commit and the retried completion would be
+		// classified as tampering instead of retried. mTLS itself is unaffected.
+		workflow.WithSigningDisabledN(0),
 		workflow.WithNoDB(),
 		workflow.WithDaprdOptions(0,
 			daprd.WithSocket(t, sock),

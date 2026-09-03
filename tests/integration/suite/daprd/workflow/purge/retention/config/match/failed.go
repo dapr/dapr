@@ -76,6 +76,12 @@ func (f *failed) Run(t *testing.T, ctx context.Context) {
 	client := dworkflow.NewClient(f.workflow.Dapr().GRPCConn(t, ctx))
 	require.NoError(t, client.StartWorker(ctx, reg))
 
+	// Signing mode stores one signature row per history save plus a sigcert row.
+	rowsRunning, rowsTerminal := 8, 11
+	if f.workflow.Signing() {
+		rowsRunning, rowsTerminal = 12, 16
+	}
+
 	t.Run("failed", func(t *testing.T) {
 		id, err := client.ScheduleWorkflow(ctx, "foo1")
 		require.NoError(t, err)
@@ -83,15 +89,20 @@ func (f *failed) Run(t *testing.T, ctx context.Context) {
 		db := f.workflow.DB().GetConnection(t)
 		tableName := f.workflow.DB().TableName()
 
-		var count int
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			// count is closure-local: EventuallyWithT ticks run in goroutines
+			// and a timed-out tick may still be writing when the next starts.
+			var count int
 			require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-			assert.Equal(c, 8, count)
+			assert.Equal(c, rowsRunning, count)
 		}, time.Second*10, time.Millisecond*10)
 
 		require.NoError(t, client.RaiseEvent(ctx, id, "someEvent"))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			// count is closure-local: EventuallyWithT ticks run in goroutines
+			// and a timed-out tick may still be writing when the next starts.
+			var count int
 			require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
 			assert.Equal(c, 0, count)
 			assert.Empty(c, f.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))
@@ -105,19 +116,25 @@ func (f *failed) Run(t *testing.T, ctx context.Context) {
 		db := f.workflow.DB().GetConnection(t)
 		tableName := f.workflow.DB().TableName()
 
-		var count int
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			// count is closure-local: EventuallyWithT ticks run in goroutines
+			// and a timed-out tick may still be writing when the next starts.
+			var count int
 			require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-			assert.Equal(c, 8, count)
+			assert.Equal(c, rowsRunning, count)
 		}, time.Second*10, time.Millisecond*10)
 
 		require.NoError(t, client.RaiseEvent(ctx, id, "someEvent"))
 		time.Sleep(time.Second * 3)
 
+		var count int
 		require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-		assert.Equal(t, 11, count)
+		assert.Equal(t, rowsTerminal, count)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			// count is closure-local: EventuallyWithT ticks run in goroutines
+			// and a timed-out tick may still be writing when the next starts.
+			var count int
 			require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
 			assert.Equal(c, 0, count)
 			assert.Empty(c, f.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))

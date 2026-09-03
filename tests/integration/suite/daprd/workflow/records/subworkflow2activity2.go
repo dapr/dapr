@@ -76,9 +76,16 @@ func (a *subworkflow2activity2) Run(t *testing.T, ctx context.Context) {
 
 	// Under WorkflowsFastPath the parent completion can become visible before
 	// the last child's own state commit lands, so poll to the steady state.
+	expected := 27
+	if a.workflow.Signing() {
+		// Signing adds 13 rows: parent gets 1 sigcert, 3 signatures and
+		// 1 ext-sigcert; each child gets 1 sigcert, 2 signatures and
+		// 1 ext-sigcert (activity completion attestation).
+		expected = 40
+	}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		if assert.NoError(c, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count)) {
-			assert.Equal(c, 27, count)
+			assert.Equal(c, expected, count)
 		}
 	}, time.Second*10, time.Millisecond*10)
 }
