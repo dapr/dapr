@@ -30,10 +30,12 @@ func init() {
 }
 
 // fsgroup verifies that the Scheduler StatefulSet renders a pod fsGroup by
-// default, so the non-root process can write to its block volume, and that the
-// fsGroup can be removed for platforms that assign one themselves.
+// default, so the non-root process can write to its block volume, that an
+// explicit value is rendered, and that the fsGroup can be removed for
+// platforms that assign one themselves.
 type fsgroup struct {
 	byDefault *helm.Helm
+	explicit  *helm.Helm
 	unset     *helm.Helm
 }
 
@@ -41,13 +43,17 @@ func (f *fsgroup) Setup(t *testing.T) []framework.Option {
 	f.byDefault = helm.New(t,
 		helm.WithShowOnlySchedulerSTS(),
 	)
+	f.explicit = helm.New(t,
+		helm.WithShowOnlySchedulerSTS(),
+		helm.WithValues("dapr_scheduler.securityContext.fsGroup=1000"),
+	)
 	f.unset = helm.New(t,
 		helm.WithShowOnlySchedulerSTS(),
 		helm.WithValues("dapr_scheduler.securityContext.fsGroup=null"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(f.byDefault, f.unset),
+		framework.WithProcesses(f.byDefault, f.explicit, f.unset),
 	}
 }
 
@@ -57,6 +63,12 @@ func (f *fsgroup) Run(t *testing.T, ctx context.Context) {
 	require.NotNil(t, sts[0].Spec.Template.Spec.SecurityContext)
 	require.NotNil(t, sts[0].Spec.Template.Spec.SecurityContext.FSGroup)
 	require.Equal(t, int64(65532), *sts[0].Spec.Template.Spec.SecurityContext.FSGroup)
+
+	sts = helm.UnmarshalStdout[appsv1.StatefulSet](t, f.explicit)
+	require.Len(t, sts, 1)
+	require.NotNil(t, sts[0].Spec.Template.Spec.SecurityContext)
+	require.NotNil(t, sts[0].Spec.Template.Spec.SecurityContext.FSGroup)
+	require.Equal(t, int64(1000), *sts[0].Spec.Template.Spec.SecurityContext.FSGroup)
 
 	sts = helm.UnmarshalStdout[appsv1.StatefulSet](t, f.unset)
 	require.Len(t, sts, 1)
