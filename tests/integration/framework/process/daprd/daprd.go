@@ -451,6 +451,10 @@ func (d *Daprd) GetMetaSubscriptions(t assert.TestingT, ctx context.Context) []M
 	return d.meta(t, ctx).Subscriptions
 }
 
+func (d *Daprd) GetMetaEnabledFeatures(t assert.TestingT, ctx context.Context) []string {
+	return d.meta(t, ctx).EnabledFeatures
+}
+
 func (d *Daprd) GetMetaSubscriptionsWithType(t assert.TestingT, ctx context.Context, subType string) []MetadataResponsePubsubSubscription {
 	subs := d.GetMetaSubscriptions(t, ctx)
 	var filteredSubs []MetadataResponsePubsubSubscription
@@ -501,6 +505,7 @@ type Metadata struct {
 	Workflows              *MetadataWorkflows                   `json:"workflows"`
 	WorkflowAccessPolicies []*rtv1.MetadataWorkflowAccessPolicy `json:"workflowAccessPolicies,omitempty"`
 	Resiliencies           []*rtv1.MetadataResiliency           `json:"resiliencies,omitempty"`
+	EnabledFeatures        []string                             `json:"enabledFeatures,omitempty"`
 }
 
 // MetadataResponsePubsubSubscription copied from pkg/api/http/metadata.go:172 to be able to use in integration tests until we move to Proto format
@@ -569,6 +574,17 @@ func (d *Daprd) Restart(t *testing.T, ctx context.Context) {
 	t.Helper()
 	clone := d.exec.Clone(t)
 	d.exec.Kill(t)
+	d.exec = clone
+	d.exec.Run(t, ctx)
+}
+
+// RestartGraceful is Restart with an interrupt and exit wait instead of a hard
+// kill, for tests that need the shutdown path (actor HaltAll, drains) to run
+// before the new process starts.
+func (d *Daprd) RestartGraceful(t *testing.T, ctx context.Context) {
+	t.Helper()
+	clone := d.exec.Clone(t)
+	d.exec.Cleanup(t)
 	d.exec = clone
 	d.exec.Run(t, ctx)
 }
