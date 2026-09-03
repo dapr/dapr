@@ -77,12 +77,22 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 		return api.ErrInstanceNotFound
 	}
 
+	// ackDropped acknowledges a child completion this workflow will never
+	// consume, after confirming the cache it was judged on is current: the
+	// child clears its pending notification on this ack.
+	ackDropped := func(reason string) error {
+		if err := o.confirmCachedState(ctx, state); err != nil {
+			return err
+		}
+		log.Debugf("Workflow actor '%s': dropping child completion from '%s': %s", o.actorID, sender.instanceID, reason)
+		return nil
+	}
+
 	// A completed parent can never consume a child completion. Ack it here
 	// rather than queueing a turn: the terminal path would re-issue the
-	// recursive terminate and the child re-sends on every stray fire.
+	// recursive terminate and the child would re-send.
 	if runtimestate.IsCompleted(o.rstate) && (e.GetChildWorkflowInstanceCompleted() != nil || e.GetChildWorkflowInstanceFailed() != nil) {
-		log.Debugf("Workflow actor '%s': dropping child completion from '%s' for a completed workflow", o.actorID, sender.instanceID)
-		return nil
+		return ackDropped("the workflow has completed")
 	}
 
 	// Only reject user events when the workflow is stalled.
@@ -96,14 +106,12 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// straggler from a previous generation and is acked without effect.
 	if sender.instanceID != "" {
 		if created := childCreatedFor(state.History, e); created != nil && created.GetInstanceId() != sender.instanceID {
-			log.Debugf("Workflow actor '%s': dropping child completion from '%s' for a task whose current child is '%s'", o.actorID, sender.instanceID, created.GetInstanceId())
-			return nil
+			return ackDropped("the task's current child is '" + created.GetInstanceId() + "'")
 		}
 	}
 	if sender.parentExecutionID != "" {
 		if cur := o.getExecutionStartedEvent(state).GetWorkflowInstance().GetExecutionId().GetValue(); cur != "" && cur != sender.parentExecutionID {
-			log.Debugf("Workflow actor '%s': dropping child completion from '%s' created under a previous execution", o.actorID, sender.instanceID)
-			return nil
+			return ackDropped("it was created under a previous execution")
 		}
 	}
 

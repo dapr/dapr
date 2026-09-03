@@ -1217,8 +1217,8 @@ func MarkAsTamperFailed(ctx context.Context, astate state.Interface, actorID str
 	// tombstoned) doesn't trip optimistic-concurrency on the stale token we
 	// loaded with. The save above bumped postgres's row version; our
 	// in-memory copy is now out of date. A read failure here is non-fatal:
-	// we clear the cached ETag so the next save falls back to a blind
-	// upsert (which is fine for a tombstoned, terminal workflow).
+	// the cached ETag is cleared and the next save is refused until the
+	// state is reloaded with a current one.
 	metaRes, metaErr := astate.Get(ctx, &api.GetStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,

@@ -133,7 +133,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// scheduler pod killed mid-call). createRetentionReminder uses a
 		// deterministic name, so re-creating an already-existing retention
 		// reminder is a no-op overwrite.
-		if runtimestate.IsCompleted(o.rstate) {
+		// Read once: a re-send below saves, and a failed metadata refresh
+		// after that save drops the cached runtime state.
+		completed := runtimestate.IsCompleted(o.rstate)
+		rstatus := runtimestate.RuntimeStatus(o.rstate)
+		if completed {
 			if state.ParentNotifyPending {
 				// A failure nacks the driving reminder; any driver other than
 				// the dedicated retry reminder also arms it.
@@ -141,7 +145,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 					return todo.RunCompletedFalse, nerr
 				}
 			}
-			if rerr := o.handleRetention(ctx, runtimestate.RuntimeStatus(o.rstate)); rerr != nil {
+			if rerr := o.handleRetention(ctx, rstatus); rerr != nil {
 				return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to (re)create retention reminder on empty-inbox completion path: %w", rerr))
 			}
 			// Re-attempt the recursive terminate cascade idempotently: this is
@@ -152,7 +156,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			}
 		}
 		log.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", o.actorID, reminder.Name)
-		if o.fastPath && !runtimestate.IsCompleted(o.rstate) {
+		if o.fastPath && !completed {
 			// Returning RunCompletedTrue deactivates the actor, and a
 			// concurrent fold submit can append a held completion the moment
 			// this no-op fire releases the lock: the deactivation would then
@@ -509,8 +513,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	pendingTasks := rs.GetPendingTasks()
 
-	// Process the outbound orchestrator events.
-	var addWorkflows []*backend.WorkflowRuntimeStateMessage
+	// Process the outbound orchestrator events. A child completion is the
+	// only message added to another workflow and only exists on a terminal
+	// turn: it is delivered after the save (notifyParent), and on a crash or
+	// a failed delivery the next fire rebuilds it from history.
+	var parentNotify []*backend.WorkflowRuntimeStateMessage
 	var createWorkflows []*backend.WorkflowRuntimeStateMessage
 	for _, msg := range rs.GetPendingMessages() {
 		switch {
@@ -518,7 +525,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			createWorkflows = append(createWorkflows, msg)
 
 		case msg.GetHistoryEvent().GetChildWorkflowInstanceCompleted() != nil, msg.GetHistoryEvent().GetChildWorkflowInstanceFailed() != nil:
-			addWorkflows = append(addWorkflows, msg)
+			parentNotify = append(parentNotify, msg)
 
 		case msg.GetHistoryEvent().GetExecutionTerminated() != nil && runtimestate.IsCompleted(rs):
 			// Recursive-terminate cascade messages. Not dispatched here as this
@@ -528,16 +535,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		default:
 			return todo.RunCompletedTrue, fmt.Errorf("workflow actor '%s': don't know how to process outbound message '%v'", o.actorID, msg)
 		}
-	}
-
-	// A completing child commits its terminal state before telling its
-	// parent: the notification is dispatched after the save (notifyParent),
-	// and on a crash or dispatch failure the empty-inbox path rebuilds it
-	// from history. Child completions are the only messages added to a
-	// parent, so this leaves non-terminal turns untouched.
-	var parentNotify []*backend.WorkflowRuntimeStateMessage
-	if runtimestate.IsCompleted(rs) && len(addWorkflows) > 0 {
-		parentNotify, addWorkflows = addWorkflows, nil
 	}
 
 	// Attach an attestation to each outbound child-completion message so
@@ -597,10 +594,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 	activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory, elideActivityReminder)
-	addResult := o.messages.CallAddEventStateMessage(ctx, addWorkflows, nil)
 	createResult := o.messages.CallCreateWorkflowStateMessage(ctx, createWorkflows, rs.GetNewEvents())
 
-	dispatchErr := errors.Join(activityResult.Err, addResult.Err, createResult.Err)
+	dispatchErr := errors.Join(activityResult.Err, createResult.Err)
 	if dispatchErr != nil {
 		if errors.Is(dispatchErr, errPayloadSizeExceeded) {
 			return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs,
@@ -612,10 +608,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			// keep their events in history so they are not re-dispatched on
 			// retry. The inbox is preserved so the existing reminder retries
 			// the full execution.
-			allFailed := make(map[int32]struct{}, len(activityResult.FailedEventIDs)+len(createResult.FailedEventIDs)+len(addResult.FailedEventIDs))
+			allFailed := make(map[int32]struct{}, len(activityResult.FailedEventIDs)+len(createResult.FailedEventIDs))
 			maps.Copy(allFailed, activityResult.FailedEventIDs)
 			maps.Copy(allFailed, createResult.FailedEventIDs)
-			maps.Copy(allFailed, addResult.FailedEventIDs)
 
 			// Temporarily replace rs.NewEvents with a filtered copy that excludes
 			// failed dispatch events, then restore the original after
@@ -700,6 +695,12 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		log.Infof("Workflow Actor '%s': workflow completed with status '%s' workflowName '%s'", o.actorID, rstatus, workflowName)
 		if len(parentNotify) > 0 {
 			if err = o.notifyParent(ctx, state, parentNotify); err != nil {
+				return todo.RunCompletedFalse, err
+			}
+		} else if state.ParentNotifyPending {
+			// A non-child event (raise, terminate, cascade) drove this turn on
+			// an already completed instance whose notification is still owed.
+			if err = o.resendParentNotification(ctx, state, true); err != nil {
 				return todo.RunCompletedFalse, err
 			}
 		}

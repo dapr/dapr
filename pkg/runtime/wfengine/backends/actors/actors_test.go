@@ -19,8 +19,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 )
 
 func TestUniqueEventTimestamp(t *testing.T) {
@@ -58,27 +56,4 @@ func TestUniqueEventTimestamp(t *testing.T) {
 			seen[v] = struct{}{}
 		}
 	})
-}
-
-func Test_keepUnlessPurged(t *testing.T) {
-	t.Parallel()
-
-	abe := &Actors{workflowActorType: "wf", activityActorType: "act"}
-	keep := abe.keepUnlessPurged("inst")
-
-	tests := map[string]struct {
-		actorType, actorID string
-		want               bool
-	}{
-		"purged workflow actor":       {"wf", "inst", false},
-		"other workflow actor":        {"wf", "inst2", true},
-		"activity actor of instance":  {"act", "inst::3", true},
-		"foreign type with purged id": {"other", "inst", true},
-	}
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tc.want, keep(&actorsapi.LookupActorRequest{ActorType: tc.actorType, ActorID: tc.actorID}))
-		})
-	}
 }

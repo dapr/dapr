@@ -1297,27 +1297,26 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 	)
 }
 
-// haltPurgedActors evicts this instance's workflow actor from this host.
-// Best effort: force purge is the escape hatch for wedged instances, so a
-// halt that cannot take the turn lock in time is logged and the purge
-// proceeds. Activity actors are left alone: their result lands on a cold
-// workflow actor that finds no state, and halting them spawns claim guards
-// that would write after the purge.
+// haltPurgedActors evicts this instance's workflow actor from this host,
+// through the actor itself so no table-wide lock is held while it waits
+// for an in-flight turn. Best effort: force purge is the escape hatch for
+// wedged instances, so a halt that cannot take the turn lock in time is
+// logged and the purge proceeds. Activity actors are left alone: their
+// result lands on a cold workflow actor that finds no state, and halting
+// them spawns claim guards that would write after the purge.
 func (abe *Actors) haltPurgedActors(ctx context.Context, id api.InstanceID) {
 	atable, err := abe.actors.Table(ctx)
 	if err != nil || atable == nil {
 		return
 	}
+	target, err := atable.GetOrCreate(abe.workflowActorType, id.String())
+	if err != nil {
+		log.Warnf("Force purge of '%s': cannot resolve the workflow actor to evict: %v", id, err)
+		return
+	}
 	hctx, cancel := context.WithTimeout(ctx, forcePurgeHaltTimeout)
 	defer cancel()
-	if err := atable.HaltNonHosted(hctx, abe.keepUnlessPurged(id)); err != nil {
-		log.Warnf("Force purge of '%s': failed to halt resident actors, stale in-memory state remains until the next write or idle reap: %v", id, err)
-	}
-}
-
-// keepUnlessPurged keeps every actor except the purged workflow actor.
-func (abe *Actors) keepUnlessPurged(id api.InstanceID) func(*actorsapi.LookupActorRequest) bool {
-	return func(req *actorsapi.LookupActorRequest) bool {
-		return req.ActorType != abe.workflowActorType || req.ActorID != id.String()
+	if err := target.Deactivate(hctx); err != nil {
+		log.Warnf("Force purge of '%s': failed to halt the resident actor, stale in-memory state remains until the next write or idle reap: %v", id, err)
 	}
 }

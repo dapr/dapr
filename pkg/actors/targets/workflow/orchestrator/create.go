@@ -165,6 +165,13 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 	}
 
 	if state.ParentNotifyPending {
+		// The parent re-dispatching the creation that produced this instance
+		// (a crash before it saved) is a replay, not a new workflow: the
+		// completion it is owed is pending and re-sent by its driver.
+		if same, _ := o.isSameParentCreation(state, startEvent); same {
+			log.Debugf("Workflow actor '%s': ignoring duplicate child workflow creation for a completed child whose completion is still pending", o.actorID)
+			return nil
+		}
 		return status.Errorf(codes.AlreadyExists, "a workflow with ID '%s' has completed but its parent has not acknowledged the completion yet", o.actorID)
 	}
 

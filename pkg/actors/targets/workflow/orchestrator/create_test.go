@@ -487,3 +487,50 @@ func Test_createWorkflowInstance_pendingStartWithRaisedEventStillReasserts(t *te
 	require.Equal(t, []string{"create:" + wantName}, h.ops,
 		"a pre-start RaiseEvent in the inbox must not prevent the pending-start re-drive")
 }
+
+func Test_createWorkflowInstance_completedChildWithPendingNotification(t *testing.T) {
+	const instanceID = "test-pending-child"
+
+	prime := func(t *testing.T) *createHarness {
+		h := newCreateHarness(t, instanceID)
+		start := startEventFor(instanceID, time.Now().Add(-time.Minute), parentWithExec("exec-a"))
+		state := wfenginestate.NewState(wfenginestate.Options{
+			AppID:             "testapp",
+			Namespace:         "default",
+			WorkflowActorType: "dapr.internal.default.testapp.workflow",
+			ActivityActorType: "dapr.internal.default.testapp.activity",
+		})
+		state.AddToHistory(start)
+		state.AddToHistory(&backend.HistoryEvent{
+			EventId: -1, Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_ExecutionCompleted{ExecutionCompleted: &protos.ExecutionCompletedEvent{
+				WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED,
+			}},
+		})
+		state.SetParentNotifyPending(true)
+		h.orch.state = state
+		h.orch.rstate = runtimestate.NewWorkflowRuntimeState(h.orch.actorID, nil, state.History)
+		h.orch.ometa = h.orch.ometaFromState(h.orch.rstate, start.GetExecutionStarted())
+		return h
+	}
+
+	t.Run("the creating parent's replay is a no-op", func(t *testing.T) {
+		h := prime(t)
+		incoming := startEventFor(instanceID, time.Now(), parentWithExec("exec-a"))
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		assert.Empty(t, h.ops, "no reset, no new start")
+	})
+
+	t.Run("any other creation is refused until the parent acknowledged", func(t *testing.T) {
+		h := prime(t)
+		incoming := startEventFor(instanceID, time.Now(), parentWithExec("exec-b"))
+		err := h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming))
+		require.Error(t, err)
+		assert.Equal(t, codes.AlreadyExists, status.Code(err))
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		assert.Empty(t, h.ops)
+	})
+}

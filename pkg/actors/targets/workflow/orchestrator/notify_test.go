@@ -87,13 +87,14 @@ func notifyCompletedEvent(status protos.OrchestrationStatus) *backend.HistoryEve
 // notifyHarness records saves (tagged with the parent-notify operation they
 // carry), parent AddWorkflowEvent calls and reminder creates, in order.
 type notifyHarness struct {
-	lock    sync.Mutex
-	ops     []string
-	calls   []*internalv1pb.InternalInvokeRequest
-	callErr error
-	purged  atomic.Bool
-	rows    map[string][]byte
-	orch    *orchestrator
+	lock      sync.Mutex
+	ops       []string
+	calls     []*internalv1pb.InternalInvokeRequest
+	callErr   error
+	purged    atomic.Bool
+	staleETag atomic.Bool
+	rows      map[string][]byte
+	orch      *orchestrator
 }
 
 func (h *notifyHarness) saveTag(req *actorapi.TransactionalRequest) string {
@@ -138,6 +139,10 @@ func newNotifyHarness(t *testing.T, history, inbox []*backend.HistoryEvent, pend
 			if req.Key == wfenginestate.MetadataKey {
 				if h.purged.Load() {
 					return &actorapi.StateResponse{}, nil
+				}
+				if h.staleETag.Load() {
+					stale := "etag-moved"
+					return &actorapi.StateResponse{Data: meta, ETag: &stale}, nil
 				}
 				return &actorapi.StateResponse{Data: meta, ETag: &etag}, nil
 			}
@@ -490,4 +495,87 @@ func Test_runWorkflow_retryReminderResendDoesNotRearm(t *testing.T) {
 	assert.True(t, wferrors.IsRecoverable(err))
 	assert.Equal(t, todo.RunCompletedFalse, completed)
 	assert.Equal(t, []string{"call:" + todo.AddWorkflowEventMethod}, h.snapshot(), "the nack retries under the reminder's failure policy; no due-now re-arm")
+}
+
+func Test_runWorkflow_nonChildEventOnCompletedChildResendsPending(t *testing.T) {
+	t.Parallel()
+
+	history := []*backend.HistoryEvent{
+		{
+			EventId: -1, Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_WorkflowStarted{WorkflowStarted: &protos.WorkflowStartedEvent{}},
+		},
+		notifyStartEvent(), notifyCompletedEvent(protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED),
+	}
+	inbox := []*backend.HistoryEvent{{
+		EventId: -1, Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{Name: "late"}},
+	}}
+	// The engine drops the work item of a completed instance; the turn
+	// still runs its terminal block.
+	scheduler := func(_ context.Context, wi *backend.WorkflowWorkItem) error {
+		wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
+		return nil
+	}
+	h := newNotifyHarness(t, history, inbox, true, scheduler)
+	h.orch.state = nil
+	h.orch.rstate = runtimestate.NewWorkflowRuntimeState(notifyChildID, nil, history)
+
+	completed, err := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-er-9"})
+	require.NoError(t, err)
+	assert.Equal(t, todo.RunCompletedTrue, completed)
+	assert.Equal(t, []string{"save", "call:" + todo.AddWorkflowEventMethod, "save-notify"}, h.snapshot(),
+		"a late event on a completed child must not strand its pending notification")
+}
+
+func Test_loadInternalState_dropsOrphanParentNotifyRow(t *testing.T) {
+	t.Parallel()
+
+	rootStart := &backend.HistoryEvent{
+		EventId: -1, Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
+			Name: "root", WorkflowInstance: &protos.WorkflowInstance{InstanceId: notifyChildID},
+		}},
+	}
+	history := []*backend.HistoryEvent{
+		{EventId: -1, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_WorkflowStarted{WorkflowStarted: &protos.WorkflowStartedEvent{}}},
+		rootStart,
+	}
+	h := newNotifyHarness(t, history, nil, true, nil)
+	h.orch.state = nil
+
+	state, _, err := h.orch.loadInternalState(t.Context())
+	require.NoError(t, err)
+	assert.False(t, state.ParentNotifyPending, "a parentless instance owes nothing")
+	require.NoError(t, h.orch.signAndSaveState(t.Context(), state))
+	assert.Equal(t, []string{"save-notify"}, h.snapshot(), "the orphan row goes with the next save")
+}
+
+func Test_addWorkflowEvent_staleCacheDoesNotAckChildCompletion(t *testing.T) {
+	t.Parallel()
+
+	history := []*backend.HistoryEvent{
+		{EventId: -1, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_WorkflowStarted{WorkflowStarted: &protos.WorkflowStartedEvent{}}},
+		{EventId: -1, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
+			Name: "parent", WorkflowInstance: &protos.WorkflowInstance{InstanceId: notifyChildID, ExecutionId: wrapperspb.String("exec-cur")},
+		}}},
+		{EventId: 0, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_ChildWorkflowInstanceCreated{
+			ChildWorkflowInstanceCreated: &protos.ChildWorkflowInstanceCreatedEvent{InstanceId: "child", Name: "child"},
+		}},
+		notifyCompletedEvent(protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED),
+	}
+	failed := &backend.HistoryEvent{
+		EventId: -1, Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ChildWorkflowInstanceFailed{ChildWorkflowInstanceFailed: &protos.ChildWorkflowInstanceFailedEvent{TaskScheduledId: 0}},
+	}
+	h := newNotifyHarness(t, history, nil, false, nil)
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), failed, completionSender{instanceID: "child"}), "a current cache acks the drop")
+	require.NotNil(t, h.orch.state)
+
+	// A peer wrote since: the metadata etag moved on under this cache.
+	h.staleETag.Store(true)
+	err := h.orch.addWorkflowEvent(t.Context(), failed, completionSender{instanceID: "child"})
+	require.Error(t, err)
+	assert.True(t, wferrors.IsRecoverable(err), "the sender must retry against a fresh load, not be acked off stale state")
+	assert.Nil(t, h.orch.state, "the stale cache is dropped")
 }

@@ -184,13 +184,15 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 	if runtimestate.IsCompleted(o.rstate) {
 		// Re-send the parent notification and re-assert retention before
 		// self-deleting: the janitor owns recovery of either lost after a
-		// terminal commit, including across a restart.
+		// terminal commit, including across a restart. The status is read
+		// before the re-send, whose save may drop the cached runtime state.
+		rstatus := runtimestate.RuntimeStatus(o.rstate)
 		if state.ParentNotifyPending {
 			if nerr := o.resendParentNotification(ctx, state, true); nerr != nil {
 				return fmt.Errorf("failed to re-send the parent notification on janitor terminal path: %w", nerr)
 			}
 		}
-		if rerr := o.handleRetention(ctx, runtimestate.RuntimeStatus(o.rstate)); rerr != nil {
+		if rerr := o.handleRetention(ctx, rstatus); rerr != nil {
 			return fmt.Errorf("failed to (re)create retention reminder on janitor terminal path: %w", rerr)
 		}
 		o.deleteJanitor(ctx)

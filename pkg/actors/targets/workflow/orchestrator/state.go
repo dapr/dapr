@@ -28,6 +28,7 @@ import (
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	wfengerrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -103,6 +104,12 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 				o.actorID, err)
 			return o.tombstoneTamperedState(ctx, opts, state, cause)
 		}
+	}
+
+	// A parent-notify row on a parentless instance is an orphan left by a
+	// purge on a binary that did not know the key; the next save drops it.
+	if state.ParentNotifyPending && o.getExecutionStartedEvent(state).GetParentInstance() == nil {
+		state.SetParentNotifyPending(false)
 	}
 
 	// Update cached state
@@ -186,6 +193,31 @@ func (o *orchestrator) invalidateCachedState() {
 	o.state = nil
 	o.rstate = nil
 	o.ometa = nil
+}
+
+// confirmCachedState re-reads the metadata row before a message is acked off
+// the cache without a write. A host that lost this actor to a peer would
+// otherwise ack from stale state, where a write would have failed on its
+// etag; a mismatch drops the cache and fails recoverably so the sender
+// retries against a fresh load.
+func (o *orchestrator) confirmCachedState(ctx context.Context, state *wfenginestate.State) error {
+	res, err := o.actorState.Get(ctx, &actorsapi.GetStateRequest{
+		ActorType: o.actorType,
+		ActorID:   o.actorID,
+		Key:       wfenginestate.MetadataKey,
+	}, false)
+	if err != nil {
+		return wfengerrors.NewRecoverable(fmt.Errorf("failed to confirm the cached state: %w", err))
+	}
+	if res == nil || len(res.Data) == 0 {
+		o.invalidateCachedState()
+		return api.ErrInstanceNotFound
+	}
+	if cur, have := res.ETag, state.MetadataETag(); cur != nil && have != nil && *cur != *have {
+		o.invalidateCachedState()
+		return wfengerrors.NewRecoverable(errors.New("cached state is stale; reloading"))
+	}
+	return nil
 }
 
 func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State) error {
