@@ -256,3 +256,30 @@ func TestListReturnsActorTimersSorted(t *testing.T) {
 	require.Len(t, got, 1)
 	assert.Equal(t, "b", got[0].Name)
 }
+
+func TestGetReturnsCopyOrNil(t *testing.T) {
+	store := New(Options{Router: routerfake.New()})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	im, ok := store.(*inmemory)
+	require.True(t, ok)
+
+	future := clock.RealClock{}.Now().Add(time.Hour)
+	ctx := context.Background()
+	timer := newNamedTimer(t, "one", "a", "10s", future)
+	require.NoError(t, store.Create(ctx, timer))
+
+	got := store.Get(ctx, timer.Key())
+	require.NotNil(t, got)
+	assert.Equal(t, "a", got.Name)
+	assert.Equal(t, "one", got.ActorID)
+	assert.Equal(t, "10s", got.Period.String())
+
+	stored, ok := im.activeTimers.Load(timer.Key())
+	require.True(t, ok)
+	assert.NotSame(t, stored.(*api.Reminder), got)
+
+	assert.Nil(t, store.Get(ctx, newNamedTimer(t, "one", "missing", "", future).Key()))
+
+	store.Delete(ctx, timer.Key())
+	assert.Nil(t, store.Get(ctx, timer.Key()))
+}

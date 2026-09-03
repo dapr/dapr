@@ -113,18 +113,39 @@ func (l *list) Run(t *testing.T, ctx context.Context) {
 		return resp.StatusCode, string(b)
 	}
 
-	assertNotOwned := func(t *testing.T, c rtv1.DaprClient, app *actors.Actors, id string) {
+	httpGet := func(t *testing.T, app *actors.Actors, id string) (int, string) {
 		t.Helper()
-		_, err := c.ListActorTimers(ctx, &rtv1.ListActorTimersRequest{ActorType: "abc", ActorId: id})
-		assert.Equal(t, codes.PermissionDenied, status.Code(err))
+		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodGet, app.Daprd().ActorTimerURL("abc", id, "foo"), nil)
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		b, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		return resp.StatusCode, string(b)
+	}
 
-		code, body := httpList(t, app, id)
+	assertNotOwnedBody := func(t *testing.T, code int, body string) {
+		t.Helper()
 		assert.Equal(t, nethttp.StatusForbidden, code)
 		var apiErr struct {
 			ErrorCode string `json:"errorCode"`
 		}
 		require.NoError(t, json.Unmarshal([]byte(body), &apiErr))
 		assert.Equal(t, "ERR_ACTOR_TIMER_NOT_OWNED", apiErr.ErrorCode)
+	}
+
+	assertNotOwned := func(t *testing.T, c rtv1.DaprClient, app *actors.Actors, id string) {
+		t.Helper()
+		_, err := c.ListActorTimers(ctx, &rtv1.ListActorTimersRequest{ActorType: "abc", ActorId: id})
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
+		_, err = c.GetActorTimer(ctx, &rtv1.GetActorTimerRequest{ActorType: "abc", ActorId: id, Name: "foo"})
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
+
+		code, body := httpList(t, app, id)
+		assertNotOwnedBody(t, code, body)
+		code, body = httpGet(t, app, id)
+		assertNotOwnedBody(t, code, body)
 	}
 
 	assertOwned := func(t *testing.T, c rtv1.DaprClient, app *actors.Actors, id string) {
@@ -138,6 +159,15 @@ func (l *list) Run(t *testing.T, ctx context.Context) {
 		code, body := httpList(t, app, id)
 		assert.Equal(t, nethttp.StatusOK, code)
 		assert.JSONEq(t, `{"timers":[{"name":"foo","actorType":"abc","actorID":"`+id+`","dueTime":"1000s"}]}`, body)
+
+		gresp, err := c.GetActorTimer(ctx, &rtv1.GetActorTimerRequest{ActorType: "abc", ActorId: id, Name: "foo"})
+		require.NoError(t, err)
+		assert.Equal(t, id, gresp.GetActorId())
+		assert.Equal(t, "1000s", gresp.GetDueTime())
+
+		code, body = httpGet(t, app, id)
+		assert.Equal(t, nethttp.StatusOK, code)
+		assert.JSONEq(t, `{"actorType":"abc","actorID":"`+id+`","dueTime":"1000s"}`, body)
 	}
 
 	// The non-owning host is rejected, the owning host lists the timer.

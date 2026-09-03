@@ -34,6 +34,8 @@ var (
 type Interface interface {
 	Create(ctx context.Context, req *api.CreateTimerRequest) error
 	Delete(ctx context.Context, req *api.DeleteTimerRequest) error
+	// Get returns the timer registered on this host, or nil if it does not exist.
+	Get(ctx context.Context, req *api.GetTimerRequest) (*api.Reminder, error)
 	// List returns the timers registered on this host for the given actor.
 	List(ctx context.Context, req *api.ListTimersRequest) ([]*api.Reminder, error)
 }
@@ -91,6 +93,20 @@ func (t *timers) Delete(ctx context.Context, req *api.DeleteTimerRequest) error 
 
 	t.storage.Delete(cctx, req.Key())
 	return nil
+}
+
+func (t *timers) Get(ctx context.Context, req *api.GetTimerRequest) (*api.Reminder, error) {
+	if !t.table.IsActorTypeHosted(req.ActorType) {
+		return nil, ErrTimerActorTypeNotHosted
+	}
+
+	cctx, cancel, err := t.claimLocal(ctx, req.ActorType, req.ActorID)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel(nil)
+
+	return t.storage.Get(cctx, req.Key()), nil
 }
 
 func (t *timers) List(ctx context.Context, req *api.ListTimersRequest) ([]*api.Reminder, error) {

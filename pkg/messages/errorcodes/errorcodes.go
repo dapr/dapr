@@ -63,6 +63,8 @@ var (
 	ActorTimerNotOwned            = ErrorCode{"ERR_ACTOR_TIMER_NOT_OWNED", "", CategoryActor}         // Timer operation on an actor not owned by this host
 	ActorTimerList                = ErrorCode{"ERR_ACTOR_TIMER_LIST", "", CategoryActor}              // Error listing actor timers
 	ActorTimerNonHosted           = ErrorCode{"ERR_ACTOR_TIMER_NON_HOSTED", "", CategoryActor}        // Timer operation on an actor type not hosted by this host
+	ActorTimerGet                 = ErrorCode{"ERR_ACTOR_TIMER_GET", "", CategoryActor}               // Error getting actor timer
+	ActorTimerNotFound            = ErrorCode{"ERR_ACTOR_TIMER_NOT_FOUND", "", CategoryActor}         // Actor timer not found
 	ErrActorNoAppChannel          = ErrorCode{"ERR_ACTOR_NO_APP_CHANNEL", "", CategoryActor}          // App channel not initialized
 	ErrActorMaxStackDepthExceeded = ErrorCode{"ERR_ACTOR_STACK_DEPTH", "", CategoryActor}             // Maximum actor call stack depth exceeded
 	ErrActorNoPlacement           = ErrorCode{"ERR_ACTOR_NO_PLACEMENT", "", CategoryActor}            // Placement service not configured

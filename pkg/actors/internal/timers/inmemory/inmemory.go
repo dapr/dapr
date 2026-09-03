@@ -381,6 +381,19 @@ func (i *inmemory) Delete(_ context.Context, timerKey string) {
 	}
 }
 
+func (i *inmemory) Get(_ context.Context, timerKey string) *api.Reminder {
+	i.queueLock.Lock()
+	defer i.queueLock.Unlock()
+
+	reminderAny, ok := i.activeTimers.Load(timerKey)
+	if !ok {
+		return nil
+	}
+	// Hand out a copy so callers can never alias the store.
+	c := *reminderAny.(*api.Reminder)
+	return &c
+}
+
 func (i *inmemory) List(_ context.Context, actorType, actorID string) []*api.Reminder {
 	i.queueLock.Lock()
 	defer i.queueLock.Unlock()

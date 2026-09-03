@@ -102,6 +102,8 @@ const (
 	DaprGetActorStateProcedure = "/dapr.proto.runtime.v1.Dapr/GetActorState"
 	// DaprGetActorReminderProcedure is the fully-qualified name of the Dapr's GetActorReminder RPC.
 	DaprGetActorReminderProcedure = "/dapr.proto.runtime.v1.Dapr/GetActorReminder"
+	// DaprGetActorTimerProcedure is the fully-qualified name of the Dapr's GetActorTimer RPC.
+	DaprGetActorTimerProcedure = "/dapr.proto.runtime.v1.Dapr/GetActorTimer"
 	// DaprExecuteActorStateTransactionProcedure is the fully-qualified name of the Dapr's
 	// ExecuteActorStateTransaction RPC.
 	DaprExecuteActorStateTransactionProcedure = "/dapr.proto.runtime.v1.Dapr/ExecuteActorStateTransaction"
@@ -275,6 +277,8 @@ type DaprClient interface {
 	GetActorState(context.Context, *connect.Request[v1.GetActorStateRequest]) (*connect.Response[v1.GetActorStateResponse], error)
 	// Gets an actor reminder.
 	GetActorReminder(context.Context, *connect.Request[v1.GetActorReminderRequest]) (*connect.Response[v1.GetActorReminderResponse], error)
+	// Gets a timer registered on this host for an actor.
+	GetActorTimer(context.Context, *connect.Request[v1.GetActorTimerRequest]) (*connect.Response[v1.GetActorTimerResponse], error)
 	// Executes state transactions for a specified actor
 	ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error)
 	// InvokeActor calls a method on an actor.
@@ -557,6 +561,12 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			httpClient,
 			baseURL+DaprGetActorReminderProcedure,
 			connect.WithSchema(daprMethods.ByName("GetActorReminder")),
+			connect.WithClientOptions(opts...),
+		),
+		getActorTimer: connect.NewClient[v1.GetActorTimerRequest, v1.GetActorTimerResponse](
+			httpClient,
+			baseURL+DaprGetActorTimerProcedure,
+			connect.WithSchema(daprMethods.ByName("GetActorTimer")),
 			connect.WithClientOptions(opts...),
 		),
 		executeActorStateTransaction: connect.NewClient[v1.ExecuteActorStateTransactionRequest, emptypb.Empty](
@@ -882,6 +892,7 @@ type daprClient struct {
 	listActorTimers                *connect.Client[v1.ListActorTimersRequest, v1.ListActorTimersResponse]
 	getActorState                  *connect.Client[v1.GetActorStateRequest, v1.GetActorStateResponse]
 	getActorReminder               *connect.Client[v1.GetActorReminderRequest, v1.GetActorReminderResponse]
+	getActorTimer                  *connect.Client[v1.GetActorTimerRequest, v1.GetActorTimerResponse]
 	executeActorStateTransaction   *connect.Client[v1.ExecuteActorStateTransactionRequest, emptypb.Empty]
 	invokeActor                    *connect.Client[v1.InvokeActorRequest, v1.InvokeActorResponse]
 	subscribeActorEventsAlpha1     *connect.Client[v1.SubscribeActorEventsRequestAlpha1, v1.SubscribeActorEventsResponseAlpha1]
@@ -1053,6 +1064,11 @@ func (c *daprClient) GetActorState(ctx context.Context, req *connect.Request[v1.
 // GetActorReminder calls dapr.proto.runtime.v1.Dapr.GetActorReminder.
 func (c *daprClient) GetActorReminder(ctx context.Context, req *connect.Request[v1.GetActorReminderRequest]) (*connect.Response[v1.GetActorReminderResponse], error) {
 	return c.getActorReminder.CallUnary(ctx, req)
+}
+
+// GetActorTimer calls dapr.proto.runtime.v1.Dapr.GetActorTimer.
+func (c *daprClient) GetActorTimer(ctx context.Context, req *connect.Request[v1.GetActorTimerRequest]) (*connect.Response[v1.GetActorTimerResponse], error) {
+	return c.getActorTimer.CallUnary(ctx, req)
 }
 
 // ExecuteActorStateTransaction calls dapr.proto.runtime.v1.Dapr.ExecuteActorStateTransaction.
@@ -1376,6 +1392,8 @@ type DaprHandler interface {
 	GetActorState(context.Context, *connect.Request[v1.GetActorStateRequest]) (*connect.Response[v1.GetActorStateResponse], error)
 	// Gets an actor reminder.
 	GetActorReminder(context.Context, *connect.Request[v1.GetActorReminderRequest]) (*connect.Response[v1.GetActorReminderResponse], error)
+	// Gets a timer registered on this host for an actor.
+	GetActorTimer(context.Context, *connect.Request[v1.GetActorTimerRequest]) (*connect.Response[v1.GetActorTimerResponse], error)
 	// Executes state transactions for a specified actor
 	ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error)
 	// InvokeActor calls a method on an actor.
@@ -1654,6 +1672,12 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 		DaprGetActorReminderProcedure,
 		svc.GetActorReminder,
 		connect.WithSchema(daprMethods.ByName("GetActorReminder")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprGetActorTimerHandler := connect.NewUnaryHandler(
+		DaprGetActorTimerProcedure,
+		svc.GetActorTimer,
+		connect.WithSchema(daprMethods.ByName("GetActorTimer")),
 		connect.WithHandlerOptions(opts...),
 	)
 	daprExecuteActorStateTransactionHandler := connect.NewUnaryHandler(
@@ -2000,6 +2024,8 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 			daprGetActorStateHandler.ServeHTTP(w, r)
 		case DaprGetActorReminderProcedure:
 			daprGetActorReminderHandler.ServeHTTP(w, r)
+		case DaprGetActorTimerProcedure:
+			daprGetActorTimerHandler.ServeHTTP(w, r)
 		case DaprExecuteActorStateTransactionProcedure:
 			daprExecuteActorStateTransactionHandler.ServeHTTP(w, r)
 		case DaprInvokeActorProcedure:
@@ -2201,6 +2227,10 @@ func (UnimplementedDaprHandler) GetActorState(context.Context, *connect.Request[
 
 func (UnimplementedDaprHandler) GetActorReminder(context.Context, *connect.Request[v1.GetActorReminderRequest]) (*connect.Response[v1.GetActorReminderResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.GetActorReminder is not implemented"))
+}
+
+func (UnimplementedDaprHandler) GetActorTimer(context.Context, *connect.Request[v1.GetActorTimerRequest]) (*connect.Response[v1.GetActorTimerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.GetActorTimer is not implemented"))
 }
 
 func (UnimplementedDaprHandler) ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error) {

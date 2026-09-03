@@ -64,6 +64,7 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/UnregisterActorRemindersByType",
 		daprRuntimePrefix + "v1.Dapr/ListActorReminders",
 		daprRuntimePrefix + "v1.Dapr/ListActorTimers",
+		daprRuntimePrefix + "v1.Dapr/GetActorTimer",
 		daprRuntimePrefix + "v1.Dapr/GetActorState",
 		daprRuntimePrefix + "v1.Dapr/ExecuteActorStateTransaction",
 		daprRuntimePrefix + "v1.Dapr/InvokeActor",

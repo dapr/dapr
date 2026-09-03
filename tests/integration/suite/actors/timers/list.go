@@ -76,6 +76,36 @@ func (l *list) Run(t *testing.T, ctx context.Context) {
 		return resp.StatusCode, strings.TrimSpace(string(b))
 	}
 
+	httpGet := func(t *testing.T, actorType, actorID, name string) (int, string) {
+		t.Helper()
+		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodGet, l.app.Daprd().ActorTimerURL(actorType, actorID, name), nil)
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		b, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		return resp.StatusCode, strings.TrimSpace(string(b))
+	}
+
+	assertNotFound := func(t *testing.T, actorType, actorID, name string) {
+		t.Helper()
+		_, err := gclient.GetActorTimer(ctx, &rtv1.GetActorTimerRequest{ActorType: actorType, ActorId: actorID, Name: name})
+		require.Error(t, err)
+		st, ok := status.FromError(err)
+		require.True(t, ok)
+		assert.Equal(t, codes.NotFound, st.Code())
+		assert.Equal(t, "actor timer not found: "+name, st.Message())
+
+		code, body := httpGet(t, actorType, actorID, name)
+		assert.Equal(t, nethttp.StatusNotFound, code)
+		var apiErr struct {
+			ErrorCode string `json:"errorCode"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(body), &apiErr))
+		assert.Equal(t, "ERR_ACTOR_TIMER_NOT_FOUND", apiErr.ErrorCode)
+	}
+
 	// No timers registered yet.
 	gresp, err := gclient.ListActorTimers(ctx, &rtv1.ListActorTimersRequest{ActorType: "abc", ActorId: "foo"})
 	require.NoError(t, err)
@@ -84,6 +114,8 @@ func (l *list) Run(t *testing.T, ctx context.Context) {
 	code, body := httpList(t, "abc", "foo")
 	assert.Equal(t, nethttp.StatusOK, code)
 	assert.JSONEq(t, `{"timers":[]}`, body)
+
+	assertNotFound(t, "abc", "foo", "t1")
 
 	// Register one timer over HTTP and one over gRPC. Long due times keep them
 	// from firing (and from being rescheduled) while the test inspects them.
@@ -136,6 +168,29 @@ func (l *list) Run(t *testing.T, ctx context.Context) {
 		{"name":"t1","actorType":"abc","actorID":"foo","dueTime":"1000s","period":"@every 10s","ttl":"2552-01-01T00:00:00Z","callback":"cb","data":"hello"}
 	]}`, body)
 
+	// Single timers can be read back with the same representation.
+	tresp, err := gclient.GetActorTimer(ctx, &rtv1.GetActorTimerRequest{ActorType: "abc", ActorId: "foo", Name: "t1"})
+	require.NoError(t, err)
+	assert.True(t, proto.Equal(&rtv1.GetActorTimerResponse{
+		ActorType: "abc", ActorId: "foo",
+		DueTime:  new("1000s"),
+		Period:   new("@every 10s"),
+		Ttl:      new("2552-01-01T00:00:00Z"),
+		Callback: new("cb"),
+		Data:     data1,
+	}, tresp), tresp.String())
+
+	code, body = httpGet(t, "abc", "foo", "t1")
+	assert.Equal(t, nethttp.StatusOK, code)
+	assert.JSONEq(t, `{"actorType":"abc","actorID":"foo","dueTime":"1000s","period":"@every 10s","ttl":"2552-01-01T00:00:00Z","callback":"cb","data":"hello"}`, body)
+
+	code, body = httpGet(t, "abc", "foo", "t0")
+	assert.Equal(t, nethttp.StatusOK, code)
+	assert.JSONEq(t, `{"actorType":"abc","actorID":"foo","dueTime":"1000s","data":"aGk="}`, body)
+
+	assertNotFound(t, "abc", "foo", "missing")
+	assertNotFound(t, "abc", "other", "t1")
+
 	// The list is scoped to the actor instance.
 	gresp, err = gclient.ListActorTimers(ctx, &rtv1.ListActorTimersRequest{ActorType: "abc", ActorId: "other"})
 	require.NoError(t, err)
@@ -145,6 +200,12 @@ func (l *list) Run(t *testing.T, ctx context.Context) {
 	_, err = gclient.ListActorTimers(ctx, &rtv1.ListActorTimersRequest{ActorType: "xyz", ActorId: "foo"})
 	require.Error(t, err)
 	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+
+	_, err = gclient.GetActorTimer(ctx, &rtv1.GetActorTimerRequest{ActorType: "xyz", ActorId: "foo", Name: "t1"})
+	require.Error(t, err)
+	st, ok = status.FromError(err)
 	require.True(t, ok)
 	assert.Equal(t, codes.PermissionDenied, st.Code())
 
@@ -168,4 +229,5 @@ func (l *list) Run(t *testing.T, ctx context.Context) {
 	code, body = httpList(t, "abc", "foo")
 	assert.Equal(t, nethttp.StatusOK, code)
 	assert.JSONEq(t, `{"timers":[{"name":"t0","actorType":"abc","actorID":"foo","dueTime":"1000s","data":"aGk="}]}`, body)
+	assertNotFound(t, "abc", "foo", "t1")
 }

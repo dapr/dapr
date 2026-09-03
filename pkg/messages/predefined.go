@@ -109,6 +109,8 @@ var (
 	ErrActorTimerOpActorNotOwned     = APIError{"operations on actor timers are only possible on the host that owns the actor", errorcodes.ActorTimerNotOwned, http.StatusForbidden, grpcCodes.PermissionDenied}
 	ErrActorTimerList                = APIError{"error listing actor timers: %s", errorcodes.ActorTimerList, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorTimerOpActorNotHosted    = APIError{"operations on actor timers are only possible on hosted actor types", errorcodes.ActorTimerNonHosted, http.StatusForbidden, grpcCodes.PermissionDenied}
+	ErrActorTimerGet                 = APIError{"error getting actor timer: %s", errorcodes.ActorTimerGet, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorTimerNotFound            = APIError{"actor timer not found: %s", errorcodes.ActorTimerNotFound, http.StatusNotFound, grpcCodes.NotFound}
 	ErrActorMaxStackDepthExceeded    = APIError{"maximum stack depth exceeded", errorcodes.ErrActorMaxStackDepthExceeded, http.StatusInternalServerError, grpcCodes.ResourceExhausted}
 	ErrActorNoPlacement              = APIError{"placement service is not configured", errorcodes.ErrActorNoPlacement, http.StatusBadRequest, grpcCodes.Unavailable}
 	ErrActorRuntimeClosed            = APIError{"actor runtime is closed", errorcodes.ErrActorRuntimeClosed, http.StatusServiceUnavailable, grpcCodes.Unavailable}

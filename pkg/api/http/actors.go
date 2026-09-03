@@ -197,6 +197,16 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 				Name: "ListActorTimers",
 			},
 		},
+		{
+			Methods: []string{http.MethodGet},
+			Route:   "actors/{actorType}/{actorId}/timers/{name}",
+			Version: apiVersionV1,
+			Group:   endpointGroupActorV1Misc,
+			Handler: a.onGetActorTimer(),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetActorTimer",
+			},
+		},
 	}
 }
 
@@ -439,6 +449,62 @@ func anyToRawJSON(data *anypb.Any) (json.RawMessage, error) {
 	}
 }
 
+// actorTimerJSON is the HTTP representation of a timer, shared by the get and
+// list endpoints. Name is only populated by the list endpoint.
+type actorTimerJSON struct {
+	Name      string          `json:"name,omitempty"`
+	ActorType string          `json:"actorType,omitempty"`
+	ActorID   string          `json:"actorID,omitempty"`
+	DueTime   *string         `json:"dueTime,omitempty"`
+	Period    *string         `json:"period,omitempty"`
+	TTL       *string         `json:"ttl,omitempty"`
+	Callback  *string         `json:"callback,omitempty"`
+	Data      json.RawMessage `json:"data,omitempty"`
+}
+
+func newActorTimerJSON(name string, t *runtimev1pb.ActorTimer) (actorTimerJSON, error) {
+	data, err := anyToRawJSON(t.GetData())
+	if err != nil {
+		return actorTimerJSON{}, err
+	}
+	return actorTimerJSON{
+		Name:      name,
+		ActorType: t.GetActorType(),
+		ActorID:   t.GetActorId(),
+		DueTime:   t.DueTime,
+		Period:    t.Period,
+		TTL:       t.Ttl,
+		Callback:  t.Callback,
+		Data:      data,
+	}, nil
+}
+
+func (a *api) onGetActorTimer() http.HandlerFunc {
+	return UniversalHTTPHandler(
+		a.universal.GetActorTimer,
+		UniversalHTTPHandlerOpts[*runtimev1pb.GetActorTimerRequest, *runtimev1pb.GetActorTimerResponse]{
+			SkipInputBody: true,
+			InModifier: func(r *http.Request, in *runtimev1pb.GetActorTimerRequest) (*runtimev1pb.GetActorTimerRequest, error) {
+				in.ActorType = chi.URLParam(r, actorTypeParam)
+				in.ActorId = chi.URLParam(r, actorIDParam)
+				in.Name = chi.URLParam(r, nameParam)
+				return in, nil
+			},
+			OutModifier: func(out *runtimev1pb.GetActorTimerResponse) (any, error) {
+				return newActorTimerJSON("", &runtimev1pb.ActorTimer{
+					ActorType: out.GetActorType(),
+					ActorId:   out.GetActorId(),
+					DueTime:   out.DueTime,
+					Period:    out.Period,
+					Ttl:       out.Ttl,
+					Callback:  out.Callback,
+					Data:      out.GetData(),
+				})
+			},
+		},
+	)
+}
+
 func (a *api) onListActorTimers() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.ListActorTimers,
@@ -450,39 +516,18 @@ func (a *api) onListActorTimers() http.HandlerFunc {
 				return in, nil
 			},
 			OutModifier: func(out *runtimev1pb.ListActorTimersResponse) (any, error) {
-				type timerJSON struct {
-					Name      string          `json:"name"`
-					ActorType string          `json:"actorType,omitempty"`
-					ActorID   string          `json:"actorID,omitempty"`
-					DueTime   *string         `json:"dueTime,omitempty"`
-					Period    *string         `json:"period,omitempty"`
-					TTL       *string         `json:"ttl,omitempty"`
-					Callback  *string         `json:"callback,omitempty"`
-					Data      json.RawMessage `json:"data,omitempty"`
-				}
-
 				// Always a non-nil slice so an empty list serializes as [].
-				timers := make([]timerJSON, 0, len(out.GetTimers()))
+				timers := make([]actorTimerJSON, 0, len(out.GetTimers()))
 				for _, nt := range out.GetTimers() {
-					t := nt.GetTimer()
-					data, err := anyToRawJSON(t.GetData())
+					t, err := newActorTimerJSON(nt.GetName(), nt.GetTimer())
 					if err != nil {
 						return nil, err
 					}
-					timers = append(timers, timerJSON{
-						Name:      nt.GetName(),
-						ActorType: t.GetActorType(),
-						ActorID:   t.GetActorId(),
-						DueTime:   t.DueTime,
-						Period:    t.Period,
-						TTL:       t.Ttl,
-						Callback:  t.Callback,
-						Data:      data,
-					})
+					timers = append(timers, t)
 				}
 
 				return struct {
-					Timers []timerJSON `json:"timers"`
+					Timers []actorTimerJSON `json:"timers"`
 				}{Timers: timers}, nil
 			},
 		},

@@ -113,6 +113,9 @@ service Dapr {
   // Gets an actor reminder.
   rpc GetActorReminder(GetActorReminderRequest) returns (GetActorReminderResponse) {}
 
+  // Gets a timer registered on this host for an actor.
+  rpc GetActorTimer(GetActorTimerRequest) returns (GetActorTimerResponse) {}
+
   // Executes state transactions for a specified actor
   rpc ExecuteActorStateTransaction(ExecuteActorStateTransactionRequest) returns (google.protobuf.Empty) {}
 

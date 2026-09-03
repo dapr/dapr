@@ -1070,7 +1070,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		apisAndMethods := map[string][]string{
 			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1": {"POST", "PUT", "GET", "DELETE"},
 			"v1.0/actors/fakeActorType/fakeActorID/method/method1":      {"POST", "PUT", "GET", "DELETE"},
-			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1":       {"POST", "PUT", "DELETE"},
+			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1":       {"POST", "PUT", "GET", "DELETE"},
 			"v1.0/actors/fakeActorType/fakeActorID/timers":              {"GET"},
 		}
 		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
@@ -1582,6 +1582,85 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 204, resp.StatusCode)
 		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+	})
+
+	t.Run("Timer Get - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+		period, err := actorsapi.NewReminderPeriod("2s")
+		require.NoError(t, err)
+		data, err := anypb.New(wrapperspb.Bytes([]byte(`{"foo":"bar"}`)))
+		require.NoError(t, err)
+
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New().WithGetFn(func(_ context.Context, req *actorsapi.GetTimerRequest) (*actorsapi.Reminder, error) {
+				assert.Equal(t, "fakeActorType", req.ActorType)
+				assert.Equal(t, "fakeActorID", req.ActorID)
+				assert.Equal(t, "timer1", req.Name)
+				return &actorsapi.Reminder{
+					ActorType: "fakeActorType",
+					ActorID:   "fakeActorID",
+					Name:      "timer1",
+					DueTime:   "1s",
+					Period:    period,
+					Callback:  "cb",
+					Data:      data,
+					IsTimer:   true,
+				}, nil
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.JSONEq(t, `{"actorType":"fakeActorType","actorID":"fakeActorID","dueTime":"1s","period":"@every 2s","callback":"cb","data":{"foo":"bar"}}`, string(resp.RawBody))
+	})
+
+	t.Run("Timer Get - 404 when not found", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New(), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 404, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_NOT_FOUND", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Timer Get - 403 when actor not owned by this host", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New().WithGetFn(func(context.Context, *actorsapi.GetTimerRequest) (*actorsapi.Reminder, error) {
+				return nil, timers.ErrTimerActorNotOwned
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_NOT_OWNED", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Timer Get - 500 on upstream error", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New().WithGetFn(func(context.Context, *actorsapi.GetTimerRequest) (*actorsapi.Reminder, error) {
+				return nil, errors.New("UPSTREAM_ERROR")
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_GET", resp.ErrorBody["errorCode"])
 	})
 
 	t.Run("Timer List - 200 OK", func(t *testing.T) {
