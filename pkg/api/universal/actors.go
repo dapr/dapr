@@ -404,7 +404,8 @@ func (a *Universal) ListActorTimers(ctx context.Context, in *runtimev1pb.ListAct
 		if r.DueTime != "" {
 			dueTime = new(r.DueTime)
 		}
-		if p := r.Period.String(); p != "" {
+		// Report the period the way the Scheduler does for reminders.
+		if p := r.Period.Schedule(); p != "" {
 			period = new(p)
 		}
 		if !r.ExpirationTime.IsZero() {

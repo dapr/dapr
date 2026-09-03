@@ -123,7 +123,7 @@ func (l *list) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, proto.Equal(&rtv1.ActorTimer{
 		ActorType: "abc", ActorId: "foo",
 		DueTime:  new("1000s"),
-		Period:   new("10s"),
+		Period:   new("@every 10s"),
 		Ttl:      new("2552-01-01T00:00:00Z"),
 		Callback: new("cb"),
 		Data:     data1,
@@ -133,7 +133,7 @@ func (l *list) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, nethttp.StatusOK, code)
 	assert.JSONEq(t, `{"timers":[
 		{"name":"t0","actorType":"abc","actorID":"foo","dueTime":"1000s","data":"aGk="},
-		{"name":"t1","actorType":"abc","actorID":"foo","dueTime":"1000s","period":"10s","ttl":"2552-01-01T00:00:00Z","callback":"cb","data":"hello"}
+		{"name":"t1","actorType":"abc","actorID":"foo","dueTime":"1000s","period":"@every 10s","ttl":"2552-01-01T00:00:00Z","callback":"cb","data":"hello"}
 	]}`, body)
 
 	// The list is scoped to the actor instance.

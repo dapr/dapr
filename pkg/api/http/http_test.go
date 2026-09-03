@@ -1622,7 +1622,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.JSONEq(t, `{"timers":[
-			{"name":"timer1","actorType":"fakeActorType","actorID":"fakeActorID","dueTime":"1s","period":"2s","callback":"cb","data":{"foo":"bar"}},
+			{"name":"timer1","actorType":"fakeActorType","actorID":"fakeActorID","dueTime":"1s","period":"@every 2s","callback":"cb","data":{"foo":"bar"}},
 			{"name":"timer2","actorType":"fakeActorType","actorID":"fakeActorID"}
 		]}`, string(resp.RawBody))
 	})
