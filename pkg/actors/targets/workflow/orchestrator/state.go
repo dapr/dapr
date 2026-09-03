@@ -239,11 +239,13 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 		state.SetMetadataETag(nil)
 	case len(metaRes.Data) == 0:
 		// The row vanished between the Multi and this read: a force purge
-		// landed. Drop the cache and the actor so nothing writes from it.
+		// landed. Drop the cache and the actor, and fail the caller so the
+		// turn's post-save effects (parent notification, retention, cascade)
+		// do not act on a purged instance; the refire finds no state.
 		log.Warnf("Workflow actor '%s': metadata row missing after save; the state was purged concurrently", o.actorID)
 		o.invalidateCachedState()
 		o.deactivate(o)
-		return nil
+		return fmt.Errorf("%w: state purged after save", api.ErrInstanceNotFound)
 	default:
 		state.SetMetadataETag(metaRes.ETag)
 	}

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,6 +41,7 @@ import (
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
@@ -89,6 +91,7 @@ type notifyHarness struct {
 	ops     []string
 	calls   []*internalv1pb.InternalInvokeRequest
 	callErr error
+	purged  atomic.Bool
 	rows    map[string][]byte
 	orch    *orchestrator
 }
@@ -133,6 +136,9 @@ func newNotifyHarness(t *testing.T, history, inbox []*backend.HistoryEvent, pend
 	fakeState := statefake.New().
 		WithGetFn(func(_ context.Context, req *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
 			if req.Key == wfenginestate.MetadataKey {
+				if h.purged.Load() {
+					return &actorapi.StateResponse{}, nil
+				}
 				return &actorapi.StateResponse{Data: meta, ETag: &etag}, nil
 			}
 			return &actorapi.StateResponse{}, nil
@@ -273,6 +279,21 @@ func Test_runWorkflow_terminalTurnSavesBeforeParentNotify(t *testing.T) {
 		ops := h.snapshot()
 		require.GreaterOrEqual(t, len(ops), 3)
 		assert.Equal(t, []string{"create:" + janitorReminderName, "save+notify", "call:" + todo.AddWorkflowEventMethod}, ops[:3], "a local wake has no reminder to nack, so the janitor must exist before the save")
+	})
+
+	t.Run("a purge landing on the terminal save aborts before the notify", func(t *testing.T) {
+		t.Parallel()
+		h := newCompletingHarness(t)
+		h.purged.Store(true)
+		// Under the actor lock as in the invoke path, so the deactivation
+		// this branch queues is ordered after the turn.
+		unlock, err := h.orch.lock.ContextLock(t.Context())
+		require.NoError(t, err)
+		completed, err := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-er-1"})
+		unlock()
+		require.ErrorIs(t, err, api.ErrInstanceNotFound)
+		assert.Equal(t, todo.RunCompletedFalse, completed)
+		assert.Equal(t, []string{"save+notify"}, h.snapshot(), "the parent must not learn of a completion whose state is gone")
 	})
 
 	t.Run("failed notify keeps the marker and arms the retry reminder", func(t *testing.T) {

@@ -48,6 +48,7 @@ type Store struct {
 
 	multiDeleteHold *holdSpec
 	bulkGetHold     *holdSpec
+	getHold         *holdSpec
 }
 
 // holdSpec is a one-shot arm-able hold on a store operation matching a key
@@ -146,6 +147,43 @@ func (s *Store) ArmBulkGetHold(sub string) (arrived <-chan struct{}, release fun
 
 	var once sync.Once
 	return spec.arrived, func() { once.Do(func() { close(spec.releaseCh) }) }
+}
+
+// ArmGetHold arms a one-shot hold on the next Get whose key contains sub.
+// The Get blocks until release is called (or its context is done).
+func (s *Store) ArmGetHold(sub string) (arrived <-chan struct{}, release func()) {
+	spec := &holdSpec{
+		sub:       sub,
+		arrived:   make(chan struct{}),
+		releaseCh: make(chan struct{}),
+	}
+	s.mu.Lock()
+	s.getHold = spec
+	s.mu.Unlock()
+
+	var once sync.Once
+	return spec.arrived, func() { once.Do(func() { close(spec.releaseCh) }) }
+}
+
+// Get implements state.Store, honouring an armed Get hold.
+func (s *Store) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
+	s.mu.Lock()
+	var hold *holdSpec
+	if s.getHold != nil && strings.Contains(req.Key, s.getHold.sub) {
+		hold = s.getHold
+		s.getHold = nil
+	}
+	s.mu.Unlock()
+
+	if hold != nil {
+		close(hold.arrived)
+		select {
+		case <-hold.releaseCh:
+		case <-ctx.Done():
+		}
+	}
+
+	return s.Store.Get(ctx, req)
 }
 
 // Multi implements state.TransactionalStore. If the store is armed and the
