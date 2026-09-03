@@ -495,12 +495,25 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 	return nil
 }
 
-// GetWorkflowMetadata implements backend.Backend
+// GetWorkflowMetadata implements backend.Backend. The read goes through the
+// hosting workflow actor so it serialises behind an in-flight turn: a child
+// dispatches its completion to its parent before committing its own terminal
+// state, so a direct store read could report a child as PENDING after its
+// parent completed. A stalled actor parks holding its turn lock while its
+// state is quiescent; only then is the store read directly.
 func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID, router *protos.TaskRouter) (*backend.WorkflowMetadata, error) {
-	if target := router.GetTargetAppID(); target != "" && target != abe.appID {
-		return abe.getWorkflowMetadataRemote(ctx, id, target)
+	target := router.GetTargetAppID()
+	if target == "" {
+		target = abe.appID
 	}
+	meta, err := abe.getWorkflowMetadataFromActor(ctx, id, target)
+	if err == nil || !targeterrors.IsStalled(err) {
+		return meta, err
+	}
+	return abe.getWorkflowMetadataFromStore(ctx, id)
+}
 
+func (abe *Actors) getWorkflowMetadataFromStore(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error) {
 	wstate, err := abe.loadInternalState(ctx, id)
 	if err != nil {
 		return nil, err
@@ -539,12 +552,12 @@ func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID, r
 	}, nil
 }
 
-// getWorkflowMetadataRemote fetches metadata for an instance owned by another
-// app via a one-shot WaitForRuntimeStatus stream on its workflow actor. The
-// MetadataFetchOnly flag makes the target reply immediately (or with
-// not-found) instead of parking the stream; an older target daprd ignores the
-// flag and this degrades to waiting for the next status change.
-func (abe *Actors) getWorkflowMetadataRemote(ctx context.Context, id api.InstanceID, targetAppID string) (*backend.WorkflowMetadata, error) {
+// getWorkflowMetadataFromActor fetches metadata via a one-shot
+// WaitForRuntimeStatus stream on the instance's workflow actor, local or in
+// another app. The MetadataFetchOnly flag makes the target reply immediately
+// (or with not-found) instead of parking the stream; an older target daprd
+// ignores the flag and this degrades to waiting for the next status change.
+func (abe *Actors) getWorkflowMetadataFromActor(ctx context.Context, id api.InstanceID, targetAppID string) (*backend.WorkflowMetadata, error) {
 	actorType, err := abe.targetWorkflowActorType(targetAppID)
 	if err != nil {
 		return nil, err
