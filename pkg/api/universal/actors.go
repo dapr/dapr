@@ -370,3 +370,65 @@ func (a *Universal) ListActorReminders(ctx context.Context, req *runtimev1pb.Lis
 		Reminders: reminders,
 	}, nil
 }
+
+func (a *Universal) ListActorTimers(ctx context.Context, in *runtimev1pb.ListActorTimersRequest) (*runtimev1pb.ListActorTimersResponse, error) {
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
+	}
+	timers, err := a.ActorTimers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := timers.List(ctx, &api.ListTimersRequest{
+		ActorType: in.GetActorType(),
+		ActorID:   in.GetActorId(),
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, actortimers.ErrTimerActorNotOwned):
+			a.logger.Debug(messages.ErrActorTimerOpActorNotOwned)
+			return nil, messages.ErrActorTimerOpActorNotOwned
+		case errors.Is(err, actortimers.ErrTimerActorTypeNotHosted):
+			a.logger.Debug(messages.ErrActorTimerOpActorNotHosted)
+			return nil, messages.ErrActorTimerOpActorNotHosted
+		}
+		err = messages.ErrActorTimerList.WithFormat(err)
+		a.logger.Debug(err)
+		return nil, err
+	}
+
+	out := make([]*runtimev1pb.NamedActorTimer, len(resp))
+	for i, r := range resp {
+		var dueTime, period, ttl, callback *string
+		if r.DueTime != "" {
+			dueTime = new(r.DueTime)
+		}
+		if p := r.Period.String(); p != "" {
+			period = new(p)
+		}
+		if !r.ExpirationTime.IsZero() {
+			ttl = new(r.ExpirationTime.Format(time.RFC3339Nano))
+		}
+		if r.Callback != "" {
+			callback = new(r.Callback)
+		}
+
+		out[i] = &runtimev1pb.NamedActorTimer{
+			Name: r.Name,
+			Timer: &runtimev1pb.ActorTimer{
+				ActorType: r.ActorType,
+				ActorId:   r.ActorID,
+				DueTime:   dueTime,
+				Period:    period,
+				Ttl:       ttl,
+				Callback:  callback,
+				Data:      r.Data,
+			},
+		}
+	}
+
+	return &runtimev1pb.ListActorTimersResponse{
+		Timers: out,
+	}, nil
+}

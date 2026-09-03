@@ -26,11 +26,16 @@ import (
 	"github.com/dapr/dapr/pkg/actors/table"
 )
 
-var ErrTimerActorNotOwned = errors.New("operations on actor timers are only possible on the host that owns the actor")
+var (
+	ErrTimerActorNotOwned      = errors.New("operations on actor timers are only possible on the host that owns the actor")
+	ErrTimerActorTypeNotHosted = errors.New("operations on actor timers are only possible on hosted actor types")
+)
 
 type Interface interface {
 	Create(ctx context.Context, req *api.CreateTimerRequest) error
 	Delete(ctx context.Context, req *api.DeleteTimerRequest) error
+	// List returns the timers registered on this host for the given actor.
+	List(ctx context.Context, req *api.ListTimersRequest) ([]*api.Reminder, error)
 }
 
 type Options struct {
@@ -86,6 +91,20 @@ func (t *timers) Delete(ctx context.Context, req *api.DeleteTimerRequest) error 
 
 	t.storage.Delete(cctx, req.Key())
 	return nil
+}
+
+func (t *timers) List(ctx context.Context, req *api.ListTimersRequest) ([]*api.Reminder, error) {
+	if !t.table.IsActorTypeHosted(req.ActorType) {
+		return nil, ErrTimerActorTypeNotHosted
+	}
+
+	cctx, cancel, err := t.claimLocal(ctx, req.ActorType, req.ActorID)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel(nil)
+
+	return t.storage.List(cctx, req.ActorType, req.ActorID), nil
 }
 
 // claimLocal holds the placement claim until released by the caller:

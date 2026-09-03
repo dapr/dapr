@@ -145,6 +145,10 @@ func (*ListActorRemindersRequest) AppendSpanAttributes(rpcMethod string, m map[s
 	// TODO
 }
 
+func (*ListActorTimersRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
 func (*ListJobsRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }

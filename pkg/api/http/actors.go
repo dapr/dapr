@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -184,6 +185,16 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 			Handler: a.onGetActorReminder(),
 			Settings: endpoints.EndpointSettings{
 				Name: "GetActorReminder",
+			},
+		},
+		{
+			Methods: []string{http.MethodGet},
+			Route:   "actors/{actorType}/{actorId}/timers",
+			Version: apiVersionV1,
+			Group:   endpointGroupActorV1Misc,
+			Handler: a.onListActorTimers(),
+			Settings: endpoints.EndpointSettings{
+				Name: "ListActorTimers",
 			},
 		},
 	}
@@ -387,22 +398,10 @@ func (a *api) onGetActorReminder() http.HandlerFunc {
 					TTL:       out.Ttl,
 				}
 
-				//nolint:protogetter
-				if out.Data != nil {
-					msg, err := out.Data.UnmarshalNew()
-					if err != nil {
-						return nil, err
-					}
-					switch mm := msg.(type) {
-					case *wrapperspb.BytesValue:
-						m.Data = mm.GetValue()
-					default:
-						d, err := protojson.Marshal(mm)
-						if err != nil {
-							return nil, err
-						}
-						m.Data = json.RawMessage(d)
-					}
+				var err error
+				m.Data, err = anyToRawJSON(out.GetData())
+				if err != nil {
+					return nil, err
 				}
 
 				return m, nil
@@ -412,6 +411,79 @@ func (a *api) onGetActorReminder() http.HandlerFunc {
 				in.ActorId = chi.URLParam(r, actorIDParam)
 				in.Name = chi.URLParam(r, nameParam)
 				return in, nil
+			},
+		},
+	)
+}
+
+// anyToRawJSON unwraps the data payload of a reminder or timer for HTTP
+// responses: a BytesValue carries the raw JSON the user registered, any other
+// message is rendered with protojson.
+func anyToRawJSON(data *anypb.Any) (json.RawMessage, error) {
+	if data == nil {
+		return nil, nil
+	}
+	msg, err := data.UnmarshalNew()
+	if err != nil {
+		return nil, err
+	}
+	switch mm := msg.(type) {
+	case *wrapperspb.BytesValue:
+		return mm.GetValue(), nil
+	default:
+		d, err := protojson.Marshal(mm)
+		if err != nil {
+			return nil, err
+		}
+		return json.RawMessage(d), nil
+	}
+}
+
+func (a *api) onListActorTimers() http.HandlerFunc {
+	return UniversalHTTPHandler(
+		a.universal.ListActorTimers,
+		UniversalHTTPHandlerOpts[*runtimev1pb.ListActorTimersRequest, *runtimev1pb.ListActorTimersResponse]{
+			SkipInputBody: true,
+			InModifier: func(r *http.Request, in *runtimev1pb.ListActorTimersRequest) (*runtimev1pb.ListActorTimersRequest, error) {
+				in.ActorType = chi.URLParam(r, actorTypeParam)
+				in.ActorId = chi.URLParam(r, actorIDParam)
+				return in, nil
+			},
+			OutModifier: func(out *runtimev1pb.ListActorTimersResponse) (any, error) {
+				type timerJSON struct {
+					Name      string          `json:"name"`
+					ActorType string          `json:"actorType,omitempty"`
+					ActorID   string          `json:"actorID,omitempty"`
+					DueTime   *string         `json:"dueTime,omitempty"`
+					Period    *string         `json:"period,omitempty"`
+					TTL       *string         `json:"ttl,omitempty"`
+					Callback  *string         `json:"callback,omitempty"`
+					Data      json.RawMessage `json:"data,omitempty"`
+				}
+
+				// Always a non-nil slice so an empty list serializes as [].
+				timers := make([]timerJSON, 0, len(out.GetTimers()))
+				for _, nt := range out.GetTimers() {
+					t := nt.GetTimer()
+					data, err := anyToRawJSON(t.GetData())
+					if err != nil {
+						return nil, err
+					}
+					timers = append(timers, timerJSON{
+						Name:      nt.GetName(),
+						ActorType: t.GetActorType(),
+						ActorID:   t.GetActorId(),
+						DueTime:   t.DueTime,
+						Period:    t.Period,
+						TTL:       t.Ttl,
+						Callback:  t.Callback,
+						Data:      data,
+					})
+				}
+
+				return struct {
+					Timers []timerJSON `json:"timers"`
+				}{Timers: timers}, nil
 			},
 		},
 	)

@@ -239,6 +239,18 @@ type ListRemindersRequest struct {
 	ActorID   *string
 }
 
+// ListTimersRequest is a request object for listing the timers registered on
+// this host for a single actor.
+type ListTimersRequest struct {
+	ActorType string
+	ActorID   string
+}
+
+// ActorKey returns the key of the actor for this request.
+func (req ListTimersRequest) ActorKey() string {
+	return req.ActorType + DaprSeparator + req.ActorID
+}
+
 // DeleteTimerRequest is a request object for deleting a timer.
 type DeleteTimerRequest struct {
 	Name      string

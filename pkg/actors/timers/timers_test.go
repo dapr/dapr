@@ -100,3 +100,57 @@ func TestDeleteNotOwnedActor(t *testing.T) {
 	})
 	require.ErrorIs(t, err, ErrTimerActorNotOwned)
 }
+
+func TestListOwnedActor(t *testing.T) {
+	ts := newTestTimers(t, true, nil)
+	ctx := t.Context()
+
+	got, err := ts.List(ctx, &api.ListTimersRequest{ActorType: "abc", ActorID: "foo"})
+	require.NoError(t, err)
+	assert.Empty(t, got)
+
+	require.NoError(t, ts.Create(ctx, &api.CreateTimerRequest{
+		ActorType: "abc", ActorID: "foo", Name: "tick", DueTime: "1h", Period: "10s", Callback: "cb",
+	}))
+	require.NoError(t, ts.Create(ctx, &api.CreateTimerRequest{
+		ActorType: "abc", ActorID: "bar", Name: "other", DueTime: "1h",
+	}))
+
+	got, err = ts.List(ctx, &api.ListTimersRequest{ActorType: "abc", ActorID: "foo"})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "tick", got[0].Name)
+	assert.Equal(t, "abc", got[0].ActorType)
+	assert.Equal(t, "foo", got[0].ActorID)
+	assert.Equal(t, "1h", got[0].DueTime)
+	assert.Equal(t, "10s", got[0].Period.String())
+	assert.Equal(t, "cb", got[0].Callback)
+	assert.True(t, got[0].IsTimer)
+}
+
+func TestListNotOwnedActor(t *testing.T) {
+	ts := newTestTimers(t, false, nil)
+	got, err := ts.List(t.Context(), &api.ListTimersRequest{ActorType: "abc", ActorID: "foo"})
+	require.ErrorIs(t, err, ErrTimerActorNotOwned)
+	assert.Nil(t, got)
+}
+
+func TestListLookupError(t *testing.T) {
+	lerr := errors.New("placement unavailable")
+	ts := newTestTimers(t, true, lerr)
+	_, err := ts.List(t.Context(), &api.ListTimersRequest{ActorType: "abc", ActorID: "foo"})
+	require.ErrorIs(t, err, lerr)
+}
+
+func TestListTypeNotHosted(t *testing.T) {
+	storage := inmemory.New(inmemory.Options{Router: routerfake.New()})
+	t.Cleanup(func() { require.NoError(t, storage.Close()) })
+	ts := New(Options{
+		Storage:   storage,
+		Table:     tablefake.New().WithIsActorTypeHosted(func(string) bool { return false }),
+		Placement: placementfake.New(),
+	})
+	_, err := ts.List(t.Context(), &api.ListTimersRequest{ActorType: "abc", ActorID: "foo"})
+	require.ErrorIs(t, err, ErrTimerActorTypeNotHosted)
+	assert.NotErrorIs(t, err, ErrTimerActorNotOwned)
+}

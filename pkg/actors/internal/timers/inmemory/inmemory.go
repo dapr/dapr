@@ -16,6 +16,7 @@ package inmemory
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
 	"sync/atomic"
 
@@ -378,6 +379,27 @@ func (i *inmemory) Delete(_ context.Context, timerKey string) {
 		i.updateActiveTimersCount(reminder.ActorType, -1)
 		i.updateActorTimers(reminder.ActorKey(), -1)
 	}
+}
+
+func (i *inmemory) List(_ context.Context, actorType, actorID string) []*api.Reminder {
+	i.queueLock.Lock()
+	defer i.queueLock.Unlock()
+
+	var out []*api.Reminder
+	i.activeTimers.Range(func(_, reminderAny any) bool {
+		reminder := reminderAny.(*api.Reminder)
+		if reminder.ActorType != actorType || reminder.ActorID != actorID {
+			return true
+		}
+		// Stored reminders are replaced rather than mutated in place, but hand
+		// out a copy so callers can never alias the store.
+		c := *reminder
+		out = append(out, &c)
+		return true
+	})
+
+	sort.Slice(out, func(a, b int) bool { return out[a].Name < out[b].Name })
+	return out
 }
 
 func (i *inmemory) DeleteFunc(_ context.Context, fn func(actorType, actorID string) bool) {
