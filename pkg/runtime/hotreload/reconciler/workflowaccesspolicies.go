@@ -81,8 +81,6 @@ func (w *workflowAccessPolicies) recompile(all []wfaclapi.WorkflowAccessPolicy) 
 
 // The go inter does not yet understand that these functions are being used by
 // the generic reconciler.
-//
-//nolint:unused
 func (w *workflowAccessPolicies) update(ctx context.Context, policy wfaclapi.WorkflowAccessPolicy) {
 	if err := validate.WorkflowAccessPolicy(ctx, &policy); err != nil {
 		log.Warnf("WorkflowAccessPolicy %q failed validation, skipping: %s", policy.Name, err)
