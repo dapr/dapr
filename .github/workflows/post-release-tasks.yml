@@ -1,0 +1,120 @@
+#
+# Copyright 2026 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: Post release tasks
+
+# The post-release-day list sits at the bottom of the endgame issue, so it is
+# easy to miss. This workflow opens one issue per task in the target repository
+# and assigns the Copilot coding agent where the organisation enabled it.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      rel_version:
+        description: 'Released Dapr version, without a leading v (example: 1.18.4)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Print the plan and change nothing'
+        required: false
+        default: false
+        type: boolean
+
+permissions: {}
+
+jobs:
+  open-tasks:
+    name: Open the post-release tasks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Work out the version
+        id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          TAG: ${{ github.event.release.tag_name }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
+          INPUT_VERSION: ${{ inputs.rel_version }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "version=${INPUT_VERSION#v}" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # A release candidate is not a released version. Skip it.
+          if [ "$PRERELEASE" = "true" ]; then
+            echo "::notice::${TAG} is a pre-release, no tasks to open"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Guard against a tag that still carries an rc suffix.
+          case "$TAG" in
+            *-rc.*|*-alpha*|*-beta*)
+              echo "::notice::${TAG} is a pre-release tag, no tasks to open"
+              echo "run=false" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
+          VERSION="${TAG#v}"
+
+          # Dapr keeps several minor lines alive at once, so a patch for an
+          # older line can publish after a newer minor. The downstream repos
+          # track the newest version only. Opening tasks for an older line
+          # would ask for a downgrade, so run only for the highest stable
+          # version.
+          LATEST=$(gh api 'repos/${{ github.repository }}/releases?per_page=100' \
+            --jq '.[] | select(.prerelease==false and .draft==false) | .tag_name' \
+            | sed 's/^v//' \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -1)
+
+          if [ -z "$LATEST" ]; then
+            echo "::error::could not work out the latest stable version"
+            exit 1
+          fi
+
+          if [ "$VERSION" != "$LATEST" ]; then
+            echo "::notice::${TAG} is not the highest stable version (${LATEST}), no tasks to open"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "run=true" >> "$GITHUB_OUTPUT"
+
+      - name: Open the tasks
+        if: steps.version.outputs.run == 'true'
+        env:
+          # The issues land in other repositories, so the built-in token is not
+          # enough. DAPR_BOT_TOKEN must be able to open issues in every
+          # repository named in tasks.json.
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: ./.github/scripts/post-release/open-tasks.sh "${{ steps.version.outputs.version }}"
+
+      - name: Remind about the tasks that stay manual
+        if: steps.version.outputs.run == 'true'
+        run: |
+          echo "### Post-release tasks that stay manual" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Kratix Marketplace. Set \`VERSION\` in \`dapr/internal/scripts/fetch-deps\`, run it, then open a PR at syntasso/kratix-marketplace. It is a third-party repository, so this workflow does not file issues there." >> "$GITHUB_STEP_SUMMARY"
+          echo "- OperatorHub. This one follows a \`dapr/kubernetes-operator\` release, not a Dapr release. Tag the operator first, then submit the bundle to k8s-operatorhub/community-operators." >> "$GITHUB_STEP_SUMMARY"
