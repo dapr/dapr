@@ -67,6 +67,8 @@ type Options struct {
 	Backend       *string
 	BackendConfig any
 
+	PlacementEnabled bool
+
 	EtcdEmbed                      bool
 	EtcdDataDir                    string
 	EtcdName                       string
