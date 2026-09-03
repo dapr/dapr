@@ -134,6 +134,13 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// deterministic name, so re-creating an already-existing retention
 		// reminder is a no-op overwrite.
 		if runtimestate.IsCompleted(o.rstate) {
+			if state.ParentNotifyPending {
+				// A failure nacks the driving reminder; any driver other than
+				// the dedicated retry reminder also arms it.
+				if nerr := o.resendParentNotification(ctx, state, reminder.Name != reminderNameParentNotify); nerr != nil {
+					return todo.RunCompletedFalse, nerr
+				}
+			}
 			if rerr := o.handleRetention(ctx, runtimestate.RuntimeStatus(o.rstate)); rerr != nil {
 				return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to (re)create retention reminder on empty-inbox completion path: %w", rerr))
 			}
@@ -523,11 +530,21 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 
+	// A completing child commits its terminal state before telling its
+	// parent: the notification is dispatched after the save (notifyParent),
+	// and on a crash or dispatch failure the empty-inbox path rebuilds it
+	// from history. Child completions are the only messages added to a
+	// parent, so this leaves non-terminal turns untouched.
+	var parentNotify []*backend.WorkflowRuntimeStateMessage
+	if runtimestate.IsCompleted(rs) && len(addWorkflows) > 0 {
+		parentNotify, addWorkflows = addWorkflows, nil
+	}
+
 	// Attach an attestation to each outbound child-completion message so
 	// the receiving parent can cryptographically verify this child
 	// executed the invocation it's reporting on. No-op when signing is
 	// disabled.
-	if o.signing.Signer != nil && len(addWorkflows) > 0 {
+	if o.signing.Signer != nil && len(parentNotify) > 0 {
 		started := o.getExecutionStartedEvent(state)
 		parent := started.GetParentInstance()
 		if parent == nil || parent.GetWorkflowInstance() == nil {
@@ -538,7 +555,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			ParentTaskScheduledID: parent.GetTaskScheduledId(),
 			Input:                 started.GetInput(),
 		}
-		for _, msg := range addWorkflows {
+		for _, msg := range parentNotify {
 			if err = o.signing.AttachChildCompletionAttestation(ctx, msg.GetHistoryEvent(), params); err != nil {
 				return todo.RunCompletedFalse, fmt.Errorf("workflow actor '%s': %w", o.actorID, err)
 			}
@@ -580,7 +597,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 	activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory, elideActivityReminder)
-	addResult := o.messages.CallAddEventStateMessage(ctx, addWorkflows)
+	addResult := o.messages.CallAddEventStateMessage(ctx, addWorkflows, nil)
 	createResult := o.messages.CallCreateWorkflowStateMessage(ctx, createWorkflows, rs.GetNewEvents())
 
 	dispatchErr := errors.Join(activityResult.Err, addResult.Err, createResult.Err)
@@ -632,8 +649,19 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
 	}
 
+	// A fastpath terminal turn may be driven by a local wake with no reminder
+	// to nack, so the janitor is the durable driver for a notification lost
+	// between the save and the parent's ack.
+	if o.fastPath && len(parentNotify) > 0 {
+		if err = o.ensureJanitor(ctx, state); err != nil {
+			return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to assert the janitor before the terminal save: %w", err))
+		}
+	}
 	state.ApplyRuntimeStateChanges(rs)
 	state.ClearInbox()
+	if len(parentNotify) > 0 {
+		state.SetParentNotifyPending(true)
+	}
 
 	err = o.signAndSaveState(ctx, state)
 	cacheSettled = true
@@ -670,6 +698,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	if runtimestate.IsCompleted(rs) {
 		log.Infof("Workflow Actor '%s': workflow completed with status '%s' workflowName '%s'", o.actorID, rstatus, workflowName)
+		if len(parentNotify) > 0 {
+			if err = o.notifyParent(ctx, state, parentNotify); err != nil {
+				return todo.RunCompletedFalse, err
+			}
+		}
 		// Create the retention reminder before deleting reminders. If the
 		// scheduler RPC fails (e.g. pod killed mid-call), returning the
 		// error here lets the firing reminder retry the whole completion

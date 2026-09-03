@@ -220,11 +220,9 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 	// Refresh the metadata ETag for the next save. Multi does not return new
 	// ETags, so we read just the metadata row back. A read error here is
 	// non-fatal: the persisted save is durable, we just don't know the new
-	// version token; drop the cache and let the next operation reload. A nil
-	// response or nil ETag is fine: we record whatever the store returned
-	// and the next save proceeds with that (which falls through to a blind
-	// upsert if no ETag is known, the same semantics as a brand-new
-	// workflow).
+	// version token; drop the cache and let the next operation reload. An
+	// empty response means the row is gone: a force purge landed and the
+	// cache must not be written back.
 	// TODO: @joshvanl: add etag support to Multi and remove this extra read.
 	metaRes, metaErr := o.actorState.Get(ctx, &actorsapi.GetStateRequest{
 		ActorType: o.actorType,
@@ -236,10 +234,18 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 		o.invalidateCachedState()
 		return nil
 	}
-	if metaRes != nil {
-		state.SetMetadataETag(metaRes.ETag)
-	} else {
+	switch {
+	case metaRes == nil:
 		state.SetMetadataETag(nil)
+	case len(metaRes.Data) == 0:
+		// The row vanished between the Multi and this read: a force purge
+		// landed. Drop the cache and the actor so nothing writes from it.
+		log.Warnf("Workflow actor '%s': metadata row missing after save; the state was purged concurrently", o.actorID)
+		o.invalidateCachedState()
+		o.deactivate(o)
+		return nil
+	default:
+		state.SetMetadataETag(metaRes.ETag)
 	}
 
 	// Update cached state
@@ -371,7 +377,9 @@ func (o *orchestrator) purgeWorkflowState(ctx context.Context, meta map[string]*
 
 	// If the workflow is required to complete but it's not yet completed then
 	// return [ErrNotCompleted] This check is used by purging workflow
-	if !runtimestate.IsCompleted(o.rstate) {
+	// A completion the parent has not acknowledged is not finished: purging
+	// it would lose the notification.
+	if !runtimestate.IsCompleted(o.rstate) || state.ParentNotifyPending {
 		return api.ErrNotCompleted
 	}
 

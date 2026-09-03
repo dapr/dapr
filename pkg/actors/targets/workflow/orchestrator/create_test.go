@@ -48,6 +48,7 @@ type createHarness struct {
 	lock    sync.Mutex
 	ops     []string
 	creates []*actorapi.CreateReminderRequest
+	saved   bool
 
 	createErr error
 
@@ -81,14 +82,23 @@ func newCreateHarness(t *testing.T, instanceID string) *createHarness {
 		})
 
 	fakeState := statefake.New().
-		WithGetFn(func(context.Context, *actorapi.GetStateRequest, bool) (*actorapi.StateResponse, error) {
-			// No stored state: fresh instance.
+		WithGetFn(func(_ context.Context, req *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
+			h.lock.Lock()
+			defer h.lock.Unlock()
+			// No stored state until the first save: fresh instance. After a
+			// save the metadata row exists, as the post-save etag refresh
+			// expects.
+			if h.saved && req.Key == wfenginestate.MetadataKey {
+				etag := "etag"
+				return &actorapi.StateResponse{Data: []byte{1}, ETag: &etag}, nil
+			}
 			return &actorapi.StateResponse{}, nil
 		}).
 		WithTransactionalStateOperationFn(func(context.Context, bool, *actorapi.TransactionalRequest, bool) error {
 			h.lock.Lock()
 			defer h.lock.Unlock()
 			h.ops = append(h.ops, "save")
+			h.saved = true
 			return nil
 		})
 

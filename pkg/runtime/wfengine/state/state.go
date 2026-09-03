@@ -53,6 +53,7 @@ const (
 	// reloading the full workflow state.
 	MetadataKey          = "metadata"
 	propagatedHistoryKey = "propagated-history"
+	parentNotifyKey      = "parent-notify"
 
 	// maxStateEntries is the upper bound for any metadata count field
 	// (inbox, history, signatures, own signing certificates, external
@@ -106,6 +107,11 @@ type State struct {
 	// events. Set once at workflow creation, never modified.
 	IncomingHistory *protos.PropagatedHistory
 
+	// ParentNotifyPending is set by the terminal save of a child workflow and
+	// cleared once the parent acknowledged the completion, so a crash or a
+	// failed delivery in between re-sends from durable history.
+	ParentNotifyPending bool
+
 	// externalCertDigestIndex maps SHA-256 cert digests (raw 32-byte digest
 	// converted to a string for use as a map key, not hex-encoded) to their
 	// index in ExternalSigningCertificates. Built on load and maintained
@@ -124,6 +130,11 @@ type State struct {
 	// first time, or the cache was just invalidated). Not persisted; lives
 	// only in the in-memory cache.
 	metadataETag *string
+	// metadataETagSeen records that the store has returned an ETag for the
+	// metadata row. A nil metadataETag after that means the row's version
+	// was lost (the row deleted underneath us), and a save must not fall
+	// through to a blind upsert that would resurrect purged state.
+	metadataETagSeen bool
 
 	// customStatusPersisted and propagatedHistoryPersisted are observed at load
 	// time from the state store's ETag for those keys. They are the source of
@@ -133,6 +144,8 @@ type State struct {
 	// IncomingHistory).
 	customStatusPersisted      bool
 	propagatedHistoryPersisted bool
+	parentNotifyPersisted      bool
+	parentNotifyChanged        bool
 
 	// change tracking
 	inboxAddedCount                         int
@@ -155,6 +168,11 @@ type legacyWorkflowStateMetadata struct {
 	HistoryLength uint64
 	Generation    uint64
 }
+
+// ErrMetadataETagLost is returned by GetSaveRequest when the metadata row's
+// ETag was known and is now nil: the row was deleted underneath the cached
+// state, so a blind upsert would resurrect purged state.
+var ErrMetadataETagLost = errors.New("workflow metadata etag lost after load; refusing blind upsert")
 
 func NewState(opts Options) *State {
 	return &State{
@@ -193,6 +211,10 @@ func (s *State) Reset() {
 		s.IncomingHistory = nil
 		s.incomingHistoryChanged = true
 	}
+	if s.ParentNotifyPending || s.parentNotifyPersisted {
+		s.ParentNotifyPending = false
+		s.parentNotifyChanged = true
+	}
 	s.Generation++
 }
 
@@ -208,6 +230,10 @@ func (s *State) ResetChangeTracking() {
 	// propagated-history key; track the resulting persistence state.
 	if s.incomingHistoryChanged {
 		s.propagatedHistoryPersisted = s.IncomingHistory != nil
+	}
+	if s.parentNotifyChanged {
+		s.parentNotifyPersisted = s.ParentNotifyPending
+		s.parentNotifyChanged = false
 	}
 
 	s.inboxAddedCount = 0
@@ -231,6 +257,15 @@ func (s *State) SetIncomingHistory(ph *protos.PropagatedHistory) {
 	s.incomingHistoryChanged = true
 }
 
+// SetParentNotifyPending records whether the parent still has to be told
+// about this workflow's completion.
+func (s *State) SetParentNotifyPending(pending bool) {
+	if s.ParentNotifyPending != pending || (pending && !s.parentNotifyPersisted) {
+		s.parentNotifyChanged = true
+	}
+	s.ParentNotifyPending = pending
+}
+
 // MetadataETag returns the cached metadata ETag, or nil if none is known.
 // Callers performing optimistic concurrency pass this through to the metadata
 // TransactionalUpsert via [GetSaveRequest].
@@ -244,6 +279,9 @@ func (s *State) MetadataETag() *string {
 // the optimistic-concurrency check.
 func (s *State) SetMetadataETag(etag *string) {
 	s.metadataETag = etag
+	if etag != nil {
+		s.metadataETagSeen = true
+	}
 }
 
 func (s *State) ApplyRuntimeStateChanges(rs *backend.WorkflowRuntimeState) {
@@ -521,6 +559,20 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		}
 	}
 
+	if s.parentNotifyChanged {
+		if s.ParentNotifyPending {
+			req.Operations = append(req.Operations, api.TransactionalOperation{
+				Operation: api.Upsert,
+				Request:   api.TransactionalUpsert{Key: parentNotifyKey, Value: []byte{1}},
+			})
+		} else if s.parentNotifyPersisted {
+			req.Operations = append(req.Operations, api.TransactionalOperation{
+				Operation: api.Delete,
+				Request:   api.TransactionalDelete{Key: parentNotifyKey},
+			})
+		}
+	}
+
 	metaProto, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
 		InboxLength:                      uint64(len(inbox)),
 		HistoryLength:                    uint64(len(s.History)),
@@ -540,8 +592,12 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 	// last load has bumped the row's ETag, so our Multi will fail with
 	// ETagMismatch instead of silently overwriting their writes. A nil
 	// metadataETag means "no prior version known" (first save of a brand-new
-	// workflow, or post-invalidation reload) and falls through to a blind
-	// upsert, which is the correct semantics for those cases.
+	// workflow, or a store that returns no ETags) and falls through to a
+	// blind upsert; once an ETag was seen, losing it means the row was
+	// deleted underneath us and the save is refused instead.
+	if s.metadataETag == nil && s.metadataETagSeen {
+		return nil, ErrMetadataETagLost
+	}
 	req.Operations = append(req.Operations, api.TransactionalOperation{
 		Operation: api.Upsert,
 		Request: api.TransactionalUpsert{
@@ -804,6 +860,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 	// nil here just means the store didn't return one for this row, which is
 	// also fine: the next save will fall through to a blind upsert.
 	wState.metadataETag = res.ETag
+	wState.metadataETagSeen = res.ETag != nil
 	wState.Inbox = make([]*backend.HistoryEvent, 0, inboxLen)
 	wState.History = make([]*backend.HistoryEvent, 0, historyLen)
 	wState.RawHistory = make([][]byte, 0, historyLen)
@@ -811,7 +868,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 	wState.ExternalSigningCertificates = make([]*backend.ExternalSigningCertificate, 0, extSigningCertLen)
 	wState.Signatures = make([]*backend.HistorySignature, 0, signatureLen)
 
-	totalKeys := inboxLen + historyLen + signingCertLen + extSigningCertLen + signatureLen + 2
+	totalKeys := inboxLen + historyLen + signingCertLen + extSigningCertLen + signatureLen + 3
 	bulkReq := &api.GetBulkStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,
@@ -823,6 +880,8 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 	bulkReq.Keys[n] = customStatusKey
 	n++
 	bulkReq.Keys[n] = propagatedHistoryKey
+	n++
+	bulkReq.Keys[n] = parentNotifyKey
 	n++
 
 	for i := range metadata.GetInboxLength() {
@@ -1008,6 +1067,10 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 		}
 		wState.IncomingHistory = &ph
 	}
+	if pn := bulkRes[parentNotifyKey]; pn.ETag != nil || len(pn.Data) > 0 {
+		wState.ParentNotifyPending = true
+		wState.parentNotifyPersisted = true
+	}
 
 	wfLogger.Debugf("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))
 
@@ -1162,9 +1225,11 @@ func MarkAsTamperFailed(ctx context.Context, astate state.Interface, actorID str
 		Key:       MetadataKey,
 	}, false)
 	if metaErr != nil || metaRes == nil {
+		// Unknown version: the next save is refused by GetSaveRequest until
+		// the state is reloaded, rather than blind-upserted.
 		s.metadataETag = nil
 	} else {
-		s.metadataETag = metaRes.ETag
+		s.SetMetadataETag(metaRes.ETag)
 	}
 	return s, nil
 }
@@ -1282,6 +1347,12 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Delete,
 			Request:   api.TransactionalDelete{Key: propagatedHistoryKey},
+		})
+	}
+	if s.parentNotifyPersisted {
+		req.Operations = append(req.Operations, api.TransactionalOperation{
+			Operation: api.Delete,
+			Request:   api.TransactionalDelete{Key: parentNotifyKey},
 		})
 	}
 

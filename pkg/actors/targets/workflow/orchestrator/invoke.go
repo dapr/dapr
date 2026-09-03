@@ -106,7 +106,7 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, met
 		return nil, o.createWorkflowInstance(ctx, request)
 
 	case todo.AddWorkflowEventMethod:
-		return nil, o.addWorkflowEvent(ctx, parsedAddEvent)
+		return nil, o.addWorkflowEvent(ctx, parsedAddEvent, senderFromMetadata(meta))
 
 	case todo.PurgeWorkflowStateMethod:
 		return nil, o.purgeWorkflowState(ctx, meta)
@@ -137,7 +137,8 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 	case strings.HasPrefix(reminder.Name, reminderPrefixStart),
 		strings.HasPrefix(reminder.Name, reminderPrefixNewEvent),
 		strings.HasPrefix(reminder.Name, reminderPrefixTimer),
-		reminder.Name == reminderCascadeTerminate:
+		reminder.Name == reminderCascadeTerminate,
+		reminder.Name == reminderNameParentNotify:
 		return o.runWorkflowFromReminder(ctx, reminder)
 
 	case strings.HasPrefix(reminder.Name, common.ReminderPrefixActivityResult):
@@ -145,7 +146,7 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 		if err := proto.Unmarshal(reminder.Data.GetValue(), &ev); err != nil {
 			return fmt.Errorf("failed to unmarshal activity-result HistoryEvent: %w", err)
 		}
-		err := o.addWorkflowEvent(ctx, &ev)
+		err := o.addWorkflowEvent(ctx, &ev, completionSender{})
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			// The instance is gone (purged or never existed): ack so the scheduler
 			// deletes this one-shot reminder. It is created with a retry-forever
@@ -181,8 +182,14 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 	}
 
 	if runtimestate.IsCompleted(o.rstate) {
-		// Re-assert retention before self-deleting: the janitor owns
-		// recovery of a retention create lost after a terminal commit.
+		// Re-send the parent notification and re-assert retention before
+		// self-deleting: the janitor owns recovery of either lost after a
+		// terminal commit, including across a restart.
+		if state.ParentNotifyPending {
+			if nerr := o.resendParentNotification(ctx, state, true); nerr != nil {
+				return fmt.Errorf("failed to re-send the parent notification on janitor terminal path: %w", nerr)
+			}
+		}
 		if rerr := o.handleRetention(ctx, runtimestate.RuntimeStatus(o.rstate)); rerr != nil {
 			return fmt.Errorf("failed to (re)create retention reminder on janitor terminal path: %w", rerr)
 		}

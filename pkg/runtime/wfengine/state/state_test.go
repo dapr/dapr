@@ -1434,3 +1434,106 @@ func TestCustomStatusChangeTracking(t *testing.T) {
 		assert.True(t, hasCustomStatusOp(t, s), "the next history-bearing save must write the changed status")
 	})
 }
+
+func TestGetSaveRequest_ParentNotify(t *testing.T) {
+	t.Parallel()
+
+	ops := func(t *testing.T, s *State) (upserts, deletes map[string]bool) {
+		t.Helper()
+		req, err := s.GetSaveRequest("actor1")
+		require.NoError(t, err)
+		upserts, deletes = map[string]bool{}, map[string]bool{}
+		for _, op := range req.Operations {
+			switch r := op.Request.(type) {
+			case api.TransactionalUpsert:
+				upserts[r.Key] = true
+			case api.TransactionalDelete:
+				deletes[r.Key] = true
+			}
+		}
+		return upserts, deletes
+	}
+
+	t.Run("pending marker rides the save", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		s.SetParentNotifyPending(true)
+		upserts, _ := ops(t, s)
+		assert.True(t, upserts[parentNotifyKey])
+
+		s.ResetChangeTracking()
+		assert.True(t, s.parentNotifyPersisted)
+		s.SetParentNotifyPending(false)
+		_, deletes := ops(t, s)
+		assert.True(t, deletes[parentNotifyKey], "clearing a persisted marker deletes the row")
+	})
+
+	t.Run("clearing an absent marker writes nothing", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		s.SetParentNotifyPending(false)
+		upserts, deletes := ops(t, s)
+		assert.False(t, upserts[parentNotifyKey])
+		assert.False(t, deletes[parentNotifyKey])
+	})
+
+	t.Run("reset clears a persisted marker", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.SetParentNotifyPending(true)
+		s.ResetChangeTracking()
+		s.Reset()
+		assert.False(t, s.ParentNotifyPending)
+		_, deletes := ops(t, s)
+		assert.True(t, deletes[parentNotifyKey])
+	})
+
+	t.Run("purge deletes a persisted marker only", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		req, err := s.GetPurgeRequest("actor1")
+		require.NoError(t, err)
+		assert.Len(t, req.Operations, 1)
+
+		s.SetParentNotifyPending(true)
+		s.ResetChangeTracking()
+		req, err = s.GetPurgeRequest("actor1")
+		require.NoError(t, err)
+		assert.Len(t, req.Operations, 2)
+		assert.Equal(t, parentNotifyKey, req.Operations[0].Request.(api.TransactionalDelete).Key)
+	})
+}
+
+func TestGetSaveRequest_MetadataETagLost(t *testing.T) {
+	t.Parallel()
+
+	t.Run("new state blind upserts", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		_, err := s.GetSaveRequest("actor1")
+		require.NoError(t, err)
+	})
+
+	t.Run("etag seen then lost refuses the save", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		etag := "v1"
+		s.SetMetadataETag(&etag)
+		s.SetMetadataETag(nil)
+		_, err := s.GetSaveRequest("actor1")
+		require.ErrorIs(t, err, ErrMetadataETagLost)
+	})
+
+	t.Run("store without etags keeps blind upserts", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		s.SetMetadataETag(nil)
+		_, err := s.GetSaveRequest("actor1")
+		require.NoError(t, err)
+	})
+}

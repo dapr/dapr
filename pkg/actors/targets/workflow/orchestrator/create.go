@@ -164,6 +164,10 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		return fmt.Errorf("a terminated workflow with ID '%s' is already awaiting an activity result", o.actorID)
 	}
 
+	if state.ParentNotifyPending {
+		return status.Errorf(codes.AlreadyExists, "a workflow with ID '%s' has completed but its parent has not acknowledged the completion yet", o.actorID)
+	}
+
 	// An ID is reusable only once the previous execution's entire child
 	// workflow tree is terminal: a still-running descendant could deliver
 	// events from the old execution into the new one.
