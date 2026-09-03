@@ -38,7 +38,12 @@ var (
 	tr            *runner.TestRunner
 	appNamePrefix = "perf-workflowsapp"
 	appName       string // actual app name including backend suffix
+	scaledAppName string // multi-replica variant of the app
 )
+
+// scaledReplicas is the replica count for the multi-instance tests, where
+// workflows and activities are placed across instances.
+const scaledReplicas = 3
 
 type K6RunConfig struct {
 	TARGET_URL     string
@@ -51,6 +56,7 @@ type K6RunConfig struct {
 func TestMain(m *testing.M) {
 	backend := os.Getenv("DAPR_PERF_WORKFLOW_BACKEND_NAME")
 	appName = appNamePrefix + backend
+	scaledAppName = appNamePrefix + "-scaled" + backend
 
 	utils.SetupLogs("workflow_test")
 	testApps := []kube.AppDescription{
@@ -59,6 +65,24 @@ func TestMain(m *testing.M) {
 			DaprEnabled:       true,
 			ImageName:         "perf-workflowsapp",
 			Replicas:          1,
+			IngressEnabled:    true,
+			IngressPort:       3000,
+			MetricsEnabled:    true,
+			DaprCPULimit:      "1.0",
+			DaprCPURequest:    "0.5",
+			DaprMemoryLimit:   "2Gi",
+			DaprMemoryRequest: "1Gi",
+			AppCPULimit:       "2.0",
+			AppCPURequest:     "1.0",
+			AppMemoryLimit:    "2Gi",
+			AppMemoryRequest:  "1Gi",
+			AppPort:           3000,
+		},
+		{
+			AppName:           scaledAppName,
+			DaprEnabled:       true,
+			ImageName:         "perf-workflowsapp",
+			Replicas:          scaledReplicas,
 			IngressEnabled:    true,
 			IngressPort:       3000,
 			MetricsEnabled:    true,
@@ -152,8 +176,10 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 				// Initialize the workflow runtime
 				url := fmt.Sprintf("http://%s/start-workflow-runtime", externalURL)
 				// Calling start-workflow-runtime multiple times so that it is started in all app instances
-				_, err := utils.HTTPGet(url)
-				require.NoError(t, err, "error starting workflow runtime")
+				for range scaledReplicas * 3 {
+					_, err := utils.HTTPGet(url)
+					require.NoError(t, err, "error starting workflow runtime")
+				}
 
 				time.Sleep(5 * time.Second)
 
@@ -222,6 +248,26 @@ func TestWorkflowWithDifferentPayloads(t *testing.T) {
 	inputs := []string{"10000", "50000", "100000"}
 	rateChecks := [][]string{{"rate==1"}, {"rate==1"}, {"rate==1"}}
 	testWorkflow(t, workflowName, appName, inputs, scenarios, rateChecks, true, true)
+}
+
+// Runs tests for `sum_series_wf` against a multi-replica app, placing
+// workflows across instances
+func TestSeriesWorkflowMultiInstance(t *testing.T) {
+	workflowName := "sum_series_wf"
+	inputs := []string{"100"}
+	scenarios := []string{"t_30_300"} // t_workflowCount_iterations
+	rateChecks := [][]string{{"rate==1"}}
+	testWorkflow(t, workflowName, scaledAppName, inputs, scenarios, rateChecks, true, false)
+}
+
+// Runs tests for `sum_parallel_wf` against a multi-replica app, fanning
+// activities out across instances
+func TestParallelWorkflowMultiInstance(t *testing.T) {
+	workflowName := "sum_parallel_wf"
+	inputs := []string{"100"}
+	scenarios := []string{"t_110_440"} // t_workflowCount_iterations
+	rateChecks := [][]string{{"rate==1"}}
+	testWorkflow(t, workflowName, scaledAppName, inputs, scenarios, rateChecks, true, false)
 }
 
 // Runs test for delaying workflows: 500 VUs, 10,000 iterations

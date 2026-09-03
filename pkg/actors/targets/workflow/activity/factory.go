@@ -15,6 +15,7 @@ package activity
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/claim"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
@@ -135,6 +137,10 @@ type factory struct {
 	rootCtx context.Context
 	escLock sync.Mutex
 	escWG   sync.WaitGroup
+
+	// claims owns the durable execution-claim guards and gate (see the
+	// claim subpackage).
+	claims *claim.Guards
 }
 
 func New(ctx context.Context, opts Options) (targets.Factory, error) {
@@ -165,13 +171,27 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 
 	driveCtx, driveCancel := context.WithCancel(context.Background())
 
+	claimRetention := common.EnvDurationOr(
+		"DAPR_WORKFLOW_ACTIVITY_CLAIM_RETENTION",
+		InflightCacheTTL,
+	)
+
 	return &factory{
-		appID:                  opts.AppID,
-		actorType:              opts.ActivityActorType,
-		fastPath:               opts.FastPath,
-		executionHeld:          opts.ExecutionHeld,
-		registerResolver:       opts.RegisterResolver,
-		staleClaimAfter:        2 * common.JanitorPeriod(),
+		appID:            opts.AppID,
+		actorType:        opts.ActivityActorType,
+		fastPath:         opts.FastPath,
+		executionHeld:    opts.ExecutionHeld,
+		registerResolver: opts.RegisterResolver,
+		staleClaimAfter:  2 * common.JanitorPeriod(),
+		claims: claim.New(claim.Options{
+			ActorType: opts.ActivityActorType,
+			State:     state,
+			// Half-period beats give a live guard three misses, not one,
+			// before its record reads stale under load.
+			HeartbeatEvery: common.JanitorPeriod() / 2,
+			Retention:      claimRetention,
+			StaleAfter:     2 * common.JanitorPeriod(),
+		}),
 		driveCtx:               driveCtx,
 		driveCancel:            driveCancel,
 		rootCtx:                ctx,
@@ -245,6 +265,7 @@ func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorReq
 			ActorType: f.actorType,
 			ActorID:   key.(string),
 		}) {
+			f.spawnClaimGuards(ctx, key.(string))
 			val.(*activity).Deactivate(ctx)
 			f.table.Delete(key)
 		}
@@ -262,4 +283,25 @@ func (f *factory) Len() int {
 	var count int
 	f.table.Range(func(_, _ any) bool { count++; return true })
 	return count
+}
+
+// spawnClaimGuards spawns a claim guard for every unsettled in-flight claim
+// of actorID, from HaltNonHosted (placement churn). Deliberately NOT from
+// HaltAll: at shutdown the execution dies with the process and a record
+// would only delay the new owner by the staleness grace.
+func (f *factory) spawnClaimGuards(ctx context.Context, actorID string) {
+	if !f.fastPath {
+		return
+	}
+	prefix := actorID + "::"
+	f.inflight.Range(func(key string, call *inflight.Call) bool {
+		if key != actorID && !strings.HasPrefix(key, prefix) {
+			return true
+		}
+		if call.Settled() {
+			return true
+		}
+		f.claims.Spawn(ctx, f.rootCtx, actorID, key, call)
+		return true
+	})
 }

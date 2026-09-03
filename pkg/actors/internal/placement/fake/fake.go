@@ -36,7 +36,7 @@ func New() *Fake {
 			return ctx, func(_ error) {}, nil
 		},
 		fnLookupActor: func(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
-			return nil, ctx, func(_ error) {}, nil
+			return &api.LookupActorResponse{Local: true}, ctx, func(_ error) {}, nil
 		},
 		fnIsActorHosted: func(ctx context.Context, actorType, actorID string) bool {
 			return false
