@@ -228,6 +228,13 @@ func (s *Server) WatchHosts(_ *schedulerv1pb.WatchHostsRequest, stream scheduler
 	return s.cron.HostsWatch(stream)
 }
 
+// ReportActorTypes serves per-actor-type placement orders to sidecars. Only
+// available when this scheduler serves placement and is the current placement
+// leader.
+func (s *Server) ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorTypesServer) error {
+	return status.Error(codes.Unimplemented, "placement is not enabled on this scheduler")
+}
+
 // DeleteByMetadata deletes all jobs matching the provided metadata.
 func (s *Server) DeleteByMetadata(ctx context.Context, req *schedulerv1pb.DeleteByMetadataRequest) (*schedulerv1pb.DeleteByMetadataResponse, error) {
 	var isPrefix bool

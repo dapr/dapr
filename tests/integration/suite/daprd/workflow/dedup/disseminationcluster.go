@@ -96,16 +96,22 @@ func (d *disseminationcluster) Run(t *testing.T, ctx context.Context) {
 	startVersion := d.workflow.Placement().PlacementTables(t, ctx).Tables["default"].Version
 
 	for i := range 2 {
-		extra := daprd.New(t,
+		extra := daprd.New(t, append([]daprd.Option{
 			daprd.WithAppID(d.appID),
 			daprd.WithPlacementAddresses(d.workflow.Placement().Address()),
 			daprd.WithScheduler(d.workflow.Scheduler()),
 			daprd.WithResourceFiles(d.workflow.DB().GetComponent(t)),
-			daprd.WithConfigManifests(t, workflow.ClusteredDeploymentConfig),
-		)
+		}, d.workflow.FeatureOptions(t)...)...)
 		extra.Run(t, ctx)
 		extra.WaitUntilRunning(t, ctx)
 		t.Cleanup(func() { extra.Cleanup(t) })
+
+		assert.Contains(t, extra.GetMetaEnabledFeatures(t, ctx), "WorkflowsClusteredDeployment",
+			"extras must join with the harness feature set")
+		if d.workflow.FastPath() {
+			assert.Contains(t, extra.GetMetaEnabledFeatures(t, ctx), "WorkflowsFastPath",
+				"extras must join with the harness feature set or the claim gate is compiled out")
+		}
 
 		registry := task.NewTaskRegistry()
 		require.NoError(t, registry.AddWorkflowN("dedup-disseminationcluster", workflowFn))
