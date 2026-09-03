@@ -76,11 +76,30 @@ func (w *restart) Run(t *testing.T, ctx context.Context) {
 		)
 	}
 
+	// gate holds the completion turn hostage on daprd1 so the kill always
+	// wins the race against the fast-path drive; it is closed only once
+	// daprd1 is dead, making the lost wake (and janitor recovery) deterministic.
+	gate := make(chan struct{})
 	registry := task.NewTaskRegistry()
 	require.NoError(t, registry.AddWorkflowN("WaitForGo", func(c *task.WorkflowContext) (any, error) {
 		if err := c.WaitForSingleEvent("go", time.Minute*3).Await(new([]byte)); err != nil {
 			return nil, err
 		}
+		<-gate
+		return "done", nil
+	}))
+
+	// daprd1's app blocks the resumed turn forever, so the raised event can
+	// never commit before the kill: the recovery MUST come from daprd2's
+	// janitor rather than racing daprd1's local drive against the shutdown.
+	block := make(chan struct{})
+	t.Cleanup(func() { close(block) })
+	registry1 := task.NewTaskRegistry()
+	require.NoError(t, registry1.AddWorkflowN("WaitForGo", func(c *task.WorkflowContext) (any, error) {
+		if err := c.WaitForSingleEvent("go", time.Minute*3).Await(new([]byte)); err != nil {
+			return nil, err
+		}
+		<-block
 		return "done", nil
 	}))
 
@@ -89,7 +108,7 @@ func (w *restart) Run(t *testing.T, ctx context.Context) {
 	daprd1.WaitUntilRunning(t, ctx)
 
 	client1 := client.NewTaskHubGrpcClient(daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
-	require.NoError(t, client1.StartWorkItemListener(ctx, registry))
+	require.NoError(t, client1.StartWorkItemListener(ctx, registry1))
 
 	resp, err := daprd1.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
 		WorkflowComponent: "dapr",
@@ -110,7 +129,8 @@ func (w *restart) Run(t *testing.T, ctx context.Context) {
 		EventName:         "go",
 	})
 	require.NoError(t, err)
-	daprd1.Cleanup(t)
+	daprd1.Kill(t)
+	close(gate)
 
 	daprd2 := newDaprd()
 	daprd2.Run(t, ctx)

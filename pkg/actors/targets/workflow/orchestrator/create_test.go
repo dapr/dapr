@@ -334,6 +334,124 @@ func Test_createWorkflowInstance_pendingStartSameParentReasserts(t *testing.T) {
 	require.Equal(t, []string{"create:" + wantName}, h.ops)
 }
 
+// parentWithExec returns a startEventFor mutate hook attaching a
+// ParentInstanceInfo whose WorkflowInstance carries the given ExecutionId, or
+// none when execID is empty.
+func parentWithExec(execID string) func(*protos.ExecutionStartedEvent) {
+	return func(es *protos.ExecutionStartedEvent) {
+		pi := &protos.ParentInstanceInfo{
+			TaskScheduledId:  3,
+			WorkflowInstance: &protos.WorkflowInstance{InstanceId: "parent-1"},
+		}
+		if execID != "" {
+			pi.WorkflowInstance.ExecutionId = wrapperspb.String(execID)
+		}
+		es.ParentInstance = pi
+	}
+}
+
+func Test_createWorkflowInstance_sameParentSameExecutionDedups(t *testing.T) {
+	const instanceID = "test-parent-same-exec"
+
+	h := newCreateHarness(t, instanceID)
+	h.primePendingStart(startEventFor(instanceID, time.Now().Add(-time.Minute), parentWithExec("exec-a")))
+	h.armedReminder = &actorapi.Reminder{Name: "start-es-1"}
+
+	// A crash-replay duplicate carries the same parent ExecutionId and is
+	// ignored exactly as when no ExecutionId is present at all.
+	incoming := startEventFor(instanceID, time.Now(), parentWithExec("exec-a"))
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	assert.Empty(t, h.ops)
+}
+
+func Test_createWorkflowInstance_parentExecutionMismatchAlreadyExists(t *testing.T) {
+	const instanceID = "test-parent-exec-mismatch"
+
+	// A differing parent ExecutionId means the parent continued-as-new (or was
+	// recreated) and scheduled a genuinely new child colliding with a live
+	// child of a previous execution. It must fail with AlreadyExists so the
+	// parent's child task is faulted, never silently deduplicated. The
+	// reminder-missing variant proves the pending-start re-drive gate does not
+	// resurrect the OLD execution's start either.
+	for name, armed := range map[string]*actorapi.Reminder{
+		"reminder armed":   {Name: "start-es-1"},
+		"reminder missing": nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newCreateHarness(t, instanceID)
+			h.primePendingStart(startEventFor(instanceID, time.Now().Add(-time.Minute), parentWithExec("exec-a")))
+			h.armedReminder = armed
+
+			incoming := startEventFor(instanceID, time.Now(), parentWithExec("exec-b"))
+			err := h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming))
+			require.Error(t, err)
+			assert.Equal(t, codes.AlreadyExists, status.Code(err))
+			assert.Contains(t, err.Error(), "already exists")
+			assert.Contains(t, err.Error(), "previous execution")
+
+			h.lock.Lock()
+			defer h.lock.Unlock()
+			assert.Empty(t, h.ops, "a colliding create from a new parent execution must not save or re-arm the old execution's start")
+		})
+	}
+}
+
+func Test_createWorkflowInstance_parentExecutionNilEitherSideDedups(t *testing.T) {
+	const instanceID = "test-parent-exec-nil"
+
+	// A missing ExecutionId on either side (older persisted state, rerun-path
+	// creations that omit it) must keep today's conservative dedup.
+	for name, execs := range map[string]struct{ saved, incoming string }{
+		"saved set, incoming nil": {saved: "exec-a", incoming: ""},
+		"saved nil, incoming set": {saved: "", incoming: "exec-b"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newCreateHarness(t, instanceID)
+			h.primePendingStart(startEventFor(instanceID, time.Now().Add(-time.Minute), parentWithExec(execs.saved)))
+			h.armedReminder = &actorapi.Reminder{Name: "start-es-1"}
+
+			incoming := startEventFor(instanceID, time.Now(), parentWithExec(execs.incoming))
+			require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+
+			h.lock.Lock()
+			defer h.lock.Unlock()
+			assert.Empty(t, h.ops)
+		})
+	}
+}
+
+func Test_sameParentExecution(t *testing.T) {
+	pi := func(execID string) *protos.ParentInstanceInfo {
+		p := &protos.ParentInstanceInfo{
+			WorkflowInstance: &protos.WorkflowInstance{InstanceId: "parent-1"},
+		}
+		if execID != "" {
+			p.WorkflowInstance.ExecutionId = wrapperspb.String(execID)
+		}
+		return p
+	}
+
+	tests := map[string]struct {
+		existing *protos.ParentInstanceInfo
+		incoming *protos.ParentInstanceInfo
+		want     bool
+	}{
+		"both nil":  {existing: pi(""), incoming: pi(""), want: true},
+		"a nil":     {existing: pi(""), incoming: pi("x"), want: true},
+		"b nil":     {existing: pi("x"), incoming: pi(""), want: true},
+		"equal":     {existing: pi("x"), incoming: pi("x"), want: true},
+		"different": {existing: pi("x"), incoming: pi("y"), want: false},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, sameParentExecution(tc.existing, tc.incoming))
+		})
+	}
+}
+
 func Test_createWorkflowInstance_pendingStartWithRaisedEventStillReasserts(t *testing.T) {
 	const instanceID = "test-pending-raised"
 
