@@ -14,6 +14,8 @@ limitations under the License.
 package reconciler
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -51,14 +53,7 @@ func Test_workflowAccessPolicies_recompileBeforeStore(t *testing.T) {
 		},
 	}
 
-	policy := wfaclapi.WorkflowAccessPolicy{
-		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "WorkflowAccessPolicy"},
-		ObjectMeta: metav1.ObjectMeta{Name: "p1"},
-		Spec: wfaclapi.WorkflowAccessPolicySpec{Rules: []wfaclapi.WorkflowAccessPolicyRule{{
-			Callers:   []wfaclapi.WorkflowCaller{{AppID: "caller"}},
-			Workflows: []wfaclapi.WorkflowRule{{Name: "wf", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule}}},
-		}}},
-	}
+	policy := testPolicy("p1", "caller")
 
 	require.NoError(t, w.update(t.Context(), policy))
 	assert.Equal(t, []string{"p1"}, names())
@@ -69,4 +64,48 @@ func Test_workflowAccessPolicies_recompileBeforeStore(t *testing.T) {
 	assert.Empty(t, listedAtSwap[0], "the policy must be enforced before the store lists it")
 	assert.Equal(t, []string{"p1"}, listedAtSwap[1], "the store must list the policy until it is no longer enforced")
 	assert.Equal(t, []bool{true, false}, callerListed)
+}
+
+// Reconciles of a batch run concurrently; every policy of the batch must be
+// in the enforced set once the batch is done.
+func Test_workflowAccessPolicies_concurrentUpdates(t *testing.T) {
+	t.Parallel()
+
+	store := compstore.New()
+	var mu sync.Mutex
+	var last *workflowacl.CompiledPolicies
+	w := &workflowAccessPolicies{
+		appID: "target",
+		store: store,
+		recompiler: func(cp *workflowacl.CompiledPolicies) {
+			mu.Lock()
+			defer mu.Unlock()
+			last = cp
+		},
+	}
+
+	const n = 8
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Go(func() {
+			assert.NoError(t, w.update(t.Context(), testPolicy(fmt.Sprintf("p%d", i), fmt.Sprintf("caller%d", i))))
+		})
+	}
+	wg.Wait()
+
+	require.Len(t, store.ListWorkflowAccessPolicies(), n)
+	for i := range n {
+		assert.Truef(t, last.ListsCaller(fmt.Sprintf("caller%d", i)), "caller%d missing from the enforced set", i)
+	}
+}
+
+func testPolicy(name, caller string) wfaclapi.WorkflowAccessPolicy {
+	return wfaclapi.WorkflowAccessPolicy{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "WorkflowAccessPolicy"},
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: wfaclapi.WorkflowAccessPolicySpec{Rules: []wfaclapi.WorkflowAccessPolicyRule{{
+			Callers:   []wfaclapi.WorkflowCaller{{AppID: caller}},
+			Workflows: []wfaclapi.WorkflowRule{{Name: "wf", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule}}},
+		}}},
+	}
 }

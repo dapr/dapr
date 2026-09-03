@@ -15,6 +15,7 @@ package reconciler
 
 import (
 	"context"
+	"sync"
 
 	"k8s.io/utils/clock"
 
@@ -42,6 +43,7 @@ type workflowAccessPolicies struct {
 	appID      string
 	store      *compstore.ComponentStore
 	recompiler PolicyRecompiler
+	lock       sync.Mutex
 	loader.Loader[wfaclapi.WorkflowAccessPolicy]
 }
 
@@ -83,6 +85,9 @@ func (w *workflowAccessPolicies) update(ctx context.Context, policy wfaclapi.Wor
 		return nil
 	}
 
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
 	all := w.store.ListWorkflowAccessPolicies()
 	replaced := false
 	for i, p := range all {
@@ -100,6 +105,9 @@ func (w *workflowAccessPolicies) update(ctx context.Context, policy wfaclapi.Wor
 }
 
 func (w *workflowAccessPolicies) delete(_ context.Context, policy wfaclapi.WorkflowAccessPolicy) error {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
 	all := w.store.ListWorkflowAccessPolicies()
 	remaining := make([]wfaclapi.WorkflowAccessPolicy, 0, len(all))
 	for _, p := range all {
