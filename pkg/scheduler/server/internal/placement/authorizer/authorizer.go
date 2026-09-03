@@ -14,11 +14,13 @@ limitations under the License.
 package authorizer
 
 import (
+	"context"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/hostauthz"
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/security"
 )
 
@@ -36,22 +38,19 @@ func New(opts Options) *Authorizer {
 	}
 }
 
-func (a *Authorizer) Host(stream v1pb.Placement_ReportDaprStatusServer, msg *v1pb.Host) error {
+// Host authorizes an ActorHost report against the stream's SPIFFE identity.
+func (a *Authorizer) Host(ctx context.Context, msg *schedulerv1pb.ActorHost) error {
 	if msg == nil {
 		return status.Errorf(codes.InvalidArgument, "received nil host report")
 	}
 
-	if msg.GetOperation() == v1pb.HostOperation_UNKNOWN && msg.Version != nil {
-		return status.Errorf(codes.InvalidArgument, "both operation and version must be set or both must be unset")
+	if len(msg.GetAddress()) == 0 || len(msg.GetAppId()) == 0 || len(msg.GetNamespace()) == 0 {
+		return status.Errorf(codes.InvalidArgument, "host address, app ID and namespace must be provided")
 	}
 
-	if len(msg.GetId()) == 0 || len(msg.GetNamespace()) == 0 {
-		return status.Errorf(codes.InvalidArgument, "host ID and namespace must be provided")
-	}
-
-	return hostauthz.Authorize(stream.Context(), a.sec, hostauthz.Report{
-		AppID:      msg.GetId(),
+	return hostauthz.Authorize(ctx, a.sec, hostauthz.Report{
+		AppID:      msg.GetAppId(),
 		Namespace:  msg.GetNamespace(),
-		ActorTypes: msg.GetEntities(),
+		ActorTypes: msg.GetActorTypes(),
 	})
 }
