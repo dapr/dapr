@@ -61,12 +61,11 @@ func NewWorkflowAccessPolicies(opts WorkflowAccessPolicyOptions) *Reconciler[wfa
 	return r
 }
 
-// recompileAll fetches all policies from the compstore, filters by app scope,
-// compiles them, and atomically swaps them on the gRPC API.
-//
-//nolint:unused
-func (w *workflowAccessPolicies) recompileAll() {
-	all := w.store.ListWorkflowAccessPolicies()
+// recompile filters the given policies by app scope, compiles them and
+// atomically swaps them on the gRPC API. Callers pass the prospective policy
+// set and mutate the compstore only afterwards: metadata lists the compstore,
+// and a policy listed there must already be enforced.
+func (w *workflowAccessPolicies) recompile(all []wfaclapi.WorkflowAccessPolicy) {
 	var scoped []wfaclapi.WorkflowAccessPolicy
 	for _, p := range all {
 		if p.IsAppScoped(w.appID) {
@@ -78,24 +77,37 @@ func (w *workflowAccessPolicies) recompileAll() {
 	log.Infof("Recompiled %d workflow access policy resource(s) (of %d total)", len(scoped), len(all))
 }
 
-// The go linter does not yet understand that these functions are being used by
-// the generic reconciler.
-//
-//nolint:unused
 func (w *workflowAccessPolicies) update(ctx context.Context, policy wfaclapi.WorkflowAccessPolicy) error {
 	if err := validate.WorkflowAccessPolicy(ctx, &policy); err != nil {
 		log.Warnf("WorkflowAccessPolicy %q failed validation, skipping: %s", policy.Name, err)
 		return nil
 	}
 
+	all := w.store.ListWorkflowAccessPolicies()
+	replaced := false
+	for i, p := range all {
+		if p.Name == policy.Name {
+			all[i] = policy
+			replaced = true
+		}
+	}
+	if !replaced {
+		all = append(all, policy)
+	}
+	w.recompile(all)
 	w.store.AddWorkflowAccessPolicy(policy)
-	w.recompileAll()
 	return nil
 }
 
-//nolint:unused
 func (w *workflowAccessPolicies) delete(_ context.Context, policy wfaclapi.WorkflowAccessPolicy) error {
+	all := w.store.ListWorkflowAccessPolicies()
+	remaining := make([]wfaclapi.WorkflowAccessPolicy, 0, len(all))
+	for _, p := range all {
+		if p.Name != policy.Name {
+			remaining = append(remaining, p)
+		}
+	}
+	w.recompile(remaining)
 	w.store.DeleteWorkflowAccessPolicy(policy.Name)
-	w.recompileAll()
 	return nil
 }
