@@ -289,6 +289,8 @@ func Test_runWorkflow_terminalTurnSavesBeforeParentNotify(t *testing.T) {
 	t.Run("a purge landing on the terminal save aborts before the notify", func(t *testing.T) {
 		t.Parallel()
 		h := newCompletingHarness(t)
+		seen := "etag-seen"
+		h.orch.state.SetMetadataETag(&seen)
 		h.purged.Store(true)
 		// Under the actor lock as in the invoke path, so the deactivation
 		// this branch queues is ordered after the turn.
@@ -299,6 +301,17 @@ func Test_runWorkflow_terminalTurnSavesBeforeParentNotify(t *testing.T) {
 		require.ErrorIs(t, err, api.ErrInstanceNotFound)
 		assert.Equal(t, todo.RunCompletedFalse, completed)
 		assert.Equal(t, []string{"save+notify"}, h.snapshot(), "the parent must not learn of a completion whose state is gone")
+	})
+
+	t.Run("a new instance whose row is not readable yet is not a purge", func(t *testing.T) {
+		t.Parallel()
+		h := newCompletingHarness(t)
+		h.purged.Store(true)
+		completed, err := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-er-1"})
+		require.NoError(t, err)
+		assert.Equal(t, todo.RunCompletedTrue, completed)
+		assert.Equal(t, []string{"save+notify", "call:" + todo.AddWorkflowEventMethod, "save-notify"}, h.snapshot(),
+			"a store without read-your-writes must not fail a create that persisted")
 	})
 
 	t.Run("failed notify keeps the marker and arms the retry reminder", func(t *testing.T) {
@@ -578,4 +591,18 @@ func Test_addWorkflowEvent_staleCacheDoesNotAckChildCompletion(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, wferrors.IsRecoverable(err), "the sender must retry against a fresh load, not be acked off stale state")
 	assert.Nil(t, h.orch.state, "the stale cache is dropped")
+}
+
+func Test_attestationInput(t *testing.T) {
+	t.Parallel()
+
+	started := &protos.ExecutionStartedEvent{Input: wrapperspb.String(`"gen2"`)}
+	state := wfenginestate.NewState(wfenginestate.Options{AppID: "testapp", WorkflowActorType: "dapr.internal.default.testapp.workflow", ActivityActorType: "dapr.internal.default.testapp.activity"})
+	assert.Equal(t, `"gen2"`, attestationInput(state, started).GetValue(), "no ContinueAsNew: the start input")
+
+	state.SetCreationInput(wrapperspb.String(`"original"`))
+	assert.Equal(t, `"original"`, attestationInput(state, started).GetValue(), "after ContinueAsNew: the input the parent created the child with")
+
+	state.SetCreationInput(nil)
+	assert.Empty(t, attestationInput(state, started).GetValue(), "a child created without input attests an empty input, not the continued one")
 }

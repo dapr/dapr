@@ -172,7 +172,10 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 			log.Debugf("Workflow actor '%s': ignoring duplicate child workflow creation for a completed child whose completion is still pending", o.actorID)
 			return nil
 		}
-		return status.Errorf(codes.AlreadyExists, "a workflow with ID '%s' has completed but its parent has not acknowledged the completion yet", o.actorID)
+		// Unavailable rather than AlreadyExists: a parent that continued as
+		// new and reuses the id retries, and its current execution acks the
+		// pending completion as a straggler, which then frees the id.
+		return status.Errorf(codes.Unavailable, "a workflow with ID '%s' has completed but its parent has not acknowledged the completion yet", o.actorID)
 	}
 
 	// An ID is reusable only once the previous execution's entire child

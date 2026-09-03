@@ -523,12 +523,12 @@ func Test_createWorkflowInstance_completedChildWithPendingNotification(t *testin
 		assert.Empty(t, h.ops, "no reset, no new start")
 	})
 
-	t.Run("any other creation is refused until the parent acknowledged", func(t *testing.T) {
+	t.Run("any other creation is refused, retryably, until the parent acknowledged", func(t *testing.T) {
 		h := prime(t)
 		incoming := startEventFor(instanceID, time.Now(), parentWithExec("exec-b"))
 		err := h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming))
 		require.Error(t, err)
-		assert.Equal(t, codes.AlreadyExists, status.Code(err))
+		assert.Equal(t, codes.Unavailable, status.Code(err))
 		h.lock.Lock()
 		defer h.lock.Unlock()
 		assert.Empty(t, h.ops)

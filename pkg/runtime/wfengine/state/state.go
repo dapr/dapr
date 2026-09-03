@@ -54,6 +54,7 @@ const (
 	MetadataKey          = "metadata"
 	propagatedHistoryKey = "propagated-history"
 	parentNotifyKey      = "parent-notify"
+	creationInputKey     = "creation-input"
 
 	// maxStateEntries is the upper bound for any metadata count field
 	// (inbox, history, signatures, own signing certificates, external
@@ -112,6 +113,12 @@ type State struct {
 	// failed delivery in between re-sends from durable history.
 	ParentNotifyPending bool
 
+	// CreationInput is the input the parent created this child with, kept
+	// from the first ContinueAsNew on: the parent verifies the completion
+	// attestation against it, while the current generation's start event
+	// carries the continued input. nil until a ContinueAsNew.
+	CreationInput *wrapperspb.StringValue
+
 	// externalCertDigestIndex maps SHA-256 cert digests (raw 32-byte digest
 	// converted to a string for use as a map key, not hex-encoded) to their
 	// index in ExternalSigningCertificates. Built on load and maintained
@@ -146,6 +153,8 @@ type State struct {
 	propagatedHistoryPersisted bool
 	parentNotifyPersisted      bool
 	parentNotifyChanged        bool
+	creationInputPersisted     bool
+	creationInputChanged       bool
 
 	// change tracking
 	inboxAddedCount                         int
@@ -215,6 +224,10 @@ func (s *State) Reset() {
 		s.ParentNotifyPending = false
 		s.parentNotifyChanged = true
 	}
+	if s.CreationInput != nil || s.creationInputPersisted {
+		s.CreationInput = nil
+		s.creationInputChanged = true
+	}
 	s.Generation++
 }
 
@@ -234,6 +247,10 @@ func (s *State) ResetChangeTracking() {
 	if s.parentNotifyChanged {
 		s.parentNotifyPersisted = s.ParentNotifyPending
 		s.parentNotifyChanged = false
+	}
+	if s.creationInputChanged {
+		s.creationInputPersisted = s.CreationInput != nil
+		s.creationInputChanged = false
 	}
 
 	s.inboxAddedCount = 0
@@ -257,6 +274,19 @@ func (s *State) SetIncomingHistory(ph *protos.PropagatedHistory) {
 	s.incomingHistoryChanged = true
 }
 
+// SetCreationInput keeps the input the parent created this child with across
+// ContinueAsNew. A nil input is kept as an empty value so the rebuild can
+// tell "no input" from "not recorded".
+func (s *State) SetCreationInput(in *wrapperspb.StringValue) {
+	if in == nil {
+		in = &wrapperspb.StringValue{}
+	}
+	if s.CreationInput == nil || s.CreationInput.GetValue() != in.GetValue() {
+		s.creationInputChanged = true
+	}
+	s.CreationInput = in
+}
+
 // SetParentNotifyPending records whether the parent still has to be told
 // about this workflow's completion.
 func (s *State) SetParentNotifyPending(pending bool) {
@@ -277,6 +307,11 @@ func (s *State) MetadataETag() *string {
 // save to record the new row-version token returned by a follow-up
 // metadata-only Get, so the next save can present it as the prior ETag for
 // the optimistic-concurrency check.
+// MetadataETagSeen reports whether the store has ever returned an ETag for
+// this instance's metadata row, so a missing row can be told from a store
+// that has not served the row yet.
+func (s *State) MetadataETagSeen() bool { return s.metadataETagSeen }
+
 func (s *State) SetMetadataETag(etag *string) {
 	s.metadataETag = etag
 	if etag != nil {
@@ -490,7 +525,7 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		s.signingCertificatesAddedCount + s.signingCertificatesRemovedCount +
 		s.externalSigningCertificatesAddedCount + s.externalSigningCertificatesRemovedCount +
 		s.signaturesAddedCount + s.signaturesRemovedCount +
-		2 // customStatus + metadata
+		4 // customStatus + metadata + parent-notify + creation-input
 	req := &api.TransactionalRequest{
 		ActorType:  s.workflowActorType,
 		ActorID:    actorID,
@@ -569,6 +604,23 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 			req.Operations = append(req.Operations, api.TransactionalOperation{
 				Operation: api.Delete,
 				Request:   api.TransactionalDelete{Key: parentNotifyKey},
+			})
+		}
+	}
+	if s.creationInputChanged {
+		if s.CreationInput != nil {
+			data, err := proto.Marshal(s.CreationInput)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal creation input: %w", err)
+			}
+			req.Operations = append(req.Operations, api.TransactionalOperation{
+				Operation: api.Upsert,
+				Request:   api.TransactionalUpsert{Key: creationInputKey, Value: data},
+			})
+		} else if s.creationInputPersisted {
+			req.Operations = append(req.Operations, api.TransactionalOperation{
+				Operation: api.Delete,
+				Request:   api.TransactionalDelete{Key: creationInputKey},
 			})
 		}
 	}
@@ -868,7 +920,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 	wState.ExternalSigningCertificates = make([]*backend.ExternalSigningCertificate, 0, extSigningCertLen)
 	wState.Signatures = make([]*backend.HistorySignature, 0, signatureLen)
 
-	totalKeys := inboxLen + historyLen + signingCertLen + extSigningCertLen + signatureLen + 3
+	totalKeys := inboxLen + historyLen + signingCertLen + extSigningCertLen + signatureLen + 4
 	bulkReq := &api.GetBulkStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,
@@ -882,6 +934,8 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 	bulkReq.Keys[n] = propagatedHistoryKey
 	n++
 	bulkReq.Keys[n] = parentNotifyKey
+	n++
+	bulkReq.Keys[n] = creationInputKey
 	n++
 
 	for i := range metadata.GetInboxLength() {
@@ -1071,6 +1125,14 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 		wState.ParentNotifyPending = true
 		wState.parentNotifyPersisted = true
 	}
+	if ci := bulkRes[creationInputKey]; ci.ETag != nil || len(ci.Data) > 0 {
+		var in wrapperspb.StringValue
+		if err = proto.Unmarshal(ci.Data, &in); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal creation input for '%s': %w", actorID, err)
+		}
+		wState.CreationInput = &in
+		wState.creationInputPersisted = true
+	}
 
 	wfLogger.Debugf("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))
 
@@ -1227,7 +1289,9 @@ func MarkAsTamperFailed(ctx context.Context, astate state.Interface, actorID str
 	if metaErr != nil || metaRes == nil {
 		// Unknown version: the next save is refused by GetSaveRequest until
 		// the state is reloaded, rather than blind-upserted.
+		// Blind upsert stays acceptable for a tombstoned, terminal instance.
 		s.metadataETag = nil
+		s.metadataETagSeen = false
 	} else {
 		s.SetMetadataETag(metaRes.ETag)
 	}
@@ -1327,7 +1391,7 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 		ActorType: s.workflowActorType,
 		ActorID:   actorID,
 		// Initial capacity should be enough to contain the entire inbox, history, signing data, and custom status + metadata
-		Operations: make([]api.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+len(s.SigningCertificates)+len(s.ExternalSigningCertificates)+len(s.Signatures)+3),
+		Operations: make([]api.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+len(s.SigningCertificates)+len(s.ExternalSigningCertificates)+len(s.Signatures)+5),
 	}
 
 	addPurgeStateOperations(req, inboxKeyPrefix, len(s.Inbox))
@@ -1353,6 +1417,12 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Delete,
 			Request:   api.TransactionalDelete{Key: parentNotifyKey},
+		})
+	}
+	if s.creationInputPersisted {
+		req.Operations = append(req.Operations, api.TransactionalOperation{
+			Operation: api.Delete,
+			Request:   api.TransactionalDelete{Key: creationInputKey},
 		})
 	}
 

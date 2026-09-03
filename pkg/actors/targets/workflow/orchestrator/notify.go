@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -49,21 +50,6 @@ func (o *orchestrator) newParentNotify(state *wfenginestate.State, msgs []*backe
 		md[todo.MetadataParentExecutionID] = []string{pe}
 	}
 	return parentNotify{msgs: msgs, md: md, name: started.GetName()}
-}
-
-// notifyParent delivers this workflow's completion to its parent after the
-// terminal save committed and clears the parent-notify row that save wrote.
-// While the row is present the parent has not acknowledged: a crash or a
-// failed delivery leaves it, and any later fire re-sends from durable
-// history; purge and recreate are refused meanwhile. A failed delivery arms
-// a durable reminder and returns recoverable so the refire re-sends.
-//
-// The row is not signature covered. Deleting it forges "delivered", which
-// deleting the parent's inbox row already achieves; forging it yields a
-// re-send the parent drops by task id and verifies against this workflow's
-// signed history.
-func (o *orchestrator) notifyParent(ctx context.Context, state *wfenginestate.State, msgs []*backend.WorkflowRuntimeStateMessage) error {
-	return o.deliverParentNotify(ctx, state, o.newParentNotify(state, msgs), true)
 }
 
 // deliverParentNotify sends the notification, bounded so a lock cycle with a
@@ -174,7 +160,7 @@ func (o *orchestrator) parentNotification(ctx context.Context, state *wfenginest
 	if err := o.signing.AttachChildCompletionAttestation(ctx, evt, signing.ChildAttestationParams{
 		ParentInstanceID:      parentID,
 		ParentTaskScheduledID: parent.GetTaskScheduledId(),
-		Input:                 started.GetInput(),
+		Input:                 attestationInput(state, started),
 	}); err != nil {
 		return nil, err
 	}
@@ -190,4 +176,14 @@ func (o *orchestrator) assertParentNotifyReminder(workflowName string) error {
 	ctx, cancel := context.WithTimeout(o.rootCtx, escalateTimeout)
 	defer cancel()
 	return o.createWorkflowReminderForever(ctx, reminderNameParentNotify, nil, time.Now(), o.appID, &workflowName)
+}
+
+// attestationInput is the input the parent verifies a child completion
+// against: the one it created the child with. After a ContinueAsNew the start
+// event carries the continued input, so the kept creation input wins.
+func attestationInput(state *wfenginestate.State, started *protos.ExecutionStartedEvent) *wrapperspb.StringValue {
+	if state.CreationInput != nil {
+		return state.CreationInput
+	}
+	return started.GetInput()
 }
