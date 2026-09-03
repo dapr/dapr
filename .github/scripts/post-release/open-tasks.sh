@@ -11,20 +11,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Open the post-release-day tasks for a Dapr release.
+# Start the post-release-day tasks for a Dapr release.
 #
-# The tasks live in tasks.json. For each task this script opens one issue in
-# the target repository and assigns the Copilot coding agent where the
-# repository supports it.
+# For each task in tasks.json this script starts a Copilot cloud agent task in
+# the target repository. The agent makes the change and opens the pull request.
 #
-# The script is safe to run again. It searches for an open issue with the same
-# title before it creates one.
+# The agent tasks API needs a user-to-server token, and the account behind that
+# token needs a Copilot seat. When the call fails, the script opens a normal
+# issue instead, so the task is never lost.
 #
 # Usage: open-tasks.sh <version>
 #   version   the released Dapr version, without a leading v, for example 1.18.4
 #
 # Environment:
-#   GITHUB_TOKEN   a token that can open issues in every target repository
+#   GITHUB_TOKEN   a user-to-server token that can reach every target repository
 #   DRY_RUN        set to true to print the plan and change nothing
 
 set -euo pipefail
@@ -36,30 +36,32 @@ DRY_RUN="${DRY_RUN:-false}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TASKS="${SCRIPT_DIR}/tasks.json"
 
-# The Copilot coding agent is a bot. It can only be assigned through GraphQL,
-# and only in repositories where the organisation enabled it.
-copilot_bot_id() {
-    local owner="$1" name="$2"
-    gh api graphql -f query='
-        query($owner:String!,$name:String!){
-          repository(owner:$owner,name:$name){
-            suggestedActors(capabilities:[CAN_BE_ASSIGNED],first:100){
-              nodes{ login ... on Bot { id } }
-            }
-          }
-        }' -F owner="$owner" -F name="$name" \
-        --jq '.data.repository.suggestedActors.nodes[]
-              | select(.login=="copilot-swe-agent") | .id' 2>/dev/null || true
+API_VERSION_HEADER="X-GitHub-Api-Version: 2022-11-28"
+
+# True when the repository already has an agent task or an open pull request
+# for this version. Keeps a re-run from starting the work twice.
+already_started() {
+    local repo="$1" version="$2"
+
+    if gh api "/agents/repos/${repo}/tasks" -H "$API_VERSION_HEADER" \
+        --jq ".tasks[]? | select(.state != \"failed\" and .state != \"cancelled\")
+              | select(.name | test(\"${version}\"; \"x\")) | .id" 2>/dev/null | grep -q .; then
+        return 0
+    fi
+
+    if gh pr list --repo "$repo" --state open --search "$version in:title" \
+        --json number --jq 'length' 2>/dev/null | grep -qv '^0$'; then
+        return 0
+    fi
+
+    return 1
 }
 
-assign_copilot() {
-    local repo="$1" issue_id="$2" bot_id="$3"
-    gh api graphql -f query='
-        mutation($assignable:ID!,$actor:ID!){
-          replaceActorsForAssignable(input:{assignableId:$assignable,actorIds:[$actor]}){
-            assignable { ... on Issue { number } }
-          }
-        }' -F assignable="$issue_id" -F actor="$bot_id" >/dev/null
+start_agent_task() {
+    local repo="$1" base="$2" prompt="$3"
+    jq -n --arg p "$prompt" --arg b "$base" \
+        '{prompt:$p, base_ref:$b, create_pull_request:true}' \
+    | gh api -X POST "/agents/repos/${repo}/tasks" -H "$API_VERSION_HEADER" --input - 2>&1
 }
 
 failed=0
@@ -67,56 +69,43 @@ total=$(jq 'length' "$TASKS")
 
 for i in $(seq 0 $((total - 1))); do
     repo=$(jq -r ".[$i].repo" "$TASKS")
-    want_copilot=$(jq -r ".[$i].assign_copilot" "$TASKS")
+    base=$(jq -r ".[$i].base" "$TASKS")
     title=$(jq -r ".[$i].title" "$TASKS" | sed "s/VERSION/${VERSION}/g")
     body=$(jq -r ".[$i].body" "$TASKS" | sed "s/VERSION/${VERSION}/g")
-    owner="${repo%%/*}"
-    name="${repo##*/}"
+    prompt="${title}"$'\n\n'"${body}"
 
     echo "::group::${repo}"
 
-    # Do not open a second issue when one already exists for this version.
-    existing=$(gh issue list --repo "$repo" --state open --search "\"$title\" in:title" \
-        --json number,title --jq "[.[] | select(.title==\"$title\") | .number] | first // empty" 2>/dev/null || true)
-    if [ -n "$existing" ]; then
-        echo "issue already open: ${repo}#${existing}"
+    if already_started "$repo" "$VERSION"; then
+        echo "a task or pull request for ${VERSION} already exists, skipping"
         echo "::endgroup::"
         continue
     fi
 
     if [ "$DRY_RUN" = "true" ]; then
-        echo "would open: ${title}"
-        echo "would assign copilot: ${want_copilot}"
+        echo "would start a Copilot agent task on ${repo} (base ${base})"
+        echo "prompt starts: ${title}"
         echo "::endgroup::"
         continue
     fi
 
-    if ! url=$(gh issue create --repo "$repo" --title "$title" --body "$body" 2>&1); then
-        echo "::error::could not open an issue in ${repo}: ${url}"
-        failed=1
-        echo "::endgroup::"
-        continue
-    fi
-    echo "opened ${url}"
-
-    if [ "$want_copilot" != "true" ]; then
+    if out=$(start_agent_task "$repo" "$base" "$prompt"); then
+        url=$(echo "$out" | jq -r '.html_url // empty' 2>/dev/null || true)
+        echo "started a Copilot agent task${url:+: $url}"
         echo "::endgroup::"
         continue
     fi
 
-    bot_id=$(copilot_bot_id "$owner" "$name")
-    if [ -z "$bot_id" ]; then
-        echo "::warning::the Copilot coding agent is not available in ${repo}, the issue stays unassigned"
-        echo "::endgroup::"
-        continue
-    fi
+    # The agent could not be started. Common causes are a repository without
+    # the Copilot coding agent, or a token that is not user-to-server.
+    echo "::warning::could not start a Copilot agent task on ${repo}, opening an issue instead"
+    echo "$out" | head -3
 
-    number="${url##*/}"
-    issue_id=$(gh api "repos/${repo}/issues/${number}" --jq '.node_id')
-    if assign_copilot "$repo" "$issue_id" "$bot_id"; then
-        echo "assigned the Copilot coding agent"
+    if issue=$(gh issue create --repo "$repo" --title "$title" --body "$body" 2>&1); then
+        echo "opened ${issue}"
     else
-        echo "::warning::could not assign the Copilot coding agent in ${repo}"
+        echo "::error::could not open an issue in ${repo} either: ${issue}"
+        failed=1
     fi
     echo "::endgroup::"
 done

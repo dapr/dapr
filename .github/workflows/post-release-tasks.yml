@@ -14,8 +14,8 @@
 name: Post release tasks
 
 # The post-release-day list sits at the bottom of the endgame issue, so it is
-# easy to miss. This workflow opens one issue per task in the target repository
-# and assigns the Copilot coding agent where the organisation enabled it.
+# easy to miss. This workflow starts a Copilot cloud agent task in each target
+# repository. The agent makes the change and opens the pull request.
 on:
   release:
     types: [published]
@@ -35,7 +35,7 @@ permissions: {}
 
 jobs:
   open-tasks:
-    name: Open the post-release tasks
+    name: Start the post-release tasks
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -101,12 +101,14 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "run=true" >> "$GITHUB_OUTPUT"
 
-      - name: Open the tasks
+      - name: Start the tasks
         if: steps.version.outputs.run == 'true'
         env:
-          # The issues land in other repositories, so the built-in token is not
-          # enough. DAPR_BOT_TOKEN must be able to open issues in every
-          # repository named in tasks.json.
+          # The agent tasks API only accepts a user-to-server token, so the
+          # built-in GITHUB_TOKEN cannot be used. DAPR_BOT_TOKEN must belong to
+          # an account that holds a Copilot seat and can reach every repository
+          # named in tasks.json. Without a seat the script falls back to
+          # opening an issue.
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           DRY_RUN: ${{ inputs.dry_run || 'false' }}
         run: ./.github/scripts/post-release/open-tasks.sh "${{ steps.version.outputs.version }}"
