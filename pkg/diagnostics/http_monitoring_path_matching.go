@@ -92,7 +92,10 @@ func (pm *pathMatching) match(path string) (string, bool) {
 	}
 
 	cleanPath := NormalizeHTTPPath(path)
-	req, _ := http.NewRequest(http.MethodGet, cleanPath, nil)
+	req, err := http.NewRequest(http.MethodGet, cleanPath, nil)
+	if err != nil {
+		return "", false
+	}
 	if req.URL != nil {
 		req.URL.Path = cleanPath
 	}
