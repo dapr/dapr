@@ -570,6 +570,17 @@ func (d *Daprd) Restart(t *testing.T, ctx context.Context) {
 	d.exec.Run(t, ctx)
 }
 
+// RestartGraceful is Restart with an interrupt and exit wait instead of a hard
+// kill, for tests that need the shutdown path (actor HaltAll, drains) to run
+// before the new process starts.
+func (d *Daprd) RestartGraceful(t *testing.T, ctx context.Context) {
+	t.Helper()
+	clone := d.exec.Clone(t)
+	d.exec.Cleanup(t)
+	d.exec = clone
+	d.exec.Run(t, ctx)
+}
+
 // ReplaceArg sets `--<flag>=<value>` on the daprd command line for the next
 // Run/Restart, replacing any existing occurrence of that flag. Existing args
 // remain in place, so this is safe to call between Kill and Restart.
@@ -581,4 +592,20 @@ func (d *Daprd) ReplaceArg(t *testing.T, flag, value string) {
 func (d *Daprd) SignalHUP(t *testing.T) {
 	t.Helper()
 	d.exec.SignalHUP(t)
+}
+
+// WaitUntilActorTypeHosted blocks until the actor runtime reports actorType
+// among its hosted types. A restarted daprd re-registers its actor types
+// after it becomes healthy, so an invocation right after WaitUntilRunning can
+// find the type unregistered.
+func (d *Daprd) WaitUntilActorTypeHosted(t *testing.T, ctx context.Context, actorType string) {
+	t.Helper()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		for _, a := range d.GetMetaActorRuntime(c, ctx).ActiveActors {
+			if a.Type == actorType {
+				return
+			}
+		}
+		assert.Fail(c, "actor type not hosted yet", actorType)
+	}, time.Second*20, time.Millisecond*10)
 }

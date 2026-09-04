@@ -167,7 +167,7 @@ func Test_addWorkflowEvent_dedupReAssertsReminder(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, o.addWorkflowEvent(t.Context(), incoming))
+	require.NoError(t, o.addWorkflowEvent(t.Context(), incoming, completionSender{}))
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -279,7 +279,7 @@ func Test_addWorkflowEvent_unknownTaskIDDroppedNotTombstoned(t *testing.T) {
 		},
 	}
 
-	err = o.addWorkflowEvent(t.Context(), incoming)
+	err = o.addWorkflowEvent(t.Context(), incoming, completionSender{})
 	require.ErrorIs(t, err, api.ErrInstanceNotFound)
 
 	assert.False(t, wfState.HasTamperMarker(),

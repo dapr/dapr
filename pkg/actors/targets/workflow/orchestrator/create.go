@@ -148,6 +148,20 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		return fmt.Errorf("a terminated workflow with ID '%s' is already awaiting an activity result", o.actorID)
 	}
 
+	if state.ParentNotifyPending {
+		// The parent re-dispatching the creation that produced this instance
+		// (a crash before it saved) is a replay, not a new workflow: the
+		// completion it is owed is pending and re-sent by its driver.
+		if same, _ := o.isSameParentCreation(state, startEvent); same {
+			log.Debugf("Workflow actor '%s': ignoring duplicate child workflow creation for a completed child whose completion is still pending", o.actorID)
+			return nil
+		}
+		// Unavailable rather than AlreadyExists: a parent that continued as
+		// new and reuses the id retries, and its current execution acks the
+		// pending completion as a straggler, which then frees the id.
+		return status.Errorf(codes.Unavailable, "a workflow with ID '%s' has completed but its parent has not acknowledged the completion yet", o.actorID)
+	}
+
 	// An ID is reusable only once the previous execution's entire child
 	// workflow tree is terminal: a still-running descendant could deliver
 	// events from the old execution into the new one.
