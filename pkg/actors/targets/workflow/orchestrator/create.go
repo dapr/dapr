@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api"
@@ -96,7 +97,7 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 	// We block (re)creation of existing workflows unless they are in a completed state
 	// Or if they still have any pending activity result awaited.
 	if !runtimestate.IsCompleted(rs) {
-		pending := pendingStartEvent(state)
+		pending := pendingstart.Event(state)
 
 		// This happens when the parent's runWorkflow created the child workflow
 		// successfully but crashed before persisting its own state, causing it to
@@ -108,14 +109,8 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 			// If the child saved its state but its start reminder was never
 			// armed (the save-first create failed), this retry is the only
 			// driver: re-assert idempotently from the SAVED event.
-			if pending != nil {
-				missing, err := o.startReminderMissing(ctx, pending)
-				if err != nil {
-					return err
-				}
-				if missing {
-					return o.assertStartReminder(ctx, pending)
-				}
+			if pending != nil && o.startReminderNeedsReassert(ctx, pending) {
+				return o.assertStartReminder(ctx, pending)
 			}
 			return nil
 		}
@@ -129,18 +124,13 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		// so the deterministic name must come from the saved one) and report
 		// success. The reminder-missing check is what distinguishes a
 		// stranded start from a concurrent duplicate create of an identical
-		// workflow, which must keep failing with AlreadyExists: actor
-		// invocations serialize, so a healthy duplicate always observes the
-		// first create's reminder.
-		if pending != nil && isSameLogicalStart(pending.GetExecutionStarted(), startEvent.GetExecutionStarted()) {
-			missing, err := o.startReminderMissing(ctx, pending)
-			if err != nil {
-				return err
-			}
-			if missing {
-				log.Infof("Workflow actor '%s': re-driving pending start for saved-but-never-run workflow", o.actorID)
-				return o.assertStartReminder(ctx, pending)
-			}
+		// workflow, which keeps failing with AlreadyExists while the check
+		// can reach the scheduler: actor invocations serialize, so a healthy
+		// duplicate always observes the first create's reminder.
+		if pending != nil && isSameLogicalStart(pending.GetExecutionStarted(), startEvent.GetExecutionStarted()) &&
+			o.startReminderNeedsReassert(ctx, pending) {
+			log.Infof("Workflow actor '%s': re-driving pending start for saved-but-never-run workflow", o.actorID)
+			return o.assertStartReminder(ctx, pending)
 		}
 
 		if parentExecMismatch {
@@ -232,27 +222,21 @@ func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *ba
 	return o.assertStartReminder(ctx, startEvent)
 }
 
-// pendingStartEvent returns the ExecutionStarted inbox event of a workflow
-// that was created (state durably saved) but has never executed a turn:
-// history is empty and the inbox holds an ExecutionStarted. The inbox may
-// also hold EventRaised rows (RaiseEvent against a pending instance), so only
-// the presence of the ExecutionStarted is required. Returns nil otherwise.
-func pendingStartEvent(state *wfenginestate.State) *backend.HistoryEvent {
-	if len(state.History) > 0 {
-		return nil
+// startReminderNeedsReassert reports whether the pending start's reminder is
+// absent from the scheduler, or the check itself failed. It fails open because
+// the outage that loses a start reminder is the one that makes the check fail,
+// and re-asserting an armed reminder is a harmless overwrite-by-name.
+func (o *orchestrator) startReminderNeedsReassert(ctx context.Context, saved *backend.HistoryEvent) bool {
+	missing, err := o.startReminderMissing(ctx, saved)
+	if err != nil {
+		log.Warnf("Workflow actor '%s': cannot verify the pending start reminder, re-asserting it: %v", o.actorID, err)
+		return true
 	}
-	for _, e := range state.Inbox {
-		if e.GetExecutionStarted() != nil {
-			return e
-		}
-	}
-	return nil
+	return missing
 }
 
 // startReminderMissing reports whether the pending start's wake-up reminder
-// is absent from the scheduler. Get errors are propagated so a transient
-// scheduler failure surfaces as a retryable error to the caller rather than
-// either a spurious re-drive or a permanent-looking AlreadyExists.
+// is absent from the scheduler.
 func (o *orchestrator) startReminderMissing(ctx context.Context, saved *backend.HistoryEvent) (bool, error) {
 	rem, err := o.reminders.Get(ctx, &actorapi.GetReminderRequest{
 		Name:      events.EventReminderName(reminderPrefixStart, saved),

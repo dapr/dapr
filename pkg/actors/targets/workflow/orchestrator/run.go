@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -725,21 +726,8 @@ func (*orchestrator) recordWorkflowSchedulingLatency(ctx context.Context, esHist
 		return
 	}
 
-	// If the event is an execution started event, then we need to record the scheduled start timestamp
-	if es := esHistoryEvent.GetExecutionStarted(); es != nil {
-		currentTimestamp := time.Now()
-		var scheduledStartTimestamp time.Time
-		timestamp := es.GetScheduledStartTimestamp()
-
-		if timestamp != nil {
-			scheduledStartTimestamp = timestamp.AsTime()
-		} else {
-			// if scheduledStartTimestamp is nil, then use the event timestamp to consider scheduling latency
-			// This case will happen when the workflow is created and started immediately
-			scheduledStartTimestamp = esHistoryEvent.GetTimestamp().AsTime()
-		}
-
-		wfSchedulingLatency := float64(currentTimestamp.Sub(scheduledStartTimestamp).Milliseconds())
+	if esHistoryEvent.GetExecutionStarted() != nil {
+		wfSchedulingLatency := float64(time.Since(pendingstart.DueTime(esHistoryEvent)).Milliseconds())
 		diag.DefaultWorkflowMonitoring.WorkflowSchedulingLatency(ctx, workflowName, wfSchedulingLatency)
 	}
 }
@@ -1004,15 +992,7 @@ func filterValidInboxEvents(state *wfenginestate.State) []*backend.HistoryEvent 
 // inbox events with an empty history and no pending ExecutionStarted. The
 // shape only arises when the committed start was lost.
 func isUnstartableState(state *wfenginestate.State) bool {
-	if len(state.Inbox) == 0 || len(state.History) != 0 {
-		return false
-	}
-	for _, e := range state.Inbox {
-		if e.GetExecutionStarted() != nil {
-			return false
-		}
-	}
-	return true
+	return len(state.Inbox) > 0 && len(state.History) == 0 && pendingstart.Event(state) == nil
 }
 
 // failUnstartableWorkflow commits a FAILED completion describing the dropped
