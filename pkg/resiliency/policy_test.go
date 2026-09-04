@@ -178,19 +178,19 @@ func TestPolicyTimeout(t *testing.T) {
 		name      string
 		sleepTime time.Duration
 		timeout   time.Duration
-		expected  bool
+		wantErr   bool
 	}{
 		{
 			name:      "Timeout expires",
 			sleepTime: time.Millisecond * 100,
 			timeout:   time.Millisecond * 10,
-			expected:  false,
+			wantErr:   true,
 		},
 		{
 			name:      "Timeout OK",
 			sleepTime: time.Millisecond * 10,
 			timeout:   time.Millisecond * 100,
-			expected:  true,
+			wantErr:   false,
 		},
 	}
 
@@ -209,9 +209,17 @@ func TestPolicyTimeout(t *testing.T) {
 				name: "timeout",
 				t:    test.timeout,
 			})
-			policy(fn)
+			_, err := policy(fn)
 
-			assert.Equal(t, test.expected, called.Load())
+			if test.wantErr {
+				assert.ErrorIs(t, err, context.DeadlineExceeded)
+			} else {
+				assert.NoError(t, err)
+			}
+			// The operation goroutine is always joined before the policy
+			// returns, even on timeout: this prevents the operation from
+			// outliving a caller that owns its resources (dapr/dapr#10371).
+			assert.True(t, called.Load())
 		})
 	}
 }
