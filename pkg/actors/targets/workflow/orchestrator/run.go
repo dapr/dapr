@@ -314,49 +314,58 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	case completed := <-callback:
 		if !completed {
 			// The engine abandoned this work item (e.g. MaxContinueAsNewCount
-			// exceeded). The engine's ContinueAsNew tight-loop may have
-			// overwritten o.rstate via the shared wi.State pointer
-			// (*s = *newState in the applier). If CAN progress was made,
-			// persist it to the state store so it survives actor
-			// deactivation. Carryover events (unprocessed EventRaised
-			// events from the CAN state) are moved to the Inbox so they
-			// become NewEvents on retry. The stale inbox (which contained
-			// ALL original events including those already consumed) is
-			// replaced to prevent duplicate event delivery.
+			// exceeded, or the execution result was lost). The engine's
+			// ContinueAsNew tight-loop may have overwritten o.rstate via the
+			// shared wi.State pointer (*s = *newState in the applier). If CAN
+			// progress was made, persist the newest generation as a pending
+			// start, exactly like a fresh creation: empty history, its
+			// ExecutionStarted in the inbox followed by any carryover
+			// (unprocessed EventRaised events from the CAN state), and a start
+			// reminder to drive it. The consumed inbox is discarded: it holds
+			// the previous generation's events, and re-delivering those into
+			// the new generation lets a stale resolution be persisted ahead of
+			// an operation of the new generation that reuses its event ID.
+			// Keeping the generation's ExecutionStarted in history instead
+			// would leave the retry with an empty inbox and nothing to run.
 			// If no CAN progress was made (non-CAN failure), restore the
 			// pre-engine snapshot so the cached state stays consistent.
 			if wi.State.GetContinuedAsNew() {
-				// Separate carryover EventRaised events from the CAN
-				// execution events (WorkflowStarted, ExecutionStarted).
-				// Carryover events must go into the Inbox so they become
-				// NewEvents on retry. If they stay in History (as
-				// OldEvents) alongside the original Inbox events
-				// (NewEvents), the engine would buffer both sets and the
-				// workflow would process duplicate events.
 				canNewEvents := wi.State.GetNewEvents()
-				filtered := make([]*backend.HistoryEvent, 0, len(canNewEvents))
+				var startEvent *backend.HistoryEvent
 				var carryover []*backend.HistoryEvent
 				for _, e := range canNewEvents {
-					if e.GetEventRaised() != nil {
+					switch {
+					case e.GetExecutionStarted() != nil:
+						startEvent = e
+					case e.GetEventRaised() != nil:
 						carryover = append(carryover, e)
-					} else {
-						filtered = append(filtered, e)
 					}
 				}
-
-				// Temporarily swap NewEvents so ApplyRuntimeStateChanges
-				// only writes the CAN execution events to History.
-				if len(carryover) > 0 {
-					wi.State.NewEvents = filtered
-					state.ApplyRuntimeStateChanges(wi.State)
-					wi.State.NewEvents = canNewEvents
-
-					state.ClearInbox()
-					for _, e := range carryover {
-						state.AddToInbox(e)
+				if startEvent == nil && wi.State.GetStartEvent() != nil {
+					startEvent = &protos.HistoryEvent{
+						EventId:   -1,
+						Timestamp: timestamppb.Now(),
+						EventType: &protos.HistoryEvent_ExecutionStarted{
+							ExecutionStarted: wi.State.GetStartEvent(),
+						},
 					}
-				} else {
-					state.ApplyRuntimeStateChanges(wi.State)
+				}
+				if startEvent == nil {
+					o.invalidateCachedState()
+					return todo.RunCompletedFalse, errors.New("continued-as-new runtime state has no ExecutionStarted event")
+				}
+
+				// Apply the CAN reset (history, certificates, signatures)
+				// without writing any of the new generation's events to
+				// history: they are re-created when the pending start runs.
+				wi.State.NewEvents = nil
+				state.ApplyRuntimeStateChanges(wi.State)
+				wi.State.NewEvents = canNewEvents
+
+				state.ClearInbox()
+				state.AddToInbox(startEvent)
+				for _, e := range carryover {
+					state.AddToInbox(e)
 				}
 
 				state.Generation++
@@ -368,10 +377,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 					state.SetIncomingHistory(wi.IncomingHistory)
 				}
 
-				// Save the carryover BEFORE creating its wake-up reminder,
-				// mirroring AddWorkflowEvent: a reminder created first can
-				// fire remotely against un-saved state, ack SUCCESS and be
-				// deleted, stranding the carryover once the save commits.
+				// Save BEFORE creating the wake-up reminder, mirroring
+				// scheduleWorkflowStart: a reminder created first can fire on
+				// another host before the save commits, ack SUCCESS off the
+				// old state and be deleted, stranding the pending start.
 				if err = o.signAndSaveState(ctx, state); err != nil {
 					// signAndSaveState already invalidated the cache.
 					return todo.RunCompletedFalse, err
@@ -395,35 +404,14 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 					o.deleteStartReminder(esHistoryEvent)
 				}
 
-				if len(carryover) > 0 {
-					reminderName := events.EventReminderName(reminderPrefixNewEvent, carryover[0])
-					if o.fastPath {
-						// Fast path: janitor + local drive instead of the
-						// durable per-event reminder (falling back to it if
-						// the janitor cannot be ensured). The subsequent
-						// recoverable ErrExecutionAborted return also
-						// propagates to the wake goroutine driving THIS
-						// turn, whose escalation then re-arms a durable
-						// reminder for the original event; that re-arm is
-						// redundant with this drive but idempotent and
-						// self-cleaning (empty-inbox ack).
-						if jerr := o.ensureJanitor(ctx, state); jerr != nil {
-							if err = o.createWorkflowReminder(ctx, reminderName, nil, time.Now(), o.appID, &workflowName); err != nil {
-								return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
-							}
-						}
-						o.localDrive(reminderName, time.Now(), workflowName)
-					} else {
-						if err = o.createWorkflowReminder(ctx, reminderName, nil, time.Now(), o.appID, &workflowName); err != nil {
-							// The carryover is already durable in the inbox; a
-							// recoverable error FAILs this reminder invocation, so
-							// the driving reminder refires and the reloaded state
-							// re-runs the new generation normally. The cache is
-							// consistent with the store post-save, so it is not
-							// invalidated.
-							return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
-						}
-					}
+				// Drive the pending start like a fresh creation. The pending
+				// start is already durable in the inbox; a recoverable error
+				// FAILs this reminder invocation, so the driving reminder
+				// refires and the reloaded state runs the new generation
+				// normally. The cache is consistent with the store post-save,
+				// so it is not invalidated.
+				if err = o.assertStartReminder(ctx, startEvent); err != nil {
+					return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
 				}
 			} else {
 				// Non-CAN abandon: the engine may have mutated the shared
