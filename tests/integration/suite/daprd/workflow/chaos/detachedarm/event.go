@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package chaos
+package detachedarm
 
 import (
 	"context"
@@ -37,22 +37,22 @@ import (
 )
 
 func init() {
-	suite.Register(new(eventclaimcancel))
+	suite.Register(new(event))
 }
 
-// eventclaimcancel is the external-event counterpart of startclaimcancel: a
+// event is the external-event counterpart of start: a
 // RaiseEvent commits its inbox row while the Scheduler is unreachable and a
 // dissemination cancels the claim context before the new-event reminder is
 // registered. The client sees an error and never re-raises. The event must
 // still be delivered once the Scheduler is reachable again.
-type eventclaimcancel struct {
+type event struct {
 	workflow  *workflow.Workflow
 	scheduler *scheduler.Scheduler
 	proxy     *proxy.Proxy
 	appID     string
 }
 
-func (e *eventclaimcancel) Setup(t *testing.T) []framework.Option {
+func (e *event) Setup(t *testing.T) []framework.Option {
 	if workflow.FastPathFromEnv() {
 		t.Skip("WorkflowsFastPath drives the external-event wake-up locally and never issues the per-event ScheduleJob this test arms a failure on")
 	}
@@ -70,10 +70,10 @@ func (e *eventclaimcancel) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (e *eventclaimcancel) Run(t *testing.T, ctx context.Context) {
+func (e *event) Run(t *testing.T, ctx context.Context) {
 	e.workflow.WaitUntilRunning(t, ctx)
 
-	const wfID = "eventclaimcancel-wf"
+	const wfID = "event-wf"
 	wfFn := func(octx *task.WorkflowContext) (any, error) {
 		if err := octx.WaitForSingleEvent("go", -1).Await(nil); err != nil {
 			return nil, err

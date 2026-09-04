@@ -27,21 +27,17 @@ func Test_Runner(t *testing.T) {
 
 	t.Run("runs on the root context and waits", func(t *testing.T) {
 		t.Parallel()
-		ctx, cancel := context.WithCancel(t.Context())
-		r := New(ctx)
+		r := New(t.Context())
 
 		var ran atomic.Int32
-		var sawRoot atomic.Bool
 		for range 3 {
-			require.True(t, r.Go(func(c context.Context) {
+			require.True(t, r.Go(func(ctx context.Context) {
 				ran.Add(1)
-				sawRoot.Store(c == ctx)
+				assert.NoError(t, ctx.Err())
 			}))
 		}
 		r.Wait()
 		assert.Equal(t, int32(3), ran.Load())
-		assert.True(t, sawRoot.Load(), "fn must receive the root context")
-		cancel()
 	})
 
 	t.Run("does not start once the root context is done", func(t *testing.T) {
@@ -54,5 +50,55 @@ func Test_Runner(t *testing.T) {
 			require.Fail(t, "must not run after shutdown")
 		}))
 		r.Wait()
+	})
+
+	t.Run("close cancels in-flight work and refuses new work", func(t *testing.T) {
+		t.Parallel()
+		r := New(t.Context())
+
+		entered := make(chan struct{})
+		var cancelled atomic.Bool
+		require.True(t, r.Go(func(ctx context.Context) {
+			close(entered)
+			<-ctx.Done()
+			cancelled.Store(true)
+		}))
+		<-entered
+		r.Close()
+		assert.True(t, cancelled.Load())
+		assert.False(t, r.Go(func(context.Context) {}))
+	})
+
+	t.Run("keyed work is deduplicated while in flight", func(t *testing.T) {
+		t.Parallel()
+		r := New(t.Context())
+
+		release := make(chan struct{})
+		entered := make(chan struct{})
+		var runs atomic.Int32
+		started, inflight := r.GoKeyed("k", func(context.Context) {
+			runs.Add(1)
+			close(entered)
+			<-release
+		})
+		require.True(t, started)
+		require.False(t, inflight)
+		<-entered
+
+		started, inflight = r.GoKeyed("k", func(context.Context) { runs.Add(1) })
+		assert.False(t, started)
+		assert.True(t, inflight)
+		assert.True(t, r.InFlight("k"))
+
+		close(release)
+		r.Wait()
+		assert.Equal(t, int32(1), runs.Load())
+		assert.False(t, r.InFlight("k"))
+
+		started, inflight = r.GoKeyed("k", func(context.Context) { runs.Add(1) })
+		assert.True(t, started)
+		assert.False(t, inflight)
+		r.Wait()
+		assert.Equal(t, int32(2), runs.Load())
 	})
 }

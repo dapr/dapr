@@ -39,19 +39,23 @@ import (
 	"github.com/dapr/kit/concurrency"
 )
 
-func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.State, *backend.WorkflowMetadata, error) {
-	// See if the state for this actor is already cached in memory
-	if o.state != nil {
-		return o.state, o.ometa, nil
-	}
-
-	opts := wfenginestate.Options{
+func (o *orchestrator) stateOptions() wfenginestate.Options {
+	return wfenginestate.Options{
 		AppID:             o.appID,
 		Namespace:         o.namespace,
 		WorkflowActorType: o.actorType,
 		ActivityActorType: o.activityActorType,
 		Signer:            o.signer,
 	}
+}
+
+func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.State, *backend.WorkflowMetadata, error) {
+	// See if the state for this actor is already cached in memory
+	if o.state != nil {
+		return o.state, o.ometa, nil
+	}
+
+	opts := o.stateOptions()
 
 	// state is not cached, so try to load it from the state store
 	state, err := wfenginestate.LoadWorkflowState(ctx, o.actorState, o.actorID, opts)

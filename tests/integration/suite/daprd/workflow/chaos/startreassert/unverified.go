@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package chaos
+package startreassert
 
 import (
 	"context"
@@ -34,22 +34,22 @@ import (
 )
 
 func init() {
-	suite.Register(new(startreassertunverified))
+	suite.Register(new(unverified))
 }
 
-// startreassertunverified: the workflow API retries a create whose start
+// unverified: the workflow API retries a create whose start
 // reminder registration failed, and the retry re-asserts the reminder from
 // the saved start after checking the Scheduler for it. That check must fail
 // open: when the Scheduler cannot be asked, the retry re-asserts anyway.
 // Previously the failed check aborted the retry, so the outage that lost the
 // reminder also blocked its recovery.
-type startreassertunverified struct {
+type unverified struct {
 	workflow  *workflow.Workflow
 	scheduler *scheduler.Scheduler
 	proxy     *proxy.Proxy
 }
 
-func (s *startreassertunverified) Setup(t *testing.T) []framework.Option {
+func (s *unverified) Setup(t *testing.T) []framework.Option {
 	s.scheduler = scheduler.New(t)
 	s.proxy = proxy.New(t, s.scheduler)
 	s.workflow = workflow.New(t,
@@ -65,10 +65,10 @@ func (s *startreassertunverified) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (s *startreassertunverified) Run(t *testing.T, ctx context.Context) {
+func (s *unverified) Run(t *testing.T, ctx context.Context) {
 	s.workflow.WaitUntilRunning(t, ctx)
 
-	const wfID = "startreassertunverified-wf"
+	const wfID = "unverified-wf"
 	require.NoError(t, s.workflow.Registry().AddWorkflowN("wf", func(*task.WorkflowContext) (any, error) {
 		return "started", nil
 	}))
@@ -84,13 +84,11 @@ func (s *startreassertunverified) Run(t *testing.T, ctx context.Context) {
 	s.proxy.ArmFailures(proxy.MethodGetJob, 1_000_000, codes.Unavailable, getFailed)
 	t.Cleanup(func() { s.proxy.ArmFailures(proxy.MethodGetJob, 0, codes.Unavailable, nil) })
 
-	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	_, err := gclient.StartWorkflowBeta1(cctx, &rtv1.StartWorkflowRequest{
+	_, err := gclient.StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
 		WorkflowComponent: "dapr",
 		WorkflowName:      "wf",
 		InstanceId:        wfID,
 	})
-	cancel()
 	require.NoError(t, err, "the create retry must re-assert the start reminder when its check is inconclusive")
 	for name, ch := range map[string]chan struct{}{"ScheduleJob": scheduleFailed, "GetJob": getFailed} {
 		select {

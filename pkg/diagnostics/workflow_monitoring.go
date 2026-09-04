@@ -96,8 +96,9 @@ const (
 	// A wake-up reminder create failed after its inbox row was committed and
 	// was handed to a detached retry, or that retry gave up; ~0 in healthy
 	// steady state.
-	StatusArmDetached       = "reminder_arm_detached"
-	StatusArmDetachedFailed = "reminder_arm_detached_failed"
+	StatusArmDetached        = "reminder_arm_detached"
+	StatusArmDetachedFailed  = "reminder_arm_detached_failed"
+	StatusArmDetachedSkipped = "reminder_arm_detached_skipped_shutdown"
 	// A status read re-asserted the start reminder of an overdue pending
 	// start; ~0 in healthy steady state.
 	StatusPendingStartRedriven = "pending_start_redriven"

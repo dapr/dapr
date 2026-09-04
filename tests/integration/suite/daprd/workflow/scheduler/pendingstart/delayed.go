@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scheduler
+package pendingstart
 
 import (
 	"context"
@@ -34,18 +34,18 @@ import (
 )
 
 func init() {
-	suite.Register(new(pendingstartdelayed))
+	suite.Register(new(delayed))
 }
 
-// pendingstartdelayed: the status-read re-drive of a pending start measures
+// delayed: the status-read re-drive of a pending start measures
 // overdue from the scheduled start, not the creation time. A delayed start
 // whose reminder was lost must stay PENDING until its scheduled time plus the
 // grace, and be re-driven after it.
-type pendingstartdelayed struct {
+type delayed struct {
 	workflow *workflow.Workflow
 }
 
-func (p *pendingstartdelayed) Setup(t *testing.T) []framework.Option {
+func (p *delayed) Setup(t *testing.T) []framework.Option {
 	p.workflow = workflow.New(t,
 		workflow.WithDaprdOptions(0, daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_WORKFLOW_PENDING_START_REDRIVE_GRACE", "1s",
@@ -56,7 +56,7 @@ func (p *pendingstartdelayed) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (p *pendingstartdelayed) Run(t *testing.T, ctx context.Context) {
+func (p *delayed) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
 	require.NoError(t, p.workflow.Registry().AddWorkflowN("Delayed", func(*task.WorkflowContext) (any, error) {

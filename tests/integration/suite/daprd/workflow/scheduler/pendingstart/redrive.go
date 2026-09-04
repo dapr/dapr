@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scheduler
+package pendingstart
 
 import (
 	"context"
@@ -35,21 +35,21 @@ import (
 )
 
 func init() {
-	suite.Register(new(pendingstartredrive))
+	suite.Register(new(redrive))
 }
 
-// pendingstartredrive covers the recovery of a workflow whose creation was
+// redrive covers the recovery of a workflow whose creation was
 // committed but whose start reminder was never registered and whose host died
 // before it could be armed: committed state, empty history, no Scheduler job,
 // PENDING forever. The client never re-issues the create; it only reads the
 // status. Both status read paths (the direct store read behind
 // GetWorkflow, and the actor stream behind WaitForWorkflowStart) must notice
 // the overdue pending start and re-drive it.
-type pendingstartredrive struct {
+type redrive struct {
 	workflow *workflow.Workflow
 }
 
-func (p *pendingstartredrive) Setup(t *testing.T) []framework.Option {
+func (p *redrive) Setup(t *testing.T) []framework.Option {
 	p.workflow = workflow.New(t,
 		workflow.WithDaprdOptions(0, daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_WORKFLOW_PENDING_START_REDRIVE_GRACE", "1s",
@@ -60,7 +60,7 @@ func (p *pendingstartredrive) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (p *pendingstartredrive) Run(t *testing.T, ctx context.Context) {
+func (p *redrive) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
 	require.NoError(t, p.workflow.Registry().AddWorkflowN("PendingStart", func(c *task.WorkflowContext) (any, error) {
@@ -110,13 +110,11 @@ func (p *pendingstartredrive) Run(t *testing.T, ctx context.Context) {
 		const instanceID = "pending-start-redrive-wait"
 		strand(instanceID)
 
-		wctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-		meta, err := client.WaitForWorkflowStart(wctx, api.InstanceID(instanceID))
+		meta, err := client.WaitForWorkflowStart(ctx, api.InstanceID(instanceID))
 		require.NoError(t, err, "a status wait on an overdue pending start must re-drive it")
 		require.NotEqual(t, api.RUNTIME_STATUS_PENDING, meta.GetRuntimeStatus())
 
-		meta, err = client.WaitForWorkflowCompletion(wctx, api.InstanceID(instanceID))
+		meta, err = client.WaitForWorkflowCompletion(ctx, api.InstanceID(instanceID))
 		require.NoError(t, err)
 		assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 		assert.Equal(t, `"Hello, Dapr!"`, meta.GetOutput().GetValue())

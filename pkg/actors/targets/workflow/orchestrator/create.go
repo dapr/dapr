@@ -124,9 +124,9 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		// so the deterministic name must come from the saved one) and report
 		// success. The reminder-missing check is what distinguishes a
 		// stranded start from a concurrent duplicate create of an identical
-		// workflow, which must keep failing with AlreadyExists: actor
-		// invocations serialize, so a healthy duplicate always observes the
-		// first create's reminder.
+		// workflow, which keeps failing with AlreadyExists while the check
+		// can reach the scheduler: actor invocations serialize, so a healthy
+		// duplicate always observes the first create's reminder.
 		if pending != nil && isSameLogicalStart(pending.GetExecutionStarted(), startEvent.GetExecutionStarted()) &&
 			o.startReminderNeedsReassert(ctx, pending) {
 			log.Infof("Workflow actor '%s': re-driving pending start for saved-but-never-run workflow", o.actorID)

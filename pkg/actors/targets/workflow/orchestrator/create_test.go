@@ -598,8 +598,7 @@ func Test_scheduleWorkflowStart_permanentCreateFailureDoesNotArmDetached(t *test
 	h.lock.Lock()
 	defer h.lock.Unlock()
 	assert.Equal(t, []string{"save"}, h.ops, "a permanent request error is not retried detached")
-	_, inflight := h.orch.armPending.Load("start-es-1")
-	assert.False(t, inflight)
+	assert.False(t, h.orch.detached.InFlight(h.orch.actorType+"||"+instanceID+"||start-es-1"))
 }
 
 func Test_armReminderDetached_dedupsInflightName(t *testing.T) {
@@ -618,11 +617,11 @@ func Test_armReminderDetached_dedupsInflightName(t *testing.T) {
 	}
 
 	start := time.Now()
-	h.orch.armReminderDetached("start-es-1", start, "TestWorkflow")
+	h.orch.armReminderDetached("start-es-1", start, "TestWorkflow", startStillPending("start-es-1"), "")
 	<-entered
 	// Hand-offs while the first create is in flight collapse onto it.
-	h.orch.armReminderDetached("start-es-1", start, "TestWorkflow")
-	h.orch.armReminderDetached("start-es-1", start, "TestWorkflow")
+	h.orch.armReminderDetached("start-es-1", start, "TestWorkflow", startStillPending("start-es-1"), "")
+	h.orch.armReminderDetached("start-es-1", start, "TestWorkflow", startStillPending("start-es-1"), "")
 	close(release)
 
 	h.orch.detached.Wait()
@@ -630,8 +629,7 @@ func Test_armReminderDetached_dedupsInflightName(t *testing.T) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
 	assert.Equal(t, []string{"create:start-es-1"}, h.ops, "exactly one detached create per reminder name")
-	_, inflight := h.orch.armPending.Load("start-es-1")
-	assert.False(t, inflight, "the in-flight marker is cleared once the create completes")
+	assert.False(t, h.orch.detached.InFlight(h.orch.actorType+"||"+instanceID+"||start-es-1"), "the in-flight marker is cleared once the create completes")
 }
 
 func Test_createWorkflowInstance_pendingStartReminderCheckFailsOpen(t *testing.T) {
@@ -764,7 +762,7 @@ func Test_armDetachedOnCreateError_classification(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			h := newCreateHarness(t, instanceID)
-			h.orch.armDetachedOnCreateError("start-es-1", time.Now(), "TestWorkflow", test.err)
+			h.orch.armDetachedOnCreateError("start-es-1", time.Now(), "TestWorkflow", startStillPending("start-es-1"), test.err)
 			h.orch.detached.Wait()
 
 			h.lock.Lock()

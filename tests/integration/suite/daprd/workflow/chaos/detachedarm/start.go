@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package chaos
+package detachedarm
 
 import (
 	"context"
@@ -36,10 +36,10 @@ import (
 )
 
 func init() {
-	suite.Register(new(startclaimcancel))
+	suite.Register(new(start))
 }
 
-// startclaimcancel reproduces a field-reported stranding: a create commits
+// start reproduces a field-reported stranding: a create commits
 // its ExecutionStarted inbox row while the Scheduler is unreachable, and a
 // placement dissemination for the workflow actor type (a second daprd joining
 // the same app) cancels the in-flight claim context before the start reminder
@@ -47,14 +47,14 @@ func init() {
 // instance must still run once the Scheduler is reachable again: the committed
 // row needs a driver that is as durable as the row itself, not one bounded by
 // the claim context of the invocation that created it.
-type startclaimcancel struct {
+type start struct {
 	workflow  *workflow.Workflow
 	scheduler *scheduler.Scheduler
 	proxy     *proxy.Proxy
 	appID     string
 }
 
-func (s *startclaimcancel) Setup(t *testing.T) []framework.Option {
+func (s *start) Setup(t *testing.T) []framework.Option {
 	s.appID = uuid.New().String()
 	s.scheduler = scheduler.New(t)
 	s.proxy = proxy.New(t, s.scheduler)
@@ -68,10 +68,10 @@ func (s *startclaimcancel) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (s *startclaimcancel) Run(t *testing.T, ctx context.Context) {
+func (s *start) Run(t *testing.T, ctx context.Context) {
 	s.workflow.WaitUntilRunning(t, ctx)
 
-	const wfID = "startclaimcancel-wf"
+	const wfID = "start-wf"
 	wfFn := func(*task.WorkflowContext) (any, error) {
 		return "started", nil
 	}

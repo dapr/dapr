@@ -95,7 +95,7 @@ func (o *orchestrator) assertStartReminder(ctx context.Context, startEvent *back
 	workflowName := startEvent.GetExecutionStarted().GetName()
 	reminderName := events.EventReminderName(reminderPrefixStart, startEvent)
 	if err := o.createWorkflowReminder(ctx, reminderName, nil, start, o.appID, &workflowName); err != nil {
-		o.armDetachedOnCreateError(reminderName, start, workflowName, err)
+		o.armDetachedOnCreateError(reminderName, start, workflowName, startStillPending(reminderName), err)
 		return err
 	}
 
@@ -221,7 +221,7 @@ func (o *orchestrator) assertNewEventReminder(ctx context.Context, e *backend.Hi
 	// external events (RaiseEvent) lack on the sender side, unlike activity
 	// results.
 	if err := o.createWorkflowReminderForever(ctx, reminderName, nil, dueTime, o.appID, &wfName); err != nil {
-		o.armDetachedOnCreateError(reminderName, dueTime, wfName, err)
+		o.armDetachedOnCreateError(reminderName, dueTime, wfName, inboxPending, err)
 		return err
 	}
 

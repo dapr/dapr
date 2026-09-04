@@ -158,12 +158,12 @@ type Actors struct {
 	// DAPR_WORKFLOW_TEST_DUPLICATE_TURN_COMPLETIONS injection.
 	duplicatedTurnCompletions atomic.Int64
 
-	// pendingStartRedrives holds the instance IDs with a detached re-drive
-	// poke in flight; redrives runs the pokes between Start and Stop.
+	// pendingStartRedrives holds, per instance ID, the UnixNano of the last
+	// re-drive poke; detached runs the pokes and the actor factories' detached
+	// work between Start and Stop.
 	pendingStartRedrives sync.Map
-	redriveLock          sync.Mutex
-	redrives             *detached.Runner
-	redriveCancel        context.CancelFunc
+	detachedLock         sync.Mutex
+	detached             *detached.Runner
 
 	stopped atomic.Bool
 }
@@ -172,31 +172,41 @@ var _ backend.Backend = (*Actors)(nil)
 
 const pendingStartRedriveTimeout = 30 * time.Second
 
+func (abe *Actors) detachedRunner() *detached.Runner {
+	abe.detachedLock.Lock()
+	defer abe.detachedLock.Unlock()
+	return abe.detached
+}
+
 // redriveOverduePendingStart pokes the instance's workflow actor with a
 // one-shot status fetch, whose handler re-asserts an overdue pending start's
-// reminder. It runs detached, at most once in flight per instance, so the
+// reminder. It runs detached and at most once per grace per instance, so the
 // caller's store read never waits on the actor lock.
 func (abe *Actors) redriveOverduePendingStart(id api.InstanceID) {
-	abe.redriveLock.Lock()
-	redrives := abe.redrives
-	abe.redriveLock.Unlock()
-	if redrives == nil {
+	runner := abe.detachedRunner()
+	if runner == nil {
 		return
 	}
-	if _, inflight := abe.pendingStartRedrives.LoadOrStore(id, struct{}{}); inflight {
+	now := time.Now().UnixNano()
+	if last, ok := abe.pendingStartRedrives.Load(id); ok && now-last.(int64) < int64(pendingstart.RedriveGrace()) {
 		return
 	}
-	started := redrives.Go(func(ctx context.Context) {
-		defer abe.pendingStartRedrives.Delete(id)
+	abe.pendingStartRedrives.Store(id, now)
+	runner.GoKeyed("redrive||"+string(id), func(ctx context.Context) {
 		ctx, cancel := context.WithTimeout(ctx, pendingStartRedriveTimeout)
 		defer cancel()
-		if _, err := abe.getWorkflowMetadataRemote(ctx, id, abe.appID); err != nil && !errors.Is(err, api.ErrInstanceNotFound) {
-			log.Debugf("Failed to poke workflow actor '%s' to re-drive its overdue pending start: %v", id, err)
+		meta, err := abe.getWorkflowMetadataRemote(ctx, id, abe.appID)
+		if err != nil {
+			if !errors.Is(err, api.ErrInstanceNotFound) {
+				log.Debugf("Failed to poke workflow actor '%s' to re-drive its overdue pending start: %v", id, err)
+			}
+			abe.pendingStartRedrives.Delete(id)
+			return
+		}
+		if meta.GetRuntimeStatus() != protos.OrchestrationStatus_ORCHESTRATION_STATUS_PENDING {
+			abe.pendingStartRedrives.Delete(id)
 		}
 	})
-	if !started {
-		abe.pendingStartRedrives.Delete(id)
-	}
 }
 
 func New(opts Options) (*Actors, error) {
@@ -268,6 +278,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		MaxRequestBodySize:     abe.maxRequestBodySize,
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
 		FastPath:               abe.workflowsFastPath,
+		Detached:               abe.detachedRunner(),
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
@@ -283,6 +294,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 	}
 
 	aopts := activity.Options{
+		Detached:          abe.detachedRunner(),
 		AppID:             abe.appID,
 		Namespace:         abe.namespace,
 		ActivityActorType: abe.activityActorType,
@@ -964,23 +976,21 @@ func (abe *Actors) purgeWorkflowRemote(ctx context.Context, id api.InstanceID, t
 // Start implements backend.Backend
 func (abe *Actors) Start(ctx context.Context) error {
 	abe.stopped.Store(false)
-	ctx, cancel := context.WithCancel(ctx)
-	abe.redriveLock.Lock()
-	abe.redrives, abe.redriveCancel = detached.New(ctx), cancel
-	abe.redriveLock.Unlock()
+	abe.detachedLock.Lock()
+	abe.detached = detached.New(ctx)
+	abe.detachedLock.Unlock()
 	return nil
 }
 
 // Stop implements backend.Backend
 func (abe *Actors) Stop(context.Context) error {
 	abe.stopped.Store(true)
-	abe.redriveLock.Lock()
-	redrives, cancel := abe.redrives, abe.redriveCancel
-	abe.redrives, abe.redriveCancel = nil, nil
-	abe.redriveLock.Unlock()
-	if cancel != nil {
-		cancel()
-		redrives.Wait()
+	abe.detachedLock.Lock()
+	runner := abe.detached
+	abe.detached = nil
+	abe.detachedLock.Unlock()
+	if runner != nil {
+		runner.Close()
 	}
 	return nil
 }

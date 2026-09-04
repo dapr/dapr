@@ -66,6 +66,10 @@ type Options struct {
 	// their run-activity reminder (WorkflowsFastPath preview feature).
 	FastPath bool
 
+	// Detached runs the drive-failure escalations on the runtime lifetime
+	// rather than this registration's. Nil creates one bounded by ctx.
+	Detached *detached.Runner
+
 	// ExecutionHeld reports whether the durabletask engine on this host
 	// currently holds a completion registration for the given activity work
 	// item, i.e. the work item is dispatched (or awaiting the app) and its
@@ -144,6 +148,11 @@ type factory struct {
 }
 
 func New(ctx context.Context, opts Options) (targets.Factory, error) {
+	det := opts.Detached
+	if det == nil {
+		det = detached.New(ctx)
+	}
+
 	router, err := opts.Actors.Router(ctx)
 	if err != nil {
 		return nil, err
@@ -195,7 +204,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		driveCtx:               driveCtx,
 		driveCancel:            driveCancel,
 		rootCtx:                ctx,
-		detached:               detached.New(ctx),
+		detached:               det,
 		router:                 router,
 		reminders:              sreminders,
 		scheduler:              opts.Scheduler,
