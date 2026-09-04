@@ -213,20 +213,21 @@ The Helm chart has the follow configuration options that can be supplied:
 ### Dapr Sentry options:
 | Parameter | Description | Default |
 |---|---|---|
-| `dapr_sentry.replicaCount`          | Number of replicas                                                                                                                                      | `1`                     |
-| `dapr_sentry.logLevel`              | Log level                                                                                                                                               | `info`                  |
-| `dapr_sentry.image.name`            | Docker image name (`global.registry/dapr_sentry.image.name`)                                                                                            | `sentry`                  |
-| `dapr_sentry.tls.issuer.certPEM`    | Issuer Certificate cert                                                                                                                                 | `""`                    |
-| `dapr_sentry.tls.issuer.keyPEM`     | Issuer Private Key cert                                                                                                                                 | `""`                    |
-| `dapr_sentry.tls.root.certPEM`      | Root Certificate cert                                                                                                                                   | `""`                    |
-| `dapr_sentry.runAsNonRoot`          | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube                                          | `true` |
-| `dapr_sentry.resources`             | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty       | `{}` |
-| `dapr_sentry.debug.enabled`         | Boolean value for enabling debug mode                                                                                                                   | `{}` |
-| `dapr_sentry.deploymentAnnotations` | Custom annotations for Dapr Sentry Deployment                                                                                                           | `{}`    |
-| `dapr_sentry.service.annotations`   | Custom annotations for "dapr-sentry" Service resource | `{}` |
-| `dapr_sentry.service.type`          | Type for "dapr-sentry" Service resource (e.g. `ClusterIP`, `LoadBalancer`, etc) | `ClusterIP` |
-| `dapr_sentry.extraArgs`             | List of additional command-line args appended to the sentry container (for flags not exposed as dedicated values) | `[]` |
-| `dapr_placement.extraEnvVars`       | Map of (name, value) tuples to use as extra environment variables (e.g. `my-env-var: "my-val"`, etc)                                                     | `{}`        |
+| `dapr_sentry.replicaCount`             | Number of replicas                                                                                                                                      | `1`                     |
+| `dapr_sentry.logLevel`                 | Log level                                                                                                                                               | `info`                  |
+| `dapr_sentry.image.name`               | Docker image name (`global.registry/dapr_sentry.image.name`)                                                                                            | `sentry`                  |
+| `dapr_sentry.tls.generateBundleSecret` | Boolean value to generate the `dapr-trust-bundle` Secret and ConfigMap. If set to `false` then the Secret and ConfigMap should be supplied. Note that you can run the chart initially with `generateBundleSecret` set to `true` and then switch to `false` to preserve the initial certificate                                                                                                                             | `true`  
+| `dapr_sentry.tls.issuer.certPEM`       | Issuer Certificate cert                                                                                                                                 | `""`                    |
+| `dapr_sentry.tls.issuer.keyPEM`        | Issuer Private Key cert                                                                                                                                 | `""`                    |
+| `dapr_sentry.tls.root.certPEM`         | Root Certificate cert                                                                                                                                   | `""`                    |
+| `dapr_sentry.runAsNonRoot`             | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube                                          | `true` |
+| `dapr_sentry.resources`                | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty       | `{}` |
+| `dapr_sentry.debug.enabled`            | Boolean value for enabling debug mode                                                                                                                   | `{}` |
+| `dapr_sentry.deploymentAnnotations`    | Custom annotations for Dapr Sentry Deployment                                                                                                           | `{}`    |
+| `dapr_sentry.service.annotations`      | Custom annotations for "dapr-sentry" Service resource | `{}` |
+| `dapr_sentry.service.type`             | Type for "dapr-sentry" Service resource (e.g. `ClusterIP`, `LoadBalancer`, etc) | `ClusterIP` |
+| `dapr_sentry.extraArgs`                | List of additional command-line args appended to the sentry container (for flags not exposed as dedicated values) | `[]` |
+| `dapr_placement.extraEnvVars`          | Map of (name, value) tuples to use as extra environment variables (e.g. `my-env-var: "my-val"`, etc)                                                     | `{}`        |
 
 ### Dapr Sidecar Injector options:
 | Parameter                                                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Default                                                                                                                                                                                                                   |
