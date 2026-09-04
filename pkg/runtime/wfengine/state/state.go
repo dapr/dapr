@@ -1184,13 +1184,26 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 		wState.parentNotifyPersisted = true
 	}
 	if ci := bulkRes[creationInputKey]; ci.ETag != nil || len(ci.Data) > 0 {
-		var row creationInputRow
-		if err = json.Unmarshal(ci.Data, &row); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal creation input for '%s': %w", actorID, err)
-		}
-		wState.CreationInput = wrapperspb.String(row.Input)
-		wState.creationInputParent = row.creationParent
 		wState.creationInputPersisted = true
+		var row creationInputRow
+		if err = json.Unmarshal(ci.Data, &row); err == nil {
+			wState.CreationInput = wrapperspb.String(row.Input)
+			wState.creationInputParent = row.creationParent
+		} else {
+			// An unstamped row written as a bare StringValue by the first
+			// binary that kept the input: adopt it for the current creation
+			// and let the next save rewrite it stamped.
+			var legacy wrapperspb.StringValue
+			if perr := proto.Unmarshal(ci.Data, &legacy); perr != nil {
+				return nil, fmt.Errorf("failed to unmarshal creation input for '%s': %w", actorID, err)
+			}
+			parent := executionStartedOf(wState.History, wState.Inbox).GetParentInstance()
+			if parent == nil {
+				wState.ClearCreationInput()
+			} else {
+				wState.setCreationInput(&legacy, parent)
+			}
+		}
 	}
 
 	wfLogger.Debugf("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))

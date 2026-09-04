@@ -87,14 +87,16 @@ func notifyCompletedEvent(status protos.OrchestrationStatus) *backend.HistoryEve
 // notifyHarness records saves (tagged with the parent-notify operation they
 // carry), parent AddWorkflowEvent calls and reminder creates, in order.
 type notifyHarness struct {
-	lock      sync.Mutex
-	ops       []string
-	calls     []*internalv1pb.InternalInvokeRequest
-	callErr   error
-	purged    atomic.Bool
-	staleETag atomic.Bool
-	rows      map[string][]byte
-	orch      *orchestrator
+	lock       sync.Mutex
+	ops        []string
+	calls      []*internalv1pb.InternalInvokeRequest
+	callErr    error
+	purged     atomic.Bool
+	confirmErr atomic.Bool
+	metaReads  atomic.Int32
+	staleETag  atomic.Bool
+	rows       map[string][]byte
+	orch       *orchestrator
 }
 
 func (h *notifyHarness) saveTag(req *actorapi.TransactionalRequest) string {
@@ -138,6 +140,9 @@ func newNotifyHarness(t *testing.T, history, inbox []*backend.HistoryEvent, pend
 		WithGetFn(func(_ context.Context, req *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
 			if req.Key == wfenginestate.MetadataKey {
 				if h.purged.Load() {
+					if h.confirmErr.Load() && h.metaReads.Add(1) > 1 {
+						return nil, errors.New("store unavailable")
+					}
 					return &actorapi.StateResponse{}, nil
 				}
 				if h.staleETag.Load() {
@@ -301,6 +306,20 @@ func Test_runWorkflow_terminalTurnSavesBeforeParentNotify(t *testing.T) {
 		require.ErrorIs(t, err, api.ErrInstanceNotFound)
 		assert.Equal(t, todo.RunCompletedFalse, completed)
 		assert.Equal(t, []string{"save+notify"}, h.snapshot(), "the parent must not learn of a completion whose state is gone")
+	})
+
+	t.Run("an unconfirmed purge retries the turn rather than notifying", func(t *testing.T) {
+		t.Parallel()
+		h := newCompletingHarness(t)
+		seen := "etag-seen"
+		h.orch.state.SetMetadataETag(&seen)
+		h.purged.Store(true)
+		h.confirmErr.Store(true)
+		completed, err := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-er-1"})
+		require.Error(t, err)
+		assert.True(t, wferrors.IsRecoverable(err))
+		assert.Equal(t, todo.RunCompletedFalse, completed)
+		assert.Equal(t, []string{"save+notify"}, h.snapshot(), "nothing runs after the save while the purge is unconfirmed")
 	})
 
 	t.Run("a new instance whose row is not readable yet is not a purge", func(t *testing.T) {

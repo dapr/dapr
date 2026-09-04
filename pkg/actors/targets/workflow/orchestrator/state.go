@@ -289,8 +289,15 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 			ActorID:   o.actorID,
 			Key:       wfenginestate.MetadataKey,
 		}, false)
-		if againErr != nil || (again != nil && len(again.Data) > 0) {
-			log.Debugf("Workflow actor '%s': metadata row read back empty once after save (confirm: %v); the next operation reloads", o.actorID, againErr)
+		if againErr != nil {
+			// Unconfirmed either way: the save is durable, so retry the turn
+			// rather than run its post-save effects on a possibly purged
+			// instance. The refire reloads and finds no state if it was.
+			o.invalidateCachedState()
+			return wfengerrors.NewRecoverable(fmt.Errorf("failed to confirm the metadata row after save: %w", againErr))
+		}
+		if len(again.Data) > 0 {
+			log.Debugf("Workflow actor '%s': metadata row read back empty once after save; the next operation reloads", o.actorID)
 			state.SetMetadataETag(nil)
 			o.invalidateCachedState()
 			return nil

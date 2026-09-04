@@ -1618,6 +1618,86 @@ func TestGetSaveRequest_CreationInput(t *testing.T) {
 		assert.Equal(t, `"first"`, s.CreationInput.GetValue())
 	})
 
+	t.Run("a legacy unstamped row is adopted for the current creation and rewritten", func(t *testing.T) {
+		t.Parallel()
+		legacy, err := proto.Marshal(wrapperspb.String(`"first"`))
+		require.NoError(t, err)
+		startRow, err := proto.Marshal(&protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
+			Name: "child", Input: wrapperspb.String(`"second"`), ParentInstance: parent,
+		}}})
+		require.NoError(t, err)
+		meta, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{Generation: 1, HistoryLength: 1})
+		require.NoError(t, err)
+		etag := "e"
+		st := statefake.New().
+			WithGetFn(func(_ context.Context, req *api.GetStateRequest, _ bool) (*api.StateResponse, error) {
+				if req.Key == MetadataKey {
+					return &api.StateResponse{Data: meta, ETag: &etag}, nil
+				}
+				return &api.StateResponse{}, nil
+			}).
+			WithGetBulkFn(func(_ context.Context, req *api.GetBulkStateRequest, _ bool) (api.BulkStateResponse, error) {
+				res := make(api.BulkStateResponse, len(req.Keys))
+				for _, k := range req.Keys {
+					switch k {
+					case "history-000000":
+						res[k] = api.BulkStateEntry{Data: startRow, ETag: &etag}
+					case creationInputKey:
+						res[k] = api.BulkStateEntry{Data: legacy, ETag: &etag}
+					default:
+						res[k] = api.BulkStateEntry{}
+					}
+				}
+				return res, nil
+			})
+		s, err := loadWorkflowStateOnce(t.Context(), st, "actor1", testOpts())
+		require.NoError(t, err)
+		require.NotNil(t, s)
+		assert.Equal(t, `"first"`, s.CreationInput.GetValue())
+		assert.True(t, s.CreationInputFor(parent), "stamped with the current creation")
+		upserts, _ := ops(t, s)
+		var row creationInputRow
+		require.NoError(t, json.Unmarshal(upserts[creationInputKey], &row), "the next save rewrites the row stamped")
+		assert.Equal(t, `"first"`, row.Input)
+	})
+
+	t.Run("a legacy unstamped row on a root workflow is dropped", func(t *testing.T) {
+		t.Parallel()
+		legacy, err := proto.Marshal(wrapperspb.String(`"x"`))
+		require.NoError(t, err)
+		startRow, err := proto.Marshal(&protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{Name: "root"}}})
+		require.NoError(t, err)
+		meta, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{Generation: 1, HistoryLength: 1})
+		require.NoError(t, err)
+		etag := "e"
+		st := statefake.New().
+			WithGetFn(func(_ context.Context, req *api.GetStateRequest, _ bool) (*api.StateResponse, error) {
+				if req.Key == MetadataKey {
+					return &api.StateResponse{Data: meta, ETag: &etag}, nil
+				}
+				return &api.StateResponse{}, nil
+			}).
+			WithGetBulkFn(func(_ context.Context, req *api.GetBulkStateRequest, _ bool) (api.BulkStateResponse, error) {
+				res := make(api.BulkStateResponse, len(req.Keys))
+				for _, k := range req.Keys {
+					switch k {
+					case "history-000000":
+						res[k] = api.BulkStateEntry{Data: startRow, ETag: &etag}
+					case creationInputKey:
+						res[k] = api.BulkStateEntry{Data: legacy, ETag: &etag}
+					default:
+						res[k] = api.BulkStateEntry{}
+					}
+				}
+				return res, nil
+			})
+		s, err := loadWorkflowStateOnce(t.Context(), st, "actor1", testOpts())
+		require.NoError(t, err)
+		assert.Nil(t, s.CreationInput)
+		_, deletes := ops(t, s)
+		assert.True(t, deletes[creationInputKey], "the next save deletes the orphan")
+	})
+
 	t.Run("a root workflow keeps nothing", func(t *testing.T) {
 		t.Parallel()
 		s := NewState(testOpts())
