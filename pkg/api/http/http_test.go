@@ -1647,6 +1647,22 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, "ERR_ACTOR_TIMER_NOT_OWNED", resp.ErrorBody["errorCode"])
 	})
 
+	t.Run("Timer Get - 403 when actor type not hosted", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New().WithGetFn(func(context.Context, *actorsapi.GetTimerRequest) (*actorsapi.Reminder, error) {
+				return nil, timers.ErrTimerActorTypeNotHosted
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_NON_HOSTED", resp.ErrorBody["errorCode"])
+	})
+
 	t.Run("Timer Get - 500 on upstream error", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
 		actors.WithTimers(func(context.Context) (timers.Interface, error) {

@@ -183,7 +183,7 @@ message GetActorTimerResponse {
 // currently hosts the actor, otherwise it fails with PermissionDenied.
 message ListActorTimersRequest {
   string actor_type = 1 [json_name = "actorType"];
-  string actor_id = 2 [json_name = "actorId"];
+  string actor_id = 2 [json_name = "actorID"];
 }
 
 // ListActorTimersResponse is the response conveying the timers registered
