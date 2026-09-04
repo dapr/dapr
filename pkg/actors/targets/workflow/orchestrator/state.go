@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -74,7 +75,12 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	// nothing to validate and the history-index build is pure waste. Skip
 	// when the workflow is already terminal, so we don't re-detect the same
 	// condition on every load.
-	if o.signer != nil && len(state.Inbox) > 0 && !state.IsCompleted() {
+	// The unstartable shape (inbox events, empty history, no pending start)
+	// is exempt: with no signed history there is no attestation for inbox
+	// events to violate, and tombstoning it appends a completion without a
+	// start event, masking the terminal status as PENDING. runWorkflow's
+	// unstartable classification fails it terminally instead.
+	if o.signer != nil && len(state.Inbox) > 0 && !state.IsCompleted() && !isUnstartableState(state) {
 		if filtered := filterValidInboxEvents(state); len(filtered) != len(state.Inbox) {
 			cause := fmt.Errorf("workflow actor '%s': inbox contained %d events that did not match signed history (state store tampering)",
 				o.actorID, len(state.Inbox)-len(filtered))
@@ -169,6 +175,10 @@ func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestat
 		o.invalidateCachedState()
 		return err
 	}
+	// A durable commit is the progress signal the wake-escalation and
+	// janitor-redispatch hysteresis keys on. Unlike lastActive it is never
+	// stamped by mere lock traffic or by the janitor fire itself.
+	o.lastProgress.Store(time.Now().UnixNano())
 	return nil
 }
 

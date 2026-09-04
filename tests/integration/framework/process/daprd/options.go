@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -229,6 +230,23 @@ func WithConfigs(configs ...string) Option {
 	}
 }
 
+// WithFeatureEnabled configures daprd with a Configuration manifest enabling
+// the given preview features.
+func WithFeatureEnabled(t *testing.T, features ...string) Option {
+	var sb strings.Builder
+	sb.WriteString(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: featureconfig
+spec:
+  features:
+`)
+	for _, f := range features {
+		sb.WriteString("  - name: " + f + "\n    enabled: true\n")
+	}
+	return WithConfigManifests(t, sb.String())
+}
+
 func WithConfigManifests(t *testing.T, manifests ...string) Option {
 	configs := make([]string, len(manifests))
 	for i, manifest := range manifests {
@@ -429,4 +447,16 @@ func WithPlacement(placement *placement.Placement) Option {
 	return func(o *options) {
 		o.placementAddresses = append(o.placementAddresses, placement.Address())
 	}
+}
+
+// WithWorkflowJanitorPeriod sets the WorkflowsFastPath janitor backstop
+// period for this daprd.
+func WithWorkflowJanitorPeriod(t *testing.T, d time.Duration) Option {
+	return WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_JANITOR_PERIOD", d.String()))
+}
+
+// WithWorkflowClaimRetention sets how long a Completed execution-claim
+// record is retained before its guard deletes it.
+func WithWorkflowClaimRetention(t *testing.T, d time.Duration) Option {
+	return WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_ACTIVITY_CLAIM_RETENTION", d.String()))
 }

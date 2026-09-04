@@ -15,29 +15,43 @@ package orchestrator
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"math/big"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	"github.com/dapr/kit/crypto/spiffe/signer"
+
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	remindersfake "github.com/dapr/dapr/pkg/actors/reminders/fake"
+	actorstate "github.com/dapr/dapr/pkg/actors/state"
+	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
 // Test_addWorkflowEvent_dedupReAssertsReminder is a focused regression test for
-// the stuck-workflow class found on the dapr-chaos preflight cluster: under
+// a stuck-workflow class: under
 // fleet-wide daprd kill, activity-result events end up durable in state.Inbox
 // while the wake-up reminder that should drive runWorkflow has been deleted
 // from the scheduler (acked SUCCESS on a prior round). The next time the
@@ -141,7 +155,7 @@ func Test_addWorkflowEvent_dedupReAssertsReminder(t *testing.T) {
 	o.ometa = o.ometaFromState(o.rstate, startEvent.GetExecutionStarted())
 
 	// The second arrival of the same activity result: a publishResult retry
-	// because the original activity reminder was not acked under chaos.
+	// because the original activity reminder was not acked.
 	incoming := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.Now(),
@@ -177,4 +191,135 @@ func Test_addWorkflowEvent_dedupReAssertsReminder(t *testing.T) {
 		"dedup branch must not append to the inbox (the duplicate is already there)")
 	assert.Len(t, wfState.History, len(history),
 		"dedup branch must not touch history")
+}
+
+// Test_addWorkflowEvent_unknownTaskIDDroppedNotTombstoned pins the signing
+// behavior for a completion that fails verification while the durable state
+// is gone (the fake store is empty): dropped with ErrInstanceNotFound, no
+// tombstone, nothing persisted. The sentinel classification itself is pinned
+// by the signing package unit tests and the canstraggler integration test.
+func Test_addWorkflowEvent_unknownTaskIDDroppedNotTombstoned(t *testing.T) {
+	const instanceID = "test-unknown-task-wf"
+
+	startEvent := &protos.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ExecutionStarted{
+			ExecutionStarted: &protos.ExecutionStartedEvent{
+				Name:  "TestWorkflow",
+				Input: wrapperspb.String(`null`),
+				WorkflowInstance: &protos.WorkflowInstance{
+					InstanceId: instanceID,
+				},
+			},
+		},
+	}
+	history := []*backend.HistoryEvent{startEvent}
+
+	wfState := state.NewState(state.Options{
+		AppID:             "testapp",
+		Namespace:         "default",
+		WorkflowActorType: "dapr.internal.default.testapp.workflow",
+		ActivityActorType: "dapr.internal.default.testapp.activity",
+	})
+	for _, e := range history {
+		wfState.AddToHistory(e)
+	}
+
+	var (
+		mu       sync.Mutex
+		creates  []*actorapi.CreateReminderRequest
+		fakeRems = remindersfake.New().
+				WithCreate(func(_ context.Context, req *actorapi.CreateReminderRequest) error {
+				mu.Lock()
+				defer mu.Unlock()
+				creates = append(creates, req)
+				return nil
+			})
+	)
+	// The drop path corroborates against durable state before classifying;
+	// answer that probe with an empty store (the statefake default returns a
+	// nil response, which the loader does not expect from a real store).
+	fakeState := statefake.New().WithGetFn(func(context.Context, *actorapi.GetStateRequest, bool) (*actorapi.StateResponse, error) {
+		return &actorapi.StateResponse{}, nil
+	})
+	actors := fake.New().WithReminders(func(context.Context) (reminders.Interface, error) {
+		return fakeRems, nil
+	}).WithState(func(context.Context) (actorstate.Interface, error) {
+		return fakeState, nil
+	})
+
+	fact, err := New(t.Context(), Options{
+		AppID:             "testapp",
+		Namespace:         "default",
+		WorkflowActorType: "dapr.internal.default.testapp.workflow",
+		ActivityActorType: "dapr.internal.default.testapp.activity",
+		ActorTypeBuilder:  common.NewActorTypeBuilder("default"),
+		Actors:            actors,
+		Signer:            testAddSigner(t),
+	})
+	require.NoError(t, err)
+
+	o := fact.GetOrCreate(instanceID).(*orchestrator)
+	o.state = wfState
+	o.rstate = runtimestate.NewWorkflowRuntimeState(instanceID, nil, history)
+	o.ometa = o.ometaFromState(o.rstate, startEvent.GetExecutionStarted())
+
+	// A completion for a task never scheduled in this history. The attestation
+	// only needs to be non-nil: the unknown-id check precedes verification.
+	incoming := &protos.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_TaskCompleted{
+			TaskCompleted: &protos.TaskCompletedEvent{
+				TaskScheduledId: 42,
+				Result:          wrapperspb.String(`"late"`),
+				Attestation:     &backend.ActivityCompletionAttestation{},
+			},
+		},
+	}
+
+	err = o.addWorkflowEvent(t.Context(), incoming)
+	require.ErrorIs(t, err, api.ErrInstanceNotFound)
+
+	assert.False(t, wfState.HasTamperMarker(),
+		"an unknown task scheduled id must not tombstone the workflow as tampered")
+	assert.Empty(t, wfState.Inbox, "the dropped completion must not be persisted")
+	assert.Len(t, wfState.History, len(history), "history must be untouched")
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Empty(t, creates, "no wake-up reminder for a dropped event")
+}
+
+func testAddSigner(t *testing.T) *signer.Signer {
+	t.Helper()
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "test"},
+		NotBefore:    time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+		NotAfter:     time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
+		URIs:         []*url.URL{{Scheme: "spiffe", Host: "example.org", Path: "/ns/default/app-a"}},
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, pub, priv)
+	require.NoError(t, err)
+	certs, err := x509.ParseCertificates(certDER)
+	require.NoError(t, err)
+	id, err := x509svid.IDFromCert(certs[0])
+	require.NoError(t, err)
+	return signer.New(staticTestSVIDSource{svid: &x509svid.SVID{
+		ID:           id,
+		Certificates: certs,
+		PrivateKey:   priv,
+	}}, nil)
+}
+
+type staticTestSVIDSource struct {
+	svid *x509svid.SVID
+}
+
+func (s staticTestSVIDSource) GetX509SVID() (*x509svid.SVID, error) {
+	return s.svid, nil
 }

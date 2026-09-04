@@ -24,6 +24,8 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -44,8 +46,17 @@ type crossactivity struct {
 
 func (c *crossactivity) Setup(t *testing.T) []framework.Option {
 	c.waitCh = make(chan struct{})
+	// Under WorkflowsFastPath recovery after the worker reconnect is driven by
+	// the janitor reminder, so shrink its period below the completion timeout.
+	// The variable is unused in default mode.
 	c.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
+		workflow.WithDaprdOptions(0, daprd.WithExecOptions(exec.WithEnvVars(t,
+			"DAPR_WORKFLOW_JANITOR_PERIOD", "2s",
+		))),
+		workflow.WithDaprdOptions(1, daprd.WithExecOptions(exec.WithEnvVars(t,
+			"DAPR_WORKFLOW_JANITOR_PERIOD", "2s",
+		))),
 	)
 
 	return []framework.Option{
@@ -80,7 +91,7 @@ func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
 
 	// verify worker is connected by checking the expected registered actors
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		assert.Len(col, c.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 3)
+		assert.Len(col, c.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, c.workflow.ActorTypesCount())
 	}, time.Second*10, time.Millisecond*10)
 
 	id, err := cl.ScheduleNewWorkflow(ctx, "foo")
