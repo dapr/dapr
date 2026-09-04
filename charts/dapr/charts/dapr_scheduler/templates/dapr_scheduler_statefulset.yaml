@@ -52,7 +52,7 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
     spec:
-      {{- if ne .Values.securityContext.fsGroup nil }}
+      {{- if .Values.securityContext.fsGroup }}
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
       {{- end }}
