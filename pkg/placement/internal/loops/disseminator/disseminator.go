@@ -23,10 +23,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/internal/placement/timeout"
 	"github.com/dapr/dapr/pkg/placement/internal/authorizer"
 	"github.com/dapr/dapr/pkg/placement/internal/loops"
 	"github.com/dapr/dapr/pkg/placement/internal/loops/disseminator/store"
-	"github.com/dapr/dapr/pkg/placement/internal/loops/disseminator/timeout"
 	"github.com/dapr/dapr/pkg/placement/internal/loops/stream"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
@@ -77,7 +77,7 @@ type disseminator struct {
 
 	namespace string
 
-	timeoutQ *timeout.Timeout
+	timeoutTimer *timeout.Timeout
 
 	streams              map[uint64]*streamConn
 	streamsInTargetState int
@@ -131,8 +131,12 @@ func New(opts Options) loop.Interface[loops.EventDisseminator] {
 
 	diss.loop = LoopFactory.NewLoop(diss)
 
-	diss.timeoutQ = timeout.New(timeout.Options{
-		Loop:    diss.loop,
+	diss.timeoutTimer = timeout.New(timeout.Options{
+		OnTimeout: func(version uint64) {
+			diss.loop.Enqueue(&loops.DisseminationTimeout{
+				Version: version,
+			})
+		},
 		Timeout: opts.DisseminationTimeout,
 	})
 
@@ -286,7 +290,7 @@ func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 	d.waitingToDisseminate = nil
 	d.waitingToDelete = nil
 	d.store.DeleteAll()
-	d.timeoutQ.Close()
+	d.timeoutTimer.Close()
 
 	monitoring.RecordRuntimesCount(0, d.namespace)
 	monitoring.RecordActorRuntimesCount(0, d.namespace)
@@ -295,8 +299,9 @@ func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 }
 
 func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.DisseminationTimeout) {
-	if timeout.Version != d.currentVersion {
-		// Ignore old timeouts.
+	if timeout.Version != d.currentVersion || d.currentOperation == v1pb.HostOperation_REPORT {
+		// Ignore old timeouts and events which were already queued when a round
+		// completed successfully.
 		return
 	}
 
@@ -363,7 +368,7 @@ func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.Dissemi
 	if len(d.streams) > 0 {
 		// Start a new dissemination round with all remaining + newly added
 		// streams.
-		d.timeoutQ.Enqueue(d.currentVersion)
+		d.timeoutTimer.Enqueue(d.currentVersion)
 		d.currentOperation = v1pb.HostOperation_LOCK
 		for _, s := range d.streams {
 			s.currentState = v1pb.HostOperation_REPORT
