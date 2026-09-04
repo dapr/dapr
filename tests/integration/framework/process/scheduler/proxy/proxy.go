@@ -19,6 +19,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -70,6 +71,7 @@ type Proxy struct {
 // armConfig captures the per-method failure injection state.
 type armConfig struct {
 	remaining int
+	name      string
 	code      codes.Code
 	notify    chan struct{}
 }
@@ -174,20 +176,26 @@ func (p *Proxy) FailedCount() int { return int(p.failures.Load()) }
 // or another non-transient code when the test wants the failure to propagate
 // to the orchestrator's error path.
 func (p *Proxy) ArmFailures(method string, n int, code codes.Code, notify chan struct{}) {
+	p.ArmNamedFailures(method, "", n, code, notify)
+}
+
+// ArmNamedFailures is ArmFailures restricted to requests whose job name
+// contains nameContains; requests for other jobs pass through untouched.
+func (p *Proxy) ArmNamedFailures(method, nameContains string, n int, code codes.Code, notify chan struct{}) {
 	p.mu.Lock()
 	if n <= 0 {
 		delete(p.armed, method)
 	} else {
-		p.armed[method] = armConfig{remaining: n, code: code, notify: notify}
+		p.armed[method] = armConfig{remaining: n, name: nameContains, code: code, notify: notify}
 	}
 	p.mu.Unlock()
 }
 
-func (p *Proxy) takeFailure(method string) (codes.Code, bool) {
+func (p *Proxy) takeFailure(method, name string) (codes.Code, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	cfg, ok := p.armed[method]
-	if !ok || cfg.remaining <= 0 {
+	if !ok || cfg.remaining <= 0 || !strings.Contains(name, cfg.name) {
 		return 0, false
 	}
 	cfg.remaining--
@@ -210,42 +218,42 @@ func injected(method string, code codes.Code) error {
 }
 
 func (p *Proxy) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
-	if code, ok := p.takeFailure(MethodScheduleJob); ok {
+	if code, ok := p.takeFailure(MethodScheduleJob, req.GetName()); ok {
 		return nil, injected(MethodScheduleJob, code)
 	}
 	return p.client.ScheduleJob(ctx, req)
 }
 
 func (p *Proxy) DeleteJob(ctx context.Context, req *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
-	if code, ok := p.takeFailure(MethodDeleteJob); ok {
+	if code, ok := p.takeFailure(MethodDeleteJob, req.GetName()); ok {
 		return nil, injected(MethodDeleteJob, code)
 	}
 	return p.client.DeleteJob(ctx, req)
 }
 
 func (p *Proxy) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (*schedulerv1pb.GetJobResponse, error) {
-	if code, ok := p.takeFailure(MethodGetJob); ok {
+	if code, ok := p.takeFailure(MethodGetJob, req.GetName()); ok {
 		return nil, injected(MethodGetJob, code)
 	}
 	return p.client.GetJob(ctx, req)
 }
 
 func (p *Proxy) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error) {
-	if code, ok := p.takeFailure(MethodListJobs); ok {
+	if code, ok := p.takeFailure(MethodListJobs, ""); ok {
 		return nil, injected(MethodListJobs, code)
 	}
 	return p.client.ListJobs(ctx, req)
 }
 
 func (p *Proxy) DeleteByMetadata(ctx context.Context, req *schedulerv1pb.DeleteByMetadataRequest) (*schedulerv1pb.DeleteByMetadataResponse, error) {
-	if code, ok := p.takeFailure(MethodDeleteByMetadata); ok {
+	if code, ok := p.takeFailure(MethodDeleteByMetadata, ""); ok {
 		return nil, injected(MethodDeleteByMetadata, code)
 	}
 	return p.client.DeleteByMetadata(ctx, req)
 }
 
 func (p *Proxy) DeleteByNamePrefix(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error) {
-	if code, ok := p.takeFailure(MethodDeleteByNamePrefix); ok {
+	if code, ok := p.takeFailure(MethodDeleteByNamePrefix, ""); ok {
 		return nil, injected(MethodDeleteByNamePrefix, code)
 	}
 	return p.client.DeleteByNamePrefix(ctx, req)
@@ -308,7 +316,7 @@ func (p *Proxy) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error 
 // real scheduler on every refresh. Without this rewrite daprd would bypass
 // the proxy as soon as the first host list arrived.
 func (p *Proxy) WatchHosts(req *schedulerv1pb.WatchHostsRequest, stream schedulerv1pb.Scheduler_WatchHostsServer) error {
-	if code, ok := p.takeFailure(MethodWatchHosts); ok {
+	if code, ok := p.takeFailure(MethodWatchHosts, ""); ok {
 		return injected(MethodWatchHosts, code)
 	}
 

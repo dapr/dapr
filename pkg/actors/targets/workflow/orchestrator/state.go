@@ -28,6 +28,7 @@ import (
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	wfengerrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -103,6 +104,12 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 				o.actorID, err)
 			return o.tombstoneTamperedState(ctx, opts, state, cause)
 		}
+	}
+
+	// A parent-notify row on a parentless instance is an orphan left by a
+	// purge on a binary that did not know the key; the next save drops it.
+	if state.ParentNotifyPending && o.getExecutionStartedEvent(state).GetParentInstance() == nil {
+		state.SetParentNotifyPending(false)
 	}
 
 	// Update cached state
@@ -188,6 +195,31 @@ func (o *orchestrator) invalidateCachedState() {
 	o.ometa = nil
 }
 
+// confirmCachedState re-reads the metadata row before a message is acked off
+// the cache without a write. A host that lost this actor to a peer would
+// otherwise ack from stale state, where a write would have failed on its
+// etag; a mismatch drops the cache and fails recoverably so the sender
+// retries against a fresh load.
+func (o *orchestrator) confirmCachedState(ctx context.Context, state *wfenginestate.State) error {
+	res, err := o.actorState.Get(ctx, &actorsapi.GetStateRequest{
+		ActorType: o.actorType,
+		ActorID:   o.actorID,
+		Key:       wfenginestate.MetadataKey,
+	}, false)
+	if err != nil {
+		return wfengerrors.NewRecoverable(fmt.Errorf("failed to confirm the cached state: %w", err))
+	}
+	if res == nil || len(res.Data) == 0 {
+		o.invalidateCachedState()
+		return api.ErrInstanceNotFound
+	}
+	if cur, have := res.ETag, state.MetadataETag(); cur != nil && have != nil && *cur != *have {
+		o.invalidateCachedState()
+		return wfengerrors.NewRecoverable(errors.New("cached state is stale; reloading"))
+	}
+	return nil
+}
+
 func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State) error {
 	// generate and run a state store operation that saves all changes
 	req, err := state.GetSaveRequest(o.actorID)
@@ -220,11 +252,9 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 	// Refresh the metadata ETag for the next save. Multi does not return new
 	// ETags, so we read just the metadata row back. A read error here is
 	// non-fatal: the persisted save is durable, we just don't know the new
-	// version token; drop the cache and let the next operation reload. A nil
-	// response or nil ETag is fine: we record whatever the store returned
-	// and the next save proceeds with that (which falls through to a blind
-	// upsert if no ETag is known, the same semantics as a brand-new
-	// workflow).
+	// version token; drop the cache and let the next operation reload. An
+	// empty response means the row is gone: a force purge landed and the
+	// cache must not be written back.
 	// TODO: @joshvanl: add etag support to Multi and remove this extra read.
 	metaRes, metaErr := o.actorState.Get(ctx, &actorsapi.GetStateRequest{
 		ActorType: o.actorType,
@@ -236,10 +266,23 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 		o.invalidateCachedState()
 		return nil
 	}
-	if metaRes != nil {
-		state.SetMetadataETag(metaRes.ETag)
-	} else {
+	switch {
+	case metaRes == nil, len(metaRes.Data) == 0 && !state.MetadataETagSeen():
+		// Unknown version, or a store that does not read its own writes yet
+		// has not served this new instance's row: the next save reloads.
 		state.SetMetadataETag(nil)
+	case len(metaRes.Data) == 0:
+		// The row vanished between the Multi and this read: a force purge
+		// landed. Drop the cache and the actor, and fail the caller so the
+		// turn's post-save effects (parent notification, retention, cascade)
+		// do not act on a purged instance; the refire finds no state. The
+		// sentinel sits last: remote classifiers match by suffix.
+		log.Warnf("Workflow actor '%s': metadata row missing after save; the state was purged concurrently", o.actorID)
+		o.invalidateCachedState()
+		o.deactivate(o)
+		return fmt.Errorf("state purged after save: %w", api.ErrInstanceNotFound)
+	default:
+		state.SetMetadataETag(metaRes.ETag)
 	}
 
 	// Update cached state
@@ -371,7 +414,9 @@ func (o *orchestrator) purgeWorkflowState(ctx context.Context, meta map[string]*
 
 	// If the workflow is required to complete but it's not yet completed then
 	// return [ErrNotCompleted] This check is used by purging workflow
-	if !runtimestate.IsCompleted(o.rstate) {
+	// A completion the parent has not acknowledged is not finished: purging
+	// it would lose the notification.
+	if !runtimestate.IsCompleted(o.rstate) || state.ParentNotifyPending {
 		return api.ErrNotCompleted
 	}
 
