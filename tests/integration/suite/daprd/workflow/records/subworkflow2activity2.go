@@ -16,6 +16,7 @@ package workflow
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,6 +74,11 @@ func (a *subworkflow2activity2) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-	assert.Equal(t, 27, count)
+	// Under WorkflowsFastPath the parent completion can become visible before
+	// the last child's own state commit lands, so poll to the steady state.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		if assert.NoError(c, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count)) {
+			assert.Equal(c, 27, count)
+		}
+	}, time.Second*10, time.Millisecond*10)
 }

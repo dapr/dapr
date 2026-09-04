@@ -15,6 +15,7 @@ package workflow
 
 import (
 	"context"
+	"os"
 	"runtime"
 	"testing"
 	"time"
@@ -32,7 +33,37 @@ import (
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 	"github.com/dapr/durabletask-go/workflow"
+	kitstrings "github.com/dapr/kit/strings"
 )
+
+// ClusteredDeploymentConfig is a Configuration manifest enabling the
+// WorkflowsClusteredDeployment preview feature.
+const ClusteredDeploymentConfig = `
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+    name: workflowsclustereddeployment
+spec:
+    features:
+    - name: WorkflowsClusteredDeployment
+      enabled: true
+`
+
+// ClusteredDeploymentFromEnv reports whether the suite is running with
+// DAPR_INTEGRATION_WORKFLOW_CLUSTERED set truthy, which enables the
+// WorkflowsClusteredDeployment feature flag on every daprd built by this
+// harness unless a test overrides it with WithClusteredDeployment.
+func ClusteredDeploymentFromEnv() bool {
+	return kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_WORKFLOW_CLUSTERED"))
+}
+
+// FastPathFromEnv reports whether the suite is running with
+// DAPR_INTEGRATION_WORKFLOW_FASTPATH set truthy, which enables the
+// WorkflowsFastPath feature flag on every daprd built by this harness unless
+// a test overrides it with WithFastPath.
+func FastPathFromEnv() bool {
+	return kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_WORKFLOW_FASTPATH"))
+}
 
 type Workflow struct {
 	taskregistry []*task.TaskRegistry
@@ -42,6 +73,8 @@ type Workflow struct {
 	ownsSched    bool
 	sentry       *sentry.Sentry
 	daprds       []*daprd.Daprd
+	clustered    bool
+	fastPath     bool
 }
 
 func New(t *testing.T, fopts ...Option) *Workflow {
@@ -59,6 +92,16 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	}
 
 	require.GreaterOrEqual(t, opts.daprds, 1, "at least one daprd instance is required")
+
+	clustered := ClusteredDeploymentFromEnv()
+	if opts.clustered != nil {
+		clustered = *opts.clustered
+	}
+
+	fastPath := FastPathFromEnv()
+	if opts.fastPath != nil {
+		fastPath = *opts.fastPath
+	}
 
 	db := sqlite.New(t,
 		sqlite.WithActorStateStore(true),
@@ -96,21 +139,16 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		baseDopts = append(baseDopts, daprd.WithResourceFiles(db.GetComponent(t)))
 	}
 
-	var signingDopts []daprd.Option
 	if sen != nil {
 		baseDopts = append(baseDopts, daprd.WithSentry(t, sen))
-		signingDopts = []daprd.Option{
-			daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: propagation-signing
-spec:
-  features:
-  - name: WorkflowHistorySigning
-    enabled: true
-`),
-		}
 	}
+
+	// daprd loads each config file onto one Configuration struct and
+	// spec.features is a slice, so the LAST config file that specifies
+	// features replaces every earlier feature list. All harness-driven
+	// features must therefore land in a single manifest per daprd; it is
+	// built in the per-daprd loop below because signing is per-daprd.
+	baseFeatures := baseFeatureList(clustered, fastPath)
 
 	if opts.schedulerAddress != nil {
 		// Reset so a caller-supplied override (e.g. a proxy in front of the
@@ -129,11 +167,15 @@ spec:
 	daprds := make([]*daprd.Daprd, opts.daprds)
 
 	for i := range daprds {
-		dopts := make([]daprd.Option, 0, len(baseDopts)+len(signingDopts))
+		dopts := make([]daprd.Option, 0, len(baseDopts)+1)
 		dopts = append(dopts, baseDopts...)
 
-		if !signingDisabled[i] {
-			dopts = append(dopts, signingDopts...)
+		features := baseFeatures
+		if sen != nil && (opts.signing || opts.mtls) && !signingDisabled[i] {
+			features = append(features[:len(features):len(features)], "WorkflowHistorySigning")
+		}
+		if len(features) > 0 {
+			dopts = append(dopts, daprd.WithFeatureEnabled(t, features...))
 		}
 
 		// Add specific opts for this daprd
@@ -171,6 +213,8 @@ spec:
 		ownsSched:    ownsSched,
 		sentry:       sen,
 		daprds:       daprds,
+		clustered:    clustered,
+		fastPath:     fastPath,
 	}
 
 	for i := range workflow.taskregistry {
@@ -312,6 +356,54 @@ func (w *Workflow) GRPCClientN(t *testing.T, ctx context.Context, index int) rtv
 	t.Helper()
 	require.Less(t, index, len(w.daprds), "index out of range")
 	return w.daprds[index].GRPCClient(t, ctx)
+}
+
+func baseFeatureList(clustered, fastPath bool) []string {
+	features := make([]string, 0, 2)
+	if clustered {
+		features = append(features, "WorkflowsClusteredDeployment")
+	}
+	if fastPath {
+		features = append(features, "WorkflowsFastPath")
+	}
+	return features
+}
+
+// FeatureOptions returns the feature manifest option for extra daprds a test
+// adds to this harness's cluster. Only cluster-wide features are covered:
+// WorkflowHistorySigning is per-daprd and needs the harness's sentry wiring
+// besides the flag. daprd's config merge makes the last spec.features list
+// win, so all features must land in one manifest.
+func (w *Workflow) FeatureOptions(t *testing.T) []daprd.Option {
+	features := baseFeatureList(w.clustered, w.fastPath)
+	if len(features) == 0 {
+		return nil
+	}
+	return []daprd.Option{daprd.WithFeatureEnabled(t, features...)}
+}
+
+// ClusteredDeployment reports whether every daprd in this workflow runs with
+// the WorkflowsClusteredDeployment feature flag enabled. Tests use this to
+// branch assertions which differ between the two modes.
+func (w *Workflow) ClusteredDeployment() bool {
+	return w.clustered
+}
+
+// FastPath reports whether every daprd in this workflow runs with the
+// WorkflowsFastPath feature flag enabled. Tests use this to branch
+// assertions which differ between the two modes.
+func (w *Workflow) FastPath() bool {
+	return w.fastPath
+}
+
+// ActorTypesCount returns the number of actor types a daprd in this workflow
+// registers when a worker is connected: workflow, activity and retentioner,
+// plus the executor rendezvous type in clustered deployment mode.
+func (w *Workflow) ActorTypesCount() int {
+	if w.clustered {
+		return 4
+	}
+	return 3
 }
 
 func (w *Workflow) Dapr() *daprd.Daprd {

@@ -21,13 +21,13 @@ import (
 
 type Fake struct {
 	createFn func(context.Context, *api.CreateTimerRequest) error
-	deleteFn func(context.Context, *api.DeleteTimerRequest)
+	deleteFn func(context.Context, *api.DeleteTimerRequest) error
 }
 
 func New() *Fake {
 	return &Fake{
 		createFn: func(context.Context, *api.CreateTimerRequest) error { return nil },
-		deleteFn: func(context.Context, *api.DeleteTimerRequest) {},
+		deleteFn: func(context.Context, *api.DeleteTimerRequest) error { return nil },
 	}
 }
 
@@ -36,7 +36,7 @@ func (f *Fake) WithCreateFn(fn func(context.Context, *api.CreateTimerRequest) er
 	return f
 }
 
-func (f *Fake) WithDeleteFn(fn func(context.Context, *api.DeleteTimerRequest)) *Fake {
+func (f *Fake) WithDeleteFn(fn func(context.Context, *api.DeleteTimerRequest) error) *Fake {
 	f.deleteFn = fn
 	return f
 }
@@ -45,6 +45,6 @@ func (f *Fake) Create(ctx context.Context, req *api.CreateTimerRequest) error {
 	return f.createFn(ctx, req)
 }
 
-func (f *Fake) Delete(ctx context.Context, req *api.DeleteTimerRequest) {
-	f.deleteFn(ctx, req)
+func (f *Fake) Delete(ctx context.Context, req *api.DeleteTimerRequest) error {
+	return f.deleteFn(ctx, req)
 }

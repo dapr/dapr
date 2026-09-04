@@ -146,7 +146,7 @@ func Test_Start(t *testing.T) {
 
 		assert.Eventually(t, func() bool {
 			// We put the write file inside this assert loop since we have to wait
-			// for the fsnotify go rountine to warm up.
+			// for the fsnotify go routine to warm up.
 			assert.NoError(t, os.WriteFile(tdFile, root2, 0o600))
 
 			curr, err := prov.sec.trustAnchors.CurrentTrustAnchors(ctx)

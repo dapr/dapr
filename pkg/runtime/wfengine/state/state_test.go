@@ -1344,3 +1344,93 @@ func TestGetSaveRequest_MetadataIncludesExternalCertLength(t *testing.T) {
 
 	assert.Equal(t, uint64(2), meta.GetExternalSigningCertificateLength())
 }
+
+// TestCustomStatusChangeTracking pins the skip-unchanged custom status
+// persistence: the first history-bearing save writes the key even when the
+// status never changed (so a loader never misses it), an unchanged status is
+// omitted from subsequent saves, a changed status is upserted again, and
+// ResetChangeTracking clears the dirty flag only when the save it mirrors
+// actually wrote the key.
+func TestCustomStatusChangeTracking(t *testing.T) {
+	t.Parallel()
+
+	hasCustomStatusOp := func(t *testing.T, s *State) bool {
+		t.Helper()
+		req, err := s.GetSaveRequest("wf-actor")
+		require.NoError(t, err)
+		for _, op := range req.Operations {
+			if up, ok := op.Request.(api.TransactionalUpsert); ok && up.Key == customStatusKey {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("first history-bearing save writes the key even when unchanged", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		assert.True(t, hasCustomStatusOp(t, s), "a never-persisted status must be written")
+	})
+
+	t.Run("unchanged status is omitted once persisted", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		require.True(t, hasCustomStatusOp(t, s))
+		s.ResetChangeTracking()
+		assert.True(t, s.customStatusPersisted)
+		assert.False(t, s.customStatusChanged)
+
+		s.AddToHistory(testEvent(1))
+		assert.False(t, hasCustomStatusOp(t, s), "an unchanged persisted status must not be re-written")
+	})
+
+	t.Run("changed status is upserted again", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		s.ResetChangeTracking()
+
+		s.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{
+			NewEvents:    []*backend.HistoryEvent{testEvent(1)},
+			CustomStatus: wrapperspb.String("phase-2"),
+		})
+		assert.True(t, s.customStatusChanged)
+		assert.True(t, hasCustomStatusOp(t, s), "a changed status must be upserted")
+	})
+
+	t.Run("same-value apply does not mark the status changed", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		s.ResetChangeTracking()
+
+		s.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{
+			NewEvents: []*backend.HistoryEvent{testEvent(1)},
+		})
+		assert.False(t, s.customStatusChanged)
+		assert.False(t, hasCustomStatusOp(t, s))
+	})
+
+	t.Run("reset does not clear the dirty flag for an inbox-only save", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		s.ResetChangeTracking()
+
+		// Status changes, but the save that follows carries no history
+		// delta (inbox-only save): GetSaveRequest omits the status key, so
+		// ResetChangeTracking must keep the dirty flag for the next
+		// history-bearing save.
+		s.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{
+			CustomStatus: wrapperspb.String("phase-2"),
+		})
+		require.False(t, hasCustomStatusOp(t, s), "inbox-only saves must not write the status")
+		s.ResetChangeTracking()
+		assert.True(t, s.customStatusChanged, "dirty flag must survive a save that did not write the key")
+
+		s.AddToHistory(testEvent(1))
+		assert.True(t, hasCustomStatusOp(t, s), "the next history-bearing save must write the changed status")
+	})
+}

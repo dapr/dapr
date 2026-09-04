@@ -18,11 +18,14 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/claim"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -66,8 +69,83 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 		return nil, fmt.Errorf("failed to decode activity invocation: %w", err)
 	}
 
+	// Gate a janitor re-dispatch on the durable execution-claim record: it
+	// may race a body still live on the previous placement owner. A local
+	// inflight entry acks without a state read.
+	if a.fastPath && janitorRedispatchMarked(req) {
+		if handled, gerr := a.gateJanitorRedispatch(ctx, invocation); handled {
+			return nil, gerr
+		}
+	}
+
+	// Fast path: when the dispatching orchestrator certifies its janitor
+	// backstop is armed (metadata) and this host runs the preview, drive
+	// the execution locally instead of creating the durable run-activity
+	// reminder, eliding its job upsert/delete commit pair and the scheduler
+	// trigger round trip. Recovery for a crashed in-flight execution moves
+	// to the certifying orchestrator's janitor re-dispatch. Delayed
+	// executions (future dueTime) keep the scheduler path so the delay is
+	// honoured; a drive that cannot be armed (factory halting) falls
+	// through to the durable reminder.
+	if a.fastPath && localDriveCertified(req) && !dueTime.After(time.Now()) {
+		if a.localDrive(invocation, dueTime, activityName) {
+			return nil, nil
+		}
+	}
+
 	// The actual execution is triggered by a reminder
 	return nil, a.createReminder(ctx, invocation, dueTime, activityName)
+}
+
+// janitorRedispatchMarked reports whether the dispatching orchestrator marked
+// this Execute call as a janitor re-dispatch of an unresolved task.
+func janitorRedispatchMarked(req *internalsv1pb.InternalInvokeRequest) bool {
+	v, ok := req.GetMetadata()[todo.MetadataActivityJanitorRedispatch]
+	return ok && len(v.GetValues()) > 0 && v.GetValues()[0] == "true"
+}
+
+// gateJanitorRedispatch consults the durable execution-claim record for a
+// janitor re-dispatch. handled=true means do not execute here: gerr nil acks
+// (a local claim owns delivery, or the guarded execution already completed
+// and published), recoverable defers (live elsewhere or unreadable record).
+func (a *activity) gateJanitorRedispatch(ctx context.Context, invocation *protos.ActivityInvocation) (handled bool, gerr error) {
+	key := inflight.Key(a.actorID, invocation.GetHistoryEvent())
+	if call, ok := a.inflight.Peek(key); ok {
+		endIndex := strings.Index(a.actorID, "::")
+		if !a.staleClaim(call, a.actorID[:max(endIndex, 0)], invocation.GetHistoryEvent().GetEventId()) {
+			// A live local entry owns delivery: ack, do not arm a drive
+			// (joining a transient gate-claim entry that settles with the
+			// defer error would re-execute via the ungated retry). The
+			// janitor re-checks next period.
+			return true, nil
+		}
+		// Stranded local entry (delivery lost, not held): fall through so
+		// the execution path's stale eviction re-executes; acking here would
+		// also swallow the escalation that creates the durable reminder.
+	}
+	outcome, err := a.claims.Check(ctx, a.actorID, key)
+	if err != nil {
+		return true, wferrors.NewRecoverable(fmt.Errorf("failed to read the execution-claim record: %w", err))
+	}
+	switch outcome {
+	case claim.Defer:
+		log.Infof("Activity actor '%s': janitor re-dispatch deferred; the execution claim is live on another host", a.actorID)
+		return true, claim.ErrHeldElsewhere
+	case claim.Completed:
+		log.Infof("Activity actor '%s': janitor re-dispatch acked; the execution completed on its previous host", a.actorID)
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
+// localDriveCertified reports whether the dispatching orchestrator attached
+// the janitor-armed certification to this Execute call. Without it the
+// durable reminder must be kept: the orchestrator may be an older or
+// gate-off binary with no janitor watching this activity.
+func localDriveCertified(req *internalsv1pb.InternalInvokeRequest) bool {
+	v, ok := req.GetMetadata()[todo.MetadataActivityLocalDrive]
+	return ok && len(v.GetValues()) > 0 && v.GetValues()[0] == "true"
 }
 
 // decodeActivityInvocation parses an activity invocation payload. New
@@ -128,7 +206,11 @@ func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Remind
 		return errors.New("activity reminder missing history event")
 	}
 
-	err := a.executeActivity(ctx, reminder.Name, &invocation)
+	// Scheduler-fired reminders are the recovery deliveries that can land
+	// on a fresh placement owner mid-handoff: gate them. Local drives
+	// (SkipRetries) stay ungated; handleInvoke gates their re-dispatches.
+	gated := a.fastPath && !reminder.SkipRetries
+	err := a.executeActivity(ctx, reminder.Name, &invocation, reminder.SkipLock, gated)
 
 	// Returning nil signals that we want the execution to be retried in the next
 	// period interval

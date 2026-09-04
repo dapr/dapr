@@ -21,14 +21,18 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
+	procworkflow "github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
 
 type Workflow struct {
-	registry *task.TaskRegistry
-	actors   *actors.Actors
+	registry  *task.TaskRegistry
+	actors    *actors.Actors
+	clustered bool
+	fastPath  bool
 }
 
 func New(t *testing.T, fopts ...Option) *Workflow {
@@ -41,10 +45,51 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		fopt(&opts)
 	}
 
-	return &Workflow{
-		registry: opts.registry,
-		actors:   actors.New(t),
+	clustered := procworkflow.ClusteredDeploymentFromEnv()
+	if opts.clustered != nil {
+		clustered = *opts.clustered
 	}
+
+	fastPath := procworkflow.FastPathFromEnv()
+	if opts.fastPath != nil {
+		fastPath = *opts.fastPath
+	}
+
+	// A single manifest carries all harness-driven features: the last config
+	// file specifying spec.features replaces earlier feature lists, so
+	// separate manifests would not compose.
+	features := make([]string, 0, 2)
+	if clustered {
+		features = append(features, "WorkflowsClusteredDeployment")
+	}
+	if fastPath {
+		features = append(features, "WorkflowsFastPath")
+	}
+	var aopts []actors.Option
+	if len(features) > 0 {
+		aopts = append(aopts, actors.WithDaprdOptions(
+			daprd.WithFeatureEnabled(t, features...),
+		))
+	}
+
+	return &Workflow{
+		registry:  opts.registry,
+		actors:    actors.New(t, aopts...),
+		clustered: clustered,
+		fastPath:  fastPath,
+	}
+}
+
+// ClusteredDeployment reports whether the underlying daprd runs with the
+// WorkflowsClusteredDeployment feature flag enabled.
+func (w *Workflow) ClusteredDeployment() bool {
+	return w.clustered
+}
+
+// FastPath reports whether the underlying daprd runs with the
+// WorkflowsFastPath feature flag enabled.
+func (w *Workflow) FastPath() bool {
+	return w.fastPath
 }
 
 func (w *Workflow) Run(t *testing.T, ctx context.Context) {

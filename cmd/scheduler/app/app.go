@@ -100,9 +100,10 @@ func Run() {
 
 	runners := []concurrency.Runner{
 		healthzserver.New(healthzserver.Options{
-			Log:     log,
-			Port:    opts.HealthzPort,
-			Healthz: healthz,
+			Log:           log,
+			ListenAddress: opts.HealthzListenAddress,
+			Port:          opts.HealthzPort,
+			Healthz:       healthz,
 		}).Start,
 		metricsExporter.Start,
 		secProvider.Run,

@@ -787,6 +787,55 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 	})
 }
 
+func TestInvokeServiceContextErrorClassification(t *testing.T) {
+	mockDirectMessaging := new(daprt.MockDirectMessaging)
+
+	fakeAPI := &api{
+		logger: logger.NewLogger("test"),
+		Universal: universal.New(universal.Options{
+			AppID:      "fakeAPI",
+			Resiliency: resiliency.New(nil),
+		}),
+		directMessaging: mockDirectMessaging,
+	}
+	lis := startDaprAPIServer(t, fakeAPI, "")
+	clientConn := createTestClient(lis)
+	defer clientConn.Close()
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	req := &runtimev1pb.InvokeServiceRequest{
+		Id:      "fakeAppID",
+		Message: &commonv1pb.InvokeRequest{Method: "fakeMethod"},
+	}
+
+	// A request context that dies mid-invoke (e.g. queued on the app
+	// channel's concurrency limiter) must keep its gRPC classification,
+	// not be wrapped as Internal.
+	tests := []struct {
+		name string
+		err  error
+		code codes.Code
+	}{
+		{"deadline exceeded", fmt.Errorf("limiter acquire: %w", context.DeadlineExceeded), codes.DeadlineExceeded},
+		{"canceled", fmt.Errorf("limiter acquire: %w", context.Canceled), codes.Canceled},
+		{"remote deadline status", status.Error(codes.DeadlineExceeded, "remote hop deadline"), codes.DeadlineExceeded},
+		{"remote canceled status", status.Error(codes.Canceled, "remote hop canceled"), codes.Canceled},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockDirectMessaging.Calls = nil
+			mockDirectMessaging.On("Invoke",
+				mock.MatchedBy(matchContextInterface),
+				"fakeAppID",
+				mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(nil, tc.err).Once()
+
+			_, err := client.InvokeService(t.Context(), req)
+			require.Error(t, err)
+			assert.Equal(t, tc.code, status.Code(err))
+		})
+	}
+}
+
 func TestSecretStoreNotConfigured(t *testing.T) {
 	lis := startDaprAPIServer(t, &api{
 		logger: logger.NewLogger("grpc.api.test"),
@@ -2673,16 +2722,31 @@ func TestInvokeBinding(t *testing.T) {
 	_, err = client.InvokeBinding(t.Context(), &runtimev1pb.InvokeBindingRequest{Name: "error-binding"})
 	assert.Equal(t, codes.Internal, status.Code(err))
 
-	ctx := grpcMetadata.AppendToOutgoingContext(t.Context(), "traceparent", "Test", "userMetadata", "overwrited", "additional", "val2")
+	binVal := string([]byte{0x00, 0x09, 0xde, 0xad})
+	ctx := grpcMetadata.AppendToOutgoingContext(t.Context(),
+		"traceparent", "Test",
+		"tracestate", "key=value",
+		"baggage", "k1=v1",
+		"userMetadata", "overwrited",
+		"additional", "val2",
+		"grpc-trace-bin", binVal,
+		"foo-bin", binVal,
+	)
 	resp, err := client.InvokeBinding(ctx, &runtimev1pb.InvokeBindingRequest{Metadata: map[string]string{"userMetadata": "val1"}})
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Contains(t, resp.GetMetadata(), "traceparent")
 	assert.Equal(t, "Test", resp.GetMetadata()["traceparent"])
+	assert.Equal(t, "key=value", resp.GetMetadata()["tracestate"])
+	assert.Equal(t, "k1=v1", resp.GetMetadata()["baggage"])
 	assert.Contains(t, resp.GetMetadata(), "userMetadata")
 	assert.Equal(t, "val1", resp.GetMetadata()["userMetadata"])
 	assert.Contains(t, resp.GetMetadata(), "additional")
 	assert.Equal(t, "val2", resp.GetMetadata()["additional"])
+	// Binary gRPC metadata must not be forwarded to output binding metadata
+	assert.NotContains(t, resp.GetMetadata(), "grpc-trace-bin")
+	assert.NotContains(t, resp.GetMetadata(), "dapr-grpc-trace-bin")
+	assert.NotContains(t, resp.GetMetadata(), "foo-bin")
 }
 
 func TestTransactionStateStoreNotConfigured(t *testing.T) {

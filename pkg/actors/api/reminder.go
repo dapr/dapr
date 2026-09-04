@@ -43,6 +43,14 @@ type Reminder struct {
 	IsTimer        bool           `json:"-"`
 	IsRemote       bool           `json:"-"`
 	SkipLock       bool           `json:"-"`
+	// SkipRetries opts this call out of the router's built-in
+	// actor-not-found retry wrapper (constant 1s backoff): a transient
+	// resolution failure surfaces to the caller immediately. For callers
+	// that own their recovery (e.g. the local wake drive, which escalates a
+	// failed drive to a durable reminder), the blind retries only add
+	// second-scale tail latency. Unlike SkipLock it does not affect the
+	// placement claim or target locking.
+	SkipRetries bool `json:"-"`
 }
 
 // ActorKey returns the key of the actor for this reminder.

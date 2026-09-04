@@ -48,14 +48,6 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 
 // InvokeReminder implements actors.InternalActor and executes the activity logic.
 func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
-	if !reminder.SkipLock {
-		unlock, err := a.lock.ContextLock(ctx)
-		if err != nil {
-			return err
-		}
-		defer unlock()
-	}
-
 	if err := a.handleReminder(ctx, reminder); err != nil {
 		return err
 	}

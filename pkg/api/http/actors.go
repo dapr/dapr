@@ -33,6 +33,7 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/reminders"
+	actortimers "github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/messages"
@@ -286,6 +287,12 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 
 	err = timers.Create(ctx, &req)
 	if err != nil {
+		if errors.Is(err, actortimers.ErrTimerActorNotOwned) {
+			respondWithError(w, messages.ErrActorTimerOpActorNotOwned)
+			log.Debug(messages.ErrActorTimerOpActorNotOwned)
+			return
+		}
+
 		msg := messages.ErrActorTimerCreate.WithFormat(err)
 		respondWithError(w, msg)
 		log.Debug(msg)

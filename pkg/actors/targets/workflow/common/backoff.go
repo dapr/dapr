@@ -24,8 +24,8 @@ import (
 )
 
 const (
-	// RetryBackoffBase and RetryBackoffCap bound the jittered retry intervals used
-	// in workflow reminder failure policies (see RetryForeverPolicy).
+	// RetryBackoffBase and RetryBackoffCap bound the jittered retry
+	// backoffs on the workflow drive, reminder and create paths.
 	RetryBackoffBase = 50 * time.Millisecond
 	RetryBackoffCap  = 2 * time.Second
 )

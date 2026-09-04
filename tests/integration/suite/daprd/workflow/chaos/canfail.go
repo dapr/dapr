@@ -49,6 +49,10 @@ type canfail struct {
 }
 
 func (c *canfail) Setup(t *testing.T) []framework.Option {
+	if workflow.FastPathFromEnv() {
+		t.Skip("WorkflowsFastPath drives the activity-result wake-up locally and never issues the per-event ScheduleJob this test arms a failure on")
+	}
+
 	c.scheduler = scheduler.New(t)
 	c.proxy = proxy.New(t, c.scheduler)
 
@@ -111,9 +115,10 @@ func (c *canfail) Run(t *testing.T, ctx context.Context) {
 	}
 
 	failedCh := make(chan struct{})
-	// codes.Internal is non-transient so daprd's CreateReminderWithRetry
-	// does not mask it; the orchestrator's error path runs.
-	c.proxy.ArmFailures(proxy.MethodScheduleJob, 1, codes.Internal, failedCh)
+	// codes.InvalidArgument is a permanent create error so daprd's
+	// CreateReminderWithRetry does not mask it; the orchestrator's error
+	// path runs.
+	c.proxy.ArmFailures(proxy.MethodScheduleJob, 1, codes.InvalidArgument, failedCh)
 
 	close(releaseActivity)
 

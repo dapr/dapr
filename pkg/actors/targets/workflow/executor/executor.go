@@ -74,21 +74,33 @@ type executor struct {
 
 func (e *executor) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 	e.wg.Add(1)
+
+	var res *internalsv1pb.InternalInvokeResponse
+	var run func()
+	var err error
+
+	defer func() {
+		if run != nil {
+			run()
+		}
+	}()
 	defer e.wg.Done()
 
 	switch req.GetMessage().GetMethod() {
 	case MethodComplete:
-		return nil, e.complete(ctx, req)
+		run, err = e.complete(ctx, req)
 	case MethodCancel:
-		return nil, e.cancel(req)
+		run, err = e.cancel(req)
 	case MethodClaim:
-		return e.claim(req), nil
+		res = e.claim(req)
 	default:
-		return nil, errors.New("unknown method: " + req.GetMessage().GetMethod())
+		err = errors.New("unknown method: " + req.GetMessage().GetMethod())
 	}
+
+	return res, err
 }
 
-func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) error {
+func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (func(), error) {
 	taskType := taskTypeOf(req, e.actorID)
 
 	// The task type header lets a watcher of the colliding other task type
@@ -108,13 +120,20 @@ func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvo
 
 	// The waiter for this task normally lives on this host (it shares this
 	// actor's ID, so placement co-locates them) and is registered in the
-	// process-local pending map: deliver in-process. The channel park below
+	// process-local pending map: deliver in-process. A callback waiter's
+	// continuation is handed back as run and executed by InvokeMethod on
+	// this goroutine once every lock is released. The channel park below
 	// remains for waiters that fell back to a WatchComplete stream and for
 	// waiters whose Register+Claim has not happened yet. The miss and the
 	// park are one critical section: a claim can never observe the channel
 	// empty after the map was checked but before the park lands.
 	e.mu.Lock()
-	if e.pending != nil && e.pending.Deliver(PendingKey(taskType, e.actorID), req.GetMessage().GetData().GetValue()) {
+	var run func()
+	var delivered bool
+	if e.pending != nil {
+		run, delivered = e.pending.DeliverDeferred(PendingKey(taskType, e.actorID), req.GetMessage().GetData().GetValue())
+	}
+	if delivered {
 		// A stale watch stream from a superseded attempt may still be
 		// parked on this actor; feed it a copy so it terminates promptly
 		// instead of hanging until its context deadline. Duplicate
@@ -128,7 +147,7 @@ func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvo
 		if deactivate {
 			e.tryDeactivate()
 		}
-		return nil
+		return run, nil
 	}
 
 	// A concurrent claim may have found nothing and requested deactivation;
@@ -138,7 +157,7 @@ func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvo
 	select {
 	case <-e.closeCh:
 		e.mu.Unlock()
-		return targeterrors.NewClosed("executor")
+		return nil, targeterrors.NewClosed("executor")
 	default:
 	}
 
@@ -163,7 +182,7 @@ func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvo
 	}
 
 	if parked {
-		return nil
+		return nil, nil
 	}
 
 	// The channel already holds an earlier parked completion (a superseded
@@ -171,13 +190,13 @@ func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvo
 	// lifecycle event resolves it.
 	select {
 	case e.completeCh <- d:
-		return nil
+		return nil, nil
 	case <-e.cancelCh:
-		return errors.New("canceled before completion result was sent")
+		return nil, errors.New("canceled before completion result was sent")
 	case <-e.closeCh:
-		return targeterrors.NewClosed("executor")
+		return nil, targeterrors.NewClosed("executor")
 	case <-ctx.Done():
-		return errors.New("context cancelled before completion result was sent")
+		return nil, errors.New("context cancelled before completion result was sent")
 	}
 }
 
@@ -285,15 +304,20 @@ func parkedTaskType(d *internalsv1pb.InternalInvokeResponse) string {
 	return ""
 }
 
-func (e *executor) cancel(req *internalsv1pb.InternalInvokeRequest) error {
+func (e *executor) cancel(req *internalsv1pb.InternalInvokeRequest) (func(), error) {
 	e.mu.Lock()
-	if e.pending != nil && e.pending.Cancel(PendingKey(taskTypeOf(req, e.actorID), e.actorID)) {
+	var run func()
+	var cancelled bool
+	if e.pending != nil {
+		run, cancelled = e.pending.CancelDeferred(PendingKey(taskTypeOf(req, e.actorID), e.actorID))
+	}
+	if cancelled {
 		deactivate := e.displaced == nil
 		e.mu.Unlock()
 		if deactivate {
 			e.tryDeactivate()
 		}
-		return nil
+		return run, nil
 	}
 
 	// Cancels are at-least-once (stream disconnect cleanup and executor
@@ -304,7 +328,7 @@ func (e *executor) cancel(req *internalsv1pb.InternalInvokeRequest) error {
 		close(e.cancelCh)
 	}
 	e.mu.Unlock()
-	return nil
+	return nil, nil
 }
 
 // tryDeactivate requests deactivation without ever blocking the caller: the

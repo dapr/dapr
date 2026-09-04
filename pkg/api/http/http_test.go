@@ -1524,10 +1524,53 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, "ERR_ACTOR_TIMER_CREATE", resp.ErrorBody["errorCode"])
 	})
 
+	t.Run("Timer Create - 403 when actor not owned by this host", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+
+		timerRequest := actorsapi.CreateTimerRequest{
+			Name:      "timer1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+			Data:      nil,
+			DueTime:   "0h0m3s0ms",
+			Period:    "0h0m7s0ms",
+		}
+
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New().WithCreateFn(func(context.Context, *actorsapi.CreateTimerRequest) error {
+				return timers.ErrTimerActorNotOwned
+			}), nil
+		})
+
+		// act
+		inputBodyBytes, err := json.Marshal(timerRequest)
+
+		require.NoError(t, err)
+		resp := fakeServer(t).DoRequest("POST", apiPath, inputBodyBytes, nil)
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_NOT_OWNED", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Timer Delete - 403 when actor not owned by this host", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New().WithDeleteFn(func(context.Context, *actorsapi.DeleteTimerRequest) error {
+				return timers.ErrTimerActorNotOwned
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("DELETE", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_NOT_OWNED", resp.ErrorBody["errorCode"])
+	})
+
 	t.Run("Timer Delete - 204 No Conent", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
 		actors.WithTimers(func(context.Context) (timers.Interface, error) {
-			return timersfake.New().WithDeleteFn(func(context.Context, *actorsapi.DeleteTimerRequest) {}), nil
+			return timersfake.New().WithDeleteFn(func(context.Context, *actorsapi.DeleteTimerRequest) error { return nil }), nil
 		})
 
 		// act

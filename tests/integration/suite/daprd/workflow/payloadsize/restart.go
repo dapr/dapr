@@ -17,6 +17,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,6 +47,7 @@ func (r *restartresume) Setup(t *testing.T) []framework.Option {
 	r.workflow = workflow.New(t,
 		workflow.WithDaprdOptions(0,
 			daprd.WithMaxBodySize("1Mi"),
+			daprd.WithWorkflowJanitorPeriod(t, time.Millisecond*500),
 		),
 	)
 	return []framework.Option{
