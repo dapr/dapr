@@ -410,7 +410,7 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 	// lazy registration an absent series is indistinguishable from a rescue
 	// path that never fired. Their views aggregate by Sum, so the zero
 	// record registers the series without changing its value.
-	for _, s := range []string{StatusJanitorRecovered, StatusJanitorFoldRecovered, StatusStaleTurnRejected, StatusUnstartableFailed, StatusArmDetached, StatusPendingStartRedriven} {
+	for _, s := range []string{StatusJanitorRecovered, StatusJanitorFoldRecovered, StatusStaleTurnRejected, StatusUnstartableFailed, StatusArmDetached, StatusArmDetachedFailed, StatusPendingStartRedriven} {
 		stats.RecordWithOptions(context.Background(),
 			stats.WithRecorder(w.meter),
 			stats.WithTags(diagUtils.WithTags(w.localWakeCount.Name(), appIDKey, appID, namespaceKey, namespace, statusKey, s)...),

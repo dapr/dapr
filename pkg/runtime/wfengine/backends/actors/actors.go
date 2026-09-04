@@ -42,6 +42,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
@@ -158,8 +159,11 @@ type Actors struct {
 	duplicatedTurnCompletions atomic.Int64
 
 	// pendingStartRedrives holds the instance IDs with a detached re-drive
-	// poke in flight (see redriveOverduePendingStart).
+	// poke in flight; redrives runs the pokes between Start and Stop.
 	pendingStartRedrives sync.Map
+	redriveLock          sync.Mutex
+	redrives             *detached.Runner
+	redriveCancel        context.CancelFunc
 
 	stopped atomic.Bool
 }
@@ -173,20 +177,26 @@ const pendingStartRedriveTimeout = 30 * time.Second
 // reminder. It runs detached, at most once in flight per instance, so the
 // caller's store read never waits on the actor lock.
 func (abe *Actors) redriveOverduePendingStart(id api.InstanceID) {
-	if abe.stopped.Load() {
+	abe.redriveLock.Lock()
+	redrives := abe.redrives
+	abe.redriveLock.Unlock()
+	if redrives == nil {
 		return
 	}
 	if _, inflight := abe.pendingStartRedrives.LoadOrStore(id, struct{}{}); inflight {
 		return
 	}
-	go func() {
+	started := redrives.Go(func(ctx context.Context) {
 		defer abe.pendingStartRedrives.Delete(id)
-		ctx, cancel := context.WithTimeout(context.Background(), pendingStartRedriveTimeout)
+		ctx, cancel := context.WithTimeout(ctx, pendingStartRedriveTimeout)
 		defer cancel()
 		if _, err := abe.getWorkflowMetadataRemote(ctx, id, abe.appID); err != nil && !errors.Is(err, api.ErrInstanceNotFound) {
 			log.Debugf("Failed to poke workflow actor '%s' to re-drive its overdue pending start: %v", id, err)
 		}
-	}()
+	})
+	if !started {
+		abe.pendingStartRedrives.Delete(id)
+	}
 }
 
 func New(opts Options) (*Actors, error) {
@@ -954,12 +964,24 @@ func (abe *Actors) purgeWorkflowRemote(ctx context.Context, id api.InstanceID, t
 // Start implements backend.Backend
 func (abe *Actors) Start(ctx context.Context) error {
 	abe.stopped.Store(false)
+	ctx, cancel := context.WithCancel(ctx)
+	abe.redriveLock.Lock()
+	abe.redrives, abe.redriveCancel = detached.New(ctx), cancel
+	abe.redriveLock.Unlock()
 	return nil
 }
 
 // Stop implements backend.Backend
 func (abe *Actors) Stop(context.Context) error {
 	abe.stopped.Store(true)
+	abe.redriveLock.Lock()
+	redrives, cancel := abe.redrives, abe.redriveCancel
+	abe.redrives, abe.redriveCancel = nil, nil
+	abe.redriveLock.Unlock()
+	if cancel != nil {
+		cancel()
+		redrives.Wait()
+	}
 	return nil
 }
 
