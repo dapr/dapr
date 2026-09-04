@@ -210,22 +210,29 @@ func (c *cmdE2EPerf) buildAndPushCmd(cmd *cobra.Command, args []string) error {
 	// Try to copy the image between the cache and the target directly, without pulling first
 	// This will fail if the image is not in cache, and that's ok
 	if c.flags.CacheRegistry != "" {
-		fmt.Printf("Trying to copy image %s directly from cache %s\n", destImage, cachedImage)
-		for attempt := 1; attempt <= 3; attempt++ {
-			err = crane.Copy(cachedImage, destImage)
-			if err == nil {
-				// If there's no error, we're done
-				fmt.Println("Image copied from cache directly! You're all set.")
-				return nil
+		// Probe the cache once before retrying the copy: a missing or unreadable
+		// image fails identically on every attempt, so retries only add delay
+		_, err = crane.Digest(cachedImage)
+		if err != nil {
+			fmt.Printf("Image %s not found in cache (%v). Will build image.\n", cachedImage, err)
+		} else {
+			fmt.Printf("Trying to copy image %s directly from cache %s\n", destImage, cachedImage)
+			for attempt := 1; attempt <= 3; attempt++ {
+				err = crane.Copy(cachedImage, destImage)
+				if err == nil {
+					// If there's no error, we're done
+					fmt.Println("Image copied from cache directly! You're all set.")
+					return nil
+				}
+				fmt.Printf("crane.Copy attempt %d/3 failed: %v\n", attempt, err)
+				if attempt < 3 {
+					time.Sleep(time.Duration(attempt*2) * time.Second)
+				}
 			}
-			fmt.Printf("crane.Copy attempt %d/3 failed: %v\n", attempt, err)
-			if attempt < 3 {
-				time.Sleep(time.Duration(attempt*2) * time.Second)
-			}
-		}
 
-		// Copying the image failed, so we'll resort to build + push
-		fmt.Printf("Copying image directly from cache failed after 3 attempts: %v. Will build image.\n", err)
+			// Copying the image failed, so we'll resort to build + push
+			fmt.Printf("Copying image directly from cache failed after 3 attempts: %v. Will build image.\n", err)
+		}
 	} else {
 		fmt.Println("Cache registry not set: will not use cache")
 	}
@@ -356,7 +363,9 @@ func (c *cmdE2EPerf) buildDockerImage(cachedImage string) error {
 	}
 
 	// Push to the cache, if needed
-	if c.flags.CacheRegistry != "" {
+	// DAPR_CACHE_READONLY skips the push on runs that have no write access to
+	// the cache registry, such as pull requests
+	if c.flags.CacheRegistry != "" && os.Getenv("DAPR_CACHE_READONLY") != "true" {
 		fmt.Printf("Pushing image %s to cache…\n", cachedImage)
 
 		err = exec.Command("docker", "tag", destImage, cachedImage).Run()
@@ -369,8 +378,15 @@ func (c *cmdE2EPerf) buildDockerImage(cachedImage string) error {
 		e.Stdout = os.Stdout
 		e.Stderr = os.Stderr
 		err = e.Run()
-		// If there's an error, we probably didn't have permissions to push to the registry, so we can just ignore that
 		if err != nil {
+			// The dedicated cache-population workflow sets DAPR_CACHE_REQUIRED
+			// so a failed push fails the run instead of leaving the cache
+			// silently incomplete. Everywhere else the push is best-effort:
+			// the run probably lacks permissions on the registry.
+			if os.Getenv("DAPR_CACHE_REQUIRED") == "true" {
+				fmt.Println("Failed to push to the cache registry:", err)
+				return err
+			}
 			fmt.Println("Failed to push to the cache registry; ignored")
 		}
 	}
@@ -541,6 +557,33 @@ func (c *cmdE2EPerf) getHashDir() (string, error) {
 				files = append(files, checksum)
 			}
 		}
+	}
+
+	// Also hash shared build inputs that live outside the app's folder, so
+	// that changing them invalidates the cached image. Apps without their own
+	// Dockerfile are compiled on the host and packaged with the shared
+	// Dockerfile, so that file is an input; if such an app also has no go.mod
+	// of its own it is built against the root module, so the root go.mod and
+	// go.sum are inputs too. Apps with their own Dockerfile handle all their
+	// build inputs inside their folder, which is already hashed.
+	shared := []string{}
+	if _, err := os.Stat(filepath.Join(basePath, c.flags.Dockerfile)); err != nil {
+		if c.cmdType == "perf" {
+			shared = append(shared, filepath.Join(c.getAppDir(), "..", "Dockerfile"))
+		} else {
+			shared = append(shared, filepath.Join(c.getAppDir(), c.flags.Dockerfile))
+		}
+		if _, err := os.Stat(filepath.Join(basePath, "go.mod")); err != nil {
+			rootDir := filepath.Join(c.flags.AppDir, "..", "..")
+			shared = append(shared, filepath.Join(rootDir, "go.mod"), filepath.Join(rootDir, "go.sum"))
+		}
+	}
+	for _, f := range shared {
+		checksum, err := hashEntryForFile(f, filepath.Join("_shared", filepath.Base(f)))
+		if err != nil {
+			continue
+		}
+		files = append(files, checksum)
 	}
 
 	// Sort files to have a consistent order, then compute the checksum of that slice (getting the first 10 chars only)

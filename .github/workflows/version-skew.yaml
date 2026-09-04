@@ -258,7 +258,10 @@ jobs:
       DAPR_REGISTRY: localhost:5000/dapr
       DAPR_TAG: dev
       DAPR_NAMESPACE: dapr-tests
-      DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+      # Public-read cache, see kind-e2e.yaml. Reads are anonymous and writes
+      # are skipped via DAPR_CACHE_READONLY.
+      DAPR_CACHE_REGISTRY: "ghcr.io/dapr/e2e-cache"
+      DAPR_CACHE_READONLY: "true"
       PULL_POLICY: Always
     strategy:
       fail-fast: false # Keep running if one leg fails.
@@ -428,7 +431,7 @@ jobs:
 
     - name: Build and push test apps
       run: |
-        cd latest-release && make build-push-e2e-app-all
+        cd latest-release && make compile-build-tools && make -j 6 USE_BUILD_TOOLS_BIN=true build-push-e2e-app-all
 
     - name: Setup Dapr - control-plane master
       if: matrix.mode == 'control-plane-master'
@@ -508,7 +511,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.mode }}_test_e2e.json
-        path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
+        path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e*
     - name: Update PR comment for success
       if: ${{ success() }}
       uses: artursouza/sticky-pull-request-comment@v2.2.0

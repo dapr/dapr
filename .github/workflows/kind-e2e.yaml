@@ -59,8 +59,12 @@ jobs:
       # TODO: Make this auto-populated based on GitHub's releases.
       DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.16.8"
       DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.15.13"
-      # Container registry where to cache e2e test images
-      DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+      # Container registry where to cache e2e test images. The packages under
+      # this path are public, so pull requests (including from forks) can read
+      # the cache anonymously. Only the e2e-cache-populate workflow writes to
+      # it; this job runs with DAPR_CACHE_READONLY=true.
+      DAPR_CACHE_REGISTRY: "ghcr.io/dapr/e2e-cache"
+      DAPR_CACHE_READONLY: "true"
       PULL_POLICY: IfNotPresent
     strategy:
       fail-fast: false # Keep running if one leg fails.
@@ -189,9 +193,21 @@ jobs:
         make docker-build
         make docker-push-retry
 
-    - name: Build and push test apps
+    - name: Precompile e2e test binaries in the background
+      # Warms the Go build cache for the Run tests step while the app images
+      # and the cluster are being prepared. -exec=true in the target means the
+      # binaries are built but nothing executes.
       run: |
-        make build-push-e2e-app-all
+        nohup make build-e2e-tests > /tmp/build-e2e-tests.log 2>&1 &
+        echo $! > /tmp/build-e2e-tests.pid
+
+    - name: Build and push test apps
+      # Compile the build tool once instead of `go run` per app, and build the
+      # apps in parallel. On a warm cache each app is a direct registry-to-registry
+      # copy from the cache into the local KinD registry.
+      run: |
+        make compile-build-tools
+        make -j 6 USE_BUILD_TOOLS_BIN=true build-push-e2e-app-all
 
     - name: Setup Dapr
       run: |
@@ -226,6 +242,11 @@ jobs:
         make setup-test-components
       env:
         DAPR_TEST_CONFIG_STORE: ${{ matrix.dapr-test-config-store }}
+
+    - name: Wait for e2e test binary precompile
+      run: |
+        while kill -0 "$(cat /tmp/build-e2e-tests.pid)" 2>/dev/null; do sleep 1; done
+        tail -5 /tmp/build-e2e-tests.log || true
 
     - name: Run tests
       run: |
@@ -268,4 +289,5 @@ jobs:
       with:
         #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
         name: ${{ matrix.k8s-version }}_${{ matrix.mode }}_test_e2e.json
-        path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
+        # Also matches the _e2e_serial.json/.xml reports from the serial pass
+        path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e*
