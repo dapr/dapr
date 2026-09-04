@@ -116,8 +116,11 @@ type State struct {
 	// CreationInput is the input the parent created this child with, kept
 	// from the first ContinueAsNew on: the parent verifies the completion
 	// attestation against it, while the current generation's start event
-	// carries the continued input. nil until a ContinueAsNew.
-	CreationInput *wrapperspb.StringValue
+	// carries the continued input. nil until a ContinueAsNew. It is stamped
+	// with the creating parent so a row an older binary's purge left behind
+	// is not read into a recreated instance.
+	CreationInput       *wrapperspb.StringValue
+	creationInputParent creationParent
 
 	// externalCertDigestIndex maps SHA-256 cert digests (raw 32-byte digest
 	// converted to a string for use as a map key, not hex-encoded) to their
@@ -274,17 +277,64 @@ func (s *State) SetIncomingHistory(ph *protos.PropagatedHistory) {
 	s.incomingHistoryChanged = true
 }
 
-// SetCreationInput keeps the input the parent created this child with across
+// creationParent identifies the creation a kept input belongs to.
+type creationParent struct {
+	InstanceID  string `json:"parentInstance"`
+	ExecutionID string `json:"parentExecution"`
+}
+
+// creationInputRow is the persisted form of the creation input.
+type creationInputRow struct {
+	creationParent
+	Input string `json:"input"`
+}
+
+func creationParentOf(p *protos.ParentInstanceInfo) creationParent {
+	return creationParent{
+		InstanceID:  p.GetWorkflowInstance().GetInstanceId(),
+		ExecutionID: p.GetWorkflowInstance().GetExecutionId().GetValue(),
+	}
+}
+
+// setCreationInput keeps the input the parent created this child with across
 // ContinueAsNew. A nil input is kept as an empty value so the rebuild can
 // tell "no input" from "not recorded".
-func (s *State) SetCreationInput(in *wrapperspb.StringValue) {
+func (s *State) setCreationInput(in *wrapperspb.StringValue, parent *protos.ParentInstanceInfo) {
 	if in == nil {
 		in = &wrapperspb.StringValue{}
 	}
-	if s.CreationInput == nil || s.CreationInput.GetValue() != in.GetValue() {
+	s.CreationInput = in
+	s.creationInputParent = creationParentOf(parent)
+	s.creationInputChanged = true
+}
+
+// CreationInputFor reports whether the kept creation input belongs to the
+// creation described by parent.
+func (s *State) CreationInputFor(parent *protos.ParentInstanceInfo) bool {
+	return s.CreationInput != nil && s.creationInputParent == creationParentOf(parent)
+}
+
+// ClearCreationInput drops a kept creation input that does not belong to
+// this instance's creation; the next save deletes the row.
+func (s *State) ClearCreationInput() {
+	if s.CreationInput != nil || s.creationInputPersisted {
+		s.CreationInput = nil
+		s.creationInputParent = creationParent{}
 		s.creationInputChanged = true
 	}
-	s.CreationInput = in
+}
+
+// executionStartedOf returns the instance's ExecutionStarted event: from
+// history, or from the inbox when the first turn has not committed it yet.
+func executionStartedOf(history, inbox []*protos.HistoryEvent) *protos.ExecutionStartedEvent {
+	for _, events := range [][]*protos.HistoryEvent{history, inbox} {
+		for _, e := range events {
+			if es := e.GetExecutionStarted(); es != nil {
+				return es
+			}
+		}
+	}
+	return nil
 }
 
 // SetParentNotifyPending records whether the parent still has to be told
@@ -321,6 +371,14 @@ func (s *State) SetMetadataETag(etag *string) {
 
 func (s *State) ApplyRuntimeStateChanges(rs *backend.WorkflowRuntimeState) {
 	if rs.GetContinuedAsNew() {
+		// The parent verifies a child's completion against the input it
+		// created it with; the new generation's start event carries the
+		// continued input, so keep the original from the first generation.
+		if s.CreationInput == nil {
+			if es := executionStartedOf(s.History, s.Inbox); es.GetParentInstance() != nil {
+				s.setCreationInput(es.GetInput(), es.GetParentInstance())
+			}
+		}
 		s.historyRemovedCount += len(s.History)
 		s.historyAddedCount = 0
 		s.History = nil
@@ -609,7 +667,7 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 	}
 	if s.creationInputChanged {
 		if s.CreationInput != nil {
-			data, err := proto.Marshal(s.CreationInput)
+			data, err := json.Marshal(creationInputRow{creationParent: s.creationInputParent, Input: s.CreationInput.GetValue()})
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal creation input: %w", err)
 			}
@@ -1126,12 +1184,26 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 		wState.parentNotifyPersisted = true
 	}
 	if ci := bulkRes[creationInputKey]; ci.ETag != nil || len(ci.Data) > 0 {
-		var in wrapperspb.StringValue
-		if err = proto.Unmarshal(ci.Data, &in); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal creation input for '%s': %w", actorID, err)
-		}
-		wState.CreationInput = &in
 		wState.creationInputPersisted = true
+		var row creationInputRow
+		if err = json.Unmarshal(ci.Data, &row); err == nil {
+			wState.CreationInput = wrapperspb.String(row.Input)
+			wState.creationInputParent = row.creationParent
+		} else {
+			// An unstamped row written as a bare StringValue by the first
+			// binary that kept the input: adopt it for the current creation
+			// and let the next save rewrite it stamped.
+			var legacy wrapperspb.StringValue
+			if perr := proto.Unmarshal(ci.Data, &legacy); perr != nil {
+				return nil, fmt.Errorf("failed to unmarshal creation input for '%s': %w", actorID, err)
+			}
+			parent := executionStartedOf(wState.History, wState.Inbox).GetParentInstance()
+			if parent == nil {
+				wState.ClearCreationInput()
+			} else {
+				wState.setCreationInput(&legacy, parent)
+			}
+		}
 	}
 
 	wfLogger.Debugf("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))
