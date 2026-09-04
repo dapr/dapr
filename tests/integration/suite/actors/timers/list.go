@@ -230,4 +230,32 @@ func (l *list) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, nethttp.StatusOK, code)
 	assert.JSONEq(t, `{"timers":[{"name":"t0","actorType":"abc","actorID":"foo","dueTime":"1000s","data":"aGk="}]}`, body)
 	assertNotFound(t, "abc", "foo", "t1")
+
+	// Dapr-reserved internal actor types are rejected at the API layer, even
+	// though the workflow runtime hosts them on this sidecar.
+	internalType := "dapr.internal.default." + l.app.AppID() + ".workflow"
+
+	_, err = gclient.ListActorTimers(ctx, &rtv1.ListActorTimersRequest{ActorType: internalType, ActorId: "foo"})
+	require.Error(t, err)
+	st, ok = status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+	assert.Contains(t, st.Message(), "reserved")
+
+	_, err = gclient.GetActorTimer(ctx, &rtv1.GetActorTimerRequest{ActorType: internalType, ActorId: "foo", Name: "t0"})
+	require.Error(t, err)
+	st, ok = status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+	assert.Contains(t, st.Message(), "reserved")
+
+	for _, do := range []func() (int, string){
+		func() (int, string) { return httpList(t, internalType, "foo") },
+		func() (int, string) { return httpGet(t, internalType, "foo", "t0") },
+	} {
+		code, body = do()
+		assert.Equal(t, nethttp.StatusForbidden, code)
+		require.NoError(t, json.Unmarshal([]byte(body), &apiErr))
+		assert.Equal(t, "ERR_ACTOR_TYPE_RESERVED", apiErr.ErrorCode)
+	}
 }
