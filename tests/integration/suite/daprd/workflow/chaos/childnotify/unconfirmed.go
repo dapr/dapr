@@ -41,10 +41,10 @@ func init() {
 	suite.Register(new(unconfirmed))
 }
 
-// unconfirmed answers the metadata read after the child's terminal save
-// with an empty row, then fails the read that would confirm it. The purge
-// is neither confirmed nor refuted, so the turn must retry rather than
-// notify the parent; the refire finds the row and completes the delivery.
+// unconfirmed force purges the child between its terminal commit and the
+// metadata re-read, then fails the read that would confirm the purge. Neither
+// confirmed nor refuted, the turn must stop rather than notify the parent for
+// state that is gone; the refire finds no state.
 type unconfirmed struct {
 	workflow *workflow.Workflow
 	ss       *statestore.StateStore
@@ -108,7 +108,7 @@ func (u *unconfirmed) Run(t *testing.T, ctx context.Context) {
 		if err := ctx.CallActivity("gate").Await(nil); err != nil {
 			return nil, err
 		}
-		return "confirmed", nil
+		return "unseen", nil
 	}))
 	require.NoError(t, reg.AddWorkflowN("parent", func(ctx *task.WorkflowContext) (any, error) {
 		var out string
@@ -118,23 +118,24 @@ func (u *unconfirmed) Run(t *testing.T, ctx context.Context) {
 		return out, nil
 	}))
 
-	// The terminal Multi carries the parent-notify row; the read-back that
-	// follows answers empty and the confirming read fails.
-	var armed atomic.Bool
-	failed := make(chan struct{})
+	// The terminal Multi carries the parent-notify row; the metadata
+	// re-read that follows is held so the purge can land, and the read that
+	// would confirm the purge is failed.
+	var committed atomic.Bool
 	var parentInboxWrites atomic.Int32
+	var arrived <-chan struct{}
+	var release func()
 	u.store.SetMultiObserver(func(req *state.TransactionalStateRequest) {
 		for _, op := range req.Operations {
 			set, ok := op.(state.SetRequest)
 			if !ok {
 				continue
 			}
-			if strings.Contains(set.Key, childID+"||parent-notify") && !armed.Load() {
-				u.store.ArmGetEmpty(childID+"||metadata", 1, nil)
-				u.store.ArmGetFailures(childID+"||metadata", 1, failed)
-				armed.Store(true)
+			if strings.Contains(set.Key, childID+"||parent-notify") && !committed.Load() {
+				arrived, release = u.store.ArmGetHold(childID + "||metadata")
+				committed.Store(true)
 			}
-			if armed.Load() && strings.Contains(set.Key, parentID+"||inbox-") {
+			if committed.Load() && strings.Contains(set.Key, parentID+"||inbox-") {
 				parentInboxWrites.Add(1)
 			}
 		}
@@ -144,18 +145,34 @@ func (u *unconfirmed) Run(t *testing.T, ctx context.Context) {
 	_, err := client.ScheduleNewWorkflow(ctx, "parent", api.WithInstanceID(parentID))
 	require.NoError(t, err)
 	require.Eventually(t, inActivity.Load, time.Second*20, time.Millisecond*10)
-	close(releaseCh)
 
+	close(releaseCh)
+	require.Eventually(t, committed.Load, time.Second*20, time.Millisecond*10)
+	select {
+	case <-arrived:
+	case <-time.After(time.Second * 20):
+		require.Fail(t, "the metadata re-read after the terminal commit never arrived")
+	}
+	t.Cleanup(release)
+
+	// The turn is parked with the actor lock held, so the purge's eviction
+	// waits out its timeout and the rows go regardless. The held read then
+	// sees the row gone, and the confirming read fails.
+	require.NoError(t, client.PurgeWorkflowState(ctx, childID, api.WithForcePurge(true)))
+	failed := make(chan struct{})
+	u.store.ArmGetFailures(childID+"||metadata", 1, failed)
+	release()
 	select {
 	case <-failed:
 	case <-time.After(time.Second * 20):
 		require.Fail(t, "the confirming read was never attempted")
 	}
 
-	// Delivery resumes on the refire, once and only once.
-	meta, err := client.WaitForWorkflowCompletion(ctx, parentID)
-	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
-	assert.JSONEq(t, `"confirmed"`, meta.GetOutput().GetValue())
-	assert.Equal(t, int32(1), parentInboxWrites.Load(), "the notification is sent only after the purge was refuted")
+	_, err = client.FetchWorkflowMetadata(ctx, childID)
+	require.ErrorIs(t, err, api.ErrInstanceNotFound)
+	assert.Never(t, func() bool {
+		meta, merr := client.FetchWorkflowMetadata(ctx, parentID)
+		return merr != nil || meta.GetRuntimeStatus() != api.RUNTIME_STATUS_RUNNING
+	}, time.Second*3, time.Millisecond*50, "an unconfirmed purge must not let the parent learn of the completion")
+	assert.Zero(t, parentInboxWrites.Load(), "no completion may reach the parent's inbox")
 }
