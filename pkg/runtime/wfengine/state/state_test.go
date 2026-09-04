@@ -816,7 +816,7 @@ func tamperMarkerEvent() *backend.HistoryEvent {
 		Timestamp: timestamppb.Now(),
 		EventType: &protos.HistoryEvent_ExecutionCompleted{
 			ExecutionCompleted: &protos.ExecutionCompletedEvent{
-				WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED,
+				WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_CANCELED,
 				FailureDetails: &protos.TaskFailureDetails{
 					ErrorType:    wferrors.ErrorTypeHistoryTampered,
 					ErrorMessage: "boom",
