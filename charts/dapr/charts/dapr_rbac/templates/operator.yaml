@@ -53,6 +53,11 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "list", "watch"]
+  # Sync the dapr-trust-bundle ConfigMap into Dapr-enabled namespaces so
+  # workloads receive root CA updates (e.g. during rotation).
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update"]
   - apiGroups: ["dapr.io"]
     resources: ["components", "configurations", "subscriptions", "resiliencies", "httpendpoints", "mcpservers", "workflowaccesspolicies"]
     verbs: [ "get", "list", "watch"]
@@ -139,6 +144,11 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "list", "watch"]
+  # Sync the dapr-trust-bundle ConfigMap into Dapr-enabled namespaces so
+  # workloads receive root CA updates (e.g. during rotation).
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update"]
   - apiGroups: ["dapr.io"]
     resources: ["components", "configurations", "subscriptions", "resiliencies", "httpendpoints", "mcpservers", "workflowaccesspolicies"]
     verbs: [ "get", "list", "watch"]
