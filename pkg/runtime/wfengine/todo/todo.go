@@ -57,6 +57,15 @@ const (
 	// predate the flag ignore it, degrading to a wait rather than a failure.
 	MetadataFetchOnly = "MetadataFetchOnly"
 
+	// MetadataSenderInstanceID carries the instance ID of the child workflow
+	// delivering its completion, so the parent can drop a completion for a
+	// task whose child in the current generation is a different instance.
+	MetadataSenderInstanceID = "SenderInstanceID"
+	// MetadataParentExecutionID carries the parent execution ID the child was
+	// created under, so a completion re-sent after the parent continued as
+	// new is dropped even when the child instance ID is reused.
+	MetadataParentExecutionID = "ParentExecutionID"
+
 	ActorTypePrefix = "dapr.internal."
 
 	// ActivityReminderName is the per-activity-actor execution reminder name.
