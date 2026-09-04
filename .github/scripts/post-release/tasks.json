@@ -1,0 +1,23 @@
+[
+  {
+    "key": "kubernetes-operator",
+    "repo": "dapr/kubernetes-operator",
+    "base": "main",
+    "title": "Update the vendored Dapr Helm chart to VERSION",
+    "body": "Dapr VERSION is released. The operator vendors the Dapr Helm chart, so it needs the new version.\n\n### Steps\n\n1. Set `HELM_CHART_VERSION` to `VERSION` in the `Makefile`.\n2. Run `make update/dapr`. The script replaces `helm-charts/dapr/` with the new chart.\n3. Commit the `Makefile` and every file under `helm-charts/`.\n\n### Notes\n\n- `HELM_CHART_VERSION` is the only place that holds the Dapr version. The e2e tests read it through `DAPR_HELM_CHART_VERSION`, so no other file needs a version edit.\n- `make update/dapr` deletes and recreates `helm-charts/dapr/`. Include any file that upstream adds or removes, and do not hand-edit the result.\n- A new Dapr minor version can add CRDs under `helm-charts/dapr/crds/`. Add them.\n\n### Verification\n\n```\ngo build ./...\nmake check\nhelm lint helm-charts/dapr\nhelm template test helm-charts/dapr\n```\n\nThe commit needs a DCO sign-off.\n\nAfter this merges, a maintainer must tag a `v0.0.N` release, then submit the new bundle to [OperatorHub](https://github.com/k8s-operatorhub/community-operators/tree/main/operators/dapr-kubernetes-operator).\n\nOpen the change as a pull request against `main`. Sign off the commit for DCO."
+  },
+  {
+    "key": "dapr-shared",
+    "repo": "dapr/dapr-shared",
+    "base": "main",
+    "title": "Update Dapr version to VERSION",
+    "body": "Dapr VERSION is released. The chart still points at the previous version.\n\n### Steps\n\n1. In `chart/dapr-shared/Chart.yaml`, set `appVersion` to `VERSION` and raise the chart `version`.\n2. In `chart/dapr-shared/values.yaml`, set the Dapr image tag to `VERSION`.\n3. In `docs/tutorial/README.md`, replace the old version with `VERSION`.\n\nSee PR #66 for the shape of this change.\n\n### Verification\n\n```\nhelm lint chart/dapr-shared\nhelm template test chart/dapr-shared\n```\n\nThe commit needs a DCO sign-off.\n\nOpen the change as a pull request against `main`. Sign off the commit for DCO."
+  },
+  {
+    "key": "testcontainers-dapr",
+    "repo": "diagridio/testcontainers-dapr",
+    "base": "main",
+    "title": "Update the default Dapr version to VERSION",
+    "body": "Dapr VERSION is released. The module still starts the previous version by default.\n\n### Steps\n\n1. Update the default Dapr image tag in `src/main/java/io/diagrid/dapr/DaprContainer.java`.\n2. Update the default placement image tag in `src/main/java/io/diagrid/dapr/DaprPlacementContainer.java`.\n3. Update the expected versions in `src/test/java/io/diagrid/dapr/`: `DaprComponentTest.java`, `DaprContainerTest.java` and `DaprPlacementContainerTest.java`.\n\nSee PR #56 for the shape of this change.\n\n### Verification\n\n```\nmvn test\n```\n\nOpen the change as a pull request against `main`. Sign off the commit for DCO."
+  }
+]
