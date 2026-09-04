@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -41,6 +42,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
@@ -155,10 +157,37 @@ type Actors struct {
 	// DAPR_WORKFLOW_TEST_DUPLICATE_TURN_COMPLETIONS injection.
 	duplicatedTurnCompletions atomic.Int64
 
+	// pendingStartRedrives holds the instance IDs with a detached re-drive
+	// poke in flight (see redriveOverduePendingStart).
+	pendingStartRedrives sync.Map
+
 	stopped atomic.Bool
 }
 
 var _ backend.Backend = (*Actors)(nil)
+
+const pendingStartRedriveTimeout = 30 * time.Second
+
+// redriveOverduePendingStart pokes the instance's workflow actor with a
+// one-shot status fetch, whose handler re-asserts an overdue pending start's
+// reminder. It runs detached, at most once in flight per instance, so the
+// caller's store read never waits on the actor lock.
+func (abe *Actors) redriveOverduePendingStart(id api.InstanceID) {
+	if abe.stopped.Load() {
+		return
+	}
+	if _, inflight := abe.pendingStartRedrives.LoadOrStore(id, struct{}{}); inflight {
+		return
+	}
+	go func() {
+		defer abe.pendingStartRedrives.Delete(id)
+		ctx, cancel := context.WithTimeout(context.Background(), pendingStartRedriveTimeout)
+		defer cancel()
+		if _, err := abe.getWorkflowMetadataRemote(ctx, id, abe.appID); err != nil && !errors.Is(err, api.ErrInstanceNotFound) {
+			log.Debugf("Failed to poke workflow actor '%s' to re-drive its overdue pending start: %v", id, err)
+		}
+	}()
+}
 
 func New(opts Options) (*Actors, error) {
 	var pendingTasksBackend PendingTasksBackend
@@ -508,6 +537,12 @@ func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID, r
 
 	if wstate == nil {
 		return nil, api.ErrInstanceNotFound
+	}
+
+	// This store read is the only thing a status-guarding client does to an
+	// instance whose start reminder was lost.
+	if pendingstart.Overdue(wstate, time.Now()) != nil {
+		abe.redriveOverduePendingStart(id)
 	}
 
 	rstate := runtimestate.NewWorkflowRuntimeState(string(id), wstate.CustomStatus, wstate.History)

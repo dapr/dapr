@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
@@ -134,8 +135,8 @@ type factory struct {
 	foldWaitTimeout time.Duration
 
 	rootCtx context.Context
-	escLock sync.Mutex
-	escWG   sync.WaitGroup
+	// detached runs work that must outlive an invocation or claim context.
+	detached *detached.Runner
 
 	table sync.Map
 	lock  sync.Mutex
@@ -202,6 +203,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		wakeCancel:             wakeCancel,
 		driveAliveWindow:       defaultDriveAliveWindow,
 		rootCtx:                ctx,
+		detached:               detached.New(ctx),
 	}
 
 	// The worker pool and reaper are factory-lifetime: they exit when the

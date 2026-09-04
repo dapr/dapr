@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/claim"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -134,9 +135,8 @@ type factory struct {
 	// unlike driveCtx it survives HaltAll, because a reminder create is
 	// host-agnostic and must be able to complete during the placement churn
 	// that cancels driveCtx.
-	rootCtx context.Context
-	escLock sync.Mutex
-	escWG   sync.WaitGroup
+	rootCtx  context.Context
+	detached *detached.Runner
 
 	// claims owns the durable execution-claim guards and gate (see the
 	// claim subpackage).
@@ -195,6 +195,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		driveCtx:               driveCtx,
 		driveCancel:            driveCancel,
 		rootCtx:                ctx,
+		detached:               detached.New(ctx),
 		router:                 router,
 		reminders:              sreminders,
 		scheduler:              opts.Scheduler,

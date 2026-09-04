@@ -28,6 +28,7 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -85,19 +86,16 @@ func (o *orchestrator) createRetentionReminder(ctx context.Context, name string,
 // callers re-driving a saved-but-never-run instance MUST pass the SAVED inbox
 // event, not the incoming request's.
 //
-// The Create retry stays bounded (unlike assertNewEventReminder): the client
-// call is blocked while this runs, and a bounded give-up is safe because the
-// pending-start path in createIfCompleted lets any retry of the create
-// re-assert this reminder from the saved event.
+// The Create retry stays bounded on the caller's context, which blocks the
+// client call. The inbox row is already committed, so a failed create is also
+// handed to a detached retry (see armDetachedOnCreateError) before the error
+// is returned.
 func (o *orchestrator) assertStartReminder(ctx context.Context, startEvent *backend.HistoryEvent) error {
-	start := startEvent.GetTimestamp().AsTime()
-	if ts := startEvent.GetExecutionStarted().GetScheduledStartTimestamp(); ts != nil {
-		start = ts.AsTime()
-	}
-
+	start := pendingstart.DueTime(startEvent)
 	workflowName := startEvent.GetExecutionStarted().GetName()
 	reminderName := events.EventReminderName(reminderPrefixStart, startEvent)
 	if err := o.createWorkflowReminder(ctx, reminderName, nil, start, o.appID, &workflowName); err != nil {
+		o.armDetachedOnCreateError(reminderName, start, workflowName, err)
 		return err
 	}
 
@@ -223,6 +221,7 @@ func (o *orchestrator) assertNewEventReminder(ctx context.Context, e *backend.Hi
 	// external events (RaiseEvent) lack on the sender side, unlike activity
 	// results.
 	if err := o.createWorkflowReminderForever(ctx, reminderName, nil, dueTime, o.appID, &wfName); err != nil {
+		o.armDetachedOnCreateError(reminderName, dueTime, wfName, err)
 		return err
 	}
 
@@ -310,18 +309,7 @@ func (o *orchestrator) deleteAllReminders(ctx context.Context) error {
 func (o *orchestrator) deleteStartReminder(startEvent *backend.HistoryEvent) {
 	name := events.EventReminderName(reminderPrefixStart, startEvent)
 
-	o.escLock.Lock()
-	rootCtx := o.rootCtx
-	if rootCtx.Err() != nil {
-		o.escLock.Unlock()
-		return
-	}
-	o.escWG.Add(1)
-	o.escLock.Unlock()
-
-	go func() {
-		defer o.escWG.Done()
-
+	o.detached.Go(func(rootCtx context.Context) {
 		ctx, cancel := context.WithTimeout(rootCtx, escalateTimeout)
 		defer cancel()
 
@@ -334,5 +322,5 @@ func (o *orchestrator) deleteStartReminder(startEvent *backend.HistoryEvent) {
 				log.Debugf("Workflow actor '%s': failed to delete pending start reminder '%s' (it will fire as a no-op): %v", o.actorID, name, err)
 			}
 		}
-	}()
+	})
 }

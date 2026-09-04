@@ -93,6 +93,14 @@ const (
 	// start was lost) was terminally FAILED instead of silently dropping
 	// its work; ~0 in healthy steady state.
 	StatusUnstartableFailed = "unstartable_failed"
+	// A wake-up reminder create failed after its inbox row was committed and
+	// was handed to a detached retry, or that retry gave up; ~0 in healthy
+	// steady state.
+	StatusArmDetached       = "reminder_arm_detached"
+	StatusArmDetachedFailed = "reminder_arm_detached_failed"
+	// A status read re-asserted the start reminder of an overdue pending
+	// start; ~0 in healthy steady state.
+	StatusPendingStartRedriven = "pending_start_redriven"
 	// Completions-fold outcomes: a sender-retried completion committed
 	// inside its folding turn (folded), or was nacked back into the
 	// sender's retry chain (turn failure, timeout, deactivation).
@@ -402,7 +410,7 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 	// lazy registration an absent series is indistinguishable from a rescue
 	// path that never fired. Their views aggregate by Sum, so the zero
 	// record registers the series without changing its value.
-	for _, s := range []string{StatusJanitorRecovered, StatusJanitorFoldRecovered, StatusStaleTurnRejected, StatusUnstartableFailed} {
+	for _, s := range []string{StatusJanitorRecovered, StatusJanitorFoldRecovered, StatusStaleTurnRejected, StatusUnstartableFailed, StatusArmDetached, StatusPendingStartRedriven} {
 		stats.RecordWithOptions(context.Background(),
 			stats.WithRecorder(w.meter),
 			stats.WithTags(diagUtils.WithTags(w.localWakeCount.Name(), appIDKey, appID, namespaceKey, namespace, statusKey, s)...),

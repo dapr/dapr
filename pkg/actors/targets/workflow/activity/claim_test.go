@@ -30,6 +30,7 @@ import (
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/claim"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -136,6 +137,7 @@ func newClaimHarness(t *testing.T) (*factory, *recordStore, chan *backend.Activi
 		state:             store.fake(),
 		fastPath:          true,
 		rootCtx:           t.Context(),
+		detached:          detached.New(t.Context()),
 		staleClaimAfter:   time.Hour,
 		claims: claim.New(claim.Options{
 			ActorType:      "dapr.internal.default.testapp.activity",
@@ -251,6 +253,7 @@ func Test_claimGuard_lifecycle(t *testing.T) {
 		f, store, _ := newClaimHarness(t)
 		rootCtx, rootCancel := context.WithCancel(t.Context())
 		f.rootCtx = rootCtx
+		f.detached = detached.New(rootCtx)
 
 		call, owner := f.inflight.Acquire(key)
 		require.True(t, owner)
@@ -797,7 +800,7 @@ func Test_driveActivity_escalationSuppressedByLiveClaim(t *testing.T) {
 		name := testActivityName
 		require.True(t, a.localDrive(testInvocation(), time.Now().Add(-time.Second), &name))
 		h.fact.driveWG.Wait()
-		h.fact.escWG.Wait()
+		h.fact.detached.Wait()
 
 		assert.Empty(t, h.sched.snapshotCreates(), "a live claim owns delivery; no durable reminder may be planted")
 	})
@@ -819,6 +822,6 @@ func Test_driveActivity_escalationSuppressedByLiveClaim(t *testing.T) {
 			return len(h.sched.snapshotCreates()) == 1
 		}, time.Second*5, time.Millisecond*10, "without a live claim the durable-reminder escalation must be restored")
 		h.fact.driveWG.Wait()
-		h.fact.escWG.Wait()
+		h.fact.detached.Wait()
 	})
 }

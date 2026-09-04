@@ -51,10 +51,16 @@ type createHarness struct {
 	saved   bool
 
 	createErr error
+	// createHook, when set, runs before every reminder create; a non-nil
+	// error is returned to the caller without recording the op.
+	createHook func(context.Context, *actorapi.CreateReminderRequest) error
 
 	// armedReminder, when non-nil, is returned by the reminders Get fake:
 	// the pending start's scheduler reminder exists. Nil means missing.
 	armedReminder *actorapi.Reminder
+	// getErr, when non-nil, is returned by the reminders Get fake: the
+	// scheduler could not be reached to check the reminder.
+	getErr error
 
 	orch *orchestrator
 }
@@ -65,9 +71,14 @@ func newCreateHarness(t *testing.T, instanceID string) *createHarness {
 	h := new(createHarness)
 
 	fakeRems := remindersfake.New().
-		WithCreate(func(_ context.Context, req *actorapi.CreateReminderRequest) error {
+		WithCreate(func(ctx context.Context, req *actorapi.CreateReminderRequest) error {
 			h.lock.Lock()
 			defer h.lock.Unlock()
+			if h.createHook != nil {
+				if err := h.createHook(ctx, req); err != nil {
+					return err
+				}
+			}
 			if h.createErr != nil {
 				return h.createErr
 			}
@@ -78,6 +89,9 @@ func newCreateHarness(t *testing.T, instanceID string) *createHarness {
 		WithGet(func(context.Context, *actorapi.GetReminderRequest) (*actorapi.Reminder, error) {
 			h.lock.Lock()
 			defer h.lock.Unlock()
+			if h.getErr != nil {
+				return nil, h.getErr
+			}
 			return h.armedReminder, nil
 		})
 
@@ -533,4 +547,233 @@ func Test_createWorkflowInstance_completedChildWithPendingNotification(t *testin
 		defer h.lock.Unlock()
 		assert.Empty(t, h.ops)
 	})
+}
+
+func Test_scheduleWorkflowStart_claimCancelledCreateArmsDetached(t *testing.T) {
+	const instanceID = "test-start-claim-cancelled"
+
+	// The placement claim context is cancelled by a dissemination round while
+	// the create is retrying against an unreachable scheduler: the inbox row
+	// is committed, so the create must be handed to a detached retry on the
+	// runtime lifetime and still complete.
+	h := newCreateHarness(t, instanceID)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	var calls int
+	h.createHook = func(cctx context.Context, _ *actorapi.CreateReminderRequest) error {
+		calls++
+		if calls == 1 {
+			cancel()
+			return status.Error(codes.Unavailable, "scheduler unreachable")
+		}
+		return nil
+	}
+
+	startTS := time.Now()
+	err := h.orch.createWorkflowInstance(ctx, createRequestBytes(t, startEventFor(instanceID, startTS, nil)))
+	require.ErrorIs(t, err, context.Canceled, "the caller still sees the failure: the create is not acknowledged before a driver exists")
+
+	h.orch.detached.Wait()
+
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	wantName := "start-es-" + strconv.Itoa(int(startTS.UnixNano()))
+	assert.Equal(t, []string{"save", "create:" + wantName}, h.ops,
+		"the detached retry must create the start reminder by its deterministic name after the save")
+	assert.Equal(t, 2, calls)
+}
+
+func Test_scheduleWorkflowStart_permanentCreateFailureDoesNotArmDetached(t *testing.T) {
+	const instanceID = "test-start-permanent"
+
+	h := newCreateHarness(t, instanceID)
+	h.createErr = status.Error(codes.InvalidArgument, "malformed")
+
+	err := h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, startEventFor(instanceID, time.Now(), nil)))
+	require.Error(t, err)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	h.orch.detached.Wait()
+
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	assert.Equal(t, []string{"save"}, h.ops, "a permanent request error is not retried detached")
+	_, inflight := h.orch.armPending.Load("start-es-1")
+	assert.False(t, inflight)
+}
+
+func Test_armReminderDetached_dedupsInflightName(t *testing.T) {
+	const instanceID = "test-arm-dedup"
+
+	h := newCreateHarness(t, instanceID)
+	release := make(chan struct{})
+	entered := make(chan struct{}, 1)
+	h.createHook = func(context.Context, *actorapi.CreateReminderRequest) error {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		<-release
+		return nil
+	}
+
+	start := time.Now()
+	h.orch.armReminderDetached("start-es-1", start, "TestWorkflow")
+	<-entered
+	// Hand-offs while the first create is in flight collapse onto it.
+	h.orch.armReminderDetached("start-es-1", start, "TestWorkflow")
+	h.orch.armReminderDetached("start-es-1", start, "TestWorkflow")
+	close(release)
+
+	h.orch.detached.Wait()
+
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	assert.Equal(t, []string{"create:start-es-1"}, h.ops, "exactly one detached create per reminder name")
+	_, inflight := h.orch.armPending.Load("start-es-1")
+	assert.False(t, inflight, "the in-flight marker is cleared once the create completes")
+}
+
+func Test_createWorkflowInstance_pendingStartReminderCheckFailsOpen(t *testing.T) {
+	const instanceID = "test-pending-get-fails"
+
+	// The reminder-missing check needs a scheduler round-trip that fails in
+	// exactly the outage that loses start reminders: the retry must re-assert
+	// rather than abort the create.
+	savedTS := time.Now().Add(-time.Minute)
+	h := newCreateHarness(t, instanceID)
+	h.primePendingStart(startEventFor(instanceID, savedTS, nil))
+	h.getErr = status.Error(codes.Internal, "failed to get job: rpc error: code = Unavailable")
+
+	incoming := startEventFor(instanceID, time.Now(), nil)
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	wantName := "start-es-" + strconv.Itoa(int(savedTS.UnixNano()))
+	assert.Equal(t, []string{"create:" + wantName}, h.ops,
+		"an inconclusive reminder check must re-assert from the saved event, not fail the create")
+}
+
+func Test_createWorkflowInstance_pendingStartSameParentReminderCheckFailsOpen(t *testing.T) {
+	const instanceID = "test-pending-parent-get-fails"
+
+	parent := func(es *protos.ExecutionStartedEvent) {
+		es.ParentInstance = &protos.ParentInstanceInfo{
+			TaskScheduledId:  3,
+			WorkflowInstance: &protos.WorkflowInstance{InstanceId: "parent-1"},
+		}
+	}
+
+	savedTS := time.Now().Add(-time.Minute)
+	h := newCreateHarness(t, instanceID)
+	h.primePendingStart(startEventFor(instanceID, savedTS, parent))
+	h.getErr = status.Error(codes.Unavailable, "connection refused")
+
+	incoming := startEventFor(instanceID, time.Now(), parent)
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	wantName := "start-es-" + strconv.Itoa(int(savedTS.UnixNano()))
+	assert.Equal(t, []string{"create:" + wantName}, h.ops)
+}
+
+func Test_redriveOverduePendingStart(t *testing.T) {
+	const instanceID = "test-redrive-overdue"
+
+	t.Run("overdue pending start is re-driven once per grace", func(t *testing.T) {
+		savedTS := time.Now().Add(-time.Minute)
+		h := newCreateHarness(t, instanceID)
+		state := h.primePendingStart(startEventFor(instanceID, savedTS, nil))
+
+		h.orch.redriveOverduePendingStart(state)
+		h.orch.redriveOverduePendingStart(state)
+		h.orch.detached.Wait()
+
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		wantName := "start-es-" + strconv.Itoa(int(savedTS.UnixNano()))
+		assert.Equal(t, []string{"create:" + wantName}, h.ops,
+			"the saved event names the reminder; a second read within the grace does not re-assert")
+	})
+
+	t.Run("fresh pending start is left to its reminder", func(t *testing.T) {
+		h := newCreateHarness(t, instanceID)
+		state := h.primePendingStart(startEventFor(instanceID, time.Now(), nil))
+
+		h.orch.redriveOverduePendingStart(state)
+		h.orch.detached.Wait()
+
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		assert.Empty(t, h.ops)
+	})
+
+	t.Run("delayed start is not overdue before its scheduled time", func(t *testing.T) {
+		h := newCreateHarness(t, instanceID)
+		state := h.primePendingStart(startEventFor(instanceID, time.Now().Add(-time.Hour), func(es *protos.ExecutionStartedEvent) {
+			es.ScheduledStartTimestamp = timestamppb.New(time.Now().Add(time.Hour))
+		}))
+
+		h.orch.redriveOverduePendingStart(state)
+		h.orch.detached.Wait()
+
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		assert.Empty(t, h.ops)
+	})
+
+	t.Run("started instance is never re-driven", func(t *testing.T) {
+		h := newCreateHarness(t, instanceID)
+		state := h.primePendingStart(startEventFor(instanceID, time.Now().Add(-time.Minute), nil))
+		state.AddToHistory(&backend.HistoryEvent{
+			EventId:   -1,
+			Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_WorkflowStarted{WorkflowStarted: &protos.WorkflowStartedEvent{}},
+		})
+
+		h.orch.redriveOverduePendingStart(state)
+		h.orch.detached.Wait()
+
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		assert.Empty(t, h.ops)
+	})
+}
+
+func Test_armDetachedOnCreateError_classification(t *testing.T) {
+	const instanceID = "test-arm-classify"
+
+	tests := map[string]struct {
+		err  error
+		arms bool
+	}{
+		"claim context cancelled":       {err: context.Canceled, arms: true},
+		"wrapped context cancelled":     {err: errors.Join(errors.New("create"), context.Canceled), arms: true},
+		"context deadline exceeded":     {err: context.DeadlineExceeded, arms: true},
+		"grpc canceled":                 {err: status.Error(codes.Canceled, "context canceled"), arms: true},
+		"grpc unavailable":              {err: status.Error(codes.Unavailable, "dial tcp"), arms: true},
+		"grpc unknown (cron is closed)": {err: status.Error(codes.Unknown, "cron is closed"), arms: true},
+		"grpc resource exhausted":       {err: status.Error(codes.ResourceExhausted, "database space exceeded"), arms: true},
+		"grpc invalid argument":         {err: status.Error(codes.InvalidArgument, "bad name"), arms: false},
+		"grpc not found":                {err: status.Error(codes.NotFound, "no actor"), arms: false},
+		"local non-status error":        {err: errors.New("marshalling exploded"), arms: false},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			h := newCreateHarness(t, instanceID)
+			h.orch.armDetachedOnCreateError("start-es-1", time.Now(), "TestWorkflow", test.err)
+			h.orch.detached.Wait()
+
+			h.lock.Lock()
+			defer h.lock.Unlock()
+			if test.arms {
+				assert.Equal(t, []string{"create:start-es-1"}, h.ops)
+			} else {
+				assert.Empty(t, h.ops)
+			}
+		})
+	}
 }

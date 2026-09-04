@@ -46,6 +46,8 @@ func (o *orchestrator) handleStream(ctx context.Context,
 		return false, aerr
 	}
 
+	o.redriveOverduePendingStart(state)
+
 	// A one-shot metadata fetch (cross-app GetWorkflowMetadata) must never
 	// park the stream: reply with the current metadata, or a not-found status
 	// when the instance does not exist. Nonexistence is conveyed in the
