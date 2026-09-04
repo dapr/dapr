@@ -242,14 +242,7 @@ func Test_patchPodLabel(t *testing.T) {
 }
 
 func TestDaprWatchdog_Start(t *testing.T) {
-	// simple test of start
-	ctx, cancel := context.WithCancel(t.Context())
-	cancelled := false
-	defer func() {
-		if !cancelled {
-			cancel()
-		}
-	}()
+	ctx := t.Context()
 
 	singleIterationDurationThreshold = 100 * time.Millisecond
 	defer func() {
@@ -262,7 +255,7 @@ func TestDaprWatchdog_Start(t *testing.T) {
 		client:            ctlClient,
 		maxRestartsPerMin: 0,
 		canPatchPodLabels: true,
-		interval:          200 * time.Millisecond,
+		interval:          50 * time.Millisecond,
 		podSelector:       getSideCarInjectedNotExistsSelector(),
 	}
 	daprized := 5
@@ -273,17 +266,7 @@ func TestDaprWatchdog_Start(t *testing.T) {
 		require.NoError(t, ctlClient.Create(ctx, pod))
 	}
 
-	startDone := make(chan error)
-	go func() {
-		startDone <- dw.Start(ctx)
-	}()
-
-	// let it run a few cycles
-	time.Sleep(time.Second)
-	cancel()
-	cancelled = true
-
-	require.NoError(t, <-startDone)
+	require.NoError(t, dw.Start(ctx))
 
 	t.Log("daprized pods should be deleted except those running")
 	assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running, injected)
