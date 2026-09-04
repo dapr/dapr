@@ -54,8 +54,10 @@ const (
 	Dapr_UnregisterActorReminder_FullMethodName        = "/dapr.proto.runtime.v1.Dapr/UnregisterActorReminder"
 	Dapr_UnregisterActorRemindersByType_FullMethodName = "/dapr.proto.runtime.v1.Dapr/UnregisterActorRemindersByType"
 	Dapr_ListActorReminders_FullMethodName             = "/dapr.proto.runtime.v1.Dapr/ListActorReminders"
+	Dapr_ListActorTimers_FullMethodName                = "/dapr.proto.runtime.v1.Dapr/ListActorTimers"
 	Dapr_GetActorState_FullMethodName                  = "/dapr.proto.runtime.v1.Dapr/GetActorState"
 	Dapr_GetActorReminder_FullMethodName               = "/dapr.proto.runtime.v1.Dapr/GetActorReminder"
+	Dapr_GetActorTimer_FullMethodName                  = "/dapr.proto.runtime.v1.Dapr/GetActorTimer"
 	Dapr_ExecuteActorStateTransaction_FullMethodName   = "/dapr.proto.runtime.v1.Dapr/ExecuteActorStateTransaction"
 	Dapr_InvokeActor_FullMethodName                    = "/dapr.proto.runtime.v1.Dapr/InvokeActor"
 	Dapr_SubscribeActorEventsAlpha1_FullMethodName     = "/dapr.proto.runtime.v1.Dapr/SubscribeActorEventsAlpha1"
@@ -154,10 +156,14 @@ type DaprClient interface {
 	UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	UnregisterActorRemindersByType(ctx context.Context, in *UnregisterActorRemindersByTypeRequest, opts ...grpc.CallOption) (*UnregisterActorRemindersByTypeResponse, error)
 	ListActorReminders(ctx context.Context, in *ListActorRemindersRequest, opts ...grpc.CallOption) (*ListActorRemindersResponse, error)
+	// Lists the timers registered on this host for an actor.
+	ListActorTimers(ctx context.Context, in *ListActorTimersRequest, opts ...grpc.CallOption) (*ListActorTimersResponse, error)
 	// Gets the state for a specific actor.
 	GetActorState(ctx context.Context, in *GetActorStateRequest, opts ...grpc.CallOption) (*GetActorStateResponse, error)
 	// Gets an actor reminder.
 	GetActorReminder(ctx context.Context, in *GetActorReminderRequest, opts ...grpc.CallOption) (*GetActorReminderResponse, error)
+	// Gets a timer registered on this host for an actor.
+	GetActorTimer(ctx context.Context, in *GetActorTimerRequest, opts ...grpc.CallOption) (*GetActorTimerResponse, error)
 	// Executes state transactions for a specified actor
 	ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// InvokeActor calls a method on an actor.
@@ -495,6 +501,15 @@ func (c *daprClient) ListActorReminders(ctx context.Context, in *ListActorRemind
 	return out, nil
 }
 
+func (c *daprClient) ListActorTimers(ctx context.Context, in *ListActorTimersRequest, opts ...grpc.CallOption) (*ListActorTimersResponse, error) {
+	out := new(ListActorTimersResponse)
+	err := c.cc.Invoke(ctx, Dapr_ListActorTimers_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daprClient) GetActorState(ctx context.Context, in *GetActorStateRequest, opts ...grpc.CallOption) (*GetActorStateResponse, error) {
 	out := new(GetActorStateResponse)
 	err := c.cc.Invoke(ctx, Dapr_GetActorState_FullMethodName, in, out, opts...)
@@ -507,6 +522,15 @@ func (c *daprClient) GetActorState(ctx context.Context, in *GetActorStateRequest
 func (c *daprClient) GetActorReminder(ctx context.Context, in *GetActorReminderRequest, opts ...grpc.CallOption) (*GetActorReminderResponse, error) {
 	out := new(GetActorReminderResponse)
 	err := c.cc.Invoke(ctx, Dapr_GetActorReminder_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) GetActorTimer(ctx context.Context, in *GetActorTimerRequest, opts ...grpc.CallOption) (*GetActorTimerResponse, error) {
+	out := new(GetActorTimerResponse)
+	err := c.cc.Invoke(ctx, Dapr_GetActorTimer_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1125,10 +1149,14 @@ type DaprServer interface {
 	UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*emptypb.Empty, error)
 	UnregisterActorRemindersByType(context.Context, *UnregisterActorRemindersByTypeRequest) (*UnregisterActorRemindersByTypeResponse, error)
 	ListActorReminders(context.Context, *ListActorRemindersRequest) (*ListActorRemindersResponse, error)
+	// Lists the timers registered on this host for an actor.
+	ListActorTimers(context.Context, *ListActorTimersRequest) (*ListActorTimersResponse, error)
 	// Gets the state for a specific actor.
 	GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error)
 	// Gets an actor reminder.
 	GetActorReminder(context.Context, *GetActorReminderRequest) (*GetActorReminderResponse, error)
+	// Gets a timer registered on this host for an actor.
+	GetActorTimer(context.Context, *GetActorTimerRequest) (*GetActorTimerResponse, error)
 	// Executes state transactions for a specified actor
 	ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
 	// InvokeActor calls a method on an actor.
@@ -1313,11 +1341,17 @@ func (UnimplementedDaprServer) UnregisterActorRemindersByType(context.Context, *
 func (UnimplementedDaprServer) ListActorReminders(context.Context, *ListActorRemindersRequest) (*ListActorRemindersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListActorReminders not implemented")
 }
+func (UnimplementedDaprServer) ListActorTimers(context.Context, *ListActorTimersRequest) (*ListActorTimersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListActorTimers not implemented")
+}
 func (UnimplementedDaprServer) GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetActorState not implemented")
 }
 func (UnimplementedDaprServer) GetActorReminder(context.Context, *GetActorReminderRequest) (*GetActorReminderResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetActorReminder not implemented")
+}
+func (UnimplementedDaprServer) GetActorTimer(context.Context, *GetActorTimerRequest) (*GetActorTimerResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetActorTimer not implemented")
 }
 func (UnimplementedDaprServer) ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExecuteActorStateTransaction not implemented")
@@ -1864,6 +1898,24 @@ func _Dapr_ListActorReminders_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_ListActorTimers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListActorTimersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).ListActorTimers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_ListActorTimers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).ListActorTimers(ctx, req.(*ListActorTimersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Dapr_GetActorState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetActorStateRequest)
 	if err := dec(in); err != nil {
@@ -1896,6 +1948,24 @@ func _Dapr_GetActorReminder_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaprServer).GetActorReminder(ctx, req.(*GetActorReminderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_GetActorTimer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetActorTimerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).GetActorTimer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_GetActorTimer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).GetActorTimer(ctx, req.(*GetActorTimerRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2900,12 +2970,20 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Dapr_ListActorReminders_Handler,
 		},
 		{
+			MethodName: "ListActorTimers",
+			Handler:    _Dapr_ListActorTimers_Handler,
+		},
+		{
 			MethodName: "GetActorState",
 			Handler:    _Dapr_GetActorState_Handler,
 		},
 		{
 			MethodName: "GetActorReminder",
 			Handler:    _Dapr_GetActorReminder_Handler,
+		},
+		{
+			MethodName: "GetActorTimer",
+			Handler:    _Dapr_GetActorTimer_Handler,
 		},
 		{
 			MethodName: "ExecuteActorStateTransaction",

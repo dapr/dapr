@@ -39,6 +39,9 @@ func (s *stubTimerStorage) Close() error                                { return
 func (s *stubTimerStorage) Create(context.Context, *api.Reminder) error { return nil }
 func (s *stubTimerStorage) Delete(context.Context, string)              {}
 
+func (s *stubTimerStorage) List(context.Context, string, string) []*api.Reminder { return nil }
+func (s *stubTimerStorage) Get(context.Context, string) *api.Reminder            { return nil }
+
 func (s *stubTimerStorage) DeleteFunc(_ context.Context, fn func(actorType, actorID string) bool) {
 	s.sweeps = append(s.sweeps, fn)
 	if s.onDelete != nil {

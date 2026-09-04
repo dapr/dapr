@@ -158,6 +158,57 @@ message ActorReminder {
   optional string ttl = 7;
 }
 
+// GetActorTimerRequest is the message to get an already-registered actor
+// timer. Timers are host-local: the request must target the sidecar that
+// currently hosts the actor, otherwise it fails with PermissionDenied.
+message GetActorTimerRequest {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorID"];
+  string name = 3;
+}
+
+// GetActorTimerResponse is the response conveying an actor's timer.
+message GetActorTimerResponse {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorID"];
+  optional string due_time = 3 [json_name = "dueTime"];
+  optional string period = 4;
+  optional string ttl = 5;
+  optional string callback = 6;
+  google.protobuf.Any data = 7;
+}
+
+// ListActorTimersRequest is the message to list the timers registered for an
+// actor. Timers are host-local: the request must target the sidecar that
+// currently hosts the actor, otherwise it fails with PermissionDenied.
+message ListActorTimersRequest {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorID"];
+}
+
+// ListActorTimersResponse is the response conveying the timers registered
+// for an actor.
+message ListActorTimersResponse {
+  repeated NamedActorTimer timers = 1;
+}
+
+message NamedActorTimer {
+  string name = 1;
+  ActorTimer timer = 2;
+}
+
+// ActorTimer describes a timer registered on this host. Timers whose TTL had
+// already elapsed at registration are never stored and are not listed.
+message ActorTimer {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorID"];
+  optional string due_time = 3 [json_name = "dueTime"];
+  optional string period = 4;
+  optional string ttl = 5;
+  optional string callback = 6;
+  google.protobuf.Any data = 7;
+}
+
 // UnregisterActorRemindersByTypeRequest is the message to unregister an actor
 // reminders by the given type. Optional actor_id can be provided to limit the
 // scope of the operation to a specific actor instance.
