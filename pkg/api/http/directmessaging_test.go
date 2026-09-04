@@ -1074,6 +1074,14 @@ func TestFindTargetIDAndMethod(t *testing.T) {
 		{name: "path with https target escaped", path: "/v1.0/invoke/https%3A%2F%2Fexample.com/method/foo", wantTargetID: "https://example.com", wantMethod: "foo"},
 		{name: "path with https target partly escaped", path: "/v1.0/invoke/https%3A/%2Fexample.com/method/foo", wantTargetID: "https://example.com", wantMethod: "foo"},
 		{name: "extra slashes are removed", path: "///foo//bar", headers: http.Header{"Dapr-App-Id": []string{"myapp"}}, wantTargetID: "myapp", wantMethod: "foo/bar"},
+		{name: "percent-encoded forward slash in method", path: "/v1.0/invoke/myapp/method/my%2Fmethod", wantTargetID: "myapp", wantMethod: "my/method"},
+		{name: "percent-encoded colon in method", path: "/v1.0/invoke/myapp/method/my%3Amethod", wantTargetID: "myapp", wantMethod: "my:method"},
+		{name: "percent-encoded dot in method", path: "/v1.0/invoke/myapp/method/my%2Epath", wantTargetID: "myapp", wantMethod: "my.path"},
+		{name: "multiple percent-encoded chars in method", path: "/v1.0/invoke/myapp/method/my%2Fpath%3Aname", wantTargetID: "myapp", wantMethod: "my/path:name"},
+		{name: "percent-encoded method with path traversal", path: "/v1.0/invoke/myapp/method/foo%2F..%2Fbar", wantTargetID: "myapp", wantMethod: "bar"},
+		{name: "dapr-app-id header with percent-encoded method", path: "/my%2Fmethod", headers: http.Header{"Dapr-App-Id": []string{"myapp"}}, wantTargetID: "myapp", wantMethod: "my/method"},
+		{name: "basic auth with percent-encoded method", path: "/my%2Fmethod", headers: http.Header{"Authorization": []string{"Basic ZGFwci1hcHAtaWQ6YXV0aA=="}}, wantTargetID: "auth", wantMethod: "my/method"},
+		{name: "percent-encoded spaces in method", path: "/v1.0/invoke/myapp/method/my%20method", wantTargetID: "myapp", wantMethod: "my method"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
