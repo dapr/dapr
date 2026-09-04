@@ -136,3 +136,19 @@ func (cp *CompiledPolicies) Evaluate(callerAppID string, opType OperationType, o
 
 	return false
 }
+
+// ListsCaller reports whether any compiled rule names appID in its Callers
+// list. Per-actor enforcement uses this on the self-call exemption path to
+// detect a misconfigured policy that lists the local appID — that listing
+// has no effect because same-app calls are always exempt.
+func (cp *CompiledPolicies) ListsCaller(appID string) bool {
+	if cp == nil {
+		return false
+	}
+	for i := range cp.rules {
+		if _, ok := cp.rules[i].callerAppIDs[appID]; ok {
+			return true
+		}
+	}
+	return false
+}
