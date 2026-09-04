@@ -325,6 +325,17 @@ func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContex
 	if len(traceContextBinary) == 0 {
 		return ctx
 	}
+	// Remove any pre-existing traceparent/grpc-trace-bin values from the outgoing metadata first.
+	// A transparently proxied gRPC call (see pkg/messaging/grpc_proxy.go) copies the caller's incoming
+	// metadata verbatim into the outgoing context, which can already include a traceparent set by the
+	// calling application's own instrumentation. Appending on top of that produces two comma-separated
+	// traceparent values on the wire instead of one. See https://github.com/dapr/dapr/issues/10462.
+	if md, ok := grpcMetadata.FromOutgoingContext(ctx); ok {
+		md = md.Copy()
+		delete(md, strings.ToLower(contribpubsub.TraceParentField))
+		delete(md, strings.ToLower(diagConsts.GRPCTraceContextKey))
+		ctx = grpcMetadata.NewOutgoingContext(ctx, md)
+	}
 
 	traceparent := SpanContextToW3CString(spanContext)
 	ctx = grpcMetadata.AppendToOutgoingContext(ctx, contribpubsub.TraceParentField, traceparent)
