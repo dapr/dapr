@@ -202,7 +202,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 	}
 
 	if err = errors.Join(
-		o.callChildWorkflows(ctx, startedEvent.GetName(), childWFs, outgoingChildPropHist),
+		o.callChildWorkflows(ctx, startedEvent.GetName(), startedEvent.GetWorkflowInstance().GetExecutionId().GetValue(), childWFs, outgoingChildPropHist),
 		o.callActivities(ctx, activities, newState, rerunRS, outgoingActPropHist).Err,
 		o.createTimers(ctx, timers, newState.Generation),
 	); err != nil {
