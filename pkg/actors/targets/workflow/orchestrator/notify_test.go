@@ -600,9 +600,14 @@ func Test_attestationInput(t *testing.T) {
 	state := wfenginestate.NewState(wfenginestate.Options{AppID: "testapp", WorkflowActorType: "dapr.internal.default.testapp.workflow", ActivityActorType: "dapr.internal.default.testapp.activity"})
 	assert.Equal(t, `"gen2"`, attestationInput(state, started).GetValue(), "no ContinueAsNew: the start input")
 
-	state.SetCreationInput(wrapperspb.String(`"original"`))
+	parent := &protos.ParentInstanceInfo{WorkflowInstance: &protos.WorkflowInstance{InstanceId: notifyParentID}}
+	first := &protos.ExecutionStartedEvent{Input: wrapperspb.String(`"original"`), ParentInstance: parent}
+	state.AddToHistory(&backend.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: first}})
+	state.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{ContinuedAsNew: true})
 	assert.Equal(t, `"original"`, attestationInput(state, started).GetValue(), "after ContinueAsNew: the input the parent created the child with")
 
-	state.SetCreationInput(nil)
-	assert.Empty(t, attestationInput(state, started).GetValue(), "a child created without input attests an empty input, not the continued one")
+	empty := wfenginestate.NewState(wfenginestate.Options{AppID: "testapp", WorkflowActorType: "dapr.internal.default.testapp.workflow", ActivityActorType: "dapr.internal.default.testapp.activity"})
+	empty.AddToHistory(&backend.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{ParentInstance: parent}}})
+	empty.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{ContinuedAsNew: true})
+	assert.Empty(t, attestationInput(empty, started).GetValue(), "a child created without input attests an empty input, not the continued one")
 }

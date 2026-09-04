@@ -56,6 +56,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		log.Warnf("No workflow state found for actor '%s', terminating execution", o.actorID)
 		return todo.RunCompletedTrue, nil
 	}
+	// Read before the engine runs, which mutates the cached runtime state in
+	// place: a notification is owed only by the turn that completes the
+	// instance, so a later stray event on a settled child does not re-arm a
+	// delivered one.
+	wasCompleted := runtimestate.IsCompleted(o.rstate)
 
 	if strings.HasPrefix(reminder.Name, "timer-") && !runtimestate.IsCompleted(o.rstate) {
 		var durableTimer backend.DurableTimer
@@ -477,14 +482,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	if rs.GetContinuedAsNew() {
 		log.Debugf("Workflow actor '%s': workflow with instanceId '%s' continued as new", o.actorID, wi.InstanceID)
 		state.Generation += 1
-		// The parent verifies this child's completion against the input it
-		// created it with; the new generation's start event carries the
-		// continued input, so keep the original from the first generation.
-		if state.CreationInput == nil {
-			if es := o.getExecutionStartedEvent(state); es.GetParentInstance() != nil {
-				state.SetCreationInput(es.GetInput())
-			}
-		}
 		// The engine carries the propagation chain across CAN by updating
 		// wi.IncomingHistory. Persist any change so the new generation sees
 		// the chain on its next run.
@@ -627,7 +624,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 	state.ApplyRuntimeStateChanges(rs)
 	state.ClearInbox()
-	if runtimestate.IsCompleted(rs) && o.getExecutionStartedEvent(state).GetParentInstance() != nil {
+	if !wasCompleted && runtimestate.IsCompleted(rs) && o.getExecutionStartedEvent(state).GetParentInstance() != nil {
 		state.SetParentNotifyPending(true)
 	}
 
@@ -780,16 +777,16 @@ func (o *orchestrator) settleTerminal(ctx context.Context, state *wfenginestate.
 		// the retention reminder is still scheduled rather than dropped.
 		completedAt = time.Now()
 	}
-	if state.ParentNotifyPending {
-		if err = o.resendParentNotification(ctx, state, arm); err != nil {
-			return err
-		}
-	}
+	// Retention and the cascade first: an unreachable parent must not hold
+	// them back, and both are idempotent re-asserts.
 	if err = o.handleRetention(ctx, status, completedAt); err != nil {
 		return wferrors.NewRecoverable(fmt.Errorf("failed to (re)create the retention reminder: %w", err))
 	}
 	if err = o.terminateChildren(ctx, state); err != nil {
 		return wferrors.NewRecoverable(fmt.Errorf("failed to (re)deliver the recursive terminate to children: %w", err))
+	}
+	if state.ParentNotifyPending {
+		return o.resendParentNotification(ctx, state, arm)
 	}
 	return nil
 }
