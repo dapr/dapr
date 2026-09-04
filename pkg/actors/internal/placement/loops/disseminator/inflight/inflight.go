@@ -44,6 +44,16 @@ var aquireCache = sync.Pool{
 type Options struct {
 	Hostname string
 	Port     string
+
+	// DisseminationTimeout is daprd's own dissemination timeout, the
+	// default drain clamp budget.
+	DisseminationTimeout time.Duration
+}
+
+// clampKey dedupes clamp warnings to once per value change.
+type clampKey struct {
+	drain  time.Duration
+	budget time.Duration
 }
 
 // Inflight gates lookup and lock-claim acquisition during placement
@@ -65,9 +75,12 @@ type Options struct {
 type Inflight struct {
 	hostname                string
 	port                    string
+	disseminationTimeout    time.Duration
+	advertisedDissTimeout   atomic.Pointer[time.Duration]
 	drainOngoingCallTimeout atomic.Pointer[time.Duration]
 	drainRebalancedActors   atomic.Pointer[bool]
-	entityDrainTimeouts     atomic.Pointer[map[string]time.Duration]
+	entityDrainConfigs      atomic.Pointer[map[string]api.EntityDrainConfig]
+	clampWarned             sync.Map
 
 	queued       map[string][]func()
 	blockedTypes map[string]struct{}
@@ -81,9 +94,10 @@ type Inflight struct {
 
 func New(opts Options) *Inflight {
 	return &Inflight{
-		hostname:          opts.Hostname,
-		port:              opts.Port,
-		virtualNodesCache: hashing.NewVirtualNodesCache(),
+		hostname:             opts.Hostname,
+		port:                 opts.Port,
+		disseminationTimeout: opts.DisseminationTimeout,
+		virtualNodesCache:    hashing.NewVirtualNodesCache(),
 		hashTable: &hashing.ConsistentHashTables{
 			Entries: make(map[string]*hashing.Consistent),
 		},
@@ -104,8 +118,9 @@ func (i *Inflight) Close(err error) {
 
 	i.lock.Close(&lock.CloseLock{
 		Error:                 err,
-		Timeout:               i.drainOngoingCallTimeout.Load(),
+		Timeout:               i.clampedGlobalDrainTimeout(),
 		DrainRebalancedActors: i.drainRebalancedActors.Load(),
+		PerTypeDrain:          i.perTypeDrain(nil),
 	})
 	i.wg.Wait()
 	lo := i.lock
@@ -194,13 +209,13 @@ func (i *Inflight) CancelClaimsForTypes(types []string, err error) {
 	}
 
 	var perType map[string]time.Duration
-	if entityTimeouts := i.entityDrainTimeouts.Load(); entityTimeouts != nil {
+	if entityConfigs := i.entityDrainConfigs.Load(); entityConfigs != nil {
 		for _, t := range types {
-			if v, ok := (*entityTimeouts)[t]; ok {
+			if c, ok := (*entityConfigs)[t]; ok && c.Timeout != nil {
 				if perType == nil {
 					perType = make(map[string]time.Duration)
 				}
-				perType[t] = v
+				perType[t] = i.clampDrain(*c.Timeout, "entities="+t)
 			}
 		}
 	}
@@ -209,9 +224,10 @@ func (i *Inflight) CancelClaimsForTypes(types []string, err error) {
 	i.lock.Enqueue(&lock.CancelTypes{
 		Types:                 set,
 		Error:                 err,
-		Timeout:               i.drainOngoingCallTimeout.Load(),
+		Timeout:               i.clampedGlobalDrainTimeout(),
 		PerTypeTimeouts:       perType,
 		DrainRebalancedActors: i.drainRebalancedActors.Load(),
+		PerTypeDrain:          i.perTypeDrain(types),
 		Done:                  done,
 	})
 	<-done
@@ -322,20 +338,113 @@ func (i *Inflight) resolve(req *api.LookupActorRequest) (*api.LookupActorRespons
 	}, nil
 }
 
+// SetAdvertisedDisseminateTimeout records the placement service's advertised
+// dissemination timeout.
+func (i *Inflight) SetAdvertisedDisseminateTimeout(timeout time.Duration) {
+	if timeout <= 0 {
+		return
+	}
+	if cur := i.advertisedDissTimeout.Load(); cur != nil && *cur == timeout {
+		return
+	}
+	i.advertisedDissTimeout.Store(&timeout)
+	log.Infof("Placement advertised a dissemination timeout of %s; actor drain timeouts are clamped against a budget of %s", timeout, i.drainBudget())
+}
+
+// ClearAdvertisedDisseminateTimeout removes the advertised dissemination
+// timeout, for example after reconnecting to a placement service that does
+// not advertise one.
+func (i *Inflight) ClearAdvertisedDisseminateTimeout() {
+	if i.advertisedDissTimeout.Swap(nil) != nil {
+		log.Infof("Cleared placement-advertised dissemination timeout; actor drain timeouts are clamped against a budget of %s", i.drainBudget())
+	}
+}
+
+// drainBudget returns the smaller of daprd's own and placement's advertised
+// dissemination timeout.
+func (i *Inflight) drainBudget() time.Duration {
+	budget := i.disseminationTimeout
+	if adv := i.advertisedDissTimeout.Load(); adv != nil && (budget <= 0 || *adv < budget) {
+		budget = *adv
+	}
+	return budget
+}
+
+// clampDrain bounds drain by the dissemination budget, warning once per
+// value change.
+func (i *Inflight) clampDrain(drain time.Duration, source string) time.Duration {
+	budget := i.drainBudget()
+	clamped, wasClamped := api.ClampDrainOngoingCallTimeout(drain, budget)
+	if !wasClamped {
+		i.clampWarned.Delete(source)
+		return clamped
+	}
+
+	key := clampKey{drain: drain, budget: budget}
+	if prev, loaded := i.clampWarned.Swap(source, key); !loaded || prev != key {
+		log.Warnf("drainOngoingCallTimeout (%s) for %s meets or exceeds the dissemination timeout (%s); clamping to %s to avoid blocking placement dissemination",
+			drain, source, budget, clamped)
+	}
+
+	return clamped
+}
+
+func (i *Inflight) clampedGlobalDrainTimeout() *time.Duration {
+	t := i.drainOngoingCallTimeout.Load()
+	if t == nil {
+		return nil
+	}
+	clamped := i.clampDrain(*t, "global config")
+	return &clamped
+}
+
 func (i *Inflight) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration) {
 	i.drainRebalancedActors.Store(drain)
 	i.drainOngoingCallTimeout.Store(timeout)
 }
 
-// SetEntityDrainOngoingCallTimeouts replaces the per-actor-type drain
-// timeouts. A nil or empty map means "no per-type overrides; fall back to
-// the global timeout for every type".
-func (i *Inflight) SetEntityDrainOngoingCallTimeouts(timeouts map[string]time.Duration) {
-	if len(timeouts) == 0 {
-		i.entityDrainTimeouts.Store(nil)
+// SetEntityDrainConfigs replaces the per-actor-type drain configuration;
+// nil/empty removes all overrides.
+func (i *Inflight) SetEntityDrainConfigs(configs map[string]api.EntityDrainConfig) {
+	if len(configs) == 0 {
+		i.entityDrainConfigs.Store(nil)
 		return
 	}
-	cp := make(map[string]time.Duration, len(timeouts))
-	maps.Copy(cp, timeouts)
-	i.entityDrainTimeouts.Store(&cp)
+	cp := make(map[string]api.EntityDrainConfig, len(configs))
+	maps.Copy(cp, configs)
+	i.entityDrainConfigs.Store(&cp)
+}
+
+// perTypeDrain returns the per-actor-type drainRebalancedActors overrides for
+// the given types, or for every configured type when types is nil.
+func (i *Inflight) perTypeDrain(types []string) map[string]bool {
+	entityConfigs := i.entityDrainConfigs.Load()
+	if entityConfigs == nil {
+		return nil
+	}
+
+	var perDrain map[string]bool
+	add := func(t string, c api.EntityDrainConfig) {
+		if c.DrainRebalancedActors == nil {
+			return
+		}
+		if perDrain == nil {
+			perDrain = make(map[string]bool)
+		}
+		perDrain[t] = *c.DrainRebalancedActors
+	}
+
+	if types == nil {
+		for t, c := range *entityConfigs {
+			add(t, c)
+		}
+		return perDrain
+	}
+
+	for _, t := range types {
+		if c, ok := (*entityConfigs)[t]; ok {
+			add(t, c)
+		}
+	}
+	return perDrain
 }

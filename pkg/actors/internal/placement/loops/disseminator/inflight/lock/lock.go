@@ -58,6 +58,9 @@ type CloseLock struct {
 	Error                 error
 	Timeout               *time.Duration
 	DrainRebalancedActors *bool
+
+	// PerTypeDrain overrides DrainRebalancedActors per actor type.
+	PerTypeDrain map[string]bool
 }
 
 // CancelTypes drains in-flight claims for the given set of actor types using
@@ -74,7 +77,11 @@ type CancelTypes struct {
 	Timeout               *time.Duration
 	PerTypeTimeouts       map[string]time.Duration
 	DrainRebalancedActors *bool
-	Done                  chan struct{}
+
+	// PerTypeDrain overrides DrainRebalancedActors per actor type.
+	PerTypeDrain map[string]bool
+
+	Done chan struct{}
 }
 
 type lock struct {
@@ -113,14 +120,14 @@ func (l *lock) handleClose(closeLock *CloseLock) {
 		lockCache.Put(l)
 	}()
 
-	// If drainRebalancedActors is false, immediately cancel all claims without
-	// waiting.
-	// Default to true (drain) if not specified.
-	if closeLock.DrainRebalancedActors != nil && !*closeLock.DrainRebalancedActors {
-		for _, claim := range l.acquires {
-			claim.Cancel(closeLock.Error)
+	// Cancel claims of types that opt out of draining immediately.
+	toDrain := make([]*Claim, 0, len(l.acquires))
+	for _, claim := range l.acquires {
+		if shouldDrain(claim.ActorType, closeLock.DrainRebalancedActors, closeLock.PerTypeDrain) {
+			toDrain = append(toDrain, claim)
+			continue
 		}
-		return
+		claim.Cancel(closeLock.Error)
 	}
 
 	// Grace period to allow claims to be released.
@@ -132,18 +139,27 @@ func (l *lock) handleClose(closeLock *CloseLock) {
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
-	for _, claim := range l.acquires {
+	for _, claim := range toDrain {
 		select {
 		case <-claim.Context.Done():
 		case <-timer.C:
 			log.Errorf("Timed out waiting for actor in-flight lock claims to be released, force cancelling remaining claims")
 			// Force cancel all remaining claims after timeout.
-			for _, claim := range l.acquires {
+			for _, claim := range toDrain {
 				claim.Cancel(closeLock.Error)
 			}
 			return
 		}
 	}
+}
+
+// shouldDrain honors the per-type override first, then the global flag,
+// defaulting to drain.
+func shouldDrain(actorType string, global *bool, perType map[string]bool) bool {
+	if drain, ok := perType[actorType]; ok {
+		return drain
+	}
+	return global == nil || *global
 }
 
 func (l *lock) handleRelease(release *releaseClaim) {
@@ -200,12 +216,17 @@ func (l *lock) handleCancelTypes(event *CancelTypes) {
 		return
 	}
 
-	if event.DrainRebalancedActors != nil && !*event.DrainRebalancedActors {
-		for _, claims := range byType {
-			for _, claim := range claims {
-				claim.Cancel(event.Error)
-			}
+	// Cancel claims of types that opt out of draining immediately.
+	for actorType, claims := range byType {
+		if shouldDrain(actorType, event.DrainRebalancedActors, event.PerTypeDrain) {
+			continue
 		}
+		for _, claim := range claims {
+			claim.Cancel(event.Error)
+		}
+		delete(byType, actorType)
+	}
+	if len(byType) == 0 {
 		return
 	}
 
