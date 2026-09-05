@@ -95,15 +95,13 @@ spec:
         {{- with .Values.global.extraVolumeMounts.placement }}
           {{- toYaml . | nindent 10 }}
         {{- end }}
-{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
-  {{- if eq .Values.cluster.forceInMemoryLog false }}
+{{- if eq .Values.cluster.forceInMemoryLog false }}
           - name: raft-log
     {{- if eq .Values.global.daprControlPlaneOs "windows" }}
             mountPath: {{ .Values.cluster.logStoreWinPath }}
     {{- else }}
             mountPath: {{ .Values.cluster.logStorePath }}
     {{- end }}
-  {{- end }}
 {{- end }}
         ports:
           - containerPort: {{ .Values.ports.apiPort }}
@@ -276,8 +274,7 @@ spec:
       priorityClassName:
 {{ toYaml .Values.global.priorityClassName | indent 8 }}
 {{- end }}
-{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
-  {{- if eq .Values.cluster.forceInMemoryLog false }}
+{{- if eq .Values.cluster.forceInMemoryLog false }}
   volumeClaimTemplates:
   - apiVersion: v1
     kind: PersistentVolumeClaim
@@ -292,6 +289,5 @@ spec:
     {{- if .Values.volumeclaims.storageClassName }}
       storageClassName: {{ .Values.volumeclaims.storageClassName }}
     {{- end }}
-  {{- end }}
 {{- end }}
 {{- end }}
