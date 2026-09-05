@@ -81,6 +81,30 @@ func (x *ConversationRequest) AppendSpanAttributes(rpcMethod string, m map[strin
 	m[diagConsts.RPCSystemSpanAttributeKey] = x.GetName()
 }
 
+func (x *SetBinaryFileRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	m[diagConsts.DBNameSpanAttributeKey] = x.GetOptions().GetComponentName()
+	m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
+	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.BinaryStoreBuildingBlockType
+	m[diagConsts.DBStatementSpanAttributeKey] = rpcMethod
+	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.BinaryStoreBuildingBlockType
+}
+
+func (x *GetBinaryFileRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	m[diagConsts.DBNameSpanAttributeKey] = x.GetComponentName()
+	m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
+	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.BinaryStoreBuildingBlockType
+	m[diagConsts.DBStatementSpanAttributeKey] = rpcMethod
+	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.BinaryStoreBuildingBlockType
+}
+
+func (x *DeleteBinaryFileRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	m[diagConsts.DBNameSpanAttributeKey] = x.GetComponentName()
+	m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
+	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.BinaryStoreBuildingBlockType
+	m[diagConsts.DBStatementSpanAttributeKey] = rpcMethod
+	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.BinaryStoreBuildingBlockType
+}
+
 func (x *ConversationRequestAlpha2) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	m[diagConsts.RPCSystemSpanAttributeKey] = x.GetName()
 }

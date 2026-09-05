@@ -6,7 +6,6 @@ Licensed under the Apache License, Version 2.0 (the "License");
 package binarystore_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,6 +39,6 @@ func TestRegistry(t *testing.T) {
 		got, err := registry.Create("binarystore.missing", "v1", "")
 		assert.Nil(t, got)
 		require.Error(t, err)
-		assert.True(t, strings.Contains(err.Error(), "couldn't find binary store"))
+		assert.Contains(t, err.Error(), "couldn't find binary store")
 	})
 }
