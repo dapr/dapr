@@ -25,6 +25,7 @@ const (
 	CategorySecret            Category = "secret"
 	CategoryPubsub            Category = "pubsub"
 	CategoryConversation      Category = "conversation"
+	CategoryBinaryStore       Category = "binarystore"
 	CategoryServiceInvocation Category = "service-invocation"
 	CategoryBinding           Category = "binding"
 	CategoryLock              Category = "lock"
@@ -141,6 +142,14 @@ var (
 	ConversationInvoke        = ErrorCode{"ERR_CONVERSATION_INVOKE", "", CategoryConversation}         // Error invoking conversation
 	ConversationMissingInputs = ErrorCode{"ERR_CONVERSATION_MISSING_INPUTS", "", CategoryConversation} // Missing inputs for conversation
 	ConversationNotFound      = ErrorCode{"ERR_CONVERSATION_NOT_FOUND", "", CategoryConversation}      // Conversation not found
+
+	// ### Binary Store API
+	BinaryStoreNotFound     = ErrorCode{"ERR_BINARY_STORE_NOT_FOUND", "", CategoryBinaryStore}           // Binary store component not found
+	BinaryStoreSet          = ErrorCode{"ERR_BINARY_STORE_SET", "", CategoryBinaryStore}                 // Error storing binary file
+	BinaryStoreGet          = ErrorCode{"ERR_BINARY_STORE_GET", "", CategoryBinaryStore}                 // Error retrieving binary file
+	BinaryStoreDelete       = ErrorCode{"ERR_BINARY_STORE_DELETE", "", CategoryBinaryStore}              // Error deleting binary file
+	BinaryStoreFileNotFound = ErrorCode{"ERR_BINARY_STORE_FILE_NOT_FOUND", "", CategoryBinaryStore}      // Binary file not found
+	BinaryStoreFileExists   = ErrorCode{"ERR_BINARY_STORE_FILE_ALREADY_EXISTS", "", CategoryBinaryStore} // Binary file already exists
 
 	// ### Service Invocation / Direct Messaging API
 	ServiceInvocationDirectInvoke = ErrorCode{"ERR_DIRECT_INVOKE", "", CategoryServiceInvocation} // Error invoking service

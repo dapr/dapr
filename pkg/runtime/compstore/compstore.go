@@ -17,6 +17,9 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/dapr/durabletask-go/backend"
+
+	"github.com/dapr/components-contrib/binarystore"
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/conversation"
@@ -32,7 +35,6 @@ import (
 	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	"github.com/dapr/durabletask-go/backend"
 )
 
 // ComponentStore is a store of all components which have been configured for the
@@ -71,6 +73,8 @@ type ComponentStore struct {
 
 	conversations map[string]conversation.Conversation
 
+	binaryStores map[string]binarystore.BinaryStore
+
 	compPendingLock sync.Mutex
 	compPending     *compsv1alpha1.Component
 
@@ -97,5 +101,6 @@ func New() *ComponentStore {
 			streams:      make(map[string][]*DeclarativeSubscription),
 		},
 		conversations: make(map[string]conversation.Conversation),
+		binaryStores:  make(map[string]binarystore.BinaryStore),
 	}
 }

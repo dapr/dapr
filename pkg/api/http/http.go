@@ -98,6 +98,7 @@ const (
 	secretStoreNameParam     = "secretStoreName"
 	secretNameParam          = "key"
 	nameParam                = "name"
+	binaryStoreFileNameParam = "fileName"
 	workflowComponent        = "workflowComponent"
 	workflowName             = "workflowName"
 	instanceID               = "instanceID"
@@ -161,6 +162,7 @@ func NewAPI(opts APIOpts) API {
 	api.endpoints = append(api.endpoints, api.constructWorkflowEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructJobsEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructConversationEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructBinaryStoreEndpoints()...)
 
 	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
 	api.publicEndpoints = append(api.publicEndpoints, healthEndpoints...)
