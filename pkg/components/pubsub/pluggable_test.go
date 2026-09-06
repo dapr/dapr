@@ -323,9 +323,17 @@ func TestPubSubPluggableCalls(t *testing.T) {
 
 		err = ps.Subscribe(t.Context(), pubsub.SubscribeRequest{
 			Topic: fakeTopic,
-		}, func(_ context.Context, m *pubsub.NewMessage) error {
-			started <- struct{}{}
-			<-release
+		}, func(ctx context.Context, m *pubsub.NewMessage) error {
+			select {
+			case started <- struct{}{}:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 			return nil
 		})
 		require.NoError(t, err)
