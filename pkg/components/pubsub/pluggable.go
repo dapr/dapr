@@ -221,7 +221,7 @@ func (p *grpcPubSub) pullMessages(parentCtx context.Context, topic *proto.Topic,
 
 			p.logger.Debugf("Received message from stream on topic %s", msg.GetTopicName())
 
-			handle(msg)
+			go handle(msg)
 		}
 	}()
 

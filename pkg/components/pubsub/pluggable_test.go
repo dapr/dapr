@@ -23,6 +23,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	guuid "github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -281,5 +282,67 @@ func TestPubSubPluggableCalls(t *testing.T) {
 
 		assert.Equal(t, int64(len(messages)), handleCalled.Load())
 		assert.Equal(t, int64(1), totalAckErrors.Load()) // at least one message should be an error
+	})
+
+	t.Run("subscribe should dispatch messages concurrently", func(t *testing.T) {
+		const fakeTopic, fakeData1, fakeData2 = "fakeTopic", "fakeData1", "fakeData2"
+		var topicSent sync.WaitGroup
+		topicSent.Add(1)
+
+		messagesData := [][]byte{[]byte(fakeData1), []byte(fakeData2)}
+		messages := make([]*proto.PullMessagesResponse, len(messagesData))
+		for idx, data := range messagesData {
+			messages[idx] = &proto.PullMessagesResponse{
+				Data:      data,
+				TopicName: fakeTopic,
+				Metadata:  map[string]string{},
+			}
+		}
+
+		messageChan := make(chan *proto.PullMessagesResponse, len(messages))
+		defer close(messageChan)
+		for _, message := range messages {
+			messageChan <- message
+		}
+
+		svc := &server{
+			pullChan: messageChan,
+			onAckReceived: func(ma *proto.PullMessagesRequest) {
+				if ma.GetTopic() != nil {
+					topicSent.Done()
+				}
+			},
+		}
+
+		ps, cleanup, err := getPubSub(svc)
+		require.NoError(t, err)
+		defer cleanup()
+
+		started := make(chan struct{}, len(messages))
+		release := make(chan struct{})
+
+		err = ps.Subscribe(t.Context(), pubsub.SubscribeRequest{
+			Topic: fakeTopic,
+		}, func(_ context.Context, m *pubsub.NewMessage) error {
+			started <- struct{}{}
+			<-release
+			return nil
+		})
+		require.NoError(t, err)
+
+		topicSent.Wait()
+
+		// Neither handler is allowed to return until both have started, so this
+		// only completes if messages are dispatched concurrently rather than
+		// the receive loop waiting for one handler to finish before the next
+		// message is even read off the stream.
+		for i := range messages {
+			select {
+			case <-started:
+			case <-time.After(5 * time.Second):
+				t.Fatalf("timed out waiting for handler %d to start; messages are not being dispatched concurrently", i+1)
+			}
+		}
+		close(release)
 	})
 }
