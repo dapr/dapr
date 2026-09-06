@@ -61,7 +61,7 @@ func (o *orchestrator) recursivePurgeWorkflowState(ctx context.Context, meta map
 		if o.rstate.Stalled != nil {
 			return nil, api.ErrStalled
 		}
-		if !runtimestate.IsCompleted(o.rstate) {
+		if !runtimestate.IsCompleted(o.rstate) || state.ParentNotifyPending {
 			return nil, api.ErrNotCompleted
 		}
 	}

@@ -80,12 +80,13 @@ debug:
 
 securityContext:
   runAsNonRoot: true
-  # fsGroup is intentionally unset by default. Set it only when you need the
-  # Scheduler process to belong to a specific file-system group (e.g. to write
-  # to a mounted volume owned by that group). Leaving it unset lets platforms
-  # such as OpenShift assign an fsGroup automatically from the namespace range.
-  # Example: fsGroup: 65532
-  fsGroup: ~
+  # fsGroup makes the Scheduler process a member of the group that owns the
+  # mounted etcd volume, which is required to write to block volumes (for
+  # example AWS EBS through the CSI driver) as a non-root user. Platforms that
+  # assign an fsGroup themselves from a namespace range (such as OpenShift)
+  # reject an explicit value; on those, unset it with
+  # --set dapr_scheduler.securityContext.fsGroup=null so no fsGroup is rendered.
+  fsGroup: 65532
 
 resources: {}
 

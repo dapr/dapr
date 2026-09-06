@@ -82,8 +82,7 @@ func (a *subworkflow1) Run(t *testing.T, ctx context.Context) {
 	// 11. OrchestratorStarted
 	// 12. ExecutionCompleted
 	// 13. OrchestratorCompleted
-	// Under WorkflowsFastPath the parent completion can become visible before
-	// the last child's own state commit lands, so poll to the steady state.
+	// Poll to the steady state: the last rows land shortly after completion.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		if assert.NoError(c, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count)) {
 			assert.Equal(c, 13, count)

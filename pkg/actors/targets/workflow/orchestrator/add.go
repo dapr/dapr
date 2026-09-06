@@ -22,11 +22,15 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	staterrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
 const (
@@ -38,7 +42,16 @@ const (
 	reminderCascadeTerminate = "cascade-terminate"
 )
 
-func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryEvent) error {
+// completionSender identifies the child delivering a completion: its instance
+// ID and the parent execution it was created under. Zero for senders that
+// carry neither.
+type completionSender struct {
+	instanceID        string
+	parentExecutionID string
+}
+
+// addWorkflowEvent appends an inbound event to the inbox and drives it.
+func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryEvent, sender completionSender) error {
 	state, _, err := o.loadInternalState(ctx)
 	if err != nil {
 		return err
@@ -64,9 +77,42 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 		return api.ErrInstanceNotFound
 	}
 
+	// ackDropped acknowledges a child completion this workflow will never
+	// consume, after confirming the cache it was judged on is current: the
+	// child clears its pending notification on this ack.
+	ackDropped := func(reason string) error {
+		if err := o.confirmCachedState(ctx, state); err != nil {
+			return err
+		}
+		log.Debugf("Workflow actor '%s': dropping child completion from '%s': %s", o.actorID, sender.instanceID, reason)
+		return nil
+	}
+
+	// A completed parent can never consume a child completion. Ack it here
+	// rather than queueing a turn: the terminal path would re-issue the
+	// recursive terminate and the child would re-send.
+	if runtimestate.IsCompleted(o.rstate) && (e.GetChildWorkflowInstanceCompleted() != nil || e.GetChildWorkflowInstanceFailed() != nil) {
+		return ackDropped("the workflow has completed")
+	}
+
 	// Only reject user events when the workflow is stalled.
 	if o.rstate.Stalled != nil && e.GetEventRaised() != nil {
 		return api.ErrStalled
+	}
+
+	// A child re-sends its completion on stray fires and after failures, and
+	// task ids restart on ContinueAsNew: a completion for task N from any
+	// instance other than the child this generation created for N is a
+	// straggler from a previous generation and is acked without effect.
+	if sender.instanceID != "" {
+		if created := childCreatedFor(state.History, e); created != nil && created.GetInstanceId() != sender.instanceID {
+			return ackDropped("the task's current child is '" + created.GetInstanceId() + "'")
+		}
+	}
+	if sender.parentExecutionID != "" {
+		if cur := o.getExecutionStartedEvent(state).GetWorkflowInstance().GetExecutionId().GetValue(); cur != "" && cur != sender.parentExecutionID {
+			return ackDropped("it was created under a previous execution")
+		}
 	}
 
 	// Drop completion events whose resolution is already in history or the
@@ -217,4 +263,39 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 		return terr
 	}
 	return api.ErrInstanceNotFound
+}
+
+// childCreatedFor returns the ChildWorkflowInstanceCreated event this
+// history holds for the task a child completion resolves, or nil.
+func childCreatedFor(history []*backend.HistoryEvent, e *backend.HistoryEvent) *protos.ChildWorkflowInstanceCreatedEvent {
+	var taskID int32
+	switch {
+	case e.GetChildWorkflowInstanceCompleted() != nil:
+		taskID = e.GetChildWorkflowInstanceCompleted().GetTaskScheduledId()
+	case e.GetChildWorkflowInstanceFailed() != nil:
+		taskID = e.GetChildWorkflowInstanceFailed().GetTaskScheduledId()
+	default:
+		return nil
+	}
+	for _, h := range history {
+		if c := h.GetChildWorkflowInstanceCreated(); c != nil && h.GetEventId() == taskID {
+			return c
+		}
+	}
+	return nil
+}
+
+// senderFromMetadata extracts the delivering child's identity from request
+// metadata; zero for senders that do not carry it.
+func senderFromMetadata(md map[string]*internalsv1pb.ListStringValue) completionSender {
+	first := func(key string) string {
+		if v, ok := md[key]; ok && len(v.GetValues()) > 0 {
+			return v.GetValues()[0]
+		}
+		return ""
+	}
+	return completionSender{
+		instanceID:        first(todo.MetadataSenderInstanceID),
+		parentExecutionID: first(todo.MetadataParentExecutionID),
+	}
 }

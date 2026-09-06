@@ -601,3 +601,19 @@ func (d *Daprd) SignalHUP(t *testing.T) {
 	t.Helper()
 	d.exec.SignalHUP(t)
 }
+
+// WaitUntilActorTypeHosted blocks until the actor runtime reports actorType
+// among its hosted types. A restarted daprd re-registers its actor types
+// after it becomes healthy, so an invocation right after WaitUntilRunning can
+// find the type unregistered.
+func (d *Daprd) WaitUntilActorTypeHosted(t *testing.T, ctx context.Context, actorType string) {
+	t.Helper()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		for _, a := range d.GetMetaActorRuntime(c, ctx).ActiveActors {
+			if a.Type == actorType {
+				return
+			}
+		}
+		assert.Fail(c, "actor type not hosted yet", actorType)
+	}, time.Second*20, time.Millisecond*10)
+}

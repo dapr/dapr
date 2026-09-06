@@ -122,6 +122,7 @@ func (tr *tamperedrunning) Run(tt *testing.T, ctx context.Context) {
 
 	client = dworkflow.NewClient(tr.daprd.GRPCConn(tt, ctx))
 	require.NoError(tt, client.StartWorker(ctx, reg))
+	tr.daprd.WaitUntilActorTypeHosted(tt, ctx, "dapr.internal."+tr.daprd.Namespace()+"."+tr.daprd.AppID()+".workflow")
 
 	// Trigger the orchestrator actor by raising the event the workflow is
 	// waiting on. The actor's load detects the tampered history and appends

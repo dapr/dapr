@@ -116,12 +116,14 @@ func (c *terminatecascade) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(co, int64(numChildren), blocked.Load())
 	}, time.Second*30, time.Millisecond*10)
 
+	// Armed before the terminate: the parent creates the children's
+	// cascade-terminate reminders as soon as its own turn runs.
+	failedCh := make(chan struct{}, numChildren)
+	c.proxy.ArmNamedFailures(proxy.MethodScheduleJob, "cascade-terminate", numChildren, codes.Internal, failedCh)
+
 	termCtx, termCancel := context.WithTimeout(ctx, time.Second*20)
 	t.Cleanup(termCancel)
 	require.NoError(t, cl.TerminateWorkflow(termCtx, id))
-
-	failedCh := make(chan struct{}, numChildren)
-	c.proxy.ArmFailures(proxy.MethodScheduleJob, numChildren, codes.Internal, failedCh)
 
 	for range numChildren {
 		select {
