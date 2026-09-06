@@ -31,11 +31,16 @@ func init() {
 	suite.Register(new(volumeClaimTemplate))
 }
 
-// volumeClaimTemplate verifies that the placement StatefulSet renders the
-// raft-log volumeClaimTemplate and its mount the same way whether HA is
-// enabled or not, so that toggling HA on an existing release only changes
-// `replicas` and never touches `volumeClaimTemplates`, which Kubernetes
-// cannot apply as an update to a live StatefulSet.
+// volumeClaimTemplate verifies that, for a fresh install (no live
+// StatefulSet to preserve, which is what `helm template` always renders
+// against), the placement StatefulSet renders the raft-log
+// volumeClaimTemplate and its mount the same way whether HA is enabled or
+// not, so that toggling HA on such a release only changes `replicas` and
+// never touches `volumeClaimTemplates`, which Kubernetes cannot apply as an
+// update to a live StatefulSet. Releases installed before this chart
+// stopped gating the claim template on HA are handled separately by the
+// `dapr_placement.renderRaftLogVolume` lookup helper, which this
+// offline-template test cannot exercise.
 type volumeClaimTemplate struct {
 	nonHA         *helm.Helm
 	ha            *helm.Helm
