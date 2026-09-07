@@ -45,6 +45,7 @@ import (
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 )
 
 const (
@@ -616,17 +617,15 @@ func Test_attestationInput(t *testing.T) {
 	t.Parallel()
 
 	started := &protos.ExecutionStartedEvent{Input: wrapperspb.String(`"gen2"`)}
-	state := wfenginestate.NewState(wfenginestate.Options{AppID: "testapp", WorkflowActorType: "dapr.internal.default.testapp.workflow", ActivityActorType: "dapr.internal.default.testapp.activity"})
-	assert.Equal(t, `"gen2"`, attestationInput(state, started).GetValue(), "no ContinueAsNew: the start input")
+	opts := wfenginestate.Options{AppID: "testapp", WorkflowActorType: "dapr.internal.default.testapp.workflow", ActivityActorType: "dapr.internal.default.testapp.activity", Signer: &signer.Signer{}}
+	state := wfenginestate.NewState(opts)
+	assert.Equal(t, `"gen2"`, attestationInput(state, started).GetValue(), "nothing recorded: the start input")
 
 	parent := &protos.ParentInstanceInfo{WorkflowInstance: &protos.WorkflowInstance{InstanceId: notifyParentID}}
-	first := &protos.ExecutionStartedEvent{Input: wrapperspb.String(`"original"`), ParentInstance: parent}
-	state.AddToHistory(&backend.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: first}})
-	state.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{ContinuedAsNew: true})
-	assert.Equal(t, `"original"`, attestationInput(state, started).GetValue(), "after ContinueAsNew: the input the parent created the child with")
+	state.KeepCreationInput(&protos.ExecutionStartedEvent{Input: wrapperspb.String(`"original"`), ParentInstance: parent})
+	assert.Equal(t, `"original"`, attestationInput(state, started).GetValue(), "recorded at creation: the input the parent created the child with")
 
-	empty := wfenginestate.NewState(wfenginestate.Options{AppID: "testapp", WorkflowActorType: "dapr.internal.default.testapp.workflow", ActivityActorType: "dapr.internal.default.testapp.activity"})
-	empty.AddToHistory(&backend.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{ParentInstance: parent}}})
-	empty.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{ContinuedAsNew: true})
+	empty := wfenginestate.NewState(opts)
+	empty.KeepCreationInput(&protos.ExecutionStartedEvent{ParentInstance: parent})
 	assert.Empty(t, attestationInput(empty, started).GetValue(), "a child created without input attests an empty input, not the continued one")
 }

@@ -113,14 +113,16 @@ type State struct {
 	// failed delivery in between re-sends from durable history.
 	ParentNotifyPending bool
 
-	// CreationInput is the input the parent created this child with, kept
-	// from the first ContinueAsNew on: the parent verifies the completion
-	// attestation against it, while the current generation's start event
-	// carries the continued input. nil until a ContinueAsNew. It is stamped
-	// with the creating parent so a row an older binary's purge left behind
-	// is not read into a recreated instance.
+	// CreationInput is the input the parent created this child with: the
+	// parent verifies the completion attestation against it, while after a
+	// ContinueAsNew the current start event carries the continued input.
+	// Recorded at creation for signed children only, since only the
+	// attestation reads it; nil otherwise. It is stamped with the creating
+	// parent so a row an older binary's purge left behind is not read into a
+	// recreated instance.
 	CreationInput       *wrapperspb.StringValue
 	creationInputParent creationParent
+	keepCreationInput   bool
 
 	// externalCertDigestIndex maps SHA-256 cert digests (raw 32-byte digest
 	// converted to a string for use as a map key, not hex-encoded) to their
@@ -193,6 +195,7 @@ func NewState(opts Options) *State {
 		namespace:         opts.Namespace,
 		workflowActorType: opts.WorkflowActorType,
 		activityActorType: opts.ActivityActorType,
+		keepCreationInput: opts.Signer != nil,
 	}
 }
 
@@ -308,6 +311,16 @@ func (s *State) setCreationInput(in *wrapperspb.StringValue, parent *protos.Pare
 	s.creationInputChanged = true
 }
 
+// KeepCreationInput records the input a signed child is created with, from
+// its start event, before the first save. A root workflow or an unsigned
+// child keeps nothing.
+func (s *State) KeepCreationInput(start *protos.ExecutionStartedEvent) {
+	if !s.keepCreationInput || start.GetParentInstance() == nil {
+		return
+	}
+	s.setCreationInput(start.GetInput(), start.GetParentInstance())
+}
+
 // CreationInputFor reports whether the kept creation input belongs to the
 // creation described by parent.
 func (s *State) CreationInputFor(parent *protos.ParentInstanceInfo) bool {
@@ -371,14 +384,6 @@ func (s *State) SetMetadataETag(etag *string) {
 
 func (s *State) ApplyRuntimeStateChanges(rs *backend.WorkflowRuntimeState) {
 	if rs.GetContinuedAsNew() {
-		// The parent verifies a child's completion against the input it
-		// created it with; the new generation's start event carries the
-		// continued input, so keep the original from the first generation.
-		if s.CreationInput == nil {
-			if es := executionStartedOf(s.History, s.Inbox); es.GetParentInstance() != nil {
-				s.setCreationInput(es.GetInput(), es.GetParentInstance())
-			}
-		}
 		s.historyRemovedCount += len(s.History)
 		s.historyAddedCount = 0
 		s.History = nil

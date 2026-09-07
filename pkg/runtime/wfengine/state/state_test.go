@@ -32,6 +32,7 @@ import (
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -1592,30 +1593,44 @@ func TestGetSaveRequest_CreationInput(t *testing.T) {
 		assert.True(t, ok)
 	})
 
-	t.Run("ContinueAsNew captures the first generation's input for a child", func(t *testing.T) {
+	t.Run("recorded at creation for a signed child, survives ContinueAsNew", func(t *testing.T) {
 		t.Parallel()
-		s := NewState(testOpts())
-		s.AddToHistory(&protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
-			Name: "child", Input: wrapperspb.String(`"first"`), ParentInstance: parent,
-		}}})
+		opts := testOpts()
+		opts.Signer = &signer.Signer{}
+		s := NewState(opts)
+		s.KeepCreationInput(&protos.ExecutionStartedEvent{Name: "child", Input: wrapperspb.String(`"first"`), ParentInstance: parent})
+		assert.Equal(t, `"first"`, s.CreationInput.GetValue())
+		assert.True(t, s.CreationInputFor(parent))
 		s.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{ContinuedAsNew: true, NewEvents: []*protos.HistoryEvent{{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
 			Name: "child", Input: wrapperspb.String(`"second"`), ParentInstance: parent,
 		}}}}})
-		assert.Equal(t, `"first"`, s.CreationInput.GetValue())
-		s.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{ContinuedAsNew: true, NewEvents: []*protos.HistoryEvent{{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
-			Name: "child", Input: wrapperspb.String(`"third"`), ParentInstance: parent,
-		}}}}})
-		assert.Equal(t, `"first"`, s.CreationInput.GetValue(), "later generations keep the first")
+		assert.Equal(t, `"first"`, s.CreationInput.GetValue(), "ContinueAsNew does not touch it")
 	})
 
-	t.Run("a first-turn ContinueAsNew reads the start event from the inbox", func(t *testing.T) {
+	t.Run("nothing is inferred at ContinueAsNew", func(t *testing.T) {
 		t.Parallel()
-		s := NewState(testOpts())
-		s.AddToInbox(&protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
-			Name: "child", Input: wrapperspb.String(`"first"`), ParentInstance: parent,
+		opts := testOpts()
+		opts.Signer = &signer.Signer{}
+		s := NewState(opts)
+		// A child created before the input was recorded: the current start
+		// event may already carry a continued input, so it is not trusted.
+		s.AddToHistory(&protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
+			Name: "child", Input: wrapperspb.String(`"second"`), ParentInstance: parent,
 		}}})
 		s.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{ContinuedAsNew: true})
-		assert.Equal(t, `"first"`, s.CreationInput.GetValue())
+		assert.Nil(t, s.CreationInput)
+	})
+
+	t.Run("a root workflow or an unsigned child keeps nothing", func(t *testing.T) {
+		t.Parallel()
+		signed := testOpts()
+		signed.Signer = &signer.Signer{}
+		root := NewState(signed)
+		root.KeepCreationInput(&protos.ExecutionStartedEvent{Name: "root", Input: wrapperspb.String("x")})
+		assert.Nil(t, root.CreationInput)
+		unsigned := NewState(testOpts())
+		unsigned.KeepCreationInput(&protos.ExecutionStartedEvent{Name: "child", Input: wrapperspb.String("x"), ParentInstance: parent})
+		assert.Nil(t, unsigned.CreationInput, "only the attestation reads it")
 	})
 
 	t.Run("a legacy unstamped row is adopted for the current creation and rewritten", func(t *testing.T) {
@@ -1696,14 +1711,6 @@ func TestGetSaveRequest_CreationInput(t *testing.T) {
 		assert.Nil(t, s.CreationInput)
 		_, deletes := ops(t, s)
 		assert.True(t, deletes[creationInputKey], "the next save deletes the orphan")
-	})
-
-	t.Run("a root workflow keeps nothing", func(t *testing.T) {
-		t.Parallel()
-		s := NewState(testOpts())
-		s.AddToHistory(&protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{Name: "root", Input: wrapperspb.String("x")}}})
-		s.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{ContinuedAsNew: true})
-		assert.Nil(t, s.CreationInput)
 	})
 
 	t.Run("purge deletes a persisted creation input", func(t *testing.T) {
