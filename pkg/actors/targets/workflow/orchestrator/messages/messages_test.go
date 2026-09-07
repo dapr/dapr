@@ -20,6 +20,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -67,7 +69,16 @@ func Test_CallAddEventStateMessage_ChildCompletionNotFoundIsTerminal(t *testing.
 	t.Run("instance not found is treated as delivered", func(t *testing.T) {
 		t.Parallel()
 		m, calls := newMessages(errors.New("failed to invoke method 'AddWorkflowEvent' on actor 'parent-instance': no such instance exists"))
-		res := m.CallAddEventStateMessage(t.Context(), []*backend.WorkflowRuntimeStateMessage{newMsg()})
+		res := m.CallAddEventStateMessage(t.Context(), []*backend.WorkflowRuntimeStateMessage{newMsg()}, nil)
+		require.NoError(t, res.Err)
+		assert.Empty(t, res.FailedEventIDs)
+		assert.Equal(t, 1, *calls)
+	})
+
+	t.Run("permission denied is treated as delivered", func(t *testing.T) {
+		t.Parallel()
+		m, calls := newMessages(status.Error(codes.PermissionDenied, "workflow access policy denied"))
+		res := m.CallAddEventStateMessage(t.Context(), []*backend.WorkflowRuntimeStateMessage{newMsg()}, nil)
 		require.NoError(t, res.Err)
 		assert.Empty(t, res.FailedEventIDs)
 		assert.Equal(t, 1, *calls)
@@ -76,7 +87,7 @@ func Test_CallAddEventStateMessage_ChildCompletionNotFoundIsTerminal(t *testing.
 	t.Run("other errors keep the dispatch failed", func(t *testing.T) {
 		t.Parallel()
 		m, calls := newMessages(errors.New("connection refused"))
-		res := m.CallAddEventStateMessage(t.Context(), []*backend.WorkflowRuntimeStateMessage{newMsg()})
+		res := m.CallAddEventStateMessage(t.Context(), []*backend.WorkflowRuntimeStateMessage{newMsg()}, nil)
 		require.Error(t, res.Err)
 		assert.Len(t, res.FailedEventIDs, 1)
 		assert.Equal(t, 1, *calls)

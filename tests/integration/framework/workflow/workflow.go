@@ -70,3 +70,20 @@ func CountHistoryEventsOfType[T any](t *testing.T, ctx context.Context, client *
 	}
 	return count
 }
+
+// ChildCompletions counts the child completion and failure events for taskID
+// in the instance's history.
+func ChildCompletions(t *testing.T, ctx context.Context, client *client.TaskHubGrpcClient, id api.InstanceID, taskID int32) (completed, failed int) {
+	t.Helper()
+	hist, err := client.GetInstanceHistory(ctx, id)
+	require.NoError(t, err)
+	for _, e := range hist.GetEvents() {
+		if c := e.GetChildWorkflowInstanceCompleted(); c != nil && c.GetTaskScheduledId() == taskID {
+			completed++
+		}
+		if f := e.GetChildWorkflowInstanceFailed(); f != nil && f.GetTaskScheduledId() == taskID {
+			failed++
+		}
+	}
+	return completed, failed
+}
