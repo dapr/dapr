@@ -557,7 +557,15 @@ func Test_runWorkflow_emptyInboxNonTerminalSkipsRetention(t *testing.T) {
 	// empty payload so the reload reports "no state" and the function returns
 	// without touching retention. Verifies the retention guard fires even
 	// after the cache-invalidating reload.
-	actorState := statefake.New().WithGetFn(func(_ context.Context, _ *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
+	metaETag := "meta-v1"
+	metaRow, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{Generation: 1})
+	require.NoError(t, err)
+	actorState := statefake.New().WithGetFn(func(_ context.Context, req *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
+		// A live instance always has its metadata row; an empty one reads
+		// as a concurrent purge.
+		if req.Key == wfenginestate.MetadataKey {
+			return &actorapi.StateResponse{Data: metaRow, ETag: &metaETag}, nil
+		}
 		return &actorapi.StateResponse{}, nil
 	})
 
