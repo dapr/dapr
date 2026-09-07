@@ -45,9 +45,12 @@ type orchestrator struct {
 	ometa  *backend.WorkflowMetadata
 
 	activityResultAwaited atomic.Bool
-	lock                  *lock.Stallable
-	closed                atomic.Bool
-	wg                    sync.WaitGroup
+	// lastStartRedrive is the UnixNano of the most recent overdue pending
+	// start re-drive.
+	lastStartRedrive atomic.Int64
+	lock             *lock.Stallable
+	closed           atomic.Bool
+	wg               sync.WaitGroup
 
 	streamFns map[int64]*streamFn
 	streamIDx int64

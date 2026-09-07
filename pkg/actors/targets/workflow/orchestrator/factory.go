@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
@@ -68,6 +69,11 @@ type Options struct {
 	// orchestrator stalls workflows whose history payload would exceed this
 	// limit on the GetWorkItems stream.
 	MaxRequestBodySize int
+
+	// Detached runs work that must outlive an invocation or claim context, on
+	// the runtime lifetime rather than this registration's. Nil creates one
+	// bounded by ctx.
+	Detached *detached.Runner
 }
 
 type factory struct {
@@ -92,6 +98,8 @@ type factory struct {
 	scheduler todo.WorkflowScheduler
 
 	deactivateCh chan *orchestrator
+
+	detached *detached.Runner
 
 	table sync.Map
 	lock  sync.Mutex
@@ -125,6 +133,11 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		}
 	}()
 
+	det := opts.Detached
+	if det == nil {
+		det = detached.New(ctx)
+	}
+
 	return &factory{
 		appID:                  opts.AppID,
 		namespace:              opts.Namespace,
@@ -144,6 +157,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		maxRequestBodySize:     opts.MaxRequestBodySize,
 		scheduler:              opts.Scheduler,
 		deactivateCh:           deactivateCh,
+		detached:               det,
 	}, nil
 }
 
