@@ -395,6 +395,15 @@ func (o *Operator) SetMCPServers(servers ...mcpserverapi.MCPServer) {
 
 func (o *Operator) MCPServerUpdateEvent(t *testing.T, ctx context.Context, event *MCPServerUpdateEvent) {
 	t.Helper()
+
+	// daprd's watch stream registers asynchronously to its readiness; fanning
+	// out to zero subscribers would silently drop the event.
+	require.Eventually(t, func() bool {
+		o.lock.Lock()
+		defer o.lock.Unlock()
+		return len(o.srvMCPUpdateCh) > 0
+	}, time.Second*10, time.Millisecond*10, "no MCPServerUpdate stream subscribed")
+
 	o.lock.Lock()
 	defer o.lock.Unlock()
 

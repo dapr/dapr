@@ -94,4 +94,21 @@ func (r *reuse) Run(t *testing.T, ctx context.Context) {
 	assert.Contains(t, err.Error(), "an active workflow with ID 'foo' already exists")
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
+
+	// EnforceUniqueInstanceID blocks recreation even of a completed instance.
+	_, err = client.ScheduleNewWorkflow(ctx, "reuse", api.WithInstanceID("foo"), api.WithEnforceUniqueInstanceID())
+	require.Error(t, err)
+	assert.Equal(t, codes.AlreadyExists, status.Code(err), err)
+	assert.Contains(t, err.Error(), "enforces instance ID uniqueness")
+
+	// Without it the completed instance stays reusable, and enforcement on a
+	// fresh ID schedules normally.
+	id, err = client.ScheduleNewWorkflow(ctx, "reuse", api.WithInstanceID("foo"))
+	require.NoError(t, err)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
+	require.NoError(t, err)
+	id, err = client.ScheduleNewWorkflow(ctx, "reuse", api.WithInstanceID("bar"), api.WithEnforceUniqueInstanceID())
+	require.NoError(t, err)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
+	require.NoError(t, err)
 }

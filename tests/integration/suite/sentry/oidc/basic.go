@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
@@ -216,6 +217,13 @@ func (o *basicOIDCServer) testJWTTokenValidation(t *testing.T) {
 	assert.NotEmpty(t, claims["iat"], "Issued at time should be present")
 	assert.NotEmpty(t, claims["exp"], "Expiration time should be present")
 	assert.NotEmpty(t, claims["jti"], "JWT ID should be present")
+
+	// SignCertificate does not set Request.Type, so the optional typ header
+	// defaults to "JWT" (RFC 7515). Assert it end-to-end to lock that default.
+	msg, err := jws.Parse([]byte(tokenString.GetValue()))
+	require.NoError(t, err)
+	require.Len(t, msg.Signatures(), 1)
+	assert.Equal(t, "JWT", msg.Signatures()[0].ProtectedHeaders().Type(), "typ header should default to JWT")
 
 	// Verify trust domain audience validation
 	trustDomainVerifier := o.oidcProvider.Verifier(&oidc.Config{ClientID: "localhost"})

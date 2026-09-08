@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -969,5 +971,60 @@ func TestConstructRequestTrailingSlash(t *testing.T) {
 
 		assert.Equal(t, "/api/events/2024-04-08T00:00:00/", gotPath)
 		assert.Equal(t, "start=1&end=2", gotQuery)
+func TestConcurrencyLimiterContext(t *testing.T) {
+	t.Run("invokeMethodV1 acquire respects context cancellation", func(t *testing.T) {
+		c := Channel{
+			baseAddress: "http://localhost:0",
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
+			ch:          make(chan struct{}, 1),
+		}
+		c.ch <- struct{}{}
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodGet, "")
+		defer req.Close()
+
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := c.InvokeMethod(ctx, req, "")
+			errCh <- err
+		}()
+
+		select {
+		case err := <-errCh:
+			require.ErrorIs(t, err, context.Canceled)
+		case <-time.After(time.Second * 5):
+			t.Fatal("InvokeMethod did not return after context cancellation while the limiter was full")
+		}
+	})
+
+	t.Run("sendJob acquire respects context cancellation", func(t *testing.T) {
+		c := Channel{
+			baseAddress: "http://localhost:0",
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
+			ch:          make(chan struct{}, 1),
+		}
+		c.ch <- struct{}{}
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := c.TriggerJob(ctx, "job", nil)
+			errCh <- err
+		}()
+
+		select {
+		case err := <-errCh:
+			require.ErrorIs(t, err, context.Canceled)
+		case <-time.After(time.Second * 5):
+			t.Fatal("TriggerJob did not return after context cancellation while the limiter was full")
+		}
 	})
 }

@@ -21,6 +21,7 @@ import (
 	"io"
 	"net"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -336,6 +337,40 @@ func TestInvokeRemote(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "🐱", string(pd.GetMessage().GetData().GetValue()))
+	})
+
+	t.Run("streaming keeps the connection checked out until the response body is fully drained", func(t *testing.T) {
+		// Regression test for https://github.com/dapr/dapr/issues/10291: the connection must not be
+		// released back to the pool while the background goroutine is still streaming the response
+		// body, otherwise a long-lived response (e.g. SSE) can have its connection closed mid-stream
+		// once the pool purges it as idle.
+		messaging, teardown := prepareEnvironment(t, true, []string{"🐱"})
+		defer teardown()
+
+		var released atomic.Bool
+		orig := messaging.connectionCreatorFn
+		messaging.connectionCreatorFn = func(ctx context.Context, address, id, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error) {
+			conn, _, err := orig(ctx, address, id, namespace, customOpts...)
+			return conn, func(destroy bool) { released.Store(true) }, err
+		}
+
+		request := invokev1.
+			NewInvokeMethodRequest("method").
+			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"app1"}})
+		defer request.Close()
+
+		res, releaseFn, err := messaging.invokeRemote(t.Context(), "app1", "namespace1", "addr1", request)
+		require.NoError(t, err)
+		// Mirrors what invokeWithRetry does immediately after invokeRemote returns.
+		releaseFn(false)
+
+		assert.False(t, released.Load(), "connection was released before the response body was drained")
+
+		pd, err := res.ProtoWithData()
+		require.NoError(t, err)
+		assert.Equal(t, "🐱", string(pd.GetMessage().GetData().GetValue()))
+
+		assert.Eventually(t, released.Load, time.Second, 10*time.Millisecond, "connection was never released after the response body was drained")
 	})
 
 	t.Run("streaming with multiple chunks", func(t *testing.T) {

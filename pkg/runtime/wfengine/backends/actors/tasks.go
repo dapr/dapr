@@ -31,8 +31,8 @@ type PendingTasksBackend interface {
 	CompleteActivityTask(ctx context.Context, response *protos.ActivityResponse) error
 	// CompleteWorkflowTask implements backend.Backend.
 	CompleteWorkflowTask(ctx context.Context, response *protos.WorkflowResponse) error
-	// WaitForActivityCompletion implements backend.Backend.
-	WaitForActivityCompletion(request *protos.ActivityRequest) func(context.Context) (*protos.ActivityResponse, error)
-	// WaitForWorkflowTaskCompletion implements backend.Backend.
-	WaitForWorkflowTaskCompletion(request *protos.WorkflowRequest) func(context.Context) (*protos.WorkflowResponse, error)
+	// OnActivityCompletion implements backend.CompletionCallbackBackend.
+	OnActivityCompletion(request *protos.ActivityRequest, cb func(*protos.ActivityResponse, error)) func()
+	// OnWorkflowTaskCompletion implements backend.CompletionCallbackBackend.
+	OnWorkflowTaskCompletion(request *protos.WorkflowRequest, cb func(*protos.WorkflowResponse, error)) func()
 }

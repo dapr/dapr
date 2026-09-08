@@ -28,6 +28,7 @@ import (
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/reminders"
+	actortimers "github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging/method"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -89,6 +90,11 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 
 	err = timers.Create(ctx, req)
 	if err != nil {
+		if errors.Is(err, actortimers.ErrTimerActorNotOwned) {
+			a.logger.Debug(messages.ErrActorTimerOpActorNotOwned)
+			return nil, messages.ErrActorTimerOpActorNotOwned
+		}
+
 		err = messages.ErrActorTimerCreate.WithFormat(err)
 		a.logger.Debug(err)
 		return nil, err
@@ -111,7 +117,16 @@ func (a *Universal) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.Un
 		ActorType: in.GetActorType(),
 	}
 
-	timers.Delete(ctx, req)
+	if err := timers.Delete(ctx, req); err != nil {
+		if errors.Is(err, actortimers.ErrTimerActorNotOwned) {
+			a.logger.Debug(messages.ErrActorTimerOpActorNotOwned)
+			return nil, messages.ErrActorTimerOpActorNotOwned
+		}
+
+		err = messages.ErrActorTimerDelete.WithFormat(err)
+		a.logger.Debug(err)
+		return nil, err
+	}
 	return nil, nil
 }
 

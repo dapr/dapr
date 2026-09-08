@@ -83,7 +83,16 @@ func (r *allowduplicatedevents) Run(t *testing.T, ctx context.Context) {
 	r.fw.RestartAsReplica(t, ctx, "old2")
 
 	r.fw.WaitForStalled(t, ctx, id)
+	waitFor := time.Second * 10
+	if r.fw.FastPath() {
+		// With WorkflowsFastPath the per-event durable wake-up reminder is
+		// elided: after the restart the local drive died with the old
+		// process, so re-driving the stalled instance on the new replica
+		// falls to the per-instance janitor backstop reminder, which fires
+		// within one janitor period (20s by default). Allow two periods.
+		waitFor = time.Second * 45
+	}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		require.Equal(c, 2, r.fw.CountStalledEvents(t, ctx, id))
-	}, time.Second*10, time.Millisecond*10)
+	}, waitFor, time.Millisecond*10)
 }

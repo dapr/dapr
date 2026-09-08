@@ -288,7 +288,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		// using the default meter which relies on
 		// global state which can be problematic in tests
 		// or when decoupling the runtimes lifecycle from
-		// the proccesses lifecycle.
+		// the processes lifecycle.
 		var meter view.Meter
 
 		if cfg.Metrics.Meter == nil {
