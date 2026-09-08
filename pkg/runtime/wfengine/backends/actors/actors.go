@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -41,6 +42,8 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
@@ -155,10 +158,56 @@ type Actors struct {
 	// DAPR_WORKFLOW_TEST_DUPLICATE_TURN_COMPLETIONS injection.
 	duplicatedTurnCompletions atomic.Int64
 
+	// pendingStartRedrives holds, per instance ID, the UnixNano of the last
+	// re-drive poke; detached runs the pokes and the actor factories' detached
+	// work between Start and Stop.
+	pendingStartRedrives sync.Map
+	detachedLock         sync.Mutex
+	detached             *detached.Runner
+
 	stopped atomic.Bool
 }
 
 var _ backend.Backend = (*Actors)(nil)
+
+const pendingStartRedriveTimeout = 30 * time.Second
+
+func (abe *Actors) detachedRunner() *detached.Runner {
+	abe.detachedLock.Lock()
+	defer abe.detachedLock.Unlock()
+	return abe.detached
+}
+
+// redriveOverduePendingStart pokes the instance's workflow actor with a
+// one-shot status fetch, whose handler re-asserts an overdue pending start's
+// reminder. It runs detached and at most once per grace per instance, so the
+// caller's store read never waits on the actor lock.
+func (abe *Actors) redriveOverduePendingStart(id api.InstanceID) {
+	runner := abe.detachedRunner()
+	if runner == nil {
+		return
+	}
+	now := time.Now().UnixNano()
+	if last, ok := abe.pendingStartRedrives.Load(id); ok && now-last.(int64) < int64(pendingstart.RedriveGrace()) {
+		return
+	}
+	abe.pendingStartRedrives.Store(id, now)
+	runner.GoKeyed("redrive||"+string(id), func(ctx context.Context) {
+		ctx, cancel := context.WithTimeout(ctx, pendingStartRedriveTimeout)
+		defer cancel()
+		meta, err := abe.getWorkflowMetadataRemote(ctx, id, abe.appID)
+		if err != nil {
+			if !errors.Is(err, api.ErrInstanceNotFound) {
+				log.Debugf("Failed to poke workflow actor '%s' to re-drive its overdue pending start: %v", id, err)
+			}
+			abe.pendingStartRedrives.Delete(id)
+			return
+		}
+		if meta.GetRuntimeStatus() != protos.OrchestrationStatus_ORCHESTRATION_STATUS_PENDING {
+			abe.pendingStartRedrives.Delete(id)
+		}
+	})
+}
 
 func New(opts Options) (*Actors, error) {
 	var pendingTasksBackend PendingTasksBackend
@@ -229,6 +278,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		MaxRequestBodySize:     abe.maxRequestBodySize,
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
 		FastPath:               abe.workflowsFastPath,
+		Detached:               abe.detachedRunner(),
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
@@ -244,6 +294,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 	}
 
 	aopts := activity.Options{
+		Detached:          abe.detachedRunner(),
 		AppID:             abe.appID,
 		Namespace:         abe.namespace,
 		ActivityActorType: abe.activityActorType,
@@ -508,6 +559,12 @@ func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID, r
 
 	if wstate == nil {
 		return nil, api.ErrInstanceNotFound
+	}
+
+	// This store read is the only thing a status-guarding client does to an
+	// instance whose start reminder was lost.
+	if pendingstart.Overdue(wstate, time.Now()) != nil {
+		abe.redriveOverduePendingStart(id)
 	}
 
 	rstate := runtimestate.NewWorkflowRuntimeState(string(id), wstate.CustomStatus, wstate.History)
@@ -919,12 +976,22 @@ func (abe *Actors) purgeWorkflowRemote(ctx context.Context, id api.InstanceID, t
 // Start implements backend.Backend
 func (abe *Actors) Start(ctx context.Context) error {
 	abe.stopped.Store(false)
+	abe.detachedLock.Lock()
+	abe.detached = detached.New(ctx)
+	abe.detachedLock.Unlock()
 	return nil
 }
 
 // Stop implements backend.Backend
 func (abe *Actors) Stop(context.Context) error {
 	abe.stopped.Store(true)
+	abe.detachedLock.Lock()
+	runner := abe.detached
+	abe.detached = nil
+	abe.detachedLock.Unlock()
+	if runner != nil {
+		runner.Close()
+	}
 	return nil
 }
 
@@ -1216,8 +1283,16 @@ func (abe *Actors) purgeWorkflow(ctx context.Context, id api.InstanceID) error {
 	return nil
 }
 
+const forcePurgeHaltTimeout = 10 * time.Second
+
 func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) error {
-	log.Warnf("Force purging workflow state of '%s'. This can cause corruption if the workflow is being processed", id.String())
+	log.Warnf("Force purging workflow state of '%s'. This can cause corruption if the workflow is being processed, and a workflow actor resident on another host is not evicted", id.String())
+
+	// Evict the resident actors first: deactivation takes the turn lock, so
+	// the purge is ordered after any in-flight turn commits and the load
+	// below covers what that turn wrote. Nothing is left serving or writing
+	// from a cache of the purged state.
+	abe.haltPurgedActors(ctx, id)
 
 	astate, err := abe.actors.State(ctx)
 	if err != nil {
@@ -1287,4 +1362,31 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 			})
 		},
 	)
+}
+
+// haltPurgedActors evicts this instance's workflow actor from this host,
+// through the actor itself so no table-wide lock is held while it waits
+// for an in-flight turn. Best effort: force purge is the escape hatch for
+// wedged instances, so a halt that cannot take the turn lock in time is
+// logged and the purge proceeds. Activity actors are left alone: their
+// result lands on a cold workflow actor that finds no state, and halting
+// them spawns claim guards that would write after the purge.
+func (abe *Actors) haltPurgedActors(ctx context.Context, id api.InstanceID) {
+	atable, err := abe.actors.Table(ctx)
+	if err != nil || atable == nil {
+		return
+	}
+	if !atable.ActorExists(abe.workflowActorType, id.String()) {
+		return
+	}
+	target, err := atable.GetOrCreate(abe.workflowActorType, id.String())
+	if err != nil {
+		log.Warnf("Force purge of '%s': cannot resolve the workflow actor to evict: %v", id, err)
+		return
+	}
+	hctx, cancel := context.WithTimeout(ctx, forcePurgeHaltTimeout)
+	defer cancel()
+	if err := target.Deactivate(hctx); err != nil {
+		log.Warnf("Force purge of '%s': failed to halt the resident actor, stale in-memory state remains until the next write or idle reap: %v", id, err)
+	}
 }
