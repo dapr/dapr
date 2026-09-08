@@ -25,8 +25,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -57,6 +57,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		log.Warnf("No workflow state found for actor '%s', terminating execution", o.actorID)
 		return todo.RunCompletedTrue, nil
 	}
+	// Read before the engine runs, which mutates the cached runtime state in
+	// place: a notification is owed only by the turn that completes the
+	// instance, so a later stray event on a settled child does not re-arm a
+	// delivered one.
+	wasCompleted := runtimestate.IsCompleted(o.rstate)
 
 	if strings.HasPrefix(reminder.Name, "timer-") && !runtimestate.IsCompleted(o.rstate) {
 		var durableTimer backend.DurableTimer
@@ -133,19 +138,19 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// scheduler pod killed mid-call). createRetentionReminder uses a
 		// deterministic name, so re-creating an already-existing retention
 		// reminder is a no-op overwrite.
-		if runtimestate.IsCompleted(o.rstate) {
-			if rerr := o.handleRetention(ctx, runtimestate.RuntimeStatus(o.rstate)); rerr != nil {
-				return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to (re)create retention reminder on empty-inbox completion path: %w", rerr))
-			}
-			// Re-attempt the recursive terminate cascade idempotently: this is
-			// the retry path for terminateChildren failures on the completion
-			// path, since the inbox is drained by then.
-			if terr := o.terminateChildren(ctx, state); terr != nil {
-				return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to (re)deliver recursive terminate to children on empty-inbox path: %w", terr))
+		// Read once: a re-send below saves, and a failed metadata refresh
+		// after that save drops the cached runtime state.
+		rst := o.rstate
+		completed := runtimestate.IsCompleted(rst)
+		if completed {
+			// A failure nacks the driving reminder; any driver other than the
+			// dedicated retry reminder also arms it.
+			if serr := o.settleTerminal(ctx, state, rst, reminder.Name != reminderNameParentNotify); serr != nil {
+				return todo.RunCompletedFalse, serr
 			}
 		}
 		log.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", o.actorID, reminder.Name)
-		if o.fastPath && !runtimestate.IsCompleted(o.rstate) {
+		if o.fastPath && !completed {
 			// Returning RunCompletedTrue deactivates the actor, and a
 			// concurrent fold submit can append a held completion the moment
 			// this no-op fire releases the lock: the deactivation would then
@@ -315,49 +320,58 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	case completed := <-callback:
 		if !completed {
 			// The engine abandoned this work item (e.g. MaxContinueAsNewCount
-			// exceeded). The engine's ContinueAsNew tight-loop may have
-			// overwritten o.rstate via the shared wi.State pointer
-			// (*s = *newState in the applier). If CAN progress was made,
-			// persist it to the state store so it survives actor
-			// deactivation. Carryover events (unprocessed EventRaised
-			// events from the CAN state) are moved to the Inbox so they
-			// become NewEvents on retry. The stale inbox (which contained
-			// ALL original events including those already consumed) is
-			// replaced to prevent duplicate event delivery.
+			// exceeded, or the execution result was lost). The engine's
+			// ContinueAsNew tight-loop may have overwritten o.rstate via the
+			// shared wi.State pointer (*s = *newState in the applier). If CAN
+			// progress was made, persist the newest generation as a pending
+			// start, exactly like a fresh creation: empty history, its
+			// ExecutionStarted in the inbox followed by any carryover
+			// (unprocessed EventRaised events from the CAN state), and a start
+			// reminder to drive it. The consumed inbox is discarded: it holds
+			// the previous generation's events, and re-delivering those into
+			// the new generation lets a stale resolution be persisted ahead of
+			// an operation of the new generation that reuses its event ID.
+			// Keeping the generation's ExecutionStarted in history instead
+			// would leave the retry with an empty inbox and nothing to run.
 			// If no CAN progress was made (non-CAN failure), restore the
 			// pre-engine snapshot so the cached state stays consistent.
 			if wi.State.GetContinuedAsNew() {
-				// Separate carryover EventRaised events from the CAN
-				// execution events (WorkflowStarted, ExecutionStarted).
-				// Carryover events must go into the Inbox so they become
-				// NewEvents on retry. If they stay in History (as
-				// OldEvents) alongside the original Inbox events
-				// (NewEvents), the engine would buffer both sets and the
-				// workflow would process duplicate events.
 				canNewEvents := wi.State.GetNewEvents()
-				filtered := make([]*backend.HistoryEvent, 0, len(canNewEvents))
+				var startEvent *backend.HistoryEvent
 				var carryover []*backend.HistoryEvent
 				for _, e := range canNewEvents {
-					if e.GetEventRaised() != nil {
+					switch {
+					case e.GetExecutionStarted() != nil:
+						startEvent = e
+					case e.GetEventRaised() != nil:
 						carryover = append(carryover, e)
-					} else {
-						filtered = append(filtered, e)
 					}
 				}
-
-				// Temporarily swap NewEvents so ApplyRuntimeStateChanges
-				// only writes the CAN execution events to History.
-				if len(carryover) > 0 {
-					wi.State.NewEvents = filtered
-					state.ApplyRuntimeStateChanges(wi.State)
-					wi.State.NewEvents = canNewEvents
-
-					state.ClearInbox()
-					for _, e := range carryover {
-						state.AddToInbox(e)
+				if startEvent == nil && wi.State.GetStartEvent() != nil {
+					startEvent = &protos.HistoryEvent{
+						EventId:   -1,
+						Timestamp: timestamppb.Now(),
+						EventType: &protos.HistoryEvent_ExecutionStarted{
+							ExecutionStarted: wi.State.GetStartEvent(),
+						},
 					}
-				} else {
-					state.ApplyRuntimeStateChanges(wi.State)
+				}
+				if startEvent == nil {
+					o.invalidateCachedState()
+					return todo.RunCompletedFalse, errors.New("continued-as-new runtime state has no ExecutionStarted event")
+				}
+
+				// Apply the CAN reset (history, certificates, signatures)
+				// without writing any of the new generation's events to
+				// history: they are re-created when the pending start runs.
+				wi.State.NewEvents = nil
+				state.ApplyRuntimeStateChanges(wi.State)
+				wi.State.NewEvents = canNewEvents
+
+				state.ClearInbox()
+				state.AddToInbox(startEvent)
+				for _, e := range carryover {
+					state.AddToInbox(e)
 				}
 
 				state.Generation++
@@ -369,10 +383,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 					state.SetIncomingHistory(wi.IncomingHistory)
 				}
 
-				// Save the carryover BEFORE creating its wake-up reminder,
-				// mirroring AddWorkflowEvent: a reminder created first can
-				// fire remotely against un-saved state, ack SUCCESS and be
-				// deleted, stranding the carryover once the save commits.
+				// Save BEFORE creating the wake-up reminder, mirroring
+				// scheduleWorkflowStart: a reminder created first can fire on
+				// another host before the save commits, ack SUCCESS off the
+				// old state and be deleted, stranding the pending start.
 				if err = o.signAndSaveState(ctx, state); err != nil {
 					// signAndSaveState already invalidated the cache.
 					return todo.RunCompletedFalse, err
@@ -396,35 +410,14 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 					o.deleteStartReminder(esHistoryEvent)
 				}
 
-				if len(carryover) > 0 {
-					reminderName := events.EventReminderName(reminderPrefixNewEvent, carryover[0])
-					if o.fastPath {
-						// Fast path: janitor + local drive instead of the
-						// durable per-event reminder (falling back to it if
-						// the janitor cannot be ensured). The subsequent
-						// recoverable ErrExecutionAborted return also
-						// propagates to the wake goroutine driving THIS
-						// turn, whose escalation then re-arms a durable
-						// reminder for the original event; that re-arm is
-						// redundant with this drive but idempotent and
-						// self-cleaning (empty-inbox ack).
-						if jerr := o.ensureJanitor(ctx, state); jerr != nil {
-							if err = o.createWorkflowReminder(ctx, reminderName, nil, time.Now(), o.appID, &workflowName); err != nil {
-								return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
-							}
-						}
-						o.localDrive(reminderName, time.Now(), workflowName)
-					} else {
-						if err = o.createWorkflowReminder(ctx, reminderName, nil, time.Now(), o.appID, &workflowName); err != nil {
-							// The carryover is already durable in the inbox; a
-							// recoverable error FAILs this reminder invocation, so
-							// the driving reminder refires and the reloaded state
-							// re-runs the new generation normally. The cache is
-							// consistent with the store post-save, so it is not
-							// invalidated.
-							return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
-						}
-					}
+				// Drive the pending start like a fresh creation. The pending
+				// start is already durable in the inbox; a recoverable error
+				// FAILs this reminder invocation, so the driving reminder
+				// refires and the reloaded state runs the new generation
+				// normally. The cache is consistent with the store post-save,
+				// so it is not invalidated.
+				if err = o.assertStartReminder(ctx, startEvent); err != nil {
+					return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
 				}
 			} else {
 				// Non-CAN abandon: the engine may have mutated the shared
@@ -503,7 +496,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	pendingTasks := rs.GetPendingTasks()
 
 	// Process the outbound orchestrator events.
-	var addWorkflows []*backend.WorkflowRuntimeStateMessage
 	var createWorkflows []*backend.WorkflowRuntimeStateMessage
 	for _, msg := range rs.GetPendingMessages() {
 		switch {
@@ -511,7 +503,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			createWorkflows = append(createWorkflows, msg)
 
 		case msg.GetHistoryEvent().GetChildWorkflowInstanceCompleted() != nil, msg.GetHistoryEvent().GetChildWorkflowInstanceFailed() != nil:
-			addWorkflows = append(addWorkflows, msg)
+			// The completion owed to the parent. Not dispatched here: the
+			// terminal save records that it is owed and settleTerminal
+			// rebuilds it from the committed history, so the first send and
+			// every re-send are the same message.
 
 		case msg.GetHistoryEvent().GetExecutionTerminated() != nil && runtimestate.IsCompleted(rs):
 			// Recursive-terminate cascade messages. Not dispatched here as this
@@ -520,28 +515,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 		default:
 			return todo.RunCompletedTrue, fmt.Errorf("workflow actor '%s': don't know how to process outbound message '%v'", o.actorID, msg)
-		}
-	}
-
-	// Attach an attestation to each outbound child-completion message so
-	// the receiving parent can cryptographically verify this child
-	// executed the invocation it's reporting on. No-op when signing is
-	// disabled.
-	if o.signing.Signer != nil && len(addWorkflows) > 0 {
-		started := o.getExecutionStartedEvent(state)
-		parent := started.GetParentInstance()
-		if parent == nil || parent.GetWorkflowInstance() == nil {
-			return todo.RunCompletedFalse, fmt.Errorf("workflow actor '%s': cannot build child attestation without parent instance info", o.actorID)
-		}
-		params := signing.ChildAttestationParams{
-			ParentInstanceID:      parent.GetWorkflowInstance().GetInstanceId(),
-			ParentTaskScheduledID: parent.GetTaskScheduledId(),
-			Input:                 started.GetInput(),
-		}
-		for _, msg := range addWorkflows {
-			if err = o.signing.AttachChildCompletionAttestation(ctx, msg.GetHistoryEvent(), params); err != nil {
-				return todo.RunCompletedFalse, fmt.Errorf("workflow actor '%s': %w", o.actorID, err)
-			}
 		}
 	}
 
@@ -580,10 +553,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 	activityResult := o.callActivities(ctx, pendingTasks, state, rs, wi.OutgoingHistory, elideActivityReminder)
-	addResult := o.messages.CallAddEventStateMessage(ctx, addWorkflows)
 	createResult := o.messages.CallCreateWorkflowStateMessage(ctx, createWorkflows, rs.GetNewEvents())
 
-	dispatchErr := errors.Join(activityResult.Err, addResult.Err, createResult.Err)
+	dispatchErr := errors.Join(activityResult.Err, createResult.Err)
 	if dispatchErr != nil {
 		if errors.Is(dispatchErr, errPayloadSizeExceeded) {
 			return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs,
@@ -595,10 +567,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			// keep their events in history so they are not re-dispatched on
 			// retry. The inbox is preserved so the existing reminder retries
 			// the full execution.
-			allFailed := make(map[int32]struct{}, len(activityResult.FailedEventIDs)+len(createResult.FailedEventIDs)+len(addResult.FailedEventIDs))
+			allFailed := make(map[int32]struct{}, len(activityResult.FailedEventIDs)+len(createResult.FailedEventIDs))
 			maps.Copy(allFailed, activityResult.FailedEventIDs)
 			maps.Copy(allFailed, createResult.FailedEventIDs)
-			maps.Copy(allFailed, addResult.FailedEventIDs)
 
 			// Temporarily replace rs.NewEvents with a filtered copy that excludes
 			// failed dispatch events, then restore the original after
@@ -632,8 +603,19 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
 	}
 
+	// A fastpath terminal turn may be driven by a local wake with no reminder
+	// to nack, so the janitor is the durable driver for anything the turn
+	// owes after the save: the parent notification, retention, the cascade.
+	if o.fastPath && runtimestate.IsCompleted(rs) {
+		if err = o.ensureJanitor(ctx, state); err != nil {
+			return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to assert the janitor before the terminal save: %w", err))
+		}
+	}
 	state.ApplyRuntimeStateChanges(rs)
 	state.ClearInbox()
+	if !wasCompleted && runtimestate.IsCompleted(rs) && o.getExecutionStartedEvent(state).GetParentInstance() != nil {
+		state.SetParentNotifyPending(true)
+	}
 
 	err = o.signAndSaveState(ctx, state)
 	cacheSettled = true
@@ -670,19 +652,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	if runtimestate.IsCompleted(rs) {
 		log.Infof("Workflow Actor '%s': workflow completed with status '%s' workflowName '%s'", o.actorID, rstatus, workflowName)
-		// Create the retention reminder before deleting reminders. If the
-		// scheduler RPC fails (e.g. pod killed mid-call), returning the
-		// error here lets the firing reminder retry the whole completion
-		// path.
-		if err = o.handleRetention(ctx, rstatus); err != nil {
+		// Everything after the save is idempotent and retried by the driving
+		// reminder, or the janitor, on failure. Reminders are deleted after
+		// it so a failure here keeps its retry.
+		if err = o.settleTerminal(ctx, state, rs, true); err != nil {
 			return todo.RunCompletedFalse, err
-		}
-		// Deliver the recursive terminate to children only after the terminal
-		// state is persisted above, so a delivery failure retries via the
-		// wake-up reminder rather than rolling back the completion.
-		if err = o.terminateChildren(ctx, state); err != nil {
-			return todo.RunCompletedFalse, wferrors.NewRecoverable(
-				fmt.Errorf("failed to deliver recursive terminate to children: %w", err))
 		}
 		if hasUnfiredTimers(rs) {
 			if err = o.deleteAllReminders(ctx); err != nil {
@@ -737,21 +711,8 @@ func (*orchestrator) recordWorkflowSchedulingLatency(ctx context.Context, esHist
 		return
 	}
 
-	// If the event is an execution started event, then we need to record the scheduled start timestamp
-	if es := esHistoryEvent.GetExecutionStarted(); es != nil {
-		currentTimestamp := time.Now()
-		var scheduledStartTimestamp time.Time
-		timestamp := es.GetScheduledStartTimestamp()
-
-		if timestamp != nil {
-			scheduledStartTimestamp = timestamp.AsTime()
-		} else {
-			// if scheduledStartTimestamp is nil, then use the event timestamp to consider scheduling latency
-			// This case will happen when the workflow is created and started immediately
-			scheduledStartTimestamp = esHistoryEvent.GetTimestamp().AsTime()
-		}
-
-		wfSchedulingLatency := float64(currentTimestamp.Sub(scheduledStartTimestamp).Milliseconds())
+	if esHistoryEvent.GetExecutionStarted() != nil {
+		wfSchedulingLatency := float64(time.Since(pendingstart.DueTime(esHistoryEvent)).Milliseconds())
 		diag.DefaultWorkflowMonitoring.WorkflowSchedulingLatency(ctx, workflowName, wfSchedulingLatency)
 	}
 }
@@ -779,7 +740,34 @@ const retentionReminderName = "retention"
 // Create), while a shared per-appID bucket job would need a read-modify-write
 // of job data that is not atomic with the completion save, with no durable
 // per-instance anchor (and no completion-time index) to recover a lost join.
-func (o *orchestrator) handleRetention(ctx context.Context, status protos.OrchestrationStatus) error {
+// settleTerminal runs what a completed instance owes after its terminal
+// commit, idempotently, so every driver (the terminal turn, an empty-inbox
+// fire, the janitor) leaves the same state behind: the pending parent
+// notification, the retention reminder and the recursive terminate. rst is
+// read before the re-send, whose save may drop the cached runtime state.
+func (o *orchestrator) settleTerminal(ctx context.Context, state *wfenginestate.State, rst *protos.WorkflowRuntimeState, arm bool) error {
+	status := runtimestate.RuntimeStatus(rst)
+	completedAt, err := runtimestate.CompletedTime(rst)
+	if err != nil || completedAt.IsZero() {
+		// Reported terminal without a completion time: fall back to now so
+		// the retention reminder is still scheduled rather than dropped.
+		completedAt = time.Now()
+	}
+	// Retention and the cascade first: an unreachable parent must not hold
+	// them back, and both are idempotent re-asserts.
+	if err = o.handleRetention(ctx, status, completedAt); err != nil {
+		return wferrors.NewRecoverable(fmt.Errorf("failed to (re)create the retention reminder: %w", err))
+	}
+	if err = o.terminateChildren(ctx, state); err != nil {
+		return wferrors.NewRecoverable(fmt.Errorf("failed to (re)deliver the recursive terminate to children: %w", err))
+	}
+	if state.ParentNotifyPending {
+		return o.resendParentNotification(ctx, state, arm)
+	}
+	return nil
+}
+
+func (o *orchestrator) handleRetention(ctx context.Context, status protos.OrchestrationStatus, completedAt time.Time) error {
 	if o.retentionPolicy == nil {
 		return nil
 	}
@@ -803,16 +791,8 @@ func (o *orchestrator) handleRetention(ctx context.Context, status protos.Orches
 		return nil
 	}
 
-	completedAt, err := runtimestate.CompletedTime(o.rstate)
-	if err != nil || completedAt.IsZero() {
-		// Workflow is reported terminal but completion time is missing; fall
-		// back to now so the retention reminder is still scheduled rather
-		// than dropped.
-		completedAt = time.Now()
-	}
-
 	log.Debugf("Workflow actor '%s': setting retention reminder for status '%s' with due time '%v'", o.actorID, status.String(), dueTime)
-	_, err = o.createRetentionReminder(ctx, retentionReminderName, completedAt.Add(*dueTime))
+	_, err := o.createRetentionReminder(ctx, retentionReminderName, completedAt.Add(*dueTime))
 	return err
 }
 
@@ -997,15 +977,7 @@ func filterValidInboxEvents(state *wfenginestate.State) []*backend.HistoryEvent 
 // inbox events with an empty history and no pending ExecutionStarted. The
 // shape only arises when the committed start was lost.
 func isUnstartableState(state *wfenginestate.State) bool {
-	if len(state.Inbox) == 0 || len(state.History) != 0 {
-		return false
-	}
-	for _, e := range state.Inbox {
-		if e.GetExecutionStarted() != nil {
-			return false
-		}
-	}
-	return true
+	return len(state.Inbox) > 0 && len(state.History) == 0 && pendingstart.Event(state) == nil
 }
 
 // failUnstartableWorkflow commits a FAILED completion describing the dropped
@@ -1052,7 +1024,7 @@ func (o *orchestrator) failUnstartableWorkflow(ctx context.Context, state *wfeng
 		return todo.RunCompletedFalse, err
 	}
 	diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusUnstartableFailed)
-	if err := o.handleRetention(ctx, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED); err != nil {
+	if err := o.handleRetention(ctx, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, time.Now()); err != nil {
 		return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
 	}
 	return todo.RunCompletedTrue, nil

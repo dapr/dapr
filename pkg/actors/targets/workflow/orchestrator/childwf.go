@@ -34,7 +34,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName string, es []*protos.HistoryEvent, outgoingHistory map[int32]*protos.PropagatedHistory) error {
+func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName, parentExecutionID string, es []*protos.HistoryEvent, outgoingHistory map[int32]*protos.PropagatedHistory) error {
 	log.Debugf("Workflow actor '%s': calling %d child workflows", o.actorID, len(es))
 
 	var errs []error
@@ -52,7 +52,7 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 					ParentInstance: &protos.ParentInstanceInfo{
 						TaskScheduledId:  e.EventId,
 						Name:             wrapperspb.String(startEventName),
-						WorkflowInstance: &protos.WorkflowInstance{InstanceId: o.actorID},
+						WorkflowInstance: &protos.WorkflowInstance{InstanceId: o.actorID, ExecutionId: wrapperspb.String(parentExecutionID)},
 						AppID:            new(o.appID),
 					},
 					Input: createSO.Input,
