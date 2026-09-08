@@ -75,12 +75,12 @@ func Test_CallAddEventStateMessage_ChildCompletionNotFoundIsTerminal(t *testing.
 		assert.Equal(t, 1, *calls)
 	})
 
-	t.Run("permission denied is treated as delivered", func(t *testing.T) {
+	t.Run("permission denied keeps the dispatch failed", func(t *testing.T) {
 		t.Parallel()
 		m, calls := newMessages(status.Error(codes.PermissionDenied, "workflow access policy denied"))
 		res := m.CallAddEventStateMessage(t.Context(), []*backend.WorkflowRuntimeStateMessage{newMsg()}, nil)
-		require.NoError(t, res.Err)
-		assert.Empty(t, res.FailedEventIDs)
+		require.Error(t, res.Err, "a policy can be reloaded; the completion must not be lost")
+		assert.Len(t, res.FailedEventIDs, 1)
 		assert.Equal(t, 1, *calls)
 	})
 

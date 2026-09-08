@@ -32,36 +32,36 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore/fault"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/framework/socket"
-	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
 )
 
 func init() {
-	suite.Register(new(pending))
+	suite.Register(new(lagread))
 }
 
-// pending keeps the parent's inbox failing so the child's completion stays
-// undelivered: the child reads COMPLETED, but purging it or reusing its id is
-// refused until the parent acknowledges, after which both succeed.
-type pending struct {
+// lagread answers the metadata read that follows the parent's inbox save
+// with an empty row once, as a store whose reads lag its writes would. The
+// save persisted, so the parent must not report the instance gone: the
+// child would treat that as delivered and the completion would be lost.
+type lagread struct {
 	workflow *workflow.Workflow
 	ss       *statestore.StateStore
 	store    *fault.Store
 }
 
-func (p *pending) Setup(t *testing.T) []framework.Option {
+func (l *lagread) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
-	p.store = fault.New(t)
+	l.store = fault.New(t)
 	sock := socket.New(t)
-	p.ss = statestore.New(t,
+	l.ss = statestore.New(t,
 		statestore.WithSocket(sock),
-		statestore.WithStateStore(p.store),
+		statestore.WithStateStore(l.store),
 	)
 
-	p.workflow = workflow.New(t,
+	l.workflow = workflow.New(t,
 		workflow.WithSigningDisabledN(0),
 		workflow.WithNoDB(),
 		workflow.WithDaprdOptions(0,
@@ -77,24 +77,24 @@ spec:
   metadata:
   - name: actorStateStore
     value: "true"
-`, p.ss.SocketName())),
+`, l.ss.SocketName())),
 		),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(p.ss, p.workflow),
+		framework.WithProcesses(l.ss, l.workflow),
 	}
 }
 
-func (p *pending) Run(t *testing.T, ctx context.Context) {
-	p.workflow.WaitUntilRunning(t, ctx)
+func (l *lagread) Run(t *testing.T, ctx context.Context) {
+	l.workflow.WaitUntilRunning(t, ctx)
 
-	const parentID = "notifypending-p"
-	const childID = "notifypending-c"
+	const parentID = "lagread-p"
+	const childID = "lagread-c"
 
 	var inActivity atomic.Bool
 	releaseCh := make(chan struct{})
-	reg := p.workflow.Registry()
+	reg := l.workflow.Registry()
 	require.NoError(t, reg.AddActivityN("gate", func(actx task.ActivityContext) (any, error) {
 		inActivity.Store(true)
 		select {
@@ -108,7 +108,7 @@ func (p *pending) Run(t *testing.T, ctx context.Context) {
 		if err := ctx.CallActivity("gate").Await(nil); err != nil {
 			return nil, err
 		}
-		return "hello", nil
+		return "lagged", nil
 	}))
 	require.NoError(t, reg.AddWorkflowN("parent", func(ctx *task.WorkflowContext) (any, error) {
 		var out string
@@ -118,55 +118,31 @@ func (p *pending) Run(t *testing.T, ctx context.Context) {
 		return out, nil
 	}))
 
-	var markerDeletes atomic.Int32
-	p.store.SetMultiObserver(func(req *state.TransactionalStateRequest) {
+	// The parent's inbox save that lands the completion is the write whose
+	// read-back lags.
+	var armed atomic.Bool
+	lagged := make(chan struct{})
+	l.store.SetMultiObserver(func(req *state.TransactionalStateRequest) {
 		for _, op := range req.Operations {
-			if d, ok := op.(state.DeleteRequest); ok && strings.Contains(d.Key, childID+"||parent-notify") {
-				markerDeletes.Add(1)
+			if set, ok := op.(state.SetRequest); ok && strings.Contains(set.Key, parentID+"||inbox-") && inActivity.Load() && !armed.Load() {
+				l.store.ArmGetEmpty(parentID+"||metadata", 1, lagged)
+				armed.Store(true)
 			}
 		}
 	})
 
-	client := p.workflow.BackendClient(t, ctx)
+	client := l.workflow.BackendClient(t, ctx)
 	_, err := client.ScheduleNewWorkflow(ctx, "parent", api.WithInstanceID(parentID))
 	require.NoError(t, err)
 	require.Eventually(t, inActivity.Load, time.Second*20, time.Millisecond*10)
-
-	// Every parent inbox save fails from here on, so the notification cannot
-	// land until the fault is disarmed.
-	failed := make(chan struct{})
-	p.store.ArmFailures(parentID+"||inbox-", 1<<20, failed)
 	close(releaseCh)
-	select {
-	case <-failed:
-	case <-time.After(time.Second * 20):
-		require.Fail(t, "the parent's inbox save was never attempted")
-	}
-
-	cmeta, err := client.FetchWorkflowMetadata(ctx, childID)
-	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, cmeta.GetRuntimeStatus())
-
-	err = client.PurgeWorkflowState(ctx, childID)
-	require.ErrorContains(t, err, api.ErrNotCompleted.Error(), "an unacknowledged completion is not purgeable")
-	// Refused as Unavailable, which the client retries: bound the attempt.
-	reuseCtx, reuseCancel := context.WithTimeout(ctx, time.Second*3)
-	t.Cleanup(reuseCancel)
-	_, err = client.ScheduleNewWorkflow(reuseCtx, "child", api.WithInstanceID(childID))
-	require.Error(t, err, "an unacknowledged completion blocks id reuse")
-	wf.WaitForRuntimeStatus(t, ctx, client, childID, api.RUNTIME_STATUS_COMPLETED)
-	assert.Zero(t, markerDeletes.Load())
-
-	p.store.ArmFailures(parentID+"||inbox-", 0, nil)
 
 	meta, err := client.WaitForWorkflowCompletion(ctx, parentID)
-	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
-	assert.JSONEq(t, `"hello"`, meta.GetOutput().GetValue())
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int32(1), markerDeletes.Load(), "the acknowledged delivery clears the marker")
-	}, time.Second*20, time.Millisecond*10)
-
-	require.NoError(t, client.PurgeWorkflowState(ctx, childID))
-	p.workflow.Scheduler().WaitJobKeyCount(t, ctx, "parent-notify", func(n int) bool { return n == 0 })
+	require.NoError(t, err, "a lagging read-back must not lose the completion")
+	assert.JSONEq(t, `"lagged"`, meta.GetOutput().GetValue())
+	select {
+	case <-lagged:
+	default:
+		require.Fail(t, "the lagging read-back was never served")
+	}
 }
