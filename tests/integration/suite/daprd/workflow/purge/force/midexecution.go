@@ -77,8 +77,28 @@ func (m *midexecution) Run(t *testing.T, ctx context.Context) {
 	assert.Eventually(t, inActivity.Load, time.Second*10, time.Millisecond*10)
 
 	require.NoError(t, client.PurgeWorkflowState(ctx, id, dworkflow.WithForcePurge(true)))
+
+	// The purge evicts the workflow actor, so the in-flight activity's
+	// result lands on a cold actor that finds no state.
+	wfType := m.workflow.WorkflowActorType(0)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		for _, a := range m.workflow.Dapr().GetMetaActorRuntime(c, ctx).ActiveActors {
+			if a.Type == wfType {
+				assert.Zero(c, a.Count, "the purged workflow actor must be evicted")
+			}
+		}
+	}, time.Second*10, time.Millisecond*10)
+
 	close(releaseCh)
 
-	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-	assert.Equal(t, 0, count)
+	// The activity's claim record lives under the activity actor and may be
+	// written as it settles; the workflow's own rows must stay gone.
+	wfRows := func() int {
+		var n int
+		require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName+" WHERE key LIKE ?", "%||"+wfType+"||%").Scan(&n))
+		return n
+	}
+	assert.Zero(t, wfRows())
+	assert.Never(t, func() bool { return wfRows() != 0 }, time.Second*2, time.Millisecond*50,
+		"the released activity must not resurrect the purged workflow's rows")
 }

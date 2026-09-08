@@ -97,7 +97,7 @@ func (o *orchestrator) invokeAddEventFold(ctx context.Context, req *internalsv1p
 		return nil, err
 	}
 
-	entry, err := o.addWorkflowEventMaybeFold(ctx, &ev)
+	entry, err := o.addWorkflowEventMaybeFold(ctx, &ev, senderFromMetadata(req.GetMetadata()))
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (o *orchestrator) invokeAddEventFold(ctx context.Context, req *internalsv1p
 // addWorkflowEventMaybeFold runs the AddWorkflowEvent validation chain under
 // the actor lock and either holds the event for folding (returning its
 // entry) or completes the durable inbox path inline (returning nil, nil).
-func (o *orchestrator) addWorkflowEventMaybeFold(ctx context.Context, e *backend.HistoryEvent) (*foldEntry, error) {
+func (o *orchestrator) addWorkflowEventMaybeFold(ctx context.Context, e *backend.HistoryEvent, sender completionSender) (*foldEntry, error) {
 	state, _, err := o.loadInternalState(ctx)
 	if err != nil {
 		return nil, err
@@ -152,14 +152,14 @@ func (o *orchestrator) addWorkflowEventMaybeFold(ctx context.Context, e *backend
 		// An empty history is never a healthy running instance: no activity
 		// was legitimately scheduled, and a held fold entry would pin its
 		// sender against a state the unstartable classification must settle.
-		return nil, o.addWorkflowEvent(ctx, e)
+		return nil, o.addWorkflowEvent(ctx, e, sender)
 	}
 
 	// A TaskExecutionId mismatch marks a straggler from a previous execution
 	// (ids reset on ContinueAsNew); the inbox path owns straggler semantics.
 	if !o.foldExecutionMatches(e, state) {
 		log.Debugf("Workflow actor '%s': completion's task execution id does not match current history; taking the durable inbox path", o.actorID)
-		return nil, o.addWorkflowEvent(ctx, e)
+		return nil, o.addWorkflowEvent(ctx, e, sender)
 	}
 
 	// Duplicates: same handling as the inbox path, but the pending set is a
