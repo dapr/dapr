@@ -33,6 +33,12 @@ func init() {
 	suite.Register(new(childidcollide))
 }
 
+// childidcollide verifies that, under history signing, the failure the
+// runtime synthesizes when a ContinueAsNew generation re-creates a child
+// under an instance ID still held by the previous generation is delivered
+// to the parent as an ordinary child failure. A synthesized failure carries
+// no attestation by design, so it must be recognised as locally authored
+// rather than rejected as tampering (which would tombstone the parent).
 type childidcollide struct {
 	workflow *workflow.Workflow
 }
@@ -85,7 +91,8 @@ func (c *childidcollide) Run(t *testing.T, ctx context.Context) {
 			ctx.ContinueAsNew(1)
 			return nil, nil
 		}
-
+		// Surface the collision as output so a tombstoned (FAILED) parent
+		// is distinguishable from one that observed the child failure.
 		if err := ctx.CallChildWorkflow("blocker",
 			task.WithChildWorkflowInstanceID(pinnedID),
 		).Await(nil); err != nil {
