@@ -101,7 +101,6 @@ func (p *presence) Run(t *testing.T, ctx context.Context) {
 		}
 	}, time.Second*20, time.Millisecond*50)
 
-	// The placement service is removed: the leader is advertised.
 	p.place.Cleanup(t)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, leader(c))

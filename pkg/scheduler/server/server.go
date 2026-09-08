@@ -209,6 +209,9 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 
 	if opts.Controller != nil {
 		opts.Controller.SetCron(cron)
+		if hoff != nil {
+			opts.Controller.SetPresenceSink(hoff)
+		}
 	}
 
 	return &Server{

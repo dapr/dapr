@@ -72,7 +72,7 @@ func (r *rollback) Setup(t *testing.T) []framework.Option {
 	r.sched = scheduler.New(t, scheduler.WithPlacementEnabled(true))
 	// The placement port must refuse connections until the placement service
 	// runs: the framework's reservation listener would satisfy the
-	// scheduler's presence probe on a placement service that does not exist
+	// scheduler's presence probe on a placement service that does not exist.
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	placePort := lis.Addr().(*net.TCPAddr).Port
@@ -117,7 +117,6 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 
 	gclient := r.daprd.GRPCClient(t, ctx)
 
-	// Actors are placed by the scheduler.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		_, err := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 			ActorType: "myactortype",
@@ -180,7 +179,6 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 		assert.Zero(c, leader)
 	}, time.Second*30, time.Millisecond*50)
 
-	// Actors keep working through the placement service.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		_, ierr := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 			ActorType: "myactortype",

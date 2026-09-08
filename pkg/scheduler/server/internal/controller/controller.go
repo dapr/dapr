@@ -18,14 +18,18 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"sync/atomic"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/dapr/dapr/pkg/healthz"
@@ -34,11 +38,14 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
+var placementPodLabels = labels.Set{"app": "dapr-placement-server"}
+
 var log = logger.NewLogger("dapr.scheduler.server.controller")
 
 type Options struct {
 	KubeConfig *string
 	Healthz    healthz.Healthz
+	Namespace  string
 }
 
 // Controller wraps a long-lived controller-runtime manager. It must only be
@@ -47,11 +54,40 @@ type Options struct {
 type Controller struct {
 	cron atomic.Value
 	run  func(ctx context.Context) error
+
+	lock                 sync.Mutex
+	sink                 PresenceSink
+	placementPodPresence *bool
+}
+
+// PresenceSink receives the placement pod observations.
+type PresenceSink interface {
+	SetKubernetesPresence(present bool)
 }
 
 // SetCron updates the cron interface used by the namespace reconciler.
 func (c *Controller) SetCron(cr cron.Interface) {
 	c.cron.Store(cr)
+}
+
+// SetPresenceSink updates the sink receiving placement pod observations,
+// pushing the current observation into it right away.
+func (c *Controller) SetPresenceSink(s PresenceSink) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	c.sink = s
+	if c.placementPodPresence != nil {
+		s.SetKubernetesPresence(*c.placementPodPresence)
+	}
+}
+
+func (c *Controller) setPlacementPresence(present bool) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	c.placementPodPresence = &present
+	if c.sink != nil {
+		c.sink.SetKubernetesPresence(present)
+	}
 }
 
 func New(opts Options) (*Controller, error) {
@@ -81,10 +117,21 @@ func New(opts Options) (*Controller, error) {
 	}
 
 	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
-		Logger:                        logr.Discard(),
-		Scheme:                        scheme,
-		HealthProbeBindAddress:        "0",
-		Metrics:                       metricsserver.Options{BindAddress: "0"},
+		Logger:                 logr.Discard(),
+		Scheme:                 scheme,
+		HealthProbeBindAddress: "0",
+		Metrics:                metricsserver.Options{BindAddress: "0"},
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				&corev1.Pod{}: {
+					Namespaces: map[string]cache.Config{
+						opts.Namespace: {
+							LabelSelector: placementPodLabels.AsSelector(),
+						},
+					},
+				},
+			},
+		},
 		LeaderElectionID:              "scheduler.dapr.io",
 		LeaderElectionReleaseOnCancel: true,
 	})
@@ -104,14 +151,26 @@ func New(opts Options) (*Controller, error) {
 		return nil, fmt.Errorf("unable to complete controller: %w", err)
 	}
 
+	if err := ctrl.NewControllerManagedBy(mgr).
+		Named("placement-pods").
+		For(new(corev1.Pod)).
+		Complete(&placementPods{
+			podReader: mgr.GetCache(),
+			ctrl:      c,
+			namespace: opts.Namespace,
+		}); err != nil {
+		return nil, fmt.Errorf("unable to complete controller: %w", err)
+	}
+
 	hzTarget := opts.Healthz.AddTarget("scheduler-controller")
 
 	c.run = concurrency.NewRunnerManager(
 		mgr.Start,
 		func(ctx context.Context) error {
-			_, err := mgr.GetCache().GetInformer(ctx, new(corev1.Namespace))
-			if err != nil {
-				return fmt.Errorf("unable to get informer: %w", err)
+			for _, obj := range []client.Object{new(corev1.Namespace), new(corev1.Pod)} {
+				if _, err := mgr.GetCache().GetInformer(ctx, obj); err != nil {
+					return fmt.Errorf("unable to get informer: %w", err)
+				}
 			}
 			if !mgr.GetCache().WaitForCacheSync(ctx) {
 				return errors.New("unable to sync cache")
