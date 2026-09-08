@@ -489,10 +489,13 @@ func TestLeadershipPlacementPresence(t *testing.T) {
 		assert.Zero(t, hoff.latched)
 	})
 
-	t.Run("replicated advertised latch survives incapable sidecars", func(t *testing.T) {
+	t.Run("replicated advertised latch survives losing every capable sidecar", func(t *testing.T) {
 		t.Parallel()
-		hoff := &fakeHandoff{advertised: true, incapable: true, capable: true}
+		// No capable sidecar, no placement stream: only the latch keeps the
+		// leader advertised.
+		hoff := &fakeHandoff{advertised: true, incapable: true}
 		l, ch := newLeadership(hoff)
+		l.placement = new(fakePlacementLeader)
 		table := []*anypb.Any{anyHost(t, "a:1", true)}
 
 		require.NoError(t, l.Handle(t.Context(), table))

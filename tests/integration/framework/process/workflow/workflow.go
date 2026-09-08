@@ -476,5 +476,8 @@ func (w *Workflow) Sentry() *sentry.Sentry {
 }
 
 func (w *Workflow) Placement() *placement.Placement {
+	if w.place == nil {
+		panic("no placement service runs when the scheduler serves placement: pin this suite with workflow.WithPlacementService()")
+	}
 	return w.place
 }

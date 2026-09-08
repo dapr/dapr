@@ -56,7 +56,7 @@ func (e *basic) Setup(t *testing.T) []framework.Option {
 		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 		daprd.WithWorkflowJanitorPeriod(t, time.Millisecond*200),
 	}
-	e.workflow = workflow.New(t, workflow.WithDaprdOptions(0, fp...))
+	e.workflow = workflow.New(t, workflow.WithPlacementService(), workflow.WithDaprdOptions(0, fp...))
 
 	for i := range e.joiners {
 		e.joiners[i] = daprd.New(t, append([]daprd.Option{

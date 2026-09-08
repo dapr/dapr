@@ -42,8 +42,11 @@ func init() {
 // rollback asserts the scheduler placement authority hands back to a
 // placement service without restarting sidecars once one is deployed again.
 // Its presence alone withholds the scheduler's placement leader, and the
-// sidecar defects back to its configured placement service, so a single
-// authority holds throughout.
+// sidecar defects back to its configured placement service. The test pins
+// convergence: each sidecar follows one authority at a time from its
+// WatchHosts view, and presence acts on the next detection cycle rather
+// than through a handshake, so a transition is settled by observation, not
+// negotiated.
 type rollback struct {
 	daprd *daprd.Daprd
 	sched *scheduler.Scheduler
