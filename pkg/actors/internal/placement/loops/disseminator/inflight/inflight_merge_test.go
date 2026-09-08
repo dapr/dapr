@@ -137,6 +137,31 @@ func TestMerge(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("session reset drops the v1 ring tables so a handover cannot answer from them", func(t *testing.T) {
+		t.Parallel()
+		i := New(Options{Hostname: "10.0.0.1", Port: "50002"})
+
+		i.Set(newTables(100, map[string]map[string]int64{
+			"t1": {"10.0.0.1:50002": 1},
+			"t2": {"10.0.0.2:50002": 1},
+		}), 1)
+
+		// The v1 stream closes and the sidecar hands over to the scheduler,
+		// whose snapshot carries only t1. A t2 lookup must not be answered
+		// from the ring the v1 session left behind.
+		i.ResetSession()
+		_, err := i.Merge(tables(map[string][]string{
+			"t1": {"10.0.0.1:50002"},
+		}), map[string]uint64{"t1": 1})
+		require.NoError(t, err)
+
+		assert.False(t, i.HasTables([]string{"t1", "t2"}))
+		_, err = i.resolve(&api.LookupActorRequest{ActorType: "t2", ActorID: "a"})
+		require.Error(t, err)
+		_, err = i.resolve(&api.LookupActorRequest{ActorType: "t1", ActorID: "a"})
+		require.NoError(t, err)
+	})
+
 	t.Run("unknown hash algorithm errors", func(t *testing.T) {
 		t.Parallel()
 		i := New(Options{Hostname: "h", Port: "1"})
