@@ -131,6 +131,7 @@ func (o *orchestrator) redispatchActivities(ctx context.Context, state *wfengine
 		// durable reminder.
 		if o.janitorRedispatchedGen != state.Generation {
 			o.janitorRedispatched = nil
+			o.janitorEscalated = nil
 			o.janitorRedispatchedGen = state.Generation
 		}
 		if o.janitorRedispatched == nil {
@@ -142,6 +143,10 @@ func (o *orchestrator) redispatchActivities(ctx context.Context, state *wfengine
 			live[id] = struct{}{}
 			if _, ok := o.janitorRedispatched[id]; ok {
 				durable[id] = true
+				if o.janitorEscalated == nil {
+					o.janitorEscalated = make(map[int32]*backend.HistoryEvent)
+				}
+				o.janitorEscalated[id] = e
 			} else {
 				o.janitorRedispatched[id] = struct{}{}
 			}
@@ -159,12 +164,13 @@ func (o *orchestrator) redispatchActivities(ctx context.Context, state *wfengine
 		defer o.wakeWG.Done()
 		for _, e := range unresolved {
 			cctx, cancel := context.WithTimeout(wakeCtx, redispatchCallTimeout)
-			cerr := o.callActivity(cctx, e, dueTime, phs[e.GetEventId()], wfName, elide && !durable[e.GetEventId()])
+			cerr := o.callActivity(cctx, e, dueTime, phs[e.GetEventId()], wfName, elide && !durable[e.GetEventId()], true)
 			cancel()
 			switch {
 			case cerr == nil && durable[e.GetEventId()]:
 				log.Infof("Workflow actor '%s': janitor escalated unresolved activity '%s::%d' to its durable run-activity reminder (a prior re-dispatch did not resolve it)", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
 				diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusJanitorRedispatchEscalated)
+				o.reapResolvedEscalation(wakeCtx, e)
 			case cerr == nil:
 				log.Infof("Workflow actor '%s': janitor re-dispatched unresolved activity '%s::%d'", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
 				diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusJanitorRedispatched)

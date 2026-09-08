@@ -1,0 +1,122 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package batched
+
+import (
+	"context"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
+	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
+	"github.com/dapr/durabletask-go/task"
+)
+
+func init() {
+	suite.Register(new(child))
+}
+
+// child verifies that a child workflow terminated mid-batch
+// ([ExecutionTerminated, TaskCompleted], with the child continuing-as-new)
+// still notifies its awaiting parent. If the child's termination is dropped,
+// or the completion is applied without the parent notification, the parent
+// blocks forever.
+type child struct {
+	workflow *workflow.Workflow
+}
+
+func (b *child) Setup(t *testing.T) []framework.Option {
+	b.workflow = workflow.New(t)
+	return []framework.Option{
+		framework.WithProcesses(b.workflow),
+	}
+}
+
+func (b *child) Run(t *testing.T, ctx context.Context) {
+	b.workflow.WaitUntilRunning(t, ctx)
+
+	const childID = "terminate-child-child"
+
+	var inActivity atomic.Bool
+	holdCh := make(chan struct{})
+
+	r := b.workflow.Registry()
+
+	r.AddWorkflowN("terminate-child-child", func(ctx *task.WorkflowContext) (any, error) {
+		if err := ctx.CallActivity("hold").Await(nil); err != nil {
+			return nil, err
+		}
+		ctx.ContinueAsNew(nil)
+		return nil, nil
+	})
+	r.AddWorkflowN("terminate-child", func(ctx *task.WorkflowContext) (any, error) {
+		out := "child-completed"
+		if err := ctx.CallChildWorkflow("terminate-child-child",
+			task.WithChildWorkflowInstanceID(childID),
+		).Await(nil); err != nil {
+			out = "child-failed"
+		}
+		return out, nil
+	})
+	require.NoError(t, r.AddActivityN("hold", func(ctx task.ActivityContext) (any, error) {
+		inActivity.Store(true)
+		<-holdCh
+		return nil, nil
+	}))
+
+	cl := b.workflow.BackendClient(t, ctx)
+	id, err := cl.ScheduleNewWorkflow(ctx, "terminate-child", api.WithInstanceID("terminate-child"))
+	require.NoError(t, err)
+	_, err = cl.WaitForWorkflowStart(ctx, id)
+	require.NoError(t, err)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.True(c, inActivity.Load())
+		assert.Equal(c, 1, fworkflow.CountHistoryEventsMatching(t, ctx, cl, api.InstanceID(childID), fworkflow.IsTaskScheduledFor(0)))
+	}, time.Second*20, time.Millisecond*10)
+
+	fworkflow.InjectInboxEvent(t, ctx, b.workflow.DB(), b.workflow.Dapr(), childID, &protos.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ExecutionTerminated{
+			ExecutionTerminated: &protos.ExecutionTerminatedEvent{
+				Input: wrapperspb.String(`"stop"`),
+			},
+		},
+	})
+
+	b.workflow.Dapr().Restart(t, ctx)
+	close(holdCh)
+	b.workflow.Dapr().WaitUntilRunning(t, ctx)
+	cl = b.workflow.BackendClient(t, ctx)
+
+	cmeta, err := cl.WaitForWorkflowCompletion(ctx, api.InstanceID(childID))
+	require.NoError(t, err)
+	require.Equal(t, api.RUNTIME_STATUS_TERMINATED.String(), cmeta.GetRuntimeStatus().String())
+
+	meta, err := cl.WaitForWorkflowCompletion(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), meta.GetRuntimeStatus().String())
+	require.Equal(t, `"child-completed"`, meta.GetOutput().GetValue())
+}

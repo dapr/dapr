@@ -23,6 +23,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -49,9 +51,17 @@ type Permutation struct {
 
 func NewPermutation(t *testing.T, opts PermutationOptions) *Permutation {
 	t.Helper()
+	// Under WorkflowsFastPath re-driving the stalled instance after the
+	// recovery workers connect falls to the per-instance janitor reminder, so
+	// shrink its period below the recovery wait windows. The variable is
+	// unused in default mode.
 	return &Permutation{
-		workflow: workflow.NewClustered(t, opts.Daprds),
-		opts:     opts,
+		workflow: workflow.NewClustered(t, opts.Daprds,
+			daprd.WithExecOptions(exec.WithEnvVars(t,
+				"DAPR_WORKFLOW_JANITOR_PERIOD", "2s",
+			)),
+		),
+		opts: opts,
 	}
 }
 

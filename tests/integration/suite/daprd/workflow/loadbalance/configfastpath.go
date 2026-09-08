@@ -25,20 +25,12 @@ import (
 )
 
 func newClusteredFastPathDeployment(t *testing.T, daprds int, extraEnv ...string) *workflow.Workflow {
-	wopts := make([]workflow.Option, 0, 1+daprds)
-	wopts = append(wopts, workflow.WithDaprds(daprds))
-	config := `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-    name: clusteredfastpath
-spec:
-    features:
-    - name: WorkflowsClusteredDeployment
-      enabled: true
-    - name: WorkflowsFastPath
-      enabled: true
-`
+	wopts := make([]workflow.Option, 0, 3+daprds)
+	wopts = append(wopts,
+		workflow.WithDaprds(daprds),
+		workflow.WithClusteredDeployment(true),
+		workflow.WithFastPath(true),
+	)
 	uid, err := uuid.NewRandom()
 	require.NoError(t, err)
 	appID := uid.String()
@@ -46,7 +38,6 @@ spec:
 	for i := range daprds {
 		wopts = append(wopts, workflow.WithDaprdOptions(i,
 			daprd.WithAppID(appID),
-			daprd.WithConfigManifests(t, config),
 			daprd.WithExecOptions(exec.WithEnvVars(t,
 				append([]string{"DAPR_WORKFLOW_JANITOR_PERIOD", "2s"}, extraEnv...)...,
 			)),

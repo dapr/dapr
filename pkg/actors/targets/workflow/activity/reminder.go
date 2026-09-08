@@ -25,6 +25,7 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -32,7 +33,7 @@ import (
 // activityReminderName is the constant name of the per-activity-actor
 // execution reminder. One reminder per actor: retries and the drive-failure
 // escalation collapse onto a single scheduler entry (overwrite-by-name).
-const activityReminderName = "run-activity"
+const activityReminderName = todo.ActivityReminderName
 
 func (a *activity) createReminder(ctx context.Context, invocation *protos.ActivityInvocation, dueTime time.Time, activityName *string) error {
 	return a.createActivityReminder(ctx, a.actorID, invocation, dueTime, activityName)
@@ -42,6 +43,13 @@ func (a *activity) createReminder(ctx context.Context, invocation *protos.Activi
 // rather than the *activity because the drive-failure escalation path may
 // outlive the actor object (HaltAll recycles it).
 func (f *factory) createActivityReminder(ctx context.Context, actorID string, invocation *protos.ActivityInvocation, dueTime time.Time, activityName *string) error {
+	// Clamp a past dueTime to now: the scheduler paces failure retries from
+	// the scheduled time, so a stale dueTime replays the whole elapsed
+	// backlog as a burst on every failed trigger.
+	if now := time.Now(); dueTime.Before(now) {
+		dueTime = now
+	}
+
 	log.Debugf("Activity actor '%s||%s': creating reminder '%s' with dueTime=%s", f.actorType, actorID, activityReminderName, dueTime)
 
 	anydata, err := anypb.New(invocation)

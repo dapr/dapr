@@ -52,7 +52,7 @@ func Test_executeActivity_lockFreeDuringExecution(t *testing.T) {
 
 	ownerErr := make(chan error, 1)
 	go func() {
-		ownerErr <- a.executeActivity(t.Context(), activityReminderName, testInvocation(), false)
+		ownerErr <- a.executeActivity(t.Context(), activityReminderName, testInvocation(), false, false)
 	}()
 
 	var wi *backend.ActivityWorkItem
@@ -74,7 +74,7 @@ func Test_executeActivity_lockFreeDuringExecution(t *testing.T) {
 	// WorkItem.
 	followerErr := make(chan error, 1)
 	go func() {
-		followerErr <- a.executeActivity(t.Context(), activityReminderName, testInvocation(), false)
+		followerErr <- a.executeActivity(t.Context(), activityReminderName, testInvocation(), false, false)
 	}()
 
 	wi.Result = &protos.HistoryEvent{
