@@ -50,9 +50,6 @@ func (d *disseminator) handleCloseStream(ctx context.Context, closeStream *loops
 	stream.StreamLoopFactory.CacheLoop(s.loop)
 
 	if len(d.streams) == 0 {
-		if d.draining {
-			d.finishDrain()
-		}
 		return
 	}
 
@@ -126,19 +123,18 @@ func (d *disseminator) advancePhase(ctx context.Context) {
 		}
 
 	case v1pb.HostOperation_UNLOCK:
-		if d.draining {
-			d.finishDrain()
-			return
-		}
-
 		d.currentOperation = v1pb.HostOperation_REPORT
 		d.streamsInTargetState = 0
 		d.timeoutQ.Dequeue(d.currentVersion)
 		log.Debugf("Dissemination of version %d in %s complete (via stream close)", d.currentVersion, d.namespace)
 
-		// Always arm the coalesce timer after a round completes so churn
-		// racing the UNLOCK ack still folds into a single follow-up round.
-		// handleCoalesceFire is a no-op when nothing is queued.
+		// Always arm the coalesce timer after a round completes when coalesceWindow > 0,
+		// regardless of whether anything is currently queued.
+		// An UNLOCK ack and a new ConnAdd that race through the disseminator's
+		// event queue can be processed in either order;
+		// if the ConnAdd loses the race,
+		// the queue is empty here and a cold-start round fires immediately for the late arrival,
+		// defeating coalescing. handleCoalesceFire is a no-op when queues are empty when the timer elapses.
 		if d.coalesceWindow > 0 {
 			d.startCoalesceTimer()
 			return
@@ -213,15 +209,12 @@ func (d *disseminator) processWaitingDisseminate(ctx context.Context, forceRound
 	}
 }
 
-// handleCoalesceFire drains the post-round coalesce window with a single
-// follow-up round covering every disconnect and connection accumulated in
-// it.
+// handleCoalesceFire is the timer callback that drains the post-round
+// coalesce window. Called when the disseminator has been idle long enough
+// since the last round ended; triggers a single follow-up round covering
+// every disconnect / new connection accumulated during the window.
 func (d *disseminator) handleCoalesceFire(ctx context.Context) {
 	d.coalesceTimer = nil
-
-	if d.draining {
-		return
-	}
 
 	// Mirror handleAdd's flow: apply queued deletions to the store BEFORE
 	// processing waiting-to-disseminate, so a single round emitted by

@@ -21,7 +21,6 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -119,9 +118,6 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		args = append(args, "--disseminate-timeout="+opts.disseminateTimeout.String())
 	}
 
-	if len(opts.schedulerAddresses) > 0 {
-		args = append(args, "--scheduler-address="+strings.Join(opts.schedulerAddresses, ","))
-	}
 	if opts.disseminateCoalesceWindow != nil {
 		args = append(args, "--disseminate-coalesce-window="+opts.disseminateCoalesceWindow.String())
 	}

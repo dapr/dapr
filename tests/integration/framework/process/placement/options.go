@@ -46,7 +46,6 @@ type options struct {
 	namespace                 string
 	disseminateTimeout        *time.Duration
 	disseminateCoalesceWindow *time.Duration
-	schedulerAddresses        []string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -157,14 +156,6 @@ func WithNamespace(namespace string) Option {
 func WithDisseminateTimeout(timeout time.Duration) Option {
 	return func(o *options) {
 		o.disseminateTimeout = &timeout
-	}
-}
-
-// WithSchedulerAddresses sets scheduler addresses for the placement
-// stand-down watcher (--scheduler-address).
-func WithSchedulerAddresses(addresses ...string) Option {
-	return func(o *options) {
-		o.schedulerAddresses = addresses
 	}
 }
 

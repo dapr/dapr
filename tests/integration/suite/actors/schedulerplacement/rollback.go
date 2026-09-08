@@ -15,6 +15,7 @@ package schedulerplacement
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -38,19 +39,17 @@ func init() {
 	suite.Register(new(rollback))
 }
 
-// rollback asserts the scheduler placement authority hands back to the placement
-// service without restarting sidecars once the control plane rolls back.
-// The running sidecar defects only on the explicit no-placement-served
-// signal and only to a placement service which accepts it, so a single
+// rollback asserts the scheduler placement authority hands back to a
+// placement service without restarting sidecars once one is deployed again.
+// Its presence alone withholds the scheduler's placement leader, and the
+// sidecar defects back to its configured placement service, so a single
 // authority holds throughout.
 type rollback struct {
 	daprd *daprd.Daprd
-	// schedPlacement serves placement. schedRolledBack replaces it on the
-	// same address with placement disabled, standing in for restarting the
-	// scheduler with --placement-enabled=false.
-	schedPlacement  *scheduler.Scheduler
-	schedRolledBack *scheduler.Scheduler
-	place           *placement.Placement
+	sched *scheduler.Scheduler
+	// place is not running at first: the sidecar's configured placement
+	// address holds nothing until the rollback deploys it.
+	place *placement.Placement
 
 	invoked atomic.Int64
 }
@@ -70,46 +69,36 @@ func (r *rollback) Setup(t *testing.T) []framework.Option {
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 
-	r.schedPlacement = scheduler.New(t, scheduler.WithPlacementEnabled(true))
-	// The placement service is wired for the stand-down handshake, so the
-	// cutover completes and the scheduler serves placement.
-	r.place = placement.New(t,
-		placement.WithSchedulerAddresses(r.schedPlacement.Address()),
-	)
-
-	// The rolled back scheduler reuses the same client address, ID and data
-	// directory, so from the sidecar's point of view the same scheduler came
-	// back with placement disabled.
-	r.schedRolledBack = scheduler.New(t,
-		scheduler.WithPlacementEnabled(false),
-		scheduler.WithID(r.schedPlacement.ID()),
-		scheduler.WithPort(r.schedPlacement.Port()),
-		scheduler.WithEtcdClientPort(r.schedPlacement.EtcdClientPort()),
-		scheduler.WithInitialCluster(r.schedPlacement.InitialCluster()),
-		scheduler.WithDataDir(r.schedPlacement.DataDir()),
-	)
+	r.sched = scheduler.New(t, scheduler.WithPlacementEnabled(true))
+	// The placement port must refuse connections until the placement service
+	// runs: the framework's reservation listener would satisfy the
+	// scheduler's presence probe on a placement service that does not exist
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	placePort := lis.Addr().(*net.TCPAddr).Port
+	require.NoError(t, lis.Close())
+	r.place = placement.New(t, placement.WithPort(placePort))
 
 	r.daprd = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithAppPort(srv.Port()),
-		daprd.WithScheduler(r.schedPlacement),
+		daprd.WithScheduler(r.sched),
 		daprd.WithPlacementAddresses(r.place.Address()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(r.schedPlacement, r.place, srv, r.daprd),
+		framework.WithProcesses(r.sched, srv, r.daprd),
 	}
 }
 
 func (r *rollback) Run(t *testing.T, ctx context.Context) {
-	r.schedPlacement.WaitUntilRunning(t, ctx)
-	r.place.WaitUntilRunning(t, ctx)
+	r.sched.WaitUntilRunning(t, ctx)
 	r.daprd.WaitUntilRunning(t, ctx)
 
-	// The placement service stands down through the handshake, then the
-	// scheduler advertises the placement leader.
+	// No placement service is present, so the scheduler advertises the
+	// placement leader.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		stream, serr := r.schedPlacement.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+		stream, serr := r.sched.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
 		if !assert.NoError(c, serr) {
 			return
 		}
@@ -128,8 +117,7 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 
 	gclient := r.daprd.GRPCClient(t, ctx)
 
-	// Actors are placed by the scheduler: the placement service has stood
-	// down and refuses streams, so working actors prove it.
+	// Actors are placed by the scheduler.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		_, err := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 			ActorType: "myactortype",
@@ -143,48 +131,56 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.Equal(t, "placement: connected", meta.GetActorRuntime().GetPlacement())
 
-	// The scheduler holds the sidecar's placement stream before the
-	// rollback, and the stood-down placement service holds none: the
-	// metrics prove a single placement authority.
+	// The scheduler holds the sidecar's placement stream and the leader.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		var streams float64
-		for k, v := range r.schedPlacement.Metrics(c, ctx).All() {
+		var leader float64
+		for k, v := range r.sched.Metrics(c, ctx).All() {
 			if strings.HasPrefix(k, "dapr_scheduler_placement_streams_connected") {
 				streams += v
 			}
-		}
-		assert.GreaterOrEqual(c, streams, float64(1))
-
-		var runtimes float64
-		var leader float64
-		for k, v := range r.place.Metrics(c, ctx).All() {
-			if strings.HasPrefix(k, "dapr_placement_runtimes_total") {
-				runtimes += v
-			}
-		}
-		assert.Zero(c, runtimes)
-
-		for k, v := range r.schedPlacement.Metrics(c, ctx).All() {
 			if strings.HasPrefix(k, "dapr_scheduler_placement_leader") {
 				leader += v
 			}
 		}
+		assert.GreaterOrEqual(c, streams, float64(1))
 		assert.Equal(c, 1, int(leader))
 	}, time.Second*10, time.Millisecond*50)
 
 	invokedBefore := r.invoked.Load()
 
-	// Roll back the control plane: the scheduler returns with placement
-	// disabled. The stood-down placement service is not restarted, it
-	// observes that no scheduler serves placement and serves again.
-	r.schedPlacement.Cleanup(t)
-	r.schedRolledBack.Run(t, ctx)
-	t.Cleanup(func() { r.schedRolledBack.Cleanup(t) })
-	r.schedRolledBack.WaitUntilRunning(t, ctx)
+	// Roll back: a placement service is deployed on the address the sidecar
+	// was configured with. Its presence withholds the scheduler's placement
+	// leader, and the sidecar adopts the placement service without a
+	// restart.
+	r.place.Run(t, ctx)
+	t.Cleanup(func() { r.place.Cleanup(t) })
+	r.place.WaitUntilRunning(t, ctx)
 
-	// The running sidecar adopts the serving placement service without a
-	// restart: the rolled back scheduler reports no placement served, and
-	// the placement service accepts it.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		var runtimes float64
+		for k, v := range r.place.Metrics(c, ctx).All() {
+			if strings.HasPrefix(k, "dapr_placement_runtimes_total") {
+				runtimes += v
+			}
+		}
+		assert.GreaterOrEqual(c, runtimes, float64(1))
+
+		var streams float64
+		var leader float64
+		for k, v := range r.sched.Metrics(c, ctx).All() {
+			if strings.HasPrefix(k, "dapr_scheduler_placement_streams_connected") {
+				streams += v
+			}
+			if strings.HasPrefix(k, "dapr_scheduler_placement_leader") {
+				leader += v
+			}
+		}
+		assert.Zero(c, streams)
+		assert.Zero(c, leader)
+	}, time.Second*30, time.Millisecond*50)
+
+	// Actors keep working through the placement service.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		_, ierr := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 			ActorType: "myactortype",
@@ -199,32 +195,6 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, "placement: connected", meta.GetActorRuntime().GetPlacement())
 	assert.Equal(t, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
-
-	// The placement service holds the sidecar after the rollback, and the
-	// rolled back scheduler holds no placement stream: the authority moved
-	// back whole.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		var runtimes float64
-		for k, v := range r.place.Metrics(c, ctx).All() {
-			if strings.HasPrefix(k, "dapr_placement_runtimes_total") {
-				runtimes += v
-			}
-		}
-		assert.GreaterOrEqual(c, runtimes, float64(1))
-
-		var streams float64
-		var leader float64
-		for k, v := range r.schedRolledBack.Metrics(c, ctx).All() {
-			if strings.HasPrefix(k, "dapr_scheduler_placement_streams_connected") {
-				streams += v
-			}
-			if strings.HasPrefix(k, "dapr_scheduler_placement_leader") {
-				leader += v
-			}
-		}
-		assert.Zero(c, streams)
-		assert.Zero(c, leader)
-	}, time.Second*10, time.Millisecond*50)
 
 	// The sidecar's own accounting agrees: the actor is active on this host.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {

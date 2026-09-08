@@ -39,8 +39,9 @@ func init() {
 }
 
 // cutoverlive asserts a sidecar adopts scheduler placement without a restart
-// when the placement service stands down: the drain already halted every
-// actor, so it re-resolves from the same clean slate a restart would give.
+// when the placement service is removed: the scheduler withholds the
+// placement leader while a placement service is present, and advertises once
+// it is gone.
 type cutoverlive struct {
 	sched *scheduler.Scheduler
 	place *placement.Placement
@@ -65,7 +66,6 @@ func (c *cutoverlive) Setup(t *testing.T) []framework.Option {
 
 	c.sched = scheduler.New(t, scheduler.WithPlacementEnabled(true))
 	c.place = placement.New(t,
-		placement.WithSchedulerAddresses(c.sched.Address()),
 		placement.WithDisseminateTimeout(time.Second*5),
 	)
 	c.daprd = daprd.New(t,
@@ -83,7 +83,8 @@ func (c *cutoverlive) Setup(t *testing.T) []framework.Option {
 func (c *cutoverlive) Run(t *testing.T, ctx context.Context) {
 	c.sched.WaitUntilRunning(t, ctx)
 
-	// An old sidecar's jobs stream holds the capability gate bc omitting the SupportsSchedulerPlacement field.
+	// An old sidecar's jobs stream holds the capability gate bc omitting the
+	// SupportsSchedulerPlacement field.
 	oldCtx, oldCancel := context.WithCancel(ctx)
 	t.Cleanup(oldCancel)
 	c.sched.WatchJobsSuccess(t, oldCtx, &schedulerv1pb.WatchJobsRequestInitial{
@@ -116,17 +117,39 @@ func (c *cutoverlive) Run(t *testing.T, ctx context.Context) {
 	}
 	assert.Zero(t, streamsBefore)
 
-	// The gate lifts: the placement service drains and stands down, and
-	// the sidecar adopts scheduler placement without a restart.
+	// The gate lifts, but the placement service is still present: the
+	// scheduler keeps withholding the placement leader and the sidecar stays
+	// on the placement service.
 	oldCancel()
 
+	time.Sleep(time.Second * 3)
+	var streamsHeld float64
+	for k, v := range c.sched.Metrics(t, ctx).All() {
+		if strings.HasPrefix(k, "dapr_scheduler_placement_streams_connected") {
+			streamsHeld += v
+		}
+	}
+	assert.Zero(t, streamsHeld)
+
+	_, err := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+		ActorType: "myactortype",
+		ActorId:   "myactorid",
+		Method:    "foo",
+	})
+	require.NoError(t, err)
+
+	// The placement service is removed: its absence hands the placement
+	// authority to the scheduler, and the sidecar adopts it without a
+	// restart.
+	c.place.Cleanup(t)
+
 	require.EventuallyWithT(t, func(a *assert.CollectT) {
-		_, err := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+		_, ierr := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 			ActorType: "myactortype",
 			ActorId:   "myactorid",
 			Method:    "foo",
 		})
-		assert.NoError(a, err)
+		assert.NoError(a, ierr)
 	}, time.Second*30, time.Millisecond*50)
 	assert.Greater(t, c.invoked.Load(), invokedBefore)
 

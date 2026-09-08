@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"sync/atomic"
 	"time"
 
 	"github.com/hashicorp/raft"
@@ -48,9 +47,6 @@ type Leadership struct {
 
 	sec     security.Handler
 	htarget healthz.Target
-
-	fsm  *fsm.FSM
-	raft atomic.Pointer[raft.Raft]
 }
 
 func New(opts Options) (*Leadership, error) {
@@ -66,7 +62,6 @@ func New(opts Options) (*Leadership, error) {
 		sec:      opts.Security,
 		leaderCh: make(chan struct{}),
 		htarget:  opts.Healthz.AddTarget("placement-raft-leadership"),
-		fsm:      fsm.New(),
 	}, nil
 }
 
@@ -154,12 +149,11 @@ func (s *Leadership) Run(ctx context.Context) error {
 		return err
 	}
 
-	ra, err := raft.NewRaft(config, s.fsm, logStore, stableStore, snapStore, raftTransport)
+	ra, err := raft.NewRaft(config, fsm.New(), logStore, stableStore, snapStore, raftTransport)
 	if err != nil {
 		return fmt.Errorf("failed to create raft: %w", err)
 	}
 	defer ra.Shutdown()
-	s.raft.Store(ra)
 
 	s.htarget.Ready()
 
@@ -193,38 +187,4 @@ func (s *Leadership) Wait(ctx context.Context) error {
 	case <-s.leaderCh:
 		return nil
 	}
-}
-
-// CommitStandDown replicates the stand-down through the raft log so a leader
-// elected after a failover inherits it. Leader only.
-func (s *Leadership) CommitStandDown(ctx context.Context) error {
-	ra := s.raft.Load()
-	if ra == nil {
-		return errors.New("raft is not running")
-	}
-	return ra.Apply(fsm.StandDownCommand, time.Second*10).Error()
-}
-
-// CommitServe replicates the revocation of a stand-down through the raft
-// log. Leader only.
-func (s *Leadership) CommitServe(ctx context.Context) error {
-	ra := s.raft.Load()
-	if ra == nil {
-		return errors.New("raft is not running")
-	}
-	return ra.Apply(fsm.ServeCommand, time.Second*10).Error()
-}
-
-// StoodDown reports whether a stand-down has been committed. It first runs
-// a raft barrier, so a newly elected leader has applied its whole log,
-// including a later revocation, before the answer is trusted.
-func (s *Leadership) StoodDown(ctx context.Context) (bool, error) {
-	ra := s.raft.Load()
-	if ra == nil {
-		return false, errors.New("raft is not running")
-	}
-	if err := ra.Barrier(time.Second * 10).Error(); err != nil {
-		return false, err
-	}
-	return s.fsm.StoodDown(), nil
 }

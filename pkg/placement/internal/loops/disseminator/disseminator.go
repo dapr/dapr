@@ -87,17 +87,17 @@ type disseminator struct {
 	wg        sync.WaitGroup
 
 	// coalesceTimer is non-nil while the disseminator is in a post-round
-	// coalesce window, during which connection churn accumulates into the
-	// waiting queues and collapses into a single follow-up round when the
-	// timer fires. The first event with no timer pending still triggers an
-	// immediate round so single-host churn stays responsive.
+	// coalesce window. While it is set, new ConnAdd / ConnCloseStream
+	// events accumulate into waitingToDisseminate / waitingToDelete instead
+	// of starting a fresh round, so a burst of host registrations or
+	// disconnects within coalesceWindow collapses into a single follow-up
+	// round when the timer fires (CoalesceFire). The first event arriving
+	// in REPORT state with no timer pending still triggers an immediate
+	// round so single-host churn stays responsive.
 	coalesceTimer *time.Timer
 
 	currentOperation     v1pb.HostOperation
 	currentVersion       uint64
-	draining             bool
-	drainDone            bool
-	drainError           error
 	connCount            atomic.Int64
 	actorConnCount       atomic.Int64
 	waitingToDisseminate []*loops.ConnAdd
@@ -119,9 +119,6 @@ func New(opts Options) loop.Interface[loops.EventDisseminator] {
 	diss.coalesceWindow = opts.DisseminationCoalesceWindow
 	diss.streamsInTargetState = 0
 	diss.coalesceTimer = nil
-	diss.draining = false
-	diss.drainDone = false
-	diss.drainError = nil
 
 	diss.waitingToDisseminate = nil
 	diss.waitingToDelete = nil
@@ -160,8 +157,6 @@ func (d *disseminator) Handle(ctx context.Context, event loops.EventDisseminator
 		d.handleTableRequest(e)
 	case *loops.CoalesceFire:
 		d.handleCoalesceFire(ctx)
-	case *loops.Drain:
-		d.handleDrain(e)
 	default:
 		panic(fmt.Sprintf("unknown disseminator event type: %T", e))
 	}
@@ -207,11 +202,6 @@ func (d *disseminator) addStream(ctx context.Context, add *loops.ConnAdd) uint64
 
 // handleAdd adds a stream to the namespaced disseminator.
 func (d *disseminator) handleAdd(ctx context.Context, add *loops.ConnAdd) {
-	if d.draining {
-		add.Cancel(d.drainError)
-		return
-	}
-
 	// If we are currently disseminating a lock OR a post-round coalesce
 	// window is open, queue this addition. CoalesceFire (or the next
 	// UNLOCK) will drain the queue into a single round.
@@ -307,14 +297,6 @@ func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.DisseminationTimeout) {
 	if timeout.Version != d.currentVersion {
 		// Ignore old timeouts.
-		return
-	}
-
-	if d.draining {
-		// Streams which did not complete the drain round in time are closed
-		// unacked, exactly as the timeout would kick them from a normal round.
-		log.Warnf("Drain round for %s timed out, closing remaining streams", d.namespace)
-		d.finishDrain()
 		return
 	}
 
