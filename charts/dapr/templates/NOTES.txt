@@ -33,5 +33,5 @@ https://dapr.io
 > guarantees a single placement authority during the rollout. It does not keep actors
 > available on older sidecars.
 > Sidecars already running adopt scheduler placement on their own once the placement
-> service stands down: no restarts are needed in either direction.
+> service is removed: no restarts are needed in either direction.
 {{- end }}
