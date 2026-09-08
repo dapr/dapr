@@ -107,8 +107,12 @@ func (s *reconnect) Run(t *testing.T, ctx context.Context) {
 	case <-time.After(10 * time.Second):
 		require.Fail(t, "injected ScheduleJob failure never fired")
 	}
-	require.Positive(t, d.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:reminder_arm_detached"),
-		"the abandoned create must have been handed to the detached retry")
+	// The client deadline cancels the create; the actor observes the
+	// cancellation and hands the create to the detached retry a moment later.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Positive(c, d.Metrics(c, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:reminder_arm_detached"),
+			"the abandoned create must have been handed to the detached retry")
+	}, 10*time.Second, 50*time.Millisecond)
 
 	// The app reconnects: the actor types are unregistered and registered
 	// again, rebuilding the factories under the retry.

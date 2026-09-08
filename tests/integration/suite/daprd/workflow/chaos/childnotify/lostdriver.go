@@ -147,9 +147,7 @@ func (l *lostdriver) Run(t *testing.T, ctx context.Context) {
 	// failed turn is retried locally for a few seconds and every retry
 	// re-arms the retry reminder, so let that drain before sweeping.
 	sched := l.workflow.Scheduler()
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Positive(c, sched.JobKeyCount(t, ctx, "parent-notify"))
-	}, time.Second*20, time.Millisecond*10)
+	sched.WaitJobKeyCount(t, ctx, "parent-notify", func(n int) bool { return n > 0 })
 	time.Sleep(time.Second * 8)
 	etcd := sched.ETCDClient(t, ctx)
 	deleteChildJobs := func() {
