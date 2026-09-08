@@ -52,8 +52,9 @@ import (
 // CallReminder invocations in one ordered log. The wake runs on a detached
 // goroutine, so assertions on wake effects must be eventual.
 type wakeHarness struct {
-	lock sync.Mutex
-	ops  []string
+	saved bool
+	lock  sync.Mutex
+	ops   []string
 
 	callReminderErr error
 	deleteErr       error
@@ -105,13 +106,22 @@ func newWakeHarness(t *testing.T, instanceID string, fastPath bool) *wakeHarness
 		})
 
 	fakeState := statefake.New().
-		WithGetFn(func(context.Context, *actorapi.GetStateRequest, bool) (*actorapi.StateResponse, error) {
+		WithGetFn(func(_ context.Context, req *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
+			h.lock.Lock()
+			defer h.lock.Unlock()
+			// The metadata row exists once something was saved, as the
+			// post-save etag refresh expects.
+			if h.saved && req.Key == wfenginestate.MetadataKey {
+				etag := "etag"
+				return &actorapi.StateResponse{Data: []byte{1}, ETag: &etag}, nil
+			}
 			return &actorapi.StateResponse{}, nil
 		}).
 		WithTransactionalStateOperationFn(func(context.Context, bool, *actorapi.TransactionalRequest, bool) error {
 			h.lock.Lock()
 			defer h.lock.Unlock()
 			h.ops = append(h.ops, "save")
+			h.saved = true
 			return nil
 		})
 
@@ -224,7 +234,7 @@ func Test_localWake_firesAfterCreateAndDeletesBackstop(t *testing.T) {
 	h := newWakeHarness(t, instanceID, true)
 	h.primeRunning(t, instanceID, 7)
 
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
 
 	// v2: the per-event reminder pair is elided entirely. The janitor is the
 	// durable backstop, the turn is driven locally, and nothing is deleted.
@@ -250,7 +260,7 @@ func Test_localWake_flagOffNoop(t *testing.T) {
 	h := newWakeHarness(t, instanceID, false)
 	h.primeRunning(t, instanceID, 7)
 
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
 
 	time.Sleep(time.Millisecond * 100)
 	assert.Equal(t, []string{"save", "create:new-event-tc-7"}, h.snapshotOps(),
@@ -308,7 +318,7 @@ func Test_localWake_callReminderErrorKeepsBackstop(t *testing.T) {
 	h.reminderGate = make(chan struct{})
 	h.primeRunning(t, instanceID, 7)
 
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
 
 	// Park the drive on the gate, then age both life signals so the failure
 	// resolves as stalled: escalation must fire without in-place retries.
@@ -341,7 +351,7 @@ func Test_localWake_failureAliveSuppressesEscalation(t *testing.T) {
 	// reads alive for the whole (compressed) retry schedule: the failure
 	// must exhaust the retries and then be handed to the janitor, never
 	// escalated to a durable reminder.
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(4), h.attempts.Load(), "the initial attempt plus every in-place retry must run")
@@ -360,7 +370,7 @@ func Test_localWake_closedActorEscalatesDespiteFreshness(t *testing.T) {
 	h.callReminderErr = targeterrors.NewClosed("test")
 	h.primeRunning(t, instanceID, 7)
 
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
 
 	// A closed actor is the migration/teardown path: the drive is lost, not
 	// slow, and the host-agnostic durable create must fire immediately even
@@ -422,8 +432,8 @@ func Test_localWake_janitorOncePerResidency(t *testing.T) {
 		},
 	})
 
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(8)))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(8), completionSender{}))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		janitors, wakes := 0, 0
@@ -449,7 +459,7 @@ func Test_localWake_janitorCreateFailureFallsBack(t *testing.T) {
 	h.createErrFor = map[string]error{janitorReminderName: errors.New("scheduler down")}
 	h.primeRunning(t, instanceID, 7)
 
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
 
 	// Durability first: without a janitor the durable per-event reminder is
 	// created exactly as with the feature off (and the drive still fires).
@@ -493,7 +503,7 @@ func Test_localWake_haltAllDrainsGoroutines(t *testing.T) {
 	h.reminderGate = make(chan struct{})
 	h.primeRunning(t, instanceID, 7)
 
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
 
 	// The wake goroutine is parked on the gate; HaltAll must cancel it and
 	// return rather than deadlocking.
@@ -579,7 +589,7 @@ func Test_escalate_staleEpochSuppressed(t *testing.T) {
 	h.reminderGate = make(chan struct{})
 	h.primeRunning(t, instanceID, 7)
 
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
 
 	// A turn commits while the drive is parked on the gate.
 	h.orch.wakeEpoch.Add(1)
