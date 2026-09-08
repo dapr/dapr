@@ -21,58 +21,68 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPlacementStreams(t *testing.T) {
+func TestKubernetesPresence(t *testing.T) {
 	t.Parallel()
 
 	h := New(Options{})
 
 	assert.False(t, h.PlacementPresent())
-	assert.False(t, h.PlacementStoodDown())
 
-	// A serving stream is presence, not stood down.
-	id1 := h.AddPlacementStream(false)
+	h.SetKubernetesPresence(true)
 	assert.True(t, h.PlacementPresent())
-	assert.False(t, h.PlacementStoodDown())
 
-	// Stood down only once no stream reports serving.
-	id2 := h.AddPlacementStream(true)
-	assert.True(t, h.PlacementPresent())
-	assert.False(t, h.PlacementStoodDown())
-
-	h.SetPlacementStreamState(id1, true)
-	assert.True(t, h.PlacementPresent())
-	assert.True(t, h.PlacementStoodDown())
-
-	// A stream reporting serving again revokes the stand-down.
-	h.SetPlacementStreamState(id2, false)
-	assert.False(t, h.PlacementStoodDown())
-	h.SetPlacementStreamState(id2, true)
-	assert.True(t, h.PlacementStoodDown())
-
-	// A placement service which disappears takes its presence with it.
-	h.RemovePlacementStream(id1)
-	h.RemovePlacementStream(id2)
+	h.SetKubernetesPresence(false)
 	assert.False(t, h.PlacementPresent())
-	assert.False(t, h.PlacementStoodDown())
 }
 
-func TestServingStreamResetsAdvertised(t *testing.T) {
+func TestPresenceResetsAdvertised(t *testing.T) {
 	t.Parallel()
 
 	h := New(Options{})
 	h.LatchAdvertised()
 	require.True(t, h.Advertised())
 
-	// A serving placement service means the next cutover runs the
-	// handshake again.
-	id := h.AddPlacementStream(false)
+	// A reappearing placement service means the next cutover waits for a
+	// capable sidecar again.
+	h.SetKubernetesPresence(true)
 	assert.False(t, h.Advertised())
 
 	h.LatchAdvertised()
-	h.SetPlacementStreamState(id, true)
-	assert.True(t, h.Advertised(), "a stood-down report keeps the latch")
+	h.SetKubernetesPresence(true)
+	assert.True(t, h.Advertised(), "an unchanged presence keeps the latch")
 
-	h.SetPlacementStreamState(id, false)
+	h.SetKubernetesPresence(false)
+	assert.True(t, h.Advertised(), "an absence keeps the latch")
+
+	h.SetKubernetesPresence(true)
+	assert.False(t, h.Advertised())
+}
+
+func TestDetectionResetsAdvertised(t *testing.T) {
+	t.Parallel()
+
+	h := New(Options{PlacementDNSName: "dapr-placement-server"})
+	resolved := true
+	h.lookupHost = func(context.Context, string) ([]string, error) {
+		if resolved {
+			return []string{"10.0.0.1"}, nil
+		}
+		return nil, assert.AnError
+	}
+
+	h.refreshDetection(t.Context())
+	h.LatchAdvertised()
+	require.True(t, h.Advertised())
+
+	h.refreshDetection(t.Context())
+	assert.True(t, h.Advertised(), "an unchanged sighting keeps the latch")
+
+	resolved = false
+	h.refreshDetection(t.Context())
+	assert.True(t, h.Advertised(), "an absence keeps the latch")
+
+	resolved = true
+	h.refreshDetection(t.Context())
 	assert.False(t, h.Advertised())
 }
 
@@ -91,23 +101,28 @@ func TestDetectionSighting(t *testing.T) {
 	h.refreshDetection(t.Context())
 	assert.False(t, h.PlacementPresent())
 
-	// A placement service too old to report itself must still withhold the
-	// advertisement, and cannot have stood down.
+	// A placement service too old to know about scheduler placement must
+	// still withhold the advertisement.
 	resolved = true
 	h.refreshDetection(t.Context())
 	assert.True(t, h.PlacementPresent())
-	assert.False(t, h.PlacementStoodDown())
-
-	// The stream is first hand state and overrides the sighting: a
-	// stood-down placement service still accepts the probe's connections.
-	id := h.AddPlacementStream(true)
-	assert.True(t, h.PlacementStoodDown())
 
 	resolved = false
 	h.refreshDetection(t.Context())
-	assert.True(t, h.PlacementPresent(), "the stream remains")
-	assert.True(t, h.PlacementStoodDown())
-	h.RemovePlacementStream(id)
+	assert.False(t, h.PlacementPresent())
+}
+
+func TestPendingDetectionIsPresence(t *testing.T) {
+	t.Parallel()
+
+	h := New(Options{})
+
+	// A just-reported placement address is treated as a present placement
+	// service until the refresh completes.
+	h.RequestDetection()
+	assert.True(t, h.PlacementPresent())
+
+	h.refreshDetection(t.Context())
 	assert.False(t, h.PlacementPresent())
 }
 
@@ -152,9 +167,9 @@ func TestOnChange(t *testing.T) {
 	fired := 0
 	h.SetOnChange(func() { fired++ })
 
-	id := h.AddPlacementStream(false)
-	h.SetPlacementStreamState(id, true)
-	h.RemovePlacementStream(id)
+	h.SetKubernetesPresence(true)
+	h.SetKubernetesPresence(true)
+	h.SetKubernetesPresence(false)
 	h.SetLocalCapabilities(true, false)
-	assert.Equal(t, 4, fired)
+	assert.Equal(t, 3, fired, "an unchanged presence does not fire")
 }

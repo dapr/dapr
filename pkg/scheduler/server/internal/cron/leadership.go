@@ -61,8 +61,8 @@ type leadership struct {
 	// placement stream. Fallback when handoff is nil.
 	advertised bool
 
-	incapableWarned     bool
-	standDownWaitLogged bool
+	incapableWarned        bool
+	placementPresentLogged bool
 }
 
 // Handle processes a single leadership update, sequentially per event. A nil
@@ -104,13 +104,13 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 	gateIncapable := h.pool.HasSchedulerPlacementIncapableSidecars()
 	gateCapable := h.pool.HasSchedulerPlacementCapableSidecars()
 	advertised := h.advertised
-	awaitingStandDown := false
+	placementPresent := false
 	ready := true
 	if h.handoff != nil {
 		gateIncapable = h.handoff.AnySchedulerPlacementIncapableSidecars()
 		gateCapable = h.handoff.AnySchedulerPlacementCapableSidecars()
 		advertised = h.handoff.Advertised()
-		awaitingStandDown = h.handoff.PlacementPresent() && !h.handoff.PlacementStoodDown()
+		placementPresent = h.handoff.PlacementPresent()
 		ready = h.handoff.Ready()
 	}
 	// Only sidecars that take placement from the scheduler open placement
@@ -121,22 +121,21 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 	}
 
 	// No scheduler placement leader is advertised while a placement service
-	// is visible and not stood down, before the first placement detection,
-	// or while no capable sidecar exists to advertise to. Only the leader
-	// bit waits for that last reason, so a booting sidecar reads
-	// capable-but-leaderless and waits for its own registration. An old
-	// sidecar alone does not withhold: with no placement service visible,
-	// nothing can serve it, so withholding would only halt the capable
-	// sidecars' actors too.
-	awaitingLeadership := awaitingStandDown || !ready || (!advertised && !gateCapable)
-	// The placement service is the authority while it is visible or not yet
+	// is present, before the first placement detection, or while no capable
+	// sidecar exists to advertise to. Only the leader bit waits for that
+	// last reason, so a booting sidecar reads capable-but-leaderless and
+	// waits for its own registration. An old sidecar alone does not
+	// withhold: with no placement service present, nothing can serve it, so
+	// withholding would only halt the capable sidecars' actors too.
+	awaitingLeadership := placementPresent || !ready || (!advertised && !gateCapable)
+	// The placement service is the authority while it is present or not yet
 	// looked for, so the capability bit is masked too: sidecars use the
 	// placement service rather than wait.
-	placementServiceAuthority := awaitingStandDown || !ready
+	placementServiceAuthority := placementPresent || !ready
 
-	// An old sidecar cannot take scheduler placement, and no visible
-	// placement service exists to serve it, so warn.
-	if ready && gateIncapable && !awaitingStandDown {
+	// An old sidecar cannot take scheduler placement, and no placement
+	// service exists to serve it, so warn.
+	if ready && gateIncapable && !placementPresent {
 		if !h.incapableWarned {
 			h.incapableWarned = true
 			log.Warn("A sidecar running an older Dapr version is connected while actor placement is served by the scheduler. Its actor APIs stall unless it can reach a placement service the control plane cannot detect, such as one under a custom service name or outside the cluster, which would place its actors as a second authority. Upgrade the sidecar, and remove any such placement service.")
@@ -161,22 +160,15 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 		}
 	}
 
-	// The elected leader is cutover pending while only the stand-down
-	// confirmation blocks the advertisement and no old sidecar is
-	// connected, so the placement service only drains once every sidecar
-	// can follow the scheduler.
-	cutoverPending := awaitingStandDown && !gateIncapable && gateCapable && electedAddr != ""
-
-	if awaitingStandDown && !gateIncapable && !h.standDownWaitLogged {
-		h.standDownWaitLogged = true
-		log.Info("Actor placement cutover is pending, waiting for the placement service to stand down. Upgrading or undeploying the placement service completes the cutover.")
-	} else if !awaitingStandDown {
-		h.standDownWaitLogged = false
+	if placementPresent && !h.placementPresentLogged {
+		h.placementPresentLogged = true
+		log.Info("A placement service is present, so it is the actor placement authority and the scheduler placement leader is withheld. Undeploying the placement service completes the cutover.")
+	} else if !placementPresent {
+		h.placementPresentLogged = false
 	}
 
 	for _, host := range hosts {
 		host.Leader = host.GetAddress() == leaderAddr && leaderAddr != ""
-		host.PlacementCutoverPending = cutoverPending && host.GetAddress() == electedAddr
 		if placementServiceAuthority {
 			host.SchedulerPlacementEnabled = false
 		}

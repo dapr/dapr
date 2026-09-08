@@ -12,15 +12,12 @@ limitations under the License.
 */
 
 // Package handoff tracks the facts deciding the actor placement authority
-// handoff, all derived from live connections so they rebuild whenever the
-// connections do:
+// handoff, all derived from live observation so they rebuild whenever the
+// observers do:
 //
-//   - presence: every placement replica holds a stream to every scheduler,
-//     reporting whether it serves or stood down. A live stream is the
-//     placement service's presence.
-//   - detection: the well-known service name and sidecar-reported placement
-//     addresses are probed, so a placement service too old to report itself
-//     still withholds the advertisement.
+//   - presence: a placement service being deployed. In kubernetes the
+//     controller's pod informer reports it, and in every mode the well-known
+//     service name and sidecar-reported placement addresses are probed.
 //   - gate: which sidecar capabilities are connected to this scheduler.
 //     Sidecars connect to every scheduler, so the local view converges on
 //     the cluster view.
@@ -65,7 +62,6 @@ type Interface interface {
 	// once for a placement service.
 	Ready() bool
 	PlacementPresent() bool
-	PlacementStoodDown() bool
 	Advertised() bool
 	AnySchedulerPlacementIncapableSidecars() bool
 	AnySchedulerPlacementCapableSidecars() bool
@@ -79,13 +75,10 @@ type Handoff struct {
 	onChange   atomic.Pointer[func()]
 
 	lock sync.RWMutex
-	// streams records the placement service streams connected to this
-	// scheduler, keyed by registration, with whether each reported standing
-	// down.
-	streams      map[uint64]bool
-	nextStreamID uint64
-	// detected is set while the detection sights a placement service which
-	// has no stream, matching a placement service too old to report itself.
+	// podPresent is set while the kubernetes controller's informer sees a
+	// placement pod.
+	podPresent bool
+	// detected is set while the detection sights a placement service.
 	detected bool
 	// reqGen counts detection requests and doneGen the requests answered by
 	// a completed refresh: while they differ, a just-reported placement
@@ -93,7 +86,7 @@ type Handoff struct {
 	reqGen  uint64
 	doneGen uint64
 	// advertised latches the advertisement so a brief capable dip does not
-	// withdraw it. A serving placement service resets it.
+	// withdraw it. A reappearing placement service resets it.
 	advertised bool
 	incapable  bool
 	capable    bool
@@ -115,7 +108,6 @@ func New(opts Options) *Handoff {
 		dnsName:    opts.PlacementDNSName,
 		lookupHost: net.DefaultResolver.LookupHost,
 		sec:        opts.Security,
-		streams:    make(map[uint64]bool),
 		ready:      make(chan struct{}),
 		detectCh:   make(chan struct{}, 1),
 	}
@@ -173,41 +165,21 @@ func (h *Handoff) fireOnChange() {
 	}
 }
 
-// AddPlacementStream registers one placement service stream with its first
-// reported state, returning the registration to update and remove it with.
-func (h *Handoff) AddPlacementStream(stoodDown bool) uint64 {
+// SetKubernetesPresence records whether the kubernetes controller's informer
+// sees a placement pod. A reappearing placement service resets the
+// advertisement latch, so the next cutover waits for a capable sidecar
+// again.
+func (h *Handoff) SetKubernetesPresence(present bool) {
 	h.lock.Lock()
-	h.nextStreamID++
-	id := h.nextStreamID
-	h.streams[id] = stoodDown
-	if !stoodDown {
-		// A serving placement service resets any previous cutover, so the
-		// next one runs the handshake again.
+	changed := h.podPresent != present
+	h.podPresent = present
+	if changed && present {
 		h.advertised = false
 	}
 	h.lock.Unlock()
-	h.fireOnChange()
-	return id
-}
-
-// SetPlacementStreamState updates one placement stream's reported state.
-func (h *Handoff) SetPlacementStreamState(id uint64, stoodDown bool) {
-	h.lock.Lock()
-	h.streams[id] = stoodDown
-	if !stoodDown {
-		h.advertised = false
+	if changed {
+		h.fireOnChange()
 	}
-	h.lock.Unlock()
-	h.fireOnChange()
-}
-
-// RemovePlacementStream removes one placement stream. A placement service
-// which died or was undeployed disappears with its streams.
-func (h *Handoff) RemovePlacementStream(id uint64) {
-	h.lock.Lock()
-	delete(h.streams, id)
-	h.lock.Unlock()
-	h.fireOnChange()
 }
 
 // SetLocalCapabilities records which sidecar capabilities are connected to
@@ -220,11 +192,9 @@ func (h *Handoff) SetLocalCapabilities(incapable, capable bool) {
 	h.fireOnChange()
 }
 
-// refreshDetection looks for a placement service the schedulers were not
-// told about, through the well-known service name and by probing
-// sidecar-reported placement addresses with the placement identity. A
-// placement service reporting itself needs no detection, so a sighting only
-// matters while no stream exists.
+// refreshDetection looks for a placement service through the well-known
+// service name and by probing sidecar-reported placement addresses with the
+// placement identity.
 func (h *Handoff) refreshDetection(ctx context.Context) {
 	h.lock.RLock()
 	gen := h.reqGen
@@ -235,6 +205,11 @@ func (h *Handoff) refreshDetection(ctx context.Context) {
 
 	h.lock.Lock()
 	changed := h.detected != (resolved || probed) || h.doneGen != gen
+	if !h.detected && (resolved || probed) {
+		// A reappearing placement service resets the advertisement latch, so
+		// the next cutover waits for a capable sidecar again.
+		h.advertised = false
+	}
 	h.detected = resolved || probed
 	h.doneGen = gen
 	h.lock.Unlock()
@@ -255,7 +230,7 @@ func (h *Handoff) resolveDNS(ctx context.Context) bool {
 
 // probeReportedAddresses dials each sidecar-reported placement address,
 // expecting the placement identity, so a placement service outside the
-// well-known service name is still detected while it serves.
+// well-known service name is still detected while it runs.
 func (h *Handoff) probeReportedAddresses(ctx context.Context) bool {
 	h.lock.RLock()
 	source := h.placementAddresses
@@ -361,30 +336,13 @@ func (h *Handoff) LatchAdvertised() {
 	h.lock.Unlock()
 }
 
-// PlacementPresent reports whether a placement service exists: one holds a
-// stream to this scheduler, the detection sights one, or a detection of
-// just-reported placement addresses is still in flight.
+// PlacementPresent reports whether a placement service exists: the
+// kubernetes informer sees a placement pod, the detection sights one, or a
+// detection of just-reported placement addresses is still in flight.
 func (h *Handoff) PlacementPresent() bool {
 	h.lock.RLock()
 	defer h.lock.RUnlock()
-	return len(h.streams) > 0 || h.detected || h.reqGen != h.doneGen
-}
-
-// PlacementStoodDown reports whether the placement service drained: streams
-// exist and none reports serving. Streams override the detection, since a
-// stood-down placement service still accepts the probe's connections.
-func (h *Handoff) PlacementStoodDown() bool {
-	h.lock.RLock()
-	defer h.lock.RUnlock()
-	if len(h.streams) == 0 {
-		return false
-	}
-	for _, stoodDown := range h.streams {
-		if !stoodDown {
-			return false
-		}
-	}
-	return true
+	return h.podPresent || h.detected || h.reqGen != h.doneGen
 }
 
 func (h *Handoff) Advertised() bool {

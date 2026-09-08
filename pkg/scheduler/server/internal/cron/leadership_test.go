@@ -385,7 +385,6 @@ func TestLeadershipMalformedTableNotReplayed(t *testing.T) {
 
 type fakeHandoff struct {
 	present    bool
-	stoodDown  bool
 	advertised bool
 	incapable  bool
 	capable    bool
@@ -396,13 +395,12 @@ type fakeHandoff struct {
 
 func (f *fakeHandoff) Ready() bool                                  { return !f.notReady }
 func (f *fakeHandoff) PlacementPresent() bool                       { return f.present }
-func (f *fakeHandoff) PlacementStoodDown() bool                     { return f.stoodDown }
 func (f *fakeHandoff) Advertised() bool                             { return f.advertised }
 func (f *fakeHandoff) AnySchedulerPlacementIncapableSidecars() bool { return f.incapable }
 func (f *fakeHandoff) AnySchedulerPlacementCapableSidecars() bool   { return f.capable }
 func (f *fakeHandoff) LatchAdvertised()                             { f.latched++ }
 
-func TestLeadershipStandDownHandshake(t *testing.T) {
+func TestLeadershipPlacementPresence(t *testing.T) {
 	t.Parallel()
 
 	anyHost := func(t *testing.T, addr string, placement bool) *anypb.Any {
@@ -430,7 +428,7 @@ func TestLeadershipStandDownHandshake(t *testing.T) {
 		}, ch
 	}
 
-	t.Run("announced placement withholds the leader and signals cutover pending", func(t *testing.T) {
+	t.Run("present placement withholds the leader and masks the capability", func(t *testing.T) {
 		t.Parallel()
 		hoff := &fakeHandoff{present: true, capable: true}
 		l, ch := newLeadership(hoff)
@@ -442,15 +440,12 @@ func TestLeadershipStandDownHandshake(t *testing.T) {
 		require.Len(t, hosts, 2)
 		assert.False(t, hosts[0].GetLeader())
 		assert.False(t, hosts[0].GetSchedulerPlacementEnabled())
-		assert.True(t, hosts[0].GetPlacementCutoverPending(),
-			"the elected leader must signal the placement service to stand down")
-		assert.False(t, hosts[1].GetPlacementCutoverPending())
 		assert.Zero(t, hoff.latched, "a withheld advertisement must not latch")
 	})
 
-	t.Run("stood down placement lifts the withhold and latches", func(t *testing.T) {
+	t.Run("absent placement advertises and latches", func(t *testing.T) {
 		t.Parallel()
-		hoff := &fakeHandoff{present: true, stoodDown: true, capable: true}
+		hoff := &fakeHandoff{capable: true}
 		l, ch := newLeadership(hoff)
 		table := []*anypb.Any{anyHost(t, "a:1", true), anyHost(t, "b:1", true)}
 
@@ -460,13 +455,12 @@ func TestLeadershipStandDownHandshake(t *testing.T) {
 		require.Len(t, hosts, 2)
 		assert.True(t, hosts[0].GetLeader())
 		assert.True(t, hosts[0].GetSchedulerPlacementEnabled())
-		assert.False(t, hosts[0].GetPlacementCutoverPending())
 		assert.Equal(t, 1, hoff.latched)
 	})
 
-	t.Run("incapable sidecar anywhere in the cluster withholds before cutover pending", func(t *testing.T) {
+	t.Run("reappearing placement withholds an advertised leader", func(t *testing.T) {
 		t.Parallel()
-		hoff := &fakeHandoff{present: true, incapable: true, capable: true}
+		hoff := &fakeHandoff{present: true, advertised: true, capable: true}
 		l, ch := newLeadership(hoff)
 		table := []*anypb.Any{anyHost(t, "a:1", true)}
 
@@ -475,8 +469,24 @@ func TestLeadershipStandDownHandshake(t *testing.T) {
 		hosts := <-ch
 		require.Len(t, hosts, 1)
 		assert.False(t, hosts[0].GetLeader())
-		assert.False(t, hosts[0].GetPlacementCutoverPending(),
-			"the placement service must not drain while old sidecars still need it")
+		assert.False(t, hosts[0].GetSchedulerPlacementEnabled(),
+			"the capability is masked so sidecars defect to the placement service")
+	})
+
+	t.Run("no capable sidecar withholds only the leader bit", func(t *testing.T) {
+		t.Parallel()
+		hoff := new(fakeHandoff)
+		l, ch := newLeadership(hoff)
+		l.placement = new(fakePlacementLeader)
+		table := []*anypb.Any{anyHost(t, "a:1", true)}
+
+		require.NoError(t, l.Handle(t.Context(), table))
+
+		hosts := <-ch
+		require.Len(t, hosts, 1)
+		assert.False(t, hosts[0].GetLeader())
+		assert.True(t, hosts[0].GetSchedulerPlacementEnabled())
+		assert.Zero(t, hoff.latched)
 	})
 
 	t.Run("replicated advertised latch survives incapable sidecars", func(t *testing.T) {
@@ -493,9 +503,9 @@ func TestLeadershipStandDownHandshake(t *testing.T) {
 		assert.True(t, hosts[0].GetSchedulerPlacementEnabled())
 	})
 
-	t.Run("no placement announced advertises without a handshake", func(t *testing.T) {
+	t.Run("not ready withholds and masks until the first detection", func(t *testing.T) {
 		t.Parallel()
-		hoff := &fakeHandoff{capable: true}
+		hoff := &fakeHandoff{capable: true, notReady: true}
 		l, ch := newLeadership(hoff)
 		table := []*anypb.Any{anyHost(t, "a:1", true)}
 
@@ -503,7 +513,7 @@ func TestLeadershipStandDownHandshake(t *testing.T) {
 
 		hosts := <-ch
 		require.Len(t, hosts, 1)
-		assert.True(t, hosts[0].GetLeader())
-		assert.False(t, hosts[0].GetPlacementCutoverPending())
+		assert.False(t, hosts[0].GetLeader())
+		assert.False(t, hosts[0].GetSchedulerPlacementEnabled())
 	})
 }
