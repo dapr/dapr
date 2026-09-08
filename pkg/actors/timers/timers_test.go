@@ -1,0 +1,102 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package timers
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/pkg/actors/api"
+	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
+	"github.com/dapr/dapr/pkg/actors/internal/timers/inmemory"
+	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
+	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
+)
+
+func newTestTimers(t *testing.T, local bool, lookupErr error) Interface {
+	t.Helper()
+	storage := inmemory.New(inmemory.Options{Router: routerfake.New()})
+	t.Cleanup(func() { require.NoError(t, storage.Close()) })
+
+	plc := placementfake.New().WithLookupActor(func(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
+		if lookupErr != nil {
+			return nil, ctx, func(error) {}, lookupErr
+		}
+		return &api.LookupActorResponse{Local: local}, ctx, func(error) {}, nil
+	})
+
+	return New(Options{
+		Storage:   storage,
+		Table:     tablefake.New().WithIsActorTypeHosted(func(string) bool { return true }),
+		Placement: plc,
+	})
+}
+
+func TestCreateOwnedActor(t *testing.T) {
+	ts := newTestTimers(t, true, nil)
+	require.NoError(t, ts.Create(t.Context(), &api.CreateTimerRequest{
+		ActorType: "abc", ActorID: "foo", Name: "tick", DueTime: "1h",
+	}))
+}
+
+func TestCreateNotOwnedActor(t *testing.T) {
+	ts := newTestTimers(t, false, nil)
+	err := ts.Create(t.Context(), &api.CreateTimerRequest{
+		ActorType: "abc", ActorID: "foo", Name: "tick", DueTime: "1h",
+	})
+	require.ErrorIs(t, err, ErrTimerActorNotOwned)
+}
+
+func TestCreateLookupError(t *testing.T) {
+	lerr := errors.New("placement unavailable")
+	ts := newTestTimers(t, true, lerr)
+	err := ts.Create(t.Context(), &api.CreateTimerRequest{
+		ActorType: "abc", ActorID: "foo", Name: "tick", DueTime: "1h",
+	})
+	require.ErrorIs(t, err, lerr)
+}
+
+func TestCreateTypeNotHosted(t *testing.T) {
+	storage := inmemory.New(inmemory.Options{Router: routerfake.New()})
+	t.Cleanup(func() { require.NoError(t, storage.Close()) })
+	ts := New(Options{
+		Storage:   storage,
+		Table:     tablefake.New().WithIsActorTypeHosted(func(string) bool { return false }),
+		Placement: placementfake.New(),
+	})
+	err := ts.Create(t.Context(), &api.CreateTimerRequest{
+		ActorType: "abc", ActorID: "foo", Name: "tick", DueTime: "1h",
+	})
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, ErrTimerActorNotOwned)
+}
+
+func TestDeleteOwnedActor(t *testing.T) {
+	ts := newTestTimers(t, true, nil)
+	require.NoError(t, ts.Delete(t.Context(), &api.DeleteTimerRequest{
+		ActorType: "abc", ActorID: "foo", Name: "tick",
+	}))
+}
+
+func TestDeleteNotOwnedActor(t *testing.T) {
+	ts := newTestTimers(t, false, nil)
+	err := ts.Delete(t.Context(), &api.DeleteTimerRequest{
+		ActorType: "abc", ActorID: "foo", Name: "tick",
+	})
+	require.ErrorIs(t, err, ErrTimerActorNotOwned)
+}

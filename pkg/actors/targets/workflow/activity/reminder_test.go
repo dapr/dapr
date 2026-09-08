@@ -302,3 +302,43 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 	// Draws must actually decorrelate across creates.
 	assert.Greater(t, len(seen), 1)
 }
+
+// Test_createReminderClampsPastDueTime: a past dueTime would replay the
+// elapsed backlog as a retry burst on every failed trigger.
+func Test_createReminderClampsPastDueTime(t *testing.T) {
+	t.Parallel()
+
+	sched := &captureScheduler{}
+	f := &factory{
+		actorType: "dapr.internal.default.testapp.activity",
+		reminders: sched,
+	}
+
+	invocation := &protos.ActivityInvocation{
+		HistoryEvent: &protos.HistoryEvent{
+			EventId: 1,
+			EventType: &protos.HistoryEvent_TaskScheduled{
+				TaskScheduled: &protos.TaskScheduledEvent{Name: "act"},
+			},
+		},
+	}
+
+	start := time.Now()
+	require.NoError(t, f.createActivityReminder(t.Context(), "activity-1", invocation, start.Add(-time.Hour), nil))
+
+	future := start.Add(time.Hour)
+	require.NoError(t, f.createActivityReminder(t.Context(), "activity-1", invocation, future, nil))
+
+	sched.mu.Lock()
+	defer sched.mu.Unlock()
+	require.Len(t, sched.creates, 2)
+
+	clamped, err := time.Parse(time.RFC3339Nano, sched.creates[0].DueTime)
+	require.NoError(t, err)
+	assert.False(t, clamped.Before(start), "a past dueTime must be clamped to the create time")
+	assert.False(t, clamped.After(time.Now()))
+
+	kept, err := time.Parse(time.RFC3339Nano, sched.creates[1].DueTime)
+	require.NoError(t, err)
+	assert.True(t, kept.Equal(future), "a future dueTime must be preserved so delays are honoured")
+}

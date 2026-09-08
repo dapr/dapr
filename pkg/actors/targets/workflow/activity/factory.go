@@ -15,6 +15,7 @@ package activity
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,8 +28,10 @@ import (
 	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/claim"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -62,6 +65,10 @@ type Options struct {
 	// FastPath drives certified activity executions locally in place of
 	// their run-activity reminder (WorkflowsFastPath preview feature).
 	FastPath bool
+
+	// Detached runs the drive-failure escalations on the runtime lifetime
+	// rather than this registration's. Nil creates one bounded by ctx.
+	Detached *detached.Runner
 
 	// ExecutionHeld reports whether the durabletask engine on this host
 	// currently holds a completion registration for the given activity work
@@ -132,12 +139,20 @@ type factory struct {
 	// unlike driveCtx it survives HaltAll, because a reminder create is
 	// host-agnostic and must be able to complete during the placement churn
 	// that cancels driveCtx.
-	rootCtx context.Context
-	escLock sync.Mutex
-	escWG   sync.WaitGroup
+	rootCtx  context.Context
+	detached *detached.Runner
+
+	// claims owns the durable execution-claim guards and gate (see the
+	// claim subpackage).
+	claims *claim.Guards
 }
 
 func New(ctx context.Context, opts Options) (targets.Factory, error) {
+	det := opts.Detached
+	if det == nil {
+		det = detached.New(ctx)
+	}
+
 	router, err := opts.Actors.Router(ctx)
 	if err != nil {
 		return nil, err
@@ -165,16 +180,31 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 
 	driveCtx, driveCancel := context.WithCancel(context.Background())
 
+	claimRetention := common.EnvDurationOr(
+		"DAPR_WORKFLOW_ACTIVITY_CLAIM_RETENTION",
+		InflightCacheTTL,
+	)
+
 	return &factory{
-		appID:                  opts.AppID,
-		actorType:              opts.ActivityActorType,
-		fastPath:               opts.FastPath,
-		executionHeld:          opts.ExecutionHeld,
-		registerResolver:       opts.RegisterResolver,
-		staleClaimAfter:        2 * common.JanitorPeriod(),
+		appID:            opts.AppID,
+		actorType:        opts.ActivityActorType,
+		fastPath:         opts.FastPath,
+		executionHeld:    opts.ExecutionHeld,
+		registerResolver: opts.RegisterResolver,
+		staleClaimAfter:  2 * common.JanitorPeriod(),
+		claims: claim.New(claim.Options{
+			ActorType: opts.ActivityActorType,
+			State:     state,
+			// Half-period beats give a live guard three misses, not one,
+			// before its record reads stale under load.
+			HeartbeatEvery: common.JanitorPeriod() / 2,
+			Retention:      claimRetention,
+			StaleAfter:     2 * common.JanitorPeriod(),
+		}),
 		driveCtx:               driveCtx,
 		driveCancel:            driveCancel,
 		rootCtx:                ctx,
+		detached:               det,
 		router:                 router,
 		reminders:              sreminders,
 		scheduler:              opts.Scheduler,
@@ -245,6 +275,7 @@ func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorReq
 			ActorType: f.actorType,
 			ActorID:   key.(string),
 		}) {
+			f.spawnClaimGuards(ctx, key.(string))
 			val.(*activity).Deactivate(ctx)
 			f.table.Delete(key)
 		}
@@ -262,4 +293,25 @@ func (f *factory) Len() int {
 	var count int
 	f.table.Range(func(_, _ any) bool { count++; return true })
 	return count
+}
+
+// spawnClaimGuards spawns a claim guard for every unsettled in-flight claim
+// of actorID, from HaltNonHosted (placement churn). Deliberately NOT from
+// HaltAll: at shutdown the execution dies with the process and a record
+// would only delay the new owner by the staleness grace.
+func (f *factory) spawnClaimGuards(ctx context.Context, actorID string) {
+	if !f.fastPath {
+		return
+	}
+	prefix := actorID + "::"
+	f.inflight.Range(func(key string, call *inflight.Call) bool {
+		if key != actorID && !strings.HasPrefix(key, prefix) {
+			return true
+		}
+		if call.Settled() {
+			return true
+		}
+		f.claims.Spawn(ctx, f.rootCtx, actorID, key, call)
+		return true
+	})
 }

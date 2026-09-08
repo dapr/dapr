@@ -312,7 +312,21 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 			}
 		}
 		if rErr != nil {
-			return rResp, apierrors.ServiceInvocation(in.GetId()).InvokeFailed(rErr)
+			// A dead request context is not an internal daprd failure:
+			// preserve its gRPC classification (DeadlineExceeded/Canceled)
+			// so the caller observes the same code whether its own deadline
+			// timer or this reply wins the race. The blanket Internal wrap
+			// below would otherwise misclassify e.g. an app-channel
+			// concurrency-limiter acquire aborted by the caller's deadline.
+			if errors.Is(rErr, context.DeadlineExceeded) || errors.Is(rErr, context.Canceled) {
+				return rResp, status.FromContextError(rErr).Err()
+			}
+			// A remote hop returns the same conditions as already-classified
+			// status errors rather than context sentinels: pass them through.
+			if c := status.Code(rErr); c == codes.DeadlineExceeded || c == codes.Canceled {
+				return rResp, rErr
+			}
+      return rResp, apierrors.ServiceInvocation(in.GetId()).InvokeFailed(rErr)
 		}
 
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
@@ -546,6 +560,10 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 		}
 
 		for key, val := range incomingMD {
+			// Binary gRPC metadata cannot be represented in string component metadata
+			if strings.HasSuffix(key, "-bin") {
+				continue
+			}
 			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
 			// Not to overwrite the existing metadata
 			// But if the key is traceparent or tracestate, we allow overwrite the existing metadata.

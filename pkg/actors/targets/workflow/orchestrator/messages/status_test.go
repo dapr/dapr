@@ -15,11 +15,14 @@ package messages
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/dapr/durabletask-go/api"
 )
 
 func TestIsPermissionDenied(t *testing.T) {
@@ -55,5 +58,33 @@ func TestIsAlreadyExists(t *testing.T) {
 	t.Run("non-AlreadyExists gRPC error", func(t *testing.T) {
 		err := status.Error(codes.PermissionDenied, "denied")
 		assert.False(t, IsAlreadyExists(err))
+	})
+}
+
+func TestIsInstanceNotFound(t *testing.T) {
+	t.Run("nil error", func(t *testing.T) {
+		assert.False(t, IsInstanceNotFound(nil))
+	})
+
+	t.Run("direct sentinel", func(t *testing.T) {
+		assert.True(t, IsInstanceNotFound(api.ErrInstanceNotFound))
+	})
+
+	t.Run("wrapped sentinel", func(t *testing.T) {
+		assert.True(t, IsInstanceNotFound(fmt.Errorf("dispatch: %w", api.ErrInstanceNotFound)))
+	})
+
+	t.Run("wire string suffix from actor invocation", func(t *testing.T) {
+		err := errors.New("failed to invoke method 'AddWorkflowEvent' on actor 'wf-1': api error: code = Unknown desc = no such instance exists")
+		assert.True(t, IsInstanceNotFound(err))
+	})
+
+	t.Run("wire string not at suffix", func(t *testing.T) {
+		err := errors.New("no such instance exists: while doing something else")
+		assert.False(t, IsInstanceNotFound(err))
+	})
+
+	t.Run("unrelated error", func(t *testing.T) {
+		assert.False(t, IsInstanceNotFound(errors.New("connection refused")))
 	})
 }
