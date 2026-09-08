@@ -597,7 +597,7 @@ type WatchJobsRequestInitial struct {
 	// placement_addresses are the placement service addresses this daprd was
 	// configured with. Schedulers probe them so a placement service outside
 	// the well-known service name still withholds the placement leader
-	// advertisement until it stands down.
+	// advertisement while it runs.
 	PlacementAddresses []string `protobuf:"bytes,8,rep,name=placement_addresses,json=placementAddresses,proto3" json:"placement_addresses,omitempty"`
 }
 
