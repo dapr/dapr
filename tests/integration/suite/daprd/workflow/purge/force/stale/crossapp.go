@@ -67,9 +67,7 @@ func (s *crossapp) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, owner.PurgeWorkflowState(ctx, id, api.WithForcePurge(true)))
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		fctx, cancel := context.WithTimeout(ctx, time.Second*5)
-		defer cancel()
-		_, ferr := remote.FetchWorkflowMetadata(fctx, id, api.WithFetchAppID(ownerApp))
+		_, ferr := remote.FetchWorkflowMetadata(ctx, id, api.WithFetchAppID(ownerApp))
 		assert.ErrorIs(c, ferr, api.ErrInstanceNotFound)
 	}, time.Second*10, time.Millisecond*100)
 

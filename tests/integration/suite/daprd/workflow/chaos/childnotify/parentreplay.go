@@ -32,26 +32,22 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore/fault"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/framework/socket"
-	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
 )
 
 func init() {
-	suite.Register(new(pending))
+	suite.Register(new(parentreplay))
 }
 
-// pending keeps the parent's inbox failing so the child's completion stays
-// undelivered: the child reads COMPLETED, but purging it or reusing its id is
-// refused until the parent acknowledges, after which both succeed.
-type pending struct {
+type parentreplay struct {
 	workflow *workflow.Workflow
 	ss       *statestore.StateStore
 	store    *fault.Store
 }
 
-func (p *pending) Setup(t *testing.T) []framework.Option {
+func (p *parentreplay) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
 	p.store = fault.New(t)
@@ -62,7 +58,7 @@ func (p *pending) Setup(t *testing.T) []framework.Option {
 	)
 
 	p.workflow = workflow.New(t,
-		workflow.WithSigningDisabledN(0),
+		workflow.WithMTLS(t),
 		workflow.WithNoDB(),
 		workflow.WithDaprdOptions(0,
 			daprd.WithSocket(t, sock),
@@ -86,17 +82,17 @@ spec:
 	}
 }
 
-func (p *pending) Run(t *testing.T, ctx context.Context) {
+func (p *parentreplay) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
-	const parentID = "notifypending-p"
-	const childID = "notifypending-c"
+	const parentID = "parentreplay-p"
+	const childID = "parentreplay-c"
 
-	var inActivity atomic.Bool
+	var runs atomic.Int32
 	releaseCh := make(chan struct{})
 	reg := p.workflow.Registry()
-	require.NoError(t, reg.AddActivityN("gate", func(actx task.ActivityContext) (any, error) {
-		inActivity.Store(true)
+	require.NoError(t, reg.AddActivityN("once", func(actx task.ActivityContext) (any, error) {
+		runs.Add(1)
 		select {
 		case <-releaseCh:
 			return nil, nil
@@ -105,12 +101,20 @@ func (p *pending) Run(t *testing.T, ctx context.Context) {
 		}
 	}))
 	require.NoError(t, reg.AddWorkflowN("child", func(ctx *task.WorkflowContext) (any, error) {
-		if err := ctx.CallActivity("gate").Await(nil); err != nil {
+		if err := ctx.CallActivity("once").Await(nil); err != nil {
 			return nil, err
 		}
-		return "hello", nil
+		return "replayed", nil
+	}))
+	require.NoError(t, reg.AddActivityN("noop", func(task.ActivityContext) (any, error) {
+		return nil, nil
 	}))
 	require.NoError(t, reg.AddWorkflowN("parent", func(ctx *task.WorkflowContext) (any, error) {
+		// A first turn that commits, so the create call returns before the
+		// turn that dispatches the child is made to fail.
+		if err := ctx.CallActivity("noop").Await(nil); err != nil {
+			return nil, err
+		}
 		var out string
 		if err := ctx.CallChildWorkflow("child", task.WithChildWorkflowInstanceID(childID)).Await(&out); err != nil {
 			return nil, err
@@ -118,11 +122,26 @@ func (p *pending) Run(t *testing.T, ctx context.Context) {
 		return out, nil
 	}))
 
-	var markerDeletes atomic.Int32
+	// The child's create save is the parent's dispatch; every parent history
+	// save from then on, the one that would commit the creation included,
+	// fails until the child's completion has been refused and dropped, which
+	// the child records by deleting its parent-notify row.
+	var armed atomic.Bool
+	failed := make(chan struct{})
+	dropped := make(chan struct{})
+	var droppedOnce atomic.Bool
 	p.store.SetMultiObserver(func(req *state.TransactionalStateRequest) {
 		for _, op := range req.Operations {
-			if d, ok := op.(state.DeleteRequest); ok && strings.Contains(d.Key, childID+"||parent-notify") {
-				markerDeletes.Add(1)
+			switch v := op.(type) {
+			case state.SetRequest:
+				if strings.Contains(v.Key, childID+"||inbox-") && !armed.Load() {
+					p.store.ArmFailures(parentID+"||history-", 1<<20, failed)
+					armed.Store(true)
+				}
+			case state.DeleteRequest:
+				if strings.Contains(v.Key, childID+"||parent-notify") && droppedOnce.CompareAndSwap(false, true) {
+					close(dropped)
+				}
 			}
 		}
 	})
@@ -130,43 +149,28 @@ func (p *pending) Run(t *testing.T, ctx context.Context) {
 	client := p.workflow.BackendClient(t, ctx)
 	_, err := client.ScheduleNewWorkflow(ctx, "parent", api.WithInstanceID(parentID))
 	require.NoError(t, err)
-	require.Eventually(t, inActivity.Load, time.Second*20, time.Millisecond*10)
-
-	// Every parent inbox save fails from here on, so the notification cannot
-	// land until the fault is disarmed.
-	failed := make(chan struct{})
-	p.store.ArmFailures(parentID+"||inbox-", 1<<20, failed)
-	close(releaseCh)
 	select {
 	case <-failed:
 	case <-time.After(time.Second * 20):
-		require.Fail(t, "the parent's inbox save was never attempted")
+		require.Fail(t, "the parent's commit of the creation was never attempted")
 	}
 
-	cmeta, err := client.FetchWorkflowMetadata(ctx, childID)
-	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, cmeta.GetRuntimeStatus())
+	// The child completes and notifies a parent that has not committed the
+	// creation; the parent refuses the completion and the child drops it.
+	require.Eventually(t, func() bool { return runs.Load() == 1 }, time.Second*20, time.Millisecond*10)
+	close(releaseCh)
+	select {
+	case <-dropped:
+	case <-time.After(time.Second * 20):
+		require.Fail(t, "the child never dropped its refused completion")
+	}
+	assert.Zero(t, p.workflow.Scheduler().JobKeyCount(t, ctx, "parent-notify"), "nothing is left to re-send it")
 
-	err = client.PurgeWorkflowState(ctx, childID)
-	require.ErrorContains(t, err, api.ErrNotCompleted.Error(), "an unacknowledged completion is not purgeable")
-	// Refused as Unavailable, which the client retries: bound the attempt.
-	reuseCtx, reuseCancel := context.WithTimeout(ctx, time.Second*3)
-	t.Cleanup(reuseCancel)
-	_, err = client.ScheduleNewWorkflow(reuseCtx, "child", api.WithInstanceID(childID))
-	require.Error(t, err, "an unacknowledged completion blocks id reuse")
-	wf.WaitForRuntimeStatus(t, ctx, client, childID, api.RUNTIME_STATUS_COMPLETED)
-	assert.Zero(t, markerDeletes.Load())
-
-	p.store.ArmFailures(parentID+"||inbox-", 0, nil)
-
+	// The parent can commit again: its replay re-dispatches the creation.
+	p.store.ArmFailures(parentID+"||history-", 0, nil)
 	meta, err := client.WaitForWorkflowCompletion(ctx, parentID)
-	require.NoError(t, err)
+	require.NoError(t, err, "the parent must receive the completion after its replay")
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
-	assert.JSONEq(t, `"hello"`, meta.GetOutput().GetValue())
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int32(1), markerDeletes.Load(), "the acknowledged delivery clears the marker")
-	}, time.Second*20, time.Millisecond*10)
-
-	require.NoError(t, client.PurgeWorkflowState(ctx, childID))
-	p.workflow.Scheduler().WaitJobKeyCount(t, ctx, "parent-notify", func(n int) bool { return n == 0 })
+	assert.JSONEq(t, `"replayed"`, meta.GetOutput().GetValue())
+	assert.Equal(t, int32(1), runs.Load(), "the replayed creation must not run the child again")
 }
