@@ -39,19 +39,23 @@ import (
 	"github.com/dapr/kit/concurrency"
 )
 
-func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.State, *backend.WorkflowMetadata, error) {
-	// See if the state for this actor is already cached in memory
-	if o.state != nil {
-		return o.state, o.ometa, nil
-	}
-
-	opts := wfenginestate.Options{
+func (o *orchestrator) stateOptions() wfenginestate.Options {
+	return wfenginestate.Options{
 		AppID:             o.appID,
 		Namespace:         o.namespace,
 		WorkflowActorType: o.actorType,
 		ActivityActorType: o.activityActorType,
 		Signer:            o.signer,
 	}
+}
+
+func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.State, *backend.WorkflowMetadata, error) {
+	// See if the state for this actor is already cached in memory
+	if o.state != nil {
+		return o.state, o.ometa, nil
+	}
+
+	opts := o.stateOptions()
 
 	// state is not cached, so try to load it from the state store
 	state, err := wfenginestate.LoadWorkflowState(ctx, o.actorState, o.actorID, opts)
@@ -106,10 +110,16 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 		}
 	}
 
-	// A parent-notify row on a parentless instance is an orphan left by a
-	// purge on a binary that did not know the key; the next save drops it.
-	if state.ParentNotifyPending && o.getExecutionStartedEvent(state).GetParentInstance() == nil {
+	// Rows a purge on a binary that did not know the keys left behind: a
+	// parent-notify row on a parentless instance, or a creation input from
+	// another creation. Neither is read as this instance's; the next save
+	// drops them.
+	parent := o.getExecutionStartedEvent(state).GetParentInstance()
+	if state.ParentNotifyPending && parent == nil {
 		state.SetParentNotifyPending(false)
+	}
+	if state.CreationInput != nil && !state.CreationInputFor(parent) {
+		state.ClearCreationInput()
 	}
 
 	// Update cached state
@@ -273,10 +283,29 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 		state.SetMetadataETag(nil)
 	case len(metaRes.Data) == 0:
 		// The row vanished between the Multi and this read: a force purge
-		// landed. Drop the cache and the actor, and fail the caller so the
-		// turn's post-save effects (parent notification, retention, cascade)
-		// do not act on a purged instance; the refire finds no state. The
-		// sentinel sits last: remote classifiers match by suffix.
+		// landed, unless the store served a read that lags its own write.
+		// Confirm once before failing the caller so the turn's post-save
+		// effects (parent notification, retention, cascade) do not act on a
+		// purged instance; the refire finds no state. The sentinel sits
+		// last: remote classifiers match by suffix.
+		again, againErr := o.actorState.Get(ctx, &actorsapi.GetStateRequest{
+			ActorType: o.actorType,
+			ActorID:   o.actorID,
+			Key:       wfenginestate.MetadataKey,
+		}, false)
+		if againErr != nil {
+			// Unconfirmed either way: the save is durable, so retry the turn
+			// rather than run its post-save effects on a possibly purged
+			// instance. The refire reloads and finds no state if it was.
+			o.invalidateCachedState()
+			return wfengerrors.NewRecoverable(fmt.Errorf("failed to confirm the metadata row after save: %w", againErr))
+		}
+		if len(again.Data) > 0 {
+			log.Debugf("Workflow actor '%s': metadata row read back empty once after save; the next operation reloads", o.actorID)
+			state.SetMetadataETag(nil)
+			o.invalidateCachedState()
+			return nil
+		}
 		log.Warnf("Workflow actor '%s': metadata row missing after save; the state was purged concurrently", o.actorID)
 		o.invalidateCachedState()
 		o.deactivate(o)
