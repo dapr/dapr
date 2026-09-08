@@ -37,7 +37,7 @@ const reminderCreateMaxElapsedTime = time.Minute
 
 // CreateReminderWithRetry calls reminders.Create with bounded exponential
 // backoff. Every error is retried except a context error, a clearly-permanent
-// request error (see isPermanentCreateError), or scheduler storage exhaustion
+// request error (see IsPermanentCreateError), or scheduler storage exhaustion
 // (ResourceExhausted). The create is often the only signal that will ever
 // advance durable state committed just before it (a workflow's start, timer,
 // or activity reminder), so dropping an unrecognised-but-transient error
@@ -64,7 +64,7 @@ func CreateReminderWithRetry(ctx context.Context, r reminderCreator, req *actora
 			return backoff.Permanent(err)
 		}
 		err := r.Create(ctx, req)
-		if err != nil && (isPermanentCreateError(err) || status.Code(err) == codes.ResourceExhausted) {
+		if err != nil && (IsPermanentCreateError(err) || status.Code(err) == codes.ResourceExhausted) {
 			return backoff.Permanent(err)
 		}
 		return err
@@ -73,7 +73,7 @@ func CreateReminderWithRetry(ctx context.Context, r reminderCreator, req *actora
 
 // CreateReminderWithRetryForever calls reminders.Create and retries every
 // error except a context error, a clearly-permanent request error (see
-// isPermanentCreateError), or ResourceExhausted (NOSPACE only clears with
+// IsPermanentCreateError), or ResourceExhausted (NOSPACE only clears with
 // compaction or a quota raise): it stops only when ctx is cancelled.
 func CreateReminderWithRetryForever(ctx context.Context, r reminderCreator, req *actorapi.CreateReminderRequest) error {
 	bo := backoff.NewExponentialBackOff()
@@ -86,22 +86,23 @@ func CreateReminderWithRetryForever(ctx context.Context, r reminderCreator, req 
 			return backoff.Permanent(err)
 		}
 		err := r.Create(ctx, req)
-		if err != nil && (isPermanentCreateError(err) || status.Code(err) == codes.ResourceExhausted) {
+		if err != nil && (IsPermanentCreateError(err) || status.Code(err) == codes.ResourceExhausted) {
 			return backoff.Permanent(err)
 		}
 		return err
 	}, backoff.WithContext(bo, ctx))
 }
 
-// isPermanentCreateError reports whether a reminder Create error is a
+// IsPermanentCreateError reports whether a reminder Create error is a
 // client-side mistake that retrying can never fix (malformed request, missing
-// auth, unimplemented method). Everything else: Unavailable, DeadlineExceeded,
+// auth, unimplemented method). A context error is not a gRPC status and so
+// reads as permanent here. Everything else: Unavailable, DeadlineExceeded,
 // Internal, Aborted, and notably Unknown (the code carried by the scheduler's
 // plain-error returns, including cron shutdown), is treated as retryable by
 // both retry helpers, because the scheduler may recover and the create is an
 // idempotent overwrite-by-name. ResourceExhausted is permanent in both
 // helpers, see CreateReminderWithRetry.
-func isPermanentCreateError(err error) bool {
+func IsPermanentCreateError(err error) bool {
 	s, ok := status.FromError(err)
 	if !ok {
 		// Not a gRPC status (e.g. a local marshalling error): retrying forever

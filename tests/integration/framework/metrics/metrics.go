@@ -96,6 +96,31 @@ func (m *Metrics) All() map[string]float64 {
 
 // MatchMetric returns all metrics that contain all the substrings in the key
 // This is useful because of the way we serialize labels in the metrics name
+// SumWithLabels sums every series of the exactly-named metric whose labels
+// include each of the given name:value pairs. Unlike the substring matchers
+// below, histogram expansions of other metrics sharing a name prefix
+// (_bucket/_sum/_count) are never matched.
+func (m *Metrics) SumWithLabels(name string, labelPairs ...string) float64 {
+	var sum float64
+	for k, v := range m.All() {
+		if k != name && !strings.HasPrefix(k, name+"|") {
+			continue
+		}
+		matched := true
+		for _, lp := range labelPairs {
+			tok := "|" + lp
+			if !strings.HasSuffix(k, tok) && !strings.Contains(k, tok+"|") {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			sum += v
+		}
+	}
+	return sum
+}
+
 func (m *Metrics) MatchMetric(substrings ...string) []Metric {
 	result := make([]Metric, 0)
 

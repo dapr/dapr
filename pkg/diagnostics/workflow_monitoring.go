@@ -32,14 +32,23 @@ var (
 )
 
 const (
-	StatusSuccess     = "success"
-	StatusFailed      = "failed"
-	StatusTerminated  = "terminated"
-	StatusRecoverable = "recoverable"
-	CreateWorkflow    = "create_workflow"
-	GetWorkflow       = "get_workflow"
-	AddEvent          = "add_event"
-	PurgeWorkflow     = "purge_workflow"
+	StatusSuccess = "success"
+	StatusFailed  = "failed"
+	// A wake-up reminder create failed after its inbox row was committed and
+	// was handed to a detached retry, or that retry gave up; ~0 in healthy
+	// steady state.
+	StatusArmDetached        = "reminder_arm_detached"
+	StatusArmDetachedFailed  = "reminder_arm_detached_failed"
+	StatusArmDetachedSkipped = "reminder_arm_detached_skipped_shutdown"
+	// A status read re-asserted the start reminder of an overdue pending
+	// start; ~0 in healthy steady state.
+	StatusPendingStartRedriven = "pending_start_redriven"
+	StatusTerminated           = "terminated"
+	StatusRecoverable          = "recoverable"
+	CreateWorkflow             = "create_workflow"
+	GetWorkflow                = "get_workflow"
+	AddEvent                   = "add_event"
+	PurgeWorkflow              = "purge_workflow"
 
 	WorkflowEvent = "event"
 	Timer         = "timer"
@@ -109,6 +118,11 @@ type workflowMetrics struct {
 	// activityPayloadSizeRatio records activity payloads as a fraction of
 	// the configured gRPC max body size. Same headroom intent as
 	// workflowPayloadSizeRatio.
+	// localWakeCount records wake-up reminder recovery outcomes by status:
+	// a create handed to a detached retry after its inbox row was committed,
+	// that retry giving up or being skipped at shutdown, and a status read
+	// re-driving an overdue pending start.
+	localWakeCount           *stats.Int64Measure
 	activityPayloadSizeRatio *stats.Float64Measure
 	appID                    string
 	enabled                  bool
@@ -178,6 +192,10 @@ func newWorkflowMetrics() *workflowMetrics {
 			"runtime/workflow/activity/payload/size_ratio",
 			"Activity payload size as a fraction of the configured gRPC max body size; values >=0.95 trip the stall, values >1 exceed the limit.",
 			stats.UnitDimensionless),
+		localWakeCount: stats.Int64(
+			"runtime/workflow/local_wake/count",
+			"The number of workflow wake-up reminder recovery events, by status.",
+			stats.UnitDimensionless),
 	}
 }
 
@@ -192,7 +210,7 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 	w.namespace = namespace
 	w.meter = meter
 
-	return meter.Register(
+	err := meter.Register(
 		diagUtils.NewMeasureView(w.workflowOperationCount, []tag.Key{appIDKey, namespaceKey, operationKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowOperationLatency, []tag.Key{appIDKey, namespaceKey, operationKey, statusKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.workflowExecutionCount, []tag.Key{appIDKey, namespaceKey, workflowNameKey, statusKey}, view.Count()),
@@ -207,7 +225,22 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 		diagUtils.NewMeasureView(w.attestationVerifyLatency, []tag.Key{appIDKey, namespaceKey, attestationKindKey, attestationResultKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.attestationCertCacheCount, []tag.Key{appIDKey, namespaceKey, certCacheOutcomeKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, payloadRatioDistribution),
-		diagUtils.NewMeasureView(w.activityPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey, activityNameKey}, payloadRatioDistribution))
+		diagUtils.NewMeasureView(w.activityPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey, activityNameKey}, payloadRatioDistribution),
+		// Sum, not Count, so Init can pre-record the rescue-evidence statuses at
+		// zero below: an absent series would be indistinguishable from a rescue
+		// path that never fired.
+		diagUtils.NewMeasureView(w.localWakeCount, []tag.Key{appIDKey, namespaceKey, statusKey}, view.Sum()))
+	if err != nil {
+		return err
+	}
+
+	for _, s := range []string{StatusArmDetached, StatusArmDetachedFailed, StatusArmDetachedSkipped, StatusPendingStartRedriven} {
+		stats.RecordWithOptions(context.Background(),
+			stats.WithRecorder(w.meter),
+			stats.WithTags(diagUtils.WithTags(w.localWakeCount.Name(), appIDKey, appID, namespaceKey, namespace, statusKey, s)...),
+			stats.WithMeasurements(w.localWakeCount.M(0)))
+	}
+	return nil
 }
 
 // WorkflowOperationEvent records total number of Successful/Failed workflow Operations requests. It also records latency for those requests.
@@ -312,6 +345,17 @@ func (w *workflowMetrics) AttestationVerified(ctx context.Context, kind, result 
 
 // AttestationCertCacheLookup records a per-orchestrator cert chain-of-
 // trust cache lookup with its outcome (hit/miss).
+// WorkflowLocalWake records a wake-up reminder recovery outcome.
+func (w *workflowMetrics) WorkflowLocalWake(ctx context.Context, status string) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.localWakeCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, statusKey, status)...),
+		stats.WithMeasurements(w.localWakeCount.M(1)))
+}
+
 func (w *workflowMetrics) AttestationCertCacheLookup(ctx context.Context, outcome string) {
 	if !w.IsEnabled() {
 		return

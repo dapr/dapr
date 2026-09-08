@@ -20,12 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// WorkflowActorType returns the orchestrator actor type registered by the
-// daprd at the given index (default namespace).
-func (w *Workflow) WorkflowActorType(index int) string {
-	return "dapr.internal.default." + w.daprds[index].AppID() + ".workflow"
-}
-
 // StrayFire schedules a stray new-event reminder against the workflow actor
 // hosted by daprd index, driving its empty-inbox path, and waits until the
 // scheduler has delivered it.

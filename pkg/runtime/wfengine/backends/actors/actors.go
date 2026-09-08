@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -40,6 +41,8 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/retentioner"
@@ -139,7 +142,58 @@ type Actors struct {
 	// timestamp) can tell two distinct concurrent RaiseEvent calls apart.
 	lastEventNano atomic.Int64
 
+	// pendingStartRedrives holds, per instance ID, the UnixNano of the last
+	// re-drive poke; detached runs the pokes and the workflow actor factory's
+	// detached work between Start and Stop.
+	pendingStartRedrives sync.Map
+	detachedLock         sync.Mutex
+	detached             *detached.Runner
+
 	stopped atomic.Bool
+}
+
+const pendingStartRedriveTimeout = 30 * time.Second
+
+func (abe *Actors) detachedRunner() *detached.Runner {
+	abe.detachedLock.Lock()
+	defer abe.detachedLock.Unlock()
+	return abe.detached
+}
+
+// redriveOverduePendingStart pokes the instance's workflow actor with a
+// status stream that stops at the first reply, whose handler re-asserts an
+// overdue pending start's reminder. It runs detached and at most once per
+// grace per instance, so the caller's store read never waits on the actor
+// lock.
+func (abe *Actors) redriveOverduePendingStart(id api.InstanceID) {
+	runner := abe.detachedRunner()
+	if runner == nil {
+		return
+	}
+	now := time.Now().UnixNano()
+	if last, ok := abe.pendingStartRedrives.Load(id); ok && now-last.(int64) < int64(pendingstart.RedriveGrace()) {
+		return
+	}
+	abe.pendingStartRedrives.Store(id, now)
+	runner.GoKeyed("redrive||"+string(id), func(ctx context.Context) {
+		ctx, cancel := context.WithTimeout(ctx, pendingStartRedriveTimeout)
+		defer cancel()
+		var meta *backend.WorkflowMetadata
+		err := abe.WatchWorkflowRuntimeStatus(ctx, id, func(m *backend.WorkflowMetadata) bool {
+			meta = m
+			return true
+		})
+		if err != nil {
+			if !errors.Is(err, api.ErrInstanceNotFound) {
+				log.Debugf("Failed to poke workflow actor '%s' to re-drive its overdue pending start: %v", id, err)
+			}
+			abe.pendingStartRedrives.Delete(id)
+			return
+		}
+		if meta.GetRuntimeStatus() != protos.OrchestrationStatus_ORCHESTRATION_STATUS_PENDING {
+			abe.pendingStartRedrives.Delete(id)
+		}
+	})
 }
 
 func New(opts Options) *Actors {
@@ -196,6 +250,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		Signer:                 abe.signer,
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
 		MaxRequestBodySize:     abe.maxRequestBodySize,
+		Detached:               abe.detachedRunner(),
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
@@ -425,6 +480,12 @@ func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID) (
 
 	if wstate == nil {
 		return nil, api.ErrInstanceNotFound
+	}
+
+	// This store read is the only thing a status-guarding client does to an
+	// instance whose start reminder was lost.
+	if pendingstart.Overdue(wstate, time.Now()) != nil {
+		abe.redriveOverduePendingStart(id)
 	}
 
 	rstate := runtimestate.NewWorkflowRuntimeState(string(id), wstate.CustomStatus, wstate.History)
@@ -746,12 +807,22 @@ func (abe *Actors) purgeWorkflowRemote(ctx context.Context, id api.InstanceID, t
 // Start implements backend.Backend
 func (abe *Actors) Start(ctx context.Context) error {
 	abe.stopped.Store(false)
+	abe.detachedLock.Lock()
+	abe.detached = detached.New(ctx)
+	abe.detachedLock.Unlock()
 	return nil
 }
 
 // Stop implements backend.Backend
 func (abe *Actors) Stop(context.Context) error {
 	abe.stopped.Store(true)
+	abe.detachedLock.Lock()
+	runner := abe.detached
+	abe.detached = nil
+	abe.detachedLock.Unlock()
+	if runner != nil {
+		runner.Close()
+	}
 	return nil
 }
 
