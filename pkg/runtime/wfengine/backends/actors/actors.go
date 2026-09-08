@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -37,9 +38,12 @@ import (
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/table"
+	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
@@ -51,7 +55,9 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors/pendingtracker"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	staterrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state/list"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/dapr/utils"
@@ -117,7 +123,7 @@ type Actors struct {
 	retentionerActorType string
 	executorActorType    string
 
-	pendingTasksBackend    PendingTasksBackend
+	pendingTasksBackend    *pendingtracker.Tracker
 	activityExecs          *activityExecutions
 	resiliency             resiliency.Provider
 	actors                 actors.Interface
@@ -152,10 +158,56 @@ type Actors struct {
 	// DAPR_WORKFLOW_TEST_DUPLICATE_TURN_COMPLETIONS injection.
 	duplicatedTurnCompletions atomic.Int64
 
+	// pendingStartRedrives holds, per instance ID, the UnixNano of the last
+	// re-drive poke; detached runs the pokes and the actor factories' detached
+	// work between Start and Stop.
+	pendingStartRedrives sync.Map
+	detachedLock         sync.Mutex
+	detached             *detached.Runner
+
 	stopped atomic.Bool
 }
 
 var _ backend.Backend = (*Actors)(nil)
+
+const pendingStartRedriveTimeout = 30 * time.Second
+
+func (abe *Actors) detachedRunner() *detached.Runner {
+	abe.detachedLock.Lock()
+	defer abe.detachedLock.Unlock()
+	return abe.detached
+}
+
+// redriveOverduePendingStart pokes the instance's workflow actor with a
+// one-shot status fetch, whose handler re-asserts an overdue pending start's
+// reminder. It runs detached and at most once per grace per instance, so the
+// caller's store read never waits on the actor lock.
+func (abe *Actors) redriveOverduePendingStart(id api.InstanceID) {
+	runner := abe.detachedRunner()
+	if runner == nil {
+		return
+	}
+	now := time.Now().UnixNano()
+	if last, ok := abe.pendingStartRedrives.Load(id); ok && now-last.(int64) < int64(pendingstart.RedriveGrace()) {
+		return
+	}
+	abe.pendingStartRedrives.Store(id, now)
+	runner.GoKeyed("redrive||"+string(id), func(ctx context.Context) {
+		ctx, cancel := context.WithTimeout(ctx, pendingStartRedriveTimeout)
+		defer cancel()
+		meta, err := abe.getWorkflowMetadataRemote(ctx, id, abe.appID)
+		if err != nil {
+			if !errors.Is(err, api.ErrInstanceNotFound) {
+				log.Debugf("Failed to poke workflow actor '%s' to re-drive its overdue pending start: %v", id, err)
+			}
+			abe.pendingStartRedrives.Delete(id)
+			return
+		}
+		if meta.GetRuntimeStatus() != protos.OrchestrationStatus_ORCHESTRATION_STATUS_PENDING {
+			abe.pendingStartRedrives.Delete(id)
+		}
+	})
+}
 
 func New(opts Options) (*Actors, error) {
 	var pendingTasksBackend PendingTasksBackend
@@ -175,6 +227,10 @@ func New(opts Options) (*Actors, error) {
 		pendingTasksBackend = local.NewTasksBackend()
 	}
 
+	// Wrapped so pending completions can be cancelled while no executor is
+	// connected; see the pendingtracker package.
+	trackedPendingTasksBackend := pendingtracker.New(pendingTasksBackend)
+
 	return &Actors{
 		appID:                     opts.AppID,
 		namespace:                 opts.Namespace,
@@ -184,7 +240,7 @@ func New(opts Options) (*Actors, error) {
 		retentionerActorType:      todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + RetentionerNameLabelKey,
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
-		pendingTasksBackend:       pendingTasksBackend,
+		pendingTasksBackend:       trackedPendingTasksBackend,
 		activityExecs:             newActivityExecutions(),
 		compStore:                 opts.ComponentStore,
 		orchestrationWorkItemChan: make(chan *backend.WorkflowWorkItem, 1),
@@ -222,6 +278,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		MaxRequestBodySize:     abe.maxRequestBodySize,
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
 		FastPath:               abe.workflowsFastPath,
+		Detached:               abe.detachedRunner(),
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
@@ -237,6 +294,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 	}
 
 	aopts := activity.Options{
+		Detached:          abe.detachedRunner(),
 		AppID:             abe.appID,
 		Namespace:         abe.namespace,
 		ActivityActorType: abe.activityActorType,
@@ -503,6 +561,12 @@ func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID, r
 		return nil, api.ErrInstanceNotFound
 	}
 
+	// This store read is the only thing a status-guarding client does to an
+	// instance whose start reminder was lost.
+	if pendingstart.Overdue(wstate, time.Now()) != nil {
+		abe.redriveOverduePendingStart(id)
+	}
+
 	rstate := runtimestate.NewWorkflowRuntimeState(string(id), wstate.CustomStatus, wstate.History)
 
 	name, _ := runtimestate.Name(rstate)
@@ -755,26 +819,46 @@ func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.Instan
 		WithActor(actorType, string(id)).
 		WithContentType(invokev1.ProtobufContentType)
 
-	err = router.CallStream(ctx, req, func(resp *internalsv1pb.InternalInvokeResponse) (bool, error) {
-		var meta backend.WorkflowMetadata
-		perr := resp.GetMessage().GetData().UnmarshalTo(&meta)
-		if perr != nil {
-			log.Errorf("Failed to unmarshal orchestration metadata: %s", perr)
-			return false, perr
-		}
+	wait := time.Millisecond * 500
+	for {
+		err = router.CallStream(ctx, req, func(resp *internalsv1pb.InternalInvokeResponse) (bool, error) {
+			var meta backend.WorkflowMetadata
+			perr := resp.GetMessage().GetData().UnmarshalTo(&meta)
+			if perr != nil {
+				log.Errorf("Failed to unmarshal orchestration metadata: %s", perr)
+				return false, perr
+			}
 
-		return condition(&meta), nil
-	})
-	if err != nil {
+			return condition(&meta), nil
+		})
+		switch {
+		case err == nil:
+			return nil
 		// Actor invocations carry errors as wire strings; normalise not-found
 		// so callers can rely on errors.Is.
-		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
+		case strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()):
 			return api.ErrInstanceNotFound
+		case !targeterrors.IsStalled(err):
+			return err
 		}
-		return err
-	}
 
-	return nil
+		// A stalled actor rejects stream registrations while the stall turn
+		// parks holding the turn lock, but the instance is quiescent and its
+		// status readable from the store. A condition the instance already
+		// reached must resolve (a schedule's wait-for-start racing a fast
+		// stall); otherwise re-register with backoff until the stall clears.
+		if meta, merr := abe.GetWorkflowMetadata(ctx, id, taskRouter); merr == nil && condition(meta) {
+			return nil
+		}
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+		wait = min(wait*2, time.Second*5)
+	}
 }
 
 // PurgeWorkflowState implements backend.Backend.
@@ -892,12 +976,22 @@ func (abe *Actors) purgeWorkflowRemote(ctx context.Context, id api.InstanceID, t
 // Start implements backend.Backend
 func (abe *Actors) Start(ctx context.Context) error {
 	abe.stopped.Store(false)
+	abe.detachedLock.Lock()
+	abe.detached = detached.New(ctx)
+	abe.detachedLock.Unlock()
 	return nil
 }
 
 // Stop implements backend.Backend
 func (abe *Actors) Stop(context.Context) error {
 	abe.stopped.Store(true)
+	abe.detachedLock.Lock()
+	runner := abe.detached
+	abe.detached = nil
+	abe.detachedLock.Unlock()
+	if runner != nil {
+		runner.Close()
+	}
 	return nil
 }
 
@@ -973,6 +1067,10 @@ func (abe *Actors) ActivityActorType() string {
 
 func (abe *Actors) WorkflowActorType() string {
 	return abe.workflowActorType
+}
+
+func (abe *Actors) SetExecutorAvailable(available bool) {
+	abe.pendingTasksBackend.SetExecutorAvailable(available)
 }
 
 // CancelActivityTask implements backend.Backend.
@@ -1185,8 +1283,16 @@ func (abe *Actors) purgeWorkflow(ctx context.Context, id api.InstanceID) error {
 	return nil
 }
 
+const forcePurgeHaltTimeout = 10 * time.Second
+
 func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) error {
-	log.Warnf("Force purging workflow state of '%s'. This can cause corruption if the workflow is being processed", id.String())
+	log.Warnf("Force purging workflow state of '%s'. This can cause corruption if the workflow is being processed, and a workflow actor resident on another host is not evicted", id.String())
+
+	// Evict the resident actors first: deactivation takes the turn lock, so
+	// the purge is ordered after any in-flight turn commits and the load
+	// below covers what that turn wrote. Nothing is left serving or writing
+	// from a cache of the purged state.
+	abe.haltPurgedActors(ctx, id)
 
 	astate, err := abe.actors.State(ctx)
 	if err != nil {
@@ -1198,11 +1304,21 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 
 	s, err := state.LoadWorkflowState(ctx, astate, id.String(), state.Options{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
+		Signer:            abe.signer,
 	})
 	if err != nil {
-		return err
+		// Force purge is the escape hatch for instances that cannot be
+		// handled normally, which includes tampered or misconfigured signed
+		// state: purge the loaded rows anyway rather than refusing.
+		var verifyErr *staterrors.VerificationError
+		var configErr *staterrors.ConfigurationError
+		if s == nil || (!errors.As(err, &verifyErr) && !errors.As(err, &configErr)) {
+			return err
+		}
+		log.Warnf("Force purging workflow '%s' whose state failed signature verification or signing configuration checks: %v", id.String(), err)
 	}
 
 	req, err := s.GetPurgeRequest(id.String())
@@ -1246,4 +1362,31 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 			})
 		},
 	)
+}
+
+// haltPurgedActors evicts this instance's workflow actor from this host,
+// through the actor itself so no table-wide lock is held while it waits
+// for an in-flight turn. Best effort: force purge is the escape hatch for
+// wedged instances, so a halt that cannot take the turn lock in time is
+// logged and the purge proceeds. Activity actors are left alone: their
+// result lands on a cold workflow actor that finds no state, and halting
+// them spawns claim guards that would write after the purge.
+func (abe *Actors) haltPurgedActors(ctx context.Context, id api.InstanceID) {
+	atable, err := abe.actors.Table(ctx)
+	if err != nil || atable == nil {
+		return
+	}
+	if !atable.ActorExists(abe.workflowActorType, id.String()) {
+		return
+	}
+	target, err := atable.GetOrCreate(abe.workflowActorType, id.String())
+	if err != nil {
+		log.Warnf("Force purge of '%s': cannot resolve the workflow actor to evict: %v", id, err)
+		return
+	}
+	hctx, cancel := context.WithTimeout(ctx, forcePurgeHaltTimeout)
+	defer cancel()
+	if err := target.Deactivate(hctx); err != nil {
+		log.Warnf("Force purge of '%s': failed to halt the resident actor, stale in-memory state remains until the next write or idle reap: %v", id, err)
+	}
 }

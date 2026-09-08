@@ -22,11 +22,91 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
+	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets/fake"
 )
+
+type stubTimerStorage struct {
+	sweeps   []func(actorType, actorID string) bool
+	onDelete func()
+}
+
+func (s *stubTimerStorage) Close() error                                { return nil }
+func (s *stubTimerStorage) Create(context.Context, *api.Reminder) error { return nil }
+func (s *stubTimerStorage) Delete(context.Context, string)              {}
+
+func (s *stubTimerStorage) DeleteFunc(_ context.Context, fn func(actorType, actorID string) bool) {
+	s.sweeps = append(s.sweeps, fn)
+	if s.onDelete != nil {
+		s.onDelete()
+	}
+}
+
+func Test_HaltDeletesTimers(t *testing.T) {
+	newTable := func(t *testing.T, storage internaltimers.Storage, factory *fake.FakeFactory) table.Interface {
+		t.Helper()
+		tble := table.New(table.Options{
+			ReentrancyStore: reentrancystore.New(),
+			Timers:          func() internaltimers.Storage { return storage },
+		})
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "test1", Factory: factory}},
+		})
+		return tble
+	}
+
+	t.Run("HaltAll sweeps every timer before halting actors", func(t *testing.T) {
+		storage := &stubTimerStorage{}
+		var order []string
+		storage.onDelete = func() { order = append(order, "sweep") }
+		factory := fake.NewFactory().WithHaltAll(func(context.Context) error {
+			order = append(order, "halt")
+			return nil
+		})
+
+		tble := newTable(t, storage, factory)
+		require.NoError(t, tble.HaltAll(t.Context()))
+
+		require.Len(t, storage.sweeps, 1)
+		assert.True(t, storage.sweeps[0]("any-type", "any-id"))
+		assert.Equal(t, []string{"sweep", "halt"}, order)
+	})
+
+	t.Run("HaltNonHosted sweeps only timers of non-hosted actors", func(t *testing.T) {
+		storage := &stubTimerStorage{}
+		tble := newTable(t, storage, fake.NewFactory())
+
+		require.NoError(t, tble.HaltNonHosted(t.Context(), func(req *api.LookupActorRequest) bool {
+			return req.ActorID == "hosted"
+		}))
+
+		require.Len(t, storage.sweeps, 1)
+		assert.False(t, storage.sweeps[0]("test1", "hosted"))
+		assert.True(t, storage.sweeps[0]("test1", "moved"))
+	})
+
+	t.Run("UnRegisterActorTypes sweeps only the removed types", func(t *testing.T) {
+		storage := &stubTimerStorage{}
+		tble := newTable(t, storage, fake.NewFactory())
+
+		require.NoError(t, tble.UnRegisterActorTypes("test1", "notregistered"))
+
+		require.Len(t, storage.sweeps, 1)
+		assert.True(t, storage.sweeps[0]("test1", "a"))
+		assert.True(t, storage.sweeps[0]("notregistered", "a"))
+		assert.False(t, storage.sweeps[0]("other", "a"))
+	})
+
+	t.Run("nil timers option does not panic", func(t *testing.T) {
+		tble := table.New(table.Options{ReentrancyStore: reentrancystore.New()})
+		require.NoError(t, tble.HaltAll(t.Context()))
+		require.NoError(t, tble.HaltNonHosted(t.Context(), func(*api.LookupActorRequest) bool { return true }))
+	})
+}
 
 func Test_GetOrCreate_NotRegistered(t *testing.T) {
 	tble := table.New(table.Options{

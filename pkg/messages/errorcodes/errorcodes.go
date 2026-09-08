@@ -59,6 +59,8 @@ var (
 	ActorReminderNotFound         = ErrorCode{"ERR_ACTOR_REMINDER_NOT_FOUND", "", CategoryActor}      // Actor reminder not found
 	ActorReminderAlreadyExists    = ErrorCode{"ERR_ACTOR_REMINDER_ALREADY_EXISTS", "", CategoryActor} // Actor reminder already exists
 	ActorTimerCreate              = ErrorCode{"ERR_ACTOR_TIMER_CREATE", "", CategoryActor}            // Error creating actor timer
+	ActorTimerDelete              = ErrorCode{"ERR_ACTOR_TIMER_DELETE", "", CategoryActor}            // Error deleting actor timer
+	ActorTimerNotOwned            = ErrorCode{"ERR_ACTOR_TIMER_NOT_OWNED", "", CategoryActor}         // Timer operation on an actor not owned by this host
 	ErrActorNoAppChannel          = ErrorCode{"ERR_ACTOR_NO_APP_CHANNEL", "", CategoryActor}          // App channel not initialized
 	ErrActorMaxStackDepthExceeded = ErrorCode{"ERR_ACTOR_STACK_DEPTH", "", CategoryActor}             // Maximum actor call stack depth exceeded
 	ErrActorNoPlacement           = ErrorCode{"ERR_ACTOR_NO_PLACEMENT", "", CategoryActor}            // Placement service not configured
