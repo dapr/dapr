@@ -113,7 +113,7 @@ global:
       #
       # Toggling this in either direction needs no sidecar restarts: on
       # enabling, sidecars adopt scheduler placement once the placement
-      # service stands down, and on disabling they return to the redeployed
+      # service is removed, and on disabling they return to the redeployed
       # placement service on their own.
       enabled: false
 
