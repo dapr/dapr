@@ -62,15 +62,15 @@ func (p *presence) Run(t *testing.T, ctx context.Context) {
 		PlacementAddresses:         []string{p.place.Address()},
 	})
 
-	leader := func(c *assert.CollectT) bool {
+	leader := func() bool {
 		stream, err := p.sched.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
-		if !assert.NoError(c, err) {
+		if err != nil {
 			return false
 		}
 		//nolint:errcheck
 		defer stream.CloseSend()
 		resp, err := stream.Recv()
-		if !assert.NoError(c, err) {
+		if err != nil {
 			return false
 		}
 		for _, host := range resp.GetHosts() {
@@ -103,6 +103,6 @@ func (p *presence) Run(t *testing.T, ctx context.Context) {
 
 	p.place.Cleanup(t)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.True(c, leader(c))
+		assert.True(c, leader())
 	}, time.Second*30, time.Millisecond*50)
 }
