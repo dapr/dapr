@@ -75,6 +75,7 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 			Namespace:         o.namespace,
 			WorkflowActorType: o.actorType,
 			ActivityActorType: o.activityActorType,
+			Signer:            o.signer,
 		})
 		o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
 		o.ometa = o.ometaFromState(o.rstate, startEvent.GetExecutionStarted())
@@ -145,14 +146,26 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		return fmt.Errorf("a terminated workflow with ID '%s' is already awaiting an activity result", o.actorID)
 	}
 
-	if state.ParentNotifyPending {
-		// The parent re-dispatching the creation that produced this instance
-		// (a crash before it saved) is a replay, not a new workflow: the
-		// completion it is owed is pending and re-sent by its driver.
-		if same, _ := o.isSameParentCreation(state, startEvent); same {
-			log.Debugf("Workflow actor '%s': ignoring duplicate child workflow creation for a completed child whose completion is still pending", o.actorID)
+	// The parent re-dispatching the creation that produced this instance (a
+	// crash before it saved) is a replay, not a new workflow, and re-running
+	// the child would execute its activities twice. A pending completion is
+	// re-sent by its driver. A delivered one may have been dropped: a parent
+	// that never committed the creation has no record of the task, so under
+	// signing it refused the completion as unknown. It is owed again, and
+	// the re-send lands once the parent's turn has committed the creation,
+	// since the delivery waits on the parent's lock.
+	if same, _ := o.isSameParentCreation(state, startEvent); same {
+		log.Debugf("Workflow actor '%s': ignoring duplicate child workflow creation for a completed child", o.actorID)
+		if state.ParentNotifyPending {
 			return nil
 		}
+		state.SetParentNotifyPending(true)
+		if err := o.signAndSaveState(ctx, state); err != nil {
+			return err
+		}
+		return o.assertParentNotifyReminder(o.getExecutionStartedEvent(state).GetName())
+	}
+	if state.ParentNotifyPending {
 		// Unavailable rather than AlreadyExists: a parent that continued as
 		// new and reuses the id retries, and its current execution acks the
 		// pending completion as a straggler, which then frees the id.
@@ -189,13 +202,23 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 }
 
 func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *backend.HistoryEvent, state *wfenginestate.State) error {
-	// Save BEFORE creating the wake-up reminder, mirroring AddWorkflowEvent:
-	// a reminder created first can fire on another host before the save
-	// commits, ack SUCCESS off the empty inbox and be deleted, stranding the
-	// workflow once the save lands. Saving first makes the failure
-	// recoverable: the reminder create retries until the caller's context
-	// dies, and a create retry re-asserts it by deterministic name from the
-	// saved event.
+	// Save the inbox event BEFORE creating the wake-up reminder, mirroring
+	// AddWorkflowEvent. With the reminder created first, under placement
+	// rebalance the reminder can fire on another host before the save
+	// commits: it loads nil/stale state, acks SUCCESS, and the scheduler
+	// deletes the reminder. Once the save then commits, the workflow is
+	// stranded in RUNNING with no driver.
+	//
+	// Saving first inverts the failure into one that is recoverable: if the
+	// save succeeds but the reminder Create fails, the error surfaces to the
+	// caller, and any retry of the create lands in createIfCompleted's
+	// pending-start path, which re-asserts the reminder by its deterministic
+	// name derived from the saved inbox event.
+	//
+	// The reminder schedules the actual workflow execution rather than
+	// running it on this thread, so the client is not blocked while the
+	// workflow logic runs.
+	state.KeepCreationInput(startEvent.GetExecutionStarted())
 	state.AddToInbox(startEvent)
 	if err := o.signAndSaveState(ctx, state); err != nil {
 		return err

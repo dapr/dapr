@@ -133,8 +133,8 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 		if assert.NoError(c, ferr) {
 			assert.Equal(c, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 		}
-		assert.Positive(c, r.workflow.Scheduler().JobKeyCount(t, ctx, "parent-notify"))
 	}, time.Second*20, time.Millisecond*10)
+	r.workflow.Scheduler().WaitJobKeyCount(t, ctx, "parent-notify", func(n int) bool { return n > 0 })
 
 	r.workflow.Dapr().RestartGraceful(t, ctx)
 	r.workflow.WaitUntilRunning(t, ctx)
@@ -155,7 +155,5 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 		}
 	}
 	assert.Equal(t, 1, completions)
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Zero(c, r.workflow.Scheduler().JobKeyCount(t, ctx, "parent-notify"))
-	}, time.Second*20, time.Millisecond*10)
+	r.workflow.Scheduler().WaitJobKeyCount(t, ctx, "parent-notify", func(n int) bool { return n == 0 })
 }

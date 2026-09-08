@@ -537,6 +537,19 @@ func Test_createWorkflowInstance_completedChildWithPendingNotification(t *testin
 		assert.Empty(t, h.ops, "no reset, no new start")
 	})
 
+	t.Run("the creating parent's replay after delivery owes the completion again", func(t *testing.T) {
+		h := prime(t)
+		h.orch.state.SetParentNotifyPending(false)
+		h.orch.state.ResetChangeTracking()
+		incoming := startEventFor(instanceID, time.Now(), parentWithExec("exec-a"))
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		assert.Equal(t, []string{"save", "create:" + reminderNameParentNotify}, h.ops,
+			"a parent re-dispatching the creation never committed it, so a delivered completion was dropped: re-arm and re-send, do not re-run the child")
+		assert.True(t, h.orch.state.ParentNotifyPending)
+	})
+
 	t.Run("any other creation is refused, retryably, until the parent acknowledged", func(t *testing.T) {
 		h := prime(t)
 		incoming := startEventFor(instanceID, time.Now(), parentWithExec("exec-b"))
