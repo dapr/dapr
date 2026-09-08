@@ -45,6 +45,7 @@ import (
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 )
 
 const (
@@ -87,14 +88,16 @@ func notifyCompletedEvent(status protos.OrchestrationStatus) *backend.HistoryEve
 // notifyHarness records saves (tagged with the parent-notify operation they
 // carry), parent AddWorkflowEvent calls and reminder creates, in order.
 type notifyHarness struct {
-	lock      sync.Mutex
-	ops       []string
-	calls     []*internalv1pb.InternalInvokeRequest
-	callErr   error
-	purged    atomic.Bool
-	staleETag atomic.Bool
-	rows      map[string][]byte
-	orch      *orchestrator
+	lock       sync.Mutex
+	ops        []string
+	calls      []*internalv1pb.InternalInvokeRequest
+	callErr    error
+	purged     atomic.Bool
+	confirmErr atomic.Bool
+	metaReads  atomic.Int32
+	staleETag  atomic.Bool
+	rows       map[string][]byte
+	orch       *orchestrator
 }
 
 func (h *notifyHarness) saveTag(req *actorapi.TransactionalRequest) string {
@@ -138,6 +141,9 @@ func newNotifyHarness(t *testing.T, history, inbox []*backend.HistoryEvent, pend
 		WithGetFn(func(_ context.Context, req *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
 			if req.Key == wfenginestate.MetadataKey {
 				if h.purged.Load() {
+					if h.confirmErr.Load() && h.metaReads.Add(1) > 1 {
+						return nil, errors.New("store unavailable")
+					}
 					return &actorapi.StateResponse{}, nil
 				}
 				if h.staleETag.Load() {
@@ -289,6 +295,20 @@ func Test_runWorkflow_terminalTurnSavesBeforeParentNotify(t *testing.T) {
 		require.ErrorIs(t, err, api.ErrInstanceNotFound)
 		assert.Equal(t, todo.RunCompletedFalse, completed)
 		assert.Equal(t, []string{"save+notify"}, h.snapshot(), "the parent must not learn of a completion whose state is gone")
+	})
+
+	t.Run("an unconfirmed purge retries the turn rather than notifying", func(t *testing.T) {
+		t.Parallel()
+		h := newCompletingHarness(t)
+		seen := "etag-seen"
+		h.orch.state.SetMetadataETag(&seen)
+		h.purged.Store(true)
+		h.confirmErr.Store(true)
+		completed, err := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-er-1"})
+		require.Error(t, err)
+		assert.True(t, wferrors.IsRecoverable(err))
+		assert.Equal(t, todo.RunCompletedFalse, completed)
+		assert.Equal(t, []string{"save+notify"}, h.snapshot(), "nothing runs after the save while the purge is unconfirmed")
 	})
 
 	t.Run("a new instance whose row is not readable yet is not a purge", func(t *testing.T) {
@@ -585,12 +605,15 @@ func Test_attestationInput(t *testing.T) {
 	t.Parallel()
 
 	started := &protos.ExecutionStartedEvent{Input: wrapperspb.String(`"gen2"`)}
-	state := wfenginestate.NewState(wfenginestate.Options{AppID: "testapp", WorkflowActorType: "dapr.internal.default.testapp.workflow", ActivityActorType: "dapr.internal.default.testapp.activity"})
-	assert.Equal(t, `"gen2"`, attestationInput(state, started).GetValue(), "no ContinueAsNew: the start input")
+	opts := wfenginestate.Options{AppID: "testapp", WorkflowActorType: "dapr.internal.default.testapp.workflow", ActivityActorType: "dapr.internal.default.testapp.activity", Signer: &signer.Signer{}}
+	state := wfenginestate.NewState(opts)
+	assert.Equal(t, `"gen2"`, attestationInput(state, started).GetValue(), "nothing recorded: the start input")
 
-	state.SetCreationInput(wrapperspb.String(`"original"`))
-	assert.Equal(t, `"original"`, attestationInput(state, started).GetValue(), "after ContinueAsNew: the input the parent created the child with")
+	parent := &protos.ParentInstanceInfo{WorkflowInstance: &protos.WorkflowInstance{InstanceId: notifyParentID}}
+	state.KeepCreationInput(&protos.ExecutionStartedEvent{Input: wrapperspb.String(`"original"`), ParentInstance: parent})
+	assert.Equal(t, `"original"`, attestationInput(state, started).GetValue(), "recorded at creation: the input the parent created the child with")
 
-	state.SetCreationInput(nil)
-	assert.Empty(t, attestationInput(state, started).GetValue(), "a child created without input attests an empty input, not the continued one")
+	empty := wfenginestate.NewState(opts)
+	empty.KeepCreationInput(&protos.ExecutionStartedEvent{ParentInstance: parent})
+	assert.Empty(t, attestationInput(empty, started).GetValue(), "a child created without input attests an empty input, not the continued one")
 }
