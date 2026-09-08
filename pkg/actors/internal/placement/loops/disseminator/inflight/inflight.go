@@ -267,13 +267,16 @@ func (i *Inflight) HasTables(types []string) bool {
 	return true
 }
 
-// ResetSession clears the per-type tables and versions on stream loss: a
-// new session starts from its authoritative snapshot, which carries no
-// tombstones for types deleted while disconnected. In-session removals are
-// tombstones handled by Merge.
+// ResetSession clears the tables and versions of both protocols on stream
+// loss: a new session starts from its authoritative snapshot, which carries
+// no tombstones for types deleted while disconnected, and a session under
+// the other protocol must not answer lookups from the tables the last one
+// left behind. In-session removals are tombstones handled by Merge.
 func (i *Inflight) ResetSession() {
 	clear(i.v2Entries)
 	clear(i.versionByType)
+	i.hashTable.Version = ""
+	i.hashTable.Entries = make(map[string]*hashing.Consistent)
 }
 
 // LockTypes marks the given actor types as blocked. New acquires for these
