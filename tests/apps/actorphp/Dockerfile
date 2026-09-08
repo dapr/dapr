@@ -1,4 +1,4 @@
-FROM php:8.0-cli
+FROM php:8.4-cli
 
 # curl, json and mbstring (the only extensions dapr/php-sdk requires) are already
 # built into the official php image. Composer falls back to the unzip binary
@@ -9,7 +9,6 @@ RUN mkdir -p /app
 WORKDIR /app
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 COPY composer.json /app/composer.json
-COPY composer.lock /app/composer.lock
 RUN composer install --no-dev -o -n
 
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"

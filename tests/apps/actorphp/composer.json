@@ -10,8 +10,9 @@
         }
     ],
     "minimum-stability": "dev",
+    "prefer-stable": true,
     "require": {
-        "dapr/php-sdk": "1.*"
+        "dapr/php-sdk": "dev-main#82c7283a73cf96e27b93383531094cf82cd2c6c4"
     },
     "autoload": {
         "psr-4": {
