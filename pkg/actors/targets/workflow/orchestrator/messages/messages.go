@@ -72,10 +72,10 @@ func (m *Messages) CallCreateWorkflowStateMessage(ctx context.Context, events []
 		}
 	}
 
-	return m.callStateMessages(ctx, msgs, historyEvents, targets, actionIDs, todo.CreateWorkflowInstanceMethod)
+	return m.callStateMessages(ctx, msgs, historyEvents, targets, actionIDs, todo.CreateWorkflowInstanceMethod, nil)
 }
 
-func (m *Messages) CallAddEventStateMessage(ctx context.Context, events []*backend.WorkflowRuntimeStateMessage) DispatchResult {
+func (m *Messages) CallAddEventStateMessage(ctx context.Context, events []*backend.WorkflowRuntimeStateMessage, md map[string][]string) DispatchResult {
 	msgs := make([]proto.Message, len(events))
 	historyEvents := make([]*backend.HistoryEvent, len(events))
 	targets := make([]string, len(events))
@@ -86,13 +86,13 @@ func (m *Messages) CallAddEventStateMessage(ctx context.Context, events []*backe
 		targets[i] = msg.GetTargetInstanceId()
 	}
 
-	return m.callStateMessages(ctx, msgs, historyEvents, targets, nil, todo.AddWorkflowEventMethod)
+	return m.callStateMessages(ctx, msgs, historyEvents, targets, nil, todo.AddWorkflowEventMethod, md)
 }
 
-func (m *Messages) callStateMessages(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, actionIDs []int32, method string) DispatchResult {
+func (m *Messages) callStateMessages(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, actionIDs []int32, method string, md map[string][]string) DispatchResult {
 	var result DispatchResult
 	for i, msg := range msgs {
-		if err := m.callStateMessage(ctx, msg, historyEvents[i], targets[i], method); err != nil {
+		if err := m.callStateMessage(ctx, msg, historyEvents[i], targets[i], method, md); err != nil {
 			eventID := historyEvents[i].GetEventId()
 			if actionIDs != nil {
 				eventID = actionIDs[i]
@@ -104,7 +104,7 @@ func (m *Messages) callStateMessages(ctx context.Context, msgs []proto.Message, 
 	return result
 }
 
-func (m *Messages) callStateMessage(ctx context.Context, msg proto.Message, historyEvent *backend.HistoryEvent, target string, method string) error {
+func (m *Messages) callStateMessage(ctx context.Context, msg proto.Message, historyEvent *backend.HistoryEvent, target string, method string, md map[string][]string) error {
 	b, err := proto.Marshal(msg)
 	if err != nil {
 		return err
@@ -139,20 +139,25 @@ func (m *Messages) callStateMessage(ctx context.Context, msg proto.Message, hist
 
 	log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s||%s'", m.ActorID, method, actorType, target)
 
-	if _, err = m.Router.Call(ctx, internalsv1pb.
+	req := internalsv1pb.
 		NewInternalInvokeRequest(method).
 		WithActor(actorType, target).
 		WithData(b).
-		WithContentType(invokev1.ProtobufContentType),
-	); err != nil {
+		WithContentType(invokev1.ProtobufContentType)
+	if len(md) > 0 {
+		req = req.WithMetadata(md)
+	}
+
+	if _, err = m.Router.Call(ctx, req); err != nil {
 		// ErrInstanceNotFound means the parent deliberately dropped the
 		// completion (purged, tombstoned, or an unmatched straggler after
-		// ContinueAsNew): terminal, since retrying redelivers forever and a
-		// late redelivery can hit a reused task id and be misread as
-		// tampering.
+		// ContinueAsNew), and PermissionDenied that its access policy will
+		// never admit this app's events: terminal either way, since retrying
+		// redelivers forever and a late redelivery can hit a reused task id
+		// and be misread as tampering.
 		if historyEvent != nil &&
 			(historyEvent.GetChildWorkflowInstanceCompleted() != nil || historyEvent.GetChildWorkflowInstanceFailed() != nil) &&
-			IsInstanceNotFound(err) {
+			(IsInstanceNotFound(err) || IsPermissionDenied(err)) {
 			log.Warnf("Workflow actor '%s': parent workflow '%s' dropped this child's completion event; not retrying: %v", m.ActorID, target, err)
 			return nil
 		}
