@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,12 +42,20 @@ func init() {
 // runtime injects the workload's SPIFFE identity (X.509 and JWT SVID sources)
 // into the context of building-block component operations.
 //
-// It relies on the `state.spiffeprobe` state store, an integration-only
-// component compiled into the test daprd via the `state_spiffeprobe` build tag
-// (see tests/integration/framework/binary and cmd/daprd/components), whose Get
-// reports which SVID sources were present in its operation context. We drive it
-// through the normal state API so the request travels the real path:
-// gRPC server -> universal API -> resiliency runner -> component.
+// It covers two distinct paths, which are wired independently:
+//
+//   - Data plane operations, via the `state.spiffeprobe` state store whose Get
+//     reports which SVID sources were present in its operation context. Driven
+//     through the normal state API so the request travels the real path:
+//     gRPC server -> universal API -> resiliency runner -> component.
+//   - Secret resolution, via the `secretstores.spiffeprobe` secret store which
+//     records the sources present when the runtime resolved another component's
+//     secretKeyRef. That happens while components are loading, so the probe
+//     reports what it saw on a later read of a reserved key.
+//
+// Both probes are integration-only components compiled into the test daprd via
+// the `state_spiffeprobe` and `secretstores_spiffeprobe` build tags (see
+// tests/integration/framework/binary and cmd/daprd/components).
 type svidcontext struct {
 	mtlsDaprd  *daprd.Daprd
 	plainDaprd *daprd.Daprd
@@ -63,6 +72,42 @@ spec:
   type: state.spiffeprobe
   version: v1
 `
+
+//nolint:gosec // G101: component YAML, not a credential.
+const spiffeProbeSecretStore = `apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: spiffeprobe-secrets
+spec:
+  type: secretstores.spiffeprobe
+  version: v1
+`
+
+// secretRefComponent resolves a metadata value out of spiffeprobe-secrets. The
+// runtime calls that store's GetSecret while loading this component, before its
+// Init, which is the context the probe records.
+//
+//nolint:gosec // G101: component YAML, not a credential.
+const secretRefComponent = `apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: secretref-store
+spec:
+  type: state.in-memory
+  version: v1
+  metadata:
+  - name: probe
+    secretKeyRef:
+      name: probe-secret
+auth:
+  secretStore: spiffeprobe-secrets
+`
+
+// resolutionReportKey mirrors SpiffeProbeResolutionReportKey in
+// cmd/daprd/components/secretstores_spiffeprobe.go. It is duplicated rather
+// than imported because every file in that package is behind a build tag, so
+// the package has no Go files from the integration suite's point of view.
+const resolutionReportKey = "__resolution__"
 
 func (s *svidcontext) Setup(t *testing.T) []framework.Option {
 	s.sentry = sentry.New(t)
@@ -92,7 +137,7 @@ func (s *svidcontext) Setup(t *testing.T) []framework.Option {
 		daprd.WithPlacementAddresses(s.placement.Address()),
 		daprd.WithSchedulerAddresses(s.scheduler.Address()),
 		daprd.WithEnableMTLS(true),
-		daprd.WithResourceFiles(spiffeProbeComponent),
+		daprd.WithResourceFiles(spiffeProbeComponent, spiffeProbeSecretStore, secretRefComponent),
 	)
 
 	// mTLS disabled: WithSVIDContext is a no-op, so component operations must not
@@ -100,7 +145,7 @@ func (s *svidcontext) Setup(t *testing.T) []framework.Option {
 	// assertion is not vacuous.
 	s.plainDaprd = daprd.New(t,
 		daprd.WithAppID("plain-app"),
-		daprd.WithResourceFiles(spiffeProbeComponent),
+		daprd.WithResourceFiles(spiffeProbeComponent, spiffeProbeSecretStore, secretRefComponent),
 	)
 
 	return []framework.Option{
@@ -128,6 +173,40 @@ func (s *svidcontext) Run(t *testing.T, ctx context.Context) {
 		return got
 	}
 
+	// resolutionProbe reads back which SVID sources the secret store saw while
+	// the runtime resolved secretref-store's secretKeyRef. The referencing
+	// component is parked until its secret store loads, so wait for the probe to
+	// have been called before reading the report.
+	resolutionProbe := func(t *testing.T, d *daprd.Daprd) map[string]string {
+		t.Helper()
+		client := d.GRPCClient(t, ctx)
+		report := func() (map[string]string, error) {
+			resp, err := client.GetSecret(ctx, &rtv1.GetSecretRequest{
+				StoreName: "spiffeprobe-secrets",
+				Key:       resolutionReportKey,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return resp.GetData(), nil
+		}
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			data, err := report()
+			if !assert.NoError(c, err) {
+				return
+			}
+			assert.Equal(c, "true", data["recorded"],
+				"secret resolution has not called the probe secret store yet")
+		}, time.Second*15, time.Millisecond*100)
+
+		// Recorded once during load and never rewritten, so a plain read now is
+		// stable.
+		data, err := report()
+		require.NoError(t, err)
+		return data
+	}
+
 	t.Run("with mTLS the component sees the SVID sources", func(t *testing.T) {
 		got := probe(t, s.mtlsDaprd)
 		assert.True(t, got["x509"], "X.509 SVID source should be in the component operation context")
@@ -138,5 +217,17 @@ func (s *svidcontext) Run(t *testing.T, ctx context.Context) {
 		got := probe(t, s.plainDaprd)
 		assert.False(t, got["x509"], "X.509 SVID source should be absent when mTLS is disabled")
 		assert.False(t, got["jwt"], "JWT SVID source should be absent when mTLS is disabled")
+	})
+
+	t.Run("with mTLS the secret store sees the SVID sources during secret resolution", func(t *testing.T) {
+		got := resolutionProbe(t, s.mtlsDaprd)
+		assert.Equal(t, "true", got["x509"], "X.509 SVID source should be in the secret resolution context")
+		assert.Equal(t, "true", got["jwt"], "JWT SVID source should be in the secret resolution context")
+	})
+
+	t.Run("without mTLS the secret store sees no SVID sources during secret resolution", func(t *testing.T) {
+		got := resolutionProbe(t, s.plainDaprd)
+		assert.Equal(t, "false", got["x509"], "X.509 SVID source should be absent when mTLS is disabled")
+		assert.Equal(t, "false", got["jwt"], "JWT SVID source should be absent when mTLS is disabled")
 	})
 }

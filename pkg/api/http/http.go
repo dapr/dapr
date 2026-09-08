@@ -101,6 +101,7 @@ const (
 	workflowComponent        = "workflowComponent"
 	workflowName             = "workflowName"
 	instanceID               = "instanceID"
+	workflowAppID            = "appID"
 	eventName                = "eventName"
 	consistencyParam         = "consistency"
 	concurrencyParam         = "concurrency"

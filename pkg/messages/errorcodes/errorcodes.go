@@ -59,6 +59,8 @@ var (
 	ActorReminderNotFound         = ErrorCode{"ERR_ACTOR_REMINDER_NOT_FOUND", "", CategoryActor}      // Actor reminder not found
 	ActorReminderAlreadyExists    = ErrorCode{"ERR_ACTOR_REMINDER_ALREADY_EXISTS", "", CategoryActor} // Actor reminder already exists
 	ActorTimerCreate              = ErrorCode{"ERR_ACTOR_TIMER_CREATE", "", CategoryActor}            // Error creating actor timer
+	ActorTimerDelete              = ErrorCode{"ERR_ACTOR_TIMER_DELETE", "", CategoryActor}            // Error deleting actor timer
+	ActorTimerNotOwned            = ErrorCode{"ERR_ACTOR_TIMER_NOT_OWNED", "", CategoryActor}         // Timer operation on an actor not owned by this host
 	ErrActorNoAppChannel          = ErrorCode{"ERR_ACTOR_NO_APP_CHANNEL", "", CategoryActor}          // App channel not initialized
 	ErrActorMaxStackDepthExceeded = ErrorCode{"ERR_ACTOR_STACK_DEPTH", "", CategoryActor}             // Maximum actor call stack depth exceeded
 	ErrActorNoPlacement           = ErrorCode{"ERR_ACTOR_NO_PLACEMENT", "", CategoryActor}            // Placement service not configured
@@ -82,6 +84,7 @@ var (
 	WorkflowInstanceIDNotFound        = ErrorCode{"ERR_INSTANCE_ID_NOT_FOUND", "", CategoryWorkflow}        // Workflow instance ID not found
 	WorkflowInstanceIDProvidedMissing = ErrorCode{"ERR_INSTANCE_ID_PROVIDED_MISSING", "", CategoryWorkflow} // Missing workflow instance ID
 	WorkflowInstanceIDTooLong         = ErrorCode{"ERR_INSTANCE_ID_TOO_LONG", "", CategoryWorkflow}         // Workflow instance ID too long
+	WorkflowAppIDInvalid              = ErrorCode{"ERR_WORKFLOW_APP_ID_INVALID", "", CategoryWorkflow}      // Invalid workflow app ID. (Only alphanumeric, dash and underscore characters are allowed)
 
 	// ### State management API
 	StateTransaction                   = ErrorCode{"ERR_STATE_TRANSACTION", "", CategoryState}                                                 // Error in state transaction

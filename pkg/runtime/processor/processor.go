@@ -204,6 +204,7 @@ func New(opts Options) *Processor {
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,
 		OperatorClient: opts.OperatorClient,
+		Security:       opts.Security,
 	})
 
 	bindingProc := binding.New(binding.Options{

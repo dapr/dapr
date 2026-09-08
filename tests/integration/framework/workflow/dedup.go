@@ -53,6 +53,61 @@ func InjectInboxEvent(t *testing.T, ctx context.Context, db *sqlite.SQLite, dapr
 	db.WriteStateValue(t, ctx, key, updated)
 }
 
+// InsertHistoryEvent inserts evt into the workflow actor's persisted history
+// immediately before the first event matching pred, shifting that event and
+// all later history-* keys up by one. The metadata's HistoryLength is
+// incremented by one. The caller is responsible for invalidating the actor's
+// in-memory cache (e.g. via daprd.Restart) before relying on the injection.
+func InsertHistoryEvent(t *testing.T, ctx context.Context, db *sqlite.SQLite, daprd *daprd.Daprd, instanceID string, evt *protos.HistoryEvent, pred func(*protos.HistoryEvent) bool) {
+	t.Helper()
+
+	keyPrefix := workflowActorKeyPrefix(daprd, instanceID)
+
+	values := db.ReadStateValues(t, ctx, instanceID, "history")
+	target := -1
+	for i, raw := range values {
+		var ev protos.HistoryEvent
+		require.NoError(t, proto.Unmarshal(raw, &ev))
+		if pred(&ev) {
+			target = i
+			break
+		}
+	}
+	require.GreaterOrEqual(t, target, 0, "no history event matched the predicate")
+
+	conn := db.GetConnection(t)
+	tableName := db.TableName()
+
+	for i := len(values) - 1; i >= target; i-- {
+		oldKey := fmt.Sprintf("%shistory-%06d", keyPrefix, i)
+		newKey := fmt.Sprintf("%shistory-%06d", keyPrefix, i+1)
+		//nolint:gosec
+		_, err := conn.ExecContext(ctx, "UPDATE "+tableName+" SET key = ? WHERE key = ?", newKey, oldKey)
+		require.NoError(t, err)
+	}
+
+	raw, err := proto.Marshal(evt)
+	require.NoError(t, err)
+	db.WriteStateValue(t, ctx, fmt.Sprintf("%shistory-%06d", keyPrefix, target), raw)
+
+	key, metaRaw := db.ReadStateValue(t, ctx, instanceID, "metadata")
+	var metadata backend.BackendWorkflowStateMetadata
+	require.NoError(t, proto.Unmarshal(metaRaw, &metadata))
+	metadata.HistoryLength++
+	updatedMeta, err := proto.Marshal(&metadata)
+	require.NoError(t, err)
+	db.WriteStateValue(t, ctx, key, updatedMeta)
+}
+
+// IsEventRaisedFor returns a predicate that matches an EventRaised event with
+// the given name.
+func IsEventRaisedFor(name string) func(*protos.HistoryEvent) bool {
+	return func(e *protos.HistoryEvent) bool {
+		er := e.GetEventRaised()
+		return er != nil && er.GetName() == name
+	}
+}
+
 // RemoveHistoryEvent deletes the first history event matching pred and
 // renumbers any subsequent history-* keys to keep the sequence contiguous.
 // The metadata's HistoryLength is decremented by one.

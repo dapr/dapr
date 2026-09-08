@@ -140,6 +140,15 @@ namespace DaprDemoActor
                     return Task.FromResult("denied-ok");
                 });
 
+                // Long-running workflow for cross-app operations e2e tests:
+                // stays RUNNING until the "Finish" external event arrives and
+                // returns its payload.
+                options.RegisterWorkflow<string, string>("WaitForFinish", implementation: async (context, input) =>
+                {
+                    var result = await context.WaitForExternalEventAsync<string>("Finish");
+                    return result;
+                });
+
             });
 
 

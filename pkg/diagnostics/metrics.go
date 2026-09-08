@@ -58,6 +58,10 @@ var payloadRatioDistribution = view.Distribution(0.1, 0.25, 0.5, 0.75, 0.9, 0.95
 func InitMetrics(meter view.Meter, appID, namespace string, metricSpec config.MetricSpec) error {
 	meter.Start()
 
+	if err := utils.CreateRulesMap(metricSpec.Rules); err != nil {
+		return err
+	}
+
 	latencyDistribution := metricSpec.GetLatencyDistribution(log)
 	// Workflow latency views default to the shared latencyDistribution unless
 	// spec.metrics.workflow.latencyDistributionBuckets provides an override.
@@ -99,5 +103,5 @@ func InitMetrics(meter view.Meter, appID, namespace string, metricSpec config.Me
 
 	// Set reporting period of views on the explicit meter
 	meter.SetReportingPeriod(DefaultReportingPeriod)
-	return utils.CreateRulesMap(metricSpec.Rules)
+	return nil
 }

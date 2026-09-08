@@ -65,13 +65,14 @@ func TestGetAppClient_Scaling(t *testing.T) {
 	// Inject a create function that we can track if needed,
 	// but the default one should work fine since we have a real listener.
 
-	// We want to verify that calling GetAppClient 101 times creates 2 connections
-	// because the first one hit the 100 stream limit.
+	// We want to verify that exceeding the per-connection cap by one
+	// creates a second connection.
+	total := grpcMaxConcurrentStreams + 1
 
-	conns := make([]grpc.ClientConnInterface, 0, 101)
-	teardowns := make([]func(bool), 0, 101)
+	conns := make([]grpc.ClientConnInterface, 0, total)
+	teardowns := make([]func(bool), 0, total)
 
-	for range 101 {
+	for range total {
 		var c grpc.ClientConnInterface
 		var teardown func(bool)
 		c, teardown, err = mgr.GetAppClient()
@@ -86,7 +87,7 @@ func TestGetAppClient_Scaling(t *testing.T) {
 	}
 
 	// Should have exactly 2 unique connections
-	assert.Len(t, uniqueConns, 2, "Expected 2 unique connections for 101 streams")
+	assert.Len(t, uniqueConns, 2, "Expected 2 unique connections for cap+1 streams")
 
 	// Release them all
 	for _, td := range teardowns {
@@ -119,10 +120,11 @@ func TestGetAppClient_BaselineComparison(t *testing.T) {
 		BaseAddress: "127.0.0.1",
 	})
 
-	// Simulate 250 requests staying open (like long-running streams)
-	conns := make([]grpc.ClientConnInterface, 250)
-	teardowns := make([]func(bool), 250)
-	for i := range 250 {
+	// Simulate cap*2.5 requests staying open (like long-running streams)
+	total := grpcMaxConcurrentStreams * 5 / 2
+	conns := make([]grpc.ClientConnInterface, total)
+	teardowns := make([]func(bool), total)
+	for i := range total {
 		c, td, err := mgr.GetAppClient()
 		require.NoError(t, err)
 		conns[i] = c
@@ -134,7 +136,7 @@ func TestGetAppClient_BaselineComparison(t *testing.T) {
 		uniqueConns[c] = struct{}{}
 	}
 
-	assert.Len(t, uniqueConns, 3, "Expected 3 unique connections for 250 streams")
+	assert.Len(t, uniqueConns, 3, "Expected 3 unique connections for cap*2.5 streams")
 
 	// Release all connections back to the pool.
 	for _, td := range teardowns {

@@ -40,7 +40,7 @@ type suborchestration struct {
 }
 
 func (s *suborchestration) Setup(t *testing.T) []framework.Option {
-	s.workflow = newClusteredDeployment(t, 2)
+	s.workflow = workflow.NewClustered(t, 2)
 
 	return []framework.Option{
 		framework.WithProcesses(s.workflow),

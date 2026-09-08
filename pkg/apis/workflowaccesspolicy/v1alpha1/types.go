@@ -27,8 +27,10 @@ const kind = "WorkflowAccessPolicy"
 // +genclient:noStatus
 // +kubebuilder:object:root=true
 
-// WorkflowAccessPolicy controls which app IDs are permitted to schedule
-// specific workflows and activities on a target application.
+// WorkflowAccessPolicy controls which app IDs are permitted to perform
+// workflow operations (schedule, terminate, raise, pause, resume, purge, get,
+// rerun) on specific workflows, and to schedule specific activities, on a
+// target application.
 //
 //nolint:recvcheck
 type WorkflowAccessPolicy struct {

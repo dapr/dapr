@@ -21,13 +21,11 @@ import (
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -91,15 +89,8 @@ func (o *orchestrator) createCascadeTerminateReminder(ctx context.Context, child
 		Name:      reminderCascadeTerminate,
 		Data:      data,
 		DueTime:   time.Now().UTC().Format(time.RFC3339Nano),
-		// One shot, retry forever, every second.
-		FailurePolicy: &commonv1pb.JobFailurePolicy{
-			Policy: &commonv1pb.JobFailurePolicy_Constant{
-				Constant: &commonv1pb.JobFailurePolicyConstant{
-					Interval:   durationpb.New(time.Second),
-					MaxRetries: nil,
-				},
-			},
-		},
+		// One shot, retry forever, jittered interval.
+		FailurePolicy: common.RetryForeverPolicy(),
 	})
 }
 
