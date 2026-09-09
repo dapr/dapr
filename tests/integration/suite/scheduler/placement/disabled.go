@@ -61,14 +61,6 @@ func (d *disabled) Run(t *testing.T, ctx context.Context) {
 
 	rstream, err := d.sched.Client(t, ctx).ReportActorTypes(ctx)
 	require.NoError(t, err)
-	require.NoError(t, rstream.Send(&schedulerv1pb.ReportActorTypesRequest{
-		Msg: &schedulerv1pb.ReportActorTypesRequest_Report{Report: &schedulerv1pb.ActorHost{
-			Address:    "127.0.0.1:40001",
-			AppId:      "myapp",
-			Namespace:  "default",
-			ActorTypes: []string{"myactortype"},
-		}},
-	}))
 	_, err = rstream.Recv()
 	require.Equal(t, codes.Unimplemented, status.Code(err))
 }

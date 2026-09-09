@@ -154,7 +154,8 @@ func (c *cron) Run(ctx context.Context) error {
 
 	var leaderLoop loop.Interface[[]*anypb.Any]
 	c.connectionPool = pool.New(pool.Options{
-		Cron: c.etcdcron,
+		Cron:             c.etcdcron,
+		PlacementEnabled: c.host.GetSchedulerPlacementEnabled(),
 		// A nil event re-broadcasts the last leadership table with its
 		// placement fields recomputed under the new capability state.
 		OnSchedulerPlacementCapabilityChange: func() {
