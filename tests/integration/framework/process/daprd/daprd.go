@@ -602,6 +602,17 @@ func (d *Daprd) SignalHUP(t *testing.T) {
 	d.exec.SignalHUP(t)
 }
 
+// ActiveActorCount returns the number of live actors of actorType reported by
+// the actor runtime, and whether the type is hosted at all.
+func (d *Daprd) ActiveActorCount(t assert.TestingT, ctx context.Context, actorType string) (int, bool) {
+	for _, a := range d.GetMetaActorRuntime(t, ctx).ActiveActors {
+		if a.Type == actorType {
+			return a.Count, true
+		}
+	}
+	return 0, false
+}
+
 // WaitUntilActorTypeHosted blocks until the actor runtime reports actorType
 // among its hosted types. A restarted daprd re-registers its actor types
 // after it becomes healthy, so an invocation right after WaitUntilRunning can
