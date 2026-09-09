@@ -15,6 +15,7 @@ package daprd
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/actors"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/binarystore"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/binding"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/config"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/conversation"
