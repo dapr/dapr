@@ -15,6 +15,7 @@ package activity
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strconv"
 	"sync"
@@ -166,7 +167,12 @@ func (f *factory) driveActivity(driveCtx context.Context, actorID string, invoca
 		}
 		diag.DefaultWorkflowMonitoring.WorkflowLocalActivityDrive(context.Background(), diag.StatusFailed, elapsed)
 
-		if driveCtx.Err() != nil || attempt >= localDriveMaxAttempts {
+		// A cancelled invocation was cut by the actor lifecycle (a placement
+		// drain force-cancel), not by the app: the execution and its publish
+		// watcher stay live here. A retry would route to the new placement
+		// owner, which runs the body again once the claim record's retention
+		// lapses.
+		if driveCtx.Err() != nil || attempt >= localDriveMaxAttempts || errors.Is(err, context.Canceled) {
 			break
 		}
 
@@ -183,10 +189,16 @@ func (f *factory) driveActivity(driveCtx context.Context, actorID string, invoca
 	// reminder that can duplicate the body on a new placement owner; skip,
 	// the janitor re-dispatch covers a lost delivery.
 	key := inflight.Key(actorID, invocation.GetHistoryEvent())
-	if call, ok := f.inflight.Peek(key); ok && !call.Settled() {
-		log.Infof("Activity actor '%s': local drive aborted but its execution claim is live; skipping the durable-reminder escalation", actorID)
-		diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusEscalateSkipped)
-		return
+	if call, ok := f.inflight.Peek(key); ok {
+		if !call.Settled() {
+			log.Infof("Activity actor '%s': local drive aborted but its execution claim is live; skipping the durable-reminder escalation", actorID)
+			diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusEscalateSkipped)
+			return
+		}
+		if call.Err() == nil {
+			// The cancelled invocation's watcher already published.
+			return
+		}
 	}
 
 	log.Warnf("Activity actor '%s': local drive failed; escalating to a durable run-activity reminder: %v", actorID, err)

@@ -25,6 +25,7 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -213,6 +214,68 @@ func Test_driveActivity_escalatesImmediatelyOnCancel(t *testing.T) {
 	h.fact.detached.Wait()
 
 	assert.Len(t, h.snapshotCalls(), 1, "driveCtx cancellation must not be retried locally")
+}
+
+func Test_driveActivity_invocationCancelNotRetried(t *testing.T) {
+	t.Parallel()
+
+	key := inflight.Key("wf::3", testInvocation().GetHistoryEvent())
+
+	t.Run("live claim: no retry, no escalation", func(t *testing.T) {
+		t.Parallel()
+		h := newDriveHarness(t)
+		h.callErr = context.Canceled
+
+		call, owner := h.fact.inflight.Acquire(key)
+		require.True(t, owner)
+		t.Cleanup(func() { call.Finish(nil) })
+
+		a := h.fact.GetOrCreate("wf::3").(*activity)
+		name := testActivityName
+		require.True(t, a.localDrive(testInvocation(), time.Now().Add(-time.Second), &name))
+		h.fact.driveWG.Wait()
+		h.fact.detached.Wait()
+
+		assert.Len(t, h.snapshotCalls(), 1, "a drain-cancelled invocation must not be retried: the retry routes to the new placement owner")
+		assert.Empty(t, h.sched.snapshotCreates())
+	})
+
+	t.Run("published claim: no retry, no escalation", func(t *testing.T) {
+		t.Parallel()
+		h := newDriveHarness(t)
+		h.callErr = context.Canceled
+
+		call, owner := h.fact.inflight.Acquire(key)
+		require.True(t, owner)
+		call.Finish(nil)
+		h.fact.inflight.ReleaseAfter(key, call, time.Minute)
+
+		a := h.fact.GetOrCreate("wf::3").(*activity)
+		name := testActivityName
+		require.True(t, a.localDrive(testInvocation(), time.Now().Add(-time.Second), &name))
+		h.fact.driveWG.Wait()
+		h.fact.detached.Wait()
+
+		assert.Len(t, h.snapshotCalls(), 1)
+		assert.Empty(t, h.sched.snapshotCreates(), "the watcher already published; nothing to recover")
+	})
+
+	t.Run("no claim: no retry, escalates once", func(t *testing.T) {
+		t.Parallel()
+		h := newDriveHarness(t)
+		h.callErr = context.Canceled
+
+		a := h.fact.GetOrCreate("wf::3").(*activity)
+		name := testActivityName
+		require.True(t, a.localDrive(testInvocation(), time.Now().Add(-time.Second), &name))
+		assert.Eventually(t, func() bool {
+			return len(h.sched.snapshotCreates()) == 1
+		}, time.Second*5, time.Millisecond*10)
+		h.fact.driveWG.Wait()
+		h.fact.detached.Wait()
+
+		assert.Len(t, h.snapshotCalls(), 1)
+	})
 }
 
 func Test_escalateActivity_skippedOnShutdown(t *testing.T) {
