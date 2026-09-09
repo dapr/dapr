@@ -21,6 +21,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -272,7 +273,8 @@ func Test_runWorkflow_terminalTurnSavesBeforeParentNotify(t *testing.T) {
 		h := newCompletingHarness(t)
 		completed, err := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-er-1"})
 		require.NoError(t, err)
-		assert.Equal(t, todo.RunCompletedTrue, completed)
+		assert.Equal(t, todo.RunCompletedFalse, completed, "resident until the detached clear ran")
+		h.orch.detached.Wait()
 		assert.Equal(t, []string{"save+notify", "call:" + todo.AddWorkflowEventMethod, "save-notify"}, h.snapshot())
 		assert.False(t, h.orch.state.ParentNotifyPending, "the parent acknowledged")
 		require.Len(t, h.calls, 1)
@@ -286,7 +288,8 @@ func Test_runWorkflow_terminalTurnSavesBeforeParentNotify(t *testing.T) {
 		h.orch.fastPath = true
 		completed, err := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-er-1"})
 		require.NoError(t, err)
-		assert.Equal(t, todo.RunCompletedTrue, completed)
+		assert.Equal(t, todo.RunCompletedFalse, completed)
+		h.orch.detached.Wait()
 		ops := h.snapshot()
 		require.GreaterOrEqual(t, len(ops), 3)
 		assert.Equal(t, []string{"create:" + janitorReminderName, "save+notify", "call:" + todo.AddWorkflowEventMethod}, ops[:3], "a local wake has no reminder to nack, so the janitor must exist before the save")
@@ -329,7 +332,8 @@ func Test_runWorkflow_terminalTurnSavesBeforeParentNotify(t *testing.T) {
 		h.purged.Store(true)
 		completed, err := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-er-1"})
 		require.NoError(t, err)
-		assert.Equal(t, todo.RunCompletedTrue, completed)
+		assert.Equal(t, todo.RunCompletedFalse, completed)
+		h.orch.detached.Wait()
 		assert.Equal(t, []string{"save+notify", "call:" + todo.AddWorkflowEventMethod, "save-notify"}, h.snapshot(),
 			"a store without read-your-writes must not fail a create that persisted")
 	})
@@ -339,12 +343,46 @@ func Test_runWorkflow_terminalTurnSavesBeforeParentNotify(t *testing.T) {
 		h := newCompletingHarness(t)
 		h.callErr = errors.New("parent unavailable")
 		completed, err := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-er-1"})
-		require.Error(t, err)
-		assert.True(t, wferrors.IsRecoverable(err))
+		require.NoError(t, err, "the turn committed; delivery is the reminder's problem")
 		assert.Equal(t, todo.RunCompletedFalse, completed)
+		h.orch.detached.Wait()
 		assert.Equal(t, []string{"save+notify", "call:" + todo.AddWorkflowEventMethod, "create:" + reminderNameParentNotify}, h.snapshot())
 		require.NotNil(t, h.orch.state)
 		assert.True(t, h.orch.state.ParentNotifyPending)
+	})
+
+	t.Run("the notify runs off the turn lock", func(t *testing.T) {
+		t.Parallel()
+		h := newCompletingHarness(t)
+		unlock, err := h.orch.lock.ContextLock(t.Context())
+		require.NoError(t, err)
+		completed, err := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-er-1"})
+		require.NoError(t, err)
+		assert.Equal(t, todo.RunCompletedFalse, completed)
+		assert.Eventually(t, func() bool {
+			ops := h.snapshot()
+			return len(ops) == 2 && ops[1] == "call:"+todo.AddWorkflowEventMethod
+		}, time.Second*5, time.Millisecond*10, "the parent call must not wait for the child's turn lock")
+		unlock()
+		h.orch.detached.Wait()
+		assert.Equal(t, []string{"save+notify", "call:" + todo.AddWorkflowEventMethod, "save-notify"}, h.snapshot(), "the clear waits for the lock")
+		assert.False(t, h.orch.state.ParentNotifyPending)
+	})
+
+	t.Run("a deactivated actor arms the reminder instead of clearing", func(t *testing.T) {
+		t.Parallel()
+		h := newCompletingHarness(t)
+		unlock, err := h.orch.lock.ContextLock(t.Context())
+		require.NoError(t, err)
+		completed, err := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-er-1"})
+		require.NoError(t, err)
+		assert.Equal(t, todo.RunCompletedFalse, completed)
+		assert.Eventually(t, func() bool { return len(h.snapshot()) == 2 }, time.Second*5, time.Millisecond*10)
+		h.orch.lock.Close()
+		unlock()
+		h.orch.detached.Wait()
+		assert.Equal(t, []string{"save+notify", "call:" + todo.AddWorkflowEventMethod, "create:" + reminderNameParentNotify}, h.snapshot(),
+			"the marker stays and the next fire re-sends; the parent drops the duplicate")
 	})
 }
 
@@ -368,10 +406,8 @@ func Test_runWorkflow_emptyInboxTerminalResendsPendingNotification(t *testing.T)
 			h.orch.state = nil
 			h.orch.rstate = runtimestate.NewWorkflowRuntimeState(notifyChildID, nil, history)
 
-			completed, err := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: reminderNameParentNotify})
-			require.NoError(t, err)
-			assert.Equal(t, todo.RunCompletedTrue, completed)
-			assert.Equal(t, []string{"call:" + todo.AddWorkflowEventMethod, "save-notify"}, h.snapshot())
+			require.NoError(t, h.orch.InvokeReminder(t.Context(), &actorapi.Reminder{Name: reminderNameParentNotify}))
+			assert.Equal(t, []string{"call:" + todo.AddWorkflowEventMethod, "save-notify"}, h.snapshot(), "the reminder fire delivers off the lock and clears the marker")
 
 			require.Len(t, h.calls, 1)
 			var evt backend.HistoryEvent
@@ -426,8 +462,9 @@ func Test_runWorkflow_strayFireResendsAndClears(t *testing.T) {
 
 	completed, err := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-stray"})
 	require.NoError(t, err)
-	assert.Equal(t, todo.RunCompletedTrue, completed)
-	assert.Equal(t, []string{"call:" + todo.AddWorkflowEventMethod, "save-notify"}, h.snapshot(), "a stray fire re-sends under the lock and clears the marker")
+	assert.Equal(t, todo.RunCompletedFalse, completed)
+	h.orch.detached.Wait()
+	assert.Equal(t, []string{"call:" + todo.AddWorkflowEventMethod, "save-notify"}, h.snapshot(), "a stray fire re-sends off the lock and clears the marker")
 
 	h.ops = nil
 	completed, err = h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-stray"})
@@ -508,7 +545,7 @@ func Test_addWorkflowEvent_dropsChildCompletionForCompletedParent(t *testing.T) 
 	}
 }
 
-func Test_runWorkflow_retryReminderResendDoesNotRearm(t *testing.T) {
+func Test_InvokeReminder_parentNotifyNacksOnFailure(t *testing.T) {
 	t.Parallel()
 
 	history := []*backend.HistoryEvent{
@@ -523,11 +560,10 @@ func Test_runWorkflow_retryReminderResendDoesNotRearm(t *testing.T) {
 	h.orch.rstate = runtimestate.NewWorkflowRuntimeState(notifyChildID, nil, history)
 	h.callErr = errors.New("parent unavailable")
 
-	completed, err := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: reminderNameParentNotify})
+	err := h.orch.InvokeReminder(t.Context(), &actorapi.Reminder{Name: reminderNameParentNotify})
 	require.Error(t, err)
 	assert.True(t, wferrors.IsRecoverable(err))
-	assert.Equal(t, todo.RunCompletedFalse, completed)
-	assert.Equal(t, []string{"call:" + todo.AddWorkflowEventMethod}, h.snapshot(), "the nack retries under the reminder's failure policy; no due-now re-arm")
+	assert.Equal(t, []string{"call:" + todo.AddWorkflowEventMethod}, h.snapshot(), "the nack keeps the reminder as the driver; no re-arm")
 }
 
 func Test_runWorkflow_nonChildEventOnCompletedChildResendsPending(t *testing.T) {
@@ -556,7 +592,8 @@ func Test_runWorkflow_nonChildEventOnCompletedChildResendsPending(t *testing.T) 
 
 	completed, err := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-er-9"})
 	require.NoError(t, err)
-	assert.Equal(t, todo.RunCompletedTrue, completed)
+	assert.Equal(t, todo.RunCompletedFalse, completed)
+	h.orch.detached.Wait()
 	assert.Equal(t, []string{"save", "call:" + todo.AddWorkflowEventMethod, "save-notify"}, h.snapshot(),
 		"a late event on a completed child must not strand its pending notification")
 }

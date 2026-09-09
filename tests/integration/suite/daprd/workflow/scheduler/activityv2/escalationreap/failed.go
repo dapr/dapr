@@ -170,7 +170,7 @@ func (e *failed) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, sumBoth("janitor_escalation_reaped"), float64(1))
-		assert.Zero(c, e.workflow.Scheduler().JobKeyCount(t, ctx, "run-activity"),
+		assert.Zero(c, e.workflow.Scheduler().JobKeyCount(c, ctx, "run-activity"),
 			"no run-activity reminder may outlive its workflow")
 	}, time.Second*30, time.Millisecond*50)
 

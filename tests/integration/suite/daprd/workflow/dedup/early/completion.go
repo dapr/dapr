@@ -129,9 +129,9 @@ func (e *completion) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, `"injected"`, meta.GetOutput().GetValue(), "the early result must resolve the activity")
 
 	assert.Equal(t, int32(0), activityCalls.Load(), "the activity must never execute; its result was injected")
-	// The suppressed ScheduleTask action means no TaskScheduled event is ever
-	// appended, and a consumed completion with no matching TaskScheduled is
-	// stripped from the persisted history; neither event may appear.
-	assert.Equal(t, 0, fworkflow.CountHistoryEventsMatching(t, ctx, cl, id, fworkflow.IsTaskScheduledFor(1)),
-		"the resolved activity must not be dispatched")
+	// The early completion is delivered behind the event that schedules the
+	// activity, so history records the scheduling and then its resolution,
+	// and the resolved activity is not dispatched.
+	assert.Equal(t, 1, fworkflow.CountHistoryEventsMatching(t, ctx, cl, id, fworkflow.IsTaskScheduledFor(1)))
+	assert.Equal(t, 1, fworkflow.CountHistoryEventsMatching(t, ctx, cl, id, fworkflow.IsTaskCompletedFor(1)))
 }

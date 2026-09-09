@@ -15,6 +15,8 @@ package activity
 
 import (
 	"context"
+	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,7 +24,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
@@ -239,4 +243,64 @@ func Test_claimStaleEviction(t *testing.T) {
 		assert.False(t, owner)
 		assert.Same(t, call, follower)
 	})
+}
+
+func Test_runOwned_publishSurvivesInvocationCancel(t *testing.T) {
+	t.Parallel()
+	f, scheduled := newExecHarness()
+
+	// The publish parks until released; it fails only if its context is cancelled.
+	unblock := make(chan struct{})
+	var calls atomic.Int32
+	f.router = routerfake.New().WithCallFn(func(ctx context.Context, _ *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+		calls.Add(1)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-unblock:
+			return &internalv1pb.InternalInvokeResponse{Status: &internalv1pb.Status{Code: http.StatusOK}}, nil
+		}
+	})
+
+	a := f.GetOrCreate("wf::3").(*activity)
+	ctx, cancel := context.WithCancel(t.Context())
+	ownerErr := make(chan error, 1)
+	go func() {
+		ownerErr <- a.executeActivity(ctx, activityReminderName, testInvocation(), false, false)
+	}()
+
+	var wi *backend.ActivityWorkItem
+	select {
+	case wi = <-scheduled:
+	case <-time.After(time.Second * 5):
+		t.Fatal("timed out waiting for the WorkItem dispatch")
+	}
+	wi.Result = &protos.HistoryEvent{
+		EventId:   -1,
+		EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 3}},
+	}
+	callback, ok := wi.Properties[todo.CallbackChannelProperty].(chan bool)
+	require.True(t, ok)
+	callback <- true
+
+	require.Eventually(t, func() bool { return calls.Load() == 1 }, time.Second*5, time.Millisecond*10)
+	cancel()
+	select {
+	case err := <-ownerErr:
+		t.Fatalf("the publish must not fail with the invocation: %v", err)
+	case <-time.After(time.Millisecond * 200):
+	}
+	close(unblock)
+
+	select {
+	case err := <-ownerErr:
+		require.NoError(t, err, "the in-hand result is published on a detached context")
+	case <-time.After(time.Second * 5):
+		t.Fatal("timed out waiting for the owner to finish")
+	}
+	assert.Equal(t, int32(1), calls.Load(), "one publish, no retry")
+	call, found := f.inflight.Peek(inflight.Key("wf::3", testInvocation().GetHistoryEvent()))
+	require.True(t, found, "the settled outcome stays cached for followers")
+	assert.True(t, call.Settled())
+	require.NoError(t, call.Err())
 }

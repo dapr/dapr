@@ -184,10 +184,12 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 	if rst := o.rstate; runtimestate.IsCompleted(rst) {
 		// Settle before self-deleting: the janitor owns recovery of anything
 		// lost after a terminal commit, including across a restart.
-		if serr := o.settleTerminal(ctx, state, rst, true); serr != nil {
+		pn, serr := o.settleTerminal(ctx, state, rst)
+		if serr != nil {
 			return fmt.Errorf("janitor terminal path: %w", serr)
 		}
 		o.deleteJanitor(ctx)
+		o.deliverParentNotify(pn)
 		return nil
 	}
 

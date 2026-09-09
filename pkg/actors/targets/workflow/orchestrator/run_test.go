@@ -1456,3 +1456,51 @@ func Test_runWorkflow_unstartableCacheButDurableStartableRetries(t *testing.T) {
 	require.Len(t, o.state.Inbox, 1)
 	assert.NotNil(t, o.state.Inbox[0].GetExecutionStarted())
 }
+
+func Test_deferUnmatchedResolutions(t *testing.T) {
+	t.Parallel()
+
+	ev := func(id int32, kind string) *backend.HistoryEvent {
+		e := &backend.HistoryEvent{EventId: -1, Timestamp: timestamppb.Now()}
+		switch kind {
+		case "tc":
+			e.EventType = &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: id}}
+		case "tf":
+			e.EventType = &protos.HistoryEvent_TaskFailed{TaskFailed: &protos.TaskFailedEvent{TaskScheduledId: id}}
+		case "cc":
+			e.EventType = &protos.HistoryEvent_ChildWorkflowInstanceCompleted{ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{TaskScheduledId: id}}
+		case "er":
+			e.EventType = &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{Name: "x"}}
+		}
+		return e
+	}
+	scheduled := func(id int32) *backend.HistoryEvent {
+		return &backend.HistoryEvent{EventId: id, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_TaskScheduled{TaskScheduled: &protos.TaskScheduledEvent{Name: "a"}}}
+	}
+	state := wfenginestate.NewState(wfenginestate.Options{AppID: "testapp", WorkflowActorType: "wf", ActivityActorType: "act"})
+	state.AddToHistory(scheduled(0))
+
+	tc0, tc1, tc2, tf3, cc4, er := ev(0, "tc"), ev(1, "tc"), ev(2, "tc"), ev(3, "tf"), ev(4, "cc"), ev(0, "er")
+
+	tests := map[string]struct {
+		in, want []*backend.HistoryEvent
+	}{
+		"matched only keeps order":               {in: []*backend.HistoryEvent{er, tc0}, want: []*backend.HistoryEvent{er, tc0}},
+		"orphan ahead of the matched completion": {in: []*backend.HistoryEvent{tc1, tc0}, want: []*backend.HistoryEvent{tc0, tc1}},
+		"orphans go behind every other event":    {in: []*backend.HistoryEvent{tc2, er, tf3, tc0, tc1}, want: []*backend.HistoryEvent{er, tc0, tc1, tc2, tf3}},
+		"child completions are resolutions too":  {in: []*backend.HistoryEvent{cc4, tc0}, want: []*backend.HistoryEvent{tc0, cc4}},
+		"nothing unmatched returns the input":    {in: []*backend.HistoryEvent{tc0}, want: []*backend.HistoryEvent{tc0}},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			in := append([]*backend.HistoryEvent(nil), tt.in...)
+			got := deferUnmatchedResolutions(state, in)
+			require.Len(t, got, len(tt.want))
+			for i := range tt.want {
+				assert.Same(t, tt.want[i], got[i], "position %d", i)
+			}
+			assert.Equal(t, tt.in, in, "the input slice is not reordered in place")
+		})
+	}
+}

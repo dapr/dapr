@@ -51,7 +51,9 @@ type driveretry struct {
 func (d *driveretry) Setup(t *testing.T) []framework.Option {
 	fp := []daprd.Option{
 		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
-		daprd.WithWorkflowJanitorPeriod(t, time.Second),
+		// The janitor stays out: with the retention compressed a stale
+		// re-dispatch would run the body too.
+		daprd.WithWorkflowJanitorPeriod(t, time.Second*30),
 		daprd.WithWorkflowClaimRetention(t, time.Millisecond),
 	}
 	d.workflow = workflow.New(t, workflow.WithDaprdOptions(0, fp...))
@@ -180,7 +182,7 @@ func (d *driveretry) Run(t *testing.T, ctx context.Context) {
 	// A retried drive lands within its backoff cap (2s) of the cancel.
 	assert.Never(t, func() bool {
 		return executions.Load() > int64(len(ids))
-	}, time.Second*3, time.Millisecond*50, "every activity body must run exactly once")
+	}, time.Second*3, time.Millisecond*10, "every activity body must run exactly once")
 
 	// The force-cancelled drive skipped its escalation instead of retrying.
 	var skipped float64

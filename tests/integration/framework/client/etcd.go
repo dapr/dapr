@@ -34,6 +34,11 @@ func Etcd(t *testing.T, cfg clientv3.Config) *EtcdClient {
 	return &EtcdClient{etcdClient}
 }
 
+// NewEtcdClient wraps an already open client; the caller owns its lifetime.
+func NewEtcdClient(c *clientv3.Client) *EtcdClient {
+	return &EtcdClient{c}
+}
+
 func (c *EtcdClient) ListAllKeys(ctx context.Context, prefix string) ([]string, error) {
 	r := []string{}
 

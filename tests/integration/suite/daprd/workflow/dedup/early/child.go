@@ -111,7 +111,8 @@ func (e *child) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, `"injected-child"`, meta.GetOutput().GetValue(), "the early result must resolve the child call")
 
 	assert.Equal(t, int32(0), childCalls.Load(), "the child workflow must never execute; its result was injected")
-	assert.Equal(t, 0, fworkflow.CountHistoryEventsMatching(t, ctx, cl, id, func(ev *protos.HistoryEvent) bool {
+	assert.Equal(t, 1, fworkflow.CountHistoryEventsMatching(t, ctx, cl, id, func(ev *protos.HistoryEvent) bool {
 		return ev.GetChildWorkflowInstanceCreated() != nil && ev.GetEventId() == 1
-	}), "the resolved child workflow must not be created")
+	}))
+	assert.Equal(t, 1, fworkflow.CountHistoryEventsMatching(t, ctx, cl, id, fworkflow.IsChildCompletedFor(1)))
 }
