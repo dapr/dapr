@@ -43,6 +43,8 @@ const (
 	ComponentsUDSVolumeName        = "dapr-components-unix-domain-socket"   // Name of the Unix domain socket volume for components.
 	ComponentsUDSMountPathEnvVar   = "DAPR_COMPONENT_SOCKETS_FOLDER"
 	ComponentsUDSDefaultFolder     = "/tmp/dapr-components-sockets"
+	TrustAnchorsVolumeName         = "dapr-trust-anchors"           // Name of the volume with the trust anchors ConfigMap for daprd.
+	TrustAnchorsVolumeMountPath    = "/var/run/secrets/dapr.io/tls" // Mount path for the trust anchors ConfigMap volume in the daprd container.
 
 	// TODO: @joshvanl: Remove in 1.18
 	SchedulerHostAddressDNSAEnvVar = "DAPR_SCHEDULER_HOST_ADDRESS_DNS_A"

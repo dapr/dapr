@@ -75,6 +75,7 @@ type options struct {
 	disableInitEndpoints       []string
 	maxBodySize                *string
 	allowedOrigins             *string
+	trustAnchorsFile           *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -399,6 +400,14 @@ func WithSentry(t *testing.T, sentry *sentry.Sentry) Option {
 		WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors)))(o)
 		WithSentryAddress(sentry.Address())(o)
 		WithEnableMTLS(true)(o)
+	}
+}
+
+// WithTrustAnchorsFile configures daprd to read, and watch, the trust anchors
+// from the given file path via --trust-anchors-file.
+func WithTrustAnchorsFile(path string) Option {
+	return func(o *options) {
+		o.trustAnchorsFile = &path
 	}
 }
 

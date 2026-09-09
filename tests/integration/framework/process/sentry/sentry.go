@@ -48,13 +48,14 @@ type Sentry struct {
 	exec  process.Interface
 	ports *ports.Ports
 
-	bundle      *bundle.Bundle
-	port        int
-	healthzPort int
-	metricsPort int
-	oidcPort    *int
-	trustDomain *string
-	namespace   string
+	bundle         *bundle.Bundle
+	port           int
+	healthzPort    int
+	metricsPort    int
+	oidcPort       *int
+	trustDomain    *string
+	namespace      string
+	credentialsDir string
 
 	runOnce     sync.Once
 	cleanupOnce sync.Once
@@ -125,6 +126,22 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 	}
 
 	tmpDir := t.TempDir()
+	if opts.credentialsDir != nil {
+		tmpDir = *opts.credentialsDir
+	}
+
+	if opts.caTTL != nil {
+		args = append(args, "-ca-ttl="+opts.caTTL.String())
+	}
+	if opts.caRenewalEnabled != nil {
+		args = append(args, "-ca-renewal-enabled="+strconv.FormatBool(*opts.caRenewalEnabled))
+	}
+	if opts.renewalThreshold != nil {
+		args = append(args, "-ca-renewal-threshold="+strconv.FormatFloat(*opts.renewalThreshold, 'f', -1, 64))
+	}
+	if opts.propagationGrace != nil {
+		args = append(args, "-trust-anchor-propagation-grace="+opts.propagationGrace.String())
+	}
 
 	if opts.writeBundle {
 		caPath := filepath.Join(tmpDir, "ca.crt")
@@ -247,16 +264,23 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 	}
 
 	return &Sentry{
-		exec:        exec.New(t, binary.EnvValue("sentry"), args, opts.execOpts...),
-		ports:       fp,
-		bundle:      opts.bundle,
-		port:        opts.port,
-		metricsPort: opts.metricsPort,
-		healthzPort: opts.healthzPort,
-		oidcPort:    opts.oidc.serverListenPort,
-		trustDomain: opts.trustDomain,
-		namespace:   ns,
+		exec:           exec.New(t, binary.EnvValue("sentry"), args, opts.execOpts...),
+		ports:          fp,
+		bundle:         opts.bundle,
+		port:           opts.port,
+		metricsPort:    opts.metricsPort,
+		healthzPort:    opts.healthzPort,
+		oidcPort:       opts.oidc.serverListenPort,
+		trustDomain:    opts.trustDomain,
+		namespace:      ns,
+		credentialsDir: tmpDir,
 	}
+}
+
+// CredentialsDir returns the directory holding the issuer credentials, so a
+// later sentry process can be started against the same credentials.
+func (s *Sentry) CredentialsDir() string {
+	return s.credentialsDir
 }
 
 func (s *Sentry) Run(t *testing.T, ctx context.Context) {

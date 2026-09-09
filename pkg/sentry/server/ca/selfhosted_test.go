@@ -15,6 +15,7 @@ package ca
 
 import (
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
@@ -325,4 +326,86 @@ func TestSelfhosted_get(t *testing.T) {
 			bundlesEqual(t, test.expBundle, bundle)
 		})
 	}
+}
+
+func TestSelfhosted_nextIssuer(t *testing.T) {
+	genRenewedBundle := func(t *testing.T) *bundle.X509 {
+		t.Helper()
+		_, rootKey, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		existing, err := bundle.GenerateX509(bundle.OptionsX509{
+			X509RootKey: rootKey, TrustDomain: "test.example.com",
+		})
+		require.NoError(t, err)
+		_, newRootKey, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		renewed, err := bundle.RenewX509(bundle.OptionsRenewX509{
+			Existing: existing, X509RootKey: newRootKey, TrustDomain: "test.example.com",
+		})
+		require.NoError(t, err)
+		return renewed
+	}
+
+	newStore := func(t *testing.T) *selfhosted {
+		t.Helper()
+		dir := t.TempDir()
+		return &selfhosted{config: config.Config{
+			RootCertPath:       filepath.Join(dir, "ca.crt"),
+			IssuerCertPath:     filepath.Join(dir, "issuer.crt"),
+			IssuerKeyPath:      filepath.Join(dir, "issuer.key"),
+			NextIssuerCertPath: filepath.Join(dir, "issuer.next.crt"),
+			NextIssuerKeyPath:  filepath.Join(dir, "issuer.next.key"),
+		}}
+	}
+
+	t.Run("round trip with pending issuer pair", func(t *testing.T) {
+		s := newStore(t)
+		renewed := genRenewedBundle(t)
+		require.NoError(t, s.store(t.Context(), bundle.Bundle{X509: renewed}))
+
+		require.FileExists(t, s.config.NextIssuerCertPath)
+		require.FileExists(t, s.config.NextIssuerKeyPath)
+
+		got, err := s.get(t.Context())
+		require.NoError(t, err)
+		require.NotNil(t, got.X509)
+		assert.Equal(t, renewed.IssChainPEM, got.X509.IssChainPEM)
+		assert.Equal(t, renewed.NextIssChainPEM, got.X509.NextIssChainPEM)
+		assert.Equal(t, renewed.NextIssKeyPEM, got.X509.NextIssKeyPEM)
+		assert.Len(t, got.X509.NextIssChain, 1)
+	})
+
+	t.Run("only one pending file present is a hard error", func(t *testing.T) {
+		s := newStore(t)
+		renewed := genRenewedBundle(t)
+		require.NoError(t, s.store(t.Context(), bundle.Bundle{X509: renewed}))
+		require.NoError(t, os.Remove(s.config.NextIssuerKeyPath))
+
+		_, err := s.get(t.Context())
+		require.ErrorContains(t, err, "only one of the pending issuer credentials")
+	})
+
+	t.Run("promotion removes the pending files", func(t *testing.T) {
+		s := newStore(t)
+		renewed := genRenewedBundle(t)
+		require.NoError(t, s.store(t.Context(), bundle.Bundle{X509: renewed}))
+
+		promoted := &bundle.X509{
+			TrustAnchors: renewed.TrustAnchors,
+			IssChainPEM:  renewed.NextIssChainPEM,
+			IssKeyPEM:    renewed.NextIssKeyPEM,
+			IssChain:     renewed.NextIssChain,
+			IssKey:       renewed.NextIssKey,
+		}
+		require.NoError(t, s.store(t.Context(), bundle.Bundle{X509: promoted}))
+
+		assert.NoFileExists(t, s.config.NextIssuerCertPath)
+		assert.NoFileExists(t, s.config.NextIssuerKeyPath)
+
+		got, err := s.get(t.Context())
+		require.NoError(t, err)
+		require.NotNil(t, got.X509)
+		assert.Equal(t, promoted.IssChainPEM, got.X509.IssChainPEM)
+		assert.Nil(t, got.X509.NextIssChainPEM)
+	})
 }

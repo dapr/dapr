@@ -260,7 +260,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 			Name:  "NAMESPACE",
 			Value: c.Namespace,
 		},
+		// TODO: Deprecated in favour of the trust anchors file below; remove per
+		// the trust distribution proposal deprecation cycle.
 		{
+			//nolint:staticcheck
 			Name:  securityConsts.TrustAnchorsEnvVar,
 			Value: string(c.CurrentTrustAnchors),
 		},
@@ -281,6 +284,17 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 			Name:  securityConsts.ControlPlaneTrustDomainEnvVar,
 			Value: c.ControlPlaneTrustDomain,
 		},
+	}
+	// Only point daprd at the trust anchors file when the operator is
+	// distributing the per-namespace ConfigMap; daprd prefers the file source
+	// and waits for the file to exist, so injecting it without distribution
+	// would leave the sidecar waiting on a file which never appears. Without
+	// the file source daprd falls back to the deprecated inline env var above.
+	if c.TrustDistributionEnabled {
+		env = append(env, corev1.EnvVar{
+			Name:  securityConsts.TrustAnchorsFileEnvVar,
+			Value: injectorConsts.TrustAnchorsVolumeMountPath + "/" + securityConsts.TrustAnchorsConfigMapKey,
+		})
 	}
 	if c.EnableK8sDownwardAPIs {
 		env = append(env,
