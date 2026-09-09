@@ -69,22 +69,22 @@ var (
 	ErrActorNoAddress             = ErrorCode{"ERR_ACTOR_NO_ADDRESS", "", CategoryActor}              // No address found for actor
 
 	// ### Workflows API
-	WorkflowGet                       = ErrorCode{"ERR_GET_WORKFLOW", "", CategoryWorkflow}                 // Error getting workflow
-	WorkflowStart                     = ErrorCode{"ERR_START_WORKFLOW", "", CategoryWorkflow}               // Error starting workflow
-	WorkflowPause                     = ErrorCode{"ERR_PAUSE_WORKFLOW", "", CategoryWorkflow}               // Error pausing workflow
-	WorkflowResume                    = ErrorCode{"ERR_RESUME_WORKFLOW", "", CategoryWorkflow}              // Error resuming workflow
-	WorkflowTerminate                 = ErrorCode{"ERR_TERMINATE_WORKFLOW", "", CategoryWorkflow}           // Error terminating workflow
-	WorkflowPurge                     = ErrorCode{"ERR_PURGE_WORKFLOW", "", CategoryWorkflow}               // Error purging workflow
-	WorkflowRaiseEvent                = ErrorCode{"ERR_RAISE_EVENT_WORKFLOW", "", CategoryWorkflow}         // Error raising event in workflow
-	WorkflowComponentMissing          = ErrorCode{"ERR_WORKFLOW_COMPONENT_MISSING", "", CategoryWorkflow}   // Missing workflow component
-	WorkflowComponentNotFound         = ErrorCode{"ERR_WORKFLOW_COMPONENT_NOT_FOUND", "", CategoryWorkflow} // Workflow component not found
-	WorkflowEventNameMissing          = ErrorCode{"ERR_WORKFLOW_EVENT_NAME_MISSING", "", CategoryWorkflow}  // Missing workflow event name
-	WorkflowNameMissing               = ErrorCode{"ERR_WORKFLOW_NAME_MISSING", "", CategoryWorkflow}        // Workflow name not configured
-	WorkflowInstanceIDInvalid         = ErrorCode{"ERR_INSTANCE_ID_INVALID", "", CategoryWorkflow}          // Invalid workflow instance ID. (Only alphanumeric and underscore characters are allowed)
-	WorkflowInstanceIDNotFound        = ErrorCode{"ERR_INSTANCE_ID_NOT_FOUND", "", CategoryWorkflow}        // Workflow instance ID not found
-	WorkflowInstanceIDProvidedMissing = ErrorCode{"ERR_INSTANCE_ID_PROVIDED_MISSING", "", CategoryWorkflow} // Missing workflow instance ID
-	WorkflowInstanceIDTooLong         = ErrorCode{"ERR_INSTANCE_ID_TOO_LONG", "", CategoryWorkflow}         // Workflow instance ID too long
-	WorkflowAppIDInvalid              = ErrorCode{"ERR_WORKFLOW_APP_ID_INVALID", "", CategoryWorkflow}      // Invalid workflow app ID. (Only alphanumeric, dash and underscore characters are allowed)
+	WorkflowGet                       = ErrorCode{"ERR_GET_WORKFLOW", "DAPR_WORKFLOW_GET_FAILED", CategoryWorkflow}                          // Error getting workflow
+	WorkflowStart                     = ErrorCode{"ERR_START_WORKFLOW", "DAPR_WORKFLOW_START_FAILED", CategoryWorkflow}                      // Error starting workflow
+	WorkflowPause                     = ErrorCode{"ERR_PAUSE_WORKFLOW", "DAPR_WORKFLOW_PAUSE_FAILED", CategoryWorkflow}                      // Error pausing workflow
+	WorkflowResume                    = ErrorCode{"ERR_RESUME_WORKFLOW", "DAPR_WORKFLOW_RESUME_FAILED", CategoryWorkflow}                    // Error resuming workflow
+	WorkflowTerminate                 = ErrorCode{"ERR_TERMINATE_WORKFLOW", "DAPR_WORKFLOW_TERMINATE_FAILED", CategoryWorkflow}              // Error terminating workflow
+	WorkflowPurge                     = ErrorCode{"ERR_PURGE_WORKFLOW", "DAPR_WORKFLOW_PURGE_FAILED", CategoryWorkflow}                      // Error purging workflow
+	WorkflowRaiseEvent                = ErrorCode{"ERR_RAISE_EVENT_WORKFLOW", "DAPR_WORKFLOW_RAISE_EVENT_FAILED", CategoryWorkflow}          // Error raising event in workflow
+	WorkflowComponentMissing          = ErrorCode{"ERR_WORKFLOW_COMPONENT_MISSING", "DAPR_WORKFLOW_COMPONENT_MISSING", CategoryWorkflow}     // Missing workflow component
+	WorkflowComponentNotFound         = ErrorCode{"ERR_WORKFLOW_COMPONENT_NOT_FOUND", "DAPR_WORKFLOW_COMPONENT_NOT_FOUND", CategoryWorkflow} // Workflow component not found
+	WorkflowEventNameMissing          = ErrorCode{"ERR_WORKFLOW_EVENT_NAME_MISSING", "DAPR_WORKFLOW_EVENT_NAME_MISSING", CategoryWorkflow}   // Missing workflow event name
+	WorkflowNameMissing               = ErrorCode{"ERR_WORKFLOW_NAME_MISSING", "DAPR_WORKFLOW_NAME_MISSING", CategoryWorkflow}               // Workflow name not configured
+	WorkflowInstanceIDInvalid         = ErrorCode{"ERR_INSTANCE_ID_INVALID", "DAPR_WORKFLOW_INSTANCE_ID_INVALID", CategoryWorkflow}          // Invalid workflow instance ID. (Only alphanumeric and underscore characters are allowed)
+	WorkflowInstanceIDNotFound        = ErrorCode{"ERR_INSTANCE_ID_NOT_FOUND", "DAPR_WORKFLOW_INSTANCE_ID_NOT_FOUND", CategoryWorkflow}      // Workflow instance ID not found
+	WorkflowInstanceIDProvidedMissing = ErrorCode{"ERR_INSTANCE_ID_PROVIDED_MISSING", "DAPR_WORKFLOW_INSTANCE_ID_MISSING", CategoryWorkflow} // Missing workflow instance ID
+	WorkflowInstanceIDTooLong         = ErrorCode{"ERR_INSTANCE_ID_TOO_LONG", "DAPR_WORKFLOW_INSTANCE_ID_TOO_LONG", CategoryWorkflow}        // Workflow instance ID too long
+	WorkflowAppIDInvalid              = ErrorCode{"ERR_WORKFLOW_APP_ID_INVALID", "DAPR_WORKFLOW_APP_ID_INVALID", CategoryWorkflow}           // Invalid workflow app ID. (Only alphanumeric, dash and underscore characters are allowed)
 
 	// ### State management API
 	StateTransaction                   = ErrorCode{"ERR_STATE_TRANSACTION", "", CategoryState}                                                 // Error in state transaction
