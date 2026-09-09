@@ -46,6 +46,8 @@ func TestAppendActorReminderTimerSpanAttributesFn(t *testing.T) {
 		{"get reminder", http.MethodGet, "/v1.0/actors/OrderActor/order-123/reminders/CancelOrder", "GetActorReminder", "GetActorReminder/OrderActor"},
 		{"create timer", http.MethodPost, "/v1.0/actors/OrderActor/order-123/timers/Refresh", "RegisterActorTimer", "RegisterActorTimer/OrderActor"},
 		{"delete timer", http.MethodDelete, "/v1.0/actors/OrderActor/order-123/timers/Refresh", "UnregisterActorTimer", "UnregisterActorTimer/OrderActor"},
+		{"list timers", http.MethodGet, "/v1.0/actors/OrderActor/order-123/timers", "ListActorTimers", "ListActorTimers/OrderActor"},
+		{"get timer", http.MethodGet, "/v1.0/actors/OrderActor/order-123/timers/Refresh", "GetActorTimer", "GetActorTimer/OrderActor"},
 	}
 
 	for _, tc := range tests {
