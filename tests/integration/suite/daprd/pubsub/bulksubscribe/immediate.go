@@ -181,21 +181,26 @@ func (im *immediate) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		im.mu.Lock()
 		defer im.mu.Unlock()
-		require.Len(c, im.deliveries, numMessages, "expected one delivery per injected message")
+		total := 0
+		for _, d := range im.deliveries {
+			total += d.entries
+		}
+		require.Equal(c, numMessages, total, "expected every injected message to be delivered")
 	}, 10*time.Second, 50*time.Millisecond)
 
 	elapsed := time.Since(start)
 
-	// All three deliveries must arrive far below the 5 s batching
-	// timer. 3 s leaves comfortable margin for daprd's own
-	// scheduling overhead while still failing if the immediate path
-	// were not selected.
+	// All entries must arrive far below the 5 s batching timer. 3 s
+	// leaves comfortable margin for daprd's own scheduling overhead
+	// while still failing if the immediate path were not selected.
+	//
+	// Messages injected concurrently can be coalesced by drainChannel
+	// into a single delivery with multiple entries (see
+	// processBulkMessagesImmediate and
+	// TestProcessBulkMessagesImmediateBurstCoalesce) - "immediate"
+	// bounds *when* the first flush happens, not how many entries it
+	// carries, so this only asserts on total elapsed time and total
+	// entries delivered rather than a fixed delivery count.
 	require.Less(t, elapsed, 3*time.Second,
 		"deliveries under FeatureBulkSubscribeImmediate should not wait for the 5s timer; got %v", elapsed)
-
-	im.mu.Lock()
-	defer im.mu.Unlock()
-	for i, d := range im.deliveries {
-		require.Equal(t, 1, d.entries, "delivery %d should carry exactly one entry", i)
-	}
 }
