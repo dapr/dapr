@@ -94,7 +94,7 @@ func (a *api) SetBinaryFileAlpha1(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Ser
 		return err
 	}
 
-	return nil
+	return stream.SendAndClose(&runtimev1pb.SetBinaryFileResponse{})
 }
 
 // GetBinaryFileAlpha1 retrieves a binary file and streams it back as chunks.
