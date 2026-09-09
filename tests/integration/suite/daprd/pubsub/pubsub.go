@@ -19,5 +19,6 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/grpc/traceparent"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/http"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/http/traceparent"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/pluggable"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/scopes"
 )
