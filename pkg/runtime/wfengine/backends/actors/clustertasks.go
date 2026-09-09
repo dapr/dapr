@@ -17,6 +17,7 @@ package actors
 import (
 	"context"
 	"errors"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
@@ -35,10 +36,17 @@ type ClusterTasksBackendOptions struct {
 	ExecutorActorType string
 }
 
+// ClusterTasksBackend rendezvouses work-item waiters with completions that
+// may arrive on any daprd (WorkflowsClusteredDeployment), through the executor
+// actor keyed by the work item. The waiter registers on that actor before the
+// engine dispatches the work item (see executor.MethodRegister).
 type ClusterTasksBackend struct {
 	actors            actors.Interface
 	executorActorType string
 }
+
+// registerTimeout bounds the registration call, which has no caller context.
+const registerTimeout = 30 * time.Second
 
 func NewClusterTasksBackend(opts ClusterTasksBackendOptions) *ClusterTasksBackend {
 	return &ClusterTasksBackend{
@@ -96,16 +104,20 @@ func (be *ClusterTasksBackend) CancelActivityTask(ctx context.Context, id api.In
 }
 
 func (be *ClusterTasksBackend) WaitForActivityCompletion(req *protos.ActivityRequest) func(context.Context) (*protos.ActivityResponse, error) {
+	key := backend.GetActivityExecutionKey(
+		req.GetWorkflowInstance().GetInstanceId(),
+		req.GetTaskId(),
+	)
+
+	// Called by the engine before the work item is dispatched.
+	be.register(key)
+
 	return func(ctx context.Context) (*protos.ActivityResponse, error) {
 		router, err := be.actors.Router(ctx)
 		if err != nil {
 			return nil, err
 		}
 
-		key := backend.GetActivityExecutionKey(
-			req.GetWorkflowInstance().GetInstanceId(),
-			req.GetTaskId(),
-		)
 		sreq := internalsv1pb.
 			NewInternalInvokeRequest(executor.MethodWatchComplete).
 			WithActor(be.executorActorType, key).
@@ -176,6 +188,9 @@ func (be *ClusterTasksBackend) CancelWorkflowTask(ctx context.Context, id api.In
 }
 
 func (be *ClusterTasksBackend) WaitForWorkflowTaskCompletion(req *protos.WorkflowRequest) func(context.Context) (*protos.WorkflowResponse, error) {
+	// Called by the engine before the work item is dispatched.
+	be.register(req.GetInstanceId())
+
 	return func(ctx context.Context) (*protos.WorkflowResponse, error) {
 		router, err := be.actors.Router(ctx)
 		if err != nil {
@@ -210,5 +225,26 @@ func (be *ClusterTasksBackend) WaitForWorkflowTaskCompletion(req *protos.Workflo
 		}
 
 		return &resp, nil
+	}
+}
+
+// register arms the executor actor for key so the next completion is held for
+// this waiter and a stale one is discarded rather than delivered to it. Best
+// effort: on failure (including an executor hosted by a daprd that predates
+// Register) the watch stream alone rendezvouses, as before.
+func (be *ClusterTasksBackend) register(key string) {
+	ctx, cancel := context.WithTimeout(context.Background(), registerTimeout)
+	defer cancel()
+
+	router, err := be.actors.Router(ctx)
+	if err == nil {
+		req := internalsv1pb.
+			NewInternalInvokeRequest(executor.MethodRegister).
+			WithActor(be.executorActorType, key).
+			WithContentType(invokev1.ProtobufContentType)
+		_, err = router.Call(ctx, req)
+	}
+	if err != nil {
+		log.Warnf("Failed to register completion waiter for '%s', relying on the watch stream alone: %v", key, err)
 	}
 }

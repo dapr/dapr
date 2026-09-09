@@ -43,12 +43,14 @@ const (
 	// A status read re-asserted the start reminder of an overdue pending
 	// start; ~0 in healthy steady state.
 	StatusPendingStartRedriven = "pending_start_redriven"
-	StatusTerminated           = "terminated"
-	StatusRecoverable          = "recoverable"
-	CreateWorkflow             = "create_workflow"
-	GetWorkflow                = "get_workflow"
-	AddEvent                   = "add_event"
-	PurgeWorkflow              = "purge_workflow"
+	// A turn rejected because its response answered a superseded work item.
+	StatusStaleTurnRejected = "stale_turn_rejected"
+	StatusTerminated        = "terminated"
+	StatusRecoverable       = "recoverable"
+	CreateWorkflow          = "create_workflow"
+	GetWorkflow             = "get_workflow"
+	AddEvent                = "add_event"
+	PurgeWorkflow           = "purge_workflow"
 
 	WorkflowEvent = "event"
 	Timer         = "timer"
@@ -234,7 +236,7 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 		return err
 	}
 
-	for _, s := range []string{StatusArmDetached, StatusArmDetachedFailed, StatusArmDetachedSkipped, StatusPendingStartRedriven} {
+	for _, s := range []string{StatusArmDetached, StatusArmDetachedFailed, StatusArmDetachedSkipped, StatusPendingStartRedriven, StatusStaleTurnRejected} {
 		stats.RecordWithOptions(context.Background(),
 			stats.WithRecorder(w.meter),
 			stats.WithTags(diagUtils.WithTags(w.localWakeCount.Name(), appIDKey, appID, namespaceKey, namespace, statusKey, s)...),

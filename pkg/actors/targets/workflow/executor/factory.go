@@ -21,15 +21,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/targets"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
-	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
-
-func newExecutor() *executor {
-	return &executor{
-		lock: lock.New(),
-	}
-}
 
 type Options struct {
 	Actors actors.Interface
@@ -56,7 +48,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 	deactivateCh := make(chan *executor, 100)
 	go func() {
 		for executor := range deactivateCh {
-			executor.Deactivate(ctx)
+			executor.deactivateIfIdle()
 		}
 	}()
 
@@ -67,29 +59,29 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 	}, nil
 }
 
+// GetOrCreate replaces a closed entry that has not yet left the table.
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
-	a, ok := f.table.Load(actorID)
-	if !ok {
-		fresh := f.initExecutor(newExecutor(), actorID)
-		a, _ = f.table.LoadOrStore(actorID, fresh)
-	}
+	for {
+		a, ok := f.table.Load(actorID)
+		if !ok {
+			a, _ = f.table.LoadOrStore(actorID, f.newExecutor(actorID))
+		}
 
-	return a.(*executor)
+		e := a.(*executor)
+		if !e.isClosed() {
+			return e
+		}
+		f.table.CompareAndDelete(actorID, e)
+	}
 }
 
-func (f *factory) initExecutor(a any, actorID string) *executor {
-	act := a.(*executor)
-
-	act.factory = f
-	act.actorID = actorID
-
-	act.closed.Store(false)
-	act.completeCh = make(chan *internalsv1pb.InternalInvokeResponse, 1)
-	act.cancelCh = make(chan struct{})
-	act.closeCh = make(chan struct{})
-	act.watchLock = make(chan struct{}, 1)
-
-	return act
+func (f *factory) newExecutor(actorID string) *executor {
+	return &executor{
+		factory:   f,
+		actorID:   actorID,
+		closeCh:   make(chan struct{}),
+		watchLock: make(chan struct{}, 1),
+	}
 }
 
 func (f *factory) HaltAll(ctx context.Context) error {
@@ -114,7 +106,6 @@ func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorReq
 			ActorID:   key.(string),
 		}) {
 			val.(*executor).Deactivate(ctx)
-			f.table.Delete(key)
 		}
 		return true
 	})
