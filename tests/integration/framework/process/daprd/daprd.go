@@ -583,6 +583,10 @@ func (d *Daprd) ActorReminderURL(actorType, actorID, method string) string {
 	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/reminders/%s", d.HTTPAddress(), actorType, actorID, method)
 }
 
+func (d *Daprd) ActorRemindersURL(actorType, actorID string) string {
+	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/reminders", d.HTTPAddress(), actorType, actorID)
+}
+
 func (d *Daprd) ActorTimerURL(actorType, actorID, name string) string {
 	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/timers/%s", d.HTTPAddress(), actorType, actorID, name)
 }
