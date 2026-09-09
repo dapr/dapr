@@ -1069,6 +1069,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
 		apisAndMethods := map[string][]string{
 			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1": {"POST", "PUT", "GET", "DELETE"},
+			"v1.0/actors/fakeActorType/fakeActorID/reminders":           {"GET"},
 			"v1.0/actors/fakeActorType/fakeActorID/method/method1":      {"POST", "PUT", "GET", "DELETE"},
 			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1":       {"POST", "PUT", "GET", "DELETE"},
 			"v1.0/actors/fakeActorType/fakeActorID/timers":              {"GET"},
@@ -1421,6 +1422,108 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 403, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_REMINDER_NON_HOSTED", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Reminder List - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders"
+		period := actorsapi.NewSchedulerReminderPeriod("@every 2s", 0)
+		data, err := anypb.New(wrapperspb.Bytes([]byte(`{"foo":"bar"}`)))
+		require.NoError(t, err)
+
+		actors.WithReminders(func(context.Context) (reminders.Interface, error) {
+			return remindersfake.New().WithList(func(_ context.Context, req *actorsapi.ListRemindersRequest) ([]*actorsapi.Reminder, error) {
+				assert.Equal(t, "fakeActorType", req.ActorType)
+				require.NotNil(t, req.ActorID)
+				assert.Equal(t, "fakeActorID", *req.ActorID)
+				return []*actorsapi.Reminder{
+					{
+						ActorType: "fakeActorType",
+						ActorID:   "fakeActorID",
+						Name:      "reminder1",
+						DueTime:   "1s",
+						Period:    period,
+						Data:      data,
+					},
+					{
+						ActorType: "fakeActorType",
+						ActorID:   "fakeActorID",
+						Name:      "reminder2",
+					},
+				}, nil
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.JSONEq(t, `{"reminders":[
+			{"name":"reminder1","actorType":"fakeActorType","actorID":"fakeActorID","dueTime":"1s","period":"@every 2s","data":{"foo":"bar"}},
+			{"name":"reminder2","actorType":"fakeActorType","actorID":"fakeActorID"}
+		]}`, string(resp.RawBody))
+	})
+
+	t.Run("Reminder List - 200 empty list", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders"
+		actors.WithReminders(func(context.Context) (reminders.Interface, error) {
+			return remindersfake.New(), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.JSONEq(t, `{"reminders":[]}`, string(resp.RawBody))
+	})
+
+	t.Run("Reminder List - 403 when actor type is not hosted", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders"
+		actors.WithReminders(func(context.Context) (reminders.Interface, error) {
+			return remindersfake.New().WithList(func(context.Context, *actorsapi.ListRemindersRequest) ([]*actorsapi.Reminder, error) {
+				return nil, reminders.ErrReminderOpActorNotHosted
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_REMINDER_NON_HOSTED", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Reminder List - 403 on reserved internal actor type", func(t *testing.T) {
+		apiPath := "v1.0/actors/dapr.internal.default.fakeAPI.workflow/fakeActorID/reminders"
+		actors.WithReminders(func(context.Context) (reminders.Interface, error) {
+			return remindersfake.New().WithList(func(context.Context, *actorsapi.ListRemindersRequest) ([]*actorsapi.Reminder, error) {
+				t.Fatal("reserved actor types must be rejected before reaching the reminders layer")
+				return nil, nil
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TYPE_RESERVED", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Reminder List - 500 on upstream error", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders"
+		actors.WithReminders(func(context.Context) (reminders.Interface, error) {
+			return remindersfake.New().WithList(func(context.Context, *actorsapi.ListRemindersRequest) ([]*actorsapi.Reminder, error) {
+				return nil, errors.New("UPSTREAM_ERROR")
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
 	})
 
 	t.Run("Reminder Get - 200 OK", func(t *testing.T) {

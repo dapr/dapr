@@ -207,6 +207,16 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 				Name: "GetActorTimer",
 			},
 		},
+		{
+			Methods: []string{http.MethodGet},
+			Route:   "actors/{actorType}/{actorId}/reminders",
+			Version: apiVersionV1,
+			Group:   endpointGroupActorV1Misc,
+			Handler: a.onListActorReminders(),
+			Settings: endpoints.EndpointSettings{
+				Name: "ListActorReminders",
+			},
+		},
 	}
 }
 
@@ -386,41 +396,80 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	respondWithEmpty(w)
 }
 
+// actorReminderJSON is the HTTP representation of a reminder, shared by the
+// get and list endpoints. Name is only populated by the list endpoint.
+type actorReminderJSON struct {
+	Name      string          `json:"name,omitempty"`
+	ActorID   string          `json:"actorID,omitempty"`
+	ActorType string          `json:"actorType,omitempty"`
+	Data      json.RawMessage `json:"data,omitempty"`
+	DueTime   *string         `json:"dueTime,omitempty"`
+	Period    *string         `json:"period,omitempty"`
+	TTL       *string         `json:"ttl,omitempty"`
+}
+
+func newActorReminderJSON(name, actorType, actorID string, dueTime, period, ttl *string, data *anypb.Any) (actorReminderJSON, error) {
+	d, err := anyToRawJSON(data)
+	if err != nil {
+		return actorReminderJSON{}, err
+	}
+	return actorReminderJSON{
+		Name:      name,
+		ActorID:   actorID,
+		ActorType: actorType,
+		Data:      d,
+		DueTime:   dueTime,
+		Period:    period,
+		TTL:       ttl,
+	}, nil
+}
+
 func (a *api) onGetActorReminder() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.GetActorReminder,
 		UniversalHTTPHandlerOpts[*runtimev1pb.GetActorReminderRequest, *runtimev1pb.GetActorReminderResponse]{
 			SkipInputBody: true,
 			OutModifier: func(out *runtimev1pb.GetActorReminderResponse) (any, error) {
-				//nolint:protogetter
-				m := struct {
-					ActorID   string          `json:"actorID,omitempty"`
-					ActorType string          `json:"actorType,omitempty"`
-					Data      json.RawMessage `json:"data,omitempty"`
-					DueTime   *string         `json:"dueTime,omitempty"`
-					Period    *string         `json:"period,omitempty"`
-					TTL       *string         `json:"ttl,omitempty"`
-				}{
-					ActorID:   out.ActorId,
-					ActorType: out.ActorType,
-					DueTime:   out.DueTime,
-					Period:    out.Period,
-					TTL:       out.Ttl,
-				}
-
-				var err error
-				m.Data, err = anyToRawJSON(out.GetData())
-				if err != nil {
-					return nil, err
-				}
-
-				return m, nil
+				return newActorReminderJSON("", out.GetActorType(), out.GetActorId(), out.DueTime, out.Period, out.Ttl, out.GetData())
 			},
 			InModifier: func(r *http.Request, in *runtimev1pb.GetActorReminderRequest) (*runtimev1pb.GetActorReminderRequest, error) {
 				in.ActorType = chi.URLParam(r, actorTypeParam)
 				in.ActorId = chi.URLParam(r, actorIDParam)
 				in.Name = chi.URLParam(r, nameParam)
 				return in, nil
+			},
+		},
+	)
+}
+
+// onListActorReminders lists the reminders of a single actor. The gRPC
+// ListActorReminders also supports listing a whole actor type; that has no
+// natural route in the actors HTTP API, so it is not exposed here.
+func (a *api) onListActorReminders() http.HandlerFunc {
+	return UniversalHTTPHandler(
+		a.universal.ListActorReminders,
+		UniversalHTTPHandlerOpts[*runtimev1pb.ListActorRemindersRequest, *runtimev1pb.ListActorRemindersResponse]{
+			SkipInputBody: true,
+			InModifier: func(r *http.Request, in *runtimev1pb.ListActorRemindersRequest) (*runtimev1pb.ListActorRemindersRequest, error) {
+				in.ActorType = chi.URLParam(r, actorTypeParam)
+				in.ActorId = new(chi.URLParam(r, actorIDParam))
+				return in, nil
+			},
+			OutModifier: func(out *runtimev1pb.ListActorRemindersResponse) (any, error) {
+				// Always a non-nil slice so an empty list serializes as [].
+				reminders := make([]actorReminderJSON, 0, len(out.GetReminders()))
+				for _, nr := range out.GetReminders() {
+					r := nr.GetReminder()
+					m, err := newActorReminderJSON(nr.GetName(), r.GetActorType(), r.GetActorId(), r.DueTime, r.Period, r.Ttl, r.GetData())
+					if err != nil {
+						return nil, err
+					}
+					reminders = append(reminders, m)
+				}
+
+				return struct {
+					Reminders []actorReminderJSON `json:"reminders"`
+				}{Reminders: reminders}, nil
 			},
 		},
 	)
