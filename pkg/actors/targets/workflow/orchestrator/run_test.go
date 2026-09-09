@@ -1097,3 +1097,76 @@ func Test_runWorkflow_pendingStartEmptyHistoryRuns(t *testing.T) {
 	require.Error(t, runErr)
 	assert.Zero(t, saves, "nothing may be committed for the abandoned healthy turn")
 }
+
+func Test_staleTurnDuplicate(t *testing.T) {
+	t.Parallel()
+
+	task := func(id int32) *backend.HistoryEvent {
+		return &protos.HistoryEvent{EventId: id, EventType: &protos.HistoryEvent_TaskScheduled{TaskScheduled: &protos.TaskScheduledEvent{Name: "act"}}}
+	}
+	timer := func(id int32) *backend.HistoryEvent {
+		return &protos.HistoryEvent{EventId: id, EventType: &protos.HistoryEvent_TimerCreated{TimerCreated: &protos.TimerCreatedEvent{}}}
+	}
+	child := func(id int32) *backend.HistoryEvent {
+		return &protos.HistoryEvent{EventId: id, EventType: &protos.HistoryEvent_ChildWorkflowInstanceCreated{ChildWorkflowInstanceCreated: &protos.ChildWorkflowInstanceCreatedEvent{Name: "child"}}}
+	}
+	completed := func(id int32) *backend.HistoryEvent {
+		return &protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: id}}}
+	}
+	started := &protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{Name: "wf"}}}
+
+	tests := map[string]struct {
+		history  []*backend.HistoryEvent
+		new      []*backend.HistoryEvent
+		wantKind string
+		wantID   int32
+		stale    bool
+	}{
+		"no new operations": {
+			history: []*backend.HistoryEvent{started, task(0)},
+			new:     []*backend.HistoryEvent{completed(0)},
+		},
+		"new operation with a fresh id": {
+			history: []*backend.HistoryEvent{started, task(0), completed(0)},
+			new:     []*backend.HistoryEvent{task(1)},
+		},
+		"same id but different kind": {
+			history: []*backend.HistoryEvent{started, task(0), completed(0)},
+			new:     []*backend.HistoryEvent{timer(0)},
+		},
+		"task re-created (the F1 stale turn)": {
+			history:  []*backend.HistoryEvent{started, task(0), completed(0)},
+			new:      []*backend.HistoryEvent{task(0)},
+			wantKind: "task",
+			wantID:   0,
+			stale:    true,
+		},
+		"timer re-created": {
+			history:  []*backend.HistoryEvent{started, timer(3)},
+			new:      []*backend.HistoryEvent{task(4), timer(3)},
+			wantKind: "timer",
+			wantID:   3,
+			stale:    true,
+		},
+		"child re-created": {
+			history:  []*backend.HistoryEvent{started, child(2)},
+			new:      []*backend.HistoryEvent{child(2)},
+			wantKind: "child",
+			wantID:   2,
+			stale:    true,
+		},
+		"empty history": {
+			new: []*backend.HistoryEvent{task(0)},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			kind, id, stale := staleTurnDuplicate(&wfenginestate.State{History: test.history}, &backend.WorkflowRuntimeState{NewEvents: test.new})
+			assert.Equal(t, test.stale, stale)
+			assert.Equal(t, test.wantKind, kind)
+			assert.Equal(t, test.wantID, id)
+		})
+	}
+}
