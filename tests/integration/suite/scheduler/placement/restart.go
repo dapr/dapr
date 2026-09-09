@@ -15,6 +15,7 @@ package placement
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 
@@ -42,6 +43,10 @@ type restart struct {
 }
 
 func (r *restart) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on windows which relies on unix process signals")
+	}
+
 	r.sched = scheduler.New(t, scheduler.WithPlacementEnabled(true))
 	r.schedBack = scheduler.New(t,
 		scheduler.WithPlacementEnabled(true),
