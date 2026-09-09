@@ -41,6 +41,7 @@ type dissemination struct {
 
 func (d *dissemination) Setup(t *testing.T) []framework.Option {
 	d.workflow = workflow.New(t,
+		workflow.WithPlacementService(),
 		workflow.WithPlacementOptions(placement.WithDisseminateTimeout(time.Second*7)),
 	)
 	return []framework.Option{

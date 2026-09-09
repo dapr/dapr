@@ -55,7 +55,7 @@ func (a *cleanup) Setup(t *testing.T) []framework.Option {
 		// the test window.
 		daprd.WithWorkflowClaimRetention(t, time.Second*2),
 	}
-	a.workflow = workflow.New(t, workflow.WithDaprdOptions(0, fp...))
+	a.workflow = workflow.New(t, workflow.WithPlacementService(), workflow.WithDaprdOptions(0, fp...))
 
 	// The joiners trigger the mid-run placement rebalance: deliberately not
 	// in WithProcesses, Run starts them at the churn moment.

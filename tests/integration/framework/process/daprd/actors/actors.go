@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -31,6 +32,8 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+
+	kitstrings "github.com/dapr/kit/strings"
 )
 
 type Actors struct {
@@ -62,13 +65,30 @@ func New(t *testing.T, fopts ...Option) *Actors {
 			sqlite.WithActorStateStore(true),
 			sqlite.WithCreateStateTables(),
 		),
-		placement: placement.New(t),
-		scheduler: scheduler.New(t,
-			scheduler.WithID("dapr-scheduler-0"),
-		),
 	}
 	for _, fopt := range fopts {
 		fopt(&opts)
+	}
+
+	// Tests which pick a topology, or drive the placement service, keep
+	// their choice.
+	if SchedulerPlacementFromEnv() &&
+		!opts.placementService && opts.placement == nil && !opts.schedulerPlacement {
+		opts.schedulerPlacement = true
+	}
+
+	if opts.scheduler == nil {
+		sopts := []scheduler.Option{scheduler.WithID("dapr-scheduler-0")}
+		if opts.schedulerPlacement {
+			sopts = append(sopts, scheduler.WithPlacementEnabled(true))
+		}
+		opts.scheduler = scheduler.New(t, sopts...)
+	}
+
+	// No standalone placement process runs when placement is served by the
+	// scheduler.
+	if opts.placement == nil && !opts.schedulerPlacement {
+		opts.placement = placement.New(t)
 	}
 
 	handlers := make([]app.Option, 0, len(opts.actorTypeHandlers))
@@ -111,12 +131,15 @@ func New(t *testing.T, fopts ...Option) *Actors {
 
 	dopts := []daprd.Option{
 		daprd.WithAppPort(app.Port()),
-		daprd.WithPlacementAddresses(opts.placement.Address()),
 		daprd.WithResourceFiles(opts.db.GetComponent(t)),
 		daprd.WithConfigManifests(t, opts.daprdConfigs...),
 		daprd.WithScheduler(opts.scheduler),
 		daprd.WithResourceFiles(opts.resources...),
 		daprd.WithErrorCodeMetrics(t),
+	}
+
+	if opts.placement != nil {
+		dopts = append(dopts, daprd.WithPlacementAddresses(opts.placement.Address()))
 	}
 
 	if opts.maxBodySize != nil {
@@ -139,7 +162,9 @@ func (a *Actors) Run(t *testing.T, ctx context.Context) {
 	a.runOnce.Do(func() {
 		a.app.Run(t, ctx)
 		a.db.Run(t, ctx)
-		a.place.Run(t, ctx)
+		if a.place != nil {
+			a.place.Run(t, ctx)
+		}
 		a.sched.Run(t, ctx)
 		a.daprd.Run(t, ctx)
 	})
@@ -150,7 +175,9 @@ func (a *Actors) Cleanup(t *testing.T) {
 		a.daprd.Cleanup(t)
 		if !a.sharedControlPlane {
 			a.sched.Cleanup(t)
-			a.place.Cleanup(t)
+			if a.place != nil {
+				a.place.Cleanup(t)
+			}
 			a.db.Cleanup(t)
 		}
 		a.app.Cleanup(t)
@@ -158,7 +185,9 @@ func (a *Actors) Cleanup(t *testing.T) {
 }
 
 func (a *Actors) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	a.place.WaitUntilRunning(t, ctx)
+	if a.place != nil {
+		a.place.WaitUntilRunning(t, ctx)
+	}
 	a.sched.WaitUntilRunning(t, ctx)
 	a.daprd.WaitUntilRunning(t, ctx)
 }
@@ -178,6 +207,8 @@ func (a *Actors) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	return a.daprd.Metrics(t, ctx).All()
 }
 
+// Placement returns the standalone placement process. Nil when the actors
+// were built with WithSchedulerPlacement, which runs no placement process.
 func (a *Actors) Placement() *placement.Placement {
 	return a.place
 }
@@ -196,4 +227,11 @@ func (a *Actors) AppID() string {
 
 func (a *Actors) DB() *sqlite.SQLite {
 	return a.db
+}
+
+// SchedulerPlacementFromEnv reports whether
+// DAPR_INTEGRATION_SCHEDULER_PLACEMENT is set truthy, which has the
+// scheduler serve actor placement for every harness built by this package.
+func SchedulerPlacementFromEnv() bool {
+	return kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_SCHEDULER_PLACEMENT"))
 }

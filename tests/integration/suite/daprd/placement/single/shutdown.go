@@ -36,6 +36,7 @@ type shutdown struct {
 
 func (s *shutdown) Setup(t *testing.T) []framework.Option {
 	s.actors = dactors.New(t,
+		dactors.WithPlacementService(),
 		dactors.WithActorTypes("mytype"),
 	)
 

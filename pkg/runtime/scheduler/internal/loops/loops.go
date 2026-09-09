@@ -50,6 +50,11 @@ type Reconnect struct {
 	*connbase
 	AppTarget  *bool
 	ActorTypes *[]string
+
+	// ActorAddress is the daprd internal gRPC host:port reported on
+	// WatchJobs streams so schedulers can route actor reminder triggers to
+	// the placement owner host.
+	ActorAddress *string
 }
 
 type Close struct {

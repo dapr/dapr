@@ -55,6 +55,7 @@ func (cr *crossreplica) Setup(t *testing.T) []framework.Option {
 	)
 
 	actor1 := dactors.New(t,
+		dactors.WithPlacementService(),
 		dactors.WithActorTypes("myactor"),
 		dactors.WithPlacement(cr.place),
 		dactors.WithActorTypeHandler("myactor", func(w http.ResponseWriter, r *http.Request) {
@@ -63,6 +64,7 @@ func (cr *crossreplica) Setup(t *testing.T) []framework.Option {
 		}),
 	)
 	actor2 := dactors.New(t,
+		dactors.WithPlacementService(),
 		dactors.WithActorTypes("myactor"),
 		dactors.WithPeerActor(actor1),
 		dactors.WithActorTypeHandler("myactor", func(w http.ResponseWriter, r *http.Request) {

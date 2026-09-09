@@ -43,6 +43,7 @@ type lateJoin struct {
 
 func (l *lateJoin) Setup(t *testing.T) []framework.Option {
 	l.withTypes = actors.New(t,
+		actors.WithPlacementService(),
 		actors.WithActorTypes("mytype"),
 		actors.WithActorTypeHandler("mytype", func(nethttp.ResponseWriter, *nethttp.Request) {
 			l.called.Add(1)
@@ -50,6 +51,7 @@ func (l *lateJoin) Setup(t *testing.T) []framework.Option {
 	)
 
 	l.noTypes = actors.New(t,
+		actors.WithPlacementService(),
 		actors.WithPeerActor(l.withTypes),
 	)
 

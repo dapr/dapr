@@ -42,9 +42,10 @@ type invoke struct {
 }
 
 func (i *invoke) Setup(t *testing.T) []framework.Option {
-	i.noTypes = actors.New(t)
+	i.noTypes = actors.New(t, actors.WithPlacementService())
 
 	i.withTypes = actors.New(t,
+		actors.WithPlacementService(),
 		actors.WithPeerActor(i.noTypes),
 		actors.WithActorTypes("mytype"),
 		actors.WithActorTypeHandler("mytype", func(nethttp.ResponseWriter, *nethttp.Request) {
