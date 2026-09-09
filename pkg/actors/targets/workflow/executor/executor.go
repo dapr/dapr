@@ -214,13 +214,11 @@ func (e *executor) isClosed() bool {
 	return e.closed
 }
 
-// tryDeactivate requests an idle deactivation without blocking; a full queue
-// leaves the actor in the table until the next request or a halt.
-func (e *executor) tryDeactivate() {
-	select {
-	case e.deactivateCh <- e:
-	default:
-	}
+// requestDeactivate queues an idle deactivation. The send blocks on a full
+// queue so every idle actor is examined; the drain goroutine never waits on
+// the caller, so this cannot deadlock.
+func (e *executor) requestDeactivate() {
+	e.deactivateCh <- e
 }
 
 func (e *executor) InvokeStream(ctx context.Context,
@@ -283,7 +281,7 @@ func (e *executor) watchComplete(ctx context.Context, stream func(*internalsv1pb
 			}
 		}
 		e.mu.Unlock()
-		e.tryDeactivate()
+		e.requestDeactivate()
 	}()
 
 	if e.cancelled {
