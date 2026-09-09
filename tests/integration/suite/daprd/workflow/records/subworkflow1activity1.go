@@ -76,10 +76,10 @@ func (a *subworkflow1activity1) Run(t *testing.T, ctx context.Context) {
 	// Poll to the steady state: the last rows land shortly after completion.
 	expected := 16
 	if a.workflow.Signing() {
-		// Signing adds 8 rows: parent gets 1 sigcert, 2 signatures and
-		// 1 ext-sigcert; child gets 1 sigcert, 2 signatures and 1 ext-sigcert
-		// (activity completion attestation).
-		expected = 24
+		// Signing adds 9 rows: parent gets 1 sigcert, 2 signatures and
+		// 1 ext-sigcert; child gets 1 sigcert, 2 signatures, 1 ext-sigcert
+		// (activity completion attestation) and 1 creation-input.
+		expected = 25
 	}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		if assert.NoError(c, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count)) {

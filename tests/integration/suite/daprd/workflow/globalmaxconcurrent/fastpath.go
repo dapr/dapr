@@ -39,23 +39,28 @@ type fastpath struct {
 }
 
 func (f *fastpath) Setup(t *testing.T) []framework.Option {
+	// The feature goes through WithFeatureEnabled so it joins the harness's
+	// feature list for the leg (daprd keeps only the last spec.features it
+	// loads); the manifest carries only the non-feature setting.
 	configManifest := `apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
   name: globalmax
 spec:
-  features:
-  - name: WorkflowsFastPath
-    enabled: true
   workflow:
     globalMaxConcurrentWorkflowInvocations: 2
 `
 	const appID = "globalmax-fastpath"
+	perDaprd := []daprd.Option{
+		daprd.WithConfigManifests(t, configManifest),
+		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
+		daprd.WithAppID(appID),
+	}
 	f.workflow = workflow.New(t,
 		workflow.WithDaprds(3),
-		workflow.WithDaprdOptions(0, daprd.WithConfigManifests(t, configManifest), daprd.WithAppID(appID)),
-		workflow.WithDaprdOptions(1, daprd.WithConfigManifests(t, configManifest), daprd.WithAppID(appID)),
-		workflow.WithDaprdOptions(2, daprd.WithConfigManifests(t, configManifest), daprd.WithAppID(appID)),
+		workflow.WithDaprdOptions(0, perDaprd...),
+		workflow.WithDaprdOptions(1, perDaprd...),
+		workflow.WithDaprdOptions(2, perDaprd...),
 	)
 
 	return []framework.Option{
