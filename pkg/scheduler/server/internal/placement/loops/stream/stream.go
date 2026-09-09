@@ -49,8 +49,9 @@ type stream struct {
 
 	loop loop.Interface[loops.EventStream]
 
-	addr string
-	wg   sync.WaitGroup
+	addr      string
+	wg        sync.WaitGroup
+	closeOnce sync.Once
 }
 
 func New(ctx context.Context, opts Options) loop.Interface[loops.EventStream] {
@@ -72,15 +73,21 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventStream] {
 	s.loop = loop.New[loops.EventStream](64).NewLoop(s)
 
 	s.wg.Go(func() {
-		err := s.recvLoop()
+		s.closeStream(s.recvLoop())
+	})
+
+	return s.loop
+}
+
+// closeStream reports the stream closed to the namespace loop
+func (s *stream) closeStream(err error) {
+	s.closeOnce.Do(func() {
 		s.nsLoop.Enqueue(&loops.ConnCloseStream{
 			StreamIDx: s.idx,
 			Namespace: s.ns,
 			Error:     err,
 		})
 	})
-
-	return s.loop
 }
 
 func (s *stream) Handle(ctx context.Context, event loops.EventStream) error {
@@ -102,11 +109,7 @@ func (s *stream) Handle(ctx context.Context, event loops.EventStream) error {
 
 	if err != nil {
 		log.Errorf("Error handling stream event %T on %s: %v", event, s.addr, err)
-		s.nsLoop.Enqueue(&loops.ConnCloseStream{
-			StreamIDx: s.idx,
-			Namespace: s.ns,
-			Error:     err,
-		})
+		s.closeStream(err)
 	}
 
 	return nil

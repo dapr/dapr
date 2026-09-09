@@ -38,6 +38,10 @@ type Options struct {
 	// incapable connected sidecars transitions between zero and non-zero.
 	// Consumers re-read the counts when handling.
 	OnSchedulerPlacementCapabilityChange func()
+
+	// PlacementEnabled gates the incapable sidecars: on a scheduler
+	// not serving placement every sidecar counts as incapable
+	PlacementEnabled bool
 }
 
 // Pool represents a connection pool for namespace/appID separation of sidecars
@@ -55,6 +59,7 @@ type Pool struct {
 	incapable                   int
 	capable                     int
 	onPlacementCapabilityChange func()
+	placementEnabled            bool
 }
 
 func New(opts Options) *Pool {
@@ -62,6 +67,7 @@ func New(opts Options) *Pool {
 		readyCh:                     make(chan struct{}),
 		cron:                        opts.Cron,
 		onPlacementCapabilityChange: opts.OnSchedulerPlacementCapabilityChange,
+		placementEnabled:            opts.PlacementEnabled,
 	}
 }
 
@@ -124,7 +130,7 @@ func (p *Pool) trackCapability(ctx context.Context, capable bool) {
 	incapableNow := p.incapable
 	p.capLock.Unlock()
 
-	if !capable {
+	if !capable && p.placementEnabled {
 		monitoring.RecordPlacementIncapableSidecars(int64(incapableNow))
 	}
 
@@ -141,7 +147,7 @@ func (p *Pool) trackCapability(ctx context.Context, capable bool) {
 		incapableNow := p.incapable
 		p.capLock.Unlock()
 
-		if !capable {
+		if !capable && p.placementEnabled {
 			monitoring.RecordPlacementIncapableSidecars(int64(incapableNow))
 		}
 

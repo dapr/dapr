@@ -83,6 +83,7 @@ func New(t *testing.T, fopts ...Option) *Cluster {
 				scheduler.WithOverrideBroadcastHostPort(opts.overrideBroadcastHostPorts[i]),
 			)
 		}
+		sopts = append(sopts, opts.schedulerOptions...)
 
 		schedulers[i] = scheduler.New(t, sopts...)
 	}

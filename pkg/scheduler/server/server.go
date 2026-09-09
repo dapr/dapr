@@ -212,16 +212,24 @@ func (s *Server) Run(ctx context.Context) error {
 
 	log.Info("Dapr Scheduler is starting...")
 
+	// On shutdown, placement closes its streams before the cron stops.
+	// Otherwise the cron teardown revokes the placement leadership first and
+	// the streams close with a lost leadership error instead of the shutdown
+	// status.
+	cronCtx, cronCancel := context.WithCancel(context.WithoutCancel(ctx))
 	runners := []concurrency.Runner{
 		s.runServer,
-		s.placement.Run,
 		func(ctx context.Context) error {
-			err := s.cron.Run(ctx)
-			if ctx.Err() != nil {
+			defer cronCancel()
+			return s.placement.Run(ctx)
+		},
+		func(context.Context) error {
+			err := s.cron.Run(cronCtx)
+			if cronCtx.Err() != nil {
 				if err != nil {
 					log.Errorf("Error running scheduler cron: %s", err)
 				}
-				return ctx.Err()
+				return cronCtx.Err()
 			}
 			return err
 		},

@@ -112,8 +112,10 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 	// withholding would only halt the capable sidecars' actors too.
 	awaitingLeadership := !advertised && !gateCapable
 
-	// An old sidecar cannot take scheduler placement, so warn.
-	if gateIncapable {
+	electedAddr := placementLeader(hosts)
+	// An old sidecar cannot take scheduler placement, so warn, but only when
+	// a scheduler actually serves placement.
+	if gateIncapable && electedAddr != "" {
 		if !h.incapableWarned {
 			h.incapableWarned = true
 			log.Warn("A sidecar running an older Dapr version is connected while actor placement is served by the scheduler. Its actor APIs stall unless it can reach a placement service the control plane cannot detect, such as one under a custom service name or outside the cluster, which would place its actors as a second authority. Upgrade the sidecar, and remove any such placement service.")
@@ -122,7 +124,6 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 		h.incapableWarned = false
 	}
 
-	electedAddr := placementLeader(hosts)
 	leaderAddr := electedAddr
 	if awaitingLeadership {
 		leaderAddr = ""
