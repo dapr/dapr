@@ -73,11 +73,11 @@ func (l *list) Setup(t *testing.T) []framework.Option {
 }
 
 func (l *list) Run(t *testing.T, ctx context.Context) {
-  type apiErr struct {
-  	ErrorCode string `json:"errorCode"`
-  }
+	type apiErr struct {
+		ErrorCode string `json:"errorCode"`
+	}
 
-		l.app1.WaitUntilRunning(t, ctx)
+	l.app1.WaitUntilRunning(t, ctx)
 
 	httpClient := client.HTTP(t)
 	body := `{"dueTime":"0s","period":"1s","data":"hello"}`
