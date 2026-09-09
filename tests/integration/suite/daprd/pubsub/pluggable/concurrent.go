@@ -18,7 +18,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,11 +35,6 @@ func init() {
 	suite.Register(new(concurrent))
 }
 
-// numInFlight is the number of messages that must be handled at the same time
-// for the test to pass. Two is enough to tell concurrent dispatch apart from
-// serial dispatch.
-const numInFlight = 2
-
 // concurrent ensures that messages received from a pluggable pub/sub component
 // are dispatched to the application concurrently, so that more than one message
 // can be in flight per subscription. Dispatching them inline caps a
@@ -48,6 +42,11 @@ const numInFlight = 2
 type concurrent struct {
 	daprd  *daprd.Daprd
 	broker *broker.Broker
+
+	// numInFlight is the number of messages that must be handled at the same
+	// time for the test to pass. Two is enough to tell concurrent dispatch
+	// apart from serial dispatch.
+	numInFlight int64
 
 	inFlight    atomic.Int64
 	allInFlight chan struct{}
@@ -57,6 +56,7 @@ type concurrent struct {
 func (c *concurrent) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
+	c.numInFlight = 2
 	c.allInFlight = make(chan struct{})
 
 	// Every event handler blocks until all of them have been entered, so the
@@ -64,7 +64,7 @@ func (c *concurrent) Setup(t *testing.T) []framework.Option {
 	// concurrently.
 	app := app.New(t,
 		app.WithOnTopicEventFn(func(ctx context.Context, _ *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
-			if c.inFlight.Add(1) == numInFlight {
+			if c.inFlight.Add(1) == c.numInFlight {
 				c.closeOnce.Do(func() { close(c.allInFlight) })
 			}
 			select {
@@ -105,17 +105,14 @@ func (c *concurrent) Run(t *testing.T, ctx context.Context) {
 
 	require.Len(t, c.daprd.GetMetaSubscriptions(t, ctx), 1)
 
-	for range numInFlight {
+	for range c.numInFlight {
 		c.broker.PublishHelloWorld("a")
 	}
 
-	tctx, cancel := context.WithTimeout(ctx, time.Second*15)
-	defer cancel()
-
 	select {
 	case <-c.allInFlight:
-	case <-tctx.Done():
+	case <-ctx.Done():
 		assert.Fail(t, "messages were not dispatched concurrently",
-			"expected %d messages to be in flight at once, got %d", numInFlight, c.inFlight.Load())
+			"expected %d messages to be in flight at once, got %d", c.numInFlight, c.inFlight.Load())
 	}
 }
