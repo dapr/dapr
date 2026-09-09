@@ -173,7 +173,7 @@ func (c *Client) Run(ctx context.Context) error {
 	for {
 		err := runner().Run(ctx)
 		if err == nil {
-			return c.table.HaltAll(ctx)
+			return c.haltAllOnShutdown()
 		}
 
 		cancel()
@@ -190,7 +190,7 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 
 		if ctx.Err() != nil {
-			return c.table.HaltAll(context.Background())
+			return c.haltAllOnShutdown()
 		}
 
 		select {
@@ -208,16 +208,27 @@ func (c *Client) Run(ctx context.Context) error {
 			log.Errorf("Failed to reconnect to placement: %s", err)
 
 			if ctx.Err() != nil {
-				return c.table.HaltAll(context.Background())
+				return c.haltAllOnShutdown()
 			}
 
 			select {
 			case <-time.After(time.Second):
 			case <-ctx.Done():
-				return c.table.HaltAll(context.Background())
+				return c.haltAllOnShutdown()
 			}
 		}
 	}
+}
+
+// haltAllOnShutdown deactivates every actor hosted on this daprd as the
+// placement client shuts down. Deactivation is best effort here: the
+// application may already be refusing connections because it is shutting down
+// too, and a failed deactivation must not turn into a fatal runtime error.
+func (c *Client) haltAllOnShutdown() error {
+	if err := c.table.HaltAll(context.Background()); err != nil {
+		log.Errorf("Failed to halt all actors during placement shutdown: %s", err)
+	}
+	return nil
 }
 
 func (c *Client) Ready() bool {
