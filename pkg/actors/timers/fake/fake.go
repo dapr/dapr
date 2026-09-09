@@ -22,12 +22,16 @@ import (
 type Fake struct {
 	createFn func(context.Context, *api.CreateTimerRequest) error
 	deleteFn func(context.Context, *api.DeleteTimerRequest) error
+	listFn   func(context.Context, *api.ListTimersRequest) ([]*api.Reminder, error)
+	getFn    func(context.Context, *api.GetTimerRequest) (*api.Reminder, error)
 }
 
 func New() *Fake {
 	return &Fake{
 		createFn: func(context.Context, *api.CreateTimerRequest) error { return nil },
 		deleteFn: func(context.Context, *api.DeleteTimerRequest) error { return nil },
+		listFn:   func(context.Context, *api.ListTimersRequest) ([]*api.Reminder, error) { return nil, nil },
+		getFn:    func(context.Context, *api.GetTimerRequest) (*api.Reminder, error) { return nil, nil },
 	}
 }
 
@@ -41,10 +45,28 @@ func (f *Fake) WithDeleteFn(fn func(context.Context, *api.DeleteTimerRequest) er
 	return f
 }
 
+func (f *Fake) WithListFn(fn func(context.Context, *api.ListTimersRequest) ([]*api.Reminder, error)) *Fake {
+	f.listFn = fn
+	return f
+}
+
+func (f *Fake) WithGetFn(fn func(context.Context, *api.GetTimerRequest) (*api.Reminder, error)) *Fake {
+	f.getFn = fn
+	return f
+}
+
 func (f *Fake) Create(ctx context.Context, req *api.CreateTimerRequest) error {
 	return f.createFn(ctx, req)
 }
 
 func (f *Fake) Delete(ctx context.Context, req *api.DeleteTimerRequest) error {
 	return f.deleteFn(ctx, req)
+}
+
+func (f *Fake) List(ctx context.Context, req *api.ListTimersRequest) ([]*api.Reminder, error) {
+	return f.listFn(ctx, req)
+}
+
+func (f *Fake) Get(ctx context.Context, req *api.GetTimerRequest) (*api.Reminder, error) {
+	return f.getFn(ctx, req)
 }
