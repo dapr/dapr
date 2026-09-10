@@ -43,7 +43,7 @@ type timeout struct {
 func (o *timeout) Setup(t *testing.T) []framework.Option {
 	o.sched = scheduler.New(t,
 		scheduler.WithPlacementEnabled(true),
-		scheduler.WithPlacementDisseminateTimeout(time.Second),
+		scheduler.WithPlacementDisseminateTimeout(time.Second*3),
 	)
 	return []framework.Option{
 		framework.WithProcesses(o.sched),
@@ -111,28 +111,8 @@ func (o *timeout) Run(t *testing.T, ctx context.Context) {
 		ActorTypes: []string{"typeA"},
 	})
 
-	// The second host stops acking after its first order: the join round
-	// cannot complete, so the host is evicted after the disseminate timeout
-	// with DeadlineExceeded.
-	streamB := openAndReport(&schedulerv1pb.ActorHost{
-		Address:    "127.0.0.1:40002",
-		AppId:      "app-b",
-		Namespace:  "default",
-		ActorTypes: []string{"typeA"},
-	})
-
-	errB := make(chan error, 1)
-	go func() {
-		for {
-			if _, err := streamB.Recv(); err != nil {
-				errB <- err
-				return
-			}
-		}
-	}()
-
-	// The survivor acks every order for the whole test: with a one second
-	// timeout any unacked round would evict it too.
+	// The survivor acks every order for the whole test, starting before the
+	// non-acker joins: any unacked round would evict it too.
 	converged := func(order *schedulerv1pb.PlacementOrder) bool {
 		if order.GetOperation() != schedulerv1pb.Operation_OPERATION_UPDATE {
 			return false
@@ -169,6 +149,26 @@ func (o *timeout) Run(t *testing.T, ctx context.Context) {
 					}
 					break
 				}
+			}
+		}
+	}()
+
+	// The second host stops acking after its first order: the join round
+	// cannot complete, so the host is evicted after the disseminate timeout
+	// with DeadlineExceeded.
+	streamB := openAndReport(&schedulerv1pb.ActorHost{
+		Address:    "127.0.0.1:40002",
+		AppId:      "app-b",
+		Namespace:  "default",
+		ActorTypes: []string{"typeA"},
+	})
+
+	errB := make(chan error, 1)
+	go func() {
+		for {
+			if _, err := streamB.Recv(); err != nil {
+				errB <- err
+				return
 			}
 		}
 	}()

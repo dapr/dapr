@@ -31,9 +31,11 @@ func init() {
 	suite.Register(new(coalesce))
 }
 
-// coalesce asserts membership churn within the coalesce window collapses
-// into one dissemination round: 2 hosts joining back to back land on the
-// observer in a single update, never one at a time.
+// coalesce asserts the coalesce window batches membership churn: the
+// window arms when a round completes with churn accumulated behind it, and
+// a host joining inside the armed window merges into the one follow-up
+// round. An unbatched scheduler disseminates that follow-up immediately,
+// which the observer sees as an extra 4 host update before the 5 host one.
 type coalesce struct {
 	sched *scheduler.Scheduler
 }
@@ -102,17 +104,6 @@ func (o *coalesce) Run(t *testing.T, ctx context.Context) {
 		return addrs
 	}
 
-	ackOrdersUntil := func(stream schedulerv1pb.Scheduler_ReportActorTypesClient, match func(*schedulerv1pb.PlacementOrder) bool) *schedulerv1pb.PlacementOrder {
-		for {
-			order, err := stream.Recv()
-			require.NoError(t, err)
-			require.NoError(t, sendAck(stream, order))
-			if match(order) {
-				return order
-			}
-		}
-	}
-
 	host := func(n string) *schedulerv1pb.ActorHost {
 		return &schedulerv1pb.ActorHost{
 			Address:    "127.0.0.1:4000" + n,
@@ -123,52 +114,104 @@ func (o *coalesce) Run(t *testing.T, ctx context.Context) {
 	}
 
 	streamA := openAndReport(host("1"))
-	streamB := openAndReport(host("2"))
 
-	errB := make(chan error, 1)
+	// The observer acks every order and forwards its typeA updates in
+	// order.
+	updatesA := make(chan *schedulerv1pb.PlacementOrder, 16)
+	errA := make(chan error, 1)
 	go func() {
 		for {
-			order, err := streamB.Recv()
+			order, err := streamA.Recv()
 			if err != nil {
-				errB <- err
+				errA <- err
 				return
 			}
-			if err = sendAck(streamB, order); err != nil {
-				errB <- err
+			if err = sendAck(streamA, order); err != nil {
+				errA <- err
 				return
+			}
+			if order.GetOperation() == schedulerv1pb.Operation_OPERATION_UPDATE {
+				if _, ok := order.GetTables().GetEntries()["typeA"]; ok {
+					updatesA <- order
+				}
 			}
 		}
 	}()
-	ackOrdersUntil(streamA, func(order *schedulerv1pb.PlacementOrder) bool {
-		return order.GetOperation() == schedulerv1pb.Operation_OPERATION_UPDATE &&
-			len(hostsOf(order)) == 2
-	})
 
-	// Two hosts join back to back within the window: the observer's next
-	// table for the type carries both at once.
-	streamC := openAndReport(host("3"))
-	streamD := openAndReport(host("4"))
-	for _, s := range []schedulerv1pb.Scheduler_ReportActorTypesClient{streamC, streamD} {
-		errS := make(chan error, 1)
+	ackAll := func(stream schedulerv1pb.Scheduler_ReportActorTypesClient) {
 		go func() {
 			for {
-				order, err := s.Recv()
+				order, err := stream.Recv()
 				if err != nil {
-					errS <- err
 					return
 				}
-				if err = sendAck(s, order); err != nil {
-					errS <- err
+				if sendAck(stream, order) != nil {
 					return
 				}
 			}
 		}()
 	}
+	streamB := openAndReport(host("2"))
+	ackAll(streamB)
 
-	update := ackOrdersUntil(streamA, func(order *schedulerv1pb.PlacementOrder) bool {
-		return order.GetOperation() == schedulerv1pb.Operation_OPERATION_UPDATE &&
-			len(hostsOf(order)) > 2
-	})
-	assert.Len(t, hostsOf(update), 4,
+	nextUpdate := func() *schedulerv1pb.PlacementOrder {
+		select {
+		case update := <-updatesA:
+			return update
+		case err := <-errA:
+			require.Fail(t, "the observer stream failed", err)
+		case <-time.After(time.Second * 20):
+			require.Fail(t, "no update arrived")
+		}
+		return nil
+	}
+
+	// Drain the observer's updates until the second host's join round
+	// completed, so the held round phase starts from a settled 2 host
+	// table.
+	update := nextUpdate()
+	for len(hostsOf(update)) != 2 {
+		update = nextUpdate()
+	}
+
+	// The third host withholds its join round's LOCK ack, holding the round
+	// in flight while the fourth host joins behind it. The join round's
+	// LOCK carries the type where the snapshot's carries none.
+	streamC := openAndReport(host("3"))
+	release := make(chan struct{})
+	go func() {
+		for {
+			order, err := streamC.Recv()
+			if err != nil {
+				return
+			}
+			if order.GetOperation() == schedulerv1pb.Operation_OPERATION_LOCK && len(order.GetActorTypes()) > 0 {
+				<-release
+			}
+			if sendAck(streamC, order) != nil {
+				return
+			}
+		}
+	}()
+
+	streamD := openAndReport(host("4"))
+	ackAll(streamD)
+	// The fourth host's churn lands behind the held round before it is
+	// released, so the round completes with churn pending and the window
+	// arms.
+	time.Sleep(time.Second)
+	close(release)
+
+	update = nextUpdate()
+	require.Len(t, hostsOf(update), 4, "the held round's update carries the membership at send time")
+
+	// A fifth host joins inside the armed window: its churn merges into the
+	// one follow-up round, so the observer's next update carries 5 hosts,
+	// never 4 again.
+	streamE := openAndReport(host("5"))
+	ackAll(streamE)
+
+	update = nextUpdate()
+	assert.Len(t, hostsOf(update), 5,
 		"churn within the coalesce window must land in one round, not one host at a time")
 }

@@ -24,12 +24,23 @@ type options struct {
 
 	overrideBroadcastHostPorts []string
 	schedulerOptions           []scheduler.Option
+	schedulerNOptions          map[uint32][]scheduler.Option
 }
 
 // WithSchedulerOptions appends options to every scheduler in the cluster.
 func WithSchedulerOptions(opts ...scheduler.Option) Option {
 	return func(o *options) {
 		o.schedulerOptions = append(o.schedulerOptions, opts...)
+	}
+}
+
+// WithSchedulerNOptions appends options to the nth scheduler in the cluster.
+func WithSchedulerNOptions(n uint32, opts ...scheduler.Option) Option {
+	return func(o *options) {
+		if o.schedulerNOptions == nil {
+			o.schedulerNOptions = make(map[uint32][]scheduler.Option)
+		}
+		o.schedulerNOptions[n] = append(o.schedulerNOptions[n], opts...)
 	}
 }
 

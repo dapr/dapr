@@ -15,6 +15,7 @@ package placement
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,7 +34,7 @@ func init() {
 
 // namespaces asserts placement tables are namespaced: hosts reporting the
 // same actor type in different namespaces never appear in each other's
-// tables.
+// tables, and an emptied namespace is deleted and rebuilt for a later host.
 type namespaces struct {
 	sched *scheduler.Scheduler
 }
@@ -54,13 +55,15 @@ func (n *namespaces) Run(t *testing.T, ctx context.Context) {
 		SupportsSchedulerPlacement: true,
 	})
 
+	client := n.sched.Client(t, ctx)
+
 	// openAndReport opens a ReportActorTypes stream and sends the host
 	// report, retrying while the leader election settles.
-	openAndReport := func(host *schedulerv1pb.ActorHost) schedulerv1pb.Scheduler_ReportActorTypesClient {
+	openAndReport := func(sctx context.Context, host *schedulerv1pb.ActorHost) schedulerv1pb.Scheduler_ReportActorTypesClient {
 		var stream schedulerv1pb.Scheduler_ReportActorTypesClient
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var err error
-			stream, err = n.sched.Client(t, ctx).ReportActorTypes(ctx)
+			stream, err = client.ReportActorTypes(sctx)
 			if !assert.NoError(c, err) {
 				return
 			}
@@ -116,7 +119,9 @@ func (n *namespaces) Run(t *testing.T, ctx context.Context) {
 		}
 	}
 
-	streamA := openAndReport(&schedulerv1pb.ActorHost{
+	actx, acancel := context.WithCancel(ctx)
+	t.Cleanup(acancel)
+	streamA := openAndReport(actx, &schedulerv1pb.ActorHost{
 		Address:    "127.0.0.1:40001",
 		AppId:      "app-a",
 		Namespace:  "ns1",
@@ -128,7 +133,9 @@ func (n *namespaces) Run(t *testing.T, ctx context.Context) {
 
 	// The second namespace's host gets a table with only itself, however
 	// both report the same actor type.
-	streamB := openAndReport(&schedulerv1pb.ActorHost{
+	bctx, bcancel := context.WithCancel(ctx)
+	t.Cleanup(bcancel)
+	streamB := openAndReport(bctx, &schedulerv1pb.ActorHost{
 		Address:    "127.0.0.1:40002",
 		AppId:      "app-b",
 		Namespace:  "ns2",
@@ -137,4 +144,32 @@ func (n *namespaces) Run(t *testing.T, ctx context.Context) {
 	updateB := ackOrdersUntilUpdate(streamB)
 	assert.Equal(t, "ns2", updateB.GetNamespace())
 	assert.ElementsMatch(t, []string{"127.0.0.1:40002"}, sharedHosts(updateB))
+
+	// Closing a namespace's last stream deletes the namespace. A host
+	// reconnecting afterwards rebuilds it and is served a table with only
+	// itself.
+	acancel()
+	bcancel()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		var streams float64
+		for k, v := range n.sched.Metrics(c, ctx).All() {
+			if strings.HasPrefix(k, "dapr_scheduler_placement_streams_connected") {
+				streams += v
+			}
+		}
+		assert.Zero(c, streams)
+	}, time.Second*20, time.Millisecond*50)
+
+	streamC := openAndReport(ctx, &schedulerv1pb.ActorHost{
+		Address:    "127.0.0.1:40003",
+		AppId:      "app-c",
+		Namespace:  "ns1",
+		ActorTypes: []string{"shared"},
+	})
+	updateC := ackOrdersUntilUpdate(streamC)
+	for len(sharedHosts(updateC)) != 1 {
+		updateC = ackOrdersUntilUpdate(streamC)
+	}
+	assert.Equal(t, "ns1", updateC.GetNamespace())
+	assert.ElementsMatch(t, []string{"127.0.0.1:40003"}, sharedHosts(updateC))
 }

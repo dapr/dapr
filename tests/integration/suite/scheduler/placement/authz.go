@@ -15,6 +15,8 @@ package placement
 
 import (
 	"context"
+	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -68,12 +70,17 @@ func (a *authz) Run(t *testing.T, ctx context.Context) {
 		}},
 	}))
 
+	client := a.sched.ClientMTLS(t, ctx, "myapp")
 	report := func(host *schedulerv1pb.ActorHost) error {
-		rstream, rerr := a.sched.ClientMTLS(t, ctx, "myapp").ReportActorTypes(ctx)
-		require.NoError(t, rerr)
-		require.NoError(t, rstream.Send(&schedulerv1pb.ReportActorTypesRequest{
+		rstream, rerr := client.ReportActorTypes(ctx)
+		if rerr != nil {
+			return rerr
+		}
+		if rerr = rstream.Send(&schedulerv1pb.ReportActorTypesRequest{
 			Msg: &schedulerv1pb.ReportActorTypesRequest_Report{Report: host},
-		}))
+		}); rerr != nil && !errors.Is(rerr, io.EOF) {
+			return rerr
+		}
 		_, rerr = rstream.Recv()
 		return rerr
 	}
