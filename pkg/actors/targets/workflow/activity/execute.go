@@ -34,7 +34,12 @@ func (a *activity) executeActivity(ctx context.Context, name string, invocation 
 		return fmt.Errorf("invalid activity task event: '%s'", taskEvent.String())
 	}
 
-	endIndex := strings.Index(a.actorID, "::")
+	// The actor ID is "<instanceID>::<taskID>::<generation>". The instance ID
+	// may itself contain "::"; the two trailing components never do.
+	endIndex := strings.LastIndex(a.actorID, "::")
+	if endIndex > 0 {
+		endIndex = strings.LastIndex(a.actorID[:endIndex], "::")
+	}
 	if endIndex < 0 {
 		return fmt.Errorf("invalid activity actor ID: '%s'", a.actorID)
 	}
