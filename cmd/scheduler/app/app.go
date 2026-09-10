@@ -150,7 +150,9 @@ func Run() {
 
 					Workers: opts.Workers,
 
-					PlacementEnabled: opts.PlacementEnabled,
+					PlacementEnabled:                   opts.PlacementEnabled,
+					PlacementDisseminateTimeout:        opts.PlacementDisseminateTimeout,
+					PlacementDisseminateCoalesceWindow: opts.PlacementDisseminateCoalesceWindow,
 				})
 				if serr != nil {
 					return nil, serr

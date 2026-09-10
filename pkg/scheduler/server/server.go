@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/controller"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/placement"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
@@ -67,7 +68,9 @@ type Options struct {
 	Backend       *string
 	BackendConfig any
 
-	PlacementEnabled bool
+	PlacementEnabled                   bool
+	PlacementDisseminateTimeout        time.Duration
+	PlacementDisseminateCoalesceWindow time.Duration
 
 	EtcdEmbed                      bool
 	EtcdDataDir                    string
@@ -102,6 +105,7 @@ type Server struct {
 	serializer *serialize.Serializer
 	cron       cron.Interface
 	etcd       etcd.Interface
+	placement  placement.Interface
 
 	hzAPIServer healthz.Target
 
@@ -160,13 +164,26 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		}
 	}
 
+	place := placement.New(placement.Options{
+		Enabled:            opts.PlacementEnabled,
+		ID:                 opts.EtcdName,
+		Security:           opts.Security,
+		Healthz:            opts.Healthz,
+		DisseminateTimeout: opts.PlacementDisseminateTimeout,
+		CoalesceWindow:     opts.PlacementDisseminateCoalesceWindow,
+	})
+
 	cron := cron.New(cron.Options{
-		ID:            opts.EtcdName,
-		Host:          &schedulerv1pb.Host{Address: broadcastAddr},
+		ID: opts.EtcdName,
+		Host: &schedulerv1pb.Host{
+			Address:                   broadcastAddr,
+			SchedulerPlacementEnabled: opts.PlacementEnabled,
+		},
 		Etcd:          etcdServer,
 		Backend:       opts.Backend,
 		BackendConfig: opts.BackendConfig,
 		Workers:       opts.Workers,
+		Placement:     place,
 	})
 
 	if opts.Controller != nil {
@@ -178,6 +195,7 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		listenAddress: opts.ListenAddress,
 		sec:           opts.Security,
 		cron:          cron,
+		placement:     place,
 		etcd:          etcdServer,
 		serializer: serialize.New(serialize.Options{
 			Security: opts.Security,
@@ -194,15 +212,24 @@ func (s *Server) Run(ctx context.Context) error {
 
 	log.Info("Dapr Scheduler is starting...")
 
+	// On shutdown, placement closes its streams before the cron stops.
+	// Otherwise the cron teardown revokes the placement leadership first and
+	// the streams close with a lost leadership error instead of the shutdown
+	// status.
+	cronCtx, cronCancel := context.WithCancel(context.WithoutCancel(ctx))
 	runners := []concurrency.Runner{
 		s.runServer,
 		func(ctx context.Context) error {
-			err := s.cron.Run(ctx)
-			if ctx.Err() != nil {
+			defer cronCancel()
+			return s.placement.Run(ctx)
+		},
+		func(context.Context) error {
+			err := s.cron.Run(cronCtx)
+			if cronCtx.Err() != nil {
 				if err != nil {
 					log.Errorf("Error running scheduler cron: %s", err)
 				}
-				return ctx.Err()
+				return cronCtx.Err()
 			}
 			return err
 		},
@@ -244,6 +271,12 @@ func (s *Server) runServer(ctx context.Context) error {
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			Time:    time.Second * 3,
 			Timeout: time.Second * 5,
+		}),
+		// The placement service pings its WatchHosts connection to detect a
+		// scheduler which died mid-stream.
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             time.Second * 5,
+			PermitWithoutStream: true,
 		}),
 	)
 	schedulerv1pb.RegisterSchedulerServer(srv, s)
