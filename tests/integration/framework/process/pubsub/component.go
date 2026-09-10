@@ -15,6 +15,7 @@ package pubsub
 
 import (
 	"context"
+	"errors"
 	"io"
 	"testing"
 
@@ -90,24 +91,38 @@ func (c *component) PullMessages(req compv1pb.PubSub_PullMessagesServer) error {
 		return err
 	}
 
+	// Recv runs in its own goroutine so that acks are consumed independently
+	// of the Send loop. Blocking the Send loop on the ack of the previous
+	// message would serialise delivery at the broker and mask whether the
+	// runtime dispatches messages concurrently. Per gRPC docs, Send and Recv
+	// on the same stream from separate goroutines is safe.
+	recvErr := make(chan error, 1)
+	go func() {
+		for {
+			resp, err := req.Recv()
+			if err != nil {
+				recvErr <- err
+				return
+			}
+			select {
+			case c.pmrReqCh <- resp:
+			case <-req.Context().Done():
+				return
+			}
+		}
+	}()
+
 	for {
 		select {
 		case pmr := <-c.pmrRespCh:
 			if err := req.Send(pmr); err != nil {
 				return err
 			}
-
-			resp, err := req.Recv()
-			if err != nil {
-				return err
-			}
-
-			select {
-			case c.pmrReqCh <- resp:
-			case <-req.Context().Done():
+		case err := <-recvErr:
+			if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
 				return nil
 			}
-
+			return err
 		case <-req.Context().Done():
 			return nil
 		}

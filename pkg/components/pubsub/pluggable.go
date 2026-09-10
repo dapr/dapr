@@ -189,8 +189,14 @@ func (p *grpcPubSub) pullMessages(parentCtx context.Context, topic *proto.Topic,
 	}
 
 	handle := p.adaptHandler(streamCtx, pull, handler)
+
+	var wg sync.WaitGroup
 	go func() {
+		// Deferred in this order so in-flight handlers are given the chance to
+		// finish, and ack, before the stream is closed underneath them.
 		defer cleanup()
+		defer wg.Wait()
+
 		for {
 			msg, err := pull.Recv()
 			if err == io.EOF { // no more messages
@@ -205,7 +211,14 @@ func (p *grpcPubSub) pullMessages(parentCtx context.Context, topic *proto.Topic,
 
 			p.logger.Debugf("Received message from stream on topic %s", msg.GetTopicName())
 
-			handle(msg)
+			// Dispatched concurrently so that more than one message can be in
+			// flight per subscription. Handling a message invokes the
+			// application and waits for its response, so doing it inline caps
+			// the subscription at the inverse of the per-message latency.
+			// Sends on the stream are serialised by the mutex in adaptHandler.
+			wg.Go(func() {
+				handle(msg)
+			})
 		}
 	}()
 
