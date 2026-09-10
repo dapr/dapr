@@ -255,7 +255,6 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 
 	or.janitorAsserted.Store(false)
 	or.janitorRedispatched = nil
-	or.resumedMidRun = false
 	or.driveRunning.Store(false)
 	or.driveNotify = make(chan struct{}, 1)
 	or.lock.Init()

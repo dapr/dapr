@@ -51,10 +51,6 @@ type orchestrator struct {
 	// janitorAsserted tracks whether the per-instance janitor backstop
 	// reminder was ensured this actor residency (WorkflowsFastPath).
 	janitorAsserted atomic.Bool
-	// resumedMidRun records that this activation loaded a running instance
-	// from the store, so escalation bookkeeping of a previous activation may
-	// be missing (see sweepActivityReminders).
-	resumedMidRun bool
 	// Drive-loop state (see wake.go localDrive/driveLoop): driveNotify is a
 	// buffered-1 coalescing notification channel, driveRunning guards the
 	// single loop, driveName carries the reminder name of the latest wake.
