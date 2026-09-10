@@ -217,7 +217,6 @@ jobs:
 
   integration-tests:
     name: Integration tests
-    needs: lint
     runs-on: "${{ matrix.os }}"
     permissions:
       contents: read
@@ -270,8 +269,7 @@ jobs:
       - name: Run make test-integration-parallel
         run: make test-integration-parallel
   integration-tests-workflow-modes:
-    name: "Integration tests (${{ matrix.mode }} mode)"
-    needs: lint
+    name: "Integration tests (workflow${{ matrix.clustered && ' clustered' || '' }}${{ matrix.fastpath && ' fastpath' || '' }}${{ matrix.signing && ' signing' || '' }} mode)"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -279,15 +277,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [clustered, fastpath, scheduler-placement]
+        # One axis per suite mode; the modes compose because all
+        # harness-driven feature flags share one feature manifest per daprd.
+        # The all-off combination is the default integration job.
+        clustered: [false, true]
+        fastpath: [false, true]
+        signing: [false, true]
+        exclude:
+          - clustered: false
+            fastpath: false
+            signing: false
     env:
       GOOS: linux
       GOARCH: amd64
       GOPROXY: "https://proxy.golang.org"
-      TEST_OUTPUT_FILE_PREFIX: "test_report_wf_${{ matrix.mode }}"
-      DAPR_INTEGRATION_WORKFLOW_CLUSTERED: ${{ matrix.mode == 'clustered' && 'true' || '' }}
-      DAPR_INTEGRATION_WORKFLOW_FASTPATH: ${{ matrix.mode == 'fastpath' && 'true' || '' }}
-      DAPR_INTEGRATION_SCHEDULER_PLACEMENT: ${{ matrix.mode == 'scheduler-placement' && 'true' || '' }}
+      TEST_OUTPUT_FILE_PREFIX: "test_report_wf${{ matrix.clustered && '_clustered' || '' }}${{ matrix.fastpath && '_fastpath' || '' }}${{ matrix.signing && '_signing' || '' }}"
+      DAPR_INTEGRATION_WORKFLOW_CLUSTERED: ${{ matrix.clustered }}
+      DAPR_INTEGRATION_WORKFLOW_FASTPATH: ${{ matrix.fastpath }}
+      DAPR_INTEGRATION_WORKFLOW_SIGNING: ${{ matrix.signing }}
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v6
@@ -296,9 +303,32 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
-      - name: Run workflow suite in ${{ matrix.mode }} mode
-        # The scheduler-placement mode runs the actor, workflow, and placement suites against both placement authorities.
-        run: make test-integration-parallel ARGS="-focus '${{ matrix.mode == 'scheduler-placement' && 'actors|workflow|placement|scheduler' || 'workflow' }}'"
+      - name: Run workflow suite in the selected modes
+        run: make test-integration-parallel ARGS="-focus workflow"
+  # Selects a different set of suites rather than another workflow mode, so it
+  # stays its own job instead of joining the matrix above.
+  integration-tests-scheduler-placement:
+    name: "Integration tests (scheduler-placement mode)"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 60
+    env:
+      GOOS: linux
+      GOARCH: amd64
+      GOPROXY: "https://proxy.golang.org"
+      TEST_OUTPUT_FILE_PREFIX: "test_report_wf_scheduler-placement"
+      DAPR_INTEGRATION_SCHEDULER_PLACEMENT: "true"
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v6
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+      - name: Run the actor, workflow, placement and scheduler suites against both placement authorities
+        run: make test-integration-parallel ARGS="-focus 'actors|workflow|placement|scheduler'"
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"
