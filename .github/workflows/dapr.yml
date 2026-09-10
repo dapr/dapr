@@ -297,9 +297,8 @@ jobs:
         with:
           go-version-file: "go.mod"
       - name: Run workflow suite in ${{ matrix.mode }} mode
-        # The scheduler-placement mode runs the actor suites too: the same
-        # tests prove both placement authorities.
-        run: make test-integration-parallel ARGS="-focus '${{ matrix.mode == 'scheduler-placement' && '^actors|^daprd/workflow' || 'workflow' }}'"
+        # The scheduler-placement mode runs the actor, workflow, and placement suites against both placement authorities.
+        run: make test-integration-parallel ARGS="-focus '${{ matrix.mode == 'scheduler-placement' && '^actors|^daprd/workflow|^daprd/placement' || 'workflow' }}'"
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"
