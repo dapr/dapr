@@ -17,6 +17,17 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
+// warnUnsignedPropagation warns that an outbound dispatch carries workflow
+// history this app cannot sign, naming the receiver. No-op when a signer is
+// configured. Called at dispatch time, so the warning is once per target
+// that actually carries a chunk.
+func (o *orchestrator) warnUnsignedPropagation(target string) {
+	if o.signer != nil {
+		return
+	}
+	log.Warnf("Workflow actor '%s': propagating unsigned workflow history to %s (signing is not configured; chunks cannot be cryptographically verified by the receiver)", o.actorID, target)
+}
+
 func hasRemoteTasks(es []*backend.HistoryEvent) bool {
 	for _, e := range es {
 		if router := e.GetRouter(); router != nil && router.TargetAppID != nil {

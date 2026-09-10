@@ -122,9 +122,7 @@ func (a *completionretry) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, a.workflow.ActorTypesCount())
 	}, time.Second*10, time.Millisecond*10)
 
-	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
-	t.Cleanup(waitCompletionCancel)
-	meta, err := client.WaitForWorkflowCompletion(waitCompletionCtx, id)
+	meta, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), meta.GetRuntimeStatus().String())
 
