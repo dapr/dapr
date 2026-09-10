@@ -15,8 +15,6 @@ package multiple
 
 import (
 	"context"
-	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -41,7 +39,6 @@ type workflow struct {
 
 func (w *workflow) Setup(t *testing.T) []framework.Option {
 	w.actors1 = dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("mytype"),
 	)
 	w.actors2 = dactors.New(t,
@@ -82,20 +79,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 
-	sortedHosts := func(ts *placement.TableState) *placement.TableState {
-		out := &placement.TableState{Tables: make(map[string]*placement.Table, len(ts.Tables))}
-		for name, table := range ts.Tables {
-			sorted := *table
-			sorted.Hosts = slices.Clone(table.Hosts)
-			slices.SortFunc(sorted.Hosts, func(a, b placement.Host) int {
-				return strings.Compare(a.Name, b.Name)
-			})
-			out.Tables[name] = &sorted
-		}
-		return out
-	}
-
-	assert.Equal(t, sortedHosts(expTable), sortedHosts(w.actors1.Placement().PlacementTables(t, ctx)))
+	assert.Equal(t, expTable, w.actors1.Placement().PlacementTables(t, ctx))
 
 	client1 := dworkflow.NewClient(w.actors1.Daprd().GRPCConn(t, ctx))
 	cctx1, cancel1 := context.WithCancel(ctx)
@@ -109,7 +93,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		"mytype",
 	}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, sortedHosts(expTable), sortedHosts(w.actors1.Placement().PlacementTables(t, ctx)))
+		assert.Equal(c, expTable, w.actors1.Placement().PlacementTables(t, ctx))
 	}, time.Second*10, time.Millisecond*10)
 
 	client2 := dworkflow.NewClient(w.actors2.Daprd().GRPCConn(t, ctx))
@@ -124,20 +108,20 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		"mytype",
 	}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, sortedHosts(expTable), sortedHosts(w.actors1.Placement().PlacementTables(t, ctx)))
+		assert.Equal(c, expTable, w.actors1.Placement().PlacementTables(t, ctx))
 	}, time.Second*20, time.Millisecond*10)
 
 	cancel1()
 	expTable.Tables["default"].Version = 5
 	expTable.Tables["default"].Hosts[0].Entities = []string{"mytype"}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, sortedHosts(expTable), sortedHosts(w.actors1.Placement().PlacementTables(t, ctx)))
+		assert.Equal(c, expTable, w.actors1.Placement().PlacementTables(t, ctx))
 	}, time.Second*10, time.Second)
 
 	cancel2()
 	expTable.Tables["default"].Version = 6
 	expTable.Tables["default"].Hosts[1].Entities = []string{"mytype"}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, sortedHosts(expTable), sortedHosts(w.actors1.Placement().PlacementTables(t, ctx)))
+		assert.Equal(c, expTable, w.actors1.Placement().PlacementTables(t, ctx))
 	}, time.Second*10, time.Second)
 }

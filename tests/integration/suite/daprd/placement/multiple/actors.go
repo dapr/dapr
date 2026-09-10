@@ -38,7 +38,6 @@ type actors struct {
 
 func (a *actors) Setup(t *testing.T) []framework.Option {
 	actor1 := dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("abc", "def"),
 	)
 	actor2 := dactors.New(t,

@@ -41,7 +41,7 @@ type workflow struct {
 
 func (w *workflow) Setup(t *testing.T) []framework.Option {
 	// No actor types registered.
-	w.actors = actors.New(t, actors.WithPlacementService())
+	w.actors = actors.New(t)
 
 	return []framework.Option{
 		framework.WithProcesses(w.actors),

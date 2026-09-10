@@ -15,8 +15,8 @@ package schedulerplacement
 
 import (
 	"context"
-	nethttp "net/http"
-	"strconv"
+	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,10 +24,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
-
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -35,48 +35,67 @@ func init() {
 	suite.Register(new(notypes))
 }
 
-// notypes asserts a daprd with an actor state store but no actor types
-// becomes ready under scheduler placement and can invoke actors across many
-// types, like a load-generator sidecar.
+// notypes runs a sidecar hosting no actor types under scheduler placement:
+// it still connects to placement and its actor calls land on the hosting
+// sidecar.
 type notypes struct {
-	host   *actors.Actors
+	sched  *scheduler.Scheduler
+	host   *daprd.Daprd
 	caller *daprd.Daprd
+
+	invoked atomic.Int64
 }
 
 func (n *notypes) Setup(t *testing.T) []framework.Option {
-	types := make([]string, 100)
-	handlers := make([]actors.Option, 0, 102)
-	for i := range types {
-		types[i] = "actor_" + strconv.Itoa(i)
-		handlers = append(handlers, actors.WithActorTypeHandler(types[i], func(nethttp.ResponseWriter, *nethttp.Request) {}))
-	}
-	n.host = actors.New(t, append(handlers,
-		actors.WithSchedulerPlacement(),
-		actors.WithActorTypes(types...),
-	)...)
+	handler := http.NewServeMux()
+	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"entities": ["myactortype"]}`))
+	})
+	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler.HandleFunc("/actors/myactortype/myactorid", func(w http.ResponseWriter, r *http.Request) {})
+	handler.HandleFunc("/actors/myactortype/myactorid/method/foo", func(w http.ResponseWriter, r *http.Request) {
+		n.invoked.Add(1)
+	})
+	srv := prochttp.New(t, prochttp.WithHandler(handler))
 
-	n.caller = daprd.New(t,
+	n.sched = scheduler.New(t, scheduler.WithPlacementEnabled(true))
+	n.host = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithScheduler(n.host.Scheduler()),
+		daprd.WithAppPort(srv.Port()),
+		daprd.WithScheduler(n.sched),
+	)
+	n.caller = daprd.New(t,
+		daprd.WithScheduler(n.sched),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(n.host, n.caller),
+		framework.WithProcesses(n.sched, srv, n.host, n.caller),
 	}
 }
 
 func (n *notypes) Run(t *testing.T, ctx context.Context) {
+	n.sched.WaitUntilRunning(t, ctx)
 	n.host.WaitUntilRunning(t, ctx)
 	n.caller.WaitUntilRunning(t, ctx)
 
-	gclient := n.caller.GRPCClient(t, ctx)
-	for i := range 100 {
-		atype := "actor_" + strconv.Itoa(i)
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			_, err := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-				ActorType: atype, ActorId: "a", Method: "foo",
-			})
-			assert.NoError(c, err)
-		}, time.Second*20, time.Millisecond*10)
-	}
+	client := n.caller.GRPCClient(t, ctx)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		meta, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
+	}, time.Second*20, time.Millisecond*10)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+			ActorType: "myactortype",
+			ActorId:   "myactorid",
+			Method:    "foo",
+		})
+		assert.NoError(c, err)
+	}, time.Second*20, time.Millisecond*10)
+	assert.Positive(t, n.invoked.Load())
 }
