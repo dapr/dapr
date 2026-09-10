@@ -112,6 +112,10 @@ func (n *noescalation) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 	assert.Equal(t, int64(1), n.a1Calls.Load())
-	assert.Zero(t, oneShots())
+	// A drive that could not be armed at all falls back to a durable one-shot,
+	// which acks and self-deletes on its empty-inbox fire.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Zero(c, oneShots())
+	}, time.Second*10, time.Millisecond*10)
 	assert.Zero(t, n.workflow.Dapr().Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:escalated"))
 }
