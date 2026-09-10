@@ -15,6 +15,7 @@ package workflow
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -69,4 +70,49 @@ func CountHistoryEventsOfType[T any](t *testing.T, ctx context.Context, client *
 		}
 	}
 	return count
+}
+
+// ChildCompletions counts the child completion and failure events for taskID
+// in the instance's history.
+func ChildCompletions(t *testing.T, ctx context.Context, client *client.TaskHubGrpcClient, id api.InstanceID, taskID int32) (completed, failed int) {
+	t.Helper()
+	hist, err := client.GetInstanceHistory(ctx, id)
+	require.NoError(t, err)
+	for _, e := range hist.GetEvents() {
+		if c := e.GetChildWorkflowInstanceCompleted(); c != nil && c.GetTaskScheduledId() == taskID {
+			completed++
+		}
+		if f := e.GetChildWorkflowInstanceFailed(); f != nil && f.GetTaskScheduledId() == taskID {
+			failed++
+		}
+	}
+	return completed, failed
+}
+
+// WaitForAllCompleted waits for every instance to reach COMPLETED and fails
+// listing the ones that did not.
+func WaitForAllCompleted(t *testing.T, ctx context.Context, client *client.TaskHubGrpcClient, ids ...api.InstanceID) {
+	t.Helper()
+
+	var lock sync.Mutex
+	var wg sync.WaitGroup
+	failed := make(map[api.InstanceID]string)
+	for _, id := range ids {
+		wg.Add(1)
+		go func(id api.InstanceID) {
+			defer wg.Done()
+			meta, err := client.WaitForWorkflowCompletion(ctx, id)
+			lock.Lock()
+			defer lock.Unlock()
+			switch {
+			case err != nil:
+				failed[id] = err.Error()
+			case meta.GetRuntimeStatus() != protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED:
+				failed[id] = meta.GetRuntimeStatus().String()
+			}
+		}(id)
+	}
+	wg.Wait()
+
+	assert.Empty(t, failed, "%d of %d instances did not complete", len(failed), len(ids))
 }

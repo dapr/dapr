@@ -172,6 +172,7 @@ func runWithContext(ctx context.Context, opts *options.Options) error {
 				AppID:                         opts.AppID,
 				ActorsService:                 opts.ActorsService,
 				ActorsDisseminationTimeout:    opts.ActorsDisseminationTimeout,
+				HotReloadReconcileInterval:    opts.HotReloadReconcileInterval,
 				RemindersService:              opts.RemindersService,
 				SchedulerAddress:              opts.SchedulerAddress,
 				SchedulerStreams:              opts.SchedulerJobStreams,
@@ -208,6 +209,7 @@ func runWithContext(ctx context.Context, opts *options.Options) error {
 				EnableAPILogging:              opts.EnableAPILogging,
 				Config:                        opts.Config,
 				DisableInitEndpoints:          opts.DisableInitEndpoints,
+				AppBindingOptionsTimeout:      opts.AppBindingOptionsTimeout,
 				Metrics: metrics.Options{
 					Enabled:       opts.Metrics.Enabled(),
 					Log:           log,

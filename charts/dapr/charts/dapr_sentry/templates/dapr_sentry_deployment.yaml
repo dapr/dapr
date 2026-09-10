@@ -240,7 +240,9 @@ spec:
         - "--oidc-server-tls-enabled={{ .Values.oidc.tls.enabled }}"
 {{- end }}
 {{- end }}
-
+{{- with .Values.extraArgs }}
+{{- toYaml . | nindent 8 }}
+{{- end }}
       serviceAccountName: dapr-sentry
       volumes:
         - name: credentials

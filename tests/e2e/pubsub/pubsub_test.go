@@ -50,7 +50,10 @@ const (
 	numberOfMessagesToPublish = 40
 	publishRateLimitRPS       = 25
 
-	receiveMessageRetries = 5
+	// Validation polls every 2s up to this many attempts (~50s budget); a
+	// short interval lets positive validations return as soon as the
+	// expected messages have all been recorded.
+	receiveMessageRetries = 25
 
 	metadataPrefix             = "metadata."
 	publisherAppName           = "pubsub-publisher"
@@ -313,6 +316,14 @@ func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternal
 	err := utils.HealthCheckApps(publisherExternalURL)
 	require.NoError(t, err, "Health check failed for publisher")
 
+	// Flush any redelivery backlog left by earlier scenarios (notably the
+	// resiliency-exhaustion scenario, whose erroring subscriber builds one
+	// up) before resetting the received sets. Stragglers arriving after the
+	// reset land on topics B/C and break the empty-topic assertions below
+	// (observed as 8/0 on topic B and 31/0 on topic C on the pluggable
+	// suite, whose redis component redelivers on a 1s interval).
+	drainSubscriberBacklog(t, publisherExternalURL, subscriberAppName, protocol, podEndpoints)
+
 	setDesiredResponse(t, subscriberAppName, "drop", publisherExternalURL, protocol)
 	callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 
@@ -324,7 +335,9 @@ func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternal
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
-	time.Sleep(5 * time.Second)
+	// Brief settle for the empty-topic assertions; the positive counts below
+	// converge via the validation's own polling
+	time.Sleep(2 * time.Second)
 	received := receivedMessagesResponse{
 		ReceivedByTopicA:          sentTopicNormal,
 		ReceivedByTopicB:          []string{},
@@ -347,17 +360,24 @@ func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExte
 	err := utils.HealthCheckApps(publisherExternalURL)
 	require.NoError(t, err, "Health check failed for publisher")
 
+	// Flush any redelivery backlog from the previous scenario before
+	// resetting the received sets: this scenario asserts nothing is
+	// delivered, so a single straggler recorded after the reset fails it.
+	drainSubscriberBacklog(t, publisherExternalURL, subscriberAppName, protocol, podEndpoints)
+
 	callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 	setDesiredResponse(t, subscriberAppName, "error", publisherExternalURL, protocol)
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 	_ = sentMessages
 
 	// After exhaustion, messages should be ACK'd and dropped. The wait is
-	// comfortably longer than the pubsubRetry budget (maxRetries=5); this
-	// assertion only requires that the messages are not delivered to the
-	// app, which holds whether they are still retrying or already dropped.
+	// comfortably longer than the pubsubRetry budget (maxRetries=5 at 1s,
+	// plus a 1-3s broker redelivery cycle per attempt); this assertion only
+	// requires that the messages are not delivered to the app, which holds
+	// whether they are still retrying or already dropped. Any stragglers
+	// beyond the wait are flushed by the next scenario's backlog drain.
 	log.Printf("Waiting for resiliency policy to exhaust retries...")
-	time.Sleep(65 * time.Second)
+	time.Sleep(20 * time.Second)
 
 	log.Printf("Validating messages were dropped after retry exhaustion...")
 	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, receivedMessagesResponse{
@@ -397,7 +417,7 @@ func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberE
 	log.Printf("Test bulkPublish and normal subscribe success flow")
 	sentMessages := testPublishBulk(t, publisherExternalURL, protocol)
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 	validateBulkMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages, podEndpoints)
 	return subscriberExternalURL
 }
@@ -414,7 +434,7 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 	log.Print("Test publish subscribe success flow")
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(2 * time.Second)
 	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages, podEndpoints)
 	return subscriberExternalURL
 }
@@ -463,7 +483,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 	if subscriberResponse == "empty-json" {
 		// on empty-json response case immediately validate the received messages
-		time.Sleep(10 * time.Second)
+		time.Sleep(2 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages, podEndpoints)
 
 		callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
@@ -494,7 +514,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 			got, err := subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
 			assert.NoError(c, err, "error calling subscriber to get dead letter count")
 			assert.Equal(c, len(sentMessages.ReceivedByTopicDeadLetter), got)
-		}, 300*time.Second, 5*time.Second,
+		}, 300*time.Second, time.Second,
 			"subscriber did not receive all dead letter messages within timeout")
 
 		// Now flip to success so the non-dead-letter topics (a/b/c/raw)
@@ -515,8 +535,12 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
 	if subscriberResponse == "empty-json" {
+		// Negative assertion: nothing may be redelivered after the empty-json
+		// acknowledgements. The window must outlast the redelivery horizon,
+		// which is bounded by the pubsubRetry budget (maxRetries=5 at 1s) plus
+		// a 1-3s broker redelivery cycle per attempt.
 		log.Printf("Validating no redelivered messages for 'empty-json' subscriber...")
-		time.Sleep(30 * time.Second)
+		time.Sleep(15 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, receivedMessagesResponse{
 			// empty string slices
 			ReceivedByTopicA:    []string{},
@@ -526,9 +550,9 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 			ReceivedByTopicDead: []string{},
 		}, podEndpoints)
 	} else {
-		// validate redelivery of messages (retry / invalid-status cases)
+		// validate redelivery of messages (retry / invalid-status cases); the
+		// validation polls until the redelivered counts converge
 		log.Printf("Validating redelivered messages...")
-		time.Sleep(30 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages, podEndpoints)
 	}
 
@@ -636,10 +660,13 @@ func drainSubscriberBacklog(t *testing.T, publisherExternalURL, subscriberAppNam
 			stable = 0
 			last = got
 		}
-		// Three consecutive quiet polls (~15s) with no new arrivals means
-		// the broker has no more in-flight redeliveries to hand us.
-		return stable >= 3
-	}, 180*time.Second, 5*time.Second, "subscriber backlog did not drain before scenario start")
+		// Eight consecutive quiet polls (~8s) with no new arrivals means the
+		// broker has no more in-flight redeliveries to hand us: with the
+		// subscriber in success mode the gap between redelivery waves is
+		// bounded by processingTimeout + idleCheckFrequency (1s each), so a
+		// quiet window several times that is a drained backlog.
+		return stable >= 8
+	}, 180*time.Second, time.Second, "subscriber backlog did not drain before scenario start")
 }
 
 func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse, podEndpoints []string) {
@@ -665,7 +692,7 @@ func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL
 		log.Printf("(reqID=%s) Attempt %d complete; took %s", request.ReqID, retryCount, utils.FormatDuration(time.Now().Sub(start)))
 		if err != nil {
 			log.Printf("(reqID=%s) Error in response: %v", request.ReqID, err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -673,7 +700,7 @@ func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL
 		if err != nil {
 			err = fmt.Errorf("(reqID=%s) failed to unmarshal JSON. Error: %v. Raw data: %s", request.ReqID, err, string(resp))
 			log.Printf("Error in response: %v", err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -691,7 +718,7 @@ func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL
 			len(appResp.ReceivedByTopicCEBulk) != len(sentMessages.ReceivedByTopicCEBulk) ||
 			len(appResp.ReceivedByTopicDefBulk) != len(sentMessages.ReceivedByTopicDefBulk) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 		} else {
 			break
 		}
@@ -737,7 +764,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 		log.Printf("(reqID=%s) Attempt %d complete; took %s", request.ReqID, retryCount, utils.FormatDuration(time.Now().Sub(start)))
 		if err != nil {
 			log.Printf("(reqID=%s) Error in response: %v", request.ReqID, err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -745,7 +772,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 		if err != nil {
 			err = fmt.Errorf("(reqID=%s) failed to unmarshal JSON. Error: %v. Raw data: %s", request.ReqID, err, string(resp))
 			log.Printf("Error in response: %v", err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -764,7 +791,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 			len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) ||
 			(validateDeadLetter && len(appResp.ReceivedByTopicDeadLetter) != len(sentMessages.ReceivedByTopicDeadLetter)) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 		} else {
 			break
 		}

@@ -21,6 +21,7 @@ import (
 	"io"
 	"net"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,6 +32,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/channel"
+	channelfake "github.com/dapr/dapr/pkg/channel/fake"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -69,6 +71,81 @@ func TestCallerAndCalleeHeaders(t *testing.T) {
 		assert.Equal(t, callerNamespace, actualCallerNamespace.GetValues()[0])
 		assert.Equal(t, callerAppID, actualCallerAppID.GetValues()[0])
 		assert.Equal(t, calleeAppID, actualCalleeAppID.GetValues()[0])
+	})
+}
+
+func TestInvokeLocalCallerAndCalleeHeaders(t *testing.T) {
+	const appID = "myapp"
+	const namespace = "myns"
+
+	invokeSelf := func(t *testing.T, req *invokev1.InvokeMethodRequest) *invokev1.InvokeMethodRequest {
+		t.Helper()
+		var got *invokev1.InvokeMethodRequest
+		appChannel := channelfake.New().WithInvokeMethod(func(ctx context.Context, r *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
+			got = r
+			return invokev1.NewInvokeMethodResponse(200, "OK", nil), nil
+		})
+		dm := &directMessaging{
+			appID:     appID,
+			namespace: namespace,
+			channels:  new(channels.Channels).WithAppChannel(appChannel),
+		}
+		_, err := dm.invokeLocal(t.Context(), req)
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		return got
+	}
+
+	t.Run("self-invocation stamps caller and callee headers", func(t *testing.T) {
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{})
+		defer req.Close()
+
+		got := invokeSelf(t, req)
+		assert.Equal(t, namespace, got.Metadata()[invokev1.CallerNamespaceHeader].GetValues()[0])
+		assert.Equal(t, appID, got.Metadata()[invokev1.CallerIDHeader].GetValues()[0])
+		assert.Equal(t, appID, got.Metadata()[invokev1.CalleeIDHeader].GetValues()[0])
+	})
+
+	t.Run("overwrites spoofed caller and callee headers", func(t *testing.T) {
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{
+				invokev1.CallerNamespaceHeader: {"spoofed-ns"},
+				invokev1.CallerIDHeader:        {"spoofed-app"},
+				invokev1.CalleeIDHeader:        {"spoofed-callee"},
+			})
+		defer req.Close()
+
+		got := invokeSelf(t, req)
+		require.Len(t, got.Metadata()[invokev1.CallerNamespaceHeader].GetValues(), 1)
+		require.Len(t, got.Metadata()[invokev1.CallerIDHeader].GetValues(), 1)
+		require.Len(t, got.Metadata()[invokev1.CalleeIDHeader].GetValues(), 1)
+		assert.Equal(t, namespace, got.Metadata()[invokev1.CallerNamespaceHeader].GetValues()[0])
+		assert.Equal(t, appID, got.Metadata()[invokev1.CallerIDHeader].GetValues()[0])
+		assert.Equal(t, appID, got.Metadata()[invokev1.CalleeIDHeader].GetValues()[0])
+	})
+
+	t.Run("overwrites spoofed caller and callee headers with canonical HTTP casing", func(t *testing.T) {
+		// HTTP-origin metadata retains the request's original header casing, so
+		// a caller could try to smuggle identity headers past a case-sensitive
+		// strip. Ensure the strip is case-insensitive and leaves no duplicates.
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{
+				"Dapr-Caller-Namespace": {"spoofed-ns"},
+				"Dapr-Caller-App-Id":    {"spoofed-app"},
+				"Dapr-Callee-App-Id":    {"spoofed-callee"},
+			})
+		defer req.Close()
+
+		got := invokeSelf(t, req)
+		_, hasCanonicalCaller := got.Metadata()["Dapr-Caller-App-Id"]
+		assert.False(t, hasCanonicalCaller, "spoofed canonical-cased header must be stripped")
+		require.Len(t, got.Metadata()[invokev1.CallerNamespaceHeader].GetValues(), 1)
+		require.Len(t, got.Metadata()[invokev1.CallerIDHeader].GetValues(), 1)
+		require.Len(t, got.Metadata()[invokev1.CalleeIDHeader].GetValues(), 1)
+		assert.Equal(t, namespace, got.Metadata()[invokev1.CallerNamespaceHeader].GetValues()[0])
+		assert.Equal(t, appID, got.Metadata()[invokev1.CallerIDHeader].GetValues()[0])
+		assert.Equal(t, appID, got.Metadata()[invokev1.CalleeIDHeader].GetValues()[0])
 	})
 }
 
@@ -260,6 +337,40 @@ func TestInvokeRemote(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "🐱", string(pd.GetMessage().GetData().GetValue()))
+	})
+
+	t.Run("streaming keeps the connection checked out until the response body is fully drained", func(t *testing.T) {
+		// Regression test for https://github.com/dapr/dapr/issues/10291: the connection must not be
+		// released back to the pool while the background goroutine is still streaming the response
+		// body, otherwise a long-lived response (e.g. SSE) can have its connection closed mid-stream
+		// once the pool purges it as idle.
+		messaging, teardown := prepareEnvironment(t, true, []string{"🐱"})
+		defer teardown()
+
+		var released atomic.Bool
+		orig := messaging.connectionCreatorFn
+		messaging.connectionCreatorFn = func(ctx context.Context, address, id, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error) {
+			conn, _, err := orig(ctx, address, id, namespace, customOpts...)
+			return conn, func(destroy bool) { released.Store(true) }, err
+		}
+
+		request := invokev1.
+			NewInvokeMethodRequest("method").
+			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"app1"}})
+		defer request.Close()
+
+		res, releaseFn, err := messaging.invokeRemote(t.Context(), "app1", "namespace1", "addr1", request)
+		require.NoError(t, err)
+		// Mirrors what invokeWithRetry does immediately after invokeRemote returns.
+		releaseFn(false)
+
+		assert.False(t, released.Load(), "connection was released before the response body was drained")
+
+		pd, err := res.ProtoWithData()
+		require.NoError(t, err)
+		assert.Equal(t, "🐱", string(pd.GetMessage().GetData().GetValue()))
+
+		assert.Eventually(t, released.Load, time.Second, 10*time.Millisecond, "connection was never released after the response body was drained")
 	})
 
 	t.Run("streaming with multiple chunks", func(t *testing.T) {

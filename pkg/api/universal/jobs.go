@@ -16,7 +16,6 @@ package universal
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -42,9 +41,14 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 }
 
 func (a *Universal) ScheduleJobAlpha1HTTP(ctx context.Context, job *internalsv1pb.JobHTTPRequest) (*runtimev1pb.ScheduleJobResponse, error) {
-	data, err := anypb.New(job.GetData())
-	if err != nil {
-		return &runtimev1pb.ScheduleJobResponse{}, fmt.Errorf("error creating storable job data from job: %w", err)
+	var data *anypb.Any
+	if job.GetData() != nil {
+		var err error
+
+		data, err = anypb.New(job.GetData())
+		if err != nil {
+			return &runtimev1pb.ScheduleJobResponse{}, fmt.Errorf("error creating storable job data from job: %w", err)
+		}
 	}
 
 	return a.scheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
@@ -71,7 +75,7 @@ func (a *Universal) scheduleJob(ctx context.Context, jobRequest *runtimev1pb.Sch
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Job", errMetadata, errorcodes.SchedulerEmpty)
 	}
 
-	if job.GetName() == "" || strings.Contains(job.GetName(), "|") {
+	if job.GetName() == "" {
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Name", errMetadata, errorcodes.SchedulerJobNameEmpty)
 	}
 

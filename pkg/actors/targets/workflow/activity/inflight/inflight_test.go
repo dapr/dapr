@@ -22,8 +22,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
+	"github.com/dapr/durabletask-go/api/protos"
+	"github.com/dapr/durabletask-go/backend"
 )
 
 func TestAcquireFirstCallerIsOwner(t *testing.T) {
@@ -177,4 +180,37 @@ func TestFollowerCtxCancelDoesNotAffectOwner(t *testing.T) {
 	<-follower.Done()
 	assert.NoError(t, follower.Err())
 	assert.NoError(t, owner.Err())
+}
+
+func TestKeyDiscriminatesSchedulings(t *testing.T) {
+	newEvent := func(taskExecutionID string, ts *timestamppb.Timestamp) *backend.HistoryEvent {
+		return &backend.HistoryEvent{
+			Timestamp: ts,
+			EventType: &protos.HistoryEvent_TaskScheduled{
+				TaskScheduled: &protos.TaskScheduledEvent{
+					Name:            "abc",
+					TaskExecutionId: taskExecutionID,
+				},
+			},
+		}
+	}
+
+	t.Run("task execution ID wins", func(t *testing.T) {
+		e := newEvent("exec-1", timestamppb.New(time.Unix(10, 5)))
+		assert.Equal(t, "wf::0::exec-1", inflight.Key("wf::0", e))
+	})
+
+	t.Run("empty task execution ID falls back to event timestamp", func(t *testing.T) {
+		e1 := newEvent("", timestamppb.New(time.Unix(10, 5)))
+		e2 := newEvent("", timestamppb.New(time.Unix(10, 6)))
+		k1 := inflight.Key("wf::0", e1)
+		k2 := inflight.Key("wf::0", e2)
+		assert.NotEqual(t, k1, k2, "schedulings at different times must not share an entry")
+		assert.Equal(t, k1, inflight.Key("wf::0", e1), "retries of the same scheduling must share an entry")
+	})
+
+	t.Run("no task execution ID and no timestamp", func(t *testing.T) {
+		e := newEvent("", nil)
+		assert.Equal(t, "wf::0", inflight.Key("wf::0", e))
+	})
 }

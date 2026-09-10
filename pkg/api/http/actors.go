@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -33,6 +34,7 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/reminders"
+	actortimers "github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/messages"
@@ -53,7 +55,7 @@ var endpointGroupActorV1State = &endpoints.EndpointGroup{
 var endpointGroupActorV1Misc = &endpoints.EndpointGroup{
 	Name:                 endpoints.EndpointGroupActors,
 	Version:              endpoints.EndpointGroupVersion1,
-	AppendSpanAttributes: nil, // TODO
+	AppendSpanAttributes: appendActorReminderTimerSpanAttributesFn,
 }
 
 func appendActorStateSpanAttributesFn(r *http.Request, m map[string]string) {
@@ -71,6 +73,19 @@ func appendActorInvocationSpanAttributesFn(r *http.Request, m map[string]string)
 	m[diagConsts.GrpcServiceSpanAttributeKey] = "ServiceInvocation"
 	m[diagConsts.NetPeerNameSpanAttributeKey] = actorTypeID
 	m[diagConsts.DaprAPISpanNameInternal] = "CallActor/" + actorType + "/" + chi.URLParam(r, "method")
+}
+
+// appendActorReminderTimerSpanAttributesFn sets a bounded span name for the
+// reminder and timer endpoints. The raw request path embeds the unbounded
+// actorId and reminder/timer name, so it must not be used as the span name
+// (it causes a tracing cardinality explosion, see issue #4703). The bounded
+// endpoint name and actorType are used instead, dropping actorId and name.
+func appendActorReminderTimerSpanAttributesFn(r *http.Request, m map[string]string) {
+	actorType := chi.URLParam(r, actorTypeParam)
+	m[diagConsts.DaprAPIActorTypeID] = actorType + "." + chi.URLParam(r, actorIDParam)
+
+	endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+	m[diagConsts.DaprAPISpanNameInternal] = endpointData.GetEndpointName() + "/" + actorType
 }
 
 func actorInvocationMethodNameWithIDFn(r *http.Request) string {
@@ -170,6 +185,36 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 			Handler: a.onGetActorReminder(),
 			Settings: endpoints.EndpointSettings{
 				Name: "GetActorReminder",
+			},
+		},
+		{
+			Methods: []string{http.MethodGet},
+			Route:   "actors/{actorType}/{actorId}/timers",
+			Version: apiVersionV1,
+			Group:   endpointGroupActorV1Misc,
+			Handler: a.onListActorTimers(),
+			Settings: endpoints.EndpointSettings{
+				Name: "ListActorTimers",
+			},
+		},
+		{
+			Methods: []string{http.MethodGet},
+			Route:   "actors/{actorType}/{actorId}/timers/{name}",
+			Version: apiVersionV1,
+			Group:   endpointGroupActorV1Misc,
+			Handler: a.onGetActorTimer(),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetActorTimer",
+			},
+		},
+		{
+			Methods: []string{http.MethodGet},
+			Route:   "actors/{actorType}/{actorId}/reminders",
+			Version: apiVersionV1,
+			Group:   endpointGroupActorV1Misc,
+			Handler: a.onListActorReminders(),
+			Settings: endpoints.EndpointSettings{
+				Name: "ListActorReminders",
 			},
 		},
 	}
@@ -273,6 +318,12 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 
 	err = timers.Create(ctx, &req)
 	if err != nil {
+		if errors.Is(err, actortimers.ErrTimerActorNotOwned) {
+			respondWithError(w, messages.ErrActorTimerOpActorNotOwned)
+			log.Debug(messages.ErrActorTimerOpActorNotOwned)
+			return
+		}
+
 		msg := messages.ErrActorTimerCreate.WithFormat(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
@@ -345,53 +396,188 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	respondWithEmpty(w)
 }
 
+// actorReminderJSON is the HTTP representation of a reminder, shared by the
+// get and list endpoints. Name is only populated by the list endpoint.
+type actorReminderJSON struct {
+	Name      string          `json:"name,omitempty"`
+	ActorID   string          `json:"actorID,omitempty"`
+	ActorType string          `json:"actorType,omitempty"`
+	Data      json.RawMessage `json:"data,omitempty"`
+	DueTime   *string         `json:"dueTime,omitempty"`
+	Period    *string         `json:"period,omitempty"`
+	TTL       *string         `json:"ttl,omitempty"`
+}
+
+func newActorReminderJSON(name, actorType, actorID string, dueTime, period, ttl *string, data *anypb.Any) (actorReminderJSON, error) {
+	d, err := anyToRawJSON(data)
+	if err != nil {
+		return actorReminderJSON{}, err
+	}
+	return actorReminderJSON{
+		Name:      name,
+		ActorID:   actorID,
+		ActorType: actorType,
+		Data:      d,
+		DueTime:   dueTime,
+		Period:    period,
+		TTL:       ttl,
+	}, nil
+}
+
 func (a *api) onGetActorReminder() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.GetActorReminder,
 		UniversalHTTPHandlerOpts[*runtimev1pb.GetActorReminderRequest, *runtimev1pb.GetActorReminderResponse]{
 			SkipInputBody: true,
 			OutModifier: func(out *runtimev1pb.GetActorReminderResponse) (any, error) {
-				//nolint:protogetter
-				m := struct {
-					ActorID   string          `json:"actorID,omitempty"`
-					ActorType string          `json:"actorType,omitempty"`
-					Data      json.RawMessage `json:"data,omitempty"`
-					DueTime   *string         `json:"dueTime,omitempty"`
-					Period    *string         `json:"period,omitempty"`
-					TTL       *string         `json:"ttl,omitempty"`
-				}{
-					ActorID:   out.ActorId,
-					ActorType: out.ActorType,
-					DueTime:   out.DueTime,
-					Period:    out.Period,
-					TTL:       out.Ttl,
-				}
-
-				//nolint:protogetter
-				if out.Data != nil {
-					msg, err := out.Data.UnmarshalNew()
-					if err != nil {
-						return nil, err
-					}
-					switch mm := msg.(type) {
-					case *wrapperspb.BytesValue:
-						m.Data = mm.GetValue()
-					default:
-						d, err := protojson.Marshal(mm)
-						if err != nil {
-							return nil, err
-						}
-						m.Data = json.RawMessage(d)
-					}
-				}
-
-				return m, nil
+				return newActorReminderJSON("", out.GetActorType(), out.GetActorId(), out.DueTime, out.Period, out.Ttl, out.GetData())
 			},
 			InModifier: func(r *http.Request, in *runtimev1pb.GetActorReminderRequest) (*runtimev1pb.GetActorReminderRequest, error) {
 				in.ActorType = chi.URLParam(r, actorTypeParam)
 				in.ActorId = chi.URLParam(r, actorIDParam)
 				in.Name = chi.URLParam(r, nameParam)
 				return in, nil
+			},
+		},
+	)
+}
+
+// onListActorReminders lists the reminders of a single actor. The gRPC
+// ListActorReminders also supports listing a whole actor type; that has no
+// natural route in the actors HTTP API, so it is not exposed here.
+func (a *api) onListActorReminders() http.HandlerFunc {
+	return UniversalHTTPHandler(
+		a.universal.ListActorReminders,
+		UniversalHTTPHandlerOpts[*runtimev1pb.ListActorRemindersRequest, *runtimev1pb.ListActorRemindersResponse]{
+			SkipInputBody: true,
+			InModifier: func(r *http.Request, in *runtimev1pb.ListActorRemindersRequest) (*runtimev1pb.ListActorRemindersRequest, error) {
+				in.ActorType = chi.URLParam(r, actorTypeParam)
+				in.ActorId = new(chi.URLParam(r, actorIDParam))
+				return in, nil
+			},
+			OutModifier: func(out *runtimev1pb.ListActorRemindersResponse) (any, error) {
+				// Always a non-nil slice so an empty list serializes as [].
+				reminders := make([]actorReminderJSON, 0, len(out.GetReminders()))
+				for _, nr := range out.GetReminders() {
+					r := nr.GetReminder()
+					m, err := newActorReminderJSON(nr.GetName(), r.GetActorType(), r.GetActorId(), r.DueTime, r.Period, r.Ttl, r.GetData())
+					if err != nil {
+						return nil, err
+					}
+					reminders = append(reminders, m)
+				}
+
+				return struct {
+					Reminders []actorReminderJSON `json:"reminders"`
+				}{Reminders: reminders}, nil
+			},
+		},
+	)
+}
+
+// anyToRawJSON unwraps the data payload of a reminder or timer for HTTP
+// responses: a BytesValue carries the raw JSON the user registered, any other
+// message is rendered with protojson.
+func anyToRawJSON(data *anypb.Any) (json.RawMessage, error) {
+	if data == nil {
+		return nil, nil
+	}
+	msg, err := data.UnmarshalNew()
+	if err != nil {
+		return nil, err
+	}
+	switch mm := msg.(type) {
+	case *wrapperspb.BytesValue:
+		return mm.GetValue(), nil
+	default:
+		d, err := protojson.Marshal(mm)
+		if err != nil {
+			return nil, err
+		}
+		return json.RawMessage(d), nil
+	}
+}
+
+// actorTimerJSON is the HTTP representation of a timer, shared by the get and
+// list endpoints. Name is only populated by the list endpoint.
+type actorTimerJSON struct {
+	Name      string          `json:"name,omitempty"`
+	ActorType string          `json:"actorType,omitempty"`
+	ActorID   string          `json:"actorID,omitempty"`
+	DueTime   *string         `json:"dueTime,omitempty"`
+	Period    *string         `json:"period,omitempty"`
+	TTL       *string         `json:"ttl,omitempty"`
+	Callback  *string         `json:"callback,omitempty"`
+	Data      json.RawMessage `json:"data,omitempty"`
+}
+
+func newActorTimerJSON(name string, t *runtimev1pb.ActorTimer) (actorTimerJSON, error) {
+	data, err := anyToRawJSON(t.GetData())
+	if err != nil {
+		return actorTimerJSON{}, err
+	}
+	return actorTimerJSON{
+		Name:      name,
+		ActorType: t.GetActorType(),
+		ActorID:   t.GetActorId(),
+		DueTime:   t.DueTime,
+		Period:    t.Period,
+		TTL:       t.Ttl,
+		Callback:  t.Callback,
+		Data:      data,
+	}, nil
+}
+
+func (a *api) onGetActorTimer() http.HandlerFunc {
+	return UniversalHTTPHandler(
+		a.universal.GetActorTimer,
+		UniversalHTTPHandlerOpts[*runtimev1pb.GetActorTimerRequest, *runtimev1pb.GetActorTimerResponse]{
+			SkipInputBody: true,
+			InModifier: func(r *http.Request, in *runtimev1pb.GetActorTimerRequest) (*runtimev1pb.GetActorTimerRequest, error) {
+				in.ActorType = chi.URLParam(r, actorTypeParam)
+				in.ActorId = chi.URLParam(r, actorIDParam)
+				in.Name = chi.URLParam(r, nameParam)
+				return in, nil
+			},
+			OutModifier: func(out *runtimev1pb.GetActorTimerResponse) (any, error) {
+				return newActorTimerJSON("", &runtimev1pb.ActorTimer{
+					ActorType: out.GetActorType(),
+					ActorId:   out.GetActorId(),
+					DueTime:   out.DueTime,
+					Period:    out.Period,
+					Ttl:       out.Ttl,
+					Callback:  out.Callback,
+					Data:      out.GetData(),
+				})
+			},
+		},
+	)
+}
+
+func (a *api) onListActorTimers() http.HandlerFunc {
+	return UniversalHTTPHandler(
+		a.universal.ListActorTimers,
+		UniversalHTTPHandlerOpts[*runtimev1pb.ListActorTimersRequest, *runtimev1pb.ListActorTimersResponse]{
+			SkipInputBody: true,
+			InModifier: func(r *http.Request, in *runtimev1pb.ListActorTimersRequest) (*runtimev1pb.ListActorTimersRequest, error) {
+				in.ActorType = chi.URLParam(r, actorTypeParam)
+				in.ActorId = chi.URLParam(r, actorIDParam)
+				return in, nil
+			},
+			OutModifier: func(out *runtimev1pb.ListActorTimersResponse) (any, error) {
+				// Always a non-nil slice so an empty list serializes as [].
+				timers := make([]actorTimerJSON, 0, len(out.GetTimers()))
+				for _, nt := range out.GetTimers() {
+					t, err := newActorTimerJSON(nt.GetName(), nt.GetTimer())
+					if err != nil {
+						return nil, err
+					}
+					timers = append(timers, t)
+				}
+
+				return struct {
+					Timers []actorTimerJSON `json:"timers"`
+				}{Timers: timers}, nil
 			},
 		},
 	)

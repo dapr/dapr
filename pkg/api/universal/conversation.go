@@ -15,7 +15,6 @@ package universal
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/tmc/langchaingo/llms"
@@ -227,7 +226,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 			)
 
 			if message.GetMessageTypes() == nil {
-				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), errors.New("message type cannot be nil"))
+				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "message type cannot be nil")
 				a.logger.Debug(err)
 				return nil, err
 			}
@@ -339,7 +338,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 				for _, tool := range msg.OfAssistant.GetToolCalls() {
 					if tool.ToolTypes == nil {
-						err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), errors.New("tool types cannot be nil"))
+						err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "tool types cannot be nil")
 						a.logger.Debug(err)
 						return nil, err
 					}
@@ -403,7 +402,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				}
 
 			default:
-				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName())
+				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "unsupported message type")
 				a.logger.Debug(err)
 				return nil, err
 			}

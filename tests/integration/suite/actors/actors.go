@@ -22,6 +22,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/http"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/metadata"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/nostore"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/state"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/timers"

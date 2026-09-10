@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 	"github.com/dapr/kit/strings"
 )
 
@@ -34,6 +35,9 @@ const (
 	daprSidecarHTTPPort                = 3500
 	daprSidecarDefaultAPIGRPCPort      = 50001
 	daprSidecarDefaultInternalGRPCPort = 50002
+	appProtocolHTTP                    = "http"
+	appProtocolGRPC                    = "grpc"
+	appProtocolTLS                     = "tls"
 	defaultMetricsEnabled              = true
 	defaultMetricsPort                 = 9090
 	clusterIPNone                      = "None"
@@ -52,6 +56,7 @@ var defaultOptions = &Options{
 
 type Options struct {
 	ArgoRolloutServiceReconcilerEnabled bool
+	MTLSEnabled                         bool
 }
 
 // DaprHandler handles the lifetime for Dapr CRDs.
@@ -61,6 +66,7 @@ type DaprHandler struct {
 	client.Client
 	Scheme                              *runtime.Scheme
 	argoRolloutServiceReconcilerEnabled bool
+	mtlsEnabled                         bool
 }
 
 type Reconciler struct {
@@ -82,6 +88,7 @@ func NewDaprHandlerWithOptions(mgr ctrl.Manager, opts *Options) *DaprHandler {
 		Client:                              mgr.GetClient(),
 		Scheme:                              mgr.GetScheme(),
 		argoRolloutServiceReconcilerEnabled: opts.ArgoRolloutServiceReconcilerEnabled,
+		mtlsEnabled:                         opts.MTLSEnabled,
 	}
 }
 
@@ -298,6 +305,15 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 
 	grpcPort := h.getGRPCPort(wrapper)
 	internalGRPCPort := h.getInternalGRPCPort(wrapper)
+
+	// The internal port serves gRPC wrapped in Dapr mTLS when mTLS is enabled.
+	// Declare tls rather than grpc in that case so service meshes do not parse
+	// the traffic as plaintext h2c.
+	internalAppProtocol := appProtocolGRPC
+	if h.mtlsEnabled {
+		internalAppProtocol = appProtocolTLS
+	}
+
 	return &corev1.Service{
 		ObjectMeta: metaV1.ObjectMeta{
 			Name:        expectedService.Name,
@@ -310,28 +326,32 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 			ClusterIP: clusterIPNone,
 			Ports: []corev1.ServicePort{
 				{
-					Protocol:   corev1.ProtocolTCP,
-					Port:       80,
-					TargetPort: intstr.FromInt(daprSidecarHTTPPort),
-					Name:       daprSidecarHTTPPortName,
+					Protocol:    corev1.ProtocolTCP,
+					Port:        80,
+					TargetPort:  intstr.FromInt(daprSidecarHTTPPort),
+					Name:        daprSidecarHTTPPortName,
+					AppProtocol: ptr.Of(appProtocolHTTP),
 				},
 				{
-					Protocol:   corev1.ProtocolTCP,
-					Port:       grpcPort,
-					TargetPort: intstr.FromInt32(grpcPort),
-					Name:       daprSidecarAPIGRPCPortName,
+					Protocol:    corev1.ProtocolTCP,
+					Port:        grpcPort,
+					TargetPort:  intstr.FromInt32(grpcPort),
+					Name:        daprSidecarAPIGRPCPortName,
+					AppProtocol: ptr.Of(appProtocolGRPC),
 				},
 				{
-					Protocol:   corev1.ProtocolTCP,
-					Port:       internalGRPCPort,
-					TargetPort: intstr.FromInt32(internalGRPCPort),
-					Name:       daprSidecarInternalGRPCPortName,
+					Protocol:    corev1.ProtocolTCP,
+					Port:        internalGRPCPort,
+					TargetPort:  intstr.FromInt32(internalGRPCPort),
+					Name:        daprSidecarInternalGRPCPortName,
+					AppProtocol: ptr.Of(internalAppProtocol),
 				},
 				{
-					Protocol:   corev1.ProtocolTCP,
-					Port:       metricsPort,
-					TargetPort: intstr.FromInt32(metricsPort),
-					Name:       daprSidecarMetricsPortName,
+					Protocol:    corev1.ProtocolTCP,
+					Port:        metricsPort,
+					TargetPort:  intstr.FromInt32(metricsPort),
+					Name:        daprSidecarMetricsPortName,
+					AppProtocol: ptr.Of(appProtocolHTTP),
 				},
 			},
 		},

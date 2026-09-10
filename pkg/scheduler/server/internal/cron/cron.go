@@ -31,19 +31,40 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.scheduler.server.cron")
 
+const BackendEtcd = etcdcron.BackendEtcd
+
+// PlacementLeader consumes placement leadership changes derived from the cron
+// leadership table.
+type PlacementLeader interface {
+	SetLeader(leader bool)
+	HasPlacementStreams() bool
+}
+
 type Options struct {
-	ID      string
-	Host    *schedulerv1pb.Host
-	Etcd    etcd.Interface
+	ID   string
+	Host *schedulerv1pb.Host
+
+	Etcd etcd.Interface
+
+	Backend *string
+
+	BackendConfig any
+
 	Workers uint32
+
+	// Placement, when non-nil, is notified whether this scheduler is the
+	// current placement leader on every leadership table change.
+	Placement PlacementLeader
 }
 
 // Interface manages the cron framework, exposing a client to schedule jobs.
@@ -66,12 +87,15 @@ type cron struct {
 	id string
 
 	host            *schedulerv1pb.Host
+	placement       PlacementLeader
 	connectionPool  *pool.Pool
 	etcdcron        api.Interface
 	hostBroadcaster *broadcaster.Broadcaster[[]*schedulerv1pb.Host]
 	lock            sync.RWMutex
-	currHosts       []*schedulerv1pb.Host
+	broadcastHosts  []*schedulerv1pb.Host
 	etcd            etcd.Interface
+	backend         *string
+	backendConfig   any
 	workers         uint32
 
 	readyCh chan struct{}
@@ -82,20 +106,18 @@ func New(opts Options) Interface {
 	return &cron{
 		id:              opts.ID,
 		host:            opts.Host,
+		placement:       opts.Placement,
 		hostBroadcaster: broadcaster.New[[]*schedulerv1pb.Host](),
 		workers:         opts.Workers,
 		readyCh:         make(chan struct{}),
 		closeCh:         make(chan struct{}),
 		etcd:            opts.Etcd,
+		backend:         opts.Backend,
+		backendConfig:   opts.BackendConfig,
 	}
 }
 
 func (c *cron) Run(ctx context.Context) error {
-	client, err := c.etcd.Client(ctx)
-	if err != nil {
-		return err
-	}
-
 	log.Info("Starting Cron")
 
 	watchLeadershipCh := make(chan []*anypb.Any)
@@ -105,21 +127,40 @@ func (c *cron) Run(ctx context.Context) error {
 		return err
 	}
 
-	c.etcdcron, err = etcdcron.New(etcdcron.Options{
-		Client:          client,
-		Namespace:       "dapr",
+	cronOpts := etcdcron.Options{
 		ID:              c.id,
 		TriggerFn:       c.triggerHandler,
 		ReplicaData:     hostAny,
 		WatchLeadership: watchLeadershipCh,
 		Workers:         new(c.workers),
-	})
-	if err != nil {
-		return fmt.Errorf("fail to create etcd-cron: %s", err)
+		Backend:         c.backend,
+		BackendConfig:   c.backendConfig,
 	}
 
+	if c.backend == nil || *c.backend == etcdcron.BackendEtcd {
+		client, cerr := c.etcd.Client(ctx)
+		if cerr != nil {
+			return cerr
+		}
+		cronOpts.Backend = ptr.Of(etcdcron.BackendEtcd)
+		cronOpts.Client = client
+		cronOpts.Namespace = "dapr"
+	}
+
+	c.etcdcron, err = etcdcron.New(cronOpts)
+	if err != nil {
+		return fmt.Errorf("fail to create cron: %s", err)
+	}
+
+	var leaderLoop loop.Interface[[]*anypb.Any]
 	c.connectionPool = pool.New(pool.Options{
-		Cron: c.etcdcron,
+		Cron:             c.etcdcron,
+		PlacementEnabled: c.host.GetSchedulerPlacementEnabled(),
+		// A nil event re-broadcasts the last leadership table with its
+		// placement fields recomputed under the new capability state.
+		OnSchedulerPlacementCapabilityChange: func() {
+			leaderLoop.Enqueue(nil)
+		},
 	})
 
 	// Use a loop to process leadership updates. The loop's Enqueue is
@@ -128,13 +169,14 @@ func (c *cron) Run(ctx context.Context) error {
 	// subscribers. Without this, a blocked send can race with elected context
 	// cancellation during quorum changes, causing the cron module to exit
 	// silently.
-	leaderLoop := loop.New[[]*anypb.Any](64).NewLoop(&leadership{
+	leaderLoop = loop.New[[]*anypb.Any](64).NewLoop(&leadership{
 		hostBroadcaster: c.hostBroadcaster,
 		lock:            &c.lock,
-		currHosts:       &c.currHosts,
+		broadcastHosts:  &c.broadcastHosts,
 		readyCh:         c.readyCh,
 		ownAddress:      c.host.GetAddress(),
 		pool:            c.connectionPool,
+		placement:       c.placement,
 	})
 
 	return concurrency.NewRunnerManager(
@@ -146,6 +188,9 @@ func (c *cron) Run(ctx context.Context) error {
 			defer close(c.closeCh)
 			defer c.hostBroadcaster.Close()
 			defer leaderLoop.Close(nil)
+			if c.placement != nil {
+				defer c.placement.SetLeader(false)
+			}
 
 			for {
 				select {
@@ -154,6 +199,11 @@ func (c *cron) Run(ctx context.Context) error {
 				case anyhosts, ok := <-watchLeadershipCh:
 					if !ok {
 						return nil
+					}
+					// nil on the loop is reserved for the pool's
+					// capability signal.
+					if anyhosts == nil {
+						continue
 					}
 					leaderLoop.Enqueue(anyhosts)
 				}
@@ -197,7 +247,7 @@ func (c *cron) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error
 	// Always send the current hosts initially to catch up to broadcast
 	// subscribe.
 	c.lock.RLock()
-	hosts := slices.Clone(c.currHosts)
+	hosts := slices.Clone(c.broadcastHosts)
 	c.lock.RUnlock()
 	err := stream.Send(&schedulerv1pb.WatchHostsResponse{
 		Hosts: hosts,
@@ -235,19 +285,38 @@ func (c *cron) triggerHandler(req *api.TriggerRequest, fn func(*api.TriggerRespo
 		return
 	}
 
-	idx := strings.LastIndex(req.GetName(), "||")
-	if idx == -1 || len(req.GetName()) <= idx+2 {
-		log.Errorf("Job name is malformed: %s", req.GetName())
+	name, err := nameFromKey(req.GetName(), &meta)
+	if err != nil {
+		log.Errorf("Job name is malformed: %s", err)
 		fn(&api.TriggerResponse{Result: api.TriggerResponseResult_UNDELIVERABLE})
 		return
 	}
 
 	c.connectionPool.Trigger(&internalsv1pb.JobEvent{
 		Key:      req.GetName(),
-		Name:     req.GetName()[idx+2:],
+		Name:     name,
 		Data:     req.GetPayload(),
 		Metadata: &meta,
 	}, c.respHandler(req.GetName(), &meta, fn))
+}
+
+// nameFromKey recovers the reminder/job name delivered to the app from the
+// stored job key. The key is the metadata prefix (built by serialize) followed
+// by the name, so the name is recovered by trimming that prefix rather than by
+// re-splitting the key on the last "||". This is unambiguous even when the name
+// (or the actor id) itself contains "||", which is a permitted character, and
+// it does not drop names that end in "||".
+func nameFromKey(key string, meta *schedulerv1pb.JobMetadata) (string, error) {
+	prefix, err := serialize.PrefixFromMetadata(meta)
+	if err != nil {
+		return "", err
+	}
+
+	if !strings.HasPrefix(key, prefix) {
+		return "", fmt.Errorf("key %q does not match expected prefix %q from its metadata", key, prefix)
+	}
+
+	return strings.TrimPrefix(key, prefix), nil
 }
 
 func (c *cron) respHandler(name string, meta *schedulerv1pb.JobMetadata, fn func(*api.TriggerResponse)) func(api.TriggerResponseResult) {

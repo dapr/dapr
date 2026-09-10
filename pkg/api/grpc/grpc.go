@@ -234,7 +234,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	}
 
 	start := time.Now()
-	err := a.pubsubAdapter.Publish(ctx, &req)
+	err := a.pubsubAdapter.Publish(ctx, &req, runtimePubsub.TransportModeGRPC)
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
@@ -312,6 +312,20 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 			}
 		}
 		if rErr != nil {
+			// A dead request context is not an internal daprd failure:
+			// preserve its gRPC classification (DeadlineExceeded/Canceled)
+			// so the caller observes the same code whether its own deadline
+			// timer or this reply wins the race. The blanket Internal wrap
+			// below would otherwise misclassify e.g. an app-channel
+			// concurrency-limiter acquire aborted by the caller's deadline.
+			if errors.Is(rErr, context.DeadlineExceeded) || errors.Is(rErr, context.Canceled) {
+				return rResp, status.FromContextError(rErr).Err()
+			}
+			// A remote hop returns the same conditions as already-classified
+			// status errors rather than context sentinels: pass them through.
+			if c := status.Code(rErr); c == codes.DeadlineExceeded || c == codes.Canceled {
+				return rResp, rErr
+			}
 			return rResp, messages.ErrDirectInvoke.WithFormat(in.GetId(), rErr)
 		}
 
@@ -465,7 +479,7 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 	start := time.Now()
 	// err is only nil if all entries are successfully published.
 	// For partial success, err is not nil and res contains the failed entries.
-	res, err := a.pubsubAdapter.BulkPublish(ctx, &req)
+	res, err := a.pubsubAdapter.BulkPublish(ctx, &req, runtimePubsub.TransportModeGRPC)
 
 	elapsed := diag.ElapsedSince(start)
 	eventsPublished := int64(len(req.Entries))
@@ -546,6 +560,10 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 		}
 
 		for key, val := range incomingMD {
+			// Binary gRPC metadata cannot be represented in string component metadata
+			if strings.HasSuffix(key, "-bin") {
+				continue
+			}
 			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
 			// Not to overwrite the existing metadata
 			// But if the key is traceparent or tracestate, we allow overwrite the existing metadata.

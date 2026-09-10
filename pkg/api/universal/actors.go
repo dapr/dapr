@@ -28,6 +28,7 @@ import (
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/reminders"
+	actortimers "github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging/method"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -89,6 +90,11 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 
 	err = timers.Create(ctx, req)
 	if err != nil {
+		if errors.Is(err, actortimers.ErrTimerActorNotOwned) {
+			a.logger.Debug(messages.ErrActorTimerOpActorNotOwned)
+			return nil, messages.ErrActorTimerOpActorNotOwned
+		}
+
 		err = messages.ErrActorTimerCreate.WithFormat(err)
 		a.logger.Debug(err)
 		return nil, err
@@ -111,7 +117,16 @@ func (a *Universal) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.Un
 		ActorType: in.GetActorType(),
 	}
 
-	timers.Delete(ctx, req)
+	if err := timers.Delete(ctx, req); err != nil {
+		if errors.Is(err, actortimers.ErrTimerActorNotOwned) {
+			a.logger.Debug(messages.ErrActorTimerOpActorNotOwned)
+			return nil, messages.ErrActorTimerOpActorNotOwned
+		}
+
+		err = messages.ErrActorTimerDelete.WithFormat(err)
+		a.logger.Debug(err)
+		return nil, err
+	}
 	return nil, nil
 }
 
@@ -139,6 +154,12 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 			a.logger.Debug(err)
 			return nil, err
 		}
+	}
+
+	if in.GetName() == "" {
+		err = messages.ErrBadRequest.WithFormat("reminder name cannot be empty")
+		a.logger.Debug(err)
+		return nil, err
 	}
 
 	if vErr := method.ValidateName(in.GetName()); vErr != nil {
@@ -348,4 +369,116 @@ func (a *Universal) ListActorReminders(ctx context.Context, req *runtimev1pb.Lis
 	return &runtimev1pb.ListActorRemindersResponse{
 		Reminders: reminders,
 	}, nil
+}
+
+func (a *Universal) ListActorTimers(ctx context.Context, in *runtimev1pb.ListActorTimersRequest) (*runtimev1pb.ListActorTimersResponse, error) {
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
+	}
+	timers, err := a.ActorTimers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := timers.List(ctx, &api.ListTimersRequest{
+		ActorType: in.GetActorType(),
+		ActorID:   in.GetActorId(),
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, actortimers.ErrTimerActorNotOwned):
+			a.logger.Debug(messages.ErrActorTimerOpActorNotOwned)
+			return nil, messages.ErrActorTimerOpActorNotOwned
+		case errors.Is(err, actortimers.ErrTimerActorTypeNotHosted):
+			a.logger.Debug(messages.ErrActorTimerOpActorNotHosted)
+			return nil, messages.ErrActorTimerOpActorNotHosted
+		}
+		err = messages.ErrActorTimerList.WithFormat(err)
+		a.logger.Debug(err)
+		return nil, err
+	}
+
+	out := make([]*runtimev1pb.NamedActorTimer, len(resp))
+	for i, r := range resp {
+		out[i] = &runtimev1pb.NamedActorTimer{
+			Name:  r.Name,
+			Timer: actorTimerFromReminder(r),
+		}
+	}
+
+	return &runtimev1pb.ListActorTimersResponse{
+		Timers: out,
+	}, nil
+}
+
+func (a *Universal) GetActorTimer(ctx context.Context, in *runtimev1pb.GetActorTimerRequest) (*runtimev1pb.GetActorTimerResponse, error) {
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
+	}
+	timers, err := a.ActorTimers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := timers.Get(ctx, &api.GetTimerRequest{
+		Name:      in.GetName(),
+		ActorID:   in.GetActorId(),
+		ActorType: in.GetActorType(),
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, actortimers.ErrTimerActorNotOwned):
+			a.logger.Debug(messages.ErrActorTimerOpActorNotOwned)
+			return nil, messages.ErrActorTimerOpActorNotOwned
+		case errors.Is(err, actortimers.ErrTimerActorTypeNotHosted):
+			a.logger.Debug(messages.ErrActorTimerOpActorNotHosted)
+			return nil, messages.ErrActorTimerOpActorNotHosted
+		}
+		err = messages.ErrActorTimerGet.WithFormat(err)
+		a.logger.Debug(err)
+		return nil, err
+	}
+
+	if resp == nil {
+		return nil, messages.ErrActorTimerNotFound.WithFormat(in.GetName())
+	}
+
+	t := actorTimerFromReminder(resp)
+	return &runtimev1pb.GetActorTimerResponse{
+		ActorType: t.GetActorType(),
+		ActorId:   t.GetActorId(),
+		DueTime:   t.DueTime,
+		Period:    t.Period,
+		Ttl:       t.Ttl,
+		Callback:  t.Callback,
+		Data:      t.GetData(),
+	}, nil
+}
+
+// actorTimerFromReminder converts a stored timer to its API representation.
+// The period is reported the way the Scheduler does for reminders.
+func actorTimerFromReminder(r *api.Reminder) *runtimev1pb.ActorTimer {
+	var dueTime, period, ttl, callback *string
+	if r.DueTime != "" {
+		dueTime = new(r.DueTime)
+	}
+	if p := r.Period.Schedule(); p != "" {
+		period = new(p)
+	}
+	if !r.ExpirationTime.IsZero() {
+		ttl = new(r.ExpirationTime.Format(time.RFC3339Nano))
+	}
+	if r.Callback != "" {
+		callback = new(r.Callback)
+	}
+
+	return &runtimev1pb.ActorTimer{
+		ActorType: r.ActorType,
+		ActorId:   r.ActorID,
+		DueTime:   dueTime,
+		Period:    period,
+		Ttl:       ttl,
+		Callback:  callback,
+		Data:      r.Data,
+	}
 }

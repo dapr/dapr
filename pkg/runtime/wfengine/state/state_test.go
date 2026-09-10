@@ -16,7 +16,9 @@ package state
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,6 +32,7 @@ import (
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -318,6 +321,53 @@ func TestGetSaveRequest_HistoryWithoutMarshaledBytes(t *testing.T) {
 
 	require.NotNil(t, historyOp, "expected history-000000 upsert")
 	assert.Equal(t, expected, historyOp.Value)
+}
+
+func TestGetSaveRequest_InboxExcludesUnpersistedTimerEvents(t *testing.T) {
+	t.Parallel()
+
+	s := NewState(testOpts())
+
+	s.AddToInbox(testEvent(0))
+
+	// A timer wake appends TimerFired directly to the in-memory inbox
+	// without going through AddToInbox (orchestrator run path); it is never
+	// persisted as an inbox key. A save taken while it is still in the inbox
+	// (workflow stall, abandoned continue-as-new) must not count it.
+	s.Inbox = append(s.Inbox, &backend.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_TimerFired{
+			TimerFired: &protos.TimerFiredEvent{TimerId: 1},
+		},
+	})
+
+	req, err := s.GetSaveRequest("actor1")
+	require.NoError(t, err)
+
+	var inboxKeys []string
+	var metadata *backend.BackendWorkflowStateMetadata
+	for _, op := range req.Operations {
+		if op.Operation != api.Upsert {
+			continue
+		}
+		u, ok := op.Request.(api.TransactionalUpsert)
+		if !ok {
+			continue
+		}
+		switch {
+		case u.Key == MetadataKey:
+			metadata = new(backend.BackendWorkflowStateMetadata)
+			require.NoError(t, proto.Unmarshal(u.Value.([]byte), metadata))
+		case strings.HasPrefix(u.Key, inboxKeyPrefix):
+			inboxKeys = append(inboxKeys, u.Key)
+		}
+	}
+
+	require.NotNil(t, metadata, "expected a metadata upsert")
+	assert.Equal(t, []string{"inbox-000000"}, inboxKeys, "only the non-timer event should be persisted")
+	assert.Equal(t, uint64(1), metadata.GetInboxLength(),
+		"metadata must declare exactly the inbox keys that exist in the store, or the next load will fail on a phantom key")
 }
 
 func TestGetSaveRequest_SigningDataOperations(t *testing.T) {
@@ -1295,4 +1345,388 @@ func TestGetSaveRequest_MetadataIncludesExternalCertLength(t *testing.T) {
 	require.NoError(t, proto.Unmarshal(metadataBytes, &meta))
 
 	assert.Equal(t, uint64(2), meta.GetExternalSigningCertificateLength())
+}
+
+// TestCustomStatusChangeTracking pins the skip-unchanged custom status
+// persistence: the first history-bearing save writes the key even when the
+// status never changed (so a loader never misses it), an unchanged status is
+// omitted from subsequent saves, a changed status is upserted again, and
+// ResetChangeTracking clears the dirty flag only when the save it mirrors
+// actually wrote the key.
+func TestCustomStatusChangeTracking(t *testing.T) {
+	t.Parallel()
+
+	hasCustomStatusOp := func(t *testing.T, s *State) bool {
+		t.Helper()
+		req, err := s.GetSaveRequest("wf-actor")
+		require.NoError(t, err)
+		for _, op := range req.Operations {
+			if up, ok := op.Request.(api.TransactionalUpsert); ok && up.Key == customStatusKey {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("first history-bearing save writes the key even when unchanged", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		assert.True(t, hasCustomStatusOp(t, s), "a never-persisted status must be written")
+	})
+
+	t.Run("unchanged status is omitted once persisted", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		require.True(t, hasCustomStatusOp(t, s))
+		s.ResetChangeTracking()
+		assert.True(t, s.customStatusPersisted)
+		assert.False(t, s.customStatusChanged)
+
+		s.AddToHistory(testEvent(1))
+		assert.False(t, hasCustomStatusOp(t, s), "an unchanged persisted status must not be re-written")
+	})
+
+	t.Run("changed status is upserted again", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		s.ResetChangeTracking()
+
+		s.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{
+			NewEvents:    []*backend.HistoryEvent{testEvent(1)},
+			CustomStatus: wrapperspb.String("phase-2"),
+		})
+		assert.True(t, s.customStatusChanged)
+		assert.True(t, hasCustomStatusOp(t, s), "a changed status must be upserted")
+	})
+
+	t.Run("same-value apply does not mark the status changed", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		s.ResetChangeTracking()
+
+		s.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{
+			NewEvents: []*backend.HistoryEvent{testEvent(1)},
+		})
+		assert.False(t, s.customStatusChanged)
+		assert.False(t, hasCustomStatusOp(t, s))
+	})
+
+	t.Run("reset does not clear the dirty flag for an inbox-only save", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		s.ResetChangeTracking()
+
+		// Status changes, but the save that follows carries no history
+		// delta (inbox-only save): GetSaveRequest omits the status key, so
+		// ResetChangeTracking must keep the dirty flag for the next
+		// history-bearing save.
+		s.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{
+			CustomStatus: wrapperspb.String("phase-2"),
+		})
+		require.False(t, hasCustomStatusOp(t, s), "inbox-only saves must not write the status")
+		s.ResetChangeTracking()
+		assert.True(t, s.customStatusChanged, "dirty flag must survive a save that did not write the key")
+
+		s.AddToHistory(testEvent(1))
+		assert.True(t, hasCustomStatusOp(t, s), "the next history-bearing save must write the changed status")
+	})
+}
+
+func TestGetSaveRequest_ParentNotify(t *testing.T) {
+	t.Parallel()
+
+	ops := func(t *testing.T, s *State) (upserts, deletes map[string]bool) {
+		t.Helper()
+		req, err := s.GetSaveRequest("actor1")
+		require.NoError(t, err)
+		upserts, deletes = map[string]bool{}, map[string]bool{}
+		for _, op := range req.Operations {
+			switch r := op.Request.(type) {
+			case api.TransactionalUpsert:
+				upserts[r.Key] = true
+			case api.TransactionalDelete:
+				deletes[r.Key] = true
+			}
+		}
+		return upserts, deletes
+	}
+
+	t.Run("pending marker rides the save", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		s.SetParentNotifyPending(true)
+		upserts, _ := ops(t, s)
+		assert.True(t, upserts[parentNotifyKey])
+
+		s.ResetChangeTracking()
+		assert.True(t, s.parentNotifyPersisted)
+		s.SetParentNotifyPending(false)
+		_, deletes := ops(t, s)
+		assert.True(t, deletes[parentNotifyKey], "clearing a persisted marker deletes the row")
+	})
+
+	t.Run("clearing an absent marker writes nothing", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		s.SetParentNotifyPending(false)
+		upserts, deletes := ops(t, s)
+		assert.False(t, upserts[parentNotifyKey])
+		assert.False(t, deletes[parentNotifyKey])
+	})
+
+	t.Run("reset clears a persisted marker", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.SetParentNotifyPending(true)
+		s.ResetChangeTracking()
+		s.Reset()
+		assert.False(t, s.ParentNotifyPending)
+		_, deletes := ops(t, s)
+		assert.True(t, deletes[parentNotifyKey])
+	})
+
+	t.Run("purge deletes a persisted marker only", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		req, err := s.GetPurgeRequest("actor1")
+		require.NoError(t, err)
+		assert.Len(t, req.Operations, 1)
+
+		s.SetParentNotifyPending(true)
+		s.ResetChangeTracking()
+		req, err = s.GetPurgeRequest("actor1")
+		require.NoError(t, err)
+		assert.Len(t, req.Operations, 2)
+		assert.Equal(t, parentNotifyKey, req.Operations[0].Request.(api.TransactionalDelete).Key)
+	})
+}
+
+func TestGetSaveRequest_MetadataETagLost(t *testing.T) {
+	t.Parallel()
+
+	t.Run("new state blind upserts", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		_, err := s.GetSaveRequest("actor1")
+		require.NoError(t, err)
+	})
+
+	t.Run("etag seen then lost refuses the save", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		etag := "v1"
+		s.SetMetadataETag(&etag)
+		s.SetMetadataETag(nil)
+		_, err := s.GetSaveRequest("actor1")
+		require.ErrorIs(t, err, ErrMetadataETagLost)
+	})
+
+	t.Run("store without etags keeps blind upserts", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		s.SetMetadataETag(nil)
+		_, err := s.GetSaveRequest("actor1")
+		require.NoError(t, err)
+	})
+}
+
+func TestGetSaveRequest_CreationInput(t *testing.T) {
+	t.Parallel()
+
+	parent := &protos.ParentInstanceInfo{WorkflowInstance: &protos.WorkflowInstance{InstanceId: "p", ExecutionId: wrapperspb.String("pe")}}
+	ops := func(t *testing.T, s *State) (upserts map[string][]byte, deletes map[string]bool) {
+		t.Helper()
+		req, err := s.GetSaveRequest("actor1")
+		require.NoError(t, err)
+		upserts, deletes = map[string][]byte{}, map[string]bool{}
+		for _, op := range req.Operations {
+			switch r := op.Request.(type) {
+			case api.TransactionalUpsert:
+				b, _ := r.Value.([]byte)
+				upserts[r.Key] = b
+			case api.TransactionalDelete:
+				deletes[r.Key] = true
+			}
+		}
+		return upserts, deletes
+	}
+
+	t.Run("kept from the first ContinueAsNew, stamped with the creating parent, dropped by Reset", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		s.setCreationInput(wrapperspb.String(`"in"`), parent)
+		upserts, _ := ops(t, s)
+		var row creationInputRow
+		require.NoError(t, json.Unmarshal(upserts[creationInputKey], &row))
+		assert.Equal(t, `"in"`, row.Input)
+		assert.Equal(t, creationParent{InstanceID: "p", ExecutionID: "pe"}, row.creationParent)
+		assert.True(t, s.CreationInputFor(parent))
+		assert.False(t, s.CreationInputFor(&protos.ParentInstanceInfo{WorkflowInstance: &protos.WorkflowInstance{InstanceId: "p", ExecutionId: wrapperspb.String("other")}}))
+
+		s.ResetChangeTracking()
+		assert.True(t, s.creationInputPersisted)
+		s.Reset()
+		assert.Nil(t, s.CreationInput)
+		_, deletes := ops(t, s)
+		assert.True(t, deletes[creationInputKey], "a recreate drops the previous instance's creation input")
+	})
+
+	t.Run("a nil input is recorded as empty", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		s.setCreationInput(nil, parent)
+		require.NotNil(t, s.CreationInput)
+		upserts, _ := ops(t, s)
+		_, ok := upserts[creationInputKey]
+		assert.True(t, ok)
+	})
+
+	t.Run("recorded at creation for a signed child, survives ContinueAsNew", func(t *testing.T) {
+		t.Parallel()
+		opts := testOpts()
+		opts.Signer = &signer.Signer{}
+		s := NewState(opts)
+		s.KeepCreationInput(&protos.ExecutionStartedEvent{Name: "child", Input: wrapperspb.String(`"first"`), ParentInstance: parent})
+		assert.Equal(t, `"first"`, s.CreationInput.GetValue())
+		assert.True(t, s.CreationInputFor(parent))
+		s.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{ContinuedAsNew: true, NewEvents: []*protos.HistoryEvent{{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
+			Name: "child", Input: wrapperspb.String(`"second"`), ParentInstance: parent,
+		}}}}})
+		assert.Equal(t, `"first"`, s.CreationInput.GetValue(), "ContinueAsNew does not touch it")
+	})
+
+	t.Run("nothing is inferred at ContinueAsNew", func(t *testing.T) {
+		t.Parallel()
+		opts := testOpts()
+		opts.Signer = &signer.Signer{}
+		s := NewState(opts)
+		// A child created before the input was recorded: the current start
+		// event may already carry a continued input, so it is not trusted.
+		s.AddToHistory(&protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
+			Name: "child", Input: wrapperspb.String(`"second"`), ParentInstance: parent,
+		}}})
+		s.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{ContinuedAsNew: true})
+		assert.Nil(t, s.CreationInput)
+	})
+
+	t.Run("a root workflow or an unsigned child keeps nothing", func(t *testing.T) {
+		t.Parallel()
+		signed := testOpts()
+		signed.Signer = &signer.Signer{}
+		root := NewState(signed)
+		root.KeepCreationInput(&protos.ExecutionStartedEvent{Name: "root", Input: wrapperspb.String("x")})
+		assert.Nil(t, root.CreationInput)
+		unsigned := NewState(testOpts())
+		unsigned.KeepCreationInput(&protos.ExecutionStartedEvent{Name: "child", Input: wrapperspb.String("x"), ParentInstance: parent})
+		assert.Nil(t, unsigned.CreationInput, "only the attestation reads it")
+	})
+
+	t.Run("a legacy unstamped row is adopted for the current creation and rewritten", func(t *testing.T) {
+		t.Parallel()
+		legacy, err := proto.Marshal(wrapperspb.String(`"first"`))
+		require.NoError(t, err)
+		startRow, err := proto.Marshal(&protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
+			Name: "child", Input: wrapperspb.String(`"second"`), ParentInstance: parent,
+		}}})
+		require.NoError(t, err)
+		meta, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{Generation: 1, HistoryLength: 1})
+		require.NoError(t, err)
+		etag := "e"
+		st := statefake.New().
+			WithGetFn(func(_ context.Context, req *api.GetStateRequest, _ bool) (*api.StateResponse, error) {
+				if req.Key == MetadataKey {
+					return &api.StateResponse{Data: meta, ETag: &etag}, nil
+				}
+				return &api.StateResponse{}, nil
+			}).
+			WithGetBulkFn(func(_ context.Context, req *api.GetBulkStateRequest, _ bool) (api.BulkStateResponse, error) {
+				res := make(api.BulkStateResponse, len(req.Keys))
+				for _, k := range req.Keys {
+					switch k {
+					case "history-000000":
+						res[k] = api.BulkStateEntry{Data: startRow, ETag: &etag}
+					case creationInputKey:
+						res[k] = api.BulkStateEntry{Data: legacy, ETag: &etag}
+					default:
+						res[k] = api.BulkStateEntry{}
+					}
+				}
+				return res, nil
+			})
+		s, err := loadWorkflowStateOnce(t.Context(), st, "actor1", testOpts())
+		require.NoError(t, err)
+		require.NotNil(t, s)
+		assert.Equal(t, `"first"`, s.CreationInput.GetValue())
+		assert.True(t, s.CreationInputFor(parent), "stamped with the current creation")
+		upserts, _ := ops(t, s)
+		var row creationInputRow
+		require.NoError(t, json.Unmarshal(upserts[creationInputKey], &row), "the next save rewrites the row stamped")
+		assert.Equal(t, `"first"`, row.Input)
+	})
+
+	t.Run("a legacy unstamped row on a root workflow is dropped", func(t *testing.T) {
+		t.Parallel()
+		legacy, err := proto.Marshal(wrapperspb.String(`"x"`))
+		require.NoError(t, err)
+		startRow, err := proto.Marshal(&protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{Name: "root"}}})
+		require.NoError(t, err)
+		meta, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{Generation: 1, HistoryLength: 1})
+		require.NoError(t, err)
+		etag := "e"
+		st := statefake.New().
+			WithGetFn(func(_ context.Context, req *api.GetStateRequest, _ bool) (*api.StateResponse, error) {
+				if req.Key == MetadataKey {
+					return &api.StateResponse{Data: meta, ETag: &etag}, nil
+				}
+				return &api.StateResponse{}, nil
+			}).
+			WithGetBulkFn(func(_ context.Context, req *api.GetBulkStateRequest, _ bool) (api.BulkStateResponse, error) {
+				res := make(api.BulkStateResponse, len(req.Keys))
+				for _, k := range req.Keys {
+					switch k {
+					case "history-000000":
+						res[k] = api.BulkStateEntry{Data: startRow, ETag: &etag}
+					case creationInputKey:
+						res[k] = api.BulkStateEntry{Data: legacy, ETag: &etag}
+					default:
+						res[k] = api.BulkStateEntry{}
+					}
+				}
+				return res, nil
+			})
+		s, err := loadWorkflowStateOnce(t.Context(), st, "actor1", testOpts())
+		require.NoError(t, err)
+		assert.Nil(t, s.CreationInput)
+		_, deletes := ops(t, s)
+		assert.True(t, deletes[creationInputKey], "the next save deletes the orphan")
+	})
+
+	t.Run("purge deletes a persisted creation input", func(t *testing.T) {
+		t.Parallel()
+		s := NewState(testOpts())
+		s.AddToHistory(testEvent(0))
+		s.setCreationInput(wrapperspb.String("x"), parent)
+		s.ResetChangeTracking()
+		req, err := s.GetPurgeRequest("actor1")
+		require.NoError(t, err)
+		var deleted bool
+		for _, op := range req.Operations {
+			if d, ok := op.Request.(api.TransactionalDelete); ok && d.Key == creationInputKey {
+				deleted = true
+			}
+		}
+		assert.True(t, deleted)
+	})
 }

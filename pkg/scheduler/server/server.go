@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/controller"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/placement"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
@@ -63,6 +64,13 @@ type Options struct {
 	Controller                *controller.Controller
 
 	Workers uint32
+
+	Backend       *string
+	BackendConfig any
+
+	PlacementEnabled                   bool
+	PlacementDisseminateTimeout        time.Duration
+	PlacementDisseminateCoalesceWindow time.Duration
 
 	EtcdEmbed                      bool
 	EtcdDataDir                    string
@@ -97,7 +105,7 @@ type Server struct {
 	serializer *serialize.Serializer
 	cron       cron.Interface
 	etcd       etcd.Interface
-	controller *controller.Controller
+	placement  placement.Interface
 
 	hzAPIServer healthz.Target
 
@@ -121,42 +129,61 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		broadcastAddr = net.JoinHostPort(haddr, strconv.Itoa(opts.Port))
 	}
 
-	etcd, err := etcd.New(ctx, etcd.Options{
-		Name:                       opts.EtcdName,
-		Embed:                      opts.EtcdEmbed,
-		InitialCluster:             opts.EtcdInitialCluster,
-		ClientPort:                 opts.EtcdClientPort,
-		ClientListenAddress:        opts.EtcdClientListenAddress,
-		SpaceQuota:                 opts.EtcdSpaceQuota,
-		CompactionMode:             opts.EtcdCompactionMode,
-		CompactionRetention:        opts.EtcdCompactionRetention,
-		SnapshotCount:              opts.EtcdSnapshotCount,
-		MaxSnapshots:               opts.EtcdMaxSnapshots,
-		MaxWALs:                    opts.EtcdMaxWALs,
-		BackendBatchLimit:          opts.EtcdBackendBatchLimit,
-		BackendBatchInterval:       opts.EtcdBackendBatchInterval,
-		MaxTxnOps:                  opts.EtcdMaxTxnOps,
-		DefragThresholdMB:          opts.EtcdDefragThresholdMB,
-		InitialElectionTickAdvance: opts.EtcdInitialElectionTickAdvance,
-		Metrics:                    opts.EtcdMetrics,
-		Security:                   opts.Security,
-		DataDir:                    opts.EtcdDataDir,
-		Healthz:                    opts.Healthz,
-		Mode:                       opts.Mode,
+	var etcdServer etcd.Interface
+	if opts.Backend == nil || *opts.Backend == cron.BackendEtcd {
+		var err error
+		etcdServer, err = etcd.New(ctx, etcd.Options{
+			Name:                       opts.EtcdName,
+			Embed:                      opts.EtcdEmbed,
+			InitialCluster:             opts.EtcdInitialCluster,
+			ClientPort:                 opts.EtcdClientPort,
+			ClientListenAddress:        opts.EtcdClientListenAddress,
+			SpaceQuota:                 opts.EtcdSpaceQuota,
+			CompactionMode:             opts.EtcdCompactionMode,
+			CompactionRetention:        opts.EtcdCompactionRetention,
+			SnapshotCount:              opts.EtcdSnapshotCount,
+			MaxSnapshots:               opts.EtcdMaxSnapshots,
+			MaxWALs:                    opts.EtcdMaxWALs,
+			BackendBatchLimit:          opts.EtcdBackendBatchLimit,
+			BackendBatchInterval:       opts.EtcdBackendBatchInterval,
+			MaxTxnOps:                  opts.EtcdMaxTxnOps,
+			DefragThresholdMB:          opts.EtcdDefragThresholdMB,
+			InitialElectionTickAdvance: opts.EtcdInitialElectionTickAdvance,
+			Metrics:                    opts.EtcdMetrics,
+			Security:                   opts.Security,
+			DataDir:                    opts.EtcdDataDir,
+			Healthz:                    opts.Healthz,
+			Mode:                       opts.Mode,
 
-		ClientEndpoints: opts.EtcdClientEndpoints,
-		ClientUsername:  opts.EtcdClientUsername,
-		ClientPassword:  opts.EtcdClientPassword,
-	})
-	if err != nil {
-		return nil, err
+			ClientEndpoints: opts.EtcdClientEndpoints,
+			ClientUsername:  opts.EtcdClientUsername,
+			ClientPassword:  opts.EtcdClientPassword,
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
+	place := placement.New(placement.Options{
+		Enabled:            opts.PlacementEnabled,
+		ID:                 opts.EtcdName,
+		Security:           opts.Security,
+		Healthz:            opts.Healthz,
+		DisseminateTimeout: opts.PlacementDisseminateTimeout,
+		CoalesceWindow:     opts.PlacementDisseminateCoalesceWindow,
+	})
+
 	cron := cron.New(cron.Options{
-		ID:      opts.EtcdName,
-		Host:    &schedulerv1pb.Host{Address: broadcastAddr},
-		Etcd:    etcd,
-		Workers: opts.Workers,
+		ID: opts.EtcdName,
+		Host: &schedulerv1pb.Host{
+			Address:                   broadcastAddr,
+			SchedulerPlacementEnabled: opts.PlacementEnabled,
+		},
+		Etcd:          etcdServer,
+		Backend:       opts.Backend,
+		BackendConfig: opts.BackendConfig,
+		Workers:       opts.Workers,
+		Placement:     place,
 	})
 
 	if opts.Controller != nil {
@@ -167,9 +194,9 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		port:          opts.Port,
 		listenAddress: opts.ListenAddress,
 		sec:           opts.Security,
-		controller:    opts.Controller,
 		cron:          cron,
-		etcd:          etcd,
+		placement:     place,
+		etcd:          etcdServer,
 		serializer: serialize.New(serialize.Options{
 			Security: opts.Security,
 		}),
@@ -185,16 +212,24 @@ func (s *Server) Run(ctx context.Context) error {
 
 	log.Info("Dapr Scheduler is starting...")
 
+	// On shutdown, placement closes its streams before the cron stops.
+	// Otherwise the cron teardown revokes the placement leadership first and
+	// the streams close with a lost leadership error instead of the shutdown
+	// status.
+	cronCtx, cronCancel := context.WithCancel(context.WithoutCancel(ctx))
 	runners := []concurrency.Runner{
-		s.etcd.Run,
 		s.runServer,
 		func(ctx context.Context) error {
-			err := s.cron.Run(ctx)
-			if ctx.Err() != nil {
+			defer cronCancel()
+			return s.placement.Run(ctx)
+		},
+		func(context.Context) error {
+			err := s.cron.Run(cronCtx)
+			if cronCtx.Err() != nil {
 				if err != nil {
 					log.Errorf("Error running scheduler cron: %s", err)
 				}
-				return ctx.Err()
+				return cronCtx.Err()
 			}
 			return err
 		},
@@ -205,13 +240,16 @@ func (s *Server) Run(ctx context.Context) error {
 		},
 	}
 
-	if s.controller != nil {
-		runners = append(runners, s.controller.Run)
+	if s.etcd != nil {
+		runners = append(runners, s.etcd.Run)
 	}
 
 	mngr := concurrency.NewRunnerCloserManager(log, nil, runners...)
-	if err := mngr.AddCloser(s.etcd); err != nil {
-		return err
+
+	if s.etcd != nil {
+		if err := mngr.AddCloser(s.etcd); err != nil {
+			return err
+		}
 	}
 
 	return mngr.Run(ctx)
@@ -234,6 +272,12 @@ func (s *Server) runServer(ctx context.Context) error {
 			Time:    time.Second * 3,
 			Timeout: time.Second * 5,
 		}),
+		// The placement service pings its WatchHosts connection to detect a
+		// scheduler which died mid-stream.
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             time.Second * 5,
+			PermitWithoutStream: true,
+		}),
 	)
 	schedulerv1pb.RegisterSchedulerServer(srv, s)
 
@@ -249,9 +293,38 @@ func (s *Server) runServer(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			<-ctx.Done()
-			srv.GracefulStop()
+			// Fail readiness before draining so probes go unhealthy during
+			// shutdown rather than only after the drain completes (the defer
+			// at the top of runServer cannot run until GracefulStop returns).
+			s.hzAPIServer.NotReady()
+
+			// Bounded drain: GracefulStop waits for every open stream, but a
+			// WatchJobs handler can be parked in its initial stream Recv (and
+			// a WatchHosts handler in a Send to a hung client), never
+			// reaching its closeCh select. An unbounded GracefulStop then
+			// waits forever and the process becomes a zombie: the gRPC
+			// transport keeps ACKing keepalives and healthz stays serving
+			// while every handler is dead. Scheduler streams are infinite
+			// watches, so a drain either completes almost immediately via
+			// closeCh or never will: force the stop after the grace period.
+			stopped := make(chan struct{})
+			go func() {
+				srv.GracefulStop()
+				close(stopped)
+			}()
+			select {
+			case <-stopped:
+			case <-time.After(gracefulShutdownTimeout):
+				log.Warnf("Graceful shutdown timed out after %s, forcing stop", gracefulShutdownTimeout)
+				srv.Stop()
+				<-stopped
+			}
 			log.Info("Scheduler GRPC server stopped")
 			return nil
 		},
 	).Run(ctx)
 }
+
+// gracefulShutdownTimeout bounds how long the scheduler waits for open
+// streams to drain on shutdown before forcing the gRPC server to stop.
+const gracefulShutdownTimeout = time.Second * 5

@@ -16,6 +16,8 @@ package retries
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -25,6 +27,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -93,4 +96,23 @@ func (e *childworkflow) Run(t *testing.T, ctx context.Context) {
 	// Child fails on first attempt, succeeds on second, so there should be
 	// exactly 1 retry timer.
 	assert.Equal(t, 1, childWorkflowRetryTimers)
+
+	// The child fails on its first attempt and succeeds on its second, so its
+	// two ChildWorkflowInstanceCreated events correlate into a single retry
+	// chain of [first attempt, retry attempt].
+	chains := fworkflow.ChildWorkflowRetryChains(hist.GetEvents())
+	require.Len(t, chains, 1)
+	chain := slices.Collect(maps.Values(chains))[0]
+	require.Len(t, chain, 2)
+	first, retry := chain[0], chain[1]
+
+	// The first attempt carries no correlation info; the retry attempt points
+	// back at the first attempt's instance ID while keeping its own distinct
+	// instance ID.
+	assert.Equal(t, "child", first.GetName())
+	assert.Nil(t, first.GetRetryParentInstanceInfo())
+	assert.Equal(t, "child", retry.GetName())
+	require.NotNil(t, retry.GetRetryParentInstanceInfo())
+	assert.Equal(t, first.GetInstanceId(), retry.GetRetryParentInstanceInfo().GetInstanceID())
+	assert.NotEqual(t, first.GetInstanceId(), retry.GetInstanceId())
 }

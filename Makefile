@@ -105,7 +105,11 @@ ifeq ($(TARGET_OS_LOCAL),windows)
 else
 	BUILD_TOOLS_BIN ?= build-tools
 	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
-	RUN_BUILD_TOOLS ?= cd .build-tools; GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) go run .
+	# Use the binary produced by compile-build-tools only when explicitly
+	# requested (CI sets USE_BUILD_TOOLS_BIN=true right after compiling);
+	# `go run` always reflects source changes so it stays the default for
+	# local use, at the cost of re-linking the tool per invocation
+	RUN_BUILD_TOOLS ?= cd .build-tools; GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) $(if $(filter true,$(USE_BUILD_TOOLS_BIN)),./$(BUILD_TOOLS_BIN),go run .)
 endif
 
 # Default docker container and e2e test target.
@@ -435,7 +439,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.26.3; cd -
+	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.26.6; cd -
 endef
 
 # Generate modtidy target action for each go.mod file

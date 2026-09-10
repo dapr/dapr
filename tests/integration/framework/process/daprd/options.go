@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,39 +39,42 @@ type Option func(*options)
 type options struct {
 	execOpts []exec.Option
 
-	appID                     string
-	namespace                 *string
-	appPort                   *int
-	grpcPort                  int
-	httpPort                  int
-	internalGRPCPort          int
-	publicPort                int
-	metricsPort               int
-	profilePort               int
-	appProtocol               string
-	appHealthCheck            bool
-	appHealthCheckPath        string
-	appHealthProbeInterval    int
-	appHealthProbeThreshold   int
-	resourceFiles             []string
-	resourceDirs              []string
-	configs                   []string
-	placementAddresses        []string
-	logLevel                  string
-	mode                      string
-	enableMTLS                bool
-	sentryAddress             string
-	sentryRequestJwtAudiences []string
-	controlPlaneAddress       string
-	disableK8sSecretStore     *bool
-	gracefulShutdownSeconds   *int
-	blockShutdownDuration     *string
-	actorsDisseminateTimeout  *time.Duration
-	controlPlaneTrustDomain   *string
-	schedulerAddresses        []string
-	disableInitEndpoints      []string
-	maxBodySize               *string
-	allowedOrigins            *string
+	appID                      string
+	namespace                  *string
+	appPort                    *int
+	appMaxConcurrency          *int
+	grpcPort                   int
+	httpPort                   int
+	internalGRPCPort           int
+	publicPort                 int
+	metricsPort                int
+	profilePort                int
+	appProtocol                string
+	appHealthCheck             bool
+	appHealthCheckPath         string
+	appHealthProbeInterval     int
+	appHealthProbeThreshold    int
+	resourceFiles              []string
+	resourceDirs               []string
+	configs                    []string
+	placementAddresses         []string
+	logLevel                   string
+	mode                       string
+	enableMTLS                 bool
+	sentryAddress              string
+	sentryRequestJwtAudiences  []string
+	controlPlaneAddress        string
+	disableK8sSecretStore      *bool
+	gracefulShutdownSeconds    *int
+	blockShutdownDuration      *string
+	actorsDisseminateTimeout   *time.Duration
+	hotReloadReconcileInterval *time.Duration
+	controlPlaneTrustDomain    *string
+	appBindingOptionsTimeout   *time.Duration
+	schedulerAddresses         []string
+	disableInitEndpoints       []string
+	maxBodySize                *string
+	allowedOrigins             *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -113,6 +117,12 @@ func WithAppPort(port int) Option {
 func WithAppProtocol(protocol string) Option {
 	return func(o *options) {
 		o.appProtocol = protocol
+	}
+}
+
+func WithAppMaxConcurrency(maxConcurrency int) Option {
+	return func(o *options) {
+		o.appMaxConcurrency = &maxConcurrency
 	}
 }
 
@@ -220,6 +230,23 @@ func WithConfigs(configs ...string) Option {
 	}
 }
 
+// WithFeatureEnabled configures daprd with a Configuration manifest enabling
+// the given preview features.
+func WithFeatureEnabled(t *testing.T, features ...string) Option {
+	var sb strings.Builder
+	sb.WriteString(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: featureconfig
+spec:
+  features:
+`)
+	for _, f := range features {
+		sb.WriteString("  - name: " + f + "\n    enabled: true\n")
+	}
+	return WithConfigManifests(t, sb.String())
+}
+
 func WithConfigManifests(t *testing.T, manifests ...string) Option {
 	configs := make([]string, len(manifests))
 	for i, manifest := range manifests {
@@ -325,6 +352,18 @@ func WithActorsDisseminateTimeout(timeout time.Duration) Option {
 	}
 }
 
+func WithHotReloadReconcileInterval(interval time.Duration) Option {
+	return func(o *options) {
+		o.hotReloadReconcileInterval = &interval
+	}
+}
+
+func WithAppBindingOptionsTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		o.appBindingOptionsTimeout = &timeout
+	}
+}
+
 func WithControlPlaneTrustDomain(trustDomain string) Option {
 	return func(o *options) {
 		o.controlPlaneTrustDomain = &trustDomain
@@ -408,4 +447,16 @@ func WithPlacement(placement *placement.Placement) Option {
 	return func(o *options) {
 		o.placementAddresses = append(o.placementAddresses, placement.Address())
 	}
+}
+
+// WithWorkflowJanitorPeriod sets the WorkflowsFastPath janitor backstop
+// period for this daprd.
+func WithWorkflowJanitorPeriod(t *testing.T, d time.Duration) Option {
+	return WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_JANITOR_PERIOD", d.String()))
+}
+
+// WithWorkflowClaimRetention sets how long a Completed execution-claim
+// record is retained before its guard deletes it.
+func WithWorkflowClaimRetention(t *testing.T, d time.Duration) Option {
+	return WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_ACTIVITY_CLAIM_RETENTION", d.String()))
 }

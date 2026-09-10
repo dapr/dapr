@@ -71,7 +71,7 @@ func (n *notexists) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, client.StartWorker(ctx, reg))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, n.workflow.Dapr().GetMetaActorRuntime(t, ctx).ActiveActors, 3)
+		assert.Len(c, n.workflow.Dapr().GetMetaActorRuntime(t, ctx).ActiveActors, n.workflow.ActorTypesCount())
 	}, time.Second*10, time.Millisecond*10)
 
 	// Inject the retentioner reminder via the scheduler directly. The daprd

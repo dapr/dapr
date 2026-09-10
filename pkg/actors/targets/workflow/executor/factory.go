@@ -22,6 +22,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
@@ -35,13 +36,20 @@ type Options struct {
 	Actors actors.Interface
 
 	ActorType string
+
+	// Pending is the process-local completion rendezvous shared with the
+	// cluster tasks backend. Completions arriving at this actor are
+	// delivered into it when the waiter is registered on this host.
+	Pending *pending.Pending
 }
 
 type factory struct {
 	actorType string
 
+	actors       actors.Interface
 	placement    placement.Interface
 	deactivateCh chan *executor
+	pending      *pending.Pending
 
 	table sync.Map
 	lock  sync.Mutex
@@ -62,8 +70,10 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 
 	return &factory{
 		actorType:    opts.ActorType,
+		actors:       opts.Actors,
 		placement:    placement,
 		deactivateCh: deactivateCh,
+		pending:      opts.Pending,
 	}, nil
 }
 
@@ -84,6 +94,7 @@ func (f *factory) initExecutor(a any, actorID string) *executor {
 	act.actorID = actorID
 
 	act.closed.Store(false)
+	act.cancelClosed.Store(false)
 	act.completeCh = make(chan *internalsv1pb.InternalInvokeResponse, 1)
 	act.cancelCh = make(chan struct{})
 	act.closeCh = make(chan struct{})

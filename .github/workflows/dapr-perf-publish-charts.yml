@@ -1,0 +1,138 @@
+#
+# Copyright 2026 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: dapr-perf-publish-charts
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "ID of the dapr-perf workflow run to take the test report from"
+        required: true
+        type: string
+      version:
+        description: "Release tag the charts belong to, e.g. v1.18.0. Used as the release to upload to and the charts output folder."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  # Branch in this repo that serves the rendered charts and manifest. The docs
+  # site reads <minor>/manifest.json from it (via jsDelivr) and renders the
+  # perf pages itself, so nothing version-specific is committed to dapr/docs.
+  CHARTS_BRANCH: perf-charts
+
+jobs:
+  publish:
+    name: Generate and publish perf charts
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ inputs.run_id }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Validate inputs
+        run: |
+          if ! [[ "$RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "run_id must be numeric, got: $RUN_ID" >&2
+            exit 1
+          fi
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
+            echo "version must be a release tag like v1.18.0 or v1.18.0-rc.1, got: $VERSION" >&2
+            exit 1
+          fi
+      - name: Derive minor version
+        id: vars
+        # The docs site is versioned per minor (params.version=v1.18), so charts
+        # and the manifest are keyed by minor. A patch release overwrites them.
+        run: |
+          MINOR="v$(echo "$VERSION" | sed -E 's/^v([0-9]+\.[0-9]+).*/\1/')"
+          echo "minor=$MINOR" >> "$GITHUB_OUTPUT"
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+      - name: Download perf test report
+        run: |
+          gh run download "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name test_perf.json \
+            --dir /tmp/perf-report
+      - name: Generate charts and docs manifest
+        working-directory: ./tests/perf/report
+        # The -infra description is single-sourced in tests/test-infra/perf-infra-description.txt.
+        # The manifest is written inside charts/<version> so it is published alongside the charts.
+        run: |
+          go run . -input /tmp/perf-report/test_report_perf.json -version "$VERSION" \
+            -infra "$(cat "$GITHUB_WORKSPACE/tests/test-infra/perf-infra-description.txt")" \
+            -manifest "charts/$VERSION/manifest.json"
+      - name: Package charts and report
+        working-directory: ./tests/perf/report
+        run: |
+          zip -r "/tmp/perf-charts-$VERSION.zip" "charts/$VERSION"
+          gzip -9 -c /tmp/perf-report/test_report_perf.json > "/tmp/test-report-perf-$VERSION.json.gz"
+      - name: Upload charts and report to release
+        run: |
+          gh release upload "$VERSION" \
+            "/tmp/perf-charts-$VERSION.zip" \
+            "/tmp/test-report-perf-$VERSION.json.gz" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+      - name: Upload charts as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf_charts_${{ inputs.version }}
+          path: /tmp/perf-charts-${{ inputs.version }}.zip
+      - name: Publish charts and manifest to ${{ env.CHARTS_BRANCH }} branch
+        # Pushes charts/<version> (charts + manifest.json) to <minor>/ on the
+        # perf-charts branch, so the docs site can serve and render them without
+        # bloating the default branch history or committing anything to dapr/docs.
+        env:
+          MINOR: ${{ steps.vars.outputs.minor }}
+        run: |
+          SRC="$GITHUB_WORKSPACE/tests/perf/report/charts/$VERSION"
+          WORK="$(mktemp -d)"
+          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git clone --depth 1 --branch "$CHARTS_BRANCH" "$REMOTE" "$WORK" 2>/dev/null; then
+            cd "$WORK"
+          else
+            git clone --depth 1 "$REMOTE" "$WORK"
+            cd "$WORK"
+            git checkout --orphan "$CHARTS_BRANCH"
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+          git config user.name "dapr-bot"
+          git config user.email "daprweb@microsoft.com"
+          rm -rf "./$MINOR"
+          mkdir -p "./$MINOR"
+          cp -r "$SRC/." "./$MINOR/"
+          git add "./$MINOR"
+          if git diff --cached --quiet; then
+            echo "No chart changes for $MINOR"
+          else
+            git commit -s -m "perf: charts and manifest for $VERSION ($MINOR)"
+            git push origin "$CHARTS_BRANCH"
+          fi
+      - name: Refresh jsDelivr cache for the manifest
+        # The docs read <minor>/manifest.json; purge it so a rebuild picks up the
+        # new run without waiting for the CDN TTL. Best-effort.
+        env:
+          MINOR: ${{ steps.vars.outputs.minor }}
+        run: |
+          curl -sf "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${CHARTS_BRANCH}/${MINOR}/manifest.json" || \
+            echo "jsDelivr purge failed (non-fatal); cache will expire on its own"

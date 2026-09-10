@@ -128,7 +128,14 @@ func (g *Channel) TriggerJob(ctx context.Context, name string, data *anypb.Any) 
 
 func (g *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
 	if g.ch != nil {
-		g.ch <- struct{}{}
+		// Acquiring the max-concurrency slot must respect cancellation: a
+		// caller whose context is already dead would otherwise queue on the
+		// limiter forever.
+		select {
+		case g.ch <- struct{}{}:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 
 	defer func() {
@@ -193,7 +200,11 @@ func (g *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 // invokeMethodV1 calls user applications using daprclient v1.
 func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	if g.ch != nil {
-		g.ch <- struct{}{}
+		select {
+		case g.ch <- struct{}{}:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 
 	defer func() {
@@ -232,11 +243,10 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		grpc.MaxCallRecvMsgSize(g.maxRequestBodySize),
 	}
 
+	// The slot is released exactly once, by the defer above: an additional
+	// inline release here would double-release, blocking the return path on
+	// an empty limiter channel and defeating the concurrency bound.
 	resp, err := runtimev1pb.NewAppCallbackClient(conn).OnInvoke(ctx, pd.GetMessage(), opts...)
-
-	if g.ch != nil {
-		<-g.ch
-	}
 
 	var rsp *invokev1.InvokeMethodResponse
 	if err != nil {

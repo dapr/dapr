@@ -67,6 +67,7 @@ func (a *api) SubscribeActorEventsAlpha1(stream runtimev1pb.Dapr_SubscribeActorE
 		DefaultIdleTimeout:      cfg.ActorIdleTimeout,
 		Reentrancy:              cfg.Reentrancy,
 		AppChannel:              a.channels.AppChannel(),
+		CallbackStream:          mgr,
 	}); err != nil {
 		return status.Errorf(codes.Internal, "failed to register hosted actors: %v", err)
 	}
@@ -183,15 +184,18 @@ func sendLoop(
 	}
 }
 
-// actorCallbackStream returns the stream manager owned by the gRPC app
-// channel, or nil if the channel is not gRPC-backed (e.g. HTTP app).
+// actorCallbackStream returns the stream manager serving the actor
+// callback stream, or nil if the app channel is HTTP-backed. When no app
+// channel exists at all (daprd was started without an app-port) the
+// runtime-owned manager is used directly: the callback stream is the
+// app's only connection to daprd and no app port is required.
 func (a *api) actorCallbackStream() *callbackstream.Manager {
 	if a.channels == nil {
 		return nil
 	}
 	ch := a.channels.AppChannel()
 	if ch == nil {
-		return nil
+		return a.channels.ActorCallbackStream()
 	}
 	gc, ok := ch.(*grpcchannel.Channel)
 	if !ok {

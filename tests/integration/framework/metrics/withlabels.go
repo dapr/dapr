@@ -24,21 +24,18 @@ import (
 	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/dapr/dapr/tests/integration/framework/client"
 )
 
 type MetricsWithLabels struct {
 	Metrics map[string]map[string]float64
 }
 
-func NewWithLabels(t *testing.T, ctx context.Context, url string) *MetricsWithLabels {
+func NewWithLabels(t *testing.T, ctx context.Context, httpclient *http.Client, url string) *MetricsWithLabels {
 	t.Helper()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	require.NoError(t, err)
 
-	httpclient := client.HTTP(t)
 	resp, err := httpclient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()

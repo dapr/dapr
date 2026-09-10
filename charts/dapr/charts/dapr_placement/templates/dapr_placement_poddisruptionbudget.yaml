@@ -1,4 +1,4 @@
-{{- if and (eq .Values.global.ha.enabled true) (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") }}
+{{- if and (eq .Values.global.ha.enabled true) (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") (ne .Values.global.scheduler.placement.enabled true) }}
 {{- if .Capabilities.APIVersions.Has "policy/v1" }}
 apiVersion: policy/v1
 {{- else }}

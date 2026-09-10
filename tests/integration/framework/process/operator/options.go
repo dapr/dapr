@@ -14,6 +14,8 @@ limitations under the License.
 package operator
 
 import (
+	"time"
+
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
 
@@ -30,6 +32,7 @@ type options struct {
 	configPath            *string
 	disableLeaderElection bool
 	trustAnchorsFile      *string
+	cacheSyncPeriod       *time.Duration
 }
 
 // Option is a function that configures the process.
@@ -92,5 +95,13 @@ func WithTrustAnchorsFile(path string) Option {
 func WithNamespace(namespace string) Option {
 	return func(o *options) {
 		o.namespace = &namespace
+	}
+}
+
+// WithCacheSyncPeriod sets the controller-runtime informer cache resync period.
+// A short period lets tests exercise resync behaviour deterministically.
+func WithCacheSyncPeriod(d time.Duration) Option {
+	return func(o *options) {
+		o.cacheSyncPeriod = &d
 	}
 }

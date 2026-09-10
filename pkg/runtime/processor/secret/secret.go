@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/kit/logger"
 )
@@ -40,6 +41,7 @@ type Options struct {
 	ComponentStore *compstore.ComponentStore
 	Meta           *meta.Meta
 	OperatorClient operatorv1pb.OperatorClient
+	Security       security.Handler
 }
 
 type secret struct {
@@ -47,6 +49,7 @@ type secret struct {
 	compStore      *compstore.ComponentStore
 	meta           *meta.Meta
 	operatorClient operatorv1pb.OperatorClient
+	security       security.Handler
 	lock           sync.Mutex
 }
 
@@ -56,6 +59,7 @@ func New(opts Options) *secret {
 		compStore:      opts.ComponentStore,
 		meta:           opts.Meta,
 		operatorClient: opts.OperatorClient,
+		security:       opts.Security,
 	}
 }
 
@@ -110,7 +114,12 @@ func (s *secret) Close(comp compapi.Component) error {
 
 // Returns the component or HTTP endpoint updated with the secrets applied.
 // If the resource references a secret store that hasn't been loaded yet, it returns the name of the secret store component as second returned value.
+//
+// Resolving a secretKeyRef invokes GetSecret on the referenced secret store, so
+// the workload's SPIFFE identity is attached here.
 func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (updated bool, secretStoreName string) {
+	ctx = s.withSVIDContext(ctx)
+
 	cache := map[string]secretstores.GetSecretResponse{}
 
 	secretStoreName = s.meta.AuthSecretStoreOrDefault(resource)
@@ -198,6 +207,17 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 	}
 
 	return updated, ""
+}
+
+// withSVIDContext attaches the workload's SPIFFE identity (X.509 and JWT SVID
+// sources) to ctx so a secret store can use it to authenticate to the underlying
+// secret provider.
+func (s *secret) withSVIDContext(ctx context.Context) context.Context {
+	if s.security == nil {
+		return ctx
+	}
+
+	return s.security.WithSVIDContext(ctx)
 }
 
 func isEnvVarAllowed(key string) bool {

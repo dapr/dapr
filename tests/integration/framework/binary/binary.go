@@ -41,13 +41,27 @@ var buildTags = []string{
 	"crypto_localstorage",
 	"middleware_http_routeralias",
 	"conversation_echo",
+	// state_spiffeprobe compiles in an integration-test-only state store that
+	// reports whether the SPIFFE identity reached the component operation
+	// context. Never set for released daprd flavors.
+	"state_spiffeprobe",
+	// secretstores_spiffeprobe compiles in an integration-test-only secret
+	// store that reports whether the SPIFFE identity reached the context that
+	// secretKeyRef entries are resolved on. Never set for released daprd
+	// flavors.
+	"secretstores_spiffeprobe",
+	// bindings_metadataprobe compiles in an integration-test-only output
+	// binding that echoes the request metadata it receives, letting a test
+	// assert which metadata daprd forwards to a component. Never set for
+	// released daprd flavors.
+	"bindings_metadataprobe",
 }
 
 func BuildAll(t *testing.T) {
 	t.Helper()
 
 	binaryNames := []string{"daprd", "placement", "sentry", "operator", "injector", "scheduler"}
-	helperBinaryNames := []string{"helmtemplate", "mcpstdioserver"}
+	helperBinaryNames := []string{"helmtemplate", "mcpstdioserver", "controllergen"}
 
 	var wg sync.WaitGroup
 	wg.Add(len(binaryNames))
@@ -92,6 +106,9 @@ func BuildAll(t *testing.T) {
 	wg.Wait()
 
 	require.False(t, t.Failed())
+
+	generateCRDs(t)
+	require.False(t, t.Failed())
 }
 
 func RootDir(t *testing.T) string {
@@ -118,15 +135,7 @@ func build(t *testing.T, name string, opts options) {
 	if _, ok := os.LookupEnv(EnvKey(name)); !ok {
 		t.Logf("%q not set, building %q binary", EnvKey(name), name)
 
-		// Use a consistent temp dir for the binary so that the binary is cached on
-		// subsequent runs.
-		var tmpdir string
-		if runtime.GOOS == "darwin" {
-			tmpdir = "/tmp"
-		} else {
-			tmpdir = os.TempDir()
-		}
-		binPath := filepath.Join(tmpdir, "dapr_integration_tests/"+name)
+		binPath := filepath.Join(tmpDir(), "dapr_integration_tests/"+name)
 		if runtime.GOOS == "windows" {
 			binPath += ".exe"
 		}
@@ -177,4 +186,11 @@ func EnvValue(name string) string {
 
 func EnvKey(name string) string {
 	return fmt.Sprintf("DAPR_INTEGRATION_%s_PATH", strings.ToUpper(name))
+}
+
+func tmpDir() string {
+	if runtime.GOOS == "darwin" {
+		return "/tmp"
+	}
+	return os.TempDir()
 }

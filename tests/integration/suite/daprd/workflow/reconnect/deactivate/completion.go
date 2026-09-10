@@ -24,6 +24,8 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -45,7 +47,14 @@ type completion struct {
 }
 
 func (a *completion) Setup(t *testing.T) []framework.Option {
-	a.workflow = workflow.New(t)
+	// Under WorkflowsFastPath recovery after the worker reconnect is driven by
+	// the janitor reminder, so shrink its period below the completion timeout.
+	// The variable is unused in default mode.
+	a.workflow = workflow.New(t,
+		workflow.WithDaprdOptions(0, daprd.WithExecOptions(exec.WithEnvVars(t,
+			"DAPR_WORKFLOW_JANITOR_PERIOD", "2s",
+		))),
+	)
 	a.completionReached = make(chan struct{}, 1)
 	a.completionReachedAck = make(chan struct{}, 1)
 
@@ -93,7 +102,7 @@ func (a *completion) Run(t *testing.T, ctx context.Context) {
 
 	// verify worker is connected by checking the expected registered actors
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 3)
+		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, a.workflow.ActorTypesCount())
 	}, time.Second*10, time.Millisecond*10)
 
 	id, err := client.ScheduleNewWorkflow(ctx, "foo")
@@ -110,7 +119,7 @@ func (a *completion) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, client.StartWorkItemListener(ctx, a.workflow.Registry()))
 	// verify a worker is still connected by checking the expected registered actors
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 3)
+		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, a.workflow.ActorTypesCount())
 	}, time.Second*10, time.Millisecond*10)
 
 	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
@@ -120,6 +129,13 @@ func (a *completion) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), meta.GetRuntimeStatus().String())
 
 	assert.Equal(t, int64(1), a.a1Calls.Load())
-	assert.Equal(t, int64(1), a.a2Calls.Load())
+	expectedA2 := int64(1)
+	if a.workflow.FastPath() {
+		// The fast path holds a2's completion on its sender instead of the
+		// durable inbox; the worker disconnect drops it, so the janitor
+		// re-dispatches and re-executes a2.
+		expectedA2 = 2
+	}
+	assert.Equal(t, expectedA2, a.a2Calls.Load())
 	assert.Equal(t, int64(2), a.completionCalls.Load())
 }

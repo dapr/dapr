@@ -33,6 +33,8 @@ type Fake struct {
 	haltAllFn                func(context.Context) error
 	haltNonHostedFn          func(context.Context, func(*api.LookupActorRequest) bool) error
 	lenFn                    func() map[string]int
+	suspendHostingFn         func(context.Context) error
+	resumeHostingFn          func()
 }
 
 func New() *Fake {
@@ -48,6 +50,8 @@ func New() *Fake {
 		haltAllFn:                func(context.Context) error { return nil },
 		haltNonHostedFn:          func(context.Context, func(*api.LookupActorRequest) bool) error { return nil },
 		lenFn:                    func() map[string]int { return nil },
+		suspendHostingFn:         func(context.Context) error { return nil },
+		resumeHostingFn:          func() {},
 	}
 }
 
@@ -84,6 +88,16 @@ func (f *Fake) WithHaltNonHosted(fn func(context.Context, func(*api.LookupActorR
 }
 func (f *Fake) WithLen(fn func() map[string]int) *Fake { f.lenFn = fn; return f }
 
+func (f *Fake) WithSuspendHosting(fn func(context.Context) error) *Fake {
+	f.suspendHostingFn = fn
+	return f
+}
+
+func (f *Fake) WithResumeHosting(fn func()) *Fake {
+	f.resumeHostingFn = fn
+	return f
+}
+
 func (f *Fake) Close() error                            { return f.closeFn() }
 func (f *Fake) Types() []string                         { return f.typesFn() }
 func (f *Fake) IsActorTypeHosted(actorType string) bool { return f.isActorTypeHostedFn(actorType) }
@@ -107,3 +121,6 @@ func (f *Fake) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorReques
 	return f.haltNonHostedFn(ctx, fn)
 }
 func (f *Fake) Len() map[string]int { return f.lenFn() }
+
+func (f *Fake) SuspendHosting(ctx context.Context) error { return f.suspendHostingFn(ctx) }
+func (f *Fake) ResumeHosting()                           { f.resumeHostingFn() }

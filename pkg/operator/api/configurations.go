@@ -21,14 +21,17 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/operator/api/authz"
 	loopsclient "github.com/dapr/dapr/pkg/operator/api/loops/client"
 	"github.com/dapr/dapr/pkg/operator/api/loops/sender"
+	operatormeta "github.com/dapr/dapr/pkg/operator/meta"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
@@ -113,6 +116,28 @@ func (a *apiServer) ConfigurationUpdate(in *operatorv1pb.ConfigurationUpdateRequ
 
 	ctx := srv.Context()
 
+	// Verify authorization and resolve the connecting app's identity.
+	id, err := authz.Request(ctx, in.GetNamespace())
+	if err != nil {
+		return fmt.Errorf("failed to authorize configuration update request: %w", err)
+	}
+
+	// Determine, server side, which configuration is assigned to the connecting
+	// app from its pod's dapr.io/config annotation. The sidecar is not trusted to
+	// self-report this. Only updates to that configuration are streamed, so the
+	// sidecar is not restarted by changes to configurations that do not belong to
+	// it. This is resolved before registering the informer watcher so a slow pod
+	// cache lookup cannot back up the watcher's event channel.
+	assigned, err := a.appAssignedConfiguration(ctx, in.GetNamespace(), id.AppID())
+	if err != nil {
+		return fmt.Errorf("failed to resolve assigned configuration for app %s in namespace %s: %w", id.AppID(), in.GetNamespace(), err)
+	}
+	if assigned == "" {
+		log.Debugf("app %s in namespace %s has no assigned configuration; no configuration updates will be streamed", id.AppID(), in.GetNamespace())
+	} else {
+		log.Debugf("streaming updates for configuration %q to app %s in namespace %s", assigned, id.AppID(), in.GetNamespace())
+	}
+
 	// Verify authorization via informer's WatchUpdates, which checks SPIFFE ID
 	ch, cancel, err := a.configInformer.WatchUpdates(ctx, in.GetNamespace())
 	if err != nil {
@@ -121,6 +146,7 @@ func (a *apiServer) ConfigurationUpdate(in *operatorv1pb.ConfigurationUpdateRequ
 
 	stream, err := sender.New(srv)
 	if err != nil {
+		cancel()
 		return err
 	}
 
@@ -132,6 +158,9 @@ func (a *apiServer) ConfigurationUpdate(in *operatorv1pb.ConfigurationUpdateRequ
 		Namespace:      in.GetNamespace(),
 		KubeClient:     a.Client,
 		ProcessSecrets: processConfigurationSecrets,
+		Filter: func(c configurationapi.Configuration) bool {
+			return c.GetName() == assigned
+		},
 	})
 	defer client.CacheLoop()
 
@@ -141,4 +170,42 @@ func (a *apiServer) ConfigurationUpdate(in *operatorv1pb.ConfigurationUpdateRequ
 	}
 
 	return nil
+}
+
+// appAssignedConfiguration returns the name of the configuration assigned to the
+// given app, as declared by the dapr.io/config annotation on the app's pod. It
+// reads pod metadata only (no spec/status) from a dedicated metadata cache. It
+// returns an empty string when the app has no pod with a configuration assigned
+// (in which case no configuration updates should be streamed to it).
+func (a *apiServer) appAssignedConfiguration(ctx context.Context, namespace, appID string) (string, error) {
+	var pods metav1.PartialObjectMetadataList
+	pods.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PodList"))
+	if err := a.podReader.List(ctx, &pods, client.InNamespace(namespace)); err != nil {
+		return "", fmt.Errorf("error listing pods: %w", err)
+	}
+
+	// Return the configuration of the first pod for this app that actually has one
+	// assigned. During a rollout multiple pods can share the app ID, and some may
+	// not (yet) carry a config annotation; skipping those avoids resolving to ""
+	// and disabling streaming when another pod does have a config assigned.
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		if !operatormeta.IsAnnotatedForDapr(pod.GetAnnotations()) || podAppID(pod) != appID {
+			continue
+		}
+		if config := pod.GetAnnotations()[annotations.KeyConfig]; config != "" {
+			return config, nil
+		}
+	}
+
+	return "", nil
+}
+
+// podAppID returns the Dapr app ID of a pod, mirroring the injector: the
+// dapr.io/app-id annotation, falling back to the pod name.
+func podAppID(pod metav1.Object) string {
+	if id := pod.GetAnnotations()[annotations.KeyAppID]; id != "" {
+		return id
+	}
+	return pod.GetName()
 }

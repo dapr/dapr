@@ -124,7 +124,7 @@ func (s *streamer) outgoing(ctx context.Context) error {
 func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) schedulerv1pb.WatchJobsRequestResultStatus {
 	meta := job.GetMetadata()
 
-	switch t := meta.GetTarget(); t.GetType().(type) {
+	switch t := meta.GetTarget().GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Job:
 		err := s.invokeApp(ctx, job)
 		if err != nil {
@@ -135,9 +135,19 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 
 	case *schedulerv1pb.JobTargetMetadata_Actor:
-		actorType := meta.GetTarget().GetActor().GetType()
+		// The generated getters are nil-safe on messages but not on the oneof
+		// wrapper: a typed-nil wrapper or a missing actor payload would
+		// nil-dereference below. Reject the job instead of panicking. FAILED
+		// is the only rejection the protocol offers, so a malformed job is
+		// left to its failure policy rather than crashing the runtime.
+		if t == nil || t.Actor == nil || t.Actor.GetType() == "" || t.Actor.GetId() == "" {
+			log.Errorf("received scheduled job '%s' with invalid actor target metadata, rejecting", job.GetName())
+			return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
+		}
 
-		err := s.invokeActorReminder(ctx, job)
+		actorType := t.Actor.GetType()
+
+		err := s.invokeActorReminder(ctx, job, t.Actor)
 		if err == nil {
 			return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 		}
@@ -226,13 +236,12 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	}
 }
 
-// invokeActorReminder calls the actor ID with the given reminder data.
-func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) error {
+// invokeActorReminder calls the actor ID with the given reminder data. The
+// actor target metadata has already been validated by handleJob.
+func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.WatchJobsResponse, actor *schedulerv1pb.TargetActorReminder) error {
 	if s.actors == nil {
 		return errors.New("received actor reminder job but actor runtime is not initialized")
 	}
-
-	actor := job.GetMetadata().GetTarget().GetActor()
 
 	err := s.actors.CallReminder(ctx, &api.Reminder{
 		Name:      job.GetName(),

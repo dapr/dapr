@@ -142,7 +142,10 @@ func New(opts Options) (*Subscription, error) {
 		subscribeTopic = s.namespace + s.topic
 	}
 
-	err := s.pubsub.Component.Subscribe(ctx, contribpubsub.SubscribeRequest{
+	// Subscribe establishes the consumer connection directly (it does not run
+	// through a policy Runner), so attach the workload's SPIFFE identity to its
+	// context here just as the Runner does for other component operations.
+	err := s.pubsub.Component.Subscribe(policyDef.ComponentContext(ctx), contribpubsub.SubscribeRequest{
 		Topic:    subscribeTopic,
 		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *contribpubsub.NewMessage) error {
@@ -550,7 +553,7 @@ func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *c
 	// detached publish so it cannot block indefinitely.
 	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deadLetterPublishTimeout)
 	defer cancel()
-	err := s.adapter.Publish(pubCtx, req)
+	err := s.adapter.Publish(pubCtx, req, rtpubsub.TransportModeGRPC)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 		return err

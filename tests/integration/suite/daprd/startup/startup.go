@@ -15,4 +15,5 @@ package startup
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/startup/appchannel"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/startup/secretstore"
 )

@@ -16,11 +16,40 @@
 # LATEST_RELEASE to true to add 'latest' tag to docker image.
 
 import os
+import re
 import sys
+import glob
 import datetime
 
 gitRef = os.getenv("GITHUB_REF")
 tagRefPrefix = "refs/tags/v"
+
+
+# parseVersion returns a (major, minor, patch) tuple of ints for a final
+# release version such as "1.9.5". It returns None for pre-release versions
+# (e.g. "1.0.0-rc.1") or anything it cannot parse, so that only final releases
+# are considered when determining the 'latest' tag.
+def parseVersion(version):
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", version)
+    if match is None:
+        return None
+    return tuple(int(part) for part in match.groups())
+
+
+# isLatestRelease returns True only if the given final release version is the
+# highest one across all release notes in releaseNotesDir. This prevents a
+# hotfix to an older release branch (e.g. 1.9.6 published after 1.10.0) from
+# being tagged as 'latest' just because it is the most recent chronologically.
+def isLatestRelease(version, releaseNotesDir):
+    current = parseVersion(version)
+    if current is None:
+        return False
+    for notePath in glob.glob(os.path.join(releaseNotesDir, "v*.md")):
+        # Strip the leading 'v' and trailing '.md' from the file name.
+        other = parseVersion(os.path.basename(notePath)[1:-3])
+        if other is not None and other > current:
+            return False
+    return True
 
 with open(os.getenv("GITHUB_ENV"), "a") as githubEnv:
 
@@ -47,8 +76,13 @@ with open(os.getenv("GITHUB_ENV"), "a") as githubEnv:
         print ("Checking if {} exists".format(releaseNotePath))
         if os.path.exists(releaseNotePath):
             print ("Found {}".format(releaseNotePath))
-            # Set LATEST_RELEASE to true
-            githubEnv.write("LATEST_RELEASE=true\n")
+            # Only tag as 'latest' if this is the highest release version, so
+            # that hotfixes to older branches do not overwrite the 'latest' tag.
+            if isLatestRelease(releaseVersion, os.path.dirname(releaseNotePath)):
+                print ("{} is the latest release; setting LATEST_RELEASE=true".format(releaseVersion))
+                githubEnv.write("LATEST_RELEASE=true\n")
+            else:
+                print ("{} is not the latest release; skipping 'latest' tag".format(releaseVersion))
         else:
             print ("{} is not found".format(releaseNotePath))
             sys.exit(1)

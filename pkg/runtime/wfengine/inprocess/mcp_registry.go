@@ -126,10 +126,10 @@ func (r *mcpRegistry) register(ctx context.Context, server mcpserverapi.MCPServe
 
 // closeAll closes every holder. Acquires each entry's mutex so it cannot race
 // with a concurrent register/unregister for the same name; shutdown runs from
-// Executor.Run's ctx.Done goroutine, which is distinct from the goroutine that
-// drives normal register/unregister. The optional onClose callback is invoked
-// once per torn-down entry so subsystems (the workflow engine) can keep their
-// own bookkeeping in step with the holder lifecycle.
+// Executor.Run's ctx.Done goroutine, which is distinct from the root loop
+// goroutine that drives normal register/unregister. The optional onClose
+// callback is invoked once per torn-down entry so subsystems (the workflow
+// engine) can keep their own bookkeeping in step with the holder lifecycle.
 func (r *mcpRegistry) closeAll(onClose func(name string)) {
 	r.entriesMu.Lock()
 	type closing struct {

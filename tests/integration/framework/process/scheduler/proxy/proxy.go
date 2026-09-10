@@ -19,6 +19,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -26,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
@@ -51,7 +53,6 @@ type Proxy struct {
 
 	sched *scheduler.Scheduler
 
-	ports    *ports.Ports
 	port     int
 	listener net.Listener
 	grpcSrv  *grpc.Server
@@ -70,25 +71,47 @@ type Proxy struct {
 // armConfig captures the per-method failure injection state.
 type armConfig struct {
 	remaining int
+	name      string
 	code      codes.Code
 	notify    chan struct{}
 }
 
-// New returns a proxy that wraps the given scheduler. The proxy waits for
-// the upstream to be reachable on Run, so framework process ordering
-// relative to the scheduler is not required. daprd should be configured
-// with daprd.WithSchedulerAddresses(proxy.Address()) instead of pointing at
-// the scheduler directly.
+// New returns a proxy that wraps the given scheduler. Run blocks until the
+// upstream is reachable, so the scheduler must precede the proxy in
+// framework process ordering. daprd should be configured with
+// daprd.WithSchedulerAddresses(proxy.Address()) instead of pointing at the
+// scheduler directly.
 func New(t *testing.T, sched *scheduler.Scheduler) *Proxy {
 	t.Helper()
-	fp := ports.Reserve(t, 1)
+	lis := ports.Reserve(t, 1).Listener(t)
+	tcp, ok := lis.Addr().(*net.TCPAddr)
+	require.True(t, ok)
 	return &Proxy{
 		sched:    sched,
-		ports:    fp,
-		port:     fp.Port(t),
+		port:     tcp.Port,
+		listener: lis,
 		armed:    make(map[string]armConfig),
 		done:     make(chan struct{}),
 		serveErr: make(chan error, 1),
+	}
+}
+
+// waitReady blocks until conn is Ready, returning false if the connection is
+// shut down or ctx expires first.
+func waitReady(ctx context.Context, conn *grpc.ClientConn) bool {
+	for {
+		state := conn.GetState()
+		switch state {
+		case connectivity.Ready:
+			return true
+		case connectivity.Shutdown:
+			return false
+		case connectivity.Idle:
+			conn.Connect()
+		}
+		if !conn.WaitForStateChange(ctx, state) {
+			return false
+		}
 	}
 }
 
@@ -96,26 +119,26 @@ func (p *Proxy) Run(t *testing.T, ctx context.Context) {
 	p.runOnce.Do(func() {
 		p.sched.WaitUntilRunning(t, ctx)
 
-		//nolint:staticcheck
-		conn, err := grpc.DialContext(ctx, p.sched.Address(),
+		conn, err := grpc.NewClient(p.sched.Address(),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithBlock(),
-			grpc.WithReturnConnectionError(),
 		)
 		require.NoError(t, err)
+		if !waitReady(ctx, conn) {
+			state := conn.GetState()
+			// Cleanup is not yet registered when Run fails, so close here.
+			cerr := conn.Close()
+			require.Failf(t, "upstream scheduler connection never became ready",
+				"address=%s state=%s ctx err=%v close err=%v",
+				p.sched.Address(), state, ctx.Err(), cerr)
+		}
 		p.upstream = conn
 		p.client = schedulerv1pb.NewSchedulerClient(conn)
-
-		p.ports.Free(t)
-		lis, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(p.port))
-		require.NoError(t, err)
-		p.listener = lis
 
 		p.grpcSrv = grpc.NewServer()
 		schedulerv1pb.RegisterSchedulerServer(p.grpcSrv, p)
 
 		go func() {
-			p.serveErr <- p.grpcSrv.Serve(lis)
+			p.serveErr <- p.grpcSrv.Serve(p.listener)
 			close(p.done)
 		}()
 	})
@@ -128,15 +151,9 @@ func (p *Proxy) Cleanup(t *testing.T) {
 		if err := <-p.serveErr; err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			require.NoError(t, err)
 		}
-	} else if p.ports != nil {
-		// Run never executed (setup-time failure): the reservation made in
-		// New was never released by Run, so release it here to avoid
-		// leaking the port for the rest of the test process lifetime.
-		p.ports.Free(t)
 	}
 	if p.listener != nil {
-		// GracefulStop closes the listener, but close it again explicitly
-		// for symmetry in case the server never started serving.
+		// Close explicitly so the port is released even when Run never executed.
 		_ = p.listener.Close()
 	}
 	if p.upstream != nil {
@@ -159,20 +176,26 @@ func (p *Proxy) FailedCount() int { return int(p.failures.Load()) }
 // or another non-transient code when the test wants the failure to propagate
 // to the orchestrator's error path.
 func (p *Proxy) ArmFailures(method string, n int, code codes.Code, notify chan struct{}) {
+	p.ArmNamedFailures(method, "", n, code, notify)
+}
+
+// ArmNamedFailures is ArmFailures restricted to requests whose job name
+// contains nameContains; requests for other jobs pass through untouched.
+func (p *Proxy) ArmNamedFailures(method, nameContains string, n int, code codes.Code, notify chan struct{}) {
 	p.mu.Lock()
 	if n <= 0 {
 		delete(p.armed, method)
 	} else {
-		p.armed[method] = armConfig{remaining: n, code: code, notify: notify}
+		p.armed[method] = armConfig{remaining: n, name: nameContains, code: code, notify: notify}
 	}
 	p.mu.Unlock()
 }
 
-func (p *Proxy) takeFailure(method string) (codes.Code, bool) {
+func (p *Proxy) takeFailure(method, name string) (codes.Code, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	cfg, ok := p.armed[method]
-	if !ok || cfg.remaining <= 0 {
+	if !ok || cfg.remaining <= 0 || !strings.Contains(name, cfg.name) {
 		return 0, false
 	}
 	cfg.remaining--
@@ -195,42 +218,42 @@ func injected(method string, code codes.Code) error {
 }
 
 func (p *Proxy) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
-	if code, ok := p.takeFailure(MethodScheduleJob); ok {
+	if code, ok := p.takeFailure(MethodScheduleJob, req.GetName()); ok {
 		return nil, injected(MethodScheduleJob, code)
 	}
 	return p.client.ScheduleJob(ctx, req)
 }
 
 func (p *Proxy) DeleteJob(ctx context.Context, req *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
-	if code, ok := p.takeFailure(MethodDeleteJob); ok {
+	if code, ok := p.takeFailure(MethodDeleteJob, req.GetName()); ok {
 		return nil, injected(MethodDeleteJob, code)
 	}
 	return p.client.DeleteJob(ctx, req)
 }
 
 func (p *Proxy) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (*schedulerv1pb.GetJobResponse, error) {
-	if code, ok := p.takeFailure(MethodGetJob); ok {
+	if code, ok := p.takeFailure(MethodGetJob, req.GetName()); ok {
 		return nil, injected(MethodGetJob, code)
 	}
 	return p.client.GetJob(ctx, req)
 }
 
 func (p *Proxy) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error) {
-	if code, ok := p.takeFailure(MethodListJobs); ok {
+	if code, ok := p.takeFailure(MethodListJobs, ""); ok {
 		return nil, injected(MethodListJobs, code)
 	}
 	return p.client.ListJobs(ctx, req)
 }
 
 func (p *Proxy) DeleteByMetadata(ctx context.Context, req *schedulerv1pb.DeleteByMetadataRequest) (*schedulerv1pb.DeleteByMetadataResponse, error) {
-	if code, ok := p.takeFailure(MethodDeleteByMetadata); ok {
+	if code, ok := p.takeFailure(MethodDeleteByMetadata, ""); ok {
 		return nil, injected(MethodDeleteByMetadata, code)
 	}
 	return p.client.DeleteByMetadata(ctx, req)
 }
 
 func (p *Proxy) DeleteByNamePrefix(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error) {
-	if code, ok := p.takeFailure(MethodDeleteByNamePrefix); ok {
+	if code, ok := p.takeFailure(MethodDeleteByNamePrefix, ""); ok {
 		return nil, injected(MethodDeleteByNamePrefix, code)
 	}
 	return p.client.DeleteByNamePrefix(ctx, req)
@@ -293,7 +316,7 @@ func (p *Proxy) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error 
 // real scheduler on every refresh. Without this rewrite daprd would bypass
 // the proxy as soon as the first host list arrived.
 func (p *Proxy) WatchHosts(req *schedulerv1pb.WatchHostsRequest, stream schedulerv1pb.Scheduler_WatchHostsServer) error {
-	if code, ok := p.takeFailure(MethodWatchHosts); ok {
+	if code, ok := p.takeFailure(MethodWatchHosts, ""); ok {
 		return injected(MethodWatchHosts, code)
 	}
 

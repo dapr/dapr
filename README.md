@@ -1,5 +1,5 @@
 <div style="text-align: center"><img src="/img/dapr_logo.svg" height="120px">
-<h2>APIs for Building Secure and Reliable Microservices</h2>
+<h2>The runtime for durable execution, AI agents, and secure distributed applications</h2>
 </div>
 
 [![Go Report][go-report-badge]][go-report-url] [![OpenSSF][openssf-badge]][openssf-url] [![Docker Pulls][docker-badge]][docker-url] [![Build Status][actions-badge]][actions-url] [![Test Status][e2e-badge]][e2e-url] [![Code Coverage][codecov-badge]][codecov-url] [![License: Apache 2.0][apache-badge]][apache-url] [![FOSSA Status][fossa-badge]][fossa-url] [![TODOs][todo-badge]][todo-url] [![Good First Issues][gfi-badge]][gfi-url] [![discord][discord-badge]][discord-url] [![YouTube][youtube-badge]][youtube-link] [![Bluesky][bluesky-badge]][bluesky-link] [![X/Twitter][x-badge]][x-link]
@@ -33,65 +33,129 @@
 [x-badge]:https://img.shields.io/twitter/follow/daprdev?logo=x&style=flat
 [x-link]:https://twitter.com/daprdev
 
-Dapr is a set of integrated APIs with built-in best practices and patterns to build distributed applications. Dapr increases your developer productivity by 20-40% with out-of-the-box features such as workflow, pub/sub, state management, secret stores, external configuration, bindings, actors, distributed lock, and cryptography. You benefit from the built-in security, reliability, and observability capabilities, so you don't need to write boilerplate code to achieve production-ready applications.
+Dapr is an open-source runtime for building distributed applications, workflows, and AI agents. It provides **durable execution**, secure service-to-service communication, state management, event-driven messaging, and a consistent set of APIs that run anywhere — on Kubernetes, in the cloud, at the edge, or on your laptop.
 
-With Dapr, a graduated CNCF project, platform teams can configure complex setups while exposing simple interfaces to application development teams, making it easier for them to build highly scalable distributed applications. Many platform teams have adopted Dapr to provide governance and golden paths for API-based infrastructure interaction.
+Whether you're building AI agents, business-critical workflows, microservices, or event-driven systems, Dapr lets you focus on business logic instead of plumbing. Dapr runs as a sidecar, so every capability is available from *any* language over standard HTTP and gRPC, with native SDKs for **.NET, Java, Python, Go, JavaScript/TypeScript, and Rust** — no framework lock-in and no boilerplate to reach production-ready reliability, security, and observability.
 
 ![Dapr overview](./img/overview.png)
 
-We are a Cloud Native Computing Foundation (CNCF) graduated project.
-<p align="center"><img src="https://raw.githubusercontent.com/kedacore/keda/main/images/logo-cncf.svg" height="75px"></p>
-
-## Goals
-
-- Enable developers using *any* language or framework to write distributed applications
-- Solve the hard problems developers face building microservice applications by providing best practice building blocks
-- Be community driven, open and vendor neutral
-- Gain new contributors
-- Provide consistency and portability through open APIs
-- Be platform agnostic across cloud and edge
-- Embrace extensibility and provide pluggable components without vendor lock-in
-- Enable IoT and edge scenarios by being highly performant and lightweight
-- Be incrementally adoptable from existing code, with no runtime dependency
-
-## How it works
-
-Dapr injects a side-car (container or process) to each compute unit. The side-car interacts with event triggers and communicates with the compute unit via standard HTTP or gRPC protocols. This enables Dapr to support all existing and future programming languages without requiring you to import frameworks or libraries.
-
-Dapr offers built-in state management, reliable messaging (at least once delivery), triggers and bindings through standard HTTP verbs or gRPC interfaces. This allows you to write stateless, stateful and actor-like services following the same programming paradigm. You can freely choose consistency model, threading model and message delivery patterns.
-
-Dapr runs natively on Kubernetes, as a self hosted binary on your machine, on an IoT device, or as a container that can be injected into any system, in the cloud or on-premises.
-
-Dapr uses pluggable component state stores and message buses such as Redis as well as gRPC to offer a wide range of communication methods, including direct dapr-to-dapr using gRPC and async Pub-Sub with guaranteed delivery and at-least-once semantics.
-
-
 ## Why Dapr?
 
-Writing highly performant, scalable and reliable distributed application is hard. Dapr brings proven patterns and practices to you. It unifies event-driven and actors semantics into a simple, consistent programming model. It supports all programming languages without framework lock-in. You are not exposed to low-level primitives such as threading, concurrency control, partitioning and scaling. Instead, you can write your code by implementing a simple web server using familiar web frameworks of your choice.
+Modern applications are no longer simple request/response services. They are long-running workflows, AI agents, event-driven pipelines, multi-agent systems, and human-in-the-loop processes — and they must survive failures, maintain state, and communicate securely in production.
 
-Dapr is flexible in threading and state consistency models. You can leverage multi-threading if you choose to, and you can choose among different consistency models. This flexibility enables you to implement advanced scenarios without artificial constraints. Dapr is unique because you can transition seamlessly between platforms and underlying implementations without rewriting your code.
+Building all of that reliably is hard. Dapr brings proven patterns and battle-tested building blocks together into one consistent programming model, so you don't have to reinvent durability, security, or messaging for every service you ship. You're never exposed to low-level primitives like threading, partitioning, or retry logic — and you can move seamlessly between platforms and backing infrastructure without rewriting your code. Platform teams use Dapr to provide governance and golden paths, while application teams get simple APIs that work the same everywhere.
 
-## Features
+## Durable Execution
 
-* Event-driven Pub-Sub system with pluggable providers and at-least-once semantics
-* Input and output bindings with pluggable providers
-* State management with pluggable data stores
-* Consistent service-to-service discovery and invocation
-* Opt-in stateful models: Strong/Eventual consistency, First-write/Last-write wins
-* Cross platform virtual actors
-* Secret management to retrieve secrets from secure key vaults
-* Rate limiting
-* Built-in [Observability](https://docs.dapr.io/concepts/observability-concept/) support
-* Runs natively on Kubernetes using a dedicated Operator and CRDs
-* Supports all programming languages via HTTP and gRPC
-* Multi-Cloud, open components (bindings, pub-sub, state) from Azure, AWS, GCP
-* Runs anywhere, as a process or containerized
-* Lightweight (58MB binary, 4MB physical memory)
-* Runs as a sidecar - removes the need for special SDKs or libraries
-* Dedicated CLI - developer friendly experience with easy debugging
-* Clients for Java, .NET Core, Go, Javascript, Python, Rust and C++
+Applications fail. Infrastructure restarts. Networks partition. Your workflows and agents shouldn't lose their progress when that happens.
 
-## Get Started using Dapr
+**Dapr Workflows** provide durable execution that automatically persists progress and resumes from the last completed step after:
+
+- Process crashes
+- Pod restarts
+- Node failures
+- Rolling deployments
+- Infrastructure interruptions
+
+Instead of restarting from the beginning, execution picks up exactly where it left off — with no extra database or state-machine code to write. You author workflows as ordinary code in your language of choice; if the application crashes midway through, Dapr recovers automatically and resumes from the next unfinished step.
+
+**Common use cases:** AI agents, customer onboarding, order processing, human-approval flows, document processing, and other multi-step business processes.
+
+## Build Reliable AI Agents
+
+AI agents need far more than model inference. To run in production they need state, orchestration, recovery, secure communication, and governance.
+
+Dapr provides the runtime primitives to operate agents reliably — and works alongside your existing AI frameworks and models:
+
+- **Durable agent execution** that survives crashes and restarts
+- **Long-running, multi-step tasks** backed by Workflows
+- **Multi-agent orchestration** and agent-to-agent communication
+- **State persistence** and memory across interactions
+- **LLM integration** through the Conversation API, with prompt caching and tool calling
+- **Human-in-the-loop approvals** and event-driven coordination
+- **Automatic recovery** after failures
+
+## Secure by Default
+
+Every Dapr application is issued a cryptographically verifiable identity. Security is built in, not bolted on:
+
+- Mutual TLS (mTLS) for all service-to-service traffic
+- Workload identity and authentication
+- Fine-grained, least-privilege authorization policies
+- Secret management backed by your preferred vault
+- Automatic certificate issuance and rotation
+- Zero-trust communication
+
+Control exactly which applications, agents, and services are allowed to talk to each other:
+
+```yaml
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: access-policy
+spec:
+  accessControl:
+    defaultAction: deny
+    policies:
+      - appId: orders
+        defaultAction: allow
+```
+
+Apply least-privilege access controls across your entire environment, without writing custom security infrastructure.
+
+## Verifiable Execution
+
+For many systems, knowing that work *completed* isn't enough — you need proof of *how* it completed.
+
+Building on Dapr's cryptographic workload identity and durable workflow history, verifiable execution provides evidence of:
+
+- Where work originated and which identity executed it
+- The sequence and lineage of execution
+- The authenticity of inputs and outputs
+- Whether execution history was tampered with
+
+This enables auditable workflows and AI systems that can prove integrity, authenticity, and provenance — ideal for financial services, healthcare, government, and other compliance-sensitive environments.
+
+## Distributed Application APIs
+
+Durable execution and AI build on the same proven building blocks that power Dapr microservices. Mix and match what you need:
+
+| API | What it does |
+|:----|:-------------|
+| **Workflows** | Author long-running, durable workflows and agentic processes as code |
+| **Service Invocation** | Reliable, secure service-to-service calls with built-in mTLS, retries, and observability |
+| **State Management** | Persist and query state across dozens of stores without coupling to a database |
+| **Pub/Sub** | Build event-driven systems on your preferred message broker with at-least-once delivery |
+| **Actors** | Build stateful, virtual actor-based applications |
+| **Conversation** | Call LLMs through a consistent API, with prompt caching and tool calling |
+| **Bindings** | Trigger your code from, and send events to, external systems |
+| **Secrets** | Retrieve secrets securely from external secret stores |
+| **Configuration** | Read and subscribe to application configuration consistently |
+| **Distributed Lock** | Coordinate access to shared resources safely |
+| **Cryptography** | Encrypt and decrypt data without exposing keys to your application |
+| **Jobs** | Schedule work to run now or in the future |
+
+All APIs are available over HTTP and gRPC, with SDKs for Java, .NET, Go, JavaScript, Python, Rust, C++, and PHP. You benefit from built-in [observability](https://docs.dapr.io/concepts/observability-concept/), reliability, and pluggable, vendor-neutral components for state stores, message brokers, and more across Azure, AWS, and GCP.
+
+## Run Anywhere
+
+Dapr runs as a sidecar (container or process) next to your app and works identically across:
+
+- Kubernetes
+- AWS, Azure, and Google Cloud
+- Virtual machines and bare metal
+- Edge and IoT environments
+- Air-gapped deployments
+
+It's lightweight (a ~58MB binary using ~4MB of memory), supports every programming language over HTTP and gRPC, and requires no application code changes to move between platforms. Adopt it incrementally, one API at a time, with no runtime lock-in.
+
+## Trusted in Production
+
+Dapr is a **graduated** Cloud Native Computing Foundation (CNCF) project, used by organizations around the world to build mission-critical applications. Teams choose Dapr to recover automatically from failures, build reliable AI systems, secure communication between services, simplify distributed architectures, and avoid infrastructure lock-in.
+
+<p align="center"><img src="https://raw.githubusercontent.com/kedacore/keda/main/images/logo-cncf.svg" height="75px"></p>
+
+## Get Started
 
 See our [Getting Started](https://docs.dapr.io/getting-started/) guide over in our docs.
 
@@ -143,7 +207,7 @@ See the [Development Guide](https://docs.dapr.io/contributing/) to get started w
 | [Docs](https://docs.dapr.io) | The documentation for Dapr.
 | [Quickstarts](https://github.com/dapr/quickstarts) | This repository contains a series of simple code samples that highlight the main Dapr capabilities.
 | [Samples](https://github.com/dapr/samples) | This repository holds community maintained samples for various Dapr use cases.
-| [Components-contrib ](https://github.com/dapr/components-contrib) | The purpose of components contrib is to provide open, community driven reusable components for building distributed applications.
+| [Components-contrib](https://github.com/dapr/components-contrib) | The purpose of components contrib is to provide open, community driven reusable components for building distributed applications.
 | [Go-sdk](https://github.com/dapr/go-sdk) | Dapr SDK for Go
 | [Java-sdk](https://github.com/dapr/java-sdk) | Dapr SDK for Java
 | [JS-sdk](https://github.com/dapr/js-sdk) | Dapr SDK for JavaScript

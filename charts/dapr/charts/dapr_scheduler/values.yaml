@@ -80,6 +80,12 @@ debug:
 
 securityContext:
   runAsNonRoot: true
+  # fsGroup makes the Scheduler process a member of the group that owns the
+  # mounted etcd volume, which is required to write to block volumes (for
+  # example AWS EBS through the CSI driver) as a non-root user. Platforms that
+  # assign an fsGroup themselves from a namespace range (such as OpenShift)
+  # reject an explicit value; on those, unset it with
+  # --set dapr_scheduler.securityContext.fsGroup=null so no fsGroup is rendered.
   fsGroup: 65532
 
 resources: {}

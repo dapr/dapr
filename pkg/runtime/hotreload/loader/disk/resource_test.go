@@ -34,6 +34,15 @@ import (
 	loadercompstore "github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
 )
 
+// clearGenerations zeros the Generation field stamped by the disk loader so
+// equality assertions against literal fixtures (which can't predict the
+// monotonic counter value) succeed.
+func clearGenerations(events []*loader.Event[componentsapi.Component]) {
+	for i := range events {
+		events[i].Resource.SetGeneration(0)
+	}
+}
+
 const (
 	comp1 = `apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -106,6 +115,7 @@ func Test_Disk(t *testing.T) {
 		}
 	}
 
+	clearGenerations(events)
 	assert.ElementsMatch(t, []*loader.Event[componentsapi.Component]{
 		{
 			Type: operatorpb.ResourceEventType_CREATED,
@@ -181,6 +191,7 @@ func Test_Stream(t *testing.T) {
 			}
 		}
 
+		clearGenerations(events)
 		assert.ElementsMatch(t, []*loader.Event[componentsapi.Component]{
 			{
 				Type: operatorpb.ResourceEventType_CREATED,
@@ -260,6 +271,7 @@ func Test_Stream(t *testing.T) {
 			}
 		}
 
+		clearGenerations(events)
 		assert.ElementsMatch(t, []*loader.Event[componentsapi.Component]{
 			{
 				Type: operatorpb.ResourceEventType_CREATED,
@@ -339,6 +351,7 @@ func Test_Stream(t *testing.T) {
 			}
 		}
 
+		clearGenerations(events)
 		assert.ElementsMatch(t, []*loader.Event[componentsapi.Component]{
 			{
 				Type: operatorpb.ResourceEventType_DELETED,

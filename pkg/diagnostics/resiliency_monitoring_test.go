@@ -267,7 +267,43 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 				diag.NewTag(diag.StatusKey.Name(), string(breaker.StateOpen)):     1,
 				diag.NewTag(diag.StatusKey.Name(), string(breaker.StateHalfOpen)): 1,
 			},
-			wantCbStateLastValue: diag.NewTag(diag.StatusKey.Name(), "half-open"),
+			// The failing probe trips the breaker back to open (half-open -> open).
+			// The gauge now tracks that transition (issue #10113); previously it
+			// stayed stuck at the "half-open" snapshot taken at instantiation.
+			wantCbStateLastValue: diag.NewTag(diag.StatusKey.Name(), "open"),
+		},
+		{
+			// Regression for #10113: when a circuit breaker recovers
+			// (half-open -> closed) during request execution, the cb_state gauge
+			// must reflect "closed". Previously the gauge was only snapshotted at
+			// policy instantiation, so a transition that happened mid-execution
+			// left the gauge stuck at the pre-transition state ("half-open").
+			name: "EndpointPolicyHalfOpenToClosedState",
+			unitFn: func() {
+				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
+				for range 3 {
+					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
+					policyRunner := resiliency.NewRunner[any](t.Context(), policyDef)
+					_, _ = policyRunner(func(ctx context.Context) (any, error) {
+						return nil, errors.New("fake error")
+					})
+				}
+				// let the circuit breaker go to half open state (>5x cb timeout)
+				time.Sleep(6 * testCBTimeout)
+				// a successful probe closes the breaker (MaxRequests == 1)
+				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
+				policyRunner := resiliency.NewRunner[any](t.Context(), policyDef)
+				_, _ = policyRunner(func(ctx context.Context) (any, error) {
+					return nil, nil
+				})
+			},
+			wantNumberOfRows: 5,
+			wantCbStateTagCount: map[tag.Tag]int64{
+				diag.NewTag(diag.StatusKey.Name(), string(breaker.StateClosed)):   2,
+				diag.NewTag(diag.StatusKey.Name(), string(breaker.StateOpen)):     1,
+				diag.NewTag(diag.StatusKey.Name(), string(breaker.StateHalfOpen)): 1,
+			},
+			wantCbStateLastValue: diag.NewTag(diag.StatusKey.Name(), "closed"),
 		},
 	}
 

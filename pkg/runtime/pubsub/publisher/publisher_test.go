@@ -15,19 +15,24 @@ package publisher
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
+	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -58,7 +63,7 @@ func TestPublish(t *testing.T) {
 					ContentType: "text/plain",
 				},
 			},
-		})
+		}, rtpubsub.TransportModeGRPC)
 
 		require.NoError(t, err)
 		assert.Empty(t, res.FailedEntries)
@@ -79,7 +84,7 @@ func TestPublish(t *testing.T) {
 					ContentType: "text/plain",
 				},
 			},
-		})
+		}, rtpubsub.TransportModeGRPC)
 
 		require.NoError(t, err)
 		assert.Empty(t, res.FailedEntries)
@@ -112,7 +117,7 @@ func TestPublish(t *testing.T) {
 					ContentType: "text/plain",
 				},
 			},
-		})
+		}, rtpubsub.TransportModeGRPC)
 
 		require.NoError(t, err)
 		assert.Empty(t, res.FailedEntries)
@@ -137,7 +142,7 @@ func TestPublish(t *testing.T) {
 					ContentType: "text/plain",
 				},
 			},
-		})
+		}, rtpubsub.TransportModeGRPC)
 
 		require.NoError(t, err)
 		assert.Empty(t, res.FailedEntries)
@@ -169,7 +174,7 @@ func TestPublish(t *testing.T) {
 					ContentType: "text/plain",
 				},
 			},
-		})
+		}, rtpubsub.TransportModeGRPC)
 		require.Error(t, err)
 		assert.Empty(t, res)
 
@@ -189,7 +194,7 @@ func TestPublish(t *testing.T) {
 					ContentType: "text/plain",
 				},
 			},
-		})
+		}, rtpubsub.TransportModeGRPC)
 		require.Error(t, err)
 		assert.Empty(t, res)
 	})
@@ -220,7 +225,7 @@ func TestPublish(t *testing.T) {
 					ContentType: "text/plain",
 				},
 			},
-		})
+		}, rtpubsub.TransportModeGRPC)
 		require.Error(t, err)
 		assert.Empty(t, res)
 
@@ -240,7 +245,7 @@ func TestPublish(t *testing.T) {
 					ContentType: "text/plain",
 				},
 			},
-		})
+		}, rtpubsub.TransportModeGRPC)
 		require.Error(t, err)
 		assert.Empty(t, res)
 	})
@@ -263,7 +268,7 @@ func TestPublish(t *testing.T) {
 			PubsubName: TestPubsubName,
 			Topic:      "topic0",
 			Metadata:   md,
-		})
+		}, rtpubsub.TransportModeGRPC)
 
 		require.NoError(t, err)
 
@@ -273,7 +278,7 @@ func TestPublish(t *testing.T) {
 		err = ps.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic1",
-		})
+		}, rtpubsub.TransportModeGRPC)
 		require.NoError(t, err)
 	})
 
@@ -295,7 +300,7 @@ func TestPublish(t *testing.T) {
 			PubsubName: TestPubsubName,
 			Topic:      "topic0",
 			Metadata:   md,
-		})
+		}, rtpubsub.TransportModeGRPC)
 		require.NoError(t, err)
 
 		compStore.AddPubSub(TestSecondPubsubName, &rtpubsub.PubsubItem{
@@ -306,7 +311,7 @@ func TestPublish(t *testing.T) {
 		err = ps.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic1",
-		})
+		}, rtpubsub.TransportModeGRPC)
 		require.NoError(t, err)
 	})
 
@@ -328,7 +333,7 @@ func TestPublish(t *testing.T) {
 		err := ps.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic5",
-		})
+		}, rtpubsub.TransportModeGRPC)
 		require.Error(t, err)
 
 		compStore.AddPubSub(TestSecondPubsubName, &rtpubsub.PubsubItem{
@@ -338,7 +343,7 @@ func TestPublish(t *testing.T) {
 		err = ps.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic5",
-		})
+		}, rtpubsub.TransportModeGRPC)
 		require.Error(t, err)
 	})
 
@@ -360,7 +365,7 @@ func TestPublish(t *testing.T) {
 		err := ps.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic1",
-		})
+		}, rtpubsub.TransportModeGRPC)
 		require.Error(t, err)
 
 		compStore.AddPubSub(TestSecondPubsubName, &rtpubsub.PubsubItem{
@@ -370,7 +375,7 @@ func TestPublish(t *testing.T) {
 		err = ps.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic1",
-		})
+		}, rtpubsub.TransportModeGRPC)
 		require.Error(t, err)
 	})
 }
@@ -391,7 +396,7 @@ func TestNamespacedPublisher(t *testing.T) {
 	err := ps.Publish(t.Context(), &contribpubsub.PublishRequest{
 		PubsubName: TestPubsubName,
 		Topic:      "topic0",
-	})
+	}, rtpubsub.TransportModeGRPC)
 	require.NoError(t, err)
 
 	pubSub, ok := compStore.GetPubSub(TestPubsubName)
@@ -422,7 +427,7 @@ func TestNamespacedBulkPublisher(t *testing.T) {
 				ContentType: "text/plain",
 			},
 		},
-	})
+	}, rtpubsub.TransportModeGRPC)
 	require.NoError(t, err)
 	assert.Empty(t, res.FailedEntries)
 
@@ -503,6 +508,151 @@ func (m *mockPublishPubSub) Features() []contribpubsub.Feature {
 	return nil
 }
 
+// matchingPubSub is a pubsub mock whose Publish returns a configurable error per
+// call, used to verify that retry `matching` is honored on the publish path.
+type matchingPubSub struct {
+	calls     atomic.Int32
+	publishFn func(call int32) error
+}
+
+func (m *matchingPubSub) Init(ctx context.Context, metadata contribpubsub.Metadata) error {
+	return nil
+}
+
+func (m *matchingPubSub) Publish(ctx context.Context, req *contribpubsub.PublishRequest) error {
+	return m.publishFn(m.calls.Add(1))
+}
+
+func (m *matchingPubSub) BulkPublish(ctx context.Context, req *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error) {
+	return contribpubsub.BulkPublishResponse{}, m.publishFn(m.calls.Add(1))
+}
+
+func (m *matchingPubSub) Subscribe(_ context.Context, req contribpubsub.SubscribeRequest, handler contribpubsub.Handler) error {
+	return nil
+}
+
+func (m *matchingPubSub) BulkSubscribe(ctx context.Context, req contribpubsub.SubscribeRequest, handler contribpubsub.BulkHandler) (contribpubsub.BulkSubscribeResponse, error) {
+	return contribpubsub.BulkSubscribeResponse{}, nil
+}
+
+func (m *matchingPubSub) Close() error {
+	return nil
+}
+
+func (m *matchingPubSub) Features() []contribpubsub.Feature {
+	return nil
+}
+
+// matchingResiliency builds a provider whose pubsub outbound policy retries up to
+// maxRetries with the given `matching` rules applied to component "failPubsub".
+func matchingResiliency(maxRetries int, matching *resiliencyV1alpha.RetryMatching) resiliency.Provider {
+	cfg := &resiliencyV1alpha.Resiliency{
+		Spec: resiliencyV1alpha.ResiliencySpec{
+			Policies: resiliencyV1alpha.Policies{
+				Retries: map[string]resiliencyV1alpha.Retry{
+					"pubsubRetry": {
+						MaxRetries: ptr.Of(maxRetries),
+						Policy:     "constant",
+						Duration:   "1ms",
+						Matching:   matching,
+					},
+				},
+			},
+			Targets: resiliencyV1alpha.Targets{
+				Components: map[string]resiliencyV1alpha.ComponentPolicyNames{
+					"failPubsub": {
+						Outbound: resiliencyV1alpha.PolicyNames{Retry: "pubsubRetry"},
+					},
+				},
+			},
+		},
+	}
+	return resiliency.FromConfigurations(logger.NewLogger("test"), cfg)
+}
+
+// TestPubsubPublishMatching verifies that, on the publish path, a component error
+// carrying a gRPC status is wrapped in a resiliency.CodeError so the configured retry
+// `matching` is consulted — and that errors without a status keep retrying as before.
+func TestPubsubPublishMatching(t *testing.T) {
+	// Only gRPC code 14 (Unavailable) is configured as retriable.
+	matching := &resiliencyV1alpha.RetryMatching{GRPCStatusCodes: "14"}
+
+	newPublisher := func(ps contribpubsub.PubSub, maxRetries int) rtpubsub.Adapter {
+		compStore := compstore.New()
+		compStore.AddPubSub("failPubsub", &rtpubsub.PubsubItem{Component: ps})
+		return New(Options{
+			GetPubSubFn: compStore.GetPubSub,
+			Resiliency:  matchingResiliency(maxRetries, matching),
+		})
+	}
+
+	req := &contribpubsub.PublishRequest{PubsubName: "failPubsub", Topic: "topic"}
+
+	t.Run("non-retriable gRPC status code is not retried", func(t *testing.T) {
+		ps := &matchingPubSub{publishFn: func(int32) error {
+			return status.Error(codes.InvalidArgument, "bad request")
+		}}
+
+		err := newPublisher(ps, 5).Publish(t.Context(), req, rtpubsub.TransportModeGRPC)
+
+		require.Error(t, err)
+		// Code 3 is not in the retriable list, so matching breaks the retry loop after 1 try
+		assert.Equal(t, int32(1), ps.calls.Load())
+	})
+
+	t.Run("retriable gRPC status code is retried until success", func(t *testing.T) {
+		ps := &matchingPubSub{publishFn: func(call int32) error {
+			if call <= 2 {
+				return status.Error(codes.Unavailable, "try later")
+			}
+			return nil
+		}}
+
+		err := newPublisher(ps, 5).Publish(t.Context(), req, rtpubsub.TransportModeGRPC)
+
+		require.NoError(t, err)
+		// 2 failures then success = 3 calls
+		assert.Equal(t, int32(3), ps.calls.Load())
+	})
+
+	t.Run("plain error without status still retries (no regression)", func(t *testing.T) {
+		ps := &matchingPubSub{publishFn: func(int32) error {
+			return errors.New("boom")
+		}}
+
+		err := newPublisher(ps, 3).Publish(t.Context(), req, rtpubsub.TransportModeGRPC)
+
+		require.Error(t, err)
+		// No gRPC status = retried up to maxRetries (initial + 3)
+		assert.Equal(t, int32(4), ps.calls.Load())
+	})
+
+	t.Run("terminal code (FailedPrecondition) is not retried", func(t *testing.T) {
+		ps := &matchingPubSub{publishFn: func(int32) error {
+			return status.Error(codes.FailedPrecondition, "invalid topic")
+		}}
+
+		err := newPublisher(ps, 5).Publish(t.Context(), req, rtpubsub.TransportModeGRPC)
+
+		require.Error(t, err)
+		assert.Equal(t, int32(1), ps.calls.Load())
+	})
+
+	t.Run("retriable code (Unavailable) is retried until success", func(t *testing.T) {
+		ps := &matchingPubSub{publishFn: func(call int32) error {
+			if call <= 2 {
+				return status.Error(codes.Unavailable, "broker unavailable")
+			}
+			return nil
+		}}
+
+		err := newPublisher(ps, 5).Publish(t.Context(), req, rtpubsub.TransportModeGRPC)
+
+		require.NoError(t, err)
+		assert.Equal(t, int32(3), ps.calls.Load())
+	})
+}
+
 func TestPubsubWithResiliency(t *testing.T) {
 	t.Run("pubsub publish retries with resiliency", func(t *testing.T) {
 		failingPubsub := daprt.FailingPubsub{
@@ -529,7 +679,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 			PubsubName: "failPubsub",
 			Topic:      "failingTopic",
 		}
-		err := ps.Publish(t.Context(), req)
+		err := ps.Publish(t.Context(), req, rtpubsub.TransportModeGRPC)
 
 		require.NoError(t, err)
 		assert.Equal(t, 2, failingPubsub.Failure.CallCount("failingTopic"))
@@ -562,7 +712,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		}
 
 		start := time.Now()
-		err := ps.Publish(t.Context(), req)
+		err := ps.Publish(t.Context(), req, rtpubsub.TransportModeGRPC)
 		end := time.Now()
 
 		require.Error(t, err)

@@ -17,8 +17,10 @@ import (
 	"context"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
+	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	remindersfake "github.com/dapr/dapr/pkg/actors/reminders/fake"
 	"github.com/dapr/dapr/pkg/actors/router"
@@ -32,18 +34,19 @@ import (
 )
 
 type Fake struct {
-	fnInit                   func(actors.InitOptions) error
-	fnRun                    func(context.Context) error
-	fnRouter                 func(context.Context) (router.Interface, error)
-	fnTable                  func(context.Context) (table.Interface, error)
-	fnState                  func(context.Context) (state.Interface, error)
-	fnTimers                 func(context.Context) (timers.Interface, error)
-	fnReminders              func(context.Context) (reminders.Interface, error)
-	fnPlacement              func(context.Context) (placement.Interface, error)
-	fnRuntimeStatus          func() *runtimev1pb.ActorRuntime
-	fnRegisterHosted         func(context.Context, hostconfig.Config) error
-	fnUnRegisterHosted       func(ctx context.Context, actorTypes ...string) error
-	fnWaitForRegisteredHosts func(ctx context.Context) error
+	fnInit                     func(actors.InitOptions) error
+	fnRun                      func(context.Context) error
+	fnRouter                   func(context.Context) (router.Interface, error)
+	fnTable                    func(context.Context) (table.Interface, error)
+	fnState                    func(context.Context) (state.Interface, error)
+	fnTimers                   func(context.Context) (timers.Interface, error)
+	fnReminders                func(context.Context) (reminders.Interface, error)
+	fnPlacement                func(context.Context) (placement.Interface, error)
+	fnRuntimeStatus            func() *runtimev1pb.ActorRuntime
+	fnRegisterHosted           func(context.Context, hostconfig.Config) error
+	fnUnRegisterHosted         func(ctx context.Context, actorTypes ...string) error
+	fnWaitForRegisteredHosts   func(ctx context.Context) error
+	fnOnActorStateStoreChanged func()
 }
 
 func New() *Fake {
@@ -84,6 +87,7 @@ func New() *Fake {
 		fnWaitForRegisteredHosts: func(context.Context) error {
 			return nil
 		},
+		fnOnActorStateStoreChanged: func() {},
 	}
 }
 
@@ -124,6 +128,20 @@ func (f *Fake) WithReminders(fn func(context.Context) (reminders.Interface, erro
 
 func (f *Fake) WithPlacement(fn func(context.Context) (placement.Interface, error)) *Fake {
 	f.fnPlacement = fn
+	return f
+}
+
+// WithPlacementLookupActor configures the fake's placement to answer
+// LookupActor with the given function. Unlike WithPlacement, callers outside
+// the actors tree can use this without importing the internal placement
+// package.
+func (f *Fake) WithPlacementLookupActor(fn func(context.Context, *api.LookupActorRequest) (*api.LookupActorResponse, error)) *Fake {
+	f.fnPlacement = func(context.Context) (placement.Interface, error) {
+		return placementfake.New().WithLookupActor(func(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
+			lar, err := fn(ctx, req)
+			return lar, ctx, func(error) {}, err
+		}), nil
+	}
 	return f
 }
 
@@ -189,6 +207,15 @@ func (f *Fake) RegisterHosted(ctx context.Context, cfg hostconfig.Config) error 
 
 func (f *Fake) WaitForRegisteredHosts(ctx context.Context) error {
 	return f.fnWaitForRegisteredHosts(ctx)
+}
+
+func (f *Fake) WithOnActorStateStoreChanged(fn func()) *Fake {
+	f.fnOnActorStateStoreChanged = fn
+	return f
+}
+
+func (f *Fake) OnActorStateStoreChanged() {
+	f.fnOnActorStateStoreChanged()
 }
 
 func (f *Fake) UnRegisterHosted(ctx context.Context, ids ...string) error {

@@ -384,7 +384,7 @@ func (g *grpc) sendToDeadLetter(ctx context.Context, name string, msg *contribpu
 	pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deadLetterPublishTimeout)
 	defer cancel()
 
-	err := g.adapter.Publish(pubCtx, req)
+	err := g.adapter.Publish(pubCtx, req, pubsub.TransportModeGRPC)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %v", msg.Topic, deadLetterTopic, err)
 		return err

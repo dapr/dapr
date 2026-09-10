@@ -43,6 +43,7 @@ import (
 	securityfake "github.com/dapr/dapr/pkg/security/fake"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	cafake "github.com/dapr/dapr/pkg/sentry/server/ca/fake"
+	"github.com/dapr/dapr/pkg/sentry/server/images"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 	validatorfake "github.com/dapr/dapr/pkg/sentry/server/validator/fake"
 )
@@ -259,6 +260,44 @@ func TestRun(t *testing.T) {
 			}),
 			req: &sentryv1pb.SignCertificateRequest{
 				Id:                        "dapr-operator",
+				Token:                     "my-token",
+				TrustDomain:               "my-trust-domain",
+				Namespace:                 "default",
+				CertificateSigningRequest: csrPEM,
+				TokenValidator:            sentryv1pb.SignCertificateRequest_TokenValidator(-1),
+			},
+			expResp: &sentryv1pb.SignCertificateResponse{
+				WorkloadCertificate:    crtPEM,
+				TrustChainCertificates: [][]byte{[]byte("my-trust-anchors")},
+				ValidUntil:             timestamppb.New(time.Date(2023, 1, 1, 1, 1, 1, 0, time.UTC)),
+			},
+			expErr:  false,
+			expCode: codes.OK,
+		},
+		"container images from validator are passed to the CA": {
+			sec: securityfake.New().WithGRPCServerOptionNoClientAuthFn(func() grpc.ServerOption {
+				return grpc.Creds(insecure.NewCredentials())
+			}),
+			val: validatorfake.New().WithValidateFn(func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error) {
+				return validator.ValidateResult{
+					TrustDomain: spiffeid.RequireTrustDomainFromString("my-trust-domain"),
+					ContainerImages: []images.ContainerImage{
+						{Role: images.RoleDaprd, ContainerName: "daprd", Image: "daprd:1.16.0", Digest: "sha256:aaa"},
+						{Role: images.RoleApp, ContainerName: "app", Image: "myapp:v1"},
+					},
+				}, nil
+			}),
+			ca: cafake.New().WithSignIdentity(func(ctx context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
+				assert.Equal(t, []images.ContainerImage{
+					{Role: images.RoleDaprd, ContainerName: "daprd", Image: "daprd:1.16.0", Digest: "sha256:aaa"},
+					{Role: images.RoleApp, ContainerName: "app", Image: "myapp:v1"},
+				}, req.ContainerImages)
+				return []*x509.Certificate{crtX509}, nil
+			}).WithTrustAnchors(func() []byte {
+				return []byte("my-trust-anchors")
+			}),
+			req: &sentryv1pb.SignCertificateRequest{
+				Id:                        "my-id",
 				Token:                     "my-token",
 				TrustDomain:               "my-trust-domain",
 				Namespace:                 "default",
