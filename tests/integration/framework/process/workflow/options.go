@@ -57,7 +57,6 @@ type options struct {
 	placementOptions  []placement.Option
 	schedulerInstance *scheduler.Scheduler
 	schedulerAddress  *string
-
 }
 
 func WithAddOrchestrator(t *testing.T, name string, or func(*task.WorkflowContext) (any, error)) Option {

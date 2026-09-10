@@ -229,9 +229,7 @@ func (w *Workflow) Run(t *testing.T, ctx context.Context) {
 	if w.sentry != nil {
 		w.sentry.Run(t, ctx)
 	}
-	if w.place != nil {
-		w.place.Run(t, ctx)
-	}
+	w.place.Run(t, ctx)
 	if w.ownsSched {
 		w.sched.Run(t, ctx)
 	}
@@ -247,9 +245,7 @@ func (w *Workflow) Cleanup(t *testing.T) {
 	if w.ownsSched {
 		w.sched.Cleanup(t)
 	}
-	if w.place != nil {
-		w.place.Cleanup(t)
-	}
+	w.place.Cleanup(t)
 	if w.sentry != nil {
 		w.sentry.Cleanup(t)
 	}
@@ -257,9 +253,7 @@ func (w *Workflow) Cleanup(t *testing.T) {
 }
 
 func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	if w.place != nil {
-		w.place.WaitUntilRunning(t, ctx)
-	}
+	w.place.WaitUntilRunning(t, ctx)
 	if w.sched != nil {
 		w.sched.WaitUntilRunning(t, ctx)
 	}

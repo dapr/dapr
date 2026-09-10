@@ -270,7 +270,7 @@ jobs:
       - name: Run make test-integration-parallel
         run: make test-integration-parallel
   integration-tests-workflow-modes:
-    name: "Integration tests (${{ matrix.mode }} mode)"
+    name: "Integration tests (workflow ${{ matrix.mode }} mode)"
     needs: lint
     runs-on: ubuntu-latest
     permissions:
@@ -296,7 +296,7 @@ jobs:
         with:
           go-version-file: "go.mod"
       - name: Run workflow suite in ${{ matrix.mode }} mode
-        run: make test-integration-parallel ARGS="-focus 'workflow'"
+        run: make test-integration-parallel ARGS="-focus workflow"
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"
