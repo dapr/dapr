@@ -110,7 +110,7 @@ func (p *pertype) Run(t *testing.T, ctx context.Context) {
 	}),
 	)
 
-	// ack echoes an order; withholdAcks stops the pump mid-round.
+	// The goroutine acks every order until withholdAcks stops it mid-round.
 	var withholdAcks atomic.Bool
 	orders := make(chan *schedulerv1pb.PlacementOrder, 16)
 	go func() {

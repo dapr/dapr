@@ -96,13 +96,16 @@ func (l *leader) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 			return nil, err
 		}
 
-		// The leader may have moved while dialling.
+		// The leader may have moved while dialling. Recheck and store under
+		// one lock, so watchLeader always sees a stale connection and
+		// closes it.
+		l.lock.Lock()
 		if current, _, _ := l.leadership.Leader(); current != addr {
+			l.lock.Unlock()
 			conn.Close()
 			continue
 		}
 
-		l.lock.Lock()
 		l.conn = conn
 		l.addr = addr
 		if !l.watchStarted {

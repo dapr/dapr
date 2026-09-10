@@ -40,12 +40,10 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 		dactors.WithActorTypes("mytype"),
 	)
 	actor2 := dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("mytype"),
 		dactors.WithPeerActor(actor1),
 	)
 	actor3 := dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("mytype"),
 		dactors.WithPeerActor(actor1),
 	)

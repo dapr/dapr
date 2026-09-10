@@ -111,7 +111,7 @@ func (p *schedulerPlacementStream) report(t *testing.T, actorTypes ...string) {
 }
 
 // sendAck acknowledges a specific order, used to release an order whose ack
-// the pump withheld.
+// was withheld.
 func (p *schedulerPlacementStream) sendAck(t *testing.T, order *schedulerv1pb.PlacementOrder) {
 	t.Helper()
 	require.NoError(t, p.stream.Send(&schedulerv1pb.ReportActorTypesRequest{

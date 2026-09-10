@@ -56,7 +56,6 @@ func (f *flag) Setup(t *testing.T) []framework.Option {
 	))
 
 	f.actors = dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("myactor"),
 		dactors.WithPlacement(f.place),
 		dactors.WithActorTypeHandler("myactor", func(w http.ResponseWriter, r *http.Request) {

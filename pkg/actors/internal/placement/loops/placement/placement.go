@@ -61,9 +61,9 @@ type Options struct {
 	SchedulerPlacement bool
 
 	// Fallback, when non-nil, is the v1 placement service connector to use
-	// when the scheduler cluster reports it does not serve placement. It is
-	// dropped once a placement authority has been chosen, so a sidecar never
-	// changes authority while running.
+	// when the scheduler cluster reports it does not serve placement. After
+	// the startup choice the other authority's connector is kept, so a
+	// control plane handover is adopted without a restart.
 	Fallback *Fallback
 
 	ActorTable table.Interface

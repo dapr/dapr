@@ -52,7 +52,6 @@ func (inf *inflight) Setup(t *testing.T) []framework.Option {
 	)
 
 	inf.actors = dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("myactor"),
 		dactors.WithPlacement(inf.place),
 		dactors.WithActorTypeHandler("myactor", func(w http.ResponseWriter, r *http.Request) {

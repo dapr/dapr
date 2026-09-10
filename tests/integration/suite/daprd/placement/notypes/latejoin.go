@@ -51,7 +51,6 @@ func (l *lateJoin) Setup(t *testing.T) []framework.Option {
 	)
 
 	l.noTypes = actors.New(t,
-		actors.WithPlacementService(),
 		actors.WithPeerActor(l.withTypes),
 	)
 
