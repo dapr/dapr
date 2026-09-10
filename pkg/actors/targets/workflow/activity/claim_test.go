@@ -24,6 +24,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
@@ -32,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -45,10 +47,17 @@ type recordStore struct {
 	lock sync.Mutex
 	data map[string][]byte
 	etag map[string]int
+	// upserts counts every record write, so tests can observe how many
+	// guards wrote without reaching into the guard bookkeeping.
+	upserts map[string]int
 }
 
 func newRecordStore() *recordStore {
-	return &recordStore{data: make(map[string][]byte), etag: make(map[string]int)}
+	return &recordStore{
+		data:    make(map[string][]byte),
+		etag:    make(map[string]int),
+		upserts: make(map[string]int),
+	}
 }
 
 func (s *recordStore) fake() *statefake.Fake {
@@ -75,6 +84,7 @@ func (s *recordStore) fake() *statefake.Fake {
 					}
 					s.data[req.ActorID] = b
 					s.etag[req.ActorID]++
+					s.upserts[req.ActorID]++
 				case actorsapi.TransactionalDelete:
 					if r.ETag != nil && *r.ETag != strconv.Itoa(s.etag[req.ActorID]) {
 						return errors.New("etag mismatch")
@@ -97,6 +107,12 @@ func (s *recordStore) get(t *testing.T, actorID string) (*claim.Record, bool) {
 	var rec claim.Record
 	require.NoError(t, json.Unmarshal(b, &rec))
 	return &rec, true
+}
+
+func (s *recordStore) upsertCount(actorID string) int {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.upserts[actorID]
 }
 
 func (s *recordStore) set(t *testing.T, actorID string, rec claim.Record) {
@@ -127,14 +143,15 @@ func newClaimHarness(t *testing.T) (*factory, *recordStore, chan *backend.Activi
 	scheduled := make(chan *backend.ActivityWorkItem, 2)
 	driveCtx, driveCancel := context.WithCancel(t.Context())
 	f := &factory{
-		driveCtx:          driveCtx,
+		drives:            detached.New(driveCtx),
 		driveCancel:       driveCancel,
+		inflight:          new(inflight.Map),
 		appID:             "testapp",
 		actorType:         "dapr.internal.default.testapp.activity",
 		workflowActorType: "dapr.internal.default.testapp.workflow",
 		router:            routerfake.New(),
+		reminders:         &stubScheduler{},
 		signing:           &signing.Signing{Namespace: "default"},
-		state:             store.fake(),
 		fastPath:          true,
 		rootCtx:           t.Context(),
 		detached:          detached.New(t.Context()),
@@ -203,7 +220,6 @@ func Test_claimGuard_lifecycle(t *testing.T) {
 			_, ok := store.get(t, actorID)
 			return !ok
 		}, time.Second*5, time.Millisecond*5, "the completed record must self-delete after retention")
-		f.claims.Wait()
 	})
 
 	t.Run("execution error deletes the record without completing it", func(t *testing.T) {
@@ -225,7 +241,6 @@ func Test_claimGuard_lifecycle(t *testing.T) {
 			_, ok := store.get(t, actorID)
 			return !ok
 		}, time.Second*5, time.Millisecond*5, "a failed execution must delete the record so the new owner re-executes")
-		f.claims.Wait()
 
 		rec, ok := store.get(t, actorID)
 		assert.False(t, ok, "no Completed marker may survive an execution error: %+v", rec)
@@ -241,8 +256,10 @@ func Test_claimGuard_lifecycle(t *testing.T) {
 		require.True(t, owner)
 		f.GetOrCreate(actorID)
 		require.NoError(t, f.HaltAll(t.Context()))
-		f.claims.Wait()
 
+		// Spawn writes its record synchronously inside the halt, so no record
+		// once the halt has returned means no guard was started.
+		assert.Zero(t, store.upsertCount(actorID))
 		_, ok := store.get(t, actorID)
 		assert.False(t, ok)
 		call.Finish(nil)
@@ -270,7 +287,6 @@ func Test_claimGuard_lifecycle(t *testing.T) {
 			_, ok := store.get(t, actorID)
 			return !ok
 		}, time.Second*5, time.Millisecond*5, "a guard stopped by shutdown must not leave a record stalling the new owner")
-		f.claims.Wait()
 		call.Finish(nil)
 	})
 
@@ -283,8 +299,8 @@ func Test_claimGuard_lifecycle(t *testing.T) {
 		call.Finish(nil)
 		f.GetOrCreate(actorID)
 		haltNothingHosted(t, f)
-		f.claims.Wait()
 
+		assert.Zero(t, store.upsertCount(actorID))
 		_, ok := store.get(t, actorID)
 		assert.False(t, ok, "a settled claim needs no guard: its outcome is already delivered")
 	})
@@ -295,8 +311,8 @@ func Test_claimGuard_lifecycle(t *testing.T) {
 
 		f.GetOrCreate(actorID)
 		haltNothingHosted(t, f)
-		f.claims.Wait()
 
+		assert.Zero(t, store.upsertCount(actorID))
 		_, ok := store.get(t, actorID)
 		assert.False(t, ok)
 	})
@@ -310,8 +326,8 @@ func Test_claimGuard_lifecycle(t *testing.T) {
 		require.True(t, owner)
 		f.GetOrCreate(actorID)
 		haltNothingHosted(t, f)
-		f.claims.Wait()
 
+		assert.Zero(t, store.upsertCount(actorID))
 		_, ok := store.get(t, actorID)
 		assert.False(t, ok)
 		call.Finish(nil)
@@ -345,16 +361,29 @@ func Test_claimGuard_lifecycle(t *testing.T) {
 		// A newer scheduling generation of the same actor takes the row
 		// while the old guard sits out its retention.
 		store.set(t, actorID, claim.Record{TaskKey: actorID + "::gen2", HeartbeatMs: time.Now().UnixMilli()})
-		f.claims.Wait()
 
-		rec, ok := store.get(t, actorID)
-		require.True(t, ok, "the old guard's retention delete must not destroy the newer generation's live claim")
-		assert.Equal(t, actorID+"::gen2", rec.TaskKey)
+		// Watch across the old guard's whole retention window: its delete
+		// leg must never land on the newer generation's row.
+		assert.Never(t, func() bool {
+			rec, ok := store.get(t, actorID)
+			return !ok || rec.TaskKey != actorID+"::gen2"
+		}, time.Second*2, time.Millisecond*25,
+			"the old guard's retention delete must not destroy the newer generation's live claim")
 	})
 
 	t.Run("repeated halts spawn a single guard per task key", func(t *testing.T) {
 		t.Parallel()
 		f, store, _ := newClaimHarness(t)
+		// A heartbeat beyond the test window leaves exactly one record write
+		// per guard, the synchronous one Spawn performs, so counting writes
+		// counts guards.
+		f.claims = claim.New(claim.Options{
+			ActorType:      f.actorType,
+			State:          store.fake(),
+			HeartbeatEvery: time.Hour,
+			Retention:      time.Millisecond * 50,
+			StaleAfter:     time.Hour,
+		})
 
 		call, owner := f.inflight.Acquire(key)
 		require.True(t, owner)
@@ -363,14 +392,17 @@ func Test_claimGuard_lifecycle(t *testing.T) {
 		f.GetOrCreate(actorID)
 		haltNothingHosted(t, f)
 
-		assert.Equal(t, 1, f.claims.Active())
+		assert.Equal(t, 1, store.upsertCount(actorID),
+			"the second halt must join the running guard, not write and heartbeat a second record")
 
+		// That one guard still owns the settle: it marks the record Completed
+		// (the second write) and deletes it after retention.
 		call.Finish(nil)
 		require.Eventually(t, func() bool {
 			_, ok := store.get(t, actorID)
 			return !ok
 		}, time.Second*5, time.Millisecond*5)
-		f.claims.Wait()
+		assert.Equal(t, 2, store.upsertCount(actorID))
 	})
 }
 
@@ -593,7 +625,7 @@ func Test_executeActivity_recoveryGate(t *testing.T) {
 		store.set(t, actorID, claim.Record{TaskKey: actorID, HeartbeatMs: time.Now().UnixMilli()})
 
 		a := f.GetOrCreate(actorID).(*activity)
-		err := a.executeActivity(t.Context(), activityReminderName, testInvocation(), false, true)
+		err := a.executeActivity(t.Context(), testReminder(), testInvocation())
 		require.ErrorIs(t, err, claim.ErrHeldElsewhere)
 		assert.True(t, wferrors.IsRecoverable(err), "the deferral must be retried, not failed terminally")
 		select {
@@ -609,7 +641,7 @@ func Test_executeActivity_recoveryGate(t *testing.T) {
 		store.set(t, actorID, claim.Record{TaskKey: actorID, HeartbeatMs: time.Now().Add(-time.Hour).UnixMilli(), Completed: true})
 
 		a := f.GetOrCreate(actorID).(*activity)
-		require.NoError(t, a.executeActivity(t.Context(), activityReminderName, testInvocation(), false, true))
+		require.NoError(t, a.executeActivity(t.Context(), testReminder(), testInvocation()))
 		select {
 		case <-scheduled:
 			t.Fatal("a completed execution must not be re-run")
@@ -634,13 +666,13 @@ func Test_executeActivity_recoveryGate(t *testing.T) {
 		// retried in a loop like real recovery arrivals: a single sleep
 		// must land between StaleAfter and the 2x prune window, a margin a
 		// loaded runner can miss.
-		err := a.executeActivity(t.Context(), activityReminderName, testInvocation(), false, true)
+		err := a.executeActivity(t.Context(), testReminder(), testInvocation())
 		require.ErrorIs(t, err, claim.ErrHeldElsewhere)
 
 		ownerErr := make(chan error, 1)
 		go func() {
 			for {
-				err := a.executeActivity(t.Context(), activityReminderName, testInvocation(), false, true)
+				err := a.executeActivity(t.Context(), testReminder(), testInvocation())
 				if !errors.Is(err, claim.ErrHeldElsewhere) {
 					ownerErr <- err
 					return
@@ -678,7 +710,25 @@ func Test_executeActivity_recoveryGate(t *testing.T) {
 	})
 }
 
-func Test_gateJanitorRedispatch(t *testing.T) {
+// redispatch delivers a janitor re-dispatch Execute call to a, the way the
+// orchestrator's janitor does (no local-drive certification, so a re-dispatch
+// that proceeds creates the durable run-activity reminder). handled reports
+// that the gate answered without executing: acked (err nil) or deferred.
+func redispatch(t *testing.T, f *factory, a *activity) (handled bool, err error) {
+	t.Helper()
+	data, merr := proto.Marshal(testInvocation())
+	require.NoError(t, merr)
+	sched := f.reminders.(*stubScheduler)
+	before := len(sched.snapshotCreates())
+	_, err = a.handleInvoke(t.Context(), internalsv1pb.
+		NewInternalInvokeRequest(todo.ExecuteActivityMethod).
+		WithActor(f.actorType, a.actorID).
+		WithMetadata(map[string][]string{todo.MetadataActivityJanitorRedispatch: {"true"}}).
+		WithData(data))
+	return len(sched.snapshotCreates()) == before, err
+}
+
+func Test_handleInvoke_janitorRedispatchGate(t *testing.T) {
 	t.Parallel()
 
 	const actorID = "wf::3"
@@ -692,9 +742,48 @@ func Test_gateJanitorRedispatch(t *testing.T) {
 		t.Cleanup(func() { call.Finish(nil) })
 
 		a := f.GetOrCreate(actorID).(*activity)
-		handled, err := a.gateJanitorRedispatch(t.Context(), testInvocation())
+		handled, err := redispatch(t, f, a)
 		require.NoError(t, err)
 		assert.True(t, handled, "a local claim owns delivery; the re-dispatch must ack, not spawn a drive that could retry ungated")
+	})
+
+	t.Run("settled successful entry acks across a re-registration", func(t *testing.T) {
+		// A worker reconnect rebuilds the factory; the cached outcome an old
+		// registration's publish left behind must still answer the janitor's
+		// re-dispatch, or the completed body runs again.
+		t.Parallel()
+		old, _, _ := newClaimHarness(t)
+		call, owner := old.inflight.Acquire(actorID)
+		require.True(t, owner)
+		old.settle(actorID, call, nil)
+
+		fresh, _, scheduled := newClaimHarness(t)
+		fresh.inflight = old.inflight
+		a := fresh.GetOrCreate(actorID).(*activity)
+		handled, err := redispatch(t, fresh, a)
+		require.NoError(t, err)
+		assert.True(t, handled, "a cached success is a duplicate re-dispatch; the body must not run again")
+		select {
+		case <-scheduled:
+			t.Fatal("a cached success must not dispatch a WorkItem")
+		default:
+		}
+		cached, ok := fresh.inflight.Peek(actorID)
+		require.True(t, ok)
+		assert.Same(t, call, cached, "the re-dispatch must not claim a fresh entry over the cached one")
+	})
+
+	t.Run("settled failed entry re-executes", func(t *testing.T) {
+		t.Parallel()
+		f, _, _ := newClaimHarness(t)
+		call, owner := f.inflight.Acquire(actorID)
+		require.True(t, owner)
+		f.settle(actorID, call, errors.New("publish failed"))
+
+		a := f.GetOrCreate(actorID).(*activity)
+		handled, err := redispatch(t, f, a)
+		require.NoError(t, err)
+		assert.False(t, handled, "a failed outcome releases the entry; recovery must re-run the body")
 	})
 
 	t.Run("stranded local entry falls through to the rescue path", func(t *testing.T) {
@@ -709,7 +798,7 @@ func Test_gateJanitorRedispatch(t *testing.T) {
 		time.Sleep(time.Millisecond)
 
 		a := f.GetOrCreate(actorID).(*activity)
-		handled, err := a.gateJanitorRedispatch(t.Context(), testInvocation())
+		handled, err := redispatch(t, f, a)
 		require.NoError(t, err)
 		assert.False(t, handled,
 			"a stranded entry must not ack: acking swallows both the re-dispatch and the escalation (janitor-livelock)")
@@ -721,7 +810,7 @@ func Test_gateJanitorRedispatch(t *testing.T) {
 		store.set(t, actorID, claim.Record{TaskKey: actorID, HeartbeatMs: time.Now().UnixMilli()})
 
 		a := f.GetOrCreate(actorID).(*activity)
-		handled, err := a.gateJanitorRedispatch(t.Context(), testInvocation())
+		handled, err := redispatch(t, f, a)
 		assert.True(t, handled)
 		require.ErrorIs(t, err, claim.ErrHeldElsewhere)
 	})
@@ -732,7 +821,7 @@ func Test_gateJanitorRedispatch(t *testing.T) {
 		store.set(t, actorID, claim.Record{TaskKey: actorID, HeartbeatMs: 0, Completed: true})
 
 		a := f.GetOrCreate(actorID).(*activity)
-		handled, err := a.gateJanitorRedispatch(t.Context(), testInvocation())
+		handled, err := redispatch(t, f, a)
 		assert.True(t, handled)
 		require.NoError(t, err)
 	})
@@ -752,7 +841,7 @@ func Test_gateJanitorRedispatch(t *testing.T) {
 		a := f.GetOrCreate(actorID).(*activity)
 
 		// First read opens the reader-side observation window and acks.
-		handled, err := a.gateJanitorRedispatch(t.Context(), testInvocation())
+		handled, err := redispatch(t, f, a)
 		assert.True(t, handled)
 		require.NoError(t, err)
 		_, ok := store.get(t, actorID)
@@ -761,7 +850,7 @@ func Test_gateJanitorRedispatch(t *testing.T) {
 		// Later reads past the grace still ack and reap the row; reads are
 		// paced so consecutive observations land inside the prune window.
 		assert.EventuallyWithT(t, func(col *assert.CollectT) {
-			handled, err = a.gateJanitorRedispatch(t.Context(), testInvocation())
+			handled, err = redispatch(t, f, a)
 			assert.True(col, handled)
 			if assert.NoError(col, err) {
 				_, ok := store.get(t, actorID)
@@ -775,9 +864,25 @@ func Test_gateJanitorRedispatch(t *testing.T) {
 		f, _, _ := newClaimHarness(t)
 
 		a := f.GetOrCreate(actorID).(*activity)
-		handled, err := a.gateJanitorRedispatch(t.Context(), testInvocation())
+		handled, err := redispatch(t, f, a)
 		require.NoError(t, err)
 		assert.False(t, handled)
+	})
+
+	t.Run("not gated without the janitor mark", func(t *testing.T) {
+		t.Parallel()
+		f, store, _ := newClaimHarness(t)
+		store.set(t, actorID, claim.Record{TaskKey: actorID, HeartbeatMs: time.Now().UnixMilli()})
+
+		data, err := proto.Marshal(testInvocation())
+		require.NoError(t, err)
+		a := f.GetOrCreate(actorID).(*activity)
+		_, err = a.handleInvoke(t.Context(), internalsv1pb.
+			NewInternalInvokeRequest(todo.ExecuteActivityMethod).
+			WithActor(f.actorType, actorID).
+			WithData(data))
+		require.NoError(t, err, "an initial dispatch never reads the claim record")
+		assert.Len(t, f.reminders.(*stubScheduler).snapshotCreates(), 1)
 	})
 }
 
@@ -798,8 +903,8 @@ func Test_driveActivity_escalationSuppressedByLiveClaim(t *testing.T) {
 
 		a := h.fact.GetOrCreate("wf::3").(*activity)
 		name := testActivityName
-		require.True(t, a.localDrive(testInvocation(), time.Now().Add(-time.Second), &name))
-		h.fact.driveWG.Wait()
+		require.True(t, a.localDrive(testInvocation(), &name))
+		h.fact.driveScope().Wait()
 		h.fact.detached.Wait()
 
 		assert.Empty(t, h.sched.snapshotCreates(), "a live claim owns delivery; no durable reminder may be planted")
@@ -817,11 +922,11 @@ func Test_driveActivity_escalationSuppressedByLiveClaim(t *testing.T) {
 
 		a := h.fact.GetOrCreate("wf::3").(*activity)
 		name := testActivityName
-		require.True(t, a.localDrive(testInvocation(), time.Now().Add(-time.Second), &name))
+		require.True(t, a.localDrive(testInvocation(), &name))
 		assert.Eventually(t, func() bool {
 			return len(h.sched.snapshotCreates()) == 1
 		}, time.Second*5, time.Millisecond*10, "without a live claim the durable-reminder escalation must be restored")
-		h.fact.driveWG.Wait()
+		h.fact.driveScope().Wait()
 		h.fact.detached.Wait()
 	})
 }

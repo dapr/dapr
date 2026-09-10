@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -124,8 +123,7 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 
 	// Update cached state
 	o.state = state
-	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
-	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
+	o.primeCachedState(state, o.getExecutionStartedEvent(state))
 
 	return state, o.ometa, nil
 }
@@ -140,8 +138,7 @@ func (o *orchestrator) tombstoneTamperedState(ctx context.Context, opts wfengine
 	}
 
 	o.state = failed
-	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, failed.CustomStatus, failed.History)
-	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(failed))
+	o.primeCachedState(failed, o.getExecutionStartedEvent(failed))
 
 	if o.eventSink != nil {
 		o.eventSink(o.ometa)
@@ -192,10 +189,6 @@ func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestat
 		o.invalidateCachedState()
 		return err
 	}
-	// A durable commit is the progress signal the wake-escalation and
-	// janitor-redispatch hysteresis keys on. Unlike lastActive it is never
-	// stamped by mere lock traffic or by the janitor fire itself.
-	o.lastProgress.Store(time.Now().UnixNano())
 	return nil
 }
 
@@ -203,6 +196,16 @@ func (o *orchestrator) invalidateCachedState() {
 	o.state = nil
 	o.rstate = nil
 	o.ometa = nil
+}
+
+// primeCachedState rebuilds the cached runtime-state and metadata views from
+// state. startEvent supplies the ExecutionStartedEvent the metadata falls back
+// to when the runtime state carries none of its own. The inverse is
+// invalidateCachedState. Callers set o.state themselves: a caller priming the
+// views for a state that is not yet durable must not cache it.
+func (o *orchestrator) primeCachedState(state *wfenginestate.State, startEvent *protos.ExecutionStartedEvent) {
+	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
+	o.ometa = o.ometaFromState(o.rstate, startEvent)
 }
 
 // confirmCachedState re-reads the metadata row before a message is acked off
@@ -316,8 +319,7 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 
 	// Update cached state
 	o.state = state
-	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
-	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
+	o.primeCachedState(state, o.getExecutionStartedEvent(state))
 	if o.eventSink != nil {
 		o.eventSink(o.ometa)
 	}

@@ -28,7 +28,6 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -68,7 +67,7 @@ type foldEntry struct {
 // it straight into history inside its single existing Multi, and only after
 // that commit is the sender acked. Everything else (external events,
 // duplicates, stalled or tombstoned instances, gate off at the factory)
-// falls back to the durable inbox path.
+// takes the durable inbox path; classifyEvent owns the decision.
 //
 // It manages the actor lock itself, mirroring InvokeStream: validation and
 // the pending append run under the lock, then the lock is RELEASED before
@@ -97,7 +96,7 @@ func (o *orchestrator) invokeAddEventFold(ctx context.Context, req *internalsv1p
 		return nil, err
 	}
 
-	entry, err := o.addWorkflowEventMaybeFold(ctx, &ev, senderFromMetadata(req.GetMetadata()))
+	entry, err := o.admitEvent(ctx, &ev, senderFromMetadata(req.GetMetadata()), true)
 	if err != nil {
 		return nil, err
 	}
@@ -133,73 +132,12 @@ func (o *orchestrator) invokeAddEventFold(ctx context.Context, req *internalsv1p
 	}, nil
 }
 
-// addWorkflowEventMaybeFold runs the AddWorkflowEvent validation chain under
-// the actor lock and either holds the event for folding (returning its
-// entry) or completes the durable inbox path inline (returning nil, nil).
-func (o *orchestrator) addWorkflowEventMaybeFold(ctx context.Context, e *backend.HistoryEvent, sender completionSender) (*foldEntry, error) {
-	state, _, err := o.loadInternalState(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Fold only sender-retried ACTIVITY completions against a healthy,
-	// running instance; everything else takes the durable inbox path, which
-	// owns all rejection semantics. Child completions must not fold: the
-	// child publishes while holding its own turn lock, which can deadlock
-	// against a parent turn dispatching back into the same child.
-	foldable := e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil
-	if state == nil || !foldable || state.HasTamperMarker() || o.rstate.GetStalled() != nil || len(state.History) == 0 {
-		// An empty history is never a healthy running instance: no activity
-		// was legitimately scheduled, and a held fold entry would pin its
-		// sender against a state the unstartable classification must settle.
-		return nil, o.addWorkflowEvent(ctx, e, sender)
-	}
-
-	// A TaskExecutionId mismatch marks a straggler from a previous execution
-	// (ids reset on ContinueAsNew); the inbox path owns straggler semantics.
-	if !o.foldExecutionMatches(e, state) {
-		log.Debugf("Workflow actor '%s': completion's task execution id does not match current history; taking the durable inbox path", o.actorID)
-		return nil, o.addWorkflowEvent(ctx, e, sender)
-	}
-
-	// Duplicates: same handling as the inbox path, but the pending set is a
-	// third place a completion can legitimately already live.
-	if dedup.IsDuplicateCompletion(e, state.History, state.Inbox) {
-		log.Debugf("Workflow actor '%s': dropping duplicate completion (history/inbox); re-driving the wake-up", o.actorID)
-		return nil, o.driveNewEvent(ctx, e, state)
-	}
-	if pending := o.foldPendingEntry(e); pending != nil {
-		// A retry of a completion that is still only held in memory must
-		// NOT be acked yet: the retry chain is the durability until the
-		// folding turn commits. Re-drive the wake (the retry usually means
-		// the prior arm was lost) and join the pending entry's resolution.
-		log.Debugf("Workflow actor '%s': joining retry to the pending fold entry; re-driving the wake-up", o.actorID)
-		if err := o.driveNewEvent(ctx, e, state); err != nil {
-			return nil, err
-		}
-		return pending, nil
-	}
-
-	// Same attestation gate as the inbox path: verify against the signed
-	// history and absorb the signer cert into the in-memory state, which the
-	// folding turn's commit persists alongside the event.
-	if err := o.verifyAndAbsorbAttestation(ctx, state, e); err != nil {
-		return nil, err
-	}
-
-	return o.foldSubmit(ctx, e, state), nil
-}
-
 // foldSubmit holds e for the next turn and arms the local drive. Called with
 // the actor lock held. The caller must wait on the returned entry after
 // releasing the lock.
 func (o *orchestrator) foldSubmit(ctx context.Context, e *backend.HistoryEvent, state *wfenginestate.State) *foldEntry {
 	entry := &foldEntry{event: e, gen: state.Generation, committed: make(chan struct{})}
 	o.foldPending = append(o.foldPending, entry)
-
-	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
-		o.activityResultAwaited.CompareAndSwap(true, false)
-	}
 
 	// Best effort: the sender is only acked after commit, so the pending
 	// window needs no durable cover of its own (the sender retry is the
@@ -213,18 +151,15 @@ func (o *orchestrator) foldSubmit(ctx context.Context, e *backend.HistoryEvent, 
 		return entry
 	}
 
-	dueTime := e.GetTimestamp().AsTime()
-	if len(state.History) > 0 {
-		dueTime = state.History[0].GetTimestamp().AsTime()
-	}
-	o.localDrive(events.EventReminderName(reminderPrefixNewEvent, e), dueTime, o.getExecutionStartedEvent(state).GetName())
+	dueTime := newEventDueTime(e, state)
+	o.localDrive(events.EventReminderName(reminderPrefixNewEvent, e), dueTime)
 	return entry
 }
 
 // testDropFoldDrives is a test-only fault injection: the first N fold
 // submissions skip arming their folding turn's local drive, reproducing an
 // arm lost to the wakeCtx cancellation window (a HaltAll racing the submit at
-// a placement handoff) or a failed drive whose escalation was suppressed. The
+// a placement handoff) or a failed drive that exhausted its retries. The
 // held completion is then committed by nothing unless its sender re-delivers
 // or the janitor drives a turn. Not a supported production knob.
 var testDropFoldDrives = sync.OnceValue(func() int64 {
@@ -300,14 +235,14 @@ func (o *orchestrator) foldTake(currentGen uint64) []*foldEntry {
 	return taken
 }
 
-// foldedEvents projects taken entries onto their events, for the payload
-// guard's merged-size accounting.
-func foldedEvents(taken []*foldEntry) []*backend.HistoryEvent {
-	if len(taken) == 0 {
+// foldedEvents projects entries onto their events, for the payload guard's
+// merged-size accounting and for the held-event views.
+func foldedEvents(entries []*foldEntry) []*backend.HistoryEvent {
+	if len(entries) == 0 {
 		return nil
 	}
-	events := make([]*backend.HistoryEvent, len(taken))
-	for i, p := range taken {
+	events := make([]*backend.HistoryEvent, len(entries))
+	for i, p := range entries {
 		events[i] = p.event
 	}
 	return events
@@ -345,14 +280,7 @@ func (o *orchestrator) foldExecutionMatches(e *backend.HistoryEvent, state *wfen
 // foldEvents returns the held events (for merging into a work item or for
 // pending-aware resolution checks). Lock held by caller.
 func (o *orchestrator) foldEvents() []*backend.HistoryEvent {
-	if len(o.foldPending) == 0 {
-		return nil
-	}
-	events := make([]*backend.HistoryEvent, len(o.foldPending))
-	for i, p := range o.foldPending {
-		events[i] = p.event
-	}
-	return events
+	return foldedEvents(o.foldPending)
 }
 
 // foldAck signals the taken entries' senders that the commit containing

@@ -15,9 +15,7 @@ package orchestrator
 
 import (
 	"context"
-
-	"google.golang.org/grpc/codes"
-	grpcstatus "google.golang.org/grpc/status"
+	"fmt"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -109,24 +107,17 @@ func (o *orchestrator) reapEscalatedCompletions(state *wfenginestate.State) {
 func (o *orchestrator) reapEscalatedReminder(appID string, id int32) {
 	diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusJanitorEscalationReaped)
 
-	activityActorType := o.activityActorType
-	if appID != "" && appID != o.appID {
-		activityActorType = o.actorTypeBuilder.Activity(appID)
-	}
+	activityActorType := o.activityActorTypeFor(appID)
 
 	o.detached.Go(func(rootCtx context.Context) {
-		cctx, cancel := context.WithTimeout(rootCtx, escalateTimeout)
+		cctx, cancel := context.WithTimeout(rootCtx, detachedReminderTimeout)
 		defer cancel()
-		if derr := o.reminders.Delete(cctx, &actorapi.DeleteReminderRequest{
+		if o.deleteReminderTolerant(cctx, &actorapi.DeleteReminderRequest{
 			Name:      todo.ActivityReminderName,
 			ActorType: activityActorType,
 			ActorID:   buildActivityActorID(o.actorID, id),
-		}); derr != nil {
-			if s, ok := grpcstatus.FromError(derr); !ok || s.Code() != codes.NotFound {
-				log.Debugf("Workflow actor '%s': failed to reap escalated run-activity reminder for resolved task %d (a warm-host fire is absorbed by the inflight cache): %v", o.actorID, id, derr)
-			}
-			return
+		}, fmt.Sprintf("escalated run-activity reminder for resolved task %d (a warm-host fire is absorbed by the inflight cache)", id)) {
+			log.Debugf("Workflow actor '%s': reaped escalated run-activity reminder for resolved task %d", o.actorID, id)
 		}
-		log.Debugf("Workflow actor '%s': reaped escalated run-activity reminder for resolved task %d", o.actorID, id)
 	})
 }

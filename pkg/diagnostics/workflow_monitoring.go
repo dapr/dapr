@@ -36,16 +36,13 @@ var (
 const (
 	StatusSuccess = "success"
 	StatusFailed  = "failed"
-	// Local-wake fast path outcomes beyond success/failed: a failed drive
-	// escalated to a durable reminder (or that escalation itself failed,
-	// leaving the janitor as the net), and a janitor fire that found and
-	// drove a pending inbox (the recovery event; ~0 in healthy steady state).
-	StatusEscalated       = "escalated"
-	StatusEscalateFailed  = "escalate_failed"
-	StatusEscalateSkipped = "escalate_skipped_shutdown"
-	// A failed drive against an instance that shows recent life was NOT
-	// escalated to a durable reminder: the janitor covers it within one
-	// period instead of the scheduler re-driving a merely-slow actor.
+	// Local-wake fast path outcomes beyond success/failed. The orchestrator
+	// no longer escalates a failed local drive to a durable reminder (the
+	// janitor is its sole durable backstop); the escalate_* statuses remain
+	// for the activity actor's escalation and for series continuity.
+	StatusEscalated          = "escalated"
+	StatusEscalateFailed     = "escalate_failed"
+	StatusEscalateSkipped    = "escalate_skipped_shutdown"
 	StatusEscalateSuppressed = "escalate_suppressed"
 	StatusJanitorRecovered   = "janitor_recovered"
 	// A janitor fire found completions held for folding with no live driver

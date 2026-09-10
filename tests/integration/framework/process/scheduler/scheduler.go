@@ -427,7 +427,8 @@ func (s *Scheduler) ETCDClient(t *testing.T, ctx context.Context) *clientv3.Clie
 
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
-		DialTimeout: 40 * time.Second,
+		DialTimeout: 5 * time.Second,
+		Context:     ctx,
 	})
 	require.NoError(t, err)
 
@@ -598,9 +599,11 @@ func (s *Scheduler) JobKeyCount(t *testing.T, ctx context.Context, substr string
 func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string) []string {
 	t.Helper()
 
+	// Bound by ctx: a dial that outlives the test panics the process.
 	resp, err := client.Etcd(t, clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
-		DialTimeout: 40 * time.Second,
+		DialTimeout: 5 * time.Second,
+		Context:     ctx,
 	}).ListAllKeys(ctx, prefix)
 	assert.NoError(t, err)
 
