@@ -470,6 +470,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			// missed delete self-deletes on its next fire against the
 			// terminal state, and purge sweeps it on any binary version.
 			o.deleteJanitor(ctx)
+			if o.fastPath && o.resumedMidRun {
+				o.sweepActivityReminders()
+			}
 		}
 		return todo.RunCompletedTrue, nil
 	}

@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -118,6 +119,28 @@ func (o *orchestrator) reapEscalatedReminder(appID string, id int32) {
 			ActorID:   buildActivityActorID(o.actorID, id),
 		}, fmt.Sprintf("escalated run-activity reminder for resolved task %d (a warm-host fire is absorbed by the inflight cache)", id)) {
 			log.Debugf("Workflow actor '%s': reaped escalated run-activity reminder for resolved task %d", o.actorID, id)
+		}
+	})
+}
+
+// sweepActivityReminders deletes every durable run-activity reminder of this
+// instance once it is terminal. An escalated reminder is otherwise reaped from
+// the escalating host's memory (reapEscalatedCompletions), which a placement
+// move of the workflow actor loses; a leaked one would fire after the terminal
+// commit and re-run a body whose task already resolved. Only an activation
+// that resumed a running instance can have lost that memory, so the steady
+// state pays nothing. Detached and best-effort: a missed sweep leaves a fire
+// whose completion is dropped as stale and whose ack deletes the reminder.
+func (o *orchestrator) sweepActivityReminders() {
+	o.detached.Go(func(rootCtx context.Context) {
+		ctx, cancel := context.WithTimeout(rootCtx, detachedReminderTimeout)
+		defer cancel()
+		if err := o.reminders.DeleteByActorID(ctx, &actorapi.DeleteRemindersByActorIDRequest{
+			ActorType:       o.activityActorType,
+			ActorID:         o.actorID + common.ActivityIDSeparator,
+			MatchIDAsPrefix: true,
+		}); err != nil {
+			log.Warnf("Workflow actor '%s': failed to sweep activity reminders of the terminal instance: %v", o.actorID, err)
 		}
 	})
 }

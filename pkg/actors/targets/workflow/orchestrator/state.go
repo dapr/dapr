@@ -84,6 +84,10 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	// events to violate, and tombstoning it appends a completion without a
 	// start event, masking the terminal status as PENDING. runWorkflow's
 	// unstartable classification fails it terminally instead.
+	if len(state.History) > 0 && !state.IsCompleted() {
+		o.resumedMidRun = true
+	}
+
 	if o.signer != nil && len(state.Inbox) > 0 && !state.IsCompleted() && !isUnstartableState(state) {
 		if filtered := filterValidInboxEvents(state); len(filtered) != len(state.Inbox) {
 			cause := fmt.Errorf("workflow actor '%s': inbox contained %d events that did not match signed history (state store tampering)",
