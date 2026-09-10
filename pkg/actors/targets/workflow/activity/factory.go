@@ -191,10 +191,13 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 
 	drives, driveCancel := newDriveScope()
 
-	claimRetention := common.EnvDurationOr(
+	// A completed claim record must outlive the redispatch a janitor fire
+	// can have in flight at the moment of completion, so retention is at
+	// least one janitor period.
+	claimRetention := max(common.EnvDurationOr(
 		"DAPR_WORKFLOW_ACTIVITY_CLAIM_RETENTION",
 		InflightCacheTTL,
-	)
+	), common.JanitorPeriod())
 
 	return &factory{
 		appID:            opts.AppID,
