@@ -158,6 +158,7 @@ func (h *churn) Run(t *testing.T, ctx context.Context) {
 
 	// Churners open a stream, ack a couple of orders and vanish without
 	// closing cleanly, so some die mid round and mid Send.
+	client := h.sched.Client(t, ctx)
 	var wg sync.WaitGroup
 	for c := range 6 {
 		wg.Go(func() {
@@ -166,7 +167,7 @@ func (h *churn) Run(t *testing.T, ctx context.Context) {
 				// disseminate timeout, stacking iterations toward the suite's
 				// per test kill.
 				cctx, cancel := context.WithTimeout(ctx, time.Second*2)
-				stream, err := h.sched.Client(t, cctx).ReportActorTypes(cctx)
+				stream, err := client.ReportActorTypes(cctx)
 				if err != nil {
 					cancel()
 					continue

@@ -15,7 +15,6 @@ package placement
 
 import (
 	"context"
-	"runtime"
 	"testing"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -43,9 +43,7 @@ type restart struct {
 }
 
 func (r *restart) Setup(t *testing.T) []framework.Option {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping test on windows which relies on unix process signals")
-	}
+	os.SkipWindows(t)
 
 	r.sched = scheduler.New(t, scheduler.WithPlacementEnabled(true))
 	r.schedBack = scheduler.New(t,

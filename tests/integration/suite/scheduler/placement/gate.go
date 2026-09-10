@@ -50,13 +50,18 @@ func (g *gate) Setup(t *testing.T) []framework.Option {
 func (g *gate) Run(t *testing.T, ctx context.Context) {
 	g.sched.WaitUntilRunning(t, ctx)
 
+	client := g.sched.Client(t, ctx)
 	leader := func() bool {
-		stream, err := g.sched.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
-		require.NoError(t, err)
+		stream, err := client.WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+		if err != nil {
+			return false
+		}
 		//nolint:errcheck
 		defer stream.CloseSend()
 		resp, err := stream.Recv()
-		require.NoError(t, err)
+		if err != nil {
+			return false
+		}
 		for _, host := range resp.GetHosts() {
 			if host.GetLeader() {
 				return true
