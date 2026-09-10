@@ -163,5 +163,23 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 		assert.Equal(t, "ERR_LOCK_STORE_NOT_CONFIGURED", data["errorCode"])
 		assert.Equal(t, "lock store is not configured", data["message"])
+
+		details, ok := data["details"].([]any)
+		require.True(t, ok)
+		require.NotEmpty(t, details)
+
+		var errInfo map[string]any
+		for _, d := range details {
+			dm, ok := d.(map[string]any)
+			if !ok {
+				continue
+			}
+			if dm["@type"] == ErrInfoType {
+				errInfo = dm
+				break
+			}
+		}
+		require.NotNil(t, errInfo, "ErrorInfo detail not found")
+		assert.Equal(t, "ERR_LOCK_STORE_NOT_CONFIGURED", errInfo["reason"])
 	})
 }
