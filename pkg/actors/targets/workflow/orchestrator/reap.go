@@ -43,7 +43,7 @@ func (o *orchestrator) reapResolvedEscalation(ctx context.Context, e *backend.Hi
 		resolved = state == nil || runtimestate.IsCompleted(o.rstate)
 		if !resolved {
 			resolved = true
-			for _, u := range unresolvedScheduledTasks(state, o.foldEvents()) {
+			for _, u := range unresolvedScheduledTasks(state, foldedEvents(o.foldPending)) {
 				if u.GetEventId() == e.GetEventId() {
 					resolved = false
 					break
@@ -85,7 +85,7 @@ func (o *orchestrator) reapEscalatedCompletions(state *wfenginestate.State) {
 		return
 	}
 	unresolved := make(map[int32]struct{})
-	for _, u := range unresolvedScheduledTasks(state, o.foldEvents()) {
+	for _, u := range unresolvedScheduledTasks(state, foldedEvents(o.foldPending)) {
 		unresolved[u.GetEventId()] = struct{}{}
 	}
 	for id, e := range o.janitorEscalated {
@@ -107,7 +107,10 @@ func (o *orchestrator) reapEscalatedCompletions(state *wfenginestate.State) {
 func (o *orchestrator) reapEscalatedReminder(appID string, id int32) {
 	diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusJanitorEscalationReaped)
 
-	activityActorType := o.activityActorTypeFor(appID)
+	activityActorType := o.activityActorType
+	if o.isRemoteApp(appID) {
+		activityActorType = o.actorTypeBuilder.Activity(appID)
+	}
 
 	o.detached.Go(func(rootCtx context.Context) {
 		cctx, cancel := context.WithTimeout(rootCtx, detachedReminderTimeout)

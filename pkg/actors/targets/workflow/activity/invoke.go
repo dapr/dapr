@@ -94,11 +94,8 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 	return nil, a.createActivityReminder(ctx, a.actorID, invocation, dueTime, activityName)
 }
 
-// metaFlagged reports whether the dispatching orchestrator set the given
-// boolean marker on this Execute call: MetadataActivityJanitorRedispatch marks
-// a re-dispatch of an unresolved task, MetadataActivityLocalDrive certifies
-// that a janitor is watching this activity (without it the durable reminder
-// must be kept: the orchestrator may be an older or gate-off binary).
+// metaFlagged reports whether the orchestrator set key to "true" on this
+// Execute call.
 func metaFlagged(req *internalsv1pb.InternalInvokeRequest, key string) bool {
 	v, ok := req.GetMetadata()[key]
 	return ok && len(v.GetValues()) > 0 && v.GetValues()[0] == "true"

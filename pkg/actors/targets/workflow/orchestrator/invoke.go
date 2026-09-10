@@ -249,7 +249,7 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 				diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusJanitorFoldRecovered)
 				return o.runWorkflowFromReminder(ctx, reminder)
 			}
-			if unresolved := unresolvedScheduledTasks(state, o.foldEvents()); len(unresolved) > 0 {
+			if unresolved := unresolvedScheduledTasks(state, foldedEvents(o.foldPending)); len(unresolved) > 0 {
 				o.redispatchActivities(ctx, state, unresolved)
 			}
 		}

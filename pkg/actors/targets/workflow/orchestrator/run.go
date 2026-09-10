@@ -140,9 +140,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	wi.IncomingHistory = state.IncomingHistory
 
 	workflowName := o.getExecutionStartedEvent(state).GetName()
-	if done, committed, c, perr := o.guardPayloadSize(ctx, state, rs, folded, workflowName); done {
+	if done, committed, perr := o.guardPayloadSize(ctx, state, rs, folded, workflowName); done {
 		foldedCommitted = committed
-		return c, perr
+		return todo.RunCompletedFalse, perr
 	}
 	// Executing workflow code is a one-way operation. We must wait for the app code to report its completion, which
 	// will trigger this callback channel.
@@ -397,10 +397,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 				protos.StalledReason_PAYLOAD_SIZE_EXCEEDED, dispatchErr.Error())
 		}
 		if len(state.History) == 0 && (hasRemoteTasks(pendingTasks) || hasRemoteMessages(createWorkflows)) {
-			c, perr := o.savePartialDispatch(ctx, state, rs, activityResult, createResult, dispatchErr)
 			cacheSettled = true
 			diagnoseStatus = diag.StatusRecoverable
-			return c, perr
+			return todo.RunCompletedFalse, o.savePartialDispatch(ctx, state, rs, activityResult, createResult, dispatchErr)
 		}
 
 		diagnoseStatus = diag.StatusRecoverable
@@ -677,7 +676,7 @@ func (o *orchestrator) classifyStartability(ctx context.Context, state *wfengine
 // failed: dispatched events stay in history, failed ones are withheld, and
 // the inbox is kept so the existing reminder retries. The caller owns the
 // cache-settled and diagnostic bookkeeping its deferred closures read.
-func (o *orchestrator) savePartialDispatch(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, activityResult, createResult messages.DispatchResult, dispatchErr error) (todo.RunCompleted, error) {
+func (o *orchestrator) savePartialDispatch(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, activityResult, createResult messages.DispatchResult, dispatchErr error) error {
 	// Save state without the events that failed to dispatch so the
 	// workflow transitions to RUNNING. Successfully dispatched items
 	// keep their events in history so they are not re-dispatched on
@@ -705,22 +704,21 @@ func (o *orchestrator) savePartialDispatch(ctx context.Context, state *wfengines
 	rs.NewEvents = filtered
 	state.ApplyRuntimeStateChanges(rs)
 	rs.NewEvents = origNewEvents
-	saveErr := o.signAndSaveState(ctx, state)
-	if saveErr != nil {
-		return todo.RunCompletedFalse, saveErr
+	if saveErr := o.signAndSaveState(ctx, state); saveErr != nil {
+		return saveErr
 	}
 	o.reapEscalatedCompletions(state)
-	return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
+	return wferrors.NewRecoverable(dispatchErr)
 }
 
 // guardPayloadSize stalls a turn whose merged payload exceeds the limit,
 // persisting taken completions first so the stall stays recoverable. The
 // second return says whether they were committed, which the caller's
 // deferred ack or nack depends on.
-func (o *orchestrator) guardPayloadSize(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, folded []*foldEntry, workflowName string) (bool, bool, todo.RunCompleted, error) {
+func (o *orchestrator) guardPayloadSize(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, folded []*foldEntry, workflowName string) (bool, bool, error) {
 	reason, description, oversize := o.workflowPayloadOversize(ctx, state, foldedEvents(folded), workflowName)
 	if !oversize {
-		return false, false, todo.RunCompletedFalse, nil
+		return false, false, nil
 	}
 	var committed bool
 	// Persist taken completions into the durable inbox before stalling:
@@ -735,14 +733,14 @@ func (o *orchestrator) guardPayloadSize(ctx context.Context, state *wfenginestat
 			state.AddToInbox(f.event)
 		}
 		if serr := o.signAndSaveState(ctx, state); serr != nil {
-			return true, false, todo.RunCompletedFalse, serr
+			return true, false, serr
 		}
 		if jerr := o.ensureJanitor(ctx, state); jerr != nil {
-			return true, false, todo.RunCompletedFalse, jerr
+			return true, false, jerr
 		}
 		committed = true
 	}
-	return true, committed, todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs, reason, description)
+	return true, committed, o.stallWorkflow(ctx, state, rs, reason, description)
 }
 
 // executionStatusForRuntimeStatus maps a terminal workflow runtime status to
@@ -904,18 +902,27 @@ func staleTurnDuplicate(state *wfenginestate.State, rs *backend.WorkflowRuntimeS
 	return "", 0, false
 }
 
-// stripUnmatchedResolutions removes from rs.NewEvents any task or child
-// workflow resolution event that resolves nothing: no matching TaskScheduled
-// or ChildWorkflowInstanceCreated with the same event ID exists in persisted
-// history or among this execution's new events. The app-side SDK silently
-// ignores such events, so without this they would be persisted into history
-// with no effect, where they poison dedup.IsDuplicateCompletion for a later
-// operation that legitimately reuses the same event ID (the ID sequence resets
-// on ContinueAsNew, so a straggler completion from an abandoned
-// previous-generation child collides with the current generation's
-// operations). Timer events are not stripped: stale timer firings are already
+// stripUnmatchedResolutions removes from rs.NewEvents any child workflow
+// resolution event that resolves nothing: no matching
+// ChildWorkflowInstanceCreated with the same event ID exists in persisted
+// history or among this execution's new events. Such an event would be
+// persisted with no effect, where it poisons dedup.IsDuplicateCompletion for
+// a later operation that legitimately reuses the same event ID: the ID
+// sequence resets on ContinueAsNew, so a straggler completion from an
+// abandoned previous-generation child collides with the current generation's
+// operations. Timer events are not stripped: stale timer firings are already
 // rejected by the generation check on the timer reminder path.
+//
+// Task resolutions are only stripped once the ID sequence has actually reset,
+// which is what makes a straggler possible. Before that an unmatched task
+// resolution is an early completion: the SDK buffers it against work this
+// execution has not re-scheduled yet and suppresses the matching action, so
+// no TaskScheduled is emitted for it, and it matches on the next replay.
+// Dropping it loses the completion, and the replay that follows fails the
+// workflow as non-deterministic.
 func (o *orchestrator) stripUnmatchedResolutions(state *wfenginestate.State, rs *backend.WorkflowRuntimeState) {
+	tasksMayStraggle := state.Generation > 0
+
 	scheduledTaskIDs := make(map[int32]struct{})
 	createdChildIDs := make(map[int32]struct{})
 	index := func(events []*backend.HistoryEvent) {
@@ -934,9 +941,15 @@ func (o *orchestrator) stripUnmatchedResolutions(state *wfenginestate.State, rs 
 	matched := func(e *backend.HistoryEvent) bool {
 		switch {
 		case e.GetTaskCompleted() != nil:
+			if !tasksMayStraggle {
+				return true
+			}
 			_, ok := scheduledTaskIDs[e.GetTaskCompleted().GetTaskScheduledId()]
 			return ok
 		case e.GetTaskFailed() != nil:
+			if !tasksMayStraggle {
+				return true
+			}
 			_, ok := scheduledTaskIDs[e.GetTaskFailed().GetTaskScheduledId()]
 			return ok
 		case e.GetChildWorkflowInstanceCompleted() != nil:

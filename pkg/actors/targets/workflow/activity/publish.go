@@ -33,10 +33,9 @@ import (
 	"github.com/dapr/durabletask-go/api"
 )
 
-// detachedPublishTimeout bounds a result publish. The publish context is the
-// caller's minus its cancellation (see publishContext), which also strips the
-// caller's deadline, so a fresh one keeps a misbehaving downstream from
-// blocking the runner indefinitely.
+// detachedPublishTimeout bounds a result publish. Its context is the caller's
+// minus cancellation, which also strips the caller's deadline, so a fresh one
+// keeps a misbehaving downstream from blocking the runner indefinitely.
 const detachedPublishTimeout = 30 * time.Second
 
 // errPublishAbandoned settles an execution whose result can no longer be
@@ -58,7 +57,7 @@ func (f *factory) watchAndPublish(origCtx context.Context, ex *execution) {
 	started := f.detached.Go(func(ctx context.Context) {
 		select {
 		case completed := <-ex.callback:
-			pubCtx, cancel := publishContext(origCtx)
+			pubCtx, cancel := context.WithTimeout(context.WithoutCancel(origCtx), detachedPublishTimeout)
 			defer cancel()
 			// There is no caller left to return the outcome to: it is
 			// recorded in metrics and carried on the settled call, which is
@@ -84,7 +83,7 @@ var cancelBeforePublishForTest = testBudget("DAPR_WORKFLOW_TEST_CANCEL_BEFORE_PU
 // unresolved task on the next owner. Settling unblocks parked followers into
 // their retry chains rather than leaving them on a call nothing will report.
 func (f *factory) abandonPublish(ex *execution) {
-	log.Warnf("Activity actor '%s': abandoning the result publish for '%s' at shutdown; the work item is re-dispatched on the next owner", ex.actorID, ex.name)
+	log.Warnf("Activity actor '%s': abandoning the result publish for '%s' at shutdown; the work item is re-dispatched on the next owner", ex.actorID, activityReminderName)
 	ex.unregister()
 	f.settle(ex.key, ex.call, errPublishAbandoned)
 }
@@ -95,15 +94,11 @@ func (f *factory) abandonPublish(ex *execution) {
 // drain, none of which lose the result, and re-running the body for it is
 // avoidable waste (the orchestrator dedups the duplicate, but the app observes
 // every extra run). So it runs on the runtime-lifetime runner with a context
-// of its own, like watchAndPublish. The owner reports the publish outcome
-// while its ctx lives and otherwise returns ctx.Err(); the publish carries on
-// and settles the inflight entry, which is what a retry arriving meanwhile
-// reads. A publish that fails settles with its error and releases the entry,
-// so recovery re-runs the activity.
+// of its own, like watchAndPublish.
 func (f *factory) publishOwned(ctx context.Context, ex *execution, completed bool) error {
 	done := make(chan error, 1)
 	started := f.detached.Go(func(context.Context) {
-		pubCtx, cancel := publishContext(ctx)
+		pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachedPublishTimeout)
 		defer cancel()
 		done <- f.publishAndSettle(pubCtx, ex, completed)
 	})
@@ -117,13 +112,6 @@ func (f *factory) publishOwned(ctx context.Context, ex *execution, completed boo
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-}
-
-// publishContext derives the context a result publish runs under from the
-// owner's: cancellation stripped (trace context and values kept), bounded by
-// detachedPublishTimeout.
-func publishContext(ownerCtx context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.WithoutCancel(ownerCtx), detachedPublishTimeout)
 }
 
 // publishAndSettle posts one activity outcome back to the parent workflow and
@@ -159,7 +147,7 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 		executionStatus = diag.StatusRecoverable
 		return wferrors.NewRecoverable(todo.ErrExecutionAborted)
 	}
-	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", ex.actorID, ex.wi.InstanceID, ex.name)
+	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", ex.actorID, ex.wi.InstanceID, activityReminderName)
 
 	// Attach an attestation so the parent workflow can cryptographically
 	// verify this activity's identity, input, and output. No-op when

@@ -143,15 +143,6 @@ func (o *orchestrator) childWorkflowActorType(child childRef) string {
 	return o.actorType
 }
 
-// activityActorTypeFor returns the activity actor type hosting a task
-// targeted at appID: the local type unless appID names another app.
-func (o *orchestrator) activityActorTypeFor(appID string) string {
-	if o.isRemoteApp(appID) {
-		return o.actorTypeBuilder.Activity(appID)
-	}
-	return o.activityActorType
-}
-
 // collectChildren scans history for ChildWorkflowInstanceCreated events,
 // preserving each child's hosting app id (from the event's Router) so the
 // recursive purge can dispatch cross-app correctly.

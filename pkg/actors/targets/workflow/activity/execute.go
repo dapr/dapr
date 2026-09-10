@@ -72,7 +72,7 @@ func (a *activity) executeActivity(ctx context.Context, reminder *actorapi.Remin
 					return gerr
 				}
 			}
-			return a.runOwned(ctx, key, call, reminder.Name, activityName, workflowID, taskEvent, invocation)
+			return a.runOwned(ctx, key, call, activityName, workflowID, taskEvent, invocation)
 		}
 
 		// Another arrival owns this scheduling (in flight, or its outcome is

@@ -135,11 +135,7 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 	// firing twice during pod migration) would pin the workflow in a replay/spin
 	// loop.
 	if dedup.IsDuplicateCompletion(e, state.History, state.Inbox) {
-		if hold {
-			log.Debugf("Workflow actor '%s': dropping duplicate completion (history/inbox); re-driving the wake-up", o.actorID)
-		} else {
-			log.Debugf("Workflow actor '%s': dropping duplicate completion event already present in history/inbox; re-driving the wake-up so the inbox row is not stranded", o.actorID)
-		}
+		log.Debugf("Workflow actor '%s': dropping duplicate completion already in history/inbox; re-driving the wake-up", o.actorID)
 		return admission{outcome: admitDuplicate}
 	}
 
@@ -178,11 +174,10 @@ func (o *orchestrator) admitEvent(ctx context.Context, e *backend.HistoryEvent, 
 	}
 
 	a := o.classifyEvent(e, state, sender, canFold)
-	switch a.outcome {
-	case admitDrop:
-		if a.err != nil {
-			return nil, a.err
-		}
+	if a.err != nil {
+		return nil, a.err
+	}
+	if a.reason != "" {
 		// Acknowledge a child completion this workflow will never consume
 		// only after confirming the cache it was judged on is current: the
 		// child clears its pending notification on this ack.
@@ -193,8 +188,8 @@ func (o *orchestrator) admitEvent(ctx context.Context, e *backend.HistoryEvent, 
 		}
 		log.Debugf("Workflow actor '%s': dropping child completion from '%s': %s", o.actorID, sender.instanceID, a.reason)
 		return nil, nil
-
-	case admitDuplicate:
+	}
+	if a.outcome == admitDuplicate {
 		if err := o.driveNewEvent(ctx, e, state); err != nil {
 			return nil, err
 		}

@@ -277,12 +277,6 @@ func (o *orchestrator) foldExecutionMatches(e *backend.HistoryEvent, state *wfen
 	return scheduled.GetTaskExecutionId() == execID
 }
 
-// foldEvents returns the held events (for merging into a work item or for
-// pending-aware resolution checks). Lock held by caller.
-func (o *orchestrator) foldEvents() []*backend.HistoryEvent {
-	return foldedEvents(o.foldPending)
-}
-
 // foldAck signals the taken entries' senders that the commit containing
 // their event succeeded, and records the folded outcome. The record lives
 // here, on the commit side, not with a waiter: a sender whose invocation

@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -177,6 +178,9 @@ func (o *orchestrator) notifyStreams() {
 	}
 }
 
+// commitTimeout bounds a state commit that has outlived its caller's context.
+const commitTimeout = 30 * time.Second
+
 // signAndSaveState signs any newly added history events and then persists the
 // state. This is the single entry point for all state persistence; callers
 // must never call saveInternalState directly.
@@ -242,7 +246,17 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 
 	log.Debugf("Workflow actor '%s': saving %d keys to actor state store", o.actorID, len(req.Operations))
 
-	if err = o.actorState.TransactionalStateOperation(ctx, true, req, false); err != nil {
+	// The commit must not be abandoned because the caller's context died. A
+	// turn dispatches its activities BEFORE it saves, so a host-level cancel
+	// (worker disconnect, placement churn, HaltAll) landing between the two
+	// would leave the side effects done and the history unwritten, which
+	// replays as a non-deterministic workflow. Safe because the Multi is
+	// ETag-conditional on the metadata row: a peer that took this actor and
+	// wrote first still wins, with an ETagMismatch handled below.
+	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), commitTimeout)
+	defer cancel()
+
+	if err = o.actorState.TransactionalStateOperation(cctx, true, req, false); err != nil {
 		// ETagMismatch means a peer host wrote to this workflow's metadata
 		// row underneath us between our load and this save. The whole Multi
 		// rolled back atomically, so the durable state still reflects the

@@ -254,11 +254,7 @@ func (f *factory) HaltAll(ctx context.Context) error {
 	// an activity actor lock aborts on the cancelled context, and one
 	// mid-execution hands its in-flight WorkItem to the runtime-scoped
 	// publish watcher before returning. Drain them only after the
-	// deactivation loop so neither side deadlocks.
-	//
-	// HaltAll also fires on placement disconnection, after which this factory
-	// keeps serving new activations: install a fresh drive scope, so the fast
-	// path survives the churn, and retire the old one.
+	// deactivation loop so neither side deadlocks (see the drives field).
 	f.driveLock.Lock()
 	drives, cancel := f.drives, f.driveCancel
 	f.drives, f.driveCancel = newDriveScope()

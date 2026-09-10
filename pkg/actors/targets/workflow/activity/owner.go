@@ -46,7 +46,6 @@ type execution struct {
 	unregister   func()
 	callback     chan bool
 	wi           *backend.ActivityWorkItem
-	name         string
 	activityName string
 	workflowID   string
 
@@ -59,11 +58,9 @@ type execution struct {
 // Finish comes FIRST and the release second: the reverse order opens a window
 // in which a new arrival becomes owner of a fresh call while followers are
 // still parked on this one, and so dispatches a second work item for the same
-// task. On success the outcome is cached for InflightCacheTTL so a cron retry
-// that arrived while the owner ran becomes a follower and acks SUCCESS
-// without dispatching a duplicate WorkItem; on error the entry is released
-// immediately so later retries become fresh owners and can re-attempt rather
-// than reading the cached failure for the full TTL window.
+// task. A success is cached for InflightCacheTTL so a retry that arrived while
+// the owner ran acks as a follower; a failure is released at once so later
+// retries contend fresh instead of reading it for the full TTL.
 func (f *factory) settle(key string, call *inflight.Call, err error) {
 	call.Finish(err)
 	if err == nil {
@@ -80,7 +77,7 @@ func (f *factory) settle(key string, call *inflight.Call, err error) {
 // ctx cancellation it hands off to the factory's detached watcher so the
 // WorkItem already in the durabletask queue still has its result published,
 // and returns ctx.Err() so the caller can surface the cancellation.
-func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call, name, activityName, workflowID string, taskEvent *backend.HistoryEvent, invocation *protos.ActivityInvocation) error {
+func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call, activityName, workflowID string, taskEvent *backend.HistoryEvent, invocation *protos.ActivityInvocation) error {
 	// The app reports completion through this callback channel; there is no
 	// execution timeout, activities may run for hours.
 	callback := make(chan bool, 1)
@@ -90,7 +87,6 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 		call:         call,
 		unregister:   func() {},
 		callback:     callback,
-		name:         name,
 		activityName: activityName,
 		workflowID:   workflowID,
 		wi: &backend.ActivityWorkItem{
@@ -105,7 +101,7 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 		ex.unregister = a.registerResolver(workflowID, taskEvent.GetEventId(), func() { call.BeginResolve() })
 	}
 
-	log.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", a.actorID, name, ex.wi.InstanceID)
+	log.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", a.actorID, activityReminderName, ex.wi.InstanceID)
 	start := time.Now()
 	err := a.scheduler(ctx, ex.wi)
 	elapsed := diag.ElapsedSince(start)

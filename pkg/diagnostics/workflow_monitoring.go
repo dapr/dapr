@@ -36,15 +36,12 @@ var (
 const (
 	StatusSuccess = "success"
 	StatusFailed  = "failed"
-	// Local-wake fast path outcomes beyond success/failed. The orchestrator
-	// no longer escalates a failed local drive to a durable reminder (the
-	// janitor is its sole durable backstop); the escalate_* statuses remain
-	// for the activity actor's escalation and for series continuity.
-	StatusEscalated          = "escalated"
-	StatusEscalateFailed     = "escalate_failed"
-	StatusEscalateSkipped    = "escalate_skipped_shutdown"
-	StatusEscalateSuppressed = "escalate_suppressed"
-	StatusJanitorRecovered   = "janitor_recovered"
+	// The activity actor's escalation of a lost local drive to its durable
+	// run-activity reminder.
+	StatusEscalated        = "escalated"
+	StatusEscalateFailed   = "escalate_failed"
+	StatusEscalateSkipped  = "escalate_skipped_shutdown"
+	StatusJanitorRecovered = "janitor_recovered"
 	// A janitor fire found completions held for folding with no live driver
 	// (their arming drive was lost and their senders stopped re-delivering,
 	// e.g. died with their pod at a placement handoff) and drove a turn to
