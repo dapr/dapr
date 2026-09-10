@@ -902,29 +902,18 @@ func staleTurnDuplicate(state *wfenginestate.State, rs *backend.WorkflowRuntimeS
 	return "", 0, false
 }
 
-// stripUnmatchedResolutions removes from rs.NewEvents any child workflow
-// resolution event that resolves nothing: no matching
-// ChildWorkflowInstanceCreated with the same event ID exists in persisted
-// history or among this execution's new events. Such an event would be
-// persisted with no effect, where it poisons dedup.IsDuplicateCompletion for
-// a later operation that legitimately reuses the same event ID: the ID
-// sequence resets on ContinueAsNew, so a straggler completion from an
-// abandoned previous-generation child collides with the current generation's
-// operations. Timer events are not stripped: stale timer firings are already
+// stripUnmatchedResolutions removes from rs.NewEvents any task or child
+// workflow resolution event that resolves nothing: no matching TaskScheduled
+// or ChildWorkflowInstanceCreated with the same event ID exists in persisted
+// history or among this execution's new events. The app-side SDK silently
+// ignores such events, so without this they would be persisted into history
+// with no effect, where they poison dedup.IsDuplicateCompletion for a later
+// operation that legitimately reuses the same event ID (the ID sequence resets
+// on ContinueAsNew, so a straggler completion from an abandoned
+// previous-generation child collides with the current generation's
+// operations). Timer events are not stripped: stale timer firings are already
 // rejected by the generation check on the timer reminder path.
-//
-// Task resolutions are only stripped once the ID sequence has actually reset,
-// which is what makes a straggler possible. Before that an unmatched task
-// resolution is an early completion: the SDK buffers it against work this
-// execution has not re-scheduled yet and suppresses the matching action, so
-// no TaskScheduled is emitted for it, and it matches on the next replay.
-// Dropping it loses the completion, and the replay that follows fails the
-// workflow as non-deterministic.
 func (o *orchestrator) stripUnmatchedResolutions(state *wfenginestate.State, rs *backend.WorkflowRuntimeState) {
-	// The first generation is 1 (NewState), and ContinueAsNew increments it;
-	// a state written before the field existed reads 0. Either way, no reset.
-	tasksMayStraggle := state.Generation > 1
-
 	scheduledTaskIDs := make(map[int32]struct{})
 	createdChildIDs := make(map[int32]struct{})
 	index := func(events []*backend.HistoryEvent) {
@@ -943,15 +932,9 @@ func (o *orchestrator) stripUnmatchedResolutions(state *wfenginestate.State, rs 
 	matched := func(e *backend.HistoryEvent) bool {
 		switch {
 		case e.GetTaskCompleted() != nil:
-			if !tasksMayStraggle {
-				return true
-			}
 			_, ok := scheduledTaskIDs[e.GetTaskCompleted().GetTaskScheduledId()]
 			return ok
 		case e.GetTaskFailed() != nil:
-			if !tasksMayStraggle {
-				return true
-			}
 			_, ok := scheduledTaskIDs[e.GetTaskFailed().GetTaskScheduledId()]
 			return ok
 		case e.GetChildWorkflowInstanceCompleted() != nil:
