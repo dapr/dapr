@@ -26,6 +26,7 @@ type entityConfig struct {
 	Entities                []string                 `json:"entities,omitempty"`
 	ActorIdleTimeout        *string                  `json:"actorIdleTimeout,omitempty"`
 	DrainOngoingCallTimeout *string                  `json:"drainOngoingCallTimeout,omitempty"`
+	DrainRebalancedActors   *bool                    `json:"drainRebalancedActors,omitempty"`
 	Reentrancy              *reentrancyEntitiyConfig `json:"reentrancy,omitempty"`
 }
 
@@ -46,6 +47,12 @@ func WithEntityConfigActorIdleTimeout(timeout time.Duration) EntityConfig {
 func WithEntityConfigDrainOngoingCallTimeout(timeout time.Duration) EntityConfig {
 	return func(e *entityConfig) {
 		e.DrainOngoingCallTimeout = new(timeout.String())
+	}
+}
+
+func WithEntityConfigDrainRebalancedActors(drain bool) EntityConfig {
+	return func(e *entityConfig) {
+		e.DrainRebalancedActors = new(drain)
 	}
 }
 

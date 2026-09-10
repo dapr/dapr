@@ -435,7 +435,7 @@ func (a *actors) RegisterHosted(ctx context.Context, cfg hostconfig.Config) erro
 
 	entityConfigs := make(map[string]api.EntityConfig)
 	for _, entityConfg := range cfg.EntityConfigs {
-		config := api.TranslateEntityConfig(entityConfg, a.disseminationTimeout)
+		config := api.TranslateEntityConfig(entityConfg)
 		for _, entity := range entityConfg.Entities {
 			var found bool
 			if slices.Contains(cfg.HostedActorTypes, entity) {
@@ -456,7 +456,6 @@ func (a *actors) RegisterHosted(ctx context.Context, cfg hostconfig.Config) erro
 		if err != nil {
 			return fmt.Errorf("failed to parse drain ongoing call timeout: %s", err)
 		}
-		drainOngoingCallTimeout = api.ClampDrainOngoingCallTimeout(drainOngoingCallTimeout, a.disseminationTimeout, "global config")
 	}
 
 	idleTimeout := api.DefaultIdleTimeout
@@ -510,17 +509,20 @@ func (a *actors) RegisterHosted(ctx context.Context, cfg hostconfig.Config) erro
 	// complete before being forcefully cancelled.
 	a.placement.SetDrainOngoingCallTimeout(cfg.DrainRebalancedActors, &drainOngoingCallTimeout)
 
-	var entityDrainTimeouts map[string]time.Duration
+	var entityDrainConfigs map[string]api.EntityDrainConfig
 	for actorType, c := range entityConfigs {
-		if c.DrainOngoingCallTimeout == nil {
+		if c.DrainOngoingCallTimeout == nil && c.DrainRebalancedActors == nil {
 			continue
 		}
-		if entityDrainTimeouts == nil {
-			entityDrainTimeouts = make(map[string]time.Duration)
+		if entityDrainConfigs == nil {
+			entityDrainConfigs = make(map[string]api.EntityDrainConfig)
 		}
-		entityDrainTimeouts[actorType] = *c.DrainOngoingCallTimeout
+		entityDrainConfigs[actorType] = api.EntityDrainConfig{
+			Timeout:               c.DrainOngoingCallTimeout,
+			DrainRebalancedActors: c.DrainRebalancedActors,
+		}
 	}
-	a.placement.SetEntityDrainOngoingCallTimeouts(entityDrainTimeouts)
+	a.placement.SetEntityDrainConfigs(entityDrainConfigs)
 
 	return nil
 }

@@ -25,73 +25,72 @@ import (
 
 func TestClampDrainOngoingCallTimeout(t *testing.T) {
 	tests := map[string]struct {
-		drain  time.Duration
-		dissem time.Duration
-		want   time.Duration
+		drain       time.Duration
+		budget      time.Duration
+		want        time.Duration
+		wantClamped bool
 	}{
-		"drain below dissemination is unchanged": {
-			drain:  10 * time.Second,
-			dissem: 30 * time.Second,
-			want:   10 * time.Second,
+		"drain below budget is unchanged": {
+			drain:       10 * time.Second,
+			budget:      30 * time.Second,
+			want:        10 * time.Second,
+			wantClamped: false,
 		},
-		"drain equal to dissemination is clamped to 80%": {
-			drain:  30 * time.Second,
-			dissem: 30 * time.Second,
-			want:   24 * time.Second,
+		"drain equal to budget is clamped to 80%": {
+			drain:       30 * time.Second,
+			budget:      30 * time.Second,
+			want:        24 * time.Second,
+			wantClamped: true,
 		},
-		"drain above dissemination is clamped to 80%": {
-			drain:  60 * time.Second,
-			dissem: 30 * time.Second,
-			want:   24 * time.Second,
+		"drain above budget is clamped to 80%": {
+			drain:       60 * time.Second,
+			budget:      30 * time.Second,
+			want:        24 * time.Second,
+			wantClamped: true,
 		},
-		"clamp floored at default ongoing call timeout when dissemination tiny": {
-			drain:  60 * time.Second,
-			dissem: 2 * time.Second,
-			want:   DefaultOngoingCallTimeout,
+		"clamp floored at default ongoing call timeout when budget tiny": {
+			drain:       60 * time.Second,
+			budget:      2 * time.Second,
+			want:        DefaultOngoingCallTimeout,
+			wantClamped: true,
 		},
-		"zero dissemination disables clamp": {
-			drain:  60 * time.Second,
-			dissem: 0,
-			want:   60 * time.Second,
+		"zero budget disables clamp": {
+			drain:       60 * time.Second,
+			budget:      0,
+			want:        60 * time.Second,
+			wantClamped: false,
 		},
-		"negative dissemination disables clamp": {
-			drain:  60 * time.Second,
-			dissem: -1 * time.Second,
-			want:   60 * time.Second,
+		"negative budget disables clamp": {
+			drain:       60 * time.Second,
+			budget:      -1 * time.Second,
+			want:        60 * time.Second,
+			wantClamped: false,
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := ClampDrainOngoingCallTimeout(tc.drain, tc.dissem, "test")
+			got, clamped := ClampDrainOngoingCallTimeout(tc.drain, tc.budget)
 			assert.Equal(t, tc.want, got)
+			assert.Equal(t, tc.wantClamped, clamped)
 		})
 	}
 }
 
 func TestTranslateEntityConfig(t *testing.T) {
-	t.Run("drain timeout below dissemination passes through", func(t *testing.T) {
-		got := TranslateEntityConfig(config.EntityConfig{
-			Entities:                []string{"foo"},
-			DrainOngoingCallTimeout: "10s",
-		}, 30*time.Second)
-		require.NotNil(t, got.DrainOngoingCallTimeout)
-		assert.Equal(t, 10*time.Second, *got.DrainOngoingCallTimeout)
-	})
-
-	t.Run("drain timeout above dissemination is clamped", func(t *testing.T) {
+	t.Run("drain timeout is stored as configured, not clamped", func(t *testing.T) {
 		got := TranslateEntityConfig(config.EntityConfig{
 			Entities:                []string{"foo"},
 			DrainOngoingCallTimeout: "60s",
-		}, 30*time.Second)
+		})
 		require.NotNil(t, got.DrainOngoingCallTimeout)
-		assert.Equal(t, 24*time.Second, *got.DrainOngoingCallTimeout)
+		assert.Equal(t, 60*time.Second, *got.DrainOngoingCallTimeout)
 	})
 
 	t.Run("unset drain timeout leaves nil so global applies", func(t *testing.T) {
 		got := TranslateEntityConfig(config.EntityConfig{
 			Entities: []string{"foo"},
-		}, 30*time.Second)
+		})
 		assert.Nil(t, got.DrainOngoingCallTimeout)
 	})
 
@@ -99,15 +98,25 @@ func TestTranslateEntityConfig(t *testing.T) {
 		got := TranslateEntityConfig(config.EntityConfig{
 			Entities:                []string{"foo"},
 			DrainOngoingCallTimeout: "not-a-duration",
-		}, 30*time.Second)
+		})
 		assert.Nil(t, got.DrainOngoingCallTimeout)
+	})
+
+	t.Run("drain rebalanced actors override is preserved", func(t *testing.T) {
+		f := false
+		got := TranslateEntityConfig(config.EntityConfig{
+			Entities:              []string{"foo"},
+			DrainRebalancedActors: &f,
+		})
+		require.NotNil(t, got.DrainRebalancedActors)
+		assert.False(t, *got.DrainRebalancedActors)
 	})
 
 	t.Run("valid idle timeout is parsed", func(t *testing.T) {
 		got := TranslateEntityConfig(config.EntityConfig{
 			Entities:         []string{"foo"},
 			ActorIdleTimeout: "2h",
-		}, 30*time.Second)
+		})
 		assert.Equal(t, 2*time.Hour, got.ActorIdleTimeout)
 	})
 
@@ -115,16 +124,7 @@ func TestTranslateEntityConfig(t *testing.T) {
 		got := TranslateEntityConfig(config.EntityConfig{
 			Entities:         []string{"foo"},
 			ActorIdleTimeout: "not-a-duration",
-		}, 30*time.Second)
+		})
 		assert.Equal(t, DefaultIdleTimeout, got.ActorIdleTimeout)
-	})
-
-	t.Run("zero dissemination timeout disables clamp", func(t *testing.T) {
-		got := TranslateEntityConfig(config.EntityConfig{
-			Entities:                []string{"foo"},
-			DrainOngoingCallTimeout: "60s",
-		}, 0)
-		require.NotNil(t, got.DrainOngoingCallTimeout)
-		assert.Equal(t, 60*time.Second, *got.DrainOngoingCallTimeout)
 	})
 }

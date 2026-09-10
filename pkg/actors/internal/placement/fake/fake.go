@@ -92,5 +92,5 @@ func (f *Fake) IsActorHosted(ctx context.Context, actorType, actorID string) boo
 func (f *Fake) SetDrainOngoingCallTimeout(*bool, *time.Duration) {
 }
 
-func (f *Fake) SetEntityDrainOngoingCallTimeouts(map[string]time.Duration) {
+func (f *Fake) SetEntityDrainConfigs(map[string]api.EntityDrainConfig) {
 }

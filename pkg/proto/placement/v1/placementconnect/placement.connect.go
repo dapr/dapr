@@ -48,12 +48,17 @@ const (
 	// PlacementReportDaprStatusProcedure is the fully-qualified name of the Placement's
 	// ReportDaprStatus RPC.
 	PlacementReportDaprStatusProcedure = "/dapr.proto.placement.v1.Placement/ReportDaprStatus"
+	// PlacementConfigProcedure is the fully-qualified name of the Placement's Config RPC.
+	PlacementConfigProcedure = "/dapr.proto.placement.v1.Placement/Config"
 )
 
 // PlacementClient is a client for the dapr.proto.placement.v1.Placement service.
 type PlacementClient interface {
 	// Reports Dapr actor status and retrieves actor placement table.
 	ReportDaprStatus(context.Context) *connect.BidiStreamForClient[v1.Host, v1.PlacementOrder]
+	// Config returns the placement service configuration. Servers predating
+	// this RPC return Unimplemented.
+	Config(context.Context, *connect.Request[v1.ConfigRequest]) (*connect.Response[v1.ConfigResponse], error)
 }
 
 // NewPlacementClient constructs a client for the dapr.proto.placement.v1.Placement service. By
@@ -73,12 +78,19 @@ func NewPlacementClient(httpClient connect.HTTPClient, baseURL string, opts ...c
 			connect.WithSchema(placementMethods.ByName("ReportDaprStatus")),
 			connect.WithClientOptions(opts...),
 		),
+		config: connect.NewClient[v1.ConfigRequest, v1.ConfigResponse](
+			httpClient,
+			baseURL+PlacementConfigProcedure,
+			connect.WithSchema(placementMethods.ByName("Config")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // placementClient implements PlacementClient.
 type placementClient struct {
 	reportDaprStatus *connect.Client[v1.Host, v1.PlacementOrder]
+	config           *connect.Client[v1.ConfigRequest, v1.ConfigResponse]
 }
 
 // ReportDaprStatus calls dapr.proto.placement.v1.Placement.ReportDaprStatus.
@@ -86,10 +98,18 @@ func (c *placementClient) ReportDaprStatus(ctx context.Context) *connect.BidiStr
 	return c.reportDaprStatus.CallBidiStream(ctx)
 }
 
+// Config calls dapr.proto.placement.v1.Placement.Config.
+func (c *placementClient) Config(ctx context.Context, req *connect.Request[v1.ConfigRequest]) (*connect.Response[v1.ConfigResponse], error) {
+	return c.config.CallUnary(ctx, req)
+}
+
 // PlacementHandler is an implementation of the dapr.proto.placement.v1.Placement service.
 type PlacementHandler interface {
 	// Reports Dapr actor status and retrieves actor placement table.
 	ReportDaprStatus(context.Context, *connect.BidiStream[v1.Host, v1.PlacementOrder]) error
+	// Config returns the placement service configuration. Servers predating
+	// this RPC return Unimplemented.
+	Config(context.Context, *connect.Request[v1.ConfigRequest]) (*connect.Response[v1.ConfigResponse], error)
 }
 
 // NewPlacementHandler builds an HTTP handler from the service implementation. It returns the path
@@ -105,10 +125,18 @@ func NewPlacementHandler(svc PlacementHandler, opts ...connect.HandlerOption) (s
 		connect.WithSchema(placementMethods.ByName("ReportDaprStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
+	placementConfigHandler := connect.NewUnaryHandler(
+		PlacementConfigProcedure,
+		svc.Config,
+		connect.WithSchema(placementMethods.ByName("Config")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/dapr.proto.placement.v1.Placement/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PlacementReportDaprStatusProcedure:
 			placementReportDaprStatusHandler.ServeHTTP(w, r)
+		case PlacementConfigProcedure:
+			placementConfigHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -120,4 +148,8 @@ type UnimplementedPlacementHandler struct{}
 
 func (UnimplementedPlacementHandler) ReportDaprStatus(context.Context, *connect.BidiStream[v1.Host, v1.PlacementOrder]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.placement.v1.Placement.ReportDaprStatus is not implemented"))
+}
+
+func (UnimplementedPlacementHandler) Config(context.Context, *connect.Request[v1.ConfigRequest]) (*connect.Response[v1.ConfigResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.placement.v1.Placement.Config is not implemented"))
 }

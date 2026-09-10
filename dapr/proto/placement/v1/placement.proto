@@ -15,12 +15,26 @@ syntax = "proto3";
 
 package dapr.proto.placement.v1;
 
+import "google/protobuf/duration.proto";
+
 option go_package = "github.com/dapr/dapr/pkg/proto/placement/v1;placement";
 
 // Placement service is used to report Dapr runtime host status.
 service Placement {
   // Reports Dapr actor status and retrieves actor placement table.
   rpc ReportDaprStatus(stream Host) returns (stream PlacementOrder) {}
+
+  // Config returns the placement service configuration. Servers predating
+  // this RPC return Unimplemented.
+  rpc Config(ConfigRequest) returns (ConfigResponse) {}
+}
+
+message ConfigRequest {}
+
+message ConfigResponse {
+  // disseminate_timeout is the deadline within which hosts must acknowledge
+  // a dissemination round.
+  google.protobuf.Duration disseminate_timeout = 1;
 }
 
 message PlacementOrder {

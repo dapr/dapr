@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/placement/internal/authorizer"
@@ -242,4 +243,10 @@ func (s *Server) ReportDaprStatus(stream v1pb.Placement_ReportDaprStatusServer) 
 	<-ctx.Done()
 
 	return context.Cause(ctx)
+}
+
+func (s *Server) Config(context.Context, *v1pb.ConfigRequest) (*v1pb.ConfigResponse, error) {
+	return &v1pb.ConfigResponse{
+		DisseminateTimeout: durationpb.New(s.disseminateTimeout),
+	}, nil
 }
