@@ -800,7 +800,7 @@ func assertCloudEventIDsAreUUIDs(t *testing.T, cloudEventIDs []string, expectedC
 	require.Len(t, cloudEventIDs, expectedCount, "unexpected number of CloudEvent IDs")
 	for _, cloudEventID := range cloudEventIDs {
 		_, err := uuid.Parse(cloudEventID)
-		assert.NoError(t, err, "CloudEvent ID is not a UUID")
+		require.NoError(t, err, "CloudEvent ID %q is not a UUID", cloudEventID)
 	}
 }
 

@@ -387,24 +387,54 @@ func extractMessage(reqID string, body []byte) (string, string, error) {
 		return "", "", err
 	}
 
+	cloudEventID, err := getStringField(m, "id")
+	if err != nil {
+		return "", "", err
+	}
+
 	if m["data_base64"] != nil {
-		b, err := base64.StdEncoding.DecodeString(m["data_base64"].(string))
+		dataBase64, err := getStringField(m, "data_base64")
+		if err != nil {
+			return "", "", err
+		}
+
+		b, err := base64.StdEncoding.DecodeString(dataBase64)
 		if err != nil {
 			log.Printf("(%s) Could not base64 decode: %v", reqID, err)
 			return "", "", err
 		}
 
 		msg := string(b)
-		log.Printf("(%s) output from base64='%s'", reqID, msg)
-		return msg, "", nil
+		log.Printf("(%s) output from base64='%s' cloudevent-id='%s'", reqID, msg, cloudEventID)
+		return msg, cloudEventID, nil
 	}
 
-	msg := m["data"].(string)
-	cloudEventID := m["id"].(string)
-	pubsubName := m["pubsubname"].(string)
+	msg, err := getStringField(m, "data")
+	if err != nil {
+		return "", "", err
+	}
+
+	pubsubName, err := getStringField(m, "pubsubname")
+	if err != nil {
+		return "", "", err
+	}
 	log.Printf("(%s) pubsub='%s' output='%s' cloudevent-id='%s'", reqID, pubsubName, msg, cloudEventID)
 
 	return msg, cloudEventID, nil
+}
+
+func getStringField(m map[string]any, field string) (string, error) {
+	value, ok := m[field]
+	if !ok {
+		return "", fmt.Errorf("missing CloudEvent %q field", field)
+	}
+
+	str, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("CloudEvent %q field is not a string", field)
+	}
+
+	return str, nil
 }
 
 func unique(slice []string) []string {
