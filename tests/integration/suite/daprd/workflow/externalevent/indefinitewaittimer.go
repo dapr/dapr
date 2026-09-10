@@ -46,7 +46,8 @@ type indefiniteWaitTimer struct {
 }
 
 func (i *indefiniteWaitTimer) Setup(t *testing.T) []framework.Option {
-	i.workflow = workflow.New(t)
+	// Signing mode opt-out: the test injects unsigned legacy-SDK history, which a signing-enabled daprd rejects by design.
+	i.workflow = workflow.New(t, workflow.WithSigning(false))
 
 	return []framework.Option{
 		framework.WithProcesses(i.workflow),

@@ -43,7 +43,10 @@ type failure struct {
 }
 
 func (e *failure) Setup(t *testing.T) []framework.Option {
-	e.workflow = workflow.New(t)
+	e.workflow = workflow.New(t,
+		// Signing mode opt-out: the injected unsigned resolution event would be rejected by signing verification.
+		workflow.WithSigning(false),
+	)
 	return []framework.Option{
 		framework.WithProcesses(e.workflow),
 	}

@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -91,6 +92,23 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	dir := t.TempDir()
 	for i, file := range opts.resourceFiles {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, strconv.Itoa(i)+".yaml"), []byte(file), 0o600))
+	}
+
+	if len(opts.features) > 0 {
+		var sb strings.Builder
+		sb.WriteString(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: featureconfig
+spec:
+  features:
+`)
+		for _, f := range slices.Compact(slices.Sorted(slices.Values(opts.features))) {
+			sb.WriteString("  - name: " + f + "\n    enabled: true\n")
+		}
+		f := filepath.Join(t.TempDir(), "features.yaml")
+		require.NoError(t, os.WriteFile(f, []byte(sb.String()), 0o600))
+		opts.configs = append(opts.configs, f)
 	}
 
 	args := []string{

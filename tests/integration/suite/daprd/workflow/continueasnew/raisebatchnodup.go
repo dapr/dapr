@@ -45,7 +45,8 @@ type raisebatchnodup struct {
 }
 
 func (r *raisebatchnodup) Setup(t *testing.T) []framework.Option {
-	r.workflow = workflow.New(t)
+	// Signing mode opt-out: the test hand-writes unsigned inbox rows into sqlite (rejected by a signing-enabled host) and dials the scheduler with a plaintext client.
+	r.workflow = workflow.New(t, workflow.WithSigning(false))
 	return []framework.Option{
 		framework.WithProcesses(r.workflow),
 	}

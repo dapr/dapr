@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler/proxy"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -58,15 +59,20 @@ func (e *event) Setup(t *testing.T) []framework.Option {
 	}
 
 	e.appID = uuid.New().String()
-	e.scheduler = scheduler.New(t)
-	e.proxy = proxy.New(t, e.scheduler)
+	sen := sentry.New(t)
+	e.scheduler = scheduler.New(t,
+		scheduler.WithSentry(sen),
+		scheduler.WithID("dapr-scheduler-server-0"),
+	)
+	e.proxy = proxy.New(t, e.scheduler, proxy.WithSentry(t, sen, "default", e.appID))
 	e.workflow = workflow.New(t,
+		workflow.WithSentryInstance(sen),
 		workflow.WithSchedulerInstance(e.scheduler),
 		workflow.WithSchedulerAddress(e.proxy.Address()),
 		workflow.WithDaprdOptions(0, daprd.WithAppID(e.appID)),
 	)
 	return []framework.Option{
-		framework.WithProcesses(e.scheduler, e.proxy, e.workflow),
+		framework.WithProcesses(sen, e.scheduler, e.proxy, e.workflow),
 	}
 }
 
@@ -112,7 +118,7 @@ func (e *event) Run(t *testing.T, ctx context.Context) {
 		daprd.WithPlacementAddresses(e.workflow.Placement().Address()),
 		daprd.WithSchedulerAddressesReset(e.proxy.Address()),
 		daprd.WithResourceFiles(e.workflow.DB().GetComponent(t)),
-	}, e.workflow.FeatureOptions(t)...)...)
+	}, e.workflow.JoinOptions(t)...)...)
 	extra.Run(t, ctx)
 	t.Cleanup(func() { extra.Cleanup(t) })
 	extra.WaitUntilRunning(t, ctx)
