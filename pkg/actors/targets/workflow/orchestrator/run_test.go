@@ -1486,17 +1486,21 @@ func Test_stripUnmatchedResolutions(t *testing.T) {
 		return state
 	}
 
-	t.Run("first generation keeps an early task completion", func(t *testing.T) {
-		o := &orchestrator{actorID: "test"}
-		rs := &backend.WorkflowRuntimeState{NewEvents: []*backend.HistoryEvent{orphanTask}}
-		o.stripUnmatchedResolutions(newState(0), rs)
-		assert.Equal(t, []*backend.HistoryEvent{orphanTask}, rs.GetNewEvents())
-	})
+	// NewState starts at generation 1; a pre-field state reads 0. Neither has
+	// reset its task ids, so both keep an early completion.
+	for _, gen := range []uint64{0, 1} {
+		t.Run(fmt.Sprintf("generation %d keeps an early task completion", gen), func(t *testing.T) {
+			o := &orchestrator{actorID: "test"}
+			rs := &backend.WorkflowRuntimeState{NewEvents: []*backend.HistoryEvent{orphanTask}}
+			o.stripUnmatchedResolutions(newState(gen), rs)
+			assert.Equal(t, []*backend.HistoryEvent{orphanTask}, rs.GetNewEvents())
+		})
+	}
 
 	t.Run("a reset id sequence strips a straggler task completion", func(t *testing.T) {
 		o := &orchestrator{actorID: "test"}
 		rs := &backend.WorkflowRuntimeState{NewEvents: []*backend.HistoryEvent{orphanTask}}
-		o.stripUnmatchedResolutions(newState(1), rs)
+		o.stripUnmatchedResolutions(newState(2), rs)
 		assert.Empty(t, rs.GetNewEvents())
 	})
 
@@ -1506,7 +1510,7 @@ func Test_stripUnmatchedResolutions(t *testing.T) {
 			EventId:   7,
 			EventType: &protos.HistoryEvent_TaskScheduled{TaskScheduled: &protos.TaskScheduledEvent{Name: "act"}},
 		}
-		state := newState(1)
+		state := newState(2)
 		state.History = append(state.History, scheduled)
 		rs := &backend.WorkflowRuntimeState{NewEvents: []*backend.HistoryEvent{orphanTask}}
 		o.stripUnmatchedResolutions(state, rs)
@@ -1514,7 +1518,7 @@ func Test_stripUnmatchedResolutions(t *testing.T) {
 	})
 
 	t.Run("an unmatched child completion is stripped in every generation", func(t *testing.T) {
-		for _, gen := range []uint64{0, 1} {
+		for _, gen := range []uint64{1, 2} {
 			o := &orchestrator{actorID: "test"}
 			rs := &backend.WorkflowRuntimeState{NewEvents: []*backend.HistoryEvent{orphanChild}}
 			o.stripUnmatchedResolutions(newState(gen), rs)

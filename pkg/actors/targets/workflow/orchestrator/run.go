@@ -921,7 +921,9 @@ func staleTurnDuplicate(state *wfenginestate.State, rs *backend.WorkflowRuntimeS
 // Dropping it loses the completion, and the replay that follows fails the
 // workflow as non-deterministic.
 func (o *orchestrator) stripUnmatchedResolutions(state *wfenginestate.State, rs *backend.WorkflowRuntimeState) {
-	tasksMayStraggle := state.Generation > 0
+	// The first generation is 1 (NewState), and ContinueAsNew increments it;
+	// a state written before the field existed reads 0. Either way, no reset.
+	tasksMayStraggle := state.Generation > 1
 
 	scheduledTaskIDs := make(map[int32]struct{})
 	createdChildIDs := make(map[int32]struct{})
