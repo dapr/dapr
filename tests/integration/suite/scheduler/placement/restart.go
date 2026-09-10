@@ -71,11 +71,11 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 		})
 	}
 
-	openAndReport := func(sched *scheduler.Scheduler) schedulerv1pb.Scheduler_ReportActorTypesClient {
+	openAndReport := func(client schedulerv1pb.SchedulerClient) schedulerv1pb.Scheduler_ReportActorTypesClient {
 		var stream schedulerv1pb.Scheduler_ReportActorTypesClient
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var err error
-			stream, err = sched.Client(t, ctx).ReportActorTypes(ctx)
+			stream, err = client.ReportActorTypes(ctx)
 			if !assert.NoError(c, err) {
 				return
 			}
@@ -106,7 +106,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 		Namespace:                  "default",
 		SupportsSchedulerPlacement: true,
 	})
-	stream := openAndReport(r.sched)
+	stream := openAndReport(r.sched.Client(t, ctx))
 
 	// The scheduler shuts down with the stream live: the stream is closed
 	// telling the sidecar placement is shutting down.
@@ -132,7 +132,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 		Namespace:                  "default",
 		SupportsSchedulerPlacement: true,
 	})
-	stream = openAndReport(r.schedBack)
+	stream = openAndReport(r.schedBack.Client(t, ctx))
 	for {
 		order, err := stream.Recv()
 		require.NoError(t, err)
