@@ -41,7 +41,7 @@ type workflow struct {
 
 func (w *workflow) Setup(t *testing.T) []framework.Option {
 	// No actor types registered.
-	w.actors = actors.New(t, actors.WithPlacementService())
+	w.actors = actors.New(t)
 
 	return []framework.Option{
 		framework.WithProcesses(w.actors),
@@ -53,7 +53,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 
 	// With no entities, the placement table should have no hosts.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := w.actors.Placement().PlacementTables(t, ctx)
+		table := w.actors.PlacementTables(t, ctx)
 		if !assert.Contains(c, table.Tables, "default") {
 			return
 		}
@@ -61,7 +61,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*10)
 
 	// Record the version after initial connection.
-	table := w.actors.Placement().PlacementTables(t, ctx)
+	table := w.actors.PlacementTables(t, ctx)
 	initVersion := table.Tables["default"].Version
 
 	// Start a workflow client which will register workflow actor types.
@@ -72,7 +72,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 
 	// Workflow entities should now be registered, triggering dissemination.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table = w.actors.Placement().PlacementTables(t, ctx)
+		table = w.actors.PlacementTables(t, ctx)
 		if !assert.Contains(c, table.Tables, "default") {
 			return
 		}
@@ -99,7 +99,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	// entities.
 	cancel()
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := w.actors.Placement().PlacementTables(t, ctx)
+		table := w.actors.PlacementTables(t, ctx)
 		if !assert.Contains(c, table.Tables, "default") {
 			return
 		}

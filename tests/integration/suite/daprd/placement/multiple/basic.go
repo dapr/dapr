@@ -36,7 +36,6 @@ type basic struct {
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
 	actor1 := dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("mytype"),
 	)
 	actor2 := dactors.New(t,
@@ -72,7 +71,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := b.actors[0].Placement().PlacementTables(t, ctx)
+		table := b.actors[0].PlacementTables(t, ctx)
 		if !assert.NotNil(c, table.Tables["default"]) {
 			return
 		}

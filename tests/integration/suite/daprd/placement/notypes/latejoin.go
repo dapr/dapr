@@ -43,7 +43,6 @@ type lateJoin struct {
 
 func (l *lateJoin) Setup(t *testing.T) []framework.Option {
 	l.withTypes = actors.New(t,
-		actors.WithPlacementService(),
 		actors.WithActorTypes("mytype"),
 		actors.WithActorTypeHandler("mytype", func(nethttp.ResponseWriter, *nethttp.Request) {
 			l.called.Add(1)
@@ -73,7 +72,7 @@ func (l *lateJoin) Run(t *testing.T, ctx context.Context) {
 			Namespace: "default",
 		},
 	}
-	table := l.withTypes.Placement().PlacementTables(t, ctx)
+	table := l.withTypes.PlacementTables(t, ctx)
 	assert.Equal(t, expHosts, table.Tables["default"].Hosts)
 
 	// Now start the no-types daprd.
@@ -83,7 +82,7 @@ func (l *lateJoin) Run(t *testing.T, ctx context.Context) {
 
 	// Wait for the no-types daprd to settle, then record the version.
 	time.Sleep(time.Millisecond * 500)
-	table = l.withTypes.Placement().PlacementTables(t, ctx)
+	table = l.withTypes.PlacementTables(t, ctx)
 	assert.Equal(t, expHosts, table.Tables["default"].Hosts)
 	versionAfterJoin := table.Tables["default"].Version
 
@@ -102,7 +101,7 @@ func (l *lateJoin) Run(t *testing.T, ctx context.Context) {
 	// no entities and its disconnection should not trigger dissemination.
 	l.noTypes.Daprd().Cleanup(t)
 	time.Sleep(time.Millisecond * 500)
-	table = l.withTypes.Placement().PlacementTables(t, ctx)
+	table = l.withTypes.PlacementTables(t, ctx)
 	assert.Equal(t, expHosts, table.Tables["default"].Hosts)
 	assert.Equal(t, versionAfterJoin, table.Tables["default"].Version)
 }

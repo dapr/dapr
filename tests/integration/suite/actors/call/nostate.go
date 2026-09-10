@@ -38,14 +38,16 @@ type nostate struct {
 
 func (n *nostate) Setup(t *testing.T) []framework.Option {
 	n.actors = actors.New(t,
-		actors.WithPlacementService(),
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(nethttp.ResponseWriter, *nethttp.Request) {}),
 	)
 
-	n.daprd = daprd.New(t,
-		daprd.WithPlacementAddresses(n.actors.Placement().Address()),
-	)
+	// The daprd joins whichever authority serves placement.
+	if place := n.actors.Placement(); place != nil {
+		n.daprd = daprd.New(t, daprd.WithPlacementAddresses(place.Address()))
+	} else {
+		n.daprd = daprd.New(t, daprd.WithScheduler(n.actors.Scheduler()))
+	}
 
 	return []framework.Option{
 		framework.WithProcesses(n.actors, n.daprd),

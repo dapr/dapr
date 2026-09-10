@@ -38,7 +38,6 @@ type actors struct {
 
 func (a *actors) Setup(t *testing.T) []framework.Option {
 	a.actors = dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("abc", "def"),
 	)
 
@@ -50,49 +49,53 @@ func (a *actors) Setup(t *testing.T) []framework.Option {
 func (a *actors) Run(t *testing.T, ctx context.Context) {
 	a.actors.WaitUntilRunning(t, ctx)
 
-	expTable := &placement.TableState{
-		Tables: map[string]*placement.Table{
-			"default": {
-				Version: 1,
-				Hosts: []placement.Host{
-					{
-						Entities:  []string{"abc", "def"},
-						Name:      a.actors.Daprd().InternalGRPCAddress(),
-						ID:        a.actors.Daprd().AppID(),
-						APIVLevel: 20,
-						Namespace: "default",
-					},
-				},
-			},
+	expHosts := []placement.Host{
+		{
+			Entities:  []string{"abc", "def"},
+			Name:      a.actors.Daprd().InternalGRPCAddress(),
+			ID:        a.actors.Daprd().AppID(),
+			APIVLevel: 20,
+			Namespace: "default",
 		},
 	}
 
-	assert.Equal(t, expTable, a.actors.Placement().PlacementTables(t, ctx))
+	var version uint64
+	expectTable := func(c *assert.CollectT) {
+		table := a.actors.PlacementTables(t, ctx).Tables["default"]
+		if !assert.NotNil(c, table) {
+			return
+		}
+		assert.Equal(c, expHosts, table.Hosts)
+		assert.Greater(c, table.Version, version)
+	}
+	capture := func() {
+		if table := a.actors.PlacementTables(t, ctx).Tables["default"]; table != nil {
+			version = table.Version
+		}
+	}
+
+	require.EventuallyWithT(t, expectTable, time.Second*10, time.Millisecond*10)
+	capture()
 
 	client := dworkflow.NewClient(a.actors.Daprd().GRPCConn(t, ctx))
 	cctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	require.NoError(t, client.StartWorker(cctx, dworkflow.NewRegistry()))
 
-	expTable.Tables["default"].Version = 2
-	expTable.Tables["default"].Hosts[0].Entities = []string{
+	expHosts[0].Entities = []string{
 		"abc",
 		"dapr.internal.default." + a.actors.Daprd().AppID() + ".activity",
 		"dapr.internal.default." + a.actors.Daprd().AppID() + ".retentioner",
 		"dapr.internal.default." + a.actors.Daprd().AppID() + ".workflow",
 		"def",
 	}
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, expTable, a.actors.Placement().PlacementTables(t, ctx))
-	}, time.Second*10, time.Millisecond*10)
+	assert.EventuallyWithT(t, expectTable, time.Second*10, time.Millisecond*10)
+	capture()
 
 	cancel()
-	expTable.Tables["default"].Version = 3
-	expTable.Tables["default"].Hosts[0].Entities = []string{
+	expHosts[0].Entities = []string{
 		"abc",
 		"def",
 	}
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, expTable, a.actors.Placement().PlacementTables(t, ctx))
-	}, time.Second*10, time.Second)
+	assert.EventuallyWithT(t, expectTable, time.Second*10, time.Second)
 }

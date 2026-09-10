@@ -54,15 +54,18 @@ func (e *failed) Setup(t *testing.T) []framework.Option {
 		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 		daprd.WithWorkflowJanitorPeriod(t, time.Millisecond*200),
 	}
-	e.workflow = workflow.New(t, workflow.WithPlacementService(), workflow.WithDaprdOptions(0, fp...))
+	e.workflow = workflow.New(t, workflow.WithDaprdOptions(0, fp...))
 
 	for i := range e.joiners {
-		e.joiners[i] = daprd.New(t, append([]daprd.Option{
+		dopts := []daprd.Option{
 			daprd.WithAppID(e.workflow.Dapr().AppID()),
 			daprd.WithResourceFiles(e.workflow.DB().GetComponent(t)),
-			daprd.WithPlacementAddresses(e.workflow.Placement().Address()),
 			daprd.WithSchedulerAddresses(e.workflow.Scheduler().Address()),
-		}, fp...)...)
+		}
+		if e.workflow.HasPlacement() {
+			dopts = append(dopts, daprd.WithPlacementAddresses(e.workflow.Placement().Address()))
+		}
+		e.joiners[i] = daprd.New(t, append(dopts, fp...)...)
 	}
 
 	return []framework.Option{

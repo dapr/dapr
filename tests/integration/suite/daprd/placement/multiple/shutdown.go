@@ -36,7 +36,6 @@ type shutdown struct {
 
 func (s *shutdown) Setup(t *testing.T) []framework.Option {
 	actor1 := dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("mytype"),
 	)
 	actor2 := dactors.New(t,
@@ -72,7 +71,7 @@ func (s *shutdown) Run(t *testing.T, ctx context.Context) {
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := s.actors[0].Placement().PlacementTables(t, ctx)
+		table := s.actors[0].PlacementTables(t, ctx)
 		if !assert.NotNil(c, table.Tables["default"]) {
 			return
 		}
@@ -84,7 +83,7 @@ func (s *shutdown) Run(t *testing.T, ctx context.Context) {
 		s.actors[i].Daprd().Cleanup(t)
 		hosts = hosts[1:]
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			table := s.actors[0].Placement().PlacementTables(t, ctx)
+			table := s.actors[0].PlacementTables(t, ctx)
 			if !assert.NotNil(c, table.Tables["default"]) {
 				return
 			}
@@ -94,7 +93,7 @@ func (s *shutdown) Run(t *testing.T, ctx context.Context) {
 
 	s.actors[2].Daprd().Cleanup(t)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := s.actors[0].Placement().PlacementTables(t, ctx)
+		table := s.actors[0].PlacementTables(t, ctx)
 		assert.Equal(c, &placement.TableState{
 			Tables: make(map[string]*placement.Table),
 		}, table)

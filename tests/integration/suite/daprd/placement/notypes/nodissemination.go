@@ -39,7 +39,7 @@ type nodissemination struct {
 }
 
 func (n *nodissemination) Setup(t *testing.T) []framework.Option {
-	n.actors1 = actors.New(t, actors.WithPlacementService())
+	n.actors1 = actors.New(t)
 	n.actors2 = actors.New(t, actors.WithPeerActor(n.actors1))
 	n.actors3 = actors.New(t, actors.WithPeerActor(n.actors1))
 
@@ -55,7 +55,7 @@ func (n *nodissemination) Run(t *testing.T, ctx context.Context) {
 
 	// No daprd has actor types, so the placement table should have no hosts.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := n.actors1.Placement().PlacementTables(t, ctx)
+		table := n.actors1.PlacementTables(t, ctx)
 		if !assert.Contains(c, table.Tables, "default") {
 			return
 		}
@@ -63,7 +63,7 @@ func (n *nodissemination) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*10)
 
 	// Record the current version.
-	table := n.actors1.Placement().PlacementTables(t, ctx)
+	table := n.actors1.PlacementTables(t, ctx)
 	versionBefore := table.Tables["default"].Version
 
 	// Kill daprd2 and daprd3. Since they had no entities, their disconnection
@@ -74,7 +74,7 @@ func (n *nodissemination) Run(t *testing.T, ctx context.Context) {
 	// Give some time for any erroneous dissemination to propagate.
 	time.Sleep(time.Millisecond * 500)
 
-	table = n.actors1.Placement().PlacementTables(t, ctx)
+	table = n.actors1.PlacementTables(t, ctx)
 	assert.Contains(t, table.Tables, "default")
 	assert.Nil(t, table.Tables["default"].Hosts)
 	assert.Equal(t, versionBefore, table.Tables["default"].Version)

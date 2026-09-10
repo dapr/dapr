@@ -16,6 +16,7 @@ package single
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -35,7 +36,6 @@ type basic struct {
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
 	b.actors = dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("mytype"),
 	)
 
@@ -47,21 +47,20 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.actors.WaitUntilRunning(t, ctx)
 
-	table := b.actors.Placement().PlacementTables(t, ctx)
-	assert.Equal(t, &placement.TableState{
-		Tables: map[string]*placement.Table{
-			"default": {
-				Version: 1,
-				Hosts: []placement.Host{
-					{
-						Entities:  []string{"mytype"},
-						Name:      b.actors.Daprd().InternalGRPCAddress(),
-						ID:        b.actors.Daprd().AppID(),
-						APIVLevel: 20,
-						Namespace: "default",
-					},
-				},
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		table := b.actors.PlacementTables(t, ctx).Tables["default"]
+		if !assert.NotNil(c, table) {
+			return
+		}
+		assert.Positive(c, table.Version)
+		assert.Equal(c, []placement.Host{
+			{
+				Entities:  []string{"mytype"},
+				Name:      b.actors.Daprd().InternalGRPCAddress(),
+				ID:        b.actors.Daprd().AppID(),
+				APIVLevel: 20,
+				Namespace: "default",
 			},
-		},
-	}, table)
+		}, table.Hosts)
+	}, time.Second*10, time.Millisecond*10)
 }

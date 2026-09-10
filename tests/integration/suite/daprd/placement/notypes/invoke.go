@@ -42,10 +42,9 @@ type invoke struct {
 }
 
 func (i *invoke) Setup(t *testing.T) []framework.Option {
-	i.noTypes = actors.New(t, actors.WithPlacementService())
+	i.noTypes = actors.New(t)
 
 	i.withTypes = actors.New(t,
-		actors.WithPlacementService(),
 		actors.WithPeerActor(i.noTypes),
 		actors.WithActorTypes("mytype"),
 		actors.WithActorTypeHandler("mytype", func(nethttp.ResponseWriter, *nethttp.Request) {
@@ -63,7 +62,7 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 	i.withTypes.WaitUntilRunning(t, ctx)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := i.noTypes.Placement().PlacementTables(t, ctx)
+		table := i.noTypes.PlacementTables(t, ctx)
 		if !assert.Contains(c, table.Tables, "default") {
 			return
 		}

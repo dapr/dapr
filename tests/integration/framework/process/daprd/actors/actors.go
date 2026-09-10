@@ -17,16 +17,23 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"net/http"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -211,6 +218,153 @@ func (a *Actors) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 // were built with WithSchedulerPlacement, which runs no placement process.
 func (a *Actors) Placement() *placement.Placement {
 	return a.place
+}
+
+// PlacementTables returns the placement table state of the active placement
+// authority. Under scheduler placement the state is read with a one-off
+// typeless report stream, whose snapshot carries every table of the default
+// namespace without joining any of them: Version is the scheduler's
+// dissemination count, which advances when any table changes and holds
+// still otherwise, and APIVLevel carries the fixed level every current
+// daprd reports.
+func (a *Actors) PlacementTables(t *testing.T, ctx context.Context) *placement.TableState {
+	t.Helper()
+
+	if a.place != nil {
+		return a.place.PlacementTables(t, ctx)
+	}
+
+	state, err := a.schedulerTables(ctx)
+	if err != nil {
+		return new(placement.TableState)
+	}
+	return state
+}
+
+// schedulerTables takes one snapshot of the scheduler's placement tables.
+func (a *Actors) schedulerTables(ctx context.Context) (*placement.TableState, error) {
+	sctx, cancel := context.WithTimeout(ctx, time.Second*10)
+	defer cancel()
+
+	metrics, err := a.schedulerMetrics(sctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// No connected sidecar means no namespace, mirroring the placement
+	// service. The scheduler also withholds its placement leader without a
+	// capable sidecar, so no snapshot could be read.
+	if metrics["dapr_scheduler_sidecars_connected"] == 0 {
+		return &placement.TableState{Tables: make(map[string]*placement.Table)}, nil
+	}
+
+	//nolint:staticcheck
+	conn, err := grpc.DialContext(sctx, a.sched.Address(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(), grpc.WithReturnConnectionError(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	stream, err := schedulerv1pb.NewSchedulerClient(conn).ReportActorTypes(sctx)
+	if err != nil {
+		return nil, err
+	}
+	if err = stream.Send(&schedulerv1pb.ReportActorTypesRequest{
+		Msg: &schedulerv1pb.ReportActorTypesRequest_Report{Report: &schedulerv1pb.ActorHost{
+			Address:   "127.0.0.1:1",
+			AppId:     "placement-table-reader",
+			Namespace: "default",
+		}},
+	}); err != nil {
+		return nil, err
+	}
+
+	table := new(placement.Table)
+	hosts := make(map[string]*placement.Host)
+	for {
+		order, oerr := stream.Recv()
+		if oerr != nil {
+			return nil, oerr
+		}
+		if serr := stream.Send(&schedulerv1pb.ReportActorTypesRequest{
+			Msg: &schedulerv1pb.ReportActorTypesRequest_Ack{Ack: &schedulerv1pb.PlacementOrderAck{
+				Operation: order.GetOperation(),
+				Seq:       order.GetSeq(),
+			}},
+		}); serr != nil {
+			return nil, serr
+		}
+
+		if order.GetOperation() == schedulerv1pb.Operation_OPERATION_UPDATE {
+			for atype, entry := range order.GetTables().GetEntries() {
+				for addr, host := range entry.GetHosts() {
+					h, ok := hosts[addr]
+					if !ok {
+						h = &placement.Host{
+							Name:      addr,
+							ID:        host.GetAppId(),
+							Namespace: "default",
+							APIVLevel: 20,
+						}
+						hosts[addr] = h
+					}
+					h.Entities = append(h.Entities, atype)
+				}
+			}
+		}
+		if order.GetOperation() == schedulerv1pb.Operation_OPERATION_UNLOCK {
+			break
+		}
+	}
+
+	table.Version = uint64(metrics["dapr_scheduler_placement_disseminations_total"])
+
+	for _, addr := range slices.Sorted(maps.Keys(hosts)) {
+		host := hosts[addr]
+		slices.Sort(host.Entities)
+		table.Hosts = append(table.Hosts, *host)
+	}
+
+	return &placement.TableState{Tables: map[string]*placement.Table{"default": table}}, nil
+}
+
+// schedulerMetrics scrapes the scheduler's metrics endpoint, summing every
+// labeled series into its family name.
+func (a *Actors) schedulerMetrics(ctx context.Context) (map[string]float64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		fmt.Sprintf("http://%s/metrics", a.sched.MetricsAddress()), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("metrics endpoint returned %d", resp.StatusCode)
+	}
+
+	families, err := new(expfmt.TextParser).TextToMetricFamilies(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(map[string]float64, len(families))
+	for name, family := range families {
+		for _, m := range family.GetMetric() {
+			if counter := m.GetCounter(); counter != nil {
+				out[name] += counter.GetValue()
+			}
+			if gauge := m.GetGauge(); gauge != nil {
+				out[name] += gauge.GetValue()
+			}
+		}
+	}
+	return out, nil
 }
 
 func (a *Actors) Scheduler() *scheduler.Scheduler {

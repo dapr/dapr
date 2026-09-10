@@ -17,6 +17,7 @@ import (
 	"context"
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -473,6 +474,29 @@ func (w *Workflow) Scheduler() *scheduler.Scheduler {
 
 func (w *Workflow) Sentry() *sentry.Sentry {
 	return w.sentry
+}
+
+// HasPlacement reports whether a standalone placement service runs, rather
+// than placement served by the scheduler.
+func (w *Workflow) HasPlacement() bool {
+	return w.place != nil
+}
+
+// PlacementVersion returns a counter which advances whenever the active
+// placement authority completes a dissemination: the default namespace table
+// version of the placement service, or the scheduler's dissemination count.
+// Only successive values compare, the units differ per authority.
+func (w *Workflow) PlacementVersion(t *testing.T, ctx context.Context) uint64 {
+	if w.place != nil {
+		return w.place.PlacementTables(t, ctx).Tables["default"].Version
+	}
+	var disseminations float64
+	for k, v := range w.sched.Metrics(t, ctx).All() {
+		if strings.HasPrefix(k, "dapr_scheduler_placement_disseminations_total") {
+			disseminations += v
+		}
+	}
+	return uint64(disseminations)
 }
 
 func (w *Workflow) Placement() *placement.Placement {
