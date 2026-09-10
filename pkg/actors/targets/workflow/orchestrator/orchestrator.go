@@ -48,9 +48,6 @@ type orchestrator struct {
 	ometa  *backend.WorkflowMetadata
 
 	activityResultAwaited atomic.Bool
-
-	// parentNotifyInFlight: one detached parent notification at a time.
-	parentNotifyInFlight atomic.Bool
 	// janitorAsserted tracks whether the per-instance janitor backstop
 	// reminder was ensured this actor residency (WorkflowsFastPath).
 	janitorAsserted atomic.Bool
@@ -156,10 +153,6 @@ func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.Inte
 func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
 	o.wg.Add(1)
 	defer o.wg.Done()
-
-	if reminder.Name == reminderNameParentNotify {
-		return o.resendParentNotification(ctx)
-	}
 
 	unlock, err := o.contextLockMeasured(ctx, "reminder")
 	if err != nil {

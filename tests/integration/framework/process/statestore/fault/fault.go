@@ -47,7 +47,6 @@ type Store struct {
 	multiObserver func(*state.TransactionalStateRequest)
 
 	multiDeleteHold *holdSpec
-	multiSetHold    *holdSpec
 	bulkGetHold     *holdSpec
 	getHold         *holdSpec
 
@@ -134,22 +133,6 @@ func (s *Store) ArmMultiDeleteHold(sub string) (arrived <-chan struct{}, release
 	}
 	s.mu.Lock()
 	s.multiDeleteHold = spec
-	s.mu.Unlock()
-
-	var once sync.Once
-	return spec.arrived, func() { once.Do(func() { close(spec.releaseCh) }) }, spec.done
-}
-
-// ArmMultiSetHold is ArmMultiDeleteHold for a Set operation.
-func (s *Store) ArmMultiSetHold(sub string) (arrived <-chan struct{}, release func(), done <-chan struct{}) {
-	spec := &holdSpec{
-		sub:       sub,
-		arrived:   make(chan struct{}),
-		releaseCh: make(chan struct{}),
-		done:      make(chan struct{}),
-	}
-	s.mu.Lock()
-	s.multiSetHold = spec
 	s.mu.Unlock()
 
 	var once sync.Once
@@ -306,9 +289,6 @@ func (s *Store) Multi(ctx context.Context, req *state.TransactionalStateRequest)
 	if s.multiDeleteHold != nil && anyDeleteHasSubstring(req.Operations, s.multiDeleteHold.sub) {
 		hold = s.multiDeleteHold
 		s.multiDeleteHold = nil
-	} else if s.multiSetHold != nil && anySetHasSubstring(req.Operations, s.multiSetHold.sub) {
-		hold = s.multiSetHold
-		s.multiSetHold = nil
 	}
 	s.mu.Unlock()
 
@@ -367,15 +347,6 @@ func anyHasSubstring(keys []string, sub string) bool {
 func anyDeleteHasSubstring(ops []state.TransactionalStateOperation, sub string) bool {
 	for _, op := range ops {
 		if del, ok := op.(state.DeleteRequest); ok && strings.Contains(del.Key, sub) {
-			return true
-		}
-	}
-	return false
-}
-
-func anySetHasSubstring(ops []state.TransactionalStateOperation, sub string) bool {
-	for _, op := range ops {
-		if set, ok := op.(state.SetRequest); ok && strings.Contains(set.Key, sub) {
 			return true
 		}
 	}

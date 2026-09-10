@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -27,7 +26,6 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -145,12 +143,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		rst := o.rstate
 		completed := runtimestate.IsCompleted(rst)
 		if completed {
-			pn, serr := o.settleTerminal(ctx, state, rst)
-			if serr != nil {
+			// A failure nacks the driving reminder; any driver other than the
+			// dedicated retry reminder also arms it.
+			if serr := o.settleTerminal(ctx, state, rst, reminder.Name != reminderNameParentNotify); serr != nil {
 				return todo.RunCompletedFalse, serr
-			}
-			if o.deliverParentNotify(pn) {
-				return todo.RunCompletedFalse, nil
 			}
 		}
 		log.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", o.actorID, reminder.Name)
@@ -239,7 +235,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			newEvents = append(newEvents, f.event)
 		}
 	}
-	newEvents = deferUnmatchedResolutions(state, newEvents)
 	wi := &backend.WorkflowWorkItem{
 		InstanceID: api.InstanceID(rs.GetInstanceId()),
 		NewEvents:  newEvents,
@@ -505,10 +500,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	for _, msg := range rs.GetPendingMessages() {
 		switch {
 		case msg.GetHistoryEvent().GetExecutionStarted() != nil:
-			if dedup.IsChildAlreadyResolved(msg.GetHistoryEvent(), rs.GetOldEvents(), rs.GetNewEvents()) {
-				log.Debugf("Workflow actor '%s': skipping creation of child '%s' - resolution already present", o.actorID, msg.GetTargetInstanceId())
-				continue
-			}
 			createWorkflows = append(createWorkflows, msg)
 
 		case msg.GetHistoryEvent().GetChildWorkflowInstanceCompleted() != nil, msg.GetHistoryEvent().GetChildWorkflowInstanceFailed() != nil:
@@ -664,9 +655,8 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// Everything after the save is idempotent and retried by the driving
 		// reminder, or the janitor, on failure. Reminders are deleted after
 		// it so a failure here keeps its retry.
-		pn, serr := o.settleTerminal(ctx, state, rs)
-		if serr != nil {
-			return todo.RunCompletedFalse, serr
+		if err = o.settleTerminal(ctx, state, rs, true); err != nil {
+			return todo.RunCompletedFalse, err
 		}
 		if hasUnfiredTimers(rs) {
 			if err = o.deleteAllReminders(ctx); err != nil {
@@ -681,10 +671,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			// missed delete self-deletes on its next fire against the
 			// terminal state, and purge sweeps it on any binary version.
 			o.deleteJanitor(ctx)
-		}
-		// After the reminder cleanup, which would sweep the retry reminder.
-		if o.deliverParentNotify(pn) {
-			return todo.RunCompletedFalse, nil
 		}
 		return todo.RunCompletedTrue, nil
 	}
@@ -755,10 +741,11 @@ const retentionReminderName = "retention"
 // of job data that is not atomic with the completion save, with no durable
 // per-instance anchor (and no completion-time index) to recover a lost join.
 // settleTerminal runs what a completed instance owes after its terminal
-// commit, idempotently: the retention reminder, the recursive terminate and
-// the pending parent notification, which is returned for the caller to
-// deliver off the lock. rst is read first: a save may drop the cached state.
-func (o *orchestrator) settleTerminal(ctx context.Context, state *wfenginestate.State, rst *protos.WorkflowRuntimeState) (parentNotify, error) {
+// commit, idempotently, so every driver (the terminal turn, an empty-inbox
+// fire, the janitor) leaves the same state behind: the pending parent
+// notification, the retention reminder and the recursive terminate. rst is
+// read before the re-send, whose save may drop the cached runtime state.
+func (o *orchestrator) settleTerminal(ctx context.Context, state *wfenginestate.State, rst *protos.WorkflowRuntimeState, arm bool) error {
 	status := runtimestate.RuntimeStatus(rst)
 	completedAt, err := runtimestate.CompletedTime(rst)
 	if err != nil || completedAt.IsZero() {
@@ -769,15 +756,15 @@ func (o *orchestrator) settleTerminal(ctx context.Context, state *wfenginestate.
 	// Retention and the cascade first: an unreachable parent must not hold
 	// them back, and both are idempotent re-asserts.
 	if err = o.handleRetention(ctx, status, completedAt); err != nil {
-		return parentNotify{}, wferrors.NewRecoverable(fmt.Errorf("failed to (re)create the retention reminder: %w", err))
+		return wferrors.NewRecoverable(fmt.Errorf("failed to (re)create the retention reminder: %w", err))
 	}
 	if err = o.terminateChildren(ctx, state); err != nil {
-		return parentNotify{}, wferrors.NewRecoverable(fmt.Errorf("failed to (re)deliver the recursive terminate to children: %w", err))
+		return wferrors.NewRecoverable(fmt.Errorf("failed to (re)deliver the recursive terminate to children: %w", err))
 	}
 	if state.ParentNotifyPending {
-		return o.pendingParentNotify(ctx, state)
+		return o.resendParentNotification(ctx, state, arm)
 	}
-	return parentNotify{}, nil
+	return nil
 }
 
 func (o *orchestrator) handleRetention(ctx context.Context, status protos.OrchestrationStatus, completedAt time.Time) error {
@@ -848,52 +835,6 @@ func staleTurnDuplicate(state *wfenginestate.State, rs *backend.WorkflowRuntimeS
 		}
 	}
 	return "", 0, false
-}
-
-// resolutionTarget returns the scheduled id a resolution event resolves.
-func resolutionTarget(e *backend.HistoryEvent) (int32, bool) {
-	switch {
-	case e.GetTaskCompleted() != nil:
-		return e.GetTaskCompleted().GetTaskScheduledId(), true
-	case e.GetTaskFailed() != nil:
-		return e.GetTaskFailed().GetTaskScheduledId(), true
-	case e.GetChildWorkflowInstanceCompleted() != nil:
-		return e.GetChildWorkflowInstanceCompleted().GetTaskScheduledId(), true
-	case e.GetChildWorkflowInstanceFailed() != nil:
-		return e.GetChildWorkflowInstanceFailed().GetTaskScheduledId(), true
-	default:
-		return 0, false
-	}
-}
-
-// deferUnmatchedResolutions moves resolutions whose scheduling is not in
-// history behind the other events, ascending by id. The SDK runs the code
-// between events, so the completion of a turn that dispatched and then
-// failed to commit meets its re-scheduled operation directly instead of
-// being buffered into a withheld action that never reaches history.
-func deferUnmatchedResolutions(state *wfenginestate.State, events []*backend.HistoryEvent) []*backend.HistoryEvent {
-	var deferred []*backend.HistoryEvent
-	for _, e := range events {
-		if id, ok := resolutionTarget(e); ok && state.FindHistoryEventByID(id) == nil {
-			deferred = append(deferred, e)
-		}
-	}
-	if len(deferred) == 0 {
-		return events
-	}
-	ordered := make([]*backend.HistoryEvent, 0, len(events))
-	for _, e := range events {
-		if id, ok := resolutionTarget(e); ok && state.FindHistoryEventByID(id) == nil {
-			continue
-		}
-		ordered = append(ordered, e)
-	}
-	sort.SliceStable(deferred, func(i, j int) bool {
-		a, _ := resolutionTarget(deferred[i])
-		b, _ := resolutionTarget(deferred[j])
-		return a < b
-	})
-	return append(ordered, deferred...)
 }
 
 // stripUnmatchedResolutions removes from rs.NewEvents any task or child

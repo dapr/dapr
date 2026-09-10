@@ -56,18 +56,6 @@ func IsDuplicateExternalEvent(e *backend.HistoryEvent, history, inbox []*backend
 	return match(history) || match(inbox)
 }
 
-// IsChildAlreadyResolved reports whether a child's start event has a
-// completion or failure in history or the inbox. Detached spawns have none.
-func IsChildAlreadyResolved(start *backend.HistoryEvent, history, inbox []*backend.HistoryEvent) bool {
-	parent := start.GetExecutionStarted().GetParentInstance()
-	if parent == nil {
-		return false
-	}
-	id := parent.GetTaskScheduledId()
-	return dtdedup.IsPresent(history, dtdedup.KindChild, id) ||
-		dtdedup.IsPresent(inbox, dtdedup.KindChild, id)
-}
-
 // IsTaskAlreadyResolved reports whether a TaskScheduled event has a matching
 // TaskCompleted or TaskFailed resolution already in history or queued in the
 // inbox.

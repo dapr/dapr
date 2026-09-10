@@ -104,11 +104,7 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 		// fresh execution is running; publish anyway, the orchestrator's
 		// duplicate-completion dedup absorbs whichever copy arrives second.
 		_ = call.BeginResolve()
-		// Detached from the invocation context: a placement drain cancels
-		// it while the publish waits, and a lost publish re-runs the body.
-		pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachedPublishTimeout)
-		execErr := a.publishResult(pubCtx, a.actorID, completed, wi, taskEvent, name, activityName, workflowID, start)
-		cancel()
+		execErr := a.publishResult(ctx, a.actorID, completed, wi, taskEvent, name, activityName, workflowID, start)
 		call.Finish(execErr)
 		unregister()
 		// On success, cache the outcome briefly so a cron retry that arrived

@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -173,7 +172,7 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		if err := o.signAndSaveState(ctx, state); err != nil {
 			return err
 		}
-		return o.assertParentNotifyReminder(o.getExecutionStartedEvent(state).GetName(), time.Now())
+		return o.assertParentNotifyReminder(o.getExecutionStartedEvent(state).GetName())
 	}
 	if state.ParentNotifyPending {
 		// Unavailable rather than AlreadyExists: a parent that continued as

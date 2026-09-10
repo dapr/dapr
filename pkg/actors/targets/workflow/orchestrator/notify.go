@@ -21,14 +21,12 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
-	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
 const reminderNameParentNotify = "parent-notify"
@@ -54,65 +52,33 @@ func (o *orchestrator) newParentNotify(state *wfenginestate.State, msgs []*backe
 	return parentNotify{msgs: msgs, md: md, name: started.GetName()}
 }
 
-// deliverParentNotify delivers off the turn lock: a parent turn may be
-// dispatching into this child at the same time. On ack the marker is cleared
-// under the lock; on failure the retry reminder is armed. Reports whether a
-// delivery is in flight so the caller keeps the actor resident for the clear.
-func (o *orchestrator) deliverParentNotify(pn parentNotify) bool {
+// deliverParentNotify sends the notification, bounded so a lock cycle with a
+// parent dispatching into this child resolves, and clears the marker once
+// the parent acknowledged. On failure it arms the retry reminder, unless
+// that reminder drove the send: its nack then retries under the scheduler's
+// failure policy rather than an immediate re-arm.
+func (o *orchestrator) deliverParentNotify(ctx context.Context, state *wfenginestate.State, pn parentNotify, arm bool) error {
 	if len(pn.msgs) == 0 {
-		return false
+		return nil
 	}
-	if !o.parentNotifyInFlight.CompareAndSwap(false, true) {
-		return true
-	}
-	started := o.detached.Go(func(rootCtx context.Context) {
-		defer o.parentNotifyInFlight.Store(false)
-		if err := o.deliverParentNotifySync(rootCtx, pn); err != nil {
-			log.Debugf("Workflow actor '%s': %v; the retry reminder re-sends", o.actorID, err)
-			o.armParentNotifyRetry(pn.name)
-		}
-	})
-	if !started {
-		o.parentNotifyInFlight.Store(false)
-		return false
-	}
-	return true
-}
-
-// deliverParentNotifySync sends the notification, bounded, and clears the
-// marker on ack. The caller must not hold the turn lock.
-func (o *orchestrator) deliverParentNotifySync(ctx context.Context, pn parentNotify) error {
 	cctx, cancel := context.WithTimeout(ctx, escalateTimeout)
 	defer cancel()
-	if res := o.messages.CallAddEventStateMessage(cctx, pn.msgs, pn.md); res.Err != nil {
-		return wferrors.NewRecoverable(fmt.Errorf("failed to notify parent of completion: %w", res.Err))
-	}
-	if err := o.clearParentNotify(cctx); err != nil {
-		return wferrors.NewRecoverable(fmt.Errorf("parent acknowledged but the marker could not be cleared: %w", err))
-	}
-	return nil
-}
-
-// resendParentNotification drives the retry reminder: the notification is
-// rebuilt under the lock and delivered off it; a failure nacks the fire, so
-// the scheduler's failure policy retries and the reminder stays the driver.
-func (o *orchestrator) resendParentNotification(ctx context.Context) error {
-	unlock, err := o.contextLockMeasured(ctx, "reminder")
-	if err != nil {
-		return err
-	}
-	pn, err := func() (parentNotify, error) {
-		defer unlock()
-		state, _, lerr := o.loadInternalState(ctx)
-		if lerr != nil || state == nil || !state.ParentNotifyPending || !runtimestate.IsCompleted(o.rstate) {
-			return parentNotify{}, lerr
+	res := o.messages.CallAddEventStateMessage(cctx, pn.msgs, pn.md)
+	if res.Err == nil {
+		// A crash before this save re-sends once on the refire; the parent
+		// drops the duplicate.
+		state.SetParentNotifyPending(false)
+		if err := o.signAndSaveState(ctx, state); err != nil {
+			return wferrors.NewRecoverable(fmt.Errorf("failed to clear the parent notification marker: %w", err))
 		}
-		return o.pendingParentNotify(ctx, state)
-	}()
-	if err != nil || len(pn.msgs) == 0 {
-		return err
+		return nil
 	}
-	return o.deliverParentNotifySync(ctx, pn)
+	if arm {
+		if rerr := o.assertParentNotifyReminder(pn.name); rerr != nil {
+			return wferrors.NewRecoverable(fmt.Errorf("failed to notify parent of completion: %w (and to arm the retry reminder: %v)", res.Err, rerr))
+		}
+	}
+	return wferrors.NewRecoverable(fmt.Errorf("failed to notify parent of completion: %w", res.Err))
 }
 
 // rebuildParentNotify rebuilds the completion notification from durable
@@ -128,46 +94,20 @@ func (o *orchestrator) rebuildParentNotify(ctx context.Context, state *wfengines
 	return o.newParentNotify(state, []*backend.WorkflowRuntimeStateMessage{msg}), nil
 }
 
-// clearParentNotify clears the marker under the lock; a recreate or purge
-// leaves nothing to clear.
-func (o *orchestrator) clearParentNotify(ctx context.Context) error {
-	unlock, err := o.lock.ContextLock(ctx)
-	if err != nil {
-		return err
-	}
-	defer unlock()
-	state, _, err := o.loadInternalState(ctx)
-	if err != nil {
-		return err
-	}
-	if state == nil || !state.ParentNotifyPending {
-		return nil
-	}
-	state.SetParentNotifyPending(false)
-	return o.signAndSaveState(ctx, state)
-}
-
-// armParentNotifyRetry arms the retry reminder with the failure policy's
-// jittered delay.
-func (o *orchestrator) armParentNotifyRetry(workflowName string) {
-	delay := common.NewJitterBackoff(common.RetryBackoffBase, common.RetryBackoffCap).NextBackOff()
-	if err := o.assertParentNotifyReminder(workflowName, time.Now().Add(delay)); err != nil {
-		log.Warnf("Workflow actor '%s': failed to arm the parent notification retry reminder; the janitor re-sends: %v", o.actorID, err)
-	}
-}
-
-// pendingParentNotify rebuilds the pending notification under the lock;
-// when nothing is owed the marker is cleared in place.
-func (o *orchestrator) pendingParentNotify(ctx context.Context, state *wfenginestate.State) (parentNotify, error) {
+// resendParentNotification re-sends a pending notification under the lock;
+// a failure nacks the driving reminder. arm adds the dedicated retry
+// reminder when some other fire drove the re-send.
+func (o *orchestrator) resendParentNotification(ctx context.Context, state *wfenginestate.State, arm bool) error {
 	pn, err := o.rebuildParentNotify(ctx, state)
 	if err != nil {
-		return parentNotify{}, err
+		return err
 	}
 	if len(pn.msgs) == 0 {
+		// No parent or no completion to report: nothing is owed.
 		state.SetParentNotifyPending(false)
-		return parentNotify{}, o.signAndSaveState(ctx, state)
+		return o.signAndSaveState(ctx, state)
 	}
-	return pn, nil
+	return o.deliverParentNotify(ctx, state, pn, arm)
 }
 
 // parentNotification mirrors the completion message the durabletask-go
@@ -232,10 +172,10 @@ func (o *orchestrator) parentNotification(ctx context.Context, state *wfenginest
 // may already be cancelled (a notify parked behind the parent's lock past
 // the local wake timeout), so the create runs on the actor's root context
 // like an escalation.
-func (o *orchestrator) assertParentNotifyReminder(workflowName string, due time.Time) error {
+func (o *orchestrator) assertParentNotifyReminder(workflowName string) error {
 	ctx, cancel := context.WithTimeout(o.rootCtx, escalateTimeout)
 	defer cancel()
-	return o.createWorkflowReminderForever(ctx, reminderNameParentNotify, nil, due, o.appID, &workflowName)
+	return o.createWorkflowReminderForever(ctx, reminderNameParentNotify, nil, time.Now(), o.appID, &workflowName)
 }
 
 // attestationInput is the input the parent verifies a child completion

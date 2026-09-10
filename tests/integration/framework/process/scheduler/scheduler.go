@@ -583,10 +583,9 @@ func (s *Scheduler) ListJobActors(t *testing.T, ctx context.Context, namespace, 
 	return resp
 }
 
-// JobKeyCount returns the number of stored job keys containing substr. It
-// accepts an assert.CollectT so Eventually bodies never assert on a finished
-// test.
-func (s *Scheduler) JobKeyCount(t require.TestingT, ctx context.Context, substr string) int {
+// JobKeyCount returns the number of stored job keys containing substr.
+func (s *Scheduler) JobKeyCount(t *testing.T, ctx context.Context, substr string) int {
+	t.Helper()
 	var n int
 	for _, key := range s.ListAllKeys(t, ctx, "dapr/jobs") {
 		if strings.Contains(key, substr) {
@@ -596,15 +595,15 @@ func (s *Scheduler) JobKeyCount(t require.TestingT, ctx context.Context, substr 
 	return n
 }
 
-func (s *Scheduler) ListAllKeys(t require.TestingT, ctx context.Context, prefix string) []string {
-	etcdClient, err := clientv3.New(clientv3.Config{
+func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string) []string {
+	t.Helper()
+
+	resp, err := client.Etcd(t, clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
 		DialTimeout: 40 * time.Second,
-	})
-	require.NoError(t, err)
-	defer etcdClient.Close()
-	resp, err := client.NewEtcdClient(etcdClient).ListAllKeys(ctx, prefix)
-	require.NoError(t, err)
+	}).ListAllKeys(ctx, prefix)
+	assert.NoError(t, err)
+
 	return resp
 }
 
