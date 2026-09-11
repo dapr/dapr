@@ -1445,7 +1445,7 @@
     },
     {
       "datasource": "Dapr",
-      "description": "Hosts reported to the placement service. dapr_placement_actor_runtimes_total is recorded by the disseminator on host add and remove and may be absent on a cluster where no actor host has connected to this placement instance since it started.",
+      "description": "Hosts reported to the placement service. Actor hosts is the count that drives placement dissemination, since every change redistributes actors.",
       "fieldConfig": {
         "defaults": {
           "color": {
