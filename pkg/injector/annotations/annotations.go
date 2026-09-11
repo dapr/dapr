@@ -28,6 +28,7 @@ const (
 	KeyLogLevel                         = "dapr.io/log-level"
 	KeyAPITokenSecret                   = "dapr.io/api-token-secret" /* #nosec */
 	KeyAppTokenSecret                   = "dapr.io/app-token-secret" /* #nosec */
+	KeyAppTokenHeader                   = "dapr.io/app-token-header" /* #nosec */
 	KeyLogAsJSON                        = "dapr.io/log-as-json"
 	KeyAppMaxConcurrency                = "dapr.io/app-max-concurrency"
 	KeyEnableMetrics                    = "dapr.io/enable-metrics"

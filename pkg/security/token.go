@@ -16,6 +16,7 @@ package security
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/dapr/dapr/pkg/security/consts"
 )
@@ -35,6 +36,14 @@ func GetAPIToken() string {
 // GetAppToken returns the value of the app api token from an environment variable.
 func GetAppToken() string {
 	return os.Getenv(consts.AppAPITokenEnvVar)
+}
+
+// GetAppTokenHeader returns the HTTP header or gRPC metadata name for the app API token.
+func GetAppTokenHeader() string {
+	if header := strings.ToLower(strings.TrimSpace(os.Getenv(consts.AppAPITokenHeaderEnvVar))); header != "" {
+		return header
+	}
+	return consts.APITokenHeader
 }
 
 // getKubernetesIdentityToken returns the value of the Kubernetes identity

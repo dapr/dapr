@@ -69,8 +69,9 @@ type Options struct {
 	// ReadBufferSize is the read buffer size, in bytes
 	ReadBufferSize int
 
-	GRPC        *manager.Manager
-	AppAPIToken string
+	GRPC              *manager.Manager
+	AppAPIToken       string
+	AppAPITokenHeader string
 
 	// ActorCallbackStream is the runtime-owned stream manager attached to
 	// the gRPC app channel, if any. Its event loop is driven by the
@@ -90,11 +91,12 @@ type Channels struct {
 	grpc                *manager.Manager
 	actorCallbackStream *callbackstream.Manager
 
-	appAPIToken     string
-	appChannel      channel.AppChannel
-	endpChannels    map[string]channel.HTTPEndpointAppChannel
-	httpEndpChannel channel.AppChannel
-	lock            sync.RWMutex
+	appAPIToken       string
+	appAPITokenHeader string
+	appChannel        channel.AppChannel
+	endpChannels      map[string]channel.HTTPEndpointAppChannel
+	httpEndpChannel   channel.AppChannel
+	lock              sync.RWMutex
 }
 
 func New(opts Options) *Channels {
@@ -109,6 +111,7 @@ func New(opts Options) *Channels {
 		grpc:                opts.GRPC,
 		actorCallbackStream: opts.ActorCallbackStream,
 		appAPIToken:         opts.AppAPIToken,
+		appAPITokenHeader:   opts.AppAPITokenHeader,
 		httpClient:          appHTTPClient(opts.AppConnectionConfig, opts.GlobalConfig, opts.ReadBufferSize),
 		endpChannels:        make(map[string]channel.HTTPEndpointAppChannel),
 	}
@@ -227,6 +230,7 @@ func (c *Channels) appHTTPChannelConfig() channelhttp.ChannelConfiguration {
 	conf.Endpoint = c.AppHTTPEndpoint()
 	conf.Client = c.httpClient
 	conf.AppAPIToken = c.appAPIToken
+	conf.AppAPITokenHeader = c.appAPITokenHeader
 
 	return conf
 }
