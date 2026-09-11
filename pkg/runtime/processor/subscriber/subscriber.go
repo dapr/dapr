@@ -597,6 +597,9 @@ func (s *Subscriber) initProgrammaticSubscriptions(ctx context.Context) error {
 
 	for pubsubName, topics := range subbedTopics {
 		log.Infof("app is subscribed to the following topics: [%s] through pubsub=%s", topics, pubsubName)
+		if _, ok := s.compStore.GetPubSub(pubsubName); !ok {
+			log.Errorf("app is subscribed to topics [%s] through pubsub=%s, but no pubsub component with that name was found", topics, pubsubName)
+		}
 	}
 
 	s.compStore.SetProgramaticSubscriptions(subscriptions...)
