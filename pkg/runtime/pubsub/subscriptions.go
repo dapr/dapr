@@ -384,29 +384,6 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 		}
 	}
 
-	var span trace.Span
-
-	iTraceID := cloudEvent[contribpubsub.TraceParentField]
-	if iTraceID == nil {
-		iTraceID = cloudEvent[contribpubsub.TraceIDField]
-	}
-
-	if iTraceID != nil {
-		if traceID, ok := iTraceID.(string); ok {
-			sc, _ := diag.SpanContextFromW3CString(traceID)
-			spanName := "pubsub/" + msg.Topic
-
-			// no ops if trace is off
-			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, tracingSpec)
-			// span is nil if tracing is disabled (sampling rate is 0)
-			if span != nil {
-				ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
-			}
-		} else {
-			log.Warnf("ignored non-string traceid value: %v", iTraceID)
-		}
-	}
-
 	extensions, extensionsErr := ExtractCloudEventExtensions(cloudEvent)
 	if extensionsErr != nil {
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
@@ -414,6 +391,34 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 	}
 
 	envelope.Extensions = extensions
+
+	iTraceID := cloudEvent[contribpubsub.TraceParentField]
+	if iTraceID == nil {
+		iTraceID = cloudEvent[contribpubsub.TraceIDField]
+	}
+
+	var sc trace.SpanContext
+	if iTraceID != nil {
+		if traceID, ok := iTraceID.(string); ok {
+			var parsed bool
+			sc, parsed = diag.SpanContextFromW3CString(traceID)
+			if !parsed {
+				log.Warnf("failed to parse pubsub trace context for topic %s; will start a new root span if tracing is enabled", msg.Topic)
+			}
+		} else {
+			log.Warnf("ignored non-string traceid value: %v", iTraceID)
+		}
+	}
+
+	// The span is started only once every error path has been cleared, so the
+	// caller is never handed back an error alongside a span it cannot end.
+	spanName := "pubsub/" + msg.Topic
+	// no ops if trace is off; empty sc produces a new root span
+	ctx, span := diag.StartInternalCallbackSpan(ctx, spanName, sc, tracingSpec)
+	// span is nil if tracing is disabled (sampling rate is 0)
+	if span != nil {
+		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+	}
 
 	return ctx, envelope, span, nil
 }
