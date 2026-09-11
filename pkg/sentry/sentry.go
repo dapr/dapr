@@ -135,6 +135,7 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 	// Start all background processes
 	runners := concurrency.NewRunnerManager(
 		sec.Run,
+		camngr.Run,
 		server.New(server.Options{
 			Port:             opts.Config.Port,
 			Security:         sec,
