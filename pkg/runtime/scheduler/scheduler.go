@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops/connector"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops/hosts"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/watchhosts"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/leadership"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
@@ -54,6 +55,7 @@ type Scheduler struct {
 	hosts      loop.Interface[loops.EventHost]
 	watchhosts *watchhosts.WatchHosts
 	client     client.Interface
+	leadership *leadership.Leadership
 
 	currentActorTypes *[]string
 }
@@ -82,22 +84,32 @@ func New(opts Options) (*Scheduler, error) {
 		Security: opts.Security,
 	})
 
+	leadership := leadership.New()
+
 	watchhosts := watchhosts.New(watchhosts.Options{
-		HostLoop:  hosts,
-		Addresses: opts.Addresses,
-		Security:  opts.Security,
-		Clients:   clients,
-		Healthz:   opts.Healthz,
+		HostLoop:   hosts,
+		Addresses:  opts.Addresses,
+		Security:   opts.Security,
+		Clients:    clients,
+		Healthz:    opts.Healthz,
+		Leadership: leadership,
 	})
 
 	return &Scheduler{
 		connector:  connector,
 		hosts:      hosts,
 		watchhosts: watchhosts,
+		leadership: leadership,
 		client: wrapper.New(wrapper.Options{
 			Clients: clients,
 		}),
 	}, nil
+}
+
+// Leadership returns the store tracking the scheduler placement leader as
+// observed on the WatchHosts stream.
+func (s *Scheduler) Leadership() *leadership.Leadership {
+	return s.leadership
 }
 
 func (s *Scheduler) Run(ctx context.Context) error {
@@ -126,6 +138,15 @@ func (s *Scheduler) StopApp() {
 	s.currentActorTypes = nil
 	s.connector.Enqueue(&loops.Reconnect{
 		AppTarget: new(false),
+	})
+}
+
+// SetActorAddress sets the daprd internal gRPC host:port reported on
+// WatchJobs streams, enabling schedulers to route actor reminder triggers
+// directly to the placement owner host.
+func (s *Scheduler) SetActorAddress(address string) {
+	s.connector.Enqueue(&loops.Reconnect{
+		ActorAddress: &address,
 	})
 }
 

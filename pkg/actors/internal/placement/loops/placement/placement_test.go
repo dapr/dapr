@@ -18,6 +18,11 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -95,4 +100,88 @@ func TestHandleCloseStream_NotReady(t *testing.T) {
 		assert.True(t, ready.Load(),
 			"ready flag should remain true when close stream idx doesn't match")
 	})
+}
+
+type fakeConnector struct{ addr string }
+
+func (f *fakeConnector) Connect(context.Context) (*grpc.ClientConn, error) {
+	return nil, errors.New("fake connector does not dial")
+}
+func (f *fakeConnector) Address() string { return f.addr }
+
+func TestSwapAlt(t *testing.T) {
+	t.Parallel()
+
+	sched := &fakeConnector{addr: "scheduler"}
+	place := &fakeConnector{addr: "placement"}
+	p := &placement{
+		connector:          place,
+		schedulerPlacement: false,
+		alt: &Fallback{
+			Connector:          sched,
+			SchedulerPlacement: true,
+		},
+	}
+
+	p.swapAlt()
+	assert.Equal(t, "scheduler", p.connector.Address())
+	assert.True(t, p.schedulerPlacement)
+	assert.Equal(t, "placement", p.alt.Connector.Address())
+	assert.False(t, p.alt.SchedulerPlacement)
+
+	p.swapAlt()
+	assert.Equal(t, "placement", p.connector.Address())
+	assert.False(t, p.schedulerPlacement)
+	assert.Equal(t, "scheduler", p.alt.Connector.Address())
+	assert.True(t, p.alt.SchedulerPlacement)
+}
+
+// TestHandleCloseStreamRefusalProbesAlt asserts a FailedPrecondition close,
+// how a stood-down authority refuses, swaps to the kept alternative before
+// reconnecting.
+func TestHandleCloseStreamRefusalProbesAlt(t *testing.T) {
+	t.Parallel()
+
+	ready := &atomic.Bool{}
+	ready.Store(true)
+	p := &placement{
+		id:         "test-id",
+		namespace:  "default",
+		ready:      ready,
+		htarget:    healthzfake.New(),
+		dissLoop:   loopfake.New[loops.EventDiss](),
+		actorTable: tablefake.New(),
+		inflight:   inflight.New(inflight.Options{Hostname: "localhost", Port: "3500"}),
+		idx:        1,
+		connector:  &fakeConnector{addr: "placement"},
+		alt: &Fallback{
+			Connector:          &fakeConnector{addr: "scheduler"},
+			SchedulerPlacement: true,
+		},
+	}
+
+	// The context outlives the close handling just long enough for the swap,
+	// then ends the reconnect loop.
+	ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond*50)
+	t.Cleanup(cancel)
+	err := p.handleCloseStream(ctx, &loops.ConnCloseStream{
+		IDx:   1,
+		Error: status.Error(codes.FailedPrecondition, "standing down"),
+	})
+	require.Error(t, err)
+	assert.Equal(t, "scheduler", p.connector.Address(),
+		"a refused stream must probe the other authority next")
+
+	// A non-refusal close does not swap the connector. The canceled
+	// context stops the handling before the reconnect loop probes.
+	p.idx = 2
+	p.dissLoop = loopfake.New[loops.EventDiss]()
+	ctx2, cancel2 := context.WithCancel(t.Context())
+	cancel2()
+	err = p.handleCloseStream(ctx2, &loops.ConnCloseStream{
+		IDx:   2,
+		Error: errors.New("connection reset"),
+	})
+	require.Error(t, err)
+	assert.Equal(t, "scheduler", p.connector.Address())
 }

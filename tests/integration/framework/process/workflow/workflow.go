@@ -17,6 +17,7 @@ import (
 	"context"
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -65,6 +66,15 @@ func FastPathFromEnv() bool {
 	return kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_WORKFLOW_FASTPATH"))
 }
 
+// SchedulerPlacementFromEnv reports whether
+// DAPR_INTEGRATION_SCHEDULER_PLACEMENT is set truthy, which has the
+// scheduler serve actor placement for every harness built by this package.
+// Tests which pick a topology, or drive the placement service, keep their
+// choice.
+func SchedulerPlacementFromEnv() bool {
+	return kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_SCHEDULER_PLACEMENT"))
+}
+
 type Workflow struct {
 	taskregistry []*task.TaskRegistry
 	db           *sqlite.SQLite
@@ -75,6 +85,8 @@ type Workflow struct {
 	daprds       []*daprd.Daprd
 	clustered    bool
 	fastPath     bool
+
+	schedulerPlacement bool
 }
 
 func New(t *testing.T, fopts ...Option) *Workflow {
@@ -103,6 +115,17 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		fastPath = *opts.fastPath
 	}
 
+	schedulerPlacement := SchedulerPlacementFromEnv()
+	// A test which tunes the placement service, brings its own scheduler,
+	// or overrides the scheduler address exercises that topology: the
+	// authority swap does not apply.
+	if len(opts.placementOptions) > 0 || opts.schedulerInstance != nil || opts.schedulerAddress != nil {
+		schedulerPlacement = false
+	}
+	if opts.schedulerPlacement != nil {
+		schedulerPlacement = *opts.schedulerPlacement
+	}
+
 	db := sqlite.New(t,
 		sqlite.WithActorStateStore(true),
 		sqlite.WithCreateStateTables(),
@@ -123,7 +146,14 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		)
 	}
 
-	place := placement.New(t, placementOpts...)
+	// No standalone placement process runs when placement is served by the
+	// scheduler: sidecars take the scheduler's advertisement.
+	var place *placement.Placement
+	if !schedulerPlacement {
+		place = placement.New(t, placementOpts...)
+	} else {
+		schedulerOpts = append(schedulerOpts, scheduler.WithPlacementEnabled(true))
+	}
 	sched := opts.schedulerInstance
 	ownsSched := false
 	if sched == nil {
@@ -131,8 +161,9 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		ownsSched = true
 	}
 
-	baseDopts := []daprd.Option{
-		daprd.WithPlacementAddresses(place.Address()),
+	baseDopts := []daprd.Option{}
+	if place != nil {
+		baseDopts = append(baseDopts, daprd.WithPlacementAddresses(place.Address()))
 	}
 
 	if !opts.skipDB {
@@ -215,6 +246,8 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		daprds:       daprds,
 		clustered:    clustered,
 		fastPath:     fastPath,
+
+		schedulerPlacement: schedulerPlacement,
 	}
 
 	for i := range workflow.taskregistry {
@@ -229,7 +262,9 @@ func (w *Workflow) Run(t *testing.T, ctx context.Context) {
 	if w.sentry != nil {
 		w.sentry.Run(t, ctx)
 	}
-	w.place.Run(t, ctx)
+	if w.place != nil {
+		w.place.Run(t, ctx)
+	}
 	if w.ownsSched {
 		w.sched.Run(t, ctx)
 	}
@@ -245,7 +280,9 @@ func (w *Workflow) Cleanup(t *testing.T) {
 	if w.ownsSched {
 		w.sched.Cleanup(t)
 	}
-	w.place.Cleanup(t)
+	if w.place != nil {
+		w.place.Cleanup(t)
+	}
 	if w.sentry != nil {
 		w.sentry.Cleanup(t)
 	}
@@ -253,7 +290,9 @@ func (w *Workflow) Cleanup(t *testing.T) {
 }
 
 func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	w.place.WaitUntilRunning(t, ctx)
+	if w.place != nil {
+		w.place.WaitUntilRunning(t, ctx)
+	}
 	if w.sched != nil {
 		w.sched.WaitUntilRunning(t, ctx)
 	}
@@ -385,6 +424,12 @@ func (w *Workflow) FeatureOptions(t *testing.T) []daprd.Option {
 // ClusteredDeployment reports whether every daprd in this workflow runs with
 // the WorkflowsClusteredDeployment feature flag enabled. Tests use this to
 // branch assertions which differ between the two modes.
+// SchedulerPlacement reports whether the scheduler serves actor placement
+// for this harness, in which case Placement returns nil.
+func (w *Workflow) SchedulerPlacement() bool {
+	return w.schedulerPlacement
+}
+
 func (w *Workflow) ClusteredDeployment() bool {
 	return w.clustered
 }
@@ -431,6 +476,32 @@ func (w *Workflow) Sentry() *sentry.Sentry {
 	return w.sentry
 }
 
+// HasPlacement reports whether a standalone placement service runs, rather
+// than placement served by the scheduler.
+func (w *Workflow) HasPlacement() bool {
+	return w.place != nil
+}
+
+// PlacementVersion returns a counter which advances whenever the active
+// placement authority completes a dissemination: the default namespace table
+// version of the placement service, or the scheduler's dissemination count.
+// Only successive values compare, the units differ per authority.
+func (w *Workflow) PlacementVersion(t *testing.T, ctx context.Context) uint64 {
+	if w.place != nil {
+		return w.place.PlacementTables(t, ctx).Tables["default"].Version
+	}
+	var disseminations float64
+	for k, v := range w.sched.Metrics(t, ctx).All() {
+		if strings.HasPrefix(k, "dapr_scheduler_placement_disseminations_total") {
+			disseminations += v
+		}
+	}
+	return uint64(disseminations)
+}
+
 func (w *Workflow) Placement() *placement.Placement {
+	if w.place == nil {
+		panic("no placement service runs when the scheduler serves placement: pin this suite with workflow.WithPlacementService()")
+	}
 	return w.place
 }
