@@ -97,6 +97,20 @@ func TestSpanContextToGRPCMetadata(t *testing.T) {
 
 		assert.Equal(t, ctx, newCtx)
 	})
+	t.Run("replaces a pre-existing traceparent from a proxied call instead of appending", func(t *testing.T) {
+		ctx := grpcMetadata.NewOutgoingContext(t.Context(), grpcMetadata.Pairs("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"))
+		testTraceParent := "00-4bf92f3577b34da6a3ce929d0e0e4736-9be09ca6ea6be43e-01"
+		sc, ok := SpanContextFromW3CString(testTraceParent)
+		require.True(t, ok)
+		
+		newCtx := SpanContextToGRPCMetadata(ctx, sc)
+		
+		md, ok := grpcMetadata.FromOutgoingContext(newCtx)
+		require.True(t, ok)
+		values := md.Get("traceparent")
+		require.Len(t, values, 1, "expected exactly one traceparent value, got %v", values)
+		assert.Equal(t, testTraceParent, values[0])
+	})
 }
 
 // runBaggageHeaderPropagationTest runs the same baggage tests across both types of interceptors
