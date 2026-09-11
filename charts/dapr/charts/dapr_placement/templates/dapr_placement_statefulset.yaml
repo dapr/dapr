@@ -104,15 +104,13 @@ spec:
         {{- with .Values.global.extraVolumeMounts.placement }}
           {{- toYaml . | nindent 10 }}
         {{- end }}
-{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
-  {{- if eq .Values.cluster.forceInMemoryLog false }}
+{{- if eq (include "dapr_placement.renderRaftLogVolume" .) "true" }}
           - name: raft-log
     {{- if eq .Values.global.daprControlPlaneOs "windows" }}
             mountPath: {{ .Values.cluster.logStoreWinPath }}
     {{- else }}
             mountPath: {{ .Values.cluster.logStorePath }}
     {{- end }}
-  {{- end }}
 {{- end }}
         ports:
           - containerPort: {{ .Values.ports.apiPort }}
@@ -146,7 +144,7 @@ spec:
         - "$(PLACEMENT_ID)"
         - "--initial-cluster"
         - {{ template "dapr_placement.initialcluster" . }}
-  {{- if eq .Values.cluster.forceInMemoryLog false }}
+  {{- if eq (include "dapr_placement.renderRaftLogVolume" .) "true" }}
         - "--raft-logstore-path"
     {{- if eq .Values.global.daprControlPlaneOs "windows" }}
         - "{{ .Values.cluster.logStoreWinPath }}\\cluster-v2-nonroot-$(PLACEMENT_ID)"
@@ -285,8 +283,7 @@ spec:
       priorityClassName:
 {{ toYaml .Values.global.priorityClassName | indent 8 }}
 {{- end }}
-{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
-  {{- if eq .Values.cluster.forceInMemoryLog false }}
+{{- if eq (include "dapr_placement.renderRaftLogVolume" .) "true" }}
   volumeClaimTemplates:
   - apiVersion: v1
     kind: PersistentVolumeClaim
@@ -301,6 +298,5 @@ spec:
     {{- if .Values.volumeclaims.storageClassName }}
       storageClassName: {{ .Values.volumeclaims.storageClassName }}
     {{- end }}
-  {{- end }}
 {{- end }}
 {{- end }}
