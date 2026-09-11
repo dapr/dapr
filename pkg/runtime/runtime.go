@@ -252,21 +252,24 @@ func newDaprRuntime(ctx context.Context,
 		ComponentContextFn:    resiliencyProvider.ComponentContextDecorator(),
 	})
 
+	schedulerPlacement := runtimeConfig.SchedulerPlacementEnabled()
+
 	actors := actors.New(actors.Options{
 		AppID:     runtimeConfig.id,
 		Namespace: namespace,
 		Port:      runtimeConfig.internalGRPCPort,
 		// TODO: @joshvanl
-		PlacementAddresses:   strings.Split(strings.TrimPrefix(runtimeConfig.actorsService, "placement:"), ","),
-		HealthEndpoint:       channels.AppHTTPEndpoint(),
-		Resiliency:           resiliencyProvider,
-		Security:             sec,
-		Healthz:              runtimeConfig.healthz,
-		CompStore:            compStore,
-		StateTTLEnabled:      globalConfig.IsFeatureEnabled(config.ActorStateTTL),
-		MaxRequestBodySize:   runtimeConfig.maxRequestBodySize,
-		Mode:                 runtimeConfig.mode,
-		DisseminationTimeout: runtimeConfig.actorsDisseminationTimeout,
+		PlacementAddresses:        strings.Split(strings.TrimPrefix(runtimeConfig.actorsService, "placement:"), ","),
+		HealthEndpoint:            channels.AppHTTPEndpoint(),
+		Resiliency:                resiliencyProvider,
+		Security:                  sec,
+		Healthz:                   runtimeConfig.healthz,
+		CompStore:                 compStore,
+		StateTTLEnabled:           globalConfig.IsFeatureEnabled(config.ActorStateTTL),
+		MaxRequestBodySize:        runtimeConfig.maxRequestBodySize,
+		Mode:                      runtimeConfig.mode,
+		DisseminationTimeout:      runtimeConfig.actorsDisseminationTimeout,
+		SchedulerPlacementEnabled: schedulerPlacement,
 	})
 	inProcessExec := inprocess.NewExecutor()
 
@@ -275,7 +278,7 @@ func newDaprRuntime(ctx context.Context,
 		Namespace:                       namespace,
 		IsHTTP:                          runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
 		ProgrammaticSubscriptionEnabled: !utils.Contains(runtimeConfig.disableInitEndpoints, DisableSubscribeInitEndpoint),
-		ActorsEnabled:                   len(runtimeConfig.actorsService) > 0,
+		ActorsEnabled:                   len(runtimeConfig.actorsService) > 0 || schedulerPlacement,
 		Actors:                          actors,
 		Registry:                        runtimeConfig.registry,
 		ComponentStore:                  compStore,
@@ -360,9 +363,21 @@ func newDaprRuntime(ctx context.Context,
 	// Install the wfengine as the processor's internal workflow registrar.
 	processor.SetInProcessWorkflows(wfe)
 
+	actorHost, err := utils.GetHostAddress()
+	if err != nil {
+		return nil, err
+	}
+	if utils.Contains(
+		[]string{"127.0.0.1", "localhost", "[::1]"},
+		runtimeConfig.internalGRPCListenAddress,
+	) {
+		actorHost = runtimeConfig.internalGRPCListenAddress
+	}
+
 	jobsManager, err := scheduler.New(scheduler.Options{
 		Namespace:        namespace,
 		AppID:            runtimeConfig.id,
+		ActorAddress:     net.JoinHostPort(actorHost, strconv.Itoa(runtimeConfig.internalGRPCPort)),
 		Channels:         channels,
 		Actors:           actors,
 		Addresses:        runtimeConfig.schedulerAddress,
@@ -1301,10 +1316,11 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 	}
 
 	if err := a.actors.Init(actors.InitOptions{
-		Hostname:          hostAddress,
-		GRPC:              a.grpc,
-		SchedulerClient:   a.jobsManager.Client(),
-		SchedulerReloader: a.jobsManager,
+		Hostname:            hostAddress,
+		GRPC:                a.grpc,
+		SchedulerClient:     a.jobsManager.Client(),
+		SchedulerReloader:   a.jobsManager,
+		SchedulerLeadership: a.jobsManager.Leadership(),
 	}); err != nil {
 		return err
 	}
