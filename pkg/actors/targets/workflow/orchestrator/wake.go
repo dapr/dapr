@@ -17,9 +17,6 @@ import (
 	"context"
 	"time"
 
-	"google.golang.org/grpc/codes"
-	grpcstatus "google.golang.org/grpc/status"
-
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
@@ -30,28 +27,9 @@ import (
 // time it spends queued on the actor lock behind the arming invocation.
 const localWakeTimeout = time.Minute
 
-// escalateTimeout bounds the durable-reminder create performed when a local
-// drive fails. It is deliberately generous: the create is idempotent
-// (overwrite-by-name) and host-agnostic, and the janitor remains the net if
-// it also fails.
-const escalateTimeout = 30 * time.Second
-
-// Escalation hysteresis defaults. A failed drive against an instance that
-// shows recent life is retried in place, and if still failing is handed to the
-// janitor rather than escalated.
-const (
-	driveRetryBudget        = 6 * time.Second
-	defaultDriveAliveWindow = 3 * time.Second
-)
-
-func (o *orchestrator) aliveWithin(window time.Duration) bool {
-	cutoff := time.Now().Add(-window).UnixNano()
-	return o.lastProgress.Load() >= cutoff || o.lastActive.Load() >= cutoff
-}
-
-func (o *orchestrator) progressWithin(window time.Duration) bool {
-	return o.lastProgress.Load() >= time.Now().Add(-window).UnixNano()
-}
+// driveRetryBudget bounds the total sleep across the in-place retries of a
+// failed drive; past it the janitor owns recovery.
+const driveRetryBudget = 6 * time.Second
 
 func (o *orchestrator) driveLost(wakeCtx context.Context, err error) bool {
 	return wakeCtx.Err() != nil || o.closed.Load() || targeterrors.IsClosed(err)
@@ -94,28 +72,15 @@ func (s *driveRetrySchedule) next() (time.Duration, bool) {
 	return d, true
 }
 
-// driveInfo carries the identity of the latest wake so a drive (or its
-// escalation) can name the reminder it stands in for. Any new-event-prefixed
-// name drives a full inbox drain, so latest-wins is sufficient.
-type driveInfo struct {
-	reminderName string
-	dueTime      time.Time
-	wfName       string
-	// epoch is o.wakeEpoch at arming time (see wakeEpoch).
-	epoch uint64
-}
-
 // localDrive eagerly drives a wake-up on this host instead of creating a
 // per-event scheduler reminder, cutting both the scheduler trigger-delivery
 // leg AND the reminder's job upsert/delete commit pair out of the workflow
 // hot path.
 //
-// MUST be called only after BOTH the state save AND a durable re-driver are
-// in place: either the per-instance janitor reminder (ensureJanitor) or a
-// durable one-shot reminder created by the caller (assertStartReminder keeps
-// its scheduler entry for delayed starts and pending-start recovery; it is
-// elided best-effort once the first turn durably commits, see
-// deleteStartReminder).
+// MUST be called only after BOTH the state save AND a durable backstop are in
+// place: the per-instance janitor (ensureJanitor) or the delayed start
+// reminder (assertStartReminder). A wake the local drive fails to deliver is
+// theirs to recover.
 //
 // Wakes are delivered through a per-instance DRIVE LOOP: localDrive posts a
 // notification (buffered-1 channel: pending notifications coalesce, mirroring
@@ -128,27 +93,24 @@ type driveInfo struct {
 // event saved before its turn starts is covered by that turn.
 //
 // The loop is detached (the arming invocation holds the actor lock the turn
-// needs) and scoped to the factory's wake context, drained in HaltAll. On a
-// drive error it first retries in place (bounded; see driveRetrySchedule),
-// then either ESCALATES by creating today's durable per-event reminder
-// (deterministic name, idempotent) on a context bounded by the factory root
-// context, NOT wakeCtx: migration is exactly the case where wakeCtx is
-// cancelled, and the reminder create is host-agnostic (the scheduler routes
-// the fire to the current owner); or, when the instance still shows recent
-// life, SUPPRESSES the escalation and leaves recovery to the janitor (see
-// driveLoop). Hard errors (cancelled wakeCtx, closed actor) always escalate.
-// If the escalation also fails, the janitor drives recovery within one
-// period.
+// needs) and scoped to the factory's wake context, drained in HaltAll. A
+// failed turn is retried in place (bounded; see driveRetrySchedule) unless
+// the drive is lost outright (cancelled wakeCtx, closed actor); once the
+// retries are exhausted the loop exits and the janitor drives the pending
+// inbox within one period.
+//
+// The reminder name only selects the handleReminder arm (start or new-event
+// prefix); latest-wins is sufficient because any wake drains the whole inbox.
 //
 // No-op when the WorkflowsFastPath preview feature is off or the
 // wake is scheduled in the future (delayed starts must keep their scheduler
 // due time); callers fall back to the durable per-event reminder path.
-func (o *orchestrator) localDrive(reminderName string, dueTime time.Time, wfName string) {
+func (o *orchestrator) localDrive(reminderName string, dueTime time.Time) {
 	if !o.fastPath || dueTime.After(time.Now()) {
 		return
 	}
 
-	o.driveInfo.Store(&driveInfo{reminderName: reminderName, dueTime: dueTime, wfName: wfName, epoch: o.wakeEpoch.Load()})
+	o.driveName.Store(&reminderName)
 
 	// Post the wake. A full buffer means a notification is already pending
 	// and this wake coalesces into it: the pending drive's turn runs after
@@ -185,9 +147,8 @@ func (o *orchestrator) localDrive(reminderName string, dueTime time.Time, wfName
 // driveLoop consumes drive notifications for this instance, running one turn
 // per notification. It never blocks on the notification channel (HaltAll
 // safety: cancellation surfaces through the turn call), exits when idle, and
-// on a failed turn (after the bounded in-place retries) hands over to the
-// escalation decision and exits: the durable reminder (or janitor) owns
-// recovery from there.
+// on a failed turn (after the bounded in-place retries) exits leaving
+// recovery to the janitor.
 func (o *orchestrator) driveLoop(wakeCtx context.Context) {
 	defer o.wakeWG.Done()
 
@@ -218,53 +179,34 @@ func (o *orchestrator) driveLoop(wakeCtx context.Context) {
 			}
 		}
 
-		info := o.driveInfo.Load()
+		name := *o.driveName.Load()
 
-		err := o.driveOnce(wakeCtx, actorType, actorID, info)
+		err := o.driveOnce(wakeCtx, actorType, actorID, name)
 
-		// Bounded in-place retries: a live instance's failed drive is
-		// re-attempted here (same coverage, no scheduler involvement)
-		// instead of escalating on first failure. Retries stop early when
-		// the drive is lost outright or the instance stops showing life.
+		// Bounded in-place retries (same coverage, no scheduler
+		// involvement); they stop early when the drive is lost outright.
 		retries := o.newDriveRetrySchedule()
-		for err != nil {
-			if o.driveLost(wakeCtx, err) || !o.aliveWithin(o.driveAliveWindow) {
-				break
-			}
+		for err != nil && !o.driveLost(wakeCtx, err) {
 			d, ok := retries.next()
-			if !ok {
+			if !ok || !sleepWake(wakeCtx, d) {
 				break
 			}
-			if !sleepWake(wakeCtx, d) {
-				break
-			}
-			err = o.driveOnce(wakeCtx, actorType, actorID, info)
+			err = o.driveOnce(wakeCtx, actorType, actorID, name)
 		}
 
 		if err != nil {
+			log.Debugf("Workflow actor '%s': local wake '%s' failed, the janitor drives the pending inbox: %v", actorID, name, err)
 			o.driveRunning.Store(false)
-			if o.driveLost(wakeCtx, err) || !o.aliveWithin(o.driveAliveWindow) {
-				log.Debugf("Workflow actor '%s': local wake '%s' failed; escalating to a durable reminder: %v", actorID, info.reminderName, err)
-				o.escalate(info)
-			} else {
-				// Alive and slow: a durable reminder here would only add
-				// scheduler re-drive load against an actor that is already
-				// working. The janitor drives any stranded inbox row within
-				// one period; that is the recovery contract this suppression
-				// leans on.
-				log.Debugf("Workflow actor '%s': local wake '%s' failed but the instance shows recent progress; suppressing escalation, the janitor covers: %v", actorID, info.reminderName, err)
-				diag.DefaultWorkflowMonitoring.WorkflowLocalWake(context.Background(), diag.StatusEscalateSuppressed)
-			}
 			return
 		}
 	}
 }
 
-func (o *orchestrator) driveOnce(wakeCtx context.Context, actorType, actorID string, info *driveInfo) error {
+func (o *orchestrator) driveOnce(wakeCtx context.Context, actorType, actorID, reminderName string) error {
 	ctx, cancel := context.WithTimeout(wakeCtx, localWakeTimeout)
 	start := time.Now()
 	err := o.router.CallReminder(ctx, &actorapi.Reminder{
-		Name:        info.reminderName,
+		Name:        reminderName,
 		ActorType:   actorType,
 		ActorID:     actorID,
 		SkipRetries: true,
@@ -279,54 +221,6 @@ func (o *orchestrator) driveOnce(wakeCtx context.Context, actorType, actorID str
 	diag.DefaultWorkflowMonitoring.WorkflowLocalWake(context.Background(), status)
 	diag.DefaultWorkflowMonitoring.WorkflowLocalWakeDrive(context.Background(), status, elapsed)
 	return err
-}
-
-// escalate creates the durable per-event wake-up reminder after a failed
-// local drive, restoring exactly today's non-fast-path recovery chain. It is
-// detached from wakeCtx (see localDrive) on the factory's detached runner,
-// bounded by rootCtx+timeout, so placement-churn HaltAll latency is
-// unaffected.
-func (o *orchestrator) escalate(info *driveInfo) {
-	if o.wakeEpoch.Load() != info.epoch {
-		// A turn committed since this wake was armed: a reminder for it
-		// would be a stray.
-		log.Debugf("Workflow actor '%s': suppressing stale escalation of wake '%s' (a turn committed since it was armed)", o.actorID, info.reminderName)
-		diag.DefaultWorkflowMonitoring.WorkflowLocalWake(context.Background(), diag.StatusEscalateSuppressed)
-		return
-	}
-
-	started := o.detached.Go(func(rootCtx context.Context) {
-		ctx, cancel := context.WithTimeout(rootCtx, escalateTimeout)
-		defer cancel()
-
-		if err := o.createWorkflowReminderForever(ctx, info.reminderName, nil, info.dueTime, o.appID, &info.wfName); err != nil {
-			// The janitor remains the durable net: recovery within one
-			// janitor period instead of ~1s.
-			log.Warnf("Workflow actor '%s': failed to escalate wake '%s' to a durable reminder; the janitor will drive it: %v", o.actorID, info.reminderName, err)
-			diag.DefaultWorkflowMonitoring.WorkflowLocalWake(context.Background(), diag.StatusEscalateFailed)
-			return
-		}
-		diag.DefaultWorkflowMonitoring.WorkflowLocalWake(context.Background(), diag.StatusEscalated)
-
-		// A commit raced the create: delete the stray, best effort.
-		// NotFound is the normal case.
-		if o.wakeEpoch.Load() != info.epoch {
-			if err := o.reminders.Delete(ctx, &actorapi.DeleteReminderRequest{
-				Name:      info.reminderName,
-				ActorType: o.actorTypeBuilder.Workflow(o.appID),
-				ActorID:   o.actorID,
-			}); err != nil {
-				if s, ok := grpcstatus.FromError(err); !ok || s.Code() != codes.NotFound {
-					log.Debugf("Workflow actor '%s': failed to delete stray escalated wake '%s' (it will fire as a no-op): %v", o.actorID, info.reminderName, err)
-				}
-			}
-		}
-	})
-	if !started {
-		// Process shutdown: nothing to escalate from; the janitor (which
-		// survives in the scheduler) drives recovery on the next owner.
-		diag.DefaultWorkflowMonitoring.WorkflowLocalWake(context.Background(), diag.StatusEscalateSkipped)
-	}
 }
 
 func sleepWake(wakeCtx context.Context, d time.Duration) bool {

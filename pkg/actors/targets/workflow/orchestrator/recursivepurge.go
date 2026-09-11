@@ -69,10 +69,7 @@ func (o *orchestrator) recursivePurgeWorkflowState(ctx context.Context, meta map
 	deleted := int32(0)
 
 	for _, child := range collectChildren(state.History) {
-		actorType := o.actorType
-		if child.targetAppID != "" && child.targetAppID != o.appID {
-			actorType = o.actorTypeBuilder.Workflow(child.targetAppID)
-		}
+		actorType := o.childWorkflowActorType(child)
 
 		var count int32
 		count, err = o.invokeRecursivePurge(ctx, actorType, child.instanceID, force)
@@ -129,6 +126,21 @@ func (o *orchestrator) invokeRecursivePurge(ctx context.Context, actorType, inst
 type childRef struct {
 	instanceID  string
 	targetAppID string
+}
+
+// isRemoteApp reports whether appID names an app other than this one. An
+// empty app ID carries no routing target, so the local app owns it.
+func (o *orchestrator) isRemoteApp(appID string) bool {
+	return appID != "" && appID != o.appID
+}
+
+// childWorkflowActorType returns the workflow actor type hosting child: the
+// local type unless the child is targeted at another app.
+func (o *orchestrator) childWorkflowActorType(child childRef) string {
+	if o.isRemoteApp(child.targetAppID) {
+		return o.actorTypeBuilder.Workflow(child.targetAppID)
+	}
+	return o.actorType
 }
 
 // collectChildren scans history for ChildWorkflowInstanceCreated events,

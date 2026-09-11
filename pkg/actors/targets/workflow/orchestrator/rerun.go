@@ -154,13 +154,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 		i--
 	}
 
-	newState := wfenginestate.NewState(wfenginestate.Options{
-		AppID:             o.appID,
-		Namespace:         o.namespace,
-		WorkflowActorType: o.actorType,
-		ActivityActorType: o.activityActorType,
-		Signer:            o.signer,
-	})
+	newState := wfenginestate.NewState(o.stateOptions())
 
 	newState.FromWorkflowState(&workflowState)
 

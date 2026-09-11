@@ -48,10 +48,14 @@ func ExampleNewRunnerWithOptions_accumulator() {
 	val := atomic.Int32{}
 	fn := func(ctx context.Context) (int32, error) {
 		v := val.Add(1)
-		// When the value is "2", we add a sleep that will trip the timeout
+		// When the value is "2", we outlast the timeout
 		// As a consequence, the accumulator is not called, so the value "2" should not be included in the result
+		// Waiting on the attempt's own deadline rather than sleeping a fixed
+		// time keeps this independent of how late a coarse timer fires; the
+		// margin after it only has to cover the runner observing the deadline
 		if v == 2 {
-			time.Sleep(50 * time.Millisecond)
+			<-ctx.Done()
+			time.Sleep(100 * time.Millisecond)
 		}
 		// Make this method be executed 4 times in total
 		if v <= 3 {

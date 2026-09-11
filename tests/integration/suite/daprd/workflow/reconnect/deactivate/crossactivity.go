@@ -113,9 +113,7 @@ func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(cancel)
 	require.NoError(t, cl.StartWorkItemListener(cctx, c.workflow.Registry()))
 
-	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
-	t.Cleanup(waitCompletionCancel)
-	meta, err := cl.WaitForWorkflowCompletion(waitCompletionCtx, id)
+	meta, err := cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 
