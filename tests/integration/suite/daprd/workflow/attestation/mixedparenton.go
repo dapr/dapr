@@ -72,7 +72,7 @@ func (m *mixedParentOn) Run(t *testing.T, ctx context.Context) {
 
 	meta, err := parentClient.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, meta.GetRuntimeStatus())
+	assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_CANCELED, meta.GetRuntimeStatus())
 	assert.Equal(t, errors.ErrorTypeHistoryTampered, meta.GetFailureDetails().GetErrorType())
 
 	assert.Equal(t, 0, fworkflow.ExtSigCertCount(t, ctx, m.workflow.DB(), string(id)))
