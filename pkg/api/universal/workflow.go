@@ -26,7 +26,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
-	"github.com/dapr/dapr/pkg/messages"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/durabletask-go/api"
@@ -76,8 +76,7 @@ func (a *Universal) GetWorkflow(ctx context.Context, in *runtimev1pb.GetWorkflow
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			err = nil
 		} else {
-			err = messages.ErrWorkflowGetResponse.WithFormat(in.GetInstanceId(),
-				fmt.Errorf("failed to get workflow metadata for '%s': %w", in.GetInstanceId(), err))
+			err = apierrors.Workflow().GetFailed(in.GetInstanceId(), err)
 		}
 		a.logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{
@@ -141,7 +140,7 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 	}
 
 	if in.GetWorkflowName() == "" {
-		err := messages.ErrWorkflowNameMissing
+		err := apierrors.Workflow().NameMissing()
 		a.logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
@@ -165,7 +164,7 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 	if startTimeRFC3339, ok := in.GetOptions()["dapr.workflow.start_time"]; ok {
 		startTime, terr := time.Parse(time.RFC3339, startTimeRFC3339)
 		if terr != nil {
-			err := messages.ErrStartWorkflow.WithFormat(in.GetWorkflowName(),
+			err := apierrors.Workflow().StartFailed(in.GetWorkflowName(),
 				errors.New(`start times must be in RFC3339 format (e.g. "2009-11-10T23:00:00Z")`))
 			a.logger.Debug(err)
 			return &runtimev1pb.StartWorkflowResponse{}, err
@@ -184,7 +183,7 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 		return id, nil
 	})
 	if err != nil {
-		err := messages.ErrStartWorkflow.WithFormat(in.GetWorkflowName(), err)
+		err := apierrors.Workflow().StartFailed(in.GetWorkflowName(), err)
 		a.logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
@@ -217,10 +216,9 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 	}
 	if err := a.workflowEngine.Client().TerminateWorkflow(ctx, api.InstanceID(in.GetInstanceId()), opts...); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId())
+			err = apierrors.Workflow().InstanceNotFound(in.GetInstanceId())
 		} else {
-			err = messages.ErrTerminateWorkflow.WithFormat(in.GetInstanceId(),
-				fmt.Errorf("failed to terminate workflow %s: %w", in.GetInstanceId(), err))
+			err = apierrors.Workflow().TerminateFailed(in.GetInstanceId(), err)
 		}
 		a.logger.Debug(err)
 		return emptyResponse, err
@@ -241,7 +239,7 @@ func (a *Universal) RaiseEventWorkflow(ctx context.Context, in *runtimev1pb.Rais
 	}
 
 	if in.GetEventName() == "" {
-		err := messages.ErrMissingWorkflowEventName
+		err := apierrors.Workflow().EventNameMissing()
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -263,8 +261,7 @@ func (a *Universal) RaiseEventWorkflow(ctx context.Context, in *runtimev1pb.Rais
 	}
 
 	if err := a.workflowEngine.Client().RaiseEvent(ctx, api.InstanceID(in.GetInstanceId()), in.GetEventName(), opts...); err != nil {
-		err = messages.ErrRaiseEventWorkflow.WithFormat(in.GetInstanceId(),
-			fmt.Errorf("failed to raise event %s on workflow %s: %w", in.GetEventName(), in.GetInstanceId(), err))
+		err = apierrors.Workflow().RaiseEventFailed(in.GetInstanceId(), err)
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -293,8 +290,7 @@ func (a *Universal) PauseWorkflow(ctx context.Context, in *runtimev1pb.PauseWork
 		opts = append(opts, api.WithSuspendAppID(targetAppID))
 	}
 	if err := a.workflowEngine.Client().SuspendWorkflow(ctx, api.InstanceID(in.GetInstanceId()), "", opts...); err != nil {
-		err = messages.ErrPauseWorkflow.WithFormat(in.GetInstanceId(),
-			fmt.Errorf("failed to pause workflow %s: %w", in.GetInstanceId(), err))
+		err = apierrors.Workflow().PauseFailed(in.GetInstanceId(), err)
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -324,8 +320,7 @@ func (a *Universal) ResumeWorkflow(ctx context.Context, in *runtimev1pb.ResumeWo
 		opts = append(opts, api.WithResumeAppID(targetAppID))
 	}
 	if err := a.workflowEngine.Client().ResumeWorkflow(ctx, api.InstanceID(in.GetInstanceId()), "", opts...); err != nil {
-		err = messages.ErrResumeWorkflow.WithFormat(in.GetInstanceId(),
-			fmt.Errorf("failed to resume workflow %s: %w", in.GetInstanceId(), err))
+		err = apierrors.Workflow().ResumeFailed(in.GetInstanceId(), err)
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -356,10 +351,9 @@ func (a *Universal) PurgeWorkflow(ctx context.Context, in *runtimev1pb.PurgeWork
 	}
 	if err := a.workflowEngine.Client().PurgeWorkflowState(ctx, api.InstanceID(in.GetInstanceId()), opts...); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId())
+			err = apierrors.Workflow().InstanceNotFound(in.GetInstanceId())
 		} else {
-			err = messages.ErrPurgeWorkflow.WithFormat(in.GetInstanceId(),
-				fmt.Errorf("failed to Purge workflow %s: %w", in.GetInstanceId(), err))
+			err = apierrors.Workflow().PurgeFailed(in.GetInstanceId(), err)
 		}
 		a.logger.Debug(err)
 		return emptyResponse, err
@@ -463,28 +457,28 @@ func (a *Universal) targetAppID(appID string) (string, error) {
 		return "", nil
 	}
 	if !common.ValidAppID(appID) {
-		return "", messages.ErrInvalidWorkflowAppID.WithFormat(appID)
+		return "", apierrors.Workflow().AppIDInvalid(appID)
 	}
 	return appID, nil
 }
 
 func (a *Universal) validateInstanceID(instanceID string, isCreate bool) error {
 	if instanceID == "" {
-		return messages.ErrMissingOrEmptyInstance
+		return apierrors.Workflow().InstanceIDProvidedMissing()
 	}
 
 	if isCreate {
 		// Limit the length of the instance ID to avoid potential conflicts with state stores that have restrictive key limits.
 		const maxInstanceIDLength = 64
 		if len(instanceID) > maxInstanceIDLength {
-			return messages.ErrInstanceIDTooLong.WithFormat(maxInstanceIDLength)
+			return apierrors.Workflow().InstanceIDTooLong(maxInstanceIDLength)
 		}
 
 		// Check to see if the instance ID contains invalid characters. Valid characters are letters, digits, dashes, and underscores.
 		// See https://github.com/dapr/dapr/issues/6156 for more context on why we check this.
 		for _, c := range instanceID {
 			if !unicode.IsLetter(c) && c != '_' && c != '-' && !unicode.IsDigit(c) {
-				return messages.ErrInvalidInstanceID.WithFormat(instanceID)
+				return apierrors.Workflow().InstanceIDInvalid(instanceID)
 			}
 		}
 	}
