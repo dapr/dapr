@@ -23,6 +23,8 @@ ports:
   targetPort: 50001
 
 tls:
+  # Controls whether this chart renders the dapr-trust-bundle Secret/ConfigMap manifests.
+  generateBundleSecret: true
   issuer:
     certPEM: ""
     keyPEM: ""
