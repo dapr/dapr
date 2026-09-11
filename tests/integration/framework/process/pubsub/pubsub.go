@@ -104,5 +104,10 @@ func (p *PubSub) PauseCalled() int64 { return p.component.pauseCalled.Load() }
 // paused state.
 func (p *PubSub) IsPaused() bool { return p.component.paused.Load() }
 
+// DropStream ends the in-flight PullMessages stream, which cancels the
+// context the component handed the runtime's inbound handler. Stands in for
+// a Kafka consumer group rebalance.
+func (p *PubSub) DropStream() { p.component.dropStream() }
+
 // PauseStarted returns a channel closed the first time Pause is called.
 func (p *PubSub) PauseStarted() <-chan struct{} { return p.component.pauseStartCh }
