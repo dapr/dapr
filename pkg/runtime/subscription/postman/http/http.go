@@ -131,15 +131,15 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 
 		switch appResponse.Status {
 		case "":
-			// Consider empty status field as success
+			// Consider empty status field as retry
 			fallthrough
-		case contribpubsub.Success:
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Success)), "", msg.Topic, elapsed)
-			return nil
 		case contribpubsub.Retry:
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
 			// TODO: add retry error info
 			return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent[contribpubsub.IDField], rterrors.NewRetriable(nil))
+		case contribpubsub.Success:
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Success)), "", msg.Topic, elapsed)
+			return nil
 		case contribpubsub.Drop:
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Drop)), strings.ToLower(string(contribpubsub.Success)), msg.Topic, elapsed)
 			log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[contribpubsub.IDField])
