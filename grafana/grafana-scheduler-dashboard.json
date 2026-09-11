@@ -14,7 +14,7 @@
       }
     ]
   },
-  "description": "Dapr Scheduler service: job lifecycle, trigger concurrency, placement dissemination and embedded etcd health. etcd histogram panels require --etcd-metrics=extensive.",
+  "description": "Dapr Scheduler service: job lifecycle, trigger concurrency, placement dissemination and embedded etcd health. etcd histogram panels require --etcd-metrics=extensive. Gauges reported identically by every Scheduler replica use max rather than sum. If a target is scraped by more than one Prometheus job, rate panels will be multiplied accordingly.",
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
@@ -38,7 +38,7 @@
     },
     {
       "datasource": "Dapr",
-      "description": "Sidecars connected to the Scheduler. A drop here means apps have lost reminders and jobs.",
+      "description": "Connections reported by a Scheduler replica. Every replica reports the same cluster-wide view, so this uses max rather than sum. Note this counts Scheduler connections, which is a multiple of the number of sidecars.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -81,7 +81,7 @@
       },
       "targets": [
         {
-          "expr": "sum(dapr_scheduler_sidecars_connected)",
+          "expr": "max(dapr_scheduler_sidecars_connected)",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -94,6 +94,7 @@
     },
     {
       "datasource": "Dapr",
+      "description": "",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -136,7 +137,7 @@
       },
       "targets": [
         {
-          "expr": "sum(dapr_scheduler_placement_streams_connected)",
+          "expr": "max(dapr_scheduler_placement_streams_connected)",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -316,7 +317,7 @@
       },
       "targets": [
         {
-          "expr": "sum(dapr_scheduler_placement_incapable_sidecars)",
+          "expr": "max(dapr_scheduler_placement_incapable_sidecars)",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -878,7 +879,7 @@
       },
       "targets": [
         {
-          "expr": "sum(dapr_scheduler_concurrency_inflight)",
+          "expr": "max(dapr_scheduler_concurrency_inflight)",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -886,7 +887,7 @@
           "refId": "A"
         },
         {
-          "expr": "sum(dapr_scheduler_concurrency_pending)",
+          "expr": "max(dapr_scheduler_concurrency_pending)",
           "format": "time_series",
           "instant": false,
           "interval": "",

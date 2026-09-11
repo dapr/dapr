@@ -1318,7 +1318,7 @@
     },
     {
       "datasource": "Dapr",
-      "description": "Dispatch payload as a fraction of --max-body-size. Above 0.95 trips the graceful stall; above 1 exceeds the limit. Not recorded when --max-body-size is non-positive.",
+      "description": "Dispatch payload as a fraction of --max-body-size. At or above 0.95 the graceful stall trips; above 1 the limit is exceeded. Histogram, so this is the p99 of observed ratios. Not recorded when --max-body-size is non-positive.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1390,20 +1390,20 @@
       },
       "targets": [
         {
-          "expr": "max(dapr_runtime_workflow_payload_size_ratio{namespace=\"$namespace\", app_id=~\"$app_id\"}) by (workflow_name)",
+          "expr": "histogram_quantile(0.99, sum(rate(dapr_runtime_workflow_payload_size_ratio_bucket{namespace=\"$namespace\", app_id=~\"$app_id\"}[5m])) by (le, workflow_name))",
           "format": "time_series",
           "instant": false,
           "interval": "",
-          "legendFormat": "{{workflow_name}}",
+          "legendFormat": "p99 {{workflow_name}}",
           "refId": "A"
         }
       ],
-      "title": "Workflow payload size ratio (max)",
+      "title": "Workflow payload size ratio (p99)",
       "type": "timeseries"
     },
     {
       "datasource": "Dapr",
-      "description": "As above, for activity dispatch payloads.",
+      "description": "As above, for activity dispatch payloads. Tagged with activity_name and workflow_name.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1475,15 +1475,15 @@
       },
       "targets": [
         {
-          "expr": "max(dapr_runtime_workflow_activity_payload_size_ratio{namespace=\"$namespace\", app_id=~\"$app_id\"}) by (activity_name)",
+          "expr": "histogram_quantile(0.99, sum(rate(dapr_runtime_workflow_activity_payload_size_ratio_bucket{namespace=\"$namespace\", app_id=~\"$app_id\"}[5m])) by (le, activity_name))",
           "format": "time_series",
           "instant": false,
           "interval": "",
-          "legendFormat": "{{activity_name}}",
+          "legendFormat": "p99 {{activity_name}}",
           "refId": "A"
         }
       ],
-      "title": "Activity payload size ratio (max)",
+      "title": "Activity payload size ratio (p99)",
       "type": "timeseries"
     }
   ],
