@@ -16,13 +16,10 @@ package client
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
-
-const readTimeout = 10 * time.Second
 
 type EtcdClient struct {
 	client *clientv3.Client
@@ -45,9 +42,7 @@ func (c *EtcdClient) ListAllKeys(ctx context.Context, prefix string) ([]string, 
 
 	// Loop until all keys are retrieved
 	for {
-		gctx, cancel := context.WithTimeout(ctx, readTimeout)
-		resp, err := c.client.Get(gctx, startKey, clientv3.WithPrefix(), clientv3.WithLimit(1000))
-		cancel()
+		resp, err := c.client.Get(ctx, startKey, clientv3.WithPrefix(), clientv3.WithLimit(1000))
 		if err != nil {
 			return nil, err
 		}
@@ -75,9 +70,7 @@ func (c *EtcdClient) Get(t *testing.T, ctx context.Context, prefix string, opts 
 
 	opts = append([]clientv3.OpOption{clientv3.WithPrefix()}, opts...)
 
-	gctx, cancel := context.WithTimeout(ctx, readTimeout)
-	defer cancel()
-	resp, err := c.client.Get(gctx, prefix, opts...)
+	resp, err := c.client.Get(ctx, prefix, opts...)
 	require.NoError(t, err)
 
 	keys := make([]string, len(resp.Kvs))
