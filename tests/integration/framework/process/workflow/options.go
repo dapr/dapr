@@ -19,6 +19,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -45,10 +46,10 @@ type options struct {
 	daprds          int
 	skipDB          bool
 	mtls            bool
-	signing         bool
 	signingDisabled []int
 	clustered       *bool
 	fastPath        *bool
+	signing         *bool
 
 	orchestrators     []orchestratorConfig
 	activities        []activityConfig
@@ -57,6 +58,7 @@ type options struct {
 	placementOptions  []placement.Option
 	schedulerInstance *scheduler.Scheduler
 	schedulerAddress  *string
+	sentryInstance    *sentry.Sentry
 }
 
 func WithAddOrchestrator(t *testing.T, name string, or func(*task.WorkflowContext) (any, error)) Option {
@@ -132,7 +134,8 @@ func WithMTLS(t *testing.T) Option {
 func WithHistorySigning(t *testing.T) Option {
 	t.Helper()
 	return func(o *options) {
-		o.signing = true
+		enabled := true
+		o.signing = &enabled
 		o.mtls = true
 	}
 }
@@ -164,9 +167,32 @@ func WithFastPath(enabled bool) Option {
 	}
 }
 
+// WithSigning explicitly enables or disables workflow history signing mode
+// (mTLS with a Sentry plus the WorkflowHistorySigning feature flag),
+// overriding the DAPR_INTEGRATION_WORKFLOW_SIGNING environment variable.
+// WithSigning(false) disables the feature flag only: mTLS requested via
+// WithMTLS or WithSentryInstance stays on.
+func WithSigning(enabled bool) Option {
+	return func(o *options) {
+		o.signing = &enabled
+	}
+}
+
 func WithSchedulerOptions(opts ...scheduler.Option) Option {
 	return func(o *options) {
 		o.schedulerOptions = append(o.schedulerOptions, opts...)
+	}
+}
+
+// WithSentryInstance lets a test supply a pre-constructed Sentry, implying
+// mTLS. The framework uses it for placement, scheduler and daprd identity
+// instead of creating its own, and skips adding it to its process list (the
+// caller is responsible for that). Required when combining
+// WithSchedulerInstance with mTLS/signing so the caller-built scheduler and
+// proxy share the same trust chain.
+func WithSentryInstance(sen *sentry.Sentry) Option {
+	return func(o *options) {
+		o.sentryInstance = sen
 	}
 }
 

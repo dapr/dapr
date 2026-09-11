@@ -95,13 +95,15 @@ func (d *disseminationcluster) Run(t *testing.T, ctx context.Context) {
 
 	startVersion := d.workflow.Placement().PlacementTables(t, ctx).Tables["default"].Version
 
+	extraOpts := append([]daprd.Option{
+		daprd.WithAppID(d.appID),
+		daprd.WithPlacementAddresses(d.workflow.Placement().Address()),
+		daprd.WithScheduler(d.workflow.Scheduler()),
+		daprd.WithResourceFiles(d.workflow.DB().GetComponent(t)),
+	}, d.workflow.JoinOptions(t)...)
+
 	for i := range 2 {
-		extra := daprd.New(t, append([]daprd.Option{
-			daprd.WithAppID(d.appID),
-			daprd.WithPlacementAddresses(d.workflow.Placement().Address()),
-			daprd.WithScheduler(d.workflow.Scheduler()),
-			daprd.WithResourceFiles(d.workflow.DB().GetComponent(t)),
-		}, d.workflow.FeatureOptions(t)...)...)
+		extra := daprd.New(t, extraOpts...)
 		extra.Run(t, ctx)
 		extra.WaitUntilRunning(t, ctx)
 		t.Cleanup(func() { extra.Cleanup(t) })

@@ -53,10 +53,10 @@ type orchestrator struct {
 	janitorAsserted atomic.Bool
 	// Drive-loop state (see wake.go localDrive/driveLoop): driveNotify is a
 	// buffered-1 coalescing notification channel, driveRunning guards the
-	// single loop, driveInfo carries the latest wake identity for the loop
-	// and its escalation.
+	// single loop, driveName carries the reminder name of the latest wake.
 	driveNotify  chan struct{}
 	driveRunning atomic.Bool
+	driveName    atomic.Pointer[string]
 
 	// lastActive is the UnixNano of the most recent turn-lock acquisition,
 	// stamped for the factory idle reaper. Also stamped at creation so a fresh
@@ -67,18 +67,6 @@ type orchestrator struct {
 	// lastActive alone cannot show that once a turn (an app roundtrip of
 	// arbitrary length) outlives the idle TTL.
 	inTurn atomic.Int32
-	// lastProgress is the UnixNano of the most recent durable state commit
-	// (stamped in signAndSaveState). Zero on a fresh activation, so an actor
-	// recreated after a crash reads as stalled and the durable backstops
-	// recover it. INVARIANT: never stamped by the janitor fire or by lock
-	// traffic; it distinguishes "alive and progressing" from "being polled".
-	lastProgress atomic.Int64
-	driveInfo    atomic.Pointer[driveInfo]
-	// wakeEpoch counts durable turn commits; escalate suppresses wakes armed
-	// before the latest commit (their durable reminder would be a stray).
-	// Bumped only at the turn-commit sites in runWorkflow; never reset
-	// (monotonic avoids ABA with a pre-halt escalation).
-	wakeEpoch atomic.Uint64
 	// foldPending holds sender-retried completions awaiting their folding
 	// turn (WorkflowsFastPath; see fold.go). INVARIANT: only touched
 	// while holding the per-actor turn lock (submit, turn, janitor,

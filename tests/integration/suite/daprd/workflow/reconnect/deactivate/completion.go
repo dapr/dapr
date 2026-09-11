@@ -122,20 +122,13 @@ func (a *completion) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, a.workflow.ActorTypesCount())
 	}, time.Second*10, time.Millisecond*10)
 
-	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
-	t.Cleanup(waitCompletionCancel)
-	meta, err := client.WaitForWorkflowCompletion(waitCompletionCtx, id)
+	meta, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), meta.GetRuntimeStatus().String())
 
 	assert.Equal(t, int64(1), a.a1Calls.Load())
-	expectedA2 := int64(1)
-	if a.workflow.FastPath() {
-		// The fast path holds a2's completion on its sender instead of the
-		// durable inbox; the worker disconnect drops it, so the janitor
-		// re-dispatches and re-executes a2.
-		expectedA2 = 2
-	}
-	assert.Equal(t, expectedA2, a.a2Calls.Load())
+	// The worker disconnect cuts the call carrying a2's completion, not the
+	// result: it is published durably and a2 is not re-executed.
+	assert.Equal(t, int64(1), a.a2Calls.Load())
 	assert.Equal(t, int64(2), a.completionCalls.Load())
 }
